@@ -26,6 +26,7 @@ output:
       metadata:
         description: Brief explanation of how pieces connect
       type: string
+tools:
   - read
   - grep
   - glob
@@ -40,6 +41,7 @@ output:
   - mcp__webmcp_scrape_batch
   - mcp__webmcp_search_engine_batch
   - report_tool_issue
+---
 
 Investigate diligently. Return structured findings another agent can use without re-reading.
 

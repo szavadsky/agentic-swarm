@@ -28,6 +28,7 @@ spawns:
   - oracle
   - sonic
 thinkingLevel: high
+tools:
   - read
   - glob
   - yield

@@ -1,6 +1,6 @@
 """
 USAGE: Caller sets TASK_FILE (str, path to task spec file), then:
-    exec(read("skill://software-builder-asset/subtask_dev_process.py"))
+    exec(read("skill://software-builder-asset/subtask_dev_process.py:raw"))
 
 DO NOT READ SCRIPT BODY UNLESS YOUR TASK IS TO DEVELOP IT
 

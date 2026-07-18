@@ -1,5 +1,5 @@
 """USAGE: Caller sets F (str, goal file folder) and N (int, max iterations), then:
-    exec(read("skill://software-builder-asset/goal_flow.py"))
+    exec(read("skill://software-builder-asset/goal_flow.py:raw"))
 All logic.  Mechanical orchestration; technical work delegated
 to subagents. Yields final status string via print().
 

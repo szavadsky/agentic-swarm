@@ -27,6 +27,7 @@ spawns:
   - designer
   - task
 thinkingLevel: high
+tools:
   - read
   - grep
   - glob
@@ -37,6 +38,7 @@ thinkingLevel: high
   - yield
   - hub
   - inspect_image
+---
 
 Goal execution planner. Receives target plan file path `{F}/plan{pIt}.md`. Produces working direction with bullet-level actions, architectural demarcation, scope of changes.
 

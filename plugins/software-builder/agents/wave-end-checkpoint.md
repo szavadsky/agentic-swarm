@@ -1,7 +1,7 @@
 ---
 description: "Wave-end state cleanup, commit, and verification agent with full edit access. Inspects working tree, removes transient junk, commits grouped changes, runs verification, reports structured status."
 model:
-  - pi/task
+  - pi/task:high
 name: wave-end-checkpoint
 output:
   properties:
