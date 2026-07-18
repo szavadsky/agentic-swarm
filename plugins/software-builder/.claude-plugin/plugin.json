@@ -1,0 +1,5 @@
+{
+  "name": "software-builder",
+  "version": "0.1.0",
+  "description": "Goal-execution agentic system: plan -> orchestrate -> verify. Agents, commands, and the subtask-dev-process python orchestration script, bundled as an omp plugin. Load with: omp --plugin-dir <this dir>. The python asset is resolved at runtime via skill://subtask-dev-process/subtask_dev_process.py — no absolute paths, no env vars."
+}
