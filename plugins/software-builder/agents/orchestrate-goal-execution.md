@@ -1,7 +1,8 @@
 ---
 description: "Goal execution orchestrator. Reads plan, defines DAG of subtasks, delegates subagents, returns summary report."
 model:
-  - pi/task
+  - "@slow"
+prewalk: "@task"
 name: orchestrate-goal-execution
 output:
   properties:
@@ -81,9 +82,9 @@ Do not copy/paste or add trivial context. Typical task:
 
 | Type | agent | isolated | role | assignment |
 |---|---|---|---|---|
-| `dev` | `subtask-dev-process` | False | Task implementation orchestrator | Pass absolute filename `{F}/Execute{pIt}/{WaveSlug}{SubtaskSlug}.md`. Nothing else. |
+| `dev` | `subtask-dev-process` | False | Task implementation pass-through | Prompt must "Follow your systrem prompt and develoment process script to work on {md}" . Pass absolute filename `{F}/Execute{pIt}/{WaveSlug}{SubtaskSlug}.md`. No other details in the assigment  |
 | `verify` | `fact-finder` | False | Verifier | Verify: read `{F}/plan{pIt}.md:<ranges>`, report status + findings. |
-| `housekeeping` | `sonic` | False | Housekeeper | Read `{F}/Execute{pIt}/{WaveSlug}{SubtaskSlug}.md`, apply trivial edit described. |
+| `housekeeping` | `sonic` | False | Housekeeper | Read `{F}/Execute{pIt}/{WaveSlug}{SubtaskSlug}.md`, apply changes described. |
 
 Provide `context` with plan iteration number and project root. Each spawn:
 

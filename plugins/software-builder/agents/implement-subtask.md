@@ -1,7 +1,8 @@
 ---
 description: "Subtask implementer. Receives a task, implements it, scrutinizes whether the work is genuinely done (not just gate-green), returns structured result."
 model:
-  - pi/task
+  - "@slow"
+prewalk: "@task"
 name: implement-subtask
 output:
   properties:
