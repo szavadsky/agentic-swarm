@@ -107,6 +107,7 @@ DO NOT READ SCRIPT BODY UNLESS YOUR TASK IS TO DEVELOP IT
 
 MAX_ITERATIONS = 3
 
+
 CONCERN_ITEM = {
     "type": "object",
     "properties": {
@@ -137,10 +138,6 @@ CHECK_SCHEMA = {
     },
     "required": ["status", "committed", "implementationConcerns", "extraPlanConcerns", "planConcernNotes"],
 }
-
-TASK_PROMPT = f"Task spec file: {TASK_FILE}\nRead it and implement the task described there."
-
-CHECK_PROMPT = f"Check: is this fully done?\nTask spec file: {TASK_FILE}\nRead it and verify the implementation against it.\nImplementer summary: "
 
 
 def concerns_text(concerns):
@@ -174,6 +171,30 @@ def log_response(label, result):
             extras.append(f"{k}={len(v) if isinstance(v, list) else v}")
     log(f"{label} response: status={status}, {', '.join(extras)}")
 
+exec(read("skill://software-builder-asset/task_spec.py:raw"))
+
+try:
+    c = build_task_content(TASK_FILE)
+except ValueError as e:
+    log(f"invalid task spec: {e}")
+    result = {"status": "failed", "concerns": [], "committed": False}
+    log(f"final: failed, committed: False, total concerns: 0")
+    getattr(tool, "yield")({"result": {"data": result}})
+    raise SystemExit(0)
+TASK_PROMPT = (
+    "Develop this task.\n\n"
+    + (f"Prerequisites (plan lines):\n{c['pre']}\n\n" if c["pre"] else "")
+    + f"Task (plan lines):\n{c['task']}\n"
+    + (f"\n\nExtra context (learned during execution, not in plan):\n{c['extra']}" if c["extra"] else "")
+)
+
+CHECK_PROMPT = (
+    "Check: is this fully done? Verify the implementation against the task below.\n\n"
+    + (f"Prerequisites (plan lines):\n{c['pre']}\n\n" if c["pre"] else "")
+    + f"Task (plan lines):\n{c['task']}\n"
+    + (f"\n\nExtra context:\n{c['extra']}" if c["extra"] else "")
+    + "\n\nImplementer summary: "
+)
 
 all_plan_concerns = {}
 all_plan_notes = []

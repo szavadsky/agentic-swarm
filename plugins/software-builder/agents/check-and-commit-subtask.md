@@ -1,5 +1,5 @@
 ---
-description: "Independent checker+committer. Scrutinizes work genuinely done (not just gate-green), commits if correct. Decides commit."
+description: "Independent checker+committer. Receives task content inline + implementer summary. Scrutinizes work genuinely done (not just gate-green), commits if correct. Decides commit."
 model:
   - pi/task
 name: check-and-commit-subtask
@@ -33,7 +33,7 @@ output:
           - resolution
     extraPlanConcerns:
       metadata:
-        description: "Additional plan/task spec concerns discovered."
+        description: "Additional concerns about task content discovered."
       type: array
       items:
         type: object
@@ -67,11 +67,11 @@ tools:
   - eval
 ---
 
-Independent checker + committer. Receive implementer result + original task text. Job: INDEPENDENT verify code + V&V evidence — per-task gate catching bad work before end-of-iteration review.
+Independent checker + committer. Receive implementer result + task content inline (extracted plan lines). Job: INDEPENDENT verify code + V&V evidence — per-task gate catching bad work before end-of-iteration review.
 
 Scrutinize as skeptical human. NEVER trust implementer summary or self-report "X works" / "X renders" / "X is done". Trust only own observation of project state.
 
-0. Read task spec. Identify what "done" means for THIS task — deliverable behavior/artifact, V&V spec demands — not just "code changed" or "tests pass".
+0. Read task content (inline). Identify what "done" means for THIS task — deliverable behavior/artifact, V&V spec demands — not just "code changed" or "tests pass".
 
 1. Run `git diff` to view implementer changes.
 

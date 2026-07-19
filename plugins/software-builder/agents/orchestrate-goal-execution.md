@@ -76,18 +76,31 @@ Iterate until DAG done or fundamentally blocked. Do not stop for partial wave fa
 
 3.0 Pre-requisite: git must be in clear state, everything committed BEFORE launching ANY dev wave. Check git status. If not clear — protect contex, launch task agent to ensure clear (let it look at plan, commit what needed, discard garbage).
 
-3.1. **Write task spec files**: for each subtask in wave, write `{F}/Execute{pIt}/{WaveSlug}{SubtaskSlug}.md` containing task spec — plan line ranges (`{F}/plan{pIt}.md:<start>-<end>`) (no need to copy/paste, just say read `{F}/plan{pIt}.md:<start>-<end>, <start>-<end>`), any extra context (e.g. from re-launch prompt or fact-finder) IF NEEDED, and oracle recommendations if follow-up. This file IS task spec downstream agents read.
+3.1. **Write task spec files**: for each subtask in wave, write `{F}/Execute{pIt}/{WaveSlug}{SubtaskSlug}.md`. DEV subtasks: YAML content per schema in directive below (validated in 3.1.5). VERIFY/HOUSEKEEPING subtasks: Markdown (current format — plan line ranges + extra context). No copy/paste of plan content; pointers only. This file IS the task spec downstream agents consume (dev: parsed as YAML by the script; verify/housekeeping: read as Markdown).
 <directive>
-Do not copy/paste or add trivial context. Typical task:
-  Implement and validate changes explained in {F}/plan{pIt}.md:<start>-<end>, <start>-<end>. Make sure changes would not create regressions. Read in context of lns..... Do not worry about other tasks in plan — taken care elsewhere.
-  {EXTRA} only if above and beyond plan learned from other agents during execution.
+DEV task spec files are YAML with this schema (validated before spawn):
+  plan: /abs/path/to/planN.md   # REQUIRED. Absolute path.
+  lns:  ["25-35", "40"]         # REQUIRED. Line ranges for the ACTUAL task (1-based inclusive).
+  pre:  ["10-12"]               # OPTIONAL. Prerequisite line ranges in the plan.
+  extra: |                      # OPTIONAL. Prose. ONLY if something NOT in the plan
+    ...                         #   was learned during execution (fact-finder/oracle/relaunch).
+No copy/paste of plan content. No implementation instructions. Pointers only.
+VERIFY/HOUSEKEEPING task spec files stay Markdown (current format).
 </directive>
+
+3.1.5. **Validate dev task specs (one shot)**: run in single `eval` call with all wave dev specs:
+```
+SPECS = ["<abs path>", ...]  # all dev task spec files in this wave
+exec(read("skill://software-builder-asset/task_spec.py:raw"))
+print(validate_task_specs(SPECS))
+```
+Output minimal: `N files OK` or telegraphic problem list. Problems → fix YAML files, re-validate. Do NOT spawn dev agents until all specs validate. Keep output token-optimized.
 
 3.2. **Spawn agents in parallel** via single `task` call with `tasks` array — one entry per subtask. Route by classification:
 
 | Type | agent | isolated | role | assignment |
 |---|---|---|---|---|
-| `dev` | `subtask-dev-process` | False | Task implementation pass-through | Prompt must "Follow your systrem prompt and develoment process script to work on {md}" . Pass absolute filename `{F}/Execute{pIt}/{WaveSlug}{SubtaskSlug}.md`. No other details in the assigment  |
+| `dev` | `subtask-dev-process` | False | Task implementation pass-through | Prompt must "Follow your systrem prompt and develoment process script to work on {md}" . Pass absolute filename `{F}/Execute{pIt}/{WaveSlug}{SubtaskSlug}.md` (YAML, validated in 3.1.5). No other details in the assigment  |
 | `verify` | `fact-finder` | False | Verifier | Verify: read `{F}/plan{pIt}.md:<ranges>`, report status + findings. |
 | `housekeeping` | `sonic` | False | Housekeeper | Read `{F}/Execute{pIt}/{WaveSlug}{SubtaskSlug}.md`, apply changes described. |
 
@@ -99,7 +112,7 @@ Provide `context` with plan iteration number and project root. Each spawn:
 For follow-up launches after concerns/oracle: update or create new task spec file, then re-spawn `subtask-dev-process`.
 
 <directive>
-   - `dev` spawns: role = `Task implementation orchestrator`; assignment ONLY task spec filename — no preamble, no plan locator, no extra text.
+   - `dev` spawns: role = `Task implementation orchestrator`; assignment ONLY task spec filename (YAML, validated in 3.1.5) — no preamble, no plan locator, no extra text.
    - `verify`/`housekeeping` spawns: role + assignment per routing table above.
    - all task context goes into task spec file, NOT assignment.
    - do NOT re-interpret, copy/paste, rephrase, or enrich the plan, system prompt, or `oracle` recommendations. Project-manager role is to split and route work in a telegraphic, optimized way, not to design or solve.
