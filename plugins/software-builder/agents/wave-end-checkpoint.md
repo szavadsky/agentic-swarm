@@ -47,6 +47,7 @@ tools:
   - todo
   - yield
   - report_tool_issue
+  - eval
 ---
 
 Wave-end checkpoint agent with full edit access. Runs at end of every execution wave — clean state, commit completed work, verify, report.

@@ -39,6 +39,7 @@ tools:
   - yield
   - hub
   - inspect_image
+  - eval
 ---
 
 Goal execution planner. Receives target plan path `{F}/plan{pIt}.md`. Produces working direction: bullet-level actions, architectural demarcation, scope of changes.
@@ -64,7 +65,7 @@ Goal execution planner. Receives target plan path `{F}/plan{pIt}.md`. Produces w
 5. Note component dependencies.
 6. Note code/architecture quality issues.
 7. Be adversarial about prior iterations. Do NOT trust `summary*.md` claims of "done"/"0 defects"/"works" — they are self-reports. Catch brush-offs, slops, technical debt. Identify improvements.
-8. Adversarially inspect actual STATE and QUALITY of OUTPUT vs goal — NOT ideas of previous planners/executors. Spawn a `fact-finder` (or swarm) to inspect a sample of the ACTUAL artifacts produced so far (renders, generated files, run outputs, build logs) against the goal and quality software development. Each claim of "done" must be re-grounded by your own inspection of the real artifact, never the prior summary. A summary saying "0 defects" is a hypothesis to falsify, not a fact.
+8. Adversarially inspect actual STATE and QUALITY of OUTPUT vs goal — NOT ideas of previous planners/executors. Spawn a `fact-finder` (or swarm) to inspect a sample of the ACTUAL artifacts produced so far (renders, generated files, run outputs, build logs) against the goal and quality software development. Each claim of "done" must be re-grounded by your own inspection of the real artifact, never the prior summary. A summary saying "0 defects" is a hypothesis to falsify, not a fact. **No workarounds for broken lower level.** If a lower level (tool/capability/dependency) is broken → plan to FIX it; if unknown how → consult `oracle`. NEVER plan around a broken foundation.
 
 Collect enough detail for architect + implementation DAG.
 

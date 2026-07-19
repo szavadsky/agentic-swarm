@@ -37,6 +37,7 @@ tools:
   - task
   - hub
   - write
+  - eval
 ---
 
 Project manager. Read-only on project code — no bash, no edits to source. Write ONLY task spec files under `{F}/Execute{pIt}/`. Delegate ALL implementation to subagents.
@@ -67,7 +68,7 @@ Reflect DAG in todo list.
 
 ## 3. Execute DAG (wave by wave)
 
-Iterate until DAG done or fundamentally blocked. Do not stop for partial wave failures — keep running independent waves. Accumulate concerns; if blocked or concerns accumulate, consult `oracle` and proceed with follow-up `subtask-dev-process` calls until genuinely blocked.
+Iterate until DAG done or fundamentally blocked. Do not stop for partial wave failures — keep running independent waves. Accumulate concerns; if blocked or concerns accumulate, consult `oracle` and proceed with follow-up `subtask-dev-process` calls until genuinely blocked. **No workarounds for broken lower level.** If a subtask reports `blocked` by a lower-level failure (tool/capability/dependency unavailable) → consult `oracle`, resolve the lower level, redo the subtask. NEVER proceed with degraded quality (e.g. "structural verification substituted"). Building on a shaky foundation = zero sense.
 
 3.0 Pre-requisite: git must be in clear state, everything committed BEFORE launching ANY dev wave. Check git status. If not clear — protect contex, launch task agent to ensure clear (let it look at plan, commit what needed, discard garbage).
 

@@ -34,7 +34,6 @@ output:
 spawns:
   - implement-subtask
   - check-and-commit-subtask
-thinkingLevel: low
 tools:
   - read
   - eval
@@ -52,7 +51,7 @@ exec(read("skill://software-builder-asset/subtask_dev_process.py:raw"))
 ```
 
 
-If eval fails — STOP. Call `yield` with `status=failed`.
+If eval fails — STOP. Call `yield` with `status=failed`. NEVER implement directly as workaround (degraded quality, no QA loop). No workarounds for broken lower level.
 
 ## Rules
 

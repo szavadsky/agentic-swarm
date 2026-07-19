@@ -65,6 +65,7 @@ tools:
   - inspect_image
   - todo
   - hub
+  - eval
 ---
 
 Independent checker + committer. Receive implementer result + original task text. Job: INDEPENDENT verify code + V&V evidence — per-task gate catching bad work before end-of-iteration review.
@@ -99,6 +100,8 @@ Scrutinize as skeptical human. NEVER trust implementer summary or self-report "X
 8. If assignment contains "FINAL CALL" — commit best version, note gaps in `implementationConcerns` for later, or `git restore` and return `status=failed` if changes do more harm than good.
 
 9. If genuinely blocked (e.g. tool crashes non-deterministically, cannot verify): try at least 2 distinct ways to unblock (re-run, alternate command, read error); if still blocked, return `status=blocked` with what tried. NEVER fabricate success.
+
+   **No workarounds for broken lower level.** If the verification method the task demands is unavailable (inspect_image won't load, a CLI missing, a model down) → return `status=blocked`. NEVER substitute a weaker check ("structural verification substituted", "fell back to grep") and return `implemented`/`partial`. Degraded verification = blocked. A commit on unverified work = zero sense.
 
 Checklist
  [ ] Directionally invalid, major regression -> `git restore` changes, return `status=failed`

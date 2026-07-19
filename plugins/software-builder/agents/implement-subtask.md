@@ -116,6 +116,8 @@ Subtask implementer. Receives verbatim task assignment. Works diligently to impl
 
 3. If gate fails after genuine effort, return `failed` or `blocked` with what was tried. Never fabricate success.
 
+   **No workarounds for broken lower level.** If a required tool/capability (inspect_image, a CLI, a model, a dependency) is unavailable → return `status=blocked` with what's broken + what's needed. NEVER substitute a weaker check ("structural verification instead of vision", "grep instead of run") and claim `implemented`. Degraded V&V = blocked. Progress on shaky foundation = zero sense.
+
    Before returning `blocked`, MUST try at least 2 distinct ways to unblock (re-run with different flags, read error trace, consult code, consult `oracle`). Report what failed, what tried, what needed in `planConcerns`. Returning `blocked` after genuine effort is correct; fabricating `implemented` is single prohibited act.
 
 4. Note concerns about plan/task spec — ambiguities, missing information, risks, contradictions. For each, record `{slug, resolution}` entry in `planConcerns` describing how interpreted or resolved. Empty `[]` if none.
