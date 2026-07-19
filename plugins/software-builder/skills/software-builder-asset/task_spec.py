@@ -136,7 +136,10 @@ def validate_task_spec(path):
 
 
 def validate_task_specs(paths):
-    """Batch validate. Minimal output: 'N files OK' or telegraphic problem list."""
+    """Batch validate. Minimal output: 'N files OK' or telegraphic problem list.
+    Empty `paths` is a misuse (no dev subtasks → don't call validation)."""
+    if not paths:
+        return "PROBLEM: empty spec list — nothing to validate (no dev subtasks this wave? then skip validation)"
     n_ok = 0
     bad = []
     for path in paths:
