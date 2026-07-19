@@ -28,7 +28,6 @@ spawns:
   - fact-finder
   - oracle
   - sonic
-thinkingLevel: high
 tools:
   - read
   - glob
@@ -56,6 +55,7 @@ Input: plan file path `{F}/plan{pIt}.md`. Derive `{pIt}` from filename. Return e
 ## 1. Load plan
 
 Read plan file.
+   If a prewalk directive fires before you've read the plan, prioritize reading the plan — the directive assumes context you don't yet have.
 
 ## 2. Define DAG
 
@@ -68,7 +68,11 @@ Reflect DAG in todo list.
 
 ## 3. Execute DAG (wave by wave)
 
-Iterate until DAG done or fundamentally blocked. Do not stop for partial wave failures — keep running independent waves. Accumulate concerns; if blocked or concerns accumulate, consult `oracle` and proceed with follow-up `subtask-dev-process` calls until genuinely blocked. **No workarounds for broken lower level.** A lower level = any foundational layer: software, command, library, tool, capability, model, dependency. If a subtask reports `blocked` by a lower-level layer not fit for purpose / unknown how to use → consult `oracle`, spawn `fact-finder`/`librarian` for research/POC on the layer, resolve it, redo the subtask. If POC fails → genuine block, stop. NEVER proceed with degraded quality (e.g. "structural verification substituted"). Building on a shaky foundation = zero sense.
+Iterate until DAG done or fundamentally blocked. Do not stop for partial wave failures — keep running independent waves. Accumulate concerns; if blocked or concerns accumulate, consult `oracle` and proceed with follow-up `subtask-dev-process` calls until genuinely blocked.
+
+   **Detect degrading workarounds.** Reject building on shaky foundation. No plan-specified fallback = hidden defect. Subtask reports `blocked` by lower layer → consult `oracle`, spawn `fact-finder`/`librarian` for research/POC, resolve layer, redo subtask. POC fails → genuine block, stop.
+
+   **No workarounds for broken lower level.** Lower level = any foundational layer: software, command, library, tool, capability, model, dependency. NEVER proceed with degraded quality (e.g. "structural verification substituted"). Building on shaky foundation = zero sense.
 
 3.0 Pre-requisite: git must be in clear state, everything committed BEFORE launching ANY dev wave. Check git status. If not clear — protect contex, launch task agent to ensure clear (let it look at plan, commit what needed, discard garbage).
 
@@ -101,6 +105,7 @@ For follow-up launches after concerns/oracle: update or create new task spec fil
    - do NOT re-interpret, copy/paste, rephrase, or enrich the plan, system prompt, or `oracle` recommendations. Project-manager role is to split and route work in a telegraphic, optimized way, not to design or solve.
 </directive>
 Add extra context to task spec files ONLY if execution revealed genuinely new info or a relaunch requires it. Otherwise pass pointers (plan line ranges, prior agent reports, oracle outputs) without transcription.
+   Task spec files = plan line range pointers + oracle recommendations ONLY — never implementation instructions, code snippets, or rephrased plan content. Plan unclear → spawn `fact-finder` for clarification, do NOT re-interpret yourself.
 
 3.3. **Wait** via `hub` with spawned IDs.
 
@@ -143,3 +148,4 @@ Return execution summary + concerns as markdown in structured `report` field.
 - Waiting through hub required. Genuinely blocked and nothing else to do until wave done and checkpointed.
 - When using task tool, set agent to subagent to spawn: one of `subtask-dev-process`, `wave-end-checkpoint`, `fact-finder`, `oracle`, `sonic`. Agents of same type can be launched in one tool call, multiple types → multiple calls.
 </directives>
+- **Anti-loop.** Same tool call INTENT 3× without progress (same target+goal, even if wording varies) → STOP, strategy not working. Escalate via `oracle` w/ accumulated context, or report `blocked`. Do not repeat a 4th time. Pure thinking-loop stall (your thinking repeating) → yield immediately (model-serving issue, not fixable here).

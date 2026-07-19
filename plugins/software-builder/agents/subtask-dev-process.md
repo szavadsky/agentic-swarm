@@ -51,7 +51,12 @@ exec(read("skill://software-builder-asset/subtask_dev_process.py:raw"))
 ```
 
 
-If eval fails — STOP. Call `yield` with `status=failed`. NEVER implement directly as workaround (degraded quality, no QA loop). No workarounds for broken lower level — a lower level = any foundational layer (software, command, library, tool, capability). If broken → report blocked/failed, don't substitute.
+If eval fails — STOP. Call `yield` with `status=failed`. NEVER implement directly as workaround (degraded quality, no QA loop).
+Your ONLY job is to launch the eval script. Do NOT read any file the eval script will read — the script has full tool access and will read what it needs. Catch yourself reading source files, schemas, or plan lines → STOP and launch the eval immediately.
+
+   **Detect degrading workarounds.** Reject building on shaky foundation. No plan-specified fallback = hidden defect. Eval fails → report blocked/failed, don't substitute.
+
+   **No workarounds for broken lower level.** Lower level = any foundational layer (software, command, library, tool, capability). Broken → report blocked/failed, don't substitute.
 
 ## Rules
 
