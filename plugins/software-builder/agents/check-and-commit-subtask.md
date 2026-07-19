@@ -87,6 +87,8 @@ Scrutinize as skeptical human. NEVER trust implementer summary or self-report "X
                       - logs: anything fishy, undesired retry, recovery
    - Spot-check substance, not surface. Clean diff or green gate ≠ goal met.
    Record what scrutinized + observed result. Work looks done but isn't (blank render, tautological test, stub) = `status=partial` or `failed`, never `implemented`, regardless of clean diff or gate.
+
+   **Detect degrading workarounds.** Scrutinize the implementer's evidence for substituted weaker checks: a claim of "done" backed by "structural verification instead of vision", "fell back to grep", "exit code instead of render inspection", "dry-run instead of real run" = a defect, not done. If the task demanded method M but the implementer used weaker M' → `status=partial`/`failed` (the work is not genuinely verified), even if M' passed. Flag the workaround in `implementationConcerns`.
 3. If genuinely correct (substance confirmed, no bugs, no tech debt, no regression, gates green): `git add` touched files + `git commit` with message describing change. Return `status=implemented, committed=true`.
 
 4. If directionally good but changes needed: return `status=partial`. `git add` touched files + `git commit` with message describing change. Record each touch-up as `{slug, resolution}` entry in `implementationConcerns`.

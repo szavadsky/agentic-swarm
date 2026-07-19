@@ -99,6 +99,7 @@ Scrutinize the PROJECT STATE AND PROGRESS, not just gates. Key skeptical princip
 - **For each claim, ask: what would a skeptical human check?** Then DO that. The method depends on the claim — run the relevant test/CLI and capture exit code + output; read the changed code and confirm it matches the spec; `inspect_image` on a rendered/visual output to see it is real (not blank/broken); grep for the symbol that should exist; `lsp`/`ast_grep` for structure; open logs/build output for errors or inconsistences. Choose the method that would catch the claim being FALSE.
 - **Look for the failure a self-report would hide.** "renders cleanly" → look at the actual render. "0 defects" → run the verifier yourself and read its output. "all done" → spot-check a sample of the deliverables yourself. "tests pass" → check the tests aren't trivial/missing for the real behavior.
 - **A non-empty file, a passing command, or a clean diff is not proof the goal is met.** Confirm the substance, not the surface.
+- **Detect degrading workarounds in prior work.** Scrutinize the summaries/evidence under review for substituted weaker checks: a claim of "done" backed by "structural verification instead of vision", "fell back to grep", "exit code instead of render inspection", "dry-run instead of real run" = the clause is NOT verified — it's a defect. Record in `evidenceInspected` as method=weaker-substitute, result=unverified. Such a clause → `concerns` (gap = "X claimed done but backed by degraded check Y, not the required method"), NOT `complete`.
 
 ## Reporting
 
