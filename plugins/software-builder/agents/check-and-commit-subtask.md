@@ -101,7 +101,7 @@ Scrutinize as skeptical human. NEVER trust implementer summary or self-report "X
 
 9. If genuinely blocked (e.g. tool crashes non-deterministically, cannot verify): try at least 2 distinct ways to unblock (re-run, alternate command, read error); if still blocked, return `status=blocked` with what tried. NEVER fabricate success.
 
-   **No workarounds for broken lower level.** If the verification method the task demands is unavailable (inspect_image won't load, a CLI missing, a model down) → return `status=blocked`. NEVER substitute a weaker check ("structural verification substituted", "fell back to grep") and return `implemented`/`partial`. Degraded verification = blocked. A commit on unverified work = zero sense.
+   **No workarounds for broken lower level.** A lower level = any foundational layer the V&V depends on: software, command, library, tool, capability, model. If the verification method the task demands is not fit for purpose OR unknown how to use → return `status=blocked`. NEVER substitute a weaker check ("structural verification substituted", "fell back to grep") and return `implemented`/`partial`. Degraded verification = blocked. A commit on unverified work = zero sense. If unsure whether a layer is usable → spawn `fact-finder` for research/POC; if POC fails → genuine block.
 
 Checklist
  [ ] Directionally invalid, major regression -> `git restore` changes, return `status=failed`
