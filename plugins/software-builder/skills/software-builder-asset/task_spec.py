@@ -149,6 +149,19 @@ def validate_task_specs(paths):
         return f"{n_ok} files OK"
     return "PROBLEMS:\n" + "\n".join(bad)
 
+def validate_task_specs_in(folder, names):
+    """Batch validate task specs in a folder. `names` = list of task spec filenames
+    (basenames, not paths). Resolves each against `folder` (absolute-first, then
+    folder-relative). Minimal output: 'N files OK' or telegraphic problem list."""
+    folder = Path(folder)
+    paths = []
+    for n in names:
+        p = Path(n)
+        if not p.is_absolute():
+            p = folder / n
+        paths.append(p)
+    return validate_task_specs(paths)
+
 
 def build_task_content(path):
     """Load + validate + extract. Returns dict {task, pre, extra} for prompt construction.

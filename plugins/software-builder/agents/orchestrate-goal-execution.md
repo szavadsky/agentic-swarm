@@ -88,11 +88,12 @@ No copy/paste of plan content. No implementation instructions. Pointers only.
 VERIFY/HOUSEKEEPING task spec files stay Markdown (current format).
 </directive>
 
-3.1.5. **Validate dev task specs (one shot)**: run in single `eval` call with all wave dev specs:
+3.1.5. **Validate dev task specs (one shot)**: run in single `eval` call with the wave's task-spec folder + list of dev task spec filenames:
 ```
-SPECS = ["<abs path>", ...]  # all dev task spec files in this wave
+FOLDER = "{F}/Execute{pIt}"           # folder where task spec files reside
+SPECS = ["WaveSlugSubtaskSlug.md", ...]  # dev task spec filenames in this wave (basenames)
 exec(read("skill://software-builder-asset/task_spec.py:raw"))
-print(validate_task_specs(SPECS))
+print(validate_task_specs_in(FOLDER, SPECS))
 ```
 Output minimal: `N files OK` or telegraphic problem list. Problems → fix YAML files, re-validate. Do NOT spawn dev agents until all specs validate. Keep output token-optimized.
 
