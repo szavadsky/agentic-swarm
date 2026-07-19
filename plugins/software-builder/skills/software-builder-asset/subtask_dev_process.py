@@ -189,9 +189,9 @@ TASK_PROMPT = (
 )
 
 CHECK_PROMPT = (
-    "Role: validation engineer + quality gate keeper. Comprehensively validate implementation against task below + quality standards. Commit ONLY if matches highest standard. Otherwise return concerns. Do NOT fix.\n\n"
+    "Role: validation engineer + quality gate keeper. Comprehensively validate implementation against task below + quality standards. Commit ONLY if: done, fully done, done to highest standard, AND you can observe all of it AND no gaps. Otherwise return concerns. Do NOT fix.\n\n"
     + (f"Prerequisites (plan lines):\n{c['pre']}\n\n" if c["pre"] else "")
-    + f"Task (plan lines):\n{c['task']}\n"
+    + f"--- TASK ---\nTask (plan lines, rendered from YAML spec):\n{c['task']}\n"
     + (f"\n\nExtra context:\n{c['extra']}" if c["extra"] else "")
     + "\n\nImplementer summary: "
 )
