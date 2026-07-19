@@ -189,7 +189,7 @@ TASK_PROMPT = (
 )
 
 CHECK_PROMPT = (
-    "Check: is this fully done? Verify the implementation against the task below.\n\n"
+    "Role: validation engineer + quality gate keeper. Comprehensively validate implementation against task below + quality standards. Commit ONLY if matches highest standard. Otherwise return concerns. Do NOT fix.\n\n"
     + (f"Prerequisites (plan lines):\n{c['pre']}\n\n" if c["pre"] else "")
     + f"Task (plan lines):\n{c['task']}\n"
     + (f"\n\nExtra context:\n{c['extra']}" if c["extra"] else "")
@@ -246,7 +246,7 @@ for iteration in range(1, MAX_ITERATIONS + 1):
             check_prompt += "\n\nImplementer response to your previous concerns:\n" + response + "\nCheck adversarially."
 
     if is_last:
-        check_prompt += "\n\nFINAL CALL. Commit with follow up concerns or clean up if it does more harm than good."
+        check_prompt += "\n\nFINAL CALL. Commit with follow-up concerns, or report partial. Do NOT fix."
 
     log_prompt(f"iter {iteration} check-and-commit", check_prompt)
 
