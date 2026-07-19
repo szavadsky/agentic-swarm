@@ -133,8 +133,22 @@ CHECK_SCHEMA = {
         "status": {"type": "string", "enum": ["complete", "concerns"]},
         "concerns": {"type": "string"},
         "summary": {"type": "string"},
+        "evidenceInspected": {
+            "type": "array",
+            "description": "REQUIRED and non-empty for status=complete. Each entry = one plan/DoD clause INDEPENDENTLY verified against the ACTUAL artifact (the render, the generated file, the run output) — not a summary, not a verifier exit code, not a rubric checkbox. {clause, artifact, method, result}. status=complete with empty evidenceInspected is a fabrication.",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "clause": {"type": "string"},
+                    "artifact": {"type": "string"},
+                    "method": {"type": "string"},
+                    "result": {"type": "string"},
+                },
+                "required": ["clause", "artifact", "method", "result"],
+            },
+        },
     },
-    "required": ["status", "concerns", "summary"],
+    "required": ["status", "concerns", "summary", "evidenceInspected"],
 }
 MAX_FOLLOWUPS = 2
 

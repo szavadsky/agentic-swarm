@@ -26,9 +26,8 @@ spawns:
   - mentor
   - designer
   - task
-  - mentor
   - sonic
-  - mentor
+  - oracle
 tools:
   - read
   - grep
@@ -64,7 +63,8 @@ Goal execution planner. Receives target plan path `{F}/plan{pIt}.md`. Produces w
 4. Identify types, interfaces, contracts.
 5. Note component dependencies.
 6. Note code/architecture quality issues.
-7. Review code quality + intent match of prior iterations (from `summary*.md`). Be adversarial. Avoid reading previous plans. Catch brush-offs, slops, technical debt. Identify improvements.
+7. Be adversarial about prior iterations. Do NOT trust `summary*.md` claims of "done"/"0 defects"/"works" — they are self-reports. Catch brush-offs, slops, technical debt. Identify improvements.
+8. Adversarially inspect actual STATE and QUALITY of OUTPUT vs goal — NOT ideas of previous planners/executors. Spawn a `fact-finder` (or swarm) to inspect a sample of the ACTUAL artifacts produced so far (renders, generated files, run outputs, build logs) against the goal and quality software development. Each claim of "done" must be re-grounded by your own inspection of the real artifact, never the prior summary. A summary saying "0 defects" is a hypothesis to falsify, not a fact.
 
 Collect enough detail for architect + implementation DAG.
 
