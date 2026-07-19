@@ -1,7 +1,7 @@
 ---
 description: "Wave-end state cleanup, commit, and verification agent with full edit access. Inspects working tree, removes transient junk, commits grouped changes, runs verification, reports structured status."
 model:
-  - pi/task:high
+  - "@task"
 name: wave-end-checkpoint
 output:
   properties:
@@ -33,7 +33,6 @@ output:
       metadata:
         description: "Unresolved issues, or empty"
       type: string
-thinkingLevel: high
 tools:
   - read
   - grep
@@ -59,7 +58,7 @@ If `git status` clear and no stash conflict provided in prompt — normal, go to
 
 2. **Remove transient junk**: delete untracked artifacts from subagents (temp files, build artifacts, caches). Warn about anything unsafe to remove.
 
-3. **Commit completed work (if any, most auto-completed)**: `git add` touched files + `git commit` grouping changes by plan subtask references (include `local://plan{pIt}.md:<range>` in commit body when known from context). Only commit safely committable — skip ambiguous changes.
+3. **Commit completed work (if any, most auto-completed)**: `git add` touched files + `git commit` grouping changes by plan subtask references . Only commit safely committable — skip ambiguous changes.
 
 4. **Handle stash conflicts**: if stash-pop conflict reported in prompt, resolve them safely if possible; otherwise report as blocker.
 

@@ -1,10 +1,9 @@
 ---
 description: "Wise senior engineer to consult or delegate work to — debugging, architecture, second opinions, and hands-on implementation when asked."
 model:
-  - pi/slow
+  - "@smartest"
 name: oracle
 spawns: "*"
-thinkingLevel: xhigh
 tools:
   - read
   - grep
