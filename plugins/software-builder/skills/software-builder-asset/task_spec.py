@@ -125,6 +125,20 @@ def validate_task_spec(path):
         problems.append("lns: required non-empty array of line-range strings")
     else:
         _check_ranges("lns", lns)
+        # Semantic echo: print nearest preceding heading per lns range (catches swap/mis-scope)
+        if isinstance(plan, str) and Path(plan).is_file():
+            plan_lines = Path(plan).read_text().splitlines()
+            for r in lns:
+                try:
+                    a, _ = _parse_range(r)
+                except Exception:
+                    continue
+                heading = ""
+                for i in range(a - 1, -1, -1):
+                    if i < len(plan_lines) and plan_lines[i].startswith(("### ", "## ", "# ")):
+                        heading = plan_lines[i].strip()
+                        break
+                print(f"  spec-echo: lns {r} → {heading}")  # info to stdout, not a problem
 
     _check_ranges("pre", data.get("pre"))
 

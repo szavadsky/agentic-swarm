@@ -1,7 +1,7 @@
 ---
 description: "Independent checker+committer. Receives task content inline + implementer summary. Scrutinizes work genuinely done (not just gate-green), commits if correct. Decides commit."
 model:
-  - pi/task
+  - ollama-cloud/glm-5.2:max
 name: check-and-commit-subtask
 output:
   properties:
