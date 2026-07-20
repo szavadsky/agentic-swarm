@@ -60,6 +60,7 @@ Read plan file.
 ## 2. Define DAG
 
 Group into waves of independent subtasks (max 5 per wave). Each wave single-type: all `dev`, all `verify`, or all `housekeeping` — never mix. Order waves by dependency. For each subtask, note one or more `{F}/plan{pIt}.md:<start>-<end>` line ranges. Use absolute paths.
+Split larger plan milestone to smaller "reviewable change" task - 1-3 files, 100-300 diff.  
 Classify each subtask: `dev` (writes code), `verify` (read-only check), `housekeeping` (trivial zero-risk edit).
 Use `fact-finder` for project state beyond plan. Focus on scope and dependencies — do not read code or understand implementation — downstream agents handle that. Just send task to them.
 Reflect DAG in todo list.
@@ -80,10 +81,11 @@ DEV task spec files are YAML with this schema (validated before spawn):
   lns:  ["25-35", "40"]         # REQUIRED. Line ranges for ACTUAL task (1-based inclusive).
   pre:  ["10-12"]               # OPTIONAL. Prerequisite line ranges in plan.
   extra: |                      # OPTIONAL. Prose. ONLY if something NOT in plan
-    ...                         #   learned during execution (fact-finder/oracle/relaunch).
+    ...                         #   learned during execution (oracle/relaunch).
 ```
 
 No copy/paste of plan content. No implementation instructions. Pointers only.
+extra: - need to have grounding in oracle/relaunch or narrow scope (split plan milestore to multiple). Do NOT add plan re-interpretation.
 VERIFY/HOUSEKEEPING task spec files Markdown.
 </directive>
 
@@ -161,4 +163,4 @@ Return execution summary + concerns as markdown in structured `report` field.
 - Waiting through hub required. Genuinely blocked and nothing else to do until wave done and checkpointed.
 - When using task tool, set agent to subagent to spawn: one of `subtask-dev-process`, `wave-end-checkpoint`, `fact-finder`, `oracle`, `sonic`. Agents of same type can be launched in one tool call, multiple types → multiple calls.
 </directives>
-- **Anti-loop.** Same tool call INTENT 3× without progress (same target+goal, even if wording varies) → STOP, strategy not working. Escalate via `oracle` w/ accumulated context, or report `blocked`. Do not repeat a 4th time. Pure thinking-loop stall (thinking repeating) → yield immediately (model-serving issue, not fixable here).
+- **Anti-loop.** Same tool call INTENT 3× without progress → STOP, strategy not working. Escalate via `oracle` w/ summary of isssues
