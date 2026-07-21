@@ -5,10 +5,19 @@ model:
 name: infra
 output:
   properties:
+    status:
+      metadata:
+        description: "Outcome: done if setup.md + cicd.md created, failed otherwise"
+      enum:
+        - done
+        - failed
     summary:
       metadata:
-        description: "Summary"
+        description: "Telegraphic summary of what was created/found"
       type: string
+  required:
+    - status
+    - summary
 tools:
   - read
   - grep
@@ -32,4 +41,8 @@ Read project code. Given `{F}/goal.md`, create
 5. Run + list ONLY commands needed for `{F}/setup.md` (eg .venv, configure) on new git worktrees (no .gitignored files passed). If nothing: one line `#No setup needed`. No prose
 6. `{F}/cicd.md` run + document compile, lint, unit test, integration test, etc. Minimum telegraphic prose only if required. If applicable: section `## Issues at start of the project`
 
-yield with telegraphic status (<5 word>)
+yield `status=done` + telegraphic `summary` (files created + any issues). Both files written → `done`; could not create → `status=failed` + summary why.
+
+<directive>
+Exremely short, telegraphic, copy and paste commands output what incremental has to be done in current environment. P<3 lines in setup and <7 lines in cicd unless absolutely required.
+</directive>

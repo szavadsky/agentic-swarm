@@ -250,7 +250,7 @@ for iteration in range(1, MAX_ITERATIONS + 1):
             check_prompt += "\n\nImplementer response to your previous concerns:\n" + response + "\nCheck adversarially."
 
     if is_last:
-        check_prompt += "\n\nFINAL CALL. Commit with follow-up concerns, or report partial. Do NOT fix."
+        check_prompt += "\n\nFINAL CALL. Commit with follow-up concerns and  report partial; stash all bad. git must be clean. Do NOT fix."
 
     log_prompt(f"iter {iteration} check-and-commit", check_prompt)
 

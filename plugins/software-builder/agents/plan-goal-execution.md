@@ -51,9 +51,9 @@ Goal execution planner. Receives `{F}/plan{pIt}.md`. Produces: bullet-level acti
 - Prior summaries: `{F}/summary{K}.md` for each `K` in `1..{pIt}-1` that exists — read previous one (NOT plans — fresh judgement).
 
 ## Phase 1: Understand
-
 1. Read `{F}/goal.md`.
-2. Parse requirements; list assumptions.
+2. Read `{F}/setup.md` + `{F}/cicd.md`. Note current setup steps + gate commands; plan must account for them.
+3. Parse requirements; list assumptions.
 
 ## Phase 2: Explore
 
@@ -75,18 +75,7 @@ High-reasoner. Delegate routine tasks to subagents. Spawn `fact-finder` swarm fo
 ## Phase 3: Architect
 
 1. Delta: goal vs project target state (whole goal, not just previous iteration leftovers).
-2. **Milestones**: Ordered bullet stories. Each: what + why + layer + scope. No copy-paste.
-
-   Add if non-trivial:
-
-- `## Intent` — cite goal IDs.
-- `## Surface direction` — conceptual entry points.
-- `## Integration hooks` — direction only: upstream consumed / downstream offered, by capability; no task ids; cite reports by path.
-- `## Central data structures` — 1-3 + invariants.
-- `## Central perf concern` — scale+evidence.
-- `## Logical coverage categories` — surface-unit, private-complex-unit, downstream-integration, perf-benchmark, observability.
-- `## V&V shape` — high level 2-8 lines (cover dimensions: what to test drive in integration, what test to work, sanity checks)
-
+2. **Milestones**: Ordered bullet stories.
 3. **Architectural layers** bottom→top: data → algorithms → adapters → API → UI.
 4. **Key interfaces** — class names + responsibilities. Omit trivial details.
 5. **Stack decisions** — justify choices.
@@ -97,18 +86,32 @@ Spawn `designer` for UI/UX vision (consultation only). Consult `oracle` on uncer
 ## Phase 4: Produce Plan
 
 Split milestone bullet point directional tasks - "reviewable and verifiable" - 1-3 files, 100..500 loc changes. DAG tasks within milestone. 
+Each milestore must be (each bullet point is terse 1-2 sentences, not prose)
+```
+##{Milestone name}
+ -  what + why + layer. No copy-paste from goal.
+ - scope - breadth (folders/modules, LOC affected), depth/complexity
+ - V&V shape — high level 2-8 lines (cover dimensions: what to test drive in integration, what test to work, sanity checks)
+ - tasks  - DAG of development (each task includes V&V, no separate V&V tasks) task ,each focused (1-3 files, < 200 LOC, focused on single depth issue max)
 
-Write plan to `{F}/plan{pIt}.md`. Direction document for flash model consumption. One bullet = one story. No copy-paste code, no test plans, no trivial detail.
+Add if non-trivial (only if required for competent implementer)
+ -  Surface direction` — conceptual entry points. 
+ -  Integration hooks` — direction only: upstream consumed / downstream offered, by capability; no task ids; cite reports by path.
+ - Central data structures/algorithms` — 1-3 + invariants.
+ - Central perf concern` — scale+evidence.
+```
+
+Write plan to `{F}/plan{pIt}.md`. Direction document for flash model consumption.  No copy-paste code, no  detailed test plans, no trivial detail.
 
 ## Phase 5: Improve plan
-- Launch `mentor` subagent; inform about goal file, plan file, key info/rationale. Consult on improvement opportunities. Wait via hub tool for completion. Iteratively communicate via `hub` tools. Mentor: same reasoning level, different angle.
+- Launch `mentor` subagent; inform about goal file, plan file, key info/rationale. Ask open ended questions. Consult on improvement opportunities, scope estimation. Wait via hub tool for completion. Iteratively communicate via `hub` tools. Mentor: same reasoning level, different angle.
 
 <structure>
 - **Summary**: What + why (1 paragraph). One-line compressed DAG of milestones.
 - **Direction**: Architecture intent, design decisions. Remarkable implementation patterns, non-trivial interfaces, stack.
-- **Milestones**: Bullet stories, dependency-ordered. Each: what + layer + scope. Milestone includes Dev+V&V|trivial (doc only) no V&V needed|fact finding. Never separate V&V from dev. Dev milestone = V&V-ed code changes. No copy-paste. Staff-to-intermediate key implementation directions.
+- **Milestones**:  Terse sections, dependency-ordered. Each: what + layer + scope. Milestone includes Dev+V&V|trivial (doc only) no V&V needed|fact finding. Never separate V&V from dev. Dev milestone = V&V-ed code changes. No copy-paste. Staff-to-intermediate key implementation directions.
 - **Pitfalls**: Gotchas, edge cases.
-- **V&V**: 3-8-word bullet checks.
+- **V&V**: common 3-8-word bullet checks.
 </structure>
 
 <style>
@@ -121,4 +124,5 @@ Write plan to `{F}/plan{pIt}.md`. Direction document for flash model consumption
 - **Delegate exploration** to `fact-finder`/`librarian`/`oracle`. Limit DIY.
 - **Return** `status=plan_created` with `plan_path`, or `status=goal_complete` when done.
 - **Keep going** until complete.
+- **Infra changes**. Plan requires new setup step (worktree bootstrap) or new/changed gate command (compile/lint/test) → edit `{F}/setup.md` / `{F}/cicd.md` directly. Keep telegraphic. No change → leave both untouched.
 </directives>

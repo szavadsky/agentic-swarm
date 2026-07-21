@@ -167,9 +167,39 @@ def call_agent(plan_path, agent_name, schema, extra=None, retries=2):
             log(f"call_agent: {agent_name} glitch on attempt {attempt}: {e}")
     raise RuntimeError(f"{agent_name} failed after {retries + 1} attempts")
 
+INFRA_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "status": {"type": "string", "enum": ["done", "failed"]},
+        "summary": {"type": "string"},
+    },
+    "required": ["status", "summary"],
+}
+
+def ensure_infra():
+    """Run infra agent if setup.md or cicd.md missing. Idempotent."""
+    setup_path = Path(f"{F}/setup.md")
+    cicd_path = Path(f"{F}/cicd.md")
+    if setup_path.is_file() and cicd_path.is_file():
+        log("infra: setup.md + cicd.md present, skip")
+        return
+    log(f"infra: missing setup={not setup_path.is_file()} cicd={not cicd_path.is_file()}, launching infra")
+    prompt = f"Run on start: create {F}/setup.md and {F}/cicd.md per your system prompt. Goal folder: {F}"
+    for attempt in range(1, 3):
+        try:
+            res = agent(prompt, agent="infra", schema=INFRA_SCHEMA)
+            if isinstance(res, dict) and res.get("status") == "done":
+                log(f"infra → done: {res.get('summary', '')[:80]}")
+                return
+            log(f"infra attempt {attempt} bad output: {res!r}")
+        except Exception as e:
+            log(f"infra attempt {attempt} glitch: {e}")
+    raise RuntimeError("infra failed after 2 attempts")
+
 goal_file = Path(f"{F}/goal.md")
 if not goal_file.is_file():
     raise ValueError(f"goal file not found: {F}/goal.md")
+ensure_infra()
 
 def iter_state(k):
     """Classify iteration k by file presence: 'done' (summary exists), 'partial' (plan only), 'empty'."""

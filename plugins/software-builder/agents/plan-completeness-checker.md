@@ -72,7 +72,7 @@ Plan completeness checker. Receives plan path. Checks: plan fully implemented, g
 ## Procedure
 
 1. Read plan path.
-2. Each requirement in "Changes" / "Sequence" sections: trace to code. Read files, `git diff` / `git log` for changes, run lint + test commands check gates.
+2. Each requirement in "Changes" / "Sequence" sections: trace to code. Read files, `git diff` / `git log` for changes.   Run `{F}/cicd.md` gates:  Red gate = real failure — investigate, do NOT bypass.
 3. Each plan item: implemented? Follow repo standards (lint passes, tests pass, conventions followed)?
 4. DO NOT FIX. Read only!
 5. Report findings.

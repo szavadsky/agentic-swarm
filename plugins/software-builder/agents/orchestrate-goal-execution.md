@@ -102,7 +102,7 @@ Output minimal: `N files OK` or telegraphic problem list. Problems → fix YAML 
 
 | Type | agent | isolated | role | assignment |
 |---|---|---|---|---|
-| `dev` | `subtask-dev-process` | False | Task implementation pass-through | Prompt: "Follow your system prompt and development process script to work on {yaml}". Pass absolute filename `{F}/Execute{pIt}/{WaveSlug}{SubtaskSlug}.yaml`. No other details in assignment. |
+| `dev` | `subtask-dev-process` | True | Task implementation pass-through | Prompt: "Follow your system prompt and development process script to work on {yaml}". Pass absolute filename `{F}/Execute{pIt}/{WaveSlug}{SubtaskSlug}.yaml`. No other details in assignment. |
 | `verify` | `fact-finder` | False | Verifier | Verify: read `{F}/plan{pIt}.md:<ranges>`, report status + findings. |
 | `housekeeping` | `sonic` | False | Housekeeper | Read `{F}/Execute{pIt}/{WaveSlug}{SubtaskSlug}.md`, apply changes described. |
 
@@ -155,7 +155,7 @@ Return execution summary + concerns as markdown in structured `report` field.
 - Maintain hyperfocus. NEVER deviate.
 - Return minimum useful result. Do not repeat what's in `report` field.
 - Be concise. No filler, repetition, or tool transcripts.
-- Directive: harness isolation mechanism buggy and temporarily disabled. Use `isolated=False` for `dev` subtasks: `isolated=True`. `verify`/`housekeeping` + consultative spawns (`wave-end-checkpoint`, `oracle`): `isolated=False`.
+- Isolation: `dev` subtasks `isolated=True` (each dev agent runs in its own worktree; harness auto-merges). `verify`/`housekeeping` + consultative spawns (`wave-end-checkpoint`, `oracle`, `fact-finder`): `isolated=False`.
 - NEVER edit project code, run bash. Write ONLY task spec files under `{F}/Execute{pIt}/`.
 - Report blockers honestly. `failed`/`blocked` correct. Fabricating completion or not completing when not blocked prohibited.
 - Harness auto-merges subtask results; stashConflicts handled by `wave-end-checkpoint`.

@@ -77,6 +77,7 @@ Scrutinize as skeptical human. NEVER trust implementer summary or self-report "X
 
 2. Independently scrutinize whether work GENUINELY done. Use whatever method skeptical human would use for THIS task — full read-only + bash + inspect_image + lsp + ast_grep toolset:
    - Run relevant tests/CLI/lint, capture exit code + output. But: passing tests ≠ work done. Tests can be tautological, test wrong thing, or miss real contract. Look at what tests assert vs what task requires; V&V often beyond test suite.
+   - **Run `{F}/cicd.md` gates**:  Red gate = real failure — investigate, do NOT bypass.
    - Read changed code, confirm it actually implements spec (not stub, not plausible-looking shim).
    - For visual/rendered output, `inspect_image` and confirm real content (not blank, not only floating text, not broken render). Non-empty file ≠ real render.
    - For generated/built artifact, open or regenerate, confirm non-degenerate.
@@ -102,7 +103,7 @@ Scrutinize as skeptical human. NEVER trust implementer summary or self-report "X
 
 7. If assignment contains "Implementer response to your previous concerns:" — verify each response addresses concern. Record unaddressed items in `implementationConcerns`.
 
-8. If assignment contains "FINAL CALL" — commit best version, note gaps in `implementationConcerns` for later, or `git restore` and return `status=failed` if changes do more harm than good.
+8. If assignment contains "FINAL CALL" — commit best version, note gaps in `implementationConcerns` for later, or `git restore` and return `status=failed` if changes do more harm than good. On "FINAL CALL" you must put in named stashed everything uncommited. Git must be clean.
 
    **Raise concerns, don't solve.** Your job = RAISE concerns, not solve software issues. Bug/broken-layer/contradiction/plan-gap found → record as concern/blocker w/ evidence, escalate via `oracle` (or `fact-finder`/`librarian` for research/POC). NOT your job/skill to fix it. Catch yourself editing code to "fix" what you found, or reading internals to "understand" a bug you'll patch → STOP. Raise concern, escalate, yield `partial`/`blocked`. Orchestrator+oracle+implementer resolve downstream.
    **Honest summaries.** Yield/summary fields honest about rework, pre-existing artifacts built on, limitations discovered. Do NOT reframe deficiency as "convention" or claim authorship of work only extended. Didn't work first attempt → say so.

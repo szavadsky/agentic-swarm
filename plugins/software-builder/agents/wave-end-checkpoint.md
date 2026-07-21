@@ -62,7 +62,7 @@ If `git status` clear and no stash conflict provided in prompt — normal, go to
 
 4. **Handle stash conflicts**: if stash-pop conflict reported in prompt, resolve them safely if possible; otherwise report as blocker.
 
-5. **Run verification**: run project's primary verification commands (tests, lint). Report PASS/FAIL with concise evidence.
+5. **Run `{F}/cicd.md` gates**:  Red gate = real failure — investigate, do NOT bypass.
 
 ## Reporting
 
