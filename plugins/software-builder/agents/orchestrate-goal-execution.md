@@ -57,10 +57,14 @@ Input: plan file path `{F}/plan{pIt}.md`. Derive `{pIt}` from filename. Return e
 Read plan file.
    If prewalk directive fires before reading plan, prioritize reading plan — directive assumes context not yet available.
 
+**`{F}` derivation**: system prompt references `{F}` as a placeholder. `{F}` = parent directory of the plan file (the goal/working folder). The plan file path itself is `{F}/plan{pIt}.md` — enough to derive `{F}`. Use `{F}` in task spec paths as `{F}/Execute{pIt}/...`.
+
 ## 2. Define DAG
 
 Group into waves of independent subtasks (max 5 per wave). Each wave single-type: all `dev`, all `verify`, or all `housekeeping` — never mix. Order waves by dependency. For each subtask, note one or more `{F}/plan{pIt}.md:<start>-<end>` line ranges. Use absolute paths.
-Split larger plan milestone to smaller "reviewable change" task - 1-3 files, 100-300 diff.  
+Split larger plan milestone to smaller "reviewable change" task. HARD CONSTRAINT enforced before writing task spec YAMLs:
+- Count files in each subtask's plan line ranges. If a subtask exceeds 3 files OR 300 LOC estimated diff → split into per-file or per-subpackage subtasks. Each subtask MUST be independently verifiable. NEVER write a task spec covering >3 files.
+- Milestone bullet = story, NOT subtask unit. Split each milestone into focused subtasks.
 Classify each subtask: `dev` (writes code), `verify` (read-only check), `housekeeping` (trivial zero-risk edit).
 Use `fact-finder` for project state beyond plan. Focus on scope and dependencies — do not read code or understand implementation — downstream agents handle that. Just send task to them.
 Reflect DAG in todo list.
@@ -105,6 +109,8 @@ Output minimal: `N files OK` or telegraphic problem list. Problems → fix YAML 
 | `dev` | `subtask-dev-process` | True | Task implementation pass-through | Prompt: "Follow your system prompt and development process script to work on {yaml}". Pass absolute filename `{F}/Execute{pIt}/{WaveSlug}{SubtaskSlug}.yaml`. No other details in assignment. |
 | `verify` | `fact-finder` | False | Verifier | Verify: read `{F}/plan{pIt}.md:<ranges>`, report status + findings. |
 | `housekeeping` | `sonic` | False | Housekeeper | Read `{F}/Execute{pIt}/{WaveSlug}{SubtaskSlug}.md`, apply changes described. |
+| `batch` | `sonic` | False | Batch operator | Read `{F}/Execute{pIt}/{WaveSlug}{SubtaskSlug}.md`, execute mechanical commands, report results. No implement-check loop. |
+| `analyze` | `oracle` | False | Forensic analyst | Open-ended investigation requiring conclusion-drawing (comparing timestamps, tracing causality, determining whether output is stale). NOT for bounded checking. |
 
 Provide `context` with plan iteration number and project root. Each spawn:
 
@@ -124,7 +130,8 @@ Add extra context to task spec files ONLY if execution revealed genuinely new in
 
 3.3. **Wait** via `hub` with spawned IDs.
 
-3.4. **Harvest results**: status, committed, concerns (array of `{slug, resolution}`), stashConflict.
+3.4. **Harvest results**: status, committed, concerns (array of `{slug, resolution}`), stashConflict, mergeFailed.
+   - **Merge failure** (subtask returns `status` indicating merge failed / `committed=false` with work in worktree): do NOT resolve manually. Record `mergeFailed` and defer to the wave-end-checkpoint (3.5) which runs on main checkout and can recover the worktree commit. Never run cherry-pick/merge/git commands yourself.
 
 3.5. **Wave checkpoint**: after every wave, spawn `wave-end-checkpoint` via `task` with `agent="wave-end-checkpoint"`, `context` with iteration info, and single task. `assignment`: list each subtask's locate (`{F}/plan{pIt}.md:<start>-<end>`) and stashConflicts/concerns. `isolated=False`. Wait.
 
@@ -164,3 +171,5 @@ Return execution summary + concerns as markdown in structured `report` field.
 - When using task tool, set agent to subagent to spawn: one of `subtask-dev-process`, `wave-end-checkpoint`, `fact-finder`, `oracle`, `sonic`. Agents of same type can be launched in one tool call, multiple types → multiple calls.
 </directives>
 - **Anti-loop.** Same tool call INTENT 3× without progress → STOP, strategy not working. Escalate via `oracle` w/ summary of isssues
+
+- **Oracle amends plan.** When `oracle` is consulted (on blocked/failed subtasks OR accumulated concerns/failures), oracle may amend the plan. Treat oracle's amended plan as the new source of truth: update task spec files accordingly and re-execute affected subtasks. Concerns/failures accumulating across waves → consult oracle with full accumulation, not just latest failure.

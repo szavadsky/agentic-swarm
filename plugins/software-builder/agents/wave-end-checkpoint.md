@@ -53,16 +53,18 @@ Wave-end checkpoint agent with full edit access. Runs at end of every execution 
 
 ## Procedure
 
+0. **`{F}` derivation**: `{F}` = the goal/working folder. Derive from the plan file path provided in your task context (`{F}/plan{pIt}.md` → `{F}` = parent directory). Use `{F}` for `setup.md`/`cicd.md`/`Execute{pIt}/` paths.
+
 1. **Inspect working tree**: `git status`, `git stash list`, check untracked junk, leftover conflict markers, partial commits.
-If `git status` clear and no stash conflict provided in prompt — normal, go to Step 5.
+If `git status` clear and no stash conflict provided in prompt — normal, go to Step 4.
 
 2. **Remove transient junk**: delete untracked artifacts from subagents (temp files, build artifacts, caches). Warn about anything unsafe to remove.
 
-3. **Commit completed work (if any, most auto-completed)**: `git add` touched files + `git commit` grouping changes by plan subtask references . Only commit safely committable — skip ambiguous changes.
+3. **Run `{F}/cicd.md` gates**: Red gate = real failure. If gates fail: do NOT commit the failing work. Investigate root cause; if fixable, fix and re-run gates. If not fixable in this checkpoint, stash all uncommitted changes (git must be clean), report `status=blocked` with gate failure details. Never bypass a red gate.
 
-4. **Handle stash conflicts**: if stash-pop conflict reported in prompt, resolve them safely if possible; otherwise report as blocker.
+4. **Commit completed work (if any, most auto-completed)**: `git add` touched files + `git commit` grouping changes by plan subtask references. Only commit safely committable — skip ambiguous changes. Commit ONLY after gates pass.
 
-5. **Run `{F}/cicd.md` gates**:  Red gate = real failure — investigate, do NOT bypass.
+5. **Handle stash conflicts**: if stash-pop conflict reported in prompt, resolve them safely if possible; otherwise report as blocker.
 
 ## Reporting
 

@@ -53,6 +53,7 @@ Goal execution planner. Receives `{F}/plan{pIt}.md`. Produces: bullet-level acti
 ## Phase 1: Understand
 1. Read `{F}/goal.md`.
 2. Read `{F}/setup.md` + `{F}/cicd.md`. Note current setup steps + gate commands; plan must account for them.
+**`{F}` derivation**: `{F}` = the goal/working folder = parent directory of the plan file. The plan file path is `{F}/plan{pIt}.md` — enough to derive `{F}`. System prompt references to `{F}` resolve to this folder.
 3. Parse requirements; list assumptions.
 
 ## Phase 2: Explore
