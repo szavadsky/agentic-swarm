@@ -183,6 +183,8 @@ except ValueError as e:
     raise SystemExit(0)
 TASK_PROMPT = (
     "Develop this task.\n\n"
+    + f"Goal folder (absolute path): {c['F']}\n"
+    + f"Setup: {c['F']}/setup.md | CI/CD gates: {c['F']}/cicd.md\n\n"
     + (f"Prerequisites (plan lines):\n{c['pre']}\n\n" if c["pre"] else "")
     + f"Task (plan lines):\n{c['task']}\n"
     + (f"\n\nExtra context (learned during execution, not in plan):\n{c['extra']}" if c["extra"] else "")
@@ -190,6 +192,8 @@ TASK_PROMPT = (
 
 CHECK_PROMPT = (
     "Role: validation engineer + quality gate keeper. Comprehensively validate implementation against task below + quality standards. Commit ONLY if: done, fully done, done to highest standard, AND you can observe all of it AND no gaps. Otherwise return concerns. Do NOT fix.\n\n"
+    + f"Goal folder (absolute path): {c['F']}\n"
+    + f"Setup: {c['F']}/setup.md | CI/CD gates: {c['F']}/cicd.md\n\n"
     + (f"Prerequisites (plan lines):\n{c['pre']}\n\n" if c["pre"] else "")
     + f"--- TASK ---\nTask (plan lines):\n{c['task']}\n"
     + (f"\n\nExtra context:\n{c['extra']}" if c["extra"] else "")

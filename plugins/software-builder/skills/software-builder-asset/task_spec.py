@@ -182,12 +182,22 @@ def validate_task_specs_in(folder, names):
 
 def build_task_content(path):
     """Load + validate + extract. Returns dict {task, pre, extra} for prompt construction.
-    Raises ValueError on invalid spec."""
+    Raises ValueError on invalid spec.
+    Substitutes {F} placeholder with the goal folder (parent of plan file) so
+    implementers receive absolute paths to setup.md/cicd.md instead of literal '{F}'."""
     ok, problems = validate_task_spec(path)
     if not ok:
         raise ValueError(f"invalid task spec {path}:\n" + "\n".join(problems))
     data = load_task_spec(path)
-    task = extract_lines(data["plan"], data.get("lns", []))
-    pre = extract_lines(data["plan"], data.get("pre", [])) if data.get("pre") else ""
+    plan_path = data["plan"]
+    task = extract_lines(plan_path, data.get("lns", []))
+    pre = extract_lines(plan_path, data.get("pre", [])) if data.get("pre") else ""
     extra = (data.get("extra") or "").strip()
-    return {"task": task, "pre": pre, "extra": extra}
+    # Substitute {F} with the goal folder (parent dir of the plan file).
+    # Plan text uses {F} as a placeholder for the goal folder (e.g. "{F}/setup.md");
+    # without substitution the implementer sees literal "{F}/setup.md" and fails.
+    F = str(Path(plan_path).parent)
+    task = task.replace("{F}", F)
+    pre = pre.replace("{F}", F)
+    extra = extra.replace("{F}", F)
+    return {"task": task, "pre": pre, "extra": extra, "F": F}
