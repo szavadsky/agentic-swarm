@@ -6,7 +6,28 @@
 
 ## The loop
 
-A user goal lands in `{F}/goal.md`. A short driver command launches iterative execution for a fixed number of iterations. Each iteration is the same pipeline: plan → wave DAG → per-subtask dev pairs → wave-end checkpoint → replan. The harness defines two contracts every participant relies on: `{F}/setup.md` (how to run, test, and lint the project) and `{F}/cicd.md` (the quality gates, all of which must pass — a red gate is a real failure and is never bypassed).
+A user goal lands in `{F}/goal.md`. A single driver command (`goal-flow`) launches the whole loop: a mechanical driver reads the goal, runs a fixed number of iterations, and spawns the planner, orchestrator, and completeness checker per iteration. Before the first iteration, an `infra` role runs as a pre-step, creating `{F}/setup.md` and `{F}/cicd.md` if they are missing. Each iteration is the same pipeline: plan → wave DAG → per-subtask dev pairs → wave-end checkpoint → replan. The two contracts every participant relies on are `{F}/setup.md` (how to run, test, and lint the project) and `{F}/cicd.md` (the quality gates, all of which must pass — a red gate is a real failure and is never bypassed).
+
+### The cast
+
+Every role in the loop is a separate agent with a deliberately chosen model tier. Expensive reasoning is reserved for the planner and oracle; verification is mid-tier; the mechanical plumbing is cheap.
+
+| Role | Agent | Model tier | Job |
+|---|---|---|---|
+| Planner | `plan-goal-execution` | `@smartest` | Reads the goal and prior summaries, spawns the investigation swarm, writes the plan |
+| Oracle | `oracle` | `@smartest` | Senior-engineer consult; forensically investigates failures and amends the plan |
+| Mentor | `mentor` | `@mentor` | Plan critique — same reasoning level, different angle |
+| PM Orchestrator | `orchestrate-goal-execution` | `@slow` | Read-only project manager: wave DAG, task-spec pointers, ≤5 parallel dev subtasks per wave |
+| Subtask pipe | `subtask-dev-process` | `pi/task:off` | Zero-reasoning pass-through: loads the spec, spawns the implementer/checker pair |
+| Implementer | `implement-subtask` | `@task:high` | Implements assigned plan lines with evidence-forced verification; never commits |
+| Checker-Committer | `check-and-commit-subtask` | `pi/task` | Independent no-trust gate; runs the cicd.md gates; the only role that commits |
+| Plan Completeness Checker | `plan-completeness-checker` | `@task:high` | After the orchestrator reports done, traces plan requirements to code before the iteration closes |
+| Wave-end Checkpoint | `wave-end-checkpoint` | `@task` | Per wave: clean tree, gates, grouped commits |
+| Infra | `infra` | `@task:low` | Start-of-goal pre-step: creates `setup.md` and `cicd.md` |
+| Fact-finder | — | `pi/task` | Read-only investigation (tests, lint, web), fanned out by the planner |
+| Librarian | — | `pi/smol` | API and library research |
+| Sonic | — | mechanical | Housekeeping and batch chores |
+| Designer | — | — | UI/UX specialist consulted by the planner |
 
 ### 1. Planner (expensive reasoning, spent once per iteration)
 
@@ -37,15 +58,15 @@ Each subtask enters through a pass-through pipe — deliberately low-reasoning �
 - **Implementer** reads the setup doc, implements its assigned plan lines, applies the coding constitution, and runs multi-source verification — tests and CLIs, reading its own code, inspecting rendered output where visuals matter, structural checks (grep/AST/LSP). Its structured output schema **requires** `evidenceInspected`: one entry per verification personally performed (check, method, result). `status=implemented` with empty evidence is rejected by the schema — self-report is not evidence. The implementer never commits.
 - **Checker-Committer** is the independent gate. It scrutinizes the work as a skeptical human reviewing an untrusted contractor: diff first, then run tests *and read what they assert* (passing tests ≠ done; tests can be tautological), run the `{F}/cicd.md` gates, confirm the code implements the spec — not a stub, not a plausible shim — and for visual output, actually look at the render. Committing requires a synthesis of ≥2 verification-method families (test/CLI + output inspection + code read + structural check); no single source is authoritative. It raises concerns rather than fixing them — and only commits genuinely correct work.
 
-Dev subtasks run in isolated git worktrees; the harness auto-merges. The checker-committer is the only role that commits, so the mainline only ever receives twice-verified work.
-
-### 4. Checkpoint
+Dev subtasks run in isolated git worktrees, and the orchestrator fans them out in parallel waves: each wave launches up to 5 subtasks concurrently, every one isolated in its own worktree, while the implementer↔checker pair iterates on concerns within each subtask. Wave size is bounded and each wave is single-type, so independent work proceeds simultaneously without contention. The harness auto-merges completed waves. The checker-committer is the only role that commits, so the mainline only ever receives twice-verified work.
 
 After every wave, a checkpoint role inspects the working tree, removes transient junk, runs the gates, commits completed work grouped by plan subtask, and reports structured status (`clean`/`committed`/`concerns`/`blocked`, with test and lint evidence). Broken worktree state from a glitch surfaces here rather than corrupting the next wave.
 
 ### 5. Iteration and adversarial replan
 
 The orchestrator harvests results, keeps running independent waves despite partial failures, and accumulates concerns. When concerns accumulate or work blocks, it consults the oracle, which forensically investigates failures and amends the plan; amended plan lines flow back to implementers via new task specs. The planner's next iteration reads prior summaries adversarially for the same reason — recovery is planned, not improvised. In git history this shows up as `recovery:` commits and wave-merge-resolution commits.
+
+After the orchestrator reports every plan line done, the iteration is not yet complete: the plan-completeness-checker (`@task:high`) independently traces every plan requirement to the code that implements it — missing or partial coverage feeds back into the next iteration rather than being declared done.
 
 **Why this shape is cheap:** mechanical roles (housekeeping, the pass-through pipe, diligent fact-finders) run on small models; expensive reasoning is spent only where it pays — planning, adversarial checking, forensic analysis. Waves parallelize independent subtasks. Verification is evidence-based, not narrative-based: both implementer and checker must record what they personally inspected, and the checker is structurally forbidden from trusting the implementer.
 
@@ -61,11 +82,9 @@ A constitution is paper; enforcement is what makes it real. The guardrail stack 
 
 - **Redundant checkers.** Multiple independent linters and type checkers over the same code — four type checkers catch what one misses. Redundancy is the point, not waste.
 - **Ratchet (baseline diffing).** A baseline file freezes pre-existing violations; only *new* violations fail. Code can never get worse, and legacy debt never blocks progress. Regeneration is deliberate and loud: an explicit `--overwrite-baseline` flag whose result is committed alongside the change — so "I'll just widen the rules" leaves a reviewable commit.
-- **Autofix with canary.** On commit, formatters and safe fixes run automatically; autofix is courtesy and never blocks. It skips files where staged and unstaged changes overlap, and reverts any file whose fix breaks parseability (the canary). Only regressions fail the hook.
 - **Semantic suppression gate.** Suppressed violations (`# type: ignore`, `# noqa`, `# pylint: disable`) are scored by a semantic checker backed by a reranker model; scores are cached. A suppression must be *meaningful* — "because" is not a justification. This kills the cheapest agent escape hatch: writing the code anyway and silencing the linter.
-- **Self-test of the test infrastructure.** An integration gate plants violations in a sample project and asserts every checker actually fires on them. A tautological checker that silently passes everything fails the gate. The CI is tested like the code it guards.
 - **Config overlays + drift detection.** Shared configs ship centrally; consumers override locally; the runner composes the final config at runtime and warns when upstream shared configs drift. Rules stay centralized instead of forking per project.
-- **Adversarial review.** The checker role is a standing adversarial reviewer: no-trust, evidence-synthesizing, concern-raising. Its structural independence — a different agent with a different mandate — is what makes it a gate rather than a formality.
+- **Self-healing autofix.** On commit, formatters and safe fixes run automatically; autofix is courtesy and never blocks the author. A fix that breaks the code is reverted before it can land; only regressions fail the hook.
 - **Evidence schema.** Every agent output is schema-validated, and the schema demands per-check evidence (check, method, result). `implemented` with empty evidence is rejected at the parse boundary, not by a polite request.
 
 Each pattern answers a specific agent failure mode:
