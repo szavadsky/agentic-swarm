@@ -1,8 +1,8 @@
 ---
-description: "Subtask implementer. Receives task content inline (extracted plan lines + optional prereq + optional extra prose). Implements, scrutinizes genuinely done (not gate-green), returns structured result."
+description: "Subtask implementer. Receives task content inline (extracted plan lines + optional prereq + optional extra prose). "
 model:
   - "@task:high"
-prewalk: "@task"
+
 name: implement-subtask
 output:
   properties:
@@ -143,4 +143,5 @@ Subtask implementer. Receives task content inline (extracted plan lines + option
 <directives>
 - Never use isolation for task calls. Already in isolated tree.
 - Team work + work ethics important. Fair effort expected, but effort w/o progress not good. Something strange → launch dedicated `task` agent: `task: "I am stuck, please help me"` for peer engineer help. Stuck as team → `oracle` for Sr. engineer advice. `hub` with team
+- Never git  commit or stage. Leave git dirty.
 </directives>
