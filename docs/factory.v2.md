@@ -26,7 +26,27 @@ idemponent artefacts stored in yaml with schema, verified ageinst schema. restar
 Kinds of tasks, kind of feedback required, orchestration for each task , mechnical checks + prompts to judge significance of decision/need for feedback/approval 
 8. Hierarchy, from bottom to top
    - `simple` - well defined, no architecture concern change, that is small enough not worhing a review. variable rename, file split, dependency uodate w/o change of prod code. No behavioral changes in prod code. materially same tests (beyond rename/repackaging). `simple` is half day worth of dev time in pre-ai time. 
-   - `story` - an atomic, reviweable PR, typically < 300 lines of prod code/doc change; + tests. Eg: scaffold repo; scaffold interface and shim implementations/tests. If story includes behavior changes, prod code and tests are part of the story, not a separate task.  story corresponds to a subtask in v1 software builder flow . story may be dedicated to an single architecture change/scaffolding; but it is smaller then multiple architecture changes/layered design/multiple interfaces definition. Story is up to  few days of pre-ai time effort of mid/sr developer. story assumes iterative refinment based on reviwes,
+   - `story` - an atomic, reviweable PR, typically < 300 lines of prod code/doc change; + tests. Eg: scaffold repo; scaffold interface and shim implementations/tests. If story includes behavior changes, prod code and tests are part of the story, not a separate task.  story corresponds to a subtask in v1 software builder flow . story may be dedicated to an single architecture change/scaffolding; but it is smaller then multiple architecture changes/layered design/multiple interfaces definition. Story is up to  few days of pre-ai time effort of mid/sr developer. story assumes iterative refinment based on reviwes
+   = `spike` research task in epic 
    - `epic`  > single story. includes PM and Architect. < 100 person  days in pre AI time. Epic is defined by set of milestone (up ~ 8 ) and a number of `story`/`simple` (up to 30..50). `epic` may include significant uncertainties that need to be resolved before implementation. Architect defines technical direction (if blocked by uncertainties -> to known level) by defining milestones, directional interfaces and gherkin test scenarios; outline of stories. 
-   - `saga`  : aggregation of epics
-7. Development "task" kinds  
+   - `saga`  : aggregation of epics + task
+7. Development "story" kinds  , all shall be configurable (config yaml with agent flow and prompt to PM agent to identify task)
+   - "mainstream dev" - mechanically orchestrated (commit to branch after each step) to "test fisrt", "develop", "QA - review vs test first (ok to have reasonable changes), red testing" , "review", possible security review (that why we have config), possible consistency review etc
+   - "no behavioral changes" -> "develop", "QA", review 
+   - "test only" -> "develop", review 
+  
+8. `spike` fact-finding task (all configurable)
+   - `fact-dinder` document capabilities of libraries, best practices, etc 
+   - `PoC` - develop in separate folder, "develop", "result review"  
+   - `test-assumptions` - develop tests (that will stay) to understand how lower level works and give examples
+
+-------
+9. Ingestion flow -> given goal.md 
+   - `triage` -> collect relevant context , and classify task as  `simple`, `task|spike` or larger. respond with json
+        mechnical orchestration check json, if 
+            `simple` -> same agent/same context implement 
+         >= simple: produce verfiable relevant context file , similar to ai bot citaions: file, line ranges, 'anchor words', 'summary". 
+         task|spike : run mechnanical orchestration based on task and context
+         else -> run architect based flow as described below
+10. architect based flow: 
+     - 
