@@ -36,7 +36,7 @@ Kinds of tasks, kind of feedback required, orchestration for each task , mechnic
    - "test only" -> "develop", review 
   
 8. `spike` fact-finding task (all configurable)
-   - `fact-dinder` document capabilities of libraries, best practices, etc 
+   - `fact-finder` document capabilities of libraries, best practices, etc 
    - `PoC` - develop in separate folder, "develop", "result review"  
    - `test-assumptions` - develop tests (that will stay) to understand how lower level works and give examples
 
@@ -48,5 +48,19 @@ Kinds of tasks, kind of feedback required, orchestration for each task , mechnic
          >= simple: produce verfiable relevant context file , similar to ai bot citaions: file, line ranges, 'anchor words', 'summary". 
          task|spike : run mechnanical orchestration based on task and context
          else -> run architect based flow as described below
-10. architect based flow: 
-     - 
+10. architect based flow(s): 
+   config based, emchanically orchestrated  
+     - infra (once)
+     - architect based plugins/software-builder/agents/plan-goal-execution.md 
+         - irc id preserved for consult
+         - prompt changed to 
+            - specfically identify uncertainties, adressing them by series of spikes is required, and plan only milestones / task that is clear in view in uncertainties (and further mistones/goals as to be replanned after uncertainties)
+            - if there untrivial assumprions what INTENT mean that could not resolved in searchable context, list them, why assumption was made
+            - Allowed to define epics with intent described (if scope is too large and independent architect analysis is required)
+            - noted technical debt not in scope of goal (adjacent, impacting, blocking)
+               - for impacting/blocking, how to resolve
+         - no more oracle , plan-review - separate agent, mechnically launched
+         
+    - applicable to all reviewers - reviewer produce json with suggestions and  based on mechanically configured (part of pipeline config to prompt) make a decision 
+        - human feedback is required, pipeline is 
+
