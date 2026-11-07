@@ -1,0 +1,33 @@
+setup:
+  - cd plugins/software-factory && bun install --frozen-lockfile
+gates:
+  - id: typecheck
+    command: cd plugins/software-factory && bun run typecheck
+  - id: test
+    command: cd plugins/software-factory && bun test
+testRunner:
+  command: cd plugins/software-factory && bun test
+  selectorArgs: []
+  junitArg: --reporter=junit --reporter-outfile={path}
+notes:
+  - Only plugins/software-factory is a Bun package; the repo root has no
+    package.json, so setup, gates and targeted test commands must cd into
+    plugins/software-factory first.
+  - "No lint/format gate exists in the repository: there is no
+    eslint/biome/prettier config and no lint script; the project defines only
+    typecheck (tsc --noEmit) and test (bun test)."
+  - Bun test selectors are positional file/pattern filters, so selectorArgs is
+    empty; -t filters test names only and would break the project's
+    'test-file-or-pattern' target selectors. JUnit output was verified for both
+    filtered and full runs.
+  - "TMPDIR caveat: this host sets TMPDIR under
+    <repo>.factory-wt/.factory-runtime/tmp. The full suite then has 2
+    pre-existing failures in test/engine/head-guard.test.ts because step-runner
+    resolves the task worktree by splitting taskDir on '/.factory', which also
+    matches '/.factory-runtime'. With TMPDIR=/tmp the suite is green (271 pass,
+    2 skip, 0 fail vs 269 pass, 2 skip, 2 fail inherited). Operator action:
+    normalize TMPDIR for gate runs or fix the '/.factory' split; otherwise the
+    test gate baseline records red."
+  - "No orchestration-folder exclusion is needed for these gates: tsconfig
+    includes only src/test/bin, bun test discovers only test files, and there is
+    no linter; the committed .factory task folder is not scanned."
