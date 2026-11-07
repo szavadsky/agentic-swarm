@@ -1,2 +1,5 @@
 {"type":"task_started","task":"concerns-funnel","branch":"topic/concerns-funnel","ts":"2026-11-07T18:28:17.653Z"}
 {"type":"ingest_started","task":"concerns-funnel","ts":"2026-11-07T18:28:17.663Z"}
+{"type":"record_marked_interrupted","recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/001-triage-a1","ts":"2026-11-07T18:59:57.359Z"}
+{"type":"task_started","task":"concerns-funnel","branch":"topic/concerns-funnel","ts":"2026-11-07T18:59:57.369Z"}
+{"type":"ingest_started","task":"concerns-funnel","ts":"2026-11-07T18:59:57.376Z"}

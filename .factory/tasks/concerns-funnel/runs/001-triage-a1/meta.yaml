@@ -7,5 +7,6 @@ models:
   - opencode-go/deepseek-v4.1-flash
   - opencode-go/muse-spark-1.3-contributor
 timeoutSec: 900
-status: started
+status: interrupted
 startedAt: 2026-11-07T18:28:17.746Z
+endedAt: 2026-11-07T18:59:57.358Z
