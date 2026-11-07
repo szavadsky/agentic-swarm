@@ -20,6 +20,7 @@ import {
   headOf,
   changedLines,
   areFilesCommitted,
+  childBranch,
 } from "../git/index.js";
 import { writeYamlAtomic, readYaml, readText } from "../records/io.js";
 import { verifyCitations } from "../records/citations.js";
@@ -266,7 +267,7 @@ export async function runIngest(params: IngestParams): Promise<IngestResult> {
     scratch = await resetScratch(
       repo,
       { branch: parentBranch, path: taskWt },
-      "simple"
+      "scratch"
     );
     // 3. Triage turn (persistent session) (§8.1)
     const triageAttempt = getNextStepAttempt(runsDir, "triage", pipeline.limits?.maxInterruptions ?? 3);
@@ -399,6 +400,7 @@ export async function runIngest(params: IngestParams): Promise<IngestResult> {
           setup: rawInfra.setup ?? [],
           gates: rawInfra.gates,
           testRunner: rawInfra.testRunner,
+          ...(rawInfra.notes ? { notes: rawInfra.notes } : {}),
         };
         await writeYamlAtomic(infraPath, infra);
 
@@ -437,7 +439,7 @@ export async function runIngest(params: IngestParams): Promise<IngestResult> {
       scratch = await resetScratch(
         repo,
         { branch: parentBranch, path: taskWt },
-        "simple"
+        "scratch"
       );
     }
     const implRes = await runAgentStep({
@@ -542,6 +544,10 @@ export async function runIngest(params: IngestParams): Promise<IngestResult> {
 
       // Remove scratch worktree registration while keeping the branch
       await removeWorktree(repo, scratch!.path);
+      const itemBranch = childBranch(parentBranch, "simple", { allowReserved: true });
+      if (scratch!.branch !== itemBranch) {
+        await git(repo.mainRoot, ["branch", "-M", scratch!.branch, itemBranch], { allowFail: true });
+      }
       return {
         kind: "simple",
         triage,

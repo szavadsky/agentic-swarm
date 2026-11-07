@@ -210,7 +210,7 @@ Canonical artifacts (plan, edits, wave, closeup, decisions) are written in the s
 
 ## 7. Git & worktrees
 
-- Branches: root `topic/{task}`; child `topic/{task}--{item}`; inside an epic `topic/{task}--{epic}--{item}`. Slugs `^[a-z0-9]+(-[a-z0-9]+)*$`; reserved: `simple`.
+- Branches: root `topic/{task}`; child `topic/{task}--{item}`; inside an epic `topic/{task}--{epic}--{item}`. Slugs `^[a-z0-9]+(-[a-z0-9]+)*$`; reserved: `simple`, `scratch`.
 - First run: main checkout must be clean except the task's `INTENT.md`; `topic/{task}` created from its HEAD; task worktree `{worktreeRoot}/topic_{task}`; INTENT copied and committed there. The main checkout is never modified afterwards.
 - Item worktree `{worktreeRoot}/{branch with / → _}`, created when its wave starts, from the parent tip after the previous wave's merges (assignment already on that tip); `ensureWorktree` is idempotent (reuse existing branch, prune stale registrations); `infra.setup` runs on creation; removed after merge/failure, branch kept.
 - HEAD guard: record branch + HEAD before an agent step; after: branch changed → `error`, restore; HEAD moved → `reset --soft` to recorded HEAD, engine commits. Prompts forbid git writes.
@@ -220,7 +220,7 @@ Canonical artifacts (plan, edits, wave, closeup, decisions) are written in the s
 ## 8. Flows
 
 ### 8.1 Ingest
-1. `triage` (persistent session, cwd = scratch worktree on `topic/{task}--simple` from the task tip): returns `triage.yaml` {kind, rationale, size, risks} + `context.yaml` citations `{file, lines: "a-b", anchors[], summary}` (always).
+1. `triage` (persistent session, cwd = scratch worktree on `topic/{task}--scratch` from the task tip): returns `triage.yaml` {kind, rationale, size, risks} + `context.yaml` citations `{file, lines: "a-b", anchors[], summary}` (always).
 2. Citations verified (file exists, range in bounds, all anchors in range); failures returned via a resumed turn (≤ `maxStepAttempts`), then dropped (journaled).
 3. `infra` if `infra.yaml` missing (epics inherit): validates/derives setup commands, gates `{id, command}`, `testRunner` {command, selectorArgs, junitArg}, runs gates → `gates-baseline.yaml`.
 4. Route: `simple` → resumed triage turn (implement) in the same worktree → checks `gates`, `simple-guard` → green: merge path. Guard failure or gate attempts exhausted: the scratch branch becomes a `no-behavior` item (QA + review added; work kept). Non-simple: scratch worktree and branch removed. `story`/`spike` → PM (single item) → item flow → merge → `task.done`. `epic`/`saga` → iteration flow. Child epic tasks skip classification (kind fixed) but still produce `context.yaml`.

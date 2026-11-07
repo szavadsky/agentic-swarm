@@ -38,6 +38,7 @@ export interface CheckResult {
   details?: unknown;
   flaky?: string[];
   skipped?: boolean;
+  mutatesWorktree?: boolean;
 }
 
 /**

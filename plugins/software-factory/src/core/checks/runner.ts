@@ -8,7 +8,7 @@ import type { ChangedFile } from "../git/diff.js";
 import { headOf } from "../git/commit.js";
 import { git } from "../git/exec.js";
 import { parseBranch } from "../git/naming.js";
-import { gateTimedOut, runGates } from "./gates.js";
+import { gateTimedOut, runGates, snapshotWorktree, checkAndRestoreWorktreeMutation } from "./gates.js";
 import { parseJunit, buildTargetCommand, shellQuote } from "./junit.js";
 import { tailCap, type CheckContext, type CheckResult } from "./types.js";
 import { getClock, detectSuspend } from "../clock.js";
@@ -185,9 +185,12 @@ async function checkGates(ctx: CheckContext): Promise<CheckResult> {
   const flaky = results.filter((r) => r.status === "flaky").map((r) => r.id);
   const failed = results.filter((r) => r.status === "fail").map((r) => r.id);
   const timedOutGates = results.filter(gateTimedOut).map((r) => r.id);
+  const mutatingGates = results.filter((r) => r.mutatesWorktree).map((r) => r.id);
 
   let summary: string;
-  if (ok) {
+  if (mutatingGates.length > 0) {
+    summary = `Gate mutations detected: ${mutatingGates.join(", ")} (mutatesWorktree: true; restored)`;
+  } else if (ok) {
     summary = `Gates passed (${results.length} gates${flaky.length > 0 ? `, flaky: ${flaky.join(", ")}` : ""})`;
   } else if (timedOutGates.length > 0) {
     summary = `Gate timeouts: ${timedOutGates.join(", ")}${failed.length > timedOutGates.length ? `; other failures: ${failed.filter((f) => !timedOutGates.includes(f)).join(", ")}` : ""}`;
@@ -196,19 +199,21 @@ async function checkGates(ctx: CheckContext): Promise<CheckResult> {
   }
 
   const rawOutput = results
-    .map((r) => `[${r.id}] ${r.status}${r.details ? `:\n${r.details}` : ""}`)
+    .map((r) => `[${r.id}] ${r.status}${r.mutatesWorktree ? " (MUTATES WORKTREE)" : ""}${r.details ? `:\n${r.details}` : ""}`)
     .join("\n\n");
   const output = tailCap(rawOutput, ctx.outputBytes);
-  const fingerprint = ok ? fingerprintText("gates ok") : fingerprintText(summary);
+  const isOk = ok && mutatingGates.length === 0;
+  const fingerprint = isOk ? fingerprintText("gates ok") : fingerprintText(summary);
 
   return {
     name: "gates",
-    ok,
+    ok: isOk,
     summary,
     output,
     fingerprint,
     flaky: flaky.length > 0 ? flaky : undefined,
     details: results,
+    ...(mutatingGates.length > 0 ? { mutatesWorktree: true } : {}),
   };
 }
 
@@ -1108,6 +1113,8 @@ async function checkCustom(
 
   const timeout = gateTimeoutSec(ctx, config.timeoutSec);
   const cwd = config.cwd === "task" ? (ctx.taskWt ?? ctx.wt) : ctx.wt;
+  const snapshot = await snapshotWorktree(cwd);
+
   const res = await runProcess({
     cmd,
     cwd,
@@ -1115,6 +1122,38 @@ async function checkCustom(
     maxOutputBytes: ctx.outputBytes,
   });
 
+  const mutation = await checkAndRestoreWorktreeMutation(cwd, snapshot);
+  if (mutation.mutatesWorktree) {
+    const taskDir =
+      ctx.taskDir ??
+      (ctx.task && ctx.taskWt
+        ? path.join(ctx.taskWt, ctx.project.orchestrationFolder ?? ".factory", ctx.task)
+        : undefined);
+    if (taskDir && fs.existsSync(taskDir)) {
+      try {
+        await appendJournal(taskDir, {
+          type: "worktree_mutation_detected",
+          task: ctx.task,
+          check: name,
+          command: cmd,
+          tracked: mutation.trackedChanged,
+          untracked: mutation.untrackedCreated,
+          summary: mutation.message,
+        });
+      } catch {}
+    }
+
+    const summary = `Custom check ${name} failed: mutated worktree (restored)`;
+    const rawOutput = `${(res.stdout + (res.stderr ? "\n" + res.stderr : "")).trim()}\n[${mutation.message}]`.trim();
+    return {
+      name,
+      ok: false,
+      summary,
+      output: tailCap(rawOutput, ctx.outputBytes),
+      fingerprint: fingerprintText(summary),
+      mutatesWorktree: true,
+    };
+  }
   if (res.timedOut) {
     const summary = timedOutSummary(`Custom check ${name}`, timeout);
     const rawOutput = (res.stdout + (res.stderr ? "\n" + res.stderr : "")).trim();

@@ -29,19 +29,33 @@ const DEFAULT_ENV: Record<string, string> = {
   LC_ALL: "C",
 };
 
+const activeTmpRepos = new Set<TmpRepo>();
+
+process.on("exit", () => {
+  for (const r of Array.from(activeTmpRepos)) {
+    try {
+      r.cleanup();
+    } catch {}
+  }
+  activeTmpRepos.clear();
+});
+
 export function createTmpRepo(options?: { initialCommitMessage?: string }): TmpRepo {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "factory-test-repo-"));
+  const baseTmp = fs.existsSync(os.tmpdir()) ? os.tmpdir() : "/tmp";
+  const dir = fs.mkdtempSync(path.join(baseTmp, "factory-test-repo-"));
   const worktrees: string[] = [];
 
   function runGit(
-    args: string[],
+    args: string | string[],
     opts: { cwd?: string; allowFail?: boolean; env?: Record<string, string> } = {}
   ): { stdout: string; stderr: string; code: number } {
     const cwd = opts.cwd ?? dir;
-    const env = { ...process.env, ...DEFAULT_ENV, ...(opts.env ?? {}) };
+    const baseTmp = fs.existsSync(os.tmpdir()) ? os.tmpdir() : "/tmp";
+    const env = { ...process.env, TMPDIR: baseTmp, TMP: baseTmp, TEMP: baseTmp, ...DEFAULT_ENV, ...(opts.env ?? {}) };
+    const argsArr = Array.isArray(args) ? args : [args];
 
     try {
-      const stdout = execFileSync("git", args, {
+      const stdout = execFileSync("git", argsArr, {
         cwd,
         env,
         stdio: ["ignore", "pipe", "pipe"],
@@ -51,7 +65,7 @@ export function createTmpRepo(options?: { initialCommitMessage?: string }): TmpR
     } catch (err: any) {
       if (!opts.allowFail) {
         throw new Error(
-          `git ${args.join(" ")} failed in ${cwd}: ${err.stderr || err.message}`
+          `git ${argsArr.join(" ")} failed in ${cwd}: ${err.stderr || err.message}`
         );
       }
       return {
@@ -104,8 +118,9 @@ export function createTmpRepo(options?: { initialCommitMessage?: string }): TmpR
     },
 
     createWorktree(branchName: string, wtPath?: string): string {
+      const baseTmp = fs.existsSync(os.tmpdir()) ? os.tmpdir() : "/tmp";
       const targetPath =
-        wtPath ?? fs.mkdtempSync(path.join(os.tmpdir(), "factory-test-wt-"));
+        wtPath ?? fs.mkdtempSync(path.join(baseTmp, "factory-test-wt-"));
       // Ensure branch exists or create it with -B
       runGit(["worktree", "add", "-B", branchName, targetPath, "HEAD"]);
       worktrees.push(targetPath);
@@ -117,6 +132,7 @@ export function createTmpRepo(options?: { initialCommitMessage?: string }): TmpR
     },
 
     cleanup(): void {
+      activeTmpRepos.delete(this);
       for (const wt of worktrees) {
         try {
           runGit(["worktree", "remove", "--force", wt], { allowFail: true });
@@ -126,10 +142,46 @@ export function createTmpRepo(options?: { initialCommitMessage?: string }): TmpR
         } catch {}
       }
       try {
+        runGit(["worktree", "prune"], { allowFail: true });
+      } catch {}
+
+      // Clean up sibling worktree roots and dirs created alongside dir (e.g. dir-wt, dir.factory-wt)
+      try {
+        const parentDir = path.dirname(dir);
+        const baseName = path.basename(dir);
+        if (fs.existsSync(parentDir)) {
+          const entries = fs.readdirSync(parentDir);
+          for (const entry of entries) {
+            if (entry.includes(baseName) && entry !== baseName) {
+              try {
+                fs.rmSync(path.join(parentDir, entry), { recursive: true, force: true });
+              } catch {}
+            }
+          }
+        }
+      } catch {}
+
+      // Clean up any stray preflight-probe or preflight-overlay files
+      try {
+        const tmp = os.tmpdir();
+        if (fs.existsSync(tmp)) {
+          const entries = fs.readdirSync(tmp);
+          for (const entry of entries) {
+            if (entry.startsWith("preflight-probe-") || entry.startsWith("preflight-overlay-")) {
+              try {
+                fs.rmSync(path.join(tmp, entry), { recursive: true, force: true });
+              } catch {}
+            }
+          }
+        }
+      } catch {}
+
+      try {
         fs.rmSync(dir, { recursive: true, force: true });
       } catch {}
     },
   };
 
+  activeTmpRepos.add(repo);
   return repo;
 }

@@ -1,13 +1,13 @@
 import path from "node:path";
 
 export const SLUG_REGEX = /^[a-z0-9]+(-[a-z0-9]+)*$/;
-export const RESERVED_SLUGS = new Set(["simple"]);
+export const RESERVED_SLUGS = new Set(["simple", "scratch"]);
 
 /**
  * Validates a task or item slug:
  * - Must match ^[a-z0-9]+(-[a-z0-9]+)*$ (lowercase alphanumeric with single hyphens)
  * - Cannot contain consecutive hyphens ('--')
- * - Cannot be a reserved slug ('simple') unless explicitly allowed
+ * - Cannot be a reserved slug ('simple', 'scratch') unless explicitly allowed
  */
 export function validateSlug(
   slug: string,
@@ -76,7 +76,7 @@ export function taskBranch(task: string): string {
 /**
  * Generates a child branch: parentBranch--item (§7).
  * Enforces maximum epic depth of 2 (§8.6).
- * Accepts opts.allowReserved for scratch branches (e.g. topic/{task}--simple).
+ * Accepts opts.allowReserved for scratch branches (e.g. topic/{task}--scratch).
  */
 export function childBranch(
   parentBranch: string,

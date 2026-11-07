@@ -37,6 +37,11 @@
         "junitArg": { "type": "string", "description": "Flag/argument template to output JUnit XML report, with '{path}' or '{{path}}' placeholder for the file path. E.g. '--junitxml={path}' for pytest, '--reporter=junit --output={path}', or '' if unsupported." }
       },
       "additionalProperties": false
+    },
+    "notes": {
+      "type": "array",
+      "description": "Optional notes or operator actions (e.g. advising to exclude the orchestration folder from project linters)",
+      "items": { "type": "string" }
     }
   },
   "additionalProperties": false

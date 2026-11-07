@@ -20,11 +20,14 @@ describe("Git branch and worktree naming (§7, §8.6)", () => {
     expect(validateSlug("trailing-")).toBe(false);
     expect(validateSlug("spaces in slug")).toBe(false);
 
-    // Reserved slug "simple"
+    // Reserved slugs "simple" and "scratch"
     expect(validateSlug("simple")).toBe(false);
     expect(validateSlug("simple", { allowReserved: true })).toBe(true);
+    expect(validateSlug("scratch")).toBe(false);
+    expect(validateSlug("scratch", { allowReserved: true })).toBe(true);
 
     expect(() => assertValidSlug("simple")).toThrow(/reserved/);
+    expect(() => assertValidSlug("scratch")).toThrow(/reserved/);
     expect(() => assertValidSlug("Bad_Slug")).toThrow(/invalid/);
   });
 
@@ -50,12 +53,15 @@ describe("Git branch and worktree naming (§7, §8.6)", () => {
       /max epic depth 2 exceeded/
     );
 
-    // Rejects reserved slug "simple" by default
+    // Rejects reserved slugs by default
     expect(() => childBranch(root, "simple")).toThrow(/reserved/);
+    expect(() => childBranch(root, "scratch")).toThrow(/reserved/);
 
-    // Accepts reserved slug "simple" when allowReserved is true (scratch branch)
-    const scratch = childBranch(root, "simple", { allowReserved: true });
-    expect(scratch).toBe("topic/auth--simple");
+    // Accepts reserved slugs when allowReserved is true (scratch branch)
+    const scratch = childBranch(root, "scratch", { allowReserved: true });
+    expect(scratch).toBe("topic/auth--scratch");
+    const simpleScratch = childBranch(root, "simple", { allowReserved: true });
+    expect(simpleScratch).toBe("topic/auth--simple");
   });
 
   it("parses factory branches into task, items, and depth", () => {

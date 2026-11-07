@@ -117,15 +117,15 @@ describe("Worktrees management (§7)", () => {
       orchestrationFolder: ".factory",
     });
 
-    // Create simple scratch
-    const scratch1 = await ensureChildWorktree(repo, taskRes, "simple");
+    // Create scratch
+    const scratch1 = await ensureChildWorktree(repo, taskRes, "scratch");
     fs.writeFileSync(path.join(scratch1.path, "scratch.txt"), "first version", "utf8");
     await git(scratch1.path, ["add", "scratch.txt"]);
     await git(scratch1.path, ["commit", "-m", "scratch work"]);
 
     // Now reset scratch
-    const resetRes = await resetScratch(repo, taskRes, "simple");
-    expect(resetRes.branch).toBe("topic/task-scratch--simple");
+    const resetRes = await resetScratch(repo, taskRes, "scratch");
+    expect(resetRes.branch).toBe("topic/task-scratch--scratch");
     expect(fs.existsSync(path.join(resetRes.path, "scratch.txt"))).toBe(false);
   });
 

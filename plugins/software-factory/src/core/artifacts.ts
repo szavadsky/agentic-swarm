@@ -174,6 +174,7 @@ export interface InfraArtifact {
   setup: string[];
   gates: InfraGate[];
   testRunner: TestRunnerConfig;
+  notes?: string[];
 }
 
 export interface GateBaselineEntry {
@@ -182,7 +183,9 @@ export interface GateBaselineEntry {
   status: "pass" | "fail" | "flaky";
   durationMs?: number;
   details?: string;
+  mutatesWorktree?: boolean;
 }
+
 
 export interface GatesBaselineArtifact {
   timestamp?: string;

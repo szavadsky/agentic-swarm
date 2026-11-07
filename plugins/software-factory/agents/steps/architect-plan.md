@@ -13,6 +13,7 @@ Design the iteration execution plan (`plan-N.yaml`) decomposing task intent into
 - Tech debt: categorize technical debt as `adjacent`, `impacting`, or `blocking`. Impacting and blocking debt MUST include explicit resolutions.
 - ADRs: record architectural decision records (`id`, `title`, `context`, `decision`, `consequences`) for non-trivial design choices.
 - Escalation: flag `escalate: true` on item outlines where domain complexity exceeds standard implementation.
+- Infrastructure & quality gates: review declared gates, baseline status, and notes in `{{infra}}`. If any gate mutates the worktree (`mutatesWorktree: true`) or has operator action notes (e.g. linter scanning orchestration folder), account for it in your plan (e.g. adding check flags, excluding folders, or addressing via tech debt/spikes).
 - Output: yield the plan matching `plan.schema.json`.
 
 ## Task & Iteration

@@ -291,6 +291,9 @@ tools:
       expect(def.body).toContain("STRICT REPO CONTAINMENT");
       expect(def.body).toContain("NEVER search, list, read, or explore files outside the target repository root");
       expect(def.body).toContain("NEVER attempt to reverse-engineer the test harness");
+      expect(def.body).toContain("orchestrationFolder");
+      expect(def.body).toContain("git branches, and worktrees are managed by the factory engine");
+      expect(def.body).toContain("when the task INTENT explicitly targets the factory itself");
     }
   });
 
@@ -316,5 +319,23 @@ tools:
     expect(schema.properties.testRunner.properties.junitArg.description).toContain("{path}");
     expect(schema.properties.testRunner.properties.selectorArgs.description).toContain("selectors");
     expect(schema.properties.gates.description).toContain("baseline");
+  });
+
+  it("triage agent and step prompt instruct quick scoping, capped citations, and no exhaustive verification", () => {
+    const lib = loadPromptLibrary({ builtinDir });
+    const def = lib.agentDefinition("triage");
+    expect(def.body).toContain("Quick scoping step");
+    expect(def.body).toContain("INTENT-referenced docs");
+    expect(def.body).toContain("≤ 12 citations");
+    expect(def.body).toContain("engine verifies citations and automatically drops");
+
+    const stepPrompt = lib.render("steps/triage", {
+      task: "task-1",
+      intent: "intent-1",
+      triageCriteria: "criteria-1",
+    });
+    expect(stepPrompt).toContain("Quick scoping step");
+    expect(stepPrompt).toContain("≤ 12 most relevant citations");
+    expect(stepPrompt).toContain("engine verifies citations and automatically drops");
   });
 });

@@ -8,6 +8,7 @@ import { OmpHarness } from "../harness/omp/harness.js";
 import { acquireRunLock, resolveRuntimeDir } from "./lock.js";
 import { runPreflight } from "./preflight.js";
 import { installShutdownHandlers } from "../core/shutdown.js";
+import { initFactoryRuntimeTmp } from "../core/runtime-tmp.js";
 
 export interface RunCliOptions {
   repoRoot: string;
@@ -76,6 +77,8 @@ export async function runFactory(opts: RunCliOptions): Promise<number> {
 
   // 2. Resolve runtime directory outside main checkout (§2, §7)
   const runtimeDir = resolveRuntimeDir(repoRoot, projectConfig.worktreeRoot);
+  const worktreeRoot = path.resolve(repoRoot, projectConfig.worktreeRoot);
+  initFactoryRuntimeTmp(worktreeRoot);
   const defaultTaskDir = path.join(repoRoot, orchestrationFolder, task);
 
   // 3. Acquire run lock

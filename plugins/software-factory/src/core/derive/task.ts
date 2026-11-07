@@ -251,7 +251,7 @@ export async function deriveTaskState(opts: {
       }
     } else {
       // Direct simple flow: check newest simple-implement record has meta.status === "ok"
-      // AND topic/{task}--simple has commits that are an ancestor of task HEAD
+      // AND topic/{task}--scratch (or legacy topic/{task}--simple) has commits that are an ancestor of task HEAD
       const runsDir = path.join(taskDir, "runs");
       let newestSimpleOk = false;
       if (fs.existsSync(runsDir)) {
@@ -278,8 +278,12 @@ export async function deriveTaskState(opts: {
       let isScratchMerged = false;
       if (newestSimpleOk && taskWt) {
         try {
-          const scratchBranch = `topic/${task}--simple`;
-          const scratchShaRes = await git(taskWt, ["rev-parse", scratchBranch], { allowFail: true });
+          const scratchBranch = `topic/${task}--scratch`;
+          let scratchShaRes = await git(taskWt, ["rev-parse", scratchBranch], { allowFail: true });
+          if (scratchShaRes.code !== 0) {
+            // Tolerate legacy topic/{task}--simple scratch if it exists
+            scratchShaRes = await git(taskWt, ["rev-parse", `topic/${task}--simple`], { allowFail: true });
+          }
           const taskHeadRes = await git(taskWt, ["rev-parse", "HEAD"], { allowFail: true });
           if (scratchShaRes.code === 0 && taskHeadRes.code === 0) {
             const scratchSha = scratchShaRes.stdout.trim();

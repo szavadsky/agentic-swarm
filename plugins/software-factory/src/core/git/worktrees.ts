@@ -127,9 +127,11 @@ export async function ensureChildWorktree(
   repo: Repo,
   parent: { branch: string; path: string },
   slug: string,
-  opts?: { fromRef?: string }
+  opts?: { fromRef?: string; allowReserved?: boolean }
 ): Promise<{ branch: string; path: string; created: boolean }> {
-  const branch = childBranch(parent.branch, slug, { allowReserved: slug === "simple" });
+  const branch = childBranch(parent.branch, slug, {
+    allowReserved: opts?.allowReserved ?? (slug === "simple" || slug === "scratch"),
+  });
   const wtPath = worktreePath(repo.worktreeRoot, branch);
 
   await repo.writeLock.runExclusive(() =>
@@ -184,14 +186,14 @@ export async function removeWorktree(repo: Repo, wtPath: string): Promise<void> 
 }
 
 /**
- * Resets a scratch worktree (e.g. topic/{task}--simple) recreated freshly from parent tip.
+ * Resets a scratch worktree (e.g. topic/{task}--scratch) recreated freshly from parent tip.
  */
 export async function resetScratch(
   repo: Repo,
   parent: { branch: string; path: string },
-  slug: string
+  slug: string = "scratch"
 ): Promise<{ branch: string; path: string }> {
-  const branch = childBranch(parent.branch, slug, { allowReserved: slug === "simple" });
+  const branch = childBranch(parent.branch, slug, { allowReserved: true });
   const wtPath = worktreePath(repo.worktreeRoot, branch);
 
   await repo.writeLock.runExclusive(async () => {

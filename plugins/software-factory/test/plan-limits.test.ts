@@ -118,6 +118,11 @@ describe("plan/limits: validatePlan", () => {
           title: "Reserved slug",
         },
         {
+          slug: "scratch", // reserved
+          kind: "dev",
+          title: "Reserved scratch slug",
+        },
+        {
           slug: "bad--slug", // double dash
           kind: "dev",
           title: "Double dash",

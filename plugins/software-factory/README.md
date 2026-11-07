@@ -29,6 +29,8 @@ bun run --cwd /path/to/plugins/software-factory factory init --repo .
 ```
 This generates `.factory/project.yaml` from `config/project.template.yaml` and commits it to git.
 
+> **Adopting in a repo**: Exclude `{orchestrationFolder}` (by default `.factory/**`) from your project's linters and formatters (e.g. `ruff`, `eslint`, `prettier`, `yamllint`, `markdownlint`). The orchestration folder contains internal harness artifacts, task intent files (`INTENT.md`), and execution records. Linters scanning this folder may fail on internal artifacts and turn baseline quality gates red. Configure tools to exclude `.factory` (e.g. `exclude = [".factory"]` in `ruff.toml` / `pyproject.toml`, or `.factory/**` in ignore files).
+
 ### Step 2: Define a Task Intent
 Create a new task directory with `INTENT.md` under `.factory/tasks/<task-name>/`:
 ```markdown
@@ -81,6 +83,9 @@ Merging semantics:
 - Explicit `null` values delete the corresponding key.
 
 Canonical schemas are located in `config/schemas/` (`pipeline.schema.json`, `project.schema.json`, `state.schema.json`, etc.).
+
+### Runtime State & Child Process TMPDIR
+Runtime state is placed outside the main checkout in `{worktreeRoot}/.factory-runtime/`. Every child process spawned by the factory (`omp` turns, gates, checks, git) runs with `TMPDIR` (and `TMP`/`TEMP`) pointing to `{worktreeRoot}/.factory-runtime/tmp/` on disk to avoid exhausting memory-backed OS `/tmp` tmpfs. Entries from prior runs are purged at run start.
 
 ---
 

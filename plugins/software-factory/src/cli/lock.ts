@@ -31,9 +31,9 @@ export function resolveRuntimeDir(repoRoot: string, worktreeRoot?: string): stri
       } catch {}
     }
   }
-  let resolvedWorktreeRoot = path.resolve(repoRoot, wt ?? "../repo.factory-wt");
+  let resolvedWorktreeRoot = path.resolve(repoRoot, wt ?? `../wt-${path.basename(repoRoot)}`);
   if (resolvedWorktreeRoot === repoRoot || resolvedWorktreeRoot.startsWith(repoRoot + path.sep)) {
-    resolvedWorktreeRoot = path.resolve(repoRoot, "..", `${path.basename(repoRoot)}.factory-wt`);
+    resolvedWorktreeRoot = path.resolve(repoRoot, "..", `wt-${path.basename(repoRoot)}`);
   }
   return path.join(resolvedWorktreeRoot, ".factory-runtime");
 }

@@ -475,7 +475,68 @@ describe("CLI Commands Integration", () => {
       tmp.cleanup();
     }
   });
+  it("factory preflight warns (does not fail) when common linter configs do not mention orchestration folder", async () => {
+    const tmp = createTmpRepo();
+    try {
+      await runInit({ repoRoot: tmp.dir, pluginRoot: PLUGIN_ROOT, silent: true });
 
+      const task = "preflight-linter-warn";
+      const taskDir = path.join(tmp.dir, ".factory/tasks", task);
+      fs.mkdirSync(taskDir, { recursive: true });
+      fs.writeFileSync(path.join(taskDir, "INTENT.md"), "# Intent\nTest goal.", "utf8");
+
+      // Add ruff.toml without .factory
+      tmp.writeFile("ruff.toml", "line-length = 88\n");
+      // Add pyproject.toml with [tool.ruff] without .factory
+      tmp.writeFile("pyproject.toml", "[tool.ruff]\nselect = ['E']\n");
+      // Add .eslintrc.json without .factory
+      tmp.writeFile(".eslintrc.json", '{"rules": {}}\n');
+      // Add rumdl.toml without .factory
+      tmp.writeFile("rumdl.toml", "[rules]\n");
+      // Add .markdownlint.json without .factory
+      tmp.writeFile(".markdownlint.json", '{"default": true}\n');
+      // Add .yamllint without .factory
+      tmp.writeFile(".yamllint", "extends: default\n");
+
+      // Commit them so cleanliness check doesn't fail
+      tmp.git(["add", "."]);
+      tmp.git(["commit", "-m", "add linter configs"]);
+
+      const res = await runPreflight({
+        repoRoot: tmp.dir,
+        task,
+        pluginRoot: PLUGIN_ROOT,
+        silent: true,
+      });
+
+      // Warns, does NOT fail!
+      expect(res.ok).toBe(true);
+      expect(res.errors).toEqual([]);
+      expect(res.warnings).toBeDefined();
+      expect(res.warnings?.some((w) => w.includes("ruff.toml"))).toBe(true);
+      expect(res.warnings?.some((w) => w.includes("pyproject.toml"))).toBe(true);
+      expect(res.warnings?.some((w) => w.includes(".eslintrc.json"))).toBe(true);
+      expect(res.warnings?.some((w) => w.includes("rumdl.toml"))).toBe(true);
+      expect(res.warnings?.some((w) => w.includes(".markdownlint.json"))).toBe(true);
+      expect(res.warnings?.some((w) => w.includes(".yamllint"))).toBe(true);
+
+      // Now update ruff.toml to mention .factory
+      tmp.writeFile("ruff.toml", "exclude = ['.factory']\n");
+      tmp.git(["add", "ruff.toml"]);
+      tmp.git(["commit", "-m", "exclude .factory in ruff"]);
+
+      const res2 = await runPreflight({
+        repoRoot: tmp.dir,
+        task,
+        pluginRoot: PLUGIN_ROOT,
+        silent: true,
+      });
+      expect(res2.ok).toBe(true);
+      expect(res2.warnings?.some((w) => w.includes("ruff.toml"))).toBe(false);
+    } finally {
+      tmp.cleanup();
+    }
+  });
 
   it("factory status outputs derived state", async () => {
     const tmp = createTmpRepo();

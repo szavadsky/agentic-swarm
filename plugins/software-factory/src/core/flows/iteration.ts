@@ -11,6 +11,8 @@ import type {
   ReviewArtifact,
   StepMetaArtifact,
   SteerItemArtifact,
+  GatesBaselineArtifact,
+  InfraArtifact,
 } from "../artifacts.js";
 import type { Harness } from "../../harness/types.js";
 import { git } from "../git/exec.js";
@@ -300,13 +302,55 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
     : "";
   let infraYaml = "";
   const infraPath = path.join(taskDir, "infra.yaml");
-  if (fs.existsSync(infraPath)) {
-    infraYaml = await readText(infraPath);
-  } else {
-    const parentInfra = path.join(path.dirname(taskDir), "infra.yaml");
-    if (fs.existsSync(parentInfra)) {
-      infraYaml = await readText(parentInfra);
-    }
+  const parentInfra = path.join(path.dirname(taskDir), "infra.yaml");
+  const actualInfraPath = fs.existsSync(infraPath)
+    ? infraPath
+    : fs.existsSync(parentInfra)
+      ? parentInfra
+      : undefined;
+
+  let infraArtifact: InfraArtifact | undefined;
+  if (actualInfraPath) {
+    infraYaml = await readText(actualInfraPath);
+    try {
+      infraArtifact = await readYaml<InfraArtifact>(actualInfraPath);
+    } catch {}
+  }
+
+  const baselinePath = path.join(taskDir, "gates-baseline.yaml");
+  const parentBaseline = path.join(path.dirname(taskDir), "gates-baseline.yaml");
+  const actualBaselinePath = fs.existsSync(baselinePath)
+    ? baselinePath
+    : fs.existsSync(parentBaseline)
+      ? parentBaseline
+      : undefined;
+
+  let baselineText = "";
+  const mutatingNotes: string[] = [];
+  if (actualBaselinePath) {
+    try {
+      const baselineArtifact = await readYaml<GatesBaselineArtifact>(actualBaselinePath);
+      if (baselineArtifact?.gates) {
+        for (const g of baselineArtifact.gates) {
+          if (g.mutatesWorktree) {
+            mutatingNotes.push(
+              `- WARNING: Gate '${g.id}' (${g.command ?? ""}) mutates the worktree during execution (mutatesWorktree: true). The gate was restored during baseline check, but it must be configured with check-only flags (e.g. '--check') or operator action required.`
+            );
+          }
+        }
+      }
+      baselineText = await readText(actualBaselinePath);
+    } catch {}
+  }
+
+  if (infraArtifact?.notes && infraArtifact.notes.length > 0) {
+    infraYaml = `${infraYaml}\n\n# Infra Operator Action Notes\n${infraArtifact.notes.map((n) => `- ${n}`).join("\n")}`.trim();
+  }
+  if (baselineText) {
+    infraYaml = `${infraYaml}\n\n# Gates Baseline\n${baselineText}`.trim();
+  }
+  if (mutatingNotes.length > 0) {
+    infraYaml = `${infraYaml}\n\n# Gate Mutation Warnings\n${mutatingNotes.join("\n")}`.trim();
   }
 
   // 2. Fresh plan or resume plan (§8.4.2, Finding 12)

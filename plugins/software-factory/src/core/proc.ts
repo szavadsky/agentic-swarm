@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { registerChildGroup, unregisterChildGroup } from "./shutdown.js";
 import { getClock, createActiveTimer, detectSuspend } from "./clock.js";
+import { getFactoryTmpDir } from "./runtime-tmp.js";
 
 export interface RunProcessOptions {
   cmd: string | string[];
@@ -145,8 +146,14 @@ export function runProcess(options: RunProcessOptions): Promise<ProcessResult> {
       args = cmd.slice(1);
     }
 
+    const factoryTmp = getFactoryTmpDir();
+    const tmpEnv: Record<string, string> = factoryTmp
+      ? { TMPDIR: factoryTmp, TMP: factoryTmp, TEMP: factoryTmp }
+      : {};
+
     const mergedEnv = {
       ...process.env,
+      ...tmpEnv,
       ...env,
     };
 

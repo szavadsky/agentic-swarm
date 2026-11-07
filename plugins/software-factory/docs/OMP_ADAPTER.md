@@ -57,7 +57,9 @@ omp -p @<runtimeDir>/prompts/complete-<ts>.txt \
 ## 3. Configuration Overlay (`omp-overlay.yaml`)
 
 Generated dynamically on each run under `<runtimeDir>/omp-overlay.yaml` from the effective (root + task layered) `PipelineConfig.models.roles`.
-`<runtimeDir>` is placed strictly outside the main repository checkout (resolving to `{worktreeRoot}/.factory-runtime/` via `resolveRuntimeDir` and `project.yaml`):
+`<runtimeDir>` is placed strictly outside the main repository checkout (resolving to `{worktreeRoot}/.factory-runtime/` via `resolveRuntimeDir` and `project.yaml`).
+
+Every child process spawned by the factory (omp turns, gates, checks, git) runs with `TMPDIR` (and `TMP`/`TEMP`) set to `{worktreeRoot}/.factory-runtime/tmp/` on disk (created at run start; entries older than the current run are purged at start). This prevents test runners (e.g. pytest) and git from filling OS tmpfs mounts.
 ```yaml
 modelRoles:
   workhorse: opencode-go/deepseek-v4.1-flash:max

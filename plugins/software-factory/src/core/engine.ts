@@ -34,6 +34,7 @@ import { readYaml, writeYamlAtomic, readText } from "./records/io.js";
 import { listPending, classify, takenPaths } from "./steer.js";
 import { resolveRole } from "./config/roles.js";
 import { installShutdownHandlers } from "./shutdown.js";
+import { initFactoryRuntimeTmp } from "./runtime-tmp.js";
 export interface EngineDeps {
   harness: Harness;
   repo: any;
@@ -301,6 +302,7 @@ export async function runTask(
   let taskWt: string | undefined;
   let parentBranch: string | undefined;
   let pipeline: PipelineConfig | undefined;
+  let runtimeTmpHandle: { tmpDir: string; restore: () => void } | undefined;
 
   const uninstallShutdown = installShutdownHandlers(async () => {
     if (taskDir) {
@@ -309,6 +311,10 @@ export async function runTask(
   });
 
   try {
+    const wtRoot = repo.worktreeRoot ?? (project.worktreeRoot ? path.resolve(repo.mainRoot ?? process.cwd(), project.worktreeRoot) : undefined);
+    if (wtRoot) {
+      runtimeTmpHandle = initFactoryRuntimeTmp(wtRoot);
+    }
     const orchFolder = project.orchestrationFolder ?? ".factory";
     const intentPath = path.join(repo.mainRoot, orchFolder, task, "INTENT.md");
   // 1. Ensure task worktree (§7)
@@ -755,6 +761,7 @@ export async function runTask(
       summary: `Task ${task} error: ${err?.message ?? String(err)}`,
     };
   } finally {
+    runtimeTmpHandle?.restore();
     uninstallShutdown();
   }
 }

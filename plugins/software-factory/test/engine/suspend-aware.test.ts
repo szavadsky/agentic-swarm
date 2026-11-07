@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import {
   setClock,
   resetClock,
@@ -221,8 +222,8 @@ describe("Suspend awareness: active monotonic timeouts and suspend detection", (
     const taskDir = path.join(tmpRepo.dir, orchFolder, task);
     fs.mkdirSync(taskDir, { recursive: true });
 
-    // Gate command fails on first run while touching markerFile, passes on re-run
-    const markerFile = path.join(tmpRepo.dir, "gate_attempt.txt");
+    // Gate command fails on first run while touching markerFile, passes on re-run (counter outside worktree)
+    const markerFile = path.join(os.tmpdir(), `gate_attempt_${Date.now()}_${Math.random().toString(36).slice(2)}.txt`);
     const gateCmd = `if [ ! -f "${markerFile}" ]; then touch "${markerFile}"; exit 1; else exit 0; fi`;
 
     let wall = 1000;
@@ -260,14 +261,18 @@ describe("Suspend awareness: active monotonic timeouts and suspend detection", (
       limits: { gateRetries: 0 },
       outputBytes: 4096,
     };
-
-    const gateRes = await runGates(ctx);
-    expect(gateRes.ok).toBe(true);
-    expect(gateRes.results[0]?.status).toBe("pass");
-    // Verify system_suspend_detected was journaled
-    const journalPath = path.join(taskDir, "journal.ndjson");
-    expect(fs.existsSync(journalPath)).toBe(true);
-    const journalContent = fs.readFileSync(journalPath, "utf8");
-    expect(journalContent).toContain("system_suspend_detected");
+    try {
+      const gateRes = await runGates(ctx);
+      expect(gateRes.ok).toBe(true);
+      expect(gateRes.results[0]?.status).toBe("pass");
+      // Verify system_suspend_detected was journaled
+      const journalPath = path.join(taskDir, "journal.ndjson");
+      expect(fs.existsSync(journalPath)).toBe(true);
+      const journalContent = fs.readFileSync(journalPath, "utf8");
+      expect(journalContent).toContain("system_suspend_detected");
+    } finally {
+      resetClock();
+      try { if (fs.existsSync(markerFile)) fs.unlinkSync(markerFile); } catch {}
+    }
   });
 });

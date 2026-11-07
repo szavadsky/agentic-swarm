@@ -23,6 +23,97 @@ export interface PreflightOptions {
 export interface PreflightResult {
   ok: boolean;
   errors: string[];
+  warnings?: string[];
+}
+
+/**
+ * Warns (does not fail) when common linter configs in the repo root do not mention
+ * the orchestration folder (.factory or custom orchestration folder).
+ */
+export function checkLinterConfigsForOrchestrationFolder(
+  repoRoot: string,
+  orchestrationFolder: string
+): string[] {
+  const warnings: string[] = [];
+  const orchRoot = orchestrationFolder.split("/")[0] ?? ".factory";
+
+  const mentionsFolder = (content: string): boolean => {
+    return content.includes(orchRoot) || content.includes(orchestrationFolder);
+  };
+
+  // 1. ruff.toml
+  const ruffTomlPath = path.join(repoRoot, "ruff.toml");
+  if (fs.existsSync(ruffTomlPath)) {
+    try {
+      const content = fs.readFileSync(ruffTomlPath, "utf8");
+      if (!mentionsFolder(content)) {
+        warnings.push(
+          `Linter config "ruff.toml" does not mention orchestration folder "${orchestrationFolder}". Linters scanning the orchestration folder may fail on internal artifacts.`
+        );
+      }
+    } catch {}
+  }
+
+  // 2. pyproject.toml ([tool.ruff])
+  const pyprojectPath = path.join(repoRoot, "pyproject.toml");
+  if (fs.existsSync(pyprojectPath)) {
+    try {
+      const content = fs.readFileSync(pyprojectPath, "utf8");
+      if (content.includes("[tool.ruff") || content.includes("tool.ruff")) {
+        if (!mentionsFolder(content)) {
+          warnings.push(
+            `Linter config in "pyproject.toml" ([tool.ruff]) does not mention orchestration folder "${orchestrationFolder}". Linters scanning the orchestration folder may fail on internal artifacts.`
+          );
+        }
+      }
+    } catch {}
+  }
+
+  // 3. .eslintrc*, rumdl.toml, .markdownlint*, .yamllint*
+  try {
+    const files = fs.readdirSync(repoRoot);
+    for (const f of files) {
+      if (f.startsWith(".eslintrc")) {
+        try {
+          const content = fs.readFileSync(path.join(repoRoot, f), "utf8");
+          if (!mentionsFolder(content)) {
+            warnings.push(
+              `Linter config "${f}" does not mention orchestration folder "${orchestrationFolder}". Linters scanning the orchestration folder may fail on internal artifacts.`
+            );
+          }
+        } catch {}
+      } else if (f === "rumdl.toml") {
+        try {
+          const content = fs.readFileSync(path.join(repoRoot, f), "utf8");
+          if (!mentionsFolder(content)) {
+            warnings.push(
+              `Linter config "rumdl.toml" does not mention orchestration folder "${orchestrationFolder}". Linters scanning the orchestration folder may fail on internal artifacts.`
+            );
+          }
+        } catch {}
+      } else if (f.startsWith(".markdownlint")) {
+        try {
+          const content = fs.readFileSync(path.join(repoRoot, f), "utf8");
+          if (!mentionsFolder(content)) {
+            warnings.push(
+              `Linter config "${f}" does not mention orchestration folder "${orchestrationFolder}". Linters scanning the orchestration folder may fail on internal artifacts.`
+            );
+          }
+        } catch {}
+      } else if (f.startsWith(".yamllint")) {
+        try {
+          const content = fs.readFileSync(path.join(repoRoot, f), "utf8");
+          if (!mentionsFolder(content)) {
+            warnings.push(
+              `Linter config "${f}" does not mention orchestration folder "${orchestrationFolder}". Linters scanning the orchestration folder may fail on internal artifacts.`
+            );
+          }
+        } catch {}
+      }
+    }
+  } catch {}
+
+  return warnings;
 }
 
 /**
@@ -42,6 +133,7 @@ export async function runPreflight(opts: PreflightOptions): Promise<PreflightRes
     ? path.resolve(opts.pluginRoot)
     : path.resolve(import.meta.dir ?? __dirname, "../..");
   const errors: string[] = [];
+  const warnings: string[] = [];
 
   const log = (msg: string) => {
     if (!opts.silent) console.log(msg);
@@ -61,6 +153,10 @@ export async function runPreflight(opts: PreflightOptions): Promise<PreflightRes
   }
 
   const orchestrationFolder = projectConfig?.orchestrationFolder ?? ".factory/tasks";
+
+  // Check common linter configs in repo root (warn, not fail)
+  const linterWarnings = checkLinterConfigsForOrchestrationFolder(repoRoot, orchestrationFolder);
+  warnings.push(...linterWarnings);
 
   // 2. First-run cleanliness (§7)
   try {
@@ -245,8 +341,8 @@ export async function runPreflight(opts: PreflightOptions): Promise<PreflightRes
         os.tmpdir(),
         `preflight-overlay-${Date.now()}-${Math.random().toString(36).slice(2, 6)}.yaml`
       );
-      writeOmpConfigOverlay(pipelineConfig, tempOverlay);
       try {
+        writeOmpConfigOverlay(pipelineConfig, tempOverlay);
         execFileSync(ompBinary, ["--config", tempOverlay, "--version"], {
           stdio: ["ignore", "pipe", "ignore"],
         });
@@ -271,6 +367,11 @@ export async function runPreflight(opts: PreflightOptions): Promise<PreflightRes
   const ok = errors.length === 0;
 
   if (!opts.silent) {
+    if (warnings.length > 0) {
+      for (const w of warnings) {
+        log(`[factory preflight] Warning: ${w}`);
+      }
+    }
     if (ok) {
       log(`[factory preflight] All preflight checks passed for task "${task}".`);
     } else {
@@ -281,5 +382,5 @@ export async function runPreflight(opts: PreflightOptions): Promise<PreflightRes
     }
   }
 
-  return { ok, errors };
+  return { ok, errors, warnings };
 }

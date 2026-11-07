@@ -12,6 +12,7 @@ import { resolveRuntimeDir } from "../../cli/lock.js";
 import { HeadTailBuffer } from "../../core/proc.js";
 import { registerChildGroup, unregisterChildGroup } from "../../core/shutdown.js";
 import { getClock, createActiveTimer, detectSuspend } from "../../core/clock.js";
+import { getFactoryTmpDir } from "../../core/runtime-tmp.js";
 const ajv = createAjv();
 const MAX_STDERR_BYTES = 64 * 1024; // 64 KB
 /**
@@ -223,12 +224,23 @@ export class OmpHarness implements Harness {
     // 5. Spawn OMP process
     let timedOut = false;
     let proc: ReturnType<typeof spawn>;
+    const factoryTmp = getFactoryTmpDir() ?? path.join(this.runtimeDir ?? os.tmpdir(), "tmp");
+    try { fs.mkdirSync(factoryTmp, { recursive: true }); } catch {}
+    const tmpEnv: Record<string, string> = {
+      TMPDIR: factoryTmp,
+      TMP: factoryTmp,
+      TEMP: factoryTmp,
+    };
     try {
       proc = spawn(args, {
         cwd: run.cwd,
         stdout: "pipe",
         stderr: "pipe",
         detached: true,
+        env: {
+          ...process.env,
+          ...tmpEnv,
+        },
       });
     } catch (err: any) {
       return {
@@ -466,12 +478,23 @@ export class OmpHarness implements Harness {
     ];
 
     let proc: ReturnType<typeof spawn>;
+    const factoryTmp = getFactoryTmpDir() ?? path.join(this.runtimeDir ?? os.tmpdir(), "tmp");
+    try { fs.mkdirSync(factoryTmp, { recursive: true }); } catch {}
+    const tmpEnv: Record<string, string> = {
+      TMPDIR: factoryTmp,
+      TMP: factoryTmp,
+      TEMP: factoryTmp,
+    };
     try {
       proc = spawn(args, {
         cwd,
         stdout: "pipe",
         stderr: "pipe",
         detached: true,
+        env: {
+          ...process.env,
+          ...tmpEnv,
+        },
       });
     } catch (err: any) {
       try { if (fs.existsSync(promptPath)) fs.unlinkSync(promptPath); } catch {}
