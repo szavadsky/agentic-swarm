@@ -35,6 +35,8 @@ export const PROMPT_VAR_DESCRIPTIONS: Record<string, string> = {
   triageCriteria: "Task triage hierarchy criteria file contents (criteria.triage)",
   dispositionsCriteria: "Review dispositions criteria file contents filtered to allowed dispositions (criteria.dispositions)",
   storyKindsCriteria: "Story and spike kinds criteria file contents (criteria.story-kinds)",
+  contextPack: "Condensed, citation-backed context document covering module maps, signatures, excerpts, conventions, and open questions",
+  maxBytes: "Maximum allowed byte cap for the artifact or document",
 };
 
 /**
@@ -48,6 +50,9 @@ export const KNOWN_VARS: Record<string, string[]> = {
 
   "steps/infra": ["task", "intent", "context"],
   infra: ["task", "intent", "context"],
+  "steps/context-pack": ["task", "intent", "context", "maxBytes"],
+  "context-pack": ["task", "intent", "context", "maxBytes"],
+
 
   // Item development & verification steps
   "steps/develop": ["assignment", "target", "citations"],
@@ -100,6 +105,7 @@ export const KNOWN_VARS: Record<string, string[]> = {
     "debt",
     "steering",
     "limits",
+    "contextPack",
   ],
   "architect-plan": [
     "task",
@@ -110,19 +116,20 @@ export const KNOWN_VARS: Record<string, string[]> = {
     "debt",
     "steering",
     "limits",
+    "contextPack",
   ],
 
-  "steps/architect-revise": ["plan", "planReview"],
-  "architect-revise": ["plan", "planReview"],
+  "steps/architect-revise": ["plan", "planReview", "contextPack"],
+  "architect-revise": ["plan", "planReview", "contextPack"],
 
-  "steps/architect-resume": ["plan", "waveReport", "steering"],
-  "architect-resume": ["plan", "waveReport", "steering"],
+  "steps/architect-resume": ["plan", "waveReport", "steering", "contextPack"],
+  "architect-resume": ["plan", "waveReport", "steering", "contextPack"],
 
-  "steps/architect-wave-report": ["plan", "waveReport", "debt", "steering"],
-  "architect-wave-report": ["plan", "waveReport", "debt", "steering"],
+  "steps/architect-wave-report": ["plan", "waveReport", "debt", "steering", "contextPack"],
+  "architect-wave-report": ["plan", "waveReport", "debt", "steering", "contextPack"],
 
-  "steps/architect-closeup": ["closeup", "plan", "intent"],
-  "architect-closeup": ["closeup", "plan", "intent"],
+  "steps/architect-closeup": ["closeup", "plan", "intent", "contextPack"],
+  "architect-closeup": ["closeup", "plan", "intent", "contextPack"],
 
   "steps/architect-consult-item": [
     "item",
@@ -130,6 +137,7 @@ export const KNOWN_VARS: Record<string, string[]> = {
     "priorAttempts",
     "diff",
     "feedback",
+    "contextPack",
   ],
   "architect-consult-item": [
     "item",
@@ -137,10 +145,11 @@ export const KNOWN_VARS: Record<string, string[]> = {
     "priorAttempts",
     "diff",
     "feedback",
+    "contextPack",
   ],
 
-  "steps/architect-consult-nonitem": ["task", "context", "feedback", "debt"],
-  "architect-consult-nonitem": ["task", "context", "feedback", "debt"],
+  "steps/architect-consult-nonitem": ["task", "context", "feedback", "debt", "contextPack"],
+  "architect-consult-nonitem": ["task", "context", "feedback", "debt", "contextPack"],
 
   // Close-up and review checkpoints
   "steps/wave-close-up": ["task", "waveReport", "infra"],

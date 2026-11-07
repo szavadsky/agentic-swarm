@@ -8,7 +8,7 @@ import type {
   SteerItemArtifact,
 } from "../artifacts.js";
 import type { Harness } from "../../harness/types.js";
-import { writeYamlAtomic } from "../records/io.js";
+import { writeYamlAtomic, readText } from "../records/io.js";
 import { writeQuestion } from "../steer.js";
 import { runAgentStep } from "./step-runner.js";
 import { appendJournal } from "../journal.js";
@@ -85,6 +85,11 @@ export async function runItemConsult(
     iteration,
   } = params;
 
+  const contextPackPath = path.join(taskDir, "context-pack.md");
+  const contextPackText = fs.existsSync(contextPackPath)
+    ? await readText(contextPackPath)
+    : "";
+
   const promptVars: Record<string, string> = {
     item,
     assignment: assignmentYaml,
@@ -92,6 +97,7 @@ export async function runItemConsult(
     diff: diffText,
     feedback: feedbackText,
     debt: debtText ?? "",
+    contextPack: contextPackText,
   };
 
   const runsDir = path.join(taskDir, "runs");
@@ -210,11 +216,17 @@ export async function runNonItemConsult(
     iteration,
   } = params;
 
+  const contextPackPath = path.join(taskDir, "context-pack.md");
+  const contextPackText = fs.existsSync(contextPackPath)
+    ? await readText(contextPackPath)
+    : "";
+
   const promptVars: Record<string, string> = {
     task,
     context: contextText,
     feedback: feedbackText,
     debt: debtText ?? "",
+    contextPack: contextPackText,
   };
 
   const runsDir = path.join(taskDir, "runs");

@@ -33,6 +33,9 @@ import { getClock, detectSuspend } from "../clock.js";
 import type { Semaphore } from "../mutex.js";
 import type { BudgetTracker } from "../budget.js";
 
+export const TIMEOUT_NUDGE_PROMPT =
+  "time budget exhausted: stop exploring, yield your result now from what you have; record unknowns as uncertainties";
+
 export interface StepRunOptions {
   task: string;
   item?: string;
@@ -132,6 +135,7 @@ export function resolveStepSchema(
   else if (stepId.startsWith("wave-close-up")) fileName = "wave-closeup.schema.json";
   else if (stepId.startsWith("pm-edits") || stepId.startsWith("pm-")) fileName = "plan-edits.schema.json";
   else if (stepId.startsWith("consult-")) fileName = "decisions.schema.json";
+  else if (stepId.startsWith("context-pack")) fileName = "fact-finder-output.schema.json";
   else fileName = schemaFileMap[stepId] ?? schemaFileMap[agent] ?? `${agent}.schema.json`;
   const schemaPath = path.resolve(pluginRoot, "config/schemas", fileName);
 
@@ -443,6 +447,17 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
     totalUsage.costUsd = (totalUsage.costUsd ?? 0) + (u.costUsd ?? 0);
   }
 
+
+  function isTimeoutOutcome(o: AgentOutcome): boolean {
+    if (o.ok) return false;
+    if ((o as any).timedOut) return true;
+    const err = o.error || "";
+    return /timed?\s*out|timeout|deadline\s*exceeded/i.test(err);
+  }
+
+  let currentSessionId: string | undefined =
+    outcome.sessionId ?? (keepSession ? opts.existingSessionId : undefined);
+
   // On sessionLost with a kept session, retry once with a fresh session
   // (§6.3.7: resume failure → fresh session with hydration; the prompt already
   // carries hydration context built by the caller).
@@ -453,6 +468,7 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
       item,
       step: stepId,
     });
+    currentSessionId = undefined;
     const rel = turnsSemaphore ? await turnsSemaphore.acquire() : () => {};
     try {
       outcome = await harness.run({
@@ -461,6 +477,9 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
         session: { resume: undefined, keep: keepSession },
       });
       addUsage(outcome.usage);
+      if (outcome.sessionId) {
+        currentSessionId = outcome.sessionId;
+      }
     } finally {
       rel();
     }
@@ -474,6 +493,33 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
     const backoffMs = Math.min(1000 * Math.pow(2, infraRetries - 1), 10000);
     await new Promise((resolve) => setTimeout(resolve, backoffMs));
 
+    const isResumable = Boolean(currentSessionId && (keepSession || Boolean(outcome.sessionId)));
+    const wasTimeout = isTimeoutOutcome(outcome);
+
+    let retryPrompt = agentRun.prompt;
+    let retryTimeoutSec = agentRun.timeoutSec;
+    let resumeSessionId: string | undefined = undefined;
+
+    if (isResumable) {
+      resumeSessionId = currentSessionId;
+      if (wasTimeout) {
+        retryPrompt = TIMEOUT_NUDGE_PROMPT;
+        const reduced =
+          (pipeline.limits?.timeoutNudgeSec as number | undefined) ??
+          (effectiveTimeoutSec ? Math.max(1, Math.floor(effectiveTimeoutSec / 2)) : 300);
+        retryTimeoutSec = reduced;
+        await appendJournal(taskDir, {
+          type: "turn_timeout_nudge",
+          task,
+          item,
+          step: stepId,
+          attempt,
+          sessionId: currentSessionId,
+          timeoutSec: retryTimeoutSec,
+        });
+      }
+    }
+
     const rel = turnsSemaphore ? await turnsSemaphore.acquire() : () => {};
     const retryStartWall = clock.now();
     const retryStartMono = clock.monotonic();
@@ -481,11 +527,48 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
       outcome = await harness.run({
         ...agentRun,
         label: `${label}#infra-retry-${infraRetries}`,
+        prompt: retryPrompt,
+        session: {
+          resume: resumeSessionId,
+          keep: keepSession,
+        },
+        timeoutSec: retryTimeoutSec,
       });
       addUsage(outcome.usage);
+      if (outcome.sessionId) {
+        currentSessionId = outcome.sessionId;
+      }
     } finally {
       rel();
     }
+
+    // Only fall back to a fresh session on sessionLost
+    if (!outcome.ok && outcome.sessionLost) {
+      await appendJournal(taskDir, {
+        type: "session_lost_rehydrated",
+        task,
+        item,
+        step: stepId,
+      });
+      currentSessionId = undefined;
+      const relFresh = turnsSemaphore ? await turnsSemaphore.acquire() : () => {};
+      try {
+        outcome = await harness.run({
+          ...agentRun,
+          label: `${label}#rehydrated`,
+          session: { resume: undefined, keep: keepSession },
+          prompt: agentRun.prompt,
+          timeoutSec: effectiveTimeoutSec,
+        });
+        addUsage(outcome.usage);
+        if (outcome.sessionId) {
+          currentSessionId = outcome.sessionId;
+        }
+      } finally {
+        relFresh();
+      }
+    }
+
     if (!outcome.ok) {
       const { suspendDetected, gapMs } = detectSuspend(retryStartWall, retryStartMono, clock);
       if (suspendDetected) {
@@ -502,6 +585,10 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
         };
       }
     }
+  }
+
+  if (currentSessionId && !outcome.sessionId) {
+    outcome.sessionId = currentSessionId;
   }
   // 9. HEAD guard after turn (§7)
   const { branchChanged, headMoved, foreignCommit } = await enforceHead(repo, cwd, headBefore);

@@ -56,6 +56,7 @@ export type AgentOutcome =
       usage?: Usage;
       transient?: boolean;
       sessionLost?: boolean;
+      timedOut?: boolean;
       transcriptBytes?: number;
       stdoutBytes?: number;
     };

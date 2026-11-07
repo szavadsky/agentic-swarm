@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 import { FakeHarness } from "../../src/harness/fake/fake-harness.js";
-import { runAgentStep } from "../../src/core/flows/step-runner.js";
+import { runAgentStep, TIMEOUT_NUDGE_PROMPT } from "../../src/core/flows/step-runner.js";
 import { runTask } from "../../src/core/engine.js";
 import { Repo } from "../../src/core/git/repo.js";
 import { loadPromptLibrary } from "../../src/core/prompts.js";
@@ -156,6 +156,247 @@ describe("Engine: Step resilience — render errors, transient retry, sessionLos
     expect(res.usage?.costUsd).toBeCloseTo(0.02, 5);
     const labels = harness.calls.filter((c) => c.type === "run").map((c) => (c as any).run.label);
     expect(labels).toContain(`${task}/runs/develop#a1#rehydrated`);
+  });
+
+  it("timeout of a kept session retries by RESUMING the same session with nudge and reduced timeout", async () => {
+    const task = "timeout-resume";
+    const taskDir = path.join(tmpRepo.dir, ".factory", task);
+    const recordsDir = path.join(taskDir, "runs");
+    fs.mkdirSync(recordsDir, { recursive: true });
+
+    const harness = new FakeHarness();
+    const targetSessionId = "fake-sess-architect-turn1";
+
+    // Turn 1 times out after exploring
+    harness.scriptOutcome(`${task}/runs/architect-plan-1#a1`, {
+      ok: false,
+      error: "Execution timed out",
+      transient: true,
+      timedOut: true,
+      sessionId: targetSessionId,
+      usage: { inputTokens: 5000, outputTokens: 500, costUsd: 0.15 },
+    });
+
+    // Retry 1 resumes the same session with the nudge
+    harness.scriptOutcome(`${task}/runs/architect-plan-1#a1#infra-retry-1`, (run) => {
+      // Assert that the retry resumed the same session, received the nudge prompt, and got reduced timeout
+      expect(run.session.resume).toBe(targetSessionId);
+      expect(run.prompt).toBe(TIMEOUT_NUDGE_PROMPT);
+      expect(run.timeoutSec).toBeLessThan(1200);
+      return {
+        ok: true,
+        data: {
+          iteration: 1,
+          milestones: [
+            { id: "m1", title: "Milestone 1", scenarios: ["Scenario: Works"], directionalInterfaces: ["interface I"] },
+          ],
+          itemOutlines: [{ slug: "item-1", kind: "dev", title: "Item 1", milestoneId: "m1" }],
+        },
+        sessionId: targetSessionId,
+        usage: { inputTokens: 100, outputTokens: 200, costUsd: 0.05 },
+      };
+    });
+
+    const customPipeline: PipelineConfig = {
+      ...pipeline,
+      agents: {
+        architect: { role: "architect", timeoutSec: 1200 },
+      },
+      models: {
+        roles: {
+          architect: { model: "claude-opus" },
+          workhorse: { model: "deepseek-chat" },
+          simpler: { model: "deepseek-chat" },
+        },
+      },
+      limits: { maxInfraRetries: 3, timeoutNudgeSec: 300 },
+    };
+
+    const res = await runAgentStep({
+      task,
+      stepId: "architect-plan-1",
+      stepFragment: "steps/architect-plan",
+      agent: "architect",
+      role: "architect",
+      sessionMode: "reuse",
+      cwd: tmpRepo.dir,
+      taskWt: tmpRepo.dir,
+      taskDir,
+      recordsDir,
+      repo: repoObj,
+      harness,
+      pipeline: customPipeline,
+      project,
+      prompts,
+      promptVars: {
+        task,
+        iteration: "1",
+        intent: "Test intent",
+        context: "[]",
+        contextPack: "",
+        infra: "",
+        debt: "",
+        steering: "",
+        limits: "{}",
+      },
+    });
+
+    expect(res.ok).toBe(true);
+    expect(res.status).toBe("ok");
+    expect(res.sessionId).toBe(targetSessionId);
+    expect(res.usage?.costUsd).toBeCloseTo(0.2, 5);
+
+    const runs = harness.calls.filter((c) => c.type === "run").map((c) => (c as any).run);
+    expect(runs.length).toBe(2);
+    expect(runs[0].session.resume).toBeUndefined();
+    expect(runs[1].session.resume).toBe(targetSessionId);
+    expect(runs[1].prompt).toBe(TIMEOUT_NUDGE_PROMPT);
+    expect(runs[1].timeoutSec).toBe(300);
+  });
+
+  it("timeout retry falls back to fresh session when sessionLost occurs on resume", async () => {
+    const task = "timeout-session-lost";
+    const taskDir = path.join(tmpRepo.dir, ".factory", task);
+    const recordsDir = path.join(taskDir, "runs");
+    fs.mkdirSync(recordsDir, { recursive: true });
+
+    const harness = new FakeHarness();
+    const deadSessionId = "fake-sess-dead-timeout";
+
+    // Turn 1 times out
+    harness.scriptOutcome(`${task}/runs/architect-plan-1#a1`, {
+      ok: false,
+      error: "Execution timed out",
+      transient: true,
+      timedOut: true,
+      sessionId: deadSessionId,
+    });
+
+    // Retry 1 attempts to resume dead session, but harness reports sessionLost
+    harness.scriptOutcome(`${task}/runs/architect-plan-1#a1#infra-retry-1`, {
+      ok: false,
+      error: `Session "${deadSessionId}" not found or expired`,
+      sessionLost: true,
+    });
+
+    // Fallback rehydrated run succeeds with fresh session
+    harness.scriptOutcome(`${task}/runs/architect-plan-1#a1#rehydrated`, {
+      ok: true,
+      data: {
+        iteration: 1,
+        milestones: [
+          { id: "m1", title: "Milestone 1", scenarios: ["Scenario: Fresh"], directionalInterfaces: ["interface I"] },
+        ],
+        itemOutlines: [{ slug: "item-1", kind: "dev", title: "Item 1", milestoneId: "m1" }],
+      },
+      sessionId: "fresh-session-recovered",
+    });
+
+    const customPipeline: PipelineConfig = {
+      ...pipeline,
+      agents: { architect: { role: "architect", timeoutSec: 1200 } },
+      models: {
+        roles: {
+          architect: { model: "claude-opus" },
+          workhorse: { model: "deepseek-chat" },
+          simpler: { model: "deepseek-chat" },
+        },
+      },
+    };
+
+    const res = await runAgentStep({
+      task,
+      stepId: "architect-plan-1",
+      stepFragment: "steps/architect-plan",
+      agent: "architect",
+      role: "architect",
+      sessionMode: "reuse",
+      cwd: tmpRepo.dir,
+      taskWt: tmpRepo.dir,
+      taskDir,
+      recordsDir,
+      repo: repoObj,
+      harness,
+      pipeline: customPipeline,
+      project,
+      prompts,
+      promptVars: {
+        task,
+        iteration: "1",
+        intent: "Test intent",
+        context: "[]",
+        contextPack: "",
+        infra: "",
+        debt: "",
+        steering: "",
+        limits: "{}",
+      },
+    });
+
+    expect(res.ok).toBe(true);
+    expect(res.status).toBe("ok");
+    expect(res.sessionId).toBe("fresh-session-recovered");
+
+    const runs = harness.calls.filter((c) => c.type === "run").map((c) => (c as any).run);
+    expect(runs.length).toBe(3);
+    expect(runs[0].session.resume).toBeUndefined();
+    expect(runs[1].session.resume).toBe(deadSessionId);
+    expect(runs[2].session.resume).toBeUndefined(); // Fresh rehydrated
+  });
+
+  it("transient retry does not discard resumable session", async () => {
+    const task = "transient-kept-session";
+    const taskDir = path.join(tmpRepo.dir, ".factory", task);
+    const recordsDir = path.join(taskDir, "runs");
+    fs.mkdirSync(recordsDir, { recursive: true });
+
+    const harness = new FakeHarness();
+    const activeSessionId = "sess-dev-transient";
+    harness.knownSessionIds.add(activeSessionId);
+
+    // Turn 1 fails with 503 (transient, not timeout)
+    harness.scriptOutcome(`${task}/runs/develop#a1`, {
+      ok: false,
+      error: "service unavailable 503",
+      transient: true,
+      sessionId: activeSessionId,
+    });
+
+    // Retry 1 must resume the session and use original prompt (not nudge)
+    harness.scriptOutcome(`${task}/runs/develop#a1#infra-retry-1`, (run) => {
+      expect(run.session.resume).toBe(activeSessionId);
+      expect(run.prompt).not.toBe(TIMEOUT_NUDGE_PROMPT);
+      return {
+        ok: true,
+        data: { status: "ok", summary: "Recovered in resumed session" },
+        sessionId: activeSessionId,
+      };
+    });
+
+    const res = await runAgentStep({
+      task,
+      stepId: "develop",
+      agent: "developer",
+      sessionMode: "reuse",
+      existingSessionId: activeSessionId,
+      cwd: tmpRepo.dir,
+      taskWt: tmpRepo.dir,
+      taskDir,
+      recordsDir,
+      repo: repoObj,
+      harness,
+      pipeline,
+      project,
+      prompts,
+      promptVars: { assignment: "a", target: "t", citations: "[]" },
+    });
+
+    expect(res.ok).toBe(true);
+    expect(res.sessionId).toBe(activeSessionId);
+    const runs = harness.calls.filter((c) => c.type === "run").map((c) => (c as any).run);
+    expect(runs.length).toBe(2);
+    expect(runs[0].session.resume).toBe(activeSessionId);
+    expect(runs[1].session.resume).toBe(activeSessionId);
   });
 
   it("corrupt meta.yaml for an item causes runTask to exit 1 naming the file", async () => {

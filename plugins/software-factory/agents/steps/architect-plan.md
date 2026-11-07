@@ -4,6 +4,7 @@
 Design the iteration execution plan (`plan-N.yaml`) decomposing task intent into sequenced milestones, spike outlines, item outlines, and architectural decisions.
 
 ## Rules
+- Exploration budget: work primarily from INTENT, triage citations (`{{context}}`), and the prepared context pack (`{{contextPack}}`). Read code ONLY to verify a specific architectural decision (few targeted reads, never broad scans or chunked whole-file reading). Do not investigate open-ended questions in code; translate unknowns into explicit uncertainties or spike outlines (`fact-finder`, `poc`, `test-assumptions`). Keep terse.
 - Milestone count within the configured limit (see `{{limits}}`).
 - Scenarios & interfaces: each milestone requires concrete Gherkin scenarios specifying observable behavior and directional interfaces defining key contracts.
 - Progressive planning: plan only what is clear. If later milestones depend on earlier execution outcomes or spikes, mark them with `replanAfter: true`.
@@ -25,6 +26,9 @@ Iteration: {{iteration}}
 
 ## Context
 {{context}}
+
+## Context Pack
+{{contextPack}}
 
 ## Infrastructure
 {{infra}}

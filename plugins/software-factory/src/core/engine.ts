@@ -27,7 +27,13 @@ import { deriveTaskState, materializeStateYaml, refreshStateYaml, type DerivedTa
 import { deriveItemState } from "./derive/item.js";
 import { tickItemMachine } from "./flows/item-machine.js";
 import { mergeItem } from "./flows/merge-path.js";
-import { runIngest, isTriageDone, isInfraDone } from "./flows/ingest.js";
+import {
+  runIngest,
+  isTriageDone,
+  isInfraDone,
+  isContextPackDone,
+  isContextPackEnabled,
+} from "./flows/ingest.js";
 import { runIteration } from "./flows/iteration.js";
 import { runSeamHooks } from "./flows/seams.js";
 import { readYaml, writeYamlAtomic, readText } from "./records/io.js";
@@ -538,9 +544,14 @@ export async function runTask(
     const simpleAssignmentExists = fs.existsSync(
       path.join(taskDir, "items", "simple", "assignment.yaml")
     );
+    const contextPackDone =
+      !isContextPackEnabled(pipeline) ||
+      triageArtifact?.kind === "simple" ||
+      (await isContextPackDone(taskDir, taskWt));
     const needsIngest =
       !triageDone ||
       !infraDone ||
+      !contextPackDone ||
       (triageArtifact?.kind === "simple" && !simpleAssignmentExists);
     if (needsIngest) {
       const ingestRes = await runIngest({

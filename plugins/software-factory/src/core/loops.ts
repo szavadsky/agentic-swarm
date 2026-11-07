@@ -23,6 +23,8 @@ export const DEFAULT_LIMITS: Required<PipelineLimits> = {
   checkOutputBytes: 4000,
   hydrationBytes: 40000,
   stepTranscriptWarningBytes: 5 * 1024 * 1024,
+  contextPackBytes: 40000,
+  timeoutNudgeSec: 300,
 };
 
 export function resolveLimits(limits?: PipelineLimits): Required<PipelineLimits> {

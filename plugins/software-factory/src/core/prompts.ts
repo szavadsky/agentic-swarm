@@ -401,6 +401,7 @@ export function renderStepPrompt(opts: {
 export const ENGINE_STEP_FRAGMENTS: string[] = [
   "steps/triage",
   "steps/infra",
+  "steps/context-pack",
   "steps/integrate",
   "steps/fix-round",
   "steps/pm-edits",

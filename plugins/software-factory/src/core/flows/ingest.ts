@@ -22,10 +22,10 @@ import {
   areFilesCommitted,
   childBranch,
 } from "../git/index.js";
-import { writeYamlAtomic, readYaml, readText } from "../records/io.js";
+import { writeYamlAtomic, writeTextAtomic, readYaml, readText } from "../records/io.js";
 import { verifyCitations } from "../records/citations.js";
 import { parseStepRecordDirName } from "../records/step-record.js";
-import { runAgentStep } from "./step-runner.js";
+import { runAgentStep, type StepRunResult } from "./step-runner.js";
 import { runSeamHooks } from "./seams.js";
 import { appendJournal } from "../journal.js";
 import { refreshStateYaml } from "../derive/task.js";
@@ -151,6 +151,171 @@ export async function isInfraDone(taskDir: string, taskWt: string): Promise<bool
   }
 
   return false;
+}
+
+/**
+ * Determines whether context-pack.md has completed and is committed.
+ */
+export async function isContextPackDone(taskDir: string, taskWt: string): Promise<boolean> {
+  const packPath = path.join(taskDir, "context-pack.md");
+  if (!fs.existsSync(packPath)) return false;
+  try {
+    const stat = await fs.promises.stat(packPath);
+    if (stat.size === 0) return false;
+    if (taskWt) {
+      const committed = await areFilesCommitted(taskWt, [packPath]);
+      if (!committed) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Determines whether context-pack.md is stale and should be regenerated.
+ * - If missing or uncommitted: stale (true).
+ * - For iteration <= 1: stale if not done.
+ * - For iteration > 1: stale if non-factory code files have changed on taskWt since context-pack.md was last committed.
+ */
+export async function isContextPackStale(
+  taskDir: string,
+  taskWt: string,
+  iteration = 1
+): Promise<boolean> {
+  const packPath = path.join(taskDir, "context-pack.md");
+  if (!fs.existsSync(packPath)) return true;
+
+  if (iteration <= 1) {
+    return !(await isContextPackDone(taskDir, taskWt));
+  }
+
+  try {
+    const logRes = await git(taskWt, [
+      "log",
+      "-1",
+      "--format=%H",
+      "--",
+      packPath,
+    ]);
+    const lastCommit = logRes.stdout.trim();
+    if (!lastCommit) return true;
+
+    const diffRes = await git(taskWt, ["diff", "--name-only", lastCommit, "HEAD"]);
+    const changed = diffRes.stdout
+      .trim()
+      .split("\n")
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    return changed.some((f) => !f.startsWith(".factory/") && !f.startsWith(".factory"));
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Returns whether context pack step is enabled in pipeline config (default on).
+ */
+export function isContextPackEnabled(pipeline: PipelineConfig): boolean {
+  return pipeline.contextPack === true;
+}
+
+export interface ContextPackParams {
+  task: string;
+  taskDir: string;
+  taskWt: string;
+  repo: any;
+  harness: any;
+  pipeline: PipelineConfig;
+  project: any;
+  prompts: any;
+  intentText: string;
+  contextArtifact: any;
+  turnsSemaphore?: Semaphore;
+  budgetTracker?: BudgetTracker;
+  stepId?: string;
+}
+
+export async function runContextPackStep(params: ContextPackParams): Promise<StepRunResult> {
+  const {
+    task,
+    taskDir,
+    taskWt,
+    repo,
+    harness,
+    pipeline,
+    project,
+    prompts,
+    intentText,
+    contextArtifact,
+    turnsSemaphore,
+    budgetTracker,
+  } = params;
+
+  const stepId = params.stepId ?? "context-pack";
+  const runsDir = path.join(taskDir, "runs");
+  const attempt = getNextStepAttempt(runsDir, stepId, pipeline.limits?.maxInterruptions ?? 3);
+  const maxBytes =
+    (pipeline.limits?.contextPackBytes as number | undefined) ??
+    (pipeline.limits?.hydrationBytes as number | undefined) ??
+    40000;
+
+  const packPath = path.join(taskDir, "context-pack.md");
+
+  const contextStr =
+    typeof contextArtifact === "string"
+      ? contextArtifact
+      : JSON.stringify(contextArtifact, null, 2);
+
+  const res = await runAgentStep({
+    task,
+    stepId,
+    stepFragment: "steps/context-pack",
+    agent: "fact-finder",
+    role: "workhorse",
+    attempt,
+    sessionMode: "fresh",
+    cwd: taskWt,
+    taskWt,
+    taskDir,
+    recordsDir: runsDir,
+    repo,
+    harness,
+    pipeline,
+    project,
+    prompts,
+    promptVars: {
+      task,
+      intent: intentText,
+      context: contextStr,
+      maxBytes: String(maxBytes),
+    },
+    turnsSemaphore,
+    budgetTracker,
+    writeArtifact: async (output: unknown) => {
+      let content = "";
+      if (output && typeof output === "object") {
+        const raw = output as Record<string, unknown>;
+        content =
+          (typeof raw.findings === "string" ? raw.findings : "") ||
+          (typeof raw.contextPack === "string" ? raw.contextPack : "") ||
+          (typeof raw.summary === "string" ? raw.summary : "");
+      } else if (typeof output === "string") {
+        content = output;
+      }
+      if (!content) {
+        content = typeof output === "string" ? output : JSON.stringify(output, null, 2);
+      }
+      if (Buffer.byteLength(content, "utf8") > maxBytes) {
+        const buf = Buffer.from(content, "utf8");
+        content = buf.subarray(0, maxBytes).toString("utf8");
+      }
+      await writeTextAtomic(packPath, content);
+    },
+  });
+
+  return res;
 }
 
 export function getNextStepAttempt(runsDir: string, stepId: string, maxInterruptions = 3): number {
@@ -431,6 +596,33 @@ export async function runIngest(params: IngestParams): Promise<IngestResult> {
       throw new Error(`Infra step failed: ${infraStepRes.meta.error || "no infra output produced"}`);
     }
     await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
+  }
+
+  // 5.5. Context pack if enabled and not simple (§8.1)
+  if (triage.kind !== "simple" && isContextPackEnabled(pipeline)) {
+    const packDone = await isContextPackDone(taskDir, taskWt);
+    if (!packDone) {
+      const packRes = await runContextPackStep({
+        task,
+        taskDir,
+        taskWt,
+        repo,
+        harness,
+        pipeline,
+        project,
+        prompts,
+        intentText,
+        contextArtifact,
+        turnsSemaphore,
+        budgetTracker: params.budgetTracker,
+        stepId: "context-pack",
+      });
+      if (!packRes.ok) {
+        if (scratch) await removeWorktree(repo, scratch.path);
+        throw new Error(`Context pack step failed: ${packRes.meta.error || "no context pack produced"}`);
+      }
+      await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
+    }
   }
 
   // 6. Routing (§8.1.4)

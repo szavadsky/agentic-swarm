@@ -96,6 +96,8 @@ export interface PipelineLimits {
   checkOutputBytes?: number;
   hydrationBytes?: number;
   stepTranscriptWarningBytes?: number;
+  contextPackBytes?: number;
+  timeoutNudgeSec?: number;
   [key: string]: unknown;
 }
 
@@ -126,6 +128,7 @@ export interface PipelineConfig {
     [agent: string]: string[] | undefined;
   };
   criteria?: Record<string, string>;
+  contextPack?: boolean;
   prompts?: {
     overrides?: Record<string, unknown>;
     extraSkillDirs?: string[];

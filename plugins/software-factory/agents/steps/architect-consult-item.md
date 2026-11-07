@@ -4,6 +4,7 @@
 Resolve an item-level blockage, retry exhaustion, size violation, or reviewer escalation.
 
 ## Rules
+- Exploration budget: diagnose root causes from the assignment, prior attempts, current diff, review feedback, and the prepared context pack (`{{contextPack}}`). Read code ONLY to verify a specific failure site or interface contract (few targeted reads, never broad scans). If root cause remains unknown, split the item, outline a spike, or escalate instead of investigating. Keep terse.
 - Decision options (yield `decision` matching `decisions.schema.json` with `context: "item"`):
   - `retry-with-guidance`: provide concrete technical steering for another developer attempt. Set `persist: true` if guidance applies to subsequent rounds.
   - `split`: decompose oversized or unfocused item into smaller, independent item outlines (respecting the configured split-depth limit).
@@ -26,3 +27,6 @@ Resolve an item-level blockage, retry exhaustion, size violation, or reviewer es
 
 ## Review Feedback
 {{feedback}}
+
+## Context Pack
+{{contextPack}}

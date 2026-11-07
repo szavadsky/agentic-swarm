@@ -339,6 +339,8 @@ limits:
   maxItemsPerPlan: 50             # Maximum items per plan
   checkOutputBytes: 4000          # Tail byte cap for check command output
   hydrationBytes: 40000           # Hydration context cap for architect sessions
+  contextPackBytes: 40000         # Byte cap for generated context-pack.md (defaults to hydrationBytes)
+  timeoutNudgeSec: 300            # Reduced timeout for session-resume timeout retries
 
 # ==============================================================================
 # Budget (§5, §12.5)
@@ -405,6 +407,18 @@ criteria:
   triage: agents/criteria/triage.md
   dispositions: agents/criteria/dispositions.md
   story-kinds: agents/criteria/story-kinds.md
+
+# ==============================================================================
+# Context Pack (§8.1, §12.5)
+# ==============================================================================
+# Ingest sub-step executed after infra and before the first architect turn:
+# a cheap workhorse agent (fact-finder role/agent) builds a condensed, citation-backed
+# context document (context-pack.md) covering module maps, signatures, excerpts,
+# conventions, and open questions, capped by limits.contextPackBytes.
+# Expensive architect turns work primarily from prepared context and triage citations
+# under an explicit exploration budget instead of broad codebase scans.
+# Refreshed across iterations only when task worktree code changes (stale).
+contextPack: true
 
 # ==============================================================================
 # Prompts (§5, §10)

@@ -22,6 +22,7 @@ import { writeYamlAtomic, writeTextAtomic, readYaml, readText } from "../records
 import { runAgentStep } from "./step-runner.js";
 import { writeQuestion } from "../steer.js";
 import { runItemConsult } from "./consults.js";
+import { isContextPackStale, isContextPackEnabled, runContextPackStep } from "./ingest.js";
 import { mergeItem } from "./merge-path.js";
 import { tickItemMachine } from "./item-machine.js";
 import { deriveItemState } from "../derive/item.js";
@@ -372,6 +373,34 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
       }
     }
   }
+  // Ensure context-pack is up-to-date before architect planning (§8.1, §8.4)
+  if (isContextPackEnabled(pipeline)) {
+    const isStale = await isContextPackStale(taskDir, taskWt, iteration);
+    if (isStale) {
+      await runContextPackStep({
+        task,
+        taskDir,
+        taskWt,
+        repo,
+        harness,
+        pipeline,
+        project,
+        prompts,
+        intentText,
+        contextArtifact: contextYaml,
+        turnsSemaphore,
+        budgetTracker,
+        stepId: iteration > 1 ? `context-pack-${iteration}` : "context-pack",
+      });
+      await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
+    }
+  }
+
+  const contextPackPath = path.join(taskDir, "context-pack.md");
+  const contextPackText = fs.existsSync(contextPackPath)
+    ? await readText(contextPackPath)
+    : "";
+
   if (!plan) {
     // Architect generates plan-N (§8.4.2)
     const planStepRes = await runAgentStep({
@@ -396,6 +425,7 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
         iteration: String(iteration),
         intent: intentText,
         context: contextYaml,
+        contextPack: contextPackText,
         infra: infraYaml,
         debt: hydrationContext,
         steering: hydrationContext,
@@ -559,6 +589,7 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
       promptVars: {
         plan: JSON.stringify(plan, null, 2),
         planReview: JSON.stringify(revOutput, null, 2),
+        contextPack: contextPackText,
       },
       turnsSemaphore,
       budgetTracker,
@@ -945,6 +976,7 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
         waveReport: waveCloseupRes.output ? JSON.stringify(waveCloseupRes.output, null, 2) : waveSummary,
         debt: hydrationContext,
         steering: hydrationContext,
+        contextPack: contextPackText,
       },
       turnsSemaphore,
       budgetTracker,
@@ -1163,6 +1195,7 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
       closeup: planCloseupRes.output ? JSON.stringify(planCloseupRes.output, null, 2) : "Plan close-up completed",
       plan: JSON.stringify(plan, null, 2),
       intent: intentText,
+      contextPack: contextPackText,
     },
     turnsSemaphore,
     budgetTracker,

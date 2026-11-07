@@ -4,6 +4,7 @@
 Revise the iteration execution plan (`plan-N.yaml`) in response to adversarial feedback from the plan reviewer.
 
 ## Rules
+- Exploration budget: evaluate review feedback against the plan and the prepared context pack (`{{contextPack}}`). Read code ONLY to verify a specific reviewer objection (few targeted reads, never broad scans or chunked whole-file reading). Translate newly identified unknowns into spike outlines or uncertainties instead of exploring in-turn. Keep terse.
 - Feedback resolution: evaluate each review suggestion. Address valid concerns by adjusting milestones, scenarios, directional interfaces, or adding spikes.
 - Architectural authority: for suggestions you deliberately reject or defer, provide clear, defensible technical rationale.
 - Maintain plan bounds: keep milestone counts and dependencies within configured limits.
@@ -14,3 +15,6 @@ Revise the iteration execution plan (`plan-N.yaml`) in response to adversarial f
 
 ## Plan Review Feedback
 {{planReview}}
+
+## Context Pack
+{{contextPack}}
