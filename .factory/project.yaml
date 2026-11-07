@@ -1,0 +1,43 @@
+# software-factory v2 — Project Configuration Template
+#
+# Created by `factory init` in `<repo>/.factory/project.yaml`.
+# Committed to version control on initialization.
+
+# Folder holding factory tasks relative to repository root.
+# Tasks live at `{orchestrationFolder}/{task}/INTENT.md`.
+orchestrationFolder: .factory/tasks
+
+# Folder where architectural decision records (ADRs) are written by architect.
+adrFolder: docs/adr
+
+# Root directory for task and item git worktrees.
+# MUST live outside the main repository working tree (sibling directory).
+# `factory init` replaces `repo` with the repository's directory name.
+worktreeRoot: ../agentic-swarm.factory-wt
+
+# Script hints for the infra agent to derive automated gates and build steps.
+# These are HINTS only (free-form strings, any key); the infra agent probes and declares
+# the real commands in infra.yaml. Uncomment the block and adjust to match your
+# toolchain, or leave commented when the repo has no such step.
+# scripts:
+#   setup: "bun install"
+#   compile: "bun run build"
+#   lint: "bun run lint"
+#   test: "bun test"
+
+# File paths and globs used by mechanical checks.
+# Used by: tests-only, test-first-scope, red-test, test-diff, size,
+# simple-guard, poc-scope (prod/test classification), and target command building.
+# WARNING: wrong globs silently weaken every scope check — prod files not matched
+# by `prod` escape size/guard limits, and test files not matched by `tests` escape
+# tests-only/test-diff enforcement. Keep both lists in sync with the repo layout.
+paths:
+  tests:
+    - "test/**"
+    - "**/*.test.ts"
+    - "**/*.spec.ts"
+  prod:
+    - "src/**"
+
+# Optional directories containing additional agent skills or prompt assets.
+skillDirs: []
