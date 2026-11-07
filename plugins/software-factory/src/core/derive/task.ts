@@ -45,7 +45,7 @@ export async function deriveTaskState(opts: {
   taskDir: string;
   task: string;
   parentBranch?: string;
-  taskWt?: string;
+  taskWt: string;
   pipeline?: PipelineConfig;
   project?: ProjectConfig;
 }): Promise<DerivedTaskState> {

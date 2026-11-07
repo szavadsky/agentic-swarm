@@ -60,7 +60,7 @@ export interface StepRunOptions {
   turnsSemaphore?: Semaphore;
   customSchema?: JSONSchema;
   log?: (msg: string) => void;
-  taskWt?: string;
+  taskWt: string;
   timeoutSec?: number;
   budgetTracker?: BudgetTracker;
   iteration?: number;
@@ -214,7 +214,7 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
   const recordDir = path.join(recordsDir, dirName);
 
   // Identify worktree that contains recordDir
-  const taskWt = opts.taskWt ?? (taskDir.includes("/.factory") ? taskDir.split("/.factory")[0]! : taskDir);
+  const taskWt = opts.taskWt;
   const wtToCommit = recordDir.startsWith(cwd) ? cwd : taskWt;
 
   // 3. Resolve schema

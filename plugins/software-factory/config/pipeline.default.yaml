@@ -137,6 +137,14 @@ agents:
 # target-red, target-green, red-test, test-diff, size, simple-guard, poc-scope) do not
 # need declarations here.
 #
+# Built-in "gates" ratchet:
+# - Gates green in gates-baseline.yaml must remain green.
+# - For test runner gates with junitArg: evaluated per-test. Fails iff any failing or
+#   erroring test ID (or collection error) was not present in the baseline. Newly
+#   passing baseline failures are reported as improvements.
+# - Gates without junitArg stay green-only ratchet (pre-existing baseline failures do
+#   not fail the whole gate run).
+#
 # To define a custom check:
 # checks:
 #   mutation:

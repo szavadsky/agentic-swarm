@@ -184,6 +184,9 @@ export interface GateBaselineEntry {
   durationMs?: number;
   details?: string;
   mutatesWorktree?: boolean;
+  failingTests?: string[];
+  collectionErrors?: string[];
+  improvements?: string[];
 }
 
 

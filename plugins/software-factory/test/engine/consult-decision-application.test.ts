@@ -232,7 +232,7 @@ describe("Engine: Consult decision application ends loops (§8.5, Finding 10)", 
       `id: dec-1\ncontext: item\nitem: ${itemSlug}\nafterRecord: 001-develop-a2\ndecision: retry-with-guidance\ntext: fix imports\ntimestamp: 2026-01-01T00:00:02.000Z\n`
     );
 
-    const opts = { taskDir, itemSlug, parentBranch: `topic/${taskDir.split("/").pop()}`, pipeline };
+    const opts = { taskDir, itemSlug, parentBranch: `topic/${path.basename(taskDir)}`, pipeline, taskWt: tmpRepo.dir };
     const before = await deriveItemState(opts);
     // Only the post-decision record counts: attempt 1, series started fresh
     expect(before.currentAttempt).toBe(1);

@@ -63,7 +63,7 @@ export interface IngestResult {
 /**
  * Determines whether triage has completed and is committed with an ok record.
  */
-export async function isTriageDone(taskDir: string, taskWt?: string): Promise<boolean> {
+export async function isTriageDone(taskDir: string, taskWt: string): Promise<boolean> {
   const triagePath = path.join(taskDir, "triage.yaml");
   const contextPath = path.join(taskDir, "context.yaml");
 
@@ -117,7 +117,7 @@ export async function isTriageDone(taskDir: string, taskWt?: string): Promise<bo
  * Determines whether infra and gates-baseline have completed and are committed.
  * For epic child tasks: inherited infra counts.
  */
-export async function isInfraDone(taskDir: string, taskWt?: string): Promise<boolean> {
+export async function isInfraDone(taskDir: string, taskWt: string): Promise<boolean> {
   const infraPath = path.join(taskDir, "infra.yaml");
   const baselinePath = path.join(taskDir, "gates-baseline.yaml");
 
@@ -126,7 +126,6 @@ export async function isInfraDone(taskDir: string, taskWt?: string): Promise<boo
       const infra = await readYaml<InfraArtifact>(infraPath);
       const baseline = await readYaml<GatesBaselineArtifact>(baselinePath);
       if (infra && baseline) {
-        if (!taskWt) return true;
         const committed = await areFilesCommitted(taskWt, [infraPath, baselinePath]);
         if (committed) return true;
       }
@@ -135,7 +134,8 @@ export async function isInfraDone(taskDir: string, taskWt?: string): Promise<boo
 
   // Epic child tasks: inherited infra counts
   const parentTaskDir = path.dirname(taskDir);
-  if (parentTaskDir && parentTaskDir !== taskDir && parentTaskDir.includes(".factory")) {
+  const relParent = path.relative(taskWt, parentTaskDir);
+  if (relParent && !relParent.startsWith("..") && !path.isAbsolute(relParent)) {
     const parentInfra = path.join(parentTaskDir, "infra.yaml");
     const parentBaseline = path.join(parentTaskDir, "gates-baseline.yaml");
     if (fs.existsSync(parentInfra) && fs.existsSync(parentBaseline)) {
@@ -143,7 +143,6 @@ export async function isInfraDone(taskDir: string, taskWt?: string): Promise<boo
         const pInfra = await readYaml<InfraArtifact>(parentInfra);
         const pBaseline = await readYaml<GatesBaselineArtifact>(parentBaseline);
         if (pInfra && pBaseline) {
-          if (!taskWt) return true;
           const committed = await areFilesCommitted(taskWt, [parentInfra, parentBaseline]);
           if (committed) return true;
         }
@@ -414,6 +413,7 @@ export async function runIngest(params: IngestParams): Promise<IngestResult> {
           infra,
           task,
           taskWt,
+          taskDir,
           limits: pipeline.limits ?? {},
           outputBytes: pipeline.limits?.checkOutputBytes ?? 4096,
         };
@@ -484,6 +484,7 @@ export async function runIngest(params: IngestParams): Promise<IngestResult> {
       kind: "simple",
       task,
       taskWt,
+      taskDir,
       limits: pipeline.limits ?? {},
       outputBytes: pipeline.limits?.checkOutputBytes ?? 4096,
     };

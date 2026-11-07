@@ -61,7 +61,7 @@ export async function deriveItemState(opts: {
   taskDir: string;
   itemSlug: string;
   parentBranch: string;
-  taskWt?: string;
+  taskWt: string;
   childWt?: string;
   pipeline?: PipelineConfig;
   project?: ProjectConfig;
@@ -118,13 +118,7 @@ export async function deriveItemState(opts: {
   }
 
   if (effectiveChildWt) {
-    const relTaskDir = taskWt
-      ? path.relative(taskWt, taskDir)
-      : project?.orchestrationFolder && taskDir.includes(project.orchestrationFolder)
-      ? taskDir.slice(taskDir.indexOf(project.orchestrationFolder))
-      : taskDir.includes(".factory")
-      ? taskDir.slice(taskDir.indexOf(".factory"))
-      : path.basename(taskDir);
+    const relTaskDir = path.relative(taskWt, taskDir);
     const childStepsDir = path.join(effectiveChildWt, relTaskDir, "items", itemSlug, "steps");
     if (fs.existsSync(childStepsDir)) {
       stepsDir = childStepsDir;
@@ -259,7 +253,7 @@ export async function deriveItemState(opts: {
         if (
           q &&
           q.status === "open" &&
-          (q.ref === itemSlug || q.ref === `${taskDir.split("/").pop()}/${itemSlug}`)
+          (q.ref === itemSlug || q.ref === `${path.basename(taskDir)}/${itemSlug}`)
         ) {
           openSteerQuestion = q;
           break;

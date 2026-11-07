@@ -226,7 +226,7 @@ export async function runChildTask(
   const childWtInfo = await ensureChildWorktree(repo, parent, epicSlug);
   const childWt = childWtInfo.path;
   const orchFolder = project.orchestrationFolder ?? ".factory";
-  const parentTaskSlug = parent.taskDir.split("/").pop()!;
+  const parentTaskSlug = path.basename(parent.taskDir);
   const childTaskDir = path.join(childWt, orchFolder, parentTaskSlug, epicSlug);
   await fs.promises.mkdir(childTaskDir, { recursive: true });
 

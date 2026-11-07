@@ -8,6 +8,7 @@ import { runCheck } from "../../src/core/checks/runner.js";
 import type { CheckContext } from "../../src/core/checks/types.js";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 import { readJournal } from "../../src/core/journal.js";
+import { git } from "../../src/core/git/exec.js";
 
 describe("Gates check & ratchet (§9, §12.3)", () => {
   let tmpRepo: TmpRepo;
@@ -300,5 +301,306 @@ fi
     const journal = await readJournal(taskDir);
     const mutationEvent = journal.find((e) => e.type === "worktree_mutation_detected" && e.check === "custom-mutator");
     expect(mutationEvent).toBeDefined();
+  });
+
+  describe("Per-test ratchet for test runner gates with junitArg (§9)", () => {
+    let testRunnerScript: string;
+
+    beforeEach(() => {
+      testRunnerScript = path.join(tmpRepo.dir, "test-runner-junit.sh");
+      fs.writeFileSync(
+        testRunnerScript,
+        `#!/bin/sh
+JUNIT_FILE=""
+for arg in "$@"; do
+  case "$arg" in
+    --junitxml=*) JUNIT_FILE="\${arg#--junitxml=}" ;;
+  esac
+done
+
+if [ -z "$JUNIT_FILE" ]; then
+  exit 1
+fi
+
+if [ -f "collection-error.flag" ]; then
+  cat <<'EOF' > "$JUNIT_FILE"
+<testsuite name="suite" errors="1" tests="0">
+  <error message="Collection error in tests/test_sample.py">ImportError: No module named foo</error>
+</testsuite>
+EOF
+  exit 1
+fi
+
+FAIL_1=0
+FAIL_2=0
+if [ -f "fail_test1.flag" ]; then
+  FAIL_1=1
+fi
+if [ -f "fail_test2.flag" ]; then
+  FAIL_2=1
+fi
+
+FAIL_TOTAL=$((FAIL_1 + FAIL_2))
+
+cat <<EOF > "$JUNIT_FILE"
+<testsuite name="tests" tests="2" failures="\${FAIL_TOTAL}">
+  <testcase classname="test_mod" name="test_one">
+$( [ "$FAIL_1" -eq 1 ] && echo '    <failure message="assertion error">assert 1 == 0</failure>' )
+  </testcase>
+  <testcase classname="test_mod" name="test_two">
+$( [ "$FAIL_2" -eq 1 ] && echo '    <failure message="assertion error">assert 2 == 0</failure>' )
+  </testcase>
+</testsuite>
+EOF
+
+if [ "$FAIL_TOTAL" -gt 0 ]; then
+  exit 1
+else
+  exit 0
+fi
+`,
+        { mode: 0o755 }
+      );
+    });
+
+    it("baseline recording captures failing test ids with junitArg", async () => {
+      fs.writeFileSync(path.join(tmpRepo.dir, "fail_test1.flag"), "1");
+      const ctx = makeContext({
+        infra: {
+          setup: [],
+          gates: [{ id: "test", command: `sh "${testRunnerScript}"` }],
+          testRunner: {
+            command: `sh "${testRunnerScript}"`,
+            junitArg: "--junitxml={path}",
+          },
+        },
+      });
+
+      const res = await runGates(ctx, { record: true });
+      expect(res.ok).toBe(false);
+      const testGate = res.results.find((r) => r.id === "test");
+      expect(testGate).toBeDefined();
+      expect(testGate?.status).toBe("fail");
+      expect(testGate?.failingTests).toEqual(["test_mod.test_one"]);
+    });
+
+    it("red baseline with 1 failing test -> breaking another test fails the gate", async () => {
+      // In baseline: test_mod.test_one was failing
+      // Now: both test_mod.test_one and test_mod.test_two are failing
+      fs.writeFileSync(path.join(tmpRepo.dir, "fail_test1.flag"), "1");
+      fs.writeFileSync(path.join(tmpRepo.dir, "fail_test2.flag"), "1");
+
+      const ctx = makeContext({
+        infra: {
+          setup: [],
+          gates: [{ id: "test", command: `sh "${testRunnerScript}"` }],
+          testRunner: {
+            command: `sh "${testRunnerScript}"`,
+            junitArg: "--junitxml={path}",
+          },
+        },
+        baseline: {
+          gates: [
+            {
+              id: "test",
+              status: "fail",
+              failingTests: ["test_mod.test_one"],
+            },
+          ],
+        },
+      });
+
+      const res = await runGates(ctx);
+      expect(res.ok).toBe(false);
+      const testGate = res.results.find((r) => r.id === "test");
+      expect(testGate?.status).toBe("fail");
+      expect(testGate?.details).toContain("test_mod.test_two");
+
+      const checkRes = await runCheck("gates", ctx);
+      expect(checkRes.ok).toBe(false);
+      expect(checkRes.summary).toContain("Gate regressions: test");
+    });
+
+    it("red baseline with 1 failing test -> fixing the baseline failure passes and reports it", async () => {
+      // In baseline: test_mod.test_one was failing
+      // Now: both tests pass (no fail flags)
+      const ctx = makeContext({
+        infra: {
+          setup: [],
+          gates: [{ id: "test", command: `sh "${testRunnerScript}"` }],
+          testRunner: {
+            command: `sh "${testRunnerScript}"`,
+            junitArg: "--junitxml={path}",
+          },
+        },
+        baseline: {
+          gates: [
+            {
+              id: "test",
+              status: "fail",
+              failingTests: ["test_mod.test_one"],
+            },
+          ],
+        },
+      });
+
+      const res = await runGates(ctx);
+      expect(res.ok).toBe(true);
+      const testGate = res.results.find((r) => r.id === "test");
+      expect(testGate?.status).toBe("pass");
+      expect(testGate?.improvements).toEqual(["test_mod.test_one"]);
+
+      const checkRes = await runCheck("gates", ctx);
+      expect(checkRes.ok).toBe(true);
+      expect(checkRes.improvements).toEqual(["test_mod.test_one"]);
+      expect(checkRes.summary).toContain("improvements: test_mod.test_one");
+    });
+
+    it("red baseline with 1 failing test -> unchanged failure passes under ratchet", async () => {
+      // In baseline: test_mod.test_one was failing
+      // Now: only test_mod.test_one still fails (no new failures)
+      fs.writeFileSync(path.join(tmpRepo.dir, "fail_test1.flag"), "1");
+
+      const ctx = makeContext({
+        infra: {
+          setup: [],
+          gates: [{ id: "test", command: `sh "${testRunnerScript}"` }],
+          testRunner: {
+            command: `sh "${testRunnerScript}"`,
+            junitArg: "--junitxml={path}",
+          },
+        },
+        baseline: {
+          gates: [
+            {
+              id: "test",
+              status: "fail",
+              failingTests: ["test_mod.test_one"],
+            },
+          ],
+        },
+      });
+
+      const res = await runGates(ctx);
+      expect(res.ok).toBe(true);
+      const testGate = res.results.find((r) => r.id === "test");
+      expect(testGate?.status).toBe("pass");
+
+      const checkRes = await runCheck("gates", ctx);
+      expect(checkRes.ok).toBe(true);
+      expect(checkRes.summary).toContain("Gates passed");
+    });
+
+    it("collection error not in baseline fails the gate", async () => {
+      fs.writeFileSync(path.join(tmpRepo.dir, "collection-error.flag"), "1");
+
+      const ctx = makeContext({
+        infra: {
+          setup: [],
+          gates: [{ id: "test", command: `sh "${testRunnerScript}"` }],
+          testRunner: {
+            command: `sh "${testRunnerScript}"`,
+            junitArg: "--junitxml={path}",
+          },
+        },
+        baseline: {
+          gates: [
+            {
+              id: "test",
+              status: "fail",
+              failingTests: ["test_mod.test_one"],
+            },
+          ],
+        },
+      });
+
+      const res = await runGates(ctx);
+      expect(res.ok).toBe(false);
+      const testGate = res.results.find((r) => r.id === "test");
+      expect(testGate?.status).toBe("fail");
+      expect(testGate?.details).toContain("Collection error");
+    });
+
+    it("old-format baseline without failing ids: re-derives at baseline commit, persists, commits, and fails on new broken test", async () => {
+      // At baseline commit: only fail_test1.flag exists
+      fs.writeFileSync(path.join(tmpRepo.dir, "fail_test1.flag"), "1");
+      const task = "old-baseline-task";
+      const taskDir = path.join(tmpRepo.dir, ".factory", task);
+      fs.mkdirSync(taskDir, { recursive: true });
+
+      // Write old-format gates-baseline.yaml (red gate, NO failingTests field)
+      const baselineFile = path.join(taskDir, "gates-baseline.yaml");
+      const oldBaseline = {
+        timestamp: "2026-01-01T00:00:00.000Z",
+        gates: [
+          {
+            id: "test",
+            command: `sh "${testRunnerScript}"`,
+            status: "fail",
+            durationMs: 100,
+            details: "pre-existing failure",
+          },
+        ],
+      };
+      fs.writeFileSync(baselineFile, JSON.stringify(oldBaseline, null, 2), "utf8");
+
+      // Commit gates-baseline.yaml at this baseline state
+      await git(tmpRepo.dir, ["add", "-A"]);
+      await git(tmpRepo.dir, ["commit", "-m", "factory: record baseline"]);
+
+      // Now simulate a change that breaks another test (fail_test2.flag)
+      fs.writeFileSync(path.join(tmpRepo.dir, "fail_test2.flag"), "1");
+
+      const ctx = makeContext({
+        task,
+        taskDir,
+        taskWt: tmpRepo.dir,
+        infra: {
+          setup: [`echo setup-ok > /dev/null`],
+          gates: [{ id: "test", command: `sh "${testRunnerScript}"` }],
+          testRunner: {
+            command: `sh "${testRunnerScript}"`,
+            junitArg: "--junitxml={path}",
+          },
+        },
+        baseline: {
+          gates: [
+            {
+              id: "test",
+              command: `sh "${testRunnerScript}"`,
+              status: "fail",
+              // Notice: no failingTests! (old format)
+            },
+          ],
+        },
+      });
+
+      // Evaluate gates: must NOT be silently disabled.
+      // It must re-derive baseline failing ids (test_mod.test_one), persist & commit,
+      // and then fail because test_mod.test_two broke!
+      const res = await runGates(ctx);
+      expect(res.ok).toBe(false);
+      const testGate = res.results.find((r) => r.id === "test");
+      expect(testGate?.status).toBe("fail");
+      expect(testGate?.details).toContain("test_mod.test_two");
+
+      // Verify gates-baseline.yaml on disk was updated with the derived failing test ids
+      const updatedBaselineContent = fs.readFileSync(baselineFile, "utf8");
+      expect(updatedBaselineContent).toContain("test_mod.test_one");
+
+      // Verify commit was made via factory commit path
+      const logRes = await git(tmpRepo.dir, ["log", "-1", "--format=%s"]);
+      expect(logRes.stdout.trim()).toContain("factory: backfill gates-baseline failing tests");
+
+      // Now remove both fail flags (fixing the baseline failure)
+      fs.unlinkSync(path.join(tmpRepo.dir, "fail_test1.flag"));
+      fs.unlinkSync(path.join(tmpRepo.dir, "fail_test2.flag"));
+
+      const resFixed = await runGates(ctx);
+      expect(resFixed.ok).toBe(true);
+      const testGateFixed = resFixed.results.find((r) => r.id === "test");
+      expect(testGateFixed?.status).toBe("pass");
+      expect(testGateFixed?.improvements).toEqual(["test_mod.test_one"]);
+    });
   });
 });

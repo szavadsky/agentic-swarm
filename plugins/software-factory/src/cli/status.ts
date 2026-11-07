@@ -34,9 +34,10 @@ export async function runStatus(opts: StatusOptions): Promise<number> {
   const wtPath = worktreePath(absWtRoot, taskBranch(task));
   const mainTaskDir = path.join(repoRoot, orchestrationFolder, task);
 
-  const taskWt = fs.existsSync(wtPath) ? wtPath : undefined;
-  const taskDir = taskWt
-    ? path.join(taskWt, orchestrationFolder, task)
+  const hasWt = fs.existsSync(wtPath);
+  const taskWt = hasWt ? wtPath : repoRoot;
+  const taskDir = hasWt
+    ? path.join(wtPath, orchestrationFolder, task)
     : mainTaskDir;
 
   if (!fs.existsSync(taskDir)) {
@@ -51,14 +52,14 @@ export async function runStatus(opts: StatusOptions): Promise<number> {
     parentBranch: taskBranch(task),
   });
 
-  const configPath = taskWt
-    ? path.join(taskWt, orchestrationFolder, task, "pipeline.yaml")
+  const configPath = hasWt
+    ? path.join(wtPath, orchestrationFolder, task, "pipeline.yaml")
     : path.join(repoRoot, ".factory", "pipeline.yaml");
 
   console.log(`================================================================`);
   console.log(`Task: ${derived.task} [${derived.status.toUpperCase()}]`);
   console.log(`Kind: ${derived.kind ?? "unclassified"} | Iteration: ${derived.iteration} | Wave: ${derived.currentWave ?? "none"}`);
-  console.log(`Worktree: ${taskWt ?? "(none - main checkout)"}`);
+  console.log(`Worktree: ${hasWt ? taskWt : "(none - main checkout)"}`);
   console.log(`Config path: ${configPath}`);
   console.log(`Budget spent: $${derived.budgetSpentUsd.toFixed(4)}`);
   console.log(`----------------------------------------------------------------`);

@@ -165,3 +165,22 @@ export function buildTargetCommand(
 
   return parts.join(" ");
 }
+
+/**
+ * Augments a gate command with the test runner's JUnit argument pointing to junitPath.
+ */
+export function buildGateWithJunitCommand(
+  gateCommand: string,
+  junitArg: string,
+  junitPath: string
+): string {
+  let junitPart = junitArg;
+  if (junitPart.includes("{path}") || junitPart.includes("{{path}}")) {
+    junitPart = junitPart.replace(/\{\{path\}\}|\{path\}/g, shellQuote(junitPath));
+  } else if (junitPart.endsWith("=")) {
+    junitPart = `${junitPart}${shellQuote(junitPath)}`;
+  } else {
+    junitPart = `${junitPart} ${shellQuote(junitPath)}`;
+  }
+  return `${gateCommand} ${junitPart}`;
+}

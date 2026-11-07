@@ -1,11 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import { runProcess } from "../proc.js";
-import type { GateBaselineEntry } from "../artifacts.js";
+import type { GateBaselineEntry, GatesBaselineArtifact, InfraGate, TestRunnerConfig } from "../artifacts.js";
+import { readYaml, writeYamlAtomic } from "../records/io.js";
+import { commitAll } from "../git/commit.js";
 import { tailCap, type CheckContext } from "./types.js";
 import { appendJournal } from "../journal.js";
 import { git } from "../git/exec.js";
 import type { StatusEntry } from "../git/status.js";
+import { buildGateWithJunitCommand, parseJunit, type ParsedJunit } from "./junit.js";
 
 /** Marker embedded in gate details when the gate command timed out. */
 export const GATE_TIMED_OUT_MARKER = "gate timed out";
@@ -159,6 +163,213 @@ export async function checkAndRestoreWorktreeMutation(
 }
 
 /**
+ * Determines whether an infra gate corresponds to the configured test runner.
+ */
+export function isTestRunnerGate(
+  gate: InfraGate,
+  runner?: TestRunnerConfig
+): boolean {
+  if (!runner || !runner.command) return false;
+  const gateCmd = gate.command.trim();
+  const runCmd = runner.command.trim();
+  if (gateCmd === runCmd) return true;
+  if (gateCmd.startsWith(runCmd + " ") || runCmd.startsWith(gateCmd + " ")) return true;
+  const gateExec = path.basename(gateCmd.split(/\s+/)[0] ?? "");
+  const runExec = path.basename(runCmd.split(/\s+/)[0] ?? "");
+  if (
+    gateExec &&
+    runExec &&
+    gateExec === runExec &&
+    (gateExec.includes("test") ||
+      gateExec.includes("pytest") ||
+      gateExec.includes("jest") ||
+      gateExec.includes("vitest"))
+  ) {
+    return true;
+  }
+  const gateId = gate.id.toLowerCase();
+  if (
+    gateId === "test" ||
+    gateId === "tests" ||
+    gateId === "test-runner" ||
+    gateId === "unit-tests" ||
+    gateId === "unit"
+  ) {
+    return true;
+  }
+  if (gateCmd.includes(runCmd) || runCmd.includes(gateCmd)) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Re-derives baseline failing test ids for a test runner gate with junitArg
+ * when the recorded baseline lacks them (e.g. recorded in the old format).
+ * Executes the gate at the commit that recorded gates-baseline.yaml in a temporary
+ * detached worktree, runs infra.setup first, parses JUnit output, persists the ids
+ * into gates-baseline.yaml (committed via factory commit), and returns the ids.
+ */
+export async function rederiveBaselineFailingTests(
+  gate: InfraGate,
+  testRunner: TestRunnerConfig,
+  baseEntry: GateBaselineEntry,
+  ctx: CheckContext,
+  timeoutSec: number
+): Promise<{ failingTests: string[]; collectionErrors: string[] }> {
+  const taskDir =
+    ctx.taskDir ??
+    (ctx.task && ctx.taskWt
+      ? path.join(ctx.taskWt, ctx.project.orchestrationFolder ?? ".factory", ctx.task)
+      : undefined);
+  const taskWt = ctx.taskWt ?? ctx.wt;
+  let baselinePath = taskDir ? path.join(taskDir, "gates-baseline.yaml") : undefined;
+  if (!baselinePath || !fs.existsSync(baselinePath)) {
+    const candidate1 = path.join(
+      taskWt,
+      ctx.project.orchestrationFolder ?? ".factory",
+      ctx.task ?? "",
+      "gates-baseline.yaml"
+    );
+    const candidate2 = path.join(taskWt, "gates-baseline.yaml");
+    if (fs.existsSync(candidate1)) baselinePath = candidate1;
+    else if (fs.existsSync(candidate2)) baselinePath = candidate2;
+  }
+
+  let baselineSha = "HEAD";
+  if (baselinePath && fs.existsSync(baselinePath)) {
+    const relBaselinePath = path.relative(taskWt, baselinePath);
+    const logRes = await git(taskWt, ["log", "-1", "--format=%H", "--", relBaselinePath], {
+      allowFail: true,
+    });
+    const sha = logRes.stdout.trim();
+    if (sha && /^[0-9a-f]{40}$/i.test(sha)) {
+      baselineSha = sha;
+    } else if (ctx.repo?.mainRoot) {
+      const logResMain = await git(
+        ctx.repo.mainRoot,
+        ["log", "-1", "--format=%H", "--", relBaselinePath],
+        { allowFail: true }
+      );
+      const shaMain = logResMain.stdout.trim();
+      if (shaMain && /^[0-9a-f]{40}$/i.test(shaMain)) {
+        baselineSha = shaMain;
+      }
+    }
+  }
+
+  const repoRoot = ctx.repo?.mainRoot ?? taskWt;
+  const tempWtDir = fs.mkdtempSync(path.join(os.tmpdir(), "baseline-derive-wt-"));
+  const tmpJunit = path.join(
+    os.tmpdir(),
+    `junit-rederive-${gate.id}-${Date.now()}-${Math.random().toString(36).slice(2)}.xml`
+  );
+
+  let derivedFailingTests: string[] = [];
+  let derivedCollectionErrors: string[] = [];
+
+  try {
+    if (ctx.repo?.writeLock) {
+      await ctx.repo.writeLock.runExclusive(async () => {
+        await git(repoRoot, ["worktree", "add", "--detach", tempWtDir, baselineSha]);
+      });
+    } else {
+      await git(repoRoot, ["worktree", "add", "--detach", tempWtDir, baselineSha]);
+    }
+
+    // Run infra.setup commands first
+    for (const cmd of ctx.infra?.setup ?? []) {
+      await runProcess({ cmd, cwd: tempWtDir, timeoutSec });
+    }
+
+    // Run the test gate with junit output
+    const cmd = buildGateWithJunitCommand(gate.command, testRunner.junitArg!, tmpJunit);
+    await runProcess({
+      cmd,
+      cwd: tempWtDir,
+      timeoutSec,
+      maxOutputBytes: ctx.outputBytes,
+    });
+
+    if (fs.existsSync(tmpJunit)) {
+      const xml = await fs.promises.readFile(tmpJunit, "utf8");
+      if (xml.trim()) {
+        const parsed = parseJunit(xml);
+        derivedFailingTests = parsed.cases
+          .filter((c) => c.status === "fail" || c.status === "error")
+          .map((c) => c.id);
+        derivedCollectionErrors = parsed.errors;
+      }
+    }
+  } finally {
+    // Always clean up detached worktree
+    try {
+      if (ctx.repo?.writeLock) {
+        await ctx.repo.writeLock.runExclusive(async () => {
+          await git(repoRoot, ["worktree", "remove", "--force", tempWtDir], { allowFail: true });
+          await git(repoRoot, ["worktree", "prune"], { allowFail: true });
+        });
+      } else {
+        await git(repoRoot, ["worktree", "remove", "--force", tempWtDir], { allowFail: true });
+        await git(repoRoot, ["worktree", "prune"], { allowFail: true });
+      }
+    } catch {}
+    if (fs.existsSync(tempWtDir)) {
+      try {
+        await fs.promises.rm(tempWtDir, { recursive: true, force: true });
+      } catch {}
+    }
+    if (fs.existsSync(tmpJunit)) {
+      try {
+        await fs.promises.rm(tmpJunit, { force: true });
+      } catch {}
+    }
+  }
+
+  // Persist ids into baseEntry
+  baseEntry.failingTests = derivedFailingTests;
+  if (derivedCollectionErrors.length > 0) {
+    baseEntry.collectionErrors = derivedCollectionErrors;
+  }
+
+  // Persist into gates-baseline.yaml file on disk and commit
+  if (baselinePath && fs.existsSync(baselinePath)) {
+    try {
+      const fileBaseline = await readYaml<GatesBaselineArtifact>(baselinePath);
+      if (fileBaseline?.gates) {
+        const entry = fileBaseline.gates.find((g) => g.id === gate.id);
+        if (entry) {
+          entry.failingTests = derivedFailingTests;
+          if (derivedCollectionErrors.length > 0) {
+            entry.collectionErrors = derivedCollectionErrors;
+          }
+          await writeYamlAtomic(baselinePath, fileBaseline);
+
+          const relPath = path.relative(taskWt, baselinePath);
+          if (ctx.repo && typeof ctx.repo.identityEnv === "function" && ctx.repo.writeLock) {
+            await commitAll(
+              ctx.repo,
+              taskWt,
+              `factory: backfill gates-baseline failing tests for ${gate.id}`,
+              { paths: [relPath] }
+            );
+          } else {
+            await git(taskWt, ["add", "--", relPath], { allowFail: true });
+            await git(
+              taskWt,
+              ["commit", "-m", `factory: backfill gates-baseline failing tests for ${gate.id}`],
+              { allowFail: true }
+            );
+          }
+        }
+      }
+    } catch {}
+  }
+
+  return { failingTests: derivedFailingTests, collectionErrors: derivedCollectionErrors };
+}
+
+/**
  * Runs infrastructure verification gates.
  * Invariants:
  * - Ratchet: Any gate that was "pass" (green) in baseline must stay green.
@@ -190,14 +401,30 @@ export async function runGates(
     let finalStatus: "pass" | "fail" | "flaky" = "fail";
     let lastOutput = "";
     let mutationMessage = "";
+    let lastParsedJunit: ParsedJunit | undefined;
+
+    const testRunner = ctx.infra.testRunner;
+    const isTestGate = isTestRunnerGate(gate, testRunner);
+    const hasJunit = isTestGate && Boolean(testRunner?.junitArg && testRunner.junitArg.trim());
 
     const startTime = Date.now();
 
     while (attempt <= retries) {
       const snapshot = await snapshotWorktree(ctx.wt);
 
+      let cmdToRun = gate.command;
+      let tmpJunit: string | undefined;
+
+      if (hasJunit) {
+        tmpJunit = path.join(
+          os.tmpdir(),
+          `junit-gate-${gate.id}-${Date.now()}-${Math.random().toString(36).slice(2)}.xml`
+        );
+        cmdToRun = buildGateWithJunitCommand(gate.command, testRunner!.junitArg!, tmpJunit);
+      }
+
       let res = await runProcess({
-        cmd: gate.command,
+        cmd: cmdToRun,
         cwd: ctx.wt,
         timeoutSec,
         maxOutputBytes: ctx.outputBytes,
@@ -220,7 +447,7 @@ export async function runGates(
         }
         // Interrupted by suspend: re-run once without recording failure or consuming attempt
         res = await runProcess({
-          cmd: gate.command,
+          cmd: cmdToRun,
           cwd: ctx.wt,
           timeoutSec,
           maxOutputBytes: ctx.outputBytes,
@@ -250,6 +477,29 @@ export async function runGates(
               summary: mutationMessage,
             });
           } catch {}
+        }
+      }
+
+      // Read and parse JUnit XML report if expected
+      if (tmpJunit) {
+        try {
+          if (fs.existsSync(tmpJunit)) {
+            const xml = await fs.promises.readFile(tmpJunit, "utf8");
+            if (xml.trim()) {
+              lastParsedJunit = parseJunit(xml);
+            }
+          }
+        } finally {
+          try {
+            await fs.promises.unlink(tmpJunit);
+          } catch {}
+        }
+        if (!lastParsedJunit && res.code !== 0 && !res.timedOut) {
+          lastParsedJunit = {
+            collected: false,
+            errors: [`Test runner exited with code ${res.code} but generated no JUnit XML`],
+            cases: [],
+          };
         }
       }
 
@@ -291,31 +541,107 @@ export async function runGates(
       details = `${details}\n[${mutationMessage}]`.trim();
     }
 
-    results.push({
+    const gateEntry: GateBaselineEntry = {
       id: gate.id,
       command: gate.command,
       status: finalStatus,
       durationMs,
       details: tailCap(details, ctx.outputBytes),
       ...(mutatesWorktree ? { mutatesWorktree: true } : {}),
-    });
+    };
+
+    let failingCaseIds: string[] = [];
+    let collectionErrors: string[] = [];
+
+    if (hasJunit && lastParsedJunit) {
+      failingCaseIds = lastParsedJunit.cases
+        .filter((c) => c.status === "fail" || c.status === "error")
+        .map((c) => c.id);
+      collectionErrors = lastParsedJunit.errors;
+
+      if (failingCaseIds.length > 0) {
+        gateEntry.failingTests = failingCaseIds;
+      }
+      if (collectionErrors.length > 0) {
+        gateEntry.collectionErrors = collectionErrors;
+      }
+    }
 
     // Ratchet evaluation:
-    if (finalStatus === "fail" || mutatesWorktree) {
-      if (opts?.record) {
+    if (opts?.record) {
+      // Baseline recording: failing gate or mutation marks overallOk false
+      if (finalStatus === "fail" || mutatesWorktree) {
         overallOk = false;
-      } else if (ctx.baseline) {
-        const baseEntry = ctx.baseline.gates.find((g) => g.id === gate.id);
-        const wasGreen = baseEntry ? baseEntry.status === "pass" : false;
-        if (wasGreen || mutatesWorktree) {
-          overallOk = false;
+      }
+    } else if (ctx.baseline) {
+      const baseEntry = ctx.baseline.gates.find((g) => g.id === gate.id);
+      if (hasJunit && baseEntry) {
+        // Handle old-format baseline lacking failing test ids (re-derive from baseline commit)
+        if (baseEntry.status !== "pass" && baseEntry.failingTests === undefined) {
+          await rederiveBaselineFailingTests(gate, testRunner!, baseEntry, ctx, timeoutSec);
         }
-        // Non-baseline-green gate: reported in results but does not fail overallOk unless mutatesWorktree
+
+        // Per-test ratchet for test runner gates with junit:
+        const baseFailingSet = new Set(baseEntry.failingTests ?? []);
+        const baseCollectionErrors = new Set(baseEntry.collectionErrors ?? []);
+
+        const newFailing = failingCaseIds.filter((id) => !baseFailingSet.has(id));
+        const newCollectionErrors = collectionErrors.filter((e) => !baseCollectionErrors.has(e));
+
+        // Newly passing baseline failures are reported as improvements
+        const currentPassed = new Set(
+          lastParsedJunit?.cases.filter((c) => c.status === "pass").map((c) => c.id) ?? []
+        );
+        const improvements = (baseEntry.failingTests ?? []).filter((id) =>
+          currentPassed.has(id)
+        );
+        if (improvements.length > 0) {
+          gateEntry.improvements = improvements;
+        }
+
+        const junitMissingOnFailure =
+          finalStatus === "fail" &&
+          (!lastParsedJunit || (!lastParsedJunit.collected && lastParsedJunit.cases.length === 0));
+
+        const hasNewFailures =
+          newFailing.length > 0 ||
+          newCollectionErrors.length > 0 ||
+          junitMissingOnFailure;
+
+        if (hasNewFailures || mutatesWorktree || timedOut) {
+          overallOk = false;
+          gateEntry.status = "fail";
+          if (newFailing.length > 0) {
+            gateEntry.details = `${gateEntry.details ?? ""}\n[New failing tests: ${newFailing.join(", ")}]`.trim();
+          }
+          if (newCollectionErrors.length > 0) {
+            gateEntry.details = `${gateEntry.details ?? ""}\n[New collection errors: ${newCollectionErrors.join("; ")}]`.trim();
+          }
+        } else {
+          // Ratchet passed: no new failures beyond baseline!
+          gateEntry.status = "pass";
+          if (improvements.length > 0) {
+            gateEntry.details = `${gateEntry.details ?? ""}\n[Improvements: ${improvements.join(", ")}]`.trim();
+          }
+        }
       } else {
-        // No baseline: any failure fails
+        // Gate without junit: stays as today (documented)
+        const wasGreen = baseEntry ? baseEntry.status === "pass" : false;
+        if (finalStatus === "fail" || mutatesWorktree) {
+          if (wasGreen || mutatesWorktree) {
+            overallOk = false;
+          }
+          // Non-baseline-green gate: reported in results but does not fail overallOk unless mutatesWorktree
+        }
+      }
+    } else {
+      // No baseline: any failure fails
+      if (finalStatus === "fail" || mutatesWorktree) {
         overallOk = false;
       }
     }
+
+    results.push(gateEntry);
   }
 
   return { results, ok: overallOk };

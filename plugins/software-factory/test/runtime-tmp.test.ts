@@ -75,4 +75,76 @@ describe("Factory Runtime Temporary Directory (§5)", () => {
       handle.restore();
     }
   });
+
+  it("runAgentStep succeeds when path contains /.factory-runtime/tmp (fix 1)", async () => {
+    // Set up repo and task inside a directory structure with .factory-runtime/tmp
+    const nestedDir = path.join(tempRoot, "wt", ".factory-runtime", "tmp", "work-repo");
+    fs.mkdirSync(nestedDir, { recursive: true });
+
+    const { Repo } = await import("../src/core/git/repo.js");
+    const { runAgentStep } = await import("../src/core/flows/step-runner.js");
+    const { FakeHarness } = await import("../src/harness/fake/fake-harness.js");
+    const { loadPromptLibrary } = await import("../src/core/prompts.js");
+    const { git } = await import("../src/core/git/exec.js");
+
+    await git(nestedDir, ["init"]);
+    await git(nestedDir, ["config", "user.name", "Test"]);
+    await git(nestedDir, ["config", "user.email", "test@test.local"]);
+    fs.writeFileSync(path.join(nestedDir, "README.md"), "# Repo\n");
+    await git(nestedDir, ["add", "README.md"]);
+    await git(nestedDir, ["commit", "-m", "initial commit"]);
+
+    const task = "test-task";
+    const taskDir = path.join(nestedDir, ".factory", task);
+    const recordsDir = path.join(taskDir, "runs");
+    fs.mkdirSync(recordsDir, { recursive: true });
+
+    const repo = new Repo({ mainRoot: nestedDir, worktreeRoot: path.join(tempRoot, "wt-root") });
+    const harness = new FakeHarness();
+    harness.scriptOutcome(`${task}/runs/triage#a1`, {
+      ok: true,
+      data: {
+        kind: "simple",
+        rationale: "Quick fix",
+        citations: [
+          {
+            file: "README.md",
+            lines: "1-1",
+            anchors: ["Repo"],
+            summary: "Title citation",
+          },
+        ],
+      },
+    });
+
+    const prompts = loadPromptLibrary({
+      builtinDir: path.resolve(import.meta.dir, "../agents"),
+      overrideDirs: [],
+    });
+
+    const res = await runAgentStep({
+      task,
+      stepId: "triage",
+      stepFragment: "steps/triage",
+      agent: "triage",
+      cwd: nestedDir,
+      taskWt: nestedDir,
+      taskDir,
+      recordsDir,
+      repo,
+      harness,
+      pipeline: {
+        models: { roles: { workhorse: { model: "m" } } },
+        agents: { triage: { role: "workhorse" } },
+        flows: { simple: { steps: [] }, story: {}, spike: {} },
+        limits: {},
+      },
+      project: { orchestrationFolder: ".factory", worktreeRoot: "../wt" },
+      prompts,
+      promptVars: { task, intent: "fix", triageCriteria: "crit" },
+    });
+
+    expect(res.ok).toBe(true);
+    expect(res.status).toBe("ok");
+  });
 });

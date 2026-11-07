@@ -39,6 +39,7 @@ export interface CheckResult {
   flaky?: string[];
   skipped?: boolean;
   mutatesWorktree?: boolean;
+  improvements?: string[];
 }
 
 /**

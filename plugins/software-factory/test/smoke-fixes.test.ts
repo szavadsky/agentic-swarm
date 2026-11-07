@@ -179,6 +179,7 @@ describe("Smoke fixes acceptance tests (§6.4, §7, §8, §9)", () => {
         stepFragment: "steps/triage",
         agent: "triage",
         cwd: taskWtRes.path,
+        taskWt: taskWtRes.path,
         taskDir,
         recordsDir: runsDir,
         repo,

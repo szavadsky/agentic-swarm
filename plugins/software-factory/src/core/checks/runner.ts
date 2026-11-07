@@ -186,12 +186,14 @@ async function checkGates(ctx: CheckContext): Promise<CheckResult> {
   const failed = results.filter((r) => r.status === "fail").map((r) => r.id);
   const timedOutGates = results.filter(gateTimedOut).map((r) => r.id);
   const mutatingGates = results.filter((r) => r.mutatesWorktree).map((r) => r.id);
+  const allImprovements = results.flatMap((r) => r.improvements ?? []);
 
   let summary: string;
   if (mutatingGates.length > 0) {
     summary = `Gate mutations detected: ${mutatingGates.join(", ")} (mutatesWorktree: true; restored)`;
   } else if (ok) {
-    summary = `Gates passed (${results.length} gates${flaky.length > 0 ? `, flaky: ${flaky.join(", ")}` : ""})`;
+    const impStr = allImprovements.length > 0 ? `, improvements: ${allImprovements.join(", ")}` : "";
+    summary = `Gates passed (${results.length} gates${flaky.length > 0 ? `, flaky: ${flaky.join(", ")}` : ""}${impStr})`;
   } else if (timedOutGates.length > 0) {
     summary = `Gate timeouts: ${timedOutGates.join(", ")}${failed.length > timedOutGates.length ? `; other failures: ${failed.filter((f) => !timedOutGates.includes(f)).join(", ")}` : ""}`;
   } else {
@@ -212,6 +214,7 @@ async function checkGates(ctx: CheckContext): Promise<CheckResult> {
     output,
     fingerprint,
     flaky: flaky.length > 0 ? flaky : undefined,
+    improvements: allImprovements.length > 0 ? allImprovements : undefined,
     details: results,
     ...(mutatingGates.length > 0 ? { mutatesWorktree: true } : {}),
   };

@@ -324,7 +324,7 @@ Hook agent outputs use the review contract (read-only) except code-writing agent
 | schema | every record | §6.4 |
 | citations | triage | file, range, anchors |
 | plan limits | plan, edits | milestones ≤ 8, items ≤ 50, unique slugs, deps acyclic and only on earlier waves, kinds exist, outlineRef exists, epics only in root plans |
-| gates | after / retry-step | infra gates; gates green in `gates-baseline.yaml` must stay green; `gateRetries` re-runs, flaky recorded |
+| gates | after / retry-step | infra gates; per-test ratchet for test runner gates with `junitArg` (fails iff failing/erroring test ids or collection errors not in baseline; newly passing baseline failures reported as improvements); gates without junit stay green-ratchet; `gateRetries` re-runs, flaky recorded |
 | test-first-scope | after / retry-step | changes under `paths.tests` + new (not modified) `paths.prod` files totalling ≤ `stubMaxProdLines` |
 | tests-only | after / retry-step | changes only under `paths.tests` |
 | target-red | after / retry-step | junit: every `expectRed` id fails (assertion), suite collects; collection/import errors ≠ red |

@@ -19,7 +19,23 @@
             "enum": ["pass", "fail", "flaky"]
           },
           "durationMs": { "type": "number" },
-          "details": { "type": "string" }
+          "details": { "type": "string" },
+          "mutatesWorktree": { "type": "boolean" },
+          "failingTests": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Test identifiers that failed or errored in baseline"
+          },
+          "collectionErrors": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Collection or suite errors in baseline"
+          },
+          "improvements": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Newly passing baseline test failures reported as improvements"
+          }
         },
         "additionalProperties": false
       }
