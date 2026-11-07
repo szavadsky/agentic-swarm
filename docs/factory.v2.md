@@ -93,6 +93,15 @@ project config: location of orcehstrationFolder, folderForPreservedADRs, scripts
      - routing: blocker affecting a dependent item → dependent item blocked + architect consult; `architect` → next architect turn (wave report / next iteration plan input); `human-*` → steer mailbox per reviewPolicy; tech debt → plan tech-debt list
      - wave/plan close-ups list open concerns; close-up reviewers re-triage them; architect resolves or carries them; status/state.yaml shows counts
      - configurable like other dispositions (which agents may raise, which dispositions are allowed per reviewer, severity thresholds)
+19. workspaces, merging, lifecycle (prefer omp over DIY)
+     - workspace isolation via omp's configurable isolation backend by default; the engine's own git worktree management stays only as a config option (`isolation: omp | engine`); a spike settles which omp mechanics (backend config, branch/commit retention on failure, cwd, merge-back) fit
+     - preflight verifies: compatible omp version + config (overlay keys, isolation backend usable — a real throwaway isolation round-trip), every configured model/role resolvable, target git repo state (clean, branches/worktrees consistent with records), harness binaries
+     - idempotent tracking of tasks, workspaces, branches and commits derived from records + git; launcher commands: `status` (whole tree: saga/epics/tasks/items, workspace + branch per active agent, open questions), `cleanup` (finished workspaces), `gc` (orphaned workspaces/branches/runtime files, stale locks; dry-run by default), all safe to run while nothing is running and refusing while a run holds the lock
+     - commits: message and scope from agents' structured output (e.g. the last review before commit summarizes the change) or omp mechanics; engine never invents content
+     - wave-end merge (default): conflict-free merge → deterministic CI command(s) (gates) → all green: merged; conflicts or red → workhorse-class wave-end merger agent resolves (v1 checker/committer role, trivial conflicts only) → unresolvable → architect escalation. The escalation carries a pointer to the overall status (one command/file) and the worktree + branch of the problematic item so the architect can inspect directly
+     - saga: each epic runs as an independent factory launch in its own workspace (parallel epics possible); merges inside an epic escalate to the epic's architect; merging epics at the saga wave end escalates to the saga architect
+     - docs show each use case (single task, story waves, epic, saga with parallel epics, conflict resolution and escalation paths, status/cleanup/gc) and how it is handled
+     - "no models" tests: end-to-end tests through the real omp harness with a scripted mock model provider (no paid models), covering isolation, merges/conflicts/escalations, saga/epic launches, restart and gc
 
 Fire testing:
      develop initial version. launch ietration by iteration; babysit

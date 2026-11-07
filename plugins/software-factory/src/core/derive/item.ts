@@ -5,6 +5,7 @@ import type {
   DecisionArtifact,
   FlowKindConfig,
   PipelineConfig,
+  ProjectConfig,
   ReviewArtifact,
   StateItemInfo,
   StepMetaArtifact,
@@ -63,9 +64,10 @@ export async function deriveItemState(opts: {
   taskWt?: string;
   childWt?: string;
   pipeline?: PipelineConfig;
+  project?: ProjectConfig;
   kindConfig?: FlowKindConfig;
 }): Promise<DerivedItemState> {
-  const { taskDir, itemSlug, parentBranch, taskWt, childWt, pipeline } = opts;
+  const { taskDir, itemSlug, parentBranch, taskWt, childWt, pipeline, project } = opts;
   const itemDir = path.join(taskDir, "items", itemSlug);
   const assignmentPath = path.join(itemDir, "assignment.yaml");
 
@@ -73,8 +75,10 @@ export async function deriveItemState(opts: {
   if (fs.existsSync(assignmentPath)) {
     try {
       assignment = await readYaml<AssignmentArtifact>(assignmentPath);
-    } catch {
-      // ignore
+    } catch (err: any) {
+      if (err?.code !== "ENOENT") {
+        throw new Error(`Corrupt assignment file at ${assignmentPath}: ${err?.message ?? err}`);
+      }
     }
   }
 
@@ -82,7 +86,7 @@ export async function deriveItemState(opts: {
   const title = assignment?.title ?? itemSlug;
   const wave = assignment?.wave ? Number(assignment.wave) : 1;
   const deps = assignment?.deps ?? [];
-  const branch = childBranch(parentBranch, itemSlug);
+  const branch = childBranch(parentBranch, itemSlug, { allowReserved: itemSlug === "simple" });
 
   // 0. Epic items: status comes from the recorded child close-up (§8.6).
   // A finished epic (done) is ready for the merge path; blocked/failed map directly.
@@ -92,11 +96,13 @@ export async function deriveItemState(opts: {
     if (fs.existsSync(childCloseupPath)) {
       try {
         const cc = await readYaml<{ status?: string }>(childCloseupPath);
-        if (cc.status === "done" || cc.status === "blocked" || cc.status === "failed") {
+        if (cc && (cc.status === "done" || cc.status === "blocked" || cc.status === "failed")) {
           epicChildStatus = cc.status;
         }
-      } catch {
-        // ignore
+      } catch (err: any) {
+        if (err?.code !== "ENOENT") {
+          throw new Error(`Corrupt child-closeup file at ${childCloseupPath}: ${err?.message ?? err}`);
+        }
       }
     }
   }
@@ -112,8 +118,14 @@ export async function deriveItemState(opts: {
   }
 
   if (effectiveChildWt) {
-    const orchFolder = taskDir.includes("/.factory") ? ".factory" : path.basename(path.dirname(taskDir));
-    const childStepsDir = path.join(effectiveChildWt, orchFolder, path.basename(taskDir), "items", itemSlug, "steps");
+    const relTaskDir = taskWt
+      ? path.relative(taskWt, taskDir)
+      : project?.orchestrationFolder && taskDir.includes(project.orchestrationFolder)
+      ? taskDir.slice(taskDir.indexOf(project.orchestrationFolder))
+      : taskDir.includes(".factory")
+      ? taskDir.slice(taskDir.indexOf(".factory"))
+      : path.basename(taskDir);
+    const childStepsDir = path.join(effectiveChildWt, relTaskDir, "items", itemSlug, "steps");
     if (fs.existsSync(childStepsDir)) {
       stepsDir = childStepsDir;
     }
@@ -137,17 +149,21 @@ export async function deriveItemState(opts: {
       let meta: StepMetaArtifact;
       try {
         meta = await readYaml<StepMetaArtifact>(metaPath);
-      } catch {
+      } catch (err: any) {
+        if (err?.code !== "ENOENT") {
+          throw new Error(`Corrupt step record meta at ${metaPath}: ${err?.message ?? err}`);
+        }
         continue;
       }
-
       let output: unknown;
       const outputPath = path.join(recordDir, "output.yaml");
       if (fs.existsSync(outputPath)) {
         try {
           output = await readYaml(outputPath);
-        } catch {
-          // ignore
+        } catch (err: any) {
+          if (err?.code !== "ENOENT") {
+            throw new Error(`Corrupt step record output at ${outputPath}: ${err?.message ?? err}`);
+          }
         }
       }
 
@@ -163,8 +179,10 @@ export async function deriveItemState(opts: {
               lastFailingCheckFingerprint = fingerprintCheckFailure(failing.summary);
             }
           }
-        } catch {
-          // ignore
+        } catch (err: any) {
+          if (err?.code !== "ENOENT") {
+            throw new Error(`Corrupt step record checks at ${checksPath}: ${err?.message ?? err}`);
+          }
         }
       }
 
@@ -208,8 +226,7 @@ export async function deriveItemState(opts: {
       try {
         const decisionPath = path.join(decisionsDir, dent.name);
         const d = await readYaml<DecisionArtifact & { item?: string; afterRecord?: string }>(decisionPath);
-        // Match exact item only
-        if (d.item === itemSlug) {
+        if (d && d.item === itemSlug) {
           consultCount++;
           const seqMatch = /^(\d{3})-/.exec(dent.name);
           const seqNum = seqMatch ? parseInt(seqMatch[1]!, 10) : 0;
@@ -221,8 +238,10 @@ export async function deriveItemState(opts: {
             decisionFingerprints.push(d.decision);
           }
         }
-      } catch {
-        // ignore
+      } catch (err: any) {
+        if (err?.code !== "ENOENT") {
+          throw new Error(`Corrupt decision file at ${path.join(decisionsDir, dent.name)}: ${err?.message ?? err}`);
+        }
       }
     }
   }
@@ -235,16 +254,20 @@ export async function deriveItemState(opts: {
     for (const sent of sentries) {
       if (!sent.isFile() || !sent.name.endsWith(".yaml")) continue;
       try {
-        const q = await readYaml<SteerItemArtifact>(path.join(steerDir, sent.name));
+        const qPath = path.join(steerDir, sent.name);
+        const q = await readYaml<SteerItemArtifact>(qPath);
         if (
+          q &&
           q.status === "open" &&
           (q.ref === itemSlug || q.ref === `${taskDir.split("/").pop()}/${itemSlug}`)
         ) {
           openSteerQuestion = q;
           break;
         }
-      } catch {
-        // ignore
+      } catch (err: any) {
+        if (err?.code !== "ENOENT") {
+          throw new Error(`Corrupt steer question file at ${path.join(steerDir, sent.name)}: ${err?.message ?? err}`);
+        }
       }
     }
   }
@@ -280,7 +303,7 @@ export async function deriveItemState(opts: {
         }
       }
     } catch {
-      // branch might not exist or error
+      // git inspect failure
     }
   }
 

@@ -143,11 +143,18 @@ export function acquireRunLock(
 
   // 2. Lock already exists (EEXIST). Read and inspect existing lock.
   let existingLock: LockData | undefined;
+  let stat: fs.Stats | undefined;
   try {
+    stat = fs.statSync(lockPath);
     const content = fs.readFileSync(lockPath, "utf8");
     existingLock = JSON.parse(content) as LockData;
   } catch {
-    // Corrupt or unparseable lock file — treat as stale
+    // Corrupt or unparseable lock file.
+    // If file was just created (< 5000 ms ago), treat as live/pending creation to prevent race.
+    const mtimeMs = stat ? stat.mtimeMs : 0;
+    if (Date.now() - mtimeMs < 5000) {
+      return null;
+    }
     existingLock = undefined;
   }
 
@@ -161,19 +168,47 @@ export function acquireRunLock(
     return null;
   }
 
-  // 5. Stale lock (dead PID on same host or corrupt file): take over atomically via temp file rename
-  const tmpLockPath = path.join(
-    lockDir,
-    `${task}.lock.takeover.${process.pid}.${Date.now()}`
-  );
+  // 5. Stale lock (dead PID on same host or corrupt file): take over atomically via exclusive takeover marker
+  const takeoverMarker = path.join(lockDir, `${task}.lock.takeover`);
+  let takeoverFd: number | undefined;
   try {
-    fs.writeFileSync(tmpLockPath, payloadStr, "utf8");
-    fs.renameSync(tmpLockPath, lockPath);
+    takeoverFd = fs.openSync(takeoverMarker, "wx");
   } catch {
-    try {
-      if (fs.existsSync(tmpLockPath)) fs.unlinkSync(tmpLockPath);
-    } catch {}
+    // Another takeover in progress
     return null;
+  }
+
+  try {
+    const tmpLockPath = path.join(
+      lockDir,
+      `${task}.lock.takeover.${process.pid}.${Date.now()}`
+    );
+    try {
+      fs.writeFileSync(tmpLockPath, payloadStr, "utf8");
+      fs.renameSync(tmpLockPath, lockPath);
+    } catch {
+      try {
+        if (fs.existsSync(tmpLockPath)) fs.unlinkSync(tmpLockPath);
+      } catch {}
+      return null;
+    }
+
+    // Verify after rename that our payload holds the lock
+    try {
+      const verified = JSON.parse(fs.readFileSync(lockPath, "utf8")) as LockData;
+      if (verified.pid !== payload.pid || verified.host !== payload.host) {
+        return null;
+      }
+    } catch {
+      return null;
+    }
+  } finally {
+    if (takeoverFd !== undefined) {
+      try {
+        fs.closeSync(takeoverFd);
+        fs.unlinkSync(takeoverMarker);
+      } catch {}
+    }
   }
 
   // 6. Log takeover notice (§2)

@@ -197,6 +197,8 @@ describe("Engine: Blocked close-up starts iteration N+1 (§8.4.1, Finding 6)", (
     let iter2PromptSeen = "";
     harness.scriptOutcome(`${task}/runs/architect-plan-2#a1`, (run) => {
       iter2PromptSeen = run.prompt;
+      // Iteration N+1 starts a fresh architect session (§8.4.7)
+      expect(run.session.resume).toBeUndefined();
       return {
         ok: true,
         data: {

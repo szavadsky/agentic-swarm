@@ -78,9 +78,12 @@ export async function runFactory(opts: RunCliOptions): Promise<number> {
   const defaultTaskDir = path.join(repoRoot, orchestrationFolder, task);
 
   // 3. Acquire run lock
+  let lockTakeoverEvent: any | undefined;
   const lockHandle = acquireRunLock(repoRoot, task, {
     runtimeDir,
-    taskDir: defaultTaskDir,
+    onTakeover: (info) => {
+      lockTakeoverEvent = info;
+    },
   });
   if (!lockHandle) {
     console.error(`[factory run] Task "${task}" is already running by another process.`);
@@ -143,9 +146,12 @@ export async function runFactory(opts: RunCliOptions): Promise<number> {
     };
 
     // 5. Run task loop mapping maxIterations
-    const runOpts: { maxIterations?: number } = {};
+    const runOpts: { maxIterations?: number; lockTakeoverEvent?: any } = {};
     if (opts.maxIterations !== undefined) {
       runOpts.maxIterations = opts.maxIterations;
+    }
+    if (lockTakeoverEvent) {
+      runOpts.lockTakeoverEvent = lockTakeoverEvent;
     }
     const result: RunResult = await (runTask as any)(deps, task, runOpts);
 

@@ -211,5 +211,148 @@ describe("Engine: Epic child task runs on the parent branch (§8.6, Finding 7)",
     });
     expect(epicState.status).toBe("merged");
     expect(fs.existsSync(path.join(deployedTaskDir, "items", epicSlug, "child-closeup.yaml"))).toBe(true);
+
+    // Child item work landed on parent topic branch through child merge
+    expect(fs.existsSync(path.join(taskWtPath, "epic-feature.ts"))).toBe(true);
+    expect(fs.readFileSync(path.join(taskWtPath, "epic-feature.ts"), "utf8")).toContain("epic");
+  }, 60000);
+
+  it("runs with shipped default orchestrationFolder (.factory/tasks) and epic child item reaches merged", async () => {
+    const defaultOrch = ".factory/tasks";
+    project.orchestrationFolder = defaultOrch;
+
+    const task = "default-orch-epic-task";
+    const epicSlug = "epic-subtask";
+    const taskDir = path.join(tmpRepo.dir, defaultOrch, task);
+    fs.mkdirSync(taskDir, { recursive: true });
+    fs.writeFileSync(path.join(taskDir, "INTENT.md"), "Parent epic task in default folder\n");
+    tmpRepo.commit("Add parent intent with default orch folder");
+
+    const harness = new FakeHarness();
+
+    // Ingest
+    harness.scriptOutcome(`${task}/runs/triage#a1`, {
+      ok: true,
+      data: { kind: "story", rationale: "Large epic feature", citations: [] },
+    });
+    harness.scriptOutcome(`${task}/runs/infra#a1`, {
+      ok: true,
+      data: { setup: [], gates: [{ id: "test", command: "true" }], testRunner: { command: "true", selectorArgs: [], junitArg: "" } },
+    });
+
+    // Iteration 1 plan
+    harness.scriptOutcome(`${task}/runs/architect-plan-1#a1`, {
+      ok: true,
+      data: {
+        iteration: 1,
+        milestones: [{ id: "m1", title: "M1" }],
+        itemOutlines: [{ slug: epicSlug, kind: "epic", title: "Epic subtask", milestoneId: "m1", deps: [] }],
+        epics: [{ slug: epicSlug, intent: "Epic intent for default folder\n" }],
+      },
+    });
+    harness.scriptOutcome(`${task}/runs/plan-review-1-1#a1`, {
+      ok: true,
+      data: { status: "approved", summary: "Plan ok", suggestions: [] },
+    });
+    harness.scriptOutcome(`${task}/runs/pm-edits-1#a1`, {
+      ok: true,
+      data: {
+        iteration: 1,
+        items: [
+          { slug: epicSlug, outlineRef: epicSlug, kind: "epic", title: "Epic subtask", assignment: "Run child task", milestone: "m1", wave: 1, deps: [] },
+        ],
+      },
+    });
+
+    // Child task turns
+    const childTask = `${task}--${epicSlug}`;
+    harness.scriptOutcome(`${childTask}/runs/architect-plan-1#a1`, {
+      ok: true,
+      data: {
+        iteration: 1,
+        milestones: [{ id: "m1", title: "Child M1" }],
+        itemOutlines: [{ slug: "nested-item", kind: "dev", title: "Nested item", milestoneId: "m1" }],
+      },
+    });
+    harness.scriptOutcome(`${childTask}/runs/plan-review-1-1#a1`, {
+      ok: true,
+      data: { status: "approved", summary: "child plan ok", suggestions: [] },
+    });
+    harness.scriptOutcome(`${childTask}/runs/pm-edits-1#a1`, {
+      ok: true,
+      data: {
+        iteration: 1,
+        items: [
+          { slug: "nested-item", outlineRef: "nested-item", kind: "dev", title: "Nested item", assignment: "Nested work", milestone: "m1", wave: 1 },
+        ],
+      },
+    });
+    harness.scriptOutcome(`${childTask}/items/nested-item/develop#a1`, (run) => {
+      fs.writeFileSync(path.join(run.cwd, "nested-result.ts"), "export const nestedDone = true;\n");
+      return { ok: true, data: { status: "ok", summary: "Nested item done" } };
+    });
+    harness.scriptOutcome(`${childTask}/runs/wave-close-up-1-1#a1`, {
+      ok: true,
+      data: { wave: 1, iteration: 1, status: "complete", mergedItems: ["nested-item"], summary: "Child wave ok" },
+    });
+    harness.scriptOutcome(`${childTask}/runs/architect-wave-report-1-1#a1`, {
+      ok: true,
+      data: { id: "dec-c1", context: "wave", decision: "continue", timestamp: new Date().toISOString() },
+    });
+    harness.scriptOutcome(`${childTask}/runs/plan-close-up-1#a1`, {
+      ok: true,
+      data: { iteration: 1, status: "complete", summary: "Child milestones done" },
+    });
+    harness.scriptOutcome(`${childTask}/runs/architect-closeup-1#a1`, {
+      ok: true,
+      data: { iteration: 1, status: "complete", summary: "Child task delivered" },
+    });
+
+    // Parent wave/iteration close-up flow
+    harness.scriptOutcome(`${task}/runs/wave-close-up-1-1#a1`, {
+      ok: true,
+      data: { wave: 1, iteration: 1, status: "complete", mergedItems: [epicSlug], summary: "Parent wave ok" },
+    });
+    harness.scriptOutcome(`${task}/runs/architect-wave-report-1-1#a1`, {
+      ok: true,
+      data: { id: "dec-p1", context: "wave", decision: "continue", timestamp: new Date().toISOString() },
+    });
+    harness.scriptOutcome(`${task}/runs/plan-close-up-1#a1`, {
+      ok: true,
+      data: { iteration: 1, status: "complete", summary: "Parent milestones done" },
+    });
+    harness.scriptOutcome(`${task}/runs/architect-closeup-1#a1`, {
+      ok: true,
+      data: { iteration: 1, status: "complete", summary: "Parent task delivered" },
+    });
+
+    const res = await runTask(
+      { harness, repo: repoObj, project, pipelineFor: async () => pipeline, prompts },
+      task
+    );
+
+    expect(res.status).toBe("done");
+
+    const taskWtPath = path.join(worktreeRoot, `topic_${task}`);
+    const deployedTaskDir = path.join(taskWtPath, defaultOrch, task);
+
+    // Epic INTENT was written by the edits commit on the parent branch in default orchestrationFolder
+    const epicIntentPath = path.join(deployedTaskDir, epicSlug, "INTENT.md");
+    expect(fs.existsSync(epicIntentPath)).toBe(true);
+
+    // Parent epic item derived as merged; child close-up recorded
+    const epicState = await deriveItemState({
+      taskDir: deployedTaskDir,
+      itemSlug: epicSlug,
+      parentBranch: `topic/${task}`,
+      taskWt: taskWtPath,
+      pipeline,
+      project,
+    });
+    expect(epicState.status).toBe("merged");
+
+    // Verify nested-item code reached the parent worktree via epic merge
+    expect(fs.existsSync(path.join(taskWtPath, "nested-result.ts"))).toBe(true);
+    expect(fs.readFileSync(path.join(taskWtPath, "nested-result.ts"), "utf8")).toContain("nestedDone");
   }, 60000);
 });

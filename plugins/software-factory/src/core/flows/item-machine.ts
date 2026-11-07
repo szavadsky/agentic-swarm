@@ -20,6 +20,7 @@ import { runAgentStep, type StepRunResult } from "./step-runner.js";
 import { runItemConsult } from "./consults.js";
 import { runSeamHooks } from "./seams.js";
 import { appendJournal } from "../journal.js";
+import { writeQuestion } from "../steer.js";
 import { deriveItemState, type DerivedItemState } from "../derive/item.js";
 import { refreshStateYaml } from "../derive/task.js";
 import {
@@ -300,7 +301,40 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
           latestReviewOutput?.suggestions?.filter((s) => s.disposition === "fix")
         );
         const priorFps = itemState.suggestionFingerprints.slice(0, -1);
-        const codeDiffRes = await git(childWt, ["diff", "HEAD~1", "--", ":!.*", ":!.factory"], { allowFail: true });
+        let baseCommit = "HEAD~1";
+        if (upcomingRound > 1) {
+          const relTaskDir = path.relative(taskWt, taskDir);
+          const currentRecordsDir = path.join(childWt, relTaskDir, "items", itemSlug, "steps");
+          const devRecords = itemState.records.filter(
+            (r) => r.meta.agent === "developer" || r.meta.role === "workhorse"
+          );
+          const targetRecord = devRecords.length >= 2 ? devRecords[devRecords.length - 2] : undefined;
+          if (targetRecord) {
+            const recDirRel = path.relative(childWt, path.join(currentRecordsDir, targetRecord.dirName));
+            const logRes = await git(childWt, ["log", "-1", "--format=%H", "--", recDirRel], { allowFail: true });
+            if (logRes.code === 0 && logRes.stdout.trim()) {
+              baseCommit = logRes.stdout.trim();
+            }
+          } else {
+            const reviewRecords = itemState.records.filter(
+              (r) => r.meta.agent === "reviewer" || r.meta.role === "alt-workhorse"
+            );
+            if (reviewRecords.length >= 2) {
+              const prevRev = reviewRecords[reviewRecords.length - 2]!;
+              const recDirRel = path.relative(childWt, path.join(currentRecordsDir, prevRev.dirName));
+              const logRes = await git(childWt, ["log", "-1", "--format=%H", "--", recDirRel], { allowFail: true });
+              if (logRes.code === 0 && logRes.stdout.trim()) {
+                baseCommit = logRes.stdout.trim();
+              }
+            }
+          }
+        }
+        const orchFolderClean = (project.orchestrationFolder ?? ".factory").replace(/^\/+|\/+$/g, "");
+        const codeDiffRes = await git(
+          childWt,
+          ["diff", baseCommit, "HEAD", "--", ":!.*", `:!${orchFolderClean}`, ":!.factory"],
+          { allowFail: true }
+        );
         const hasDiff = upcomingRound <= 1 || Boolean(codeDiffRes.stdout.trim());
         const fixCheck = checkFixRounds(upcomingRound, maxFixRounds, hasDiff, priorFps, upcomingRound > 1 ? currentFp : undefined);
 
@@ -460,8 +494,10 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
   if (fs.existsSync(infraPath)) {
     try {
       infra = await readYaml<InfraArtifact>(infraPath);
-    } catch {
-      // ignore
+    } catch (err: any) {
+      if (err?.code !== "ENOENT") {
+        throw new Error(`Corrupt infra artifact at ${infraPath}: ${err?.message ?? err}`);
+      }
     }
   }
 
@@ -470,8 +506,10 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
   if (fs.existsSync(baselinePath)) {
     try {
       baseline = await readYaml<GatesBaselineArtifact>(baselinePath);
-    } catch {
-      // ignore
+    } catch (err: any) {
+      if (err?.code !== "ENOENT") {
+        throw new Error(`Corrupt gates baseline at ${baselinePath}: ${err?.message ?? err}`);
+      }
     }
   }
 
@@ -587,8 +625,8 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
     : (currentStep.session ?? "reuse");
 
   // Place records under childWt on the item branch (§6.1, Finding 3)
-  const orchFolder = project.orchestrationFolder ?? ".factory";
-  const recordsDir = path.join(childWt, orchFolder, task, "items", itemSlug, "steps");
+  const relTaskDir = path.relative(taskWt, taskDir);
+  const recordsDir = path.join(childWt, relTaskDir, "items", itemSlug, "steps");
   await fs.promises.mkdir(recordsDir, { recursive: true });
 
   // 5. Run seam hooks before:item.step.{id} (§8.10)
@@ -644,17 +682,15 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
         const rev = output as ReviewArtifact;
         const asyncQuestions = rev.suggestions?.filter((s) => s.disposition === "human-async");
         if (asyncQuestions && asyncQuestions.length > 0) {
-          const steerDir = path.join(taskDir, "steer", "tousertoreview");
-          await fs.promises.mkdir(steerDir, { recursive: true });
           for (const q of asyncQuestions) {
-            const qId = `q-${itemSlug}-${Date.now()}-${q.id}`;
-            await writeYamlAtomic(path.join(steerDir, `${qId}.yaml`), {
+            const cleanSuggestionId = (q.id || "s").replace(/[^a-z0-9_-]/gi, "-");
+            const qId = `q-${itemSlug}-${cleanSuggestionId}`;
+            await writeQuestion(taskWt, taskDir, {
               id: qId,
               ref: itemSlug,
               disposition: "human-async",
               question: q.detail || q.summary,
               blocks: [itemSlug],
-              status: "open",
             });
           }
         }

@@ -5,6 +5,7 @@ import type {
   PlanArtifact,
   PlanCloseupArtifact,
   PipelineConfig,
+  ProjectConfig,
   StateArtifact,
   StateItemInfo,
   StepMetaArtifact,
@@ -46,8 +47,9 @@ export async function deriveTaskState(opts: {
   parentBranch?: string;
   taskWt?: string;
   pipeline?: PipelineConfig;
+  project?: ProjectConfig;
 }): Promise<DerivedTaskState> {
-  const { taskDir, task, taskWt, pipeline } = opts;
+  const { taskDir, task, taskWt, pipeline, project } = opts;
   const parentBranch = opts.parentBranch ?? `topic/${task}`;
 
   // 1. Triage
@@ -56,31 +58,34 @@ export async function deriveTaskState(opts: {
   if (fs.existsSync(triagePath)) {
     try {
       triage = await readYaml<TriageArtifact>(triagePath);
-    } catch {
-      // ignore
+    } catch (err: any) {
+      if (err?.code !== "ENOENT") {
+        throw new Error(`Corrupt triage file at ${triagePath}: ${err?.message ?? err}`);
+      }
     }
   }
 
   // 2. Iteration count from existing closeup-*.yaml (§8.4)
   let existingCloseupsCount = 0;
   let lastCloseup: PlanCloseupArtifact | undefined;
-  try {
+  if (fs.existsSync(taskDir)) {
     const entries = await fs.promises.readdir(taskDir, { withFileTypes: true });
     for (const ent of entries) {
       if (ent.isFile() && ent.name.startsWith("closeup-") && ent.name.endsWith(".yaml")) {
         existingCloseupsCount++;
+        const cuPath = path.join(taskDir, ent.name);
         try {
-          const cu = await readYaml<PlanCloseupArtifact>(path.join(taskDir, ent.name));
+          const cu = await readYaml<PlanCloseupArtifact>(cuPath);
           if (!lastCloseup || (cu.iteration && cu.iteration >= (lastCloseup.iteration ?? 0))) {
             lastCloseup = cu;
           }
-        } catch {
-          // ignore
+        } catch (err: any) {
+          if (err?.code !== "ENOENT") {
+            throw new Error(`Corrupt closeup file at ${cuPath}: ${err?.message ?? err}`);
+          }
         }
       }
     }
-  } catch {
-    // taskDir might not exist yet
   }
 
   const iteration = existingCloseupsCount + 1;
@@ -91,8 +96,10 @@ export async function deriveTaskState(opts: {
   if (fs.existsSync(planPath)) {
     try {
       plan = await readYaml<PlanArtifact>(planPath);
-    } catch {
-      // ignore
+    } catch (err: any) {
+      if (err?.code !== "ENOENT") {
+        throw new Error(`Corrupt plan file at ${planPath}: ${err?.message ?? err}`);
+      }
     }
   }
 
@@ -100,21 +107,20 @@ export async function deriveTaskState(opts: {
   const openSteerQuestions: SteerItemArtifact[] = [];
   const steerDir = path.join(taskDir, "steer", "tousertoreview");
   if (fs.existsSync(steerDir)) {
-    try {
-      const sentries = await fs.promises.readdir(steerDir, { withFileTypes: true });
-      for (const sent of sentries) {
-        if (!sent.isFile() || !sent.name.endsWith(".yaml")) continue;
-        try {
-          const q = await readYaml<SteerItemArtifact>(path.join(steerDir, sent.name));
-          if (q.status === "open") {
-            openSteerQuestions.push(q);
-          }
-        } catch {
-          // ignore
+    const sentries = await fs.promises.readdir(steerDir, { withFileTypes: true });
+    for (const sent of sentries) {
+      if (!sent.isFile() || !sent.name.endsWith(".yaml")) continue;
+      const qPath = path.join(steerDir, sent.name);
+      try {
+        const q = await readYaml<SteerItemArtifact>(qPath);
+        if (q && q.status === "open") {
+          openSteerQuestions.push(q);
+        }
+      } catch (err: any) {
+        if (err?.code !== "ENOENT") {
+          throw new Error(`Corrupt steer question file at ${qPath}: ${err?.message ?? err}`);
         }
       }
-    } catch {
-      // ignore
     }
   }
 
@@ -123,22 +129,19 @@ export async function deriveTaskState(opts: {
   const itemMap: Record<string, DerivedItemState> = {};
   const itemsDir = path.join(taskDir, "items");
   if (fs.existsSync(itemsDir)) {
-    try {
-      const itemEntries = await fs.promises.readdir(itemsDir, { withFileTypes: true });
-      for (const ent of itemEntries) {
-        if (!ent.isDirectory()) continue;
-        const itState = await deriveItemState({
-          taskDir,
-          itemSlug: ent.name,
-          parentBranch,
-          taskWt,
-          pipeline,
-        });
-        items.push(itState);
-        itemMap[ent.name] = itState;
-      }
-    } catch {
-      // ignore
+    const itemEntries = await fs.promises.readdir(itemsDir, { withFileTypes: true });
+    for (const ent of itemEntries) {
+      if (!ent.isDirectory()) continue;
+      const itState = await deriveItemState({
+        taskDir,
+        itemSlug: ent.name,
+        parentBranch,
+        taskWt,
+        pipeline,
+        project,
+      });
+      items.push(itState);
+      itemMap[ent.name] = itState;
     }
   }
 
@@ -171,21 +174,20 @@ export async function deriveTaskState(opts: {
   // From decisions: accept-with-debt
   const decisionsDir = path.join(taskDir, "decisions");
   if (fs.existsSync(decisionsDir)) {
-    try {
-      const dentries = await fs.promises.readdir(decisionsDir, { withFileTypes: true });
-      for (const dent of dentries) {
-        if (!dent.isFile() || !dent.name.endsWith(".yaml")) continue;
-        try {
-          const d = await readYaml<DecisionArtifact>(path.join(decisionsDir, dent.name));
-          if (d.decision === "accept-with-debt" && d.debt) {
-            debtSet.add(d.debt);
-          }
-        } catch {
-          // ignore
+    const dentries = await fs.promises.readdir(decisionsDir, { withFileTypes: true });
+    for (const dent of dentries) {
+      if (!dent.isFile() || !dent.name.endsWith(".yaml")) continue;
+      const dPath = path.join(decisionsDir, dent.name);
+      try {
+        const d = await readYaml<DecisionArtifact>(dPath);
+        if (d && d.decision === "accept-with-debt" && d.debt) {
+          debtSet.add(d.debt);
+        }
+      } catch (err: any) {
+        if (err?.code !== "ENOENT") {
+          throw new Error(`Corrupt decision file at ${dPath}: ${err?.message ?? err}`);
         }
       }
-    } catch {
-      // ignore
     }
   }
   // From review suggestions with disposition optional
@@ -262,16 +264,17 @@ export async function deriveTaskState(opts: {
           if (fs.existsSync(metaPath)) {
             try {
               const meta = await readYaml<StepMetaArtifact>(metaPath);
-              if (meta.status === "ok") {
+              if (meta && meta.status === "ok") {
                 newestSimpleOk = true;
               }
-            } catch {
-              // ignore
+            } catch (err: any) {
+              if (err?.code !== "ENOENT") {
+                throw new Error(`Corrupt meta file at ${metaPath}: ${err?.message ?? err}`);
+              }
             }
           }
         }
       }
-
       let isScratchMerged = false;
       if (newestSimpleOk && taskWt) {
         try {

@@ -134,8 +134,10 @@ export class BudgetTracker {
               if (meta?.usage) {
                 this.recordUsage({ usage: meta.usage });
               }
-            } catch {
-              // ignore malformed or unreadable meta
+            } catch (err: any) {
+              if (err?.code !== "ENOENT") {
+                throw new Error(`Corrupt step record meta at ${metaPath}: ${err?.message ?? err}`);
+              }
             }
           }
         }
@@ -161,8 +163,10 @@ export class BudgetTracker {
                     if (meta?.usage) {
                       this.recordUsage({ item: itemSlug, usage: meta.usage });
                     }
-                  } catch {
-                    // ignore
+                  } catch (err: any) {
+                    if (err?.code !== "ENOENT") {
+                      throw new Error(`Corrupt step record meta at ${metaPath}: ${err?.message ?? err}`);
+                    }
                   }
                 }
               }

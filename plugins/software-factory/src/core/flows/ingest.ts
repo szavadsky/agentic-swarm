@@ -27,6 +27,7 @@ import { appendJournal } from "../journal.js";
 import { refreshStateYaml } from "../derive/task.js";
 import { loadCriteriaBundle } from "../prompts.js";
 import { runGates } from "../checks/gates.js";
+import { runCheck } from "../checks/runner.js";
 import type { CheckContext } from "../checks/types.js";
 import type { Semaphore } from "../mutex.js";
 import type { BudgetTracker } from "../budget.js";
@@ -190,15 +191,19 @@ export async function runIngest(params: IngestParams): Promise<IngestResult> {
   if (fs.existsSync(infraPath)) {
     try {
       infra = await readYaml<InfraArtifact>(infraPath);
-    } catch {
-      // ignore
+    } catch (err: any) {
+      if (err?.code !== "ENOENT") {
+        throw new Error(`Corrupt infra artifact at ${infraPath}: ${err?.message ?? err}`);
+      }
     }
     const baselinePath = path.join(taskDir, "gates-baseline.yaml");
     if (fs.existsSync(baselinePath)) {
       try {
         baselineArtifact = await readYaml<GatesBaselineArtifact>(baselinePath);
-      } catch {
-        // ignore
+      } catch (err: any) {
+        if (err?.code !== "ENOENT") {
+          throw new Error(`Corrupt gates baseline at ${baselinePath}: ${err?.message ?? err}`);
+        }
       }
     }
   } else {
@@ -299,47 +304,36 @@ export async function runIngest(params: IngestParams): Promise<IngestResult> {
     await commitAll(repo, scratch.path, "factory(simple): implement");
     await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
 
-    // Run simple-guard and gates
+    // Run configured simple flow checks (gates, simple-guard) (§8.1.4)
+    const checkCtx: CheckContext = {
+      repo,
+      wt: scratch.path,
+      base: parentBranch,
+      project,
+      pipeline,
+      infra,
+      baseline: baselineArtifact,
+      kind: "simple",
+      task,
+      taskWt,
+      limits: pipeline.limits ?? {},
+      outputBytes: pipeline.limits?.checkOutputBytes ?? 4096,
+    };
+
+    const configuredChecks = pipeline.flows?.simple?.steps?.[0]?.checks ?? ["gates", "simple-guard"];
     let guardPassed = implRes.ok;
-    const maxProd = pipeline.limits?.simpleMaxProdLines ?? 150;
-    try {
-      const diffStat = await git(scratch.path, ["diff", "--cached", "--numstat", parentBranch], { allowFail: true });
-      let linesAdded = 0;
-      for (const line of diffStat.stdout.split("\n")) {
-        const parts = line.split("\t");
-        if (parts.length >= 3) {
-          const added = parseInt(parts[0]!, 10);
-          if (!isNaN(added)) linesAdded += added;
-        }
-      }
-      if (linesAdded > maxProd) {
+    for (const cName of configuredChecks) {
+      if (!guardPassed) break;
+      const cRes = await runCheck(cName, checkCtx);
+      if (!cRes.ok) {
         guardPassed = false;
-      }
-    } catch {
-      // ignore
-    }
-
-    // Run gates on scratch commit (§8.1.4)
-    if (guardPassed && infra) {
-      const checkCtx: CheckContext = {
-        repo,
-        wt: scratch.path,
-        base: parentBranch,
-        project,
-        pipeline,
-        infra,
-        baseline: baselineArtifact,
-        task,
-        taskWt,
-        limits: pipeline.limits ?? {},
-        outputBytes: pipeline.limits?.checkOutputBytes ?? 4096,
-      };
-      const gatesRes = await runGates(checkCtx);
-      if (!gatesRes.ok) {
-        guardPassed = false;
+        await appendJournal(taskDir, {
+          type: "simple_check_failed",
+          check: cName,
+          summary: cRes.summary,
+        });
       }
     }
-
     if (guardPassed && implRes.ok) {
       // Green: merge through merge path under merge lock (§8.1.4)
       await repo.mergeLocks.runExclusive(parentBranch, async () => {
@@ -378,10 +372,11 @@ export async function runIngest(params: IngestParams): Promise<IngestResult> {
         wave: 1,
         deps: [],
       });
+      await git(taskWt, ["add", "-A"], { allowFail: true });
+      await commitAll(repo, taskWt, "factory: convert simple task to no-behavior item");
 
       // Remove scratch worktree registration while keeping the branch
       await removeWorktree(repo, scratch.path);
-
       return {
         kind: "simple",
         triage,

@@ -300,4 +300,128 @@ describe("Engine: Sessions rehydration, budget exceed, and simple-guard fallback
     expect(assignment.slug).toBe("simple");
     expect(assignment.kind).toBe("no-behavior");
   });
+
+  it("converts simple task to no-behavior item and drives it to completion merged on topic/{task}", async () => {
+    const task = "simple-converted-merge-task";
+    const orchFolder = ".factory";
+    const taskDir = path.join(tmpRepo.dir, orchFolder, task);
+    fs.mkdirSync(taskDir, { recursive: true });
+    fs.writeFileSync(path.join(taskDir, "INTENT.md"), "Simple task that falls back and merges\n", "utf8");
+    tmpRepo.commit("Add intent for simple converted merge");
+
+    const worktreeRoot = path.join(tmpRepo.dir + "-wt");
+    fs.mkdirSync(worktreeRoot, { recursive: true });
+    const repoObj = new Repo({
+      mainRoot: tmpRepo.dir,
+      worktreeRoot,
+    });
+    const project: ProjectConfig = {
+      orchestrationFolder: orchFolder,
+      worktreeRoot: repoObj.worktreeRoot,
+    };
+
+    const pipeline: PipelineConfig = {
+      models: {
+        roles: {
+          workhorse: { model: "deepseek-chat" },
+          "alt-workhorse": { model: "deepseek-chat" },
+          architect: { model: "deepseek-reasoner" },
+          "alt-architect": { model: "deepseek-reasoner" },
+          simpler: { model: "deepseek-chat" },
+        },
+      },
+      agents: {
+        triage: { role: "workhorse" },
+        infra: { role: "workhorse" },
+        pm: { role: "alt-workhorse" },
+        developer: { role: "workhorse" },
+        qa: { role: "alt-workhorse" },
+        reviewer: { role: "alt-workhorse" },
+        "wave-close-up": { role: "alt-workhorse" },
+        "plan-close-up": { role: "alt-workhorse" },
+      },
+      flows: {
+        simple: { steps: [{ id: "develop", agent: "developer", role: "workhorse" }] },
+        story: {
+          "no-behavior": {
+            fixLoopTo: "develop",
+            steps: [
+              { id: "develop", agent: "developer", role: "workhorse" },
+              { id: "qa", agent: "qa", role: "alt-workhorse" },
+              { id: "review", agent: "reviewer", role: "alt-workhorse" },
+            ],
+          },
+        },
+        spike: {},
+      },
+      limits: {
+        simpleMaxProdLines: 10,
+      },
+    };
+
+    const prompts = {
+      agentDefinition: (ag: string) => ({ body: `Agent ${ag}`, tools: ["edit", "bash"], description: ag }),
+      render: (frag: string, vars: Record<string, string>) => `${frag}\n${JSON.stringify(vars)}`,
+      placeholders: () => [],
+    };
+
+    const harness = new FakeHarness();
+
+    // Triage classifies as simple
+    harness.scriptOutcome(`${task}/runs/triage#a1`, {
+      ok: true,
+      data: { kind: "simple", rationale: "Simple fix", citations: [] },
+    });
+    harness.scriptOutcome(`${task}/runs/infra#a1`, {
+      ok: true,
+      data: {
+        setup: [],
+        gates: [{ id: "test", command: "true" }],
+        testRunner: { command: "true", selectorArgs: [], junitArg: "" },
+      },
+    });
+
+    // Simple-implement writes 50 lines (exceeds simpleMaxProdLines of 10)
+    harness.scriptOutcome(`${task}/runs/simple-implement#a1`, (run) => {
+      const code = Array.from({ length: 50 }, (_, i) => `console.log("fallback line ${i}");`).join("\n") + "\n";
+      fs.writeFileSync(path.join(run.cwd, "huge.ts"), code);
+      return { ok: true, data: { status: "ok", summary: "Implementation done" } };
+    });
+
+    // Scripted turns for converted no-behavior item "simple"
+    harness.scriptOutcome(`${task}/items/simple/develop#a1`, (run) => {
+      fs.appendFileSync(path.join(run.cwd, "huge.ts"), "// developer adjusted\n");
+      return { ok: true, data: { status: "ok", summary: "Adjusted" } };
+    });
+    harness.scriptOutcome(`${task}/items/simple/qa#a1`, {
+      ok: true,
+      data: { status: "approved", summary: "QA pass", suggestions: [] },
+    });
+    harness.scriptOutcome(`${task}/items/simple/review#a1`, {
+      ok: true,
+      data: { status: "approved", summary: "Review pass", suggestions: [] },
+    });
+
+    const res = await runTask(
+      {
+        harness,
+        repo: repoObj,
+        project,
+        pipelineFor: async () => pipeline,
+        prompts,
+      },
+      task,
+      { maxTicks: 20 }
+    );
+
+    expect(res.status).toBe("done");
+    expect(res.exitCode).toBe(0);
+
+    // Verify observable outcome: huge.ts landed on topic/{task} worktree
+    const taskWtPath = path.join(repoObj.worktreeRoot, `topic_${task}`);
+    const mergedHugePath = path.join(taskWtPath, "huge.ts");
+    expect(fs.existsSync(mergedHugePath)).toBe(true);
+    const content = fs.readFileSync(mergedHugePath, "utf8");
+    expect(content).toContain("fallback line");
+  });
 });

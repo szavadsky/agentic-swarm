@@ -9,6 +9,7 @@ import type {
 } from "../artifacts.js";
 import type { Harness } from "../../harness/types.js";
 import { writeYamlAtomic } from "../records/io.js";
+import { writeQuestion } from "../steer.js";
 import { runAgentStep } from "./step-runner.js";
 import { appendJournal } from "../journal.js";
 import type { Semaphore } from "../mutex.js";
@@ -124,7 +125,7 @@ export async function runItemConsult(
       const raw = output as any;
       const decisionVal = raw?.decision ?? "retry-with-guidance";
       let nextSeq = 1;
-      try {
+      if (fs.existsSync(decisionsDir)) {
         const existing = await fs.promises.readdir(decisionsDir);
         for (const name of existing) {
           const match = /^(\d{3})-/.exec(name);
@@ -133,8 +134,6 @@ export async function runItemConsult(
             if (num >= nextSeq) nextSeq = num + 1;
           }
         }
-      } catch {
-        // ignore
       }
 
       decisionArtifact = {
@@ -158,18 +157,14 @@ export async function runItemConsult(
       await writeYamlAtomic(decisionPath, decisionArtifact);
 
       if (decisionVal === "human-async" && raw?.question) {
-        const steerDir = path.join(taskDir, "steer", "tousertoreview");
-        await fs.promises.mkdir(steerDir, { recursive: true });
-        const qId = `q-${item}-${Date.now()}`;
-        const steerItem: SteerItemArtifact = {
+        const qId = `q-${item}-${String(nextSeq).padStart(3, "0")}`;
+        await writeQuestion(taskWt, taskDir, {
           id: qId,
           ref: item,
           disposition: "human-async",
           question: raw.question,
           blocks: [item],
-          status: "open",
-        };
-        await writeYamlAtomic(path.join(steerDir, `${qId}.yaml`), steerItem);
+        });
       }
     },
   });
@@ -252,7 +247,7 @@ export async function runNonItemConsult(
       const raw = output as any;
       const decisionVal = raw?.decision ?? "accept-with-debt";
       let nextSeq = 1;
-      try {
+      if (fs.existsSync(decisionsDir)) {
         const existing = await fs.promises.readdir(decisionsDir);
         for (const name of existing) {
           const match = /^(\d{3})-/.exec(name);
@@ -261,8 +256,6 @@ export async function runNonItemConsult(
             if (num >= nextSeq) nextSeq = num + 1;
           }
         }
-      } catch {
-        // ignore
       }
 
       decisionArtifact = {

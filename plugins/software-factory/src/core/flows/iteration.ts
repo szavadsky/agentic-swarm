@@ -18,6 +18,7 @@ import { childBranch } from "../git/naming.js";
 import { ensureChildWorktree, commitAll, removeWorktree } from "../git/index.js";
 import { writeYamlAtomic, writeTextAtomic, readYaml, readText } from "../records/io.js";
 import { runAgentStep } from "./step-runner.js";
+import { writeQuestion } from "../steer.js";
 import { runItemConsult } from "./consults.js";
 import { mergeItem } from "./merge-path.js";
 import { tickItemMachine } from "./item-machine.js";
@@ -99,21 +100,16 @@ async function buildArchitectHydration(
   // 1. Prior plans
   const planDir = path.join(taskDir, "plan");
   if (fs.existsSync(planDir)) {
-    try {
-      const files = (await fs.promises.readdir(planDir)).sort();
-      for (const f of files) {
-        if (f.startsWith("plan-") && f.endsWith(".yaml")) {
-          const content = await readText(path.join(planDir, f));
-          parts.push(`--- Prior Plan ${f} ---\n${content}`);
-        }
+    const files = (await fs.promises.readdir(planDir)).sort();
+    for (const f of files) {
+      if (f.startsWith("plan-") && f.endsWith(".yaml")) {
+        const content = await readText(path.join(planDir, f));
+        parts.push(`--- Prior Plan ${f} ---\n${content}`);
       }
-    } catch {
-      // ignore
     }
   }
 
-  // 2. Prior closeups
-  try {
+  if (fs.existsSync(taskDir)) {
     const entries = (await fs.promises.readdir(taskDir)).sort();
     for (const f of entries) {
       if (f.startsWith("closeup-") && f.endsWith(".yaml")) {
@@ -121,39 +117,29 @@ async function buildArchitectHydration(
         parts.push(`--- Prior Close-up ${f} ---\n${content}`);
       }
     }
-  } catch {
-    // ignore
   }
 
   // 3. Taken steering answers
   const takenDir = path.join(taskDir, "steer", "fromusertaken");
   if (fs.existsSync(takenDir)) {
-    try {
-      const sfiles = (await fs.promises.readdir(takenDir)).sort();
-      for (const sf of sfiles) {
-        if (!sf.endsWith(".yaml")) {
-          const text = await readText(path.join(takenDir, sf));
-          parts.push(`--- Steering Directive/Answer (${sf}) ---\n${text}`);
-        }
+    const sfiles = (await fs.promises.readdir(takenDir)).sort();
+    for (const sf of sfiles) {
+      if (!sf.endsWith(".yaml")) {
+        const text = await readText(path.join(takenDir, sf));
+        parts.push(`--- Steering Directive/Answer (${sf}) ---\n${text}`);
       }
-    } catch {
-      // ignore
     }
   }
 
   // 4. Decisions
   const decisionsDir = path.join(taskDir, "decisions");
   if (fs.existsSync(decisionsDir)) {
-    try {
-      const dfiles = (await fs.promises.readdir(decisionsDir)).sort();
-      for (const df of dfiles) {
-        if (df.endsWith(".yaml")) {
-          const text = await readText(path.join(decisionsDir, df));
-          parts.push(`--- Decision ${df} ---\n${text}`);
-        }
+    const dfiles = (await fs.promises.readdir(decisionsDir)).sort();
+    for (const df of dfiles) {
+      if (df.endsWith(".yaml")) {
+        const text = await readText(path.join(decisionsDir, df));
+        parts.push(`--- Decision ${df} ---\n${text}`);
       }
-    } catch {
-      // ignore
     }
   }
 
@@ -190,15 +176,13 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
 
   // 1. Determine iteration number N (§8.4.1)
   let existingCloseups = 0;
-  try {
+  if (fs.existsSync(taskDir)) {
     const entries = await fs.promises.readdir(taskDir);
     for (const name of entries) {
       if (name.startsWith("closeup-") && name.endsWith(".yaml")) {
         existingCloseups++;
       }
     }
-  } catch {
-    // ignore
   }
 
   const iteration = existingCloseups + 1;
@@ -231,8 +215,10 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
           const st = await deriveItemState({ taskDir, itemSlug: it.slug, parentBranch, taskWt, pipeline });
           if (st.status === "merged") count++;
         }
-      } catch {
-        // ignore
+      } catch (err: any) {
+        if (err?.code !== "ENOENT") {
+          throw new Error(`Corrupt edits file at ${editsFile}: ${err?.message ?? err}`);
+        }
       }
     }
     mergedItemsPerIteration.push(count);
@@ -252,25 +238,33 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
 
   // Restore newest architect session id from step records if not supplied (Finding 22)
   if (!architectSessionId && fs.existsSync(runsDir)) {
-    try {
-      const runEntries = (await fs.promises.readdir(runsDir))
-        .filter((r) => r.includes("architect-"))
-        .sort();
-      for (let i = runEntries.length - 1; i >= 0; i--) {
-        const metaPath = path.join(runsDir, runEntries[i]!, "meta.yaml");
-        if (fs.existsSync(metaPath)) {
+    const runEntries = (await fs.promises.readdir(runsDir))
+      .filter((r) => {
+        if (!r.includes("architect-")) return false;
+        return (
+          r.includes(`-${iteration}-`) ||
+          r.endsWith(`-${iteration}`) ||
+          new RegExp(`architect-[a-z-]+-${iteration}(-|$)`).test(r)
+        );
+      })
+      .sort();
+    for (let i = runEntries.length - 1; i >= 0; i--) {
+      const metaPath = path.join(runsDir, runEntries[i]!, "meta.yaml");
+      if (fs.existsSync(metaPath)) {
+        try {
           const meta = await readYaml<StepMetaArtifact>(metaPath);
-          if (meta.session) {
+          if (meta?.session) {
             architectSessionId = meta.session;
             break;
           }
+        } catch (err: any) {
+          if (err?.code !== "ENOENT") {
+            throw new Error(`Corrupt architect step meta at ${metaPath}: ${err?.message ?? err}`);
+          }
         }
       }
-    } catch {
-      // ignore
     }
   }
-
   // Build hydration context
   const hydrationContext = await buildArchitectHydration(taskDir, hydrationBytes);
 
@@ -293,8 +287,10 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
   if (fs.existsSync(planPath)) {
     try {
       plan = await readYaml<PlanArtifact>(planPath);
-    } catch {
-      // ignore
+    } catch (err: any) {
+      if (err?.code !== "ENOENT") {
+        throw new Error(`Corrupt plan file at ${planPath}: ${err?.message ?? err}`);
+      }
     }
   }
 
@@ -493,13 +489,15 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
   if (fs.existsSync(editsPath)) {
     try {
       edits = await readYaml<PlanEditsArtifact>(editsPath);
-    } catch {
-      // ignore
+    } catch (err: any) {
+      if (err?.code !== "ENOENT") {
+        throw new Error(`Corrupt plan edits file at ${editsPath}: ${err?.message ?? err}`);
+      }
     }
   }
 
+  const { kindsDescription, validKindNames } = buildKindsPromptVar(pipeline, !isChildTask);
   if (!edits) {
-    const { kindsDescription, validKindNames } = buildKindsPromptVar(pipeline, !isChildTask);
 
     const pmStepRes = await runAgentStep({
       task,
@@ -600,15 +598,44 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
 
   // 5. Waves execution (§8.4.5, Finding 24: restrict itemSlugs to current iteration's edits)
   let currentIterationItems = edits.items.map((i) => i.slug);
+  let amendmentCount = 0;
+  if (fs.existsSync(planDir)) {
+    const planFiles = await fs.promises.readdir(planDir);
+    for (const pf of planFiles) {
+      const m = new RegExp(`^edits-${iteration}\\.(\\d+)\\.yaml$`).exec(pf);
+      if (m) {
+        const k = parseInt(m[1]!, 10);
+        if (k > amendmentCount) {
+          amendmentCount = k;
+        }
+        if (k >= 1) {
+          const amendPath = path.join(planDir, pf);
+          try {
+            const prevAmend = await readYaml<PlanEditsArtifact>(amendPath);
+            if (prevAmend && Array.isArray(prevAmend.items)) {
+              for (const it of prevAmend.items) {
+                if (it && it.slug && !currentIterationItems.includes(it.slug)) {
+                  currentIterationItems.push(it.slug);
+                }
+              }
+            }
+          } catch (err: any) {
+            if (err?.code !== "ENOENT") {
+              throw new Error(`Corrupt plan edits amendment at ${amendPath}: ${err?.message ?? err}`);
+            }
+          }
+        }
+      }
+    }
+  }
+
   const initialStates = await Promise.all(
     currentIterationItems.map((slug) =>
-      deriveItemState({ taskDir, itemSlug: slug, parentBranch, taskWt, pipeline })
+      deriveItemState({ taskDir, itemSlug: slug, parentBranch, taskWt, pipeline, project })
     )
   );
 
   let maxWave = initialStates.reduce((max, it) => Math.max(max, it.wave), 1);
-  let amendmentCount = 0;
-
   for (let w = 1; w <= maxWave; w++) {
     // Check if wave close-up already completed for this wave (Finding 24)
     const waveArtifactPath = path.join(taskDir, "waves", `wave-${iteration}.${w}.yaml`);
@@ -789,6 +816,8 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
       iteration,
     });
 
+
+
     // Architect turn on wave report (§8.4.6)
     let waveDecision = "continue";
     const waveReportRes = await runAgentStep({
@@ -810,7 +839,7 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
       prompts,
       promptVars: {
         plan: JSON.stringify(plan, null, 2),
-        waveReport: JSON.stringify(waveCloseupRes.output ?? {}, null, 2),
+        waveReport: waveCloseupRes.output ? JSON.stringify(waveCloseupRes.output, null, 2) : waveSummary,
         debt: hydrationContext,
         steering: hydrationContext,
       },
@@ -834,6 +863,21 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
         await writeYamlAtomic(waveArtifactPath, waveArtifact);
       },
     });
+
+    if (!waveReportRes.ok) {
+      await appendJournal(taskDir, {
+        type: "wave_report_failed",
+        wave: w,
+        iteration,
+        error: waveReportRes.meta.error,
+      });
+      return {
+        iteration,
+        status: "failed",
+        plan,
+        architectSessionId,
+      };
+    }
 
     if (waveReportRes.sessionId) {
       architectSessionId = waveReportRes.sessionId;
@@ -873,34 +917,76 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
           iteration,
         });
 
-        if (pmAmendRes.ok && pmAmendRes.output) {
-          const rawAmendEdits = pmAmendRes.output as any;
-          const amendEdits: PlanEditsArtifact = {
+        if (!pmAmendRes.ok || !pmAmendRes.output) {
+          await appendJournal(taskDir, {
+            type: "pm_amend_failed",
+            error: pmAmendRes.meta.error ?? "PM amend step failed",
+          });
+          return {
             iteration,
-            amendmentIndex: amendmentCount,
-            items: rawAmendEdits.items ?? [],
+            status: "failed",
+            plan,
+            architectSessionId,
           };
-          await writeYamlAtomic(amendEditsPath, amendEdits);
-          const applied = applyEdits(amendEdits, { taskDir, plan });
-          for (const f of applied.files) {
-            await fs.promises.mkdir(path.dirname(f.path), { recursive: true });
-            await writeTextAtomic(f.path, f.content);
-          }
-          await git(taskWt, ["add", "-A"], { allowFail: true });
-          await commitAll(repo, taskWt, `factory: apply plan amendment ${iteration}.${amendmentCount}`);
-          // Re-plan remaining waves with the amended items (§8.4.6, Finding 31)
-          for (const added of amendEdits.items) {
-            if (!currentIterationItems.includes(added.slug)) {
-              currentIterationItems.push(added.slug);
-            }
-          }
-          const amendedStates = await Promise.all(
-            currentIterationItems.map((slug) =>
-              deriveItemState({ taskDir, itemSlug: slug, parentBranch, taskWt, pipeline })
-            )
-          );
-          maxWave = Math.max(maxWave, amendedStates.reduce((m, it) => Math.max(m, it.wave), 1));
         }
+
+        const rawAmendEdits = pmAmendRes.output as any;
+        const amendEdits: PlanEditsArtifact = {
+          iteration,
+          amendmentIndex: amendmentCount,
+          items: rawAmendEdits.items ?? [],
+        };
+
+        const existingList: { slug: string; status: string; wave?: string | number }[] = [];
+        const itemsDir = path.join(taskDir, "items");
+        if (fs.existsSync(itemsDir)) {
+          const existingSlugs = await fs.promises.readdir(itemsDir);
+          for (const es of existingSlugs) {
+            existingList.push({ slug: es, status: "existing" });
+          }
+        }
+
+        const validationErrors = validateEdits(amendEdits, {
+          plan,
+          limits,
+          kinds: validKindNames,
+          isRootTask: !isChildTask,
+          existing: existingList,
+        });
+
+        if (validationErrors.length > 0) {
+          await appendJournal(taskDir, {
+            type: "pm_amend_validation_failed",
+            errors: validationErrors,
+          });
+          return {
+            iteration,
+            status: "failed",
+            plan,
+            architectSessionId,
+          };
+        }
+
+        await writeYamlAtomic(amendEditsPath, amendEdits);
+        const applied = applyEdits(amendEdits, { taskDir, plan });
+        for (const f of applied.files) {
+          await fs.promises.mkdir(path.dirname(f.path), { recursive: true });
+          await writeTextAtomic(f.path, f.content);
+        }
+        await git(taskWt, ["add", "-A"], { allowFail: true });
+        await commitAll(repo, taskWt, `factory: apply plan amendment ${iteration}.${amendmentCount}`);
+        // Re-plan remaining waves with the amended items (§8.4.6, Finding 31)
+        for (const added of amendEdits.items) {
+          if (!currentIterationItems.includes(added.slug)) {
+            currentIterationItems.push(added.slug);
+          }
+        }
+        const amendedStates = await Promise.all(
+          currentIterationItems.map((slug) =>
+            deriveItemState({ taskDir, itemSlug: slug, parentBranch, taskWt, pipeline, project })
+          )
+        );
+        maxWave = Math.max(maxWave, amendedStates.reduce((m, it) => Math.max(m, it.wave), 1));
       }
     } else if (waveDecision === "end-iteration") {
       break;
@@ -950,6 +1036,8 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
     iteration,
   });
 
+
+
   let closeupArtifact: PlanCloseupArtifact | undefined;
   const archCloseupRes = await runAgentStep({
     task,
@@ -969,7 +1057,7 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
     project,
     prompts,
     promptVars: {
-      closeup: JSON.stringify(planCloseupRes.output ?? {}, null, 2),
+      closeup: planCloseupRes.output ? JSON.stringify(planCloseupRes.output, null, 2) : "Plan close-up completed",
       plan: JSON.stringify(plan, null, 2),
       intent: intentText,
     },
@@ -991,18 +1079,14 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
 
       // If blocked close-up, write question to tousertoreview (Finding 6)
       if (rawCloseup.status === "blocked") {
-        const steerDir = path.join(taskDir, "steer", "tousertoreview");
-        await fs.promises.mkdir(steerDir, { recursive: true });
         const qId = `closeup-${iteration}`;
-        const questionItem: SteerItemArtifact = {
+        await writeQuestion(taskWt, taskDir, {
           id: qId,
           ref: "plan",
           disposition: "human-async",
           question: rawCloseup.question || "Plan close-up requires human review and guidance",
           blocks: ["task"],
-          status: "open",
-        };
-        await writeYamlAtomic(path.join(steerDir, `${qId}.yaml`), questionItem);
+        });
       }
     },
   });

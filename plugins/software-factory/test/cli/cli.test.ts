@@ -154,6 +154,121 @@ describe("Run Lock Management", () => {
       tmp.cleanup();
     }
   });
+
+  it("refuses takeover when an exclusive takeover marker is already held", () => {
+    const tmp = createTmpRepo();
+    try {
+      const task = "competing-takeover-task";
+      const lockPath = getRunLockPath(tmp.dir, task);
+      const lockDir = path.dirname(lockPath);
+      fs.mkdirSync(lockDir, { recursive: true });
+
+      // Stale lock with dead PID
+      const stalePayload = {
+        pid: 9999999,
+        host: os.hostname(),
+        start: new Date(Date.now() - 3600_000).toISOString(),
+      };
+      fs.writeFileSync(lockPath, JSON.stringify(stalePayload), "utf8");
+
+      // Competitor holds takeover marker
+      const takeoverMarker = path.join(lockDir, `${task}.lock.takeover`);
+      fs.writeFileSync(takeoverMarker, "marker", "utf8");
+
+      const handle = acquireRunLock(tmp.dir, task);
+      expect(handle).toBeNull();
+
+      // Remove marker -> now takeover succeeds
+      fs.unlinkSync(takeoverMarker);
+      const handle2 = acquireRunLock(tmp.dir, task);
+      expect(handle2).not.toBeNull();
+      handle2!.release();
+    } finally {
+      tmp.cleanup();
+    }
+  });
+
+  it("stale lock takeover journals into task worktree and leaves main checkout clean", async () => {
+    const tmp = createTmpRepo();
+    try {
+      const task = "journal-worktree-task";
+      const lockPath = getRunLockPath(tmp.dir, task);
+      const lockDir = path.dirname(lockPath);
+      fs.mkdirSync(lockDir, { recursive: true });
+
+      const stalePayload = {
+        pid: 9999999,
+        host: os.hostname(),
+        start: new Date(Date.now() - 3600_000).toISOString(),
+      };
+      fs.writeFileSync(lockPath, JSON.stringify(stalePayload), "utf8");
+
+      let takeoverInfo: any;
+      const handle = acquireRunLock(tmp.dir, task, {
+        onTakeover: (info) => {
+          takeoverInfo = info;
+        },
+      });
+      expect(handle).not.toBeNull();
+      expect(takeoverInfo).toBeDefined();
+
+      // Simulate engine run with lockTakeoverEvent
+      const { runTask } = await import("../../src/core/engine.js");
+      const { Repo } = await import("../../src/core/git/repo.js");
+      const { FakeHarness } = await import("../../src/harness/fake/fake-harness.js");
+      const worktreeRoot = path.join(tmp.dir + "-wt");
+      fs.mkdirSync(worktreeRoot, { recursive: true });
+      const repoObj = new Repo({ mainRoot: tmp.dir, worktreeRoot });
+
+      const intentPath = path.join(tmp.dir, ".factory/tasks", task, "INTENT.md");
+      fs.mkdirSync(path.dirname(intentPath), { recursive: true });
+      fs.writeFileSync(intentPath, "Test intent\n");
+      tmp.commit("Add intent for journal test");
+
+      const harness = new FakeHarness();
+      harness.scriptOutcome(`${task}/runs/triage#a1`, {
+        ok: true,
+        data: { kind: "story", rationale: "Stop early", citations: [] },
+      });
+      harness.scriptOutcome(`${task}/runs/infra#a1`, {
+        ok: true,
+        data: { setup: [], gates: [{ id: "t", command: "true" }], testRunner: { command: "true" } },
+      });
+
+      const pipeline = {
+        models: { roles: { workhorse: { model: "m" } } },
+        agents: { triage: { role: "workhorse" }, infra: { role: "workhorse" } },
+        flows: { simple: { steps: [{ id: "develop", agent: "developer", role: "workhorse" }] }, story: {}, spike: {} },
+        limits: {},
+      };
+
+      await runTask(
+        {
+          harness,
+          repo: repoObj,
+          project: { orchestrationFolder: ".factory/tasks", worktreeRoot },
+          pipelineFor: async () => pipeline as any,
+          prompts: { agentDefinition: () => ({ body: "", tools: [] }), render: () => "", placeholders: () => [] } as any,
+        },
+        task,
+        { maxTicks: 1, lockTakeoverEvent: takeoverInfo }
+      );
+
+      // Task worktree journal contains lock_takeover
+      const taskWtPath = path.join(worktreeRoot, `topic_${task}`);
+      const wtJournal = path.join(taskWtPath, ".factory/tasks", task, "journal.ndjson");
+      expect(fs.existsSync(wtJournal)).toBe(true);
+      expect(fs.readFileSync(wtJournal, "utf8")).toContain("lock_takeover");
+
+      // Main checkout MUST NOT contain journal.ndjson
+      const mainJournal = path.join(tmp.dir, ".factory/tasks", task, "journal.ndjson");
+      expect(fs.existsSync(mainJournal)).toBe(false);
+
+      handle!.release();
+    } finally {
+      tmp.cleanup();
+    }
+  });
 });
 
 describe("Runtime Directory & Untracked Files", () => {

@@ -4,6 +4,7 @@ import path from "node:path";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 import { FakeHarness } from "../../src/harness/fake/fake-harness.js";
 import { runAgentStep } from "../../src/core/flows/step-runner.js";
+import { runTask } from "../../src/core/engine.js";
 import { Repo } from "../../src/core/git/repo.js";
 import { loadPromptLibrary } from "../../src/core/prompts.js";
 import type { AgentOutcome } from "../../src/harness/types.js";
@@ -155,5 +156,46 @@ describe("Engine: Step resilience — render errors, transient retry, sessionLos
     expect(res.usage?.costUsd).toBeCloseTo(0.02, 5);
     const labels = harness.calls.filter((c) => c.type === "run").map((c) => (c as any).run.label);
     expect(labels).toContain(`${task}/runs/develop#a1#rehydrated`);
+  });
+
+  it("corrupt meta.yaml for an item causes runTask to exit 1 naming the file", async () => {
+    const task = "corrupt-meta-task";
+    const orchFolder = ".factory";
+    const taskDir = path.join(tmpRepo.dir, orchFolder, task);
+    fs.mkdirSync(taskDir, { recursive: true });
+    fs.writeFileSync(path.join(taskDir, "INTENT.md"), "Corrupt meta test\n");
+    tmpRepo.commit("Add intent for corrupt meta");
+
+    const harness = new FakeHarness();
+    harness.scriptOutcome(`${task}/runs/triage#a1`, {
+      ok: true,
+      data: { kind: "story", rationale: "multistep", citations: [] },
+    });
+    harness.scriptOutcome(`${task}/runs/infra#a1`, {
+      ok: true,
+      data: { setup: [], gates: [{ id: "t", command: "true" }], testRunner: { command: "true" } },
+    });
+
+    // Create an item with corrupt meta.yaml
+    const itemSlug = "corrupt-item";
+    const itemDir = path.join(taskDir, "items", itemSlug);
+    const stepDir = path.join(itemDir, "steps", "001-develop-a1");
+    fs.mkdirSync(stepDir, { recursive: true });
+    const corruptMetaPath = path.join(stepDir, "meta.yaml");
+    fs.writeFileSync(corruptMetaPath, "::: invalid: yaml: {{{\n");
+    fs.writeFileSync(
+      path.join(itemDir, "assignment.yaml"),
+      JSON.stringify({ slug: itemSlug, kind: "dev", title: "Corrupt Item", assignment: "Do", wave: 1 })
+    );
+    tmpRepo.commit("Add item with corrupt meta.yaml");
+
+    const res = await runTask(
+      { harness, repo: repoObj, project, pipelineFor: async () => pipeline, prompts },
+      task
+    );
+
+    expect(res.status).toBe("failed");
+    expect(res.exitCode).toBe(1);
+    expect(res.summary).toContain("001-develop-a1/meta.yaml");
   });
 });

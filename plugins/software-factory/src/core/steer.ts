@@ -63,7 +63,7 @@ export function takenPaths(
 export async function writeQuestion(
   rootWt: string,
   taskDir: string,
-  q: Omit<SteerItemArtifact, "id" | "status">
+  q: Omit<SteerItemArtifact, "id" | "status"> & { id?: string }
 ): Promise<SteerItemArtifact> {
   const hash = crypto
     .createHash("sha256")
@@ -72,7 +72,7 @@ export async function writeQuestion(
     .slice(0, 10);
 
   const cleanRef = q.ref.replace(/[^a-z0-9_-]/gi, "-");
-  const id = `q-${cleanRef}-${hash}`;
+  const id = q.id ?? `q-${cleanRef}-${hash}`;
 
   const item: SteerItemArtifact = {
     id,
@@ -87,16 +87,22 @@ export async function writeQuestion(
     ...(q.answer ? { answer: q.answer } : {}),
   };
 
-  const outDir = path.join(rootWt, taskDir, "steer", "tousertoreview");
+  const outDir = path.isAbsolute(taskDir)
+    ? path.join(taskDir, "steer", "tousertoreview")
+    : path.join(rootWt, taskDir, "steer", "tousertoreview");
   await fs.promises.mkdir(outDir, { recursive: true });
 
   const targetPath = path.join(outDir, `${id}.yaml`);
   if (fs.existsSync(targetPath)) {
     // A re-run step raising the same question must not clobber the operator's answer.
-    const existing = yaml.parse(
-      await fs.promises.readFile(targetPath, "utf8")
-    ) as SteerItemArtifact;
-    return existing;
+    try {
+      const existing = yaml.parse(
+        await fs.promises.readFile(targetPath, "utf8")
+      ) as SteerItemArtifact;
+      return existing;
+    } catch {
+      // ignore parse failure on existing
+    }
   }
   await writeYamlAtomic(targetPath, item);
 

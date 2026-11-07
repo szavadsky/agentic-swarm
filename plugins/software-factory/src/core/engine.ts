@@ -19,10 +19,14 @@ import {
   ensureChildWorktree,
   repairWorktree,
   commitAll,
+  removeWorktree,
 } from "./git/index.js";
 import { appendJournal } from "./journal.js";
 import { BudgetTracker } from "./budget.js";
-import { deriveTaskState, materializeStateYaml, type DerivedTaskState } from "./derive/task.js";
+import { deriveTaskState, materializeStateYaml, refreshStateYaml, type DerivedTaskState } from "./derive/task.js";
+import { deriveItemState } from "./derive/item.js";
+import { tickItemMachine } from "./flows/item-machine.js";
+import { mergeItem } from "./flows/merge-path.js";
 import { runIngest } from "./flows/ingest.js";
 import { runIteration } from "./flows/iteration.js";
 import { runSeamHooks } from "./flows/seams.js";
@@ -91,8 +95,10 @@ async function repairInterruptedRecords(taskDir: string): Promise<void> {
               recordDir,
             });
           }
-        } catch {
-          // ignore
+        } catch (err: any) {
+          if (err?.code !== "ENOENT") {
+            throw new Error(`Corrupt step record meta at ${metaPath}: ${err?.message ?? err}`);
+          }
         }
       }
     }
@@ -124,11 +130,14 @@ async function processSteeringMailbox(
     const qFiles = await fs.promises.readdir(touserDir);
     for (const qf of qFiles) {
       if (!qf.endsWith(".yaml")) continue;
+      const qPath = path.join(touserDir, qf);
       try {
-        const q = await readYaml<SteerItemArtifact>(path.join(touserDir, qf));
-        if (q.status === "open") openQuestions.push(q);
-      } catch {
-        // ignore
+        const q = await readYaml<SteerItemArtifact>(qPath);
+        if (q && q.status === "open") openQuestions.push(q);
+      } catch (err: any) {
+        if (err?.code !== "ENOENT") {
+          throw new Error(`Corrupt steer question at ${qPath}: ${err?.message ?? err}`);
+        }
       }
     }
   }
@@ -165,13 +174,15 @@ async function processSteeringMailbox(
             const matches = classification.refs.some(
               (r) => q.ref === r || q.ref === `${task}/${r}` || q.id === r
             );
-            if (q.status === "open" && matches) {
+            if (q && q.status === "open" && matches) {
               q.status = "answered";
               q.answer = item.text;
               await writeYamlAtomic(qPath, q);
             }
-          } catch {
-            // ignore
+          } catch (err: any) {
+            if (err?.code !== "ENOENT") {
+              throw new Error(`Corrupt steer question at ${qPath}: ${err?.message ?? err}`);
+            }
           }
         }
       }
@@ -267,12 +278,21 @@ export async function runChildTask(
 export async function runTask(
   deps: EngineDeps,
   task: string,
-  opts?: { maxTicks?: number; maxIterations?: number }
+  opts?: {
+    maxTicks?: number;
+    maxIterations?: number;
+    lockTakeoverEvent?: {
+      previousLock?: { pid?: number; host?: string };
+      newLock: { pid: number; host: string };
+    };
+  }
 ): Promise<RunResult> {
   const { harness, repo, project, pipelineFor, prompts, log } = deps;
+  let taskDir: string | undefined;
 
-  const orchFolder = project.orchestrationFolder ?? ".factory";
-  const intentPath = path.join(repo.mainRoot, orchFolder, task, "INTENT.md");
+  try {
+    const orchFolder = project.orchestrationFolder ?? ".factory";
+    const intentPath = path.join(repo.mainRoot, orchFolder, task, "INTENT.md");
 
   // 1. Ensure task worktree (§7)
   const taskWtInfo = await ensureTaskWorktree(repo, task, {
@@ -280,10 +300,9 @@ export async function runTask(
     orchestrationFolder: orchFolder,
   });
 
-  const taskWt = taskWtInfo.path;
-  const taskDir = path.join(taskWt, orchFolder, task);
+    const taskWt = taskWtInfo.path;
+    taskDir = path.join(taskWt, orchFolder, task);
   await fs.promises.mkdir(taskDir, { recursive: true });
-
   const parentBranch = `topic/${task}`;
 
   // 2. Start-up repair restricted to §6.3.6 list (Finding 1 & 19)
@@ -337,6 +356,17 @@ export async function runTask(
   const budgetTracker = new BudgetTracker(pipeline.budget);
   await budgetTracker.reconcileFromDisk(taskDir);
 
+  if (opts?.lockTakeoverEvent) {
+    await appendJournal(taskDir, {
+      type: "lock_takeover",
+      task,
+      previousPid: opts.lockTakeoverEvent.previousLock?.pid,
+      previousHost: opts.lockTakeoverEvent.previousLock?.host,
+      newPid: opts.lockTakeoverEvent.newLock.pid,
+      newHost: opts.lockTakeoverEvent.newLock.host,
+    });
+  }
+
   await appendJournal(taskDir, { type: "task_started", task, branch: parentBranch });
 
   // 4. Derive -> Act -> Commit loop (§2)
@@ -380,8 +410,10 @@ export async function runTask(
           if (q.status === "answered") {
             alreadyAnswered = true;
           }
-        } catch {
-          // ignore
+        } catch (err: any) {
+          if (err?.code !== "ENOENT") {
+            throw new Error(`Corrupt budget-stop file at ${budgetStopPath}: ${err?.message ?? err}`);
+          }
         }
       }
 
@@ -470,8 +502,10 @@ export async function runTask(
     if (fs.existsSync(triagePath)) {
       try {
         triageArtifact = await readYaml<TriageArtifact>(triagePath);
-      } catch {
-        // ignore
+      } catch (err: any) {
+        if (err?.code !== "ENOENT") {
+          throw new Error(`Corrupt triage file at ${triagePath}: ${err?.message ?? err}`);
+        }
       }
     }
 
@@ -507,6 +541,113 @@ export async function runTask(
       continue;
     }
 
+    if (simpleAssignmentExists) {
+      const childWtInfo = await ensureChildWorktree(
+        repo,
+        { branch: parentBranch, path: taskWt },
+        "simple"
+      );
+      const childWt = childWtInfo.path;
+      let simpleItemState = await deriveItemState({
+        taskDir,
+        itemSlug: "simple",
+        parentBranch,
+        taskWt,
+        childWt,
+        pipeline,
+        project,
+      });
+
+      let itemTicks = 0;
+      const maxItemTicks = 50;
+      while (
+        simpleItemState.status !== "ready" &&
+        simpleItemState.status !== "merged" &&
+        simpleItemState.status !== "failed" &&
+        simpleItemState.status !== "blocked" &&
+        itemTicks < maxItemTicks
+      ) {
+        itemTicks++;
+        const tickRes = await tickItemMachine({
+          task,
+          taskDir,
+          taskWt,
+          childWt,
+          parentBranch,
+          itemSlug: "simple",
+          repo,
+          harness,
+          pipeline,
+          project,
+          prompts,
+          turnsSemaphore,
+          budgetTracker,
+        });
+        simpleItemState = await deriveItemState({
+          taskDir,
+          itemSlug: "simple",
+          parentBranch,
+          taskWt,
+          childWt,
+          pipeline,
+          project,
+        });
+        if (tickRes.status === "failed" || tickRes.status === "blocked") {
+          break;
+        }
+      }
+
+      if (simpleItemState.status === "ready") {
+        const mRes = await mergeItem({
+          item: simpleItemState,
+          parentBranch,
+          taskWt,
+          childWt,
+          repo,
+          harness,
+          pipeline,
+          project,
+          prompts,
+          task,
+          taskDir,
+          turnsSemaphore,
+        });
+        if (mRes.ok) {
+          await removeWorktree(repo, childWt);
+          await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
+          return {
+            status: "done",
+            exitCode: 0,
+            summary: `Simple task ${task} completed and merged via converted no-behavior item`,
+          };
+        }
+      }
+
+      if (simpleItemState.status === "merged") {
+        await removeWorktree(repo, childWt);
+        await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
+        return {
+          status: "done",
+          exitCode: 0,
+          summary: `Simple task ${task} completed and merged via converted no-behavior item`,
+        };
+      }
+
+      if (simpleItemState.status === "blocked") {
+        return {
+          status: "blocked",
+          exitCode: 10,
+          summary: `Simple task ${task} blocked`,
+        };
+      }
+
+      return {
+        status: "failed",
+        exitCode: 1,
+        summary: `Simple task ${task} failed during converted no-behavior execution`,
+      };
+    }
+
     // Phase 2: Iterations / Waves
     const itRes = await runIteration({
       task,
@@ -524,22 +665,20 @@ export async function runTask(
       runTaskChild: async (epicSlug: string) => {
         return await runChildTask(
           deps,
-          { branch: parentBranch, path: taskWt, taskDir },
+          { branch: parentBranch, path: taskWt, taskDir: taskDir! },
           epicSlug,
           {
             maxTicks: opts?.maxTicks,
             maxIterations: opts?.maxIterations,
             budgetTracker,
-            rootTaskDir: taskDir,
+            rootTaskDir: taskDir!,
           }
         );
       },
       log,
     });
 
-    if (itRes.architectSessionId) {
-      architectSessionId = itRes.architectSessionId;
-    }
+    architectSessionId = itRes.architectSessionId;
 
     if (itRes.status === "done") {
       return {
@@ -562,9 +701,21 @@ export async function runTask(
     }
   }
 
-  return {
-    status: "stopped",
-    exitCode: 1,
-    summary: `Task ${task} stopped: exceeded max ticks (${maxTicks})`,
-  };
+    return {
+      status: "stopped",
+      exitCode: 1,
+      summary: `Task ${task} stopped: exceeded max ticks (${maxTicks})`,
+    };
+  } catch (err: any) {
+    if (taskDir && fs.existsSync(taskDir)) {
+      try {
+        await appendJournal(taskDir, { type: "task_error", error: err?.message ?? String(err) });
+      } catch {}
+    }
+    return {
+      status: "failed",
+      exitCode: 1,
+      summary: `Task ${task} error: ${err?.message ?? String(err)}`,
+    };
+  }
 }

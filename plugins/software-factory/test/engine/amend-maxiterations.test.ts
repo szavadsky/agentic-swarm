@@ -270,4 +270,201 @@ describe("Engine: Wave-report amend + maxIterations (§8.4.6, §12.2)", () => {
     expect(res.status).toBe("blocked");
     expect(res.exitCode).toBe(10);
   });
+
+  it("validates PM amendment edits and rejects invalid kind", async () => {
+    const task = "amend-validate-task";
+    const orchFolder = ".factory";
+    const taskDir = path.join(tmpRepo.dir, orchFolder, task);
+    fs.mkdirSync(taskDir, { recursive: true });
+    fs.writeFileSync(path.join(taskDir, "INTENT.md"), "Amend validate test\n", "utf8");
+    tmpRepo.commit("Add intent for amend validate");
+
+    const pipeline = makePipeline();
+    const harness = new FakeHarness();
+
+    // Ingest
+    harness.scriptOutcome(`${task}/runs/triage#a1`, {
+      ok: true,
+      data: { kind: "story", rationale: "Standard story", citations: [] },
+    });
+    harness.scriptOutcome(`${task}/runs/infra#a1`, {
+      ok: true,
+      data: { setup: [], gates: [{ id: "t", command: "true" }], testRunner: { command: "true" } },
+    });
+
+    // Plan with outlines
+    harness.scriptOutcome(`${task}/runs/architect-plan-1#a1`, {
+      ok: true,
+      data: {
+        iteration: 1,
+        milestones: [{ id: "m1", title: "M1" }],
+        itemOutlines: [{ slug: "first-1", kind: "dev", title: "First", milestoneId: "m1" }],
+      },
+    });
+    harness.scriptOutcome(`${task}/runs/plan-review-1-1#a1`, {
+      ok: true,
+      data: { status: "approved", summary: "ok", suggestions: [] },
+    });
+    harness.scriptOutcome(`${task}/runs/pm-edits-1#a1`, {
+      ok: true,
+      data: {
+        iteration: 1,
+        items: [
+          { slug: "first-1", outlineRef: "first-1", kind: "dev", title: "First", assignment: "Work", milestone: "m1", wave: 1 },
+        ],
+      },
+    });
+    harness.scriptOutcome(`${task}/items/first-1/develop#a1`, {
+      ok: true,
+      data: { status: "ok", summary: "First done" },
+    });
+    harness.scriptOutcome(`${task}/runs/wave-close-up-1-1#a1`, {
+      ok: true,
+      data: { wave: 1, iteration: 1, status: "complete", mergedItems: ["first-1"], summary: "Wave 1 ok" },
+    });
+    harness.scriptOutcome(`${task}/runs/architect-wave-report-1-1#a1`, {
+      ok: true,
+      data: { id: "dec-amend", context: "wave", decision: "amend", rationale: "Add bad kind", timestamp: new Date().toISOString() },
+    });
+
+    // PM amend produces an invalid kind "unknown-kind"
+    harness.scriptOutcome(`${task}/runs/pm-amend-1-1#a1`, {
+      ok: true,
+      data: {
+        iteration: 1,
+        amendmentIndex: 1,
+        items: [
+          { slug: "bad-item", outlineRef: "bad-item", kind: "unknown-kind", title: "Bad", assignment: "Bad", milestone: "m1", wave: 2 },
+        ],
+      },
+    });
+
+    const res = await runTask(
+      { harness, repo: repoObj, project, pipelineFor: async () => pipeline, prompts },
+      task
+    );
+
+    // PM amend validation failure returns status: failed
+    expect(res.status).toBe("failed");
+
+    const taskWtPath = path.join(worktreeRoot, `topic_${task}`);
+    const journal = fs.readFileSync(path.join(taskWtPath, orchFolder, task, "journal.ndjson"), "utf8");
+    expect(journal).toContain("pm_amend_validation_failed");
+  });
+
+  it("restores amended items and amendment count across restart", async () => {
+    const task = "amend-restart-task";
+    const orchFolder = ".factory";
+    const taskDir = path.join(tmpRepo.dir, orchFolder, task);
+    fs.mkdirSync(taskDir, { recursive: true });
+    fs.writeFileSync(path.join(taskDir, "INTENT.md"), "Amend restart test\n", "utf8");
+    tmpRepo.commit("Add intent for amend restart");
+
+    const pipeline = makePipeline();
+    const harness = new FakeHarness();
+
+    // Ingest
+    harness.scriptOutcome(`${task}/runs/triage#a1`, {
+      ok: true,
+      data: { kind: "story", rationale: "Standard story", citations: [] },
+    });
+    harness.scriptOutcome(`${task}/runs/infra#a1`, {
+      ok: true,
+      data: { setup: [], gates: [{ id: "t", command: "true" }], testRunner: { command: "true" } },
+    });
+
+    // Iteration 1 plan
+    harness.scriptOutcome(`${task}/runs/architect-plan-1#a1`, {
+      ok: true,
+      data: {
+        iteration: 1,
+        milestones: [{ id: "m1", title: "M1" }],
+        itemOutlines: [
+          { slug: "base-1", kind: "dev", title: "Base", milestoneId: "m1" },
+          { slug: "amended-item", kind: "dev", title: "Amended", milestoneId: "m1" },
+        ],
+      },
+    });
+    harness.scriptOutcome(`${task}/runs/plan-review-1-1#a1`, {
+      ok: true,
+      data: { status: "approved", summary: "ok", suggestions: [] },
+    });
+    harness.scriptOutcome(`${task}/runs/pm-edits-1#a1`, {
+      ok: true,
+      data: {
+        iteration: 1,
+        items: [
+          { slug: "base-1", outlineRef: "base-1", kind: "dev", title: "Base", assignment: "Work", milestone: "m1", wave: 1 },
+        ],
+      },
+    });
+    harness.scriptOutcome(`${task}/items/base-1/develop#a1`, (run) => {
+      fs.writeFileSync(path.join(run.cwd, "base.txt"), "base code\n");
+      return { ok: true, data: { status: "ok", summary: "Base done" } };
+    });
+    harness.scriptOutcome(`${task}/runs/wave-close-up-1-1#a1`, {
+      ok: true,
+      data: { wave: 1, iteration: 1, status: "complete", mergedItems: ["base-1"], summary: "Wave 1 ok" },
+    });
+    harness.scriptOutcome(`${task}/runs/architect-wave-report-1-1#a1`, {
+      ok: true,
+      data: { id: "dec-amend", context: "wave", decision: "amend", rationale: "Add wave 2 item", timestamp: new Date().toISOString() },
+    });
+
+    // PM amend produces amended-item in wave 2
+    harness.scriptOutcome(`${task}/runs/pm-amend-1-1#a1`, {
+      ok: true,
+      data: {
+        iteration: 1,
+        amendmentIndex: 1,
+        items: [
+          { slug: "amended-item", outlineRef: "amended-item", kind: "dev", title: "Amended", assignment: "Wave 2 work", milestone: "m1", wave: 2 },
+        ],
+      },
+    });
+
+    // Script outcome for wave 2 amended item
+    harness.scriptOutcome(`${task}/items/amended-item/develop#a1`, (run) => {
+      fs.writeFileSync(path.join(run.cwd, "amended.txt"), "amended code\n");
+      return { ok: true, data: { status: "ok", summary: "Amended done" } };
+    });
+    harness.scriptOutcome(`${task}/runs/wave-close-up-1-2#a1`, {
+      ok: true,
+      data: { wave: 2, iteration: 1, status: "complete", mergedItems: ["amended-item"], summary: "Wave 2 ok" },
+    });
+    harness.scriptOutcome(`${task}/runs/architect-wave-report-1-2#a1`, {
+      ok: true,
+      data: { id: "dec-c2", context: "wave", decision: "continue", timestamp: new Date().toISOString() },
+    });
+    harness.scriptOutcome(`${task}/runs/plan-close-up-1#a1`, {
+      ok: true,
+      data: { iteration: 1, status: "complete", summary: "All done" },
+    });
+    harness.scriptOutcome(`${task}/runs/architect-closeup-1#a1`, {
+      ok: true,
+      data: { iteration: 1, status: "complete", summary: "Finished" },
+    });
+
+    // Run 1: will complete wave 1 and apply amendment (creating edits-1.1.yaml), then execute wave 2
+    const res = await runTask(
+      { harness, repo: repoObj, project, pipelineFor: async () => pipeline, prompts },
+      task
+    );
+
+    expect(res.status).toBe("done");
+
+    // Now simulate restart: runTask again on same task
+    // On restart, it must read edits-1.1.yaml, restore amended-item into currentIterationItems,
+    // set amendmentCount to 1, and derive states cleanly without losing amended-item.
+    const res2 = await runTask(
+      { harness, repo: repoObj, project, pipelineFor: async () => pipeline, prompts },
+      task
+    );
+
+    expect(res2.status).toBe("done");
+
+    const taskWtPath = path.join(worktreeRoot, `topic_${task}`);
+    expect(fs.existsSync(path.join(taskWtPath, "base.txt"))).toBe(true);
+    expect(fs.existsSync(path.join(taskWtPath, "amended.txt"))).toBe(true);
+  });
 });

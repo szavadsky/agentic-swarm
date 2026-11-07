@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { PipelineConfig, ProjectConfig, InfraArtifact, GatesBaselineArtifact } from "../artifacts.js";
+import type { PipelineConfig, ProjectConfig, InfraArtifact, GatesBaselineArtifact, DeveloperTarget } from "../artifacts.js";
 import type { Harness } from "../../harness/types.js";
 import { git } from "../git/exec.js";
 import {
@@ -84,7 +84,8 @@ export async function mergeItem(params: MergeItemParams): Promise<MergeItemResul
       });
 
       const diffRes = await git(childWt, ["diff"], { allowFail: true });
-      const recordsDir = path.join(childWt, project.orchestrationFolder ?? ".factory", task, "items", item.slug, "steps");
+      const relTaskDir = path.relative(taskWt, taskDir);
+      const recordsDir = path.join(childWt, relTaskDir, "items", item.slug, "steps");
 
       const integrateRes = await runAgentStep({
         task,
@@ -119,11 +120,19 @@ export async function mergeItem(params: MergeItemParams): Promise<MergeItemResul
 
       const mergeHeadCheck = await git(childWt, ["rev-parse", "-q", "--verify", "MERGE_HEAD"], { allowFail: true });
       if (mergeHeadCheck.code === 0) {
-        await concludeMerge(
-          repo,
-          childWt,
-          `factory(${item.slug}): integrate conflict resolution`
-        );
+        try {
+          await concludeMerge(
+            repo,
+            childWt,
+            `factory(${item.slug}): integrate conflict resolution`
+          );
+        } catch (err: any) {
+          await git(childWt, ["merge", "--abort"], { allowFail: true });
+          return {
+            ok: false,
+            error: err.message ?? `Failed to conclude merge for item ${item.slug}`,
+          };
+        }
       }
       conflictResolved = true;
     }
@@ -136,8 +145,10 @@ export async function mergeItem(params: MergeItemParams): Promise<MergeItemResul
       if (fs.existsSync(infraPath)) {
         try {
           infra = await readYaml<InfraArtifact>(infraPath);
-        } catch {
-          // ignore
+        } catch (err: any) {
+          if (err?.code !== "ENOENT") {
+            throw new Error(`Corrupt infra artifact at ${infraPath}: ${err?.message ?? err}`);
+          }
         }
       }
 
@@ -146,8 +157,19 @@ export async function mergeItem(params: MergeItemParams): Promise<MergeItemResul
       if (fs.existsSync(baselinePath)) {
         try {
           baseline = await readYaml<GatesBaselineArtifact>(baselinePath);
-        } catch {
-          // ignore
+        } catch (err: any) {
+          if (err?.code !== "ENOENT") {
+            throw new Error(`Corrupt gates baseline at ${baselinePath}: ${err?.message ?? err}`);
+          }
+        }
+      }
+
+      let lastDeveloperTarget: DeveloperTarget | undefined;
+      for (let i = item.records.length - 1; i >= 0; i--) {
+        const r = item.records[i]!;
+        if (r.output && typeof r.output === "object" && "target" in (r.output as any)) {
+          lastDeveloperTarget = (r.output as any).target as DeveloperTarget;
+          break;
         }
       }
 
@@ -163,6 +185,7 @@ export async function mergeItem(params: MergeItemParams): Promise<MergeItemResul
         item: item.slug,
         task,
         taskWt,
+        target: lastDeveloperTarget,
         limits: pipeline.limits ?? {},
         outputBytes: pipeline.limits?.checkOutputBytes ?? 4096,
       };

@@ -26,6 +26,7 @@ import { generateReviewSchema } from "../records/review-schema.js";
 import { resolveStepRole, resolveRole, type ResolvedRole } from "../config/roles.js";
 import { captureHead, enforceHead } from "../git/guard.js";
 import { commitAll } from "../git/commit.js";
+import { git } from "../git/exec.js";
 import { appendJournal } from "../journal.js";
 import type { Semaphore } from "../mutex.js";
 import type { BudgetTracker } from "../budget.js";
@@ -197,17 +198,13 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
   // 2. Determine sequence number for step record
   let nextSeq = 1;
   if (fs.existsSync(recordsDir)) {
-    try {
-      const existing = await fs.promises.readdir(recordsDir);
-      for (const name of existing) {
-        const match = /^(\d{3})-/.exec(name);
-        if (match) {
-          const num = parseInt(match[1]!, 10);
-          if (num >= nextSeq) nextSeq = num + 1;
-        }
+    const existing = await fs.promises.readdir(recordsDir);
+    for (const name of existing) {
+      const match = /^(\d{3})-/.exec(name);
+      if (match) {
+        const num = parseInt(match[1]!, 10);
+        if (num >= nextSeq) nextSeq = num + 1;
       }
-    } catch {
-      // ignore
     }
   }
 
@@ -279,12 +276,19 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
     inputPrompt: promptText,
   });
 
-  await commitAll(
-    repo,
-    wtToCommit,
-    `factory${item ? `(${item})` : ""}: ${stepId} a${attempt} [started]`
-  );
-  if (item && cwd !== wtToCommit) {
+  const isMerging = async (wt: string) => {
+    const res = await git(wt, ["rev-parse", "-q", "--verify", "MERGE_HEAD"], { allowFail: true });
+    return res.code === 0;
+  };
+
+  if (!(await isMerging(wtToCommit))) {
+    await commitAll(
+      repo,
+      wtToCommit,
+      `factory${item ? `(${item})` : ""}: ${stepId} a${attempt} [started]`
+    );
+  }
+  if (item && cwd !== wtToCommit && !(await isMerging(cwd))) {
     await commitAll(
       repo,
       cwd,
@@ -563,12 +567,14 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
   }
 
   // 14. Invariant §6.3.2, §6.3.3: Engine commits worktree after every step
-  await commitAll(
-    repo,
-    wtToCommit,
-    `factory${item ? `(${item})` : ""}: ${stepId} a${attempt} [${finalStatus}]`
-  );
-  if (item && cwd !== wtToCommit) {
+  if (!(await isMerging(wtToCommit))) {
+    await commitAll(
+      repo,
+      wtToCommit,
+      `factory${item ? `(${item})` : ""}: ${stepId} a${attempt} [${finalStatus}]`
+    );
+  }
+  if (item && cwd !== wtToCommit && !(await isMerging(cwd))) {
     await commitAll(
       repo,
       cwd,

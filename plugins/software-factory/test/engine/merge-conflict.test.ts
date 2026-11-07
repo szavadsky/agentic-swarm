@@ -135,9 +135,233 @@ describe("Engine: Merge path conflict -> integrate (§7)", () => {
     expect(result.ok).toBe(true);
     expect(result.conflictResolved).toBe(true);
     expect(integrateRan).toBe(true);
-
     // Verify parent branch has the resolved content
     const mergedContent = fs.readFileSync(path.join(taskWt, "shared.txt"), "utf8");
     expect(mergedContent).toContain("Resolved: Parent line 1 + Child line 2");
+
+    // Verify no commit on child branch ever contained conflict markers
+    const commits = tmpRepo.git(["log", "--format=%H", childBranch]).stdout.trim().split("\n");
+    for (const c of commits) {
+      const show = tmpRepo.git(["show", `${c}:shared.txt`], { allowFail: true });
+      if (show.code === 0) {
+        expect(show.stdout).not.toContain("<<<<<<<");
+        expect(show.stdout).not.toContain("=======");
+        expect(show.stdout).not.toContain(">>>>>>>");
+      }
+    }
+  });
+
+  it("aborts merge and restores pre-merge tip when integrate fails or leaves conflict markers", async () => {
+    const task = "merge-abort-test";
+    const orchFolder = ".factory";
+    const taskDir = path.join(tmpRepo.dir, orchFolder, task);
+    const itemSlug = "item-fail";
+
+    // 1. Base commit on main
+    tmpRepo.writeFile("conflict.txt", "Initial content\n");
+    tmpRepo.commit("Add conflict.txt on main");
+
+    // 2. Child worktree from main
+    const childBranch = `topic/${task}--${itemSlug}`;
+    const childWt = tmpRepo.createWorktree(childBranch);
+    const { git: execGit } = await import("../../src/core/git/exec.js");
+    fs.writeFileSync(path.join(childWt, "conflict.txt"), "Child unique content\n", "utf8");
+    await execGit(childWt, ["add", "conflict.txt"]);
+    await execGit(childWt, ["commit", "-m", "Child commit"]);
+    const preMergeHeadRes = await execGit(childWt, ["rev-parse", "HEAD"]);
+    const preMergeHead = preMergeHeadRes.stdout.trim();
+
+    // 3. Parent commit on topic branch
+    const parentBranch = `topic/${task}`;
+    tmpRepo.createBranch(parentBranch, "main");
+    tmpRepo.git(["checkout", parentBranch]);
+    tmpRepo.writeFile("conflict.txt", "Conflicting parent content\n");
+    tmpRepo.commit("Parent conflicting commit");
+
+    const repoObj = new Repo({
+      mainRoot: tmpRepo.dir,
+      worktreeRoot: path.join(tmpRepo.dir, ".worktrees"),
+    });
+    const project: ProjectConfig = {
+      orchestrationFolder: orchFolder,
+      worktreeRoot: repoObj.worktreeRoot,
+    };
+    const pipeline: PipelineConfig = {
+      models: { roles: { workhorse: { model: "m" } } },
+      agents: { developer: { role: "workhorse" } },
+      flows: { simple: { steps: [{ id: "develop", agent: "developer", role: "workhorse" }] }, story: {}, spike: {} },
+      limits: {},
+    };
+    const prompts = loadPromptLibrary({
+      builtinDir: path.resolve(import.meta.dir, "../../agents"),
+      overrideDirs: [],
+    });
+
+    const harness = new FakeHarness();
+    // Script integrate to fail
+    harness.scriptOutcome(`${task}/items/${itemSlug}/integrate#a1`, {
+      ok: false,
+      error: "Could not resolve conflicts",
+    });
+
+    const item: DerivedItemState = {
+      slug: itemSlug,
+      kind: "dev",
+      title: "Fail item",
+      wave: 1,
+      deps: [],
+      status: "ready",
+      branch: childBranch,
+      records: [],
+      currentAttempt: 1,
+      currentFixRound: 1,
+      isEscalated: false,
+      freshSeries: false,
+      interruptionCount: 0,
+      suggestionFingerprints: [],
+      decisionFingerprints: [],
+      consultCount: 0,
+    };
+
+    const result = await mergeItem({
+      task,
+      item,
+      parentBranch,
+      taskWt: tmpRepo.dir,
+      childWt,
+      repo: repoObj,
+      harness,
+      pipeline,
+      project,
+      prompts,
+      taskDir,
+    });
+
+    expect(result.ok).toBe(false);
+
+    // MERGE_HEAD must be gone (aborted)
+    const mhCheck = await execGit(childWt, ["rev-parse", "-q", "--verify", "MERGE_HEAD"], { allowFail: true });
+    expect(mhCheck.code).not.toBe(0);
+
+    // Pre-merge tip restored
+    const currentHeadRes = await execGit(childWt, ["rev-parse", "HEAD"]);
+    expect(currentHeadRes.stdout.trim()).toBe(preMergeHead);
+    expect(fs.readFileSync(path.join(childWt, "conflict.txt"), "utf8")).toBe("Child unique content\n");
+
+    // No commit on child branch contains conflict markers
+    const commits = tmpRepo.git(["log", "--format=%H", childBranch]).stdout.trim().split("\n");
+    for (const c of commits) {
+      const show = tmpRepo.git(["show", `${c}:conflict.txt`], { allowFail: true });
+      if (show.code === 0) {
+        expect(show.stdout).not.toContain("<<<<<<<");
+      }
+    }
+  });
+
+  it("runs target-green on post-merge tree using target populated from developer record", async () => {
+    const task = "merge-target-green-test";
+    const orchFolder = ".factory";
+    const taskDir = path.join(tmpRepo.dir, orchFolder, task);
+    const itemSlug = "item-target";
+    fs.mkdirSync(taskDir, { recursive: true });
+
+    // Infra artifact with testRunner
+    fs.writeFileSync(
+      path.join(taskDir, "infra.yaml"),
+      JSON.stringify({
+        setup: [],
+        gates: [{ id: "lint", command: "true" }],
+        testRunner: { command: "exit 0", selectorArgs: [], junitArg: "" },
+      })
+    );
+
+    // Base on main
+    tmpRepo.writeFile("base.txt", "Base\n");
+    tmpRepo.commit("Add base.txt on main");
+
+    // Child branch from main
+    const childBranch = `topic/${task}--${itemSlug}`;
+    const childWt = tmpRepo.createWorktree(childBranch);
+    const { git: execGit } = await import("../../src/core/git/exec.js");
+    fs.writeFileSync(path.join(childWt, "child.txt"), "Child content\n", "utf8");
+    await execGit(childWt, ["add", "child.txt"]);
+    await execGit(childWt, ["commit", "-m", "Child commit"]);
+
+    // Parent branch with non-conflicting change (so tree changes on merge)
+    const parentBranch = `topic/${task}`;
+    tmpRepo.createBranch(parentBranch, "main");
+    tmpRepo.git(["checkout", parentBranch]);
+    tmpRepo.writeFile("parent.txt", "Parent new content\n");
+    tmpRepo.commit("Parent new file modifying tree");
+
+    const repoObj = new Repo({
+      mainRoot: tmpRepo.dir,
+      worktreeRoot: path.join(tmpRepo.dir, ".worktrees"),
+    });
+    const project: ProjectConfig = {
+      orchestrationFolder: orchFolder,
+      worktreeRoot: repoObj.worktreeRoot,
+    };
+    const pipeline: PipelineConfig = {
+      models: { roles: { workhorse: { model: "m" } } },
+      agents: { developer: { role: "workhorse" } },
+      flows: { simple: { steps: [{ id: "develop", agent: "developer", role: "workhorse" }] }, story: {}, spike: {} },
+      limits: {},
+    };
+    const prompts = loadPromptLibrary({
+      builtinDir: path.resolve(import.meta.dir, "../../agents"),
+      overrideDirs: [],
+    });
+    const harness = new FakeHarness();
+
+    // Item with developer record containing target
+    const item: DerivedItemState = {
+      slug: itemSlug,
+      kind: "dev",
+      title: "Target item",
+      wave: 1,
+      deps: [],
+      status: "ready",
+      branch: childBranch,
+      records: [
+        {
+          dirName: "001-develop-a1",
+          seq: 1,
+          name: "develop",
+          attempt: 1,
+          meta: { seq: 1, name: "develop", attempt: 1, agent: "developer", role: "workhorse", models: ["m"], status: "ok", startedAt: new Date().toISOString() },
+          output: {
+            status: "ok",
+            summary: "Done",
+            target: { command: "true", selector: "test-feature" },
+          },
+        },
+      ],
+      currentAttempt: 1,
+      currentFixRound: 1,
+      isEscalated: false,
+      freshSeries: false,
+      interruptionCount: 0,
+      suggestionFingerprints: [],
+      decisionFingerprints: [],
+      consultCount: 0,
+    };
+
+    const result = await mergeItem({
+      task,
+      item,
+      parentBranch,
+      taskWt: tmpRepo.dir,
+      childWt,
+      repo: repoObj,
+      harness,
+      pipeline,
+      project,
+      prompts,
+      taskDir,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(fs.existsSync(path.join(tmpRepo.dir, "child.txt"))).toBe(true);
   });
 });

@@ -45,8 +45,10 @@ A launch may cover several architect iterations. After each launch:
 
 Operator steering is logged in `steer/fromusertaken/` on the task branch.
 
-## Self-host (concerns tracking)
-Second target: this repo (`/home/slava/aiexp/agentic-swarm`), task `concerns-tracking`, INTENT = spec item 18 of `docs/factory.v2.md` (concerns raised in structured agent output, aggregated under the task folder, triaged by the step reviewer with dispositions + `dismiss`, routed to dependent-item blocking / architect / steer mailbox / tech debt, surfaced in close-ups and status). The factory runs from the main checkout's `plugins/software-factory` while it edits its own copy on `topic/concerns-tracking` in a worktree; after trace analysis and review of the result the operator merges it to `main` (conflicts with interim harness fixes resolved in the merge). Same launch loop and trace analysis as above (≤ 5 launches).
+## Self-host
+Target: this repo (`/home/slava/aiexp/agentic-swarm`). The factory runs from the main checkout's `plugins/software-factory` while it edits its own copy on `topic/{task}` in a worktree; after trace analysis and review the operator merges the result to `main` (conflicts with interim harness fixes resolved in the merge). Same launch loop and trace analysis as above, ≤ 5 launches per task, in order:
+1. `concerns-tracking` — INTENT = spec item 18 of `docs/factory.v2.md` (concerns in structured agent output, aggregated under the task folder, triaged by the step reviewer with dispositions + `dismiss`, routed to dependent-item blocking / architect / steer mailbox / tech debt, surfaced in close-ups and status).
+2. `omp-workspaces` — INTENT = spec item 19 (omp isolation backend by default with engine worktrees as an option, preflight compatibility checks, idempotent status/cleanup/gc, commit content from agent output, wave-end merger agent + architect escalation with status/worktree pointers, saga with independent epic launches, no-model end-to-end tests through omp with a scripted mock provider). Expected to be planned as epic/saga scale with a fact-finder spike on omp isolation first; prior research in `docs/spikes/`.
 
 ## Exit
 Push the target repo's `topic/*` branches and the harness commits. Report: launches, iterations, items done/failed, interventions, harness fixes, cost.

@@ -399,4 +399,150 @@ describe("Engine: Fix loop, consult, and alt-on-retry (§8.2, §8.5, §12.4)", (
     // In Round 2, developer rotated to retryRole "alt-workhorse"
     expect(round2DevRole).toBe("alt-workhorse");
   });
+
+  it("measures progress against previous round developer commit: round 2 with real code changes does not trigger consult", async () => {
+    const task = "fix-round-progress-task";
+    const orchFolder = ".factory";
+    const taskDir = path.join(tmpRepo.dir, orchFolder, task);
+    const itemSlug = "item-progress";
+    const itemDir = path.join(taskDir, "items", itemSlug);
+    fs.mkdirSync(itemDir, { recursive: true });
+
+    fs.writeFileSync(
+      path.join(itemDir, "assignment.yaml"),
+      JSON.stringify(
+        {
+          slug: itemSlug,
+          kind: "dev",
+          title: "Progress test item",
+          assignment: "Implement feature",
+          milestone: "m1",
+          wave: 1,
+          deps: [],
+        },
+        null,
+        2
+      )
+    );
+
+    const childBranch = `topic/${task}--${itemSlug}`;
+    const childWt = tmpRepo.createWorktree(childBranch);
+
+    const repoObj = new Repo({
+      mainRoot: tmpRepo.dir,
+      worktreeRoot: path.join(tmpRepo.dir, ".worktrees"),
+    });
+
+    const project: ProjectConfig = {
+      orchestrationFolder: orchFolder,
+      worktreeRoot: repoObj.worktreeRoot,
+    };
+
+    const pipeline: PipelineConfig = {
+      models: {
+        roles: {
+          workhorse: { model: "m" },
+          "alt-workhorse": { model: "m" },
+          "task-reviewer": { model: "m" },
+          architect: { model: "m" },
+        },
+      },
+      agents: {
+        developer: { role: "workhorse" },
+        reviewer: { role: "task-reviewer" },
+        architect: { role: "architect" },
+      },
+      flows: {
+        simple: { steps: [{ id: "develop", agent: "developer", role: "workhorse" }] },
+        story: {
+          dev: {
+            fixLoopTo: "develop",
+            steps: [
+              { id: "develop", agent: "developer", role: "workhorse" },
+              { id: "review", agent: "reviewer", role: "task-reviewer" },
+            ],
+          },
+        },
+        spike: {},
+      },
+      limits: {
+        maxFixRounds: 3,
+        maxStepAttempts: 3,
+        maxConsultsPerItem: 2,
+      },
+    };
+
+    const prompts = loadPromptLibrary({
+      builtinDir: path.resolve(import.meta.dir, "../../agents"),
+      overrideDirs: [],
+    });
+
+    const harness = new FakeHarness();
+
+    // Round 1 develop
+    harness.scriptOutcome(`${task}/items/${itemSlug}/develop#a1`, (run) => {
+      fs.writeFileSync(path.join(run.cwd, "feature.ts"), "const v = 1;\n");
+      return { ok: true, data: { status: "ok", summary: "Round 1 code" } };
+    });
+
+    // Round 1 review: requests fix
+    harness.scriptOutcome(`${task}/items/${itemSlug}/review#a1`, {
+      ok: true,
+      data: {
+        status: "changes_requested",
+        summary: "Need changes",
+        suggestions: [{ id: "s1", disposition: "fix", summary: "First fix" }],
+      },
+    });
+
+    // Round 2 develop (fix round 1 re-entry): makes real code change
+    harness.scriptOutcome(`${task}/items/${itemSlug}/develop#a2`, (run) => {
+      fs.writeFileSync(path.join(run.cwd, "feature.ts"), "const v = 2; // real code progress\n");
+      return { ok: true, data: { status: "ok", summary: "Round 2 updated code" } };
+    });
+
+    // Round 2 review: requests fix again
+    harness.scriptOutcome(`${task}/items/${itemSlug}/review#a2`, {
+      ok: true,
+      data: {
+        status: "changes_requested",
+        summary: "Need more changes",
+        suggestions: [{ id: "s2", disposition: "fix", summary: "Second fix" }],
+      },
+    });
+
+    const tickParams = {
+      task,
+      itemSlug,
+      parentBranch: `topic/${task}`,
+      taskWt: tmpRepo.dir,
+      childWt,
+      taskDir,
+      repo: repoObj,
+      harness,
+      pipeline,
+      project,
+      prompts,
+    };
+
+    // 1. Tick develop a1
+    const t1 = await tickItemMachine(tickParams);
+    expect(t1.status).toBe("running");
+
+    // 2. Tick review a1 -> jumps back to develop
+    const t2 = await tickItemMachine(tickParams);
+    expect(t2.status).toBe("running");
+
+    // 3. Tick develop a2 (round 2)
+    const t3 = await tickItemMachine(tickParams);
+    expect(t3.status).toBe("running");
+
+    // 4. Tick review a2 -> evaluates fix round 2
+    // Must measure progress against round 1 developer commit, see the code diff,
+    // and NOT trigger noProgress consult or failure!
+    const t4 = await tickItemMachine(tickParams);
+    expect(t4.status).toBe("running");
+    expect(t4.consulted).toBeFalsy();
+    expect(t4.done).toBe(false);
+  });
 });

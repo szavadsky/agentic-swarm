@@ -13,7 +13,7 @@ import { parseJunit, buildTargetCommand, shellQuote } from "./junit.js";
 import { tailCap, type CheckContext, type CheckResult } from "./types.js";
 
 const DEFAULT_TEST_GLOBS = ["test/**", "tests/**", "**/*.test.*", "**/*.spec.*"];
-const DEFAULT_PROD_GLOBS = ["src/**", "lib/**"];
+const DEFAULT_PROD_GLOBS = ["src/**", "lib/**", "*.ts", "*.js", "*.mjs", "*.cjs", "*.py", "*.go", "*.rs", "*.java", "*.c", "*.cpp", "*.h", "pkg/**", "app/**"];
 const DEFAULT_GATE_TIMEOUT_SEC = 900;
 const CONFIG_FILE_GLOBS = [
   "package.json",

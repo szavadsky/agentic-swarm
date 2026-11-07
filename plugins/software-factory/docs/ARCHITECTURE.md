@@ -37,6 +37,7 @@ Source spec: `docs/factory.v2.md`. v1: `plugins/software-builder`. This file is 
 | 16 config | `config/*` | §5; extra agents, checks, hooks at any seam. |
 | 17 bun launch, preflight, omp per iteration | `bin/factory.ts`, `src/cli`, `src/harness/omp` | **Deviation:** spec keeps one omp process per iteration to preserve IRC. Here each agent turn is its own harness process and a persistent role keeps its conversation as a resumable session on disk (same architect context, survives restarts, no live handles). §2, §11. |
 | 18 concerns tracking (added after v2 build) | — | **Deliberately not hand-built**: it is the goal of the self-hosted fire test (`docs/FIRE_TEST.md` §Self-host), so the factory extends itself. |
+| 19 workspaces via omp isolation, preflight, status/cleanup/gc, commit content from agents, wave-end merger + escalation, saga with independent epic launches, no-model omp tests (added after v2 build) | — | **Deliberately not hand-built**: second self-hosted fire-test goal. Current state: engine-managed worktrees (§7), item-level integrate step, in-process epics; prior omp research in `docs/spikes/`. |
 | 26 feedback/approval per kind | `reviewPolicy`, `criteria`, §9 | Mechanical checks per kind + disposition criteria in prompts. |
 | Fire test / DoD | `docs/FIRE_TEST.md`, README, templates, schemas | §13. Out of scope (not in spec): pushing, parallel epics. |
 
