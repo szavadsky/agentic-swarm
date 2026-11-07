@@ -146,6 +146,130 @@ describe("OmpHarness Process & Timeout Mechanics", () => {
     }
   });
 
+  it("timeout kills child process group completely including grandchildren without killing factory", async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "omp-pgid-test-"));
+    const pidFile = path.join(tmpDir, "child.pid");
+    const mockBinary = path.join(tmpDir, "mock-group-omp.sh");
+    // Mock binary that spawns background child sleep processes in its process group
+    fs.writeFileSync(
+      mockBinary,
+      `#!/bin/sh
+echo "$$" > "${pidFile}"
+sleep 30 &
+sleep 30 &
+wait
+`,
+      { mode: 0o755 }
+    );
+
+    try {
+      const harness = new OmpHarness({
+        ompBinary: mockBinary,
+        runtimeDir: tmpDir,
+        timeoutMs: 300_000,
+      });
+
+      const initialFactoryPid = process.pid;
+      const outcome = await harness.run({
+        agent: "developer",
+        definition: "# Dev",
+        prompt: "implement",
+        role: "workhorse",
+        models: ["test-model"],
+        tools: ["read"],
+        cwd: tmpDir,
+        outputSchema: { type: "object" },
+        label: "test/pgid-timeout",
+        session: { keep: false },
+        timeoutSec: 0.2, // 200ms timeout
+      });
+
+      // Factory process must be completely unharmed
+      expect(process.pid).toBe(initialFactoryPid);
+      expect(outcome.ok).toBe(false);
+
+      // Read child shell PID and check if any processes from that group survive
+      if (fs.existsSync(pidFile)) {
+        const childPid = parseInt(fs.readFileSync(pidFile, "utf8").trim(), 10);
+        // Give kernel a moment to reap
+        await new Promise((r) => setTimeout(r, 200));
+        let groupAlive = true;
+        try {
+          process.kill(-childPid, 0);
+        } catch {
+          groupAlive = false;
+        }
+        expect(groupAlive).toBe(false);
+      }
+    } finally {
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+    }
+  });
+
+  it("shutdown handler terminates child groups and marks running steps interrupted", async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "omp-shutdown-test-"));
+    const { spawn } = await import("bun");
+    const {
+      registerChildGroup,
+      unregisterChildGroup,
+      registerActiveStep,
+      terminateAllChildGroups,
+      markActiveStepsInterrupted,
+    } = await import("../../src/core/shutdown.js");
+    const { writeYamlAtomic, readYaml } = await import("../../src/core/records/io.js");
+
+    try {
+      // 1. Spawn a detached child in its own group
+      const child = spawn(["sleep", "30"], { detached: true });
+      expect(child.pid).toBeGreaterThan(0);
+      registerChildGroup(child.pid);
+
+      // 2. Create an active step record with status: started
+      const stepDir = path.join(tmpDir, "001-test-step-a1");
+      fs.mkdirSync(stepDir, { recursive: true });
+      const metaPath = path.join(stepDir, "meta.yaml");
+      await writeYamlAtomic(metaPath, {
+        seq: 1,
+        name: "test-step",
+        attempt: 1,
+        status: "started",
+        startedAt: new Date().toISOString(),
+      });
+      registerActiveStep({
+        recordDir: stepDir,
+        metaPath,
+        taskDir: tmpDir,
+      });
+
+      // 3. Trigger shutdown routine
+      await terminateAllChildGroups(100);
+      await markActiveStepsInterrupted("SIGTERM");
+
+      // 4. Verify child was terminated
+      let childAlive = true;
+      try {
+        process.kill(child.pid, 0);
+      } catch {
+        childAlive = false;
+      }
+      expect(childAlive).toBe(false);
+
+      // 5. Verify step meta marked interrupted cleanly
+      const updatedMeta = await readYaml<any>(metaPath);
+      expect(updatedMeta.status).toBe("interrupted");
+      expect(updatedMeta.endedAt).toBeDefined();
+
+      // 6. Verify journal recorded the interruption
+      const journalPath = path.join(tmpDir, "journal.ndjson");
+      expect(fs.existsSync(journalPath)).toBe(true);
+      const journalContent = fs.readFileSync(journalPath, "utf8");
+      expect(journalContent).toContain('"type":"step_interrupted"');
+      expect(journalContent).toContain('"signal":"SIGTERM"');
+    } finally {
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+    }
+  });
+
   it("regenerates overlay each run from effective pipeline", async () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "omp-overlay-regen-"));
     const mockBinary = path.join(tmpDir, "mock-noop-omp.sh");

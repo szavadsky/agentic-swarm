@@ -91,4 +91,92 @@ describe("OmpNdjsonParser", () => {
     expect(result.stopReason).toBe("abort");
     expect(result.finalAssistantText).toBe("I must abort.");
   });
+  it("keeps memory bounded (< 20 KB) when processing huge multi-MB tool-result lines and extracts outcome", () => {
+    const parser = new OmpNdjsonParser();
+
+    // 1. Session start
+    parser.feedLine('{"type":"session","id":"sess-memory-test","timestamp":"2026-11-07T10:00:00Z","cwd":"/repo"}');
+
+    // 2. Multi-megabyte tool execution traces (simulate 6x 3.5MB bash AST trace loops from Launch 1)
+    const hugeTracePayload = "x".repeat(3_500_000);
+    for (let i = 0; i < 6; i++) {
+      const hugeToolEvent = JSON.stringify({
+        type: "tool_execution_end",
+        toolName: "bash",
+        result: {
+          exitCode: 0,
+          output: "stdout line",
+          details: {
+            trace: {
+              units: hugeTracePayload,
+            },
+          },
+        },
+      });
+      parser.feedLine(hugeToolEvent);
+    }
+
+    // 3. Yield tool execution
+    parser.feedLine(
+      JSON.stringify({
+        type: "tool_execution_end",
+        toolName: "yield",
+        result: { details: { data: { status: "ok", discoveredItems: [1, 2, 3] } } },
+      })
+    );
+
+    // 4. Turn end with assistant text and usage
+    parser.feedLine(
+      JSON.stringify({
+        type: "turn_end",
+        message: {
+          role: "assistant",
+          content: [{ type: "text", text: "Turn completed successfully." }],
+          usage: { input: 5000, output: 250, cost: { total: 0.015 } },
+          stopReason: "stop",
+        },
+      })
+    );
+
+    const result = parser.getResult();
+
+    // Verify correct outcome extraction
+    expect(result.sessionId).toBe("sess-memory-test");
+    expect(result.sessionTimestamp).toBe("2026-11-07T10:00:00Z");
+    expect(result.cwd).toBe("/repo");
+    expect(result.yieldData).toEqual({ status: "ok", discoveredItems: [1, 2, 3] });
+    expect(result.finalAssistantText).toBe("Turn completed successfully.");
+    expect(result.usage.inputTokens).toBe(5000);
+    expect(result.usage.outputTokens).toBe(250);
+    expect(result.usage.costUsd).toBe(0.015);
+    expect(result.stopReason).toBe("stop");
+    expect(result.rawEvents?.length ?? 0).toBe(0);
+
+    // Verify memory footprint of retained result:
+    // Over 21 MB of JSON was fed, but the retained result serialized is under 1 KB (< 20 KB limit)
+    const retainedJsonBytes = Buffer.byteLength(JSON.stringify(result), "utf8");
+    expect(retainedJsonBytes).toBeLessThan(1024);
+  });
+
+  it("bounds excessive assistant text to MAX_ASSISTANT_TEXT_CHARS preserving head and tail", () => {
+    const parser = new OmpNdjsonParser();
+    const excessiveText = "A".repeat(200_000) + "MIDDLE_TEXT" + "Z".repeat(200_000); // 400KB+
+
+    parser.feedLine(
+      JSON.stringify({
+        type: "turn_end",
+        message: {
+          role: "assistant",
+          content: [{ type: "text", text: excessiveText }],
+          stopReason: "stop",
+        },
+      })
+    );
+
+    const result = parser.getResult();
+    expect(result.finalAssistantText.length).toBeLessThanOrEqual(256 * 1024 + 50);
+    expect(result.finalAssistantText).toContain("...[truncated]...");
+    expect(result.finalAssistantText.startsWith("AAA")).toBe(true);
+    expect(result.finalAssistantText.endsWith("ZZZ")).toBe(true);
+  });
 });

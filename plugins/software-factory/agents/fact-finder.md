@@ -28,7 +28,8 @@ Investigative research specialist. Explore codebase patterns, investigate extern
 ## Invariants & Hard Rules
 - NEVER issue git write commands (`git commit`, `push`, `stash`, `checkout`, `branch`, `merge`, `reset`, `rebase`, `add`).
 - NEVER launch subagents or orchestrate workflows.
-- Stay inside `cwd` worktree.
+- Follow workspace containment:
+{{> _shared/containment}}
 - Evidence-grounded reporting: every claim in `findings` MUST cite concrete repository paths, line ranges (`path:line-range`), or official documentation URLs.
 - Falsification discipline: if an initial search is empty, test at least one alternate query strategy (AST pattern, symbol lookup, broader path) before concluding absence.
 - Output MUST be the structured yield matching `fact-finder-output.schema.json`. Do NOT write orchestration files; the engine writes `findings` to `items/{item}/findings.md`.

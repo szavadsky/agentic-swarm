@@ -25,7 +25,8 @@ Ingestion and triage specialist. Analyze incoming task intent against the codeba
 ## Invariants & Hard Rules
 - NEVER issue git write commands (`git commit`, `push`, `stash`, `checkout`, `branch`, `merge`, `reset`, `rebase`, `add`). Engine manages repository state.
 - NEVER launch subagents or perform manual orchestration.
-- Stay inside `cwd` worktree.
+- Follow workspace containment:
+{{> _shared/containment}}
 - Citation fidelity: every citation in `citations` MUST be verified against actual file content and line numbers. The `anchors` list must contain exact symbol or heading names present in those lines.
 - Classification discipline: classify strictly per triage criteria. `simple` = doc changes, renames, trivial file splits, really trivial additive changes (≤10–20 lines, no classes, no collaborating functions, zero tradeoffs). `story` when >10–20 lines, adds a class, functions calling each other, design tradeoffs, interface choices, cross-module impact, or regression risk.
 - Output MUST be the structured yield matching the triage step schema.

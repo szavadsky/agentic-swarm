@@ -22,6 +22,7 @@ export const DEFAULT_LIMITS: Required<PipelineLimits> = {
   maxItemsPerPlan: 50,
   checkOutputBytes: 4000,
   hydrationBytes: 40000,
+  stepTranscriptWarningBytes: 5 * 1024 * 1024,
 };
 
 export function resolveLimits(limits?: PipelineLimits): Required<PipelineLimits> {

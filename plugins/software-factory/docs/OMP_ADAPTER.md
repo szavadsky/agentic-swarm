@@ -117,13 +117,13 @@ Stdout emits streaming NDJSON objects (`--mode json`):
 3. **Structured Yield**:
    When `--tools` includes `yield`, model invocations emit `toolCall` events with name `yield` and `arguments.data`. Captured as primary candidate data.
 4. **Text JSON Extraction**:
-   If no tool call occurred, extracts JSON (or fenced ` ```json ` blocks) from the **last assistant turn's text** (overwriting intermediate turns rather than concatenating transcript text).
-5. **StopReason Honor**:
+   If no tool call occurred, extracts JSON (or fenced ` ```json ` blocks) from the **last assistant turn's text** (overwriting intermediate turns rather than concatenating transcript text; assistant text bounded to 256 KiB).
+5. **Memory-Bounded Streaming**:
+   `OmpNdjsonParser` stream-parses lines without buffering raw event trees (`rawEvents` is never accumulated in memory). Multi-megabyte tool execution traces (e.g. bash loop ASTs) that do not contain `yield` are fast-skipped before parsing. Stderr is captured via `HeadTailBuffer` capped at 64 KiB preserving head and tail diagnostics.
+6. **StopReason Honor**:
    Turns ending with `stopReason: "abort"` or `stopReason: "error"` are classified as failures even if the process exit code is 0.
-6. **Schema Enforcement**:
+7. **Schema Enforcement**:
    Validates candidate data against `AgentRun.outputSchema`. On schema violation, returns `{ ok: false, error: ajvError, data: rawOutput, transient: false }`, allowing the engine's `validateAndRepair` pipeline to repair structure.
----
-
 ## 5. Failure Classification Matrix
 
 | Category | Indicators | Engine Action |
@@ -136,10 +136,12 @@ Stdout emits streaming NDJSON objects (`--mode json`):
 
 ## 6. Process Lifecycle, Timeouts & Run Lock
 
-### 6.1 Per-Step & Completion Timeouts
-- **`AgentRun.timeoutSec`**: Honors per-step timeout configured in pipeline steps (e.g. `timeoutSec: 120`). When omitted, falls back to `defaultTimeoutMs` (300,000ms / 5m).
-- **`complete()` Timeout**: Spawns `omp -p` with an active timer; on timeout, fires `SIGTERM` followed by `SIGKILL` (3s grace) and terminates the process with an explicit timeout rejection.
-
+### 6.1 Process Isolation, Process Groups & Timeouts
+- **Process Group Isolation**: All `omp` invocations are spawned with `detached: true` creating independent process groups (`PGID = proc.pid`).
+- **Group Termination on Timeout**: Per-step timeout (`AgentRun.timeoutSec` or `defaultTimeoutMs`) fires `SIGTERM` to the child's process group (`-proc.pid`), followed by `SIGKILL` after a grace period. This terminates all grandchildren (e.g. bash loops, sleep commands) and never touches the orchestrator's process group.
+- **Factory Process Signals (SIGINT/SIGTERM)**: The orchestrator installs process signal handlers that terminate all active child process groups and mark running steps with `status: "interrupted"` cleanly in `meta.yaml` and `journal.ndjson`.
+- **Transcript / Stdout Size Guard**: An engine-side guard tracks per-step stdout and transcript size; if size exceeds `limits.stepTranscriptWarningBytes` (default 5 MiB), a `step_transcript_size_warning` audit event is recorded to `journal.ndjson`.
+- **`complete()` Timeout**: Spawns `omp -p` detached with an active timer; on timeout, fires `SIGTERM` followed by `SIGKILL` to its process group and rejects with an explicit timeout error.
 ### 6.2 Atomic Run Lock (`acquireRunLock`)
 - Lock files live at `<runtimeDir>/locks/<task>.lock` outside git tracking.
 - Acquired atomically using `fs.openSync(lockPath, "wx")`.

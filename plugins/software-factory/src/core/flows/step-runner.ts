@@ -28,6 +28,7 @@ import { captureHead, enforceHead } from "../git/guard.js";
 import { commitAll } from "../git/commit.js";
 import { git } from "../git/exec.js";
 import { appendJournal } from "../journal.js";
+import { registerActiveStep, unregisterActiveStep } from "../shutdown.js";
 import type { Semaphore } from "../mutex.js";
 import type { BudgetTracker } from "../budget.js";
 
@@ -277,7 +278,11 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
     },
     inputPrompt: promptText,
   });
-
+  registerActiveStep({
+    recordDir,
+    metaPath: path.join(recordDir, "meta.yaml"),
+    taskDir,
+  });
   const isMerging = async (wt: string) => {
     const res = await git(wt, ["rev-parse", "-q", "--verify", "MERGE_HEAD"], { allowFail: true });
     return res.code === 0;
@@ -379,6 +384,28 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
     outcome = await harness.run(agentRun);
   } finally {
     releaseSemaphore();
+  }
+
+  // Check transcript / stdout size against limit threshold (§4)
+  const thresholdBytes: number =
+    typeof pipeline.limits?.stepTranscriptWarningBytes === "number"
+      ? pipeline.limits.stepTranscriptWarningBytes
+      : 5 * 1024 * 1024;
+  const stepSizeBytes = Math.max(outcome.transcriptBytes ?? 0, outcome.stdoutBytes ?? 0);
+  if (stepSizeBytes > thresholdBytes) {
+    await appendJournal(taskDir, {
+      type: "step_transcript_size_warning",
+      task,
+      item,
+      step: stepId,
+      attempt,
+      sizeBytes: stepSizeBytes,
+      thresholdBytes,
+      traceRef: outcome.traceRef,
+    });
+    opts.log?.(
+      `[warning] Step "${stepId}" transcript/stdout size (${stepSizeBytes} bytes) exceeded threshold of ${thresholdBytes} bytes`
+    );
   }
 
   // Accumulate total token/cost usage across ALL turns of the step (primary,
@@ -600,7 +627,7 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
     sessionId: outcome.sessionId,
     usage: totalUsage,
   });
-
+  unregisterActiveStep(recordDir);
   return {
     ok: finalStatus === "ok",
     status: finalStatus,

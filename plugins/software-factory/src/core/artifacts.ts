@@ -95,6 +95,7 @@ export interface PipelineLimits {
   maxItemsPerPlan?: number;
   checkOutputBytes?: number;
   hydrationBytes?: number;
+  stepTranscriptWarningBytes?: number;
   [key: string]: unknown;
 }
 

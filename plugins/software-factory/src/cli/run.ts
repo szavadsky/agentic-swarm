@@ -7,6 +7,7 @@ import { runTask, type EngineDeps, type RunResult } from "../core/engine.js";
 import { OmpHarness } from "../harness/omp/harness.js";
 import { acquireRunLock, resolveRuntimeDir } from "./lock.js";
 import { runPreflight } from "./preflight.js";
+import { installShutdownHandlers } from "../core/shutdown.js";
 
 export interface RunCliOptions {
   repoRoot: string;
@@ -90,6 +91,7 @@ export async function runFactory(opts: RunCliOptions): Promise<number> {
     return 1;
   }
 
+  const uninstallShutdown = installShutdownHandlers();
   try {
     // 4. Build engine dependencies with effective (root + task layered) pipeline
     const taskPipelinePath = path.join(defaultTaskDir, "pipeline.yaml");
@@ -158,6 +160,7 @@ export async function runFactory(opts: RunCliOptions): Promise<number> {
     console.log(`[factory run] Task "${task}" completed with status "${result.status}": ${result.summary}`);
     return result.exitCode;
   } finally {
+    uninstallShutdown();
     lockHandle.release();
   }
 }

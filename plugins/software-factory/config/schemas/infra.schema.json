@@ -7,34 +7,34 @@
   "properties": {
     "setup": {
       "type": "array",
-      "description": "Minimal setup shell commands executed to prepare a fresh worktree",
+      "description": "Minimal setup shell commands (at most 1-3) executed to prepare a fresh worktree, e.g. ['poetry install'] or ['bun install']. Empty array [] if standard checkout requires no setup.",
       "items": { "type": "string" }
     },
     "gates": {
       "type": "array",
-      "description": "Verification gates (build, typecheck, lint, fast tests) that must pass green",
+      "description": "Repository quality gates (compile, typecheck, lint, fast tests) defined by the project. If any gate fails on clean checkout, record it as is — the engine records baseline status.",
       "items": {
         "type": "object",
         "required": ["id", "command"],
         "properties": {
-          "id": { "type": "string", "description": "Gate identifier (e.g. build, typecheck, test)" },
-          "command": { "type": "string", "description": "Shell command to run for this gate" }
+          "id": { "type": "string", "description": "Gate identifier (e.g. 'typecheck', 'lint', 'test', 'build')" },
+          "command": { "type": "string", "description": "Shell command to run for this gate, e.g. 'ruff check .', 'pytest', 'tsc --noEmit'" }
         },
         "additionalProperties": false
       }
     },
     "testRunner": {
       "type": "object",
-      "description": "Project test runner configuration for automated red/green checking",
+      "description": "Project test runner configuration for automated red/green checking and JUnit XML reporting",
       "required": ["command"],
       "properties": {
-        "command": { "type": "string", "description": "Base test runner shell command" },
+        "command": { "type": "string", "description": "Base test runner shell command, e.g. 'pytest', 'cargo test', 'bun test', 'npm test'" },
         "selectorArgs": {
           "type": "array",
-          "description": "Arguments/flags to pass test selectors to the runner",
+          "description": "Arguments/flags to pass test selectors to the runner. E.g. ['-k'] for pytest, ['-t'] for jest, or [] if selectors are positional arguments.",
           "items": { "type": "string" }
         },
-        "junitArg": { "type": "string", "description": "Flag/argument to output JUnit XML report" }
+        "junitArg": { "type": "string", "description": "Flag/argument template to output JUnit XML report, with '{path}' or '{{path}}' placeholder for the file path. E.g. '--junitxml={path}' for pytest, '--reporter=junit --output={path}', or '' if unsupported." }
       },
       "additionalProperties": false
     }

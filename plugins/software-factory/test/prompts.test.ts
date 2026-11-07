@@ -269,4 +269,52 @@ tools:
     expect(lib.placeholders("steps/pm-edits")).toContain("storyKindsCriteria");
     expect(lib.placeholders("steps/pm-single-item")).toContain("storyKindsCriteria");
   });
+  it("every agent definition includes the workspace containment instructions", () => {
+    const lib = loadPromptLibrary({ builtinDir });
+    const agents = [
+      "architect",
+      "developer",
+      "fact-finder",
+      "infra",
+      "plan-close-up",
+      "plan-reviewer",
+      "pm",
+      "qa",
+      "reviewer",
+      "triage",
+      "wave-close-up",
+    ];
+
+    for (const agent of agents) {
+      const def = lib.agentDefinition(agent);
+      expect(def.body).toContain("Workspace Containment");
+      expect(def.body).toContain("STRICT REPO CONTAINMENT");
+      expect(def.body).toContain("NEVER search, list, read, or explore files outside the target repository root");
+      expect(def.body).toContain("NEVER attempt to reverse-engineer the test harness");
+    }
+  });
+
+  it("infra agent prompt and schema instruct recording red gates as baseline without workarounds", () => {
+    const lib = loadPromptLibrary({ builtinDir });
+    const def = lib.agentDefinition("infra");
+    expect(def.body).toContain("gates-baseline.yaml");
+    expect(def.body).toContain("junitArg");
+    expect(def.body).toContain("selectorArgs");
+
+    const stepPrompt = lib.render("steps/infra", {
+      task: "task-1",
+      intent: "intent-1",
+      context: "context-1",
+    });
+    expect(stepPrompt).toContain("If gates fail or are red on a clean checkout, record them as they are");
+    expect(stepPrompt).toContain("junitArg");
+    expect(stepPrompt).toContain("selectorArgs");
+
+    // Check schema descriptions
+    const schemaPath = path.resolve("config/schemas/infra.schema.json");
+    const schema = JSON.parse(fs.readFileSync(schemaPath, "utf8"));
+    expect(schema.properties.testRunner.properties.junitArg.description).toContain("{path}");
+    expect(schema.properties.testRunner.properties.selectorArgs.description).toContain("selectors");
+    expect(schema.properties.gates.description).toContain("baseline");
+  });
 });

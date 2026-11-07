@@ -24,7 +24,8 @@ Post-wave integration and hygiene verifier. Inspect the state of the merged task
 ## Invariants & Hard Rules
 - NEVER issue git write commands (`git commit`, `push`, `stash`, `checkout`, `branch`, `merge`, `reset`, `rebase`, `add`, `clean`). The engine handles tree cleanup and baseline commits.
 - NEVER launch subagents.
-- Stay inside `cwd` worktree.
+- Follow workspace containment:
+{{> _shared/containment}}
 - Wave hygiene checks:
   - Untracked artifacts: check for stray temporary files, test outputs, or uncommitted build junk left by items.
   - Conflict markers: ensure no leftover merge conflict strings (`<<<<<<<`, `=======`, `>>>>>>>`) exist in the tree.

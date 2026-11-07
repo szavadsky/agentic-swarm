@@ -265,6 +265,15 @@ export function loadPromptLibrary(opts: {
           /\{\{>\s*([a-zA-Z0-9_./-]+)\s*\}\}/g,
           (_m, inc) => loadAndResolveIncludes(inc, searchDirs, inMemoryOverrides)
         );
+        let finalBody = resolvedBody.trim();
+        if (!finalBody.includes("Workspace Containment")) {
+          try {
+            const containment = loadAndResolveIncludes("_shared/containment", searchDirs, inMemoryOverrides);
+            if (containment) {
+              finalBody = `${finalBody}\n\n${containment.trim()}`;
+            }
+          } catch {}
+        }
 
         const tools = Array.isArray(frontmatter.tools)
           ? (frontmatter.tools as string[])
@@ -275,7 +284,7 @@ export function loadPromptLibrary(opts: {
             : "";
 
         return {
-          body: resolvedBody.trim(),
+          body: finalBody,
           tools,
           description,
         };
@@ -286,9 +295,18 @@ export function loadPromptLibrary(opts: {
         /\{\{>\s*([a-zA-Z0-9_./-]+)\s*\}\}/g,
         (_m, inc) => loadAndResolveIncludes(inc, searchDirs, inMemoryOverrides)
       );
+      let finalBody = resolvedBody.trim();
+      if (!finalBody.includes("Workspace Containment")) {
+        try {
+          const containment = loadAndResolveIncludes("_shared/containment", searchDirs, inMemoryOverrides);
+          if (containment) {
+            finalBody = `${finalBody}\n\n${containment.trim()}`;
+          }
+        } catch {}
+      }
 
       return {
-        body: resolvedBody.trim(),
+        body: finalBody,
         tools: [],
         description: "",
       };

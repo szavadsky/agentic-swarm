@@ -33,7 +33,7 @@ import { runSeamHooks } from "./flows/seams.js";
 import { readYaml, writeYamlAtomic, readText } from "./records/io.js";
 import { listPending, classify, takenPaths } from "./steer.js";
 import { resolveRole } from "./config/roles.js";
-
+import { installShutdownHandlers } from "./shutdown.js";
 export interface EngineDeps {
   harness: Harness;
   repo: any;
@@ -292,10 +292,16 @@ export async function runTask(
   let taskWt: string | undefined;
   let parentBranch: string | undefined;
   let pipeline: PipelineConfig | undefined;
+
+  const uninstallShutdown = installShutdownHandlers(async () => {
+    if (taskDir) {
+      await repairInterruptedRecords(taskDir);
+    }
+  });
+
   try {
     const orchFolder = project.orchestrationFolder ?? ".factory";
     const intentPath = path.join(repo.mainRoot, orchFolder, task, "INTENT.md");
-
   // 1. Ensure task worktree (§7)
   const taskWtInfo = await ensureTaskWorktree(repo, task, {
     intentPath,
@@ -731,5 +737,7 @@ export async function runTask(
       exitCode: 1,
       summary: `Task ${task} error: ${err?.message ?? String(err)}`,
     };
+  } finally {
+    uninstallShutdown();
   }
 }

@@ -8,10 +8,11 @@ import { OmpNdjsonParser } from "./ndjson.js";
 import { classifyOmpOutcome } from "./classify.js";
 import { generateOmpConfigOverlay, writeOmpConfigOverlay } from "./overlay.js";
 import { createAjv, formatAjvErrors } from "../../core/config/ajv.js";
-
 import { resolveRuntimeDir } from "../../cli/lock.js";
+import { HeadTailBuffer } from "../../core/proc.js";
+import { registerChildGroup, unregisterChildGroup } from "../../core/shutdown.js";
 const ajv = createAjv();
-
+const MAX_STDERR_BYTES = 64 * 1024; // 64 KB
 /**
  * Strips YAML frontmatter from an agent definition body (§10, spike 2).
  */
@@ -226,6 +227,7 @@ export class OmpHarness implements Harness {
         cwd: run.cwd,
         stdout: "pipe",
         stderr: "pipe",
+        detached: true,
       });
     } catch (err: any) {
       return {
@@ -235,32 +237,47 @@ export class OmpHarness implements Harness {
       };
     }
 
-    // 6. Setup timeout handler with SIGTERM -> SIGKILL
+    if (proc.pid && proc.pid > 0) {
+      registerChildGroup(proc.pid);
+    }
+
+    const killGroup = (signal: "SIGTERM" | "SIGKILL") => {
+      if (proc.pid && proc.pid > 0) {
+        try {
+          process.kill(-proc.pid, signal);
+          return;
+        } catch (err: any) {
+          if (err?.code === "ESRCH") return;
+        }
+      }
+      try {
+        proc.kill(signal);
+      } catch {}
+    };
+
+    // 6. Setup timeout handler with SIGTERM -> SIGKILL on child's process group
     let killTimer: NodeJS.Timeout | undefined;
     const timeoutMs = run.timeoutSec != null && run.timeoutSec > 0
       ? run.timeoutSec * 1000
       : this.defaultTimeoutMs;
     const termTimer = setTimeout(() => {
       timedOut = true;
-      try {
-        proc.kill("SIGTERM");
-      } catch {}
+      killGroup("SIGTERM");
 
       killTimer = setTimeout(() => {
-        try {
-          proc.kill("SIGKILL");
-        } catch {}
+        killGroup("SIGKILL");
       }, 3000);
     }, timeoutMs);
-
     // 7. Parse stdout NDJSON
     const parser = new OmpNdjsonParser();
     const decoder = new TextDecoder();
     let stdoutBuffer = "";
+    let totalStdoutBytes = 0;
 
     const readStdout = async () => {
       if (!proc.stdout || typeof proc.stdout === "number") return;
       for await (const chunk of proc.stdout) {
+        totalStdoutBytes += chunk.length;
         stdoutBuffer += decoder.decode(chunk, { stream: true });
         const lines = stdoutBuffer.split("\n");
         stdoutBuffer = lines.pop() ?? "";
@@ -275,9 +292,12 @@ export class OmpHarness implements Harness {
 
     const readStderr = async () => {
       if (!proc.stderr || typeof proc.stderr === "number") return "";
-      return await new Response(proc.stderr).text();
+      const ring = new HeadTailBuffer(MAX_STDERR_BYTES);
+      for await (const chunk of proc.stderr) {
+        ring.push(Buffer.from(chunk));
+      }
+      return ring.toString();
     };
-
     let stderrText = "";
     let exitCode = 0;
     try {
@@ -289,6 +309,9 @@ export class OmpHarness implements Harness {
       stderrText = results[1];
       exitCode = results[2];
     } finally {
+      if (proc?.pid && proc.pid > 0) {
+        unregisterChildGroup(proc.pid);
+      }
       clearTimeout(termTimer);
       if (killTimer) clearTimeout(killTimer);
       try {
@@ -299,6 +322,7 @@ export class OmpHarness implements Harness {
     const parsed = parser.getResult();
     const sessionId = parsed.sessionId ?? run.session?.resume;
     const traceRef = sessionId ? this.findSessionTrace(sessionsDir, sessionId, parsed.sessionTimestamp) : undefined;
+    const transcriptBytes = traceRef && fs.existsSync(traceRef) ? fs.statSync(traceRef).size : undefined;
 
     // 8. Handle non-zero exit or timeout
     const stopReasonFailure = Boolean(
@@ -325,6 +349,8 @@ export class OmpHarness implements Harness {
         sessionId,
         traceRef,
         usage: parsed.usage,
+        transcriptBytes,
+        stdoutBytes: totalStdoutBytes,
       };
     }
 
@@ -354,6 +380,8 @@ export class OmpHarness implements Harness {
           traceRef,
           usage: parsed.usage,
           transient: false,
+          transcriptBytes,
+          stdoutBytes: totalStdoutBytes,
         };
       }
 
@@ -364,6 +392,8 @@ export class OmpHarness implements Harness {
           sessionId,
           traceRef,
           usage: parsed.usage,
+          transcriptBytes,
+          stdoutBytes: totalStdoutBytes,
         };
       }
 
@@ -376,6 +406,8 @@ export class OmpHarness implements Harness {
         traceRef,
         usage: parsed.usage,
         transient: false,
+        transcriptBytes,
+        stdoutBytes: totalStdoutBytes,
       };
     }
 
@@ -385,6 +417,8 @@ export class OmpHarness implements Harness {
       sessionId,
       traceRef,
       usage: parsed.usage,
+      transcriptBytes,
+      stdoutBytes: totalStdoutBytes,
     };
   }
 
@@ -427,25 +461,40 @@ export class OmpHarness implements Harness {
         cwd,
         stdout: "pipe",
         stderr: "pipe",
+        detached: true,
       });
     } catch (err: any) {
       try { if (fs.existsSync(promptPath)) fs.unlinkSync(promptPath); } catch {}
       throw new Error(`Failed to spawn omp complete: ${err.message}`);
     }
 
+    if (proc.pid && proc.pid > 0) {
+      registerChildGroup(proc.pid);
+    }
+
+    const killGroup = (signal: "SIGTERM" | "SIGKILL") => {
+      if (proc.pid && proc.pid > 0) {
+        try {
+          process.kill(-proc.pid, signal);
+          return;
+        } catch (err: any) {
+          if (err?.code === "ESRCH") return;
+        }
+      }
+      try {
+        proc.kill(signal);
+      } catch {}
+    };
+
     let timedOut = false;
     let killTimer: NodeJS.Timeout | undefined;
     const timeoutMs = c.timeoutMs ?? (c.timeoutSec != null && c.timeoutSec > 0 ? c.timeoutSec * 1000 : this.defaultTimeoutMs);
     const termTimer = setTimeout(() => {
       timedOut = true;
-      try {
-        proc.kill("SIGTERM");
-      } catch {}
+      killGroup("SIGTERM");
 
       killTimer = setTimeout(() => {
-        try {
-          proc.kill("SIGKILL");
-        } catch {}
+        killGroup("SIGKILL");
       }, 3000);
     }, timeoutMs);
 
@@ -470,9 +519,12 @@ export class OmpHarness implements Harness {
 
     const readStderr = async () => {
       if (!proc.stderr || typeof proc.stderr === "number") return "";
-      return await new Response(proc.stderr).text();
+      const ring = new HeadTailBuffer(MAX_STDERR_BYTES);
+      for await (const chunk of proc.stderr) {
+        ring.push(Buffer.from(chunk));
+      }
+      return ring.toString();
     };
-
     let stderrText = "";
     let exitCode = 0;
     try {
@@ -484,6 +536,9 @@ export class OmpHarness implements Harness {
       stderrText = results[1];
       exitCode = results[2];
     } finally {
+      if (proc?.pid && proc.pid > 0) {
+        unregisterChildGroup(proc.pid);
+      }
       clearTimeout(termTimer);
       if (killTimer) clearTimeout(killTimer);
       try {

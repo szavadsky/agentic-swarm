@@ -536,6 +536,25 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
     (c) => c === "red-test" || c === "test-diff" || pipeline.checks?.[c]?.phase === "before"
   );
   const afterChecksList = stepChecks.filter((c) => !beforeChecksList.includes(c));
+  // Derive testFirstCommit durably via git log on the newest ok test-first record's meta.yaml
+  let testFirstCommit: string | undefined;
+  const okTestFirstRecords = records.filter(
+    (r) => r.name === "test-first" && r.meta.status === "ok"
+  );
+  if (okTestFirstRecords.length > 0) {
+    okTestFirstRecords.sort((a, b) => b.seq - a.seq || b.attempt - a.attempt);
+    const newest = okTestFirstRecords[0]!;
+    const relTaskDir = taskWt ? path.relative(taskWt, taskDir) : path.basename(taskDir);
+    const metaCandidate = path.join(childWt, relTaskDir, "items", itemSlug, "steps", newest.dirName, "meta.yaml");
+    const relMetaPath = path.relative(childWt, metaCandidate);
+    try {
+      const logRes = await git(childWt, ["log", "-n", "1", "--format=%H", "--", relMetaPath]);
+      const sha = logRes.stdout.trim();
+      if (/^[0-9a-f]{40}$/i.test(sha)) {
+        testFirstCommit = sha;
+      }
+    } catch {}
+  }
 
   const checkCtx: CheckContext = {
     repo,
@@ -551,6 +570,7 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
     taskWt,
     target: lastDeveloperTarget,
     checkTimeoutSec: currentStep.timeoutSec,
+    testFirstCommit,
     limits,
     outputBytes: limits.checkOutputBytes ?? 4096,
   };
@@ -584,6 +604,7 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
             }
           }
           checkCtx.target = lastDeveloperTarget;
+          checkCtx.testFirstCommit = testFirstCommit;
           const results: CheckItemResult[] = [];
           let ok = true;
           for (const cName of afterChecksList) {

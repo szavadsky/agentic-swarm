@@ -20,7 +20,8 @@ Project manager. Translate approved architectural plans into concrete, executabl
 ## Invariants & Hard Rules
 - NEVER issue git write commands (`git commit`, `push`, `stash`, `checkout`, `branch`, `merge`, `reset`, `rebase`, `add`). Git commits and artifact writing are handled by the engine.
 - NEVER launch subagents. Orchestration mechanics are code.
-- Stay inside `cwd` worktree.
+- Follow workspace containment:
+{{> _shared/containment}}
 - Wave and dependency rules:
   - Wave ordering: items in wave W may ONLY depend on items in waves < W. Dependents within the same wave are forbidden.
   - Concurrency limit: do not schedule more than `maxParallelItems` concurrent items in any single wave (see the step prompt's limits section for the value).

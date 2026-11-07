@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { registerChildGroup, unregisterChildGroup } from "./shutdown.js";
 
 export interface RunProcessOptions {
   cmd: string | string[];
@@ -25,59 +26,80 @@ const STREAM_GRACE_MS = 100;
 const DEFAULT_STREAM_RING_BYTES = 1024 * 1024;
 
 /**
- * Caps output length by preserving head and tail with a truncation marker.
+ * Bounded head+tail buffer: keeps up to headBytes from the start and up to
+ * tailBytes from the end, dropping the middle. Total memory is strictly
+ * bounded by maxBytes at all times during streaming.
  */
-function capOutput(text: string, maxBytes: number): string {
-  if (!maxBytes || maxBytes <= 0) return text;
-  const buf = Buffer.from(text, "utf8");
-  if (buf.length <= maxBytes) return text;
+export class HeadTailBuffer {
+  private headChunks: Buffer[] = [];
+  private headBytes = 0;
+  private tailChunks: Buffer[] = [];
+  private tailBytes = 0;
+  private readonly maxHeadBytes: number;
+  private readonly maxTailBytes: number;
+  public totalBytes = 0;
 
-  const headBytes = Math.floor(maxBytes / 3);
-  const tailBytes = maxBytes - headBytes;
-  const truncatedBytes = buf.length - headBytes - tailBytes;
-
-  const headStr = buf.subarray(0, headBytes).toString("utf8");
-  const tailStr = buf.subarray(buf.length - tailBytes).toString("utf8");
-
-  return `${headStr}\n... [truncated ${truncatedBytes} bytes] ...\n${tailStr}`;
-}
-
-/**
- * Bounded tail buffer: keeps at most `capacity` bytes of the most recent
- * output so a verbose or never-ending stream cannot grow memory without limit.
- */
-class TailRing {
-  private chunks: Buffer[] = [];
-  private bytes = 0;
-  public droppedBytes = 0;
-
-  constructor(private readonly capacity: number) {}
+  constructor(public readonly maxBytes: number) {
+    this.maxHeadBytes = Math.max(1, Math.floor(maxBytes / 3));
+    this.maxTailBytes = Math.max(1, maxBytes - this.maxHeadBytes);
+  }
 
   public push(chunk: Buffer): void {
     if (chunk.length === 0) return;
-    this.chunks.push(chunk);
-    this.bytes += chunk.length;
-    while (this.bytes > this.capacity && this.chunks.length > 1) {
-      const head = this.chunks.shift()!;
-      this.bytes -= head.length;
-      this.droppedBytes += head.length;
+    this.totalBytes += chunk.length;
+
+    // 1. Fill head buffer if not yet full
+    if (this.headBytes < this.maxHeadBytes) {
+      const needed = this.maxHeadBytes - this.headBytes;
+      if (chunk.length <= needed) {
+        this.headChunks.push(chunk);
+        this.headBytes += chunk.length;
+        return;
+      }
+      this.headChunks.push(chunk.subarray(0, needed));
+      this.headBytes += needed;
+      chunk = chunk.subarray(needed);
     }
-    if (this.bytes > this.capacity) {
-      // Single chunk larger than capacity: keep its tail.
-      const only = this.chunks[0]!;
-      const excess = this.bytes - this.capacity;
-      this.chunks[0] = only.subarray(only.length - this.capacity);
-      this.bytes = this.capacity;
-      this.droppedBytes += excess;
+
+    // 2. Push remainder to tail ring
+    this.tailChunks.push(chunk);
+    this.tailBytes += chunk.length;
+    while (this.tailBytes > this.maxTailBytes && this.tailChunks.length > 1) {
+      const first = this.tailChunks.shift()!;
+      this.tailBytes -= first.length;
+    }
+    if (this.tailBytes > this.maxTailBytes) {
+      const only = this.tailChunks[0]!;
+      this.tailChunks[0] = only.subarray(only.length - this.maxTailBytes);
+      this.tailBytes = this.maxTailBytes;
     }
   }
 
   public toString(): string {
-    if (this.chunks.length === 0) return "";
-    return Buffer.concat(this.chunks, this.bytes).toString("utf8");
+    if (this.totalBytes === 0) return "";
+    if (this.totalBytes <= this.maxBytes) {
+      const allChunks = [...this.headChunks, ...this.tailChunks];
+      return Buffer.concat(allChunks, this.headBytes + this.tailBytes).toString("utf8");
+    }
+    const headStr = Buffer.concat(this.headChunks, this.headBytes).toString("utf8");
+    const tailStr = Buffer.concat(this.tailChunks, this.tailBytes).toString("utf8");
+    const dropped = this.totalBytes - this.headBytes - this.tailBytes;
+    return `${headStr}\n... [truncated ${dropped} bytes] ...\n${tailStr}`;
   }
 }
 
+/** Backward compatibility wrapper for capOutput */
+export function capOutput(text: string, maxBytes: number): string {
+  if (!maxBytes || maxBytes <= 0) return text;
+  const buf = Buffer.from(text, "utf8");
+  if (buf.length <= maxBytes) return text;
+  const htb = new HeadTailBuffer(maxBytes);
+  htb.push(buf);
+  return htb.toString();
+}
+
+/** Bounded tail buffer (kept for backwards compatibility). */
+export class TailRing extends HeadTailBuffer {}
 /**
  * Runs a process with process-group cleanup on timeout, bounded output
  * capture, and support for string shell command (via bash -lc) or argument
@@ -124,21 +146,14 @@ export function runProcess(options: RunProcessOptions): Promise<ProcessResult> {
 
     // The ring must hold at least maxOutputBytes so end-capping stays meaningful.
     const ringCapacity =
-      maxOutputBytes && maxOutputBytes > DEFAULT_STREAM_RING_BYTES
+      maxOutputBytes && maxOutputBytes > 0
         ? maxOutputBytes
         : DEFAULT_STREAM_RING_BYTES;
-    const stdoutRing = new TailRing(ringCapacity);
-    const stderrRing = new TailRing(ringCapacity);
+    const stdoutRing = new HeadTailBuffer(ringCapacity);
+    const stderrRing = new HeadTailBuffer(ringCapacity);
 
-    const finalizeStream = (ring: TailRing): string => {
-      let text = ring.toString();
-      if (ring.droppedBytes > 0) {
-        text = `... [truncated ${ring.droppedBytes} bytes of head output] ...\n${text}`;
-      }
-      if (maxOutputBytes) {
-        text = capOutput(text, maxOutputBytes);
-      }
-      return text;
+    const finalizeStream = (ring: HeadTailBuffer): string => {
+      return ring.toString();
     };
 
     let child: ReturnType<typeof spawn>;
@@ -158,13 +173,17 @@ export function runProcess(options: RunProcessOptions): Promise<ProcessResult> {
         durationMs: Date.now() - startTime,
       });
     }
-
+    if (child.pid && child.pid > 0) {
+      registerChildGroup(child.pid);
+    }
     let timeoutTimer: NodeJS.Timeout | undefined;
     let graceTimer: NodeJS.Timeout | undefined;
 
     const finish = () => {
       if (settled) return;
-      settled = true;
+      if (child.pid && child.pid > 0) {
+        unregisterChildGroup(child.pid);
+      }
       if (timeoutTimer) clearTimeout(timeoutTimer);
       if (graceTimer) clearTimeout(graceTimer);
       resolve({
@@ -209,11 +228,27 @@ export function runProcess(options: RunProcessOptions): Promise<ProcessResult> {
       timeoutTimer = setTimeout(() => {
         timedOut = true;
         // Kill the whole process group
-        try {
-          if (child.pid) {
-            process.kill(-child.pid, "SIGKILL");
+        // Kill the whole process group: SIGTERM first, then SIGKILL
+        if (child.pid && child.pid > 0) {
+          try {
+            process.kill(-child.pid, "SIGTERM");
+          } catch {
+            try {
+              child.kill("SIGTERM");
+            } catch {}
           }
-        } catch {
+          setTimeout(() => {
+            if (child.pid && child.pid > 0) {
+              try {
+                process.kill(-child.pid, "SIGKILL");
+              } catch {
+                try {
+                  child.kill("SIGKILL");
+                } catch {}
+              }
+            }
+          }, 500);
+        } else {
           try {
             child.kill("SIGKILL");
           } catch {}

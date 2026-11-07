@@ -3,6 +3,10 @@ import type { OmpParsedResult } from "./types.js";
 /**
  * Parser for streaming NDJSON protocol emitted by `omp --mode json`.
  */
+const MAX_ASSISTANT_TEXT_CHARS = 256 * 1024; // 256 KB
+const MAX_ERRORS = 50;
+const MAX_ERROR_LEN = 2048;
+
 export class OmpNdjsonParser {
   private sessionId?: string;
   private sessionTimestamp?: string;
@@ -13,15 +17,22 @@ export class OmpNdjsonParser {
   private outputTokens = 0;
   private costUsd = 0;
   private stopReason?: string;
-  private rawEvents: unknown[] = [];
   private errors: string[] = [];
-
   /**
    * Ingests a single NDJSON line. Non-JSON lines (e.g. wall time metrics) are safely skipped.
    */
   public feedLine(line: string): void {
     const trimmed = line.trim();
     if (!trimmed) return;
+
+    // Fast skip for multi-MB tool execution traces (e.g. bash loop ASTs) that do not contain yield
+    if (
+      trimmed.length > 65536 &&
+      !trimmed.includes('"yield"') &&
+      (trimmed.includes('"tool_execution_') || trimmed.includes('"toolResult"'))
+    ) {
+      return;
+    }
 
     let event: any;
     try {
@@ -30,9 +41,6 @@ export class OmpNdjsonParser {
       // Skip non-JSON lines emitted by CLI wrapper (e.g. "Wall time: ...")
       return;
     }
-
-    this.rawEvents.push(event);
-
     switch (event.type) {
       case "session":
         if (event.id) this.sessionId = event.id;
@@ -55,9 +63,13 @@ export class OmpNdjsonParser {
             }
           }
 
-          // Overwrite with the latest turn's text (§2, §4, spike 2)
-          this.finalAssistantText = currentTurnText.join("");
-
+          // Overwrite with the latest turn's text, bounded to MAX_ASSISTANT_TEXT_CHARS (§2, §4)
+          let turnText = currentTurnText.join("");
+          if (turnText.length > MAX_ASSISTANT_TEXT_CHARS) {
+            const half = Math.floor(MAX_ASSISTANT_TEXT_CHARS / 2);
+            turnText = `${turnText.slice(0, half)}\n...[truncated]...\n${turnText.slice(-half)}`;
+          }
+          this.finalAssistantText = turnText;
           if (event.message.usage) {
             const u = event.message.usage;
             this.inputTokens += u.input || 0;
@@ -108,8 +120,9 @@ export class OmpNdjsonParser {
         break;
 
       case "error":
-        if (event.error) {
-          this.errors.push(typeof event.error === "string" ? event.error : JSON.stringify(event.error));
+        if (event.error && this.errors.length < MAX_ERRORS) {
+          const errStr = typeof event.error === "string" ? event.error : JSON.stringify(event.error);
+          this.errors.push(errStr.slice(0, MAX_ERROR_LEN));
         }
         break;
     }
@@ -141,7 +154,7 @@ export class OmpNdjsonParser {
         costUsd: this.costUsd > 0 ? Number(this.costUsd.toFixed(6)) : 0,
       },
       stopReason: this.stopReason,
-      rawEvents: this.rawEvents,
+      rawEvents: [],
       errors: this.errors,
     };
   }

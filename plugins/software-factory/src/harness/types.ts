@@ -44,6 +44,8 @@ export type AgentOutcome =
       sessionId?: string;
       traceRef?: string;
       usage?: Usage;
+      transcriptBytes?: number;
+      stdoutBytes?: number;
     }
   | {
       ok: false;
@@ -54,4 +56,6 @@ export type AgentOutcome =
       usage?: Usage;
       transient?: boolean;
       sessionLost?: boolean;
+      transcriptBytes?: number;
+      stdoutBytes?: number;
     };
