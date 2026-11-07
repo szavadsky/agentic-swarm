@@ -20,6 +20,7 @@ export interface CheckContext {
   kind?: string;
   item?: string;
   task?: string;
+  taskDir?: string;
   taskWt?: string;
   target?: DeveloperTarget;
   checkTimeoutSec?: number;

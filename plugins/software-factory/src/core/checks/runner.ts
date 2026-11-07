@@ -11,6 +11,8 @@ import { parseBranch } from "../git/naming.js";
 import { gateTimedOut, runGates } from "./gates.js";
 import { parseJunit, buildTargetCommand, shellQuote } from "./junit.js";
 import { tailCap, type CheckContext, type CheckResult } from "./types.js";
+import { getClock, detectSuspend } from "../clock.js";
+import { appendJournal } from "../journal.js";
 
 const DEFAULT_TEST_GLOBS = ["test/**", "tests/**", "**/*.test.*", "**/*.spec.*"];
 const DEFAULT_PROD_GLOBS = ["src/**", "lib/**", "*.ts", "*.js", "*.mjs", "*.cjs", "*.py", "*.go", "*.rs", "*.java", "*.c", "*.cpp", "*.h", "pkg/**", "app/**"];
@@ -106,6 +108,40 @@ function findMatchingCase(
  * Runs a mechanical check by name (built-in or custom command check from pipeline.checks).
  */
 export async function runCheck(name: string, ctx: CheckContext): Promise<CheckResult> {
+  const clock = getClock();
+  const startWall = clock.now();
+  const startMono = clock.monotonic();
+
+  let res = await executeCheck(name, ctx);
+
+  if (!res.ok) {
+    const { suspendDetected, gapMs } = detectSuspend(startWall, startMono, clock);
+    if (suspendDetected) {
+      const taskDir =
+        ctx.taskDir ??
+        (ctx.task && ctx.taskWt
+          ? path.join(ctx.taskWt, ctx.project.orchestrationFolder ?? ".factory", ctx.task)
+          : undefined);
+      if (taskDir && fs.existsSync(taskDir)) {
+        try {
+          await appendJournal(taskDir, {
+            type: "system_suspend_detected",
+            task: ctx.task,
+            item: ctx.item,
+            check: name,
+            gapMs: Math.round(gapMs),
+          });
+        } catch {}
+      }
+      // Gates/checks interrupted by a suspend-related failure are re-run once rather than recorded red
+      res = await executeCheck(name, ctx);
+    }
+  }
+
+  return res;
+}
+
+async function executeCheck(name: string, ctx: CheckContext): Promise<CheckResult> {
   switch (name) {
     case "gates":
       return checkGates(ctx);

@@ -1,6 +1,9 @@
+import fs from "node:fs";
+import path from "node:path";
 import { runProcess } from "../proc.js";
 import type { GateBaselineEntry } from "../artifacts.js";
 import { tailCap, type CheckContext } from "./types.js";
+import { appendJournal } from "../journal.js";
 
 /** Marker embedded in gate details when the gate command timed out. */
 export const GATE_TIMED_OUT_MARKER = "gate timed out";
@@ -39,12 +42,36 @@ export async function runGates(
     const startTime = Date.now();
 
     while (attempt <= retries) {
-      const res = await runProcess({
+      let res = await runProcess({
         cmd: gate.command,
         cwd: ctx.wt,
         timeoutSec,
         maxOutputBytes: ctx.outputBytes,
       });
+      if ((res.timedOut || res.code !== 0) && res.suspendDetected) {
+        const taskDir =
+          ctx.taskDir ??
+          (ctx.task && ctx.taskWt
+            ? path.join(ctx.taskWt, ctx.project.orchestrationFolder ?? ".factory", ctx.task)
+            : undefined);
+        if (taskDir && fs.existsSync(taskDir)) {
+          try {
+            await appendJournal(taskDir, {
+              type: "system_suspend_detected",
+              task: ctx.task,
+              gate: gate.id,
+              gapMs: Math.round(res.suspendGapMs ?? 0),
+            });
+          } catch {}
+        }
+        // Interrupted by suspend: re-run once without recording failure or consuming attempt
+        res = await runProcess({
+          cmd: gate.command,
+          cwd: ctx.wt,
+          timeoutSec,
+          maxOutputBytes: ctx.outputBytes,
+        });
+      }
 
       lastOutput = (res.stdout + (res.stderr ? "\n" + res.stderr : "")).trim();
 

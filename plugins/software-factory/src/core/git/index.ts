@@ -36,7 +36,7 @@ export {
   resetScratch,
 } from "./worktrees.js";
 
-export { commitAll, headOf, isAncestor } from "./commit.js";
+export { commitAll, headOf, isAncestor, areFilesCommitted } from "./commit.js";
 
 export { captureHead, enforceHead } from "./guard.js";
 export type { EnforceHeadResult } from "./guard.js";

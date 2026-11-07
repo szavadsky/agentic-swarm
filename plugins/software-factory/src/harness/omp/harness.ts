@@ -11,6 +11,7 @@ import { createAjv, formatAjvErrors } from "../../core/config/ajv.js";
 import { resolveRuntimeDir } from "../../cli/lock.js";
 import { HeadTailBuffer } from "../../core/proc.js";
 import { registerChildGroup, unregisterChildGroup } from "../../core/shutdown.js";
+import { getClock, createActiveTimer, detectSuspend } from "../../core/clock.js";
 const ajv = createAjv();
 const MAX_STDERR_BYTES = 64 * 1024; // 64 KB
 /**
@@ -255,19 +256,25 @@ export class OmpHarness implements Harness {
       } catch {}
     };
 
-    // 6. Setup timeout handler with SIGTERM -> SIGKILL on child's process group
+    // 6. Setup active monotonic timeout handler with SIGTERM -> SIGKILL on child's process group
+    const clock = getClock();
+    const startWall = clock.now();
+    const startMono = clock.monotonic();
     let killTimer: NodeJS.Timeout | undefined;
     const timeoutMs = run.timeoutSec != null && run.timeoutSec > 0
       ? run.timeoutSec * 1000
       : this.defaultTimeoutMs;
-    const termTimer = setTimeout(() => {
-      timedOut = true;
-      killGroup("SIGTERM");
-
-      killTimer = setTimeout(() => {
-        killGroup("SIGKILL");
-      }, 3000);
-    }, timeoutMs);
+    const activeTimer = createActiveTimer(
+      timeoutMs,
+      () => {
+        timedOut = true;
+        killGroup("SIGTERM");
+        killTimer = setTimeout(() => {
+          killGroup("SIGKILL");
+        }, 3000);
+      },
+      clock
+    );
     // 7. Parse stdout NDJSON
     const parser = new OmpNdjsonParser();
     const decoder = new TextDecoder();
@@ -312,7 +319,7 @@ export class OmpHarness implements Harness {
       if (proc?.pid && proc.pid > 0) {
         unregisterChildGroup(proc.pid);
       }
-      clearTimeout(termTimer);
+      activeTimer.cancel();
       if (killTimer) clearTimeout(killTimer);
       try {
         if (fs.existsSync(promptPath)) fs.unlinkSync(promptPath);
@@ -333,6 +340,7 @@ export class OmpHarness implements Harness {
     );
 
     if (timedOut || exitCode !== 0 || stopReasonFailure) {
+      const { suspendDetected } = detectSuspend(startWall, startMono, clock);
       const classification = classifyOmpOutcome({
         exitCode: timedOut ? 143 : stopReasonFailure && exitCode === 0 ? 1 : exitCode,
         stderr: stderrText,
@@ -340,7 +348,9 @@ export class OmpHarness implements Harness {
         resumeRequested: Boolean(run.session?.resume),
         timedOut,
       });
-
+      if (suspendDetected) {
+        classification.transient = true;
+      }
       return {
         ok: false,
         error: classification.error ?? `Process failed with exit code ${exitCode}`,
@@ -488,15 +498,21 @@ export class OmpHarness implements Harness {
 
     let timedOut = false;
     let killTimer: NodeJS.Timeout | undefined;
+    const clock = getClock();
+    const startWall = clock.now();
+    const startMono = clock.monotonic();
     const timeoutMs = c.timeoutMs ?? (c.timeoutSec != null && c.timeoutSec > 0 ? c.timeoutSec * 1000 : this.defaultTimeoutMs);
-    const termTimer = setTimeout(() => {
-      timedOut = true;
-      killGroup("SIGTERM");
-
-      killTimer = setTimeout(() => {
-        killGroup("SIGKILL");
-      }, 3000);
-    }, timeoutMs);
+    const activeTimer = createActiveTimer(
+      timeoutMs,
+      () => {
+        timedOut = true;
+        killGroup("SIGTERM");
+        killTimer = setTimeout(() => {
+          killGroup("SIGKILL");
+        }, 3000);
+      },
+      clock
+    );
 
     const parser = new OmpNdjsonParser();
     const decoder = new TextDecoder();
@@ -539,7 +555,7 @@ export class OmpHarness implements Harness {
       if (proc?.pid && proc.pid > 0) {
         unregisterChildGroup(proc.pid);
       }
-      clearTimeout(termTimer);
+      activeTimer.cancel();
       if (killTimer) clearTimeout(killTimer);
       try {
         if (fs.existsSync(promptPath)) fs.unlinkSync(promptPath);

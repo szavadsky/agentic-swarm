@@ -8,6 +8,7 @@ import type {
   PipelineConfig,
   ProjectConfig,
   TriageArtifact,
+  StepMetaArtifact,
 } from "../artifacts.js";
 import type { Harness } from "../../harness/types.js";
 import { git } from "../git/exec.js";
@@ -18,9 +19,11 @@ import {
   commitAll,
   headOf,
   changedLines,
+  areFilesCommitted,
 } from "../git/index.js";
 import { writeYamlAtomic, readYaml, readText } from "../records/io.js";
 import { verifyCitations } from "../records/citations.js";
+import { parseStepRecordDirName } from "../records/step-record.js";
 import { runAgentStep } from "./step-runner.js";
 import { runSeamHooks } from "./seams.js";
 import { appendJournal } from "../journal.js";
@@ -57,6 +60,160 @@ export interface IngestResult {
 }
 
 /**
+ * Determines whether triage has completed and is committed with an ok record.
+ */
+export async function isTriageDone(taskDir: string, taskWt?: string): Promise<boolean> {
+  const triagePath = path.join(taskDir, "triage.yaml");
+  const contextPath = path.join(taskDir, "context.yaml");
+
+  if (!fs.existsSync(triagePath) || !fs.existsSync(contextPath)) {
+    return false;
+  }
+  try {
+    const triage = await readYaml<TriageArtifact>(triagePath);
+    if (!triage || !triage.kind) return false;
+    const context = await readYaml<ContextArtifact>(contextPath);
+    if (!context) return false;
+  } catch {
+    return false;
+  }
+
+  // Check for an ok triage step record in runs/
+  const runsDir = path.join(taskDir, "runs");
+  if (!fs.existsSync(runsDir)) return false;
+  const entries = await fs.promises.readdir(runsDir);
+  const triageRecords = entries
+    .filter((e) => /^(\d{3})-triage-a(\d+)$/.test(e))
+    .sort();
+  if (triageRecords.length === 0) return false;
+
+  let hasOkRecord = false;
+  let okMetaPath = "";
+  for (const rec of triageRecords) {
+    const metaPath = path.join(runsDir, rec, "meta.yaml");
+    if (fs.existsSync(metaPath)) {
+      try {
+        const meta = await readYaml<StepMetaArtifact>(metaPath);
+        if (meta && meta.status === "ok") {
+          hasOkRecord = true;
+          okMetaPath = metaPath;
+          break;
+        }
+      } catch {}
+    }
+  }
+  if (!hasOkRecord) return false;
+
+  if (taskWt) {
+    const committed = await areFilesCommitted(taskWt, [triagePath, contextPath, okMetaPath]);
+    if (!committed) return false;
+  }
+
+  return true;
+}
+
+/**
+ * Determines whether infra and gates-baseline have completed and are committed.
+ * For epic child tasks: inherited infra counts.
+ */
+export async function isInfraDone(taskDir: string, taskWt?: string): Promise<boolean> {
+  const infraPath = path.join(taskDir, "infra.yaml");
+  const baselinePath = path.join(taskDir, "gates-baseline.yaml");
+
+  if (fs.existsSync(infraPath) && fs.existsSync(baselinePath)) {
+    try {
+      const infra = await readYaml<InfraArtifact>(infraPath);
+      const baseline = await readYaml<GatesBaselineArtifact>(baselinePath);
+      if (infra && baseline) {
+        if (!taskWt) return true;
+        const committed = await areFilesCommitted(taskWt, [infraPath, baselinePath]);
+        if (committed) return true;
+      }
+    } catch {}
+  }
+
+  // Epic child tasks: inherited infra counts
+  const parentTaskDir = path.dirname(taskDir);
+  if (parentTaskDir && parentTaskDir !== taskDir && parentTaskDir.includes(".factory")) {
+    const parentInfra = path.join(parentTaskDir, "infra.yaml");
+    const parentBaseline = path.join(parentTaskDir, "gates-baseline.yaml");
+    if (fs.existsSync(parentInfra) && fs.existsSync(parentBaseline)) {
+      try {
+        const pInfra = await readYaml<InfraArtifact>(parentInfra);
+        const pBaseline = await readYaml<GatesBaselineArtifact>(parentBaseline);
+        if (pInfra && pBaseline) {
+          if (!taskWt) return true;
+          const committed = await areFilesCommitted(taskWt, [parentInfra, parentBaseline]);
+          if (committed) return true;
+        }
+      } catch {}
+    }
+  }
+
+  return false;
+}
+
+export function getNextStepAttempt(runsDir: string, stepId: string, maxInterruptions = 3): number {
+  if (!fs.existsSync(runsDir)) return 1;
+  try {
+    const entries = fs.readdirSync(runsDir);
+    const matching = entries
+      .map(parseStepRecordDirName)
+      .filter((p): p is { seq: number; name: string; attempt: number } => p !== null && p.name === stepId)
+      .sort((a, b) => b.seq - a.seq || b.attempt - a.attempt);
+
+    if (matching.length === 0) return 1;
+    const latest = matching[0]!;
+    const metaPath = path.join(
+      runsDir,
+      `${String(latest.seq).padStart(3, "0")}-${stepId}-a${latest.attempt}`,
+      "meta.yaml"
+    );
+    let status: string | undefined;
+    if (fs.existsSync(metaPath)) {
+      try {
+        const meta = readYamlSync(metaPath) as any;
+        status = meta?.status;
+      } catch {}
+    }
+
+    if (status === "interrupted") {
+      let interruptions = 0;
+      for (const m of matching) {
+        const mPath = path.join(
+          runsDir,
+          `${String(m.seq).padStart(3, "0")}-${stepId}-a${m.attempt}`,
+          "meta.yaml"
+        );
+        try {
+          const meta = readYamlSync(mPath) as any;
+          if (meta?.status === "interrupted") interruptions++;
+        } catch {}
+      }
+      if (interruptions < maxInterruptions) {
+        return latest.attempt;
+      } else {
+        return latest.attempt + 1;
+      }
+    } else if (status === "error") {
+      return latest.attempt;
+    } else if (status === "ok") {
+      return latest.attempt;
+    } else {
+      return latest.attempt + 1;
+    }
+  } catch {
+    return 1;
+  }
+}
+
+function readYamlSync(filePath: string): unknown {
+  const content = fs.readFileSync(filePath, "utf8");
+  const yaml = require("yaml");
+  return yaml.parse(content);
+}
+
+/**
  * Runs the ingest flow: triage -> citation verification -> infra -> routing (§8.1).
  */
 export async function runIngest(params: IngestParams): Promise<IngestResult> {
@@ -81,17 +238,11 @@ export async function runIngest(params: IngestParams): Promise<IngestResult> {
     intentText = await readText(intentPath);
   }
 
-  // 2. Scratch worktree on topic/{task}--simple from task tip (§8.1)
   const parentBranch = `topic/${task}`;
-  const scratch = await resetScratch(
-    repo,
-    { branch: parentBranch, path: taskWt },
-    "simple"
-  );
-
   const runsDir = path.join(taskDir, "runs");
   await fs.promises.mkdir(runsDir, { recursive: true });
 
+  const triageDone = await isTriageDone(taskDir, taskWt);
   let triage: TriageArtifact | undefined;
   let rawTriageOutput: any;
   let finalCitations: Citation[] = [];
@@ -100,31 +251,34 @@ export async function runIngest(params: IngestParams): Promise<IngestResult> {
 
   const triagePath = path.join(taskDir, "triage.yaml");
   const contextPath = path.join(taskDir, "context.yaml");
+  let scratch: { branch: string; path: string } | undefined;
 
-  if (fs.existsSync(triagePath)) {
-    try {
-      triage = await readYaml<TriageArtifact>(triagePath);
-      if (fs.existsSync(contextPath)) {
-        contextArtifact = await readYaml<ContextArtifact>(contextPath);
-        finalCitations = Array.isArray(contextArtifact)
-          ? contextArtifact
-          : (contextArtifact.citations ?? []);
-      }
-    } catch {
-      // ignore
+  if (triageDone) {
+    triage = await readYaml<TriageArtifact>(triagePath);
+    if (fs.existsSync(contextPath)) {
+      contextArtifact = await readYaml<ContextArtifact>(contextPath);
+      finalCitations = Array.isArray(contextArtifact)
+        ? contextArtifact
+        : (contextArtifact.citations ?? []);
     }
   }
-
   if (!triage) {
+    scratch = await resetScratch(
+      repo,
+      { branch: parentBranch, path: taskWt },
+      "simple"
+    );
     // 3. Triage turn (persistent session) (§8.1)
+    const triageAttempt = getNextStepAttempt(runsDir, "triage", pipeline.limits?.maxInterruptions ?? 3);
     const triageStepRes = await runAgentStep({
       task,
       stepId: "triage",
       stepFragment: "steps/triage",
       agent: "triage",
       role: "workhorse",
+      attempt: triageAttempt,
       sessionMode: "reuse",
-      cwd: scratch.path,
+      cwd: scratch ? scratch.path : taskWt,
       taskWt,
       taskDir,
       recordsDir: runsDir,
@@ -149,71 +303,77 @@ export async function runIngest(params: IngestParams): Promise<IngestResult> {
           risks: rawTriageOutput.risks,
         };
         await writeYamlAtomic(path.join(taskDir, "triage.yaml"), triage);
+
+        // Parse and verify citations right here so context.yaml lands in the same commit (§6.2)
+        let citations: Citation[] = rawTriageOutput?.citations ?? [];
+        if (rawTriageOutput?.context?.citations) {
+          citations = rawTriageOutput.context.citations;
+        }
+        const vRes = verifyCitations(citations, scratch!.path);
+        finalCitations = vRes.valid;
+        if (vRes.failed.length > 0) {
+          await appendJournal(taskDir, {
+            type: "citations_dropped",
+            dropped: vRes.failed.map((f) => ({
+              file: f.citation.file,
+              reason: f.reason,
+              message: f.message,
+            })),
+          });
+        }
+        contextArtifact = { citations: finalCitations };
+        await writeYamlAtomic(path.join(taskDir, "context.yaml"), contextArtifact);
       },
     });
 
     if (!triageStepRes.ok || !triage) {
-      await removeWorktree(repo, scratch.path);
+      if (scratch) await removeWorktree(repo, scratch.path);
       throw new Error(`Triage step failed: ${triageStepRes.meta.error || "no triage output produced"}`);
     }
 
     triageSessionId = triageStepRes.sessionId;
-
-    // Parse citations
-    let citations: Citation[] = rawTriageOutput?.citations ?? [];
-    if (rawTriageOutput?.context?.citations) {
-      citations = rawTriageOutput.context.citations;
-    }
-
-    // 4. Citation verification (§8.1.2)
-    const vRes = verifyCitations(citations, scratch.path);
-    finalCitations = vRes.valid;
-    if (vRes.failed.length > 0) {
-      await appendJournal(taskDir, {
-        type: "citations_dropped",
-        dropped: vRes.failed.map((f) => ({
-          file: f.citation.file,
-          reason: f.reason,
-          message: f.message,
-        })),
-      });
-    }
-
-    contextArtifact = { citations: finalCitations };
-    await writeYamlAtomic(path.join(taskDir, "context.yaml"), contextArtifact);
     await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
   }
-  // 5. Infra if infra.yaml is missing (§8.1.3)
+  // 5. Infra if infra is not done (§8.1.3)
+  const infraDone = await isInfraDone(taskDir, taskWt);
   const infraPath = path.join(taskDir, "infra.yaml");
+  const baselinePath = path.join(taskDir, "gates-baseline.yaml");
   let infra: InfraArtifact | undefined;
   let baselineArtifact: GatesBaselineArtifact | undefined;
 
-  if (fs.existsSync(infraPath)) {
-    try {
+  if (infraDone) {
+    if (fs.existsSync(infraPath)) {
       infra = await readYaml<InfraArtifact>(infraPath);
-    } catch (err: any) {
-      if (err?.code !== "ENOENT") {
-        throw new Error(`Corrupt infra artifact at ${infraPath}: ${err?.message ?? err}`);
-      }
     }
-    const baselinePath = path.join(taskDir, "gates-baseline.yaml");
     if (fs.existsSync(baselinePath)) {
-      try {
-        baselineArtifact = await readYaml<GatesBaselineArtifact>(baselinePath);
-      } catch (err: any) {
-        if (err?.code !== "ENOENT") {
-          throw new Error(`Corrupt gates baseline at ${baselinePath}: ${err?.message ?? err}`);
+      baselineArtifact = await readYaml<GatesBaselineArtifact>(baselinePath);
+    }
+    // Inherited infra if direct is absent
+    if (!infra) {
+      const parentTaskDir = path.dirname(taskDir);
+      if (parentTaskDir && parentTaskDir !== taskDir) {
+        const pInfra = path.join(parentTaskDir, "infra.yaml");
+        const pBaseline = path.join(parentTaskDir, "gates-baseline.yaml");
+        if (fs.existsSync(pInfra)) {
+          infra = await readYaml<InfraArtifact>(pInfra);
+          await fs.promises.copyFile(pInfra, infraPath);
+        }
+        if (fs.existsSync(pBaseline)) {
+          baselineArtifact = await readYaml<GatesBaselineArtifact>(pBaseline);
+          await fs.promises.copyFile(pBaseline, baselinePath);
         }
       }
     }
   } else {
     // Run infra step
+    const infraAttempt = getNextStepAttempt(runsDir, "infra", pipeline.limits?.maxInterruptions ?? 3);
     const infraStepRes = await runAgentStep({
       task,
       stepId: "infra",
       stepFragment: "steps/infra",
       agent: "infra",
       role: "workhorse",
+      attempt: infraAttempt,
       cwd: taskWt,
       taskWt,
       taskDir,
@@ -265,7 +425,7 @@ export async function runIngest(params: IngestParams): Promise<IngestResult> {
     });
 
     if (!infraStepRes.ok || !infra) {
-      await removeWorktree(repo, scratch.path);
+      if (scratch) await removeWorktree(repo, scratch.path);
       throw new Error(`Infra step failed: ${infraStepRes.meta.error || "no infra output produced"}`);
     }
     await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
@@ -273,7 +433,13 @@ export async function runIngest(params: IngestParams): Promise<IngestResult> {
 
   // 6. Routing (§8.1.4)
   if (triage.kind === "simple") {
-    // Resumed triage turn (implement) in the same worktree (§8.1.4)
+    if (!scratch) {
+      scratch = await resetScratch(
+        repo,
+        { branch: parentBranch, path: taskWt },
+        "simple"
+      );
+    }
     const implRes = await runAgentStep({
       task,
       stepId: "simple-implement",
@@ -340,12 +506,11 @@ export async function runIngest(params: IngestParams): Promise<IngestResult> {
         await mergeChildIntoParent(
           repo,
           taskWt,
-          scratch.branch,
+          scratch!.branch,
           "factory: merge simple implementation"
         );
       });
-      await removeWorktree(repo, scratch.path);
-      await appendJournal(taskDir, { type: "simple_merged", task });
+      await removeWorktree(repo, scratch!.path);
       return {
         kind: "simple",
         triage,
@@ -376,7 +541,7 @@ export async function runIngest(params: IngestParams): Promise<IngestResult> {
       await commitAll(repo, taskWt, "factory: convert simple task to no-behavior item");
 
       // Remove scratch worktree registration while keeping the branch
-      await removeWorktree(repo, scratch.path);
+      await removeWorktree(repo, scratch!.path);
       return {
         kind: "simple",
         triage,
@@ -389,7 +554,7 @@ export async function runIngest(params: IngestParams): Promise<IngestResult> {
   }
 
   // Non-simple: scratch worktree removed (§8.1.4)
-  await removeWorktree(repo, scratch.path);
+  if (scratch) await removeWorktree(repo, scratch.path);
 
   return {
     kind: triage.kind,

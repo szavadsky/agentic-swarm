@@ -27,7 +27,7 @@ import { deriveTaskState, materializeStateYaml, refreshStateYaml, type DerivedTa
 import { deriveItemState } from "./derive/item.js";
 import { tickItemMachine } from "./flows/item-machine.js";
 import { mergeItem } from "./flows/merge-path.js";
-import { runIngest } from "./flows/ingest.js";
+import { runIngest, isTriageDone, isInfraDone } from "./flows/ingest.js";
 import { runIteration } from "./flows/iteration.js";
 import { runSeamHooks } from "./flows/seams.js";
 import { readYaml, writeYamlAtomic, readText } from "./records/io.js";
@@ -229,6 +229,15 @@ export async function runChildTask(
   const childTaskDir = path.join(childWt, orchFolder, parentTaskSlug, epicSlug);
   await fs.promises.mkdir(childTaskDir, { recursive: true });
 
+  // Epic child tasks inherit infra from parent task (§8.1.3)
+  const parentInfra = path.join(parent.taskDir, "infra.yaml");
+  const parentBaseline = path.join(parent.taskDir, "gates-baseline.yaml");
+  if (fs.existsSync(parentInfra) && !fs.existsSync(path.join(childTaskDir, "infra.yaml"))) {
+    await fs.promises.copyFile(parentInfra, path.join(childTaskDir, "infra.yaml"));
+  }
+  if (fs.existsSync(parentBaseline) && !fs.existsSync(path.join(childTaskDir, "gates-baseline.yaml"))) {
+    await fs.promises.copyFile(parentBaseline, path.join(childTaskDir, "gates-baseline.yaml"));
+  }
   // 2. Child shares root budget and mailbox (§8.6, §8.8)
   const pipeline = await pipelineFor(childTaskDir);
   const budgetTracker = opts?.budgetTracker ?? new BudgetTracker(pipeline.budget);
@@ -504,10 +513,13 @@ export async function runTask(
     }
 
     // d. Act: Phase progression
-    // Phase 1: Ingest if triage is missing
+    // Phase 1: Ingest (resumable per sub-step)
+    const triageDone = await isTriageDone(taskDir, taskWt);
+    const infraDone = await isInfraDone(taskDir, taskWt);
+
     const triagePath = path.join(taskDir, "triage.yaml");
     let triageArtifact: TriageArtifact | undefined;
-    if (fs.existsSync(triagePath)) {
+    if (triageDone && fs.existsSync(triagePath)) {
       try {
         triageArtifact = await readYaml<TriageArtifact>(triagePath);
       } catch (err: any) {
@@ -521,9 +533,9 @@ export async function runTask(
       path.join(taskDir, "items", "simple", "assignment.yaml")
     );
     const needsIngest =
-      !triageArtifact ||
-      (triageArtifact.kind === "simple" && !simpleAssignmentExists);
-
+      !triageDone ||
+      !infraDone ||
+      (triageArtifact?.kind === "simple" && !simpleAssignmentExists);
     if (needsIngest) {
       const ingestRes = await runIngest({
         task,
@@ -657,6 +669,11 @@ export async function runTask(
         exitCode: 1,
         summary: `Simple task ${task} failed during converted no-behavior execution`,
       };
+    }
+    // Invariant: never start the architect before infra is done
+    const infraReady = await isInfraDone(taskDir, taskWt);
+    if (!infraReady) {
+      throw new Error(`Cannot start architect: infra step is not done for task ${task}`);
     }
 
     // Phase 2: Iterations / Waves

@@ -29,6 +29,7 @@ import { commitAll } from "../git/commit.js";
 import { git } from "../git/exec.js";
 import { appendJournal } from "../journal.js";
 import { registerActiveStep, unregisterActiveStep } from "../shutdown.js";
+import { getClock, detectSuspend } from "../clock.js";
 import type { Semaphore } from "../mutex.js";
 import type { BudgetTracker } from "../budget.js";
 
@@ -380,10 +381,29 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
 
   let outcome: AgentOutcome;
   const releaseSemaphore = turnsSemaphore ? await turnsSemaphore.acquire() : () => {};
+  const clock = getClock();
+  const turnStartWall = clock.now();
+  const turnStartMono = clock.monotonic();
   try {
     outcome = await harness.run(agentRun);
   } finally {
     releaseSemaphore();
+  }
+  if (!outcome.ok) {
+    const { suspendDetected, gapMs } = detectSuspend(turnStartWall, turnStartMono, clock);
+    if (suspendDetected) {
+      await appendJournal(taskDir, {
+        type: "system_suspend_detected",
+        task,
+        item,
+        step: stepId,
+        gapMs: Math.round(gapMs),
+      });
+      outcome = {
+        ...outcome,
+        transient: true,
+      };
+    }
   }
 
   // Check transcript / stdout size against limit threshold (§4)
@@ -455,6 +475,8 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
     await new Promise((resolve) => setTimeout(resolve, backoffMs));
 
     const rel = turnsSemaphore ? await turnsSemaphore.acquire() : () => {};
+    const retryStartWall = clock.now();
+    const retryStartMono = clock.monotonic();
     try {
       outcome = await harness.run({
         ...agentRun,
@@ -464,8 +486,23 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
     } finally {
       rel();
     }
+    if (!outcome.ok) {
+      const { suspendDetected, gapMs } = detectSuspend(retryStartWall, retryStartMono, clock);
+      if (suspendDetected) {
+        await appendJournal(taskDir, {
+          type: "system_suspend_detected",
+          task,
+          item,
+          step: stepId,
+          gapMs: Math.round(gapMs),
+        });
+        outcome = {
+          ...outcome,
+          transient: true,
+        };
+      }
+    }
   }
-
   // 9. HEAD guard after turn (§7)
   const { branchChanged, headMoved, foreignCommit } = await enforceHead(repo, cwd, headBefore);
   if (foreignCommit) {

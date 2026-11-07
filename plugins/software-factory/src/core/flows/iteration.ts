@@ -35,6 +35,23 @@ import { PersistentAgent } from "../sessions.js";
 import { Semaphore } from "../mutex.js";
 import type { BudgetTracker } from "../budget.js";
 
+async function hasOkRecord(recordsDir: string, stepPrefix: string): Promise<boolean> {
+  if (!fs.existsSync(recordsDir)) return false;
+  try {
+    const entries = await fs.promises.readdir(recordsDir);
+    for (const ent of entries) {
+      if (ent.includes(stepPrefix)) {
+        const metaPath = path.join(recordsDir, ent, "meta.yaml");
+        if (fs.existsSync(metaPath)) {
+          const meta = await readYaml<StepMetaArtifact>(metaPath);
+          if (meta && meta.status === "ok") return true;
+        }
+      }
+    }
+  } catch {}
+  return false;
+}
+
 export interface IterationParams {
   task: string;
   taskDir: string;
@@ -180,7 +197,14 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
     const entries = await fs.promises.readdir(taskDir);
     for (const name of entries) {
       if (name.startsWith("closeup-") && name.endsWith(".yaml")) {
-        existingCloseups++;
+        const m = /^closeup-(\d+)\.yaml$/.exec(name);
+        if (m) {
+          const cIter = parseInt(m[1]!, 10);
+          const closeupOk = await hasOkRecord(runsDir, `architect-closeup-${cIter}`);
+          if (closeupOk) {
+            existingCloseups++;
+          }
+        }
       }
     }
   }
@@ -274,9 +298,16 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
   const contextYaml = fs.existsSync(path.join(taskDir, "context.yaml"))
     ? await readText(path.join(taskDir, "context.yaml"))
     : "";
-  const infraYaml = fs.existsSync(path.join(taskDir, "infra.yaml"))
-    ? await readText(path.join(taskDir, "infra.yaml"))
-    : "";
+  let infraYaml = "";
+  const infraPath = path.join(taskDir, "infra.yaml");
+  if (fs.existsSync(infraPath)) {
+    infraYaml = await readText(infraPath);
+  } else {
+    const parentInfra = path.join(path.dirname(taskDir), "infra.yaml");
+    if (fs.existsSync(parentInfra)) {
+      infraYaml = await readText(parentInfra);
+    }
+  }
 
   // 2. Fresh plan or resume plan (§8.4.2, Finding 12)
   const planDir = path.join(taskDir, "plan");
@@ -284,7 +315,11 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
   const planPath = path.join(planDir, `plan-${iteration}.yaml`);
   let plan: PlanArtifact | undefined;
 
-  if (fs.existsSync(planPath)) {
+  const planOk =
+    (await hasOkRecord(runsDir, `architect-plan-${iteration}`)) ||
+    (await hasOkRecord(runsDir, `architect-revise-${iteration}`));
+
+  if (fs.existsSync(planPath) && planOk) {
     try {
       plan = await readYaml<PlanArtifact>(planPath);
     } catch (err: any) {
@@ -293,7 +328,6 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
       }
     }
   }
-
   if (!plan) {
     // Architect generates plan-N (§8.4.2)
     const planStepRes = await runAgentStep({
@@ -370,11 +404,37 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
     await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
   }
 
-  // 3. Plan review rounds (§8.4.3, Finding 12: restart safe)
-  let reviewRound = 1;
-  const reviewFingerprints: string[] = [];
+  // Check if PM edits are already completed
+  const editsPath = path.join(planDir, `edits-${iteration}.0.yaml`);
+  let edits: PlanEditsArtifact | undefined;
+  let editsDone = false;
 
-  while (reviewRound <= maxPlanReviewRounds) {
+  if (fs.existsSync(editsPath)) {
+    try {
+      edits = await readYaml<PlanEditsArtifact>(editsPath);
+      const pmOk = await hasOkRecord(runsDir, `pm-edits-${iteration}`);
+      const assignmentsExist =
+        edits &&
+        Array.isArray(edits.items) &&
+        edits.items.every((it) =>
+          fs.existsSync(path.join(taskDir, "items", it.slug, "assignment.yaml"))
+        );
+      if (pmOk && assignmentsExist) {
+        editsDone = true;
+      }
+    } catch (err: any) {
+      if (err?.code !== "ENOENT") {
+        throw new Error(`Corrupt plan edits file at ${editsPath}: ${err?.message ?? err}`);
+      }
+    }
+  }
+
+  // 3. Plan review rounds (§8.4.3, Finding 12: restart safe)
+  if (!editsDone) {
+    let reviewRound = 1;
+    const reviewFingerprints: string[] = [];
+
+    while (reviewRound <= maxPlanReviewRounds) {
     // Check if review round record already exists
     const revRecordName = `plan-review-${iteration}-${reviewRound}`;
     const revStepRes = await runAgentStep({
@@ -480,25 +540,12 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
     }
     reviewRound++;
     await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
-  }
-
-  // 4. PM edits (§8.4.4, Finding 12 & 13)
-  const editsPath = path.join(planDir, `edits-${iteration}.0.yaml`);
-  let edits: PlanEditsArtifact | undefined;
-
-  if (fs.existsSync(editsPath)) {
-    try {
-      edits = await readYaml<PlanEditsArtifact>(editsPath);
-    } catch (err: any) {
-      if (err?.code !== "ENOENT") {
-        throw new Error(`Corrupt plan edits file at ${editsPath}: ${err?.message ?? err}`);
-      }
     }
   }
 
+  // 4. PM edits (§8.4.4, Finding 12 & 13)
   const { kindsDescription, validKindNames } = buildKindsPromptVar(pipeline, !isChildTask);
-  if (!edits) {
-
+  if (!editsDone) {
     const pmStepRes = await runAgentStep({
       task,
       stepId: `pm-edits-${iteration}`,
@@ -596,6 +643,15 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
     await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
   }
 
+  if (!edits) {
+    return {
+      iteration,
+      status: "failed",
+      plan,
+      architectSessionId,
+    };
+  }
+
   // 5. Waves execution (§8.4.5, Finding 24: restrict itemSlugs to current iteration's edits)
   let currentIterationItems = edits.items.map((i) => i.slug);
   let amendmentCount = 0;
@@ -640,7 +696,10 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
     // Check if wave close-up already completed for this wave (Finding 24)
     const waveArtifactPath = path.join(taskDir, "waves", `wave-${iteration}.${w}.yaml`);
     if (fs.existsSync(waveArtifactPath)) {
-      continue;
+      const waveOk = await hasOkRecord(runsDir, `architect-wave-report-${iteration}-${w}`);
+      if (waveOk) {
+        continue;
+      }
     }
 
     // Collect item states

@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { registerChildGroup, unregisterChildGroup } from "./shutdown.js";
+import { getClock, createActiveTimer, detectSuspend } from "./clock.js";
 
 export interface RunProcessOptions {
   cmd: string | string[];
@@ -17,6 +18,8 @@ export interface ProcessResult {
   stderr: string;
   timedOut: boolean;
   durationMs: number;
+  suspendDetected?: boolean;
+  suspendGapMs?: number;
 }
 
 /** Grace period after process exit (or timeout kill) for stdio to flush. */
@@ -113,7 +116,10 @@ export function runProcess(options: RunProcessOptions): Promise<ProcessResult> {
   const { cmd, cwd, env, timeoutSec, maxOutputBytes, stdin } = options;
 
   return new Promise((resolve) => {
-    const startTime = Date.now();
+    const clock = getClock();
+    const startWall = clock.now();
+    const startMono = clock.monotonic();
+    const startTime = startWall;
     let timedOut = false;
     let settled = false;
     let exitCode: number | null = null;
@@ -176,7 +182,7 @@ export function runProcess(options: RunProcessOptions): Promise<ProcessResult> {
     if (child.pid && child.pid > 0) {
       registerChildGroup(child.pid);
     }
-    let timeoutTimer: NodeJS.Timeout | undefined;
+    let activeTimer: { cancel: () => void } | undefined;
     let graceTimer: NodeJS.Timeout | undefined;
 
     const finish = () => {
@@ -184,15 +190,18 @@ export function runProcess(options: RunProcessOptions): Promise<ProcessResult> {
       if (child.pid && child.pid > 0) {
         unregisterChildGroup(child.pid);
       }
-      if (timeoutTimer) clearTimeout(timeoutTimer);
+      if (activeTimer) activeTimer.cancel();
       if (graceTimer) clearTimeout(graceTimer);
+      const { suspendDetected, gapMs } = detectSuspend(startWall, startMono, clock);
       resolve({
         code: exitCode,
         signal: exitSignal,
         stdout: finalizeStream(stdoutRing),
         stderr: finalizeStream(stderrRing),
         timedOut,
-        durationMs: Date.now() - startTime,
+        durationMs: clock.now() - startWall,
+        suspendDetected,
+        suspendGapMs: gapMs,
       });
     };
 
@@ -225,36 +234,39 @@ export function runProcess(options: RunProcessOptions): Promise<ProcessResult> {
     }
 
     if (timeoutSec && timeoutSec > 0) {
-      timeoutTimer = setTimeout(() => {
-        timedOut = true;
-        // Kill the whole process group
-        // Kill the whole process group: SIGTERM first, then SIGKILL
-        if (child.pid && child.pid > 0) {
-          try {
-            process.kill(-child.pid, "SIGTERM");
-          } catch {
+      activeTimer = createActiveTimer(
+        timeoutSec * 1000,
+        () => {
+          timedOut = true;
+          // Kill the whole process group: SIGTERM first, then SIGKILL
+          if (child.pid && child.pid > 0) {
             try {
-              child.kill("SIGTERM");
+              process.kill(-child.pid, "SIGTERM");
+            } catch {
+              try {
+                child.kill("SIGTERM");
+              } catch {}
+            }
+            setTimeout(() => {
+              if (child.pid && child.pid > 0) {
+                try {
+                  process.kill(-child.pid, "SIGKILL");
+                } catch {
+                  try {
+                    child.kill("SIGKILL");
+                  } catch {}
+                }
+              }
+            }, 500);
+          } else {
+            try {
+              child.kill("SIGKILL");
             } catch {}
           }
-          setTimeout(() => {
-            if (child.pid && child.pid > 0) {
-              try {
-                process.kill(-child.pid, "SIGKILL");
-              } catch {
-                try {
-                  child.kill("SIGKILL");
-                } catch {}
-              }
-            }
-          }, 500);
-        } else {
-          try {
-            child.kill("SIGKILL");
-          } catch {}
-        }
-        scheduleGraceFinish();
-      }, timeoutSec * 1000);
+          scheduleGraceFinish();
+        },
+        clock
+      );
     }
 
     child.on("exit", (code, signal) => {
@@ -270,14 +282,17 @@ export function runProcess(options: RunProcessOptions): Promise<ProcessResult> {
     child.on("error", (err) => {
       if (settled) return;
       settled = true;
-      if (timeoutTimer) clearTimeout(timeoutTimer);
+      if (activeTimer) activeTimer.cancel();
       if (graceTimer) clearTimeout(graceTimer);
+      const { suspendDetected, gapMs } = detectSuspend(startWall, startMono, clock);
       resolve({
         code: 1,
         stdout: finalizeStream(stdoutRing),
         stderr: err.message,
         timedOut,
-        durationMs: Date.now() - startTime,
+        durationMs: clock.now() - startWall,
+        suspendDetected,
+        suspendGapMs: gapMs,
       });
     });
   });
