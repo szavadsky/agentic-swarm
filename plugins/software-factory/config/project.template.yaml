@@ -12,12 +12,11 @@ adrFolder: docs/adr
 
 # Root directory for task and item git worktrees.
 # MUST live outside the main repository working tree (sibling directory).
-# NOTE: `../repo.factory-wt` is a literal placeholder, not a template expression:
-# replace `repo` with your repository's directory name (e.g. `../myapp.factory-wt`).
+# `factory init` replaces `repo` with the repository's directory name.
 worktreeRoot: ../repo.factory-wt
 
 # Script hints for the infra agent to derive automated gates and build steps.
-# These are HINTS only (free-form strings); the infra agent probes and declares
+# These are HINTS only (free-form strings, any key); the infra agent probes and declares
 # the real commands in infra.yaml. Uncomment the block and adjust to match your
 # toolchain, or leave commented when the repo has no such step.
 # scripts:

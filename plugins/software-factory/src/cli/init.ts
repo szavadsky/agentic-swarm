@@ -34,7 +34,11 @@ export async function runInit(opts: InitOptions): Promise<number> {
   }
 
   fs.mkdirSync(targetDir, { recursive: true });
-  fs.copyFileSync(templatePath, targetFile);
+  const template = fs.readFileSync(templatePath, "utf8");
+  fs.writeFileSync(
+    targetFile,
+    template.replace("worktreeRoot: ../repo.factory-wt", `worktreeRoot: ../${path.basename(repoRoot)}.factory-wt`),
+  );
 
   if (!opts.silent) {
     console.log(`[factory init] Created .factory/project.yaml from template`);

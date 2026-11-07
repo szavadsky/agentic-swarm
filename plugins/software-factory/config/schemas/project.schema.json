@@ -22,13 +22,8 @@
     },
     "scripts": {
       "type": "object",
-      "properties": {
-        "setup": { "type": "string" },
-        "compile": { "type": "string" },
-        "lint": { "type": "string" },
-        "test": { "type": "string" }
-      },
-      "additionalProperties": false
+      "description": "Free-form command hints for the infra agent; common keys: setup, compile, lint, test; any other key (e.g. integration) is passed through.",
+      "additionalProperties": { "type": "string" }
     },
     "paths": {
       "type": "object",

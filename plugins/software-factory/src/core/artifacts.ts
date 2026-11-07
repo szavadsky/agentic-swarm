@@ -12,12 +12,8 @@ export interface ProjectConfig {
   orchestrationFolder: string;
   adrFolder?: string;
   worktreeRoot: string;
-  scripts?: {
-    setup?: string;
-    compile?: string;
-    lint?: string;
-    test?: string;
-  };
+  /** Free-form command hints for the infra agent (setup, compile, lint, test, …). */
+  scripts?: Record<string, string>;
   paths?: {
     tests?: string | string[];
     prod?: string | string[];

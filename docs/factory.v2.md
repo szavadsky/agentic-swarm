@@ -86,13 +86,21 @@ Kinds of tasks, kind of feedback required, orchestration for each task , mechnic
       pipeline config, criteria, orchestration steps. default bs override prompt templates, possible extra agents, extra skill folders 
 project config: location of orcehstrationFolder, folderForPreservedADRs, scripts for compile/test/lint, extra skills folders
 17. launch: a bun command, prepare/check prompts /env, launch harness, omp once per ietration (as need to preserve irc)
-18. concerns tracking ("see something, say something"; partly in v1, missing in v2)
+18. concerns + remarkable decisions funnel, human-involvement modes ("see something, say something"; partly in v1, missing in v2)
      - every agent output may carry structured `concerns[]`: {kind: tech-debt|assumption|blocker|risk|question, summary, detail, location?, severity: low|medium|high, affects?: item/epic/plan refs}
      - engine aggregates them in the task orchestration folder (`concerns/`, stable id by fingerprint, dedup across steps/attempts, status open|dismissed|routed|resolved, source step record)
      - the step's reviewer (workhorse class, except architect output which goes to plan-reviewer) triages new concerns with the same disposition vocabulary as review suggestions plus `dismiss` (not real: logged with reason, kept in the folder, no further action)
      - routing: blocker affecting a dependent item → dependent item blocked + architect consult; `architect` → next architect turn (wave report / next iteration plan input); `human-*` → steer mailbox per reviewPolicy; tech debt → plan tech-debt list
      - wave/plan close-ups list open concerns; close-up reviewers re-triage them; architect resolves or carries them; status/state.yaml shows counts
      - configurable like other dispositions (which agents may raise, which dispositions are allowed per reviewer, severity thresholds)
+     - besides concerns, agents report remarkable decisions/tradeoffs (what was chosen, alternatives, why) in structured output; same aggregation/triage as concerns
+     - funnel: worker agents → workhorse reviewer (confirm/dismiss, condense) → epic architect → [saga architect] → human; every level passes up less detail than it receives and never more text than the code it summarizes; each level may resolve, steer, or propagate up. In a saga, epic-level concerns/decisions propagate to the saga architect, which reviews them and steers epics or propagates to the human
+     - ADRs are marked blocking or non-blocking; blocking = needs human decision per the active mode; remarkable = below the blocking threshold, reported (mailbox digest), never waits
+     - human-involvement modes = config presets (pipeline config + prompt fragments for reviewer/architect criteria, shipped as default config examples):
+       - `autonomous`: the human is consulted blocking only for the portion still blocked after everything unblocked is done; blocked items and remarkable findings (confirmed by the architect) appear in the mailbox as they are found
+       - `principal`: blocking on stack/layer decisions, external interfaces and config shapes, roles of major classes, performance and edge-case handling, deviations and clean-code exceptions
+       - `detailed`: additionally any change to external interfaces/configs (not only shapes), major internal interfaces, test-scenario level for major internal layers and classes
+     - fire-tested in the same self-host launches (mode switched via config between launches) — the mailbox must show only funnelled, confirmed, low-noise items
 19. workspaces, merging, lifecycle (prefer omp over DIY)
      - workspace isolation via omp's configurable isolation backend by default; the engine's own git worktree management stays only as a config option (`isolation: omp | engine`); a spike settles which omp mechanics (backend config, branch/commit retention on failure, cwd, merge-back) fit
      - preflight verifies: compatible omp version + config (overlay keys, isolation backend usable — a real throwaway isolation round-trip), every configured model/role resolvable, target git repo state (clean, branches/worktrees consistent with records), harness binaries
