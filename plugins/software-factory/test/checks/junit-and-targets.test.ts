@@ -183,7 +183,7 @@ fi
 
     const cmd = buildTargetCommand(
       infra,
-      { selectors: ["test_special name", "test_b"] },
+      { selectors: ["test_special name", "test_b"], expectRed: ["test_special name", "test_b"] },
       "/tmp/out with space/junit.xml"
     );
 
@@ -198,7 +198,7 @@ fi
     fs.writeFileSync(path.join(tmpRepo.dir, "test_fail.flag"), "1", "utf8");
 
     const ctx = makeContext({
-      target: { expectRed: ["test_math.test_add"] },
+      target: { selectors: ["test_math"], expectRed: ["test_math.test_add"] },
     });
 
     const res = await runCheck("target-red", ctx);
@@ -209,7 +209,7 @@ fi
   it("target-red rejects collection errors and missing ids", async () => {
     // 1. Missing test id
     const ctxMissing = makeContext({
-      target: { expectRed: ["test_nonexistent"] },
+      target: { selectors: ["test_nonexistent"], expectRed: ["test_nonexistent"] },
     });
     const resMissing = await runCheck("target-red", ctxMissing);
     expect(resMissing.ok).toBe(false);
@@ -218,7 +218,7 @@ fi
     // 2. Collection error
     fs.writeFileSync(path.join(tmpRepo.dir, "collection-error.flag"), "1", "utf8");
     const ctxError = makeContext({
-      target: { expectRed: ["test_math.test_add"] },
+      target: { selectors: ["test_math"], expectRed: ["test_math.test_add"] },
     });
     const resError = await runCheck("target-red", ctxError);
     expect(resError.ok).toBe(false);
@@ -233,7 +233,7 @@ fi
     if (fs.existsSync(colFlag)) fs.unlinkSync(colFlag);
 
     const ctx = makeContext({
-      target: { selectors: ["test_math"] },
+      target: { selectors: ["test_math"], expectRed: ["test_math.test_add"] },
     });
 
     const res = await runCheck("target-green", ctx);
@@ -255,7 +255,7 @@ fi
     // Case 1: Real red-test -> tests pass WITH prod code, but FAIL when prod restored to testFirstCommit!
     const ctx = makeContext({
       testFirstCommit: testFirstSha,
-      target: { expectRed: ["test_math.test_add"] },
+      target: { selectors: ["test_math"], expectRed: ["test_math.test_add"] },
     });
 
     const res = await runCheck("red-test", ctx);
@@ -286,5 +286,190 @@ exit 0
     const tautologyRes = await runCheck("red-test", ctx);
     expect(tautologyRes.ok).toBe(false);
     expect(tautologyRes.summary).toContain("passes even without production code changes");
+  });
+
+  it("target-red matches pytest-style node ids against junit ids", async () => {
+    // Runner reports classname="test_math" name="test_add"; declare pytest node id instead
+    fs.writeFileSync(path.join(tmpRepo.dir, "test_fail.flag"), "1", "utf8");
+
+    const ctx = makeContext({
+      // junit id file is fake-runner based: test_math.test_add
+      target: { selectors: ["tests/test_math.py::test_add"], expectRed: ["tests/test_math.py::test_add"] },
+    });
+
+    const res = await runCheck("target-red", ctx);
+    expect(res.ok).toBe(true);
+  });
+
+  it("target commands time out with a clear summary", async () => {
+    // Gate target that hangs: bounded by limits.gateTimeoutSec
+    const ctxGate = makeContext({
+      target: { gate: "slow" },
+      infra: {
+        setup: [],
+        gates: [{ id: "slow", command: "sleep 5" }],
+        testRunner: { command: "true" },
+      },
+      limits: { gateTimeoutSec: 1 },
+    });
+    const resGate = await runCheck("target-red", ctxGate);
+    expect(resGate.ok).toBe(false);
+    expect(resGate.summary).toContain("timed out");
+
+    // Standard selector target that hangs
+    const hangScript = path.join(tmpRepo.dir, "hang-runner.sh");
+    fs.writeFileSync(hangScript, "#!/bin/sh\nsleep 5\n", { mode: 0o755 });
+    const ctxHang = makeContext({
+      target: { selectors: ["test_math"], expectRed: ["test_math.test_add"] },
+      infra: {
+        setup: [],
+        gates: [],
+        testRunner: { command: `sh "${hangScript}"`, junitArg: "--junitxml={path}" },
+      },
+      limits: { gateTimeoutSec: 1 },
+    });
+    const resHang = await runCheck("target-green", ctxHang);
+    expect(resHang.ok).toBe(false);
+    expect(resHang.summary).toContain("timed out");
+  });
+
+  it("red-test handles bootstrap gate/custom targets without expectRed", async () => {
+    // Gate target that is red (non-zero) -> passes; green gate -> fails
+    const ctxRed = makeContext({ target: { gate: "failing-gate" } });
+    ctxRed.infra = {
+      setup: [],
+      gates: [{ id: "failing-gate", command: "false" }],
+      testRunner: { command: "true" },
+    };
+    const resRed = await runCheck("red-test", ctxRed);
+    expect(resRed.ok).toBe(true);
+    expect(resRed.summary).toContain("failed as expected");
+
+    const ctxGreen = makeContext({ target: { gate: "passing-gate" } });
+    ctxGreen.infra = {
+      setup: [],
+      gates: [{ id: "passing-gate", command: "true" }],
+      testRunner: { command: "true" },
+    };
+    const resGreen = await runCheck("red-test", ctxGreen);
+    expect(resGreen.ok).toBe(false);
+    expect(resGreen.summary).toContain("expected red");
+
+    // Custom command target: red passes, green fails
+    const ctxCustomRed = makeContext({ target: { command: "false", customTarget: true } });
+    const resCustomRed = await runCheck("red-test", ctxCustomRed);
+    expect(resCustomRed.ok).toBe(true);
+
+    const ctxCustomGreen = makeContext({ target: { command: "true", customTarget: true } });
+    const resCustomGreen = await runCheck("red-test", ctxCustomGreen);
+    expect(resCustomGreen.ok).toBe(false);
+  });
+
+  it("red-test runs infra.setup in the temp worktree", async () => {
+    fs.mkdirSync(path.join(tmpRepo.dir, "src"), { recursive: true });
+    fs.writeFileSync(path.join(tmpRepo.dir, "src", "math.txt"), "stub\n", "utf8");
+    const testFirstSha = (await commitAll(repo, tmpRepo.dir, "test-first commit"))!;
+    fs.writeFileSync(path.join(tmpRepo.dir, "src", "math.txt"), "implemented\n", "utf8");
+    await commitAll(repo, tmpRepo.dir, "develop: implement feature");
+
+    // Setup writes a marker file; the runner requires it before producing XML
+    fs.writeFileSync(
+      runnerScript,
+      `#!/bin/sh
+JUNIT_FILE=""
+for arg in "$@"; do
+  case "$arg" in
+    --junitxml=*) JUNIT_FILE="\${arg#--junitxml=}" ;;
+  esac
+done
+if [ ! -f "setup-marker.txt" ]; then
+  exit 3
+fi
+if grep -q "implemented" src/math.txt 2>/dev/null; then
+  cat <<'EOF' > "$JUNIT_FILE"
+<testsuite name="tests" tests="1" failures="0">
+  <testcase classname="test_math" name="test_add" />
+</testsuite>
+EOF
+  exit 0
+else
+  cat <<'EOF' > "$JUNIT_FILE"
+<testsuite name="tests" tests="1" failures="1">
+  <testcase classname="test_math" name="test_add">
+    <failure message="AssertionError">red</failure>
+  </testcase>
+</testsuite>
+EOF
+  exit 1
+fi
+`,
+      { mode: 0o755 }
+    );
+    await commitAll(repo, tmpRepo.dir, "setup-dependent runner");
+
+    const ctx = makeContext({
+      testFirstCommit: testFirstSha,
+      target: { selectors: ["test_math"], expectRed: ["test_math.test_add"] },
+      infra: {
+        setup: ["touch setup-marker.txt"],
+        gates: [],
+        testRunner: { command: `sh "${runnerScript}"`, junitArg: "--junitxml={path}" },
+      },
+    });
+    const res = await runCheck("red-test", ctx);
+    expect(res.ok).toBe(true);
+    expect(res.summary).toContain("red-test passed");
+  });
+
+  it("red-test restores renamed prod files (old path back, new path gone)", async () => {
+    fs.mkdirSync(path.join(tmpRepo.dir, "src"), { recursive: true });
+    fs.writeFileSync(path.join(tmpRepo.dir, "src", "old.txt"), "stub\n", "utf8");
+    const testFirstSha = (await commitAll(repo, tmpRepo.dir, "test-first commit"))!;
+
+    // Rename + implement in the develop step
+    await git(tmpRepo.dir, ["mv", "src/old.txt", "src/new.txt"]);
+    fs.writeFileSync(path.join(tmpRepo.dir, "src", "new.txt"), "implemented\n", "utf8");
+    await commitAll(repo, tmpRepo.dir, "develop: rename and implement");
+
+    // Runner passes iff the new (implemented) path exists — i.e. iff red-test
+    // failed to delete it when restoring prod to the test-first commit.
+    fs.writeFileSync(
+      runnerScript,
+      `#!/bin/sh
+JUNIT_FILE=""
+for arg in "$@"; do
+  case "$arg" in
+    --junitxml=*) JUNIT_FILE="\${arg#--junitxml=}" ;;
+  esac
+done
+if [ -f "src/new.txt" ]; then
+  cat <<'EOF' > "$JUNIT_FILE"
+<testsuite name="tests" tests="1" failures="0">
+  <testcase classname="test_math" name="test_add" />
+</testsuite>
+EOF
+  exit 0
+else
+  cat <<'EOF' > "$JUNIT_FILE"
+<testsuite name="tests" tests="1" failures="1">
+  <testcase classname="test_math" name="test_add">
+    <failure message="AssertionError">red</failure>
+  </testcase>
+</testsuite>
+EOF
+  exit 1
+fi
+`,
+      { mode: 0o755 }
+    );
+    await commitAll(repo, tmpRepo.dir, "rename-aware runner");
+
+    const ctx = makeContext({
+      testFirstCommit: testFirstSha,
+      target: { selectors: ["test_math"], expectRed: ["test_math.test_add"] },
+    });
+    const res = await runCheck("red-test", ctx);
+    expect(res.ok).toBe(true);
+    expect(res.summary).toContain("red-test passed");
   });
 });

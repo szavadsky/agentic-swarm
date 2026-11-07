@@ -7,7 +7,7 @@ export class OmpNdjsonParser {
   private sessionId?: string;
   private sessionTimestamp?: string;
   private cwd?: string;
-  private assistantTextParts: string[] = [];
+  private finalAssistantText = "";
   private yieldData?: unknown;
   private inputTokens = 0;
   private outputTokens = 0;
@@ -43,9 +43,10 @@ export class OmpNdjsonParser {
       case "turn_end":
         if (event.message?.role === "assistant") {
           const contents = event.message.content || [];
+          const currentTurnText: string[] = [];
           for (const part of contents) {
             if (part.type === "text" && part.text) {
-              this.assistantTextParts.push(part.text);
+              currentTurnText.push(part.text);
             } else if (
               part.type === "toolCall" &&
               (part.name === "yield" || part.name?.endsWith(":yield"))
@@ -53,6 +54,9 @@ export class OmpNdjsonParser {
               this.yieldData = part.arguments?.data !== undefined ? part.arguments.data : part.arguments;
             }
           }
+
+          // Overwrite with the latest turn's text (§2, §4, spike 2)
+          this.finalAssistantText = currentTurnText.join("");
 
           if (event.message.usage) {
             const u = event.message.usage;
@@ -129,7 +133,7 @@ export class OmpNdjsonParser {
       sessionId: this.sessionId,
       sessionTimestamp: this.sessionTimestamp,
       cwd: this.cwd,
-      finalAssistantText: this.assistantTextParts.join(""),
+      finalAssistantText: this.finalAssistantText,
       yieldData: this.yieldData,
       usage: {
         inputTokens: this.inputTokens,

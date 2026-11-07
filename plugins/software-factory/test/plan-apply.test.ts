@@ -23,11 +23,6 @@ describe("plan/apply: applyEdits", () => {
         title: "Complex SIMD routine",
         escalate: true, // outline flagged for escalation
       },
-      {
-        slug: "auth-epic",
-        kind: "epic",
-        title: "Authentication subsystem",
-      },
     ],
     epics: [
       {

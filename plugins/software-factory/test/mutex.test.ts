@@ -43,10 +43,46 @@ describe("Async synchronization primitives (§2)", () => {
     };
 
     await Promise.all([task("a"), task("a"), task("b"), task("b")]);
-
     // Within same key, concurrency is exactly 1
     expect(maxA).toBe(1);
     expect(maxB).toBe(1);
+  });
+
+  it("KeyedMutex removes idle key entries after the last waiter completes", async () => {
+    const keyed = new KeyedMutex();
+
+    await keyed.runExclusive("only-key", async () => {
+      expect(keyed.activeKeys).toBe(1);
+    });
+    expect(keyed.activeKeys).toBe(0);
+
+    // Entries survive while waiters are queued, then drain to zero.
+    const gate = Promise.all([
+      keyed.runExclusive("hot", async () => {
+        await new Promise((resolve) => setTimeout(resolve, 30));
+      }),
+      keyed.runExclusive("hot", async () => {}),
+      keyed.runExclusive("other", async () => {
+        await new Promise((resolve) => setTimeout(resolve, 30));
+      }),
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(keyed.activeKeys).toBe(2);
+    await gate;
+    expect(keyed.activeKeys).toBe(0);
+
+    // A fresh lock on a cleaned-up key still serializes correctly.
+    const order: number[] = [];
+    await Promise.all([
+      keyed.runExclusive("only-key", async () => {
+        order.push(1);
+      }),
+      keyed.runExclusive("only-key", async () => {
+        order.push(2);
+      }),
+    ]);
+    expect(order).toEqual([1, 2]);
+    expect(keyed.activeKeys).toBe(0);
   });
 
   it("Semaphore restricts active concurrency to maxConcurrency limit", async () => {

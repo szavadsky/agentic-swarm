@@ -9,21 +9,8 @@ import type {
 import {
   writeTextAtomic,
   writeYamlAtomic,
-  readText,
   readYaml,
 } from "./io.js";
-
-/**
- * Formats directory name for a step record: `{seq:03}-{name}-a{n}` (e.g. `001-develop-a1`)
- */
-export function formatStepRecordDirName(
-  seq: number,
-  name: string,
-  attempt: number
-): string {
-  const paddedSeq = String(seq).padStart(3, "0");
-  return `${paddedSeq}-${name}-a${attempt}`;
-}
 
 /**
  * Parses directory name into seq, name, attempt.
@@ -76,6 +63,7 @@ export interface FinishStepRecordParams {
   endedAt?: string;
   usage?: StepUsage;
   error?: string;
+  traceRef?: string;
   outputData?: unknown;
   checksData?: ChecksResultArtifact;
 }
@@ -88,7 +76,7 @@ export interface FinishStepRecordParams {
 export async function finishStepRecord(
   params: FinishStepRecordParams
 ): Promise<StepMetaArtifact> {
-  const { recordDir, status, endedAt, usage, error, outputData, checksData } =
+  const { recordDir, status, endedAt, usage, error, traceRef, outputData, checksData } =
     params;
 
   const metaPath = path.join(recordDir, "meta.yaml");
@@ -106,6 +94,7 @@ export async function finishStepRecord(
     endedAt: endedAt ?? new Date().toISOString(),
     usage: usage ?? existingMeta.usage,
     error: error ?? existingMeta.error,
+    traceRef: traceRef ?? existingMeta.traceRef,
   };
 
   // Write output.yaml if outputData is provided
@@ -122,33 +111,4 @@ export async function finishStepRecord(
   await writeYamlAtomic(metaPath, updatedMeta);
 
   return updatedMeta;
-}
-
-export interface StepRecordData {
-  meta: StepMetaArtifact;
-  input: string;
-  output?: unknown;
-  checks?: ChecksResultArtifact;
-}
-
-/**
- * Reads a committed step record from disk.
- */
-export async function readStepRecord(recordDir: string): Promise<StepRecordData> {
-  const meta = await readYaml<StepMetaArtifact>(path.join(recordDir, "meta.yaml"));
-  const input = await readText(path.join(recordDir, "input.md"));
-
-  let output: unknown;
-  const outputPath = path.join(recordDir, "output.yaml");
-  if (fs.existsSync(outputPath)) {
-    output = await readYaml(outputPath);
-  }
-
-  let checks: ChecksResultArtifact | undefined;
-  const checksPath = path.join(recordDir, "checks.yaml");
-  if (fs.existsSync(checksPath)) {
-    checks = await readYaml<ChecksResultArtifact>(checksPath);
-  }
-
-  return { meta, input, output, checks };
 }

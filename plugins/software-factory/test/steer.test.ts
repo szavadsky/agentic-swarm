@@ -93,6 +93,48 @@ describe("steer: mailbox ops & classification", () => {
     }
   });
 
+  it("writeQuestion re-run preserves the existing answer and status", async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "steer-test-"));
+    try {
+      const q = {
+        ref: "items/auth-feature",
+        disposition: "human-async",
+        question: "Should we support OAuth 1.0 legacy clients?",
+      };
+
+      const first = await writeQuestion(tempDir, "task-1", q);
+      expect(first.status).toBe("open");
+
+      // Operator answers the question.
+      const filePath = path.join(
+        tempDir,
+        "task-1",
+        "steer",
+        "tousertoreview",
+        `${first.id}.yaml`
+      );
+      const answered = {
+        ...first,
+        status: "answered",
+        answer: "OAuth 2.0 only",
+        answeredAt: new Date().toISOString(),
+      };
+      fs.writeFileSync(filePath, yaml.stringify(answered));
+
+      // A re-run step raising the same question must not clobber it.
+      const second = await writeQuestion(tempDir, "task-1", q);
+      expect(second.id).toBe(first.id);
+      expect(second.status).toBe("answered");
+      expect(second.answer).toBe("OAuth 2.0 only");
+
+      const saved = yaml.parse(fs.readFileSync(filePath, "utf8"));
+      expect(saved.status).toBe("answered");
+      expect(saved.answer).toBe("OAuth 2.0 only");
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it("classify invokes FakeHarness.scriptComplete and validates output schema", async () => {
     const harness = new FakeHarness();
 

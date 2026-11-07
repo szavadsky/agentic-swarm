@@ -76,4 +76,37 @@ describe("classifyOmpOutcome", () => {
     expect(res.sessionLost).toBe(false);
     expect(res.error).toContain("not found");
   });
+
+  it("classifies stopReason abort as non-transient agent failure", () => {
+    const res = classifyOmpOutcome({
+      exitCode: 0,
+      stderr: "",
+      parsed: {
+        finalAssistantText: "",
+        usage: {},
+        stopReason: "abort",
+        rawEvents: [],
+        errors: ["Context aborted"],
+      },
+    });
+    expect(res.transient).toBe(false);
+    expect(res.sessionLost).toBe(false);
+    expect(res.error).toContain("abort");
+  });
+
+  it("classifies stopReason error as failure", () => {
+    const res = classifyOmpOutcome({
+      exitCode: 0,
+      stderr: "",
+      parsed: {
+        finalAssistantText: "",
+        usage: {},
+        stopReason: "error",
+        rawEvents: [],
+        errors: ["Fatal model error"],
+      },
+    });
+    expect(res.transient).toBe(false);
+    expect(res.error).toContain("error");
+  });
 });

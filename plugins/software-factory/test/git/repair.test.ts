@@ -146,4 +146,39 @@ describe("Start-up repair (§6.3.6)", () => {
     const stashList = await git(parent.path, ["stash", "list"]);
     expect(stashList.stdout).toContain("factory-stray-");
   });
+
+  it("task worktree commits a new steer/fromuserpending file instead of stashing it", async () => {
+    const intentPath = path.join(tmpRepo.dir, "INTENT.md");
+    fs.writeFileSync(intentPath, "Intent", "utf8");
+
+    const parent = await ensureTaskWorktree(repo, "steer-task", {
+      intentPath,
+      orchestrationFolder: ".factory",
+    });
+
+    // Brand-new untracked folder with the operator's message inside.
+    const pendingFile = path.join(
+      parent.path, ".factory", "steer-task", "steer", "fromuserpending", "msg-1.md"
+    );
+    fs.mkdirSync(path.dirname(pendingFile), { recursive: true });
+    fs.writeFileSync(pendingFile, "# Answer\nYes, proceed.\n", "utf8");
+
+    const repairRes = await repairWorktree(repo, parent.path, "task", {
+      operatorEditable: [".factory/steer-task/steer/fromuserpending/**"],
+    });
+
+    expect(repairRes.actions).toContain("commit_operator_edits");
+    expect(repairRes.actions.find((a) => a.startsWith("stash_stray:"))).toBeUndefined();
+
+    // The message is committed, not stashed away.
+    const logRes = await git(parent.path, ["log", "-1", "--pretty=%s"]);
+    expect(logRes.stdout.trim()).toBe("factory: operator edits");
+    const showRes = await git(
+      parent.path,
+      ["show", "HEAD:.factory/steer-task/steer/fromuserpending/msg-1.md"]
+    );
+    expect(showRes.stdout).toContain("Yes, proceed.");
+    const stashList = await git(parent.path, ["stash", "list"]);
+    expect(stashList.stdout.trim()).toBe("");
+  });
 });

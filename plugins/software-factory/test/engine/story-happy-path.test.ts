@@ -4,9 +4,11 @@ import path from "node:path";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 import { FakeHarness } from "../../src/harness/fake/fake-harness.js";
 import { runTask } from "../../src/core/engine.js";
-import { AsyncMutex, KeyedMutex } from "../../src/core/mutex.js";
+import { Repo } from "../../src/core/git/repo.js";
+import { loadPromptLibrary } from "../../src/core/prompts.js";
 import type { PipelineConfig, ProjectConfig } from "../../src/core/artifacts.js";
 import { deriveTaskState } from "../../src/core/derive/task.js";
+import { readYaml } from "../../src/core/records/io.js";
 
 describe("Engine: Story happy path", () => {
   let tmpRepo: TmpRepo;
@@ -36,6 +38,7 @@ describe("Engine: Story happy path", () => {
       data: {
         kind: "story",
         rationale: "Requires multiple steps",
+        citations: [],
       },
     });
 
@@ -71,7 +74,7 @@ describe("Engine: Story happy path", () => {
       },
     });
 
-    // Iteration 1: PM edits
+    // Iteration 1: PM edits with outlineRef matching plan
     harness.scriptOutcome(`${task}/runs/pm-edits-1#a1`, {
       ok: true,
       data: {
@@ -79,6 +82,7 @@ describe("Engine: Story happy path", () => {
         items: [
           {
             slug: "item-1",
+            outlineRef: "item-1",
             kind: "dev",
             title: "Item 1 feature",
             assignment: "Write item 1 feature",
@@ -142,16 +146,17 @@ describe("Engine: Story happy path", () => {
       },
     });
 
-    const repoObj = {
+    // Real Repo with worktreeRoot outside main checkout
+    const worktreeRoot = path.join(tmpRepo.dir + "-wt");
+    fs.mkdirSync(worktreeRoot, { recursive: true });
+    const repoObj = new Repo({
       mainRoot: tmpRepo.dir,
-      worktreeRoot: path.join(tmpRepo.dir, ".worktrees"),
-      writeLock: new AsyncMutex(),
-      mergeLocks: new KeyedMutex(),
-    };
+      worktreeRoot,
+    });
 
     const project: ProjectConfig = {
       orchestrationFolder: orchFolder,
-      worktreeRoot: repoObj.worktreeRoot,
+      worktreeRoot,
     };
 
     const pipeline: PipelineConfig = {
@@ -161,6 +166,9 @@ describe("Engine: Story happy path", () => {
           "alt-workhorse": { model: "deepseek-chat" },
           architect: { model: "deepseek-reasoner" },
           "alt-architect": { model: "deepseek-reasoner" },
+          "task-reviewer": { model: "deepseek-chat" },
+          "wave-close-up": { model: "deepseek-chat" },
+          "plan-close-up": { model: "deepseek-chat" },
           simpler: { model: "deepseek-chat" },
         },
       },
@@ -171,10 +179,10 @@ describe("Engine: Story happy path", () => {
         "plan-reviewer": { role: "alt-architect" },
         pm: { role: "alt-workhorse" },
         developer: { role: "workhorse" },
-        qa: { role: "alt-workhorse" },
-        reviewer: { role: "alt-workhorse" },
-        "wave-close-up": { role: "alt-workhorse" },
-        "plan-close-up": { role: "alt-workhorse" },
+        qa: { role: "task-reviewer" },
+        reviewer: { role: "task-reviewer" },
+        "wave-close-up": { role: "wave-close-up" },
+        "plan-close-up": { role: "plan-close-up" },
       },
       flows: {
         simple: { steps: [{ id: "develop", agent: "developer", role: "workhorse" }] },
@@ -201,11 +209,11 @@ describe("Engine: Story happy path", () => {
       },
     };
 
-    const prompts = {
-      agentDefinition: (ag: string) => ({ body: `Agent ${ag}`, tools: ["edit", "bash"], description: ag }),
-      render: (frag: string, vars: Record<string, string>) => `${frag}\n${JSON.stringify(vars)}`,
-      placeholders: () => [],
-    };
+    // Real prompt library
+    const prompts = loadPromptLibrary({
+      builtinDir: path.resolve(import.meta.dir, "../../agents"),
+      overrideDirs: [],
+    });
 
     const result = await runTask(
       {
@@ -221,14 +229,53 @@ describe("Engine: Story happy path", () => {
     expect(result.status).toBe("done");
     expect(result.exitCode).toBe(0);
 
-    // Verify task state derived from disk
+    // Verify observable outcomes on the task worktree and branch
+    const taskWtPath = path.join(worktreeRoot, `topic_${task}`);
+    expect(fs.existsSync(taskWtPath)).toBe(true);
+
+    // Feature code and test files exist on task branch
+    expect(fs.existsSync(path.join(taskWtPath, "feature.ts"))).toBe(true);
+    expect(fs.readFileSync(path.join(taskWtPath, "feature.ts"), "utf8")).toContain("world");
+    expect(fs.existsSync(path.join(taskWtPath, "feature.test.ts"))).toBe(true);
+
+    // Canonical artifacts exist and validate
+    const deployedTaskDir = path.join(taskWtPath, orchFolder, task);
+    expect(fs.existsSync(path.join(deployedTaskDir, "triage.yaml"))).toBe(true);
+    expect(fs.existsSync(path.join(deployedTaskDir, "infra.yaml"))).toBe(true);
+    expect(fs.existsSync(path.join(deployedTaskDir, "plan", "plan-1.yaml"))).toBe(true);
+    expect(fs.existsSync(path.join(deployedTaskDir, "plan", "edits-1.0.yaml"))).toBe(true);
+    expect(fs.existsSync(path.join(deployedTaskDir, "closeup-1.yaml"))).toBe(true);
+    expect(fs.existsSync(path.join(deployedTaskDir, "state.yaml"))).toBe(true);
+
+    // Verify task state derived from disk and git
     const state = await deriveTaskState({
-      taskDir: path.join(repoObj.worktreeRoot, `topic_${task}`, orchFolder, task),
+      taskDir: deployedTaskDir,
       task,
-      taskWt: path.join(repoObj.worktreeRoot, `topic_${task}`),
+      taskWt: taskWtPath,
+      pipeline,
     });
 
     expect(state.status).toBe("done");
     expect(state.items.find((i) => i.slug === "item-1")?.status).toBe("merged");
+
+    // Verify git log includes merge commit
+    const logRes = tmpRepo.git(["log", "--oneline", `topic/${task}`]);
+    expect(logRes.stdout).toContain("factory: merge item item-1");
+
+    // Rerun on the completed task: still done, no waves re-run, no new turns
+    const callsBefore = harness.calls.length;
+    const res2 = await runTask(
+      {
+        harness,
+        repo: repoObj,
+        project,
+        pipelineFor: async () => pipeline,
+        prompts,
+      },
+      task
+    );
+    expect(res2.status).toBe("done");
+    expect(res2.exitCode).toBe(0);
+    expect(harness.calls.length).toBe(callsBefore);
   });
 });

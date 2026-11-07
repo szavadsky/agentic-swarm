@@ -1,4 +1,5 @@
 import type { DerivedItemState } from "./item.js";
+import { blockedByFailure } from "../plan/scheduler.js";
 
 export interface DerivedWaveState {
   wave: number;
@@ -34,11 +35,30 @@ export function deriveWaveState(opts: {
   const running: DerivedItemState[] = [];
   const blocked: DerivedItemState[] = [];
   const runnable: DerivedItemState[] = [];
-
   // Index all items by slug for dependency lookup
   const allBySlug = new Map<string, DerivedItemState>();
   for (const it of items) {
     allBySlug.set(it.slug, it);
+  }
+
+  // Dependents of failed items become blocked-by-failure, cascaded transitively
+  // to a fixpoint (§8.2): an item blocked this way blocks its own dependents.
+  const schedItems = items.map((it) => ({
+    slug: it.slug,
+    wave: String(it.wave),
+    deps: it.deps,
+    status: it.status as "pending" | "running" | "done" | "failed" | "blocked" | "abandoned",
+  }));
+  const failureBlocked = new Set<string>(blockedByFailure(schedItems));
+  let grew = failureBlocked.size > 0;
+  while (grew) {
+    grew = false;
+    for (const it of items) {
+      if (it.status === "pending" && !failureBlocked.has(it.slug) && it.deps.some((d) => failureBlocked.has(d))) {
+        failureBlocked.add(it.slug);
+        grew = true;
+      }
+    }
   }
 
   for (const it of waveItems) {
@@ -55,6 +75,11 @@ export function deriveWaveState(opts: {
     } else if (it.status === "blocked") {
       blocked.push(it);
     } else if (it.status === "pending") {
+      // Blocked-by-failure (transitive fixpoint computed above) routes to blocked.
+      if (failureBlocked.has(it.slug)) {
+        blocked.push(it);
+        continue;
+      }
       // Check dependencies
       let depsOk = true;
       let depBlocked = false;

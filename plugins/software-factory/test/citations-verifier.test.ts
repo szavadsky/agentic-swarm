@@ -103,4 +103,62 @@ describe("Citation verifier (§8.1.2)", () => {
     expect(result.failed.length).toBe(1);
     expect(result.failed[0]?.reason).toBe("out_of_range");
   });
+
+  it("marks a directory citation failed instead of crashing", () => {
+    fs.mkdirSync(path.join(tempDir, "subdir"), { recursive: true });
+    const citation: Citation = {
+      file: "subdir",
+      lines: "1",
+      anchors: [],
+      summary: "Directory is not a file",
+    };
+
+    const failure = verifyCitation(citation, tempDir);
+    expect(failure).not.toBeNull();
+    expect(failure?.reason).toBe("file_not_found");
+  });
+
+  it("rejects citations resolving outside the worktree", () => {
+    const sibling = path.join(path.dirname(tempDir), `factory-citation-escape-${process.pid}.txt`);
+    fs.writeFileSync(sibling, "secret escape-anchor\n", "utf8");
+    try {
+      for (const file of [`../${path.basename(sibling)}`, sibling]) {
+        const citation: Citation = {
+          file,
+          lines: "1",
+          anchors: ["escape-anchor"],
+          summary: "Outside the worktree",
+        };
+        const failure = verifyCitation(citation, tempDir);
+        expect(failure).not.toBeNull();
+        expect(failure?.reason).toBe("file_not_found");
+      }
+    } finally {
+      fs.rmSync(sibling, { force: true });
+    }
+  });
+
+  it("ignores the final empty line from a trailing newline", () => {
+    // File holds exactly 2 lines; under the old split() counting, line 3
+    // (the empty segment after the trailing newline) was wrongly accepted.
+    fs.writeFileSync(path.join(tempDir, "trailing.txt"), "one\ntwo\n", "utf8");
+    const citation: Citation = {
+      file: "trailing.txt",
+      lines: "3",
+      anchors: [],
+      summary: "One past the end",
+    };
+
+    const failure = verifyCitation(citation, tempDir);
+    expect(failure).not.toBeNull();
+    expect(failure?.reason).toBe("out_of_range");
+
+    const lastLine: Citation = {
+      file: "trailing.txt",
+      lines: "2",
+      anchors: ["two"],
+      summary: "Real last line",
+    };
+    expect(verifyCitation(lastLine, tempDir)).toBeNull();
+  });
 });

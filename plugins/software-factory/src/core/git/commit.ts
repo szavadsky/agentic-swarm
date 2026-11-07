@@ -13,14 +13,7 @@ export async function commitAll(
   opts?: { allowEmpty?: boolean; paths?: string[] }
 ): Promise<string | null> {
   return repo.writeLock.runExclusive(async () => {
-    const env = repo.identity
-      ? {
-          GIT_AUTHOR_NAME: repo.identity.name,
-          GIT_AUTHOR_EMAIL: repo.identity.email,
-          GIT_COMMITTER_NAME: repo.identity.name,
-          GIT_COMMITTER_EMAIL: repo.identity.email,
-        }
-      : undefined;
+    const env = repo.identityEnv();
 
     if (opts?.paths && opts.paths.length > 0) {
       await git(wt, ["add", "-A", "--", ...opts.paths], { env });

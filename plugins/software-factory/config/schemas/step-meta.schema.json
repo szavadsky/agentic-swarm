@@ -31,7 +31,8 @@
     },
     "startedAt": { "type": "string" },
     "endedAt": { "type": "string" },
-    "error": { "type": "string" }
+    "error": { "type": "string" },
+    "timeoutSec": { "type": "number", "minimum": 1 }
   },
   "additionalProperties": false
 }

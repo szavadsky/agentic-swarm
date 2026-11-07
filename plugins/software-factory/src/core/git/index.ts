@@ -5,7 +5,6 @@ export {
   changedFiles,
   numstat,
   changedLines,
-  fileAt,
   matchGlobs,
   diffText,
 } from "./diff.js";
@@ -19,7 +18,6 @@ export {
   validateSlug,
   assertValidSlug,
   parseBranch,
-  branchDepth,
   taskBranch,
   childBranch,
   worktreePath,
@@ -41,10 +39,12 @@ export {
 export { commitAll, headOf, isAncestor } from "./commit.js";
 
 export { captureHead, enforceHead } from "./guard.js";
+export type { EnforceHeadResult } from "./guard.js";
 
 export {
   mergeParentInto,
   hasConflictMarkers,
+  unmergedFiles,
   concludeMerge,
   mergeChildIntoParent,
   treeOf,

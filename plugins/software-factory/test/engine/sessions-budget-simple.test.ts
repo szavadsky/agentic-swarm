@@ -4,6 +4,7 @@ import path from "node:path";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 import { FakeHarness } from "../../src/harness/fake/fake-harness.js";
 import { runTask } from "../../src/core/engine.js";
+import { Repo } from "../../src/core/git/repo.js";
 import { PersistentAgent } from "../../src/core/sessions.js";
 import { AsyncMutex, KeyedMutex } from "../../src/core/mutex.js";
 import type { PipelineConfig, ProjectConfig, SteerItemArtifact } from "../../src/core/artifacts.js";
@@ -84,12 +85,12 @@ describe("Engine: Sessions rehydration, budget exceed, and simple-guard fallback
     fs.writeFileSync(path.join(taskDir, "INTENT.md"), "Budget exceed test\n", "utf8");
     tmpRepo.commit("Add intent");
 
-    const repoObj = {
+    const worktreeRoot = path.join(tmpRepo.dir + "-wt");
+    fs.mkdirSync(worktreeRoot, { recursive: true });
+    const repoObj = new Repo({
       mainRoot: tmpRepo.dir,
-      worktreeRoot: path.join(tmpRepo.dir, ".worktrees"),
-      writeLock: new AsyncMutex(),
-      mergeLocks: new KeyedMutex(),
-    };
+      worktreeRoot,
+    });
 
     const project: ProjectConfig = {
       orchestrationFolder: orchFolder,
@@ -133,6 +134,7 @@ describe("Engine: Sessions rehydration, budget exceed, and simple-guard fallback
       data: {
         kind: "story",
         rationale: "Requires work",
+        citations: [],
       },
     });
     harness.scriptOutcome(`${task}/runs/infra#a1`, {
@@ -159,16 +161,32 @@ describe("Engine: Sessions rehydration, budget exceed, and simple-guard fallback
     expect(result.exitCode).toBe(10);
     expect(result.summary).toContain("budget exceeded");
 
-    // Verify human-stop question was written to tousertoreview
+    // Verify human-stop question was written to tousertoreview (stable id, committed)
     const taskWtPath = path.join(repoObj.worktreeRoot, `topic_${task}`);
     const touserDir = path.join(taskWtPath, orchFolder, task, "steer", "tousertoreview");
+    expect(fs.existsSync(path.join(touserDir, "budget-stop.yaml"))).toBe(true);
     const qFiles = fs.readdirSync(touserDir);
-    expect(qFiles.length).toBeGreaterThan(0);
+    expect(qFiles.length).toBe(1);
 
-    const qPath = path.join(touserDir, qFiles[0]!);
+    const qPath = path.join(touserDir, "budget-stop.yaml");
     const q = await readYaml<SteerItemArtifact>(qPath);
     expect(q.disposition).toBe("human-stop");
     expect(q.status).toBe("open");
+
+    // Rerun: idempotent — no duplicate question, still blocked exit 10
+    const result2 = await runTask(
+      {
+        harness,
+        repo: repoObj,
+        project,
+        pipelineFor: async () => pipeline,
+        prompts,
+      },
+      task
+    );
+    expect(result2.status).toBe("blocked");
+    expect(result2.exitCode).toBe(10);
+    expect(fs.readdirSync(touserDir).length).toBe(1);
   });
 
   it("handles simple-guard fallback: converts to no-behavior item when prod lines exceed limit (§8.1.4)", async () => {
@@ -179,13 +197,12 @@ describe("Engine: Sessions rehydration, budget exceed, and simple-guard fallback
     fs.writeFileSync(path.join(taskDir, "INTENT.md"), "Simple guard fallback test\n", "utf8");
     tmpRepo.commit("Add intent");
 
-    const repoObj = {
+    const worktreeRoot = path.join(tmpRepo.dir + "-wt");
+    fs.mkdirSync(worktreeRoot, { recursive: true });
+    const repoObj = new Repo({
       mainRoot: tmpRepo.dir,
-      worktreeRoot: path.join(tmpRepo.dir, ".worktrees"),
-      writeLock: new AsyncMutex(),
-      mergeLocks: new KeyedMutex(),
-    };
-
+      worktreeRoot,
+    });
     const project: ProjectConfig = {
       orchestrationFolder: orchFolder,
       worktreeRoot: repoObj.worktreeRoot,
@@ -243,7 +260,7 @@ describe("Engine: Sessions rehydration, budget exceed, and simple-guard fallback
     // Triage classifies as simple
     harness.scriptOutcome(`${task}/runs/triage#a1`, {
       ok: true,
-      data: { kind: "simple", rationale: "Looks like a simple fix" },
+      data: { kind: "simple", rationale: "Looks like a simple fix", citations: [] },
     });
     harness.scriptOutcome(`${task}/runs/infra#a1`, {
       ok: true,
@@ -271,7 +288,7 @@ describe("Engine: Sessions rehydration, budget exceed, and simple-guard fallback
         prompts,
       },
       task,
-      { maxTicks: 2 }
+      { maxTicks: 1 }
     );
 
     // Verify item "simple" was created as a "no-behavior" item!

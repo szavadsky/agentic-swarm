@@ -91,6 +91,13 @@ export async function writeQuestion(
   await fs.promises.mkdir(outDir, { recursive: true });
 
   const targetPath = path.join(outDir, `${id}.yaml`);
+  if (fs.existsSync(targetPath)) {
+    // A re-run step raising the same question must not clobber the operator's answer.
+    const existing = yaml.parse(
+      await fs.promises.readFile(targetPath, "utf8")
+    ) as SteerItemArtifact;
+    return existing;
+  }
   await writeYamlAtomic(targetPath, item);
 
   return item;

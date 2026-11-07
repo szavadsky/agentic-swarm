@@ -2,7 +2,6 @@ import type { PipelineLimits } from "./artifacts.js";
 import { fingerprintText, fingerprintObject } from "./fingerprint.js";
 
 export const DEFAULT_LIMITS: Required<PipelineLimits> = {
-  maxParallel: 2,
   maxParallelItems: 2,
   maxParallelTurns: 4,
   maxStepAttempts: 3,
@@ -15,6 +14,7 @@ export const DEFAULT_LIMITS: Required<PipelineLimits> = {
   maxInterruptions: 3,
   maxInfraRetries: 3,
   gateRetries: 1,
+  gateTimeoutSec: 900,
   storyMaxProdLines: 400,
   simpleMaxProdLines: 150,
   stubMaxProdLines: 30,
@@ -41,7 +41,7 @@ export function checkStepAttempts(
   previousFingerprints: string[],
   currentFingerprint?: string
 ): { exhausted: boolean; noProgress: boolean } {
-  const exhausted = attempt >= maxStepAttempts;
+  const exhausted = attempt > maxStepAttempts;
   let noProgress = false;
   if (
     currentFingerprint &&
@@ -76,7 +76,7 @@ export function checkFixRounds(
   previousSuggestionFingerprints: string[],
   currentSuggestionFingerprint?: string
 ): { exhausted: boolean; noProgress: boolean } {
-  const exhausted = round >= maxFixRounds;
+  const exhausted = round > maxFixRounds;
   let noProgress = !hasDiff;
   if (
     !noProgress &&
@@ -121,7 +121,7 @@ export function checkPlanReviewRounds(
   previousReviewFingerprints: string[],
   currentReviewFingerprint?: string
 ): { exhausted: boolean; noProgress: boolean } {
-  const exhausted = round >= maxPlanReviewRounds;
+  const exhausted = round > maxPlanReviewRounds;
   let noProgress = false;
   if (
     currentReviewFingerprint &&
@@ -151,7 +151,7 @@ export function checkIterations(
   maxIterations: number,
   mergedItemsPerIteration: number[]
 ): { exhausted: boolean; zeroProgress: boolean } {
-  const exhausted = iterationCount >= maxIterations;
+  const exhausted = iterationCount > maxIterations;
   let zeroProgress = false;
   if (mergedItemsPerIteration.length >= 2) {
     const lastTwo = mergedItemsPerIteration.slice(-2);

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { runProcess, tail, capOutput } from "../src/core/proc.js";
+import { runProcess } from "../src/core/proc.js";
 
 describe("Process runner & output capping (§5, §9)", () => {
   it("executes an argument array directly", async () => {
@@ -45,18 +45,46 @@ describe("Process runner & output capping (§5, §9)", () => {
     expect(res.timedOut).toBe(true);
   });
 
-  it("caps large output retaining head and tail with truncation marker", () => {
-    const original = "HEAD_START_" + "x".repeat(1000) + "_TAIL_END";
-    const capped = capOutput(original, 50);
+  it("caps large output via maxOutputBytes retaining head and tail with truncation marker", async () => {
+    const res = await runProcess({
+      cmd: ["bash", "-lc", 'printf "HEAD_START_"; head -c 1000 /dev/zero | tr "\\0" "x"; printf "_TAIL_END"'],
+      cwd: process.cwd(),
+      maxOutputBytes: 50,
+    });
 
-    expect(capped).toContain("HEAD_START");
-    expect(capped).toContain("TAIL_END");
-    expect(capped).toContain("... [truncated");
+    expect(res.code).toBe(0);
+    expect(res.stdout).toContain("HEAD_START");
+    expect(res.stdout).toContain("TAIL_END");
+    expect(res.stdout).toContain("... [truncated");
   });
 
-  it("tail helper extracts trailing bytes safely", () => {
-    const text = "0123456789";
-    expect(tail(text, 4)).toBe("6789");
-    expect(tail(text, 20)).toBe("0123456789");
+  it("resolves after timeout even when a setsid grandchild holds the pipes open", async () => {
+    // The child exits immediately; the detached grandchild (own session,
+    // immune to the process-group SIGKILL) inherits stdout and sleeps.
+    // Old behavior: promise waited on `close` forever. New: grace finish.
+    const res = await runProcess({
+      cmd: "setsid bash -c 'sleep 30' < /dev/null & sleep 0.05; echo child-done",
+      cwd: process.cwd(),
+      timeoutSec: 5,
+    });
+
+    expect(res.code).toBe(0);
+    expect(res.stdout).toContain("child-done");
+    expect(res.timedOut).toBe(false);
+  });
+
+  it("bounds memory on unbounded output while keeping the tail", async () => {
+    // 5 MiB of stdout exceeds the 1 MiB per-stream ring: the runner must
+    // finish with capped output whose tail survives.
+    const res = await runProcess({
+      cmd: ["bash", "-lc", 'head -c 5000000 /dev/zero | tr "\\0" "x"; echo; echo TAIL_SENTINEL'],
+      cwd: process.cwd(),
+      timeoutSec: 15,
+    });
+
+    expect(res.code).toBe(0);
+    expect(res.stdout).toContain("TAIL_SENTINEL");
+    expect(res.stdout).toContain("... [truncated");
+    expect(Buffer.byteLength(res.stdout, "utf8")).toBeLessThan(5000000);
   });
 });

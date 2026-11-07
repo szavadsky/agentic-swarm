@@ -18,7 +18,7 @@ export function generateReviewSchema(
     properties: {
       status: {
         type: "string",
-        enum: ["approved", "changes_requested", "commented"],
+        enum: ["approved", "changes_requested"],
       },
       summary: { type: "string" },
       suggestions: {

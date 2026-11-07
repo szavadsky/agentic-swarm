@@ -1,7 +1,7 @@
 export { runSeamHooks, matchesWhen } from "./seams.js";
 export type { HookContext, HookResult } from "./seams.js";
 
-export { runAgentStep, resolveStepSchema, captureHeadSafe, enforceHeadSafe, commitWorktreeSafe } from "./step-runner.js";
+export { runAgentStep, resolveStepSchema } from "./step-runner.js";
 export type { StepRunOptions, StepRunResult } from "./step-runner.js";
 
 export { runItemConsult, runNonItemConsult } from "./consults.js";

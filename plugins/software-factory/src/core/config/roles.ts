@@ -13,7 +13,7 @@ export interface ResolvedRole {
  * Resolves a role name to its canonical role and deduplicated list of models:
  * - Follows alias chains (e.g. task-reviewer -> alt-workhorse -> model)
  * - Throws descriptive error on alias cycles
- * - Recursively expands fallbacks in order, deduplicating while preserving primary first
+ * - Iteratively expands fallbacks breadth-first, deduplicating while preserving primary first
  */
 export function resolveRole(
   roleName: string,
@@ -54,39 +54,65 @@ export function resolveRole(
   // Primary model
   const primaryModel = concreteDef.model;
   const models: string[] = [primaryModel];
-  const seenModels = new Set<string>([primaryModel]);
+  // One shared visited set across roles and models: every role name resolved
+  // so far (including alias-chain names) plus every emitted model. Mutual
+  // fallbacks (workhorse <-> alt-workhorse) terminate via this set, with no
+  // recursion and no catch-all.
+  const visited = new Set<string>([...aliasChain, primaryModel]);
 
-  // Recursively expand fallbacks
-  function collectFallbacks(fallbacks?: string[], visitedRoles = new Set<string>()) {
-    if (!fallbacks) return;
-    for (const fb of fallbacks) {
-      // fb could be a role name in rolesConfig or a direct model string
-      if (rolesConfig[fb]) {
-        if (visitedRoles.has(fb)) continue;
-        visitedRoles.add(fb);
+  // Breadth-first fallback expansion. Alias cycles reached through fallbacks
+  // throw (same as top-level resolution); fallback loops are cut by `visited`.
+  const queue: string[] = [...(concreteDef.fallbacks ?? [])];
+  while (queue.length > 0) {
+    const fb = queue.shift()!;
+    if (visited.has(fb)) continue;
 
-        // Resolve that role's models
-        try {
-          const resolved = resolveRole(fb, rolesConfig);
-          for (const m of resolved.models) {
-            if (!seenModels.has(m)) {
-              seenModels.add(m);
-              models.push(m);
-            }
-          }
-        } catch {
-          // If fallback has an alias cycle, ignore or skip to be resilient
-        }
-      } else {
-        if (!seenModels.has(fb)) {
-          seenModels.add(fb);
-          models.push(fb);
-        }
+    const def = rolesConfig[fb];
+    if (!def) {
+      // Direct model string
+      visited.add(fb);
+      models.push(fb);
+      continue;
+    }
+
+    // Follow the alias chain to its canonical target (cycle => throw).
+    const chain: string[] = [fb];
+    const chainSeen = new Set<string>([fb]);
+    let target = fb;
+    let targetDef: RoleDefinition | undefined = def;
+    while (targetDef && "alias" in targetDef) {
+      target = targetDef.alias;
+      chain.push(target);
+      if (chainSeen.has(target)) {
+        throw new Error(`Role alias cycle detected: ${chain.join(" -> ")}`);
       }
+      chainSeen.add(target);
+      targetDef = rolesConfig[target];
+    }
+
+    if (!targetDef || !("model" in targetDef)) {
+      // Alias chain ends at a direct model id
+      if (!visited.has(target)) {
+        visited.add(target);
+        models.push(target);
+      }
+      for (const name of chain) visited.add(name);
+      continue;
+    }
+    if (visited.has(target)) {
+      // Canonical role already expanded; remember the alias names and skip.
+      for (const name of chain) visited.add(name);
+      continue;
+    }
+    for (const name of chain) visited.add(name);
+    if (!visited.has(targetDef.model)) {
+      visited.add(targetDef.model);
+      models.push(targetDef.model);
+    }
+    for (const next of targetDef.fallbacks ?? []) {
+      if (!visited.has(next)) queue.push(next);
     }
   }
-
-  collectFallbacks(concreteDef.fallbacks, new Set([currentName]));
 
   return {
     role: currentName,
@@ -99,7 +125,12 @@ export interface StepRoleSelectionParams {
   isEscalated?: boolean;
   fixRound?: number;
   baseProducerRole?: string;
-  producerRetryRole?: string;
+  /**
+   * The producer step's retryRole for this kind, or null/undefined when the
+   * producer does not rotate on retry. The reviewer alt-swap only applies
+   * when the producer really rotated.
+   */
+  producerRetryRole?: string | null;
   rolesConfig: Record<string, RoleDefinition>;
   agentsConfig?: Record<string, AgentConfig>;
 }
@@ -109,7 +140,8 @@ export interface StepRoleSelectionParams {
  * - Escalated items: if step.escalatable is true, role is "task-escalation"
  * - Alt on retry (fixRound >= 2):
  *   - Developer with retryRole runs `retryRole` (e.g. alt-workhorse)
- *   - Reviewing steps resolving to the same primary model swap to producer's base role (workhorse)
+ *   - When the producer really rotated (producerRetryRole set), reviewing steps
+ *     resolving to the same primary model swap to the producer's base role (workhorse)
  */
 export function resolveStepRole(params: StepRoleSelectionParams): ResolvedRole {
   const {
@@ -117,7 +149,7 @@ export function resolveStepRole(params: StepRoleSelectionParams): ResolvedRole {
     isEscalated = false,
     fixRound = 1,
     baseProducerRole = "workhorse",
-    producerRetryRole = "alt-workhorse",
+    producerRetryRole = null,
     rolesConfig,
     agentsConfig,
   } = params;
@@ -139,21 +171,20 @@ export function resolveStepRole(params: StepRoleSelectionParams): ResolvedRole {
   }
 
   // 3. Reviewer step pair-swap on retry rotation (fixRound >= 2)
-  // If developer rotated to retryRole, check if this reviewing step shares that model
-  if (fixRound >= 2) {
-    const devRotatedRole = step.retryRole ? null : (producerRetryRole || "alt-workhorse");
-    if (devRotatedRole) {
-      const devResolved = resolveRole(devRotatedRole, rolesConfig);
-      const devPrimary = devResolved.models[0];
+  // Only when the producer really rotated: the caller passes the producer
+  // step's actual retryRole (null when the producer has none). Assuming a
+  // rotation that never happened would collapse the producer/reviewer split.
+  if (fixRound >= 2 && !step.retryRole && producerRetryRole) {
+    const devResolved = resolveRole(producerRetryRole, rolesConfig);
+    const devPrimary = devResolved.models[0];
 
-      const reviewerResolved = resolveRole(configuredRole, rolesConfig);
-      const reviewerPrimary = reviewerResolved.models[0];
+    const reviewerResolved = resolveRole(configuredRole, rolesConfig);
+    const reviewerPrimary = reviewerResolved.models[0];
 
-      // If reviewer resolves to the same primary model as the developer's rotated role,
-      // swap the reviewer to the producer's base role
-      if (devPrimary && reviewerPrimary && devPrimary === reviewerPrimary) {
-        return resolveRole(baseProducerRole, rolesConfig);
-      }
+    // If reviewer resolves to the same primary model as the developer's rotated role,
+    // swap the reviewer to the producer's base role
+    if (devPrimary && reviewerPrimary && devPrimary === reviewerPrimary) {
+      return resolveRole(baseProducerRole, rolesConfig);
     }
   }
 

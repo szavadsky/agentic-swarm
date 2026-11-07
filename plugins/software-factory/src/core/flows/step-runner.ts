@@ -23,10 +23,12 @@ import {
 } from "../records/step-record.js";
 import { validateAndRepair } from "../records/repair.js";
 import { generateReviewSchema } from "../records/review-schema.js";
-import { resolveStepRole, type ResolvedRole } from "../config/roles.js";
-import { git } from "../git/exec.js";
+import { resolveStepRole, resolveRole, type ResolvedRole } from "../config/roles.js";
+import { captureHead, enforceHead } from "../git/guard.js";
+import { commitAll } from "../git/commit.js";
 import { appendJournal } from "../journal.js";
 import type { Semaphore } from "../mutex.js";
+import type { BudgetTracker } from "../budget.js";
 
 export interface StepRunOptions {
   task: string;
@@ -36,6 +38,7 @@ export interface StepRunOptions {
   agent: string;
   role?: string;
   retryRole?: string;
+  producerRetryRole?: string | null;
   escalatable?: boolean;
   isEscalated?: boolean;
   fixRound?: number;
@@ -54,6 +57,11 @@ export interface StepRunOptions {
   turnsSemaphore?: Semaphore;
   customSchema?: JSONSchema;
   log?: (msg: string) => void;
+  taskWt?: string;
+  timeoutSec?: number;
+  budgetTracker?: BudgetTracker;
+  iteration?: number;
+  writeArtifact?: (output: unknown) => Promise<void>;
   beforeChecks?: () => Promise<{ ok: boolean; checks: CheckItemResult[] }>;
   afterChecks?: () => Promise<{ ok: boolean; checks: CheckItemResult[] }>;
 }
@@ -79,7 +87,13 @@ export function resolveStepSchema(
   stepId: string,
   allowedDispositions?: string[]
 ): Record<string, unknown> {
-  if (agent === "reviewer" || agent === "qa" || agent === "plan-reviewer" || stepId === "review" || stepId === "plan-review") {
+  if (
+    agent === "reviewer" ||
+    agent === "qa" ||
+    agent === "plan-reviewer" ||
+    stepId === "review" ||
+    stepId === "plan-review"
+  ) {
     return generateReviewSchema(
       allowedDispositions && allowedDispositions.length > 0
         ? allowedDispositions
@@ -138,90 +152,6 @@ export function resolveStepSchema(
 }
 
 /**
- * Captures git HEAD and branch (§7).
- */
-export async function captureHeadSafe(wt: string): Promise<{ branch: string; sha: string }> {
-  try {
-    const { captureHead } = await import("../git/guard.js" as any);
-    return await captureHead(wt);
-  } catch {
-    const branchRes = await git(wt, ["rev-parse", "--abbrev-ref", "HEAD"], { allowFail: true });
-    const shaRes = await git(wt, ["rev-parse", "HEAD"], { allowFail: true });
-    return {
-      branch: branchRes.stdout.trim() || "unknown",
-      sha: shaRes.stdout.trim() || "unknown",
-    };
-  }
-}
-
-/**
- * Enforces HEAD guard around agent turn (§7).
- */
-export async function enforceHeadSafe(
-  repo: any,
-  wt: string,
-  before: { branch: string; sha: string }
-): Promise<{ branchChanged: boolean; headMoved: boolean }> {
-  try {
-    const { enforceHead } = await import("../git/guard.js" as any);
-    return await enforceHead(repo, wt, before);
-  } catch {
-    let branchChanged = false;
-    let headMoved = false;
-
-    const currentBranchRes = await git(wt, ["rev-parse", "--abbrev-ref", "HEAD"], { allowFail: true });
-    const currentShaRes = await git(wt, ["rev-parse", "HEAD"], { allowFail: true });
-
-    const currentBranch = currentBranchRes.stdout.trim();
-    const currentSha = currentShaRes.stdout.trim();
-
-    if (currentBranch && before.branch && currentBranch !== before.branch) {
-      branchChanged = true;
-      // Checkout back, keeping working tree changes
-      await git(wt, ["checkout", before.branch], { allowFail: true });
-    }
-
-    if (currentSha && before.sha && currentSha !== before.sha) {
-      headMoved = true;
-      // Soft reset to keep changes uncommitted/staged
-      await git(wt, ["reset", "--soft", before.sha], { allowFail: true });
-    }
-
-    return { branchChanged, headMoved };
-  }
-}
-
-/**
- * Commits worktree changes safely (§6.3 Invariant 3).
- */
-export async function commitWorktreeSafe(
-  repo: any,
-  wt: string,
-  message: string
-): Promise<string | null> {
-  try {
-    const { commitAll } = await import("../git/commit.js" as any);
-    return await commitAll(repo, wt, message);
-  } catch {
-    try {
-      await git(wt, ["add", "-A"], { allowFail: true });
-      const statusRes = await git(wt, ["status", "--porcelain"], { allowFail: true });
-      if (!statusRes.stdout.trim()) {
-        return null;
-      }
-      const commitRes = await git(wt, ["commit", "-m", message], { allowFail: true });
-      if (commitRes.code === 0) {
-        const rev = await git(wt, ["rev-parse", "HEAD"], { allowFail: true });
-        return rev.stdout.trim();
-      }
-    } catch {
-      // ignore
-    }
-    return null;
-  }
-}
-
-/**
  * Runs a single agent turn/step per §6.1, §6.3, §6.4.
  */
 export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult> {
@@ -259,36 +189,12 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
     isEscalated,
     fixRound,
     baseProducerRole: "workhorse",
-    producerRetryRole: "alt-workhorse",
+    producerRetryRole: opts.producerRetryRole ?? null,
     rolesConfig: pipeline.models.roles,
     agentsConfig: pipeline.agents,
   });
 
-  // 2. Render prompt and agent definition
-  const fragment = stepFragment ?? `steps/${stepId}`;
-  let promptText: string;
-  try {
-    promptText = prompts.render(fragment, promptVars);
-  } catch (err: any) {
-    // If specific fragment not found, fallback to agent definition or basic prompt
-    promptText = `Step ${stepId} for ${item ?? task}\n\n${JSON.stringify(promptVars, null, 2)}`;
-  }
-
-  let agentDef = { body: "", tools: ["edit", "bash"], description: agent };
-  try {
-    agentDef = prompts.agentDefinition(agent);
-  } catch {
-    // fallback
-  }
-
-  // 3. Resolve schema
-  const pluginRoot = path.resolve(import.meta.dir ?? __dirname, "../../..");
-  const allowedDispositions = pipeline.reviewPolicy?.allowedDispositions;
-  const outputSchema =
-    opts.customSchema ??
-    resolveStepSchema(pluginRoot, agent, stepId, allowedDispositions);
-
-  // 4. Determine next sequence number for step record
+  // 2. Determine sequence number for step record
   let nextSeq = 1;
   if (fs.existsSync(recordsDir)) {
     try {
@@ -308,8 +214,56 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
   const dirName = `${String(nextSeq).padStart(3, "0")}-${stepId}-a${attempt}`;
   const recordDir = path.join(recordsDir, dirName);
 
+  // Identify worktree that contains recordDir
+  const taskWt = opts.taskWt ?? (taskDir.includes("/.factory") ? taskDir.split("/.factory")[0]! : taskDir);
+  const wtToCommit = recordDir.startsWith(cwd) ? cwd : taskWt;
+
+  // 3. Render prompt and agent definition. Errors fail the step per §10.
+  const fragment = stepFragment ?? `steps/${stepId}`;
+  let promptText: string;
+  let agentDef: { body: string; tools: string[]; description: string };
+  try {
+    promptText = prompts.render(fragment, promptVars);
+    agentDef = prompts.agentDefinition(agent);
+  } catch (err: any) {
+    const errorMsg = `Prompt or agent definition error for step ${stepId}: ${err?.message || err}`;
+    const startMeta = await startStepRecord({
+      recordDir,
+      meta: {
+        seq: nextSeq,
+        name: stepId,
+        attempt,
+        agent,
+        role: resolvedRole.role,
+        models: resolvedRole.models,
+      },
+      inputPrompt: `FAILED RENDERING: ${errorMsg}`,
+    });
+    const finalMeta = await finishStepRecord({
+      recordDir,
+      status: "error",
+      error: errorMsg,
+    });
+    await commitAll(repo, wtToCommit, `factory${item ? `(${item})` : ""}: ${stepId} a${attempt} [error]`);
+    return {
+      ok: false,
+      status: "error",
+      meta: finalMeta,
+    };
+  }
+
+  // 4. Resolve schema
+  const pluginRoot = path.resolve(import.meta.dir ?? __dirname, "../../..");
+  const allowedDispositions = pipeline.reviewPolicy?.allowedDispositions;
+  const outputSchema =
+    opts.customSchema ??
+    resolveStepSchema(pluginRoot, agent, stepId, allowedDispositions);
+
   // 5. Invariant §6.3.1: input.md + meta(status: started) committed before launch
   const keepSession = opts.sessionMode === "reuse";
+  // Resolve effective per-step timeout early so it is recorded in meta:
+  // step config first, then per-agent config default (ToySmoke).
+  const effectiveTimeoutSec = opts.timeoutSec ?? pipeline.agents?.[agent]?.timeoutSec;
   const startMeta = await startStepRecord({
     recordDir,
     meta: {
@@ -320,12 +274,18 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
       role: resolvedRole.role,
       models: resolvedRole.models,
       session: keepSession ? opts.existingSessionId : undefined,
+      timeoutSec: effectiveTimeoutSec,
     },
     inputPrompt: promptText,
   });
 
-  if (item) {
-    await commitWorktreeSafe(
+  await commitAll(
+    repo,
+    wtToCommit,
+    `factory${item ? `(${item})` : ""}: ${stepId} a${attempt} [started]`
+  );
+  if (item && cwd !== wtToCommit) {
+    await commitAll(
       repo,
       cwd,
       `factory(${item}): ${stepId} a${attempt} [started]`
@@ -353,8 +313,13 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
         status: "rejected",
         checksData: { checks: collectedChecks },
       });
-      if (item) {
-        await commitWorktreeSafe(
+      await commitAll(
+        repo,
+        wtToCommit,
+        `factory${item ? `(${item})` : ""}: ${stepId} a${attempt} [rejected]`
+      );
+      if (item && cwd !== wtToCommit) {
+        await commitAll(
           repo,
           cwd,
           `factory(${item}): ${stepId} a${attempt} [rejected]`
@@ -370,12 +335,20 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
   }
 
   // 7. HEAD guard before launch (§7)
-  const headBefore = await captureHeadSafe(cwd);
+  const headBefore = await captureHead(cwd);
 
   // 8. Launch harness with semaphore (§2 maxParallelTurns)
   const label = item
     ? `${task}/items/${item}/${stepId}#a${attempt}`
     : `${task}/runs/${stepId}#a${attempt}`;
+
+  await appendJournal(taskDir, {
+    type: "step_timeout",
+    task,
+    item,
+    step: stepId,
+    timeoutSec: effectiveTimeoutSec ?? "harness-default",
+  });
 
   const agentRun: AgentRun = {
     agent,
@@ -391,6 +364,7 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
       resume: keepSession ? opts.existingSessionId : undefined,
       keep: keepSession,
     },
+    timeoutSec: effectiveTimeoutSec,
   };
 
   let outcome: AgentOutcome;
@@ -401,17 +375,97 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
     releaseSemaphore();
   }
 
+  // Accumulate total token/cost usage across ALL turns of the step (primary,
+  // sessionLost rehydration, infra retries, repair ask-turns, relaunch).
+  const totalUsage: Usage = {
+    inputTokens: outcome.usage?.inputTokens ?? 0,
+    outputTokens: outcome.usage?.outputTokens ?? 0,
+    costUsd: outcome.usage?.costUsd ?? 0,
+  };
+
+  function addUsage(u?: Usage) {
+    if (!u) return;
+    totalUsage.inputTokens = (totalUsage.inputTokens ?? 0) + (u.inputTokens ?? 0);
+    totalUsage.outputTokens = (totalUsage.outputTokens ?? 0) + (u.outputTokens ?? 0);
+    totalUsage.costUsd = (totalUsage.costUsd ?? 0) + (u.costUsd ?? 0);
+  }
+
+  // On sessionLost with a kept session, retry once with a fresh session
+  // (§6.3.7: resume failure → fresh session with hydration; the prompt already
+  // carries hydration context built by the caller).
+  if (!outcome.ok && outcome.sessionLost && keepSession) {
+    await appendJournal(taskDir, {
+      type: "session_lost_rehydrated",
+      task,
+      item,
+      step: stepId,
+    });
+    const rel = turnsSemaphore ? await turnsSemaphore.acquire() : () => {};
+    try {
+      outcome = await harness.run({
+        ...agentRun,
+        label: `${label}#rehydrated`,
+        session: { resume: undefined, keep: keepSession },
+      });
+      addUsage(outcome.usage);
+    } finally {
+      rel();
+    }
+  }
+
+  // Retry transient harness errors up to maxInfraRetries with exponential backoff (§12.2)
+  const maxInfraRetries = pipeline.limits?.maxInfraRetries ?? 3;
+  let infraRetries = 0;
+  while (!outcome.ok && outcome.transient && infraRetries < maxInfraRetries) {
+    infraRetries++;
+    const backoffMs = Math.min(1000 * Math.pow(2, infraRetries - 1), 10000);
+    await new Promise((resolve) => setTimeout(resolve, backoffMs));
+
+    const rel = turnsSemaphore ? await turnsSemaphore.acquire() : () => {};
+    try {
+      outcome = await harness.run({
+        ...agentRun,
+        label: `${label}#infra-retry-${infraRetries}`,
+      });
+      addUsage(outcome.usage);
+    } finally {
+      rel();
+    }
+  }
+
   // 9. HEAD guard after turn (§7)
-  const { branchChanged, headMoved } = await enforceHeadSafe(repo, cwd, headBefore);
+  const { branchChanged, headMoved, foreignCommit } = await enforceHead(repo, cwd, headBefore);
+  if (foreignCommit) {
+    await appendJournal(taskDir, {
+      type: "head_guard_foreign_commit",
+      task,
+      item,
+      step: stepId,
+      branch: foreignCommit.branch,
+      sha: foreignCommit.sha,
+    });
+  }
+
 
   // 10. Output validation & repair (§6.4)
   let finalStatus: StepMetaStatus = "ok";
   let validatedData: unknown = outcome.ok ? outcome.data : undefined;
   let validationError: string | undefined = outcome.ok ? undefined : outcome.error;
 
-  if (outcome.ok || outcome.data !== undefined) {
+  if (branchChanged) {
+    // §7: Branch changed during agent turn -> error, branch was restored by enforceHead
+    finalStatus = "error";
+    validationError = "HEAD guard detected branch change during agent turn";
+    await appendJournal(taskDir, {
+      type: "head_guard_branch_restored",
+      task,
+      item,
+      step: stepId,
+    });
+  } else if (outcome.ok || outcome.data !== undefined) {
     const validationSchema = { ...outputSchema };
-    delete (validationSchema as any).$id;
+
+    const simplerRole = resolveRole("simpler", pipeline.models.roles);
 
     const repairRes = await validateAndRepair({
       rawOutput: outcome.data,
@@ -420,13 +474,15 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
         ? async (retryPrompt, sch) => {
             const rel = turnsSemaphore ? await turnsSemaphore.acquire() : () => {};
             try {
-              return await harness.run({
+              const res = await harness.run({
                 ...agentRun,
                 prompt: retryPrompt,
                 outputSchema: sch,
                 label: `${label}#repair-ask`,
                 session: { resume: outcome.sessionId, keep: keepSession },
               });
+              addUsage(res.usage);
+              return res;
             } finally {
               rel();
             }
@@ -434,12 +490,8 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
         : undefined,
       completeSimpler: async (repairPrompt, sch) => {
         return await harness.complete({
-          role: "simpler",
-          models: pipeline.models.roles["simpler"] ? [
-            "model" in pipeline.models.roles["simpler"]
-              ? (pipeline.models.roles["simpler"] as any).model
-              : "deepseek-chat"
-          ] : ["deepseek-chat"],
+          role: simplerRole.role,
+          models: simplerRole.models,
           system: "Output valid JSON according to schema.",
           prompt: repairPrompt,
           schema: sch,
@@ -448,11 +500,13 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
       relaunch: async () => {
         const rel = turnsSemaphore ? await turnsSemaphore.acquire() : () => {};
         try {
-          return await harness.run({
+          const res = await harness.run({
             ...agentRun,
             label: `${label}#relaunch`,
             session: { resume: undefined, keep: keepSession },
           });
+          addUsage(res.usage);
+          return res;
         } finally {
           rel();
         }
@@ -478,18 +532,44 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
     }
   }
 
-  // 12. Invariant §6.3.2: Finish step record with final meta
+  // 12. Write canonical artifact before finishing meta so both land in the same commit (§6.2, Invariant 5)
+  if (finalStatus === "ok" && opts.writeArtifact) {
+    try {
+      await opts.writeArtifact(validatedData);
+    } catch (err: any) {
+      finalStatus = "error";
+      validationError = `Failed writing canonical artifact: ${err?.message || err}`;
+    }
+  }
+
+  // 13. Invariant §6.3.2: Finish step record with final meta
   const finalMeta = await finishStepRecord({
     recordDir,
     status: finalStatus,
     outputData: validatedData,
     checksData: collectedChecks.length > 0 ? { checks: collectedChecks } : undefined,
-    usage: outcome.usage,
+    usage: totalUsage,
+    error: validationError,
+    traceRef: outcome.traceRef,
   });
 
-  // 13. Invariant §6.3.3: Engine commits worktree after every item step
-  if (item) {
-    await commitWorktreeSafe(
+  // Record usage centrally in budget tracker (§12.5)
+  if (opts.budgetTracker && totalUsage) {
+    opts.budgetTracker.recordUsage({
+      item,
+      iteration: opts.iteration,
+      usage: totalUsage,
+    });
+  }
+
+  // 14. Invariant §6.3.2, §6.3.3: Engine commits worktree after every step
+  await commitAll(
+    repo,
+    wtToCommit,
+    `factory${item ? `(${item})` : ""}: ${stepId} a${attempt} [${finalStatus}]`
+  );
+  if (item && cwd !== wtToCommit) {
+    await commitAll(
       repo,
       cwd,
       `factory(${item}): ${stepId} a${attempt} [${finalStatus}]`
@@ -504,7 +584,7 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
     attempt,
     status: finalStatus,
     sessionId: outcome.sessionId,
-    usage: outcome.usage,
+    usage: totalUsage,
   });
 
   return {
@@ -514,7 +594,7 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
     meta: finalMeta,
     checks: collectedChecks,
     sessionId: outcome.sessionId,
-    usage: outcome.usage,
+    usage: totalUsage,
     branchChanged,
     headMoved,
   };

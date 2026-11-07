@@ -6,7 +6,6 @@ import {
   changedFiles,
   numstat,
   changedLines,
-  fileAt,
   matchGlobs,
   diffText,
 } from "../src/core/git/diff.js";
@@ -45,10 +44,40 @@ describe("Git diff analysis (§7, §9)", () => {
 
     const changes = await changedFiles(repo.dir, preRenameCommit, "HEAD");
     const renamed = changes.find((c) => c.path === "src/renamed.ts");
-
     expect(renamed).toBeDefined();
     expect(renamed?.status).toBe("R");
     expect(renamed?.from).toBe("src/old.ts");
+    expect(renamed?.similarity).toBe(100);
+  });
+
+  it("reports similarity below 100 for renamed-and-edited files", async () => {
+    // Large file so a small edit still detects as a rename with R<100.
+    const lines = Array.from({ length: 60 }, (_, i) => `line ${i}`);
+    repo.writeFile("src/big.ts", lines.join("\n") + "\n");
+    const preCommit = repo.commit("Add big.ts");
+
+    fs.renameSync(path.join(repo.dir, "src/big.ts"), path.join(repo.dir, "src/big-renamed.ts"));
+    const edited = [...lines];
+    edited[0] = "line zero edited";
+    edited[1] = "line one edited";
+    fs.writeFileSync(path.join(repo.dir, "src/big-renamed.ts"), edited.join("\n") + "\n", "utf8");
+    repo.commit("Rename and edit big.ts");
+
+    const changes = await changedFiles(repo.dir, preCommit, "HEAD");
+    const renamed = changes.find((c) => c.path === "src/big-renamed.ts");
+
+    expect(renamed).toBeDefined();
+    expect(renamed?.status).toBe("R");
+    expect(renamed?.from).toBe("src/big.ts");
+    expect(renamed?.similarity).toBeDefined();
+    expect(renamed!.similarity!).toBeLessThan(100);
+    expect(renamed!.similarity!).toBeGreaterThan(0);
+
+    // Non-rename entries carry no similarity score.
+    const plain = changes.find((c) => c.status !== "R" && c.status !== "C");
+    if (plain) {
+      expect(plain.similarity).toBeUndefined();
+    }
   });
 
   it("calculates numstat line changes accurately", async () => {
@@ -79,20 +108,6 @@ describe("Git diff analysis (§7, §9)", () => {
     const testStats = await changedLines(repo.dir, baseCommit, headCommit, ["test/**"]);
     expect(testStats.files).toContain("test/suite.ts");
     expect(testStats.files).not.toContain("src/prod.ts");
-  });
-
-  it("reads file content at a specific historical revision with fileAt", async () => {
-    repo.writeFile("docs/spec.txt", "v1 specification\n");
-    const rev1 = repo.commit("v1 spec");
-
-    repo.writeFile("docs/spec.txt", "v2 specification\n");
-    repo.commit("v2 spec");
-
-    const pastContent = await fileAt(repo.dir, rev1, "docs/spec.txt");
-    expect(pastContent).toBe("v1 specification");
-
-    const missingContent = await fileAt(repo.dir, rev1, "docs/nonexistent.txt");
-    expect(missingContent).toBeNull();
   });
 
   it("matches globs accurately with matchGlobs", () => {

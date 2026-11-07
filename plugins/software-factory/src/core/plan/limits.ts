@@ -236,7 +236,8 @@ export function validatePlan(
  * - Unique, valid slugs (no reserved 'simple', no '--')
  * - No collisions with existing items
  * - Kinds exist in allowed kinds list; epics allowed only in root task
- * - outlineRef must be specified and must exist in plan.itemOutlines
+ * - outlineRef must be specified: a plan.itemOutlines slug for regular items,
+ *   a plan.epics slug for kind "epic" (epic and outline slugs never collide)
  * - Dependencies must be acyclic and strictly on earlier waves (dep.wave < item.wave)
  * - Dependencies cannot reference self and must exist in edits or existing items
  */
@@ -306,6 +307,11 @@ export function validateEdits(
     (ctx.plan?.itemOutlines ?? []).map((o) => o.slug)
   );
 
+  // Set of valid plan epic slugs (epic items reference these via outlineRef)
+  const epicSlugs = new Set<string>(
+    (ctx.plan?.epics ?? []).map((e) => e.slug)
+  );
+
   const seenSlugs = new Set<string>();
   const editsWaveMap = new Map<string, number>();
   const depGraph = new Map<string, string[]>();
@@ -351,7 +357,7 @@ export function validateEdits(
       errors.push(`Unknown item kind "${item.kind}" for item "${item.slug}"`);
     }
 
-    // Epics in root task only
+    // Epics in root task only; an epic item's outlineRef names its plan.epics entry (§8.4, §8.6)
     if (item.kind === "epic") {
       if (!ctx.isRootTask) {
         errors.push(`Epic item "${item.slug}" is only allowed in root tasks`);
@@ -364,15 +370,22 @@ export function validateEdits(
           `Epic item "${item.slug}" has no corresponding epic definition in plan.epics`
         );
       }
-    }
-
-    // outlineRef exists
-    if (!item.outlineRef) {
-      errors.push(`Item "${item.slug}" is missing required outlineRef`);
-    } else if (!outlineSlugs.has(item.outlineRef)) {
-      errors.push(
-        `Item "${item.slug}" references unknown outlineRef "${item.outlineRef}"`
-      );
+      if (!item.outlineRef) {
+        errors.push(`Item "${item.slug}" is missing required outlineRef`);
+      } else if (!epicSlugs.has(item.outlineRef)) {
+        errors.push(
+          `Epic item "${item.slug}" references unknown epic "${item.outlineRef}" (outlineRef must name a plan.epics entry)`
+        );
+      }
+    } else {
+      // outlineRef exists
+      if (!item.outlineRef) {
+        errors.push(`Item "${item.slug}" is missing required outlineRef`);
+      } else if (!outlineSlugs.has(item.outlineRef)) {
+        errors.push(
+          `Item "${item.slug}" references unknown outlineRef "${item.outlineRef}"`
+        );
+      }
     }
 
     // Wave number validation

@@ -11,14 +11,25 @@ import type {
 } from "../artifacts.js";
 import type { Harness } from "../../harness/types.js";
 import { git } from "../git/exec.js";
-import { childBranch } from "../git/naming.js";
+import {
+  resetScratch,
+  removeWorktree,
+  mergeChildIntoParent,
+  commitAll,
+  headOf,
+  changedLines,
+} from "../git/index.js";
 import { writeYamlAtomic, readYaml, readText } from "../records/io.js";
 import { verifyCitations } from "../records/citations.js";
 import { runAgentStep } from "./step-runner.js";
 import { runSeamHooks } from "./seams.js";
 import { appendJournal } from "../journal.js";
-import { mergeChildIntoParentSafe } from "./merge-path.js";
+import { refreshStateYaml } from "../derive/task.js";
+import { loadCriteriaBundle } from "../prompts.js";
+import { runGates } from "../checks/gates.js";
+import type { CheckContext } from "../checks/types.js";
 import type { Semaphore } from "../mutex.js";
+import type { BudgetTracker } from "../budget.js";
 
 export interface IngestParams {
   task: string;
@@ -31,7 +42,7 @@ export interface IngestParams {
   prompts: any;
   turnsSemaphore?: Semaphore;
   log?: (msg: string) => void;
-  budgetTracker?: any;
+  budgetTracker?: BudgetTracker;
 }
 
 export interface IngestResult {
@@ -42,46 +53,6 @@ export interface IngestResult {
   simpleDone?: boolean;
   convertedToItem?: boolean;
   triageSessionId?: string;
-}
-
-/**
- * Creates scratch worktree topic/{task}--simple (§7, §8.1).
- */
-async function ensureScratchWorktree(
-  repo: any,
-  parent: { branch: string; path: string },
-  slug = "simple"
-): Promise<{ branch: string; path: string }> {
-  try {
-    const { resetScratch, ensureChildWorktree } = await import("../git/worktrees.js" as any);
-    if (resetScratch) {
-      return await resetScratch(repo, parent, slug);
-    }
-    return await ensureChildWorktree(repo, parent, slug);
-  } catch {
-    const branch = `${parent.branch}--${slug}`;
-    const wtPath = path.join(repo?.worktreeRoot ?? path.dirname(parent.path), branch.replace(/\//g, "_"));
-    if (!fs.existsSync(wtPath)) {
-      await git(parent.path, ["worktree", "add", "-B", branch, wtPath, "HEAD"], { allowFail: true });
-    }
-    return { branch, path: wtPath };
-  }
-}
-
-/**
- * Removes scratch worktree (§7).
- */
-async function removeWorktreeSafe(repo: any, wtPath: string): Promise<void> {
-  try {
-    const { removeWorktree } = await import("../git/worktrees.js" as any);
-    await removeWorktree(repo, wtPath);
-  } catch {
-    try {
-      await git(repo?.mainRoot ?? wtPath, ["worktree", "remove", "--force", wtPath], { allowFail: true });
-    } catch {
-      // ignore
-    }
-  }
 }
 
 /**
@@ -111,7 +82,7 @@ export async function runIngest(params: IngestParams): Promise<IngestResult> {
 
   // 2. Scratch worktree on topic/{task}--simple from task tip (§8.1)
   const parentBranch = `topic/${task}`;
-  const scratch = await ensureScratchWorktree(
+  const scratch = await resetScratch(
     repo,
     { branch: parentBranch, path: taskWt },
     "simple"
@@ -120,70 +91,115 @@ export async function runIngest(params: IngestParams): Promise<IngestResult> {
   const runsDir = path.join(taskDir, "runs");
   await fs.promises.mkdir(runsDir, { recursive: true });
 
-  // 3. Triage turn (persistent session) (§8.1)
-  const triageStepRes = await runAgentStep({
-    task,
-    stepId: "triage",
-    stepFragment: "steps/triage",
-    agent: "triage",
-    role: "workhorse",
-    sessionMode: "reuse",
-    cwd: scratch.path,
-    taskDir,
-    recordsDir: runsDir,
-    repo,
-    harness,
-    pipeline,
-    project,
-    prompts,
-    promptVars: { intent: intentText },
-    turnsSemaphore,
-  });
-  if (params.budgetTracker && triageStepRes.usage) {
-    params.budgetTracker.recordUsage({ usage: triageStepRes.usage });
+  let triage: TriageArtifact | undefined;
+  let rawTriageOutput: any;
+  let finalCitations: Citation[] = [];
+  let contextArtifact: ContextArtifact = { citations: [] };
+  let triageSessionId: string | undefined;
+
+  const triagePath = path.join(taskDir, "triage.yaml");
+  const contextPath = path.join(taskDir, "context.yaml");
+
+  if (fs.existsSync(triagePath)) {
+    try {
+      triage = await readYaml<TriageArtifact>(triagePath);
+      if (fs.existsSync(contextPath)) {
+        contextArtifact = await readYaml<ContextArtifact>(contextPath);
+        finalCitations = Array.isArray(contextArtifact)
+          ? contextArtifact
+          : (contextArtifact.citations ?? []);
+      }
+    } catch {
+      // ignore
+    }
   }
 
-  const rawTriage = (triageStepRes.output as any) ?? {};
-  const triage: TriageArtifact = {
-    kind: rawTriage.kind ?? "story",
-    rationale: rawTriage.rationale ?? "Triage analysis",
-    size: rawTriage.size,
-    risks: rawTriage.risks,
-  };
-  await writeYamlAtomic(path.join(taskDir, "triage.yaml"), triage);
-
-  // Parse citations
-  let citations: Citation[] = rawTriage.citations ?? [];
-  if (rawTriage.context?.citations) {
-    citations = rawTriage.context.citations;
-  }
-
-  // 4. Citation verification (§8.1.2)
-  const vRes = verifyCitations(citations, scratch.path);
-  let finalCitations = vRes.valid;
-  if (vRes.failed.length > 0) {
-    await appendJournal(taskDir, {
-      type: "citations_dropped",
-      dropped: vRes.failed.map((f) => ({
-        file: f.citation.file,
-        reason: f.reason,
-        message: f.message,
-      })),
+  if (!triage) {
+    // 3. Triage turn (persistent session) (§8.1)
+    const triageStepRes = await runAgentStep({
+      task,
+      stepId: "triage",
+      stepFragment: "steps/triage",
+      agent: "triage",
+      role: "workhorse",
+      sessionMode: "reuse",
+      cwd: scratch.path,
+      taskWt,
+      taskDir,
+      recordsDir: runsDir,
+      repo,
+      harness,
+      pipeline,
+      project,
+      prompts,
+      promptVars: { task, intent: intentText, triageCriteria: loadCriteriaBundle(pipeline.criteria).triage ?? "" },
+      turnsSemaphore,
+      budgetTracker: params.budgetTracker,
+      writeArtifact: async (output: unknown) => {
+        rawTriageOutput = output as any;
+        if (!rawTriageOutput || !rawTriageOutput.kind) {
+          throw new Error("Triage step failed: missing kind in output");
+        }
+        triage = {
+          kind: rawTriageOutput.kind,
+          rationale: rawTriageOutput.rationale ?? "Triage analysis",
+          citations: rawTriageOutput.citations ?? rawTriageOutput.context?.citations ?? [],
+          size: rawTriageOutput.size,
+          risks: rawTriageOutput.risks,
+        };
+        await writeYamlAtomic(path.join(taskDir, "triage.yaml"), triage);
+      },
     });
+
+    if (!triageStepRes.ok || !triage) {
+      await removeWorktree(repo, scratch.path);
+      throw new Error(`Triage step failed: ${triageStepRes.meta.error || "no triage output produced"}`);
+    }
+
+    triageSessionId = triageStepRes.sessionId;
+
+    // Parse citations
+    let citations: Citation[] = rawTriageOutput?.citations ?? [];
+    if (rawTriageOutput?.context?.citations) {
+      citations = rawTriageOutput.context.citations;
+    }
+
+    // 4. Citation verification (§8.1.2)
+    const vRes = verifyCitations(citations, scratch.path);
+    finalCitations = vRes.valid;
+    if (vRes.failed.length > 0) {
+      await appendJournal(taskDir, {
+        type: "citations_dropped",
+        dropped: vRes.failed.map((f) => ({
+          file: f.citation.file,
+          reason: f.reason,
+          message: f.message,
+        })),
+      });
+    }
+
+    contextArtifact = { citations: finalCitations };
+    await writeYamlAtomic(path.join(taskDir, "context.yaml"), contextArtifact);
+    await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
   }
-
-  const contextArtifact: ContextArtifact = { citations: finalCitations };
-  await writeYamlAtomic(path.join(taskDir, "context.yaml"), contextArtifact);
-
   // 5. Infra if infra.yaml is missing (§8.1.3)
   const infraPath = path.join(taskDir, "infra.yaml");
   let infra: InfraArtifact | undefined;
+  let baselineArtifact: GatesBaselineArtifact | undefined;
 
   if (fs.existsSync(infraPath)) {
     try {
       infra = await readYaml<InfraArtifact>(infraPath);
     } catch {
       // ignore
+    }
+    const baselinePath = path.join(taskDir, "gates-baseline.yaml");
+    if (fs.existsSync(baselinePath)) {
+      try {
+        baselineArtifact = await readYaml<GatesBaselineArtifact>(baselinePath);
+      } catch {
+        // ignore
+      }
     }
   } else {
     // Run infra step
@@ -194,6 +210,7 @@ export async function runIngest(params: IngestParams): Promise<IngestResult> {
       agent: "infra",
       role: "workhorse",
       cwd: taskWt,
+      taskWt,
       taskDir,
       recordsDir: runsDir,
       repo,
@@ -207,29 +224,46 @@ export async function runIngest(params: IngestParams): Promise<IngestResult> {
         context: JSON.stringify(contextArtifact, null, 2),
       },
       turnsSemaphore,
+      budgetTracker: params.budgetTracker,
+      writeArtifact: async (output: unknown) => {
+        const rawInfra = output as any;
+        if (!rawInfra || !rawInfra.gates || !rawInfra.testRunner) {
+          throw new Error("Infra step failed: missing gates or testRunner in output");
+        }
+        infra = {
+          setup: rawInfra.setup ?? [],
+          gates: rawInfra.gates,
+          testRunner: rawInfra.testRunner,
+        };
+        await writeYamlAtomic(infraPath, infra);
+
+        // Run real baseline gates (§8.1.3, §9)
+        const checkCtx: CheckContext = {
+          repo,
+          wt: taskWt,
+          base: "HEAD",
+          project,
+          pipeline,
+          infra,
+          task,
+          taskWt,
+          limits: pipeline.limits ?? {},
+          outputBytes: pipeline.limits?.checkOutputBytes ?? 4096,
+        };
+        const gatesOutcome = await runGates(checkCtx, { record: true });
+        baselineArtifact = {
+          timestamp: new Date().toISOString(),
+          gates: gatesOutcome.results,
+        };
+        await writeYamlAtomic(path.join(taskDir, "gates-baseline.yaml"), baselineArtifact);
+      },
     });
-    if (params.budgetTracker && infraStepRes.usage) {
-      params.budgetTracker.recordUsage({ usage: infraStepRes.usage });
+
+    if (!infraStepRes.ok || !infra) {
+      await removeWorktree(repo, scratch.path);
+      throw new Error(`Infra step failed: ${infraStepRes.meta.error || "no infra output produced"}`);
     }
-
-    const rawInfra = infraStepRes.output as any;
-    infra = {
-      setup: rawInfra?.setup ?? [],
-      gates: rawInfra?.gates ?? [{ id: "build", command: "true" }],
-      testRunner: rawInfra?.testRunner ?? { command: "bun test", selectorArgs: [], junitArg: "" },
-    };
-    await writeYamlAtomic(infraPath, infra);
-
-    // Baseline gates run
-    const baselineArtifact: GatesBaselineArtifact = {
-      timestamp: new Date().toISOString(),
-      gates: (infra.gates ?? []).map((g) => ({
-        id: g.id,
-        command: g.command,
-        status: "pass",
-      })),
-    };
-    await writeYamlAtomic(path.join(taskDir, "gates-baseline.yaml"), baselineArtifact);
+    await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
   }
 
   // 6. Routing (§8.1.4)
@@ -242,8 +276,9 @@ export async function runIngest(params: IngestParams): Promise<IngestResult> {
       agent: "developer",
       role: "workhorse",
       sessionMode: "reuse",
-      existingSessionId: triageStepRes.sessionId,
+      existingSessionId: triageSessionId,
       cwd: scratch.path,
+      taskWt,
       taskDir,
       recordsDir: runsDir,
       repo,
@@ -256,17 +291,18 @@ export async function runIngest(params: IngestParams): Promise<IngestResult> {
         citations: JSON.stringify(finalCitations, null, 2),
       },
       turnsSemaphore,
+      budgetTracker: params.budgetTracker,
     });
-    if (params.budgetTracker && implRes.usage) {
-      params.budgetTracker.recordUsage({ usage: implRes.usage });
-    }
+
+    // Commit simple-implementation work before running checks or merging (Finding 1)
+    await git(scratch.path, ["add", "-A"], { allowFail: true });
+    await commitAll(repo, scratch.path, "factory(simple): implement");
+    await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
 
     // Run simple-guard and gates
     let guardPassed = implRes.ok;
-    // Check prod lines <= simpleMaxProdLines
     const maxProd = pipeline.limits?.simpleMaxProdLines ?? 150;
     try {
-      await git(scratch.path, ["add", "-A"], { allowFail: true });
       const diffStat = await git(scratch.path, ["diff", "--cached", "--numstat", parentBranch], { allowFail: true });
       let linesAdded = 0;
       for (const line of diffStat.stdout.split("\n")) {
@@ -283,15 +319,38 @@ export async function runIngest(params: IngestParams): Promise<IngestResult> {
       // ignore
     }
 
-    if (guardPassed && implRes.ok) {
-      // Green: merge path (§8.1.4)
-      await mergeChildIntoParentSafe(
+    // Run gates on scratch commit (§8.1.4)
+    if (guardPassed && infra) {
+      const checkCtx: CheckContext = {
         repo,
+        wt: scratch.path,
+        base: parentBranch,
+        project,
+        pipeline,
+        infra,
+        baseline: baselineArtifact,
+        task,
         taskWt,
-        scratch.branch,
-        "factory: merge simple implementation"
-      );
-      await removeWorktreeSafe(repo, scratch.path);
+        limits: pipeline.limits ?? {},
+        outputBytes: pipeline.limits?.checkOutputBytes ?? 4096,
+      };
+      const gatesRes = await runGates(checkCtx);
+      if (!gatesRes.ok) {
+        guardPassed = false;
+      }
+    }
+
+    if (guardPassed && implRes.ok) {
+      // Green: merge through merge path under merge lock (§8.1.4)
+      await repo.mergeLocks.runExclusive(parentBranch, async () => {
+        await mergeChildIntoParent(
+          repo,
+          taskWt,
+          scratch.branch,
+          "factory: merge simple implementation"
+        );
+      });
+      await removeWorktree(repo, scratch.path);
       await appendJournal(taskDir, { type: "simple_merged", task });
       return {
         kind: "simple",
@@ -320,6 +379,9 @@ export async function runIngest(params: IngestParams): Promise<IngestResult> {
         deps: [],
       });
 
+      // Remove scratch worktree registration while keeping the branch
+      await removeWorktree(repo, scratch.path);
+
       return {
         kind: "simple",
         triage,
@@ -332,7 +394,7 @@ export async function runIngest(params: IngestParams): Promise<IngestResult> {
   }
 
   // Non-simple: scratch worktree removed (§8.1.4)
-  await removeWorktreeSafe(repo, scratch.path);
+  await removeWorktree(repo, scratch.path);
 
   return {
     kind: triage.kind,
@@ -340,6 +402,6 @@ export async function runIngest(params: IngestParams): Promise<IngestResult> {
     context: contextArtifact,
     infra,
     simpleDone: false,
-    triageSessionId: triageStepRes.sessionId,
+    triageSessionId,
   };
 }

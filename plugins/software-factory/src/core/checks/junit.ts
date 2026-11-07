@@ -111,7 +111,7 @@ export function parseJunit(xml: string): ParsedJunit {
   return { collected, errors, cases };
 }
 
-function shellQuote(arg: string): string {
+export function shellQuote(arg: string): string {
   if (/^[a-zA-Z0-9_\-\.\/:=]+$/.test(arg)) {
     return arg;
   }

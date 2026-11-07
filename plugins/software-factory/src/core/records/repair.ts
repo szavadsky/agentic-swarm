@@ -45,11 +45,18 @@ export interface LeafGuardCheckResult {
   missingLeaf?: LeafValue;
 }
 
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 /**
  * §6.4 Leaf-value presence guard:
  * A structural repair from @simpler is accepted ONLY IF every leaf value
  * (enums, verdicts, statuses especially) appears in the raw output text.
  * This prevents the repair model from inventing outcomes/verdicts not stated in raw output.
+ * Enum-like single tokens (no whitespace) require a whole-word match so short
+ * verdicts such as `fix`, `ok` or `approved` don't match inside unrelated
+ * words ("fixture", "token", "unapproved").
  */
 export function checkLeafValuePresence(
   repairedObj: unknown,
@@ -62,7 +69,19 @@ export function checkLeafValuePresence(
     const strVal = String(leaf.value).trim();
     if (!strVal) continue; // Skip empty strings
 
-    if (!normalizedRaw.includes(strVal.toLowerCase())) {
+    const lowered = strVal.toLowerCase();
+    if (!/\s/.test(strVal)) {
+      const wholeWord = new RegExp(`(?<![\\w-])${escapeRegExp(lowered)}(?![\\w-])`);
+      if (!wholeWord.test(normalizedRaw)) {
+        return {
+          ok: false,
+          missingLeaf: leaf,
+        };
+      }
+      continue;
+    }
+
+    if (!normalizedRaw.includes(lowered)) {
       return {
         ok: false,
         missingLeaf: leaf,
@@ -112,7 +131,12 @@ export async function validateAndRepair(
 ): Promise<RepairPipelineResult> {
   const { rawOutput, schema, askSession, completeSimpler, relaunch } = options;
 
-  const validate = ajv.compile(schema);
+  // Step-runner hands us a freshly JSON.parse'd copy of the schema file on every
+  // call; recompiling on the shared instance would throw once the $id is
+  // registered ("schema with key or id ... already exists"). Reuse it instead.
+  const schemaId =
+    typeof schema.$id === "string" ? (schema.$id as string) : undefined;
+  const validate = (schemaId && ajv.getSchema(schemaId)) || ajv.compile(schema);
 
   function tryParse(val: unknown): unknown {
     if (typeof val !== "string") return val;

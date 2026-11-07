@@ -9,6 +9,7 @@ import { classifyOmpOutcome } from "./classify.js";
 import { generateOmpConfigOverlay, writeOmpConfigOverlay } from "./overlay.js";
 import { createAjv, formatAjvErrors } from "../../core/config/ajv.js";
 
+import { resolveRuntimeDir } from "../../cli/lock.js";
 const ajv = createAjv();
 
 /**
@@ -84,6 +85,13 @@ export class OmpHarness implements Harness {
   }
 
   /**
+   * Updates effective pipeline configuration used for overlay generation.
+   */
+  public setPipeline(pipeline: any): void {
+    this.pipeline = pipeline;
+  }
+
+  /**
    * Resolves the runtime directory and ensures its subfolders exist.
    */
   private ensureRuntimeDirs(cwd: string): {
@@ -95,7 +103,7 @@ export class OmpHarness implements Harness {
   } {
     const runtimeDir = this.runtimeDir
       ? path.resolve(this.runtimeDir)
-      : path.join(cwd, ".factory-runtime");
+      : resolveRuntimeDir(cwd);
 
     const sessionsDir = path.join(runtimeDir, "sessions");
     const promptsDir = path.join(runtimeDir, "prompts");
@@ -111,7 +119,8 @@ export class OmpHarness implements Harness {
       overlayPath = path.resolve(this.configOverlayPath);
     } else {
       overlayPath = path.join(runtimeDir, "omp-overlay.yaml");
-      if (!fs.existsSync(overlayPath) && this.pipeline) {
+      if (this.pipeline) {
+        // Regenerate overlay each run from effective pipeline (finding: stale model roles)
         writeOmpConfigOverlay(this.pipeline, overlayPath);
       } else if (!fs.existsSync(overlayPath)) {
         // Fallback minimal overlay
@@ -122,7 +131,6 @@ export class OmpHarness implements Harness {
         );
       }
     }
-
     return {
       runtimeDir,
       sessionsDir,
@@ -229,7 +237,9 @@ export class OmpHarness implements Harness {
 
     // 6. Setup timeout handler with SIGTERM -> SIGKILL
     let killTimer: NodeJS.Timeout | undefined;
-    const timeoutMs = this.defaultTimeoutMs;
+    const timeoutMs = run.timeoutSec != null && run.timeoutSec > 0
+      ? run.timeoutSec * 1000
+      : this.defaultTimeoutMs;
     const termTimer = setTimeout(() => {
       timedOut = true;
       try {
@@ -268,29 +278,39 @@ export class OmpHarness implements Harness {
       return await new Response(proc.stderr).text();
     };
 
-    const [_, stderrText, exitCode] = await Promise.all([
-      readStdout(),
-      readStderr(),
-      proc.exited,
-    ]);
-
-    clearTimeout(termTimer);
-    if (killTimer) clearTimeout(killTimer);
-
-    // Clean up temporary prompt and system prompt files
+    let stderrText = "";
+    let exitCode = 0;
     try {
-      if (fs.existsSync(promptPath)) fs.unlinkSync(promptPath);
-      if (fs.existsSync(systemPromptPath)) fs.unlinkSync(systemPromptPath);
-    } catch {}
-
+      const results = await Promise.all([
+        readStdout(),
+        readStderr(),
+        proc.exited,
+      ]);
+      stderrText = results[1];
+      exitCode = results[2];
+    } finally {
+      clearTimeout(termTimer);
+      if (killTimer) clearTimeout(killTimer);
+      try {
+        if (fs.existsSync(promptPath)) fs.unlinkSync(promptPath);
+        if (fs.existsSync(systemPromptPath)) fs.unlinkSync(systemPromptPath);
+      } catch {}
+    }
     const parsed = parser.getResult();
     const sessionId = parsed.sessionId ?? run.session?.resume;
     const traceRef = sessionId ? this.findSessionTrace(sessionsDir, sessionId, parsed.sessionTimestamp) : undefined;
 
     // 8. Handle non-zero exit or timeout
-    if (timedOut || exitCode !== 0) {
+    const stopReasonFailure = Boolean(
+      parsed.stopReason &&
+      (parsed.stopReason === "abort" ||
+       parsed.stopReason === "error" ||
+       (exitCode === 0 && parsed.stopReason !== "stop" && parsed.stopReason !== "toolUse" && !parsed.yieldData))
+    );
+
+    if (timedOut || exitCode !== 0 || stopReasonFailure) {
       const classification = classifyOmpOutcome({
-        exitCode,
+        exitCode: timedOut ? 143 : stopReasonFailure && exitCode === 0 ? 1 : exitCode,
         stderr: stderrText,
         parsed,
         resumeRequested: Boolean(run.session?.resume),
@@ -377,6 +397,8 @@ export class OmpHarness implements Harness {
     system: string;
     prompt: string;
     schema: JSONSchema;
+    timeoutSec?: number;
+    timeoutMs?: number;
   }): Promise<unknown> {
     const cwd = process.cwd();
     const { promptsDir, overlayPath } = this.ensureRuntimeDirs(cwd);
@@ -407,8 +429,25 @@ export class OmpHarness implements Harness {
         stderr: "pipe",
       });
     } catch (err: any) {
+      try { if (fs.existsSync(promptPath)) fs.unlinkSync(promptPath); } catch {}
       throw new Error(`Failed to spawn omp complete: ${err.message}`);
     }
+
+    let timedOut = false;
+    let killTimer: NodeJS.Timeout | undefined;
+    const timeoutMs = c.timeoutMs ?? (c.timeoutSec != null && c.timeoutSec > 0 ? c.timeoutSec * 1000 : this.defaultTimeoutMs);
+    const termTimer = setTimeout(() => {
+      timedOut = true;
+      try {
+        proc.kill("SIGTERM");
+      } catch {}
+
+      killTimer = setTimeout(() => {
+        try {
+          proc.kill("SIGKILL");
+        } catch {}
+      }, 3000);
+    }, timeoutMs);
 
     const parser = new OmpNdjsonParser();
     const decoder = new TextDecoder();
@@ -434,21 +473,37 @@ export class OmpHarness implements Harness {
       return await new Response(proc.stderr).text();
     };
 
-    const [_, stderrText, exitCode] = await Promise.all([
-      readStdout(),
-      readStderr(),
-      proc.exited,
-    ]);
-
+    let stderrText = "";
+    let exitCode = 0;
     try {
-      if (fs.existsSync(promptPath)) fs.unlinkSync(promptPath);
-    } catch {}
+      const results = await Promise.all([
+        readStdout(),
+        readStderr(),
+        proc.exited,
+      ]);
+      stderrText = results[1];
+      exitCode = results[2];
+    } finally {
+      clearTimeout(termTimer);
+      if (killTimer) clearTimeout(killTimer);
+      try {
+        if (fs.existsSync(promptPath)) fs.unlinkSync(promptPath);
+      } catch {}
+    }
+
+    if (timedOut) {
+      throw new Error(`OMP complete timed out after ${timeoutMs}ms (process terminated)`);
+    }
 
     if (exitCode !== 0) {
       throw new Error(`OMP complete failed with exit code ${exitCode}: ${stderrText.trim()}`);
     }
 
     const parsed = parser.getResult();
+    if (parsed.stopReason === "abort" || parsed.stopReason === "error") {
+      throw new Error(`OMP complete stopped with reason "${parsed.stopReason}": ${parsed.errors.join("; ") || stderrText.trim()}`);
+    }
+
     const parsedData = extractJsonFromText(parsed.finalAssistantText);
 
     // Validate against requested schema

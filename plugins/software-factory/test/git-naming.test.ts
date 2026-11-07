@@ -6,7 +6,6 @@ import {
   childBranch,
   worktreePath,
   parseBranch,
-  branchDepth,
 } from "../src/core/git/naming.js";
 
 describe("Git branch and worktree naming (§7, §8.6)", () => {
@@ -36,15 +35,15 @@ describe("Git branch and worktree naming (§7, §8.6)", () => {
   it("builds child branch with '--' separator and tracks depth", () => {
     const root = taskBranch("auth");
     expect(root).toBe("topic/auth");
-    expect(branchDepth(root)).toBe(0);
+    expect(parseBranch(root)?.depth).toBe(0);
 
     const child = childBranch(root, "login-form");
     expect(child).toBe("topic/auth--login-form");
-    expect(branchDepth(child)).toBe(1);
+    expect(parseBranch(child)?.depth).toBe(1);
 
     const epicItem = childBranch(child, "submit-btn");
     expect(epicItem).toBe("topic/auth--login-form--submit-btn");
-    expect(branchDepth(epicItem)).toBe(2);
+    expect(parseBranch(epicItem)?.depth).toBe(2);
 
     // Reject depth > 2
     expect(() => childBranch(epicItem, "too-deep")).toThrow(

@@ -22,6 +22,8 @@ export interface PersistentAgentOptions {
 export interface TurnOptions {
   rehydrate?: () => string | Promise<string>;
   keep?: boolean;
+  /** Per-turn label override; falls back to PersistentAgent labelBase. */
+  label?: string;
 }
 
 /**
@@ -87,6 +89,7 @@ export class PersistentAgent {
   ): Promise<AgentOutcome> {
     const keep = opts?.keep ?? true;
     const outputSchema = schema ?? this.defaultOutputSchema;
+    const label = opts?.label ?? this.labelBase;
 
     const run: AgentRun = {
       agent: this.agent,
@@ -97,7 +100,7 @@ export class PersistentAgent {
       tools: this.tools,
       cwd: this.cwd,
       outputSchema,
-      label: this.labelBase,
+      label,
       session: {
         resume: this.sessionId,
         keep,
@@ -107,16 +110,17 @@ export class PersistentAgent {
     const outcome = await this.harness.run(run);
     this.accumulateUsage(outcome.usage);
 
-    // If session was lost, attempt one-shot rehydration if caller provided rehydrate()
-    if (!outcome.ok && outcome.sessionLost && opts?.rehydrate) {
+    if (!outcome.ok && outcome.sessionLost) {
+      // Stale session id must never be reused, even without rehydration.
       this.sessionId = undefined;
+      if (!opts?.rehydrate) return outcome;
       const prefix = await opts.rehydrate();
       const rehydratedPrompt = prefix ? `${prefix}\n\n${prompt}` : prompt;
 
       const rehydratedRun: AgentRun = {
         ...run,
         prompt: rehydratedPrompt,
-        label: `${this.labelBase}#rehydrated`,
+        label: `${label}#rehydrated`,
         session: {
           resume: undefined,
           keep,

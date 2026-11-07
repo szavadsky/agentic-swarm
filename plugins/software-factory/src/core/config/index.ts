@@ -9,8 +9,9 @@ export type { ResolvedRole, StepRoleSelectionParams } from "./roles.js";
 export {
   validateStructural,
   isValidSeam,
-  isItemSeam,
   BUILTIN_CHECK_IDS,
+  ATTACHABLE_BUILTIN_CHECK_IDS,
+  ENGINE_INTERNAL_CHECK_IDS,
   VALID_SEAMS,
 } from "./validate.js";
 export type { ValidationResult, ValidateStructuralOptions } from "./validate.js";

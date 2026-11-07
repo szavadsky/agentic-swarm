@@ -4,7 +4,8 @@ import path from "node:path";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 import { FakeHarness } from "../../src/harness/fake/fake-harness.js";
 import { mergeItem } from "../../src/core/flows/merge-path.js";
-import { AsyncMutex, KeyedMutex } from "../../src/core/mutex.js";
+import { Repo } from "../../src/core/git/repo.js";
+import { loadPromptLibrary } from "../../src/core/prompts.js";
 import type { PipelineConfig, ProjectConfig } from "../../src/core/artifacts.js";
 import type { DerivedItemState } from "../../src/core/derive/item.js";
 
@@ -44,12 +45,10 @@ describe("Engine: Merge path conflict -> integrate (§7)", () => {
     tmpRepo.writeFile("shared.txt", "Parent line 1\nParent line 2\n");
     tmpRepo.commit("Parent commit modifying shared.txt");
 
-    const repoObj = {
+    const repoObj = new Repo({
       mainRoot: tmpRepo.dir,
       worktreeRoot: path.join(tmpRepo.dir, ".worktrees"),
-      writeLock: new AsyncMutex(),
-      mergeLocks: new KeyedMutex(),
-    };
+    });
 
     const project: ProjectConfig = {
       orchestrationFolder: orchFolder,
@@ -74,11 +73,10 @@ describe("Engine: Merge path conflict -> integrate (§7)", () => {
       limits: {},
     };
 
-    const prompts = {
-      agentDefinition: (ag: string) => ({ body: `Agent ${ag}`, tools: ["edit", "bash"], description: ag }),
-      render: (frag: string, vars: Record<string, string>) => `${frag}\n${JSON.stringify(vars)}`,
-      placeholders: () => [],
-    };
+    const prompts = loadPromptLibrary({
+      builtinDir: path.resolve(import.meta.dir, "../../agents"),
+      overrideDirs: [],
+    });
 
     const harness = new FakeHarness();
 
@@ -110,9 +108,11 @@ describe("Engine: Merge path conflict -> integrate (§7)", () => {
       currentAttempt: 1,
       currentFixRound: 1,
       isEscalated: false,
+      freshSeries: false,
       interruptionCount: 0,
       suggestionFingerprints: [],
       decisionFingerprints: [],
+      consultCount: 0,
     };
 
     const taskWt = tmpRepo.dir;

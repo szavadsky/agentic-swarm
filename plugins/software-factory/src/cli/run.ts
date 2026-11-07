@@ -5,7 +5,7 @@ import { loadPromptLibrary } from "../core/prompts.js";
 import { Repo } from "../core/git/repo.js";
 import { runTask, type EngineDeps, type RunResult } from "../core/engine.js";
 import { OmpHarness } from "../harness/omp/harness.js";
-import { acquireRunLock } from "./lock.js";
+import { acquireRunLock, resolveRuntimeDir } from "./lock.js";
 import { runPreflight } from "./preflight.js";
 
 export interface RunCliOptions {
@@ -73,22 +73,34 @@ export async function runFactory(opts: RunCliOptions): Promise<number> {
     return 1;
   }
 
-  // 2. Acquire run lock
-  const lockHandle = acquireRunLock(repoRoot, task);
+  // 2. Resolve runtime directory outside main checkout (§2, §7)
+  const runtimeDir = resolveRuntimeDir(repoRoot, projectConfig.worktreeRoot);
+  const defaultTaskDir = path.join(repoRoot, orchestrationFolder, task);
+
+  // 3. Acquire run lock
+  const lockHandle = acquireRunLock(repoRoot, task, {
+    runtimeDir,
+    taskDir: defaultTaskDir,
+  });
   if (!lockHandle) {
     console.error(`[factory run] Task "${task}" is already running by another process.`);
     return 1;
   }
 
   try {
-    // 3. Build engine dependencies
+    // 4. Build engine dependencies with effective (root + task layered) pipeline
+    const taskPipelinePath = path.join(defaultTaskDir, "pipeline.yaml");
     const loadedPipeline = loadPipelineConfig({
       pluginRoot,
       repoRoot,
+      taskYamlPath: fs.existsSync(taskPipelinePath) ? taskPipelinePath : undefined,
     });
     const pipelineConfig = loadedPipeline.config;
 
-    const runtimeDir = path.join(repoRoot, ".factory-runtime");
+    if (opts.maxIterations !== undefined && pipelineConfig.limits) {
+      pipelineConfig.limits.maxIterations = opts.maxIterations;
+    }
+
     const harness = new OmpHarness({
       ompBinary: opts.ompBinary,
       pipeline: pipelineConfig,
@@ -108,12 +120,17 @@ export async function runFactory(opts: RunCliOptions): Promise<number> {
     });
 
     const pipelineFor = async (taskDir: string) => {
-      const taskPipelinePath = path.join(taskDir, "pipeline.yaml");
-      return loadPipelineConfig({
+      const taskPipeline = path.join(taskDir, "pipeline.yaml");
+      const layered = loadPipelineConfig({
         pluginRoot,
         repoRoot,
-        taskYamlPath: fs.existsSync(taskPipelinePath) ? taskPipelinePath : undefined,
+        taskYamlPath: fs.existsSync(taskPipeline) ? taskPipeline : undefined,
       }).config;
+      if (opts.maxIterations !== undefined && layered.limits) {
+        layered.limits.maxIterations = opts.maxIterations;
+      }
+      harness.setPipeline(layered);
+      return layered;
     };
 
     const deps: EngineDeps = {
@@ -125,10 +142,12 @@ export async function runFactory(opts: RunCliOptions): Promise<number> {
       log: (line: string) => console.log(line),
     };
 
-    // 4. Run task loop
-    const result: RunResult = await runTask(deps, task, {
-      maxTicks: opts.maxIterations,
-    });
+    // 5. Run task loop mapping maxIterations
+    const runOpts: { maxIterations?: number } = {};
+    if (opts.maxIterations !== undefined) {
+      runOpts.maxIterations = opts.maxIterations;
+    }
+    const result: RunResult = await (runTask as any)(deps, task, runOpts);
 
     console.log(`[factory run] Task "${task}" completed with status "${result.status}": ${result.summary}`);
     return result.exitCode;

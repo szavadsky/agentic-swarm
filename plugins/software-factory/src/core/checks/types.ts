@@ -19,7 +19,10 @@ export interface CheckContext {
   baseline?: GatesBaselineArtifact;
   kind?: string;
   item?: string;
+  task?: string;
+  taskWt?: string;
   target?: DeveloperTarget;
+  checkTimeoutSec?: number;
   testFirstCommit?: string;
   limits: PipelineLimits;
   outputBytes: number;

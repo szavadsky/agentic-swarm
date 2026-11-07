@@ -111,16 +111,18 @@ describe("Merge path primitives (§7)", () => {
       concludeMerge(repo, child.path, "resolve merge")
     ).rejects.toThrow("Cannot conclude merge");
 
-    // Resolve conflict by writing resolved content and staging
+    // Resolve conflict by writing resolved content WITHOUT staging:
+    // concludeMerge stages the resolution itself (integrate may not run git).
     fs.writeFileSync(path.join(child.path, "conflict.txt"), "resolved line\n", "utf8");
-    await git(child.path, ["add", "conflict.txt"]);
 
-    expect(await hasConflictMarkers(child.path)).toEqual([]);
-
-    // concludeMerge succeeds
+    // concludeMerge succeeds and stages + commits the resolution
     const resolvedSha = await concludeMerge(repo, child.path, "integrate: resolve conflicts");
     expect(resolvedSha).toBeString();
     expect(resolvedSha.length).toBe(40);
+
+    // Resolution is committed; tree contains the resolved content
+    const committed = await git(child.path, ["show", `${resolvedSha}:conflict.txt`]);
+    expect(committed.stdout).toBe("resolved line");
   });
 
   it("mergeChildIntoParent performs --no-ff merge into parent worktree", async () => {
@@ -137,7 +139,6 @@ describe("Merge path primitives (§7)", () => {
     fs.writeFileSync(path.join(child.path, "feature.txt"), "feature data", "utf8");
     await commitAll(repo, child.path, "feat: add feature");
 
-    // Merge child into parent
     const mergeSha = await mergeChildIntoParent(
       repo,
       parent.path,
@@ -146,5 +147,48 @@ describe("Merge path primitives (§7)", () => {
     );
     expect(mergeSha).toBeString();
     expect(fs.existsSync(path.join(parent.path, "feature.txt"))).toBe(true);
+  });
+
+  it("hasConflictMarkers ignores legitimate ======= lines in merge-touched files", async () => {
+    const intentPath = path.join(tmpRepo.dir, "INTENT.md");
+    fs.writeFileSync(intentPath, "Intent", "utf8");
+
+    const parent = await ensureTaskWorktree(repo, "marker-task", {
+      intentPath,
+      orchestrationFolder: ".factory",
+    });
+
+    // Tracked file with a legitimate 7-equals separator line (RST heading).
+    fs.writeFileSync(path.join(parent.path, "doc.rst"), "Title\n=======\n\nBody text\n", "utf8");
+    await commitAll(repo, parent.path, "feat: add doc");
+
+    const child = await ensureChildWorktree(repo, parent, "item-marker");
+
+    // Touch the doc on the parent side so it lands in the merge-touched set.
+    fs.writeFileSync(path.join(parent.path, "doc.rst"), "Title\n=======\n\nParent body\n", "utf8");
+    await commitAll(repo, parent.path, "feat: parent doc edit");
+
+    fs.writeFileSync(path.join(child.path, "other.txt"), "child work\n", "utf8");
+    await commitAll(repo, child.path, "feat: child other file");
+
+    const mergeRes = await mergeParentInto(repo, child.path, parent.branch);
+    expect(mergeRes.ok).toBe(true);
+
+    // Sanity: real markers in an unmerged file are still reported.
+    fs.writeFileSync(path.join(parent.path, "clash.txt"), "base\n", "utf8");
+    await commitAll(repo, parent.path, "feat: base clash");
+    await git(child.path, ["merge", "--no-edit", parent.branch]);
+    fs.writeFileSync(path.join(parent.path, "clash.txt"), "parent v\n", "utf8");
+    await commitAll(repo, parent.path, "feat: parent clash");
+    fs.writeFileSync(path.join(child.path, "clash.txt"), "child v\n", "utf8");
+    await commitAll(repo, child.path, "feat: child clash");
+    const clashRes = await mergeParentInto(repo, child.path, parent.branch);
+    expect(clashRes.ok).toBe(false);
+    if (!clashRes.ok) {
+      expect(clashRes.conflicts).toContain("clash.txt");
+    }
+    expect(await hasConflictMarkers(child.path)).toContain("clash.txt");
+    // ... but the legitimate separator file is never flagged.
+    expect(await hasConflictMarkers(child.path)).not.toContain("doc.rst");
   });
 });

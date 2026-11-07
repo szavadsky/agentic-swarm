@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { nextWave, runnable, type SchedItem } from "../src/core/plan/scheduler.js";
+import { blockedByFailure, nextWave, runnable, type SchedItem } from "../src/core/plan/scheduler.js";
 
 describe("plan/scheduler: nextWave", () => {
   it("returns current active wave while items are pending or running", () => {
@@ -42,6 +42,42 @@ describe("plan/scheduler: nextWave", () => {
 
     // Numeric sort ensures "2" runs before "10" (not alphabetical "10" before "2")
     expect(nextWave(items, [])).toBe("2");
+  });
+
+  it("treats pending items with failed/abandoned deps as blocked for wave advancement", () => {
+    const items: SchedItem[] = [
+      { slug: "dep-ok", wave: "1", deps: [], status: "done" },
+      { slug: "dep-fail", wave: "1", deps: [], status: "failed" },
+      { slug: "doomed", wave: "2", deps: ["dep-fail"], status: "pending" },
+      { slug: "viable", wave: "2", deps: ["dep-ok"], status: "pending" },
+    ];
+
+    // Wave 2 still has runnable work (viable), so it stays active.
+    expect(nextWave(items, ["1", "2"])).toBe("2");
+
+    const finished: SchedItem[] = [
+      { slug: "dep-ok", wave: "1", deps: [], status: "done" },
+      { slug: "dep-fail", wave: "1", deps: [], status: "failed" },
+      { slug: "doomed", wave: "2", deps: ["dep-fail"], status: "pending" },
+      { slug: "viable", wave: "2", deps: ["dep-ok"], status: "done" },
+    ];
+
+    // Only the never-runnable dependent is left pending: the wave must not stall.
+    expect(nextWave(finished, ["1", "2"])).toBeNull();
+  });
+
+  it("reports directly blocked items; transitive cascade is the engine's job", () => {
+    const items: SchedItem[] = [
+      { slug: "dep-gone", wave: "1", deps: [], status: "abandoned" },
+      { slug: "orphan-a", wave: "2", deps: ["dep-gone"], status: "pending" },
+      { slug: "orphan-b", wave: "3", deps: ["orphan-a"], status: "pending" },
+    ];
+
+    // orphan-a is directly blocked; the engine marks it, then orphan-b transitively.
+    expect(blockedByFailure(items)).toEqual(["orphan-a"]);
+    // Wave 3's pending item has no failed DIRECT dep yet, so wave 3 stays active
+    // until the engine cascades the blocked marking.
+    expect(nextWave(items, ["1", "2", "3"])).toBe("3");
   });
 });
 
@@ -98,5 +134,41 @@ describe("plan/scheduler: runnable", () => {
 
     const result = runnable(items, "1", 2, 0);
     expect(result).toEqual(["first-pm-priority", "second-pm-priority"]);
+  });
+
+  it("never returns items whose deps failed", () => {
+    const items: SchedItem[] = [
+      { slug: "dep-ok", wave: "1", deps: [], status: "done" },
+      { slug: "dep-fail", wave: "1", deps: [], status: "failed" },
+      { slug: "ready", wave: "2", deps: ["dep-ok"], status: "pending" },
+      { slug: "doomed", wave: "2", deps: ["dep-fail"], status: "pending" },
+    ];
+
+    expect(runnable(items, "2", 4, 0)).toEqual(["ready"]);
+  });
+});
+
+describe("plan/scheduler: blockedByFailure", () => {
+  it("returns pending items with failed or abandoned deps, in PM order", () => {
+    const items: SchedItem[] = [
+      { slug: "ok", wave: "1", deps: [], status: "done" },
+      { slug: "bad", wave: "1", deps: [], status: "failed" },
+      { slug: "gone", wave: "1", deps: [], status: "abandoned" },
+      { slug: "first", wave: "2", deps: ["bad"], status: "pending" },
+      { slug: "fine", wave: "2", deps: ["ok"], status: "pending" },
+      { slug: "second", wave: "2", deps: ["gone"], status: "pending" },
+      { slug: "already", wave: "2", deps: ["bad"], status: "running" },
+    ];
+
+    expect(blockedByFailure(items)).toEqual(["first", "second"]);
+  });
+
+  it("returns empty when no dep has failed or been abandoned", () => {
+    const items: SchedItem[] = [
+      { slug: "dep", wave: "1", deps: [], status: "done" },
+      { slug: "next", wave: "2", deps: ["dep"], status: "pending" },
+    ];
+
+    expect(blockedByFailure(items)).toEqual([]);
   });
 });

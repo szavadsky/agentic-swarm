@@ -1,13 +1,24 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { PipelineConfig, ProjectConfig } from "../artifacts.js";
+import type { PipelineConfig, ProjectConfig, InfraArtifact, GatesBaselineArtifact } from "../artifacts.js";
 import type { Harness } from "../../harness/types.js";
 import { git } from "../git/exec.js";
+import {
+  mergeParentInto,
+  concludeMerge,
+  mergeChildIntoParent,
+  removeWorktree,
+  treeOf,
+} from "../git/index.js";
 import { runAgentStep } from "./step-runner.js";
 import { runSeamHooks } from "./seams.js";
 import { appendJournal } from "../journal.js";
+import { runGates } from "../checks/gates.js";
+import { runCheck } from "../checks/runner.js";
+import type { CheckContext } from "../checks/types.js";
 import type { DerivedItemState } from "../derive/item.js";
 import type { Semaphore } from "../mutex.js";
+import { readYaml } from "../records/io.js";
 
 export interface MergeItemParams {
   task: string;
@@ -33,99 +44,7 @@ export interface MergeItemResult {
 }
 
 /**
- * Merges parent into child worktree (§7).
- */
-async function mergeParentIntoSafe(
-  repo: any,
-  childWt: string,
-  parentBranch: string
-): Promise<{ ok: true; sha: string } | { ok: false; conflicts: string[] }> {
-  try {
-    const { mergeParentInto } = await import("../git/merge.js" as any);
-    return await mergeParentInto(repo, childWt, parentBranch);
-  } catch {
-    const res = await git(childWt, ["merge", parentBranch], { allowFail: true });
-    if (res.code === 0) {
-      const shaRes = await git(childWt, ["rev-parse", "HEAD"]);
-      return { ok: true, sha: shaRes.stdout.trim() };
-    }
-    // Conflict
-    const statusRes = await git(childWt, ["diff", "--name-only", "--diff-filter=U"], { allowFail: true });
-    const conflicts = statusRes.stdout.split("\n").map((f) => f.trim()).filter(Boolean);
-    return { ok: false, conflicts };
-  }
-}
-
-/**
- * Concludes merge after integrate step (§7).
- */
-async function concludeMergeSafe(
-  repo: any,
-  childWt: string,
-  message: string
-): Promise<string> {
-  try {
-    const { concludeMerge } = await import("../git/merge.js" as any);
-    return await concludeMerge(repo, childWt, message);
-  } catch {
-    await git(childWt, ["add", "-A"], { allowFail: true });
-    await git(childWt, ["commit", "-m", message], { allowFail: true });
-    const shaRes = await git(childWt, ["rev-parse", "HEAD"]);
-    return shaRes.stdout.trim();
-  }
-}
-
-/**
- * Merges child into parent with --no-ff (§7).
- */
-export async function mergeChildIntoParentSafe(
-  repo: any,
-  parentWt: string,
-  childBranch: string,
-  message: string
-): Promise<string> {
-  try {
-    const { mergeChildIntoParent } = await import("../git/merge.js" as any);
-    return await mergeChildIntoParent(repo, parentWt, childBranch, message);
-  } catch {
-    const res = await git(parentWt, ["merge", "--no-ff", childBranch, "-m", message]);
-    const shaRes = await git(parentWt, ["rev-parse", "HEAD"]);
-    return shaRes.stdout.trim();
-  }
-}
-
-/**
- * Removes child worktree (§7).
- */
-async function removeWorktreeSafe(repo: any, wtPath: string): Promise<void> {
-  try {
-    const { removeWorktree } = await import("../git/worktrees.js" as any);
-    await removeWorktree(repo, wtPath);
-  } catch {
-    try {
-      await git(repo?.mainRoot ?? wtPath, ["worktree", "remove", "--force", wtPath], { allowFail: true });
-    } catch {
-      // ignore
-    }
-  }
-}
-
-/**
- * Returns tree sha of worktree (§7).
- */
-async function treeOfSafe(wt: string, rev?: string): Promise<string> {
-  try {
-    const { treeOf } = await import("../git/merge.js" as any);
-    return await treeOf(wt, rev);
-  } catch {
-    const targetRev = rev ?? "HEAD";
-    const res = await git(wt, ["rev-parse", `${targetRev}^{tree}`], { allowFail: true });
-    return res.stdout.trim();
-  }
-}
-
-/**
- * Runs the merge path for a single ready item under the parent's merge lock (§7).
+ * Runs the merge path for a single ready item under the parent's merge lock (§7, §9).
  */
 export async function mergeItem(params: MergeItemParams): Promise<MergeItemResult> {
   const {
@@ -143,107 +62,174 @@ export async function mergeItem(params: MergeItemParams): Promise<MergeItemResul
     turnsSemaphore,
   } = params;
 
-  await appendJournal(taskDir, {
-    type: "item_merge_started",
-    item: item.slug,
-    branch: item.branch,
-  });
-
-  // 1. In child worktree: merge parent into child
-  const mergeParentRes = await mergeParentIntoSafe(repo, childWt, parentBranch);
-  let conflictResolved = false;
-
-  if (!mergeParentRes.ok) {
-    // Conflict -> integrate step with developer agent
+  return await repo.mergeLocks.runExclusive(parentBranch, async () => {
     await appendJournal(taskDir, {
-      type: "merge_conflict",
+      type: "item_merge_started",
       item: item.slug,
-      conflicts: mergeParentRes.conflicts,
+      branch: item.branch,
     });
 
-    const diffRes = await git(childWt, ["diff"], { allowFail: true });
-    const recordsDir = path.join(taskDir, "items", item.slug, "steps");
+    const preMergeTree = await treeOf(childWt);
 
-    const integrateRes = await runAgentStep({
-      task,
-      item: item.slug,
-      stepId: "integrate",
-      stepFragment: "steps/integrate",
-      agent: "developer",
-      role: "workhorse",
-      cwd: childWt,
-      taskDir,
-      recordsDir,
-      repo,
-      harness,
-      pipeline,
-      project,
-      prompts,
-      promptVars: {
+    // 1. In child worktree: merge parent into child (§7)
+    const mergeParentRes = await mergeParentInto(repo, childWt, parentBranch);
+    let conflictResolved = false;
+
+    if (!mergeParentRes.ok) {
+      // Conflict -> integrate step with developer agent
+      await appendJournal(taskDir, {
+        type: "merge_conflict",
         item: item.slug,
-        diff: diffRes.stdout || `Conflicts in: ${mergeParentRes.conflicts.join(", ")}`,
-      },
-      turnsSemaphore,
-    });
+        conflicts: mergeParentRes.conflicts,
+      });
 
-    if (!integrateRes.ok) {
-      return {
-        ok: false,
-        error: `Integrate step failed for item ${item.slug}`,
-      };
+      const diffRes = await git(childWt, ["diff"], { allowFail: true });
+      const recordsDir = path.join(childWt, project.orchestrationFolder ?? ".factory", task, "items", item.slug, "steps");
+
+      const integrateRes = await runAgentStep({
+        task,
+        item: item.slug,
+        stepId: "integrate",
+        stepFragment: "steps/integrate",
+        agent: "developer",
+        role: "workhorse",
+        cwd: childWt,
+        taskDir,
+        recordsDir,
+        repo,
+        harness,
+        pipeline,
+        project,
+        prompts,
+        promptVars: {
+          item: item.slug,
+          diff: diffRes.stdout || `Conflicts in: ${mergeParentRes.conflicts.join(", ")}`,
+        },
+        turnsSemaphore,
+      });
+
+      if (!integrateRes.ok) {
+        // Abort failed merge so child worktree is not left with MERGE_HEAD
+        await git(childWt, ["merge", "--abort"], { allowFail: true });
+        return {
+          ok: false,
+          error: `Integrate step failed for item ${item.slug}`,
+        };
+      }
+
+      const mergeHeadCheck = await git(childWt, ["rev-parse", "-q", "--verify", "MERGE_HEAD"], { allowFail: true });
+      if (mergeHeadCheck.code === 0) {
+        await concludeMerge(
+          repo,
+          childWt,
+          `factory(${item.slug}): integrate conflict resolution`
+        );
+      }
+      conflictResolved = true;
     }
 
-    await concludeMergeSafe(
+    // 2. Tree comparison and check verification if tree differs (§7, §9)
+    const postMergeTree = await treeOf(childWt);
+    if (postMergeTree !== preMergeTree) {
+      let infra: InfraArtifact | undefined;
+      const infraPath = path.join(taskDir, "infra.yaml");
+      if (fs.existsSync(infraPath)) {
+        try {
+          infra = await readYaml<InfraArtifact>(infraPath);
+        } catch {
+          // ignore
+        }
+      }
+
+      let baseline: GatesBaselineArtifact | undefined;
+      const baselinePath = path.join(taskDir, "gates-baseline.yaml");
+      if (fs.existsSync(baselinePath)) {
+        try {
+          baseline = await readYaml<GatesBaselineArtifact>(baselinePath);
+        } catch {
+          // ignore
+        }
+      }
+
+      const checkCtx: CheckContext = {
+        repo,
+        wt: childWt,
+        base: parentBranch,
+        project,
+        pipeline,
+        infra,
+        baseline,
+        kind: item.kind,
+        item: item.slug,
+        task,
+        taskWt,
+        limits: pipeline.limits ?? {},
+        outputBytes: pipeline.limits?.checkOutputBytes ?? 4096,
+      };
+
+      // Run gates if configured
+      if (infra && infra.gates && infra.gates.length > 0) {
+        const gatesOutcome = await runGates(checkCtx);
+        if (!gatesOutcome.ok) {
+          return {
+            ok: false,
+            error: `Quality gates failed on merge path for ${item.slug}`,
+          };
+        }
+      }
+
+      // Run target-green if testRunner and target are configured
+      if (infra && infra.testRunner && checkCtx.target) {
+        const targetRes = await runCheck("target-green", checkCtx);
+        if (!targetRes.ok) {
+          return {
+            ok: false,
+            error: `target-green failed on merge path for ${item.slug}: ${targetRes.summary}`,
+          };
+        }
+      }
+    }
+
+    // 3. Merge child into parent with --no-ff (§7)
+    const mergeCommitSha = await mergeChildIntoParent(
       repo,
-      childWt,
-      `factory(${item.slug}): integrate conflict resolution`
+      taskWt,
+      item.branch,
+      `factory: merge item ${item.slug}`
     );
-    conflictResolved = true;
-  }
 
-  // 2. Tree comparison and check verification if tree differs
-  // Check if gates / target-green need to run
-  // In full flow: if tree differed, re-run checks.
+    // 4. Remove child worktree (branch is kept)
+    await removeWorktree(repo, childWt);
 
-  // 3. Merge child into parent with --no-ff
-  const mergeCommitSha = await mergeChildIntoParentSafe(
-    repo,
-    taskWt,
-    item.branch,
-    `factory: merge item ${item.slug}`
-  );
+    // 5. Run after:item.merge hooks (§8.10)
+    await runSeamHooks({
+      phase: "after",
+      seam: "item.merge",
+      cwd: taskWt,
+      baseRef: parentBranch,
+      kind: item.kind,
+      isEscalated: item.isEscalated,
+      taskKind: "story",
+      pipeline,
+      project,
+      repo,
+      harness,
+      prompts,
+      taskDir,
+      item: item.slug,
+    });
 
-  // 4. Remove child worktree (branch is kept)
-  await removeWorktreeSafe(repo, childWt);
+    await appendJournal(taskDir, {
+      type: "item_merged",
+      item: item.slug,
+      sha: mergeCommitSha,
+      conflictResolved,
+    });
 
-  // 5. Run after:item.merge hooks (§8.10)
-  await runSeamHooks({
-    phase: "after",
-    seam: "item.merge",
-    cwd: taskWt,
-    baseRef: parentBranch,
-    kind: item.kind,
-    isEscalated: item.isEscalated,
-    taskKind: "story",
-    pipeline,
-    project,
-    repo,
-    harness,
-    prompts,
-    taskDir,
-    item: item.slug,
+    return {
+      ok: true,
+      sha: mergeCommitSha,
+      conflictResolved,
+    };
   });
-
-  await appendJournal(taskDir, {
-    type: "item_merged",
-    item: item.slug,
-    sha: mergeCommitSha,
-    conflictResolved,
-  });
-
-  return {
-    ok: true,
-    sha: mergeCommitSha,
-    conflictResolved,
-  };
 }

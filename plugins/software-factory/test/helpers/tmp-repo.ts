@@ -11,7 +11,7 @@ export interface TmpRepo {
   commit(message: string, paths?: string[]): string;
   createBranch(branchName: string, startPoint?: string): void;
   createWorktree(branchName: string, wtPath?: string): string;
-  git(args: string[], opts?: { allowFail?: boolean; env?: Record<string, string> }): {
+  git(args: string[], opts?: { allowFail?: boolean; env?: Record<string, string>; cwd?: string }): {
     stdout: string;
     stderr: string;
     code: number;
@@ -112,7 +112,7 @@ export function createTmpRepo(options?: { initialCommitMessage?: string }): TmpR
       return targetPath;
     },
 
-    git(args: string[], opts?: { allowFail?: boolean; env?: Record<string, string> }) {
+    git(args: string[], opts?: { allowFail?: boolean; env?: Record<string, string>; cwd?: string }) {
       return runGit(args, opts);
     },
 

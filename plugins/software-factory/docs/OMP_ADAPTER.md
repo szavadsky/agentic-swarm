@@ -56,8 +56,8 @@ omp -p @<runtimeDir>/prompts/complete-<ts>.txt \
 
 ## 3. Configuration Overlay (`omp-overlay.yaml`)
 
-Generated dynamically per run under `.factory-runtime/omp-overlay.yaml` from `PipelineConfig.models.roles`:
-
+Generated dynamically on each run under `<runtimeDir>/omp-overlay.yaml` from the effective (root + task layered) `PipelineConfig.models.roles`.
+`<runtimeDir>` is placed strictly outside the main repository checkout (resolving to `{worktreeRoot}/.factory-runtime/` via `resolveRuntimeDir` and `project.yaml`):
 ```yaml
 modelRoles:
   workhorse: opencode-go/deepseek-v4.1-flash:max
@@ -117,10 +117,11 @@ Stdout emits streaming NDJSON objects (`--mode json`):
 3. **Structured Yield**:
    When `--tools` includes `yield`, model invocations emit `toolCall` events with name `yield` and `arguments.data`. Captured as primary candidate data.
 4. **Text JSON Extraction**:
-   If no tool call occurred, extracts JSON (or fenced ` ```json ` blocks) from assistant text.
-5. **Schema Enforcement**:
+   If no tool call occurred, extracts JSON (or fenced ` ```json ` blocks) from the **last assistant turn's text** (overwriting intermediate turns rather than concatenating transcript text).
+5. **StopReason Honor**:
+   Turns ending with `stopReason: "abort"` or `stopReason: "error"` are classified as failures even if the process exit code is 0.
+6. **Schema Enforcement**:
    Validates candidate data against `AgentRun.outputSchema`. On schema violation, returns `{ ok: false, error: ajvError, data: rawOutput, transient: false }`, allowing the engine's `validateAndRepair` pipeline to repair structure.
-
 ---
 
 ## 5. Failure Classification Matrix
@@ -130,3 +131,21 @@ Stdout emits streaming NDJSON objects (`--mode json`):
 | **Transient Error** (`transient: true`) | Process timeout; killed by `SIGTERM` (143) / `SIGKILL` (137); HTTP 429, 500, 502, 503, 504; socket hangup; `ECONNRESET`; `ETIMEDOUT`; `overloaded`; `quota exceeded`. | Retried via `maxInfraRetries` with backoff; does not consume item fix rounds. |
 | **Session Lost** (`sessionLost: true`) | `resumeRequested === true` and session transcript not found or OMP prints `Session "..." not found`. | Triggers engine rehydration from artifacts (`src/core/sessions.ts`). |
 | **Agent / Model Failure** (`transient: false`) | Exit code 1; invalid arguments; model refusal; stopReason `abort`. | Advances step fix rounds or triggers consult. |
+
+---
+
+## 6. Process Lifecycle, Timeouts & Run Lock
+
+### 6.1 Per-Step & Completion Timeouts
+- **`AgentRun.timeoutSec`**: Honors per-step timeout configured in pipeline steps (e.g. `timeoutSec: 120`). When omitted, falls back to `defaultTimeoutMs` (300,000ms / 5m).
+- **`complete()` Timeout**: Spawns `omp -p` with an active timer; on timeout, fires `SIGTERM` followed by `SIGKILL` (3s grace) and terminates the process with an explicit timeout rejection.
+
+### 6.2 Atomic Run Lock (`acquireRunLock`)
+- Lock files live at `<runtimeDir>/locks/<task>.lock` outside git tracking.
+- Acquired atomically using `fs.openSync(lockPath, "wx")`.
+- On `EEXIST`:
+  - If the lock was created by another host (`host !== os.hostname()`), acquisition is safely refused (`null`).
+  - If the PID is alive on the current host, acquisition is refused (`null`).
+  - If the PID is dead on the current host, the lock is taken over atomically via a temporary file write and `fs.renameSync(tmpPath, lockPath)`.
+  - Takeovers emit a console warning notice and append a `lock_takeover` audit event to `{taskDir}/journal.ndjson`.
+  - `release()` removes the lock file only if the lock still belongs to the active process PID and host.

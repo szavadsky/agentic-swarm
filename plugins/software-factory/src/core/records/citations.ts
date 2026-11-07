@@ -46,10 +46,30 @@ export function verifyCitation(
   citation: Citation,
   workspaceRoot: string
 ): CitationVerificationFailure | null {
-  const filePath = path.resolve(workspaceRoot, citation.file);
+  const root = path.resolve(workspaceRoot);
+  const filePath = path.resolve(root, citation.file);
 
-  // 1. File existence
-  if (!fs.existsSync(filePath)) {
+  // 0. Containment: reject absolute paths and `../` escapes outside the worktree.
+  if (filePath !== root && !filePath.startsWith(root + path.sep)) {
+    return {
+      citation,
+      reason: "file_not_found",
+      message: `File "${citation.file}" is outside the workspace "${workspaceRoot}".`,
+    };
+  }
+
+  // 1. File existence (must be a regular file; directories are not citable).
+  let stat: fs.Stats;
+  try {
+    stat = fs.statSync(filePath);
+  } catch {
+    return {
+      citation,
+      reason: "file_not_found",
+      message: `File "${citation.file}" not found in workspace "${workspaceRoot}".`,
+    };
+  }
+  if (!stat.isFile()) {
     return {
       citation,
       reason: "file_not_found",
@@ -57,9 +77,12 @@ export function verifyCitation(
     };
   }
 
-  // Read file lines
+  // Read file lines (a single trailing newline is a terminator, not an extra line).
   const content = fs.readFileSync(filePath, "utf8");
   const fileLines = content.split(/\r?\n/);
+  if (fileLines.length > 0 && fileLines[fileLines.length - 1] === "") {
+    fileLines.pop();
+  }
   const totalLines = fileLines.length;
 
   // 2. Line range validation

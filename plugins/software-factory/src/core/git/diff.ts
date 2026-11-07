@@ -4,6 +4,8 @@ export interface ChangedFile {
   path: string;
   status: string; // "A" | "M" | "D" | "R" | ...
   from?: string;
+  /** Rename/copy similarity score (0-100) parsed from R100/R087/Cxx; undefined otherwise. */
+  similarity?: number;
 }
 
 export interface NumstatEntry {
@@ -69,10 +71,12 @@ export async function changedFiles(
       // Rename or Copy: rawStatus is e.g. R100, parts[1] is old path, parts[2] is new path
       const from = parts[1];
       const targetPath = parts[2] ?? from ?? "";
+      const parsed = parseInt(rawStatus.slice(1), 10);
       result.push({
         path: targetPath,
         status: statusCode,
         from,
+        ...(Number.isFinite(parsed) ? { similarity: parsed } : {}),
       });
     } else {
       const targetPath = parts[1] ?? "";
@@ -181,21 +185,6 @@ export async function changedLines(
     total: added + deleted,
     files,
   };
-}
-
-/**
- * Reads file content at a specific revision, or returns null if not present.
- */
-export async function fileAt(
-  wt: string,
-  rev: string,
-  path: string
-): Promise<string | null> {
-  const res = await git(wt, ["show", `${rev}:${path}`], { allowFail: true });
-  if (res.code === 0) {
-    return res.stdout;
-  }
-  return null;
 }
 
 /**

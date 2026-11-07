@@ -8,11 +8,18 @@ import type {
   SteerClassificationArtifact,
   SteerItemArtifact,
   StepMetaArtifact,
+  TriageArtifact,
 } from "./artifacts.js";
 import type { Harness } from "../harness/types.js";
 import { Semaphore } from "./mutex.js";
 import { git } from "./git/exec.js";
-import { taskBranch } from "./git/naming.js";
+import { taskBranch, childBranch } from "./git/naming.js";
+import {
+  ensureTaskWorktree,
+  ensureChildWorktree,
+  repairWorktree,
+  commitAll,
+} from "./git/index.js";
 import { appendJournal } from "./journal.js";
 import { BudgetTracker } from "./budget.js";
 import { deriveTaskState, materializeStateYaml, type DerivedTaskState } from "./derive/task.js";
@@ -20,6 +27,8 @@ import { runIngest } from "./flows/ingest.js";
 import { runIteration } from "./flows/iteration.js";
 import { runSeamHooks } from "./flows/seams.js";
 import { readYaml, writeYamlAtomic, readText } from "./records/io.js";
+import { listPending, classify, takenPaths } from "./steer.js";
+import { resolveRole } from "./config/roles.js";
 
 export interface EngineDeps {
   harness: Harness;
@@ -36,67 +45,6 @@ export type RunResult = {
   exitCode: 0 | 10 | 1;
   summary: string;
 };
-
-/**
- * Ensures task worktree exists (§7).
- */
-async function ensureTaskWorktreeSafe(
-  repo: any,
-  task: string,
-  opts: { intentPath: string; orchestrationFolder: string }
-): Promise<{ branch: string; path: string; created: boolean }> {
-  try {
-    const { ensureTaskWorktree } = await import("./git/worktrees.js" as any);
-    return await ensureTaskWorktree(repo, task, opts);
-  } catch {
-    const branch = taskBranch(task);
-    const wtPath = path.join(repo.worktreeRoot, branch.replace(/\//g, "_"));
-    let created = false;
-    if (!fs.existsSync(wtPath)) {
-      await git(repo.mainRoot, ["branch", branch], { allowFail: true });
-      await git(repo.mainRoot, ["worktree", "add", wtPath, branch], { allowFail: true });
-      created = true;
-    }
-    const dest = path.join(wtPath, opts.orchestrationFolder, task, "INTENT.md");
-    if (!fs.existsSync(dest) && fs.existsSync(opts.intentPath)) {
-      await fs.promises.mkdir(path.dirname(dest), { recursive: true });
-      await fs.promises.copyFile(opts.intentPath, dest);
-      await git(wtPath, ["add", "-A"], { allowFail: true });
-      await git(wtPath, ["commit", "-m", `factory: initialize ${task}`], { allowFail: true });
-    }
-    return { branch, path: wtPath, created };
-  }
-}
-
-/**
- * Runs start-up repair across worktrees (§6.3.6).
- */
-async function repairWorktreeSafe(
-  repo: any,
-  wt: string,
-  kind: "task" | "item",
-  opts: { operatorEditable: string[] }
-): Promise<{ actions: string[] }> {
-  try {
-    const { repairWorktree } = await import("./git/repair.js" as any);
-    return await repairWorktree(repo, wt, kind, opts);
-  } catch {
-    const actions: string[] = [];
-    const statusRes = await git(wt, ["status", "--porcelain"], { allowFail: true });
-    if (statusRes.stdout.trim()) {
-      if (kind === "task") {
-        await git(wt, ["add", "-A"], { allowFail: true });
-        await git(wt, ["commit", "-m", "factory: operator edits"], { allowFail: true });
-        actions.push("commit_operator_edits");
-      } else {
-        await git(wt, ["add", "-A"], { allowFail: true });
-        await git(wt, ["commit", "-m", "interrupted"], { allowFail: true });
-        actions.push("commit_interrupted");
-      }
-    }
-    return { actions };
-  }
-}
 
 /**
  * Repairs uncompleted step records (§6.3.6):
@@ -152,79 +100,61 @@ async function repairInterruptedRecords(taskDir: string): Promise<void> {
 }
 
 /**
- * Processes steering mailbox single-flight (§8.8).
+ * Processes steering mailbox single-flight using steer.ts API (§8.8, Finding 17).
  */
 async function processSteeringMailbox(
+  taskWt: string,
   taskDir: string,
   harness: Harness,
-  pipeline: PipelineConfig
+  pipeline: PipelineConfig,
+  prompts: any,
+  repo: any,
+  task: string
 ): Promise<{ stopRequested: boolean }> {
-  const pendingDir = path.join(taskDir, "steer", "fromuserpending");
-  if (!fs.existsSync(pendingDir)) {
+  const relTaskDir = path.relative(taskWt, taskDir);
+  const pending = await listPending(taskWt, relTaskDir);
+  if (pending.length === 0) {
     return { stopRequested: false };
   }
 
-  const entries = await fs.promises.readdir(pendingDir, { withFileTypes: true });
-  const pendingFiles = entries.filter((e) => e.isFile() && !e.name.startsWith("."));
-  if (pendingFiles.length === 0) {
-    return { stopRequested: false };
-  }
-
-  const takenDir = path.join(taskDir, "steer", "fromusertaken");
-  await fs.promises.mkdir(takenDir, { recursive: true });
+  // Load currently open questions for context
+  const openQuestions: SteerItemArtifact[] = [];
   const touserDir = path.join(taskDir, "steer", "tousertoreview");
-
-  let stopRequested = false;
-
-  for (const pf of pendingFiles) {
-    const srcPath = path.join(pendingDir, pf.name);
-    const text = await readText(srcPath);
-
-    // Classify using @simpler (§8.8)
-    let classification: SteerClassificationArtifact = {
-      refs: ["task"],
-      kind: "directive",
-      urgency: "now",
-      summary: text.slice(0, 100),
-    };
-
-    try {
-      const classified = (await harness.complete({
-        role: "simpler",
-        models: ["deepseek-chat"],
-        system: "Classify user steering message into refs, kind (answer|directive|stop), urgency (now|next-architect-call), summary.",
-        prompt: `Steering message:\n${text}`,
-        schema: {
-          type: "object",
-          required: ["refs", "kind", "urgency", "summary"],
-          properties: {
-            refs: { type: "array", items: { type: "string" } },
-            kind: { type: "string", enum: ["answer", "directive", "stop"] },
-            urgency: { type: "string", enum: ["now", "next-architect-call"] },
-            summary: { type: "string" },
-          },
-        },
-      })) as SteerClassificationArtifact;
-
-      if (classified && classified.kind) {
-        classification = classified;
-      }
-    } catch {
-      // Fallback
-      if (text.toLowerCase().includes("stop")) {
-        classification.kind = "stop";
+  if (fs.existsSync(touserDir)) {
+    const qFiles = await fs.promises.readdir(touserDir);
+    for (const qf of qFiles) {
+      if (!qf.endsWith(".yaml")) continue;
+      try {
+        const q = await readYaml<SteerItemArtifact>(path.join(touserDir, qf));
+        if (q.status === "open") openQuestions.push(q);
+      } catch {
+        // ignore
       }
     }
+  }
 
-    // Move pending to taken
-    const destPath = path.join(takenDir, pf.name);
-    await fs.promises.rename(srcPath, destPath);
-    await writeYamlAtomic(`${destPath}.classification.yaml`, classification);
+  const simplerRole = resolveRole("simpler", pipeline.models.roles);
+  let stopRequested = false;
+
+  for (const item of pending) {
+    const classification = await classify(harness, item, {
+      openQuestions,
+      role: simplerRole.role,
+      models: simplerRole.models,
+      prompts,
+    });
+
+    const { from, to } = takenPaths(item.file, relTaskDir);
+    const absTo = path.join(taskWt, to);
+    await fs.promises.mkdir(path.dirname(absTo), { recursive: true });
+    // One atomic commit per §8.8: git mv to fromusertaken/, classification yaml, effects
+    await git(taskWt, ["mv", from, to]);
+    await writeYamlAtomic(`${absTo}.classification.yaml`, classification);
 
     if (classification.kind === "stop") {
       stopRequested = true;
     } else if (classification.kind === "answer") {
-      // Answer closes / unblocks items in tousertoreview
+      // Answer matching questions exactly (Finding 16)
       if (fs.existsSync(touserDir)) {
         const qFiles = await fs.promises.readdir(touserDir);
         for (const qf of qFiles) {
@@ -232,9 +162,12 @@ async function processSteeringMailbox(
           const qPath = path.join(touserDir, qf);
           try {
             const q = await readYaml<SteerItemArtifact>(qPath);
-            if (q.status === "open" && classification.refs.some((r) => q.ref.includes(r))) {
+            const matches = classification.refs.some(
+              (r) => q.ref === r || q.ref === `${task}/${r}` || q.id === r
+            );
+            if (q.status === "open" && matches) {
               q.status = "answered";
-              q.answer = text;
+              q.answer = item.text;
               await writeYamlAtomic(qPath, q);
             }
           } catch {
@@ -244,14 +177,87 @@ async function processSteeringMailbox(
       }
     }
 
+    // Atomic commit for mailbox processing (§8.8, Finding 17)
+    await git(taskWt, ["add", "-A"], { allowFail: true });
+    await commitAll(repo, taskWt, `factory: process steering message ${item.file}`);
+
     await appendJournal(taskDir, {
       type: "steer_processed",
-      file: pf.name,
+      file: item.file,
       classification,
     });
   }
 
   return { stopRequested };
+}
+
+/**
+ * Runs an epic as a child task on the parent branch (§8.6, Finding 7).
+ */
+export async function runChildTask(
+  deps: EngineDeps,
+  parent: { branch: string; path: string; taskDir: string },
+  epicSlug: string,
+  opts?: {
+    maxTicks?: number;
+    maxIterations?: number;
+    budgetTracker?: BudgetTracker;
+    rootTaskDir?: string;
+  }
+): Promise<RunResult> {
+  const { harness, repo, project, pipelineFor, prompts, log } = deps;
+  const parentBranch = parent.branch;
+  const childBranchName = childBranch(parentBranch, epicSlug);
+
+  // 1. Child worktree from parent tip (§8.6, §7: from the parent tip after the
+  // previous wave's merges; the epic INTENT written by the edits commit is on it)
+  const childWtInfo = await ensureChildWorktree(repo, parent, epicSlug);
+  const childWt = childWtInfo.path;
+  const orchFolder = project.orchestrationFolder ?? ".factory";
+  const parentTaskSlug = parent.taskDir.split("/").pop()!;
+  const childTaskDir = path.join(childWt, orchFolder, parentTaskSlug, epicSlug);
+  await fs.promises.mkdir(childTaskDir, { recursive: true });
+
+  // 2. Child shares root budget and mailbox (§8.6, §8.8)
+  const pipeline = await pipelineFor(childTaskDir);
+  const budgetTracker = opts?.budgetTracker ?? new BudgetTracker(pipeline.budget);
+
+  // 3. Child iterations (child skips classification; kind fixed by parent plan)
+  const itRes = await runIteration({
+    task: `${parentTaskSlug}--${epicSlug}`,
+    taskDir: childTaskDir,
+    taskWt: childWt,
+    parentBranch: childBranchName,
+    repo,
+    harness,
+    pipeline,
+    project,
+    prompts,
+    budgetTracker,
+    isChildTask: true,
+    log,
+  });
+
+  // 4. Record the child's final close-up as the parent item status so derive
+  // and the merge path see it (§8.6, Finding 7)
+  const parentItemDir = path.join(parent.taskDir, "items", epicSlug);
+  await fs.promises.mkdir(parentItemDir, { recursive: true });
+  const childStatus =
+    itRes.status === "done" ? "done" : itRes.status === "blocked" ? "blocked" : "failed";
+  await writeYamlAtomic(path.join(parentItemDir, "child-closeup.yaml"), {
+    epic: epicSlug,
+    status: childStatus,
+    iteration: itRes.iteration,
+    summary: `Epic child task finished: ${itRes.status}`,
+  });
+  await git(parent.path, ["add", "-A"], { allowFail: true });
+  await commitAll(repo, parent.path, `factory: record epic ${epicSlug} child status ${childStatus}`);
+
+  return {
+    status: itRes.status === "done" ? "done" : itRes.status === "blocked" ? "blocked" : "failed",
+    exitCode: itRes.status === "done" ? 0 : itRes.status === "blocked" ? 10 : 1,
+    summary: `Epic ${epicSlug} child task ${itRes.status}`,
+  };
 }
 
 /**
@@ -261,7 +267,7 @@ async function processSteeringMailbox(
 export async function runTask(
   deps: EngineDeps,
   task: string,
-  opts?: { maxTicks?: number }
+  opts?: { maxTicks?: number; maxIterations?: number }
 ): Promise<RunResult> {
   const { harness, repo, project, pipelineFor, prompts, log } = deps;
 
@@ -269,7 +275,7 @@ export async function runTask(
   const intentPath = path.join(repo.mainRoot, orchFolder, task, "INTENT.md");
 
   // 1. Ensure task worktree (§7)
-  const taskWtInfo = await ensureTaskWorktreeSafe(repo, task, {
+  const taskWtInfo = await ensureTaskWorktree(repo, task, {
     intentPath,
     orchestrationFolder: orchFolder,
   });
@@ -280,21 +286,49 @@ export async function runTask(
 
   const parentBranch = `topic/${task}`;
 
-  // 2. Start-up repair (§6.3.6)
-  await repairWorktreeSafe(repo, taskWt, "task", {
+  // 2. Start-up repair restricted to §6.3.6 list (Finding 1 & 19)
+  await repairWorktree(repo, taskWt, "task", {
     operatorEditable: [
+      "INTENT.md",
       "**/INTENT.md",
-      "**/*.yaml",
-      "**/*.yml",
-      "**/pipeline.yaml",
-      "**/steer/**",
-      `${orchFolder}/**`,
+      `${orchFolder}/${task}/INTENT.md`,
+      `${orchFolder}/${task}/pipeline.yaml`,
+      `${orchFolder}/*.yaml`,
+      `${orchFolder}/${task}/steer/fromuserpending/**`,
     ],
   });
+
+  // Repair existing item worktrees at start-up (Finding 19)
+  const itemsDir = path.join(taskDir, "items");
+  if (fs.existsSync(itemsDir)) {
+    try {
+      const itemEntries = await fs.promises.readdir(itemsDir, { withFileTypes: true });
+      for (const ent of itemEntries) {
+        if (ent.isDirectory()) {
+          const itemBranchName = childBranch(parentBranch, ent.name);
+          const itemWtPath = path.join(
+            repo.worktreeRoot,
+            itemBranchName.replace(/\//g, "_")
+          );
+          if (fs.existsSync(itemWtPath)) {
+            await repairWorktree(repo, itemWtPath, "item", { operatorEditable: [] });
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   await repairInterruptedRecords(taskDir);
 
   // 3. Load pipeline config and setup semaphores (§2)
   const pipeline = await pipelineFor(taskDir);
+  if (opts?.maxIterations !== undefined) {
+    if (!pipeline.limits) pipeline.limits = {};
+    pipeline.limits.maxIterations = opts.maxIterations;
+  }
+
   const limits = pipeline.limits ?? {};
   const maxParallelTurns = limits.maxParallelTurns ?? 4;
   const turnsSemaphore = new Semaphore(maxParallelTurns);
@@ -313,8 +347,16 @@ export async function runTask(
   while (ticks < maxTicks) {
     ticks++;
 
-    // a. Process steering mailbox (§8.8)
-    const steerRes = await processSteeringMailbox(taskDir, harness, pipeline);
+    // a. Process steering mailbox single-flight (§8.8, Finding 17)
+    const steerRes = await processSteeringMailbox(
+      taskWt,
+      taskDir,
+      harness,
+      pipeline,
+      prompts,
+      repo,
+      task
+    );
     if (steerRes.stopRequested) {
       await appendJournal(taskDir, { type: "task_stopped_by_user", task });
       return {
@@ -324,26 +366,48 @@ export async function runTask(
       };
     }
 
-    // b. Budget limit check (§12.5)
+    // b. Budget limit check (§12.5, Finding 32: idempotent and committed)
     const taskBudgetCheck = budgetTracker.checkTaskBudget();
     if (taskBudgetCheck.exceeded) {
-      // Create human-stop item in tousertoreview and exit 10 (§12.5)
       const steerDir = path.join(taskDir, "steer", "tousertoreview");
       await fs.promises.mkdir(steerDir, { recursive: true });
-      const qId = `budget-stop-${Date.now()}`;
-      await writeYamlAtomic(path.join(steerDir, `${qId}.yaml`), {
-        id: qId,
-        ref: task,
-        disposition: "human-stop",
-        question: `Task spend $${taskBudgetCheck.spent.toFixed(2)} exceeded budget limit $${taskBudgetCheck.limit}.`,
-        status: "open",
-      });
-      await appendJournal(taskDir, { type: "task_budget_exceeded", spent: taskBudgetCheck.spent });
-      return {
-        status: "blocked",
-        exitCode: 10,
-        summary: `Task ${task} budget exceeded ($${taskBudgetCheck.spent.toFixed(2)})`,
-      };
+      const budgetStopPath = path.join(steerDir, "budget-stop.yaml");
+      let alreadyAnswered = false;
+
+      if (fs.existsSync(budgetStopPath)) {
+        try {
+          const q = await readYaml<SteerItemArtifact>(budgetStopPath);
+          if (q.status === "answered") {
+            alreadyAnswered = true;
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      if (!alreadyAnswered) {
+        if (!fs.existsSync(budgetStopPath)) {
+          await writeYamlAtomic(budgetStopPath, {
+            id: "budget-stop",
+            ref: task,
+            disposition: "human-stop",
+            question: `Task spend $${taskBudgetCheck.spent.toFixed(2)} exceeded budget limit $${taskBudgetCheck.limit}.`,
+            blocks: ["task"],
+            status: "open",
+          });
+          await git(taskWt, ["add", "-A"], { allowFail: true });
+          await commitAll(repo, taskWt, "factory: raise budget-stop question");
+        }
+        await appendJournal(taskDir, {
+          type: "task_budget_exceeded",
+          spent: taskBudgetCheck.spent,
+        });
+        return {
+          status: "blocked",
+          exitCode: 10,
+          summary: `Task ${task} budget exceeded ($${taskBudgetCheck.spent.toFixed(2)})`,
+        };
+      }
     }
 
     // c. Derive current state (§6.3 Invariant 4)
@@ -352,6 +416,7 @@ export async function runTask(
       task,
       parentBranch,
       taskWt,
+      pipeline,
     });
 
     // Materialize state.yaml for humans (Invariant 4)
@@ -401,7 +466,23 @@ export async function runTask(
     // d. Act: Phase progression
     // Phase 1: Ingest if triage is missing
     const triagePath = path.join(taskDir, "triage.yaml");
-    if (!fs.existsSync(triagePath)) {
+    let triageArtifact: TriageArtifact | undefined;
+    if (fs.existsSync(triagePath)) {
+      try {
+        triageArtifact = await readYaml<TriageArtifact>(triagePath);
+      } catch {
+        // ignore
+      }
+    }
+
+    const simpleAssignmentExists = fs.existsSync(
+      path.join(taskDir, "items", "simple", "assignment.yaml")
+    );
+    const needsIngest =
+      !triageArtifact ||
+      (triageArtifact.kind === "simple" && !simpleAssignmentExists);
+
+    if (needsIngest) {
       const ingestRes = await runIngest({
         task,
         taskDir,
@@ -440,8 +521,18 @@ export async function runTask(
       budgetTracker,
       turnsSemaphore,
       architectSessionId,
-      runTaskChild: async (childSlug: string) => {
-        return await runTask(deps, `${task}--${childSlug}`, opts);
+      runTaskChild: async (epicSlug: string) => {
+        return await runChildTask(
+          deps,
+          { branch: parentBranch, path: taskWt, taskDir },
+          epicSlug,
+          {
+            maxTicks: opts?.maxTicks,
+            maxIterations: opts?.maxIterations,
+            budgetTracker,
+            rootTaskDir: taskDir,
+          }
+        );
       },
       log,
     });

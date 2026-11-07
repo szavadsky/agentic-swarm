@@ -143,4 +143,48 @@ fi
     expect(checkRes.ok).toBe(true);
     expect(checkRes.flaky).toContain("flaky-gate");
   });
+
+  it("gate timeout uses gateTimeoutSec and reports distinctly", async () => {
+    const ctx = makeContext({
+      infra: {
+        setup: [],
+        gates: [{ id: "slow", command: "sleep 5" }],
+        testRunner: { command: "true" },
+      },
+      limits: { gateRetries: 0, gateTimeoutSec: 1 },
+    });
+
+    const res = await runGates(ctx);
+    expect(res.ok).toBe(false);
+    expect(res.results[0]?.status).toBe("fail");
+    expect(res.results[0]?.details).toContain("timed out");
+
+    const checkRes = await runCheck("gates", ctx);
+    expect(checkRes.ok).toBe(false);
+    expect(checkRes.summary).toContain("slow");
+  });
+
+  it("gate details are tail-capped to outputBytes", async () => {
+    // ~100KB of output must be capped to outputBytes in the stored baseline entry
+    const scriptPath = path.join(tmpRepo.dir, "noisy.sh");
+    fs.writeFileSync(
+      scriptPath,
+      `#!/bin/sh\nyes "log-line-padding-0123456789" | head -n 4000\n`,
+      { mode: 0o755 }
+    );
+    const ctx = makeContext({
+      infra: {
+        setup: [],
+        gates: [{ id: "noisy", command: `sh "${scriptPath}"` }],
+        testRunner: { command: "true" },
+      },
+      limits: { gateRetries: 0 },
+      outputBytes: 1000,
+    });
+
+    const res = await runGates(ctx, { record: true });
+    const details = res.results[0]?.details ?? "";
+    expect(Buffer.byteLength(details, "utf8")).toBeLessThanOrEqual(1000);
+    expect(details).toContain("log-line-padding");
+  });
 });

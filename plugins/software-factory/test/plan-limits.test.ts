@@ -218,7 +218,6 @@ describe("plan/limits: validateEdits", () => {
       { slug: "item-a", kind: "dev", title: "Item A" },
       { slug: "item-b", kind: "dev", title: "Item B" },
       { slug: "item-c", kind: "dev", title: "Item C" },
-      { slug: "my-epic", kind: "epic", title: "My Epic" },
     ],
     epics: [{ slug: "my-epic", intent: "Build epic" }],
   };
@@ -432,5 +431,88 @@ describe("plan/limits: validateEdits", () => {
     });
 
     expect(errors.some((e) => e.includes('Epic item "my-epic" is only allowed in root tasks'))).toBe(true);
+  });
+
+  it("accepts epic edits whose outlineRef names a plan.epics entry (plan also validates)", () => {
+    // The shared fixture must be a plan validatePlan itself accepts:
+    // epic slugs must NOT collide with item-outline slugs.
+    const planErrors = validatePlan(defaultPlan, {
+      limits: defaultLimits,
+      kinds: defaultKinds,
+      isRootTask: true,
+      existingItems: [],
+    });
+    expect(planErrors).toEqual([]);
+
+    const edits: PlanEditsArtifact = {
+      iteration: 1,
+      items: [
+        {
+          slug: "my-epic",
+          kind: "epic",
+          title: "My Epic",
+          assignment: "Run child epic",
+          outlineRef: "my-epic",
+          milestone: "m1",
+          wave: 1,
+        },
+      ],
+    };
+
+    const errors = validateEdits(edits, {
+      plan: defaultPlan,
+      limits: defaultLimits,
+      kinds: defaultKinds,
+      isRootTask: true,
+      existing: [],
+    });
+
+    expect(errors).toEqual([]);
+  });
+
+  it("rejects epic edits whose outlineRef names no plan.epics entry", () => {
+    const edits: PlanEditsArtifact = {
+      iteration: 1,
+      items: [
+        {
+          slug: "ghost-epic",
+          kind: "epic",
+          title: "Ghost epic",
+          assignment: "Run child epic",
+          outlineRef: "item-a", // an item outline, not a plan.epics entry
+          milestone: "m1",
+          wave: 1,
+        },
+      ],
+    };
+
+    const errors = validateEdits(edits, {
+      plan: defaultPlan,
+      limits: defaultLimits,
+      kinds: defaultKinds,
+      isRootTask: true,
+      existing: [],
+    });
+
+    expect(errors.some((e) => e.includes('Epic item "ghost-epic" references unknown epic "item-a"'))).toBe(true);
+    expect(errors.some((e) => e.includes('has no corresponding epic definition in plan.epics'))).toBe(true);
+  });
+
+  it("rejects epic outline slugs colliding with item outlines in validatePlan", () => {
+    const plan: PlanArtifact = {
+      iteration: 1,
+      milestones: [{ id: "m1", title: "M1" }],
+      itemOutlines: [{ slug: "my-epic", kind: "dev", title: "Outline" }],
+      epics: [{ slug: "my-epic", intent: "Build epic" }],
+    };
+
+    const errors = validatePlan(plan, {
+      limits: defaultLimits,
+      kinds: defaultKinds,
+      isRootTask: true,
+      existingItems: [],
+    });
+
+    expect(errors.some((e) => e.includes('Duplicate slug "my-epic" (collides with item outline)'))).toBe(true);
   });
 });

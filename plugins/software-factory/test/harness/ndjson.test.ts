@@ -59,4 +59,36 @@ describe("OmpNdjsonParser", () => {
     expect(result.sessionId).toBe("test-session-123");
     expect(result.errors.length).toBe(0);
   });
+
+  it("extracts last turn text from multi-turn fixture without concatenating previous turns", () => {
+    const multiTurnFixture = [
+      '{"type":"session","id":"multi-turn-sess-1","timestamp":"2026-11-07T00:00:00Z"}',
+      '{"type":"turn_start"}',
+      '{"type":"turn_end","message":{"role":"assistant","content":[{"type":"text","text":"{\\"status\\":\\"draft\\",\\"step\\":1}"}],"stopReason":"stop"}}',
+      '{"type":"turn_start"}',
+      '{"type":"turn_end","message":{"role":"assistant","content":[{"type":"text","text":"{\\"status\\":\\"final\\",\\"step\\":2}"}],"stopReason":"stop"}}',
+    ].join("\n");
+
+    const parser = new OmpNdjsonParser();
+    parser.feedText(multiTurnFixture);
+    const result = parser.getResult();
+
+    // Must be strictly the last turn's text, not concatenated
+    expect(result.finalAssistantText).toBe('{"status":"final","step":2}');
+    expect(result.finalAssistantText).not.toContain("draft");
+  });
+
+  it("captures abort and error stopReasons", () => {
+    const abortFixture = [
+      '{"type":"session","id":"abort-sess-1"}',
+      '{"type":"turn_end","message":{"role":"assistant","content":[{"type":"text","text":"I must abort."}],"stopReason":"abort"}}',
+    ].join("\n");
+
+    const parser = new OmpNdjsonParser();
+    parser.feedText(abortFixture);
+    const result = parser.getResult();
+
+    expect(result.stopReason).toBe("abort");
+    expect(result.finalAssistantText).toBe("I must abort.");
+  });
 });

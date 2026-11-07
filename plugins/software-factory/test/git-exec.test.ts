@@ -55,4 +55,38 @@ describe("Hardened git execution (§2, §7)", () => {
       fs.rmSync(unconfiguredDir, { recursive: true, force: true });
     }
   });
+
+  it("engine git calls bypass repo hooks that would reject the commit", async () => {
+    // A hostile pre-commit hook that rejects everything.
+    const hookPath = path.join(repo.dir, ".git", "hooks", "pre-commit");
+    fs.writeFileSync(hookPath, "#!/bin/sh\necho BLOCKED >&2\nexit 1\n", "utf8");
+    fs.chmodSync(hookPath, 0o755);
+    try {
+      repo.writeFile("hooked.txt", "content\n");
+      await git(repo.dir, ["add", "hooked.txt"]);
+      const res = await git(repo.dir, ["commit", "-m", "hook bypass"]);
+      expect(res.code).toBe(0);
+      const logRes = await git(repo.dir, ["log", "-1", "--pretty=%s"]);
+      expect(logRes.stdout).toBe("hook bypass");
+    } finally {
+      fs.rmSync(hookPath, { force: true });
+    }
+  });
+
+  it("Repo.identityEnv builds the author/committer env once", async () => {
+    const { Repo } = await import("../src/core/git/repo.js");
+    const withIdentity = new Repo({
+      mainRoot: repo.dir,
+      worktreeRoot: repo.dir,
+      identity: { name: "Id Name", email: "id@example.test" },
+    });
+    expect(withIdentity.identityEnv()).toEqual({
+      GIT_AUTHOR_NAME: "Id Name",
+      GIT_AUTHOR_EMAIL: "id@example.test",
+      GIT_COMMITTER_NAME: "Id Name",
+      GIT_COMMITTER_EMAIL: "id@example.test",
+    });
+    const withoutIdentity = new Repo({ mainRoot: repo.dir, worktreeRoot: repo.dir });
+    expect(withoutIdentity.identityEnv()).toBeUndefined();
+  });
 });

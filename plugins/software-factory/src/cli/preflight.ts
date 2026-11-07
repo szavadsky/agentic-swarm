@@ -9,6 +9,7 @@ import { defaultSchemaCache } from "../core/records/schema-cache.js";
 import { generateOmpConfigOverlay, writeOmpConfigOverlay } from "../harness/omp/overlay.js";
 import { isRunLockFree } from "./lock.js";
 import { taskBranch } from "../core/git/naming.js";
+import { KNOWN_VARS } from "../core/prompt-vars.js";
 
 export interface PreflightOptions {
   repoRoot: string;
@@ -160,6 +161,57 @@ export async function runPreflight(opts: PreflightOptions): Promise<PreflightRes
       const promptErrors = preflightPrompts(promptLib, pipelineConfig);
       if (promptErrors.length > 0) {
         errors.push(...promptErrors.map((e) => `Prompt preflight: ${e}`));
+      }
+
+      // Render check every fragment referenced by the effective pipeline and orchestration (§10, §11)
+      const fragmentsToCheck = new Set<string>();
+      if (pipelineConfig.flows) {
+        if (pipelineConfig.flows.simple?.steps) {
+          for (const s of pipelineConfig.flows.simple.steps) {
+            fragmentsToCheck.add(s.stepFragment ?? s.id);
+          }
+        }
+        if (pipelineConfig.flows.story) {
+          for (const k of Object.values<any>(pipelineConfig.flows.story)) {
+            for (const s of k?.steps ?? []) {
+              fragmentsToCheck.add(s.stepFragment ?? s.id);
+            }
+          }
+        }
+        if (pipelineConfig.flows.spike) {
+          for (const k of Object.values<any>(pipelineConfig.flows.spike)) {
+            for (const s of k?.steps ?? []) {
+              fragmentsToCheck.add(s.stepFragment ?? s.id);
+            }
+          }
+        }
+      }
+      const standardOrchFragments = [
+        "steps/triage", "steps/infra", "steps/architect-plan", "steps/architect-revise",
+        "steps/architect-closeup", "steps/plan-review", "steps/pm-edits", "steps/pm-amend",
+        "steps/wave-close-up", "steps/architect-wave-report", "steps/fix-round",
+        "steps/architect-consult-item", "steps/architect-consult-nonitem",
+        "system/steer-classify", "system/repair"
+      ];
+      for (const frag of standardOrchFragments) {
+        fragmentsToCheck.add(frag);
+      }
+
+      for (const frag of fragmentsToCheck) {
+        try {
+          const known = KNOWN_VARS[frag] ?? KNOWN_VARS[`steps/${frag}`] ?? KNOWN_VARS[frag.replace(/^steps\//, "")];
+          if (!known) {
+            errors.push(`Prompt fragment "${frag}" has no KNOWN_VARS registration`);
+            continue;
+          }
+          const sampleVars: Record<string, string> = {};
+          for (const v of known) {
+            sampleVars[v] = `test_${v}`;
+          }
+          promptLib.render(frag, sampleVars);
+        } catch (err: any) {
+          errors.push(`Prompt render check failed for "${frag}": ${err.message}`);
+        }
       }
     } catch (err: any) {
       errors.push(`Prompt library initialization failed: ${err.message}`);

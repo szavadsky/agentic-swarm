@@ -44,9 +44,40 @@ describe("Role resolution & step role selection (§5, §12.4)", () => {
     expect(resolved.models.length).toBe(unique.size);
   });
 
+  it("resolves mutual fallbacks iteratively without stack overflow", () => {
+    // workhorse <-> alt-workhorse reference each other; this must terminate
+    // via the shared visited set, not via a caught RangeError.
+    const fromWorkhorse = resolveRole("workhorse", rolesConfig);
+    expect(fromWorkhorse.role).toBe("workhorse");
+    expect(fromWorkhorse.models[0]).toBe("vendor/fast-v1");
+    expect(fromWorkhorse.models).toContain("vendor/spark-v2");
+    expect(fromWorkhorse.models).toContain("vendor/cheap-v0");
+    expect(fromWorkhorse.models.length).toBe(new Set(fromWorkhorse.models).size);
+
+    const fromAlt = resolveRole("alt-workhorse", rolesConfig);
+    expect(fromAlt.role).toBe("alt-workhorse");
+    expect(fromAlt.models[0]).toBe("vendor/spark-v2");
+    expect(fromAlt.models).toContain("vendor/fast-v1");
+    expect(fromAlt.models).toContain("vendor/cheap-v0");
+    expect(fromAlt.models.length).toBe(new Set(fromAlt.models).size);
+  });
+
   it("throws descriptive error when an alias cycle is detected", () => {
     expect(() => resolveRole("cycle-a", rolesConfig)).toThrow(
       /Role alias cycle detected: cycle-a -> cycle-b -> cycle-c -> cycle-a/
+    );
+  });
+
+  it("throws on an alias cycle reached through fallbacks", () => {
+    const withFallbackCycle: Record<string, RoleDefinition> = {
+      ...rolesConfig,
+      "broken-primary": {
+        model: "vendor/broken-v1",
+        fallbacks: ["cycle-a"],
+      },
+    };
+    expect(() => resolveRole("broken-primary", withFallbackCycle)).toThrow(
+      /Role alias cycle detected/
     );
   });
 
@@ -140,5 +171,46 @@ describe("Role resolution & step role selection (§5, §12.4)", () => {
     });
     expect(revRound2.role).toBe("workhorse");
     expect(revRound2.models[0]).toBe("vendor/fast-v1");
+  });
+
+  it("does not swap the reviewer when the producer has no retryRole", () => {
+    // no-behavior / test-only / poc producers have no retryRole: the producer
+    // stays on workhorse in round 2, so the reviewer must stay on
+    // task-reviewer to preserve the §12.4 producer/reviewer split.
+    const reviewerStep: FlowStep = {
+      id: "review",
+      agent: "reviewer",
+      role: "task-reviewer",
+    };
+
+    for (const producerRetryRole of [null, undefined] as const) {
+      const revRound2 = resolveStepRole({
+        step: reviewerStep,
+        fixRound: 2,
+        baseProducerRole: "workhorse",
+        producerRetryRole,
+        rolesConfig,
+      });
+      expect(revRound2.role).toBe("alt-workhorse");
+      expect(revRound2.models[0]).toBe("vendor/spark-v2");
+    }
+  });
+
+  it("does not swap the reviewer when its model differs from the rotated producer", () => {
+    const qaStep: FlowStep = {
+      id: "qa",
+      agent: "qa",
+      role: "architect", // vendor/smart-v3: distinct from alt-workhorse
+    };
+
+    const qaRound2 = resolveStepRole({
+      step: qaStep,
+      fixRound: 2,
+      baseProducerRole: "workhorse",
+      producerRetryRole: "alt-workhorse",
+      rolesConfig,
+    });
+    expect(qaRound2.role).toBe("architect");
+    expect(qaRound2.models[0]).toBe("vendor/smart-v3");
   });
 });

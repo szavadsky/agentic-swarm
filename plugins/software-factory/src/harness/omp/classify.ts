@@ -90,6 +90,23 @@ export function classifyOmpOutcome(opts: {
       };
     }
   }
+  // 4b. Stop reason abort or error (§4, spike 2)
+  if (parsed?.stopReason === "abort") {
+    return {
+      transient: false,
+      sessionLost: false,
+      error: stderr.trim() || (parsed.errors.length ? parsed.errors.join("\n") : undefined) || "Agent turn aborted (stopReason: abort)",
+    };
+  }
+
+  if (parsed?.stopReason === "error") {
+    return {
+      transient: false,
+      sessionLost: false,
+      error: stderr.trim() || (parsed.errors.length ? parsed.errors.join("\n") : undefined) || "Agent turn failed (stopReason: error)",
+    };
+  }
+
 
   // 5. Normal agent / client failure
   return {

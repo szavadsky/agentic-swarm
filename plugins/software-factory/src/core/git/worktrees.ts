@@ -3,7 +3,35 @@ import path from "node:path";
 import { git } from "./exec.js";
 import { taskBranch, childBranch, worktreePath } from "./naming.js";
 import { commitAll } from "./commit.js";
+import { porcelainStatus, parseWorktreeList } from "./status.js";
 import type { Repo } from "./repo.js";
+
+/**
+ * Returns true when wtPath is registered in `git worktree list --porcelain`
+ * (exact path compare, never substring).
+ */
+async function isWorktreeRegistered(mainRoot: string, wtPath: string): Promise<boolean> {
+  const listRes = await git(mainRoot, ["worktree", "list", "--porcelain"], {
+    allowFail: true,
+  });
+  const resolved = path.resolve(wtPath);
+  return parseWorktreeList(listRes.stdout).some((p) => path.resolve(p) === resolved);
+}
+
+/**
+ * Removes a stale folder that exists on disk but is not registered as a
+ * worktree (e.g. crash during `worktree add`), so a later `worktree add`
+ * does not fail on the existing folder.
+ */
+async function pruneUnregisteredFolder(mainRoot: string, wtPath: string): Promise<boolean> {
+  const registered = await isWorktreeRegistered(mainRoot, wtPath);
+  const existsOnDisk = fs.existsSync(wtPath);
+  if (registered && existsOnDisk) return true;
+  if (!registered && existsOnDisk) {
+    await fs.promises.rm(wtPath, { recursive: true, force: true });
+  }
+  return false;
+}
 
 /**
  * Ensures the root task worktree exists.
@@ -28,14 +56,7 @@ export async function ensureTaskWorktree(
     git(repo.mainRoot, ["worktree", "prune"], { allowFail: true })
   );
 
-  // Check if worktree is already registered and present on disk
-  const listRes = await git(repo.mainRoot, ["worktree", "list", "--porcelain"], {
-    allowFail: true,
-  });
-  const isRegistered = listRes.stdout.includes(wtPath);
-  const existsOnDisk = fs.existsSync(wtPath);
-
-  if (isRegistered && existsOnDisk) {
+  if (await pruneUnregisteredFolder(repo.mainRoot, wtPath)) {
     return { branch, path: wtPath, created: false };
   }
 
@@ -55,29 +76,19 @@ export async function ensureTaskWorktree(
     return { branch, path: wtPath, created: false };
   }
 
-  // First run: Check that main checkout is clean except INTENT
-  const statusRes = await git(repo.mainRoot, ["status", "--porcelain"]);
-  const dirtyLines = statusRes.stdout
-    .split("\n")
-    .map((l) => l.trim())
-    .filter(Boolean);
+  // First run: main checkout must be clean except the INTENT file itself.
+  // Use -z + untracked-files=all so a new untracked folder shows up as its
+  // individual files (default mode collapses it to one folder entry), and
+  // compare exact repo-relative paths only.
+  const entries = await porcelainStatus(repo.mainRoot);
 
   const resolvedIntent = path.resolve(opts.intentPath);
   const relIntent = path.relative(repo.mainRoot, resolvedIntent).replace(/\\/g, "/");
-  const intentBasename = path.basename(resolvedIntent);
 
-  for (const line of dirtyLines) {
-    let filePath = line.slice(2).trim();
-    if (filePath.includes(" -> ")) {
-      filePath = filePath.split(" -> ")[1]?.trim() ?? filePath;
-    }
-    if (
-      filePath !== relIntent &&
-      filePath !== intentBasename &&
-      !resolvedIntent.endsWith(filePath)
-    ) {
+  for (const entry of entries) {
+    if (entry.path !== relIntent) {
       throw new Error(
-        `Main checkout is dirty (uncommitted changes outside INTENT: ${filePath})`
+        `Main checkout is dirty (uncommitted changes outside INTENT: ${entry.path})`
       );
     }
   }
@@ -121,13 +132,7 @@ export async function ensureChildWorktree(
     git(repo.mainRoot, ["worktree", "prune"], { allowFail: true })
   );
 
-  const listRes = await git(repo.mainRoot, ["worktree", "list", "--porcelain"], {
-    allowFail: true,
-  });
-  const isRegistered = listRes.stdout.includes(wtPath);
-  const existsOnDisk = fs.existsSync(wtPath);
-
-  if (isRegistered && existsOnDisk) {
+  if (await pruneUnregisteredFolder(repo.mainRoot, wtPath)) {
     return { branch, path: wtPath, created: false };
   }
 

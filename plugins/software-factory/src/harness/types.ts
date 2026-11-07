@@ -18,6 +18,8 @@ export interface Harness {
     system: string;
     prompt: string;
     schema: JSONSchema;
+    timeoutSec?: number;
+    timeoutMs?: number;
   }): Promise<unknown>;
 }
 
@@ -32,6 +34,7 @@ export interface AgentRun {
   outputSchema: JSONSchema;
   label: string;
   session: { resume?: string; keep: boolean }; // resume: session id from prior outcome; keep: leave resumable
+  timeoutSec?: number;
 }
 
 export type AgentOutcome =

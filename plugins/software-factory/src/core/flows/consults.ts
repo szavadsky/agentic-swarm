@@ -12,6 +12,7 @@ import { writeYamlAtomic } from "../records/io.js";
 import { runAgentStep } from "./step-runner.js";
 import { appendJournal } from "../journal.js";
 import type { Semaphore } from "../mutex.js";
+import type { BudgetTracker } from "../budget.js";
 
 export interface ItemConsultParams {
   task: string;
@@ -21,6 +22,8 @@ export interface ItemConsultParams {
   diffText: string;
   feedbackText: string;
   debtText?: string;
+  /** Newest item record dir name at decision time; durable series pointer (§8.5). */
+  afterRecord?: string;
   taskDir: string;
   taskWt: string;
   repo: any;
@@ -30,6 +33,8 @@ export interface ItemConsultParams {
   prompts: any;
   architectSessionId?: string;
   turnsSemaphore?: Semaphore;
+  budgetTracker?: BudgetTracker;
+  iteration?: number;
 }
 
 export interface NonItemConsultParams {
@@ -47,6 +52,8 @@ export interface NonItemConsultParams {
   prompts: any;
   architectSessionId?: string;
   turnsSemaphore?: Semaphore;
+  budgetTracker?: BudgetTracker;
+  iteration?: number;
 }
 
 /**
@@ -63,6 +70,7 @@ export async function runItemConsult(
     diffText,
     feedbackText,
     debtText,
+    afterRecord,
     taskDir,
     taskWt,
     repo,
@@ -72,6 +80,8 @@ export async function runItemConsult(
     prompts,
     architectSessionId,
     turnsSemaphore,
+    budgetTracker,
+    iteration,
   } = params;
 
   const promptVars: Record<string, string> = {
@@ -84,6 +94,12 @@ export async function runItemConsult(
   };
 
   const runsDir = path.join(taskDir, "runs");
+  const decisionsDir = path.join(taskDir, "decisions");
+  await fs.promises.mkdir(decisionsDir, { recursive: true });
+
+  let decisionArtifact: (DecisionArtifact & { item?: string; afterRecord?: string }) | undefined;
+  let decisionPath = "";
+
   const stepRes = await runAgentStep({
     task,
     stepId: `consult-${item}`,
@@ -102,62 +118,71 @@ export async function runItemConsult(
     prompts,
     promptVars,
     turnsSemaphore,
+    budgetTracker,
+    iteration,
+    writeArtifact: async (output: unknown) => {
+      const raw = output as any;
+      const decisionVal = raw?.decision ?? "retry-with-guidance";
+      let nextSeq = 1;
+      try {
+        const existing = await fs.promises.readdir(decisionsDir);
+        for (const name of existing) {
+          const match = /^(\d{3})-/.exec(name);
+          if (match) {
+            const num = parseInt(match[1]!, 10);
+            if (num >= nextSeq) nextSeq = num + 1;
+          }
+        }
+      } catch {
+        // ignore
+      }
+
+      decisionArtifact = {
+        id: `decision-${item}-${Date.now()}`,
+        context: "item",
+        item,
+        afterRecord,
+        decision: decisionVal,
+        timestamp: new Date().toISOString(),
+        rationale: raw?.rationale ?? raw?.summary ?? "Architect consult decision",
+        text: raw?.text ?? raw?.guidance,
+        persist: raw?.persist,
+        outlines: raw?.outlines,
+        debt: raw?.debt,
+        reason: raw?.reason,
+        question: raw?.question,
+      };
+
+      const decisionFileName = `${String(nextSeq).padStart(3, "0")}-item-${item}.yaml`;
+      decisionPath = path.join(decisionsDir, decisionFileName);
+      await writeYamlAtomic(decisionPath, decisionArtifact);
+
+      if (decisionVal === "human-async" && raw?.question) {
+        const steerDir = path.join(taskDir, "steer", "tousertoreview");
+        await fs.promises.mkdir(steerDir, { recursive: true });
+        const qId = `q-${item}-${Date.now()}`;
+        const steerItem: SteerItemArtifact = {
+          id: qId,
+          ref: item,
+          disposition: "human-async",
+          question: raw.question,
+          blocks: [item],
+          status: "open",
+        };
+        await writeYamlAtomic(path.join(steerDir, `${qId}.yaml`), steerItem);
+      }
+    },
   });
 
-  const raw = stepRes.output as any;
-  const decisionVal = raw?.decision ?? "retry-with-guidance";
-  const decisionArtifact: DecisionArtifact = {
-    id: `decision-${item}-${Date.now()}`,
-    context: "item",
-    decision: decisionVal,
-    timestamp: new Date().toISOString(),
-    rationale: raw?.rationale ?? raw?.summary ?? "Architect consult decision",
-    text: raw?.text ?? raw?.guidance,
-    persist: raw?.persist,
-    outlines: raw?.outlines,
-    debt: raw?.debt,
-    reason: raw?.reason,
-    question: raw?.question,
-  };
-
-  // Determine next seq number for decisions folder
-  const decisionsDir = path.join(taskDir, "decisions");
-  await fs.promises.mkdir(decisionsDir, { recursive: true });
-  let nextSeq = 1;
-  const existing = await fs.promises.readdir(decisionsDir);
-  for (const name of existing) {
-    const match = /^(\d{3})-/.exec(name);
-    if (match) {
-      const num = parseInt(match[1]!, 10);
-      if (num >= nextSeq) nextSeq = num + 1;
-    }
-  }
-
-  const decisionFileName = `${String(nextSeq).padStart(3, "0")}-item-${item}.yaml`;
-  const decisionPath = path.join(decisionsDir, decisionFileName);
-  await writeYamlAtomic(decisionPath, decisionArtifact);
-
-  // If decision is human-async, write question to tousertoreview (§8.8)
-  if (decisionVal === "human-async" && raw?.question) {
-    const steerDir = path.join(taskDir, "steer", "tousertoreview");
-    await fs.promises.mkdir(steerDir, { recursive: true });
-    const qId = `q-${item}-${Date.now()}`;
-    const steerItem: SteerItemArtifact = {
-      id: qId,
-      ref: item,
-      disposition: "human-async",
-      question: raw.question,
-      blocks: [item],
-      status: "open",
-    };
-    await writeYamlAtomic(path.join(steerDir, `${qId}.yaml`), steerItem);
+  if (!stepRes.ok || !decisionArtifact) {
+    throw new Error(`Item consult for ${item} failed: ${stepRes.meta.error || "no output"}`);
   }
 
   await appendJournal(taskDir, {
     type: "decision_made",
     context: "item",
     item,
-    decision: decisionVal,
+    decision: decisionArtifact.decision,
     decisionPath,
   });
 
@@ -185,6 +210,8 @@ export async function runNonItemConsult(
     prompts,
     architectSessionId,
     turnsSemaphore,
+    budgetTracker,
+    iteration,
   } = params;
 
   const promptVars: Record<string, string> = {
@@ -195,6 +222,12 @@ export async function runNonItemConsult(
   };
 
   const runsDir = path.join(taskDir, "runs");
+  const decisionsDir = path.join(taskDir, "decisions");
+  await fs.promises.mkdir(decisionsDir, { recursive: true });
+
+  let decisionArtifact: DecisionArtifact | undefined;
+  let decisionPath = "";
+
   const stepRes = await runAgentStep({
     task,
     stepId: `consult-${seam.replace(/[^a-zA-Z0-9_-]/g, "_")}`,
@@ -213,42 +246,51 @@ export async function runNonItemConsult(
     prompts,
     promptVars,
     turnsSemaphore,
+    budgetTracker,
+    iteration,
+    writeArtifact: async (output: unknown) => {
+      const raw = output as any;
+      const decisionVal = raw?.decision ?? "accept-with-debt";
+      let nextSeq = 1;
+      try {
+        const existing = await fs.promises.readdir(decisionsDir);
+        for (const name of existing) {
+          const match = /^(\d{3})-/.exec(name);
+          if (match) {
+            const num = parseInt(match[1]!, 10);
+            if (num >= nextSeq) nextSeq = num + 1;
+          }
+        }
+      } catch {
+        // ignore
+      }
+
+      decisionArtifact = {
+        id: `decision-nonitem-${Date.now()}`,
+        context: "non-item",
+        decision: decisionVal,
+        timestamp: new Date().toISOString(),
+        rationale: raw?.rationale ?? raw?.summary ?? "Architect non-item consult decision",
+        debt: raw?.debt,
+        reason: raw?.reason,
+        question: raw?.question,
+      };
+
+      const decisionFileName = `${String(nextSeq).padStart(3, "0")}-nonitem.yaml`;
+      decisionPath = path.join(decisionsDir, decisionFileName);
+      await writeYamlAtomic(decisionPath, decisionArtifact);
+    },
   });
 
-  const raw = stepRes.output as any;
-  const decisionVal = raw?.decision ?? "accept-with-debt";
-  const decisionArtifact: DecisionArtifact = {
-    id: `decision-nonitem-${Date.now()}`,
-    context: "non-item",
-    decision: decisionVal,
-    timestamp: new Date().toISOString(),
-    rationale: raw?.rationale ?? raw?.summary ?? "Architect non-item consult decision",
-    debt: raw?.debt,
-    reason: raw?.reason,
-    question: raw?.question,
-  };
-
-  const decisionsDir = path.join(taskDir, "decisions");
-  await fs.promises.mkdir(decisionsDir, { recursive: true });
-  let nextSeq = 1;
-  const existing = await fs.promises.readdir(decisionsDir);
-  for (const name of existing) {
-    const match = /^(\d{3})-/.exec(name);
-    if (match) {
-      const num = parseInt(match[1]!, 10);
-      if (num >= nextSeq) nextSeq = num + 1;
-    }
+  if (!stepRes.ok || !decisionArtifact) {
+    throw new Error(`Non-item consult for ${seam} failed: ${stepRes.meta.error || "no output"}`);
   }
-
-  const decisionFileName = `${String(nextSeq).padStart(3, "0")}-nonitem.yaml`;
-  const decisionPath = path.join(decisionsDir, decisionFileName);
-  await writeYamlAtomic(decisionPath, decisionArtifact);
 
   await appendJournal(taskDir, {
     type: "decision_made",
     context: "non-item",
     seam,
-    decision: decisionVal,
+    decision: decisionArtifact.decision,
     decisionPath,
   });
 

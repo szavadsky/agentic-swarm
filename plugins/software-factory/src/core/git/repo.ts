@@ -29,4 +29,18 @@ export class Repo {
     this.writeLock = new AsyncMutex();
     this.mergeLocks = new KeyedMutex();
   }
+
+  /**
+   * Author/committer env for engine commits/merges, or undefined when the
+   * repo should use its own configured (or exec fallback) identity.
+   */
+  identityEnv(): Record<string, string> | undefined {
+    if (!this.identity) return undefined;
+    return {
+      GIT_AUTHOR_NAME: this.identity.name,
+      GIT_AUTHOR_EMAIL: this.identity.email,
+      GIT_COMMITTER_NAME: this.identity.name,
+      GIT_COMMITTER_EMAIL: this.identity.email,
+    };
+  }
 }

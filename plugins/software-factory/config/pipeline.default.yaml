@@ -10,6 +10,17 @@
 #   - Maps (objects) are deeply merged.
 #   - Arrays are replaced (not concatenated).
 #   - Explicit `null` values delete the corresponding key from the merged map.
+#
+# Layer-override example (<repo>/.factory/pipeline.yaml):
+#   limits:
+#     maxParallelItems: 8        # deep-merged scalar override
+#     checkOutputBytes: null     # `null` deletes the key from the merged map
+#   reviewPolicy:
+#     default: [fix, optional]   # arrays are REPLACED, not concatenated
+#   agents:
+#     docs-writer:               # new map keys are added
+#       role: workhorse
+#       timeoutSec: 600
 
 # ==============================================================================
 # Models & Roles (§5, §12.4)
@@ -67,47 +78,64 @@ models:
 # ==============================================================================
 # Agents (§5, §10)
 # ==============================================================================
-# Maps agent names to their default role and tool exposures.
+# Maps agent names to their default role, per-agent timeout, and tool exposures.
 # Built-in agents: triage, infra, architect, plan-reviewer, pm, developer,
 #                  qa, reviewer, fact-finder, wave-close-up, plan-close-up.
+#
+# Per-agent timeouts: `timeoutSec` caps a single agent turn. Step-level
+# `timeoutSec` (in flows) overrides the agent default; when neither is set the
+# harness default applies. Long-horizon agents (developer, architect) get 1200s;
+# bounded review/discovery agents get 900s.
 #
 # Extra agents can be added here with:
 #   my-agent:
 #     role: workhorse
+#     timeoutSec: 900
 #     definition: .factory/agents/my-agent.md   # Path to definition or inline
 #     output: developer | review | path/to/schema.json
 #     tools: [bash, edit]
 agents:
   triage:
     role: workhorse
+    timeoutSec: 900
   infra:
     role: workhorse
+    timeoutSec: 900
   architect:
     role: architect
+    timeoutSec: 1200
   plan-reviewer:
     role: alt-architect
+    timeoutSec: 900
   pm:
     role: pm
+    timeoutSec: 900
   developer:
     role: workhorse
+    timeoutSec: 1200
   qa:
     role: task-reviewer
+    timeoutSec: 900
   reviewer:
     role: task-reviewer
+    timeoutSec: 900
   fact-finder:
     role: workhorse
+    timeoutSec: 900
   wave-close-up:
     role: wave-close-up
+    timeoutSec: 900
   plan-close-up:
     role: plan-close-up
+    timeoutSec: 900
 
 # ==============================================================================
 # Custom Checks (§5, §9)
 # ==============================================================================
 # Custom mechanical checks executed by the engine.
-# Built-in checks (schema, citations, plan-limits, gates, tests-only, target-red,
-# target-green, red-test, test-diff, size, simple-guard, poc-scope) do not need
-# declarations here.
+# Built-in checks (schema, citations, plan-limits, gates, tests-only, test-first-scope,
+# target-red, target-green, red-test, test-diff, size, simple-guard, poc-scope) do not
+# need declarations here.
 #
 # To define a custom check:
 # checks:
@@ -155,8 +183,36 @@ hooks: {}
 #   - session: fresh | reuse (reuse preserves session context across turns)
 #   - checks: array of check IDs to execute at this step
 #   - focus: domain focus for reviewer prompt (e.g. code, security, result)
-#   - stepFragment: optional fragment name in agents/steps/{fragment}.md (defaults to step id)
-#   - timeoutSec: per-step deadline
+#   - stepFragment: optional fragment name in agents/steps/{fragment}.md (defaults to step id).
+#     Use it whenever the step id is generic but the prompt must be kind-specific
+#     (e.g. spike `develop` steps render `poc` / `test-assumptions`, not `develop`).
+#   - timeoutSec: per-step deadline (overrides the agent default)
+#
+# Adding a story/spike kind end to end (worked example: `docs-only` story kind):
+#   1. flows entry: add `story.docs-only` (or `spike.<kind>`) with `criteria`
+#      (one line; shown to PM in the kinds guide), `steps`, and `fixLoopTo`
+#      naming one of the kind's own step ids (preflight rejects dangling refs).
+#   2. criteria text: extend `agents/criteria/story-kinds.md` with the kind's
+#      contract so PM/reviewers apply the right rules.
+#   3. stepFragment: if a step needs a kind-specific prompt, add
+#      `agents/steps/<fragment>.md` and set `stepFragment` on the step.
+#      Otherwise the step renders `agents/steps/<id>.md`.
+#   4. per-kind limits: optional `limits:` map on the kind overrides global
+#      `limits` for items of that kind (e.g. tighter `storyMaxProdLines`).
+#   Example:
+#   story:
+#     docs-only:
+#       criteria: "documentation updates without code change"
+#       limits: { storyMaxProdLines: 50 }
+#       steps:
+#         - id: develop
+#           agent: developer
+#           stepFragment: docs-develop
+#           checks: [gates]
+#         - id: review
+#           agent: reviewer
+#           focus: code
+#       fixLoopTo: develop
 flows:
   # Simple item: single develop step, no review
   simple:
@@ -231,6 +287,7 @@ flows:
       steps:
         - id: develop
           agent: developer
+          stepFragment: poc
           checks: [poc-scope]
         - id: review
           agent: reviewer
@@ -242,6 +299,7 @@ flows:
       steps:
         - id: develop
           agent: developer
+          stepFragment: test-assumptions
           checks: [gates, tests-only]
         - id: review
           agent: reviewer
@@ -266,6 +324,7 @@ limits:
   maxIterations: 6                # Max iterations per task
   maxInfraRetries: 3              # Retries for infrastructure/harness setup
   gateRetries: 1                  # Re-runs for flaky gate detection
+  gateTimeoutSec: 900             # Per-gate command timeout (sec); real suites need minutes, not seconds
   storyMaxProdLines: 300          # Production lines changed cap for stories
   simpleMaxProdLines: 150         # Production lines changed cap for simple items
   maxMilestones: 8                # Maximum milestones per plan
@@ -319,7 +378,21 @@ reviewPolicy:
 # ==============================================================================
 # Criteria (§5, §8.7)
 # ==============================================================================
-# Paths to criteria markdown files (resolved relative to plugin root or repo).
+# Paths to criteria markdown files (resolved relative to plugin root, or to the
+# repo root when overridden in <repo>/.factory/pipeline.yaml).
+#
+# How each file is consumed by the engine:
+#   - triage: rendered into the triage step prompt (`triageCriteria` var) and
+#     used as the classification matrix for kind selection.
+#   - dispositions: rendered into every review-type step prompt
+#     (`dispositionsCriteria` var) after filtering to the agent's allowed
+#     dispositions from `reviewPolicy` (see formatDispositionsSection).
+#     The same allowed set restricts the generated review JSON schema enum.
+#   - story-kinds: rendered into PM prompts (`storyKindsCriteria` var) alongside
+#     the generated `kinds` guide (one line per flows.story/spike criteria).
+# Adding a story/spike kind therefore needs BOTH a flows entry (with criteria
+# one-liner, steps, stepFragment where kind-specific, and fixLoopTo naming a
+# step of the same kind) AND criteria text in agents/criteria/story-kinds.md.
 criteria:
   triage: agents/criteria/triage.md
   dispositions: agents/criteria/dispositions.md
@@ -329,6 +402,27 @@ criteria:
 # Prompts (§5, §10)
 # ==============================================================================
 # Template overrides and additional skill directories.
+#
+# `overrides` maps a fragment key to a replacement body:
+#   - fragment key: agent name ("developer"), step fragment ("steps/develop" or
+#     bare "develop"), shared include ("_shared/philosophy"), or system fragment.
+#   - value: either a plain string (new body, frontmatter tools/description kept
+#     from the file) or an object {body, tools, description} replacing all three.
+#   Example:
+#   overrides:
+#     steps/develop: "Custom develop prompt. Assignment: {{assignment}} ..."
+#     reviewer: { body: "Custom reviewer ... {{dispositionsCriteria}}", tools: [read, grep], description: "Custom" }
+#   Override bodies may use {{> include}} and {{placeholder}}; unknown
+#   placeholders fail preflight (checked against KNOWN_VARS).
+#
+# Shadowing order (first hit wins): in-memory `overrides` -> `extraSkillDirs`
+# in order -> built-in agents/ directory.
+#
+# `extraSkillDirs` semantics: each entry is a directory searched for prompt
+# fragments exactly like the built-in agents/ dir (agent defs at top level,
+# step fragments under steps/, shared includes under _shared/). Use it for
+# project-specific prompt variants without forking the plugin. Entries resolve
+# relative to the process cwd; prefer absolute paths in project overrides.
 prompts:
   overrides: {}
   extraSkillDirs: []

@@ -34,6 +34,7 @@ export interface AgentConfig {
   tools?: string[];
   definition?: string;
   output?: string;
+  timeoutSec?: number;
 }
 
 export interface CustomCheckConfig {
@@ -78,7 +79,6 @@ export interface FlowKindConfig {
 }
 
 export interface PipelineLimits {
-  maxParallel?: number;
   maxParallelItems?: number;
   maxParallelTurns?: number;
   stubMaxProdLines?: number;
@@ -92,6 +92,7 @@ export interface PipelineLimits {
   maxIterations?: number;
   maxInfraRetries?: number;
   gateRetries?: number;
+  gateTimeoutSec?: number;
   storyMaxProdLines?: number;
   simpleMaxProdLines?: number;
   maxMilestones?: number;
@@ -143,6 +144,7 @@ export type TaskKind = "simple" | "story" | "spike" | "epic" | "saga";
 export interface TriageArtifact {
   kind: TaskKind;
   rationale: string;
+  citations: Citation[];
   size?: string;
   risks?: string[];
 }
@@ -306,13 +308,13 @@ export interface ReviewSuggestion {
 }
 
 export interface ReviewArtifact {
-  status: "approved" | "changes_requested" | "commented";
+  status: "approved" | "changes_requested";
   summary: string;
   suggestions: ReviewSuggestion[];
 }
 
 export type DeveloperTarget =
-  | { selectors?: string[]; expectRed?: string[] }
+  | { selectors: string[]; expectRed: string[] }
   | { gate: string }
   | { command: string; customTarget: boolean };
 
@@ -346,7 +348,7 @@ export interface WaveCloseupArtifact {
 
 export interface PlanCloseupArtifact {
   iteration: number;
-  status: "complete" | "next_iteration" | "blocked";
+  status: "complete" | "next-iteration" | "blocked";
   summary: string;
   question?: string;
   completedMilestones?: string[];
@@ -419,6 +421,7 @@ export interface StepMetaArtifact {
   startedAt: string;
   endedAt?: string;
   error?: string;
+  timeoutSec?: number;
 }
 
 export interface CheckItemResult {

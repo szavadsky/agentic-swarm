@@ -9,6 +9,10 @@ import type {
   ProjectConfig,
   ReviewArtifact,
   CheckItemResult,
+  InfraArtifact,
+  GatesBaselineArtifact,
+  DeveloperTarget,
+  SteerItemArtifact,
 } from "../artifacts.js";
 import type { Harness } from "../../harness/types.js";
 import { git } from "../git/exec.js";
@@ -17,14 +21,20 @@ import { runItemConsult } from "./consults.js";
 import { runSeamHooks } from "./seams.js";
 import { appendJournal } from "../journal.js";
 import { deriveItemState, type DerivedItemState } from "../derive/item.js";
+import { refreshStateYaml } from "../derive/task.js";
 import {
   checkStepAttempts,
   checkFixRounds,
+  checkConsultsPerItem,
   fingerprintCheckFailure,
   fingerprintSuggestions,
 } from "../loops.js";
+import { loadCriteriaBundle, formatDispositionsSection } from "../prompts.js";
+import { runCheck } from "../checks/runner.js";
+import type { CheckContext } from "../checks/types.js";
 import type { BudgetTracker } from "../budget.js";
 import type { Semaphore } from "../mutex.js";
+import { readYaml, readText, writeYamlAtomic } from "../records/io.js";
 
 export interface ItemMachineOptions {
   task: string;
@@ -104,19 +114,22 @@ export function getDefaultFlowForKind(kind: string, pipeline: PipelineConfig): F
     case "fact-finder":
       return {
         steps: [
-          { id: "fact-finder", agent: "fact-finder", role: "workhorse" },
+          { id: "research", agent: "fact-finder", role: "workhorse" },
+          { id: "review", agent: "reviewer", role: "alt-workhorse" },
         ],
       };
     case "poc":
       return {
         steps: [
-          { id: "poc", agent: "developer", role: "workhorse" },
+          { id: "develop", agent: "developer", role: "workhorse" },
+          { id: "review", agent: "reviewer", role: "alt-workhorse" },
         ],
       };
     case "test-assumptions":
       return {
         steps: [
-          { id: "test-assumptions", agent: "developer", role: "workhorse" },
+          { id: "develop", agent: "developer", role: "workhorse" },
+          { id: "review", agent: "reviewer", role: "alt-workhorse" },
         ],
       };
     default:
@@ -131,7 +144,7 @@ export function getDefaultFlowForKind(kind: string, pipeline: PipelineConfig): F
 }
 
 /**
- * Runs one step or transition for an item (§8.2, §8.3).
+ * Runs one step or transition for an item (§8.2, §8.3, §9, §12).
  */
 export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMachineTickResult> {
   const {
@@ -155,6 +168,7 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
   const maxStepAttempts = limits.maxStepAttempts ?? 3;
   const maxFixRounds = limits.maxFixRounds ?? 3;
   const maxInterruptions = limits.maxInterruptions ?? 3;
+  const maxConsults = limits.maxConsultsPerItem ?? 2;
 
   // 1. Derive current item state
   const itemState = await deriveItemState({
@@ -162,9 +176,17 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
     itemSlug,
     parentBranch,
     taskWt,
+    childWt,
+    pipeline,
   });
 
-  if (itemState.status === "ready" || itemState.status === "merged" || itemState.status === "failed" || itemState.status === "superseded" || itemState.status === "blocked") {
+  if (
+    itemState.status === "ready" ||
+    itemState.status === "merged" ||
+    itemState.status === "failed" ||
+    itemState.status === "superseded" ||
+    itemState.status === "blocked"
+  ) {
     return {
       done: true,
       status: itemState.status,
@@ -181,7 +203,21 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
         spent: bCheck.spent,
         limit: bCheck.limit,
       });
-      // Trigger consult
+
+      // Check loop detector for consults before triggering
+      const diffRes = await git(childWt, ["diff"], { allowFail: true });
+      const cCheck = checkConsultsPerItem(
+        itemState.consultCount,
+        maxConsults,
+        Boolean(diffRes.stdout.trim()),
+        itemState.decisionFingerprints
+      );
+
+      if (cCheck.exhausted || cCheck.noProgress) {
+        await appendJournal(taskDir, { type: "item_failed_consults_exhausted", item: itemSlug });
+        return { done: true, status: "failed" };
+      }
+
       await runItemConsult({
         task,
         item: itemSlug,
@@ -189,6 +225,7 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
         priorAttemptsText: "Item budget limit exceeded",
         diffText: "",
         feedbackText: `Spent $${bCheck.spent.toFixed(2)}, limit is $${bCheck.limit}`,
+        afterRecord: itemState.records[itemState.records.length - 1]?.dirName,
         taskDir,
         taskWt,
         repo,
@@ -198,6 +235,7 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
         prompts,
         architectSessionId,
         turnsSemaphore,
+        budgetTracker,
       });
       return { done: false, status: "running", consulted: true };
     }
@@ -211,48 +249,83 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
   let attempt = 1;
   let fixRound = itemState.currentFixRound;
   let isRetrying = false;
-  let lastFailingCheckSummary: string | undefined;
+  let isFixReentry = false;
+  let latestReviewOutput: ReviewArtifact | undefined;
+  let answeredAsyncFeedback = "";
+
+  // Check for answered human-async questions (§8.7)
+  const steerDir = path.join(taskDir, "steer", "tousertoreview");
+  if (fs.existsSync(steerDir)) {
+    try {
+      const qFiles = await fs.promises.readdir(steerDir);
+      for (const qf of qFiles) {
+        if (!qf.endsWith(".yaml")) continue;
+        const q = await readYaml<SteerItemArtifact>(path.join(steerDir, qf));
+        if ((q.ref === itemSlug || q.ref === `${task}/${itemSlug}`) && q.status === "answered" && q.answer) {
+          answeredAsyncFeedback += `\nHuman answer to question "${q.question}":\n${q.answer}\n`;
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
 
   const records = itemState.records;
   if (records.length > 0) {
     const lastRecord = records[records.length - 1]!;
 
     if (lastRecord.meta.status === "ok") {
-      // Check if last step was a review that requested fix
       let fixRequested = false;
       if (lastRecord.output && typeof lastRecord.output === "object" && "suggestions" in (lastRecord.output as any)) {
         const rev = lastRecord.output as ReviewArtifact;
+        latestReviewOutput = rev;
         const fixSuggestions = rev.suggestions?.filter((s) => s.disposition === "fix");
 
-        // Handle human-async questions (§8.7, §8.8)
-        const asyncQuestions = rev.suggestions?.filter((s) => s.disposition === "human-async");
-        if (asyncQuestions && asyncQuestions.length > 0) {
-          if (itemState.openSteerQuestion) {
-            return { done: true, status: "blocked" };
-          }
-          // Question was answered! Loop back to develop/fix with the answer (§8.7)
-          fixRequested = true;
+        // Handle open human-async questions (§8.7, §8.8)
+        const openAsync = rev.suggestions?.filter((s) => s.disposition === "human-async");
+        if (openAsync && openAsync.length > 0 && itemState.openSteerQuestion) {
+          return { done: true, status: "blocked" };
         }
+
         if (fixSuggestions && fixSuggestions.length > 0) {
           fixRequested = true;
         }
       }
 
       if (fixRequested) {
-        // Fix loop! Check fix round bounds (§12.2)
-        const diffRes = await git(childWt, ["diff", "HEAD~1"], { allowFail: true });
-        const hasDiff = Boolean(diffRes.stdout.trim());
-        const fixCheck = checkFixRounds(fixRound, maxFixRounds, hasDiff, itemState.suggestionFingerprints);
+        // Fix loop! The upcoming re-entry round equals the number of fix-requesting
+        // reviews seen so far (1 for the first re-entry) (§12.2).
+        const upcomingRound = Math.max(1, itemState.suggestionFingerprints.length);
+        const currentFp = fingerprintSuggestions(
+          latestReviewOutput?.suggestions?.filter((s) => s.disposition === "fix")
+        );
+        const priorFps = itemState.suggestionFingerprints.slice(0, -1);
+        const codeDiffRes = await git(childWt, ["diff", "HEAD~1", "--", ":!.*", ":!.factory"], { allowFail: true });
+        const hasDiff = upcomingRound <= 1 || Boolean(codeDiffRes.stdout.trim());
+        const fixCheck = checkFixRounds(upcomingRound, maxFixRounds, hasDiff, priorFps, upcomingRound > 1 ? currentFp : undefined);
 
         if (fixCheck.exhausted || fixCheck.noProgress) {
-          // Exhausted fix rounds -> consult now (§12.2)
+          // Check consult bounds
+          const cCheck = checkConsultsPerItem(
+            itemState.consultCount,
+            maxConsults,
+            hasDiff,
+            itemState.decisionFingerprints
+          );
+          if (cCheck.exhausted || cCheck.noProgress) {
+            await appendJournal(taskDir, { type: "item_failed_consults_exhausted", item: itemSlug });
+            return { done: true, status: "failed" };
+          }
+
+          // Consult architect (§12.2)
           await runItemConsult({
             task,
             item: itemSlug,
             assignmentYaml: JSON.stringify(itemState.assignment ?? {}),
-            priorAttemptsText: `Fix rounds exhausted (${fixRound}/${maxFixRounds})`,
-            diffText: diffRes.stdout,
+            priorAttemptsText: `Fix rounds exhausted (${upcomingRound}/${maxFixRounds})`,
+            diffText: codeDiffRes.stdout,
             feedbackText: "Fix rounds exhausted without resolution",
+            afterRecord: lastRecord.dirName,
             taskDir,
             taskWt,
             repo,
@@ -262,15 +335,19 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
             prompts,
             architectSessionId,
             turnsSemaphore,
+            budgetTracker,
           });
           return { done: false, status: "running", consulted: true };
         }
 
-        // Jump back to fixLoopTo (§8.2)
+        // Jump back to fixLoopTo (§8.2). fixRound follows the {1: initial, 2+: retry}
+        // convention for role resolution (§12.4 alt-on-retry) and session rotation.
+        fixRound = upcomingRound + 1;
         const loopTarget = kindFlow.fixLoopTo ?? "develop";
         const idx = steps.findIndex((s) => s.id === loopTarget);
         targetStepIndex = idx >= 0 ? idx : 0;
         attempt = 1;
+        isFixReentry = true;
       } else {
         // Step succeeded without fix! Advance to next step in flow
         const lastStepIdx = steps.findIndex((s) => s.id === lastRecord.name);
@@ -288,13 +365,20 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
       targetStepIndex = stepIdx >= 0 ? stepIdx : 0;
       isRetrying = true;
 
-      if (lastRecord.meta.status === "interrupted") {
-        // Invariant §6.3.6: Next attempt does not count toward maxStepAttempts until maxInterruptions
+      // A fresh retry-with-guidance/escalate decision starts a new attempt
+      // series at attempt 1 with the decision guidance hydrated (§8.5).
+      // deriveItemState scopes currentAttempt to the post-decision series.
+      if (itemState.freshSeries) {
+        attempt = 1;
+      } else if (lastRecord.meta.status === "interrupted") {
         if (itemState.interruptionCount < maxInterruptions) {
-          attempt = lastRecord.attempt; // keep attempt count
+          attempt = lastRecord.attempt;
         } else {
           attempt = lastRecord.attempt + 1;
         }
+      } else if (lastRecord.meta.status === "error") {
+        // §12.2: Harness/provider errors never consume attempts
+        attempt = lastRecord.attempt;
       } else {
         attempt = lastRecord.attempt + 1;
       }
@@ -306,9 +390,19 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
         itemState.lastFailingCheckFingerprint ? [itemState.lastFailingCheckFingerprint] : []
       );
 
-      if (attemptsCheck.exhausted) {
-        // Consult now (§12.2)
+      if (attemptsCheck.exhausted || attemptsCheck.noProgress) {
         const diffRes = await git(childWt, ["diff"], { allowFail: true });
+        const cCheck = checkConsultsPerItem(
+          itemState.consultCount,
+          maxConsults,
+          Boolean(diffRes.stdout.trim()),
+          itemState.decisionFingerprints
+        );
+        if (cCheck.exhausted || cCheck.noProgress) {
+          await appendJournal(taskDir, { type: "item_failed_consults_exhausted", item: itemSlug });
+          return { done: true, status: "failed" };
+        }
+
         await runItemConsult({
           task,
           item: itemSlug,
@@ -316,6 +410,7 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
           priorAttemptsText: `Step attempts exhausted for ${lastRecord.name} (attempt ${attempt}/${maxStepAttempts})`,
           diffText: diffRes.stdout,
           feedbackText: lastRecord.meta.error || "Step failed repeatedly",
+          afterRecord: lastRecord.dirName,
           taskDir,
           taskWt,
           repo,
@@ -325,6 +420,7 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
           prompts,
           architectSessionId,
           turnsSemaphore,
+          budgetTracker,
         });
         return { done: false, status: "running", consulted: true };
       }
@@ -336,21 +432,152 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
     return { done: true, status: "ready" };
   }
 
-  // 4. Prepare prompt variables
+  // 4. Prepare prompt variables and check runner wiring (§9, §10, Finding 9 & 11)
   const diffRes = await git(childWt, ["diff"], { allowFail: true });
   const assignmentYaml = itemState.assignment
     ? JSON.stringify(itemState.assignment, null, 2)
     : "";
 
+  let intentText = "";
+  const intentPath = path.join(taskDir, "INTENT.md");
+  if (fs.existsSync(intentPath)) {
+    intentText = await readText(intentPath);
+  }
+
+  // Find last developer target from records
+  let lastDeveloperTarget: DeveloperTarget | undefined;
+  for (let i = records.length - 1; i >= 0; i--) {
+    const r = records[i]!;
+    if (r.output && typeof r.output === "object" && "target" in (r.output as any)) {
+      lastDeveloperTarget = (r.output as any).target;
+      break;
+    }
+  }
+
+  // Load infra and baseline for check execution
+  let infra: InfraArtifact | undefined;
+  const infraPath = path.join(taskDir, "infra.yaml");
+  if (fs.existsSync(infraPath)) {
+    try {
+      infra = await readYaml<InfraArtifact>(infraPath);
+    } catch {
+      // ignore
+    }
+  }
+
+  let baseline: GatesBaselineArtifact | undefined;
+  const baselinePath = path.join(taskDir, "gates-baseline.yaml");
+  if (fs.existsSync(baselinePath)) {
+    try {
+      baseline = await readYaml<GatesBaselineArtifact>(baselinePath);
+    } catch {
+      // ignore
+    }
+  }
+
+  // Build feedback for fix rounds or retries (Finding 11)
+  let feedbackText = itemState.guidanceText ?? "";
+  if (answeredAsyncFeedback) {
+    feedbackText = feedbackText ? `${feedbackText}\n${answeredAsyncFeedback}` : answeredAsyncFeedback;
+  }
+  if (isFixReentry && latestReviewOutput) {
+    const fixList = latestReviewOutput.suggestions
+      ?.filter((s) => s.disposition === "fix")
+      .map((s) => `- [FIX] ${s.summary}${s.detail ? `: ${s.detail}` : ""}${s.location?.file ? ` (${s.location.file})` : ""}`)
+      .join("\n");
+    const optionalList = latestReviewOutput.suggestions
+      ?.filter((s) => s.disposition === "optional")
+      .map((s) => `- [OPTIONAL] ${s.summary}${s.detail ? `: ${s.detail}` : ""}`)
+      .join("\n");
+    feedbackText = [feedbackText, fixList, optionalList].filter(Boolean).join("\n\n");
+  }
+
+  // Wire per-step checks by phase (§9, Finding 9)
+  const stepChecks = currentStep.checks ?? [];
+  const beforeChecksList = stepChecks.filter(
+    (c) => c === "red-test" || c === "test-diff" || pipeline.checks?.[c]?.phase === "before"
+  );
+  const afterChecksList = stepChecks.filter((c) => !beforeChecksList.includes(c));
+
+  const checkCtx: CheckContext = {
+    repo,
+    wt: childWt,
+    base: parentBranch,
+    project,
+    pipeline,
+    infra,
+    baseline,
+    kind: itemState.kind,
+    item: itemSlug,
+    task,
+    taskWt,
+    target: lastDeveloperTarget,
+    checkTimeoutSec: currentStep.timeoutSec,
+    limits,
+    outputBytes: limits.checkOutputBytes ?? 4096,
+  };
+
+  let failingCheckSummaries: string[] = [];
+
+  const beforeChecks =
+    beforeChecksList.length > 0
+      ? async () => {
+          const results: CheckItemResult[] = [];
+          let ok = true;
+          for (const cName of beforeChecksList) {
+            const cRes = await runCheck(cName, checkCtx);
+            results.push({ id: cRes.name, status: cRes.ok ? "pass" : "fail", message: cRes.summary });
+            if (!cRes.ok) {
+              ok = false;
+              failingCheckSummaries.push(`[${cName}] ${cRes.summary}`);
+            }
+          }
+          return { ok, checks: results };
+        }
+      : undefined;
+
+  const afterChecks =
+    afterChecksList.length > 0
+      ? async () => {
+          const results: CheckItemResult[] = [];
+          let ok = true;
+          for (const cName of afterChecksList) {
+            const cRes = await runCheck(cName, checkCtx);
+            results.push({ id: cRes.name, status: cRes.ok ? "pass" : "fail", message: cRes.summary });
+            if (!cRes.ok) {
+              ok = false;
+              failingCheckSummaries.push(`[${cName}] ${cRes.summary}`);
+            }
+          }
+          return { ok, checks: results };
+        }
+      : undefined;
+
+  // Use steps/fix-round on fix loop re-entry (Finding 11)
+  const isFixRoundReentry = isFixReentry && currentStep.agent === "developer";
+  const stepFragment = isFixRoundReentry
+    ? "steps/fix-round"
+    : (currentStep.stepFragment ?? `steps/${currentStep.id}`);
+
+  // Criteria bundle for review prompts (§8.7); allowed dispositions mirror the
+  // schema binding in step-runner so prompt and validation agree.
+  const criteriaBundle = loadCriteriaBundle(pipeline.criteria);
+  const reviewAllowed =
+    pipeline.reviewPolicy?.allowedDispositions ??
+    pipeline.reviewPolicy?.[currentStep.agent] ??
+    ["fix", "optional", "architect", "human-awareness", "human-async"];
+
   const promptVars: Record<string, string> = {
     assignment: assignmentYaml,
-    target: "tests",
-    citations: "",
+    intent: intentText,
+    target: lastDeveloperTarget ? JSON.stringify(lastDeveloperTarget, null, 2) : "tests",
+    citations: JSON.stringify(itemState.assignment?.citations ?? [], null, 2),
     context: "",
-    checks: "",
+    checks: failingCheckSummaries.join("\n"),
     testDiff: "",
     diff: diffRes.stdout,
-    feedback: itemState.guidanceText ?? "",
+    feedback: feedbackText,
+    dispositionsCriteria: formatDispositionsSection(criteriaBundle.dispositions, reviewAllowed),
   };
 
   // If rotated round (fixRound >= 2), developer uses fresh session (§12.4)
@@ -359,7 +586,10 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
     ? "fresh"
     : (currentStep.session ?? "reuse");
 
-  const recordsDir = path.join(taskDir, "items", itemSlug, "steps");
+  // Place records under childWt on the item branch (§6.1, Finding 3)
+  const orchFolder = project.orchestrationFolder ?? ".factory";
+  const recordsDir = path.join(childWt, orchFolder, task, "items", itemSlug, "steps");
+  await fs.promises.mkdir(recordsDir, { recursive: true });
 
   // 5. Run seam hooks before:item.step.{id} (§8.10)
   await runSeamHooks({
@@ -378,21 +608,23 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
     item: itemSlug,
   });
 
-  // 6. Execute step
+  // 6. Execute step with atomic question persistence (Finding 23)
   const stepRes = await runAgentStep({
     task,
     item: itemSlug,
     stepId: currentStep.id,
-    stepFragment: currentStep.stepFragment,
+    stepFragment,
     agent: currentStep.agent,
     role: currentStep.role,
     retryRole: currentStep.retryRole,
+    producerRetryRole: steps.find((s) => s.id === (kindFlow.fixLoopTo ?? "develop"))?.retryRole ?? null,
     escalatable: currentStep.escalatable,
     isEscalated: itemState.isEscalated,
     fixRound,
     attempt,
     sessionMode,
     cwd: childWt,
+    taskWt,
     taskDir,
     recordsDir,
     repo,
@@ -402,16 +634,36 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
     prompts,
     promptVars,
     turnsSemaphore,
+    timeoutSec: currentStep.timeoutSec,
+    budgetTracker,
+    beforeChecks,
+    afterChecks,
+    writeArtifact: async (output: unknown) => {
+      // Persist human-async questions atomically with the review record (Finding 23)
+      if (output && typeof output === "object" && "suggestions" in (output as any)) {
+        const rev = output as ReviewArtifact;
+        const asyncQuestions = rev.suggestions?.filter((s) => s.disposition === "human-async");
+        if (asyncQuestions && asyncQuestions.length > 0) {
+          const steerDir = path.join(taskDir, "steer", "tousertoreview");
+          await fs.promises.mkdir(steerDir, { recursive: true });
+          for (const q of asyncQuestions) {
+            const qId = `q-${itemSlug}-${Date.now()}-${q.id}`;
+            await writeYamlAtomic(path.join(steerDir, `${qId}.yaml`), {
+              id: qId,
+              ref: itemSlug,
+              disposition: "human-async",
+              question: q.detail || q.summary,
+              blocks: [itemSlug],
+              status: "open",
+            });
+          }
+        }
+      }
+    },
   });
 
-  // Record usage in budget tracker
-  if (budgetTracker && stepRes.usage) {
-    budgetTracker.recordUsage({
-      item: itemSlug,
-      usage: stepRes.usage,
-    });
-  }
-
+  // Refresh state.yaml after every step (ToySmoke: budget/status visibility)
+  await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
   // 7. Run seam hooks after:item.step.{id} (§8.10)
   await runSeamHooks({
     phase: "after",
@@ -429,37 +681,21 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
     item: itemSlug,
   });
 
-  // Check for human-async questions immediately (§8.7, §8.8)
-  if (stepRes.output && typeof stepRes.output === "object" && "suggestions" in (stepRes.output as any)) {
-    const rev = stepRes.output as ReviewArtifact;
-    const asyncQuestions = rev.suggestions?.filter((s) => s.disposition === "human-async");
-    if (asyncQuestions && asyncQuestions.length > 0) {
-      const steerDir = path.join(taskDir, "steer", "tousertoreview");
-      await fs.promises.mkdir(steerDir, { recursive: true });
-      for (const q of asyncQuestions) {
-        const qId = `q-${itemSlug}-${q.id}`;
-        const { writeYamlAtomic } = await import("../records/io.js");
-        await writeYamlAtomic(path.join(steerDir, `${qId}.yaml`), {
-          id: qId,
-          ref: itemSlug,
-          disposition: "human-async",
-          question: q.detail || q.summary,
-          blocks: [itemSlug],
-          status: "open",
-        });
-      }
-      await git(taskWt, ["add", "-A"], { allowFail: true });
-      await git(taskWt, ["commit", "-m", `factory: raise question for ${itemSlug}`], { allowFail: true });
-      return { done: true, status: "blocked", stepRan: currentStep.id };
-    }
+  // Check if any human-async suggestions blocked the item
+  const hasAsync = (stepRes.output as any)?.suggestions?.some(
+    (s: any) => s.disposition === "human-async"
+  );
+  if (hasAsync) {
+    return { done: true, status: "blocked", stepRan: currentStep.id };
   }
 
   // Check if this was the last step and succeeded
   const isLastStep = targetStepIndex === steps.length - 1;
   const hasIssues = (stepRes.output as any)?.suggestions?.some(
-    (s: any) => s.disposition === "fix" || s.disposition === "human-async" || s.disposition === "human-stop"
+    (s: any) => s.disposition === "fix" || s.disposition === "human-stop"
   );
   const isTerminalSuccess = isLastStep && stepRes.ok && !hasIssues;
+
   return {
     done: isTerminalSuccess,
     status: isTerminalSuccess ? "ready" : "running",

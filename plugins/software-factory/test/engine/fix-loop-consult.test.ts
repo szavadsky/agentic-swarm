@@ -4,7 +4,8 @@ import path from "node:path";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 import { FakeHarness } from "../../src/harness/fake/fake-harness.js";
 import { tickItemMachine } from "../../src/core/flows/item-machine.js";
-import { AsyncMutex, KeyedMutex } from "../../src/core/mutex.js";
+import { Repo } from "../../src/core/git/repo.js";
+import { loadPromptLibrary } from "../../src/core/prompts.js";
 import type { PipelineConfig, ProjectConfig, ReviewArtifact } from "../../src/core/artifacts.js";
 import { deriveItemState } from "../../src/core/derive/item.js";
 
@@ -48,12 +49,10 @@ describe("Engine: Fix loop, consult, and alt-on-retry (§8.2, §8.5, §12.4)", (
     const childBranch = `topic/${task}--${itemSlug}`;
     const childWt = tmpRepo.createWorktree(childBranch);
 
-    const repoObj = {
+    const repoObj = new Repo({
       mainRoot: tmpRepo.dir,
       worktreeRoot: path.join(tmpRepo.dir, ".worktrees"),
-      writeLock: new AsyncMutex(),
-      mergeLocks: new KeyedMutex(),
-    };
+    });
 
     const project: ProjectConfig = {
       orchestrationFolder: orchFolder,
@@ -97,11 +96,10 @@ describe("Engine: Fix loop, consult, and alt-on-retry (§8.2, §8.5, §12.4)", (
       },
     };
 
-    const prompts = {
-      agentDefinition: (ag: string) => ({ body: `Agent ${ag}`, tools: ["edit", "bash"], description: ag }),
-      render: (frag: string, vars: Record<string, string>) => `${frag}\n${JSON.stringify(vars)}`,
-      placeholders: () => [],
-    };
+    const prompts = loadPromptLibrary({
+      builtinDir: path.resolve(import.meta.dir, "../../agents"),
+      overrideDirs: [],
+    });
 
     const harness = new FakeHarness();
 
@@ -111,22 +109,28 @@ describe("Engine: Fix loop, consult, and alt-on-retry (§8.2, §8.5, §12.4)", (
       return { ok: true, data: { status: "ok", summary: "Tests created" } };
     });
 
-    // 2. develop step ok
+    // 2. develop step ok, then fix-round develop with changes
+    let developCalls = 0;
     harness.scriptOutcome(`${task}/items/${itemSlug}/develop#a1`, (run) => {
-      fs.writeFileSync(path.join(run.cwd, "impl.ts"), "initial code");
-      return { ok: true, data: { status: "ok", summary: "Code written" } };
+      developCalls++;
+      fs.writeFileSync(path.join(run.cwd, "impl.ts"), `code version ${developCalls}`);
+      return { ok: true, data: { status: "ok", summary: `Code written v${developCalls}` } };
     });
 
-    // 3. review step requests fix
-    harness.scriptOutcome(`${task}/items/${itemSlug}/review#a1`, {
-      ok: true,
-      data: {
-        status: "changes_requested",
-        summary: "Needs changes",
-        suggestions: [
-          { id: "s1", disposition: "fix", summary: "Fix implementation bug" },
-        ],
-      },
+    // 3. review step requests fix twice (second fix exhausts maxFixRounds=1)
+    let reviewCalls = 0;
+    harness.scriptOutcome(`${task}/items/${itemSlug}/review#a1`, () => {
+      reviewCalls++;
+      return {
+        ok: true,
+        data: {
+          status: "changes_requested",
+          summary: `Needs changes round ${reviewCalls}`,
+          suggestions: [
+            { id: `s${reviewCalls}`, disposition: "fix", summary: `Fix implementation bug round ${reviewCalls}` },
+          ],
+        },
+      };
     });
 
     // 4. Architect consult: decides "escalate"
@@ -186,7 +190,39 @@ describe("Engine: Fix loop, consult, and alt-on-retry (§8.2, §8.5, §12.4)", (
       prompts,
     });
 
-    // Next tick: fix round limit reached -> triggers consult -> escalate decision
+    // Next tick: first fix re-entry runs develop (round 1 of maxFixRounds=1)
+    const fixTick = await tickItemMachine({
+      task,
+      itemSlug,
+      parentBranch: `topic/${task}`,
+      taskWt: tmpRepo.dir,
+      childWt,
+      taskDir,
+      repo: repoObj,
+      harness,
+      pipeline,
+      project,
+      prompts,
+    });
+    expect(fixTick.stepRan).toBe("develop");
+    expect(fixTick.consulted).toBeUndefined();
+
+    // Next tick: review requests fix again
+    await tickItemMachine({
+      task,
+      itemSlug,
+      parentBranch: `topic/${task}`,
+      taskWt: tmpRepo.dir,
+      childWt,
+      taskDir,
+      repo: repoObj,
+      harness,
+      pipeline,
+      project,
+      prompts,
+    });
+
+    // Next tick: upcoming round 2 exceeds maxFixRounds=1 -> consult -> escalate
     const consultTick = await tickItemMachine({
       task,
       itemSlug,
@@ -241,12 +277,10 @@ describe("Engine: Fix loop, consult, and alt-on-retry (§8.2, §8.5, §12.4)", (
     const childBranch = `topic/${task}--${itemSlug}`;
     const childWt = tmpRepo.createWorktree(childBranch);
 
-    const repoObj = {
+    const repoObj = new Repo({
       mainRoot: tmpRepo.dir,
       worktreeRoot: path.join(tmpRepo.dir, ".worktrees"),
-      writeLock: new AsyncMutex(),
-      mergeLocks: new KeyedMutex(),
-    };
+    });
 
     const project: ProjectConfig = {
       orchestrationFolder: orchFolder,
@@ -285,11 +319,10 @@ describe("Engine: Fix loop, consult, and alt-on-retry (§8.2, §8.5, §12.4)", (
       },
     };
 
-    const prompts = {
-      agentDefinition: (ag: string) => ({ body: `Agent ${ag}`, tools: ["edit", "bash"], description: ag }),
-      render: (frag: string, vars: Record<string, string>) => `${frag}\n${JSON.stringify(vars)}`,
-      placeholders: () => [],
-    };
+    const prompts = loadPromptLibrary({
+      builtinDir: path.resolve(import.meta.dir, "../../agents"),
+      overrideDirs: [],
+    });
 
     const harness = new FakeHarness();
 

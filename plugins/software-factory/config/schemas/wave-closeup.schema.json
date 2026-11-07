@@ -28,7 +28,10 @@
       "items": { "type": "string" }
     },
     "summary": { "type": "string" },
-    "recommendations": { "type": "string" }
+    "recommendations": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
   },
   "additionalProperties": false
 }

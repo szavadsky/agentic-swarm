@@ -66,20 +66,6 @@ export function parseBranch(branch: string): ParsedBranch | null {
 }
 
 /**
- * Returns branch depth:
- * 0 = root task (topic/{task})
- * 1 = item or epic (topic/{task}--{item})
- * 2 = item inside an epic (topic/{task}--{epic}--{item})
- */
-export function branchDepth(branch: string): number {
-  const parsed = parseBranch(branch);
-  if (!parsed) {
-    throw new Error(`Invalid branch for depth computation: "${branch}"`);
-  }
-  return parsed.depth;
-}
-
-/**
  * Generates the root topic branch name for a task: topic/{task}
  */
 export function taskBranch(task: string): string {

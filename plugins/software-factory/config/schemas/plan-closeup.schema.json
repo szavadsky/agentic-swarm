@@ -8,7 +8,7 @@
     "iteration": { "type": "integer", "minimum": 1 },
     "status": {
       "type": "string",
-      "enum": ["complete", "next_iteration", "blocked"]
+      "enum": ["complete", "next-iteration", "blocked"]
     },
     "summary": { "type": "string" },
     "question": { "type": "string" },

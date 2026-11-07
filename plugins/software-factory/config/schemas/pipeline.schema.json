@@ -51,7 +51,8 @@
             "items": { "type": "string" }
           },
           "definition": { "type": "string" },
-          "output": { "type": "string" }
+          "output": { "type": "string" },
+          "timeoutSec": { "type": "number", "minimum": 1 }
         },
         "additionalProperties": false
       }
@@ -157,7 +158,6 @@
     "limits": {
       "type": "object",
       "properties": {
-        "maxParallel": { "type": "integer", "minimum": 1 },
         "maxParallelItems": { "type": "integer", "minimum": 1 },
         "maxParallelTurns": { "type": "integer", "minimum": 1 },
         "stubMaxProdLines": { "type": "integer", "minimum": 0 },
@@ -171,6 +171,7 @@
         "maxIterations": { "type": "integer", "minimum": 1 },
         "maxInfraRetries": { "type": "integer", "minimum": 0 },
         "gateRetries": { "type": "integer", "minimum": 0 },
+        "gateTimeoutSec": { "type": "integer", "minimum": 1 },
         "storyMaxProdLines": { "type": "integer", "minimum": 1 },
         "simpleMaxProdLines": { "type": "integer", "minimum": 1 },
         "maxMilestones": { "type": "integer", "minimum": 1 },

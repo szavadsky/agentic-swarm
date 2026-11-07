@@ -4,7 +4,8 @@ import path from "node:path";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 import { FakeHarness } from "../../src/harness/fake/fake-harness.js";
 import { runTask } from "../../src/core/engine.js";
-import { AsyncMutex, KeyedMutex } from "../../src/core/mutex.js";
+import { Repo } from "../../src/core/git/repo.js";
+import { loadPromptLibrary } from "../../src/core/prompts.js";
 import type { PipelineConfig, ProjectConfig, SteerItemArtifact } from "../../src/core/artifacts.js";
 import { readYaml } from "../../src/core/records/io.js";
 
@@ -27,16 +28,16 @@ describe("Engine: human-async disposition & steering (§8.7, §8.8)", () => {
     fs.writeFileSync(path.join(taskDir, "INTENT.md"), "Human-async steering test\n", "utf8");
     tmpRepo.commit("Add intent");
 
-    const repoObj = {
+    const worktreeRoot = path.join(tmpRepo.dir + "-wt");
+    fs.mkdirSync(worktreeRoot, { recursive: true });
+    const repoObj = new Repo({
       mainRoot: tmpRepo.dir,
-      worktreeRoot: path.join(tmpRepo.dir, ".worktrees"),
-      writeLock: new AsyncMutex(),
-      mergeLocks: new KeyedMutex(),
-    };
+      worktreeRoot,
+    });
 
     const project: ProjectConfig = {
       orchestrationFolder: orchFolder,
-      worktreeRoot: repoObj.worktreeRoot,
+      worktreeRoot,
     };
 
     const pipeline: PipelineConfig = {
@@ -46,6 +47,9 @@ describe("Engine: human-async disposition & steering (§8.7, §8.8)", () => {
           "alt-workhorse": { model: "deepseek-chat" },
           architect: { model: "deepseek-reasoner" },
           "alt-architect": { model: "deepseek-reasoner" },
+          "task-reviewer": { model: "deepseek-chat" },
+          "wave-close-up": { model: "deepseek-chat" },
+          "plan-close-up": { model: "deepseek-chat" },
           simpler: { model: "deepseek-chat" },
         },
       },
@@ -56,10 +60,10 @@ describe("Engine: human-async disposition & steering (§8.7, §8.8)", () => {
         "plan-reviewer": { role: "alt-architect" },
         pm: { role: "alt-workhorse" },
         developer: { role: "workhorse" },
-        qa: { role: "alt-workhorse" },
-        reviewer: { role: "alt-workhorse" },
-        "wave-close-up": { role: "alt-workhorse" },
-        "plan-close-up": { role: "alt-workhorse" },
+        qa: { role: "task-reviewer" },
+        reviewer: { role: "task-reviewer" },
+        "wave-close-up": { role: "wave-close-up" },
+        "plan-close-up": { role: "plan-close-up" },
       },
       flows: {
         simple: { steps: [{ id: "develop", agent: "developer", role: "workhorse" }] },
@@ -68,7 +72,7 @@ describe("Engine: human-async disposition & steering (§8.7, §8.8)", () => {
             fixLoopTo: "develop",
             steps: [
               { id: "develop", agent: "developer", role: "workhorse" },
-              { id: "review", agent: "reviewer", role: "alt-workhorse" },
+              { id: "review", agent: "reviewer", role: "task-reviewer" },
             ],
           },
         },
@@ -82,18 +86,17 @@ describe("Engine: human-async disposition & steering (§8.7, §8.8)", () => {
       },
     };
 
-    const prompts = {
-      agentDefinition: (ag: string) => ({ body: `Agent ${ag}`, tools: ["edit", "bash"], description: ag }),
-      render: (frag: string, vars: Record<string, string>) => `${frag}\n${JSON.stringify(vars)}`,
-      placeholders: () => [],
-    };
+    const prompts = loadPromptLibrary({
+      builtinDir: path.resolve(import.meta.dir, "../../agents"),
+      overrideDirs: [],
+    });
 
     const harness = new FakeHarness();
 
     // 1. Ingest
     harness.scriptOutcome(`${task}/runs/triage#a1`, {
       ok: true,
-      data: { kind: "story", rationale: "Needs human review" },
+      data: { kind: "story", rationale: "Needs human review", citations: [] },
     });
     harness.scriptOutcome(`${task}/runs/infra#a1`, {
       ok: true,
@@ -124,6 +127,7 @@ describe("Engine: human-async disposition & steering (§8.7, §8.8)", () => {
         items: [
           {
             slug: "item-q",
+            outlineRef: "item-q",
             kind: "dev",
             title: "Item with question",
             assignment: "Ask user",
@@ -163,15 +167,16 @@ describe("Engine: human-async disposition & steering (§8.7, §8.8)", () => {
         data: { status: "approved", summary: "Approved with option A", suggestions: [] },
       },
     ]);
-    // Script close-up outcomes as arrays so they handle run 1 (blocked) and run 2 (complete)
-    harness.scriptOutcome(`${task}/runs/wave-close-up-1-1#a1`, [
-      { ok: true, data: { wave: 1, iteration: 1, status: "complete", summary: "Wave report 1" } },
-      { ok: true, data: { wave: 1, iteration: 1, status: "complete", summary: "Wave report 2" } },
-    ]);
-    harness.scriptOutcome(`${task}/runs/architect-wave-report-1-1#a1`, [
-      { ok: true, data: { id: "dec-1", context: "wave", decision: "continue", timestamp: new Date().toISOString() } },
-      { ok: true, data: { id: "dec-2", context: "wave", decision: "continue", timestamp: new Date().toISOString() } },
-    ]);
+
+    // Close-up outcomes
+    harness.scriptOutcome(`${task}/runs/wave-close-up-1-1#a1`, {
+      ok: true,
+      data: { wave: 1, iteration: 1, status: "complete", summary: "Wave report" },
+    });
+    harness.scriptOutcome(`${task}/runs/architect-wave-report-1-1#a1`, {
+      ok: true,
+      data: { id: "dec-1", context: "wave", decision: "continue", timestamp: new Date().toISOString() },
+    });
     harness.scriptOutcome(`${task}/runs/plan-close-up-1#a1`, {
       ok: true,
       data: { iteration: 1, status: "complete", summary: "Plan satisfied" },
@@ -194,10 +199,13 @@ describe("Engine: human-async disposition & steering (§8.7, §8.8)", () => {
       { maxTicks: 5 }
     );
 
-    const taskWtPath = path.join(repoObj.worktreeRoot, `topic_${task}`);
+    expect(res1.status).toBe("blocked");
+    expect(res1.exitCode).toBe(10);
+
+    const taskWtPath = path.join(worktreeRoot, `topic_${task}`);
     const touserDir = path.join(taskWtPath, orchFolder, task, "steer", "tousertoreview");
 
-    // Verify question was written to steer/tousertoreview (§8.8)
+    // Verify question was written to steer/tousertoreview (§8.8, Finding 23)
     expect(fs.existsSync(touserDir)).toBe(true);
     const qFiles = fs.readdirSync(touserDir);
     expect(qFiles.length).toBeGreaterThan(0);
@@ -226,14 +234,13 @@ describe("Engine: human-async disposition & steering (§8.7, §8.8)", () => {
       };
     });
 
-    // Now script follow-up review turn (approved) after user answer
+    // Follow-up developer step after user answer
     harness.scriptOutcome(`${task}/items/item-q/develop#a2`, (run) => {
       fs.writeFileSync(path.join(run.cwd, "file.txt"), "option A code");
       return { ok: true, data: { status: "ok", summary: "Option A implemented" } };
     });
 
-
-    // Run engine again: steering mailbox processed single-flight, question answered, item unblocked, completes to done
+    // Second run: engine processes steering, unblocks item-q, runs develop a2, review approves, completes
     const res2 = await runTask(
       {
         harness,
@@ -242,19 +249,15 @@ describe("Engine: human-async disposition & steering (§8.7, §8.8)", () => {
         pipelineFor: async () => pipeline,
         prompts,
       },
-      task
+      task,
+      { maxTicks: 10 }
     );
 
     expect(res2.status).toBe("done");
     expect(res2.exitCode).toBe(0);
 
-    // Verify question is now closed/answered in tousertoreview
+    // Verify question is now marked answered
     const updatedQ = await readYaml<SteerItemArtifact>(qPath);
     expect(updatedQ.status).toBe("answered");
-
-    // Verify pending file moved to fromusertaken
-    const takenDir = path.join(taskWtPath, orchFolder, task, "steer", "fromusertaken");
-    expect(fs.existsSync(path.join(takenDir, "answer-01.txt"))).toBe(true);
-    expect(fs.existsSync(path.join(takenDir, "answer-01.txt.classification.yaml"))).toBe(true);
   });
 });

@@ -128,4 +128,82 @@ describe("Worktrees management (§7)", () => {
     expect(resetRes.branch).toBe("topic/task-scratch--simple");
     expect(fs.existsSync(path.join(resetRes.path, "scratch.txt"))).toBe(false);
   });
+
+  it("first-run accepts INTENT inside an untracked .factory/tasks/<task>/ folder", async () => {
+    // INTENT nested in a brand-new untracked folder: default porcelain
+    // collapses this to one `?? .factory/` folder entry.
+    const intentPath = path.join(tmpRepo.dir, ".factory", "tasks", "nested-task", "INTENT.md");
+    fs.mkdirSync(path.dirname(intentPath), { recursive: true });
+    fs.writeFileSync(intentPath, "# Nested Intent\n", "utf8");
+
+    const res = await ensureTaskWorktree(repo, "nested-task", {
+      intentPath,
+      orchestrationFolder: ".factory",
+    });
+    expect(res.created).toBe(true);
+    expect(fs.readFileSync(path.join(res.path, ".factory", "nested-task", "INTENT.md"), "utf8")).toBe(
+      "# Nested Intent\n"
+    );
+  });
+
+  it("first-run still rejects unrelated dirt and stray INTENT-named files", async () => {
+    const intentPath = path.join(tmpRepo.dir, "INTENT.md");
+    fs.writeFileSync(intentPath, "Intent", "utf8");
+    // Same basename in another folder must NOT pass the exact-path check.
+    fs.mkdirSync(path.join(tmpRepo.dir, "other"), { recursive: true });
+    fs.writeFileSync(path.join(tmpRepo.dir, "other", "INTENT.md"), "impostor", "utf8");
+
+    await expect(
+      ensureTaskWorktree(repo, "reject-task", {
+        intentPath,
+        orchestrationFolder: ".factory",
+      })
+    ).rejects.toThrow("Main checkout is dirty");
+  });
+
+  it("prunes a stale unregistered folder before re-adding the worktree", async () => {
+    const intentPath = path.join(tmpRepo.dir, "INTENT.md");
+    fs.writeFileSync(intentPath, "Intent", "utf8");
+
+    const taskRes = await ensureTaskWorktree(repo, "stale-task", {
+      intentPath,
+      orchestrationFolder: ".factory",
+    });
+    const child = await ensureChildWorktree(repo, taskRes, "item-stale");
+
+    // Simulate a crash: unregister the worktree but leave junk in the folder.
+    await git(repo.mainRoot, ["worktree", "remove", "--force", child.path]);
+    await git(repo.mainRoot, ["worktree", "prune"]);
+    fs.mkdirSync(child.path, { recursive: true });
+    fs.writeFileSync(path.join(child.path, "crash-junk.txt"), "junk", "utf8");
+
+    // Branch still exists; ensure must drop the stale folder and re-attach.
+    const reattached = await ensureChildWorktree(repo, taskRes, "item-stale");
+    expect(reattached.created).toBe(false);
+    expect(reattached.path).toBe(child.path);
+    expect(fs.existsSync(path.join(child.path, "crash-junk.txt"))).toBe(false);
+    const listRes = await git(repo.mainRoot, ["worktree", "list", "--porcelain"]);
+    expect(listRes.stdout).toContain(`worktree ${child.path}`);
+  });
+
+  it("registration check does not confuse sibling worktree prefixes", async () => {
+    const intentPath = path.join(tmpRepo.dir, "INTENT.md");
+    fs.writeFileSync(intentPath, "Intent", "utf8");
+
+    const taskRes = await ensureTaskWorktree(repo, "prefix-task", {
+      intentPath,
+      orchestrationFolder: ".factory",
+    });
+    // Longer slug first so its path is a superstring of the shorter one.
+    const longChild = await ensureChildWorktree(repo, taskRes, "item-longer");
+    expect(longChild.created).toBe(true);
+
+    const shortChild = await ensureChildWorktree(repo, taskRes, "item");
+    expect(shortChild.created).toBe(true);
+    expect(fs.existsSync(shortChild.path)).toBe(true);
+    // Both registered exactly.
+    const listRes = await git(repo.mainRoot, ["worktree", "list", "--porcelain"]);
+    expect(listRes.stdout).toContain(`worktree ${longChild.path}`);
+    expect(listRes.stdout).toContain(`worktree ${shortChild.path}`);
+  });
 });

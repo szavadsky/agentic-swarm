@@ -6,12 +6,43 @@ export interface SchedItem {
 }
 
 /**
+ * Returns the slugs of pending items blocked by a failed dependency (§8.2).
+ *
+ * A pending item is blocked-by-failure iff any slug in its `deps` refers to
+ * an item with status "failed" or "abandoned". The engine calls this to mark
+ * such items `blocked` and include them in the wave report. Only direct
+ * failed/abandoned deps are considered here; the engine must cascade
+ * transitively (a pending item whose dep was just marked blocked-by-failure
+ * can never run either, so it must be marked too, to a fixpoint).
+ *
+ * Preserves input (PM) order.
+ */
+export function blockedByFailure(items: SchedItem[]): string[] {
+  const failedSlugs = new Set(
+    items
+      .filter((i) => i.status === "failed" || i.status === "abandoned")
+      .map((i) => i.slug)
+  );
+  if (failedSlugs.size === 0) {
+    return [];
+  }
+  return items
+    .filter(
+      (i) => i.status === "pending" && i.deps.some((d) => failedSlugs.has(d))
+    )
+    .map((i) => i.slug);
+}
+
+/**
  * Determines the next wave to execute according to wave sequence order (§8.4).
  *
  * Waves execute sequentially. A wave is active as long as any item in it
- * remains "pending" or "running". When all items of a wave reach a terminal
- * status ("done", "failed", "blocked", "abandoned"), execution moves to the
- * next wave.
+ * remains "running", or is "pending" and not blocked-by-failure (see
+ * `blockedByFailure`). Pending items whose deps include a failed/abandoned
+ * item can never run, so they do not keep their wave active; the engine
+ * marks them `blocked` via `blockedByFailure`. When no wave has active
+ * work, execution moves past it. Terminal statuses are "done", "failed",
+ * "blocked", "abandoned".
  *
  * Returns the wave identifier, or null if all waves are complete or empty.
  */
@@ -31,12 +62,16 @@ export function nextWave(items: SchedItem[], order: string[]): string | null {
     waveOrder = uniqueWaves;
   }
 
+  const blocked = new Set(blockedByFailure(items));
+
   for (const wave of waveOrder) {
     const waveItems = items.filter((i) => String(i.wave) === String(wave));
     if (waveItems.length === 0) continue;
 
     const hasActive = waveItems.some(
-      (i) => i.status === "pending" || i.status === "running"
+      (i) =>
+        i.status === "running" ||
+        (i.status === "pending" && !blocked.has(i.slug))
     );
 
     if (hasActive) {

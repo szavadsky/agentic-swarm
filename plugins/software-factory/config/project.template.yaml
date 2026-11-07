@@ -11,19 +11,27 @@ orchestrationFolder: .factory/tasks
 adrFolder: docs/adr
 
 # Root directory for task and item git worktrees.
-# Note: Should live outside the main repository working tree.
-# The default uses a sibling directory with `-wt` suffix.
+# MUST live outside the main repository working tree (sibling directory).
+# NOTE: `../repo.factory-wt` is a literal placeholder, not a template expression:
+# replace `repo` with your repository's directory name (e.g. `../myapp.factory-wt`).
 worktreeRoot: ../repo.factory-wt
 
 # Script hints for the infra agent to derive automated gates and build steps.
-# Leave blank or adjust to match your repository package manager / toolchain.
-scripts:
-  setup: "bun install"
-  compile: "bun run build"
-  lint: "bun run lint"
-  test: "bun test"
+# These are HINTS only (free-form strings); the infra agent probes and declares
+# the real commands in infra.yaml. Uncomment the block and adjust to match your
+# toolchain, or leave commented when the repo has no such step.
+# scripts:
+#   setup: "bun install"
+#   compile: "bun run build"
+#   lint: "bun run lint"
+#   test: "bun test"
 
-# File paths and globs used by mechanical checks (tests-only, red-test, size).
+# File paths and globs used by mechanical checks.
+# Used by: tests-only, test-first-scope, red-test, test-diff, size,
+# simple-guard, poc-scope (prod/test classification), and target command building.
+# WARNING: wrong globs silently weaken every scope check — prod files not matched
+# by `prod` escape size/guard limits, and test files not matched by `tests` escape
+# tests-only/test-diff enforcement. Keep both lists in sync with the repo layout.
 paths:
   tests:
     - "test/**"

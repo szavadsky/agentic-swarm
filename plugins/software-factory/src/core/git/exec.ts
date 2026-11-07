@@ -1,3 +1,4 @@
+import path from "node:path";
 import { runProcess } from "../proc.js";
 
 export class GitError extends Error {
@@ -39,10 +40,26 @@ const HARDENED_GIT_ENV: Record<string, string> = {
   LC_ALL: "C",
 };
 
+// Cache of repo-identity probes per resolved cwd. Each probe costs two
+// `git config` spawns, so resolve once per directory instead of per call.
+const identityCache = new Map<string, boolean>();
+
 /**
  * Checks whether the repo in `cwd` already has user.name and user.email configured.
+ * Result is cached per directory for the process lifetime.
  */
 async function hasRepoIdentity(cwd: string): Promise<boolean> {
+  const key = path.resolve(cwd);
+  const cached = identityCache.get(key);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const result = await probeRepoIdentity(cwd);
+  identityCache.set(key, result);
+  return result;
+}
+
+async function probeRepoIdentity(cwd: string): Promise<boolean> {
   const nameRes = await runProcess({
     cmd: ["git", "config", "--local", "user.name"],
     cwd,
@@ -63,8 +80,11 @@ async function hasRepoIdentity(cwd: string): Promise<boolean> {
 /**
  * Executes a hardened git command.
  * - Always prepends: -c gc.auto=0 -c core.quotepath=off -c advice.detachedHead=false
+ * - Disables repo hooks (core.hooksPath=/dev/null) so target-repo pre-commit/
+ *   commit-msg hooks can never reject, hang, or rewrite engine commits/merges
  * - Hardened environment: GIT_TERMINAL_PROMPT=0, GIT_EDITOR=true, no pager, LC_ALL=C
  * - Uses factory identity via GIT_AUTHOR / GIT_COMMITTER env if repo has no user.name/email
+ *   (probed once per directory and cached)
  * - Trims trailing newline only from stdout
  * - Throws GitError on failure unless allowFail: true
  */
@@ -80,6 +100,8 @@ export async function git(
     "core.quotepath=off",
     "-c",
     "advice.detachedHead=false",
+    "-c",
+    "core.hooksPath=/dev/null",
     ...args,
   ];
 

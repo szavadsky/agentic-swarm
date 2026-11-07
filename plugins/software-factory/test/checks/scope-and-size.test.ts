@@ -177,25 +177,28 @@ describe("Scope, size, simple-guard, and custom checks (§9)", () => {
     expect(resDepFail.summary).toContain("added new dependency or config file");
   });
 
-  it("poc-scope restricts changes to poc/", async () => {
-    // 1. Changes inside items/poc-1/poc/
-    fs.mkdirSync(path.join(tmpRepo.dir, "items", "poc-1", "poc"), { recursive: true });
-    fs.writeFileSync(
-      path.join(tmpRepo.dir, "items", "poc-1", "poc", "experiment.py"),
-      "print('poc')\n",
-      "utf8"
-    );
+  it("poc-scope restricts changes to the item poc dir", async () => {
+    // 1. Changes inside {orch}/{task}/items/{item}/poc/
+    const pocDir = path.join(tmpRepo.dir, ".factory", "task-poc", "items", "poc-1", "poc");
+    fs.mkdirSync(pocDir, { recursive: true });
+    fs.writeFileSync(path.join(pocDir, "experiment.py"), "print('poc')\n", "utf8");
+    // Engine step record next to poc/ is excluded, not a violation
+    const stepsDir = path.join(tmpRepo.dir, ".factory", "task-poc", "items", "poc-1", "steps");
+    fs.mkdirSync(stepsDir, { recursive: true });
+    fs.writeFileSync(path.join(stepsDir, "develop.record.yaml"), "status: ok\n", "utf8");
     await commitAll(repo, tmpRepo.dir, "poc changes");
 
-    const ctxOk = makeContext({ item: "poc-1" });
+    const ctxOk = makeContext({ task: "task-poc", item: "poc-1" });
     const resOk = await runCheck("poc-scope", ctxOk);
     expect(resOk.ok).toBe(true);
 
-    // 2. Changes outside poc/
+    // 2. Changes outside poc/ (incl. a stray poc folder elsewhere)
     fs.writeFileSync(path.join(tmpRepo.dir, "src", "outside.ts"), "data", "utf8");
+    fs.mkdirSync(path.join(tmpRepo.dir, "src", "poc"), { recursive: true });
+    fs.writeFileSync(path.join(tmpRepo.dir, "src", "poc", "stray.py"), "x=1\n", "utf8");
     await commitAll(repo, tmpRepo.dir, "outside poc change");
 
-    const ctxFail = makeContext({ item: "poc-1" });
+    const ctxFail = makeContext({ task: "task-poc", item: "poc-1" });
     const resFail = await runCheck("poc-scope", ctxFail);
     expect(resFail.ok).toBe(false);
     expect(resFail.summary).toContain("changes outside poc/");
@@ -230,5 +233,104 @@ describe("Scope, size, simple-guard, and custom checks (§9)", () => {
 
     const res2 = await runCheck("verify-item-placeholder", ctx);
     expect(res2.ok).toBe(true);
+  });
+
+  it("scope checks ignore committed engine step records", async () => {
+    // Test change + engine step record commit (as item branches carry)
+    fs.writeFileSync(path.join(tmpRepo.dir, "tests", "feature.test.ts"), "// new test\n", "utf8");
+    const recDir = path.join(tmpRepo.dir, ".factory", "task-s", "items", "item-1", "steps");
+    fs.mkdirSync(recDir, { recursive: true });
+    fs.writeFileSync(path.join(recDir, "develop.record.yaml"), "status: ok\n", "utf8");
+    await commitAll(repo, tmpRepo.dir, "test + step record");
+
+    const scopeCtx = makeContext();
+    const resScope = await runCheck("test-first-scope", scopeCtx);
+    expect(resScope.ok).toBe(true);
+
+    const testsOnlyCtx = makeContext();
+    const resTestsOnly = await runCheck("tests-only", testsOnlyCtx);
+    expect(resTestsOnly.ok).toBe(true);
+  });
+
+  it("simple-guard accepts pure R100 renames but rejects R<100 edits", async () => {
+    // Create a test file with enough content that an edit drops similarity below 100
+    const lines = Array.from({ length: 20 }, (_, i) => `export const t${i} = ${i};`);
+    fs.writeFileSync(path.join(tmpRepo.dir, "tests", "big.test.ts"), lines.join("\n") + "\n", "utf8");
+    await commitAll(repo, tmpRepo.dir, "add big test");
+    const renameBase = (await git(tmpRepo.dir, ["rev-parse", "HEAD"])).stdout.trim();
+
+    // 1. Pure rename (content identical) -> accepted
+    await git(tmpRepo.dir, ["mv", "tests/big.test.ts", "tests/big-renamed.test.ts"]);
+    await commitAll(repo, tmpRepo.dir, "rename test");
+    const ctxPure = makeContext({ kind: "simple", base: renameBase });
+    const resPure = await runCheck("simple-guard", ctxPure);
+    expect(resPure.ok).toBe(true);
+
+    // 2. Rename + content edit (R<100) -> rejected
+    await git(tmpRepo.dir, ["reset", "--hard", renameBase]);
+    await git(tmpRepo.dir, ["mv", "tests/big.test.ts", "tests/big-renamed.test.ts"]);
+    fs.appendFileSync(
+      path.join(tmpRepo.dir, "tests", "big-renamed.test.ts"),
+      "export const edited = true;\nexport const edited2 = true;\n"
+    );
+    await commitAll(repo, tmpRepo.dir, "rename and edit test");
+    const ctxEdited = makeContext({ kind: "simple", base: renameBase });
+    const resEdited = await runCheck("simple-guard", ctxEdited);
+    expect(resEdited.ok).toBe(false);
+    expect(resEdited.summary).toContain("not rename-only");
+  });
+
+  it("custom check: expect:fail, quoting, cwd:task, timeout", async () => {
+    // File with a space exercises placeholder shell-quoting
+    fs.writeFileSync(path.join(tmpRepo.dir, "src", "sp ace.ts"), "x\n", "utf8");
+    await commitAll(repo, tmpRepo.dir, "add spaced prod file");
+
+    const taskWt = fs.mkdtempSync(path.join(wtRoot, "topic_task-c-"));
+    fs.writeFileSync(path.join(taskWt, "task-marker.txt"), "marker\n", "utf8");
+
+    const ctx = makeContext({
+      task: "task-c",
+      taskWt,
+      pipeline: {
+        models: { roles: {} },
+        agents: {},
+        flows: { simple: { steps: [] }, story: {}, spike: {} },
+        limits: {},
+        checks: {
+          "expect-fail-pass": { run: "false", expect: "fail" },
+          "expect-fail-reject": { run: "true", expect: "fail" },
+          "quoted-path": { run: "test -n {{changedProd}}", expect: "pass" },
+          "task-cwd": { run: "test -f task-marker.txt", expect: "pass", cwd: "task" },
+          "times-out": { run: "sleep 5", expect: "pass", timeoutSec: 1 },
+          "timeout-not-pass": { run: "sleep 5", expect: "fail", timeoutSec: 1 },
+        },
+      },
+    });
+
+    const resFailPass = await runCheck("expect-fail-pass", ctx);
+    expect(resFailPass.ok).toBe(true);
+
+    const resFailReject = await runCheck("expect-fail-reject", ctx);
+    expect(resFailReject.ok).toBe(false);
+    expect(resFailReject.summary).toContain("expected failure");
+
+    // Quoting: unquoted insertion of `src/sp ace.ts` would split into two words and fail
+    const resQuoted = await runCheck("quoted-path", ctx);
+    expect(resQuoted.ok).toBe(true);
+
+    // cwd:task resolves to the task worktree, not the repo worktreeRoot
+    const resTaskCwd = await runCheck("task-cwd", ctx);
+    expect(resTaskCwd.ok).toBe(true);
+
+    // Timeout fails even when the command would otherwise "fail as expected"
+    const resTimeout = await runCheck("times-out", ctx);
+    expect(resTimeout.ok).toBe(false);
+    expect(resTimeout.summary).toContain("timed out");
+
+    const resTimeoutFail = await runCheck("timeout-not-pass", ctx);
+    expect(resTimeoutFail.ok).toBe(false);
+    expect(resTimeoutFail.summary).toContain("timed out");
+
+    fs.rmSync(taskWt, { recursive: true, force: true });
   });
 });

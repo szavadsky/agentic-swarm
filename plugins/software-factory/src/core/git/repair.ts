@@ -1,5 +1,6 @@
 import { git } from "./exec.js";
 import { matchGlobs } from "./diff.js";
+import { porcelainStatus } from "./status.js";
 import type { Repo } from "./repo.js";
 
 /**
@@ -19,14 +20,7 @@ export async function repairWorktree(
 ): Promise<{ actions: string[] }> {
   return repo.writeLock.runExclusive(async () => {
     const actions: string[] = [];
-    const env = repo.identity
-      ? {
-          GIT_AUTHOR_NAME: repo.identity.name,
-          GIT_AUTHOR_EMAIL: repo.identity.email,
-          GIT_COMMITTER_NAME: repo.identity.name,
-          GIT_COMMITTER_EMAIL: repo.identity.email,
-        }
-      : undefined;
+    const env = repo.identityEnv();
 
     // 1. Abort merge in progress if MERGE_HEAD is present
     const mhCheck = await git(wt, ["rev-parse", "-q", "--verify", "MERGE_HEAD"], {
@@ -38,14 +32,13 @@ export async function repairWorktree(
       actions.push("abort_merge");
     }
 
-    // 2. Check for dirty/uncommitted changes
-    const statusRes = await git(wt, ["status", "--porcelain"], { env });
-    const dirtyLines = statusRes.stdout
-      .split("\n")
-      .map((l) => l.trim())
-      .filter(Boolean);
+    // 2. Check for dirty/uncommitted changes. -z + untracked-files=all lists
+    // every untracked file individually so a new file under an untracked
+    // folder (e.g. steer/fromuserpending/) matches its glob instead of being
+    // stashed as stray.
+    const entries = await porcelainStatus(wt, { env });
 
-    if (dirtyLines.length === 0) {
+    if (entries.length === 0) {
       return { actions };
     }
 
@@ -59,13 +52,9 @@ export async function repairWorktree(
 
     // Task worktree: partition into operator-editable vs stray dirt
     const operatorFiles: string[] = [];
-    for (const line of dirtyLines) {
-      let filePath = line.slice(2).trim();
-      if (filePath.includes(" -> ")) {
-        filePath = filePath.split(" -> ")[1]?.trim() ?? filePath;
-      }
-      if (matchGlobs(filePath, opts.operatorEditable)) {
-        operatorFiles.push(filePath);
+    for (const entry of entries) {
+      if (matchGlobs(entry.path, opts.operatorEditable)) {
+        operatorFiles.push(entry.path);
       }
     }
 
@@ -76,8 +65,8 @@ export async function repairWorktree(
     }
 
     // Check if any stray dirt remains
-    const remainingStatus = await git(wt, ["status", "--porcelain"], { env });
-    if (remainingStatus.stdout.trim().length > 0) {
+    const remaining = await porcelainStatus(wt, { env });
+    if (remaining.length > 0) {
       const ts = Date.now();
       const stashMsg = `factory-stray-${ts}`;
       await git(wt, ["stash", "push", "-u", "-m", stashMsg], { env });

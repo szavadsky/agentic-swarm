@@ -5,7 +5,8 @@ import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 import { FakeHarness } from "../../src/harness/fake/fake-harness.js";
 import { runAgentStep } from "../../src/core/flows/step-runner.js";
 import { git } from "../../src/core/git/exec.js";
-import { AsyncMutex } from "../../src/core/mutex.js";
+import { Repo } from "../../src/core/git/repo.js";
+import { loadPromptLibrary } from "../../src/core/prompts.js";
 import type { PipelineConfig, ProjectConfig } from "../../src/core/artifacts.js";
 
 describe("Engine: HEAD guard resilience (§7)", () => {
@@ -65,17 +66,15 @@ describe("Engine: HEAD guard resilience (§7)", () => {
       worktreeRoot: path.join(tmpRepo.dir, ".worktrees"),
     };
 
-    const prompts = {
-      agentDefinition: (ag: string) => ({ body: `Agent ${ag}`, tools: ["edit", "bash"], description: ag }),
-      render: (frag: string, vars: Record<string, string>) => `${frag}\n${JSON.stringify(vars)}`,
-      placeholders: () => [],
-    };
+    const prompts = loadPromptLibrary({
+      builtinDir: path.resolve(import.meta.dir, "../../agents"),
+      overrideDirs: [],
+    });
 
-    const repoObj = {
+    const repoObj = new Repo({
       mainRoot: tmpRepo.dir,
       worktreeRoot: project.worktreeRoot,
-      writeLock: new AsyncMutex(),
-    };
+    });
 
     const stepRes = await runAgentStep({
       task,
@@ -90,7 +89,11 @@ describe("Engine: HEAD guard resilience (§7)", () => {
       pipeline,
       project,
       prompts,
-      promptVars: {},
+      promptVars: {
+        assignment: "Guard test assignment",
+        target: "tests",
+        citations: "[]",
+      },
     });
 
     expect(stepRes.headMoved).toBe(true);
@@ -148,17 +151,15 @@ describe("Engine: HEAD guard resilience (§7)", () => {
       worktreeRoot: path.join(tmpRepo.dir, ".worktrees"),
     };
 
-    const prompts = {
-      agentDefinition: (ag: string) => ({ body: `Agent ${ag}`, tools: ["edit", "bash"], description: ag }),
-      render: (frag: string, vars: Record<string, string>) => `${frag}\n${JSON.stringify(vars)}`,
-      placeholders: () => [],
-    };
+    const prompts = loadPromptLibrary({
+      builtinDir: path.resolve(import.meta.dir, "../../agents"),
+      overrideDirs: [],
+    });
 
-    const repoObj = {
+    const repoObj = new Repo({
       mainRoot: tmpRepo.dir,
       worktreeRoot: project.worktreeRoot,
-      writeLock: new AsyncMutex(),
-    };
+    });
 
     const stepRes = await runAgentStep({
       task,
@@ -173,7 +174,11 @@ describe("Engine: HEAD guard resilience (§7)", () => {
       pipeline,
       project,
       prompts,
-      promptVars: {},
+      promptVars: {
+        assignment: "Guard test assignment",
+        target: "tests",
+        citations: "[]",
+      },
     });
 
     expect(stepRes.branchChanged).toBe(true);

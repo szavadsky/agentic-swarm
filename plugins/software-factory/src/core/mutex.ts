@@ -50,6 +50,10 @@ export class AsyncMutex {
 export class KeyedMutex {
   private mutexes = new Map<string, { mutex: AsyncMutex; count: number }>();
 
+  /** Number of retained key entries (0 when idle; exposed for tests). */
+  public get activeKeys(): number {
+    return this.mutexes.size;
+  }
   public async runExclusive<T>(
     key: string,
     fn: () => Promise<T> | T
@@ -65,7 +69,9 @@ export class KeyedMutex {
       return await entry.mutex.runExclusive(fn);
     } finally {
       entry.count--;
-      if (entry.count <= 0) {
+      // Delete only if this entry is still the current one: entry B created
+      // after entry A hit zero must not be removed by A's late unlock.
+      if (entry.count <= 0 && this.mutexes.get(key) === entry) {
         this.mutexes.delete(key);
       }
     }

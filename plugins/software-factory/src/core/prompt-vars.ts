@@ -32,6 +32,9 @@ export const PROMPT_VAR_DESCRIPTIONS: Record<string, string> = {
   infra: "Discovered infrastructure gates, setup commands, and test runner configuration",
   planReview: "Adversarial review suggestions and findings on the proposed plan",
   closeup: "Plan close-up audit findings detailing scenario and milestone completion",
+  triageCriteria: "Task triage hierarchy criteria file contents (criteria.triage)",
+  dispositionsCriteria: "Review dispositions criteria file contents filtered to allowed dispositions (criteria.dispositions)",
+  storyKindsCriteria: "Story and spike kinds criteria file contents (criteria.story-kinds)",
 };
 
 /**
@@ -39,18 +42,24 @@ export const PROMPT_VAR_DESCRIPTIONS: Record<string, string> = {
  * Includes both prefixed ("steps/...") and bare ("...") fragment keys.
  */
 export const KNOWN_VARS: Record<string, string[]> = {
+  // Ingest & infrastructure steps
+  "steps/triage": ["task", "intent", "triageCriteria"],
+  triage: ["task", "intent", "triageCriteria"],
+
+  "steps/infra": ["task", "intent", "context"],
+  infra: ["task", "intent", "context"],
+
   // Item development & verification steps
   "steps/develop": ["assignment", "target", "citations"],
   develop: ["assignment", "target", "citations"],
 
   "steps/test-first": ["assignment", "citations"],
   "test-first": ["assignment", "citations"],
+  "steps/qa": ["assignment", "checks", "testDiff", "diff", "dispositionsCriteria"],
+  qa: ["assignment", "checks", "testDiff", "diff", "dispositionsCriteria"],
 
-  "steps/qa": ["assignment", "checks", "testDiff", "diff"],
-  qa: ["assignment", "checks", "testDiff", "diff"],
-
-  "steps/review": ["assignment", "checks", "diff"],
-  review: ["assignment", "checks", "diff"],
+  "steps/review": ["assignment", "checks", "diff", "dispositionsCriteria"],
+  review: ["assignment", "checks", "diff", "dispositionsCriteria"],
 
   "steps/fix-round": ["assignment", "feedback", "checks", "diff"],
   "fix-round": ["assignment", "feedback", "checks", "diff"],
@@ -72,14 +81,14 @@ export const KNOWN_VARS: Record<string, string[]> = {
   "test-assumptions": ["assignment", "context"],
 
   // Project manager steps
-  "steps/pm-edits": ["plan", "kinds", "citations", "limits"],
-  "pm-edits": ["plan", "kinds", "citations", "limits"],
+  "steps/pm-edits": ["plan", "kinds", "citations", "limits", "storyKindsCriteria"],
+  "pm-edits": ["plan", "kinds", "citations", "limits", "storyKindsCriteria"],
 
   "steps/pm-amend": ["plan", "feedback", "waveReport"],
   "pm-amend": ["plan", "feedback", "waveReport"],
 
-  "steps/pm-single-item": ["intent", "citations", "kinds"],
-  "pm-single-item": ["intent", "citations", "kinds"],
+  "steps/pm-single-item": ["intent", "citations", "kinds", "storyKindsCriteria"],
+  "pm-single-item": ["intent", "citations", "kinds", "storyKindsCriteria"],
 
   // Architect steps
   "steps/architect-plan": [
@@ -140,8 +149,8 @@ export const KNOWN_VARS: Record<string, string[]> = {
   "steps/plan-close-up": ["intent", "plan", "context"],
   "plan-close-up": ["intent", "plan", "context"],
 
-  "steps/plan-review": ["plan", "intent", "context", "limits"],
-  "plan-review": ["plan", "intent", "context", "limits"],
+  "steps/plan-review": ["plan", "intent", "context", "limits", "dispositionsCriteria"],
+  "plan-review": ["plan", "intent", "context", "limits", "dispositionsCriteria"],
 
   // System fragments
   "system/steer-classify": [],

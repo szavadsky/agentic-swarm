@@ -3,7 +3,7 @@
   "$id": "https://software-factory/schemas/triage.schema.json",
   "title": "TriageArtifact",
   "type": "object",
-  "required": ["kind", "rationale"],
+  "required": ["kind", "rationale", "citations"],
   "properties": {
     "kind": {
       "type": "string",
@@ -14,6 +14,26 @@
     "risks": {
       "type": "array",
       "items": { "type": "string" }
+    },
+    "citations": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/Citation" }
+    }
+  },
+  "definitions": {
+    "Citation": {
+      "type": "object",
+      "required": ["file", "lines", "anchors", "summary"],
+      "properties": {
+        "file": { "type": "string" },
+        "lines": { "type": "string", "pattern": "^[0-9]+(-[0-9]+)?$" },
+        "anchors": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "summary": { "type": "string" }
+      },
+      "additionalProperties": false
     }
   },
   "additionalProperties": false

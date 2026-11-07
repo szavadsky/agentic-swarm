@@ -167,4 +167,79 @@ describe("PersistentAgent sessions (§4, §6.1)", () => {
     expect(lastRun.run.prompt).toContain("# Context Hydration");
     expect(lastRun.run.prompt).toContain("followup prompt");
   });
+
+  it("clears sessionId on sessionLost even without a rehydrate callback", async () => {
+    const harness = new FakeHarness();
+    const label = "task/runs/triage";
+
+    harness.scriptOutcome(label, {
+      ok: true,
+      data: { initial: true },
+    });
+
+    const agent = new PersistentAgent({
+      harness,
+      labelBase: label,
+      agent: "triage",
+      role: "workhorse",
+      models: ["deepseek"],
+      definition: "triage def",
+      tools: [],
+      cwd: "/mock/cwd",
+    });
+
+    await agent.turn("initial turn");
+    const initialSessionId = agent.sessionId!;
+    expect(initialSessionId).toBeDefined();
+
+    harness.invalidateSession(initialSessionId);
+
+    const lost = await agent.turn("followup without rehydrate");
+    expect(lost.ok).toBe(false);
+    expect(agent.sessionId).toBeUndefined();
+
+    // Next turn resumes cleanly (no stale resume id sent to the harness).
+    const resumed = await agent.turn("fresh turn");
+    expect(resumed.ok).toBe(true);
+    expect(agent.sessionId).toBeDefined();
+    expect(agent.sessionId).not.toBe(initialSessionId);
+    const runCalls = harness.calls.filter((c) => c.type === "run") as Array<{
+      type: "run";
+      run: AgentRun;
+    }>;
+    expect(runCalls[runCalls.length - 1]!.run.session.resume).toBeUndefined();
+  });
+
+  it("uses the per-turn label override with fallback to labelBase", async () => {
+    const harness = new FakeHarness();
+    const label = "task/runs/architect";
+    const customLabel = "task/runs/architect/turn-7";
+
+    harness.scriptOutcome(label, { ok: true, data: { base: true } });
+    harness.scriptOutcome(customLabel, { ok: true, data: { custom: true } });
+
+    const agent = new PersistentAgent({
+      harness,
+      labelBase: label,
+      agent: "architect",
+      role: "architect",
+      models: ["claude-opus"],
+      definition: "architect def",
+      tools: [],
+      cwd: "/mock/cwd",
+    });
+
+    const base = await agent.turn("base turn");
+    expect(base.ok).toBe(true);
+    const custom = await agent.turn("custom turn", undefined, { label: customLabel });
+    expect(custom.ok).toBe(true);
+    expect((custom.data as any).custom).toBe(true);
+
+    const runCalls = harness.calls.filter((c) => c.type === "run") as Array<{
+      type: "run";
+      run: AgentRun;
+    }>;
+    expect(runCalls[0]!.run.label).toBe(label);
+    expect(runCalls[1]!.run.label).toBe(customLabel);
+  });
 });

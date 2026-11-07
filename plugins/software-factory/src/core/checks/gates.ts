@@ -1,6 +1,9 @@
 import { runProcess } from "../proc.js";
 import type { GateBaselineEntry } from "../artifacts.js";
-import type { CheckContext } from "./types.js";
+import { tailCap, type CheckContext } from "./types.js";
+
+/** Marker embedded in gate details when the gate command timed out. */
+export const GATE_TIMED_OUT_MARKER = "gate timed out";
 
 /**
  * Runs infrastructure verification gates.
@@ -8,6 +11,8 @@ import type { CheckContext } from "./types.js";
  * - Ratchet: Any gate that was "pass" (green) in baseline must stay green.
  * - Retries: Failed gates are retried up to limits.gateRetries. Gates that pass on retry are marked "flaky".
  * - Resilience: Non-baseline-green gates are reported in results but do not fail the check.
+ * - Timeouts: every attempt is bounded by limits.gateTimeoutSec (default 900s); a
+ *   timeout fails the attempt and is reported distinctly in details.
  */
 export async function runGates(
   ctx: CheckContext,
@@ -18,6 +23,8 @@ export async function runGates(
   }
 
   const retries = ctx.limits.gateRetries ?? 0;
+  const rawTimeout = ctx.limits.gateTimeoutSec as number | undefined;
+  const timeoutSec = typeof rawTimeout === "number" && rawTimeout > 0 ? rawTimeout : 900;
   const results: GateBaselineEntry[] = [];
   let overallOk = true;
 
@@ -25,6 +32,7 @@ export async function runGates(
     let attempt = 0;
     let passedOnce = false;
     let failedOnce = false;
+    let timedOut = false;
     let finalStatus: "pass" | "fail" | "flaky" = "fail";
     let lastOutput = "";
 
@@ -34,10 +42,18 @@ export async function runGates(
       const res = await runProcess({
         cmd: gate.command,
         cwd: ctx.wt,
-        timeoutSec: (ctx.limits["gateTimeoutSec"] as number | undefined) ?? 60,
+        timeoutSec,
+        maxOutputBytes: ctx.outputBytes,
       });
 
       lastOutput = (res.stdout + (res.stderr ? "\n" + res.stderr : "")).trim();
+
+      if (res.timedOut) {
+        timedOut = true;
+        failedOnce = true;
+        attempt++;
+        continue;
+      }
 
       if (res.code === 0) {
         passedOnce = true;
@@ -54,12 +70,15 @@ export async function runGates(
     }
 
     const durationMs = Date.now() - startTime;
+    const details = timedOut
+      ? `${lastOutput}\n[${GATE_TIMED_OUT_MARKER} after ${timeoutSec}s]`.trim()
+      : lastOutput;
     results.push({
       id: gate.id,
       command: gate.command,
       status: finalStatus,
       durationMs,
-      details: lastOutput,
+      details: tailCap(details, ctx.outputBytes),
     });
 
     // Ratchet evaluation:
@@ -81,4 +100,9 @@ export async function runGates(
   }
 
   return { results, ok: overallOk };
+}
+
+/** True when a gate result entry recorded a command timeout. */
+export function gateTimedOut(entry: GateBaselineEntry): boolean {
+  return !!entry.details?.includes(GATE_TIMED_OUT_MARKER);
 }

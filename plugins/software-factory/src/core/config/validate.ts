@@ -7,10 +7,19 @@ import type {
 } from "../artifacts.js";
 import { resolveRole } from "./roles.js";
 
-export const BUILTIN_CHECK_IDS = new Set([
+/**
+ * Built-in checks the engine runs itself at fixed points (record validation,
+ * citation verification, plan-limit enforcement). They have no runCheck case
+ * and MUST NOT be attached to steps or hooks.
+ */
+export const ENGINE_INTERNAL_CHECK_IDS = new Set([
   "schema",
   "citations",
   "plan-limits",
+]);
+
+/** Built-in checks that steps and hooks may attach (all have a runCheck case). */
+export const ATTACHABLE_BUILTIN_CHECK_IDS = new Set([
   "gates",
   "tests-only",
   "test-first-scope",
@@ -21,6 +30,12 @@ export const BUILTIN_CHECK_IDS = new Set([
   "size",
   "simple-guard",
   "poc-scope",
+]);
+
+/** All built-in check ids (attachable + engine-internal). */
+export const BUILTIN_CHECK_IDS = new Set([
+  ...ENGINE_INTERNAL_CHECK_IDS,
+  ...ATTACHABLE_BUILTIN_CHECK_IDS,
 ]);
 
 export const VALID_SEAMS = new Set([
@@ -49,7 +64,7 @@ export function isValidSeam(seam: string): boolean {
   return false;
 }
 
-export function isItemSeam(seam: string): boolean {
+function isItemSeam(seam: string): boolean {
   return seam.startsWith("item.");
 }
 
@@ -77,11 +92,44 @@ export function validateStructural(
   const agents = pipeline.agents ?? {};
   const checks = pipeline.checks ?? {};
   const hooks = pipeline.hooks ?? {};
+  const roles = pipeline.models?.roles ?? {};
+
+  /** Requires a role reference to resolve to a configured role (no model-id fallback). */
+  function checkRoleRef(context: string, roleName: string, label: string): void {
+    if (!roles[roleName]) {
+      errors.push(`${context} references unknown ${label} "${roleName}".`);
+      return;
+    }
+    try {
+      resolveRole(roleName, roles);
+    } catch (err) {
+      errors.push(
+        `${context} references ${label} "${roleName}" that fails to resolve: ${(err as Error).message}`
+      );
+    }
+  }
+
+  function checkAttachableCheck(
+    context: string,
+    target: string,
+    checkId: string
+  ): void {
+    if (ATTACHABLE_BUILTIN_CHECK_IDS.has(checkId) || checks[checkId]) return;
+    if (ENGINE_INTERNAL_CHECK_IDS.has(checkId)) {
+      errors.push(
+        `${context} references engine-internal check "${checkId}" (run by the engine; cannot be attached to ${target}).`
+      );
+    } else {
+      errors.push(`${context} references unknown check "${checkId}".`);
+    }
+  }
 
   // 1. Validate agents existence & definition / output resolution
   for (const [agentName, agentConfig] of Object.entries(agents)) {
     if (!agentConfig.role) {
       errors.push(`Agent "${agentName}" does not specify a role.`);
+    } else {
+      checkRoleRef(`Agent "${agentName}"`, agentConfig.role, "role");
     }
 
     // Extra agent definition validation
@@ -147,15 +195,40 @@ export function validateStructural(
           `Flow "${flowName}" step "${step.id}" references unknown agent "${step.agent}".`
         );
       }
+      if (step.role) {
+        checkRoleRef(`Flow "${flowName}" step "${step.id}"`, step.role, "role");
+      }
+      if (step.retryRole) {
+        checkRoleRef(
+          `Flow "${flowName}" step "${step.id}"`,
+          step.retryRole,
+          "retryRole"
+        );
+      }
       if (step.checks) {
         for (const checkId of step.checks) {
-          if (!BUILTIN_CHECK_IDS.has(checkId) && !checks[checkId]) {
-            errors.push(
-              `Flow "${flowName}" step "${step.id}" references unknown check "${checkId}".`
-            );
-          }
+          checkAttachableCheck(
+            `Flow "${flowName}" step "${step.id}"`,
+            "steps",
+            checkId
+          );
         }
       }
+    }
+  }
+
+  // fixLoopTo must name a step id of the same kind (else item-machine would
+  // silently fall back to index 0).
+  function validateFixLoopTo(
+    flowName: string,
+    steps: FlowStep[],
+    fixLoopTo: string | undefined
+  ): void {
+    if (fixLoopTo === undefined) return;
+    if (!steps.some((s) => s.id === fixLoopTo)) {
+      errors.push(
+        `Flow "${flowName}" fixLoopTo "${fixLoopTo}" does not match any step id in this kind.`
+      );
     }
   }
 
@@ -165,12 +238,16 @@ export function validateStructural(
   }
   if (pipeline.flows?.story) {
     for (const [kind, kindConfig] of Object.entries(pipeline.flows.story)) {
-      validateSteps(`flows.story.${kind}`, kindConfig.steps);
+      const flowName = `flows.story.${kind}`;
+      validateSteps(flowName, kindConfig.steps);
+      validateFixLoopTo(flowName, kindConfig.steps, kindConfig.fixLoopTo);
     }
   }
   if (pipeline.flows?.spike) {
     for (const [kind, kindConfig] of Object.entries(pipeline.flows.spike)) {
-      validateSteps(`flows.spike.${kind}`, kindConfig.steps);
+      const flowName = `flows.spike.${kind}`;
+      validateSteps(flowName, kindConfig.steps);
+      validateFixLoopTo(flowName, kindConfig.steps, kindConfig.fixLoopTo);
     }
   }
 
@@ -211,9 +288,7 @@ export function validateStructural(
       }
 
       if (entry.check) {
-        if (!BUILTIN_CHECK_IDS.has(entry.check) && !checks[entry.check]) {
-          errors.push(`Hook "${hookKey}" references unknown check "${entry.check}".`);
-        }
+        checkAttachableCheck(`Hook "${hookKey}"`, "hooks", entry.check);
       }
     }
   }
