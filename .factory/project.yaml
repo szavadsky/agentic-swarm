@@ -19,11 +19,10 @@ worktreeRoot: ../agentic-swarm.factory-wt
 # These are HINTS only (free-form strings, any key); the infra agent probes and declares
 # the real commands in infra.yaml. Uncomment the block and adjust to match your
 # toolchain, or leave commented when the repo has no such step.
-# scripts:
-#   setup: "bun install"
-#   compile: "bun run build"
-#   lint: "bun run lint"
-#   test: "bun test"
+scripts:
+  setup: "cd plugins/software-factory && bun install"
+  typecheck: "cd plugins/software-factory && bun run typecheck"
+  test: "cd plugins/software-factory && bun test"
 
 # File paths and globs used by mechanical checks.
 # Used by: tests-only, test-first-scope, red-test, test-diff, size,
@@ -33,11 +32,12 @@ worktreeRoot: ../agentic-swarm.factory-wt
 # tests-only/test-diff enforcement. Keep both lists in sync with the repo layout.
 paths:
   tests:
-    - "test/**"
-    - "**/*.test.ts"
-    - "**/*.spec.ts"
+    - "plugins/software-factory/test/**"
   prod:
-    - "src/**"
+    - "plugins/software-factory/src/**"
+    - "plugins/software-factory/bin/**"
+    - "plugins/software-factory/agents/**"
+    - "plugins/software-factory/config/**"
 
 # Optional directories containing additional agent skills or prompt assets.
 skillDirs: []
