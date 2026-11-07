@@ -1,0 +1,93 @@
+citations:
+  - file: docs/factory.v2.md
+    lines: 89-103
+    anchors:
+      - 18. concerns + remarkable decisions funnel
+      - concerns[]
+      - human-involvement modes
+      - "funnel: worker agents"
+    summary: "Acceptance definition: structured concerns[] with
+      kind/severity/affects, engine aggregation with fingerprint
+      ids/dedup/status/source record, reviewer triage plus dismiss, routing
+      (blocker→dependent item + architect consult, architect→next turn,
+      human-*→mailbox, debt→plan), close-up/status counts, configurable
+      dispositions, remarkable decisions/ADRs, funnel and
+      autonomous/principal/detailed presets."
+  - file: plugins/software-factory/docs/ARCHITECTURE.md
+    lines: "39"
+    anchors:
+      - 18 concerns + remarkable decisions funnel
+      - Deliberately not hand-built
+      - review dispositions (§8.7)
+    summary: "The §1 row that must be updated: item 18 currently marked deliberately
+      unimplemented, with only review dispositions (§8.7) and steering mailbox
+      (§8.8) in place."
+  - file: plugins/software-factory/src/core/artifacts.ts
+    lines: 313-325
+    anchors:
+      - DeveloperOutputArtifact
+      - "concerns?: string[]"
+    summary: Current developer output carries only free-form string concerns; needs
+      the structured concern object (kind, summary, detail, location, severity,
+      affects) plus remarkable decisions/ADR fields.
+  - file: plugins/software-factory/src/core/records/review-schema.ts
+    lines: 5-52
+    anchors:
+      - generateReviewSchema
+      - allowedDispositions
+      - "enum: dispositions"
+    summary: Review JSON schema is generated from the agent's allowed disposition
+      enum; triage-by-reviewer needs the vocabulary extended with `dismiss` and
+      the allowed set filtered per reviewer/agent.
+  - file: plugins/software-factory/src/core/flows/item-machine.ts
+    lines: 628-647
+    anchors:
+      - reviewAllowed
+      - formatDispositionsSection
+      - dispositionsCriteria
+    summary: Per-item review prompt wiring and allowed-disposition resolution; the
+      natural insertion point for the step reviewer's concern triage and its
+      disposition vocabulary.
+  - file: plugins/software-factory/src/core/flows/iteration.ts
+    lines: 439-485
+    anchors:
+      - plan-reviewer
+      - ReviewArtifact
+      - fixSuggestions
+    summary: Plan review flow where architect output is reviewed by plan-reviewer;
+      item 18 requires architect concerns/decisions to be triaged here rather
+      than by the workhorse reviewer.
+  - file: plugins/software-factory/src/core/steer.ts
+    lines: 59-88
+    anchors:
+      - writeQuestion
+      - sha256
+      - q-${cleanRef}-${hash}
+    summary: Existing stable-id mailbox write pattern (fingerprint-derived id,
+      ref/disposition, blocks, status) to reuse for concern routing to human-*
+      and for the mailbox digest.
+  - file: plugins/software-factory/src/core/derive/task.ts
+    lines: 167-205
+    anchors:
+      - Tech debt collection
+      - accept-with-debt
+      - disposition === "optional"
+    summary: Debt is currently derived from plan techDebt, accept-with-debt
+      decisions and optional review suggestions; routed tech-debt concerns and
+      concern counts must be added to this derived state.
+  - file: plugins/software-factory/src/cli/status.ts
+    lines: 83-105
+    anchors:
+      - openSteerQuestions
+      - Recorded Technical Debt
+    summary: factory status currently surfaces open operator questions and debt; it
+      must additionally show open/routed/resolved concern counts and
+      remarkable-item digests.
+  - file: plugins/software-factory/src/core/fingerprint.ts
+    lines: 20-50
+    anchors:
+      - fingerprintText
+      - fingerprintObject
+      - canonicalJsonStringify
+    summary: Existing normalization/fingerprint helpers usable for stable concern
+      ids and dedup across steps/attempts/restarts.

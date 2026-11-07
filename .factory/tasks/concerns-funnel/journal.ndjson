@@ -3,3 +3,6 @@
 {"type":"record_marked_interrupted","recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/001-triage-a1","ts":"2026-11-07T18:59:57.359Z"}
 {"type":"task_started","task":"concerns-funnel","branch":"topic/concerns-funnel","ts":"2026-11-07T18:59:57.369Z"}
 {"type":"ingest_started","task":"concerns-funnel","ts":"2026-11-07T18:59:57.376Z"}
+{"type":"step_started","task":"concerns-funnel","step":"triage","attempt":1,"recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/002-triage-a1","ts":"2026-11-07T18:59:57.436Z"}
+{"type":"step_timeout","task":"concerns-funnel","step":"triage","timeoutSec":900,"ts":"2026-11-07T18:59:57.441Z"}
+{"type":"citations_dropped","dropped":[{"file":"plugins/software-factory/config/schemas/developer-output.schema.json","reason":"missing_anchor","message":"Anchor \"items: string\" not found within lines 61-66 of \"plugins/software-factory/config/schemas/developer-output.schema.json\"."},{"file":"plugins/software-factory/config/pipeline.default.yaml","reason":"missing_anchor","message":"Anchor \"reviewPolicy.default\" not found within lines 359-399 of \"plugins/software-factory/config/pipeline.default.yaml\"."}],"ts":"2026-11-07T19:01:26.143Z"}
