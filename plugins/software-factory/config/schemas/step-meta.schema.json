@@ -1,0 +1,37 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://software-factory/schemas/step-meta.schema.json",
+  "title": "StepMetaArtifact",
+  "type": "object",
+  "required": ["agent", "role", "models", "status", "startedAt"],
+  "properties": {
+    "seq": { "type": "integer" },
+    "name": { "type": "string" },
+    "attempt": { "type": "integer" },
+    "agent": { "type": "string" },
+    "role": { "type": "string" },
+    "models": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "session": { "type": "string" },
+    "traceRef": { "type": "string" },
+    "status": {
+      "type": "string",
+      "enum": ["started", "ok", "rejected", "error", "interrupted"]
+    },
+    "usage": {
+      "type": "object",
+      "properties": {
+        "inputTokens": { "type": "number" },
+        "outputTokens": { "type": "number" },
+        "costUsd": { "type": "number" }
+      },
+      "additionalProperties": false
+    },
+    "startedAt": { "type": "string" },
+    "endedAt": { "type": "string" },
+    "error": { "type": "string" }
+  },
+  "additionalProperties": false
+}

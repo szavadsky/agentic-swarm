@@ -1,0 +1,45 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://software-factory/schemas/plan-edits.schema.json",
+  "title": "PlanEditsArtifact",
+  "type": "object",
+  "required": ["iteration", "items"],
+  "properties": {
+    "iteration": { "type": "integer", "minimum": 1 },
+    "amendmentIndex": { "type": "integer", "minimum": 0 },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["slug", "kind", "title", "assignment", "milestone", "wave"],
+        "properties": {
+          "slug": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+          },
+          "kind": { "type": "string" },
+          "title": { "type": "string" },
+          "assignment": { "type": "string" },
+          "outlineRef": { "type": "string" },
+          "milestone": { "type": "string" },
+          "wave": { "type": "integer", "minimum": 1 },
+          "deps": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "scenarioRefs": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "citations": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "escalate": { "type": "boolean" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

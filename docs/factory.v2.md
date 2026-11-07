@@ -1,9 +1,9 @@
 based on plugins/software-builder, developm plugins/software-factory
 
-1. Orchestration code shall be rewitten in typsecript/tsc to js to run in eval kernels when applicable. No more "mechanical" orchestration prompts, that shall be done as omp extensions; with launching smol model completions when needed to repair
+1. Orchestration code shall be rewitten in typescrpt bun to js to run in eval kernels when applicable. No more "mechanical" orchestration prompts, that shall be done as omp extensions; with launching smol model completions when needed to repair
 idemponent artefacts stored in yaml with schema, verified ageinst schema. restart at any time : continuing execution
 2. /home/slava/aiexp/software-builder.dev/plugins/prompt-engineering/skills/prompt-debloat applied to all prompts
-3. pre-requisite (define in ~/.omp/agent/config.yml) - model aliases
+3.  (define in  pipeline config ) - model roles, fallbacks - propagated to launch specific config (may include aliases )
      - @workhorse: open code go deeepseek v4.1 flash
      - @alt-workhorse: open code go muse contributor 1.3
      - @task-reviewer: = @alt-workhorse
@@ -15,7 +15,7 @@ idemponent artefacts stored in yaml with schema, verified ageinst schema. restar
      - @architect: claude opus 5.5 : max
      - @alt-architect: open code go muse contrbutor 1.3
 4. Although omp is our primary target, overall orchestration (picking up tasks, artifact structure, etc) shall be harness agnostic, all core code shall be w/o direct omp SDK dependencies, abstracted launch agent (with agent definion files and exposed tools) and chat handle (for IRC chat channel to architect) - no need to overabstract (eg, will leverage omp isolation functionality), but keep non omp related mechnic separate allow friendlier  support  of another harness
-5. A task {orchestrationFolder}/{taskSlug}/"INTENT.md" is given to the factory.
+5. A task {orchestrationFolder}/{taskSlug[/sugslugforepics]}/"INTENT.md" is given to the factory.
    - Pre-requisite: clear git workspace.
    - workstree must be in brnach topic/{taskSlug} , additional branches created topic/{taskSlug}/{subSlug} - for epics, and tasks (2 level for task within epics) 
    - All orchestration files are under {orchestrationFolder}/{taskSlug} , develop structure. 
@@ -31,12 +31,12 @@ Kinds of tasks, kind of feedback required, orchestration for each task , mechnic
    - `epic`  > single story. includes PM and Architect. < 100 person  days in pre AI time. Epic is defined by set of milestone (up ~ 8 ) and a number of `story`/`simple` (up to 30..50). `epic` may include significant uncertainties that need to be resolved before implementation. Architect defines technical direction (if blocked by uncertainties -> to known level) by defining milestones, directional interfaces and gherkin test scenarios; outline of stories. 
    - `saga`  : aggregation of epics + task
 7. Development "story" kinds  , all shall be configurable (config yaml with agent flow and prompt to PM agent to identify task)
-   - "mainstream dev" - mechanically orchestrated (commit to branch after each step) to "test fisrt", "develop", "QA - review vs test first (ok to have reasonable changes), red testing" , "review", possible security review (that why we have config), possible consistency review etc
+   - "dev" - mechanically orchestrated (commit to branch after each step) to "test fisrt", "develop", "QA - review vs test first (ok to have reasonable changes), red testing" , "review", possible security review (that why we have config), possible consistency review etc. event infra setup task or boostrap is dev with test first - define which comand shall to run
    - "no behavioral changes" -> "develop", "QA", review 
    - "test only" -> "develop", review 
   
 8. `spike` fact-finding task (all configurable)
-   - `fact-finder` document capabilities of libraries, best practices, etc 
+   - `fact-finder` document capabilities of libraries, best practices, 
    - `PoC` - develop in separate folder, "develop", "result review"  
    - `test-assumptions` - develop tests (that will stay) to understand how lower level works and give examples
 
@@ -61,6 +61,52 @@ Kinds of tasks, kind of feedback required, orchestration for each task , mechnic
                - for impacting/blocking, how to resolve
          - no more oracle , plan-review - separate agent, mechnically launched
          
-    - applicable to all reviewers - reviewer produce json with suggestions and  based on mechanically configured (part of pipeline config to prompt) make a decision 
-        - human feedback is required, pipeline is 
+    - applicable to all reviewers - reviewer produce json with suggestions and  based on mechanically configured (part of pipeline config to prompt) make a decision (option present ig agent schema/prompt applicable)
+        - human feedback is required, pipeline is stopped (not even option by default, not in agent schema prompt )
+        - human feedback is requred, pipline can contnue on non dependent tasks
+        - human awareness, architrct ganetic deision is used meanwhile
+        - architect agent must decide 
+
+
+  11. plugins/software-builder/agents/orchestrate-goal-execution.md becames pm. create edits json, the rest is mechanical.
+  12. plugins/software-builder/agents/subtask-dev-process.md disappers - mechnical
+     overall mechnical process -> on confugurable number of retries architect is consukted
+     problem with earlier implementation -now shall be ok as mechanical -  qa trusted dev report, dev report tried to cheat.
+     task may include tradeof analysis, complex debugging ing etc - dev and review done by escalation model (rare) - flagged by architect. complexity != size . large size -> split    
+ 13.  steering mailbox
+       - orchestrationFolder/{slug}/steer/ 
+                                          tousertoreview/ - pipeline sopped, draft decisions, remarkable
+                                          /fromuserpending/
+                                          /fromusertaken/
+      mechcanical orcehstation check pending, process with json model, add to next architect call, decide if it needs to be escalated quick
+ 14. During iteration or after spike architect is on stabdby (irc id preserved)
+     subsequent iterations - relaunch like v1
+ 15. DEbloat, code quality, self deocmenting, debloat tests while preserving intent, never test linting, test ifra/assumptions first - see my phylosophy in /home/slava/aiexp/python-setup shall be in generic form part of default prompts
+ 16. config 
+      pipeline config, criteria, orchestration steps. default bs override prompt templates, possible extra agents, extra skill folders 
+project config: location of orcehstrationFolder, folderForPreservedADRs, scripts for compile/test/lint, extra skills folders
+17. launch: a bun command, prepare/check prompts /env, launch harness, omp once per ietration (as need to preserve irc)
+18. concerns tracking ("see something, say something"; partly in v1, missing in v2)
+     - every agent output may carry structured `concerns[]`: {kind: tech-debt|assumption|blocker|risk|question, summary, detail, location?, severity: low|medium|high, affects?: item/epic/plan refs}
+     - engine aggregates them in the task orchestration folder (`concerns/`, stable id by fingerprint, dedup across steps/attempts, status open|dismissed|routed|resolved, source step record)
+     - the step's reviewer (workhorse class, except architect output which goes to plan-reviewer) triages new concerns with the same disposition vocabulary as review suggestions plus `dismiss` (not real: logged with reason, kept in the folder, no further action)
+     - routing: blocker affecting a dependent item → dependent item blocked + architect consult; `architect` → next architect turn (wave report / next iteration plan input); `human-*` → steer mailbox per reviewPolicy; tech debt → plan tech-debt list
+     - wave/plan close-ups list open concerns; close-up reviewers re-triage them; architect resolves or carries them; status/state.yaml shows counts
+     - configurable like other dispositions (which agents may raise, which dispositions are allowed per reviewer, severity thresholds)
+
+Fire testing:
+     develop initial version. launch ietration by iteration; babysit
+       for /home/slava/aiexp/python-setup 
+           GOAL
+              - modernize, preserve all material checks, enforce coding rules
+              - deblot
+              - remove extra tests
+              - replace embedding/rerank based justification/commment check with a cpu frendly hev style model eg https://huggingface.co/fastino/GLiDE-0.4B or even smaller https://huggingface.co/spaces/multimodalart/jev-decision-index , keep git stored cache with cleanup
+      after each iteration susbagnt analyze execution traces, see issues in  factory build
+        then launch harness imrpovement (scope might be from task to saga, observe behavior)
+
+DoD. build and minimum documented factoy harness, ready to use, default config with commentary how to change in template. config schema
+
+                                                   
+
 

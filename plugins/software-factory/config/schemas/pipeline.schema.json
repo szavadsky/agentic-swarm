@@ -1,0 +1,253 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://software-factory/schemas/pipeline.schema.json",
+  "title": "PipelineConfig",
+  "type": "object",
+  "required": ["models", "agents", "flows", "limits"],
+  "properties": {
+    "models": {
+      "type": "object",
+      "required": ["roles"],
+      "properties": {
+        "roles": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": ["model"],
+                "properties": {
+                  "model": { "type": "string" },
+                  "fallbacks": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "required": ["alias"],
+                "properties": {
+                  "alias": { "type": "string" }
+                },
+                "additionalProperties": false
+              }
+            ]
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "agents": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["role"],
+        "properties": {
+          "role": { "type": "string" },
+          "tools": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "definition": { "type": "string" },
+          "output": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "checks": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["run"],
+        "properties": {
+          "run": { "type": "string" },
+          "expect": { "type": "string", "enum": ["pass", "fail"], "default": "pass" },
+          "cwd": { "type": "string", "enum": ["item", "task"], "default": "item" },
+          "timeoutSec": { "type": "number", "minimum": 1 },
+          "phase": { "type": "string", "enum": ["before", "after"], "default": "after" },
+          "onFail": {
+            "type": "string",
+            "enum": ["retry-step", "fix-loop", "consult", "feed"],
+            "default": "retry-step"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "hooks": {
+      "type": "object",
+      "patternProperties": {
+        "^(before|after):[a-zA-Z0-9_.-]+$": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "agent": { "type": "string" },
+              "check": { "type": "string" },
+              "when": {
+                "type": "object",
+                "properties": {
+                  "kinds": { "type": "array", "items": { "type": "string" } },
+                  "escalated": { "type": "boolean" },
+                  "taskKinds": { "type": "array", "items": { "type": "string" } }
+                },
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "flows": {
+      "type": "object",
+      "required": ["simple", "story", "spike"],
+      "properties": {
+        "simple": {
+          "type": "object",
+          "required": ["steps"],
+          "properties": {
+            "steps": {
+              "type": "array",
+              "items": { "$ref": "#/definitions/FlowStep" }
+            }
+          },
+          "additionalProperties": false
+        },
+        "story": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["steps"],
+            "properties": {
+              "criteria": { "type": "string" },
+              "steps": {
+                "type": "array",
+                "items": { "$ref": "#/definitions/FlowStep" }
+              },
+              "fixLoopTo": { "type": "string" },
+              "limits": { "type": "object" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "spike": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["steps"],
+            "properties": {
+              "criteria": { "type": "string" },
+              "steps": {
+                "type": "array",
+                "items": { "$ref": "#/definitions/FlowStep" }
+              },
+              "fixLoopTo": { "type": "string" },
+              "limits": { "type": "object" }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "limits": {
+      "type": "object",
+      "properties": {
+        "maxParallel": { "type": "integer", "minimum": 1 },
+        "maxParallelItems": { "type": "integer", "minimum": 1 },
+        "maxParallelTurns": { "type": "integer", "minimum": 1 },
+        "stubMaxProdLines": { "type": "integer", "minimum": 0 },
+        "maxStepAttempts": { "type": "integer", "minimum": 1 },
+        "maxInterruptions": { "type": "integer", "minimum": 1 },
+        "maxFixRounds": { "type": "integer", "minimum": 0 },
+        "maxConsultsPerItem": { "type": "integer", "minimum": 0 },
+        "maxSplitDepth": { "type": "integer", "minimum": 0 },
+        "maxPlanReviewRounds": { "type": "integer", "minimum": 0 },
+        "maxAmendmentsPerIteration": { "type": "integer", "minimum": 0 },
+        "maxIterations": { "type": "integer", "minimum": 1 },
+        "maxInfraRetries": { "type": "integer", "minimum": 0 },
+        "gateRetries": { "type": "integer", "minimum": 0 },
+        "storyMaxProdLines": { "type": "integer", "minimum": 1 },
+        "simpleMaxProdLines": { "type": "integer", "minimum": 1 },
+        "maxMilestones": { "type": "integer", "minimum": 1 },
+        "maxItemsPerPlan": { "type": "integer", "minimum": 1 },
+        "checkOutputBytes": { "type": "integer", "minimum": 100 },
+        "hydrationBytes": { "type": "integer", "minimum": 1000 }
+      },
+      "additionalProperties": true
+    },
+    "budget": {
+      "type": "object",
+      "properties": {
+        "perTaskUsd": { "type": "number", "minimum": 0 },
+        "perIterationUsd": { "type": "number", "minimum": 0 },
+        "perItemUsd": { "type": "number", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "diversity": {
+      "type": "string",
+      "enum": ["warn", "error", "off"],
+      "default": "warn"
+    },
+    "harness": {
+      "type": "string",
+      "default": "omp"
+    },
+    "reviewPolicy": {
+      "type": "object",
+      "properties": {
+        "default": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "additionalProperties": {
+        "type": "array",
+        "items": { "type": "string" }
+      }
+    },
+    "criteria": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "prompts": {
+      "type": "object",
+      "properties": {
+        "overrides": { "type": "object" },
+        "extraSkillDirs": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "definitions": {
+    "FlowStep": {
+      "type": "object",
+      "required": ["id", "agent"],
+      "properties": {
+        "id": { "type": "string" },
+        "agent": { "type": "string" },
+        "role": { "type": "string" },
+        "retryRole": { "type": "string" },
+        "escalatable": { "type": "boolean" },
+        "session": { "type": "string", "enum": ["fresh", "reuse"] },
+        "checks": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "focus": { "type": "string" },
+        "stepFragment": { "type": "string" },
+        "timeoutSec": { "type": "number", "minimum": 1 }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

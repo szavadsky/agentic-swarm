@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://software-factory/schemas/decisions.schema.json",
+  "title": "DecisionArtifact",
+  "type": "object",
+  "required": ["id", "context", "decision", "timestamp"],
+  "properties": {
+    "id": { "type": "string" },
+    "context": {
+      "type": "string",
+      "enum": ["item", "non-item", "wave", "plan-closeup"]
+    },
+    "decision": {
+      "type": "string",
+      "enum": [
+        "retry-with-guidance",
+        "split",
+        "escalate",
+        "accept-with-debt",
+        "abandon",
+        "fix-item",
+        "human-async",
+        "abort",
+        "continue",
+        "amend",
+        "end-iteration",
+        "complete",
+        "next-iteration",
+        "blocked"
+      ]
+    },
+    "rationale": { "type": "string" },
+    "text": { "type": "string" },
+    "persist": { "type": "boolean" },
+    "outlines": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "outline": { "type": "object" },
+    "debt": { "type": "string" },
+    "reason": { "type": "string" },
+    "question": { "type": "string" },
+    "planDelta": { "type": "string" },
+    "timestamp": { "type": "string" }
+  },
+  "additionalProperties": false
+}

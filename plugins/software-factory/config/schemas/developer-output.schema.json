@@ -1,0 +1,60 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://software-factory/schemas/developer-output.schema.json",
+  "title": "DeveloperOutputArtifact",
+  "type": "object",
+  "required": ["status", "summary"],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["ok", "blocked", "failed"]
+    },
+    "summary": { "type": "string" },
+    "target": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "selectors": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "expectRed": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["gate"],
+          "properties": {
+            "gate": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["command", "customTarget"],
+          "properties": {
+            "command": { "type": "string" },
+            "customTarget": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "evidence": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": []
+    },
+    "concerns": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": []
+    }
+  },
+  "additionalProperties": false
+}

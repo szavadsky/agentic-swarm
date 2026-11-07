@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://software-factory/schemas/fact-finder-output.schema.json",
+  "title": "FactFinderOutputArtifact",
+  "type": "object",
+  "required": ["status", "summary", "findings"],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["ok", "inconclusive"]
+    },
+    "summary": { "type": "string" },
+    "findings": { "type": "string" },
+    "sources": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "recommendations": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,126 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://software-factory/schemas/plan.schema.json",
+  "title": "PlanArtifact",
+  "type": "object",
+  "required": ["iteration", "milestones"],
+  "properties": {
+    "iteration": { "type": "integer", "minimum": 1 },
+    "milestones": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title"],
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "scenarios": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "directionalInterfaces": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "replanAfter": { "type": "boolean" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "uncertainties": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "description"],
+        "properties": {
+          "id": { "type": "string" },
+          "description": { "type": "string" },
+          "spikeOutlines": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "itemOutlines": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["slug", "kind", "title"],
+        "properties": {
+          "slug": { "type": "string" },
+          "kind": { "type": "string" },
+          "title": { "type": "string" },
+          "description": { "type": "string" },
+          "milestoneId": { "type": "string" },
+          "deps": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "escalate": { "type": "boolean" },
+          "replanAfter": { "type": "boolean" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "assumptions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["assumption", "why"],
+        "properties": {
+          "assumption": { "type": "string" },
+          "why": { "type": "string" },
+          "disposition": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "epics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["slug", "intent"],
+        "properties": {
+          "slug": { "type": "string" },
+          "intent": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "techDebt": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "description", "category"],
+        "properties": {
+          "id": { "type": "string" },
+          "description": { "type": "string" },
+          "category": {
+            "type": "string",
+            "enum": ["adjacent", "impacting", "blocking"]
+          },
+          "resolution": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "adrs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "context", "decision"],
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "context": { "type": "string" },
+          "decision": { "type": "string" },
+          "consequences": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

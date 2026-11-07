@@ -1,0 +1,334 @@
+# software-factory v2 — Default Pipeline Configuration
+#
+# This file defines the default pipeline configuration.
+# Configuration is layered in order of precedence:
+#   1. config/pipeline.default.yaml (this file)
+#   2. <repo>/.factory/pipeline.yaml (project-wide pipeline overrides)
+#   3. <repo>/{orchestrationFolder}/{task}/pipeline.yaml (task-specific pipeline overrides)
+#
+# Merging semantics across layers:
+#   - Maps (objects) are deeply merged.
+#   - Arrays are replaced (not concatenated).
+#   - Explicit `null` values delete the corresponding key from the merged map.
+
+# ==============================================================================
+# Models & Roles (§5, §12.4)
+# ==============================================================================
+# Defines model roles, aliases, and fallback chains.
+# Each role is either:
+#   - Direct model with optional fallbacks: { model: "...", fallbacks: ["..."] }
+#   - Alias pointing to another role: { alias: "..." }
+#
+# Fallback resolution expands recursively and deduplicates while preserving primary first.
+# Cycles in alias chains are detected and rejected at preflight.
+models:
+  roles:
+    # Primary workhorse for development, triage, infra, fact-finding
+    workhorse:
+      model: opencode-go/deepseek-v4.1-flash
+      fallbacks: [alt-workhorse]
+
+    # Alternative workhorse used for review, PM, and rotation on retries
+    alt-workhorse:
+      model: opencode-go/muse-spark-1.3-contributor
+      fallbacks: [workhorse]
+
+    # Reviewing roles aliased to alt-workhorse (split producer/reviewer within class)
+    task-reviewer:
+      alias: alt-workhorse
+
+    wave-close-up:
+      alias: workhorse
+
+    plan-close-up:
+      alias: alt-workhorse
+
+    # High-reasoning escalation model for difficult tasks / escalatable steps
+    task-escalation:
+      model: anthropic/claude-sonnet-5-5:max
+
+    # Ultra-cheap model for structural repair and steering classification
+    simpler:
+      model: google-antigravity/gemini-3.8-flash
+      fallbacks: [workhorse]
+
+    # Project manager role for plan edits
+    pm:
+      alias: alt-workhorse
+
+    # Architect role for high-level decomposition, milestones, consults
+    architect:
+      model: anthropic/claude-opus-5-5:max
+      fallbacks: [alt-architect]
+
+    alt-architect:
+      model: opencode-go/muse-spark-1.3-contributor
+
+# ==============================================================================
+# Agents (§5, §10)
+# ==============================================================================
+# Maps agent names to their default role and tool exposures.
+# Built-in agents: triage, infra, architect, plan-reviewer, pm, developer,
+#                  qa, reviewer, fact-finder, wave-close-up, plan-close-up.
+#
+# Extra agents can be added here with:
+#   my-agent:
+#     role: workhorse
+#     definition: .factory/agents/my-agent.md   # Path to definition or inline
+#     output: developer | review | path/to/schema.json
+#     tools: [bash, edit]
+agents:
+  triage:
+    role: workhorse
+  infra:
+    role: workhorse
+  architect:
+    role: architect
+  plan-reviewer:
+    role: alt-architect
+  pm:
+    role: pm
+  developer:
+    role: workhorse
+  qa:
+    role: task-reviewer
+  reviewer:
+    role: task-reviewer
+  fact-finder:
+    role: workhorse
+  wave-close-up:
+    role: wave-close-up
+  plan-close-up:
+    role: plan-close-up
+
+# ==============================================================================
+# Custom Checks (§5, §9)
+# ==============================================================================
+# Custom mechanical checks executed by the engine.
+# Built-in checks (schema, citations, plan-limits, gates, tests-only, target-red,
+# target-green, red-test, test-diff, size, simple-guard, poc-scope) do not need
+# declarations here.
+#
+# To define a custom check:
+# checks:
+#   mutation:
+#     run: "uv run mutmut run --paths-to-mutate {{changedProd}}"
+#     expect: pass                    # pass | fail
+#     cwd: item                       # item | task
+#     timeoutSec: 900
+#     phase: after                    # before | after
+#     onFail: fix-loop                # retry-step | fix-loop | consult | feed
+checks: {}
+
+# ==============================================================================
+# Hooks (§5, §8.10)
+# ==============================================================================
+# Injects extra agents or checks before/after any valid lifecycle seam.
+# Valid seams:
+#   ingest.triage, ingest.infra, plan.architect, plan.review, plan.edits,
+#   item.start, item.step.{id}, item.accept, item.merge,
+#   wave.start, wave.merge, wave.closeup,
+#   iteration.start, iteration.closeup, task.done.
+#
+# Example:
+# hooks:
+#   after:item.step.develop:
+#     - check: mutation
+#       when: { kinds: [dev] }
+#   after:wave.merge:
+#     - agent: docs-writer
+# Note: Code-writing agents (output: developer) at non-item seams create synthetic
+# items. Synthetic items never fire hooks to prevent self-triggering loops.
+hooks: {}
+
+# ==============================================================================
+# Flows (§5, §8.1, §8.2, §8.3)
+# ==============================================================================
+# Defines step sequences, checks, and retry targets per task/item kind.
+#
+# Step fields:
+#   - id: step identifier (e.g. develop, qa, review)
+#   - agent: agent name defined in `agents`
+#   - role: optional role override
+#   - retryRole: role to swap to on retry (fix round >= 2)
+#   - escalatable: if true, uses `task-escalation` when item is escalated
+#   - session: fresh | reuse (reuse preserves session context across turns)
+#   - checks: array of check IDs to execute at this step
+#   - focus: domain focus for reviewer prompt (e.g. code, security, result)
+#   - stepFragment: optional fragment name in agents/steps/{fragment}.md (defaults to step id)
+#   - timeoutSec: per-step deadline
+flows:
+  # Simple item: single develop step, no review
+  simple:
+    steps:
+      - id: develop
+        agent: developer
+        stepFragment: simple-implement
+        checks: [gates, simple-guard]
+
+  # Story kinds (configurable):
+  story:
+    dev:
+      criteria: "behavior change; tests first"
+      steps:
+        - id: test-first
+          agent: developer
+          checks: [test-first-scope, target-red]
+        - id: develop
+          agent: developer
+          escalatable: true
+          session: reuse
+          retryRole: alt-workhorse
+          checks: [gates, target-green, size]
+        - id: qa
+          agent: qa
+          checks: [red-test, test-diff]
+        - id: review
+          agent: reviewer
+          focus: code
+          escalatable: true
+      fixLoopTo: develop
+
+    no-behavior:
+      criteria: "refactoring, file move, dependency update without prod behavior change"
+      steps:
+        - id: develop
+          agent: developer
+          checks: [gates, size]
+        - id: qa
+          agent: qa
+          checks: [test-diff]
+        - id: review
+          agent: reviewer
+          focus: code
+      fixLoopTo: develop
+
+    test-only:
+      criteria: "test additions or improvements without prod code change"
+      steps:
+        - id: develop
+          agent: developer
+          checks: [gates, tests-only]
+        - id: review
+          agent: reviewer
+          focus: code
+      fixLoopTo: develop
+
+  # Spike kinds (configurable):
+  spike:
+    fact-finder:
+      criteria: "investigate library, API, or unknown without writing production code"
+      steps:
+        - id: research
+          agent: fact-finder
+        - id: review
+          agent: reviewer
+          focus: result
+      fixLoopTo: research
+
+    poc:
+      criteria: "throwaway proof of concept confined to poc/ folder"
+      steps:
+        - id: develop
+          agent: developer
+          checks: [poc-scope]
+        - id: review
+          agent: reviewer
+          focus: result
+      fixLoopTo: develop
+
+    test-assumptions:
+      criteria: "exploratory tests demonstrating how lower level works that stay"
+      steps:
+        - id: develop
+          agent: developer
+          checks: [gates, tests-only]
+        - id: review
+          agent: reviewer
+          focus: result
+      fixLoopTo: develop
+
+# ==============================================================================
+# Limits (§5, §12.2)
+# ==============================================================================
+# Hard thresholds for loops, parallelism, size budgets, and output caps.
+limits:
+  maxParallelItems: 4             # Concurrently executing items per task wave
+  maxParallelTurns: 6             # Concurrent harness turns across the whole run
+  stubMaxProdLines: 40            # Max added prod lines allowed during test-first step
+  maxStepAttempts: 2              # Attempts per step before consult
+  maxInterruptions: 3             # Tolerated interruptions before fatal error
+  maxFixRounds: 3                 # Iterative fix rounds before consult
+  maxConsultsPerItem: 2           # Architect consults per item before fail
+  maxSplitDepth: 1                # Hierarchy split depth limit
+  maxPlanReviewRounds: 2          # Architect <-> plan-reviewer rounds
+  maxAmendmentsPerIteration: 3    # Mid-iteration plan amendments
+  maxIterations: 6                # Max iterations per task
+  maxInfraRetries: 3              # Retries for infrastructure/harness setup
+  gateRetries: 1                  # Re-runs for flaky gate detection
+  storyMaxProdLines: 300          # Production lines changed cap for stories
+  simpleMaxProdLines: 150         # Production lines changed cap for simple items
+  maxMilestones: 8                # Maximum milestones per plan
+  maxItemsPerPlan: 50             # Maximum items per plan
+  checkOutputBytes: 4000          # Tail byte cap for check command output
+  hydrationBytes: 40000           # Hydration context cap for architect sessions
+
+# ==============================================================================
+# Budget (§5, §12.5)
+# ==============================================================================
+# Monetary limits (USD) enforced when harness reports token usage.
+budget:
+  perTaskUsd: 100
+  perIterationUsd: 30
+  perItemUsd: 8
+
+# ==============================================================================
+# Model Diversity (§5, §12.4)
+# ==============================================================================
+# Enforces model independence between producer and reviewer.
+# "warn": log warning if developer and reviewer share primary model.
+# "error": fail preflight if developer and reviewer share primary model.
+# "off": disable check.
+diversity: warn
+
+# ==============================================================================
+# Harness (§4, §5)
+# ==============================================================================
+# Adapter identifier for agent execution (e.g. "omp", "fake").
+harness: omp
+
+# ==============================================================================
+# Review Policy & Dispositions (§5, §8.7)
+# ==============================================================================
+# Configures allowed reviewer dispositions and feedback policies.
+# Dispositions:
+#   - fix: sends item back to fixLoopTo
+#   - optional: non-blocking debt
+#   - architect: architect consult for resolution
+#   - human-awareness: architect decides; recorded for human review
+#   - human-async: item blocks awaiting operator response; other items continue
+#   - human-stop: halts pipeline and exits 10 (deliberately absent from default)
+reviewPolicy:
+  default:
+    - fix
+    - optional
+    - architect
+    - human-awareness
+    - human-async
+
+# ==============================================================================
+# Criteria (§5, §8.7)
+# ==============================================================================
+# Paths to criteria markdown files (resolved relative to plugin root or repo).
+criteria:
+  triage: agents/criteria/triage.md
+  dispositions: agents/criteria/dispositions.md
+  story-kinds: agents/criteria/story-kinds.md
+
+# ==============================================================================
+# Prompts (§5, §10)
+# ==============================================================================
+# Template overrides and additional skill directories.
+prompts:
+  overrides: {}
+  extraSkillDirs: []

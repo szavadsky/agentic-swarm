@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://software-factory/schemas/state.schema.json",
+  "title": "StateArtifact",
+  "type": "object",
+  "required": ["task", "status", "iteration", "items", "lastUpdated"],
+  "properties": {
+    "task": { "type": "string" },
+    "kind": { "type": "string" },
+    "status": {
+      "type": "string",
+      "enum": ["active", "blocked", "done", "failed"]
+    },
+    "iteration": { "type": "integer", "minimum": 1 },
+    "currentWave": { "type": "integer", "minimum": 1 },
+    "items": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["kind", "status"],
+        "properties": {
+          "kind": { "type": "string" },
+          "status": { "type": "string" },
+          "branch": { "type": "string" },
+          "attempts": { "type": "integer" },
+          "fixRounds": { "type": "integer" },
+          "assignedAt": { "type": "string" },
+          "mergedAt": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "debt": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "budgetSpentUsd": { "type": "number", "minimum": 0 },
+    "lastUpdated": { "type": "string" }
+  },
+  "additionalProperties": false
+}

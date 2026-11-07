@@ -1,0 +1,36 @@
+# software-factory v2 — Project Configuration Template
+#
+# Created by `factory init` in `<repo>/.factory/project.yaml`.
+# Committed to version control on initialization.
+
+# Folder holding factory tasks relative to repository root.
+# Tasks live at `{orchestrationFolder}/{task}/INTENT.md`.
+orchestrationFolder: .factory/tasks
+
+# Folder where architectural decision records (ADRs) are written by architect.
+adrFolder: docs/adr
+
+# Root directory for task and item git worktrees.
+# Note: Should live outside the main repository working tree.
+# The default uses a sibling directory with `-wt` suffix.
+worktreeRoot: ../repo.factory-wt
+
+# Script hints for the infra agent to derive automated gates and build steps.
+# Leave blank or adjust to match your repository package manager / toolchain.
+scripts:
+  setup: "bun install"
+  compile: "bun run build"
+  lint: "bun run lint"
+  test: "bun test"
+
+# File paths and globs used by mechanical checks (tests-only, red-test, size).
+paths:
+  tests:
+    - "test/**"
+    - "**/*.test.ts"
+    - "**/*.spec.ts"
+  prod:
+    - "src/**"
+
+# Optional directories containing additional agent skills or prompt assets.
+skillDirs: []

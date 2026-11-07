@@ -1,0 +1,58 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://software-factory/schemas/project.schema.json",
+  "title": "ProjectConfig",
+  "type": "object",
+  "required": ["orchestrationFolder", "worktreeRoot"],
+  "properties": {
+    "orchestrationFolder": {
+      "type": "string",
+      "default": ".factory/tasks",
+      "description": "Folder holding factory tasks, relative to repo root"
+    },
+    "adrFolder": {
+      "type": "string",
+      "default": "docs/adr",
+      "description": "Folder where architectural decision records are written"
+    },
+    "worktreeRoot": {
+      "type": "string",
+      "default": "../<repo>.factory-wt",
+      "description": "Root path for task and item git worktrees"
+    },
+    "scripts": {
+      "type": "object",
+      "properties": {
+        "setup": { "type": "string" },
+        "compile": { "type": "string" },
+        "lint": { "type": "string" },
+        "test": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "paths": {
+      "type": "object",
+      "properties": {
+        "tests": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array", "items": { "type": "string" } }
+          ]
+        },
+        "prod": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array", "items": { "type": "string" } }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "skillDirs": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": []
+    }
+  },
+  "additionalProperties": false
+}

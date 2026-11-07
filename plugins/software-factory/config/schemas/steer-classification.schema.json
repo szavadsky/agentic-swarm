@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://software-factory/schemas/steer-classification.schema.json",
+  "title": "SteerClassificationArtifact",
+  "type": "object",
+  "required": ["refs", "kind", "urgency", "summary"],
+  "properties": {
+    "refs": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "kind": {
+      "type": "string",
+      "enum": ["answer", "directive", "stop"]
+    },
+    "urgency": {
+      "type": "string",
+      "enum": ["now", "next-architect-call"]
+    },
+    "summary": { "type": "string" }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,5 @@
+Model "invalid-provider/nonexistent-model" not found
+
+Run `omp models find <pattern>` to search, or `omp models` to list all.
+
+Wall time: 1.33 seconds

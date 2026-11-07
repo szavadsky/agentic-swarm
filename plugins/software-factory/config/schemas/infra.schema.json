@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://software-factory/schemas/infra.schema.json",
+  "title": "InfraArtifact",
+  "type": "object",
+  "required": ["setup", "gates", "testRunner"],
+  "properties": {
+    "setup": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "gates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "command"],
+        "properties": {
+          "id": { "type": "string" },
+          "command": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "testRunner": {
+      "type": "object",
+      "required": ["command"],
+      "properties": {
+        "command": { "type": "string" },
+        "selectorArgs": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "junitArg": { "type": "string" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

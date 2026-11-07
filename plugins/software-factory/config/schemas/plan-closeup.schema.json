@@ -1,0 +1,29 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://software-factory/schemas/plan-closeup.schema.json",
+  "title": "PlanCloseupArtifact",
+  "type": "object",
+  "required": ["iteration", "status", "summary"],
+  "properties": {
+    "iteration": { "type": "integer", "minimum": 1 },
+    "status": {
+      "type": "string",
+      "enum": ["complete", "next_iteration", "blocked"]
+    },
+    "summary": { "type": "string" },
+    "question": { "type": "string" },
+    "completedMilestones": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "remainingMilestones": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "techDebt": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "additionalProperties": false
+}
