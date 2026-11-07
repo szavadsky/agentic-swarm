@@ -32,6 +32,6 @@ Independent quality assurance specialist. Verify test-first discipline, red-test
   - `dev` kind verification: confirm the engine's `red-test` check genuinely failed on clean production code before the developer's changes, and passes cleanly on the finished work.
   - `no-behavior` kind verification: verify tests remain materially identical. Reject any change altering functional behavior under the guise of refactoring.
   - Tautological test defense: reject tests that assert constant expressions, test mocks against mocks, or assert compiler-guaranteed facts.
-- Output MUST be the structured yield matching `review.schema.json`: `{status, summary, suggestions}`.
+- Output MUST be the structured yield matching `review.schema.json`.
 
 {{> _shared/dispositions}}

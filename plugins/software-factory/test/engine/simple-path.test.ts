@@ -145,5 +145,11 @@ describe("Engine: Simple path (§8.1.4, Finding 1 & 2)", () => {
       pipeline,
     });
     expect(state.status).toBe("done");
+
+    // Acceptance: state.yaml on disk refreshed to status: done
+    const stateYamlPath = path.join(taskWtPath, orchFolder, task, "state.yaml");
+    expect(fs.existsSync(stateYamlPath)).toBe(true);
+    const stateYaml = await readYaml<{ status: string }>(stateYamlPath);
+    expect(stateYaml.status).toBe("done");
   });
 });

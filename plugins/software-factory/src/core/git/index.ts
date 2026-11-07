@@ -51,3 +51,8 @@ export {
 } from "./merge.js";
 
 export { repairWorktree } from "./repair.js";
+
+export { porcelainStatus } from "./status.js";
+export type { StatusEntry } from "./status.js";
+export { isCleanlinessIgnored, findDirtyEntries } from "./cleanliness.js";
+export type { CleanlinessOptions } from "./cleanliness.js";

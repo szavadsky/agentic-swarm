@@ -3,15 +3,17 @@
   "$id": "https://software-factory/schemas/decisions.schema.json",
   "title": "DecisionArtifact",
   "type": "object",
-  "required": ["id", "context", "decision", "timestamp"],
+  "required": ["decision"],
   "properties": {
-    "id": { "type": "string" },
+    "id": { "type": "string", "description": "Unique identifier for this decision (assigned by engine if omitted)" },
     "context": {
       "type": "string",
+      "description": "Decision context scope (item, non-item, wave, plan-closeup)",
       "enum": ["item", "non-item", "wave", "plan-closeup"]
     },
     "decision": {
       "type": "string",
+      "description": "Architect decision verdict",
       "enum": [
         "retry-with-guidance",
         "split",
@@ -29,19 +31,20 @@
         "blocked"
       ]
     },
-    "rationale": { "type": "string" },
-    "text": { "type": "string" },
-    "persist": { "type": "boolean" },
+    "rationale": { "type": "string", "description": "Technical justification for this decision" },
+    "text": { "type": "string", "description": "Concrete guidance or steering directives" },
+    "persist": { "type": "boolean", "description": "Whether guidance persists across subsequent attempts" },
     "outlines": {
       "type": "array",
+      "description": "Decomposed item outlines when decision is split",
       "items": { "type": "object" }
     },
-    "outline": { "type": "object" },
-    "debt": { "type": "string" },
-    "reason": { "type": "string" },
-    "question": { "type": "string" },
-    "planDelta": { "type": "string" },
-    "timestamp": { "type": "string" }
+    "outline": { "type": "object", "description": "Item outline to schedule when decision is fix-item" },
+    "debt": { "type": "string", "description": "Technical debt description when decision is accept-with-debt" },
+    "reason": { "type": "string", "description": "Reason for abandonment or abort" },
+    "question": { "type": "string", "description": "Specific question for human operator when decision is human-async or blocked" },
+    "planDelta": { "type": "string", "description": "Plan delta or amendment directives when decision is amend" },
+    "timestamp": { "type": "string", "description": "ISO timestamp (assigned by engine if omitted)" }
   },
   "additionalProperties": false
 }

@@ -11,7 +11,7 @@ Conduct adversarial review of the architect's proposed plan, critiquing mileston
   - Contract clarity: do directional interfaces establish clear caller/callee contracts?
   - Risk isolation: are technical unknowns and third-party dependencies isolated into spikes?
   - Debt & ADRs: is technical debt properly categorized? Are major decisions documented in ADRs?
-- Reviewer boundary: reviewers critique; reviewers NEVER rewrite plans. Yield `{status, summary, suggestions}` matching `review.schema.json`, using only dispositions allowed by the section below.
+- Reviewer boundary: reviewers critique; reviewers NEVER rewrite plans. Yield structured output matching `review.schema.json`, using only dispositions allowed by the section below.
 
 ## Dispositions Criteria
 {{dispositionsCriteria}}

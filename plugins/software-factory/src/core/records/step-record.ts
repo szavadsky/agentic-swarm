@@ -63,6 +63,7 @@ export interface FinishStepRecordParams {
   endedAt?: string;
   usage?: StepUsage;
   error?: string;
+  repairedFrom?: string;
   traceRef?: string;
   outputData?: unknown;
   checksData?: ChecksResultArtifact;
@@ -76,7 +77,7 @@ export interface FinishStepRecordParams {
 export async function finishStepRecord(
   params: FinishStepRecordParams
 ): Promise<StepMetaArtifact> {
-  const { recordDir, status, endedAt, usage, error, traceRef, outputData, checksData } =
+  const { recordDir, status, endedAt, usage, error, repairedFrom, traceRef, outputData, checksData } =
     params;
 
   const metaPath = path.join(recordDir, "meta.yaml");
@@ -93,7 +94,8 @@ export async function finishStepRecord(
     status,
     endedAt: endedAt ?? new Date().toISOString(),
     usage: usage ?? existingMeta.usage,
-    error: error ?? existingMeta.error,
+    error: status === "ok" ? undefined : (error ?? existingMeta.error),
+    repairedFrom: repairedFrom ?? existingMeta.repairedFrom,
     traceRef: traceRef ?? existingMeta.traceRef,
   };
 

@@ -7,16 +7,25 @@
   "properties": {
     "kind": {
       "type": "string",
+      "description": "Task hierarchy classification (simple, story, spike, epic, saga)",
       "enum": ["simple", "story", "spike", "epic", "saga"]
     },
-    "rationale": { "type": "string" },
-    "size": { "type": "string" },
+    "rationale": {
+      "type": "string",
+      "description": "Explanation of classification rationale based on scope, risk, and design choices"
+    },
+    "size": {
+      "type": "string",
+      "description": "Estimated scope or line count as a string (e.g. '1 file, <20 lines')"
+    },
     "risks": {
       "type": "array",
+      "description": "Anticipated risks, uncertainties, or edge cases",
       "items": { "type": "string" }
     },
     "citations": {
       "type": "array",
+      "description": "Verified citations in the codebase with anchors and line numbers",
       "items": { "$ref": "#/definitions/Citation" }
     }
   },

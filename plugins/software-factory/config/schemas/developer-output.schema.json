@@ -7,10 +7,15 @@
   "properties": {
     "status": {
       "type": "string",
+      "description": "Step execution status (ok, blocked, failed)",
       "enum": ["ok", "blocked", "failed"]
     },
-    "summary": { "type": "string" },
+    "summary": {
+      "type": "string",
+      "description": "Concise summary of implementation actions and test results"
+    },
     "target": {
+      "description": "Target test selectors, gate, or custom command for red/green verification",
       "oneOf": [
         {
           "type": "object",
@@ -49,13 +54,19 @@
     },
     "evidence": {
       "type": "array",
+      "description": "List of executed checks and verification commands proving correctness",
       "items": { "type": "string" },
       "default": []
     },
     "concerns": {
       "type": "array",
+      "description": "Observations, technical debt, or potential risks identified during implementation",
       "items": { "type": "string" },
       "default": []
+    },
+    "notes": {
+      "type": "string",
+      "description": "Optional developer notes, implementation observations, or comments"
     }
   },
   "additionalProperties": false

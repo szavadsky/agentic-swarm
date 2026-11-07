@@ -891,7 +891,7 @@ async function checkTestDiff(ctx: CheckContext): Promise<CheckResult> {
 async function checkSize(ctx: CheckContext): Promise<CheckResult> {
   const isSimple = ctx.kind === "simple";
   const limit = isSimple
-    ? (ctx.limits.simpleMaxProdLines ?? 150)
+    ? (ctx.limits.simpleMaxProdLines ?? 20)
     : (ctx.limits.storyMaxProdLines ?? 300);
 
   const prodGlobs = getGlobs(ctx.project.paths?.prod, DEFAULT_PROD_GLOBS);
@@ -921,7 +921,7 @@ async function checkSize(ctx: CheckContext): Promise<CheckResult> {
 }
 
 async function checkSimpleGuard(ctx: CheckContext): Promise<CheckResult> {
-  const limit = ctx.limits.simpleMaxProdLines ?? 150;
+  const limit = ctx.limits.simpleMaxProdLines ?? 20;
   const prodGlobs = getGlobs(ctx.project.paths?.prod, DEFAULT_PROD_GLOBS);
   const testGlobs = getGlobs(ctx.project.paths?.tests, DEFAULT_TEST_GLOBS);
 

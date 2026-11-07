@@ -3,11 +3,12 @@
   "$id": "https://software-factory/schemas/plan.schema.json",
   "title": "PlanArtifact",
   "type": "object",
-  "required": ["iteration", "milestones"],
+  "required": ["iteration", "milestones", "itemOutlines"],
   "properties": {
-    "iteration": { "type": "integer", "minimum": 1 },
+    "iteration": { "type": "integer", "minimum": 1, "description": "Iteration number for this plan (minimum 1)" },
     "milestones": {
       "type": "array",
+      "description": "Key delivery milestones for this iteration",
       "items": {
         "type": "object",
         "required": ["id", "title"],
@@ -29,6 +30,7 @@
     },
     "uncertainties": {
       "type": "array",
+      "description": "Identified technical or domain uncertainties to resolve via spikes",
       "items": {
         "type": "object",
         "required": ["id", "description"],
@@ -45,6 +47,7 @@
     },
     "itemOutlines": {
       "type": "array",
+      "description": "Planned items/tasks to implement in this iteration",
       "items": {
         "type": "object",
         "required": ["slug", "kind", "title"],
@@ -66,6 +69,7 @@
     },
     "assumptions": {
       "type": "array",
+      "description": "Key assumptions made during planning",
       "items": {
         "type": "object",
         "required": ["assumption", "why"],
@@ -79,6 +83,7 @@
     },
     "epics": {
       "type": "array",
+      "description": "Child epics to spawn (root tasks only)",
       "items": {
         "type": "object",
         "required": ["slug", "intent"],
@@ -91,6 +96,7 @@
     },
     "techDebt": {
       "type": "array",
+      "description": "Technical debt identified, categorized as adjacent, impacting, or blocking",
       "items": {
         "type": "object",
         "required": ["id", "description", "category"],
@@ -108,6 +114,7 @@
     },
     "adrs": {
       "type": "array",
+      "description": "Architecture Decision Records documented for major design choices",
       "items": {
         "type": "object",
         "required": ["id", "title", "context", "decision"],

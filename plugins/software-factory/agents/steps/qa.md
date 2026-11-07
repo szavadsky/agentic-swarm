@@ -9,7 +9,7 @@ Perform independent quality assurance on the item's implementation and test suit
 - Story kind validation:
   - `dev` stories: verify `red-test` proved tests failed on baseline code and pass after implementation.
   - `no-behavior` stories: confirm tests remain materially identical. Functional behavior must not change.
-- Reviewer boundary: reviewers critique; reviewers NEVER write code fixes. Yield `{status, summary, suggestions}` matching `review.schema.json`, using only dispositions allowed by the section below.
+- Reviewer boundary: reviewers critique; reviewers NEVER write code fixes. Yield structured output matching `review.schema.json`, using only dispositions allowed by the section below.
 
 ## Dispositions Criteria
 {{dispositionsCriteria}}

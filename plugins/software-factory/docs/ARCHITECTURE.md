@@ -163,7 +163,7 @@ flows:
     test-assumptions: { criteria: …, steps: [develop(gates, tests-only), review(focus: result)], fixLoopTo: develop }
 limits: { maxParallelItems: 4, maxParallelTurns: 6, maxStepAttempts: 2, maxInterruptions: 3, maxFixRounds: 3, maxConsultsPerItem: 2,
           maxSplitDepth: 1, maxPlanReviewRounds: 2, maxAmendmentsPerIteration: 3, maxIterations: 6,
-          maxInfraRetries: 3, gateRetries: 1, storyMaxProdLines: 300, simpleMaxProdLines: 150, stubMaxProdLines: 40,
+          maxInfraRetries: 3, gateRetries: 1, storyMaxProdLines: 300, simpleMaxProdLines: 20, stubMaxProdLines: 40,
           maxMilestones: 8, maxItemsPerPlan: 50, checkOutputBytes: 4000, hydrationBytes: 40000 }
 budget: { perTaskUsd: 100, perIterationUsd: 30, perItemUsd: 8 }   # enforced when harness reports usage
 diversity: warn

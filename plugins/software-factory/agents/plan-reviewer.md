@@ -34,4 +34,4 @@ Adversarial architectural reviewer. Scrutinize the architect's proposed plan for
 
 {{> _shared/dispositions}}
 
-- Output MUST be the structured yield matching `review.schema.json`: `{status, summary, suggestions}`.
+- Output MUST be the structured yield matching `review.schema.json`.

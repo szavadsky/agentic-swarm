@@ -320,6 +320,7 @@ export interface DeveloperOutputArtifact {
   target?: DeveloperTarget;
   evidence?: string[];
   concerns?: string[];
+  notes?: string;
 }
 
 export interface FactFinderOutputArtifact {
@@ -417,6 +418,7 @@ export interface StepMetaArtifact {
   startedAt: string;
   endedAt?: string;
   error?: string;
+  repairedFrom?: string;
   timeoutSec?: number;
 }
 

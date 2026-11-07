@@ -12,7 +12,7 @@ Deconstruct the approved architectural plan into scheduled, executable item spec
   - Total items: stay within `maxItemsPerPlan` (see `{{limits}}`).
 - Citation scoping: include only the specific subset of codebase citations required for each item's assignment. Never attach irrelevant task citations.
 - Outline linkage: map each item to its plan outline via `outlineRef`. Inherit `escalate` flags from outlines.
-- Output: yield `{iteration, amendmentIndex?, items}` matching `plan-edits.schema.json`.
+- Output: yield structured output matching `plan-edits.schema.json`.
 
 ## Plan
 {{plan}}

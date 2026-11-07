@@ -32,6 +32,7 @@
     "startedAt": { "type": "string" },
     "endedAt": { "type": "string" },
     "error": { "type": "string" },
+    "repairedFrom": { "type": "string" },
     "timeoutSec": { "type": "number", "minimum": 1 }
   },
   "additionalProperties": false

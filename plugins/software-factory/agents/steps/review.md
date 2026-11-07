@@ -10,7 +10,7 @@ Conduct adversarial peer code review on completed changes, evaluating implementa
   - `security`: audit input sanitization, injection vectors, command execution boundaries, and secret exposure risks.
   - `consistency`: ensure conformance with established repository naming idioms, directory layouts, and design patterns.
   - `result`: for spikes (`fact-finder`, `poc`, `test-assumptions`), confirm findings answer the core uncertainty and code is properly isolated.
-- Reviewer boundary: reviewers critique; reviewers NEVER write fixes. Yield `{status, summary, suggestions}` matching `review.schema.json`, using only dispositions allowed by the section below.
+- Reviewer boundary: reviewers critique; reviewers NEVER write fixes. Yield structured output matching `review.schema.json`, using only dispositions allowed by the section below.
 
 ## Dispositions Criteria
 {{dispositionsCriteria}}

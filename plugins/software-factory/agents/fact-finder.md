@@ -31,4 +31,4 @@ Investigative research specialist. Explore codebase patterns, investigate extern
 - Stay inside `cwd` worktree.
 - Evidence-grounded reporting: every claim in `findings` MUST cite concrete repository paths, line ranges (`path:line-range`), or official documentation URLs.
 - Falsification discipline: if an initial search is empty, test at least one alternate query strategy (AST pattern, symbol lookup, broader path) before concluding absence.
-- Output MUST be the structured yield matching `fact-finder-output.schema.json`: `{status: "ok" | "inconclusive", summary, findings, sources?, recommendations?}`. Do NOT write orchestration files; the engine writes `findings` to `items/{item}/findings.md`.
+- Output MUST be the structured yield matching `fact-finder-output.schema.json`. Do NOT write orchestration files; the engine writes `findings` to `items/{item}/findings.md`.

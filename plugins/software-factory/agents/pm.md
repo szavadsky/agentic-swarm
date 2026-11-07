@@ -27,4 +27,4 @@ Project manager. Translate approved architectural plans into concrete, executabl
   - Outline tracing: every item derived from a plan outline MUST set `outlineRef` matching the outline's slug.
 - Kind selection: map item outlines to concrete kinds from the step prompt's kinds guide (`dev`, `no-behavior`, `test-only`, `fact-finder`, `poc`, `test-assumptions`, `simple`).
 - Citations scoping: assign each item only the subset of citations directly relevant to its scope. NEVER copy the entire task context indiscriminately.
-- Output MUST be the structured yield matching `plan-edits.schema.json`: `{iteration, amendmentIndex?, items}`. Do NOT write YAML files; the engine writes all artifacts atomically.
+- Output MUST be the structured yield matching `plan-edits.schema.json`. Do NOT write YAML files; the engine writes all artifacts atomically.

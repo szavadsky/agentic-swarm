@@ -3,6 +3,7 @@ import path from "node:path";
 import yaml from "yaml";
 import type { PipelineConfig } from "./artifacts.js";
 import { KNOWN_VARS } from "./prompt-vars.js";
+import { formatOutputSchemaSection } from "./records/schema-format.js";
 
 export interface PromptLibrary {
   agentDefinition(agent: string): {
@@ -11,6 +12,11 @@ export interface PromptLibrary {
     description: string;
   };
   render(fragment: string, vars: Record<string, string>): string;
+  renderStepPrompt(
+    fragment: string,
+    vars: Record<string, string>,
+    schema?: Record<string, unknown>
+  ): string;
   placeholders(fragment: string): string[];
 }
 export interface CriteriaBundle {
@@ -342,7 +348,31 @@ export function loadPromptLibrary(opts: {
         (_m, varName) => (varName in vars ? vars[varName] ?? "" : "")
       );
     },
+
+    renderStepPrompt(
+      fragment: string,
+      vars: Record<string, string>,
+      schema?: Record<string, unknown>
+    ): string {
+      const basePrompt = this.render(fragment, vars);
+      if (!schema || typeof schema !== "object" || Object.keys(schema).length === 0) {
+        return basePrompt;
+      }
+      const outputSection = formatOutputSchemaSection(schema);
+      return `${basePrompt.trimEnd()}\n\n${outputSection}\n`;
+    },
   };
+}
+
+export { formatOutputSchemaSection } from "./records/schema-format.js";
+
+export function renderStepPrompt(opts: {
+  prompts: PromptLibrary;
+  fragment: string;
+  vars: Record<string, string>;
+  schema?: Record<string, unknown>;
+}): string {
+  return opts.prompts.renderStepPrompt(opts.fragment, opts.vars, opts.schema);
 }
 
 /**

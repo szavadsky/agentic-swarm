@@ -326,7 +326,7 @@ limits:
   gateRetries: 1                  # Re-runs for flaky gate detection
   gateTimeoutSec: 900             # Per-gate command timeout (sec); real suites need minutes, not seconds
   storyMaxProdLines: 300          # Production lines changed cap for stories
-  simpleMaxProdLines: 150         # Production lines changed cap for simple items
+  simpleMaxProdLines: 20          # Production lines changed cap for simple items (strictly small/trivial scope; >20 lines must be story)
   maxMilestones: 8                # Maximum milestones per plan
   maxItemsPerPlan: 50             # Maximum items per plan
   checkOutputBytes: 4000          # Tail byte cap for check command output

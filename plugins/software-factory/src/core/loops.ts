@@ -16,7 +16,7 @@ export const DEFAULT_LIMITS: Required<PipelineLimits> = {
   gateRetries: 1,
   gateTimeoutSec: 900,
   storyMaxProdLines: 400,
-  simpleMaxProdLines: 150,
+  simpleMaxProdLines: 20,
   stubMaxProdLines: 30,
   maxMilestones: 8,
   maxItemsPerPlan: 50,

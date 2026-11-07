@@ -120,9 +120,9 @@ export type RepairPipelineResult =
 
 /**
  * Output validation and repair pipeline (§6.4):
- * 1. Schema enforcement
- * 2. ask same session with validation errors
- * 3. complete(@simpler) structural repair + leaf-value presence guard
+ * 1. Harness schema enforcement (direct validation)
+ * 2. complete(@simpler) structural repair + leaf-value presence guard
+ * 3. ask same session with validation errors (if session kept)
  * 4. relaunch once
  * 5. error
  */
@@ -171,22 +171,7 @@ export async function validateAndRepair(
 
   let lastError = formatAjvErrors(validate.errors);
 
-  // 2. Ask same session if alive
-  if (askSession) {
-    const askPrompt = `The previous output did not match the required schema:\n${lastError}\nPlease provide the corrected response matching the JSON schema.`;
-    const askOutcome = await askSession(askPrompt, schema);
-    if (askOutcome.ok) {
-      const parsedAsk = tryParse(askOutcome.data);
-      if (validate(parsedAsk)) {
-        return { ok: true, data: parsedAsk, method: "ask" };
-      }
-      lastError = formatAjvErrors(validate.errors);
-    } else {
-      lastError = askOutcome.error;
-    }
-  }
-
-  // 3. Structural repair via @simpler with leaf-value presence guard
+  // 2. Structural repair via @simpler with leaf-value presence guard (cheapest-first)
   if (completeSimpler) {
     const repairPrompt = `Repair the following raw agent output to strictly conform to the expected JSON schema.\n\nErrors:\n${lastError}\n\nRaw Output:\n${rawText}`;
     try {
@@ -206,6 +191,21 @@ export async function validateAndRepair(
       }
     } catch (err: any) {
       lastError = `complete(@simpler) failed: ${err.message ?? String(err)}`;
+    }
+  }
+
+  // 3. Ask same session if alive
+  if (askSession) {
+    const askPrompt = `The previous output did not match the required schema:\n${lastError}\nPlease provide the corrected response matching the JSON schema.`;
+    const askOutcome = await askSession(askPrompt, schema);
+    if (askOutcome.ok) {
+      const parsedAsk = tryParse(askOutcome.data);
+      if (validate(parsedAsk)) {
+        return { ok: true, data: parsedAsk, method: "ask" };
+      }
+      lastError = formatAjvErrors(validate.errors);
+    } else {
+      lastError = askOutcome.error;
     }
   }
 

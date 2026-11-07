@@ -30,4 +30,4 @@ Post-wave integration and hygiene verifier. Inspect the state of the merged task
   - Conflict markers: ensure no leftover merge conflict strings (`<<<<<<<`, `=======`, `>>>>>>>`) exist in the tree.
   - Gate baseline: run all infra gate commands via `bash`. Flag any gate regressions against `gates-baseline.yaml` in `failedItems`/`blockedItems` and the summary.
 - Reviewers critique; reviewers NEVER write code fixes.
-- Output MUST be the structured yield matching `wave-closeup.schema.json`: `{wave, iteration, status, mergedItems, failedItems?, blockedItems?, debt?, summary, recommendations?}` with `status` one of `complete | has_failures | blocked`.
+- Output MUST be the structured yield matching `wave-closeup.schema.json`. `status` is one of `complete`, `has_failures`, or `blocked`.

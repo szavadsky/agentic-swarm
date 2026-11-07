@@ -289,7 +289,9 @@ export async function runTask(
 ): Promise<RunResult> {
   const { harness, repo, project, pipelineFor, prompts, log } = deps;
   let taskDir: string | undefined;
-
+  let taskWt: string | undefined;
+  let parentBranch: string | undefined;
+  let pipeline: PipelineConfig | undefined;
   try {
     const orchFolder = project.orchestrationFolder ?? ".factory";
     const intentPath = path.join(repo.mainRoot, orchFolder, task, "INTENT.md");
@@ -300,10 +302,10 @@ export async function runTask(
     orchestrationFolder: orchFolder,
   });
 
-    const taskWt = taskWtInfo.path;
+    taskWt = taskWtInfo.path;
     taskDir = path.join(taskWt, orchFolder, task);
-  await fs.promises.mkdir(taskDir, { recursive: true });
-  const parentBranch = `topic/${task}`;
+    await fs.promises.mkdir(taskDir, { recursive: true });
+    parentBranch = `topic/${task}`;
 
   // 2. Start-up repair restricted to §6.3.6 list (Finding 1 & 19)
   await repairWorktree(repo, taskWt, "task", {
@@ -342,7 +344,7 @@ export async function runTask(
   await repairInterruptedRecords(taskDir);
 
   // 3. Load pipeline config and setup semaphores (§2)
-  const pipeline = await pipelineFor(taskDir);
+  pipeline = await pipelineFor(taskDir);
   if (opts?.maxIterations !== undefined) {
     if (!pipeline.limits) pipeline.limits = {};
     pipeline.limits.maxIterations = opts.maxIterations;
@@ -532,6 +534,7 @@ export async function runTask(
       });
 
       if (ingestRes.simpleDone) {
+        await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
         return {
           status: "done",
           exitCode: 0,
@@ -634,6 +637,7 @@ export async function runTask(
       }
 
       if (simpleItemState.status === "blocked") {
+        await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
         return {
           status: "blocked",
           exitCode: 10,
@@ -641,6 +645,7 @@ export async function runTask(
         };
       }
 
+      await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
       return {
         status: "failed",
         exitCode: 1,
@@ -665,7 +670,7 @@ export async function runTask(
       runTaskChild: async (epicSlug: string) => {
         return await runChildTask(
           deps,
-          { branch: parentBranch, path: taskWt, taskDir: taskDir! },
+          { branch: parentBranch!, path: taskWt!, taskDir: taskDir! },
           epicSlug,
           {
             maxTicks: opts?.maxTicks,
@@ -681,18 +686,21 @@ export async function runTask(
     architectSessionId = itRes.architectSessionId;
 
     if (itRes.status === "done") {
+      await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
       return {
         status: "done",
         exitCode: 0,
         summary: `Task ${task} completed successfully`,
       };
     } else if (itRes.status === "blocked") {
+      await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
       return {
         status: "blocked",
         exitCode: 10,
         summary: `Task ${task} blocked at iteration ${itRes.iteration}`,
       };
     } else if (itRes.status === "failed") {
+      await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
       return {
         status: "failed",
         exitCode: 1,
@@ -701,13 +709,19 @@ export async function runTask(
     }
   }
 
-    return {
-      status: "stopped",
-      exitCode: 1,
-      summary: `Task ${task} stopped: exceeded max ticks (${maxTicks})`,
-    };
+  await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
+  return {
+    status: "stopped",
+    exitCode: 1,
+    summary: `Task ${task} stopped: exceeded max ticks (${maxTicks})`,
+  };
   } catch (err: any) {
     if (taskDir && fs.existsSync(taskDir)) {
+      if (parentBranch && taskWt && pipeline) {
+        try {
+          await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
+        } catch {}
+      }
       try {
         await appendJournal(taskDir, { type: "task_error", error: err?.message ?? String(err) });
       } catch {}

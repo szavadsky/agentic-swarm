@@ -6,7 +6,7 @@ Conduct technical spike research to eliminate architecture unknowns, investigate
 ## Rules
 - Investigative discipline: form multiple hypotheses; test using search, LSP, code inspection, and documentation queries.
 - Concrete references: ground every finding with repository paths, exact line ranges, or documentation URLs.
-- Deliverable: yield structured output matching `fact-finder-output.schema.json`: `{status: "ok" | "inconclusive", summary, findings, sources?, recommendations?}`. Do NOT write files; the engine writes `findings` to `items/{item}/findings.md`.
+- Deliverable: yield structured output matching `fact-finder-output.schema.json`. Do NOT write files; the engine writes `findings` to `items/{item}/findings.md`.
 - Read-only on repository: do NOT edit or write code files. NEVER issue git write commands or launch subagents.
 
 ## Assignment

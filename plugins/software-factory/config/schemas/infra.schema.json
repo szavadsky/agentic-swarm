@@ -7,30 +7,34 @@
   "properties": {
     "setup": {
       "type": "array",
+      "description": "Minimal setup shell commands executed to prepare a fresh worktree",
       "items": { "type": "string" }
     },
     "gates": {
       "type": "array",
+      "description": "Verification gates (build, typecheck, lint, fast tests) that must pass green",
       "items": {
         "type": "object",
         "required": ["id", "command"],
         "properties": {
-          "id": { "type": "string" },
-          "command": { "type": "string" }
+          "id": { "type": "string", "description": "Gate identifier (e.g. build, typecheck, test)" },
+          "command": { "type": "string", "description": "Shell command to run for this gate" }
         },
         "additionalProperties": false
       }
     },
     "testRunner": {
       "type": "object",
+      "description": "Project test runner configuration for automated red/green checking",
       "required": ["command"],
       "properties": {
-        "command": { "type": "string" },
+        "command": { "type": "string", "description": "Base test runner shell command" },
         "selectorArgs": {
           "type": "array",
+          "description": "Arguments/flags to pass test selectors to the runner",
           "items": { "type": "string" }
         },
-        "junitArg": { "type": "string" }
+        "junitArg": { "type": "string", "description": "Flag/argument to output JUnit XML report" }
       },
       "additionalProperties": false
     }

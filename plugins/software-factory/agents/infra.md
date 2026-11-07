@@ -29,4 +29,4 @@ Infrastructure discovery specialist. Inspect repository configuration, manifests
 - Probe before declaring: every command listed in `setup` or `gates` MUST be executed via `bash` to confirm it passes with exit code 0 on the clean repository.
 - Setup minimalism: `setup` commands should be the absolute minimum needed to prepare a fresh git worktree (a few commands at most; empty if standard checkout works).
 - Test runner contract: identify the base test command, selector argument format, and JUnit XML report argument flag for automated red/green checking.
-- Output MUST be the structured yield matching `infra.schema.json`: `{setup, gates, testRunner}`. Do NOT write YAML files or orchestration files; the engine writes all artifacts from your structured yield.
+- Output MUST be the structured yield matching `infra.schema.json`. Do NOT write YAML files or orchestration files; the engine writes all artifacts from your structured yield.

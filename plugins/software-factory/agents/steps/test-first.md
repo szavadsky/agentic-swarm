@@ -12,7 +12,7 @@ Author automated tests specifying the required behavior changes BEFORE writing p
   - Test id format: declare `expectRed` ids in the runner's native node-id form (e.g. pytest `tests/test_math.py::test_add`); the engine normalizes node ids against JUnit ids when matching.
   - Bootstrap story (no test runner exists yet): yield `target: { gate: "<gate-id>" }` or `target: { command: "<test-command>", customTarget: true }`. The gate/command itself must currently fail (red).
 - Never test lint/format rules: assert behavior, never style or compiler-guaranteed facts. Debloat test code preserving intent.
-- Output: yield `{status, summary, target, evidence?}` per `developer-output.schema.json`.
+- Output: yield structured output per `developer-output.schema.json`.
 
 ## Assignment
 {{assignment}}

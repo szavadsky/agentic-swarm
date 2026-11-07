@@ -576,7 +576,14 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
 
   const afterChecks =
     afterChecksList.length > 0
-      ? async () => {
+      ? async (output?: unknown) => {
+          if (output && typeof output === "object" && "target" in (output as any)) {
+            const outTarget = (output as any).target;
+            if (outTarget) {
+              lastDeveloperTarget = outTarget;
+            }
+          }
+          checkCtx.target = lastDeveloperTarget;
           const results: CheckItemResult[] = [];
           let ok = true;
           for (const cName of afterChecksList) {

@@ -64,7 +64,7 @@ export interface StepRunOptions {
   iteration?: number;
   writeArtifact?: (output: unknown) => Promise<void>;
   beforeChecks?: () => Promise<{ ok: boolean; checks: CheckItemResult[] }>;
-  afterChecks?: () => Promise<{ ok: boolean; checks: CheckItemResult[] }>;
+  afterChecks?: (output?: unknown) => Promise<{ ok: boolean; checks: CheckItemResult[] }>;
 }
 
 export interface StepRunResult {
@@ -215,12 +215,21 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
   const taskWt = opts.taskWt ?? (taskDir.includes("/.factory") ? taskDir.split("/.factory")[0]! : taskDir);
   const wtToCommit = recordDir.startsWith(cwd) ? cwd : taskWt;
 
-  // 3. Render prompt and agent definition. Errors fail the step per §10.
+  // 3. Resolve schema
+  const pluginRoot = path.resolve(import.meta.dir ?? __dirname, "../../..");
+  const allowedDispositions = pipeline.reviewPolicy?.allowedDispositions;
+  const outputSchema =
+    opts.customSchema ??
+    resolveStepSchema(pluginRoot, agent, stepId, allowedDispositions);
+
+  // 4. Render prompt and agent definition. Appends compact ## Output section (§6.4)
   const fragment = stepFragment ?? `steps/${stepId}`;
   let promptText: string;
   let agentDef: { body: string; tools: string[]; description: string };
   try {
-    promptText = prompts.render(fragment, promptVars);
+    promptText = prompts.renderStepPrompt
+      ? prompts.renderStepPrompt(fragment, promptVars, outputSchema)
+      : prompts.render(fragment, promptVars);
     agentDef = prompts.agentDefinition(agent);
   } catch (err: any) {
     const errorMsg = `Prompt or agent definition error for step ${stepId}: ${err?.message || err}`;
@@ -248,13 +257,6 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
       meta: finalMeta,
     };
   }
-
-  // 4. Resolve schema
-  const pluginRoot = path.resolve(import.meta.dir ?? __dirname, "../../..");
-  const allowedDispositions = pipeline.reviewPolicy?.allowedDispositions;
-  const outputSchema =
-    opts.customSchema ??
-    resolveStepSchema(pluginRoot, agent, stepId, allowedDispositions);
 
   // 5. Invariant §6.3.1: input.md + meta(status: started) committed before launch
   const keepSession = opts.sessionMode === "reuse";
@@ -455,6 +457,7 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
   let finalStatus: StepMetaStatus = "ok";
   let validatedData: unknown = outcome.ok ? outcome.data : undefined;
   let validationError: string | undefined = outcome.ok ? undefined : outcome.error;
+  let repairedFrom: string | undefined;
 
   if (branchChanged) {
     // §7: Branch changed during agent turn -> error, branch was restored by enforceHead
@@ -519,6 +522,10 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
 
     if (repairRes.ok) {
       validatedData = repairRes.data;
+      validationError = undefined;
+      if (repairRes.method !== "direct") {
+        repairedFrom = repairRes.method;
+      }
     } else {
       finalStatus = "rejected";
       validationError = repairRes.error;
@@ -529,7 +536,7 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
 
   // 11. Run after checks if any
   if (finalStatus === "ok" && opts.afterChecks) {
-    const aRes = await opts.afterChecks();
+    const aRes = await opts.afterChecks(validatedData);
     collectedChecks.push(...aRes.checks);
     if (!aRes.ok) {
       finalStatus = "rejected";
@@ -554,6 +561,7 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
     checksData: collectedChecks.length > 0 ? { checks: collectedChecks } : undefined,
     usage: totalUsage,
     error: validationError,
+    repairedFrom,
     traceRef: outcome.traceRef,
   });
 

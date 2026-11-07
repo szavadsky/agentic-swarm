@@ -8,7 +8,7 @@ Author permanent automated tests that explicitly verify third-party library beha
 - Assumption validation: test boundary behaviors, edge conditions, return value contracts, and exception types that subsequent code will rely upon.
 - Test infra first: verify failure detection. Prove tests fail when assumptions are violated.
 - Verification: run tests via `bash` using project test runner; ensure tests pass cleanly on current environment.
-- Output: yield `{status, summary, evidence}` per `developer-output.schema.json` (`status: ok` with executed verification in `evidence`).
+- Output: yield structured output per `developer-output.schema.json` (`status: ok` with executed verification in `evidence`).
 
 ## Assignment
 {{assignment}}

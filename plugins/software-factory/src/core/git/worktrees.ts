@@ -4,6 +4,7 @@ import { git } from "./exec.js";
 import { taskBranch, childBranch, worktreePath } from "./naming.js";
 import { commitAll } from "./commit.js";
 import { porcelainStatus, parseWorktreeList } from "./status.js";
+import { findDirtyEntries } from "./cleanliness.js";
 import type { Repo } from "./repo.js";
 
 /**
@@ -85,12 +86,15 @@ export async function ensureTaskWorktree(
   const resolvedIntent = path.resolve(opts.intentPath);
   const relIntent = path.relative(repo.mainRoot, resolvedIntent).replace(/\\/g, "/");
 
-  for (const entry of entries) {
-    if (entry.path !== relIntent) {
-      throw new Error(
-        `Main checkout is dirty (uncommitted changes outside INTENT: ${entry.path})`
-      );
-    }
+  const dirty = findDirtyEntries(entries, {
+    orchestrationFolder: opts.orchestrationFolder,
+    currentIntentPath: relIntent,
+  });
+
+  if (dirty.length > 0) {
+    throw new Error(
+      `Main checkout is dirty (uncommitted changes outside INTENT: ${dirty[0]!.path})`
+    );
   }
 
   // Read intent content

@@ -415,6 +415,36 @@ describe("CLI Commands Integration", () => {
       tmp.cleanup();
     }
   });
+
+  it("factory preflight passes for second task when first task has untracked INTENT.md", async () => {
+    const tmp = createTmpRepo();
+    try {
+      await runInit({ repoRoot: tmp.dir, pluginRoot: PLUGIN_ROOT, silent: true });
+
+      // First task's untracked INTENT.md
+      const task1Intent = path.join(tmp.dir, ".factory/tasks", "task-1", "INTENT.md");
+      fs.mkdirSync(path.dirname(task1Intent), { recursive: true });
+      fs.writeFileSync(task1Intent, "# Task 1\nFirst task.", "utf8");
+
+      // Second task's INTENT.md
+      const task2 = "task-2";
+      const task2Intent = path.join(tmp.dir, ".factory/tasks", task2, "INTENT.md");
+      fs.mkdirSync(path.dirname(task2Intent), { recursive: true });
+      fs.writeFileSync(task2Intent, "# Task 2\nSecond task.", "utf8");
+
+      const res = await runPreflight({
+        repoRoot: tmp.dir,
+        task: task2,
+        pluginRoot: PLUGIN_ROOT,
+        silent: true,
+      });
+
+      expect(res.ok).toBe(true);
+      expect(res.errors).toEqual([]);
+    } finally {
+      tmp.cleanup();
+    }
+  });
   it("factory preflight fails when prompt fragments are missing or fail render", async () => {
     const tmp = createTmpRepo();
     try {

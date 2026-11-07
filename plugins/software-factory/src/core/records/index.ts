@@ -41,3 +41,5 @@ export type {
   CitationVerificationFailure,
   VerificationResult,
 } from "./citations.js";
+
+export { formatOutputSchemaSection } from "./schema-format.js";

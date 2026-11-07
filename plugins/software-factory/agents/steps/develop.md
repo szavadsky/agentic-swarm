@@ -7,7 +7,7 @@ Implement production code changes and supporting tests to satisfy the assignment
 - Target green: every test selector and case identified in `target` MUST pass cleanly.
 - Quality gates: run project gates via `bash`; all gates MUST succeed with exit code 0.
 - Sizing budget: keep changes minimal and within the engine-enforced prod-line budget (see agent philosophy). The engine rejects oversized diffs mechanically.
-- Evidence mandatory: yield `status: ok` with non-empty `evidence` (array of strings detailing personal verification). Output format matches `developer-output.schema.json`: `{status, summary, target?, evidence, concerns}`.
+- Evidence mandatory: yield `status: ok` with non-empty `evidence` (array of strings detailing personal verification) matching `developer-output.schema.json`.
 
 ## Assignment
 {{assignment}}

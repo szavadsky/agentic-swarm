@@ -96,4 +96,39 @@ describe("Output repair pipeline & leaf-value presence guard (§6.4)", () => {
     const guardPass = checkLeafValuePresence(repaired, "Overall approved. Good progress.");
     expect(guardPass.ok).toBe(true);
   });
+
+  it("cheapest-first: invalid-but-repairable output repairs via @simpler and NEVER triggers askSession", async () => {
+    const rawBrokenOutput = `
+      status: approved
+      summary: Looks good
+      suggestions: none
+    `;
+
+    let askSessionCalled = false;
+    let completeSimplerCalled = false;
+
+    const result = await validateAndRepair({
+      rawOutput: rawBrokenOutput,
+      schema: reviewSchema,
+      askSession: async () => {
+        askSessionCalled = true;
+        return { ok: true, data: {} };
+      },
+      completeSimpler: async () => {
+        completeSimplerCalled = true;
+        return {
+          status: "approved",
+          summary: "Looks good",
+          suggestions: [],
+        };
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(completeSimplerCalled).toBe(true);
+    expect(askSessionCalled).toBe(false);
+    if (result.ok) {
+      expect(result.method).toBe("simpler_repair");
+    }
+  });
 });

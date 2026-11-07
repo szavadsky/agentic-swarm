@@ -9,6 +9,7 @@ import { defaultSchemaCache } from "../core/records/schema-cache.js";
 import { generateOmpConfigOverlay, writeOmpConfigOverlay } from "../harness/omp/overlay.js";
 import { isRunLockFree } from "./lock.js";
 import { taskBranch } from "../core/git/naming.js";
+import { porcelainStatus, findDirtyEntries } from "../core/git/index.js";
 import { KNOWN_VARS } from "../core/prompt-vars.js";
 
 export interface PreflightOptions {
@@ -76,30 +77,20 @@ export async function runPreflight(opts: PreflightOptions): Promise<PreflightRes
     }
 
     if (!branchExists) {
-      // First run for this task: main checkout must be clean except INTENT.md
-      const statusOutput = execFileSync("git", ["status", "--porcelain", "-uall"], {
-        cwd: repoRoot,
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "ignore"],
-      }).trim();
+      // First run for this task: main checkout must be clean except INTENT.md (§7)
+      const entries = await porcelainStatus(repoRoot);
+      const intentRelative = path.join(orchestrationFolder, task, "INTENT.md");
 
-      if (statusOutput) {
-        const dirtyLines = statusOutput
-          .split("\n")
-          .map((l) => l.trim())
-          .filter(Boolean);
+      const dirty = findDirtyEntries(entries, {
+        orchestrationFolder,
+        currentIntentPath: intentRelative,
+      });
 
-        const intentRelative = path.join(orchestrationFolder, task, "INTENT.md");
-        const dirtyNonIntent = dirtyLines.filter(
-          (line) => !line.endsWith(intentRelative) && !line.endsWith("INTENT.md")
+      if (dirty.length > 0) {
+        errors.push(
+          `First-run cleanliness check failed: repository has uncommitted changes outside INTENT.md:\n` +
+            dirty.map((e) => `  ${e.code} ${e.path}`).join("\n")
         );
-
-        if (dirtyNonIntent.length > 0) {
-          errors.push(
-            `First-run cleanliness check failed: repository has uncommitted changes outside INTENT.md:\n` +
-              dirtyNonIntent.map((l) => `  ${l}`).join("\n")
-          );
-        }
       }
     }
   } catch {

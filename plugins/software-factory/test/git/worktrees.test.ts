@@ -146,6 +146,29 @@ describe("Worktrees management (§7)", () => {
     );
   });
 
+  it("second task starts with first task's INTENT untracked in main checkout", async () => {
+    const orchFolder = ".factory/tasks";
+    // Task 1's untracked INTENT.md left in main checkout
+    const task1Intent = path.join(tmpRepo.dir, orchFolder, "task-1", "INTENT.md");
+    fs.mkdirSync(path.dirname(task1Intent), { recursive: true });
+    fs.writeFileSync(task1Intent, "# Task 1 Intent\n", "utf8");
+
+    // Task 2's intent
+    const task2Intent = path.join(tmpRepo.dir, orchFolder, "task-2", "INTENT.md");
+    fs.mkdirSync(path.dirname(task2Intent), { recursive: true });
+    fs.writeFileSync(task2Intent, "# Task 2 Intent\n", "utf8");
+
+    // Ensure task 2 starts cleanly despite task 1's untracked INTENT.md
+    const res = await ensureTaskWorktree(repo, "task-2", {
+      intentPath: task2Intent,
+      orchestrationFolder: orchFolder,
+    });
+    expect(res.created).toBe(true);
+    expect(fs.readFileSync(path.join(res.path, orchFolder, "task-2", "INTENT.md"), "utf8")).toBe(
+      "# Task 2 Intent\n"
+    );
+  });
+
   it("first-run still rejects unrelated dirt and stray INTENT-named files", async () => {
     const intentPath = path.join(tmpRepo.dir, "INTENT.md");
     fs.writeFileSync(intentPath, "Intent", "utf8");
