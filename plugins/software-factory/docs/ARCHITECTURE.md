@@ -37,7 +37,7 @@ Source spec: `docs/factory.v2.md`. v1: `plugins/software-builder`. This file is 
 | 16 config | `config/*` | §5; extra agents, checks, hooks at any seam. |
 | 17 bun launch, preflight, omp per iteration | `bin/factory.ts`, `src/cli`, `src/harness/omp` | **Deviation:** spec keeps one omp process per iteration to preserve IRC. Here each agent turn is its own harness process and a persistent role keeps its conversation as a resumable session on disk (same architect context, survives restarts, no live handles). §2, §11. |
 | 18 concerns + remarkable decisions funnel, blocking/non-blocking ADRs, human-involvement modes (added after v2 build) | — | **Deliberately not hand-built**: goal of the first self-hosted fire test `concerns-funnel` (`docs/FIRE_TEST.md` §Self-host), so the factory extends itself. Current state: review dispositions (§8.7) and steering mailbox (§8.8) only. |
-| 19 workspaces via omp isolation, preflight, status/cleanup/gc, commit content from agents, wave-end merger + escalation, saga with independent epic launches, no-model omp tests (added after v2 build) | — | **Deliberately not hand-built**: second self-hosted fire-test goal. Current state: engine-managed worktrees (§7), item-level integrate step, in-process epics; prior omp research in `docs/spikes/`. |
+| 19 workspaces via omp isolation, preflight, status/cleanup/gc, commit content from agents, wave-end merger + escalation, saga with independent epic launches, no-model omp tests; 20 architect cache coherence/compaction, schema-free architect output (added after v2 build) | — | **Deliberately not hand-built**: second self-hosted fire-test goal `omp-workspaces`. Current state: engine-managed worktrees (§7), item-level integrate step, in-process epics, schema-bound architect plan, no cache/compaction management; prior omp research in `docs/spikes/`. |
 | 26 feedback/approval per kind | `reviewPolicy`, `criteria`, §9 | Mechanical checks per kind + disposition criteria in prompts. |
 | Fire test / DoD | `docs/FIRE_TEST.md`, README, templates, schemas | §13. Out of scope (not in spec): pushing, parallel epics. |
 
@@ -206,7 +206,7 @@ Canonical artifacts (plan, edits, wave, closeup, decisions) are written in the s
 7. Sessions are resumable across processes: a persistent role's latest `sessionId` is read from its newest step record; resume failure → fresh session with hydration (§4).
 
 ### 6.4 Output validation & repair
-1. Harness schema enforcement (when supported). 2. Invalid → resumed turn in the same session with the validation errors (when the session was kept). 3. `complete(@simpler)` structural repair; accepted only if every leaf value of the repaired object (enums, verdicts, statuses especially) appears in the raw output. 4. Relaunch once. 5. `error`.
+1. Harness schema enforcement (when supported). 2. `complete(@simpler)` structural repair; accepted only if every leaf value of the repaired object (enums, verdicts, statuses especially) appears in the raw output. 3. Invalid → resumed turn in the same session with the validation errors (when the session was kept). 4. Relaunch once. 5. `error`.
 
 ## 7. Git & worktrees
 

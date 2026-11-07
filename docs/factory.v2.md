@@ -110,6 +110,11 @@ project config: location of orcehstrationFolder, folderForPreservedADRs, scripts
      - saga: each epic runs as an independent factory launch in its own workspace (parallel epics possible); merges inside an epic escalate to the epic's architect; merging epics at the saga wave end escalates to the saga architect
      - docs show each use case (single task, story waves, epic, saga with parallel epics, conflict resolution and escalation paths, status/cleanup/gc) and how it is handled
      - "no models" tests: end-to-end tests through the real omp harness with a scripted mock model provider (no paid models), covering isolation, merges/conflicts/escalations, saga/epic launches, restart and gc
+20. architect context economy: cache coherence and compaction (part of the same self-host complex task as 19)
+     - (a) compact the architect session before a resume that will miss the provider prompt cache (cache TTL expired / model switched), so an uncached resume does not re-pay the full history
+     - (b) keep the prompt cache warm while the architect is on standby between turns (waves running), when cheaper than the expected uncached resume; leverage omp mechanics where available
+     - decide defaults by measured cost (usage/cache-read tokens in records); each mechanism configurable, and explicitly off where it does not pay
+     - v1 lesson: architect output was intentionally schema-free and telegraphic; extracting the relevant per-item task and context from that markdown was the (cheap) PM's job. Re-evaluate v2's schema-bound architect plan output against this (an expensive repair turn was observed in the fire test) — e.g. architect writes telegraphic md, PM structures it into the plan/edits schemas
 
 Fire testing:
      develop initial version. launch ietration by iteration; babysit
