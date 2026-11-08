@@ -1,0 +1,26 @@
+checks:
+  - id: test-first-scope
+    status: pass
+    message: test-first-scope passed (1 test files, 0 new prod stubs with 0 lines)
+    details:
+      testFiles:
+        - plugins/software-factory/test/engine/routing-architect-consult.test.ts
+      newProdFiles: []
+      stubProdLines: 0
+  - id: target-red
+    status: pass
+    message: "target-red passed: all 2 expected tests failed with assertion failures"
+    details:
+      command: cd plugins/software-factory && bun test
+        test/engine/routing-architect-consult.test.ts --reporter=junit
+        --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-1794148909121-8w7gb7ks43d.xml
+      junitCaseCount: 2
+      junitCaseIds:
+        - "Routing: architect consult and hydration.writes one concern decision
+          file and hydrates architect turns with routed concerns"
+        - "Routing: architect consult and hydration.restart after a
+          mid-iteration failure neither repeats the consult nor rewrites the
+          decision"
+      junitTruncated: false
+      collected: true
+      collectionErrors: []
