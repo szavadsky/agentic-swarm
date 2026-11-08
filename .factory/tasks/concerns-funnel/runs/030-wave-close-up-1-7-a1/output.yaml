@@ -1,0 +1,17 @@
+blockedItems: []
+debt: []
+failedItems: []
+iteration: 1
+mergedItems:
+  - reviewer-triage-v2
+  - plan-reviewer-triage-v2
+recommendations: []
+status: complete
+summary: "Wave 7 (iteration 1): 2/2 items merged (reviewer-triage-v2,
+  plan-reviewer-triage-v2; merge commits ce0acee/bda78da present). Tree clean:
+  zero untracked files, git diff --check clean, strict conflict-marker check
+  empty (git grep for '^<<<<<<< ' and '^>>>>>>> ' both exit 1). Only modified
+  file is engine-managed .factory/tasks/concerns-funnel/journal.ndjson. Gates vs
+  baseline (judged ONLY from Gate Diff table): typecheck pass/pass green, no
+  regression; test fail->pass IMPROVED."
+wave: 7
