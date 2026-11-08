@@ -1,0 +1,76 @@
+status: changes_requested
+summary: "changes_requested: listOpenConcerns leaks rm-* remarkables as
+  StoredConcernArtifact; locks/commit discipline verified"
+suggestions:
+  - id: list-open-includes-remarkables
+    disposition: fix
+    summary: listOpenConcerns returns rm-* remarkable files as StoredConcernArtifact
+    detail: mergeRemarkable writes rm-*.yaml with status open but no
+      kind/summary/detail/severity (concerns.ts:60-66). listOpenConcerns reads
+      all *.yaml and filters only status==='open' (108-112), so open remarkables
+      are returned typed as StoredConcernArtifact, breaking the type contract
+      (kind/summary/detail/severity required). Future hydration expecting
+      Concern fields will see undefined. Filter to c-*.yaml or require r.kind.
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 108
+  - id: remarkable-validation-partial-write
+    disposition: optional
+    summary: aggregateConcerns validates only remarkable.chosen; missing why throws
+      mid-RMW after partial writes
+    detail: Validation at line 79 checks only chosen. mergeRemarkable dereferences
+      input.why.length and rmId uses alternatives (28,63). A remarkable missing
+      why throws inside the KeyedMutex after earlier concerns were already
+      writeYamlAtomic'd, leaving dirty uncommitted files and violating the
+      no-partial-write atomicity shown for kinds. Validate
+      chosen/alternatives/why before the lock; low risk via schema-validated
+      paths but direct/reconcile callers can hit it.
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 79
+  - id: kinds-duplicate-schema-source
+    disposition: optional
+    summary: KINDS/RANK hardcode enums instead of deriving from schema single source
+    detail: Line 18-19 duplicates ConcernKind/ConcernSeverity enums already in
+      artifacts.ts:301-303, config/schemas/*.schema.json, and
+      review-schema.ts:60. Philosophy section 5 requires schema as single
+      source; a shared constant or schema-derived list would prevent drift.
+      Non-blocking, matches existing duplication.
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 18
+  - id: reconcile-reads-worktree-not-head
+    disposition: optional
+    summary: reconcile filters by HEAD ls-tree but reads worktree files, can ingest
+      dirty outputs
+    detail: committedStepRecords uses git ls-tree HEAD to enumerate committed
+      meta/output pairs but then readYaml from taskWt working-tree paths
+      (185-186). Uncommitted modifications to output.yaml after HEAD would be
+      ingested despite 'from committed records (derive read-only)'. Either git
+      show HEAD:path or document that repairWorktree guarantees worktree==HEAD
+      at that point.
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 185
+  - id: routed-retains-dismiss-reason
+    disposition: optional
+    summary: Non-dismiss triage to routed leaves stale dismissReason/pendingResolution
+    detail: applyConcernTriage routed patch spreads record and only sets
+      status/disposition (144-145), so a concern previously dismissed then
+      routed keeps dismissReason; similarly triage never clears
+      pendingResolution. Clear dismissReason on routed or document sticky
+      semantics.
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 144
+  - id: reconcile-journal-unguarded
+    disposition: optional
+    summary: Startup reconcile error journal can throw and crash runTask unlike
+      task_error guard
+    detail: engine.ts:369-377 catches reconcile errors with await appendJournal
+      without nested guard; step-runner.ts:683 has same shape. engine.ts:766-768
+      shows the guarded pattern try{appendJournal}catch{}. If the journal write
+      fails (IO), startup/step throws instead of isolating the ingest failure.
+    location:
+      file: plugins/software-factory/src/core/engine.ts
+      line: 370
