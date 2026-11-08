@@ -524,6 +524,7 @@ export class OmpHarness implements Harness {
         error: classification.error ?? `Process failed with exit code ${exitCode}`,
         transient: classification.transient,
         sessionLost: classification.sessionLost,
+        launchError: classification.launchError,
         timedOut: Boolean(timedOut),
         sessionId,
         traceRef,

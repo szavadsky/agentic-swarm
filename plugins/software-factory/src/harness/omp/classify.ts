@@ -29,6 +29,15 @@ const SESSION_LOST_PATTERNS: RegExp[] = [
   /cannot\s+resume/i,
   /session\s+file\s+not\s+found/i,
 ];
+const LAUNCH_ERROR_PATTERNS: RegExp[] = [
+  /built-in tools unavailable/i,
+  /no such tool/i,
+  /unknown flag/i,
+  /unrecognized (flag|option|argument)/i,
+  /invalid.*--tools/i,
+  /bad flag/i,
+  /failed to parse (flags|options|config)/i,
+];
 
 /**
  * Classifies an OMP process outcome as transient, sessionLost, or permanent agent failure (§12.3).
@@ -107,6 +116,20 @@ export function classifyOmpOutcome(opts: {
     };
   }
 
+  // 4c. Launch/config error: omp never ran the agent (bad tools, flags, config).
+  // Not transient (retrying with the same config cannot help) and not an agent
+  // failure — callers fail the RUN fast with the error surfaced, burning no
+  // attempts or consults.
+  for (const pat of LAUNCH_ERROR_PATTERNS) {
+    if (pat.test(combinedText)) {
+      return {
+        transient: false,
+        sessionLost: false,
+        launchError: true,
+        error: stderr.trim() || combinedText.trim(),
+      };
+    }
+  }
 
   // 5. Normal agent / client failure
   return {

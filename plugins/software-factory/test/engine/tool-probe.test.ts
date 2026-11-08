@@ -89,4 +89,39 @@ describe("Engine: tool-name probe fails fast", () => {
     );
     expect(res).toBeDefined();
   });
+
+  it("launchError outcome fails the run fast without consuming attempts", async () => {
+    const task = "tool-probe-launch-error";
+    const taskDir = path.join(tmpRepo.dir, ".factory", task);
+    fs.mkdirSync(taskDir, { recursive: true });
+    fs.writeFileSync(path.join(taskDir, "INTENT.md"), "x\n", "utf8");
+    tmpRepo.commit("intent");
+
+    const harness = new FakeHarness() as FakeHarness & { validateTools: (t: string[]) => Promise<string[]> };
+    harness.validateTools = async () => [];
+    harness.scriptOutcome(`${task}/runs/triage#a1`, {
+      ok: false,
+      error: "Error: Built-in tools unavailable in this session: checkpoint.",
+      launchError: true,
+    });
+
+    const repo = new Repo({ mainRoot: tmpRepo.dir, worktreeRoot: path.join(tmpRepo.dir, ".wt") });
+    const prompts = loadPromptLibrary({ builtinDir: path.resolve(import.meta.dir, "../../agents"), overrideDirs: [] });
+    const project = { orchestrationFolder: ".factory", worktreeRoot: path.join(tmpRepo.dir, ".wt") } as ProjectConfig;
+    const pipeline = basePipeline();
+    pipeline.agents = { developer: { role: "workhorse", tools: ["read"] } };
+
+    const res = await runTask(
+      { harness, repo, project, pipelineFor: async () => pipeline, prompts },
+      task,
+      { maxTicks: 1 }
+    );
+    expect(res.status).toBe("failed");
+    expect(res.summary).toContain("launch error");
+    // Fail fast: no retry, repair, or consult — exactly one harness run call.
+    expect(harness.calls.filter((c) => c.type === "run").length).toBe(1);
+    const deployedTaskDir = path.join(tmpRepo.dir, ".wt", `topic_${task}`, ".factory", task);
+    const journal = fs.readFileSync(path.join(deployedTaskDir, "journal.ndjson"), "utf8");
+    expect(journal).toContain("step_launch_error");
+  });
 });

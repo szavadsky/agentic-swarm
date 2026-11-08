@@ -111,4 +111,21 @@ describe("classifyOmpOutcome", () => {
     expect(res.transient).toBe(false);
     expect(res.error).toContain("error");
   });
+
+  it("classifies tool/flag errors as launch errors, not agent failures", () => {
+    for (const stderr of [
+      "Error: Built-in tools unavailable in this session: checkpoint, rewind.\nRun `omp --help` for available flags.",
+      "Error: unknown flag --frobnicate",
+    ]) {
+      const res = classifyOmpOutcome({ exitCode: 1, stderr });
+      expect(res.launchError).toBe(true);
+      expect(res.transient).toBe(false);
+      expect(res.sessionLost).toBe(false);
+    }
+  });
+
+  it("does not classify agent failures as launch errors", () => {
+    const res = classifyOmpOutcome({ exitCode: 1, stderr: "Error: model request failed: bad response" });
+    expect(res.launchError).toBeFalsy();
+  });
 });

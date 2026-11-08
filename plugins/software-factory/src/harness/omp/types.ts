@@ -55,5 +55,7 @@ export interface OmpRunTurnResult {
 export interface OmpClassificationResult {
   transient: boolean;
   sessionLost: boolean;
+  /** omp never ran the agent (bad tools/flags/config) — fail the run fast, burn nothing. */
+  launchError?: boolean;
   error?: string;
 }

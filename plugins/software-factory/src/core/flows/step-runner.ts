@@ -645,6 +645,19 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
   }
 
   commitTurnUsage(outcome.usage);
+  // Launch/config error: omp never ran the agent. Fail the RUN fast with the
+  // error surfaced — no attempts consumed, no repair, no consult. The operator
+  // fixes config/prompts and restarts; resume continues from records.
+  if (!outcome.ok && outcome.launchError) {
+    await appendJournal(taskDir, {
+      type: "step_launch_error",
+      task,
+      item,
+      step: stepId,
+      error: outcome.error,
+    });
+    throw new Error(`Harness launch error at step "${stepId}"${item ? ` (item "${item}")` : ""}: ${outcome.error} (fix config/prompts and restart; no attempts consumed)`);
+  }
   if (outcome.sessionId) {
     currentSessionId = outcome.sessionId;
     activeStep.sessionId = outcome.sessionId;
