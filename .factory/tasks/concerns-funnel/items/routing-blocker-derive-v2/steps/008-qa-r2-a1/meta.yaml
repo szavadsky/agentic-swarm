@@ -1,0 +1,13 @@
+seq: 8
+name: qa
+attempt: 1
+fixRound: 2
+agent: qa
+role: workhorse
+models:
+  - opencode-go/deepseek-v4.1-flash
+  - opencode-go/muse-spark-1.3-contributor
+session: 01a1baf9-4e7f-74e6-8ed0-a8908b8dbca6
+timeoutSec: 300
+status: started
+startedAt: 2026-11-08T11:47:40.042Z
