@@ -1,0 +1,22 @@
+context: item
+decision: retry-with-guidance
+persist: true
+rationale: "Reviewer defect is valid and blocks M1 restart-idempotency
+  invariant: unconditional replay with wall-clock timestamps rewrites every
+  concern and commits per record on each startup, churning updatedAt/lastSeen
+  and git history. Root cause is localized to aggregate/reconcile timestamp and
+  dirty handling, fixable in one small round. No split or escalation warranted."
+text: "Fix reconcile idempotency in concerns-store-v2 (one round): 1) Add
+  opts.at to aggregateConcerns/merge (default now ISO). Live step seams keep
+  wall-clock; reconcile passes meta.endedAt. 2) Write-only-on-diff: compare
+  merged vs existing on content fields (detail, severity, sources, status,
+  disposition, escalated); if equal and existing lastSeen >= at, skip
+  writeYamlAtomic entirely. Else write with updatedAt=at,
+  lastSeen=max(existing.lastSeen, at). 3) reconcileConcerns: enumerate committed
+  ok records (runs + items/*/steps), read meta.endedAt, sort ascending (fallback
+  seq/name), replay in order with at=endedAt; track dirty flag; single commitAll
+  at end only if dirty — remove per-record commitAll from replay path. 4)
+  Strengthen idempotency test: hash concern files + git rev-parse HEAD after
+  first reconcile, run reconcile again, assert bytes and HEAD unchanged and
+  updatedAt/lastSeen equal endedAt values. Keep KeyedMutex RMW-only, never wrap
+  commitAll in repo.writeLock, ingest errors never change step status."
