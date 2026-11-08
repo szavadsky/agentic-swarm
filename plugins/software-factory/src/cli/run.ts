@@ -8,8 +8,8 @@ import { OmpHarness } from "../harness/omp/harness.js";
 import { acquireRunLock, resolveRuntimeDir } from "./lock.js";
 import { runPreflight } from "./preflight.js";
 import { installShutdownHandlers } from "../core/shutdown.js";
-import { initFactoryRuntimeTmp } from "../core/runtime-tmp.js";
-
+ import { initFactoryRuntimeTmp } from "../core/runtime-tmp.js";
+import { taskBranch, worktreePath } from "../core/git/naming.js";
 export interface RunCliOptions {
   repoRoot: string;
   taskOrIntent: string;
@@ -97,11 +97,17 @@ export async function runFactory(opts: RunCliOptions): Promise<number> {
   const uninstallShutdown = installShutdownHandlers();
   try {
     // 4. Build engine dependencies with effective (root + task layered) pipeline
-    const taskPipelinePath = path.join(defaultTaskDir, "pipeline.yaml");
+    const taskBranchName = taskBranch(task);
+    const taskWtPath = worktreePath(worktreeRoot, taskBranchName);
+    const wtPipelinePath = path.join(taskWtPath, orchestrationFolder, task, "pipeline.yaml");
+    const mainPipelinePath = path.join(defaultTaskDir, "pipeline.yaml");
+    const taskPipelinePath = (fs.existsSync(taskWtPath) && fs.existsSync(wtPipelinePath))
+      ? wtPipelinePath
+      : (fs.existsSync(mainPipelinePath) ? mainPipelinePath : undefined);
     const loadedPipeline = loadPipelineConfig({
       pluginRoot,
       repoRoot,
-      taskYamlPath: fs.existsSync(taskPipelinePath) ? taskPipelinePath : undefined,
+      taskYamlPath: taskPipelinePath,
     });
     const pipelineConfig = loadedPipeline.config;
 
@@ -129,10 +135,14 @@ export async function runFactory(opts: RunCliOptions): Promise<number> {
 
     const pipelineFor = async (taskDir: string) => {
       const taskPipeline = path.join(taskDir, "pipeline.yaml");
+      const mainPipeline = path.join(defaultTaskDir, "pipeline.yaml");
+      const effectivePath = fs.existsSync(taskPipeline)
+        ? taskPipeline
+        : (fs.existsSync(mainPipeline) ? mainPipeline : undefined);
       const layered = loadPipelineConfig({
         pluginRoot,
         repoRoot,
-        taskYamlPath: fs.existsSync(taskPipeline) ? taskPipeline : undefined,
+        taskYamlPath: effectivePath,
       }).config;
       if (opts.maxIterations !== undefined && layered.limits) {
         layered.limits.maxIterations = opts.maxIterations;

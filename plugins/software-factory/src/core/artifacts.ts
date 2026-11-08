@@ -87,6 +87,7 @@ export interface PipelineLimits {
   maxAmendmentsPerIteration?: number;
   maxIterations?: number;
   maxInfraRetries?: number;
+  maxInfraRetriesExpensive?: number;
   gateRetries?: number;
   gateTimeoutSec?: number;
   storyMaxProdLines?: number;
@@ -98,6 +99,7 @@ export interface PipelineLimits {
   stepTranscriptWarningBytes?: number;
   contextPackBytes?: number;
   timeoutNudgeSec?: number;
+  minFreeDiskMb?: number;
   [key: string]: unknown;
 }
 
@@ -105,6 +107,8 @@ export interface PipelineBudget {
   perTaskUsd?: number;
   perIterationUsd?: number;
   perItemUsd?: number;
+  perStepUsd?: number;
+  expensiveRoles?: string[];
 }
 
 export interface PipelineConfig {

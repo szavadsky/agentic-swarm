@@ -7,6 +7,11 @@ const MAX_ASSISTANT_TEXT_CHARS = 256 * 1024; // 256 KB
 const MAX_ERRORS = 50;
 const MAX_ERROR_LEN = 2048;
 
+export interface OmpNdjsonParserOptions {
+  onSession?: (sessionId: string) => void | Promise<void>;
+  onUsage?: (usage: { inputTokens: number; outputTokens: number; costUsd: number }) => void | Promise<void>;
+}
+
 export class OmpNdjsonParser {
   private sessionId?: string;
   private sessionTimestamp?: string;
@@ -18,6 +23,8 @@ export class OmpNdjsonParser {
   private costUsd = 0;
   private stopReason?: string;
   private errors: string[] = [];
+
+  constructor(private opts?: OmpNdjsonParserOptions) {}
   /**
    * Ingests a single NDJSON line. Non-JSON lines (e.g. wall time metrics) are safely skipped.
    */
@@ -43,7 +50,12 @@ export class OmpNdjsonParser {
     }
     switch (event.type) {
       case "session":
-        if (event.id) this.sessionId = event.id;
+        if (event.id) {
+          this.sessionId = event.id;
+          try {
+            this.opts?.onSession?.(event.id);
+          } catch {}
+        }
         if (event.timestamp) this.sessionTimestamp = event.timestamp;
         if (event.cwd) this.cwd = event.cwd;
         break;
@@ -76,8 +88,14 @@ export class OmpNdjsonParser {
             this.outputTokens += u.output || 0;
             const costVal = u.cost?.total ?? ((u.cost?.input || 0) + (u.cost?.output || 0));
             this.costUsd += costVal || 0;
+            try {
+              this.opts?.onUsage?.({
+                inputTokens: this.inputTokens,
+                outputTokens: this.outputTokens,
+                costUsd: this.costUsd,
+              });
+            } catch {}
           }
-
           if (event.message.stopReason) {
             this.stopReason = event.message.stopReason;
           }

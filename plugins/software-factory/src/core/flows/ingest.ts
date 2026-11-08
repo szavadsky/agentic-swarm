@@ -579,7 +579,7 @@ export async function runIngest(params: IngestParams): Promise<IngestResult> {
           task,
           taskWt,
           taskDir,
-          limits: pipeline.limits ?? {},
+          limits: { ...(pipeline.limits ?? {}), gateRetries: 0 },
           outputBytes: pipeline.limits?.checkOutputBytes ?? 4096,
         };
         const gatesOutcome = await runGates(checkCtx, { record: true });

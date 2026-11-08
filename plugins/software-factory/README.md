@@ -85,7 +85,7 @@ Merging semantics:
 Canonical schemas are located in `config/schemas/` (`pipeline.schema.json`, `project.schema.json`, `state.schema.json`, etc.).
 
 ### Runtime State & Child Process TMPDIR
-Runtime state is placed outside the main checkout in `{worktreeRoot}/.factory-runtime/`. Every child process spawned by the factory (`omp` turns, gates, checks, git) runs with `TMPDIR` (and `TMP`/`TEMP`) pointing to `{worktreeRoot}/.factory-runtime/tmp/` on disk to avoid exhausting memory-backed OS `/tmp` tmpfs. Entries from prior runs are purged at run start.
+Runtime state is placed outside the main checkout in `{worktreeRoot}/.factory-runtime/`. Every child process spawned by the factory (`omp` turns, gates, checks, git) runs with `TMPDIR` (and `TMP`/`TEMP`) pointing to `{worktreeRoot}/.factory-runtime/tmp/` on disk to avoid exhausting memory-backed OS `/tmp` tmpfs. Entries from prior runs are purged at run start. Disk-space guards enforce minimum free disk space (`limits.minFreeDiskMb`, default 2048 MB) across repoRoot, worktreeRoot, and OS temp dir before preflight and before each step/gate run (stopping cleanly with exit code 10 on low disk space).
 
 ---
 

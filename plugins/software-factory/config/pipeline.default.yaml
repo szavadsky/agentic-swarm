@@ -331,6 +331,7 @@ limits:
   maxAmendmentsPerIteration: 3    # Mid-iteration plan amendments
   maxIterations: 6                # Max iterations per task
   maxInfraRetries: 3              # Retries for infrastructure/harness setup
+  maxInfraRetriesExpensive: 1     # Transient retries cap for expensive roles
   gateRetries: 1                  # Re-runs for flaky gate detection
   gateTimeoutSec: 900             # Per-gate command timeout (sec); real suites need minutes, not seconds
   storyMaxProdLines: 300          # Production lines changed cap for stories
@@ -341,6 +342,9 @@ limits:
   hydrationBytes: 40000           # Hydration context cap for architect sessions
   contextPackBytes: 40000         # Byte cap for generated context-pack.md (defaults to hydrationBytes)
   timeoutNudgeSec: 300            # Reduced timeout for session-resume timeout retries
+  # Disk-space guard: minimum free disk space required across worktreeRoot, repoRoot,
+  # and system temp filesystems. Preflight fails and engine steps/gates cleanly halt below this.
+  minFreeDiskMb: 2048             # Minimum free disk space (MB) required on repo, worktree, and tmp filesystems
 
 # ==============================================================================
 # Budget (§5, §12.5)
@@ -350,7 +354,10 @@ budget:
   perTaskUsd: 100
   perIterationUsd: 30
   perItemUsd: 8
-
+  perStepUsd: 8
+  expensiveRoles:
+    - architect
+    - task-escalation
 # ==============================================================================
 # Model Diversity (§5, §12.4)
 # ==============================================================================

@@ -10,6 +10,7 @@ import { appendJournal } from "../journal.js";
 import { git } from "../git/exec.js";
 import type { StatusEntry } from "../git/status.js";
 import { buildGateWithJunitCommand, parseJunit, type ParsedJunit } from "./junit.js";
+import { assertDiskSpace } from "../disk-space.js";
 
 /** Marker embedded in gate details when the gate command timed out. */
 export const GATE_TIMED_OUT_MARKER = "gate timed out";
@@ -386,7 +387,19 @@ export async function runGates(
     return { results: [], ok: true };
   }
 
-  const retries = ctx.limits.gateRetries ?? 0;
+  // Disk-space guard check before gate execution (§limits.minFreeDiskMb)
+  const repoRoot = ctx.repo?.mainRoot ?? process.cwd();
+  const worktreeRoot = ctx.repo?.worktreeRoot ?? ctx.project?.worktreeRoot;
+  await assertDiskSpace({
+    repoRoot,
+    worktreeRoot,
+    pipeline: ctx.pipeline,
+    task: ctx.task,
+    taskDir: ctx.taskDir,
+    taskWt: ctx.taskWt ?? ctx.wt,
+    repo: ctx.repo,
+  });
+  const retries = opts?.record ? 0 : (ctx.limits.gateRetries ?? 0);
   const rawTimeout = ctx.limits.gateTimeoutSec as number | undefined;
   const timeoutSec = typeof rawTimeout === "number" && rawTimeout > 0 ? rawTimeout : 900;
   const results: GateBaselineEntry[] = [];
@@ -429,7 +442,7 @@ export async function runGates(
         timeoutSec,
         maxOutputBytes: ctx.outputBytes,
       });
-      if ((res.timedOut || res.code !== 0) && res.suspendDetected) {
+      if (res.suspendDetected) {
         const taskDir =
           ctx.taskDir ??
           (ctx.task && ctx.taskWt
@@ -445,13 +458,15 @@ export async function runGates(
             });
           } catch {}
         }
-        // Interrupted by suspend: re-run once without recording failure or consuming attempt
-        res = await runProcess({
-          cmd: cmdToRun,
-          cwd: ctx.wt,
-          timeoutSec,
-          maxOutputBytes: ctx.outputBytes,
-        });
+        if (res.timedOut || res.code !== 0) {
+          // Interrupted by suspend: re-run once without recording failure or consuming attempt
+          res = await runProcess({
+            cmd: cmdToRun,
+            cwd: ctx.wt,
+            timeoutSec,
+            maxOutputBytes: ctx.outputBytes,
+          });
+        }
       }
 
       // Check mutation guard after gate run

@@ -13,6 +13,7 @@ export const DEFAULT_LIMITS: Required<PipelineLimits> = {
   maxConsultsPerItem: 3,
   maxInterruptions: 3,
   maxInfraRetries: 3,
+  maxInfraRetriesExpensive: 1,
   gateRetries: 1,
   gateTimeoutSec: 900,
   storyMaxProdLines: 400,
@@ -25,6 +26,7 @@ export const DEFAULT_LIMITS: Required<PipelineLimits> = {
   stepTranscriptWarningBytes: 5 * 1024 * 1024,
   contextPackBytes: 40000,
   timeoutNudgeSec: 300,
+  minFreeDiskMb: 2048,
 };
 
 export function resolveLimits(limits?: PipelineLimits): Required<PipelineLimits> {

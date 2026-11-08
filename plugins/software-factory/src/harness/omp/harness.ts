@@ -288,7 +288,18 @@ export class OmpHarness implements Harness {
       clock
     );
     // 7. Parse stdout NDJSON
-    const parser = new OmpNdjsonParser();
+    const parser = new OmpNdjsonParser({
+      onSession: (id) => {
+        if (run.onSession) {
+          Promise.resolve(run.onSession(id)).catch(() => {});
+        }
+      },
+      onUsage: (u) => {
+        if (run.onUsage) {
+          Promise.resolve(run.onUsage(u)).catch(() => {});
+        }
+      },
+    });
     const decoder = new TextDecoder();
     let stdoutBuffer = "";
     let totalStdoutBytes = 0;

@@ -28,13 +28,27 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   );
 }
 
+function isAtomicPath(pathSegments: string[]): boolean {
+  // models.roles.<name> is a union-typed leaf object (model vs alias) that must replace wholesale
+  if (
+    pathSegments.length === 3 &&
+    pathSegments[0] === "models" &&
+    pathSegments[1] === "roles"
+  ) {
+    return true;
+  }
+  return false;
+}
+
 function mergeTwoObjects(
   target: Record<string, unknown>,
-  source: Record<string, unknown>
+  source: Record<string, unknown>,
+  pathSegments: string[] = []
 ): Record<string, unknown> {
   const output: Record<string, unknown> = { ...target };
 
   for (const [key, value] of Object.entries(source)) {
+    const currentPath = [...pathSegments, key];
     if (value === null) {
       // Explicit null deletes the key
       delete output[key];
@@ -44,14 +58,19 @@ function mergeTwoObjects(
     } else if (Array.isArray(value)) {
       // Arrays replace wholesale
       output[key] = [...value];
+    } else if (isAtomicPath(currentPath)) {
+      // Atomic replacement for union-typed leaf objects
+      output[key] = isPlainObject(value)
+        ? mergeTwoObjects({}, value, currentPath)
+        : value;
     } else if (isPlainObject(value)) {
       // Plain objects merge recursively
       const existing = output[key];
       if (isPlainObject(existing)) {
-        output[key] = mergeTwoObjects(existing, value);
+        output[key] = mergeTwoObjects(existing, value, currentPath);
       } else {
         // Source is object, target is not: clean copy without nulls
-        output[key] = mergeTwoObjects({}, value);
+        output[key] = mergeTwoObjects({}, value, currentPath);
       }
     } else {
       // Primitives overwrite

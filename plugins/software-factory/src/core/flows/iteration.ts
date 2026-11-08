@@ -552,8 +552,21 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
     }
 
     const revOutput = revStepRes.output as ReviewArtifact | undefined;
+    const awarenessSuggestions = revOutput?.suggestions?.filter((s) => s.disposition === "human-awareness");
+    if (awarenessSuggestions && awarenessSuggestions.length > 0) {
+      for (const q of awarenessSuggestions) {
+        const cleanSuggestionId = (q.id || "s").replace(/[^a-z0-9_-]/gi, "-");
+        const qId = `awareness-plan-${iteration}-${cleanSuggestionId}`;
+        await writeQuestion(taskWt, taskDir, {
+          id: qId,
+          ref: `plan-${iteration}`,
+          disposition: "human-awareness",
+          question: q.detail || q.summary,
+          blocks: [],
+        });
+      }
+    }
     const fixSuggestions = revOutput?.suggestions?.filter((s) => s.disposition === "fix");
-
     if (!fixSuggestions || fixSuggestions.length === 0) {
       break; // Plan approved!
     }

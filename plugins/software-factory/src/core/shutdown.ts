@@ -7,6 +7,8 @@ export interface ActiveStepRecord {
   recordDir: string;
   metaPath: string;
   taskDir: string;
+  sessionId?: string;
+  getUsage?: () => { inputTokens?: number; outputTokens?: number; costUsd?: number } | undefined;
 }
 
 const activeChildGroups = new Set<number>();
@@ -112,6 +114,13 @@ export async function markActiveStepsInterrupted(signalName?: string): Promise<v
         if (meta.status === "started") {
           meta.status = "interrupted";
           meta.endedAt = new Date().toISOString();
+          if (!meta.session && step.sessionId) {
+            meta.session = step.sessionId;
+          }
+          const u = step.getUsage?.();
+          if (u && (u.inputTokens || u.outputTokens || u.costUsd)) {
+            meta.usage = { ...u };
+          }
           await writeYamlAtomic(step.metaPath, meta);
           await appendJournal(step.taskDir, {
             type: "step_interrupted",

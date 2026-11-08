@@ -35,6 +35,8 @@ export interface AgentRun {
   label: string;
   session: { resume?: string; keep: boolean }; // resume: session id from prior outcome; keep: leave resumable
   timeoutSec?: number;
+  onSession?: (sessionId: string) => void | Promise<void>;
+  onUsage?: (usage: Usage) => void | Promise<void>;
 }
 
 export type AgentOutcome =

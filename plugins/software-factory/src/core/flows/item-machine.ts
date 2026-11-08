@@ -722,6 +722,20 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
             });
           }
         }
+        const awarenessQuestions = rev.suggestions?.filter((s) => s.disposition === "human-awareness");
+        if (awarenessQuestions && awarenessQuestions.length > 0) {
+          for (const q of awarenessQuestions) {
+            const cleanSuggestionId = (q.id || "s").replace(/[^a-z0-9_-]/gi, "-");
+            const qId = `awareness-${itemSlug}-${cleanSuggestionId}`;
+            await writeQuestion(taskWt, taskDir, {
+              id: qId,
+              ref: itemSlug,
+              disposition: "human-awareness",
+              question: q.detail || q.summary,
+              blocks: [],
+            });
+          }
+        }
       }
     },
   });

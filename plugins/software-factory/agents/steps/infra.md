@@ -5,7 +5,7 @@ Discover project infrastructure, worktree bootstrap commands, test runner config
 
 ## Rules
 - Read-only on repository files: Do NOT edit or write code files.
-- Validate commands: Probe candidate commands with `bash`. If gates fail or are red on a clean checkout, record them as they are — the engine records baseline gate status and ratchets against regressions; do NOT hunt for workarounds or search outside the repository.
+- Validate commands: Probe candidate commands with `bash`. Record red gates as-is, do NOT investigate or fix: If gates fail or are red on a clean checkout, record them as they are — the engine records baseline gate status and ratchets against regressions; do NOT hunt for workarounds, do NOT investigate failure causes, and do NOT search outside the repository. The target repository may be the factory itself — still only record, never investigate or fix engine internals.
 - Orchestration-folder lint noise: when a gate's failures come from `{orchestrationFolder}` files (`.factory/**` or configured orchestration folder, such as `input.md`, `INTENT.md`, or harness records), declare the gate command with the tool's exclude option if one exists (e.g. `--exclude .factory`). If no exclude option exists for the tool, declare the gate as-is and report it in `notes: string[]` as an operator action.
 - Gate mutation rule: quality gates MUST NOT mutate the worktree. Always declare check-only flags (e.g. `ruff format --check` instead of `ruff format`).
 - Sizing: Setup commands should be minimal (≤3, empty `[]` if standard checkout works).

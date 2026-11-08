@@ -40,16 +40,18 @@ import { readYaml, writeYamlAtomic, readText } from "./records/io.js";
 import { listPending, classify, takenPaths } from "./steer.js";
 import { resolveRole } from "./config/roles.js";
 import { installShutdownHandlers } from "./shutdown.js";
-import { initFactoryRuntimeTmp } from "./runtime-tmp.js";
-export interface EngineDeps {
+ import { initFactoryRuntimeTmp } from "./runtime-tmp.js";
+import { assertDiskSpace, LowDiskSpaceStopError, type DiskSpaceProbe } from "./disk-space.js";
+ export interface EngineDeps {
   harness: Harness;
   repo: any;
   project: ProjectConfig;
   pipelineFor(taskDir: string): Promise<PipelineConfig>;
   prompts: any;
   clock?: () => Date;
-  log?: (line: string) => void;
-}
+   log?: (line: string) => void;
+  diskSpaceProbe?: DiskSpaceProbe;
+ }
 
 export type RunResult = {
   status: "done" | "blocked" | "failed" | "stopped";
@@ -223,11 +225,10 @@ export async function runChildTask(
     rootTaskDir?: string;
   }
 ): Promise<RunResult> {
-  const { harness, repo, project, pipelineFor, prompts, log } = deps;
-  const parentBranch = parent.branch;
-  const childBranchName = childBranch(parentBranch, epicSlug);
-
-  // 1. Child worktree from parent tip (§8.6, §7: from the parent tip after the
+  try {
+    const { harness, repo, project, pipelineFor, prompts, log } = deps;
+    const parentBranch = parent.branch;
+    const childBranchName = childBranch(parentBranch, epicSlug);
   // previous wave's merges; the epic INTENT written by the edits commit is on it)
   const childWtInfo = await ensureChildWorktree(repo, parent, epicSlug);
   const childWt = childWtInfo.path;
@@ -280,11 +281,21 @@ export async function runChildTask(
   await git(parent.path, ["add", "-A"], { allowFail: true });
   await commitAll(repo, parent.path, `factory: record epic ${epicSlug} child status ${childStatus}`);
 
-  return {
-    status: itRes.status === "done" ? "done" : itRes.status === "blocked" ? "blocked" : "failed",
-    exitCode: itRes.status === "done" ? 0 : itRes.status === "blocked" ? 10 : 1,
-    summary: `Epic ${epicSlug} child task ${itRes.status}`,
-  };
+    return {
+      status: itRes.status === "done" ? "done" : itRes.status === "blocked" ? "blocked" : "failed",
+      exitCode: itRes.status === "done" ? 0 : itRes.status === "blocked" ? 10 : 1,
+      summary: `Epic ${epicSlug} child task ${itRes.status}`,
+    };
+  } catch (err: any) {
+    if (err instanceof LowDiskSpaceStopError || err?.code === "LOW_DISK_SPACE") {
+      return {
+        status: "blocked",
+        exitCode: 10,
+        summary: `Epic ${epicSlug} child task stopped: ${err.message}`,
+      };
+    }
+    throw err;
+  }
 }
 
 /**
@@ -470,6 +481,18 @@ export async function runTask(
         };
       }
     }
+
+    // Disk-space guard check (§limits.minFreeDiskMb, default 2048)
+    await assertDiskSpace({
+      repoRoot: repo.mainRoot,
+      worktreeRoot: repo.worktreeRoot,
+      pipeline,
+      task,
+      taskDir,
+      taskWt,
+      repo,
+      probe: deps.diskSpaceProbe,
+    });
 
     // c. Derive current state (§6.3 Invariant 4)
     const taskState = await deriveTaskState({
@@ -755,8 +778,20 @@ export async function runTask(
     exitCode: 1,
     summary: `Task ${task} stopped: exceeded max ticks (${maxTicks})`,
   };
-  } catch (err: any) {
-    if (taskDir && fs.existsSync(taskDir)) {
+   } catch (err: any) {
+    if (err instanceof LowDiskSpaceStopError || err?.code === "LOW_DISK_SPACE") {
+      if (taskDir && fs.existsSync(taskDir) && parentBranch && taskWt && pipeline) {
+        try {
+          await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
+        } catch {}
+      }
+      return {
+        status: "blocked",
+        exitCode: 10,
+        summary: `Task ${task} stopped: ${err.message}`,
+      };
+    }
+     if (taskDir && fs.existsSync(taskDir)) {
       if (parentBranch && taskWt && pipeline) {
         try {
           await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });

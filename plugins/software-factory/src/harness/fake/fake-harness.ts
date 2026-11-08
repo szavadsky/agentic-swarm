@@ -68,6 +68,14 @@ export class FakeHarness implements Harness {
       }
     }
 
+    const cleanLabel = run.label.replace(/[^a-zA-Z0-9_-]/g, "_");
+    const sessionId = run.session.resume ?? `fake-sess-${cleanLabel}-${++this.sessionCounter}`;
+    this.knownSessionIds.add(sessionId);
+
+    if (run.onSession) {
+      await run.onSession(sessionId);
+    }
+
     const scripted = this.outcomesByLabel.get(run.label);
     if (!scripted) {
       throw new Error(`FakeHarness: No scripted outcome for label "${run.label}"`);
@@ -90,15 +98,14 @@ export class FakeHarness implements Harness {
     }
 
     // Assign / propagate deterministic session IDs
-    if (run.session.resume && !outcome.sessionId) {
-      outcome.sessionId = run.session.resume;
-    } else if (run.session.keep && !outcome.sessionId) {
-      const cleanLabel = run.label.replace(/[^a-zA-Z0-9_-]/g, "_");
-      const generatedId = `fake-sess-${cleanLabel}-${++this.sessionCounter}`;
-      outcome.sessionId = generatedId;
-      this.knownSessionIds.add(generatedId);
-    } else if (outcome.sessionId) {
+    if (!outcome.sessionId) {
+      outcome.sessionId = sessionId;
+    } else {
       this.knownSessionIds.add(outcome.sessionId);
+    }
+
+    if (run.onUsage && outcome.usage) {
+      await run.onUsage(outcome.usage);
     }
 
     return outcome;

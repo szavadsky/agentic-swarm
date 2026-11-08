@@ -170,6 +170,7 @@
         "maxAmendmentsPerIteration": { "type": "integer", "minimum": 0 },
         "maxIterations": { "type": "integer", "minimum": 1 },
         "maxInfraRetries": { "type": "integer", "minimum": 0 },
+        "maxInfraRetriesExpensive": { "type": "integer", "minimum": 0 },
         "gateRetries": { "type": "integer", "minimum": 0 },
         "gateTimeoutSec": { "type": "integer", "minimum": 1 },
         "storyMaxProdLines": { "type": "integer", "minimum": 1 },
@@ -179,7 +180,8 @@
         "checkOutputBytes": { "type": "integer", "minimum": 100 },
         "hydrationBytes": { "type": "integer", "minimum": 1000 },
         "contextPackBytes": { "type": "integer", "minimum": 1000 },
-        "timeoutNudgeSec": { "type": "integer", "minimum": 1 }
+        "timeoutNudgeSec": { "type": "integer", "minimum": 1 },
+        "minFreeDiskMb": { "type": "integer", "minimum": 1 }
       },
       "additionalProperties": true
     },
@@ -188,7 +190,12 @@
       "properties": {
         "perTaskUsd": { "type": "number", "minimum": 0 },
         "perIterationUsd": { "type": "number", "minimum": 0 },
-        "perItemUsd": { "type": "number", "minimum": 0 }
+        "perItemUsd": { "type": "number", "minimum": 0 },
+        "perStepUsd": { "type": "number", "minimum": 0 },
+        "expensiveRoles": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
       },
       "additionalProperties": false
     },

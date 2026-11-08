@@ -19,8 +19,10 @@ import type {
 import {
   startStepRecord,
   finishStepRecord,
+  parseStepRecordDirName,
   type StartStepRecordParams,
 } from "../records/step-record.js";
+import { readYaml, writeYamlAtomic } from "../records/io.js";
 import { validateAndRepair } from "../records/repair.js";
 import { generateReviewSchema } from "../records/review-schema.js";
 import { resolveStepRole, resolveRole, type ResolvedRole } from "../config/roles.js";
@@ -28,14 +30,17 @@ import { captureHead, enforceHead } from "../git/guard.js";
 import { commitAll } from "../git/commit.js";
 import { git } from "../git/exec.js";
 import { appendJournal } from "../journal.js";
-import { registerActiveStep, unregisterActiveStep } from "../shutdown.js";
+import { registerActiveStep, unregisterActiveStep, type ActiveStepRecord } from "../shutdown.js";
 import { getClock, detectSuspend } from "../clock.js";
 import type { Semaphore } from "../mutex.js";
 import type { BudgetTracker } from "../budget.js";
-
+ import { writeQuestion } from "../steer.js";
+import { assertDiskSpace } from "../disk-space.js";
 export const TIMEOUT_NUDGE_PROMPT =
   "time budget exhausted: stop exploring, yield your result now from what you have; record unknowns as uncertainties";
 
+export const INTERRUPTED_RESUME_PROMPT =
+  "you were interrupted; continue and yield";
 export interface StepRunOptions {
   task: string;
   item?: string;
@@ -178,8 +183,20 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
     prompts,
     promptVars,
     turnsSemaphore,
-  } = opts;
+   } = opts;
 
+  // Disk-space guard check before step execution (§limits.minFreeDiskMb)
+  const repoRoot = repo?.mainRoot ?? cwd ?? process.cwd();
+  const worktreeRoot = repo?.worktreeRoot ?? project?.worktreeRoot;
+  await assertDiskSpace({
+    repoRoot,
+    worktreeRoot,
+    pipeline,
+    task,
+    taskDir,
+    taskWt: opts.taskWt,
+    repo,
+  });
   const attempt = opts.attempt ?? 1;
   const fixRound = opts.fixRound ?? 1;
   const isEscalated = opts.isEscalated ?? false;
@@ -264,11 +281,47 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
     };
   }
 
+  // Look for a prior interrupted record for this step that has a session id (§6.3, restart resilience)
+  let resumeInterruptedSessionId: string | undefined;
+  if (fs.existsSync(recordsDir)) {
+    const existingEntries = await fs.promises.readdir(recordsDir);
+    const matching = existingEntries
+      .map((e) => {
+        const parsed = parseStepRecordDirName(e);
+        return parsed ? { dir: e, ...parsed } : null;
+      })
+      .filter((r): r is NonNullable<typeof r> => r !== null && r.name === stepId)
+      .sort((a, b) => b.seq - a.seq);
+
+    for (const prev of matching) {
+      const prevMetaPath = path.join(recordsDir, prev.dir, "meta.yaml");
+      if (fs.existsSync(prevMetaPath)) {
+        try {
+          const prevMeta = await readYaml<StepMetaArtifact>(prevMetaPath);
+          if (prevMeta.status === "interrupted" && prevMeta.session) {
+            resumeInterruptedSessionId = prevMeta.session;
+            break;
+          }
+        } catch {}
+      }
+    }
+  }
+
   // 5. Invariant §6.3.1: input.md + meta(status: started) committed before launch
   const keepSession = opts.sessionMode === "reuse";
+  const isResumingInterrupted = Boolean(resumeInterruptedSessionId);
+
   // Resolve effective per-step timeout early so it is recorded in meta:
   // step config first, then per-agent config default (ToySmoke).
   const effectiveTimeoutSec = opts.timeoutSec ?? pipeline.agents?.[agent]?.timeoutSec;
+  const timeoutNudge =
+    (pipeline.limits?.timeoutNudgeSec as number | undefined) ??
+    (effectiveTimeoutSec ? Math.max(1, Math.floor(effectiveTimeoutSec / 2)) : 300);
+
+  const initialTimeoutSec = isResumingInterrupted ? timeoutNudge : effectiveTimeoutSec;
+  const initialSession = resumeInterruptedSessionId ?? (keepSession ? opts.existingSessionId : undefined);
+  const initialPrompt = isResumingInterrupted ? INTERRUPTED_RESUME_PROMPT : promptText;
+
   const startMeta = await startStepRecord({
     recordDir,
     meta: {
@@ -278,16 +331,82 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
       agent,
       role: resolvedRole.role,
       models: resolvedRole.models,
-      session: keepSession ? opts.existingSessionId : undefined,
-      timeoutSec: effectiveTimeoutSec,
+      session: initialSession,
+      timeoutSec: initialTimeoutSec,
     },
-    inputPrompt: promptText,
+    inputPrompt: initialPrompt,
   });
-  registerActiveStep({
+
+  const priorUsage: Usage = {
+    inputTokens: 0,
+    outputTokens: 0,
+    costUsd: 0,
+  };
+  let currentTurnUsage: Usage = {
+    inputTokens: 0,
+    outputTokens: 0,
+    costUsd: 0,
+  };
+
+  function getCurrentTotalUsage(): Usage {
+    return {
+      inputTokens: (priorUsage.inputTokens ?? 0) + (currentTurnUsage.inputTokens ?? 0),
+      outputTokens: (priorUsage.outputTokens ?? 0) + (currentTurnUsage.outputTokens ?? 0),
+      costUsd: (priorUsage.costUsd ?? 0) + (currentTurnUsage.costUsd ?? 0),
+    };
+  }
+
+  function onTurnUsage(u?: Usage) {
+    if (!u) return;
+    currentTurnUsage = {
+      inputTokens: u.inputTokens ?? 0,
+      outputTokens: u.outputTokens ?? 0,
+      costUsd: u.costUsd ?? 0,
+    };
+  }
+
+  function commitTurnUsage(outcomeUsage?: Usage) {
+    const finalTurnUsage = outcomeUsage ?? currentTurnUsage;
+    priorUsage.inputTokens = (priorUsage.inputTokens ?? 0) + (finalTurnUsage.inputTokens ?? 0);
+    priorUsage.outputTokens = (priorUsage.outputTokens ?? 0) + (finalTurnUsage.outputTokens ?? 0);
+    priorUsage.costUsd = (priorUsage.costUsd ?? 0) + (finalTurnUsage.costUsd ?? 0);
+    currentTurnUsage = { inputTokens: 0, outputTokens: 0, costUsd: 0 };
+  }
+
+  let currentSessionId: string | undefined = initialSession;
+
+  const activeStep: ActiveStepRecord = {
     recordDir,
     metaPath: path.join(recordDir, "meta.yaml"),
     taskDir,
-  });
+    sessionId: currentSessionId,
+    getUsage: () => getCurrentTotalUsage(),
+  };
+  registerActiveStep(activeStep);
+
+  const onSession = async (sid: string) => {
+    currentSessionId = sid;
+    activeStep.sessionId = sid;
+    const metaFile = path.join(recordDir, "meta.yaml");
+    if (fs.existsSync(metaFile)) {
+      try {
+        const meta = await readYaml<StepMetaArtifact>(metaFile);
+        if (meta && meta.session !== sid) {
+          meta.session = sid;
+          await writeYamlAtomic(metaFile, meta);
+          if (!(await isMerging(wtToCommit))) {
+            const relMeta = path.relative(wtToCommit, metaFile).replace(/\\/g, "/");
+            await commitAll(
+              repo,
+              wtToCommit,
+              `factory${item ? `(${item})` : ""}: ${stepId} a${attempt} [session]`,
+              { paths: [relMeta] }
+            );
+          }
+        }
+      } catch {}
+    }
+  };
   const isMerging = async (wt: string) => {
     const res = await git(wt, ["rev-parse", "-q", "--verify", "MERGE_HEAD"], { allowFail: true });
     return res.code === 0;
@@ -366,10 +485,22 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
     timeoutSec: effectiveTimeoutSec ?? "harness-default",
   });
 
+  if (isResumingInterrupted) {
+    await appendJournal(taskDir, {
+      type: "interrupted_step_resumed",
+      task,
+      item,
+      step: stepId,
+      attempt,
+      sessionId: resumeInterruptedSessionId,
+      timeoutSec: initialTimeoutSec,
+    });
+  }
+
   const agentRun: AgentRun = {
     agent,
     definition: agentDef.body || agentDef.description || agent,
-    prompt: promptText,
+    prompt: initialPrompt,
     role: resolvedRole.role,
     models: resolvedRole.models,
     tools: agentDef.tools ?? ["edit", "bash"],
@@ -377,10 +508,12 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
     outputSchema,
     label,
     session: {
-      resume: keepSession ? opts.existingSessionId : undefined,
+      resume: initialSession,
       keep: keepSession,
     },
-    timeoutSec: effectiveTimeoutSec,
+    timeoutSec: initialTimeoutSec,
+    onSession,
+    onUsage: (u) => onTurnUsage(u),
   };
 
   let outcome: AgentOutcome;
@@ -390,19 +523,47 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
   const turnStartMono = clock.monotonic();
   try {
     outcome = await harness.run(agentRun);
+  } catch (err) {
+    const curUsage = getCurrentTotalUsage();
+    const metaPath = path.join(recordDir, "meta.yaml");
+    if (fs.existsSync(metaPath)) {
+      try {
+        const meta = await readYaml<StepMetaArtifact>(metaPath);
+        let changed = false;
+        if (!meta.session && currentSessionId) {
+          meta.session = currentSessionId;
+          changed = true;
+        }
+        if (curUsage.inputTokens || curUsage.outputTokens || curUsage.costUsd) {
+          meta.usage = { ...curUsage };
+          changed = true;
+        }
+        if (changed) {
+          await writeYamlAtomic(metaPath, meta);
+        }
+      } catch {}
+    }
+    throw err;
   } finally {
     releaseSemaphore();
   }
-  if (!outcome.ok) {
-    const { suspendDetected, gapMs } = detectSuspend(turnStartWall, turnStartMono, clock);
-    if (suspendDetected) {
-      await appendJournal(taskDir, {
-        type: "system_suspend_detected",
-        task,
-        item,
-        step: stepId,
-        gapMs: Math.round(gapMs),
-      });
+
+  commitTurnUsage(outcome.usage);
+  if (outcome.sessionId) {
+    currentSessionId = outcome.sessionId;
+    activeStep.sessionId = outcome.sessionId;
+  }
+
+  const { suspendDetected, gapMs } = detectSuspend(turnStartWall, turnStartMono, clock);
+  if (suspendDetected) {
+    await appendJournal(taskDir, {
+      type: "system_suspend_detected",
+      task,
+      item,
+      step: stepId,
+      gapMs: Math.round(gapMs),
+    });
+    if (!outcome.ok) {
       outcome = {
         ...outcome,
         transient: true,
@@ -432,22 +593,6 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
     );
   }
 
-  // Accumulate total token/cost usage across ALL turns of the step (primary,
-  // sessionLost rehydration, infra retries, repair ask-turns, relaunch).
-  const totalUsage: Usage = {
-    inputTokens: outcome.usage?.inputTokens ?? 0,
-    outputTokens: outcome.usage?.outputTokens ?? 0,
-    costUsd: outcome.usage?.costUsd ?? 0,
-  };
-
-  function addUsage(u?: Usage) {
-    if (!u) return;
-    totalUsage.inputTokens = (totalUsage.inputTokens ?? 0) + (u.inputTokens ?? 0);
-    totalUsage.outputTokens = (totalUsage.outputTokens ?? 0) + (u.outputTokens ?? 0);
-    totalUsage.costUsd = (totalUsage.costUsd ?? 0) + (u.costUsd ?? 0);
-  }
-
-
   function isTimeoutOutcome(o: AgentOutcome): boolean {
     if (o.ok) return false;
     if ((o as any).timedOut) return true;
@@ -455,13 +600,8 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
     return /timed?\s*out|timeout|deadline\s*exceeded/i.test(err);
   }
 
-  let currentSessionId: string | undefined =
-    outcome.sessionId ?? (keepSession ? opts.existingSessionId : undefined);
-
-  // On sessionLost with a kept session, retry once with a fresh session
-  // (§6.3.7: resume failure → fresh session with hydration; the prompt already
-  // carries hydration context built by the caller).
-  if (!outcome.ok && outcome.sessionLost && keepSession) {
+  // On sessionLost with a kept session or resumed interrupted session, retry once with a fresh session
+  if (!outcome.ok && outcome.sessionLost && (keepSession || isResumingInterrupted)) {
     await appendJournal(taskDir, {
       type: "session_lost_rehydrated",
       task,
@@ -469,26 +609,95 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
       step: stepId,
     });
     currentSessionId = undefined;
+    activeStep.sessionId = undefined;
     const rel = turnsSemaphore ? await turnsSemaphore.acquire() : () => {};
+    const rehydratedWall = clock.now();
+    const rehydratedMono = clock.monotonic();
     try {
       outcome = await harness.run({
         ...agentRun,
         label: `${label}#rehydrated`,
+        prompt: promptText,
         session: { resume: undefined, keep: keepSession },
+        timeoutSec: effectiveTimeoutSec,
+        onSession,
+        onUsage: (u) => onTurnUsage(u),
       });
-      addUsage(outcome.usage);
+      commitTurnUsage(outcome.usage);
       if (outcome.sessionId) {
         currentSessionId = outcome.sessionId;
+        activeStep.sessionId = outcome.sessionId;
       }
     } finally {
       rel();
     }
+    const { suspendDetected: rehydratedSuspend, gapMs: rehydratedGap } = detectSuspend(
+      rehydratedWall,
+      rehydratedMono,
+      clock
+    );
+    if (rehydratedSuspend) {
+      await appendJournal(taskDir, {
+        type: "system_suspend_detected",
+        task,
+        item,
+        step: stepId,
+        gapMs: Math.round(rehydratedGap),
+      });
+      if (!outcome.ok) {
+        outcome = {
+          ...outcome,
+          transient: true,
+        };
+      }
+    }
   }
 
   // Retry transient harness errors up to maxInfraRetries with exponential backoff (§12.2)
-  const maxInfraRetries = pipeline.limits?.maxInfraRetries ?? 3;
+  const expensiveRoles = pipeline.budget?.expensiveRoles ?? ["architect", "task-escalation"];
+  const isExpensiveRole =
+    expensiveRoles.includes(resolvedRole.role) ||
+    expensiveRoles.includes(agent) ||
+    (opts.role ? expensiveRoles.includes(opts.role) : false);
+
+  const maxInfraRetries = isExpensiveRole
+    ? (pipeline.limits?.maxInfraRetriesExpensive ?? 1)
+    : (pipeline.limits?.maxInfraRetries ?? 3);
+  const perStepUsdCap = pipeline.budget?.perStepUsd ?? 8;
   let infraRetries = 0;
-  while (!outcome.ok && outcome.transient && infraRetries < maxInfraRetries) {
+
+  while (!outcome.ok && outcome.transient) {
+    const currentCost = getCurrentTotalUsage().costUsd ?? 0;
+    const costCapExceeded = currentCost >= perStepUsdCap;
+    const retriesExhausted = infraRetries >= maxInfraRetries;
+
+    if (costCapExceeded || retriesExhausted) {
+      const reason = costCapExceeded
+        ? `cost_cap_exceeded (${currentCost.toFixed(2)} USD >= ${perStepUsdCap} USD)`
+        : `retries_exhausted (${infraRetries}/${maxInfraRetries})`;
+      const escalationQId = `escalation-${item ? `${item}-` : ""}${stepId}-a${attempt}`;
+      await writeQuestion(wtToCommit, taskDir, {
+        id: escalationQId,
+        ref: item ?? stepId,
+        disposition: "human-async",
+        question: `Step "${stepId}" ${item ? `for item "${item}" ` : ""}stopped due to ${reason}. Error: ${outcome.error ?? "transient failure"}`,
+        blocks: [item ?? stepId],
+      });
+      await appendJournal(taskDir, {
+        type: "infra_retry_escalated",
+        task,
+        item,
+        step: stepId,
+        attempt,
+        reason: costCapExceeded ? "cost_cap_exceeded" : "retries_exhausted",
+        costUsd: currentCost,
+        retries: infraRetries,
+        maxRetries: maxInfraRetries,
+        questionId: escalationQId,
+      });
+      break;
+    }
+
     infraRetries++;
     const backoffMs = Math.min(1000 * Math.pow(2, infraRetries - 1), 10000);
     await new Promise((resolve) => setTimeout(resolve, backoffMs));
@@ -520,6 +729,18 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
       }
     }
 
+    await appendJournal(taskDir, {
+      type: "infra_retry_started",
+      task,
+      item,
+      step: stepId,
+      attempt,
+      retry: infraRetries,
+      maxRetries: maxInfraRetries,
+      sessionId: resumeSessionId,
+      costUsd: getCurrentTotalUsage().costUsd,
+    });
+
     const rel = turnsSemaphore ? await turnsSemaphore.acquire() : () => {};
     const retryStartWall = clock.now();
     const retryStartMono = clock.monotonic();
@@ -533,14 +754,29 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
           keep: keepSession,
         },
         timeoutSec: retryTimeoutSec,
+        onSession,
+        onUsage: (u) => onTurnUsage(u),
       });
-      addUsage(outcome.usage);
+      commitTurnUsage(outcome.usage);
       if (outcome.sessionId) {
         currentSessionId = outcome.sessionId;
+        activeStep.sessionId = outcome.sessionId;
       }
     } finally {
       rel();
     }
+
+    await appendJournal(taskDir, {
+      type: "infra_retry_finished",
+      task,
+      item,
+      step: stepId,
+      attempt,
+      retry: infraRetries,
+      ok: outcome.ok,
+      transient: !outcome.ok ? outcome.transient : false,
+      costUsd: getCurrentTotalUsage().costUsd,
+    });
 
     // Only fall back to a fresh session on sessionLost
     if (!outcome.ok && outcome.sessionLost) {
@@ -551,7 +787,10 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
         step: stepId,
       });
       currentSessionId = undefined;
+      activeStep.sessionId = undefined;
       const relFresh = turnsSemaphore ? await turnsSemaphore.acquire() : () => {};
+      const freshStartWall = clock.now();
+      const freshStartMono = clock.monotonic();
       try {
         outcome = await harness.run({
           ...agentRun,
@@ -559,26 +798,42 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
           session: { resume: undefined, keep: keepSession },
           prompt: agentRun.prompt,
           timeoutSec: effectiveTimeoutSec,
+          onSession,
+        onUsage: (u) => onTurnUsage(u),
         });
-        addUsage(outcome.usage);
+        commitTurnUsage(outcome.usage);
         if (outcome.sessionId) {
           currentSessionId = outcome.sessionId;
+          activeStep.sessionId = outcome.sessionId;
         }
       } finally {
         relFresh();
       }
-    }
-
-    if (!outcome.ok) {
-      const { suspendDetected, gapMs } = detectSuspend(retryStartWall, retryStartMono, clock);
-      if (suspendDetected) {
+      const freshSuspend = detectSuspend(freshStartWall, freshStartMono, clock);
+      if (freshSuspend.suspendDetected) {
         await appendJournal(taskDir, {
           type: "system_suspend_detected",
           task,
           item,
           step: stepId,
-          gapMs: Math.round(gapMs),
+          gapMs: Math.round(freshSuspend.gapMs),
         });
+        if (!outcome.ok) {
+          outcome = { ...outcome, transient: true };
+        }
+      }
+    }
+
+    const { suspendDetected, gapMs } = detectSuspend(retryStartWall, retryStartMono, clock);
+    if (suspendDetected) {
+      await appendJournal(taskDir, {
+        type: "system_suspend_detected",
+        task,
+        item,
+        step: stepId,
+        gapMs: Math.round(gapMs),
+      });
+      if (!outcome.ok) {
         outcome = {
           ...outcome,
           transient: true,
@@ -638,8 +893,10 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
                 outputSchema: sch,
                 label: `${label}#repair-ask`,
                 session: { resume: outcome.sessionId, keep: keepSession },
+                onSession,
+                onUsage: (u) => onTurnUsage(u),
               });
-              addUsage(res.usage);
+              commitTurnUsage(res.usage);
               return res;
             } finally {
               rel();
@@ -662,8 +919,10 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
             ...agentRun,
             label: `${label}#relaunch`,
             session: { resume: undefined, keep: keepSession },
+            onSession,
+            onUsage: (u) => onTurnUsage(u),
           });
-          addUsage(res.usage);
+          commitTurnUsage(res.usage);
           return res;
         } finally {
           rel();
@@ -704,24 +963,36 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
     }
   }
 
+  // Ensure session is written into meta.yaml before finishing
+  const metaFile = path.join(recordDir, "meta.yaml");
+  if (currentSessionId && fs.existsSync(metaFile)) {
+    try {
+      const curMeta = await readYaml<StepMetaArtifact>(metaFile);
+      if (!curMeta.session) {
+        curMeta.session = currentSessionId;
+        await writeYamlAtomic(metaFile, curMeta);
+      }
+    } catch {}
+  }
+
   // 13. Invariant §6.3.2: Finish step record with final meta
   const finalMeta = await finishStepRecord({
     recordDir,
     status: finalStatus,
     outputData: validatedData,
     checksData: collectedChecks.length > 0 ? { checks: collectedChecks } : undefined,
-    usage: totalUsage,
+    usage: getCurrentTotalUsage(),
     error: validationError,
     repairedFrom,
     traceRef: outcome.traceRef,
   });
 
   // Record usage centrally in budget tracker (§12.5)
-  if (opts.budgetTracker && totalUsage) {
+  if (opts.budgetTracker) {
     opts.budgetTracker.recordUsage({
       item,
       iteration: opts.iteration,
-      usage: totalUsage,
+      usage: getCurrentTotalUsage(),
     });
   }
 
@@ -749,7 +1020,7 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
     attempt,
     status: finalStatus,
     sessionId: outcome.sessionId,
-    usage: totalUsage,
+    usage: getCurrentTotalUsage(),
   });
   unregisterActiveStep(recordDir);
   return {
@@ -759,7 +1030,7 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
     meta: finalMeta,
     checks: collectedChecks,
     sessionId: outcome.sessionId,
-    usage: totalUsage,
+    usage: getCurrentTotalUsage(),
     branchChanged,
     headMoved,
   };

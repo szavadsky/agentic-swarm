@@ -7,19 +7,19 @@ import { resolveRole } from "../core/config/roles.js";
 import { loadPromptLibrary, preflightPrompts } from "../core/prompts.js";
 import { defaultSchemaCache } from "../core/records/schema-cache.js";
 import { generateOmpConfigOverlay, writeOmpConfigOverlay } from "../harness/omp/overlay.js";
-import { isRunLockFree } from "./lock.js";
-import { taskBranch } from "../core/git/naming.js";
-import { porcelainStatus, findDirtyEntries } from "../core/git/index.js";
-import { KNOWN_VARS } from "../core/prompt-vars.js";
-
+ import { isRunLockFree } from "./lock.js";
+import { taskBranch, worktreePath } from "../core/git/naming.js";
+ import { porcelainStatus, findDirtyEntries } from "../core/git/index.js";
+ import { KNOWN_VARS } from "../core/prompt-vars.js";
+import { checkDiskSpace, type DiskSpaceProbe } from "../core/disk-space.js";
 export interface PreflightOptions {
   repoRoot: string;
   task: string;
   pluginRoot?: string;
   ompBinary?: string;
-  silent?: boolean;
-}
-
+   silent?: boolean;
+  diskSpaceProbe?: DiskSpaceProbe;
+ }
 export interface PreflightResult {
   ok: boolean;
   errors: string[];
@@ -193,26 +193,63 @@ export async function runPreflight(opts: PreflightOptions): Promise<PreflightRes
     // If not a git repo, skip git cleanliness check
   }
 
-  // 3. Load & validate pipeline config
-  let pipelineConfig: any;
-  try {
-    const taskYamlPath = path.join(repoRoot, orchestrationFolder, task, "pipeline.yaml");
-    const loaded = loadPipelineConfig({
-      pluginRoot,
-      repoRoot,
-      taskYamlPath: fs.existsSync(taskYamlPath) ? taskYamlPath : undefined,
-    });
-    pipelineConfig = loaded.config;
+   // 3. Load & validate pipeline config
+   let pipelineConfig: any;
+   try {
+    // Check task worktree first (§task layer lives in task worktree after first run)
+    const branchName = taskBranch(task);
+    const absWtRoot = path.resolve(repoRoot, projectConfig?.worktreeRoot ?? "../repo.factory-wt");
+    const wtPath = worktreePath(absWtRoot, branchName);
+    const wtTaskYaml = path.join(wtPath, orchestrationFolder, task, "pipeline.yaml");
+    const mainTaskYaml = path.join(repoRoot, orchestrationFolder, task, "pipeline.yaml");
 
-    if (loaded.structural && loaded.structural.errors.length > 0) {
+    const taskYamlPath = (fs.existsSync(wtPath) && fs.existsSync(wtTaskYaml))
+      ? wtTaskYaml
+      : (fs.existsSync(mainTaskYaml) ? mainTaskYaml : undefined);
+
+     const loaded = loadPipelineConfig({
+       pluginRoot,
+       repoRoot,
+      taskYamlPath,
+     });
+     pipelineConfig = loaded.config;
+
+     if (loaded.structural && loaded.structural.errors.length > 0) {
+       errors.push(
+         ...loaded.structural.errors.map((e) => `Pipeline config error: ${e}`)
+       );
+     }
+   } catch (err: any) {
+     errors.push(`Pipeline config loading failed: ${err.message}`);
+   }
+
+  // 3b. Disk-space guards (§limits.minFreeDiskMb, default 2048)
+  try {
+    const minFreeDiskMb =
+      (pipelineConfig?.limits?.minFreeDiskMb as number | undefined) ?? 2048;
+    const diskCheck = await checkDiskSpace({
+      repoRoot,
+      worktreeRoot: projectConfig?.worktreeRoot,
+      minFreeDiskMb,
+      probe: opts.diskSpaceProbe,
+    });
+
+    if (!diskCheck.ok) {
       errors.push(
-        ...loaded.structural.errors.map((e) => `Pipeline config error: ${e}`)
+        `Insufficient disk space: free space is below ${minFreeDiskMb} MB threshold:\n` +
+          diskCheck.paths
+            .map((p) => `  ${p.name} (${p.path}): ${p.freeMb} MB free (threshold: ${minFreeDiskMb} MB)`)
+            .join("\n")
+      );
+    } else if (!opts.silent) {
+      log(
+        `Disk space check passed (threshold ${minFreeDiskMb} MB):\n` +
+          diskCheck.paths.map((p) => `  ${p.name} (${p.path}): ${p.freeMb} MB free`).join("\n")
       );
     }
   } catch (err: any) {
-    errors.push(`Pipeline config loading failed: ${err.message}`);
+    errors.push(`Disk space check failed: ${err.message}`);
   }
-
   // 4. Role resolution & cycles
   if (pipelineConfig?.models?.roles) {
     const roles = pipelineConfig.models.roles;

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "bun:test";
 import { mergeLayers } from "../src/core/config/merge.js";
-import { loadPipelineConfig } from "../src/core/config/loader.js";
-
+ import { loadPipelineConfig } from "../src/core/config/loader.js";
+import { resolveRole } from "../src/core/config/roles.js";
 describe("Config layering semantics (§5)", () => {
   it("merges maps deeply, replaces arrays, and deletes keys on explicit null", () => {
     const defaults = {
@@ -64,5 +64,28 @@ describe("Config layering semantics (§5)", () => {
     expect(config.limits.stubMaxProdLines).toBe(40);
     expect("hydrationBytes" in config.limits).toBe(false);
     expect(config.models.roles.workhorse).toBeDefined();
+   });
+
+  it("task layer aliasing a role over a default model role resolves to the alias target", () => {
+    const { config } = loadPipelineConfig({
+      overrides: {
+        models: {
+          roles: {
+            architect: { alias: "alt-architect" },
+            "alt-architect": { model: "claude-haiku" },
+          },
+        },
+      },
+    });
+
+    // Atomically replaced by alias-only object
+    expect(config.models.roles.architect).toEqual({ alias: "alt-architect" });
+    expect("model" in (config.models.roles.architect as any)).toBe(false);
+    expect("fallbacks" in (config.models.roles.architect as any)).toBe(false);
+
+    // Resolves role to alias target
+    const resolved = resolveRole("architect", config.models.roles);
+    expect(resolved.role).toBe("alt-architect");
+    expect(resolved.models).toEqual(["claude-haiku"]);
   });
-});
+ });
