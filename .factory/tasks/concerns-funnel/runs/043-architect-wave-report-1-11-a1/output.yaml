@@ -1,0 +1,19 @@
+context: wave
+decision: end-iteration
+rationale: "Wave 11 merged 0: funnel-closeups-v3 blocked on human-async
+  escalation (develop retries 3/3 timeouts after fix-rounds exhausted on 4
+  probe-verified defects) and its wave-mate saga-propagate-v3 cannot run alone
+  to completion value; docs-finish-v2 is unsatisfiable this iteration (deps on
+  superseded -v2 slugs, same-wave violation, amendments 3/3 exhausted).
+  M1+M2+M3+half-M4 are merged and green; remaining tail (funnel fixes, saga
+  propagate, docs) needs fresh waves with corrected deps, which only a new
+  iteration plan can schedule. Continuing waves in iteration 1 burns budget on
+  an unrunnable tail."
+text: "End iteration 1 now and run plan close-up. Iteration 2 plan must: (1)
+  re-wave funnel-closeups as v4 with the 4 persisted fixes (step-role cap
+  classification, pendingResolution for open+routed, reject preserves status,
+  zero-cap returns ''); (2) re-wave saga-propagate-v3 and docs-finish with
+  corrected deps on -v3 slugs in STRICTLY later waves than their deps; (3) keep
+  all 13 merged items as done, no rework; (4) resolve the funnel-closeups-v3
+  human-async escalation (retries/timeout) via smaller scope or split before
+  re-scheduling."
