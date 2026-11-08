@@ -36,3 +36,6 @@ Iteration: {{iteration}}
 
 ## Limits
 {{limits}}
+
+## Human involvement
+{{humanInvolvementCriteria}}

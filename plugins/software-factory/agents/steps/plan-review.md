@@ -17,6 +17,9 @@ Conduct adversarial review of the architect's proposed plan, critiquing mileston
 ## Dispositions Criteria
 {{dispositionsCriteria}}
 
+## Human involvement
+{{humanInvolvementCriteria}}
+
 ## Plan
 {{plan}}
 

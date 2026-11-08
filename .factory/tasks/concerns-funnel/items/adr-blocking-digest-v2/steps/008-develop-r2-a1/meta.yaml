@@ -8,6 +8,15 @@ models:
   - opencode-go/muse-spark-1.3-contributor
   - opencode-go/deepseek-v4.1-flash
 timeoutSec: 1200
-status: started
+status: rejected
 startedAt: 2026-11-08T13:41:43.823Z
 session: 01a1bb68-861a-74e0-9300-9b4bfa8652f2
+endedAt: 2026-11-08T13:48:27.902Z
+usage:
+  inputTokens: 612289
+  outputTokens: 21548
+  costUsd: 0.08594299999999999
+error: |-
+  Output validation and repair failed: Agent output failed schema validation:
+  /: must be object ({"type":"object"})
+traceRef: /home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/sessions/2026-11-08T13-41-44-418Z_01a1bb64-bf62-76aa-a89b-0f19070b5160

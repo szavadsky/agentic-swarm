@@ -15,3 +15,6 @@ Revise the iteration execution plan (`plan-N.yaml`) in response to adversarial f
 
 ## Plan Review Feedback
 {{planReview}}
+
+## Human involvement
+{{humanInvolvementCriteria}}
