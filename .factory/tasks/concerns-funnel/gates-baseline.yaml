@@ -73,3 +73,8 @@ gates:
        2 fail
        1072 expect() calls
       Ran 273 tests across 50 files. [64.65s]
+    failingTests:
+      - "Engine: HEAD guard resilience (§7).detects when an agent commits and
+        resets --soft to before.sha, keeping changes staged"
+      - "Engine: HEAD guard resilience (§7).detects when an agent switches
+        branch and restores original branch, keeping changes"

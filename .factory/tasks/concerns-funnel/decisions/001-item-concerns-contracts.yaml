@@ -1,0 +1,67 @@
+id: decision-concerns-contracts-1794104526635
+context: item
+item: concerns-contracts
+afterRecord: 006-develop-a2
+decision: split
+timestamp: 2026-11-08T02:22:06.635Z
+rationale: "Root cause is oversize + scope conflation, not logic: one item
+  bundled types + ~12 schemas + new resolver + 3 call-site wirings + runtime
+  repair, exceeding the 300-line story budget; 3 develop attempts produced an
+  empty diff (scope paralysis). Repair/defaulting and dismiss-detail enforcement
+  are runtime owned by concerns-store, but the assignment text pulled them into
+  contracts, creating an unimplementable contract. Split into 3 sequenced
+  stories (types -> schemas+policy parallel) each with a falsifiable budget and
+  test."
+text: "Engine: replace concerns-contracts with the 3 outlines; rewire downstream
+  concerns-store/modes-prompts deps from concerns-contracts to all 3 children.
+  Developers: do not implement aggregate/repair/triage runtime in these items;
+  schemas declare optionality only. Do not use cross-file $ref in JSON schemas
+  (inline the concern/remarkable partial). Keep each diff within its stated
+  budget."
+outlines:
+  - deps: []
+    description: "Types only. In src/core/artifacts.ts add
+      Concern/ConcernKind/ConcernSeverity/ConcernStatus, RemarkableDecision,
+      StoredConcernArtifact (+pendingResolution?, source.escalated?),
+      ReviewDisposition+dismiss (no tech-debt value), PlanAdr.blocking,
+      PipelineConfig.humanInvolvement +
+      concerns{raiseAllowlist,minDigestSeverity,minBlockingSeverity},
+      reviewPolicy.default canonical + legacy allowedDispositions alias in type.
+      No JSON, no runtime, no repair logic (deferred to concerns-store). Verify:
+      bun run typecheck. Prod budget <=80 lines."
+    kind: story
+    milestoneId: m1-contracts-aggregate
+    slug: concerns-contracts-types
+    title: Concern artifact types
+  - deps:
+      - concerns-contracts-types
+    description: "Schemas only. Inline (no cross-file $ref) shared
+      concern/remarkable definitions into developer-output, fact-finder-output,
+      qa, poc, test-assumptions, review newConcerns, plan, decisions,
+      wave/plan-closeup (+concernResolutions), architect wave-report/closeup
+      outputs; triage/infra/pm-edit untouched. severity/detail optional at
+      schema level (defaults applied at runtime by concerns-store); kind is
+      strict enum so unknown kind fails validation with no write. Dismiss
+      detail-required enforced at runtime (store), not in JSON schema. Verify:
+      typecheck + prompts.test preflight + one FakeHarness behavior case in
+      test/engine/concerns-funnel.test.ts (valid concerns pass, unknown kind
+      errors, no file written). Prod budget <=200 lines JSON."
+    kind: story
+    milestoneId: m1-contracts-aggregate
+    slug: concerns-contracts-schemas
+    title: Concern producer schemas
+  - deps:
+      - concerns-contracts-types
+    description: "Resolver only. New src/core/review-policy.ts
+      resolveReviewAllowed(pipeline,agent,isTriager): precedence per-agent array
+      > default > builtin [fix,optional,architect,human-awareness,human-async];
+      legacy reviewPolicy.allowedDispositions read-alias for default; append
+      dismiss iff isTriager. Wire the single resolver into item-machine review
+      promptVars, step-runner schema path, iteration plan-review prompt+schema,
+      and generateReviewSchema (dismiss in enum only for triagers; QA never).
+      Verify: typecheck + FakeHarness review-step behavior (reviewer accepts
+      dismiss id-match; QA rejects dismiss). Prod budget <=100 lines."
+    kind: story
+    milestoneId: m1-contracts-aggregate
+    slug: concerns-contracts-policy
+    title: Canonical review-policy resolver
