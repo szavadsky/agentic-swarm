@@ -1,0 +1,14 @@
+context: wave
+decision: continue
+rationale: "Wave 2 complete: concerns-contracts-types merged clean (80b5d47, 5/5
+  red-green, QA+review approved, TMPDIR=/tmp green 287/2/0). No
+  failures/blocked. Schemas+policy unblocked (deps on types satisfied). Carried
+  debt is non-blocking and owned by upcoming items. No plan change needed."
+text: "Next wave: run concerns-contracts-schemas + concerns-contracts-policy in
+  parallel. Binding clarifications (no plan edit): (1) Merged
+  Concern.detail/severity are required per spec — schemas keep them optional in
+  JSON and concerns-store applies runtime defaults (severity->medium,
+  detail->summary) before persisting; do not widen merged Concern type. (2)
+  Policy split owns tightening ReviewSuggestion.disposition (currently collapses
+  to string) and wiring canonical reviewPolicy.default resolver off the legacy
+  alias. (3) Run gates/merges with TMPDIR=/tmp until /.factory split fixed."
