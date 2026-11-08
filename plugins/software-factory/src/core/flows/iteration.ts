@@ -20,7 +20,7 @@ import { writeYamlAtomic, writeTextAtomic, readYaml, readText } from "../records
 import { runAgentStep } from "./step-runner.js";
 import { writeQuestion } from "../steer.js";
 import { persistAdrs } from "./adrs.js";
-import { runItemConsult } from "./consults.js";
+import { runItemConsult, runConcernConsult } from "./consults.js";
 import { mergeItem } from "./merge-path.js";
 import { tickItemMachine } from "./item-machine.js";
 import { deriveItemState } from "../derive/item.js";
@@ -32,8 +32,10 @@ import { isTriagerAgent, resolveReviewAllowed } from "../review-policy.js";
 import {
   hydrateConcernsYaml,
   listConcernIds,
+  listConcerns,
   partitionSuggestions,
 } from "../concerns.js";
+import { renderConcernsYaml } from "../triage.js";
 import { checkPlanReviewRounds, checkIterations, checkAmendments } from "../loops.js";
 import { validateEdits } from "../plan/limits.js";
 import { applyEdits } from "../plan/apply.js";
@@ -167,11 +169,75 @@ async function buildArchitectHydration(
     }
   }
 
+  // 5. Concerns (adr-routing-derived-state): routed and open concerns give
+  // every architect turn the terse decision context the act phase acts on.
+  // Appended last so the byte cap never evicts it.
+  const actionableConcerns = (await listConcerns(taskDir)).filter(
+    (c) => c.status === "open" || c.status === "routed"
+  );
+  if (actionableConcerns.length > 0) {
+    parts.push(
+      `--- Concerns ---\n${renderConcernsYaml(actionableConcerns, maxBytes)}`
+    );
+  }
+
   const combined = parts.join("\n\n");
   if (combined.length <= maxBytes) {
     return combined;
   }
   return combined.slice(combined.length - maxBytes);
+}
+
+/**
+ * Act-phase routing (§18, adr-routing-derived-state): consult the architect
+ * once per routed blocker concern that blocks a pending item in this wave.
+ * The per-concern decision artifact is the guard, so repeated or restarted
+ * act passes neither repeat the turn nor rewrite the decision.
+ */
+interface RoutedConsultContext {
+  task: string;
+  taskDir: string;
+  taskWt: string;
+  repo: any;
+  harness: Harness;
+  pipeline: PipelineConfig;
+  project: ProjectConfig;
+  prompts: any;
+  architectSessionId?: string;
+  turnsSemaphore?: Semaphore;
+  budgetTracker?: BudgetTracker;
+  iteration: number;
+}
+
+async function consultRoutedBlockers(
+  ctx: RoutedConsultContext,
+  blockedSlugs: Iterable<string>
+): Promise<string | undefined> {
+  const blocked = new Set(blockedSlugs);
+  if (blocked.size === 0) return ctx.architectSessionId;
+
+  let sessionId = ctx.architectSessionId;
+  for (const concern of await listConcerns(ctx.taskDir)) {
+    if (concern.kind !== "blocker" || concern.status !== "routed") continue;
+    if (!(concern.affects ?? []).some((slug) => blocked.has(slug))) continue;
+    const res = await runConcernConsult({
+      task: ctx.task,
+      concern,
+      taskDir: ctx.taskDir,
+      taskWt: ctx.taskWt,
+      repo: ctx.repo,
+      harness: ctx.harness,
+      pipeline: ctx.pipeline,
+      project: ctx.project,
+      prompts: ctx.prompts,
+      architectSessionId: sessionId,
+      turnsSemaphore: ctx.turnsSemaphore,
+      budgetTracker: ctx.budgetTracker,
+      iteration: ctx.iteration,
+    });
+    sessionId = res.sessionId ?? sessionId;
+  }
+  return sessionId;
 }
 
 /**
@@ -772,6 +838,28 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
       continue;
     }
 
+    // Act-phase routing (§18): each routed blocker concern blocking a pending
+    // item in this wave gets one architect consult before work starts.
+    const consultCtx: RoutedConsultContext = {
+      task,
+      taskDir,
+      taskWt,
+      repo,
+      harness,
+      pipeline,
+      project,
+      prompts,
+      architectSessionId,
+      turnsSemaphore,
+      budgetTracker,
+      iteration,
+    };
+    architectSessionId = await consultRoutedBlockers(
+      consultCtx,
+      waveState.blocked.map((it) => it.slug)
+    );
+    consultCtx.architectSessionId = architectSessionId;
+
     await appendJournal(taskDir, { type: "wave_started", wave: w, iteration });
 
     // Run wave items until wave can merge or complete
@@ -844,6 +932,11 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
         items: itemStates,
         blockedBy: await collectRoutedBlockers(taskDir),
       });
+      architectSessionId = await consultRoutedBlockers(
+        consultCtx,
+        waveState.blocked.map((it) => it.slug)
+      );
+      consultCtx.architectSessionId = architectSessionId;
       await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
     }
 

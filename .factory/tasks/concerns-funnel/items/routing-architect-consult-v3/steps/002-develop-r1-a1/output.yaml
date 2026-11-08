@@ -1,0 +1,73 @@
+status: ok
+summary: "Rebased the exact ready routing-architect-consult-v2 act-phase diff
+  onto the current topic tip (iteration.ts import block resolved keeping BOTH
+  persistAdrs from adr-blocking-digest-v2 and runConcernConsult, so all three
+  wave-9 sibling diffs survive) plus a per-decision runExclusive guard per the
+  assignment. Added runConcernConsult in src/core/flows/consults.ts: keyed-mutex
+  exclusive section keyed on decisions/concern-<cid>.yaml, existence check as
+  idempotency guard, architect consult via steps/architect-consult-nonitem
+  (stepId consult-concern-<cid>, prompt names concern
+  id/summary/severity/affects), atomic writeYamlAtomic of the decision artifact,
+  decision_made journal entry. Hooked consultRoutedBlockers into wave act at
+  wave start and after every wave tick, consulting once per routed blocker
+  concern whose affects intersect the wave's blocked slugs. Extended
+  buildArchitectHydration with an open+routed terse concernsYaml section
+  appended LAST (renderConcernsYaml, byte-capped) so plan and wave-report turns
+  see routed concerns; plan-reviewer hydration path is untouched and stays
+  open-only. No derive/scheduler changes."
+target:
+  selectors:
+    - test/engine/routing-architect-consult.test.ts
+  expectRed:
+    - "Routing: architect consult and hydration.writes one concern decision file
+      and hydrates architect turns with routed concerns"
+    - "Routing: architect consult and hydration.restart after a mid-iteration
+      failure neither repeats the consult nor rewrites the decision"
+evidence:
+  - cd plugins/software-factory && bun run typecheck -> exit 0 (tsc --noEmit
+    clean)
+  - TMPDIR=/tmp bun test test/engine/routing-architect-consult.test.ts -> 2
+    pass, 0 fail, 26 expect() calls; both declared expectRed cases green (single
+    decisions/concern-c-0123456789.yaml, one consult turn, restart keeps the
+    byte-identical decision file and issues no second consult, plan prompt +
+    wave-report prompts contain concern id and summary)
+  - "Baseline before the fix: same selector -> 0 pass, 2 fail (decisionFiles([])
+    vs ['concern-c-0123456789.yaml']), confirming the tests were behaviorally
+    red on current production"
+  - TMPDIR=/tmp bun test test/engine/concerns-funnel.test.ts
+    test/cli/status-concerns.test.ts -> 24 pass, 0 fail, 222 expect() calls
+  - "Sibling merge-repair regression suites kept green: TMPDIR=/tmp bun test
+    test/engine/adr-blocking-digest.test.ts test/engine/status-concerns.test.ts
+    test/engine/state-concern-counts.test.ts
+    test/engine/routing-blocker-derive.test.ts
+    test/engine/plan-reviewer-triage.test.ts -> 24 pass, 0 fail, 124 expect()
+    calls"
+  - "Full gate: TMPDIR=/tmp bun test -> 384 pass, 2 skip, 0 fail, 386 tests
+    across 65 files (84s), including all three wave-9 sibling suites (consult,
+    adr-blocking-digest, state/status concern surface)"
+  - git status --porcelain -> only
+    plugins/software-factory/src/core/flows/consults.ts and iteration.ts
+    modified; no stray scratch artifacts
+concerns:
+  - The exact wave-9 merge-gate failure is not persisted in-repo (journal
+    records only failingGates:['test'] with no test names); test-first
+    reproduced the v2 merge tree green under both TMPDIR profiles, so the repair
+    is the rebase onto current tip plus TMPDIR-normalized gates, not a
+    deterministic test defect.
+  - "Per instructions the 4 optional nits remain deferred to docs-finish:
+    concerns hydration sub-budget (v2 diff caps the concerns section at the
+    whole hydration budget via renderConcernsYaml rather than a reserved
+    sub-budget), concern-id sanitize in stepId, flows barrel export of
+    runConcernConsult, consult prompt-context alignment."
+  - Newly-routed concerns discovered mid-wave are consulted on the next wave
+    tick (same per-decision guard); a crash after the decision write but before
+    the step-record commit could re-consult only if worktree repair drops the
+    uncommitted artifact (same artifact-ordering property as all engine
+    artifacts).
+notes: "Act-phase only: derive/task.ts, derive/item.ts, derive/wave.ts and
+  plan/scheduler.ts untouched. The only rebase conflict was iteration.ts's
+  import block; resolution keeps persistAdrs (adr-blocking-digest-v2) alongside
+  runConcernConsult, which is covered by the green adr-blocking-digest suite.
+  Added a KeyedMutex keyed on the decision path around the existence-check +
+  consult + atomic write so concurrent/restarted act passes cannot
+  double-consult."
