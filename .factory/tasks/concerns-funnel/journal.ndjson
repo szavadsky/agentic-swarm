@@ -1429,3 +1429,5 @@
 {"type":"step_finished","task":"concerns-funnel","step":"context-pack-2","attempt":1,"status":"ok","sessionId":"01a1bc3d-defc-72c3-8631-602744975931","usage":{"inputTokens":347055,"outputTokens":90344,"costUsd":0.154663},"ts":"2026-11-08T18:00:37.344Z"}
 {"type":"step_started","task":"concerns-funnel","step":"architect-plan-2","attempt":1,"recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/047-architect-plan-2-a1","ts":"2026-11-08T18:00:38.337Z"}
 {"type":"step_timeout_armed","task":"concerns-funnel","step":"architect-plan-2","timeoutSec":1200,"ts":"2026-11-08T18:00:38.341Z"}
+{"type":"task_started","task":"concerns-funnel","branch":"topic/concerns-funnel","ts":"2026-11-08T18:03:55.597Z"}
+{"type":"iteration_started","iteration":2,"ts":"2026-11-08T18:03:57.351Z"}
