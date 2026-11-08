@@ -1,0 +1,200 @@
+status: changes_requested
+summary: 4 milestones/7 items in bounds, acyclic; interfaces non-directional,
+  schema/ingest gaps, severity/epic/hydration ambiguous, milestone back-edge,
+  scenarios unfalsifiable
+suggestions:
+  - id: interfaces-not-directional
+    disposition: fix
+    summary: Directional interfaces list files, not caller/callee contracts
+    detail: "Plan m1-m4 directionalInterfaces enumerate files/functions (e.g.
+      concerns.ts fingerprint, triage.ts router, runChildTask propagate) without
+      caller, callee, inputs/outputs, ownership, or error handling. Real callers
+      diverge: step-runner injects concernsYaml (step-runner.ts:296-307),
+      iteration overrides for plan-review (iteration.ts:526-549) and embeds
+      concerns in debt/steering hydration (iteration.ts:120-189), item-machine
+      writes human-* raw (item-machine.ts:722-743). Rewrite each as
+      caller->callee with byte inputs, artifact outputs, and commit/journal
+      ownership."
+    location:
+      file: plugins/software-factory/src/core/flows/step-runner.ts
+      line: 296
+  - id: confirms-schema-gap
+    disposition: fix
+    summary: concernConfirms and consult resolution have no schema/TS/ingest owner
+    detail: Plan item closeup-lifecycle-resolve introduces concernConfirms
+      accept/reject and consult decision resolve->resolved, but
+      contracts-drift-fix claims no runtime changes and lists only
+      concerns/remarkable; m3 interface says producer schemas otherwise
+      unchanged. decisions.schema.json has concerns/remarkable but no
+      concernConfirms/resolution; DecisionArtifact has no such fields;
+      ingestStepConcerns reads only
+      concerns/newConcerns/remarkable/suggestions/resolutions
+      (step-runner.ts:184-216). No owner for
+      schema+TS+ingest+applyConcernConfirms seam or consult concern-id binding.
+      Assign ownership and define shapes.
+    location:
+      file: plugins/software-factory/config/schemas/decisions.schema.json
+      line: 48
+  - id: severity-router-digest-gap
+    disposition: fix
+    summary: Severity gates, rm-* digest, defaults, and allowlist precedence undefined
+    detail: RemarkableDecision has no severity (artifacts.ts:323-327) so
+      minDigest/minBlocking inapplicable to rm-*; listConcerns/listOpenConcerns
+      filter c-* only (concerns.ts:117,126) so rm-* never hydrates yet m2
+      asserts rm-* digest with blocks=[]; digest write path undefined
+      (writeQuestion blocks=[] vs separate digest); defaults low/low contradict
+      shipped pipeline.default.yaml medium/high; allowlist skip+journal vs
+      schema additionalProperties-false precedence undefined because validation
+      runs before ingest (step-runner.ts:690-719); QA uses review shape
+      (newConcerns) not concerns, so QA-emits-concern field ambiguous. Define
+      rm-* handling, digest mechanism, defaults migration, and gate precedence
+      plus step-ok/journal assertions.
+    location:
+      file: plugins/software-factory/src/core/artifacts.ts
+      line: 126
+  - id: fingerprint-migration-gap
+    disposition: fix
+    summary: Fingerprint identity change lacks migration and terminal-union semantics
+    detail: "ADR adr-fingerprint-affects-union drops affects from identity, but
+      stored files keyed by old hash including affects (concerns.ts:33-35);
+      re-emit creates second file, breaking dedup and exact-id triage partition.
+      mergeConcern replaces affects (concerns.ts:51) vs union; terminal handling
+      ambiguous: assumption says terminal-in-merge yet merge updates
+      detail/severity/affects/escalated on terminal (concerns.ts:44-60). No
+      scenario for dismissed+affects or upgrade no-dup. Define migration/GC or
+      dual-lookup compat and whether union applies to terminal."
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 33
+  - id: epic-propagation-underspecified
+    disposition: fix
+    summary: Epic push omits worktree/commit/id/forward/timing and spike citation
+    detail: runChildTask only writes child-closeup.yaml and commits parent.path
+      (engine.ts:262-281), no cleanup/merge; rootTaskDir unused despite
+      shares-mailbox comment. Plan says after completion before cleanup/merge
+      for every status, condensed with source.epic+prefix, restart-idempotent,
+      forward to root mailbox, parent hydration LAST before wave-report, but
+      omits parent vs child taskDir/taskWt paths, committer, id computation
+      (same fingerprint vs prefixed summary changes hash), truncation
+      length/method for strictly shorter, forward id/blocks mapping and root
+      definition, ordering vs wave-report, and blocked/failed double-halt risk.
+      Spike-saga-commit cited authoritative with no file/lines. Expand to
+      directional contract with restart/bytes assertions.
+    location:
+      file: plugins/software-factory/src/core/engine.ts
+      line: 209
+  - id: hydration-caps-circular
+    disposition: fix
+    summary: Step-role caps circular, architect double-embeds, zero-cap rendering
+      undefined
+    detail: "ADR defines plan-review/architect* cap min(input,500) where input=sum
+      registered input vars, but input includes debt/steering which ARE
+      buildArchitectHydration containing concerns (iteration.ts:429-430),
+      circular if concernsYaml counted. Task-diff source for wave/plan-close-up
+      (non-item, no diff var) undefined. Architect gets concerns twice
+      (concernsYaml via step-runner plus debt/steering hydration).
+      buildArchitectHydration caps JS length slice (iteration.ts:185-188) not
+      UTF-8. Zero-cap '' still leaves ## Open Concerns heading in fragments; no
+      strip contract. Plan-review override removal caller/callee split undefined
+      (iteration passes concernsYaml overriding step-runner). Define input
+      allowlist excluding concerns/human/debt/steering, task-diff producer,
+      single architect source, heading handling."
+    location:
+      file: plugins/software-factory/src/core/flows/iteration.ts
+      line: 120
+  - id: hydrated-set-predicate-missing
+    disposition: fix
+    summary: listHydratedConcerns predicate and escalated/pending/rm-* visibility
+      undefined
+    detail: "m1 interface mentions listHydratedConcerns but no item defines
+      signature. Predicates diverge: step-runner open only,
+      buildArchitectHydration open+routed (iteration.ts:175-182),
+      hydrateConcernsYaml open c-+rm- (concerns.ts:186-189). terseConcern drops
+      pendingResolution (triage.ts:61-69) vs ADR says emit whenever present.
+      Dismissed+escalated in digest+architect hydration implies dismissed
+      included for architect only; per-consumer predicate missing. rm-* excluded
+      from listOpenConcerns yet digest asserted. Define function, per-consumer
+      set, pending/escalated/rm-* rules."
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 110
+  - id: milestone-back-edge
+    disposition: fix
+    summary: m2 item depends on future m3, breaking milestone sequencing
+    detail: "Item closeup-lifecycle-resolve in m2 depends on epic-saga-propagate in
+      m3 while milestones order m1,m2,m3,m4. Item deps are acyclic but milestone
+      ordering violated: m2 depends on future m3. Reassign milestoneIds (move
+      epic to m2 or closeup to m3) or reorder milestones so dependencies flow
+      forward."
+    location:
+      file: docs/factory.v2.md
+      line: 31
+  - id: fragment-matrix-contradiction
+    disposition: fix
+    summary: Fragment matrix contradicts KNOWN_VARS, omits ownership, debloat
+      unfalsifiable
+    detail: "Plan says add ## Open Concerns + Human involvement to develop/qa/review
+      per KNOWN_VARS, but KNOWN_VARS steps/develop is
+      assignment,target,citations with no concernsYaml/humanInvolvementCriteria
+      (prompt-vars.ts:55-56); adding placeholder without KNOWN_VARS update fails
+      preflight render check. No item owns prompt-vars.ts update. Existing
+      fragments partial (architect-plan has Human involvement only, review has
+      Open Concerns only) so add-vs-keep delta undefined. m1 scenario 5 and m4
+      docs scenario assert sections within budgets without listing fragments.
+      15/60 undefined (per-fragment <=15 vs total growth <=60 vs per-addition
+      <=5) and assertion split across items. Audit existing, own KNOWN_VARS
+      extension, define budgets."
+    location:
+      file: plugins/software-factory/src/core/prompt-vars.ts
+      line: 55
+  - id: scenarios-incomplete-unfalsifiable
+    disposition: fix
+    summary: Scenarios miss core spec behaviors and lack falsifiable assertions
+    detail: Spec item 18 (docs/factory.v2.md:89-103) requires blocker->dependent
+      blocked+architect consult, architect->next turn, dismiss kept/logged,
+      remarkable same aggregation/triage, funnel less-detail, modes per task.
+      Plan has no scenario for blocker blocking via
+      collectRoutedBlockers/blockedByConcern plus consultRoutedBlockers,
+      architect next-turn hydration, plain dismiss, remarkable triage/hydration,
+      human-async parks without exit-10, or mode presets/commented defaults. m4
+      docs scenario 'describe with terse prompts' unassertable; epic detail <800
+      omits method/length; allowlist scenario omits step-ok/journal; simple
+      fallback omits scope (task-wide untriaged vs simple-affiliated) and
+      debt-list assertion; consult unblock omits id binding. Add/tighten
+      scenarios.
+    location:
+      file: docs/factory.v2.md
+      line: 89
+  - id: autonomous-halt-deviation
+    disposition: human-awareness
+    summary: Autonomous immediate halt accepted as deviation from drain-then-block spec
+    detail: Spec autonomous defers blocking until unblocked work drains, but
+      implementation routes blocking ADRs at plan time and halts immediately
+      (iteration.ts:481-490). Plan ADR accepts immediate halt for iteration 2
+      with docs in ARCHITECTURE 8.11/human-involvement.md, drain scheduling
+      future work. High-impact tradeoff operator should be aware of; architect
+      can decide now. Ensure docs mark deviation explicitly.
+    location:
+      file: plugins/software-factory/src/core/flows/iteration.ts
+      line: 481
+  - id: sizing-near-limit
+    disposition: optional
+    summary: "Advisory: 270/240/220-line hints near storyMax, multi-file scope risk"
+    detail: human-router-severity 270, hydration 240, closeup 220 under
+      storyMaxProdLines 300 so non-blocking per review rules. Each touches 3-5
+      files plus behavior tests; watch for split if prod exceeds hint. No action
+      unless overrun.
+    location:
+      file: docs/factory.v2.md
+      line: 29
+  - id: debt-description-stale
+    disposition: optional
+    summary: td-tmpdir-split description stale vs boundary-match fix
+    detail: Adjacent debt says step-runner splits on /.factory but inferTaskWorktree
+      now matches folder-boundary tail (step-runner.ts:176-181) explicitly
+      avoiding substring split. Head-guard failures persist via different path.
+      Out of scope, but refresh description when touched to avoid misleading
+      triage.
+    location:
+      file: plugins/software-factory/src/core/flows/step-runner.ts
+      line: 176
