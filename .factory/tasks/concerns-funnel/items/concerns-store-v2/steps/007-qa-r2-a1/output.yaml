@@ -1,0 +1,49 @@
+status: approved
+summary: "Approved. Independent verification: typecheck exit 0; target file
+  22/22 pass (203 expects; --rerun-each 2 = 44/44); full suite 324 pass, 2 skip,
+  0 fail; size 278/300. Engine red-test evidence (steps 001/004) shows all 21
+  tests failed on the test-first stub, and the current file passes. Test diff vs
+  test-first commit is +11 additive lines only (rm-* fixture + shape assertion)
+  — no deletions, relaxed matchers, or mocks; the r2 listOpenConcerns rm-* leak
+  fix is covered by a genuine regression test. Lock/commit discipline verified
+  by inspection: RMW under KeyedMutex(taskDir), commitAll outside locks, no
+  repo.writeLock wrapping, concerns commit precedes startup repair. Reviewer's
+  fix finding is resolved; remaining notes are optional."
+suggestions:
+  - id: corrupt-concern-silent-skip
+    disposition: optional
+    summary: listOpenConcerns still silently drops unreadable YAML and only
+      validates kind
+    detail: "The line-109 catch returns undefined for any read/parse error, and line
+      112 only requires r.kind, so a corrupt c-*.yaml either vanishes from
+      triage/hydration or leaks a partial StoredConcernArtifact with missing
+      summary/detail/severity and no journal signal. Consider journaling the
+      offending filename or validating the full stored shape. Non-blocking:
+      valid-file behavior is correct and tested."
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 109
+  - id: routed-pending-resolution-stale
+    disposition: optional
+    summary: Routed triage clears dismissReason but leaves stale pendingResolution;
+      no regression test
+    detail: applyConcernTriage line 144 clears dismissReason on non-dismiss routing
+      but spreads any prior pendingResolution, so a carried/resolved-then-routed
+      concern can retain a stale pending action until the next close-up
+      overwrites it. The r2 routed-clearing behavior also has no test (the
+      existing routes test starts from an open concern); add a dismissed->routed
+      assertion. Non-blocking; reviewer marked this area optional.
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 144
+  - id: missing-r2-hardening-tests
+    disposition: optional
+    summary: No regression test for r2 remarkable pre-lock validation
+    detail: The r2 fix added chosen/alternatives/why validation before the
+      KeyedMutex (concerns.ts:79) but no test proves an invalid remarkable
+      throws without partial writes; the existing no-partial-write test covers
+      only unknown concern kinds. Add a small invalid-remarkable case to lock in
+      the atomicity fix. Non-blocking.
+    location:
+      file: plugins/software-factory/test/engine/concerns-funnel.test.ts
+      line: 589
