@@ -394,3 +394,4 @@
 {"type":"wave_started","wave":4,"iteration":1,"ts":"2026-11-08T05:55:53.576Z"}
 {"type":"step_started","task":"concerns-funnel","step":"wave-close-up-1-4","attempt":1,"recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/022-wave-close-up-1-4-a1","ts":"2026-11-08T05:57:02.704Z"}
 {"type":"step_timeout_armed","task":"concerns-funnel","step":"wave-close-up-1-4","timeoutSec":900,"ts":"2026-11-08T05:57:02.708Z"}
+{"type":"step_finished","task":"concerns-funnel","step":"wave-close-up-1-4","attempt":1,"status":"ok","sessionId":"01a1b9bb-4fa2-70b1-8d11-11624e900c72","usage":{"inputTokens":16698,"outputTokens":13345,"costUsd":0.00458},"ts":"2026-11-08T05:58:40.345Z"}
