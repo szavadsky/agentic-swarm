@@ -1,0 +1,62 @@
+status: ok
+summary: Completed the review round for adr-blocking-digest-v2. The three
+  architect/reviewer step prompts (agents/steps/architect-plan.md,
+  architect-revise.md, plan-review.md) each carry a terse 2-line `## Human
+  involvement` section with only `{{humanInvolvementCriteria}}`, inserted after
+  the existing criteria/dispositions blocks; step-runner and KNOWN_VARS were
+  left untouched. Extended test/human-involvement-config.test.ts with a sentinel
+  render test asserting the criteria placeholder renders into architect-plan,
+  architect-revise, and plan-review. Fixed the one resulting full-suite
+  regression in test/smoke-fixes.test.ts by supplying the new
+  `humanInvolvementCriteria` sample var to its direct architect-plan render
+  (assertions unchanged). Target ADR blocking/remarkable behavior and
+  dispositions.md exit-10 contract remain green.
+target:
+  selectors:
+    - test/engine/adr-blocking-digest.test.ts
+  expectRed:
+    - test/engine/adr-blocking-digest.test.ts::Blocking vs remarkable ADRs
+      (§18).writes full ADR markdown with context, decision, consequences, and
+      blocking status
+    - test/engine/adr-blocking-digest.test.ts::Blocking vs remarkable ADRs
+      (§18).routes a blocking ADR to the mailbox with task blocks and halts with
+      exit 10
+    - test/engine/adr-blocking-digest.test.ts::Blocking vs remarkable ADRs
+      (§18).reports a remarkable ADR in the digest and lets the run complete
+    - test/engine/adr-blocking-digest.test.ts::Blocking vs remarkable ADRs
+      (§18).respects the active mode table for blocking and remarkable ADRs
+evidence:
+  - "`bun run typecheck` in plugins/software-factory: exit 0, no diagnostics
+    (run twice, including after the smoke-test edit)."
+  - "`TMPDIR=/tmp bun test test/engine/adr-blocking-digest.test.ts
+    test/human-involvement-config.test.ts`: 17 pass, 0 fail, 156 expect()
+    calls."
+  - '`TMPDIR=/tmp bun test test/engine/adr-blocking-digest.test.ts -t "Blocking
+    vs remarkable"`: 5 pass, 0 fail — all four declared expectRed selectors pass
+    by name.'
+  - "`TMPDIR=/tmp bun test test/prompts.test.ts`: 17 pass, 0 fail, confirming
+    prompt preflight stays green with the new placeholder sections."
+  - "`grep -n '^## Human involvement' -A2 agents/steps/architect-plan.md
+    agents/steps/architect-revise.md agents/steps/plan-review.md`: each file has
+    the 2-line heading + `{{humanInvolvementCriteria}}` placeholder after the
+    criteria/dispositions block."
+  - "`TMPDIR=/tmp bun test test/smoke-fixes.test.ts
+    test/human-involvement-config.test.ts
+    test/engine/adr-blocking-digest.test.ts test/prompts.test.ts`: 37 pass, 0
+    fail after adding the missing `humanInvolvementCriteria` sample var to the
+    smoke-fixes architect-plan render."
+  - "`TMPDIR=/tmp bun test` (full project gate): 377 tests across 61 files — 375
+    pass, 2 skip, 0 fail."
+  - "`git status --porcelain` + `git diff --stat`: this round's only
+    working-tree change is the 1-line smoke-test var addition; review prompt
+    fixes are already committed (2-3 lines per prompt, well under the
+    5-line/15-line debloat limits)."
+concerns:
+  - The prompt preflight renders with caller-supplied vars, so any future direct
+    `renderStepPrompt("steps/architect-plan", ...)` call must include
+    `humanInvolvementCriteria`; the engine step-runner already supplies it.
+  - PTY was unavailable in this environment; the full suite was still executed
+    to completion without a terminal.
+notes: No changes to ADR digest/blocking logic, step-runner computation, or
+  KNOWN_VARS registration; scope stayed on the reviewer-requested prompt
+  sections, sentinel render test, and the one smoke-test variable completion.

@@ -19,6 +19,7 @@ import { ensureChildWorktree, commitAll, removeWorktree } from "../git/index.js"
 import { writeYamlAtomic, writeTextAtomic, readYaml, readText } from "../records/io.js";
 import { runAgentStep } from "./step-runner.js";
 import { writeQuestion } from "../steer.js";
+import { persistAdrs } from "./adrs.js";
 import { runItemConsult } from "./consults.js";
 import { mergeItem } from "./merge-path.js";
 import { tickItemMachine } from "./item-machine.js";
@@ -383,14 +384,16 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
         };
         await writeYamlAtomic(planPath, plan);
 
-        // Write ADRs if specified (§8.4.2)
-        if (plan.adrs && project.adrFolder) {
-          const adrDir = path.join(taskWt, project.adrFolder);
-          await fs.promises.mkdir(adrDir, { recursive: true });
-          for (const adr of plan.adrs) {
-            const adrFile = path.join(adrDir, `${adr.id}.md`);
-            await writeTextAtomic(adrFile, `# ${adr.title}\n\n${adr.context}\n`);
-          }
+        // Write full ADR records and route blocking/remarkable ones (§8.4.2, §18).
+        // Routing always runs; markdown only when adrFolder is configured.
+        if (plan.adrs) {
+          await persistAdrs({
+            taskWt,
+            taskDir,
+            adrFolder: project.adrFolder,
+            adrs: plan.adrs,
+            mode: pipeline.humanInvolvement,
+          });
         }
       },
     });
@@ -407,7 +410,18 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
     if (planStepRes.sessionId) {
       architectSessionId = planStepRes.sessionId;
     }
-    await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
+    const state = await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
+
+    // A blocking ADR routed at plan time parks the task: halt before waves so
+    // the derive loop reports blocked and exits 10 (§18 blocking table).
+    if (state.status === "blocked") {
+      return {
+        iteration,
+        status: "blocked",
+        plan,
+        architectSessionId,
+      };
+    }
   }
 
   // Check if PM edits are already completed
@@ -542,8 +556,19 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
       iteration,
       writeArtifact: async (output: unknown) => {
         if (output && typeof output === "object") {
-          plan = { ...plan, ...(output as any), iteration };
-          await writeYamlAtomic(planPath, plan);
+          const merged = { ...plan, ...(output as any), iteration };
+          plan = merged;
+          await writeYamlAtomic(planPath, merged);
+          // Revise may add or flip ADRs: re-persist idempotently (§8.4.2, §18).
+          if (merged.adrs) {
+            await persistAdrs({
+              taskWt,
+              taskDir,
+              adrFolder: project.adrFolder,
+              adrs: merged.adrs,
+              mode: pipeline.humanInvolvement,
+            });
+          }
         }
       },
     });
@@ -560,7 +585,15 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
       };
     }
     reviewRound++;
-    await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
+    const reviseState = await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
+    if (reviseState.status === "blocked") {
+      return {
+        iteration,
+        status: "blocked",
+        plan,
+        architectSessionId,
+      };
+    }
     }
   }
 

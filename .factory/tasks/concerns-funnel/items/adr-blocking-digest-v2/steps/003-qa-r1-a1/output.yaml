@@ -1,0 +1,29 @@
+status: approved
+summary: 4 ADR tests green, gates pass, no weakening; blocking halts exit-10,
+  remarkable digest-only
+suggestions:
+  - detail: persistAdrs runs only inside initial architect-plan writeArtifact
+      (iteration.ts:387-396). architect-revise merges ADRs into plan-N.yaml
+      (iteration.ts:556-561) without markdown persistence or mailbox routing, so
+      a blocking ADR introduced or flipped during revise would update plan yaml
+      but never create docs/adr md or tousertoreview entry. Pre-existing gap
+      (old writer also plan-only) and developer-disclosed; no test covers
+      revise. Defer as tech debt or route on revise.
+    disposition: optional
+    id: revise-adr-reroute-gap
+    location:
+      file: plugins/software-factory/src/core/flows/iteration.ts
+      line: 556
+    summary: Revise-path ADRs not persisted or routed
+  - detail: renderAdrMarkdown falls back to Not recorded. when consequences
+      missing/blank (adrs.ts:30), but all fixtures provide consequences.
+      Markdown assertions cover unmarked remarkable (false) and autonomous
+      blocking (true) only; explicit blocking:false md and missing-consequences
+      fallback lack direct md assertions (mailbox covered). Consider one md
+      assertion for explicit-false/missing case to pin fallback.
+    disposition: optional
+    id: adr-md-edge-coverage
+    location:
+      file: plugins/software-factory/test/engine/adr-blocking-digest.test.ts
+      line: 285
+    summary: Missing md coverage for explicit-false/missing consequences

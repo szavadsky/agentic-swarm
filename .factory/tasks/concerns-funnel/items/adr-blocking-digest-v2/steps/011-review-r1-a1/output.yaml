@@ -1,0 +1,41 @@
+status: approved
+summary: Blocking/remarkable ADR routing, full md, prompt table wiring verified;
+  gates green; 3 optionals
+suggestions:
+  - detail: persistAdrs re-runs for all merged.adrs on every revise
+      (iteration.ts:563-571) but writeQuestion dedups by
+      ref+question+disposition hash. A blocking->remarkable flip or ADR removal
+      leaves the old task-blocking question open (still halts via
+      blocks:[task]); decision-text edits duplicate entries. Downgrade then
+      violates remarkable-never-waits until the operator answers the stale
+      entry. Consider stable per-ADR question IDs with supersede/retract, or
+      document the dismiss workaround; add a revise-flip regression test.
+    disposition: optional
+    id: revise-adr-stale-mailbox-on-flip
+    location:
+      file: plugins/software-factory/src/core/flows/iteration.ts
+      line: 563
+    summary: Revise re-persist leaves stale mailbox entries on ADR flip/removal
+  - detail: blockingAdrDisposition is deterministic (autonomous human-stop,
+      principal/detailed human-async) yet the mode test accepts either label for
+      detailed (test:364), so a regression passes silently. All blocking ADRs
+      set blocks:[task], so principal/detailed still halt the whole task with
+      exit 10 despite human-async's item-pause semantics in dispositions.md. Pin
+      detailed to human-async and document the mode->disposition/blocks contract
+      in the human-involvement criteria.
+    disposition: optional
+    id: detailed-disposition-undocumented
+    location:
+      file: plugins/software-factory/src/core/flows/adrs.ts
+      line: 14
+    summary: Detailed-mode disposition loose in test, mode mapping undocumented
+  - detail: renderAdrMarkdown falls back to 'Not recorded.' when consequences is
+      blank/absent, but md assertions cover only the unmarked remarkable (false)
+      and blocking-true cases. Add one md assertion for an explicit
+      blocking:false ADR with omitted consequences to pin the fallback.
+    disposition: optional
+    id: adr-md-fallback-coverage
+    location:
+      file: plugins/software-factory/src/core/flows/adrs.ts
+      line: 30
+    summary: Explicit blocking:false md and missing-consequences fallback unasserted

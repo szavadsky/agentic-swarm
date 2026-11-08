@@ -1,0 +1,59 @@
+status: changes_requested
+summary: Blocking routing lost when adrFolder unset; revise/reroute and
+  hardening optionals
+suggestions:
+  - id: adr-routing-gated-on-adrfolder
+    disposition: fix
+    summary: Blocking/remarkable routing dropped when adrFolder unset
+    detail: iteration.ts:388 gates entire persistAdrs (markdown + mailbox routing +
+      halt) on project.adrFolder, but adrFolder is optional in ProjectConfig.
+      When undefined, blocking ADRs never reach tousertoreview nor halt,
+      silently losing the safety signal. Markdown write should be gated, routing
+      must always run. Split persistAdrs or make folder optional; add test with
+      no adrFolder asserting mailbox entry with blocks:[task] and
+      blocked/exit-10.
+    location:
+      file: plugins/software-factory/src/core/flows/iteration.ts
+      line: 388
+  - id: revise-adr-reroute-gap
+    disposition: optional
+    summary: Revise-path ADRs not persisted or routed
+    detail: architect-revise merges plan.adrs into plan yaml without persistAdrs nor
+      halt check, so blocking ADR added/flipped during revise never creates
+      docs/adr md or mailbox entry and waves still run. Reuse persistAdrs
+      (idempotent via deterministic question IDs) plus task-block halt after
+      revise loop.
+    location:
+      file: plugins/software-factory/src/core/flows/iteration.ts
+      line: 556
+  - id: duplicate-task-block-scan
+    disposition: optional
+    summary: Redundant mailbox scan duplicates derive logic
+    detail: hasOpenTaskBlockingQuestion re-scans tousertoreview with
+      questionBlocks(q,task), duplicating
+      deriveTaskState.hasTaskLevelOpenQuestion already computed by
+      refreshStateYaml just before. Reuse refreshStateYaml return status instead
+      of new helper to keep single source of truth.
+    location:
+      file: plugins/software-factory/src/core/steer.ts
+      line: 129
+  - id: adr-id-filename-sanitization
+    disposition: optional
+    summary: Unsanitized ADR id used as filename
+    detail: persistAdrs joins adrDir with `${adr.id}.md` from LLM-supplied plan
+      without sanitizing; ../ or / would escape adrDir or create subdirs. Clean
+      like writeQuestion cleanRef or reject traversal. Pre-existing pattern, low
+      severity (architect already has worktree write), harden while touched.
+    location:
+      file: plugins/software-factory/src/core/flows/adrs.ts
+      line: 55
+  - id: revise-prompt-blocking-doc
+    disposition: optional
+    summary: Revise prompt omits blocking guidance
+    detail: architect.md and architect-plan.md document blocking:true vs remarkable,
+      but architect-revise.md (also outputs plan.schema with ADRs) has no
+      ADR/blocking mention, risking dropped/flipped flags on revise. Mirror
+      one-line blocking rule for consistency.
+    location:
+      file: plugins/software-factory/agents/steps/architect-revise.md
+      line: 10

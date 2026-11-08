@@ -123,7 +123,11 @@
           "title": { "type": "string" },
           "context": { "type": "string" },
           "decision": { "type": "string" },
-          "consequences": { "type": "string" }
+          "consequences": { "type": "string" },
+          "blocking": {
+            "type": "boolean",
+            "description": "Needs a human decision per the active human-involvement mode; false/absent is remarkable (digest only)"
+          }
         },
         "additionalProperties": false
       }

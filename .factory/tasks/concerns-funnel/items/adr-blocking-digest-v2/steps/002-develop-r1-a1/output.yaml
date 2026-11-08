@@ -1,0 +1,54 @@
+status: ok
+summary: "Implemented blocking vs remarkable ADRs. New src/core/flows/adrs.ts
+  renders full ADR markdown (# title plus
+  Context/Decision/Consequences/Blocking) and routes each ADR through
+  steer/tousertoreview: blocking:true raises a task-blocking question under the
+  mode table (autonomous -> human-stop, principal/detailed -> human-async) with
+  blocks:[task], while remarkable/absent ADRs become human-awareness digest
+  entries with no blocks. iteration.ts now uses persistAdrs and halts the
+  iteration immediately when an open mailbox question blocks the task (derive
+  loop returns blocked/exit 10); plan.schema.json accepts `blocking`; steer.ts
+  gained hasOpenTaskBlockingQuestion; architect prompts document the field.
+  dispositions.md untouched, preserving the human-stop exit-code-10 contract."
+target:
+  selectors:
+    - test/engine/adr-blocking-digest.test.ts
+  expectRed:
+    - test/engine/adr-blocking-digest.test.ts::Blocking vs remarkable ADRs
+      (§18).writes full ADR markdown with context, decision, consequences, and
+      blocking status
+    - test/engine/adr-blocking-digest.test.ts::Blocking vs remarkable ADRs
+      (§18).routes a blocking ADR to the mailbox with task blocks and halts with
+      exit 10
+    - test/engine/adr-blocking-digest.test.ts::Blocking vs remarkable ADRs
+      (§18).reports a remarkable ADR in the digest and lets the run complete
+    - test/engine/adr-blocking-digest.test.ts::Blocking vs remarkable ADRs
+      (§18).respects the active mode table for blocking and remarkable ADRs
+evidence:
+  - bun test test/engine/adr-blocking-digest.test.ts -> 4 pass, 0 fail, 44
+    expect() calls (was 0 pass / 4 fail before the change).
+  - bun run typecheck -> tsc --noEmit clean, exit 0.
+  - bun test (full suite, plugin dir) -> 373 pass, 2 skip, 0 fail across 61
+    files, 1743 expect() calls.
+  - "Regression subset: bun test test/engine/routing-human-debt.test.ts
+    test/engine/human-async-steering.test.ts
+    test/engine/story-happy-path.test.ts -> 7 pass, 0 fail."
+  - Target test asserts full ADR md sections (## Context/## Decision/##
+    Consequences/## Blocking true|false), blocking mailbox entry disposition +
+    blocks:[task] + state.yaml blocked + exit 10, remarkable human-awareness
+    with empty blocks and exit 0, and mode table routing for
+    autonomous/principal/detailed.
+concerns:
+  - First full-suite run overlapped with concurrently launched test commands and
+    one qa-red-test case hit its 5s timeout; the isolated rerun and a clean
+    full-suite run both passed, so it was CPU contention, not a code regression.
+  - Architect-revise output that changes ADRs does not re-route them; a blocking
+    ADR is only routed when the plan is first written (existing restart behavior
+    remains safe because the mailbox question is committed with the plan and
+    derive halts on restart).
+notes: 'Mode mapping: blocking ADRs always park the task because blocks includes
+  "task"; only the disposition differs (autonomous human-stop,
+  principal/detailed human-async). Remarkable ADRs reuse tousertoreview with
+  human-awareness (per adr-digest-mailbox) and never affect exit status. Prod
+  diff: new src/core/flows/adrs.ts plus small edits to iteration.ts, steer.ts,
+  plan schema, and architect prompts; no test file changes.'
