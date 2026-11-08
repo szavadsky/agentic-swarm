@@ -1,0 +1,10 @@
+refs:
+  - plan-1
+  - awareness-plan-1-digest-mailbox-reuse
+  - awareness-plan-1-merge-escalation-hidden
+kind: answer
+urgency: next-architect-call
+summary: "Resolves both plan-1 awareness questions: keep digest dispositions
+  low-noise/non-blocking (verify no empty-blocks awareness path is blocking) and
+  keep dismissed/routed/resolved terminal-in-merge with escalated-severity
+  surfaced via digest; triage only reopen path; no further action."
