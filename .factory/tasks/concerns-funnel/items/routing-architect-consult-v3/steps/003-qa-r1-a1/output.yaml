@@ -1,0 +1,26 @@
+status: approved
+summary: "Approved: 2 target tests green, typecheck+full suite green, no test
+  weakening, siblings preserved"
+suggestions:
+  - detail: buildArchitectHydration appends renderConcernsYaml(actionableConcerns,
+      maxBytes) LAST with tail-slice preserving it; whole-budget cap matches
+      exact v2 rebase. Reserved sub-budget is one of 4 nits explicitly out of
+      scope to docs-finish per assignment, so not a fix.
+    disposition: optional
+    id: hydration-sub-budget-deferred
+    location:
+      file: plugins/software-factory/src/core/flows/iteration.ts
+      line: 180
+    summary: Concerns hydration uses whole-budget cap; sub-budget deferred to
+      docs-finish
+  - detail: Outer existsSync guard under KeyedMutex plus inner writeArtifact guard
+      and writeYamlAtomic (tmp+rename) satisfy runExclusive+atomic-write spec;
+      restart test proves byte-identical decision and single consult. Inner
+      guard returns without setting decisionArtifact so a cross-process race
+      would throw then succeed on retry; in-process restart is fully covered.
+    disposition: optional
+    id: inner-race-throw-polish
+    location:
+      file: plugins/software-factory/src/core/flows/consults.ts
+      line: 386
+    summary: Cross-process consult race would throw once before idempotent retry
