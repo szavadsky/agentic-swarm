@@ -1,0 +1,55 @@
+status: ok
+summary: "Implemented the producer type/schema drift fix: added
+  remarkable/concern fields to review schemas and artifact types,
+  concernConfirms to architect wave-report (decisions) and plan close-up
+  schemas, concernResolution to decisions schema, and matching
+  ConcernConfirms/ConcernResolution/CloseupConcernResolution TS types.
+  DeveloperOutput now uses Concern[] instead of string[]. Target contract tests
+  are green and typecheck passes."
+target:
+  selectors:
+    - test/contracts/concern-schemas.test.ts
+    - test/contracts/concern-artifact-types.test.ts
+  expectRed:
+    - Concern producer schemas.adds remarkable and lowercase detail to reviewer,
+      plan-reviewer, QA, and file review schemas
+    - Concern producer schemas.adds concernConfirms and concernResolution to
+      architect report decisions
+    - Concern producer schemas.adds concernConfirms to plan close-up outputs
+      while preserving concernResolutions
+    - Concern artifact types.types structured concerns and remarkable decisions
+      on every producer artifact
+    - Concern artifact types.types concern confirmations and decision
+      resolutions with strict vocabularies
+evidence:
+  - bun test test/contracts/concern-schemas.test.ts
+    test/contracts/concern-artifact-types.test.ts -> 16 pass, 0 fail (all 5
+    previously-red target cases green)
+  - bun run typecheck -> exit 0
+  - bun test test/contracts test/cli/cli.test.ts -> 33 pass, 0 fail (includes
+    factory preflight validation cases)
+  - bun test test/engine/concerns-funnel.test.ts
+    test/engine/reviewer-triage.test.ts test/engine/plan-reviewer-triage.test.ts
+    test/engine/routing-architect-consult.test.ts test/prompts.test.ts
+    test/validation-seams-hooks.test.ts -> 66 pass, 0 fail
+  - bun test over remaining non-engine suites (checks/git/harness/root tests) ->
+    210 tests, 208 pass, 2 skip, 0 fail
+  - bun test over all 27 engine test files in two chunks -> 46 pass, 0 fail and
+    35 pass, 0 fail (no failures across the full 65-file suite)
+  - grep -rn '"Detail"' plugins/software-factory/config/schemas -> no matches;
+    lowercase detail validates and persists in developer, decisions, close-up,
+    and review producers
+concerns:
+  - TypeScript Concern.detail and Concern.severity remain required while the
+    JSON schemas treat them as optional and let the concern store apply
+    defaults; the new contract tests do not require loosening this, but it is
+    residual schema/TS strictness drift.
+  - "The test-first fixture used a @ts-expect-error directly above a multi-line
+    object literal; TypeScript reports nested excess-property errors on the
+    property line, making that directive 'unused'. The directive was moved to
+    the nested concerns property line (test-only, intent unchanged: capital-D
+    Detail must be rejected)."
+notes: "Production changes stay within the schema/type-only scope: no ingest,
+  apply, hydration, routing, or runtime behavior changed. Prod diff is 99
+  inserted lines across artifacts.ts, review-schema.ts, and the reviewed schema
+  JSON files, within the ~140-line budget."

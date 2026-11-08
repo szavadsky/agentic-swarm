@@ -1,0 +1,31 @@
+status: approved
+summary: "contracts-drift-fix verified: 5 red tests credible on baseline, 16/16
+  targets + 17/17 contracts green, typecheck exit 0, full suite 390 pass/0 fail,
+  no test weakening, Detail lowercase byte-verified, untouched schemas reject
+  concern fields."
+suggestions:
+  - id: ts-json-required-drift
+    disposition: optional
+    summary: TS Concern.detail/severity required while JSON schemas keep them
+      optional (pre-existing)
+    detail: artifacts.ts Concern requires detail+severity but all JSON concern items
+      require only kind+summary (verified decisions req=[kind,summary]).
+      Pre-existing and developer-disclosed; schemas intentionally lenient with
+      store defaults. Consider aligning TS optionality or documenting the
+      contract in a follow-up.
+    location:
+      file: plugins/software-factory/src/core/artifacts.ts
+      line: 308
+  - id: resolution-note-superset
+    disposition: optional
+    summary: ConcernResolution allows optional note beyond assignment's {id,action}
+      shape (harmless superset)
+    detail: "Assignment specifies concernResolution {id, action:resolve|carry};
+      implementation adds note?: string in both artifacts.ts and
+      decisions.schema.json. Optional-only superset, consistent with
+      concernConfirms/close-up items, no test rejects it. Consider pinning note
+      acceptance/rejection explicitly in contract tests if the vocabulary should
+      be exact."
+    location:
+      file: plugins/software-factory/src/core/artifacts.ts
+      line: 337

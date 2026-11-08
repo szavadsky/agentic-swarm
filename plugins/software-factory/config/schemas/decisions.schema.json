@@ -69,6 +69,27 @@
           "alternatives": { "type": "array", "items": { "type": "string" } }
         }
       }
+    },
+    "concernConfirms": {
+      "type": "array",
+      "description": "Architect confirmations for close-up concern resolutions",
+      "items": {
+        "type": "object", "required": ["id", "confirm"], "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" }, "note": { "type": "string" },
+          "confirm": { "type": "string", "enum": ["accept", "reject"] }
+        }
+      }
+    },
+    "concernResolution": {
+      "type": "object",
+      "description": "Direct concern resolution applied when the decision commits",
+      "required": ["id", "action"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" }, "note": { "type": "string" },
+        "action": { "type": "string", "enum": ["resolve", "carry"] }
+      }
     }
   },
   "additionalProperties": false

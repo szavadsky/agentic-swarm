@@ -12,6 +12,30 @@ items:
     fixRounds: 2
     spendUsd: 0.251577
     currentStep: develop
+  contracts-drift-fix:
+    kind: dev
+    status: ready
+    branch: topic/concerns-funnel--contracts-drift-fix
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0.16688999999999998
+    currentStep: review
+  hydration-fingerprint-caps:
+    kind: dev
+    status: running
+    branch: topic/concerns-funnel--hydration-fingerprint-caps
+    attempts: 1
+    fixRounds: 3
+    spendUsd: 0.38945699999999994
+    currentStep: qa
+  prompt-fragments:
+    kind: dev
+    status: running
+    branch: topic/concerns-funnel--prompt-fragments
+    attempts: 1
+    fixRounds: 2
+    spendUsd: 0.233481
+    currentStep: qa
   spike-saga-commit:
     kind: fact-finder
     status: ready
@@ -45,10 +69,31 @@ items:
     attempts: 1
     fixRounds: 1
     spendUsd: 0
+  epic-saga-propagate:
+    kind: dev
+    status: pending
+    branch: topic/concerns-funnel--epic-saga-propagate
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0
+  human-router-severity:
+    kind: dev
+    status: pending
+    branch: topic/concerns-funnel--human-router-severity
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0
   modes-prompts:
     kind: dev
     status: superseded
     branch: topic/concerns-funnel--modes-prompts
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0
+  closeup-lifecycle-resolve:
+    kind: dev
+    status: pending
+    branch: topic/concerns-funnel--closeup-lifecycle-resolve
     attempts: 1
     fixRounds: 1
     spendUsd: 0
@@ -81,6 +126,13 @@ items:
     kind: dev
     status: superseded
     branch: topic/concerns-funnel--reviewer-triage
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0
+  docs-finish-v3:
+    kind: dev
+    status: pending
+    branch: topic/concerns-funnel--docs-finish-v3
     attempts: 1
     fixRounds: 1
     spendUsd: 0
@@ -294,6 +346,37 @@ debt:
     step-runner and item-machine"
   - "[concerns-contracts] Custom reviewPolicy values accept any string, can
     reintroduce tech-debt"
+  - "[contracts-drift-fix] TS Concern.detail/severity required while JSON
+    schemas keep them optional (pre-existing)"
+  - "[contracts-drift-fix] ConcernResolution allows optional note beyond
+    assignment's {id,action} shape (harmless superset)"
+  - "[contracts-drift-fix] ConcernResolution defined twice with different enums;
+    CloseupConcernResolution duplicates concerns.ts shape"
+  - "[contracts-drift-fix] TS Concern requires detail+severity while JSON
+    schemas require kind+summary only (pre-existing)"
+  - "[contracts-drift-fix] ConcernResolution note? is a harmless superset of
+    assignment {id,action}"
+  - "[hydration-fingerprint-caps] Develop-family hydration dormant: KNOWN_VARS
+    lacks concernsYaml so step-runner never injects"
+  - "[hydration-fingerprint-caps] Legacy migration merges first match only;
+    additional pre-union forks would persist"
+  - "[hydration-fingerprint-caps] Replace dynamic triage lookup with direct
+    imports now implementation is green"
+  - "[hydration-fingerprint-caps] Remove dead yaml import left after
+    hydrateConcernsYaml deletion"
+  - "[hydration-fingerprint-caps] Architect UTF-8 cap assertions pass vacuously
+    if hydration returns empty"
+  - "[hydration-fingerprint-caps] Develop-family hydration branch unreachable
+    until KNOWN_VARS registers concernsYaml"
+  - "[prompt-fragments] Total fragment budget at 78/80 leaves 2 lines headroom"
+  - "[prompt-fragments] plan-review missing blank line between concernsYaml and
+    raise line"
+  - "[prompt-fragments] review Raise line misplaced under Human involvement
+    instead of Open Concerns"
+  - "[prompt-fragments] Test comments still label architects/QA as triagers,
+    contradicting engine contract"
+  - "[prompt-fragments] Corrected raise-only prompt contract has no regression
+    assertion"
   - "[spike-saga-commit] Qualify 'epic state derived ONLY from
     child-closeup.yaml' — isMerged takes precedence"
   - "[spike-saga-commit] Inline citation paths missing plugins/software-factory/
@@ -503,16 +586,16 @@ debt:
     inconsistent with documented branch-from-HEAD worktrees"
   - "[funnel-closeups-v3] Propagated parent copy retains child source.item,
     writes undeclared source.epic, and can clobber/lengthen parent records"
-budgetSpentUsd: 5.47199292
+budgetSpentUsd: 6.266042920000002
 spendByRole:
   alt-workhorse:
-    costUsd: 1.160009
-    inputTokens: 6176622
-    outputTokens: 1733975
+    costUsd: 1.4248859999999999
+    inputTokens: 7337244
+    outputTokens: 2223563
   workhorse:
-    costUsd: 3.5598639199999993
-    inputTokens: 7621030
-    outputTokens: 2128726
+    costUsd: 4.089036919999999
+    inputTokens: 8930797
+    outputTokens: 2466887
   architect:
     costUsd: 0.7082619999999998
     inputTokens: 6338453
@@ -586,12 +669,24 @@ spendByItem:
     costUsd: 0.131932
     inputTokens: 263905
     outputTokens: 109900
+  prompt-fragments:
+    costUsd: 0.233481
+    inputTokens: 920135
+    outputTokens: 243146
   routing-architect-consult-v2:
     costUsd: 0.198996
     inputTokens: 463902
     outputTokens: 217893
+  hydration-fingerprint-caps:
+    costUsd: 0.38945699999999994
+    inputTokens: 1073199
+    outputTokens: 362465
+  contracts-drift-fix:
+    costUsd: 0.16688999999999998
+    inputTokens: 450079
+    outputTokens: 214518
   (orchestration):
-    costUsd: 1.274056
-    inputTokens: 7777057
-    outputTokens: 673293
-lastUpdated: 2026-11-08T19:22:23.489Z
+    costUsd: 1.278278
+    inputTokens: 7804033
+    outputTokens: 680913
+lastUpdated: 2026-11-08T22:15:09.953Z

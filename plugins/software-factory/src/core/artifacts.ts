@@ -326,6 +326,27 @@ export interface RemarkableDecision {
   why: string;
 }
 
+/** Architect confirmation for a close-up concern resolution. */
+export interface ConcernConfirms {
+  id: string;
+  confirm: "accept" | "reject";
+  note?: string;
+}
+
+/** Decision-level resolution: resolve now or carry to the next architect turn. */
+export interface ConcernResolution {
+  id: string;
+  action: "resolve" | "carry";
+  note?: string;
+}
+
+/** Close-up proposals may also propagate a concern to the parent epic or saga. */
+export interface CloseupConcernResolution {
+  id: string;
+  action: "resolve" | "carry" | "propagate";
+  note?: string;
+}
+
 export interface ConcernSource {
   record: string;
   agent: string;
@@ -380,6 +401,8 @@ export interface ReviewArtifact {
   status: "approved" | "changes_requested";
   summary: string;
   suggestions: ReviewSuggestion[];
+  newConcerns?: Concern[];
+  remarkable?: RemarkableDecision[];
 }
 
 export type DeveloperTarget =
@@ -392,7 +415,8 @@ export interface DeveloperOutputArtifact {
   summary: string;
   target?: DeveloperTarget;
   evidence?: string[];
-  concerns?: string[];
+  concerns?: Concern[];
+  remarkable?: RemarkableDecision[];
   notes?: string;
 }
 
@@ -402,6 +426,8 @@ export interface FactFinderOutputArtifact {
   findings: string;
   sources?: string[];
   recommendations?: string[];
+  concerns?: Concern[];
+  remarkable?: RemarkableDecision[];
 }
 
 export interface WaveCloseupArtifact {
@@ -414,6 +440,9 @@ export interface WaveCloseupArtifact {
   debt?: string[];
   summary: string;
   recommendations?: string[];
+  concerns?: Concern[];
+  remarkable?: RemarkableDecision[];
+  concernResolutions?: CloseupConcernResolution[];
 }
 
 export interface PlanCloseupArtifact {
@@ -424,6 +453,10 @@ export interface PlanCloseupArtifact {
   completedMilestones?: string[];
   remainingMilestones?: string[];
   techDebt?: string[];
+  concerns?: Concern[];
+  remarkable?: RemarkableDecision[];
+  concernConfirms?: ConcernConfirms[];
+  concernResolutions?: CloseupConcernResolution[];
 }
 
 export type DecisionContext = "item" | "non-item" | "wave" | "plan-closeup";
@@ -442,6 +475,10 @@ export interface DecisionArtifact {
   question?: string;
   planDelta?: string;
   timestamp: string;
+  concerns?: Concern[];
+  remarkable?: RemarkableDecision[];
+  concernConfirms?: ConcernConfirms[];
+  concernResolution?: ConcernResolution;
 }
 
 export interface SteerItemArtifact {

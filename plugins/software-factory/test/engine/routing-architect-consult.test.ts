@@ -137,6 +137,14 @@ describe("Routing: architect consult and hydration", () => {
     prompts = loadPromptLibrary({
       builtinDir: path.resolve(import.meta.dir, "../../agents"),
       overrideDirs: [],
+      // The single hydration source is concernsYaml; prompt fragments gain the
+      // placeholder in the prompt-fragments item, so this test supplies it here.
+      overrides: {
+        "steps/architect-plan":
+          "Architect plan\nDEBT:\n{{debt}}\nSTEERING:\n{{steering}}\nCONCERNS:\n{{concernsYaml}}\n",
+        "steps/architect-wave-report":
+          "Architect wave report\nCONCERNS:\n{{concernsYaml}}\n",
+      },
     });
   });
 

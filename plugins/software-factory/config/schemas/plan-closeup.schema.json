@@ -49,6 +49,17 @@
         }
       }
     },
+    "concernConfirms": {
+      "type": "array",
+      "description": "Architect confirmations for close-up concern resolutions",
+      "items": {
+        "type": "object", "required": ["id", "confirm"], "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" }, "note": { "type": "string" },
+          "confirm": { "type": "string", "enum": ["accept", "reject"] }
+        }
+      }
+    },
     "concernResolutions": {
       "type": "array",
       "description": "Close-up resolutions for open concerns",

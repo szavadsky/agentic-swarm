@@ -1,0 +1,103 @@
+status: ok
+summary: "Authored test/engine/hydration-fingerprint-caps.test.ts (15 behavior
+  tests) covering the ADR contracts: step-role byte caps (review/qa
+  min(diff,2000), close-ups min(taskDiff,2000),
+  plan-review/architect/develop-family min(input,500)), '' semantics at
+  0/1/3-byte caps, step-runner diff-based injection plus caller-supplied skip
+  rule, close-up taskDiff via injectable gitFn, architect hydration from
+  concernsYaml without the removed duplicated '--- Concerns ---' section and
+  UTF-8-capped debt/steering, per-consumer hydrated sets (open/pending, closeup
+  routed, architect dismissed+escalated, rm-* terse shape), c-*-only counts,
+  affects-free fingerprint identity, affects union without forking incl.
+  terminal status, and legacy affects-keyed rename-merge. Updated three existing
+  tests to the new contracts (fingerprint ignores affects; reviewer rendering
+  hydrates through the new API with a non-empty diff; architect routing tests
+  supply the concernsYaml placeholder that the prompt-fragments item will add).
+  Production code was left untouched; only test files changed. New production
+  API is looked up dynamically so red failures are assertion/runtime failures in
+  executed tests, not collection/import errors."
+target:
+  selectors:
+    - test/engine/hydration-fingerprint-caps.test.ts
+  expectRed:
+    - Hydration caps (adr-hydration-single-cap).caps review hydration at
+      min(diffBytes, 2000) bytes
+    - Hydration caps (adr-hydration-single-cap).caps plan-review hydration at
+      min(inputBytes, 500) bytes
+    - Hydration caps (adr-hydration-single-cap).caps wave-close-up hydration at
+      min(taskDiffBytes, 2000) bytes
+    - Hydration caps (adr-hydration-single-cap).returns empty hydration for zero
+      and tiny caps
+    - Hydration caps (adr-hydration-single-cap).injects review concernsYaml by
+      diff bytes and lets caller-supplied values win
+    - Hydration caps (adr-hydration-single-cap).computes close-up task diff
+      bytes through the injected git function
+    - Hydration caps (adr-hydration-single-cap).hydrates architect turns from
+      concernsYaml without a duplicate concerns section
+    - Hydrated concern sets (adr-hydrated-sets).hydrates open concerns with
+      pending resolutions for review
+    - Hydrated concern sets (adr-hydrated-sets).includes routed concerns for
+      close-ups but not for review
+    - Hydrated concern sets (adr-hydrated-sets).hydrates open remarkables as
+      terse remarkable records
+    - Hydrated concern sets (adr-hydrated-sets).includes dismissed escalated
+      concerns only in the architect set
+    - Concern identity and affects union
+      (adr-fingerprint-affects-union).fingerprints kind, normalized summary, and
+      location without affects
+    - Concern identity and affects union (adr-fingerprint-affects-union).unions
+      affects without forking and preserves terminal status
+    - Concern identity and affects union (adr-fingerprint-affects-union).renames
+      a legacy affects-keyed file to the stable id
+evidence:
+  - "`cd plugins/software-factory && bun run typecheck` -> exit 0 (test code
+    compiles against current production; new options are passed through an
+    explicit any-cast only in tests)."
+  - "`TMPDIR=/tmp bun test test/engine/hydration-fingerprint-caps.test.ts` -> 15
+    tests run, 1 pass / 14 fail; the 14 declared tests fail on missing
+    hydrateStepConcerns/listHydratedConcerns or on old fingerprint/cap behavior,
+    not on import/collection errors."
+  - JUnit probe via `bun test test/engine/hydration-fingerprint-caps.test.ts
+    --reporter=junit` -> suite collected; all 14 declared node ids present with
+    status=fail (<failure>). Probe IDs match the runner's native
+    `classname.name` form.
+  - "`TMPDIR=/tmp bun test test/engine/concerns-funnel.test.ts` -> 21 pass / 1
+    fail (only the updated fingerprint test expecting affects-independent
+    identity); confirms the suite collects after the test edit."
+  - "`TMPDIR=/tmp bun test test/engine/reviewer-triage.test.ts` -> 10 pass / 1
+    fail (only the rewritten hydration-rendering test awaiting
+    hydrateStepConcerns); prompt hydration test now supplies a 3000-byte diff so
+    review hydration is exercised."
+  - "`TMPDIR=/tmp bun test test/engine/routing-architect-consult.test.ts` -> 0
+    pass / 2 fail as expected-red for the new architect set: seeded concerns are
+    routed, and the old open-only step-runner path cannot hydrate them without
+    the removed buildArchitectHydration concerns section."
+  - "`git status --short` -> only test files modified: concerns-funnel.test.ts,
+    reviewer-triage.test.ts, routing-architect-consult.test.ts, plus new
+    hydration-fingerprint-caps.test.ts; no production files touched."
+concerns:
+  - The routing-architect-consult test now injects a minimal in-memory
+    architect-plan/architect-wave-report override containing {{concernsYaml}},
+    because builtin fragments gain that placeholder only in the separate
+    prompt-fragments item. The override should be removable once that item
+    lands.
+  - Tests access the not-yet-existing triage exports through a dynamic namespace
+    lookup so the suite collects and target-red failures are behavioral rather
+    than import errors; once green, the lookup can be replaced by direct named
+    imports.
+  - One non-declared test in the new file ('counts concerns only, never
+    remarkables') already passes because countConcerns is intentionally
+    unchanged by this item.
+notes: "Implementation plan for the green step is fully specified by the tests:
+  add
+  triage.hydrateStepConcerns({stepRole,inputBytes?,diffBytes?,taskDiffBytes?,co\
+  nsumer}) + triage.listHydratedConcerns(taskDir,consumer) and a records-based
+  renderConcernsYaml with strict empty fallback; drop affects from
+  concernFingerprint, union affects (including terminal statuses) with an
+  affects-aware dirty pick, add legacy same-kind/summary/location rename-merge
+  scan with no GC; inject concernsYaml in step-runner only when caller
+  promptVars lack it, computing diff bytes, KNOWN_VARS input bytes (excluding
+  concernsYaml/humanInvolvementCriteria/debt/steering), and close-up taskDiff
+  via git(parentBranch...HEAD) with an injectable gitFn; delete
+  hydrateConcernsYaml and make iteration's buildArchitectHydration UTF-8-capped
+  without concerns."

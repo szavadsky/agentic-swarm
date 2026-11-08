@@ -1,0 +1,38 @@
+status: approved
+summary: Verified caps, sets, fingerprint-union, legacy rename; gates green; no
+  test weakening
+suggestions:
+  - id: develop-family-dormant-injection
+    disposition: optional
+    summary: "Develop-family hydration dormant: KNOWN_VARS lacks concernsYaml so
+      step-runner never injects"
+    detail: hydrateStepConcerns maps develop/test-first/fix-round/etc to 500B
+      inputBytes branch, but step-runner gates on
+      knownVars.includes(concernsYaml) and KNOWN_VARS for develop-family has no
+      concernsYaml entry. Path is correct per current fragments (no placeholder
+      to fill) but unexercised end-to-end; coordinate with prompt-fragments item
+      to register placeholder plus KNOWN_VARS, or document as intentional.
+    location:
+      file: plugins/software-factory/src/core/flows/step-runner.ts
+      line: 306
+  - id: legacy-multi-fork-merge
+    disposition: optional
+    summary: Legacy migration merges first match only; additional pre-union forks
+      would persist
+    detail: legacyConcern returns first same kind+normSummary+location file; once
+      stable file exists the scan is skipped, so hypothetical multiple
+      affects-keyed forks for one identity leave duplicates. Spec says singular
+      rename-merge with no GC, so compliant; consider merging all matches or
+      documenting single-merge sufficiency.
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 76
+  - id: test-dynamic-lookup-cleanup
+    disposition: optional
+    summary: Replace dynamic triage lookup with direct imports now implementation is
+      green
+    detail: New and updated tests access hydrateStepConcerns via dynamic namespace
+      cast to allow red-phase collection; now green, direct named imports would
+      simplify and catch signature drift at compile time. No behavior impact.
+    location:
+      file: plugins/software-factory/test/engine/hydration-fingerprint-caps.test.ts

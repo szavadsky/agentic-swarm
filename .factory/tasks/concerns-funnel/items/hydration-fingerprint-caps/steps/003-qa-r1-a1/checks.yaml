@@ -1,0 +1,53 @@
+checks:
+  - id: red-test
+    status: pass
+    message: "red-test passed: all 14 tests fail when prod changes are restored to
+      test-first commit"
+    details:
+      command: cd plugins/software-factory && bun test
+        test/engine/hydration-fingerprint-caps.test.ts --reporter=junit
+        --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-redtest-1794167425243-3rnydh3yvvm.xml
+      junitCaseCount: 15
+      junitCaseIds:
+        - Hydration caps (adr-hydration-single-cap).caps review hydration at
+          min(diffBytes, 2000) bytes
+        - Hydration caps (adr-hydration-single-cap).caps plan-review hydration
+          at min(inputBytes, 500) bytes
+        - Hydration caps (adr-hydration-single-cap).caps wave-close-up hydration
+          at min(taskDiffBytes, 2000) bytes
+        - Hydration caps (adr-hydration-single-cap).returns empty hydration for
+          zero and tiny caps
+        - Hydration caps (adr-hydration-single-cap).injects review concernsYaml
+          by diff bytes and lets caller-supplied values win
+        - Hydration caps (adr-hydration-single-cap).computes close-up task diff
+          bytes through the injected git function
+        - Hydration caps (adr-hydration-single-cap).hydrates architect turns
+          from concernsYaml without a duplicate concerns section
+        - Hydrated concern sets (adr-hydrated-sets).hydrates open concerns with
+          pending resolutions for review
+        - Hydrated concern sets (adr-hydrated-sets).includes routed concerns for
+          close-ups but not for review
+        - Hydrated concern sets (adr-hydrated-sets).hydrates open remarkables as
+          terse remarkable records
+        - Hydrated concern sets (adr-hydrated-sets).includes dismissed escalated
+          concerns only in the architect set
+        - Hydrated concern sets (adr-hydrated-sets).counts concerns only, never
+          remarkables
+        - Concern identity and affects union
+          (adr-fingerprint-affects-union).fingerprints kind, normalized summary,
+          and location without affects
+        - Concern identity and affects union
+          (adr-fingerprint-affects-union).unions affects without forking and
+          preserves terminal status
+        - Concern identity and affects union
+          (adr-fingerprint-affects-union).renames a legacy affects-keyed file to
+          the stable id
+      junitTruncated: false
+      collected: true
+      collectionErrors: []
+  - id: test-diff
+    status: pass
+    message: test-diff generated (0 test files, 0 bytes)
+    details:
+      diff: ""
+      files: []

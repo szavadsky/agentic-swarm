@@ -367,9 +367,352 @@ describe("Concern producer schemas", () => {
 
     for (const producer of untouched) {
       const schema = producer.schema();
-      for (const field of ["concerns", "newConcerns", "remarkable", "remarkableDecisions", "concernResolutions"]) {
+      for (const field of [
+        "concerns",
+        "newConcerns",
+        "remarkable",
+        "remarkableDecisions",
+        "concernResolutions",
+        "concernConfirms",
+        "concernResolution",
+      ]) {
         expect(schema.properties?.[field]).toBeUndefined();
       }
     }
+  });
+
+  it("adds remarkable and lowercase detail to reviewer, plan-reviewer, QA, and file review schemas", () => {
+    const failures: string[] = [];
+    const producers: Producer[] = [
+      ...REVIEW_PRODUCERS,
+      {
+        name: "plan-reviewer",
+        schema: () =>
+          resolveStepSchema(pluginRoot, "plan-reviewer", "plan-review", [
+            "fix",
+            "optional",
+            "architect",
+            "dismiss",
+          ]),
+        base: { status: "approved", summary: "Plan is sound", suggestions: [] },
+      },
+    ];
+
+    for (const producer of producers) {
+      const schema = producer.schema();
+      const validate = validator(schema);
+      const label = producer.name;
+
+      const item = arrayItem(schema, "remarkable");
+      if (!item) {
+        failures.push(`${label}: missing inline remarkable[]`);
+        continue;
+      }
+      const required: string[] = item.required ?? [];
+      for (const key of ["chosen", "alternatives", "why"]) {
+        if (!required.includes(key)) failures.push(`${label}: remarkable.${key} must be required`);
+      }
+
+      if (
+        !validate({
+          ...producer.base,
+          remarkable: [
+            {
+              chosen: "Keep review output in one schema",
+              alternatives: ["A separate remarkable artifact"],
+              why: "One vocabulary keeps triage uniform",
+            },
+          ],
+        })
+      ) {
+        failures.push(`${label}: valid remarkable decision rejected (${validationErrors(validate)})`);
+      }
+      if (validate({ ...producer.base, remarkable: [{ chosen: "Incomplete", why: "Missing alternatives" }] })) {
+        failures.push(`${label}: remarkable without alternatives accepted`);
+      }
+
+      const detailed = {
+        kind: "risk",
+        summary: "Lowercase detail",
+        detail: "carried through validation",
+      };
+      const output = { ...producer.base, newConcerns: [detailed] };
+      if (!validate(output)) {
+        failures.push(`${label}: lowercase concern detail rejected (${validationErrors(validate)})`);
+      } else if (output.newConcerns[0]?.detail !== "carried through validation") {
+        failures.push(`${label}: lowercase concern detail was not preserved`);
+      }
+      if (validate({ ...producer.base, newConcerns: [{ kind: "risk", summary: "Capital detail", Detail: "wrong field" }] })) {
+        failures.push(`${label}: capital-D Detail accepted`);
+      }
+
+      const refs = externalRefs(schema);
+      if (refs.length > 0) failures.push(`${label}: external $refs must be inlined, found ${refs.join(", ")}`);
+    }
+
+    expect(failures).toEqual([]);
+  });
+
+  it("adds concernConfirms and concernResolution to architect report decisions", () => {
+    const failures: string[] = [];
+    const steps = ["architect-wave-report", "architect-consult-item", "architect-consult-nonitem"];
+
+    for (const step of steps) {
+      const schema = resolveStepSchema(pluginRoot, "architect", step) as JsonSchema;
+      const validate = validator(schema);
+      const base = { decision: "continue" };
+
+      const confirms = arrayItem(schema, "concernConfirms");
+      if (!confirms) {
+        failures.push(`${step}: missing inline concernConfirms[]`);
+      } else {
+        const required: string[] = confirms.required ?? [];
+        if (!required.includes("id") || !required.includes("confirm")) {
+          failures.push(`${step}: concernConfirms must require id and confirm`);
+        }
+        const confirmValues = resolveRef(schema, confirms.properties?.confirm)?.enum ?? [];
+        if (["accept", "reject"].some((value) => !confirmValues.includes(value))) {
+          failures.push(`${step}: confirm enum must be accept|reject, got ${JSON.stringify(confirmValues)}`);
+        }
+
+        if (
+          !validate({
+            ...base,
+            concernConfirms: [
+              { id: "c-1", confirm: "accept" },
+              { id: "c-2", confirm: "reject", note: "Keep it open for the next iteration" },
+            ],
+          })
+        ) {
+          failures.push(`${step}: valid concern confirmations rejected (${validationErrors(validate)})`);
+        }
+        if (validate({ ...base, concernConfirms: [{ id: "c-3", confirm: "maybe" }] })) {
+          failures.push(`${step}: unknown confirm value accepted`);
+        }
+        if (validate({ ...base, concernConfirms: [{ confirm: "accept" }] })) {
+          failures.push(`${step}: confirmation without a concern id accepted`);
+        }
+      }
+
+      const resolution = resolveRef(schema, schema.properties?.concernResolution);
+      if (!resolution) {
+        failures.push(`${step}: missing concernResolution`);
+      } else {
+        const required: string[] = resolution.required ?? [];
+        if (!required.includes("id") || !required.includes("action")) {
+          failures.push(`${step}: concernResolution must require id and action`);
+        }
+        const actions = resolveRef(schema, resolution.properties?.action)?.enum ?? [];
+        if (["resolve", "carry"].some((action) => !actions.includes(action))) {
+          failures.push(`${step}: concernResolution action must include resolve|carry, got ${JSON.stringify(actions)}`);
+        }
+        if (actions.includes("propagate")) {
+          failures.push(`${step}: decision concernResolution must not propagate`);
+        }
+
+        if (!validate({ ...base, concernResolution: { id: "c-4", action: "resolve" } })) {
+          failures.push(`${step}: valid concern resolution rejected (${validationErrors(validate)})`);
+        }
+        if (!validate({ ...base, concernResolution: { id: "c-5", action: "carry" } })) {
+          failures.push(`${step}: valid carry resolution rejected (${validationErrors(validate)})`);
+        }
+        if (validate({ ...base, concernResolution: { id: "c-6", action: "propagate" } })) {
+          failures.push(`${step}: propagate action accepted for a decision resolution`);
+        }
+        if (validate({ ...base, concernResolution: { action: "resolve" } })) {
+          failures.push(`${step}: resolution without a concern id accepted`);
+        }
+      }
+
+      if (
+        !validate({
+          ...base,
+          concerns: [{ kind: "risk", summary: "Lowercase detail", detail: "stored as written" }],
+        })
+      ) {
+        failures.push(`${step}: lowercase concern detail rejected (${validationErrors(validate)})`);
+      }
+      if (validate({ ...base, concerns: [{ kind: "risk", summary: "Capital detail", Detail: "wrong field" }] })) {
+        failures.push(`${step}: capital-D Detail accepted`);
+      }
+    }
+
+    expect(failures).toEqual([]);
+  });
+
+  it("adds concernConfirms to plan close-up outputs while preserving concernResolutions", () => {
+    const failures: string[] = [];
+    const closeups: Producer[] = [
+      {
+        name: "plan-closeup",
+        schema: () => resolveStepSchema(pluginRoot, "plan-close-up", "plan-close-up"),
+        base: { iteration: 1, status: "complete", summary: "Plan complete" },
+      },
+      {
+        name: "architect-closeup",
+        schema: () => resolveStepSchema(pluginRoot, "architect", "architect-closeup"),
+        base: { iteration: 1, status: "complete", summary: "Plan complete" },
+      },
+    ];
+
+    for (const closeup of closeups) {
+      const schema = closeup.schema();
+      const validate = validator(schema);
+      const label = closeup.name;
+
+      const confirms = arrayItem(schema, "concernConfirms");
+      if (!confirms) {
+        failures.push(`${label}: missing inline concernConfirms[]`);
+      } else {
+        const required: string[] = confirms.required ?? [];
+        if (!required.includes("id") || !required.includes("confirm")) {
+          failures.push(`${label}: concernConfirms must require id and confirm`);
+        }
+        const confirmValues = resolveRef(schema, confirms.properties?.confirm)?.enum ?? [];
+        if (["accept", "reject"].some((value) => !confirmValues.includes(value))) {
+          failures.push(`${label}: confirm enum must be accept|reject, got ${JSON.stringify(confirmValues)}`);
+        }
+
+        if (
+          !validate({
+            ...closeup.base,
+            concernConfirms: [
+              { id: "c-1", confirm: "accept" },
+              { id: "c-2", confirm: "reject", note: "Carry into the next iteration" },
+            ],
+          })
+        ) {
+          failures.push(`${label}: valid concern confirmations rejected (${validationErrors(validate)})`);
+        }
+        if (validate({ ...closeup.base, concernConfirms: [{ id: "c-3", confirm: "maybe" }] })) {
+          failures.push(`${label}: unknown confirm value accepted`);
+        }
+        if (validate({ ...closeup.base, concernConfirms: [{ confirm: "accept" }] })) {
+          failures.push(`${label}: confirmation without a concern id accepted`);
+        }
+      }
+
+      const resolutions = arrayItem(schema, "concernResolutions");
+      if (!resolutions) {
+        failures.push(`${label}: missing inline concernResolutions[]`);
+      } else if (
+        !validate({
+          ...closeup.base,
+          concernResolutions: [
+            { id: "c-4", action: "resolve" },
+            { id: "c-5", action: "carry", note: "Needs an architect decision" },
+            { id: "c-6", action: "propagate" },
+          ],
+        })
+      ) {
+        failures.push(`${label}: close-up resolutions must remain validate-able (${validationErrors(validate)})`);
+      }
+
+      if (
+        !validate({
+          ...closeup.base,
+          concerns: [{ kind: "assumption", summary: "Lowercase detail", detail: "kept intact" }],
+        })
+      ) {
+        failures.push(`${label}: lowercase concern detail rejected (${validationErrors(validate)})`);
+      }
+      if (validate({ ...closeup.base, concerns: [{ kind: "assumption", summary: "Capital detail", Detail: "wrong field" }] })) {
+        failures.push(`${label}: capital-D Detail accepted`);
+      }
+    }
+
+    expect(failures).toEqual([]);
+  });
+
+  it("accepts structured concerns and remarkable across every developer, fact-finder, and plan step", () => {
+    const failures: string[] = [];
+    const producers: Producer[] = [
+      ...["develop", "poc", "test-assumptions", "test-first", "simple-implement", "fix-round"].map(
+        (step): Producer => ({
+          name: `developer/${step}`,
+          schema: () => resolveStepSchema(pluginRoot, "developer", step),
+          base: { status: "ok", summary: "Implemented the change" },
+        })
+      ),
+      {
+        name: "fact-finder/research",
+        schema: () => resolveStepSchema(pluginRoot, "fact-finder", "research"),
+        base: { status: "ok", summary: "Investigated", findings: "The API supports retries" },
+      },
+      {
+        name: "architect/architect-plan",
+        schema: () => resolveStepSchema(pluginRoot, "architect", "architect-plan"),
+        base: { iteration: 1, milestones: [], itemOutlines: [] },
+      },
+      {
+        name: "architect/architect-revise",
+        schema: () => resolveStepSchema(pluginRoot, "architect", "architect-revise"),
+        base: { iteration: 1, milestones: [], itemOutlines: [] },
+      },
+      {
+        name: "wave-closeup",
+        schema: () => resolveStepSchema(pluginRoot, "wave-close-up", "wave-close-up"),
+        base: { wave: 1, iteration: 1, status: "complete", mergedItems: [], summary: "Wave merged" },
+      },
+      {
+        name: "plan-closeup",
+        schema: () => resolveStepSchema(pluginRoot, "plan-close-up", "plan-close-up"),
+        base: { iteration: 1, status: "complete", summary: "Plan complete" },
+      },
+    ];
+
+    for (const producer of producers) {
+      const schema = producer.schema();
+      const validate = validator(schema);
+      const label = producer.name;
+
+      const concernItem = arrayItem(schema, "concerns");
+      if (!concernItem) {
+        failures.push(`${label}: missing inline concerns[]`);
+        continue;
+      }
+      hasConcernShape(schema, concernItem, label, failures);
+
+      const detailed = {
+        kind: "risk",
+        summary: "Flaky gate",
+        detail: "Retries hide real failures",
+        severity: "high",
+      };
+      const output = { ...producer.base, concerns: [detailed] };
+      if (!validate(output)) {
+        failures.push(`${label}: concern with lowercase detail rejected (${validationErrors(validate)})`);
+      } else if (output.concerns[0]?.detail !== "Retries hide real failures") {
+        failures.push(`${label}: lowercase detail was not preserved`);
+      }
+      if (validate({ ...producer.base, concerns: [{ kind: "risk", summary: "Capital detail", Detail: "wrong field" }] })) {
+        failures.push(`${label}: capital-D Detail accepted`);
+      }
+
+      const remarkableItem = arrayItem(schema, "remarkable");
+      if (!remarkableItem) {
+        failures.push(`${label}: missing inline remarkable[]`);
+        continue;
+      }
+      if (
+        !validate({
+          ...producer.base,
+          remarkable: [
+            {
+              chosen: "Inline shared definitions",
+              alternatives: ["External $ref"],
+              why: "Every producer schema validates standalone",
+            },
+          ],
+        })
+      ) {
+        failures.push(`${label}: valid remarkable decision rejected (${validationErrors(validate)})`);
+      }
+      if (validate({ ...producer.base, remarkable: [{ chosen: "Incomplete", why: "Missing alternatives" }] })) {
+        failures.push(`${label}: remarkable without alternatives accepted`);
+      }
+    }
+
+    expect(failures).toEqual([]);
   });
 });
