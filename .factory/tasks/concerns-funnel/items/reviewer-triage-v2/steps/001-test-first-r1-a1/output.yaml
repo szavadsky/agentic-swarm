@@ -1,0 +1,82 @@
+status: ok
+summary: "Authored 11 test-first behavior tests in
+  test/engine/reviewer-triage.test.ts and a 35-line interface stub at
+  src/core/triage.ts (within the 40-line stubMaxProdLines budget). Tests
+  specify: steps/review hydration with terse open-concern YAML
+  (id/kind/severity/summary/affects, no detail) plus dismiss-reason and
+  condensing instructions; exact-id partition of c-*/rm-* triage vs findings
+  with a single fixRequired flag; strict condensing render under a UTF-8 byte
+  cap; dismiss persisted to dismissReason with no mailbox/routing/debt; routed
+  dispositions persisted and the debt predicate (kind==tech-debt routed/resolved
+  OR disposition==optional routed, no tech-debt disposition); fix-on-concern
+  returns fixRequired once and stays in the canonical fix loop; deduped
+  q-concern-<cid> human-async mailbox entry; dismiss without detail rejects in
+  the store and errors the review step; QA non-triager no-op; and a full engine
+  flow proving the item blocks with exactly one q-concern mailbox entry (normal
+  mailbox path skipped). No existing production code was modified. Verified:
+  typecheck green; target file red with 11 assertion failures and 0 errors; full
+  suite has exactly those 11 failures (335 pass, 2 skip)."
+target:
+  selectors:
+    - test/engine/reviewer-triage.test.ts
+  expectRed:
+    - test/engine/reviewer-triage.test.ts::Reviewer triage (§8.7, §18).hydrates
+      steps/review with terse concern fields and triage instructions
+    - test/engine/reviewer-triage.test.ts::Reviewer triage (§8.7,
+      §18).partitions exact-id triage from findings and flags fix once
+    - test/engine/reviewer-triage.test.ts::Reviewer triage (§8.7, §18).renders
+      condensing concern YAML without detail and within the byte cap
+    - test/engine/reviewer-triage.test.ts::Reviewer triage (§8.7, §18).dismisses
+      a concern with its reason and routes nothing
+    - test/engine/reviewer-triage.test.ts::Reviewer triage (§8.7, §18).persists
+      routed dispositions and applies the debt predicate without a tech-debt
+      disposition
+    - test/engine/reviewer-triage.test.ts::Reviewer triage (§8.7, §18).returns
+      fixRequired once for fix-on-concern and keeps it in the fix loop
+    - test/engine/reviewer-triage.test.ts::Reviewer triage (§8.7, §18).writes
+      one deduped q-concern mailbox entry for human-async triage
+    - test/engine/reviewer-triage.test.ts::Reviewer triage (§8.7, §18).rejects
+      dismiss triage without detail and leaves the concern unchanged
+    - test/engine/reviewer-triage.test.ts::Reviewer triage (§8.7, §18).fails the
+      review step when a dismiss triage lacks detail
+    - "test/engine/reviewer-triage.test.ts::Reviewer triage (§8.7, §18).gates
+      non-triagers: QA matching a concern id is a no-op"
+    - test/engine/reviewer-triage.test.ts::Reviewer triage (§8.7, §18).blocks
+      the item with a single q-concern mailbox entry in the engine flow
+evidence:
+  - "cd plugins/software-factory && TMPDIR=/tmp bun run typecheck: exit 0 (tsc
+    --noEmit, no errors)."
+  - "cd plugins/software-factory && TMPDIR=/tmp bun test
+    test/engine/reviewer-triage.test.ts: 0 pass, 11 fail, 0 errors; failure list
+    shows only assertion failures
+    (toContain/toEqual/toBe/toBeDefined/rejects.toThrow), so target-red is
+    genuine and not an import/compile failure."
+  - "cd plugins/software-factory && TMPDIR=/tmp bun test: 335 pass, 2 skip, 11
+    fail across 57 files; the only failures are the 11 new reviewer-triage
+    tests, so no existing behavior regressed."
+  - "JUnit verification: generated /tmp/rt-junit.xml with bun's junit reporter
+    and matched all 11 expectRed node ids using the engine's parseJunit +
+    normaliseCaseId/findMatchingCase logic; all matched with status fail."
+  - "git status --short: only '?? src/core/triage.ts' (new 35-line interface
+    stub) and '?? test/engine/reviewer-triage.test.ts'; no existing production
+    or test files were modified."
+concerns:
+  - The stub module src/core/triage.ts intentionally returns empty/no-op results
+    so the new tests collect and fail by assertion; the develop step must
+    replace it with real behavior and wire it into step-runner/item-machine.
+  - Test 'fails the review step when a dismiss triage lacks detail' pins
+    StepMetaStatus 'error' (not merely rejected), requiring a distinct
+    triage-validation error path rather than the existing journal-and-keep-ok
+    ingest error path.
+  - Test 'gates non-triagers' requires runAgentStep to expose a triage outcome
+    for every step carrying suggestions (empty triage for non-triagers), which
+    is the planned home for the single fixRequired signal.
+  - The full-engine test expects the canonical review output to exclude non-fix
+    triage suggestions before writeArtifact so the normal mailbox path writes no
+    q-item-* copy; the develop step should apply triage before writeArtifact and
+    retain only fix-on-concern entries for the fix loop.
+notes: Test ids use the JUnit classname form 'Reviewer triage (§8.7, §18).<test
+  name>' under the reporter's file attribute, matching the engine's node-id
+  normalizer. Full-suite runtime was ~67s with TMPDIR=/tmp; without it the two
+  pre-existing head-guard failures noted in infra.yaml appear, so gate runs
+  should keep TMPDIR=/tmp.
