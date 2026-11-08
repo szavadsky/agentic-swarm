@@ -1,0 +1,59 @@
+status: ok
+summary: "Added permanent spike suite test/engine/funnel-text-budget.test.ts (11
+  tests, no production code changes) encoding the adr-funnel-text-budget
+  contract. It measures real git diffs: two item branches calibrated to 2499 B
+  and 2500 B produce an exactly-5000-byte aggregated wave diff, and the hardened
+  git() wrapper returns identical UTF-8 text. Asserted code-step hydration cap
+  min(diffBytes,2000) for item review and wave close-up (5000 B diff +
+  exactly-3000-byte concern details => concernsYaml <=2000 B and < diff),
+  zero-diff plan-review cap min(4000,500)=500 B (<=500 and < input), and no
+  500-byte floor for a 320-byte code diff or 350-byte zero-diff input. Verified
+  UTF-8 byte (not JS char) budgeting, code-point-safe truncation,
+  reviewer/architect/close-up strict output<input condensation (with
+  pass-through rejection controls), stored concern artifacts keeping full detail
+  while only the hydrated promptVar is capped, and prompt rendering preserving
+  values verbatim so caps must be applied before render. Full gate: 282 pass, 2
+  skip, 0 fail; typecheck clean."
+target:
+  command: TMPDIR=/tmp bun test test/engine/funnel-text-budget.test.ts
+  customTarget: true
+evidence:
+  - "bun install --frozen-lockfile in plugins/software-factory: worktree had no
+    node_modules; 13 packages installed"
+  - "TMPDIR=/tmp bun test test/engine/funnel-text-budget.test.ts: 11 pass, 0
+    fail, 62 expect() calls; repeated 3x with identical results"
+  - "bun run typecheck: tsc --noEmit clean"
+  - "TMPDIR=/tmp bun test (full suite): 282 pass, 2 skip, 0 fail, 1141 expect()
+    calls across 284 tests / 51 files"
+  - "Failure detection proven in-test: uncapped 3000-B concern YAML throws
+    assertWithinBudget against 2000/500-byte caps, and a pass-through level
+    throws assertStrictlyCondensed"
+  - "Measured git assumption: item diffs 2499 B + 2500 B + 1 inter-file patch
+    newline = 5000 B aggregate wave diff; production git() stdout
+    byte-identically matches the fixture"
+  - "Stored-artifact assumption: writeYamlAtomic/readYaml round-trips the full
+    1000-byte concern detail unchanged while hydrated rendering is strictly
+    smaller"
+  - "Render-seam assumption: loadPromptLibrary render() preserves a 2000-byte
+    concernsYaml variable verbatim (no truncation at render time)"
+concerns:
+  - Spike helpers are executable test-local placeholders; funnel-closeups must
+    implement the same UTF-8 byte cap at the promptVars hydration seam for item
+    review, wave-close-up, plan-close-up, and architect reports. The spike tests
+    remain self-contained and will not bind the implementation.
+  - Existing tailCap() in src/core/checks/types.ts (and raw Buffer.subarray
+    slices) can split multi-byte UTF-8 code points and emit U+FFFD; the
+    concernsYaml cap should use boundary-safe truncation as asserted by this
+    suite.
+  - Aggregate wave diff byte additivity depends on git() trimming exactly one
+    trailing newline; the measured relation is waveBytes = itemABytes +
+    itemBBytes + 1 separator byte. Recalibrate if diff capture/trim semantics
+    change.
+  - When both diff and orchestration input are zero the budget is 0 bytes;
+    production should emit an empty concernsYaml (or skip the variable) rather
+    than exceed the summarized input.
+notes: Finding record is the permanent test file header plus its executable
+  assertions; no files under src/ were modified. Test path is relative to the
+  plugin package (plugins/software-factory), where bun test runs. The worktree
+  initially lacked node_modules, so bun install --frozen-lockfile was required
+  before running gates.
