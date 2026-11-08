@@ -118,6 +118,10 @@ project config: location of orcehstrationFolder, folderForPreservedADRs, scripts
      - v1 lesson: architect output was intentionally schema-free and telegraphic; extracting the relevant per-item task and context from that markdown was the (cheap) PM's job. Re-evaluate v2's schema-bound architect plan output against this (an expensive repair turn was observed in the fire test) — e.g. architect writes telegraphic md, PM structures it into the plan/edits schemas
      - (c) session launching must never break the provider prompt cache: normal additive sessions only, never rewrite a session transcript; the harness is audited so resumed turns append (no history reconstruction), prompt prefixes stay byte-stable across turns (no timestamps/random/temp-path interpolation into the cached prefix), and the generated omp overlay is byte-stable given the same config
      - (d) optional optimizations only after (c) holds: focused compaction/handoff summaries on resume, on IRC escalation reply, and on restart — each measured against the uncached-resume cost and configurable/off by default where it does not pay
+21. tool policy: profiles, thinking-loop prevention (self-host, after 19/20)
+     - per-agent/per-step tool sets configurable in pipeline config (`agents.<name>.tools` overrides the agent definition; presets for research vs read-only vs none); defaults measured, not guessed
+     - observed failure modes: with bash, agents use it for everything; read-only tools + bash sometimes send agents into thinking loops. The harness gets tool-use loop detection (repeated tool patterns, turn budgets tied to tool use) and prompt guidance; a thinking loop consults/escalates instead of burning silently
+     - PM stays tool-less by construction (yield only); repo-rules hydration (19) and status hydration keep tool-less roles effective
 
 Fire testing:
      develop initial version. launch ietration by iteration; babysit
@@ -131,6 +135,18 @@ Fire testing:
         then launch harness imrpovement (scope might be from task to saga, observe behavior)
 
 DoD. build and minimum documented factoy harness, ready to use, default config with commentary how to change in template. config schema
+
+Steering log (user decisions recorded by the orchestrator during the build; newest last):
+     - fire test: user acts as steering user for human gates; push both repos; ≤5 launches per target (python-setup, concerns-funnel, omp-workspaces, tool-policy); env/operator-killed launches don't count; no launch deadline
+     - model splits: developer/reviewer are workhorse class (reviewer = alt-workhorse); alt-on-retry rotation; muse as architect for the initial launches (cheap)
+     - triage: `simple` = docs/rename/trivial split/really trivial additive change; story if >10-20 lines, new class, collaborating functions, or any tradeoff/decision; simpleMaxProdLines 20 enforced by simple-guard
+     - self-host: orchestrator merges results to main after review; complex goals split into epics by the architect; each self-host task expected to finish in a couple of iterations; concerns-funnel launches switch human-involvement mode via config
+     - saga: epic-level concerns/decisions propagate to the saga architect, which steers epics or propagates to the human
+     - trace analysis: dedicated subagents per launch, down to omp session JSONL; audit agent use, separation of concerns, guardrail execution, cost
+     - operability: timeouts exclude machine sleep (monotonic clocks); /tmp cleaned; disk-space preflight + per-step guard
+     - PM is non-technical by construction: no file tools (yield only), minimal delta-only output, outlineRef must name an architect-provided outline, context = injected plan + task status only; architect gets tools + injected task status + status-file paths
+     - agent tools: per-agent tool sets configurable (`agents.<name>.tools`); tool profiles and loop prevention are spec item 21 (self-host)
+     - sessions: additive-only, never rewrite transcripts; prompt prefixes and overlay byte-stable (spec 20c); repo rules hydrated by the factory (spec 19)
 
                                                    
 
