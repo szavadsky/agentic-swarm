@@ -1,0 +1,449 @@
+amendmentIndex: 1
+items:
+  - assignment: "Types only (split 1/3 of concerns-contracts per decision 001;
+      unblocks schemas+policy). In src/core/artifacts.ts add
+      Concern/ConcernKind/ConcernSeverity/ConcernStatus, RemarkableDecision,
+      StoredConcernArtifact (+pendingResolution?, source.escalated?),
+      ReviewDisposition+dismiss (no tech-debt value), PlanAdr.blocking,
+      PipelineConfig.humanInvolvement+concerns{raiseAllowlist,minDigestSeverity\
+      ,minBlockingSeverity}, reviewPolicy.default canonical + legacy
+      allowedDispositions alias in type. No JSON schemas, no runtime, no repair
+      logic (deferred to concerns-store). Do not implement
+      aggregate/repair/triage; do not use cross-file $ref. Prod budget <=80
+      lines. Verify: bun run typecheck. Run with TMPDIR=/tmp."
+    citations:
+      - docs/factory.v2.md:89-103
+      - plugins/software-factory/src/core/artifacts.ts:313-325
+    kind: dev
+    milestone: m1-contracts-aggregate
+    outlineRef: concerns-contracts-types
+    slug: concerns-contracts-types
+    title: Concern artifact types
+    wave: 2
+  - assignment: "Schemas only (split 2/3, decision 001; deps: types). Inline (no
+      cross-file $ref) shared concern/remarkable definitions into
+      developer-output, fact-finder-output, qa, poc, test-assumptions, review
+      newConcerns, plan, decisions, wave/plan-closeup (+concernResolutions),
+      architect wave-report/closeup outputs; leave triage/infra/pm-edit
+      untouched. severity/detail optional at schema level (defaults applied at
+      runtime by concerns-store); kind strict enum so unknown kind fails
+      validation with no write. Dismiss detail-required enforced at runtime
+      (store), not JSON. Verify: typecheck + prompts.test preflight + one
+      FakeHarness behavior case in test/engine/concerns-funnel.test.ts (valid
+      concerns pass, unknown kind errors no write). Prod budget <=200 lines
+      JSON. Run TMPDIR=/tmp bun test + typecheck."
+    citations:
+      - docs/factory.v2.md:89-103
+      - plugins/software-factory/src/core/artifacts.ts:313-325
+      - plugins/software-factory/src/core/records/review-schema.ts:5-52
+    deps:
+      - concerns-contracts-types
+    kind: dev
+    milestone: m1-contracts-aggregate
+    outlineRef: concerns-contracts-schemas
+    scenarioRefs:
+      - m1-contracts-aggregate:s4
+      - m1-contracts-aggregate:s5
+    slug: concerns-contracts-schemas
+    title: Concern producer schemas
+    wave: 3
+  - assignment: "Resolver only (split 3/3, decision 001; deps: types). New
+      src/core/review-policy.ts resolveReviewAllowed(pipeline,agent,isTriager):
+      precedence per-agent array > default > builtin
+      [fix,optional,architect,human-awareness,human-async]; legacy
+      reviewPolicy.allowedDispositions read-alias for default; append dismiss
+      iff isTriager. Wire single resolver into item-machine review promptVars,
+      step-runner schema path, iteration plan-review prompt+schema, and
+      generateReviewSchema (dismiss enum only for triagers; QA never). Verify:
+      typecheck + FakeHarness review-step behavior (reviewer accepts dismiss
+      id-match; QA rejects dismiss). Prod budget <=100 lines. Run TMPDIR=/tmp
+      bun test + typecheck."
+    citations:
+      - docs/factory.v2.md:89-103
+      - plugins/software-factory/src/core/records/review-schema.ts:5-52
+      - plugins/software-factory/src/core/flows/item-machine.ts:628-647
+      - plugins/software-factory/src/core/flows/iteration.ts:439-485
+    deps:
+      - concerns-contracts-types
+    kind: dev
+    milestone: m1-contracts-aggregate
+    outlineRef: concerns-contracts-policy
+    scenarioRefs:
+      - m1-contracts-aggregate:s7
+    slug: concerns-contracts-policy
+    title: Canonical review-policy resolver
+    wave: 3
+  - assignment: "Test-first dev building on concerns-contracts-types/schemas/policy
+      + accepted spike-saga-commit findings
+      (items/spike-saga-commit/steps/001-research-a1/output.yaml, no gate; drop
+      spike dep). Implement src/core/concerns.ts (adr-concern-store-taskwt,
+      adr-fingerprint-merge, adr-producer-matrix, adr-triage-suggestions-dismiss
+      ordering, adr-resilience): concernFingerprint over
+      {kind,normalizedSummary,location,sortedAffects} excluding detail/severity,
+      aggregateConcerns merge (detail longer/latest, severity max,
+      updatedAt/lastSeen advance, never clobber dismissed/routed/resolved;
+      escalated=true on severity rise), listOpenConcerns, applyConcernTriage
+      exact-id+isTriager, applyCloseupResolutions, partitionSuggestions. Binding
+      (decision 002): one file per fingerprint id, writeYamlAtomic distinct
+      files, KeyedMutex(taskDir) only for status/source RMW, NEVER wrap
+      commitAll in repo.writeLock.runExclusive (deadlock), explicit taskWt
+      path+immediate commitAll, concerns/** startup recovery+reconcileConcerns
+      from committed records (derive read-only), ingest errors must not change
+      step status. Repair owned here: severity->medium, detail->summary; dismiss
+      requires detail else errors; unknown kind fails with no partial write.
+      Wire producer seams incl consults; reviewer ordering aggregate new then
+      triage pre-existing only. Tests: open+source, retry dedup, reword merge,
+      escalation, rm-*. Run TMPDIR=/tmp bun test
+      test/engine/concerns-funnel.test.ts + typecheck."
+    citations:
+      - docs/factory.v2.md:89-103
+      - plugins/software-factory/src/core/artifacts.ts:313-325
+      - plugins/software-factory/src/core/fingerprint.ts:20-50
+      - plugins/software-factory/src/core/flows/item-machine.ts:628-647
+      - plugins/software-factory/src/core/flows/iteration.ts:439-485
+    deps:
+      - concerns-contracts-types
+      - concerns-contracts-schemas
+      - concerns-contracts-policy
+    kind: dev
+    milestone: m1-contracts-aggregate
+    outlineRef: concerns-store
+    scenarioRefs:
+      - m1-contracts-aggregate:s1
+      - m1-contracts-aggregate:s2
+      - m1-contracts-aggregate:s3
+      - m1-contracts-aggregate:s4
+      - m1-contracts-aggregate:s5
+      - m1-contracts-aggregate:s6
+      - m1-contracts-aggregate:s8
+    slug: concerns-store
+    title: Concerns store with merge and commit
+    wave: 4
+  - assignment: "Test-first dev building on concerns-contracts-types/schemas/policy
+      (drop old contracts dep): modes/thresholds+prompt wiring
+      (adr-humaninvolvement-config, adr-funnel-text-budget prompt,
+      adr-reviewpolicy-canonical usage). Extend PipelineConfig+loader/merge with
+      humanInvolvement default autonomous + concerns {raiseAllowlist default
+      all, minDigestSeverity, minBlockingSeverity}; add commented
+      autonomous/principal/detailed presets with blocking table+examples in
+      config/pipeline.default.yaml; add terse
+      agents/criteria/human-involvement.md fragment. Wire
+      KNOWN_VARS+descriptions for concernsYaml in steps/review,
+      steps/plan-review, steps/wave-close-up, steps/plan-close-up,
+      architect-plan, architect-wave-report, architect-closeup,
+      architect-consult-* and humanInvolvementCriteria in review, plan-review,
+      architect-* per 8-fragment matrix (each <=15 lines, total <=60). Tests:
+      mode switch changes criteria+blocking-ADR; preflight green; prompts.test
+      line-count. Precedes routing. Run typecheck + TMPDIR=/tmp bun test."
+    citations:
+      - docs/factory.v2.md:89-103
+      - plugins/software-factory/src/core/flows/item-machine.ts:628-647
+      - plugins/software-factory/src/core/flows/iteration.ts:439-485
+    deps:
+      - concerns-contracts-types
+      - concerns-contracts-schemas
+      - concerns-contracts-policy
+    kind: dev
+    milestone: m2-triage-modes
+    outlineRef: modes-prompts
+    scenarioRefs:
+      - m2-triage-modes:s7
+      - m3-routing:s7
+      - m5-docs:s2
+    slug: modes-prompts
+    title: Modes, thresholds, prompt wiring
+    wave: 4
+  - assignment: "Test-first dev building on concerns-store: workhorse reviewer
+      triage (adr-triage-suggestions-dismiss, adr-digest-mailbox, debt
+      predicate). Hydrate steps/review with concernsYaml
+      {id,kind,severity,summary,affects}+terse triage + condensing output<input;
+      update agents/reviewer+criteria/dispositions+human-involvement. In
+      item-machine review writeArtifact with isTriager gate (reviewer only, QA
+      no-op): partitionSuggestions exact-id c-/rm- split, triage ids update
+      concerns/ only excluded from fix-loop/approval/normal mailbox; dismiss
+      requires detail->dismissed+dismissReason else errors; routed persists
+      disposition; fix-on-concern sets fixRequired once; human-async single
+      q-concern-<cid> deduped. Binding: partition concern entries out of
+      fix-loop (decision 002). Debt predicate (tech-debt routed/resolved OR
+      optional routed), no tech-debt disposition. Tests: dismiss no routing,
+      routed persist, QA no-op, missing detail errors, fix-once, no double
+      mailbox. Run TMPDIR=/tmp bun test + typecheck."
+    citations:
+      - docs/factory.v2.md:89-103
+      - plugins/software-factory/src/core/records/review-schema.ts:5-52
+      - plugins/software-factory/src/core/flows/item-machine.ts:628-647
+      - plugins/software-factory/src/core/derive/task.ts:167-205
+    deps:
+      - concerns-store
+    kind: dev
+    milestone: m2-triage-modes
+    outlineRef: reviewer-triage
+    scenarioRefs:
+      - m2-triage-modes:s1
+      - m2-triage-modes:s2
+      - m2-triage-modes:s3
+      - m2-triage-modes:s4
+      - m2-triage-modes:s5
+    slug: reviewer-triage
+    title: Workhorse reviewer triage
+    wave: 5
+  - assignment: "Test-first dev building on concerns-store: architect plan-reviewer
+      triage mirroring workhorse (adr-triage-suggestions-dismiss,
+      adr-remarkable-store). Aggregate plan/revise concerns[]+rm-* via shared
+      partial; hydrate steps/plan-review with concernsYaml; in iteration
+      plan-review with isTriager gate: same exact-id partition+dismiss
+      vocabulary (detail->dismissReason, missing errors), non-dismissed become
+      routed, triage ids excluded from approval; rm-* same path; debt predicate.
+      Binding: plan-review has no writeArtifact so re-apply verdicts
+      idempotently (decision 002). Update agents/plan-reviewer+criteria tersely.
+      Tests: dismissed vs routed, rm-* triaged, debt, no approval from triage
+      ids. Run TMPDIR=/tmp bun test + typecheck."
+    citations:
+      - docs/factory.v2.md:89-103
+      - plugins/software-factory/src/core/flows/iteration.ts:439-485
+      - plugins/software-factory/src/core/records/review-schema.ts:5-52
+      - plugins/software-factory/src/core/artifacts.ts:313-325
+    deps:
+      - concerns-store
+    kind: dev
+    milestone: m2-triage-modes
+    outlineRef: plan-reviewer-triage
+    scenarioRefs:
+      - m2-triage-modes:s1
+      - m2-triage-modes:s6
+    slug: plan-reviewer-triage
+    title: Plan-reviewer triage
+    wave: 5
+  - assignment: "Test-first dev building on
+      reviewer-triage+plan-reviewer-triage+modes-prompts + accepted spike
+      findings (drop spike-saga-commit gate): pure derive only, no writes
+      (adr-routing-derived-state). In derive/task.ts implement
+      collectRoutedBlockers(taskDir)->Set reading routed kind==blocker affects;
+      integrate into deriveWave/deriveItem; in scheduler blockedByConcern
+      reusing blockedByFailure fixpoint, union with failure-blocked, cascade
+      only declared deps. Binding: owner derive/task.ts, thread blockedBy into
+      deriveItemState or post-process before every deriveWaveState call; debt in
+      debtSet block. Tests: dependent blocked no writes, non-dep unaffected,
+      transitive via deps only. Run TMPDIR=/tmp bun test + typecheck.
+      Escalation: pure-derive boundary+fixpoint risk; consult if seam differs."
+    citations:
+      - docs/factory.v2.md:89-103
+      - plugins/software-factory/src/core/derive/task.ts:167-205
+    deps:
+      - reviewer-triage
+      - plan-reviewer-triage
+      - modes-prompts
+    escalate: true
+    kind: dev
+    milestone: m3-routing
+    outlineRef: routing-blocker-derive
+    scenarioRefs:
+      - m3-routing:s1
+    slug: routing-blocker-derive
+    title: Blocker derive
+    wave: 6
+  - assignment: "Test-first dev building on reviewer-triage+modes-prompts: human
+      mailbox+debt routing (adr-digest-mailbox, adr-human-stop, blocking table,
+      debt). Via steer writeQuestion: human-async blocks [item] continues no
+      exit 10; human-stop blocks task/item, item-machine blocked terminal,
+      derive blocked, engine halts exit 10 until answered/dismissed; awareness
+      blocks [] digest-only never blocking/exiting; derive/task splits blocking
+      (blocks.length>0) vs digest (awareness+empty). Binding: tousertoreview
+      reuse requires derive/item blocking change (any open matching ref blocks
+      today) or separate digest dir (decision 002). Debt predicate surfaced as
+      [item] summary. Tests: mailbox per disposition, exit 10 on stop, awareness
+      continues, debt includes summary. Run TMPDIR=/tmp bun test + typecheck."
+    citations:
+      - docs/factory.v2.md:89-103
+      - plugins/software-factory/src/core/steer.ts:59-88
+      - plugins/software-factory/src/core/derive/task.ts:167-205
+      - plugins/software-factory/src/cli/status.ts:83-105
+    deps:
+      - reviewer-triage
+      - modes-prompts
+    kind: dev
+    milestone: m3-routing
+    outlineRef: routing-human-debt
+    scenarioRefs:
+      - m3-routing:s4
+      - m3-routing:s5
+      - m3-routing:s6
+    slug: routing-human-debt
+    title: Human mailbox and debt routing
+    wave: 6
+  - assignment: "Test-first dev building on modes-prompts+routing-blocker-derive:
+      act phase only for architect routing (adr-routing-derived-state act). In
+      triage writeArtifact+wave-act newly-blocked check write
+      decisions/concern-<cid>.yaml exactly once idempotent on restart; extend
+      buildArchitectHydration with concernsYaml digest for
+      wave-report/next-plan. Binding: avoid seq-allocated filenames under
+      parallel consults (fingerprint ids or lock); trigger from wave act phase;
+      hydration append concerns LAST (tail-slice) or registered concernsYaml
+      var, recompute before wave-report (iteration-start snapshot stale). Tests:
+      single file, restart no duplicate, architect input contains id+summary.
+      Run TMPDIR=/tmp bun test + typecheck."
+    citations:
+      - docs/factory.v2.md:89-103
+      - plugins/software-factory/src/core/flows/iteration.ts:439-485
+      - plugins/software-factory/src/core/derive/task.ts:167-205
+    deps:
+      - modes-prompts
+      - routing-blocker-derive
+    kind: dev
+    milestone: m3-routing
+    outlineRef: routing-architect-consult
+    scenarioRefs:
+      - m3-routing:s2
+      - m3-routing:s3
+    slug: routing-architect-consult
+    title: Architect consult and hydration
+    wave: 7
+  - assignment: "Test-first dev building on modes-prompts+routing-human-debt:
+      blocking vs remarkable ADRs (adr-humaninvolvement-config,
+      adr-remarkable-store, adr-digest-mailbox, adr-human-stop,
+      td-adr-md-truncated). Write full ADR md
+      title/context/decision/consequences/blocking (fix truncated writer);
+      PlanAdr.blocking routed per mode table (autonomous blocks only blocking
+      ADR or high human-stop; principal adds human-async+high; detailed adds all
+      human-*), stop triggers exit 10; remarkable digest-only never waiting
+      unless elevated to blocking ADR; preserve dispositions.md exit-10
+      contract. Tests: blocking mailbox+blocks, remarkable digest only, mode
+      table respected. Run TMPDIR=/tmp bun test + typecheck."
+    citations:
+      - docs/factory.v2.md:89-103
+      - plugins/software-factory/src/core/steer.ts:59-88
+      - plugins/software-factory/src/core/derive/task.ts:167-205
+      - plugins/software-factory/src/cli/status.ts:83-105
+    deps:
+      - modes-prompts
+      - routing-human-debt
+    kind: dev
+    milestone: m3-routing
+    outlineRef: adr-blocking-digest
+    scenarioRefs:
+      - m3-routing:s7
+    slug: adr-blocking-digest
+    title: Blocking vs remarkable ADRs
+    wave: 7
+  - assignment: "Test-first dev building on concerns-store+routing-human-debt: sole
+      owner state counts+CLI surfacing (adr-digest-mailbox split,
+      adr-resilience). Define StateArtifact.concerns
+      {open,dismissed,routed,resolved}+state.schema; implement
+      toStateArtifact/refreshStateYaml (missing dir zeros, corrupt skip+warn
+      excluded); in cli/status.ts render Concerns plus separate Blocking vs
+      Digest sections (blocking blocks.length>0, digest awareness+empty). Tests:
+      counts, missing/corrupt, CLI sections. Run TMPDIR=/tmp bun test +
+      typecheck."
+    citations:
+      - docs/factory.v2.md:89-103
+      - plugins/software-factory/src/core/derive/task.ts:167-205
+      - plugins/software-factory/src/cli/status.ts:83-105
+    deps:
+      - concerns-store
+      - routing-human-debt
+    kind: dev
+    milestone: m4-funnel-surface
+    outlineRef: status-state-surface
+    scenarioRefs:
+      - m4-funnel-surface:s6
+    slug: status-state-surface
+    title: State counts and status surfacing
+    wave: 7
+  - assignment: "Test-first dev building on
+      adr-blocking-digest+routing-architect-consult+spike-text-budget: funnel
+      close-ups+simple triage (adr-funnel-text-budget, adr-closeup-retriage,
+      producer-matrix closeup). Hydrate wave/plan-close-up+architect reports
+      with concernsYaml capped per spike (UTF-8 bytes: code min(diffBytes,2000),
+      zero-diff min(inputBytes,500), condensing output<input, engine truncates
+      hydrated var only). Add closeup schemas concernResolutions
+      resolve/carry/propagate+concerns[]/remarkable[]+pendingResolution{action,\
+      note,by,at}; wave-close-up proposes via applyCloseupResolutions (status
+      stays routed, pending set); architect-wave-report concernConfirms
+      accept/reject applies resolved/routed/propagated or clears pending;
+      propagate to parent concerns/ copy (epics) or human digest unless
+      elevated. Simple fallback: explicit triage; auto-route
+      tech-debt->optional, others->architect, human-* never auto. Nits (accepted
+      spike-text-budget): cross-check diffs via production git() wrapper, add
+      many-concerns 2000B hard-truncation case, clarify trim semantics. Tests:
+      byte budgets+pending/confirm+fallback. Run TMPDIR=/tmp bun test +
+      typecheck. Note: replan checkpoint follows."
+    citations:
+      - docs/factory.v2.md:89-103
+      - plugins/software-factory/src/core/flows/iteration.ts:439-485
+      - plugins/software-factory/src/core/artifacts.ts:313-325
+    deps:
+      - adr-blocking-digest
+      - routing-architect-consult
+      - spike-text-budget
+    kind: dev
+    milestone: m4-funnel-surface
+    outlineRef: funnel-closeups
+    scenarioRefs:
+      - m4-funnel-surface:s1
+      - m4-funnel-surface:s2
+      - m4-funnel-surface:s3
+      - m4-funnel-surface:s4
+    slug: funnel-closeups
+    title: Funnel close-ups and simple triage
+    wave: 8
+  - assignment: "Test-first dev building on routing-architect-consult + accepted
+      spike findings (drop spike-saga-commit gate): epic-to-saga propagation
+      (adr-concern-store-taskwt timing, parent hydration). In engine
+      runChildTask after child completion before cleanup/merge call
+      propagateEpicConcerns: condensed parent copies with source.epic, only
+      open/routed (dismissed stays local), parent detail<child detail with size
+      assert; extend parent buildArchitectHydration concernsYaml to include
+      propagated ids. Binding: copy filtered/condensed child concerns at
+      runChildTask engine.ts:246-274 for every child status; forward child human
+      questions to root mailbox (rootTaskDir unused today); hydration append
+      LAST, recompute before wave-report. Tests: one copy, dismissed stays
+      local, saga input contains id, detail shrunk. Run TMPDIR=/tmp bun test +
+      typecheck. Escalation: timing/serialization risk; consult if seam differs.
+      Note: replan checkpoint follows."
+    citations:
+      - docs/factory.v2.md:89-103
+      - plugins/software-factory/src/core/flows/iteration.ts:439-485
+      - plugins/software-factory/src/core/engine.ts:246-274
+    deps:
+      - routing-architect-consult
+    escalate: true
+    kind: dev
+    milestone: m4-funnel-surface
+    outlineRef: saga-propagate
+    scenarioRefs:
+      - m4-funnel-surface:s5
+    slug: saga-propagate
+    title: Epic to saga propagation
+    wave: 8
+  - assignment: "Dev consolidation building on
+      funnel-closeups+modes-prompts+saga-propagate+status-state-surface:
+      docs+suite consolidation. Update docs/ARCHITECTURE.md section 1 row 18+6.2
+      concerns/+8
+      funnel/routing/modes/partition/producer-matrix/resilience/exit-10,
+      README.md, config commentary, agents/criteria/dispositions.md human-stop
+      exit-10 preserved; enforce fragment matrix 8 fragments+debloat <=15/<=60
+      with preflight+line-count assert in prompts.test; consolidate
+      test/engine/concerns-funnel.test.ts+steer/CLI coverage. Test-first where
+      code asserts added; docs edits no prod behavior change. Final gates: bun
+      run typecheck and TMPDIR=/tmp bun test green."
+    citations:
+      - docs/factory.v2.md:89-103
+      - plugins/software-factory/docs/ARCHITECTURE.md:39
+      - plugins/software-factory/src/core/flows/iteration.ts:439-485
+      - plugins/software-factory/src/cli/status.ts:83-105
+    deps:
+      - funnel-closeups
+      - modes-prompts
+      - saga-propagate
+      - status-state-surface
+    kind: dev
+    milestone: m5-docs
+    outlineRef: docs-finish
+    scenarioRefs:
+      - m5-docs:s1
+      - m5-docs:s2
+      - m5-docs:s3
+    slug: docs-finish
+    title: Docs and suite consolidation
+    wave: 9
+iteration: 1
