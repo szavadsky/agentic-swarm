@@ -1,0 +1,57 @@
+status: ok
+summary: "Added a type-contract test suite at
+  plugins/software-factory/test/contracts/concern-artifact-types.test.ts with 5
+  tests covering every required type change:
+  Concern/ConcernKind/ConcernSeverity/ConcernStatus + RemarkableDecision,
+  StoredConcernArtifact (required id/status/source, optional
+  pendingResolution{action,note,by,at} and source.escalated), ReviewDisposition
+  including dismiss and rejecting tech-debt, PlanAdr.blocking, and
+  PipelineConfig.humanInvolvement +
+  concerns{raiseAllowlist,minDigestSeverity,minBlockingSeverity} +
+  reviewPolicy.default/allowedDispositions. Tests compile fixture code against
+  src/core/artifacts.ts via the TypeScript compiler API, so runtime assertions
+  fail now with assertion failures (not import/collection errors) and will pass
+  once the types exist. No production code was modified."
+target:
+  selectors:
+    - test/contracts/concern-artifact-types.test.ts
+  expectRed:
+    - Concern artifact types.exposes structured concerns and remarkable
+      decisions with strict vocabularies
+    - Concern artifact types.stores concern lifecycle metadata including pending
+      resolution and escalation
+    - Concern artifact types.adds dismiss to review dispositions without a
+      tech-debt value
+    - Concern artifact types.marks plan ADRs as blocking or remarkable
+    - Concern artifact types.adds human involvement modes, concern thresholds,
+      and canonical review policy to pipeline config
+evidence:
+  - TMPDIR=/tmp bun test test/contracts/concern-artifact-types.test.ts
+    --reporter=junit --reporter-outfile=/tmp/junit-concerns2.xml -> 0 pass, 5
+    fail; every testcase has a JUnit <failure type="AssertionError"> status
+    (verified with XML parsing), so target-red is assertion-based rather than
+    compilation/collection error
+  - TMPDIR=/tmp bun run typecheck -> exit 0 (test file itself typechecks under
+    the project's strict tsconfig)
+  - "In-memory green probe: patched artifacts.ts source with the intended
+    contract, compiled all 5 fixture strings extracted from the test -> fixture
+    0-4 OK with zero diagnostics, confirming the fixtures are satisfiable and
+    the @ts-expect-error negative cases are precise"
+  - git status --short -> only '?? plugins/software-factory/test/contracts/' (no
+    production or config files touched)
+  - Test runtime ~1.4s for 5 tests; each test compiles one in-memory fixture
+    against the real artifacts module
+concerns:
+  - expectRed ids are declared as JUnit classname.name ids because the
+    target-red matcher normalizes against parsed JUnit ids; Bun's native '<file>
+    > <describe> > <test>' form with a file prefix does not match the engine's
+    id normalizer for this project's JUnit classname shape
+  - Concern.detail and Concern.severity are specified as required on the
+    canonical/stored type (per the context-pack target contract); the sibling
+    schemas story keeps them optional at JSON-schema level and defaults them at
+    runtime before storage
+notes: Type-only story, so the tests assert the public type surface by compiling
+  typed fixtures against src/core/artifacts.ts. @ts-expect-error placement was
+  adjusted after an in-memory green probe showed property-level diagnostics must
+  carry the directive on the offending property line. No stubs or runtime
+  behavior were added.

@@ -1,0 +1,4 @@
+status: approved
+summary: "Types-only contract complete: all required types present, 5/5 tests
+  green, typecheck passes, 72 lines, no runtime/schemas"
+suggestions: []
