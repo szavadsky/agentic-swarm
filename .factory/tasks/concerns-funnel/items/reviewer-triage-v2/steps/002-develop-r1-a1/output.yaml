@@ -1,0 +1,60 @@
+status: ok
+summary: "Implemented workhorse reviewer triage: terse, byte-capped concernsYaml
+  hydration; exact-id partition with triager gate and one-shot fixRequired;
+  dispatching dismiss/route/fix/human-async triage with dismiss-reason
+  validation; deduped q-concern-<cid> mailbox; debt predicate without a
+  tech-debt disposition; and engine wiring that excludes concern ids from the
+  normal mailbox while surfacing triage outcomes on StepRunResult."
+target:
+  selectors:
+    - test/engine/reviewer-triage.test.ts
+  expectRed:
+    - test/engine/reviewer-triage.test.ts::Reviewer triage (§8.7, §18).hydrates
+      steps/review with terse concern fields and triage instructions
+    - test/engine/reviewer-triage.test.ts::Reviewer triage (§8.7,
+      §18).partitions exact-id triage from findings and flags fix once
+    - test/engine/reviewer-triage.test.ts::Reviewer triage (§8.7, §18).renders
+      condensing concern YAML without detail and within the byte cap
+    - test/engine/reviewer-triage.test.ts::Reviewer triage (§8.7, §18).dismisses
+      a concern with its reason and routes nothing
+    - test/engine/reviewer-triage.test.ts::Reviewer triage (§8.7, §18).persists
+      routed dispositions and applies the debt predicate without a tech-debt
+      disposition
+    - test/engine/reviewer-triage.test.ts::Reviewer triage (§8.7, §18).returns
+      fixRequired once for fix-on-concern and keeps it in the fix loop
+    - test/engine/reviewer-triage.test.ts::Reviewer triage (§8.7, §18).writes
+      one deduped q-concern mailbox entry for human-async triage
+    - test/engine/reviewer-triage.test.ts::Reviewer triage (§8.7, §18).rejects
+      dismiss triage without detail and leaves the concern unchanged
+    - test/engine/reviewer-triage.test.ts::Reviewer triage (§8.7, §18).fails the
+      review step when a dismiss triage lacks detail
+    - "test/engine/reviewer-triage.test.ts::Reviewer triage (§8.7, §18).gates
+      non-triagers: QA matching a concern id is a no-op"
+    - test/engine/reviewer-triage.test.ts::Reviewer triage (§8.7, §18).blocks
+      the item with a single q-concern mailbox entry in the engine flow
+evidence:
+  - "`cd plugins/software-factory && bun test
+    test/engine/reviewer-triage.test.ts` — 11 pass, 0 fail, 97 expect() calls."
+  - "`cd plugins/software-factory && bun run typecheck` — tsc --noEmit exits 0."
+  - "`cd plugins/software-factory && bun test` — full suite: 346 pass, 2 skip, 0
+    fail across 348 tests / 57 files."
+  - "Manual renderer probe with 600-byte details: default output 189 bytes vs
+    JSON payload with detail (strictly condensed); cap 120 yields 108 bytes of
+    valid YAML; cap 80 yields 74 bytes; no U+FFFD produced."
+  - Impacted regression tests `test/smoke-fixes.test.ts`,
+    `test/engine/concerns-funnel.test.ts`, and
+    `test/engine/reviewer-triage.test.ts` — 36 pass, 0 fail.
+concerns:
+  - "`test/smoke-fixes.test.ts` fixture now supplies the newly required
+    `concernsYaml` prompt variable; assertions were unchanged."
+  - Hydration treats a non-directory `concerns` path (ENOTDIR) as empty, while
+    ingest still journals the underlying concern-store failure.
+notes: "Core changes: src/core/triage.ts now implements
+  partitionReviewSuggestions, renderConcernsYaml, applyReviewTriage,
+  concernMailboxId, isDebtConcern, and TriageValidationError. step-runner
+  hydrates open concerns before rendering, applies triage after the canonical
+  artifact write, returns ReviewTriageOutcome as result.triage, and fails the
+  step on dismiss-without-detail. item-machine excludes exact concern ids from
+  the normal q-* mailbox so human-async triage only creates q-concern-<cid>.
+  agents/steps/review.md documents exact-id triage, dismiss detail requirement,
+  and condensing."
