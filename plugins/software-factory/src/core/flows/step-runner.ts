@@ -517,7 +517,7 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
     : `${task}/runs/${stepId}#a${attempt}`;
 
   await appendJournal(taskDir, {
-    type: "step_timeout",
+    type: "step_timeout_armed",
     task,
     item,
     step: stepId,
