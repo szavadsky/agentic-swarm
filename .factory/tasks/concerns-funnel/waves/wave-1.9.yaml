@@ -1,0 +1,11 @@
+wave: 9
+iteration: 1
+status: has_failures
+mergedItems:
+  - adr-blocking-digest-v2
+  - status-state-surface-v2
+failedItems:
+  - routing-architect-consult-v2
+blockedItems: []
+summary: "Wave 9 completed. Merged items: adr-blocking-digest-v2,
+  status-state-surface-v2"

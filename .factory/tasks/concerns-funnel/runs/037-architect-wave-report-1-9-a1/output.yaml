@@ -1,0 +1,48 @@
+context: wave
+decision: amend
+outlines:
+  - deps:
+      - modes-prompts-v2
+      - routing-blocker-derive-v2
+    description: "Act phase only: wave-act newly-blocked check writes
+      decisions/concern-<cid>.yaml exactly once (restart idempotent) +
+      buildArchitectHydration concernsYaml extension (append LAST, open+routed,
+      capped sub-budget, plan-reviewer path stays open-only). This is a
+      merge-repair rerun of the COMPLETE ready implementation (steps approved,
+      targets green); do NOT redesign: rebase the exact merged-diff approach
+      onto current topic tip, verify wave-9 sibling conflict resolution
+      (adr-blocking-digest-v2, status-state-surface-v2) kept ALL THREE diffs,
+      then TMRDIR-normalized gates. Pull and fix the exact merge-gate failure
+      (names+output in evidence). Out of scope: 4 optional nits (carry to
+      docs-finish-v2)."
+    kind: story
+    milestoneId: m3-routing
+    slug: routing-architect-consult-v3
+    title: Architect consult and hydration (merge repair)
+planDelta: "Amendment 3/3 (final, scheduling repair): wave 9 merged
+  adr-blocking-digest-v2 + status-state-surface-v2 but
+  routing-architect-consult-v2 stays ready after a merge-gate test failure
+  followed by retry-with-guidance; wave 9 is now CLOSED (wave artifact exists)
+  and the iteration loop (iteration.ts:702-720) never revisits closed waves, so
+  the ready item can never merge and its wave-10 dependents (funnel-closeups-v2
+  needs consult + ADR; saga-propagate-v2 needs consult) would starve. Fix:
+  version to routing-architect-consult-v3 (identical act-phase scope +
+  merge-repair instructions); REMOVE stale ready routing-architect-consult-v2;
+  REWAVE dependents funnel-closeups-v2 and saga-propagate-v2 to versions
+  depending on -v3 so PM schedules them after it. docs-finish-v2 stays pending
+  (depends on funnel/saga versions). PM: schedule consult-v3 alone in the next
+  wave, then funnel/saga versions."
+rationale: "Wave 9 partial (2/3 merged) but the straggler is structurally stuck:
+  wave 9 closed with the consult item still ready-after-merge-failure, and
+  closed waves are never revisited, so no retry can merge it. Same verified
+  stall mechanism as amendment 2 (closed-wave + ready/pending never carried
+  forward). Consult + hydration are milestone-critical (funnel/saga/docs depend
+  on them); must version forward. Amendment budget allows exactly this one final
+  repair (3/3)."
+removeItemSlugs:
+  - funnel-closeups-v2
+  - routing-architect-consult-v2
+  - saga-propagate-v2
+text: "Next wave: routing-architect-consult-v3 alone (deps merged). Then
+  funnel-closeups-v3 + saga-propagate-v3. No scope change; merge-repair rerun
+  only."

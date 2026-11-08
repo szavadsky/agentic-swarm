@@ -1294,3 +1294,5 @@
 {"type":"step_timeout_armed","task":"concerns-funnel","step":"wave-close-up-1-9","timeoutSec":900,"ts":"2026-11-08T14:26:12.708Z"}
 {"type":"step_finished","task":"concerns-funnel","step":"wave-close-up-1-9","attempt":1,"status":"ok","sessionId":"01a1bb8d-77ac-71ad-b37e-1eb1e97991a7","usage":{"inputTokens":20588,"outputTokens":4905,"costUsd":0.003197},"ts":"2026-11-08T14:27:08.161Z"}
 {"type":"scheduler_wait","wave":9,"iteration":1,"reason":"wave-end merge + close-up gates + close-up turn","gapWallMs":969503,"gapActiveMs":969503,"merges":["routing-architect-consult-v2","adr-blocking-digest-v2","status-state-surface-v2"],"ts":"2026-11-08T14:27:08.162Z"}
+{"type":"step_started","task":"concerns-funnel","step":"architect-wave-report-1-9","attempt":1,"recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/037-architect-wave-report-1-9-a1","ts":"2026-11-08T14:27:08.548Z"}
+{"type":"step_timeout_armed","task":"concerns-funnel","step":"architect-wave-report-1-9","timeoutSec":1200,"ts":"2026-11-08T14:27:08.552Z"}
