@@ -23,6 +23,7 @@ export interface CriteriaBundle {
   triage?: string;
   dispositions?: string;
   storyKinds?: string;
+  humanInvolvement?: string;
 }
 
 /**
@@ -42,6 +43,7 @@ export function loadCriteriaBundle(
     ["triage", "triage"],
     ["dispositions", "dispositions"],
     ["story-kinds", "storyKinds"],
+    ["human-involvement", "humanInvolvement"],
   ];
   for (const [key, field] of mapping) {
     const filePath = criteria[key];
@@ -54,6 +56,31 @@ export function loadCriteriaBundle(
     }
   }
   return bundle;
+}
+
+/**
+ * Selects the active mode's `## <mode>` section from the human-involvement
+ * criteria file plus every shared section (notably the ADR blocking table).
+ * Inactive mode sections are dropped; empty input renders an empty string.
+ */
+const HUMAN_INVOLVEMENT_MODES = new Set(["autonomous", "principal", "detailed"]);
+
+export function formatHumanInvolvementCriteria(
+  criteria: string | undefined,
+  mode: PipelineConfig["humanInvolvement"] = "autonomous"
+): string {
+  if (!criteria || criteria.trim().length === 0) return "";
+  const active = mode ?? "autonomous";
+  const kept: string[] = [];
+  let keep = true;
+  for (const line of criteria.split("\n")) {
+    const heading = /^##\s+(.+?)\s*$/.exec(line)?.[1]?.toLowerCase();
+    if (heading !== undefined) {
+      keep = !HUMAN_INVOLVEMENT_MODES.has(heading) || heading === active;
+    }
+    if (keep) kept.push(line);
+  }
+  return kept.join("\n").trim();
 }
 
 /**

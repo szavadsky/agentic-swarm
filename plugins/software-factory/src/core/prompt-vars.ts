@@ -35,6 +35,8 @@ export const PROMPT_VAR_DESCRIPTIONS: Record<string, string> = {
   triageCriteria: "Task triage hierarchy criteria file contents (criteria.triage)",
   dispositionsCriteria: "Review dispositions criteria file contents filtered to allowed dispositions (criteria.dispositions)",
   storyKindsCriteria: "Story and spike kinds criteria file contents (criteria.story-kinds)",
+  humanInvolvementCriteria: "Active human-involvement mode rules plus shared ADR/concern blocking table (criteria.human-involvement)",
+  concernsYaml: "Open concerns hydrated for this step, formatted as YAML",
 };
 
 /**
@@ -55,11 +57,11 @@ export const KNOWN_VARS: Record<string, string[]> = {
 
   "steps/test-first": ["assignment", "citations"],
   "test-first": ["assignment", "citations"],
-  "steps/qa": ["assignment", "checks", "testDiff", "diff", "dispositionsCriteria"],
-  qa: ["assignment", "checks", "testDiff", "diff", "dispositionsCriteria"],
+  "steps/qa": ["assignment", "checks", "testDiff", "diff", "dispositionsCriteria", "humanInvolvementCriteria", "concernsYaml"],
+  qa: ["assignment", "checks", "testDiff", "diff", "dispositionsCriteria", "humanInvolvementCriteria", "concernsYaml"],
 
-  "steps/review": ["assignment", "checks", "diff", "dispositionsCriteria"],
-  review: ["assignment", "checks", "diff", "dispositionsCriteria"],
+  "steps/review": ["assignment", "checks", "diff", "dispositionsCriteria", "humanInvolvementCriteria", "concernsYaml"],
+  review: ["assignment", "checks", "diff", "dispositionsCriteria", "humanInvolvementCriteria", "concernsYaml"],
 
   "steps/fix-round": ["assignment", "feedback", "checks", "diff"],
   "fix-round": ["assignment", "feedback", "checks", "diff"],
@@ -100,6 +102,8 @@ export const KNOWN_VARS: Record<string, string[]> = {
     "debt",
     "steering",
     "limits",
+    "humanInvolvementCriteria",
+    "concernsYaml",
   ],
   "architect-plan": [
     "task",
@@ -110,19 +114,21 @@ export const KNOWN_VARS: Record<string, string[]> = {
     "debt",
     "steering",
     "limits",
+    "humanInvolvementCriteria",
+    "concernsYaml",
   ],
 
-  "steps/architect-revise": ["plan", "planReview"],
-  "architect-revise": ["plan", "planReview"],
+  "steps/architect-revise": ["plan", "planReview", "humanInvolvementCriteria", "concernsYaml"],
+  "architect-revise": ["plan", "planReview", "humanInvolvementCriteria", "concernsYaml"],
 
-  "steps/architect-resume": ["plan", "waveReport", "steering"],
-  "architect-resume": ["plan", "waveReport", "steering"],
+  "steps/architect-resume": ["plan", "waveReport", "steering", "humanInvolvementCriteria", "concernsYaml"],
+  "architect-resume": ["plan", "waveReport", "steering", "humanInvolvementCriteria", "concernsYaml"],
 
-  "steps/architect-wave-report": ["plan", "waveReport", "debt", "steering"],
-  "architect-wave-report": ["plan", "waveReport", "debt", "steering"],
+  "steps/architect-wave-report": ["plan", "waveReport", "debt", "steering", "humanInvolvementCriteria", "concernsYaml"],
+  "architect-wave-report": ["plan", "waveReport", "debt", "steering", "humanInvolvementCriteria", "concernsYaml"],
 
-  "steps/architect-closeup": ["closeup", "plan", "intent"],
-  "architect-closeup": ["closeup", "plan", "intent"],
+  "steps/architect-closeup": ["closeup", "plan", "intent", "humanInvolvementCriteria", "concernsYaml"],
+  "architect-closeup": ["closeup", "plan", "intent", "humanInvolvementCriteria", "concernsYaml"],
 
   "steps/architect-consult-item": [
     "item",
@@ -130,6 +136,8 @@ export const KNOWN_VARS: Record<string, string[]> = {
     "priorAttempts",
     "diff",
     "feedback",
+    "humanInvolvementCriteria",
+    "concernsYaml",
   ],
   "architect-consult-item": [
     "item",
@@ -137,20 +145,22 @@ export const KNOWN_VARS: Record<string, string[]> = {
     "priorAttempts",
     "diff",
     "feedback",
+    "humanInvolvementCriteria",
+    "concernsYaml",
   ],
 
-  "steps/architect-consult-nonitem": ["task", "context", "feedback", "debt"],
-  "architect-consult-nonitem": ["task", "context", "feedback", "debt"],
+  "steps/architect-consult-nonitem": ["task", "context", "feedback", "debt", "humanInvolvementCriteria", "concernsYaml"],
+  "architect-consult-nonitem": ["task", "context", "feedback", "debt", "humanInvolvementCriteria", "concernsYaml"],
 
   // Close-up and review checkpoints
-  "steps/wave-close-up": ["task", "waveReport", "infra"],
-  "wave-close-up": ["task", "waveReport", "infra"],
+  "steps/wave-close-up": ["task", "waveReport", "infra", "humanInvolvementCriteria", "concernsYaml"],
+  "wave-close-up": ["task", "waveReport", "infra", "humanInvolvementCriteria", "concernsYaml"],
 
-  "steps/plan-close-up": ["intent", "plan", "context"],
-  "plan-close-up": ["intent", "plan", "context"],
+  "steps/plan-close-up": ["intent", "plan", "context", "humanInvolvementCriteria", "concernsYaml"],
+  "plan-close-up": ["intent", "plan", "context", "humanInvolvementCriteria", "concernsYaml"],
 
-  "steps/plan-review": ["plan", "intent", "context", "limits", "dispositionsCriteria"],
-  "plan-review": ["plan", "intent", "context", "limits", "dispositionsCriteria"],
+  "steps/plan-review": ["plan", "intent", "context", "limits", "dispositionsCriteria", "humanInvolvementCriteria"],
+  "plan-review": ["plan", "intent", "context", "limits", "dispositionsCriteria", "humanInvolvementCriteria"],
 
   // System fragments
   "system/steer-classify": [],

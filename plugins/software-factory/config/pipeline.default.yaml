@@ -376,6 +376,62 @@ reviewPolicy:
     - human-async
 
 # ==============================================================================
+# Human Involvement & Concerns (§18)
+# ==============================================================================
+# `humanInvolvement` selects how aggressively remarkable decisions and
+# blocking ADRs/concerns reach the human: autonomous (least), principal, or
+# detailed (most). The active mode selects its `## <mode>` section from
+# `agents/criteria/human-involvement.md` and the shared blocking table below.
+#
+# `concerns.raiseAllowlist` lists agents whose structured output may raise
+# concerns. `minDigestSeverity` is the lowest severity worth a human digest;
+# `minBlockingSeverity` is the lowest severity that can block an item. Arrays
+# replace wholesale across config layers; `null` deletes a concern key.
+humanInvolvement: autonomous
+
+concerns:
+  raiseAllowlist:
+    - developer
+    - fact-finder
+    - architect
+    - qa
+    - reviewer
+    - plan-reviewer
+    - wave-close-up
+    - plan-close-up
+  minDigestSeverity: medium
+  minBlockingSeverity: high
+
+# Presets — copy the desired mode block into `.factory/pipeline.yaml` (project)
+# or a task `pipeline.yaml` override:
+#
+# humanInvolvement: autonomous
+# concerns:
+#   raiseAllowlist: [developer, fact-finder, architect, qa, reviewer, plan-reviewer, wave-close-up, plan-close-up]
+#   minDigestSeverity: medium
+#   minBlockingSeverity: high
+#
+# humanInvolvement: principal
+# concerns:
+#   raiseAllowlist: [developer, fact-finder, architect, qa, reviewer, plan-reviewer, wave-close-up, plan-close-up]
+#   minDigestSeverity: low
+#   minBlockingSeverity: medium
+#
+# humanInvolvement: detailed
+# concerns:
+#   raiseAllowlist: [developer, fact-finder, architect, qa, reviewer, plan-reviewer, wave-close-up, plan-close-up]
+#   minDigestSeverity: low
+#   minBlockingSeverity: low
+#
+# ADR blocking table (which ADRs and concerns reach the human per mode):
+#
+# | Mode | Blocking (needs human decision) | Remarkable (digest only) |
+# | --- | --- | --- |
+# | autonomous | high-severity ADRs/concerns still blocking after unblocked work | everything else |
+# | principal | stack/layer, external interfaces, config shapes | internal choices |
+# | detailed | external-interface changes and major internal interfaces | minor internals |
+
+# ==============================================================================
 # Criteria (§5, §8.7)
 # ==============================================================================
 # Paths to criteria markdown files (resolved relative to plugin root, or to the
@@ -397,6 +453,7 @@ criteria:
   triage: agents/criteria/triage.md
   dispositions: agents/criteria/dispositions.md
   story-kinds: agents/criteria/story-kinds.md
+  human-involvement: agents/criteria/human-involvement.md
 
 # ==============================================================================
 # Prompts (§5, §10)
