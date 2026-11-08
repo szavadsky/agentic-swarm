@@ -1,0 +1,9 @@
+context: wave
+decision: continue
+rationale: "Wave 8 complete: 2/2 merged (routing-blocker-derive-v2,
+  routing-human-debt-v2), tree clean, typecheck pass, test fail->pass improved,
+  no failures/blocked/debt. M3 derive half done; wave 9 deps all satisfied."
+text: "Proceed to wave 9: routing-architect-consult-v2 + adr-blocking-digest-v2
+  + status-state-surface-v2 in parallel. Consult owns exactly-once
+  decisions/concern-<cid>.yaml + concernsYaml hydration; ADR owns full md + mode
+  routing; status owns counts + Blocking vs Digest."
