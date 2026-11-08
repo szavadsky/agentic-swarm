@@ -1,0 +1,54 @@
+status: ok
+summary: Inlined structured concern and remarkable-decision definitions (no
+  cross-file $ref) into developer-output, fact-finder-output, plan, decisions,
+  wave-closeup, plan-closeup, and review schemas. Added newConcerns[] to both
+  the static review.schema.json and the runtime generateReviewSchema
+  (QA/reviewer), added concernResolutions[] (resolve|carry|propagate) to
+  wave/plan close-ups, kept kind/severity strict enums with summary/kind
+  required and detail/severity optional, added dismiss to the static review
+  disposition enum, and left triage/infra/plan-edits untouched. All 6 target
+  tests, typecheck, prompts preflight, and the full suite pass.
+target:
+  selectors:
+    - test/contracts/concern-schemas.test.ts
+    - test/engine/concerns-funnel.test.ts
+  expectRed:
+    - test/contracts/concern-schemas.test.ts::Concern producer schemas::inlines
+      the concern definition into every producer schema without external refs
+    - test/contracts/concern-schemas.test.ts::Concern producer schemas::inlines
+      the remarkable decision definition with chosen, alternatives, and why
+    - test/contracts/concern-schemas.test.ts::Concern producer schemas::adds
+      newConcerns to review and QA schemas outside the triage suggestions
+    - test/contracts/concern-schemas.test.ts::Concern producer schemas::adds
+      concernResolutions with resolve, carry, and propagate to close-up schemas
+    - test/engine/concerns-funnel.test.ts::Concern funnel schemas::valid
+      concerns pass validation and unknown kinds reject with no artifact write
+evidence:
+  - "Baseline before changes: TMPDIR=/tmp bun test
+    test/contracts/concern-schemas.test.ts test/engine/concerns-funnel.test.ts
+    -> 1 pass, 5 fail (5 declared expectRed cases red)."
+  - "After changes: TMPDIR=/tmp bun test test/contracts/concern-schemas.test.ts
+    test/engine/concerns-funnel.test.ts -> 6 pass, 0 fail, 29 expect() calls."
+  - TMPDIR=/tmp bun run typecheck (plugins/software-factory) -> exit 0, no
+    diagnostics.
+  - TMPDIR=/tmp bun test test/prompts.test.ts -> 17 pass, 0 fail (preflight
+    green).
+  - TMPDIR=/tmp bun test (full suite) -> 293 pass, 2 skip, 0 fail across 54
+    files.
+  - "Parsed every modified .json file with python json.load: all valid JSON."
+  - "git diff --numstat: 186 JSON lines added (191 incl. replaced lines) across
+    7 schemas, within the <=200 JSON-line budget; 34 TS lines in
+    review-schema.ts; no test files modified."
+concerns:
+  - DeveloperOutputArtifact.concerns in src/core/artifacts.ts is still typed
+    string[]; schema now emits structured concerns. The runtime/store story will
+    need to reconcile this type (schemas-only scope intentionally left types
+    untouched).
+  - generateReviewSchema defaults still omit dismiss; the review-policy story
+    owns appending dismiss for triagers, while the static review.schema.json
+    includes it for the fallback path.
+notes: The remarkable-decision property is named `remarkable` (the contract test
+  detects it structurally). All new fields are optional so existing producer
+  payloads remain valid; kind/summary are required and kind/severity use strict
+  enums so unknown kinds fail Ajv before writeArtifact runs, as proven by the
+  FakeHarness case.

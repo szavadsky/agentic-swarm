@@ -1,0 +1,38 @@
+status: approved
+summary: "Schemas green: 6/6 targets pass, typecheck+prompts pass, strict kind
+  enum with no-write proven, no weakening"
+suggestions:
+  - detail: Schema now requires structured {kind,summary} objects but
+      DeveloperOutputArtifact.concerns remains string[]. No gate breaks (nothing
+      reads concerns yet) but runtime/store split must reconcile type to
+      Concern[] or Omit<Concern,'id'>. Deferred debt, not schemas-story scope.
+    disposition: optional
+    id: developer-output-type-mismatch
+    location:
+      file: plugins/software-factory/src/core/artifacts.ts
+      line: 393
+    summary: DeveloperOutputArtifact.concerns type still string[] vs structured schema
+  - detail: inferTaskWorktree fixes taskWt fallback for TMPDIR under
+      .factory-runtime/tmp (old split on '/.factory' mis-resolved to workspace
+      root). All prod callsites already pass taskWt explicitly so risk is
+      fallback/test path only; full suite 293 pass. Alternative test-only fix
+      (pass taskWt in funnel helper) would preserve schemas-only diff, but prod
+      fix is strictly more correct (uses orchestrationFolder, boundary match).
+      No dedicated unit test for infer; covered only indirectly when TMPDIR
+      contains .factory substring.
+    disposition: optional
+    id: step-runner-fallback-scope
+    location:
+      file: plugins/software-factory/src/core/flows/step-runner.ts
+      line: 162
+    summary: Out-of-scope step-runner fallback fix is correct but lacks direct test
+  - detail: Check uses .some(!includes) so superset enum would pass as long as
+      resolve|carry|propagate present. Dismiss is separately rejected so current
+      impl (exact 3) is safe, but extra action like archive would slip. Tighten
+      to exact set equality like kind/severity checks.
+    disposition: optional
+    id: concern-resolutions-enum-exactness
+    location:
+      file: plugins/software-factory/test/contracts/concern-schemas.test.ts
+      line: 334
+    summary: concernResolutions test allows superset enum
