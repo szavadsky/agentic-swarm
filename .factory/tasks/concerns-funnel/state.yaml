@@ -3,7 +3,97 @@ kind: epic
 status: active
 iteration: 1
 currentWave: 1
-items: {}
+items:
+  concerns-contracts:
+    kind: dev
+    status: running
+    branch: topic/concerns-funnel--concerns-contracts
+    attempts: 2
+    fixRounds: 2
+  spike-saga-commit:
+    kind: fact-finder
+    status: ready
+    branch: topic/concerns-funnel--spike-saga-commit
+    attempts: 1
+    fixRounds: 1
+  spike-text-budget:
+    kind: test-assumptions
+    status: ready
+    branch: topic/concerns-funnel--spike-text-budget
+    attempts: 1
+    fixRounds: 1
+  concerns-store:
+    kind: dev
+    status: pending
+    branch: topic/concerns-funnel--concerns-store
+    attempts: 1
+    fixRounds: 1
+  modes-prompts:
+    kind: dev
+    status: pending
+    branch: topic/concerns-funnel--modes-prompts
+    attempts: 1
+    fixRounds: 1
+  plan-reviewer-triage:
+    kind: dev
+    status: pending
+    branch: topic/concerns-funnel--plan-reviewer-triage
+    attempts: 1
+    fixRounds: 1
+  reviewer-triage:
+    kind: dev
+    status: pending
+    branch: topic/concerns-funnel--reviewer-triage
+    attempts: 1
+    fixRounds: 1
+  routing-blocker-derive:
+    kind: dev
+    status: pending
+    branch: topic/concerns-funnel--routing-blocker-derive
+    attempts: 1
+    fixRounds: 1
+  routing-human-debt:
+    kind: dev
+    status: pending
+    branch: topic/concerns-funnel--routing-human-debt
+    attempts: 1
+    fixRounds: 1
+  adr-blocking-digest:
+    kind: dev
+    status: pending
+    branch: topic/concerns-funnel--adr-blocking-digest
+    attempts: 1
+    fixRounds: 1
+  routing-architect-consult:
+    kind: dev
+    status: pending
+    branch: topic/concerns-funnel--routing-architect-consult
+    attempts: 1
+    fixRounds: 1
+  status-state-surface:
+    kind: dev
+    status: pending
+    branch: topic/concerns-funnel--status-state-surface
+    attempts: 1
+    fixRounds: 1
+  funnel-closeups:
+    kind: dev
+    status: pending
+    branch: topic/concerns-funnel--funnel-closeups
+    attempts: 1
+    fixRounds: 1
+  saga-propagate:
+    kind: dev
+    status: pending
+    branch: topic/concerns-funnel--saga-propagate
+    attempts: 1
+    fixRounds: 1
+  docs-finish:
+    kind: dev
+    status: pending
+    branch: topic/concerns-funnel--docs-finish
+    attempts: 1
+    fixRounds: 1
 debt:
   - Pre-existing head-guard failures when TMPDIR sits under .factory-runtime
     because step-runner splits on /.factory. Baseline red; green with
@@ -15,5 +105,30 @@ debt:
     human-stop contract drifted from exit-10.
   - human-awareness and human-stop ignored, debt derivation ignores routed
     concerns, status lists digest as blocking.
-budgetSpentUsd: 0.292805
-lastUpdated: 2026-11-08T00:53:51.132Z
+  - "[concerns-contracts] Review fallback duplicates canonical dispositions
+    instead of importing the constant"
+  - "[concerns-contracts] resolveReviewAllowed could return ReviewDisposition[]
+    instead of string[]"
+  - "[concerns-contracts] resolveStepSchema hardcodes canonical dispositions
+    instead of reusing constant"
+  - "[concerns-contracts] CONCERN_KINDS set duplicates CONCERN_SCHEMA enum"
+  - "[concerns-contracts] isTriager logic duplicated and divergent between
+    step-runner and item-machine"
+  - "[concerns-contracts] Custom reviewPolicy values accept any string, can
+    reintroduce tech-debt"
+  - "[spike-saga-commit] Qualify 'epic state derived ONLY from
+    child-closeup.yaml' — isMerged takes precedence"
+  - "[spike-saga-commit] Inline citation paths missing plugins/software-factory/
+    prefix"
+  - "[spike-saga-commit] Scope 'no failure-path removeWorktree' claim to epic
+    child worktrees"
+  - "[spike-saga-commit] contextPack key exceeds strict fact-finder output
+    schema"
+  - "[spike-text-budget] Cross-check item diffs through production git()
+    wrapper, not just wave aggregate"
+  - "[spike-text-budget] Add many-concerns case forcing hard truncation at the
+    2000-byte cap"
+  - "[spike-text-budget] Clarify trim-semantics comment to name TmpRepo trimEnd
+    measurement path"
+budgetSpentUsd: 0.298402
+lastUpdated: 2026-11-08T02:21:06.632Z
