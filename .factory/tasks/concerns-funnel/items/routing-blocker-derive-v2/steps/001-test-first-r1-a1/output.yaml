@@ -1,0 +1,84 @@
+status: ok
+summary: "Authored test-first coverage for routed-blocker derivation (no
+  production code touched). New test/engine/routing-blocker-derive.test.ts
+  covers: collectRoutedBlockers reading only routed kind==blocker affects
+  (open/resolved/dismissed/other kinds ignored, missing concerns dir,
+  late-arriving blocker); deriveWaveState blockedBy routing an affected item
+  plus declared dependents while non-dependents stay runnable and transitive
+  cascade follows deps only; deriveItemState blockedBy marking only the named
+  item and preserving terminal (abandoned/failed) status; and deriveTaskState
+  end-to-end deriving itemMap/waves blocked statuses for seed + dependent +
+  transitive while an independent item stays pending, with a full task-tree
+  snapshot proving derivation writes nothing, plus task status blocked when
+  every item is in the cascade. Added plan/scheduler: blockedByConcern tests to
+  test/plan-scheduler.test.ts covering PM-order blocking of affected items and
+  declared dependents, union with the failure-blocked fixpoint (direct +
+  transitive), and ignoring dangling/plan refs and terminal (done) items. All 11
+  declared target tests fail with assertion failures (not import/collection
+  errors) on the current production code; the 13 pre-existing scheduler tests
+  still pass; typecheck is clean."
+target:
+  selectors:
+    - test/engine/routing-blocker-derive.test.ts
+    - test/plan-scheduler.test.ts
+  expectRed:
+    - "plan/scheduler: blockedByConcern.blocks concern-affected items and their
+      declared dependents in PM order"
+    - "plan/scheduler: blockedByConcern.unions concern blocking with the
+      failure-blocked fixpoint over declared deps"
+    - "plan/scheduler: blockedByConcern.ignores refs naming no item and never
+      blocks a done item"
+    - "derive/task: collectRoutedBlockers.collects affects of routed blocker
+      concerns and ignores other statuses and kinds"
+    - "derive/task: collectRoutedBlockers.returns an empty set when the task has
+      no concerns directory"
+    - "derive/wave: routed blocker integration.routes a concern-affected item
+      and its declared dependents to blocked"
+    - "derive/wave: routed blocker integration.cascades transitively over
+      declared deps only"
+    - "derive/item: routed blocker integration.blocks only the item named by a
+      routed blocker"
+    - "derive/item: routed blocker integration.keeps a terminal item status over
+      routed blocking"
+    - "derive/task: routed blocker scenario.blocks affected items and declared
+      dependents, leaving non-dependents pending without writes"
+    - "derive/task: routed blocker scenario.derives the task blocked when every
+      item is in the routed blocker cascade"
+evidence:
+  - Installed workspace deps with `cd plugins/software-factory && bun install
+    --frozen-lockfile` (node_modules gitignored) so bun can resolve the `yaml`
+    import chain used by derive tests.
+  - "Proved red classification first with a scratch bun test: a failed `expect`
+    is emitted as `<failure>` (status fail) in bun's JUnit reporter, while
+    runtime exceptions become `<error>`, so a missing symbol alone would not
+    satisfy target-red."
+  - "Ran the exact engine target command from the worktree root: `cd
+    plugins/software-factory && bun test
+    test/engine/routing-blocker-derive.test.ts test/plan-scheduler.test.ts
+    --reporter=junit --reporter-outfile=/tmp/junit-target.xml`; exit code 1 with
+    13 pass / 11 fail."
+  - "Parsed the JUnit XML with Python: all 11 declared expectRed ids are
+    present, each with a `<failure>` element and 0 `<error>` elements; no
+    declared id is missing and no declared test passes."
+  - "Re-ran the exact target command under the ambient TMPDIR
+    (`.../.factory-runtime/tmp`): same 11 failures / 0 errors, so the red target
+    does not depend on the TMPDIR head-guard caveat."
+  - "Ran `cd plugins/software-factory && bun run typecheck` (tsc --noEmit):
+    pass, confirming the test-only additions compile under strict settings with
+    no production changes."
+  - "Verified `git status --short`: only
+    `plugins/software-factory/test/plan-scheduler.test.ts` (modified) and
+    `plugins/software-factory/test/engine/routing-blocker-derive.test.ts` (new)
+    changed; no production files touched."
+notes: "Test-first seams use inert local fallbacks (empty Set / empty array) for
+  the not-yet-existing collectRoutedBlockers and blockedByConcern exports, so
+  every red failure is a behavioural assertion rather than a module
+  import/collection error. The end-to-end scenario snapshots the entire task
+  tree before/after deriveTaskState to enforce the pure-derive/no-writes
+  constraint. Expected implementation contract: deriveWaveState/deriveItemState
+  accept `blockedBy?: Iterable<string>`; scheduler.blockedByConcern(items,
+  concernBlocked) returns a PM-ordered union of concern seeds and
+  direct/transitive failure blocking; deriveTaskState collects routed blocker
+  affects, marks directly affected items and their declared-dependency cascade
+  blocked in itemMap/waves, and leaves non-dependents pending."
+concerns: []

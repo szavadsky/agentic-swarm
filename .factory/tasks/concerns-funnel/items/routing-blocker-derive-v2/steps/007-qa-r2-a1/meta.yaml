@@ -1,0 +1,18 @@
+seq: 7
+name: qa
+attempt: 1
+fixRound: 2
+agent: qa
+role: workhorse
+models:
+  - opencode-go/deepseek-v4.1-flash
+  - opencode-go/muse-spark-1.3-contributor
+timeoutSec: 900
+status: interrupted
+startedAt: 2026-11-08T11:44:21.378Z
+session: 01a1baf9-4e7f-74e6-8ed0-a8908b8dbca6
+endedAt: 2026-11-08T11:46:26.657Z
+usage:
+  inputTokens: 190112
+  outputTokens: 8424
+  costUsd: 0.034657919999999995

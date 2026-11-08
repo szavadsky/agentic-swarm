@@ -1,0 +1,121 @@
+checks:
+  - id: gates
+    status: pass
+    message: "Gates passed (2 gates, improvements: Engine: HEAD guard resilience
+      (§7).detects when an agent commits and resets --soft to before.sha,
+      keeping changes staged, Engine: HEAD guard resilience (§7).detects when an
+      agent switches branch and restores original branch, keeping changes)"
+    details:
+      - id: typecheck
+        command: cd plugins/software-factory && bun run typecheck
+        status: pass
+        durationMs: 4267
+        details: $ tsc --noEmit
+      - id: test
+        command: cd plugins/software-factory && bun test
+        status: pass
+        durationMs: 66017
+        details: |-
+          bun test v1.4.3 (c6da4a4d3)
+          ================================================================
+          Task: status-test-task [ACTIVE]
+          Kind: unclassified | Iteration: 1 | Wave: 1
+          Worktree: (none - main checkout)
+          Config path: /home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/factory-test-repo-WTJIgy/.factory/pipeline.yaml
+          Budget spent: $0.0000
+          ----------------------------------------------------------------
+          Waves & Items:
+            Wave 1:
+          ================================================================
+
+
+          test/cli/cli.test.ts:
+          [factory lock] Stale run lock for task "stale-lock-task" (PID 9999999 on host Slava-Yoga) taken over by PID 3788233
+          [factory lock] Stale run lock for task "competing-takeover-task" (PID 9999999 on host Slava-Yoga) taken over by PID 3788233
+          [factory lock] Stale run lock for task "journal-worktree-task" (PID 9999999 on host Slava-Yoga) taken over by PID 3788233
+
+           361 pass
+           2 skip
+           0 fail
+           1661 expect() calls
+          Ran 363 tests across 59 files. [65.88s]
+          [Improvements: Engine: HEAD guard resilience (§7).detects when an agent commits and resets --soft to before.sha, keeping changes staged, Engine: HEAD guard resilience (§7).detects when an agent switches branch and restores original branch, keeping changes]
+        improvements:
+          - "Engine: HEAD guard resilience (§7).detects when an agent commits
+            and resets --soft to before.sha, keeping changes staged"
+          - "Engine: HEAD guard resilience (§7).detects when an agent switches
+            branch and restores original branch, keeping changes"
+  - id: target-green
+    status: pass
+    message: "target-green passed: selected tests passed"
+    details:
+      command: cd plugins/software-factory && bun test
+        test/engine/routing-blocker-derive.test.ts test/plan-scheduler.test.ts
+        --reporter=junit
+        --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-green-1794133678161-h4umdoqwcu.xml
+      junitCaseCount: 24
+      junitCaseIds:
+        - "plan/scheduler: nextWave.returns current active wave while items are
+          pending or running"
+        - "plan/scheduler: nextWave.advances to next wave when all items in
+          current wave are terminal"
+        - "plan/scheduler: nextWave.returns null when all items across all waves
+          are terminal"
+        - "plan/scheduler: nextWave.automatically sorts numeric waves when order
+          is omitted"
+        - "plan/scheduler: nextWave.treats pending items with failed/abandoned
+          deps as blocked for wave advancement"
+        - "plan/scheduler: nextWave.reports directly blocked items; transitive
+          cascade is the engine's job"
+        - "plan/scheduler: runnable.respects dependencies: pending item only
+          runs when all deps are done"
+        - "plan/scheduler: runnable.respects active wave filter"
+        - "plan/scheduler: runnable.respects maxParallel concurrency limit and
+          current running count"
+        - "plan/scheduler: runnable.preserves PM order"
+        - "plan/scheduler: runnable.never returns items whose deps failed"
+        - "plan/scheduler: blockedByFailure.returns pending items with failed or
+          abandoned deps, in PM order"
+        - "plan/scheduler: blockedByFailure.returns empty when no dep has failed
+          or been abandoned"
+        - "plan/scheduler: blockedByConcern.blocks concern-affected items and
+          their declared dependents in PM order"
+        - "plan/scheduler: blockedByConcern.unions concern blocking with the
+          failure-blocked fixpoint over declared deps"
+        - "plan/scheduler: blockedByConcern.ignores refs naming no item and
+          never blocks a done item"
+        - "derive/task: collectRoutedBlockers.collects affects of routed blocker
+          concerns and ignores other statuses and kinds"
+        - "derive/task: collectRoutedBlockers.returns an empty set when the task
+          has no concerns directory"
+        - "derive/wave: routed blocker integration.routes a concern-affected
+          item and its declared dependents to blocked"
+        - "derive/wave: routed blocker integration.cascades transitively over
+          declared deps only"
+        - "derive/item: routed blocker integration.blocks only the item named by
+          a routed blocker"
+        - "derive/item: routed blocker integration.keeps a terminal item status
+          over routed blocking"
+        - "derive/task: routed blocker scenario.blocks affected items and
+          declared dependents, leaving non-dependents pending without writes"
+        - "derive/task: routed blocker scenario.derives the task blocked when
+          every item is in the routed blocker cascade"
+      junitTruncated: false
+      collected: true
+      collectionErrors: []
+  - id: size
+    status: pass
+    message: "size passed: 218/300 production lines changed"
+    details:
+      changedLines:
+        added: 165
+        deleted: 53
+        total: 218
+        files:
+          - plugins/software-factory/src/core/derive/item.ts
+          - plugins/software-factory/src/core/derive/task.ts
+          - plugins/software-factory/src/core/derive/wave.ts
+          - plugins/software-factory/src/core/flows/iteration.ts
+          - plugins/software-factory/src/core/plan/index.ts
+          - plugins/software-factory/src/core/plan/scheduler.ts
+      limit: 300

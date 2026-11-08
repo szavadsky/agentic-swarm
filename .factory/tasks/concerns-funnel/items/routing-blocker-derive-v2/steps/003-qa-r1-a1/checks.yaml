@@ -1,0 +1,66 @@
+checks:
+  - id: red-test
+    status: pass
+    message: "red-test passed: all 11 tests fail when prod changes are restored to
+      test-first commit"
+    details:
+      command: cd plugins/software-factory && bun test
+        test/engine/routing-blocker-derive.test.ts test/plan-scheduler.test.ts
+        --reporter=junit
+        --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-redtest-1794133684463-6u040o06mre.xml
+      junitCaseCount: 24
+      junitCaseIds:
+        - "plan/scheduler: nextWave.returns current active wave while items are
+          pending or running"
+        - "plan/scheduler: nextWave.advances to next wave when all items in
+          current wave are terminal"
+        - "plan/scheduler: nextWave.returns null when all items across all waves
+          are terminal"
+        - "plan/scheduler: nextWave.automatically sorts numeric waves when order
+          is omitted"
+        - "plan/scheduler: nextWave.treats pending items with failed/abandoned
+          deps as blocked for wave advancement"
+        - "plan/scheduler: nextWave.reports directly blocked items; transitive
+          cascade is the engine's job"
+        - "plan/scheduler: runnable.respects dependencies: pending item only
+          runs when all deps are done"
+        - "plan/scheduler: runnable.respects active wave filter"
+        - "plan/scheduler: runnable.respects maxParallel concurrency limit and
+          current running count"
+        - "plan/scheduler: runnable.preserves PM order"
+        - "plan/scheduler: runnable.never returns items whose deps failed"
+        - "plan/scheduler: blockedByFailure.returns pending items with failed or
+          abandoned deps, in PM order"
+        - "plan/scheduler: blockedByFailure.returns empty when no dep has failed
+          or been abandoned"
+        - "plan/scheduler: blockedByConcern.blocks concern-affected items and
+          their declared dependents in PM order"
+        - "plan/scheduler: blockedByConcern.unions concern blocking with the
+          failure-blocked fixpoint over declared deps"
+        - "plan/scheduler: blockedByConcern.ignores refs naming no item and
+          never blocks a done item"
+        - "derive/task: collectRoutedBlockers.collects affects of routed blocker
+          concerns and ignores other statuses and kinds"
+        - "derive/task: collectRoutedBlockers.returns an empty set when the task
+          has no concerns directory"
+        - "derive/wave: routed blocker integration.routes a concern-affected
+          item and its declared dependents to blocked"
+        - "derive/wave: routed blocker integration.cascades transitively over
+          declared deps only"
+        - "derive/item: routed blocker integration.blocks only the item named by
+          a routed blocker"
+        - "derive/item: routed blocker integration.keeps a terminal item status
+          over routed blocking"
+        - "derive/task: routed blocker scenario.blocks affected items and
+          declared dependents, leaving non-dependents pending without writes"
+        - "derive/task: routed blocker scenario.derives the task blocked when
+          every item is in the routed blocker cascade"
+      junitTruncated: false
+      collected: true
+      collectionErrors: []
+  - id: test-diff
+    status: pass
+    message: test-diff generated (0 test files, 0 bytes)
+    details:
+      diff: ""
+      files: []

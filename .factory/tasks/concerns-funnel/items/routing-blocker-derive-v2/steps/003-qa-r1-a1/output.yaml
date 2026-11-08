@@ -1,0 +1,37 @@
+status: approved
+summary: 11/11 red->green verified, no weakening, pure-derive holds
+suggestions:
+  - id: test-seam-cleanup
+    disposition: optional
+    summary: Replace test-first fallback seams with direct imports
+    detail: Both suites capture new exports via dynamic lookup with inert fallbacks
+      (empty Set/[]) to force assertion-failures for target-red. Now that
+      collectRoutedBlockers and blockedByConcern exist, direct static imports
+      fail fast on missing exports and gain type checking. Current form still
+      exercises real code and fails behaviorally if exports removed, so polish
+      only.
+    location:
+      file: plugins/software-factory/test/engine/routing-blocker-derive.test.ts
+      line: 24
+  - id: drop-blockedby-casts
+    disposition: optional
+    summary: Drop now-redundant blockedBy option casts
+    detail: "ItemDeriveOpts/WaveDeriveOpts intersection plus `as` casts were needed
+      pre-implementation; deriveItemState/deriveWaveState now type blockedBy?:
+      Iterable<string>. Removing casts tightens type checking without behavior
+      change."
+    location:
+      file: plugins/software-factory/test/engine/routing-blocker-derive.test.ts
+      line: 28
+  - id: wave-report-routed-label
+    disposition: optional
+    summary: Wave report conflates routed-blocked with failure-blocked
+    detail: iteration.ts derives blockedByFailureSlugs from waveState.blocked via
+      deps-on-failed-or-blocked predicate. Routed dependents satisfy same
+      predicate and will be labeled Blocked-by-failure in summary/artifact while
+      dep-less seeds are omitted. Pure-derive scope is correct; downstream
+      routing-architect-consult act-phase should distinguish failure vs routed
+      when reporting.
+    location:
+      file: plugins/software-factory/src/core/flows/iteration.ts
+      line: 878

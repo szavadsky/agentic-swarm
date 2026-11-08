@@ -1,0 +1,71 @@
+status: changes_requested
+summary: Routed seed predicate diverges across layers; wave duplicates scheduler
+  fixpoint
+suggestions:
+  - id: routed-seed-predicate-divergence
+    disposition: fix
+    summary: "Unify routed-blocker seed predicate: task/item use non-terminal,
+      wave/scheduler use pending-only"
+    detail: task.ts seeds routedBlocked for any non-terminal (!TERMINAL) while
+      wave.ts and scheduler.blockedByConcern seed only status==pending.
+      withRoutedBlocking also blocks running/ready. Same concern therefore
+      derives different blocked sets via deriveTaskState (running/ready seeds
+      blocked + pending dependents cascaded) vs iteration deriveWaveState
+      (running/ready seeds ignored, dependents stay runnable). Breaks
+      pure-derive consistency; refreshStateYaml can report blocked while
+      iteration keeps scheduling the item. Align all three to one predicate
+      (pending-only matches §8.2 precedent and avoids retro-blocking in-flight
+      work; if non-terminal is intended, update wave/scheduler to match) and add
+      a running/ready-seed test to lock it.
+    location:
+      file: plugins/software-factory/src/core/derive/task.ts
+      line: 169
+  - id: wave-reuse-blockedByConcern
+    disposition: fix
+    summary: deriveWaveState reimplements blockedByConcern seeding+cascade instead
+      of reusing it
+    detail: wave.ts builds blockedSlugs via blockedByFailure + manual pending-seed
+      loop + cascadePendingBlocked, which is exactly
+      blockedByConcern(schedItems, blockedBy). Duplication already caused the
+      predicate divergence with task.ts. Replace with new
+      Set(blockedByConcern(schedItems, opts.blockedBy ?? [])) (schedItems
+      mapping already exists) so the failure-union fixpoint has one owner; apply
+      the same shared helper for task.ts post-processing.
+    location:
+      file: plugins/software-factory/src/core/derive/wave.ts
+      line: 55
+  - id: iteration-final-blocked-check-ignores-routed
+    disposition: optional
+    summary: Iteration end-of-wave blocked check derives without blockedBy, misses
+      routed blockers
+    detail: iteration.ts derives allCurrentStates via deriveItemState without
+      blockedBy and checks status==blocked. Routed-blocked items stay pending
+      there (blocking only materialized in deriveTaskState itemMap or wave
+      buckets), so the iteration blocked early-return never fires for
+      routed-only blocking while deriveTaskState reports task blocked. Either
+      derive via a routed-aware path or check wave/blocked buckets; defer to
+      routing-architect-consult act-phase if intentional.
+    location:
+      file: plugins/software-factory/src/core/flows/iteration.ts
+      line: 1091
+  - id: blockedby-naming
+    disposition: optional
+    summary: Unify blockedBy vs concernBlocked/routedNames naming for the same set
+    detail: derive item/wave use blockedBy for affected-item slugs (reads as edge
+      list), scheduler uses concernBlocked, task uses routedNames/routedBlocked.
+      Pick one term (e.g. concernBlocked or routedBlocked) across derive +
+      scheduler to avoid misreading as blocker ids.
+    location:
+      file: plugins/software-factory/src/core/derive/wave.ts
+      line: 28
+  - id: task-wave-blockedby-comment
+    disposition: optional
+    summary: Document why deriveTaskState wave calls omit blockedBy
+    detail: Items are pre-blocked via withRoutedBlocking before the wave loop, so
+      deriveWaveState calls intentionally omit blockedBy (seeds would be status
+      blocked, not pending). Add a one-line comment at the wave loop to prevent
+      a future caller from threading it twice or removing the post-process as
+      redundant.
+    location:
+      file: plugins/software-factory/src/core/derive/task.ts
+      line: 190

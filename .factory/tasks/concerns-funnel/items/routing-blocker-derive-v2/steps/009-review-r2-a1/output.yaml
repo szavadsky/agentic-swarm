@@ -1,0 +1,83 @@
+status: approved
+summary: "Implementation matches the routing-derived-state ADR and item
+  assignment: collectRoutedBlockers reads routed kind==blocker affects,
+  deriveWave/deriveTask thread the seed set through the single-owner
+  blockedByConcern fixpoint (union with blockedByFailure, cascade over declared
+  deps only), deriveItem post-processes pending items, and iteration threads
+  blockedBy into both deriveWaveState calls. Fix-round items (pending-only
+  predicate, wave/task reuse of blockedByConcern) are resolved with regression
+  tests. Independently verified: 27/27 target tests, typecheck clean, full suite
+  364 pass / 2 skip / 0 fail; test diff is additive plus a documented timeout
+  stabilization. Only optional polish remains."
+suggestions:
+  - id: task-postprocess-failure-union
+    disposition: optional
+    summary: deriveTaskState now also marks failure-blocked items blocked (union),
+      an untested semantic change
+    detail: 'task.ts:177 passes routedNames through blockedByConcern, which unions
+      blockedByFailure, and withRoutedBlocking then flips those pending items to
+      blocked in items/itemMap/state.yaml. Probe: item A abandoned (derives
+      failed), item B deps A -> itemMap B is now "blocked" (pre-change it stayed
+      "pending"); task status is unchanged (some-failed wins). Not required by
+      the routed-blocker contract; either add a test and document the union as
+      intentional (consistent with wave buckets) or filter the post-process to
+      concern seeds so failure blocking stays wave-owned.'
+    location:
+      file: plugins/software-factory/src/core/derive/task.ts
+      line: 177
+  - id: sched-status-mapping-duplication
+    disposition: optional
+    summary: DerivedItemState->SchedItem mapping and status cast duplicated in
+      wave.ts and task.ts
+    detail: Both wave.ts:51 and task.ts:171 map slug/wave/deps/status with
+      `it.status as "pending"|"running"|"done"|"failed"|"blocked"|"abandoned"`,
+      while DerivedItemState also yields "ready" and "superseded"; the cast
+      silently lies and the two copies must be kept in sync (the same divergence
+      class the fix round just removed for the fixpoint). Extract one shared
+      adapter next to blockedByConcern. Also cascadePendingBlocked is exported
+      but has no caller outside scheduler.ts; making it module-private keeps the
+      scheduler surface tight.
+    location:
+      file: plugins/software-factory/src/core/derive/task.ts
+      line: 171
+  - id: wave-report-routed-label
+    disposition: optional
+    summary: Wave report labels routed-blocked dependents "Blocked-by-failure";
+      dep-less routed seeds omitted
+    detail: iteration.ts:878 builds blockedByFailureSlugs from waveState.blocked
+      where status==pending and any dep is in waveState.blocked. Routed-blocked
+      dependents (now placed in waveState.blocked by deriveWaveState) satisfy
+      that predicate and are reported/summarized as "Blocked-by-failure", while
+      a dep-less routed seed is omitted entirely. The routing-architect-consult
+      act-phase should split routed vs failure causes (or the predicate should
+      filter on failedSlugs only) so the architect report/blockedItems artifact
+      does not misattribute the blocker.
+    location:
+      file: plugins/software-factory/src/core/flows/iteration.ts
+      line: 878
+  - id: heavy-test-timeout
+    disposition: optional
+    summary: Unrelated 2-cycle integration test now relies on a 30s timeout ceiling
+    detail: blocked-closeup-iteration.test.ts:266 raises the per-test timeout
+      5s->30s with no assertion changes. I measured 2.65s idle (developer
+      measured 4.7-7.9s under load), so the 5s default was marginal and the bump
+      is not test weakening, but the two runTask cycles remain timing-sensitive.
+      Durable fix is splitting/speeding the harness rather than only raising the
+      ceiling.
+    location:
+      file: plugins/software-factory/test/engine/blocked-closeup-iteration.test.ts
+      line: 266
+  - id: test-first-seams-retained
+    disposition: optional
+    summary: Test-first dynamic-export seams and option casts remain after
+      implementation
+    detail: "routing-blocker-derive.test.ts:24 resolves collectRoutedBlockers via
+      `as unknown as` with an inert empty-Set fallback, and
+      ItemDeriveOpts/WaveDeriveOpts casts at line 28 mask the now-real
+      signatures; plan-scheduler.test.ts:5 does the same for blockedByConcern.
+      Behavior still fails if exports disappear, so this is polish, not
+      weakening: direct static imports restore compile-time checking and remove
+      the fallback shims."
+    location:
+      file: plugins/software-factory/test/engine/routing-blocker-derive.test.ts
+      line: 24
