@@ -1,0 +1,53 @@
+status: ok
+summary: "Test-only fix-round complete: the working tree's strengthened
+  hydration-fingerprint-caps tests now discriminate role caps (2000 vs 500),
+  cover step-runner plan-review inputBytes summation/exclusions end-to-end, add
+  the legacy detail-preservation regression test, and make architect UTF-8
+  assertions non-vacuous. All 5 injected mutants fail exactly their target test;
+  typecheck and the full suite are green; no production files changed."
+evidence:
+  - git status --short -> only M
+    plugins/software-factory/test/engine/hydration-fingerprint-caps.test.ts
+    (235+/55-); no prod files modified.
+  - bun run typecheck (plugins/software-factory) -> tsc --noEmit exit 0.
+  - "TMPDIR=/tmp bun test test/engine/hydration-fingerprint-caps.test.ts -> 17
+    pass, 0 fail, 125 expect() calls (15 original + 2 new: plan-review
+    step-runner summation, legacy detail preservation)."
+  - "FIX cap-discrimination verified: review/wave-close-up fixtures assert
+    uncapped > 2000, rendered <= 2000 AND > 500, < uncapped, fewer id lines than
+    seeded (condensation); plan-review asserts uncapped > 500, inputBytes=294 <
+    500 renders <= 294 with dropped records. Mutant review-cap-2000->500 fails
+    only 'caps review hydration'; mutant closeup-cap-2000->500 fails only 'caps
+    wave-close-up hydration'; mutant plan-review-cap-500->2000 fails only 'caps
+    plan-review hydration' (each 16 pass/1 fail)."
+  - "FIX step-runner summation verified: new runAgentStep plan-review test (no
+    caller concernsYaml) with 5000B debt/steering/humanInvolvementCriteria +
+    294B registered input renders <= 294B/2 records; 400B input renders more (3
+    records); caller-supplied 5000B concernsYaml passes through verbatim (skip
+    rule). Mutant dropping exclusions to {concernsYaml} fails only this test."
+  - "FIX legacy-gate regression verified: new test seeds legacy affects-keyed
+    file with 200+ char stored detail (longer than summary), re-emits omitting
+    detail, asserts stored detail survives, affects == [new,old], stable id file
+    exists, legacy file removed. Mutant reverting concerns.ts gate to
+    merged.detail=(input.detail ?? input.summary).trim() fails only this test."
+  - "OPTIONAL architect non-vacuous verified: debt/steering now asserted
+    non-empty and containing Han tail content (not just <= 20B and no U+FFFD);
+    suite green."
+  - "Neighbors: concerns-funnel + reviewer-triage + routing-architect-consult ->
+    35 pass, 0 fail."
+  - Full suite TMPDIR=/tmp bun test -> 401 pass, 2 skip, 0 fail, 1929 expect()
+    calls, 403 tests across 66 files.
+  - "Post-mutation integrity: triage.ts, concerns.ts, step-runner.ts each
+    diff-clean vs pre-mutation backups (ALL_PROD_RESTORED)."
+concerns:
+  - "OPTIONAL develop-family dormant branch (KNOWN_VARS lacks concernsYaml for
+    develop-family) left untouched: cross-item dependency on prompt-fragments,
+    no test-only action available here."
+  - debt/steering are not in KNOWN_VARS[plan-review], so their exclusion in the
+    plan-review summation test is vacuous by registry; the
+    humanInvolvementCriteria 5000B exclusion (proven by mutant) plus
+    sum-tracking assertions carry the coverage.
+notes: "No new code was written in this round: the required test strengthening
+  was already present as uncommitted changes in the worktree. Work performed was
+  skeptical verification (5 targeted mutants, each failing exactly one test),
+  gate runs, and confirming production files are byte-identical to baseline."

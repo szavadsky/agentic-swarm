@@ -205,30 +205,37 @@ describe("Hydration caps (adr-hydration-single-cap)", () => {
   }
 
   it("caps review hydration at min(diffBytes, 2000) bytes", async () => {
-    await writeConcern({
-      id: "c-aaaaaaaaaa",
-      kind: "risk",
-      summary: "Retry loop can spin",
-      detail: "DETAIL_SENTINEL" + "d".repeat(600),
-      severity: "high",
-      affects: ["item-a"],
-    });
-    await writeConcern({
-      id: "c-bbbbbbbbbb",
-      kind: "blocker",
-      summary: "Missing adapter",
-      detail: "e".repeat(600),
-      severity: "medium",
-    });
+    // Twelve terse records whose uncapped serialization (~2900B) exceeds both
+    // candidate caps, so a regression applying 500 to review fails the >500
+    // assertion and a regression applying 2000-everywhere fails plan-review.
+    for (let i = 0; i < 12; i++) {
+      await writeConcern({
+        id: `c-${i.toString(16).padStart(10, "0")}`,
+        kind: "risk",
+        summary: `Cap fixture concern ${i} ${"L".repeat(120)}`,
+        detail: "DETAIL_SENTINEL" + "d".repeat(600),
+        severity: "high",
+        affects: ["item-a", "item-b"],
+        createdAt: `2026-01-${String(i + 1).padStart(2, "0")}T00:00:00.000Z`,
+      });
+    }
 
-    const { hydrate } = hydrationApi();
+    const { hydrate, list } = hydrationApi();
+    const uncapped = yaml.stringify(await list(taskDir, "review"), { lineWidth: 0 });
+    expect(utf8Bytes(uncapped)).toBeGreaterThan(2000);
+
     const hydrated = await hydrate(taskDir, { stepRole: "review", diffBytes: 5000 });
     expect(utf8Bytes(hydrated)).toBeLessThanOrEqual(2000);
+    // 2000 was applied, not 500: output exceeds what the 500 cap would allow.
+    expect(utf8Bytes(hydrated)).toBeGreaterThan(500);
     expect(utf8Bytes(hydrated)).toBeLessThan(5000);
-    expect(hydrated).toContain("c-aaaaaaaaaa");
-    expect(hydrated).toContain("Retry loop can spin");
+    expect(utf8Bytes(hydrated)).toBeLessThan(utf8Bytes(uncapped));
+    expect(hydrated).toContain("c-0000000000");
     expect(hydrated).not.toContain("DETAIL_SENTINEL");
-    expect(yaml.parse(hydrated)).toHaveLength(2);
+    // Condensation actually occurred: fewer records survived than exist.
+    expect(idLines(hydrated).length).toBeLessThan(12);
+    expect(idLines(hydrated).length).toBeGreaterThan(0);
+    expect(yaml.parse(hydrated).length).toBe(idLines(hydrated).length);
 
     const small = await hydrate(taskDir, { stepRole: "review", diffBytes: 320 });
     expect(utf8Bytes(small)).toBeLessThanOrEqual(320);
@@ -236,62 +243,77 @@ describe("Hydration caps (adr-hydration-single-cap)", () => {
   });
 
   it("caps plan-review hydration at min(inputBytes, 500) bytes", async () => {
-    await writeConcern({
-      id: "c-cccccccccc",
-      kind: "tech-debt",
-      summary: "Plan duplicates the retry helper",
-      detail: "f".repeat(600),
-      severity: "medium",
-      affects: ["m1"],
-    });
-    await writeConcern({
-      id: "c-dddddddddd",
-      kind: "risk",
-      summary: "Milestone boundary depends on an unbuilt adapter",
-      detail: "g".repeat(600),
-      severity: "high",
-      affects: ["m1"],
-    });
+    // Five terse records (~1210B uncapped) exceed every cap below, so the
+    // assertions prove truncation rather than passing on a small fixture.
+    for (let i = 0; i < 5; i++) {
+      await writeConcern({
+        id: `c-cccccccc0${i}`,
+        kind: "tech-debt",
+        summary: `Plan duplicates the retry helper ${i} ${"P".repeat(120)}`,
+        detail: "f".repeat(600),
+        severity: "medium",
+        affects: ["m1"],
+        createdAt: `2026-01-0${i + 1}T00:00:00.000Z`,
+      });
+    }
 
-    const { hydrate } = hydrationApi();
+    const { hydrate, list } = hydrationApi();
+    const uncapped = yaml.stringify(await list(taskDir, "plan-review"), { lineWidth: 0 });
+    expect(utf8Bytes(uncapped)).toBeGreaterThan(500);
+
     const hydrated = await hydrate(taskDir, { stepRole: "plan-review", inputBytes: 4000 });
     expect(utf8Bytes(hydrated)).toBeLessThanOrEqual(500);
     expect(utf8Bytes(hydrated)).toBeLessThan(4000);
-    expect(hydrated).toContain("c-cccccccccc");
+    expect(utf8Bytes(hydrated)).toBeLessThan(utf8Bytes(uncapped));
+    expect(hydrated).toContain("c-cccccccc00");
+    expect(idLines(hydrated).length).toBeLessThan(5);
 
     // Iteration 2+ has merged code on the branch: classification still uses the
-    // registered prompt input, not a branch-state diff inference.
+    // registered prompt input, not a branch-state diff inference. inputBytes
+    // 294 < 500 with a 1210B payload proves min(inputBytes, 500).
     const iterationTwo = await hydrate(taskDir, { stepRole: "plan-review", inputBytes: 294 });
     expect(utf8Bytes(iterationTwo)).toBeLessThanOrEqual(294);
+    expect(utf8Bytes(iterationTwo)).toBeLessThan(utf8Bytes(uncapped));
+    expect(idLines(iterationTwo).length).toBeLessThan(5);
+    expect(idLines(iterationTwo).length).toBeGreaterThan(0);
   });
 
   it("caps wave-close-up hydration at min(taskDiffBytes, 2000) bytes", async () => {
-    await writeConcern({
-      id: "c-eeeeeeeeee",
-      kind: "tech-debt",
-      summary: "Shared helper duplicated in two modules",
-      detail: "h".repeat(3000),
-      severity: "medium",
-    });
-    await writeConcern({
-      id: "c-ffffffffff",
-      kind: "assumption",
-      summary: "Cache survives restart",
-      detail: "i".repeat(3000),
-      severity: "low",
-    });
+    // Twelve terse records (~2900B uncapped) exceed both candidate caps, so a
+    // regression applying 500 to close-ups fails the >500 assertion.
+    for (let i = 0; i < 12; i++) {
+      await writeConcern({
+        id: `c-eeeeeeeee${i.toString(16)}`,
+        kind: "tech-debt",
+        summary: `Shared helper duplicated in two modules ${i} ${"W".repeat(120)}`,
+        detail: "h".repeat(3000),
+        severity: "medium",
+        affects: ["wave-1"],
+        createdAt: `2026-01-${String(i + 1).padStart(2, "0")}T00:00:00.000Z`,
+      });
+    }
 
-    const { hydrate } = hydrationApi();
+    const { hydrate, list } = hydrationApi();
+    const uncapped = yaml.stringify(await list(taskDir, "closeup"), { lineWidth: 0 });
+    expect(utf8Bytes(uncapped)).toBeGreaterThan(2000);
+
     const hydrated = await hydrate(taskDir, { stepRole: "wave-close-up", taskDiffBytes: 5000 });
     expect(utf8Bytes(hydrated)).toBeLessThanOrEqual(2000);
+    // 2000 was applied, not 500: output exceeds what the 500 cap would allow.
+    expect(utf8Bytes(hydrated)).toBeGreaterThan(500);
     expect(utf8Bytes(hydrated)).toBeLessThan(5000);
-    expect(hydrated).toContain("c-eeeeeeeeee");
+    expect(utf8Bytes(hydrated)).toBeLessThan(utf8Bytes(uncapped));
+    expect(hydrated).toContain("c-eeeeeeeee0");
+    expect(idLines(hydrated).length).toBeLessThan(12);
+    expect(idLines(hydrated).length).toBeGreaterThan(0);
 
     const planCloseup = await hydrate(taskDir, {
       stepRole: "plan-close-up",
       taskDiffBytes: 5000,
     });
     expect(utf8Bytes(planCloseup)).toBeLessThanOrEqual(2000);
+    expect(utf8Bytes(planCloseup)).toBeGreaterThan(500);
+    expect(idLines(planCloseup).length).toBeLessThan(12);
   });
 
   it("returns empty hydration for zero and tiny caps", async () => {
@@ -351,6 +373,115 @@ describe("Hydration caps (adr-hydration-single-cap)", () => {
     const suppliedPrompt = promptOf(supplied.harness);
     expect(suppliedPrompt).toContain("CALLER-CONCERNS: c-caller");
     expect(suppliedPrompt).not.toContain(cid);
+  });
+
+  it("computes plan-review input bytes in step-runner excluding hydration keys", async () => {
+    // Payload (~848B uncapped) exceeds the 500 cap; promptVars carry large
+    // values for the four excluded keys, so only the registered non-excluded
+    // input sum (294/400 bytes) must drive the cap. Short summaries make the
+    // 294-cap output (2 records) differ from the 400-cap output (3 records).
+    for (let i = 0; i < 8; i++) {
+      await writeConcern({
+        id: `c-dddddddd0${i}`,
+        kind: "risk",
+        summary: `C${i} ${"S".repeat(20)}`,
+        detail: "s".repeat(600),
+        severity: "medium",
+        affects: ["m1"],
+        createdAt: `2026-01-0${i + 1}T00:00:00.000Z`,
+      });
+    }
+
+    const overridesDir = fs.mkdtempSync(path.join(os.tmpdir(), "plan-review-prompts-"));
+    fs.mkdirSync(path.join(overridesDir, "steps"), { recursive: true });
+    fs.writeFileSync(
+      path.join(overridesDir, "steps", "plan-review.md"),
+      "HYDRATE:\n{{concernsYaml}}\nEND\n",
+      "utf8"
+    );
+    const planReviewPrompts = loadPromptLibrary({ builtinDir: agentsDir, overrideDirs: [overridesDir] });
+
+    async function runPlanReview(promptVars: Record<string, string>): Promise<string> {
+      const harness = new FakeHarness();
+      harness.scriptOutcome(`${TASK}/runs/plan-review-1-1#a1`, {
+        ok: true,
+        data: { status: "approved", summary: "Plan ok", suggestions: [] },
+      });
+      harness.scriptOutcome(`${TASK}/runs/plan-review-1-1#a1#relaunch`, {
+        ok: true,
+        data: { status: "approved", summary: "Plan ok", suggestions: [] },
+      });
+      fs.mkdirSync(path.join(taskDir, "runs"), { recursive: true });
+      await runAgentStep({
+        task: TASK,
+        stepId: "plan-review-1-1",
+        stepFragment: "steps/plan-review",
+        agent: "plan-reviewer",
+        cwd: taskWt,
+        taskWt,
+        taskDir,
+        recordsDir: path.join(taskDir, "runs"),
+        repo,
+        harness,
+        pipeline,
+        project,
+        prompts: planReviewPrompts,
+        promptVars,
+      });
+      const prompt = promptOf(harness);
+      return /HYDRATE:\n([\s\S]*?)\nEND/.exec(prompt)?.[1] ?? "";
+    }
+
+    try {
+      // inputBytes = plan(150) + intent(44) + context(50) + limits(30) +
+      // dispositionsCriteria(20) = 294; the 5000-byte excluded values must
+      // not inflate the sum, so the rendered block is capped at 294.
+      const excluded = {
+        debt: "D".repeat(5000),
+        steering: "S".repeat(5000),
+        humanInvolvementCriteria: "H".repeat(5000),
+      };
+      const small = await runPlanReview({
+        plan: "p".repeat(150),
+        intent: "i".repeat(44),
+        context: "c".repeat(50),
+        limits: "l".repeat(30),
+        dispositionsCriteria: "d".repeat(20),
+        ...excluded,
+      });
+      expect(small).not.toBe("");
+      expect(utf8Bytes(small)).toBeLessThanOrEqual(294);
+      expect(idLines(small)).toHaveLength(2);
+
+      // Without the excluded values a wider registered input (400B) hydrates
+      // more: proves the sum tracks registered prompt input, not a constant.
+      const wider = await runPlanReview({
+        plan: "p".repeat(200),
+        intent: "i".repeat(100),
+        context: "c".repeat(50),
+        limits: "l".repeat(30),
+        dispositionsCriteria: "d".repeat(20),
+      });
+      expect(utf8Bytes(wider)).toBeLessThanOrEqual(400);
+      expect(utf8Bytes(wider)).toBeGreaterThan(utf8Bytes(small));
+      expect(idLines(wider)).toHaveLength(3);
+
+      // Caller-supplied concernsYaml wins: step-runner must skip computation.
+      // A 5000-byte caller value reaching the prompt proves no hydration ran
+      // (hydration would cap at min(input,500)).
+      const callerValue = `CALLER-CONCERNS ${"z".repeat(5000)}`;
+      const supplied = await runPlanReview({
+        plan: "p".repeat(150),
+        intent: "i".repeat(44),
+        context: "c".repeat(50),
+        limits: "l".repeat(30),
+        dispositionsCriteria: "d".repeat(20),
+        concernsYaml: callerValue,
+      });
+      expect(supplied).toBe(callerValue);
+    } finally {
+      fs.rmSync(overridesDir, { recursive: true, force: true });
+    }
   });
 
   it("computes close-up task diff bytes through the injected git function", async () => {
@@ -433,8 +564,8 @@ describe("Hydration caps (adr-hydration-single-cap)", () => {
       id: "dec-1",
       context: "task",
       decision: "continue",
-      rationale: "漢".repeat(120),
       timestamp: "2026-01-01T00:00:00.000Z",
+      rationale: "漢".repeat(120),
     });
 
     const overridesDir = fs.mkdtempSync(path.join(os.tmpdir(), "architect-plan-prompts-"));
@@ -505,6 +636,11 @@ describe("Hydration caps (adr-hydration-single-cap)", () => {
     const steering = /STEER<([\s\S]*?)>CONCERNS:/.exec(architectPrompt)?.[1] ?? "";
     expect(utf8Bytes(debt)).toBeLessThanOrEqual(20);
     expect(utf8Bytes(steering)).toBeLessThanOrEqual(20);
+    // Non-vacuous: truncation must have produced non-empty tail content, not ''.
+    expect(debt.length).toBeGreaterThan(0);
+    expect(steering.length).toBeGreaterThan(0);
+    expect(debt).toContain("漢");
+    expect(steering).toContain("漢");
     expect(debt).not.toContain("\uFFFD");
     expect(steering).not.toContain("\uFFFD");
 
@@ -835,5 +971,49 @@ describe("Concern identity and affects union (adr-fingerprint-affects-union)", (
     );
     expect(concernFiles()).toEqual([stableId]);
     expect((await listConcerns(taskDir)).map((c) => c.id)).toEqual([stableId]);
+  });
+
+  it("preserves stored legacy detail when the migrating emission omits detail", async () => {
+    // Regression test for the concerns.ts legacy gate
+    // (`legacyFile && input.detail?.trim()`): a detail-less emission must not
+    // clobber the rich stored detail with the bare summary fallback. Fails on
+    // the pre-fix `merged.detail = (input.detail ?? input.summary).trim()`.
+    const identity = {
+      kind: "risk" as const,
+      summary: "Legacy detail",
+      location: { file: "src/legacy-detail.ts", line: 9 },
+    };
+    const legacyId = legacyFingerprint({ ...identity, affects: ["old"] });
+    const stableId = concernFingerprint(identity);
+    expect(legacyId).not.toBe(stableId);
+
+    const storedDetail = `Rich stored legacy detail ${"R".repeat(200)}`;
+    expect(storedDetail.length).toBeGreaterThan(identity.summary.length);
+    await writeYamlAtomic(path.join(taskDir, "concerns", `${legacyId}.yaml`), {
+      id: legacyId,
+      ...identity,
+      detail: storedDetail,
+      severity: "medium",
+      status: "open",
+      affects: ["old"],
+      source: { record: "000-develop-a1", agent: "developer" },
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+    expect(concernFiles()).toEqual([legacyId]);
+
+    await aggregateConcerns(
+      { taskDir, taskWt, repo, source: source("001-develop-a1") },
+      [{ ...identity, severity: "medium", affects: ["new"] }]
+    );
+
+    expect(concernFiles()).toEqual([stableId]);
+    expect(fs.existsSync(path.join(taskDir, "concerns", `${legacyId}.yaml`))).toBe(false);
+    const stored = await readYaml<StoredConcernArtifact>(
+      path.join(taskDir, "concerns", `${stableId}.yaml`)
+    );
+    expect(stored.id).toBe(stableId);
+    expect(stored.detail).toBe(storedDetail);
+    expect(stored.affects).toEqual(["new", "old"]);
   });
 });
