@@ -17,3 +17,11 @@ Resume oversight of an existing iteration following process restart or return fr
 
 ## Steering Directives
 {{steering}}
+
+## Human involvement
+{{humanInvolvementCriteria}}
+
+## Open Concerns
+{{concernsYaml}}
+
+- Raise concerns with evidence; condense stale detail instead of repeating it.

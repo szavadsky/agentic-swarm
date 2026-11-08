@@ -30,9 +30,10 @@ import type { PipelineConfig, ProjectConfig } from "../src/core/artifacts.js";
  * - A terse `agents/criteria/human-involvement.md` fragment is registered under
  *   `criteria.human-involvement`; the active mode selects its `## <mode>`
  *   section plus the shared blocking table.
- * - `concernsYaml` and `humanInvolvementCriteria` are registered in KNOWN_VARS
- *   for the review/architect/close-up fragment matrix and supplied by the
- *   engine when rendering those steps.
+ * - `concernsYaml` is registered in KNOWN_VARS for every producer and triager
+ *   fragment (develop-family, poc/test-assumptions/research, review/qa,
+ *   plan-review, close-ups, architects); `humanInvolvementCriteria` is added
+ *   only for triagers, which receive both vars when the engine renders a step.
  */
 
 const pluginRoot = path.resolve(import.meta.dir, "..");
@@ -54,24 +55,56 @@ const DEFAULT_RAISE_ALLOWLIST = [
 ];
 
 /**
- * Fragment matrix: which engine steps receive which concern/involvement var.
- * Reviewers triage raised concerns; architects mark ADRs blocking and consume
- * funneled concerns; close-ups are funnel levels themselves.
+ * Fragment matrix: every engine step that produces or triages concerns receives
+ * hydrated open concerns. Only triagers (reviewers/architects/close-ups/qa) also
+ * receive the human-involvement criteria; producers raise concerns but never
+ * triage them.
  */
-const FRAGMENT_MATRIX: Record<string, string[]> = {
-  review: ["humanInvolvementCriteria", "concernsYaml"],
-  qa: ["humanInvolvementCriteria", "concernsYaml"],
-  "plan-review": ["humanInvolvementCriteria", "concernsYaml"],
-  "wave-close-up": ["humanInvolvementCriteria", "concernsYaml"],
-  "plan-close-up": ["humanInvolvementCriteria", "concernsYaml"],
-  "architect-plan": ["humanInvolvementCriteria", "concernsYaml"],
-  "architect-revise": ["humanInvolvementCriteria", "concernsYaml"],
-  "architect-resume": ["humanInvolvementCriteria", "concernsYaml"],
-  "architect-wave-report": ["humanInvolvementCriteria", "concernsYaml"],
-  "architect-closeup": ["humanInvolvementCriteria", "concernsYaml"],
-  "architect-consult-item": ["humanInvolvementCriteria", "concernsYaml"],
-  "architect-consult-nonitem": ["humanInvolvementCriteria", "concernsYaml"],
-};
+const CONCERN_FRAGMENTS = [
+  "develop",
+  "test-first",
+  "simple-implement",
+  "fix-round",
+  "poc",
+  "test-assumptions",
+  "research",
+  "review",
+  "qa",
+  "plan-review",
+  "wave-close-up",
+  "plan-close-up",
+  "architect-plan",
+  "architect-revise",
+  "architect-resume",
+  "architect-wave-report",
+  "architect-closeup",
+  "architect-consult-item",
+  "architect-consult-nonitem",
+];
+
+const HUMAN_INVOLVEMENT_FRAGMENTS = new Set([
+  "review",
+  "qa",
+  "plan-review",
+  "wave-close-up",
+  "plan-close-up",
+  "architect-plan",
+  "architect-revise",
+  "architect-resume",
+  "architect-wave-report",
+  "architect-closeup",
+  "architect-consult-item",
+  "architect-consult-nonitem",
+]);
+
+const FRAGMENT_MATRIX: Record<string, string[]> = Object.fromEntries(
+  CONCERN_FRAGMENTS.map((fragment) => [
+    fragment,
+    HUMAN_INVOLVEMENT_FRAGMENTS.has(fragment)
+      ? ["humanInvolvementCriteria", "concernsYaml"]
+      : ["concernsYaml"],
+  ])
+);
 
 const CRITERIA_FIXTURE = `# Human involvement criteria
 
@@ -258,7 +291,7 @@ describe("human-involvement pipeline configuration", () => {
     expect(bundle.humanInvolvement).toContain("autonomous");
   });
 
-  it("registers concernsYaml and humanInvolvementCriteria for the fragment matrix", () => {
+  it("registers concernsYaml for producers and humanInvolvementCriteria for triagers", () => {
     for (const [fragment, vars] of Object.entries(FRAGMENT_MATRIX)) {
       for (const key of [fragment, `steps/${fragment}`]) {
         expect({ key, vars: KNOWN_VARS[key] }).toEqual({
@@ -268,8 +301,18 @@ describe("human-involvement pipeline configuration", () => {
       }
     }
 
-    // Non-consumers must not silently gain the vars: the matrix is selective.
-    for (const key of ["develop", "steps/develop", "triage", "steps/triage", "infra"]) {
+    // Producers raise concerns but never triage them: no involvement criteria.
+    for (const fragment of CONCERN_FRAGMENTS.filter(
+      (fragment) => !HUMAN_INVOLVEMENT_FRAGMENTS.has(fragment)
+    )) {
+      for (const key of [fragment, `steps/${fragment}`]) {
+        expect(KNOWN_VARS[key]).toContain("concernsYaml");
+        expect(KNOWN_VARS[key]).not.toContain("humanInvolvementCriteria");
+      }
+    }
+
+    // Triage and infra stay outside the concern funnel entirely.
+    for (const key of ["triage", "steps/triage", "infra", "steps/infra"]) {
       expect(KNOWN_VARS[key]).not.toContain("humanInvolvementCriteria");
       expect(KNOWN_VARS[key]).not.toContain("concernsYaml");
     }
@@ -295,10 +338,18 @@ describe("human-involvement pipeline configuration", () => {
     });
     expect(preflightPrompts(matrixLib, pipeline)).toEqual([]);
 
+    const producerLib = loadPromptLibrary({
+      builtinDir: agentsDir,
+      overrides: {
+        "steps/develop": "Develop {{assignment}} {{target}} {{citations}} {{concernsYaml}}",
+      },
+    });
+    expect(preflightPrompts(producerLib, pipeline)).toEqual([]);
+
     const nonMatrixLib = loadPromptLibrary({
       builtinDir: agentsDir,
       overrides: {
-        develop: "Develop {{assignment}} {{target}} {{citations}} {{concernsYaml}}",
+        "steps/triage": "Triage {{task}} {{intent}} {{triageCriteria}} {{concernsYaml}}",
       },
     });
     const errors = preflightPrompts(nonMatrixLib, pipeline);
@@ -438,17 +489,25 @@ describe("human-involvement mode switching at prompt time", () => {
   });
 });
 
-describe("human-involvement criteria reach architect prompts", () => {
-  it("renders sentinel criteria in architect-plan, architect-revise, and plan-review", () => {
+describe("human-involvement criteria reach triager prompts", () => {
+  it("renders sentinel criteria in every triage fragment of the matrix", () => {
     const lib = loadPromptLibrary({ builtinDir: agentsDir });
     const sentinel = "SENTINEL-HUMAN-INVOLVEMENT-CRITERIA";
-    const fragments = ["steps/architect-plan", "steps/architect-revise", "steps/plan-review"];
+    const fragments = [...HUMAN_INVOLVEMENT_FRAGMENTS].map(
+      (fragment) => `steps/${fragment}`
+    );
     for (const fragment of fragments) {
       const vars: Record<string, string> = {};
       for (const v of KNOWN_VARS[fragment] ?? []) vars[v] = `sample-${v}`;
       vars.humanInvolvementCriteria = sentinel;
-      expect(lib.placeholders(fragment)).toContain("humanInvolvementCriteria");
-      expect(lib.render(fragment, vars)).toContain(sentinel);
+      expect({ fragment, placeholders: lib.placeholders(fragment) }).toEqual({
+        fragment,
+        placeholders: expect.arrayContaining(["humanInvolvementCriteria"]),
+      });
+      expect({ fragment, rendered: lib.render(fragment, vars) }).toEqual({
+        fragment,
+        rendered: expect.stringContaining(sentinel),
+      });
     }
   });
 });

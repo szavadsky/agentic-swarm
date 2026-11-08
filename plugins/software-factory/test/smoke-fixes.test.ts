@@ -53,6 +53,7 @@ describe("Smoke fixes acceptance tests (§6.4, §7, §8, §9)", () => {
         debt: "sample debt",
         steering: "sample steering",
         humanInvolvementCriteria: "sample criteria",
+        concernsYaml: "sample concerns",
       },
       planSchema
     );
@@ -70,6 +71,7 @@ describe("Smoke fixes acceptance tests (§6.4, §7, §8, §9)", () => {
         assignment: "sample assignment",
         target: "sample target",
         citations: "sample citations",
+        concernsYaml: "sample concerns",
       },
       devSchema
     );
@@ -88,6 +90,7 @@ describe("Smoke fixes acceptance tests (§6.4, §7, §8, §9)", () => {
         checks: "sample checks",
         diff: "sample diff",
         dispositionsCriteria: "sample dispositions",
+        humanInvolvementCriteria: "sample criteria",
         concernsYaml: "",
       },
       reviewSchema

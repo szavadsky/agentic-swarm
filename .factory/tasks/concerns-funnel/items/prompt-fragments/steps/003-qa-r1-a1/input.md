@@ -1,0 +1,1524 @@
+# Step: QA
+
+## Goal
+Perform independent quality assurance on the item's implementation and test suite. Guard against test weakening, false passes, and unverified claims.
+
+## Rules
+- SKEPTICAL VERIFICATION: do NOT trust developer summaries. Scrutinize engine check results (`red-test`, `test-diff`), actual diffs, and tool outputs.
+- Test weakening defense: scrutinize `testDiff`. Reject any test change that deletes assertions, relaxes matchers, replaces concrete checks with tautologies, or reduces test coverage.
+- Story kind validation:
+  - `dev` stories: verify `red-test` proved tests failed on baseline code and pass after implementation.
+  - `no-behavior` stories: confirm tests remain materially identical. Functional behavior must not change.
+- Reviewer boundary: reviewers critique; reviewers NEVER write code fixes. Yield structured output matching `review.schema.json`, using only dispositions allowed by the section below.
+
+## Dispositions Criteria
+Allowed dispositions for this review: fix, optional, architect, human-awareness, human-async.
+Use ONLY these dispositions; any other disposition value fails validation.
+# Review Suggestion Dispositions
+
+Criteria for assigning disposition to review findings:
+
+| Disposition | When to Assign | Engine Action |
+|---|---|---|
+| `fix` | Concrete defect, failing gate, broken contract, missing test, or deviation from assignment. | Returns item to `fixLoopTo` step (bounded by `maxFixRounds`); developer must address. Non-item: triggers consult. |
+| `optional` | Non-blocking polish, code style improvement, minor refactor opportunity, or deferred debt. | Passed to developer if another fix round occurs; otherwise recorded as tech debt for future iterations. |
+| `architect` | Architectural contradiction, interface redesign, boundary breach, or uncertainty exceeding item scope. | Triggers immediate architect consult; architect's decision is binding and final. |
+| `human-awareness` | High-impact technical tradeoff or notable choice operator should be aware of, but architect can decide now. | Architect decides immediately; creates informational record in `steer/tousertoreview/{id}.yaml`. |
+| `human-async` | Missing business requirement, external credential needed, conflicting user intent requiring operator decision. | Creates blocking entry in `steer/tousertoreview/{id}.yaml`; item and dependents pause; unrelated items proceed. |
+
+## Rules
+- Defect requiring code change MUST be `fix`.
+- Do NOT use `architect` for routine bugs; reserve for structural/design conflicts.
+- Do NOT use `human-async` when repo context or architecture docs provide the answer.
+
+## Assignment
+{
+  "slug": "prompt-fragments",
+  "kind": "dev",
+  "title": "Fragment matrix and raise instructions",
+  "assignment": "Own prompt-vars.ts + fragments + prompts.test matrix per adr-prompt-fragment-matrix (no hydration bytes, no router). KNOWN_VARS gains concernsYaml on steps/develop,develop,steps/test-first,test-first,steps/simple-implement,simple-implement,steps/fix-round,fix-round,steps/poc,poc,steps/test-assumptions,test-assumptions,steps/research,research (+humanInvolvementCriteria only where already registered). Sections: producers (develop-family+poc/test-assumptions/research) get 3-line ## Open Concerns {{concernsYaml}} + 1-line raise (no HI: raise never triage); triagers/architects/close-ups/qa get HI section + condense rule appended. Deltas: architect-plan/revise add OC+raise; review adds HI+condense; plan-review adds raise+condense; rest per matrix. Budgets: added lines per fragment <=15, total <=80 (2-3-line sections); prompts.test asserts per-fragment sentinels (## Open Concerns + Raise concerns on all 19; ## Human involvement on review/qa/plan-review/architect-*/close-ups) + budgets; update human-involvement-config.test.ts non-consumer assertion (develop leaves, triage/infra stay) + FRAGMENT_MATRIX. Behavior tests: sections render with sentinels, mode switch (pipeline.yaml humanInvolvement detailed) changes criteria, budget assertions pass. Verify: preflight + bun run typecheck. Budget ~120 prod lines.",
+  "outlineRef": "prompt-fragments",
+  "milestone": "m1-hydration-prompts",
+  "wave": 1,
+  "scenarioRefs": [
+    "m1-hydration-prompts:5"
+  ],
+  "citations": [
+    "plugins/software-factory/src/core/flows/item-machine.ts:628-647",
+    "plugins/software-factory/src/core/flows/iteration.ts:439-485",
+    "docs/factory.v2.md:89-103"
+  ]
+}
+
+## Engine Checks
+
+
+## Test Diff
+
+
+## Code Diff
+diff --git a/.factory/tasks/concerns-funnel/items/prompt-fragments/steps/001-test-first-r1-a1/checks.yaml b/.factory/tasks/concerns-funnel/items/prompt-fragments/steps/001-test-first-r1-a1/checks.yaml
+new file mode 100644
+index 0000000..a683cf6
+--- /dev/null
++++ b/.factory/tasks/concerns-funnel/items/prompt-fragments/steps/001-test-first-r1-a1/checks.yaml
+@@ -0,0 +1,94 @@
++checks:
++  - id: test-first-scope
++    status: pass
++    message: test-first-scope passed (3 test files, 0 new prod stubs with 0 lines)
++    details:
++      testFiles:
++        - plugins/software-factory/test/human-involvement-config.test.ts
++        - plugins/software-factory/test/prompts.test.ts
++        - plugins/software-factory/test/smoke-fixes.test.ts
++      newProdFiles: []
++      stubProdLines: 0
++  - id: target-red
++    status: pass
++    message: "target-red passed: all 8 expected tests failed with assertion failures"
++    details:
++      command: cd plugins/software-factory && bun test test/prompts.test.ts
++        test/human-involvement-config.test.ts --reporter=junit
++        --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-1794166269318-bm38yrhfe4p.xml
++      junitCaseCount: 34
++      junitCaseIds:
++        - "prompts: PromptLibrary & preflightPrompts.loads agent definition with
++          frontmatter tools, description, and body"
++        - "prompts: PromptLibrary & preflightPrompts.step fragments no longer
++          duplicate agent-level shared includes"
++        - "prompts: PromptLibrary & preflightPrompts.throws with descriptive
++          error listing missing variables when render fails"
++        - "prompts: PromptLibrary & preflightPrompts.overrides directory shadows
++          builtin directory"
++        - "prompts: PromptLibrary & preflightPrompts.in-memory overrides shadow
++          both override directories and builtin"
++        - "prompts: PromptLibrary & preflightPrompts.preflight passes with zero
++          errors on real pipeline.default.yaml"
++        - "prompts: PromptLibrary & preflightPrompts.preflight flags unknown
++          agent definitions"
++        - "prompts: PromptLibrary & preflightPrompts.preflight flags unknown
++          step fragments"
++        - "prompts: PromptLibrary & preflightPrompts.preflight flags unknown
++          placeholders that the engine does not supply"
++        - "prompts: PromptLibrary & preflightPrompts.preflight covers every
++          engine-invoked orchestration fragment"
++        - "prompts: PromptLibrary & preflightPrompts.preflight render check
++          fails when a fragment needs vars outside KNOWN_VARS"
++        - "prompts: PromptLibrary & preflightPrompts.loadCriteriaBundle reads
++          declared criteria files and skips missing ones"
++        - "prompts: PromptLibrary & preflightPrompts.formatDispositionsSection
++          lists allowed set and filters human-stop"
++        - "prompts: PromptLibrary & preflightPrompts.close-up step fragments
++          bind to closeup schemas, not the review shape"
++        - "prompts: PromptLibrary & preflightPrompts.review-type step fragments
++          consume dispositionsCriteria"
++        - "prompts: PromptLibrary & preflightPrompts.every agent definition
++          includes the workspace containment instructions"
++        - "prompts: PromptLibrary & preflightPrompts.infra agent prompt and
++          schema instruct recording red gates as baseline without workarounds"
++        - "prompts: concern fragment matrix
++          (adr-prompt-fragment-matrix).registers concernsYaml for every
++          concern-producing and triaging fragment"
++        - "prompts: concern fragment matrix (adr-prompt-fragment-matrix).renders
++          Open Concerns and Raise concerns instructions on all 19 matrix
++          fragments"
++        - "prompts: concern fragment matrix (adr-prompt-fragment-matrix).renders
++          Human involvement criteria and the condense rule on triage fragments"
++        - "prompts: concern fragment matrix (adr-prompt-fragment-matrix).keeps
++          per-fragment additions <=15 non-empty lines and total additions <=80"
++        - "prompts: concern fragment matrix
++          (adr-prompt-fragment-matrix).switches autonomous and detailed criteria
++          inside a rendered matrix fragment"
++        - human-involvement pipeline configuration.defaults to autonomous mode
++          with concern raise/digest/blocking policy
++        - human-involvement pipeline configuration.layers humanInvolvement and
++          concern thresholds through project and task configs
++        - human-involvement pipeline configuration.applies overrides last and
++          supports null deletion of concern keys
++        - human-involvement pipeline configuration.schema accepts all modes and
++          thresholds, rejects unknown values, and stays closed at root
++        - human-involvement pipeline configuration.ships commented
++          autonomous/principal/detailed presets with a blocking table
++        - human-involvement pipeline configuration.registers a terse
++          human-involvement criteria fragment and loads it
++        - human-involvement pipeline configuration.registers concernsYaml for
++          producers and humanInvolvementCriteria for triagers
++        - human-involvement pipeline configuration.preflight accepts the new
++          vars on matrix fragments and rejects them elsewhere
++        - human-involvement mode switching at prompt time.selects the active
++          mode section plus the shared ADR blocking table
++        - human-involvement mode switching at prompt time.renders empty
++          involvement criteria when no fragment is configured
++        - human-involvement mode switching at prompt time.lets callers provide
++          hydrated concernsYaml without dropping the criteria
++        - human-involvement criteria reach triager prompts.renders sentinel
++          criteria in every triage fragment of the matrix
++      junitTruncated: false
++      collected: true
++      collectionErrors: []
+diff --git a/.factory/tasks/concerns-funnel/items/prompt-fragments/steps/001-test-first-r1-a1/input.md b/.factory/tasks/concerns-funnel/items/prompt-fragments/steps/001-test-first-r1-a1/input.md
+new file mode 100644
+index 0000000..bb71152
+--- /dev/null
++++ b/.factory/tasks/concerns-funnel/items/prompt-fragments/steps/001-test-first-r1-a1/input.md
+@@ -0,0 +1,61 @@
++# Step: Test-First
++
++## Goal
++Author automated tests specifying the required behavior changes BEFORE writing production code.
++
++## Rules
++- Test-first scope: modify files under test paths (`paths.tests`). You may introduce new (never modified) interface-stub files under production paths (`paths.prod`) within the engine-enforced stub budget so tests of new modules can collect/compile. Existing production code must remain untouched.
++- Red expectation: every declared test must fail on the current production codebase because the functionality does not yet exist. A test that fails due to compilation/syntax/import errors does NOT satisfy target-red.
++- Prove test infra first: confirm the runner executes your new tests and reports failures correctly before declaring the target.
++- Target declaration in yield:
++  - Standard story: yield `target: { selectors: ["<test-file-or-pattern>"], expectRed: ["<test-case-id-1>", "<test-case-id-2>"] }` (both required; `expectRed` non-empty).
++  - Test id format: declare `expectRed` ids in the runner's native node-id form (e.g. pytest `tests/test_math.py::test_add`); the engine normalizes node ids against JUnit ids when matching.
++  - Bootstrap story (no test runner exists yet): yield `target: { gate: "<gate-id>" }` or `target: { command: "<test-command>", customTarget: true }`. The gate/command itself must currently fail (red).
++- Never test lint/format rules: assert behavior, never style or compiler-guaranteed facts. Debloat test code preserving intent.
++- Output: yield structured output per `developer-output.schema.json`.
++
++## Assignment
++{
++  "slug": "prompt-fragments",
++  "kind": "dev",
++  "title": "Fragment matrix and raise instructions",
++  "assignment": "Own prompt-vars.ts + fragments + prompts.test matrix per adr-prompt-fragment-matrix (no hydration bytes, no router). KNOWN_VARS gains concernsYaml on steps/develop,develop,steps/test-first,test-first,steps/simple-implement,simple-implement,steps/fix-round,fix-round,steps/poc,poc,steps/test-assumptions,test-assumptions,steps/research,research (+humanInvolvementCriteria only where already registered). Sections: producers (develop-family+poc/test-assumptions/research) get 3-line ## Open Concerns {{concernsYaml}} + 1-line raise (no HI: raise never triage); triagers/architects/close-ups/qa get HI section + condense rule appended. Deltas: architect-plan/revise add OC+raise; review adds HI+condense; plan-review adds raise+condense; rest per matrix. Budgets: added lines per fragment <=15, total <=80 (2-3-line sections); prompts.test asserts per-fragment sentinels (## Open Concerns + Raise concerns on all 19; ## Human involvement on review/qa/plan-review/architect-*/close-ups) + budgets; update human-involvement-config.test.ts non-consumer assertion (develop leaves, triage/infra stay) + FRAGMENT_MATRIX. Behavior tests: sections render with sentinels, mode switch (pipeline.yaml humanInvolvement detailed) changes criteria, budget assertions pass. Verify: preflight + bun run typecheck. Budget ~120 prod lines.",
++  "outlineRef": "prompt-fragments",
++  "milestone": "m1-hydration-prompts",
++  "wave": 1,
++  "scenarioRefs": [
++    "m1-hydration-prompts:5"
++  ],
++  "citations": [
++    "plugins/software-factory/src/core/flows/item-machine.ts:628-647",
++    "plugins/software-factory/src/core/flows/iteration.ts:439-485",
++    "docs/factory.v2.md:89-103"
++  ]
++}
++
++## Context & Citations
++[
++  "plugins/software-factory/src/core/flows/item-machine.ts:628-647",
++  "plugins/software-factory/src/core/flows/iteration.ts:439-485",
++  "docs/factory.v2.md:89-103"
++]
++
++## Review Feedback
++
++## Output
++
++Yield a structured JSON object matching this schema:
++- status (string, required, enum: ["ok","blocked","failed"]): Step execution status (ok, blocked, failed)
++- summary (string, required): Concise summary of implementation actions and test results
++- target (object, optional): Target test selectors, gate, or custom command for red/green verification
++  - Option 1:
++    - selectors (array of string, required)
++    - expectRed (array of string, required, minItems: 1)
++  - Option 2:
++    - gate (string, required)
++  - Option 3:
++    - command (string, required)
++    - customTarget (boolean, required)
++- evidence (array of string, optional): List of executed checks and verification commands proving correctness
++- concerns (array of string, optional): Observations, technical debt, or potential risks identified during implementation
++- notes (string, optional): Optional developer notes, implementation observations, or comments
+diff --git a/.factory/tasks/concerns-funnel/items/prompt-fragments/steps/001-test-first-r1-a1/meta.yaml b/.factory/tasks/concerns-funnel/items/prompt-fragments/steps/001-test-first-r1-a1/meta.yaml
+new file mode 100644
+index 0000000..5563d79
+--- /dev/null
++++ b/.factory/tasks/concerns-funnel/items/prompt-fragments/steps/001-test-first-r1-a1/meta.yaml
+@@ -0,0 +1,19 @@
++seq: 1
++name: test-first
++attempt: 1
++fixRound: 1
++agent: developer
++role: workhorse
++models:
++  - opencode-go/deepseek-v4.1-flash
++  - opencode-go/muse-spark-1.3-contributor
++timeoutSec: 5400
++status: ok
++startedAt: 2026-11-08T19:23:16.150Z
++session: 01a1bc9d-711d-7186-9b28-d719913df635
++endedAt: 2026-11-08T19:31:10.349Z
++usage:
++  inputTokens: 101812
++  outputTokens: 34105
++  costUsd: 0.04446
++traceRef: /home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/sessions/2026-11-08T19-23-17-149Z_01a1bc9d-711d-7186-9b28-d719913df635.jsonl
+diff --git a/.factory/tasks/concerns-funnel/items/prompt-fragments/steps/001-test-first-r1-a1/output.yaml b/.factory/tasks/concerns-funnel/items/prompt-fragments/steps/001-test-first-r1-a1/output.yaml
+new file mode 100644
+index 0000000..b78ce85
+--- /dev/null
++++ b/.factory/tasks/concerns-funnel/items/prompt-fragments/steps/001-test-first-r1-a1/output.yaml
+@@ -0,0 +1,92 @@
++status: ok
++summary: "Authored the test-first contract for the full prompt fragment matrix
++  (adr-prompt-fragment-matrix). prompts.test.ts now pins: KNOWN_VARS
++  concernsYaml registration on all 19 producer/triager fragments (develop,
++  test-first, simple-implement, fix-round, poc, test-assumptions, research,
++  review, qa, plan-review, wave/plan close-ups, 7 architect fragments) and
++  humanInvolvementCriteria only on the 12 triager fragments; rendered sentinels
++  (`## Open Concerns`, `Raise concerns`, hydrated concerns sentinel) on all 19;
++  `## Human involvement` + criteria sentinel + condense rule on the 12 triagers;
++  per-fragment added-line budget <=15 and total <=80 against pre-change
++  non-empty baselines; and autonomous-vs-detailed mode switching through a
++  rendered review fragment. human-involvement-config.test.ts now reflects the
++  full FRAGMENT_MATRIX (producers receive concernsYaml but not HI; triage/infra
++  stay outside), verifies preflight accepts producer concernsYaml while
++  rejecting it on triage, and extends the HI sentinel render test to every
++  triager fragment. smoke-fixes.test.ts and two close-up render tests were
++  updated to pass the newly required vars so the suite stays green after
++  implementation. No production files were modified."
++target:
++  selectors:
++    - test/prompts.test.ts
++    - test/human-involvement-config.test.ts
++  expectRed:
++    - "test/prompts.test.ts::prompts: PromptLibrary & preflightPrompts.throws
++      with descriptive error listing missing variables when render fails"
++    - "test/prompts.test.ts::prompts: concern fragment matrix
++      (adr-prompt-fragment-matrix).registers concernsYaml for every
++      concern-producing and triaging fragment"
++    - "test/prompts.test.ts::prompts: concern fragment matrix
++      (adr-prompt-fragment-matrix).renders Open Concerns and Raise concerns
++      instructions on all 19 matrix fragments"
++    - "test/prompts.test.ts::prompts: concern fragment matrix
++      (adr-prompt-fragment-matrix).renders Human involvement criteria and the
++      condense rule on triage fragments"
++    - "test/prompts.test.ts::prompts: concern fragment matrix
++      (adr-prompt-fragment-matrix).switches autonomous and detailed criteria
++      inside a rendered matrix fragment"
++    - test/human-involvement-config.test.ts::human-involvement pipeline
++      configuration.registers concernsYaml for producers and
++      humanInvolvementCriteria for triagers
++    - test/human-involvement-config.test.ts::human-involvement pipeline
++      configuration.preflight accepts the new vars on matrix fragments and
++      rejects them elsewhere
++    - test/human-involvement-config.test.ts::human-involvement criteria reach
++      triager prompts.renders sentinel criteria in every triage fragment of the
++      matrix
++evidence:
++  - cd plugins/software-factory && TMPDIR=/tmp bun install -> 13 packages
++    installed; bun/yaml/ajv/type packages available so the new tests collect and
++    execute
++  - cd plugins/software-factory && TMPDIR=/tmp bun run typecheck -> exit 0, no
++    diagnostics
++  - cd plugins/software-factory && TMPDIR=/tmp bun test test/prompts.test.ts
++    test/human-involvement-config.test.ts -> 26 pass, 8 fail, 185 expect()
++    calls; every failure is an assertion failure (no import/collection errors)
++  - JUnit run (--reporter=junit
++    --reporter-outfile=/tmp/prompt-fragments-target.xml) -> tests=34,
++    failures=8, errors=0; failing ids match the eight declared expectRed targets
++  - cd plugins/software-factory && TMPDIR=/tmp bun test --timeout 30000 -> 381
++    pass, 2 skip, 8 fail across 391 tests / 65 files; the only failures are the
++    declared red target tests (no baseline regressions)
++  - git status --short -> only plugins/software-factory/test/prompts.test.ts,
++    test/human-involvement-config.test.ts, and test/smoke-fixes.test.ts
++    modified; production code untouched
++concerns:
++  - "Budget test pins pre-change non-empty line counts for the 19 fragments:
++    added lines must stay <=15 per fragment and <=80 total. Tightest path is ~80
++    lines, so the implementation should use 3-line sections and reuse existing
++    review/plan-review/architect-plan lines where possible."
++  - "The sentinel contract is literal: every concern fragment must contain `##
++    Open Concerns`, `{{concernsYaml}}`, and the phrase `Raise concerns`; every
++    triager must contain `## Human involvement`, `{{humanInvolvementCriteria}}`,
++    and a line matching /condens/i. Producers must NOT contain
++    humanInvolvementCriteria."
++  - Existing direct-render tests in smoke-fixes.test.ts and the close-up render
++    tests were updated to supply concernsYaml/humanInvolvementCriteria so they
++    remain green once the fragments gain the placeholders; the missing-variable
++    assertion was made order-independent (checks target, citations, concernsYaml
++    independently).
++  - KNOWN_VARS must register both prefixed (steps/foo) and bare (foo) keys for
++    all 7 new producer fragments; the matrix tests assert both.
++notes: "Green-step guidance: (1) extend prompt-vars.ts with concernsYaml for
++  develop/test-first/simple-implement/fix-round/poc/test-assumptions/research in
++  both key forms, leaving humanInvolvementCriteria off producers; (2) append
++  terse `## Open Concerns` + `{{concernsYaml}}` + `Raise concerns` lines to all
++  19 listed fragments; (3) add `## Human involvement` +
++  `{{humanInvolvementCriteria}}` + a condense rule to the 12 triager fragments
++  (architect-plan/revise already have the HI heading and only need
++  OC+raise+condense; review already has OC+condense and needs HI+raise;
++  plan-review already has HI+OC+condense and only needs raise); (4) keep added
++  non-empty lines <=15 per fragment and <=80 total; (5) run preflight
++  (prompts.preflight test) and bun run typecheck."
+diff --git a/.factory/tasks/concerns-funnel/items/prompt-fragments/steps/002-develop-r1-a1/checks.yaml b/.factory/tasks/concerns-funnel/items/prompt-fragments/steps/002-develop-r1-a1/checks.yaml
+new file mode 100644
+index 0000000..6dfbd28
+--- /dev/null
++++ b/.factory/tasks/concerns-funnel/items/prompt-fragments/steps/002-develop-r1-a1/checks.yaml
+@@ -0,0 +1,167 @@
++checks:
++  - id: gates
++    status: pass
++    message: "Gates passed (2 gates, improvements: Engine: HEAD guard resilience
++      (§7).detects when an agent commits and resets --soft to before.sha,
++      keeping changes staged, Engine: HEAD guard resilience (§7).detects when an
++      agent switches branch and restores original branch, keeping changes)"
++    details:
++      - id: typecheck
++        command: cd plugins/software-factory && bun run typecheck
++        status: pass
++        durationMs: 4912
++        details: $ tsc --noEmit
++      - id: test
++        command: cd plugins/software-factory && bun test
++        status: pass
++        durationMs: 96555
++        details: |-
++          bun test v1.4.3 (c6da4a4d3)
++          ================================================================
++          Task: status-test-task [ACTIVE]
++          Kind: unclassified | Iteration: 1 | Wave: 1
++          Worktree: (none - main checkout)
++          Config path: /home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/factory-test-repo-Glx0rl/.factory/pipeline.yaml
++          Budget spent: $0.0000
++          ----------------------------------------------------------------
++          Waves & Items:
++            Wave 1:
++          Concerns: open 0 | dismissed 0 | routed 0 | resolved 0
++          ----------------------------------------------------------------
++          Blocking Questions:
++            (none)
++          ----------------------------------------------------------------
++          Digest Questions:
++            (none)
++          ================================================================
++
++
++          test/cli/cli.test.ts:
++          [factory lock] Stale run lock for task "stale-lock-task" (PID 9999999 on host Slava-Yoga) taken over by PID 2344242
++          [factory lock] Stale run lock for task "competing-takeover-task" (PID 9999999 on host Slava-Yoga) taken over by PID 2344242
++          [factory lock] Stale run lock for task "journal-worktree-task" (PID 9999999 on host Slava-Yoga) taken over by PID 2344242
++
++           389 pass
++           2 skip
++           0 fail
++           2067 expect() calls
++          Ran 391 tests across 65 files. [96.35s]
++          [Improvements: Engine: HEAD guard resilience (§7).detects when an agent commits and resets --soft to before.sha, keeping changes staged, Engine: HEAD guard resilience (§7).detects when an agent switches branch and restores original branch, keeping changes]
++        improvements:
++          - "Engine: HEAD guard resilience (§7).detects when an agent commits
++            and resets --soft to before.sha, keeping changes staged"
++          - "Engine: HEAD guard resilience (§7).detects when an agent switches
++            branch and restores original branch, keeping changes"
++  - id: target-green
++    status: pass
++    message: "target-green passed: selected tests passed"
++    details:
++      command: cd plugins/software-factory && bun test test/prompts.test.ts
++        test/human-involvement-config.test.ts --reporter=junit
++        --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-green-1794167064046-x40umvwos5q.xml
++      junitCaseCount: 34
++      junitCaseIds:
++        - "prompts: PromptLibrary & preflightPrompts.loads agent definition with
++          frontmatter tools, description, and body"
++        - "prompts: PromptLibrary & preflightPrompts.step fragments no longer
++          duplicate agent-level shared includes"
++        - "prompts: PromptLibrary & preflightPrompts.throws with descriptive
++          error listing missing variables when render fails"
++        - "prompts: PromptLibrary & preflightPrompts.overrides directory shadows
++          builtin directory"
++        - "prompts: PromptLibrary & preflightPrompts.in-memory overrides shadow
++          both override directories and builtin"
++        - "prompts: PromptLibrary & preflightPrompts.preflight passes with zero
++          errors on real pipeline.default.yaml"
++        - "prompts: PromptLibrary & preflightPrompts.preflight flags unknown
++          agent definitions"
++        - "prompts: PromptLibrary & preflightPrompts.preflight flags unknown
++          step fragments"
++        - "prompts: PromptLibrary & preflightPrompts.preflight flags unknown
++          placeholders that the engine does not supply"
++        - "prompts: PromptLibrary & preflightPrompts.preflight covers every
++          engine-invoked orchestration fragment"
++        - "prompts: PromptLibrary & preflightPrompts.preflight render check
++          fails when a fragment needs vars outside KNOWN_VARS"
++        - "prompts: PromptLibrary & preflightPrompts.loadCriteriaBundle reads
++          declared criteria files and skips missing ones"
++        - "prompts: PromptLibrary & preflightPrompts.formatDispositionsSection
++          lists allowed set and filters human-stop"
++        - "prompts: PromptLibrary & preflightPrompts.close-up step fragments
++          bind to closeup schemas, not the review shape"
++        - "prompts: PromptLibrary & preflightPrompts.review-type step fragments
++          consume dispositionsCriteria"
++        - "prompts: PromptLibrary & preflightPrompts.every agent definition
++          includes the workspace containment instructions"
++        - "prompts: PromptLibrary & preflightPrompts.infra agent prompt and
++          schema instruct recording red gates as baseline without workarounds"
++        - "prompts: concern fragment matrix
++          (adr-prompt-fragment-matrix).registers concernsYaml for every
++          concern-producing and triaging fragment"
++        - "prompts: concern fragment matrix (adr-prompt-fragment-matrix).renders
++          Open Concerns and Raise concerns instructions on all 19 matrix
++          fragments"
++        - "prompts: concern fragment matrix (adr-prompt-fragment-matrix).renders
++          Human involvement criteria and the condense rule on triage fragments"
++        - "prompts: concern fragment matrix (adr-prompt-fragment-matrix).keeps
++          per-fragment additions <=15 non-empty lines and total additions <=80"
++        - "prompts: concern fragment matrix
++          (adr-prompt-fragment-matrix).switches autonomous and detailed criteria
++          inside a rendered matrix fragment"
++        - human-involvement pipeline configuration.defaults to autonomous mode
++          with concern raise/digest/blocking policy
++        - human-involvement pipeline configuration.layers humanInvolvement and
++          concern thresholds through project and task configs
++        - human-involvement pipeline configuration.applies overrides last and
++          supports null deletion of concern keys
++        - human-involvement pipeline configuration.schema accepts all modes and
++          thresholds, rejects unknown values, and stays closed at root
++        - human-involvement pipeline configuration.ships commented
++          autonomous/principal/detailed presets with a blocking table
++        - human-involvement pipeline configuration.registers a terse
++          human-involvement criteria fragment and loads it
++        - human-involvement pipeline configuration.registers concernsYaml for
++          producers and humanInvolvementCriteria for triagers
++        - human-involvement pipeline configuration.preflight accepts the new
++          vars on matrix fragments and rejects them elsewhere
++        - human-involvement mode switching at prompt time.selects the active
++          mode section plus the shared ADR blocking table
++        - human-involvement mode switching at prompt time.renders empty
++          involvement criteria when no fragment is configured
++        - human-involvement mode switching at prompt time.lets callers provide
++          hydrated concernsYaml without dropping the criteria
++        - human-involvement criteria reach triager prompts.renders sentinel
++          criteria in every triage fragment of the matrix
++      junitTruncated: false
++      collected: true
++      collectionErrors: []
++  - id: size
++    status: pass
++    message: "size passed: 150/300 production lines changed"
++    details:
++      changedLines:
++        added: 136
++        deleted: 14
++        total: 150
++        files:
++          - plugins/software-factory/agents/steps/architect-closeup.md
++          - plugins/software-factory/agents/steps/architect-consult-item.md
++          - plugins/software-factory/agents/steps/architect-consult-nonitem.md
++          - plugins/software-factory/agents/steps/architect-plan.md
++          - plugins/software-factory/agents/steps/architect-resume.md
++          - plugins/software-factory/agents/steps/architect-revise.md
++          - plugins/software-factory/agents/steps/architect-wave-report.md
++          - plugins/software-factory/agents/steps/develop.md
++          - plugins/software-factory/agents/steps/fix-round.md
++          - plugins/software-factory/agents/steps/plan-close-up.md
++          - plugins/software-factory/agents/steps/plan-review.md
++          - plugins/software-factory/agents/steps/poc.md
++          - plugins/software-factory/agents/steps/qa.md
++          - plugins/software-factory/agents/steps/research.md
++          - plugins/software-factory/agents/steps/review.md
++          - plugins/software-factory/agents/steps/simple-implement.md
++          - plugins/software-factory/agents/steps/test-assumptions.md
++          - plugins/software-factory/agents/steps/test-first.md
++          - plugins/software-factory/agents/steps/wave-close-up.md
++          - plugins/software-factory/src/core/prompt-vars.ts
++      limit: 300
+diff --git a/.factory/tasks/concerns-funnel/items/prompt-fragments/steps/002-develop-r1-a1/input.md b/.factory/tasks/concerns-funnel/items/prompt-fragments/steps/002-develop-r1-a1/input.md
+new file mode 100644
+index 0000000..382223b
+--- /dev/null
++++ b/.factory/tasks/concerns-funnel/items/prompt-fragments/steps/002-develop-r1-a1/input.md
+@@ -0,0 +1,75 @@
++# Step: Develop
++
++## Goal
++Implement production code changes and supporting tests to satisfy the assignment, make declared targets pass green, and pass all project gates.
++
++## Rules
++- Target green: every test selector and case identified in `target` MUST pass cleanly.
++- Quality gates: run project gates via `bash`; all gates MUST succeed with exit code 0.
++- Sizing budget: keep changes minimal and within the engine-enforced prod-line budget (see agent philosophy). The engine rejects oversized diffs mechanically.
++- Tool-call budget: aim to finish within ~60 tool calls. Batch reads, prefer `grep`/`ast_grep` over re-reading files, and stop exploring once you can implement — the engine journals a warning above the threshold.
++- Evidence mandatory: yield `status: ok` with non-empty `evidence` (array of strings detailing personal verification) matching `developer-output.schema.json`.
++
++## Assignment
++{
++  "slug": "prompt-fragments",
++  "kind": "dev",
++  "title": "Fragment matrix and raise instructions",
++  "assignment": "Own prompt-vars.ts + fragments + prompts.test matrix per adr-prompt-fragment-matrix (no hydration bytes, no router). KNOWN_VARS gains concernsYaml on steps/develop,develop,steps/test-first,test-first,steps/simple-implement,simple-implement,steps/fix-round,fix-round,steps/poc,poc,steps/test-assumptions,test-assumptions,steps/research,research (+humanInvolvementCriteria only where already registered). Sections: producers (develop-family+poc/test-assumptions/research) get 3-line ## Open Concerns {{concernsYaml}} + 1-line raise (no HI: raise never triage); triagers/architects/close-ups/qa get HI section + condense rule appended. Deltas: architect-plan/revise add OC+raise; review adds HI+condense; plan-review adds raise+condense; rest per matrix. Budgets: added lines per fragment <=15, total <=80 (2-3-line sections); prompts.test asserts per-fragment sentinels (## Open Concerns + Raise concerns on all 19; ## Human involvement on review/qa/plan-review/architect-*/close-ups) + budgets; update human-involvement-config.test.ts non-consumer assertion (develop leaves, triage/infra stay) + FRAGMENT_MATRIX. Behavior tests: sections render with sentinels, mode switch (pipeline.yaml humanInvolvement detailed) changes criteria, budget assertions pass. Verify: preflight + bun run typecheck. Budget ~120 prod lines.",
++  "outlineRef": "prompt-fragments",
++  "milestone": "m1-hydration-prompts",
++  "wave": 1,
++  "scenarioRefs": [
++    "m1-hydration-prompts:5"
++  ],
++  "citations": [
++    "plugins/software-factory/src/core/flows/item-machine.ts:628-647",
++    "plugins/software-factory/src/core/flows/iteration.ts:439-485",
++    "docs/factory.v2.md:89-103"
++  ]
++}
++
++## Target
++{
++  "selectors": [
++    "test/prompts.test.ts",
++    "test/human-involvement-config.test.ts"
++  ],
++  "expectRed": [
++    "test/prompts.test.ts::prompts: PromptLibrary & preflightPrompts.throws with descriptive error listing missing variables when render fails",
++    "test/prompts.test.ts::prompts: concern fragment matrix (adr-prompt-fragment-matrix).registers concernsYaml for every concern-producing and triaging fragment",
++    "test/prompts.test.ts::prompts: concern fragment matrix (adr-prompt-fragment-matrix).renders Open Concerns and Raise concerns instructions on all 19 matrix fragments",
++    "test/prompts.test.ts::prompts: concern fragment matrix (adr-prompt-fragment-matrix).renders Human involvement criteria and the condense rule on triage fragments",
++    "test/prompts.test.ts::prompts: concern fragment matrix (adr-prompt-fragment-matrix).switches autonomous and detailed criteria inside a rendered matrix fragment",
++    "test/human-involvement-config.test.ts::human-involvement pipeline configuration.registers concernsYaml for producers and humanInvolvementCriteria for triagers",
++    "test/human-involvement-config.test.ts::human-involvement pipeline configuration.preflight accepts the new vars on matrix fragments and rejects them elsewhere",
++    "test/human-involvement-config.test.ts::human-involvement criteria reach triager prompts.renders sentinel criteria in every triage fragment of the matrix"
++  ]
++}
++
++## Context & Citations
++[
++  "plugins/software-factory/src/core/flows/item-machine.ts:628-647",
++  "plugins/software-factory/src/core/flows/iteration.ts:439-485",
++  "docs/factory.v2.md:89-103"
++]
++
++## Review Feedback
++
++## Output
++
++Yield a structured JSON object matching this schema:
++- status (string, required, enum: ["ok","blocked","failed"]): Step execution status (ok, blocked, failed)
++- summary (string, required): Concise summary of implementation actions and test results
++- target (object, optional): Target test selectors, gate, or custom command for red/green verification
++  - Option 1:
++    - selectors (array of string, required)
++    - expectRed (array of string, required, minItems: 1)
++  - Option 2:
++    - gate (string, required)
++  - Option 3:
++    - command (string, required)
++    - customTarget (boolean, required)
++- evidence (array of string, optional): List of executed checks and verification commands proving correctness
++- concerns (array of string, optional): Observations, technical debt, or potential risks identified during implementation
++- notes (string, optional): Optional developer notes, implementation observations, or comments
+diff --git a/.factory/tasks/concerns-funnel/items/prompt-fragments/steps/002-develop-r1-a1/meta.yaml b/.factory/tasks/concerns-funnel/items/prompt-fragments/steps/002-develop-r1-a1/meta.yaml
+new file mode 100644
+index 0000000..84595aa
+--- /dev/null
++++ b/.factory/tasks/concerns-funnel/items/prompt-fragments/steps/002-develop-r1-a1/meta.yaml
+@@ -0,0 +1,19 @@
++seq: 2
++name: develop
++attempt: 1
++fixRound: 1
++agent: developer
++role: workhorse
++models:
++  - opencode-go/deepseek-v4.1-flash
++  - opencode-go/muse-spark-1.3-contributor
++timeoutSec: 5400
++status: ok
++startedAt: 2026-11-08T19:39:01.207Z
++session: 01a1bcab-daf0-7583-b03c-2e724687e05c
++endedAt: 2026-11-08T19:44:25.505Z
++usage:
++  inputTokens: 60047
++  outputTokens: 16696
++  costUsd: 0.02311
++traceRef: /home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/sessions/2026-11-08T19-39-01-744Z_01a1bcab-daf0-7583-b03c-2e724687e05c
+diff --git a/.factory/tasks/concerns-funnel/items/prompt-fragments/steps/002-develop-r1-a1/output.yaml b/.factory/tasks/concerns-funnel/items/prompt-fragments/steps/002-develop-r1-a1/output.yaml
+new file mode 100644
+index 0000000..980a6f1
+--- /dev/null
++++ b/.factory/tasks/concerns-funnel/items/prompt-fragments/steps/002-develop-r1-a1/output.yaml
+@@ -0,0 +1,67 @@
++status: ok
++summary: "Implemented the ADR prompt-fragment matrix: registered concernsYaml
++  for the seven producer families (develop, test-first, simple-implement,
++  fix-round, poc, test-assumptions, research; both prefixed and bare keys) in
++  KNOWN_VARS, and wired the concern funnel into all 19 step fragments. Producers
++  now render a 4-line ## Open Concerns block (header + {{concernsYaml}} + scope
++  line + 'Raise concerns' line, no human-involvement criteria). All 12 triagers
++  (review, qa, plan-review, two close-ups, seven architect fragments) render ##
++  Human involvement {{humanInvolvementCriteria}} plus the Open Concerns block
++  with a raise/triage/condense rule; review gained the missing HI section and
++  raise line, plan-review gained the raise/condense line, architect-plan/revise
++  gained the OC block. Per-fragment additions are 1-5 non-empty lines (<=15) and
++  total additions are 78 (<=80). All 34 target tests pass, typecheck is clean,
++  prompt preflight returns no errors, and the full plugin suite passes 389 tests
++  with 2 skips and 0 failures."
++target:
++  selectors:
++    - test/prompts.test.ts
++    - test/human-involvement-config.test.ts
++  expectRed:
++    - "test/prompts.test.ts::prompts: PromptLibrary & preflightPrompts.throws
++      with descriptive error listing missing variables when render fails"
++    - "test/prompts.test.ts::prompts: concern fragment matrix
++      (adr-prompt-fragment-matrix).registers concernsYaml for every
++      concern-producing and triaging fragment"
++    - "test/prompts.test.ts::prompts: concern fragment matrix
++      (adr-prompt-fragment-matrix).renders Open Concerns and Raise concerns
++      instructions on all 19 matrix fragments"
++    - "test/prompts.test.ts::prompts: concern fragment matrix
++      (adr-prompt-fragment-matrix).renders Human involvement criteria and the
++      condense rule on triage fragments"
++    - "test/prompts.test.ts::prompts: concern fragment matrix
++      (adr-prompt-fragment-matrix).switches autonomous and detailed criteria
++      inside a rendered matrix fragment"
++    - test/human-involvement-config.test.ts::human-involvement pipeline
++      configuration.registers concernsYaml for producers and
++      humanInvolvementCriteria for triagers
++    - test/human-involvement-config.test.ts::human-involvement pipeline
++      configuration.preflight accepts the new vars on matrix fragments and
++      rejects them elsewhere
++    - test/human-involvement-config.test.ts::human-involvement criteria reach
++      triager prompts.renders sentinel criteria in every triage fragment of the
++      matrix
++evidence:
++  - bun test test/prompts.test.ts test/human-involvement-config.test.ts -> 34
++    pass, 0 fail (465 expect calls)
++  - bun run typecheck -> tsc --noEmit exit 0
++  - "bun test (full plugin suite) -> 391 tests across 65 files: 389 pass, 2
++    skip, 0 fail"
++  - Programmatic prompt preflight via loadPipelineConfig + loadPromptLibrary +
++    preflightPrompts on agents/ -> [] (no errors)
++  - Line-budget script over all 19 matrix fragments -> per-fragment deltas 1-5
++    (<=15), total 78 (<=80)
++  - Sentinel grep over matrix -> all 19 fragments contain '## Open Concerns' and
++    'Raise concerns'; all 12 triagers also contain '## Human involvement' and
++    'condens'
++concerns:
++  - "Total fragment addition budget is tight: 78 of the allowed 80 non-empty
++    lines are consumed, leaving only 2 lines of headroom for future fragment
++    edits."
++  - Producer fragments intentionally do not receive humanInvolvementCriteria,
++    matching the raise-never-triage rule; triage/infra/integrate fragments
++    remain outside the funnel.
++notes: New sections are appended at the end of each fragment; review keeps its
++  pre-existing Open Concerns/triage block and gains a separate HI section, while
++  plan-review keeps its existing HI/OC blocks and only gains the raise/condense
++  rule.
+diff --git a/plugins/software-factory/agents/steps/architect-closeup.md b/plugins/software-factory/agents/steps/architect-closeup.md
+index 7dcd9b8..756b2f5 100644
+--- a/plugins/software-factory/agents/steps/architect-closeup.md
++++ b/plugins/software-factory/agents/steps/architect-closeup.md
+@@ -19,3 +19,11 @@ Determine the final iteration outcome following the completeness audit by the pl
+ 
+ ## Task Intent
+ {{intent}}
++
++## Human involvement
++{{humanInvolvementCriteria}}
++
++## Open Concerns
++{{concernsYaml}}
++
++- Raise concerns with evidence; triage pre-existing ids with the allowed dispositions and condense or dismiss stale ones.
+diff --git a/plugins/software-factory/agents/steps/architect-consult-item.md b/plugins/software-factory/agents/steps/architect-consult-item.md
+index 7f3e17f..4280cf5 100644
+--- a/plugins/software-factory/agents/steps/architect-consult-item.md
++++ b/plugins/software-factory/agents/steps/architect-consult-item.md
+@@ -26,3 +26,11 @@ Resolve an item-level blockage, retry exhaustion, size violation, or reviewer es
+ 
+ ## Review Feedback
+ {{feedback}}
++
++## Human involvement
++{{humanInvolvementCriteria}}
++
++## Open Concerns
++{{concernsYaml}}
++
++- Raise concerns with evidence; triage pre-existing ids with the allowed dispositions and condense or dismiss stale ones.
+diff --git a/plugins/software-factory/agents/steps/architect-consult-nonitem.md b/plugins/software-factory/agents/steps/architect-consult-nonitem.md
+index e56d972..6d611a3 100644
+--- a/plugins/software-factory/agents/steps/architect-consult-nonitem.md
++++ b/plugins/software-factory/agents/steps/architect-consult-nonitem.md
+@@ -20,3 +20,11 @@ Context: {{context}}
+ 
+ ## Tech Debt
+ {{debt}}
++
++## Human involvement
++{{humanInvolvementCriteria}}
++
++## Open Concerns
++{{concernsYaml}}
++
++- Raise concerns with evidence; triage pre-existing ids with the allowed dispositions and condense or dismiss stale ones.
+diff --git a/plugins/software-factory/agents/steps/architect-plan.md b/plugins/software-factory/agents/steps/architect-plan.md
+index 5169330..4bf5f7c 100644
+--- a/plugins/software-factory/agents/steps/architect-plan.md
++++ b/plugins/software-factory/agents/steps/architect-plan.md
+@@ -39,3 +39,8 @@ Iteration: {{iteration}}
+ 
+ ## Human involvement
+ {{humanInvolvementCriteria}}
++
++## Open Concerns
++{{concernsYaml}}
++
++- Raise concerns with evidence; triage pre-existing ids using the human-involvement table and condense stale detail.
+diff --git a/plugins/software-factory/agents/steps/architect-resume.md b/plugins/software-factory/agents/steps/architect-resume.md
+index 8214afd..22488ee 100644
+--- a/plugins/software-factory/agents/steps/architect-resume.md
++++ b/plugins/software-factory/agents/steps/architect-resume.md
+@@ -17,3 +17,11 @@ Resume oversight of an existing iteration following process restart or return fr
+ 
+ ## Steering Directives
+ {{steering}}
++
++## Human involvement
++{{humanInvolvementCriteria}}
++
++## Open Concerns
++{{concernsYaml}}
++
++- Raise concerns with evidence; triage pre-existing ids with the allowed dispositions and condense or dismiss stale ones.
+diff --git a/plugins/software-factory/agents/steps/architect-revise.md b/plugins/software-factory/agents/steps/architect-revise.md
+index 154eb1b..1b889b5 100644
+--- a/plugins/software-factory/agents/steps/architect-revise.md
++++ b/plugins/software-factory/agents/steps/architect-revise.md
+@@ -18,3 +18,8 @@ Revise the iteration execution plan (`plan-N.yaml`) in response to adversarial f
+ 
+ ## Human involvement
+ {{humanInvolvementCriteria}}
++
++## Open Concerns
++{{concernsYaml}}
++
++- Raise concerns with evidence; triage pre-existing ids using the human-involvement table and condense stale detail.
+diff --git a/plugins/software-factory/agents/steps/architect-wave-report.md b/plugins/software-factory/agents/steps/architect-wave-report.md
+index 6c1458c..d4eae3f 100644
+--- a/plugins/software-factory/agents/steps/architect-wave-report.md
++++ b/plugins/software-factory/agents/steps/architect-wave-report.md
+@@ -22,3 +22,11 @@ Evaluate the results of a completed execution wave, assess spike findings and ac
+ 
+ ## Steering Directives
+ {{steering}}
++
++## Human involvement
++{{humanInvolvementCriteria}}
++
++## Open Concerns
++{{concernsYaml}}
++
++- Raise concerns with evidence; triage pre-existing ids with the allowed dispositions and condense or dismiss stale ones.
+diff --git a/plugins/software-factory/agents/steps/develop.md b/plugins/software-factory/agents/steps/develop.md
+index 5994cfa..0e85356 100644
+--- a/plugins/software-factory/agents/steps/develop.md
++++ b/plugins/software-factory/agents/steps/develop.md
+@@ -17,3 +17,9 @@ Implement production code changes and supporting tests to satisfy the assignment
+ 
+ ## Context & Citations
+ {{citations}}
++
++## Open Concerns
++{{concernsYaml}}
++
++- Review the concerns above before starting; they constrain this step but are not part of the assignment.
++- Raise concerns with evidence when you find cross-cutting issues; do not triage pre-existing concerns.
+diff --git a/plugins/software-factory/agents/steps/fix-round.md b/plugins/software-factory/agents/steps/fix-round.md
+index a9745b9..3e205f8 100644
+--- a/plugins/software-factory/agents/steps/fix-round.md
++++ b/plugins/software-factory/agents/steps/fix-round.md
+@@ -20,3 +20,9 @@ Address reviewer suggestions and gate failures from the previous development att
+ 
+ ## Current Diff
+ {{diff}}
++
++## Open Concerns
++{{concernsYaml}}
++
++- Review the concerns above before starting; they constrain this step but are not part of the assignment.
++- Raise concerns with evidence when you find cross-cutting issues; do not triage pre-existing concerns.
+diff --git a/plugins/software-factory/agents/steps/plan-close-up.md b/plugins/software-factory/agents/steps/plan-close-up.md
+index 01a8f5a..08be89f 100644
+--- a/plugins/software-factory/agents/steps/plan-close-up.md
++++ b/plugins/software-factory/agents/steps/plan-close-up.md
+@@ -19,3 +19,11 @@ Audit completed iteration work against original plan milestones, Gherkin scenari
+ 
+ ## Context
+ {{context}}
++
++## Human involvement
++{{humanInvolvementCriteria}}
++
++## Open Concerns
++{{concernsYaml}}
++
++- Raise concerns with evidence; triage pre-existing ids with the allowed dispositions and condense or dismiss stale ones.
+diff --git a/plugins/software-factory/agents/steps/plan-review.md b/plugins/software-factory/agents/steps/plan-review.md
+index 4492984..5803754 100644
+--- a/plugins/software-factory/agents/steps/plan-review.md
++++ b/plugins/software-factory/agents/steps/plan-review.md
+@@ -34,3 +34,4 @@ Conduct adversarial review of the architect's proposed plan, critiquing mileston
+ 
+ ## Open Concerns
+ {{concernsYaml}}
++- Raise concerns with evidence; triage pre-existing ids as above and condense stale detail.
+diff --git a/plugins/software-factory/agents/steps/poc.md b/plugins/software-factory/agents/steps/poc.md
+index 4303feb..5b23c37 100644
+--- a/plugins/software-factory/agents/steps/poc.md
++++ b/plugins/software-factory/agents/steps/poc.md
+@@ -14,3 +14,9 @@ Implement a confined Proof of Concept (PoC) to validate feasibility, test experi
+ 
+ ## Context
+ {{context}}
++
++## Open Concerns
++{{concernsYaml}}
++
++- Review the concerns above before starting; they constrain this step but are not part of the assignment.
++- Raise concerns with evidence when you find cross-cutting issues; do not triage pre-existing concerns.
+diff --git a/plugins/software-factory/agents/steps/qa.md b/plugins/software-factory/agents/steps/qa.md
+index 313f9f1..6e8a413 100644
+--- a/plugins/software-factory/agents/steps/qa.md
++++ b/plugins/software-factory/agents/steps/qa.md
+@@ -25,3 +25,11 @@ Perform independent quality assurance on the item's implementation and test suit
+ 
+ ## Code Diff
+ {{diff}}
++
++## Human involvement
++{{humanInvolvementCriteria}}
++
++## Open Concerns
++{{concernsYaml}}
++
++- Raise concerns with evidence; triage pre-existing ids with the allowed dispositions and condense or dismiss stale ones.
+diff --git a/plugins/software-factory/agents/steps/research.md b/plugins/software-factory/agents/steps/research.md
+index 1617b6b..69b1ebe 100644
+--- a/plugins/software-factory/agents/steps/research.md
++++ b/plugins/software-factory/agents/steps/research.md
+@@ -17,3 +17,9 @@ Conduct technical spike research to eliminate architecture unknowns, investigate
+ 
+ ## Context & Citations
+ {{citations}}
++
++## Open Concerns
++{{concernsYaml}}
++
++- Review the concerns above before starting; they constrain this step but are not part of the assignment.
++- Raise concerns with evidence when you find cross-cutting issues; do not triage pre-existing concerns.
+diff --git a/plugins/software-factory/agents/steps/review.md b/plugins/software-factory/agents/steps/review.md
+index f36a1fe..c60100c 100644
+--- a/plugins/software-factory/agents/steps/review.md
++++ b/plugins/software-factory/agents/steps/review.md
+@@ -30,3 +30,8 @@ Conduct adversarial peer code review on completed changes, evaluating implementa
+ 
+ ## Code Diff
+ {{diff}}
++
++## Human involvement
++{{humanInvolvementCriteria}}
++
++- Raise concerns with evidence when review uncovers new cross-cutting issues.
+diff --git a/plugins/software-factory/agents/steps/simple-implement.md b/plugins/software-factory/agents/steps/simple-implement.md
+index 76d1f11..a66db74 100644
+--- a/plugins/software-factory/agents/steps/simple-implement.md
++++ b/plugins/software-factory/agents/steps/simple-implement.md
+@@ -15,3 +15,9 @@ Implement a small, isolated change directly on the item branch as a continuation
+ 
+ ## Context & Citations
+ {{citations}}
++
++## Open Concerns
++{{concernsYaml}}
++
++- Review the concerns above before starting; they constrain this step but are not part of the assignment.
++- Raise concerns with evidence when you find cross-cutting issues; do not triage pre-existing concerns.
+diff --git a/plugins/software-factory/agents/steps/test-assumptions.md b/plugins/software-factory/agents/steps/test-assumptions.md
+index 00636f0..a5209cb 100644
+--- a/plugins/software-factory/agents/steps/test-assumptions.md
++++ b/plugins/software-factory/agents/steps/test-assumptions.md
+@@ -15,3 +15,9 @@ Author permanent automated tests that explicitly verify third-party library beha
+ 
+ ## Context
+ {{context}}
++
++## Open Concerns
++{{concernsYaml}}
++
++- Review the concerns above before starting; they constrain this step but are not part of the assignment.
++- Raise concerns with evidence when you find cross-cutting issues; do not triage pre-existing concerns.
+diff --git a/plugins/software-factory/agents/steps/test-first.md b/plugins/software-factory/agents/steps/test-first.md
+index d710643..161f1d4 100644
+--- a/plugins/software-factory/agents/steps/test-first.md
++++ b/plugins/software-factory/agents/steps/test-first.md
+@@ -19,3 +19,9 @@ Author automated tests specifying the required behavior changes BEFORE writing p
+ 
+ ## Context & Citations
+ {{citations}}
++
++## Open Concerns
++{{concernsYaml}}
++
++- Review the concerns above before starting; they constrain this step but are not part of the assignment.
++- Raise concerns with evidence when you find cross-cutting issues; do not triage pre-existing concerns.
+diff --git a/plugins/software-factory/agents/steps/wave-close-up.md b/plugins/software-factory/agents/steps/wave-close-up.md
+index ecda5a4..5cc67c2 100644
+--- a/plugins/software-factory/agents/steps/wave-close-up.md
++++ b/plugins/software-factory/agents/steps/wave-close-up.md
+@@ -16,3 +16,11 @@ Wave Report: {{waveReport}}
+ 
+ ## Infrastructure Gates
+ {{infra}}
++
++## Human involvement
++{{humanInvolvementCriteria}}
++
++## Open Concerns
++{{concernsYaml}}
++
++- Raise concerns with evidence; triage pre-existing ids with the allowed dispositions and condense or dismiss stale ones.
+diff --git a/plugins/software-factory/src/core/prompt-vars.ts b/plugins/software-factory/src/core/prompt-vars.ts
+index f6d9f8a..81a4e65 100644
+--- a/plugins/software-factory/src/core/prompt-vars.ts
++++ b/plugins/software-factory/src/core/prompt-vars.ts
+@@ -52,35 +52,35 @@ export const KNOWN_VARS: Record<string, string[]> = {
+   infra: ["task", "intent", "context"],
+ 
+   // Item development & verification steps
+-  "steps/develop": ["assignment", "target", "citations"],
+-  develop: ["assignment", "target", "citations"],
++  "steps/develop": ["assignment", "target", "citations", "concernsYaml"],
++  develop: ["assignment", "target", "citations", "concernsYaml"],
+ 
+-  "steps/test-first": ["assignment", "citations"],
+-  "test-first": ["assignment", "citations"],
++  "steps/test-first": ["assignment", "citations", "concernsYaml"],
++  "test-first": ["assignment", "citations", "concernsYaml"],
+   "steps/qa": ["assignment", "checks", "testDiff", "diff", "dispositionsCriteria", "humanInvolvementCriteria", "concernsYaml"],
+   qa: ["assignment", "checks", "testDiff", "diff", "dispositionsCriteria", "humanInvolvementCriteria", "concernsYaml"],
+ 
+   "steps/review": ["assignment", "checks", "diff", "dispositionsCriteria", "humanInvolvementCriteria", "concernsYaml"],
+   review: ["assignment", "checks", "diff", "dispositionsCriteria", "humanInvolvementCriteria", "concernsYaml"],
+ 
+-  "steps/fix-round": ["assignment", "feedback", "checks", "diff"],
+-  "fix-round": ["assignment", "feedback", "checks", "diff"],
++  "steps/fix-round": ["assignment", "feedback", "checks", "diff", "concernsYaml"],
++  "fix-round": ["assignment", "feedback", "checks", "diff", "concernsYaml"],
+ 
+-  "steps/simple-implement": ["intent", "citations"],
+-  "simple-implement": ["intent", "citations"],
++  "steps/simple-implement": ["intent", "citations", "concernsYaml"],
++  "simple-implement": ["intent", "citations", "concernsYaml"],
+ 
+   "steps/integrate": ["item", "diff"],
+   integrate: ["item", "diff"],
+ 
+   // Spikes
+-  "steps/research": ["assignment", "intent", "citations"],
+-  research: ["assignment", "intent", "citations"],
++  "steps/research": ["assignment", "intent", "citations", "concernsYaml"],
++  research: ["assignment", "intent", "citations", "concernsYaml"],
+ 
+-  "steps/poc": ["assignment", "context"],
+-  poc: ["assignment", "context"],
++  "steps/poc": ["assignment", "context", "concernsYaml"],
++  poc: ["assignment", "context", "concernsYaml"],
+ 
+-  "steps/test-assumptions": ["assignment", "context"],
+-  "test-assumptions": ["assignment", "context"],
++  "steps/test-assumptions": ["assignment", "context", "concernsYaml"],
++  "test-assumptions": ["assignment", "context", "concernsYaml"],
+ 
+   // Project manager steps
+   "steps/pm-edits": ["plan", "kinds", "citations", "limits", "storyKindsCriteria"],
+diff --git a/plugins/software-factory/test/human-involvement-config.test.ts b/plugins/software-factory/test/human-involvement-config.test.ts
+index 72c1649..6276022 100644
+--- a/plugins/software-factory/test/human-involvement-config.test.ts
++++ b/plugins/software-factory/test/human-involvement-config.test.ts
+@@ -30,9 +30,10 @@ import type { PipelineConfig, ProjectConfig } from "../src/core/artifacts.js";
+  * - A terse `agents/criteria/human-involvement.md` fragment is registered under
+  *   `criteria.human-involvement`; the active mode selects its `## <mode>`
+  *   section plus the shared blocking table.
+- * - `concernsYaml` and `humanInvolvementCriteria` are registered in KNOWN_VARS
+- *   for the review/architect/close-up fragment matrix and supplied by the
+- *   engine when rendering those steps.
++ * - `concernsYaml` is registered in KNOWN_VARS for every producer and triager
++ *   fragment (develop-family, poc/test-assumptions/research, review/qa,
++ *   plan-review, close-ups, architects); `humanInvolvementCriteria` is added
++ *   only for triagers, which receive both vars when the engine renders a step.
+  */
+ 
+ const pluginRoot = path.resolve(import.meta.dir, "..");
+@@ -54,24 +55,56 @@ const DEFAULT_RAISE_ALLOWLIST = [
+ ];
+ 
+ /**
+- * Fragment matrix: which engine steps receive which concern/involvement var.
+- * Reviewers triage raised concerns; architects mark ADRs blocking and consume
+- * funneled concerns; close-ups are funnel levels themselves.
++ * Fragment matrix: every engine step that produces or triages concerns receives
++ * hydrated open concerns. Only triagers (reviewers/architects/close-ups/qa) also
++ * receive the human-involvement criteria; producers raise concerns but never
++ * triage them.
+  */
+-const FRAGMENT_MATRIX: Record<string, string[]> = {
+-  review: ["humanInvolvementCriteria", "concernsYaml"],
+-  qa: ["humanInvolvementCriteria", "concernsYaml"],
+-  "plan-review": ["humanInvolvementCriteria", "concernsYaml"],
+-  "wave-close-up": ["humanInvolvementCriteria", "concernsYaml"],
+-  "plan-close-up": ["humanInvolvementCriteria", "concernsYaml"],
+-  "architect-plan": ["humanInvolvementCriteria", "concernsYaml"],
+-  "architect-revise": ["humanInvolvementCriteria", "concernsYaml"],
+-  "architect-resume": ["humanInvolvementCriteria", "concernsYaml"],
+-  "architect-wave-report": ["humanInvolvementCriteria", "concernsYaml"],
+-  "architect-closeup": ["humanInvolvementCriteria", "concernsYaml"],
+-  "architect-consult-item": ["humanInvolvementCriteria", "concernsYaml"],
+-  "architect-consult-nonitem": ["humanInvolvementCriteria", "concernsYaml"],
+-};
++const CONCERN_FRAGMENTS = [
++  "develop",
++  "test-first",
++  "simple-implement",
++  "fix-round",
++  "poc",
++  "test-assumptions",
++  "research",
++  "review",
++  "qa",
++  "plan-review",
++  "wave-close-up",
++  "plan-close-up",
++  "architect-plan",
++  "architect-revise",
++  "architect-resume",
++  "architect-wave-report",
++  "architect-closeup",
++  "architect-consult-item",
++  "architect-consult-nonitem",
++];
++
++const HUMAN_INVOLVEMENT_FRAGMENTS = new Set([
++  "review",
++  "qa",
++  "plan-review",
++  "wave-close-up",
++  "plan-close-up",
++  "architect-plan",
++  "architect-revise",
++  "architect-resume",
++  "architect-wave-report",
++  "architect-closeup",
++  "architect-consult-item",
++  "architect-consult-nonitem",
++]);
++
++const FRAGMENT_MATRIX: Record<string, string[]> = Object.fromEntries(
++  CONCERN_FRAGMENTS.map((fragment) => [
++    fragment,
++    HUMAN_INVOLVEMENT_FRAGMENTS.has(fragment)
++      ? ["humanInvolvementCriteria", "concernsYaml"]
++      : ["concernsYaml"],
++  ])
++);
+ 
+ const CRITERIA_FIXTURE = `# Human involvement criteria
+ 
+@@ -258,7 +291,7 @@ describe("human-involvement pipeline configuration", () => {
+     expect(bundle.humanInvolvement).toContain("autonomous");
+   });
+ 
+-  it("registers concernsYaml and humanInvolvementCriteria for the fragment matrix", () => {
++  it("registers concernsYaml for producers and humanInvolvementCriteria for triagers", () => {
+     for (const [fragment, vars] of Object.entries(FRAGMENT_MATRIX)) {
+       for (const key of [fragment, `steps/${fragment}`]) {
+         expect({ key, vars: KNOWN_VARS[key] }).toEqual({
+@@ -268,8 +301,18 @@ describe("human-involvement pipeline configuration", () => {
+       }
+     }
+ 
+-    // Non-consumers must not silently gain the vars: the matrix is selective.
+-    for (const key of ["develop", "steps/develop", "triage", "steps/triage", "infra"]) {
++    // Producers raise concerns but never triage them: no involvement criteria.
++    for (const fragment of CONCERN_FRAGMENTS.filter(
++      (fragment) => !HUMAN_INVOLVEMENT_FRAGMENTS.has(fragment)
++    )) {
++      for (const key of [fragment, `steps/${fragment}`]) {
++        expect(KNOWN_VARS[key]).toContain("concernsYaml");
++        expect(KNOWN_VARS[key]).not.toContain("humanInvolvementCriteria");
++      }
++    }
++
++    // Triage and infra stay outside the concern funnel entirely.
++    for (const key of ["triage", "steps/triage", "infra", "steps/infra"]) {
+       expect(KNOWN_VARS[key]).not.toContain("humanInvolvementCriteria");
+       expect(KNOWN_VARS[key]).not.toContain("concernsYaml");
+     }
+@@ -295,10 +338,18 @@ describe("human-involvement pipeline configuration", () => {
+     });
+     expect(preflightPrompts(matrixLib, pipeline)).toEqual([]);
+ 
++    const producerLib = loadPromptLibrary({
++      builtinDir: agentsDir,
++      overrides: {
++        "steps/develop": "Develop {{assignment}} {{target}} {{citations}} {{concernsYaml}}",
++      },
++    });
++    expect(preflightPrompts(producerLib, pipeline)).toEqual([]);
++
+     const nonMatrixLib = loadPromptLibrary({
+       builtinDir: agentsDir,
+       overrides: {
+-        develop: "Develop {{assignment}} {{target}} {{citations}} {{concernsYaml}}",
++        "steps/triage": "Triage {{task}} {{intent}} {{triageCriteria}} {{concernsYaml}}",
+       },
+     });
+     const errors = preflightPrompts(nonMatrixLib, pipeline);
+@@ -438,17 +489,25 @@ describe("human-involvement mode switching at prompt time", () => {
+   });
+ });
+ 
+-describe("human-involvement criteria reach architect prompts", () => {
+-  it("renders sentinel criteria in architect-plan, architect-revise, and plan-review", () => {
++describe("human-involvement criteria reach triager prompts", () => {
++  it("renders sentinel criteria in every triage fragment of the matrix", () => {
+     const lib = loadPromptLibrary({ builtinDir: agentsDir });
+     const sentinel = "SENTINEL-HUMAN-INVOLVEMENT-CRITERIA";
+-    const fragments = ["steps/architect-plan", "steps/architect-revise", "steps/plan-review"];
++    const fragments = [...HUMAN_INVOLVEMENT_FRAGMENTS].map(
++      (fragment) => `steps/${fragment}`
++    );
+     for (const fragment of fragments) {
+       const vars: Record<string, string> = {};
+       for (const v of KNOWN_VARS[fragment] ?? []) vars[v] = `sample-${v}`;
+       vars.humanInvolvementCriteria = sentinel;
+-      expect(lib.placeholders(fragment)).toContain("humanInvolvementCriteria");
+-      expect(lib.render(fragment, vars)).toContain(sentinel);
++      expect({ fragment, placeholders: lib.placeholders(fragment) }).toEqual({
++        fragment,
++        placeholders: expect.arrayContaining(["humanInvolvementCriteria"]),
++      });
++      expect({ fragment, rendered: lib.render(fragment, vars) }).toEqual({
++        fragment,
++        rendered: expect.stringContaining(sentinel),
++      });
+     }
+   });
+ });
+diff --git a/plugins/software-factory/test/prompts.test.ts b/plugins/software-factory/test/prompts.test.ts
+index e18d311..74715c3 100644
+--- a/plugins/software-factory/test/prompts.test.ts
++++ b/plugins/software-factory/test/prompts.test.ts
+@@ -7,11 +7,79 @@ import {
+   preflightPrompts,
+   loadCriteriaBundle,
+   formatDispositionsSection,
++  formatHumanInvolvementCriteria,
+   ENGINE_STEP_FRAGMENTS,
+ } from "../src/core/prompts.js";
++import { KNOWN_VARS } from "../src/core/prompt-vars.js";
+ import { loadPipelineConfig } from "../src/core/config/loader.js";
+ import type { PipelineConfig } from "../src/core/artifacts.js";
+ 
++/**
++ * Fragment matrix (docs/adr/adr-prompt-fragment-matrix.md): every fragment that
++ * receives hydrated open concerns. Producers raise concerns; reviewers,
++ * architects, close-ups, and QA additionally triage them.
++ */
++const CONCERN_FRAGMENTS = [
++  "steps/develop",
++  "steps/test-first",
++  "steps/simple-implement",
++  "steps/fix-round",
++  "steps/poc",
++  "steps/test-assumptions",
++  "steps/research",
++  "steps/review",
++  "steps/qa",
++  "steps/plan-review",
++  "steps/wave-close-up",
++  "steps/plan-close-up",
++  "steps/architect-plan",
++  "steps/architect-revise",
++  "steps/architect-resume",
++  "steps/architect-wave-report",
++  "steps/architect-closeup",
++  "steps/architect-consult-item",
++  "steps/architect-consult-nonitem",
++] as const;
++
++/** Triage fragments that receive the active human-involvement criteria. */
++const HUMAN_INVOLVEMENT_FRAGMENTS = new Set<string>([
++  "steps/review",
++  "steps/qa",
++  "steps/plan-review",
++  "steps/wave-close-up",
++  "steps/plan-close-up",
++  "steps/architect-plan",
++  "steps/architect-revise",
++  "steps/architect-resume",
++  "steps/architect-wave-report",
++  "steps/architect-closeup",
++  "steps/architect-consult-item",
++  "steps/architect-consult-nonitem",
++]);
++
++/** Non-empty line counts before the concern/human-involvement sections landed. */
++const FRAGMENT_BASELINE_LINES: Record<string, number> = {
++  "steps/develop": 14,
++  "steps/test-first": 17,
++  "steps/simple-implement": 13,
++  "steps/fix-round": 16,
++  "steps/poc": 12,
++  "steps/test-assumptions": 13,
++  "steps/research": 14,
++  "steps/review": 24,
++  "steps/qa": 20,
++  "steps/plan-review": 27,
++  "steps/wave-close-up": 14,
++  "steps/plan-close-up": 16,
++  "steps/architect-plan": 31,
++  "steps/architect-revise": 15,
++  "steps/architect-resume": 14,
++  "steps/architect-wave-report": 18,
++  "steps/architect-closeup": 16,
++  "steps/architect-consult-item": 21,
++  "steps/architect-consult-nonitem": 17,
++};
++
+ describe("prompts: PromptLibrary & preflightPrompts", () => {
+   const builtinDir = path.resolve("agents");
+ 
+@@ -34,6 +102,7 @@ describe("prompts: PromptLibrary & preflightPrompts", () => {
+       assignment: "Build feature X",
+       target: "Unit tests",
+       citations: "src/index.ts:1-10",
++      concernsYaml: "",
+     });
+ 
+     expect(rendered).toContain("Build feature X");
+@@ -44,11 +113,17 @@ describe("prompts: PromptLibrary & preflightPrompts", () => {
+   it("throws with descriptive error listing missing variables when render fails", () => {
+     const lib = loadPromptLibrary({ builtinDir });
+ 
+-    expect(() => {
++    const renderWithMissingVars = () =>
+       lib.render("steps/develop", {
+         assignment: "Only assignment provided",
+       });
+-    }).toThrow(/Missing required prompt variables for "steps\/develop": target, citations/);
++
++    expect(renderWithMissingVars).toThrow(
++      /Missing required prompt variables for "steps\/develop":/
++    );
++    expect(renderWithMissingVars).toThrow(/target/);
++    expect(renderWithMissingVars).toThrow(/citations/);
++    expect(renderWithMissingVars).toThrow(/concernsYaml/);
+   });
+ 
+   it("overrides directory shadows builtin directory", () => {
+@@ -248,6 +323,8 @@ tools:
+       task: "t",
+       waveReport: "w",
+       infra: "i",
++      humanInvolvementCriteria: "h",
++      concernsYaml: "",
+     });
+     expect(wave).toContain("wave-closeup.schema.json");
+     expect(wave).not.toContain("suggestions");
+@@ -256,6 +333,8 @@ tools:
+       intent: "i",
+       plan: "p",
+       context: "c",
++      humanInvolvementCriteria: "h",
++      concernsYaml: "",
+     });
+     expect(plan).toContain("plan-closeup.schema.json");
+     expect(plan).not.toContain("suggestions");
+@@ -318,3 +397,149 @@ tools:
+     expect(schema.properties.gates.description).toContain("baseline");
+   });
+ });
++
++describe("prompts: concern fragment matrix (adr-prompt-fragment-matrix)", () => {
++  const builtinDir = path.resolve("agents");
++
++  function sampleVars(fragment: string): Record<string, string> {
++    const vars: Record<string, string> = {};
++    for (const name of KNOWN_VARS[fragment] ?? []) vars[name] = `sample-${name}`;
++    return vars;
++  }
++
++  it("registers concernsYaml for every concern-producing and triaging fragment", () => {
++    for (const fragment of CONCERN_FRAGMENTS) {
++      for (const key of [fragment, fragment.replace(/^steps\//, "")]) {
++        expect({ key, vars: KNOWN_VARS[key] }).toEqual({
++          key,
++          vars: expect.arrayContaining(["concernsYaml"]),
++        });
++      }
++    }
++
++    // Producers raise concerns but never triage them: no involvement criteria.
++    for (const fragment of CONCERN_FRAGMENTS.filter(
++      (fragment) => !HUMAN_INVOLVEMENT_FRAGMENTS.has(fragment)
++    )) {
++      expect(KNOWN_VARS[fragment]).not.toContain("humanInvolvementCriteria");
++    }
++
++    // Triage and infra never participate in the concern funnel.
++    for (const key of ["steps/triage", "triage", "steps/infra", "infra"]) {
++      expect(KNOWN_VARS[key]).not.toContain("concernsYaml");
++      expect(KNOWN_VARS[key]).not.toContain("humanInvolvementCriteria");
++    }
++  });
++
++  it("renders Open Concerns and Raise concerns instructions on all 19 matrix fragments", () => {
++    const lib = loadPromptLibrary({ builtinDir });
++    const concernSentinel = "CONCERNS-SENTINEL-YAML";
++
++    for (const fragment of CONCERN_FRAGMENTS) {
++      expect({ fragment, placeholders: lib.placeholders(fragment) }).toEqual({
++        fragment,
++        placeholders: expect.arrayContaining(["concernsYaml"]),
++      });
++
++      const rendered = lib.render(fragment, {
++        ...sampleVars(fragment),
++        concernsYaml: concernSentinel,
++      });
++
++      expect({ fragment, openConcerns: rendered.includes("## Open Concerns") }).toEqual({
++        fragment,
++        openConcerns: true,
++      });
++      expect({ fragment, hydrated: rendered.includes(concernSentinel) }).toEqual({
++        fragment,
++        hydrated: true,
++      });
++      expect({ fragment, raise: /Raise concerns/.test(rendered) }).toEqual({
++        fragment,
++        raise: true,
++      });
++    }
++  });
++
++  it("renders Human involvement criteria and the condense rule on triage fragments", () => {
++    const lib = loadPromptLibrary({ builtinDir });
++    const criteriaSentinel = "HI-CRITERIA-SENTINEL";
++
++    for (const fragment of HUMAN_INVOLVEMENT_FRAGMENTS) {
++      expect({ fragment, placeholders: lib.placeholders(fragment) }).toEqual({
++        fragment,
++        placeholders: expect.arrayContaining(["humanInvolvementCriteria"]),
++      });
++
++      const rendered = lib.render(fragment, {
++        ...sampleVars(fragment),
++        humanInvolvementCriteria: criteriaSentinel,
++        concernsYaml: "",
++      });
++
++      expect({ fragment, section: rendered.includes("## Human involvement") }).toEqual({
++        fragment,
++        section: true,
++      });
++      expect({ fragment, criteria: rendered.includes(criteriaSentinel) }).toEqual({
++        fragment,
++        criteria: true,
++      });
++      expect({ fragment, condense: /condens/i.test(rendered) }).toEqual({
++        fragment,
++        condense: true,
++      });
++    }
++  });
++
++  it("keeps per-fragment additions <=15 non-empty lines and total additions <=80", () => {
++    let totalAdded = 0;
++
++    for (const fragment of CONCERN_FRAGMENTS) {
++      const basename = `${fragment.replace(/^steps\//, "")}.md`;
++      const text = fs.readFileSync(path.join(builtinDir, "steps", basename), "utf8");
++      const lines = text.split("\n").filter((line) => line.trim().length > 0).length;
++      const added = lines - FRAGMENT_BASELINE_LINES[fragment]!;
++
++      expect({ fragment, withinFragmentBudget: added <= 15 }).toEqual({
++        fragment,
++        withinFragmentBudget: true,
++      });
++      totalAdded += added;
++    }
++
++    expect({ totalAdded, withinTotalBudget: totalAdded <= 80 }).toEqual({
++      totalAdded,
++      withinTotalBudget: true,
++    });
++  });
++
++  it("switches autonomous and detailed criteria inside a rendered matrix fragment", () => {
++    const { config } = loadPipelineConfig();
++    const bundle = loadCriteriaBundle(config.criteria);
++    const lib = loadPromptLibrary({ builtinDir });
++
++    const renderFor = (mode: "autonomous" | "detailed"): string => {
++      const vars = sampleVars("steps/review");
++      vars.humanInvolvementCriteria = formatHumanInvolvementCriteria(
++        bundle.humanInvolvement,
++        mode
++      );
++      return lib.render("steps/review", vars);
++    };
++
++    const autonomous = renderFor("autonomous");
++    const detailed = renderFor("detailed");
++
++    expect(autonomous).toContain("## Human involvement");
++    expect(autonomous).toContain("Block only explicit high-severity");
++    expect(autonomous).not.toContain(
++      "Block external-interface changes and major internal-interface"
++    );
++
++    expect(detailed).toContain(
++      "Block external-interface changes and major internal-interface"
++    );
++    expect(detailed).not.toContain("Block only explicit high-severity");
++  });
++});
+diff --git a/plugins/software-factory/test/smoke-fixes.test.ts b/plugins/software-factory/test/smoke-fixes.test.ts
+index d7ec62f..1d7d4c5 100644
+--- a/plugins/software-factory/test/smoke-fixes.test.ts
++++ b/plugins/software-factory/test/smoke-fixes.test.ts
+@@ -53,6 +53,7 @@ describe("Smoke fixes acceptance tests (§6.4, §7, §8, §9)", () => {
+         debt: "sample debt",
+         steering: "sample steering",
+         humanInvolvementCriteria: "sample criteria",
++        concernsYaml: "sample concerns",
+       },
+       planSchema
+     );
+@@ -70,6 +71,7 @@ describe("Smoke fixes acceptance tests (§6.4, §7, §8, §9)", () => {
+         assignment: "sample assignment",
+         target: "sample target",
+         citations: "sample citations",
++        concernsYaml: "sample concerns",
+       },
+       devSchema
+     );
+@@ -88,6 +90,7 @@ describe("Smoke fixes acceptance tests (§6.4, §7, §8, §9)", () => {
+         checks: "sample checks",
+         diff: "sample diff",
+         dispositionsCriteria: "sample dispositions",
++        humanInvolvementCriteria: "sample criteria",
+         concernsYaml: "",
+       },
+       reviewSchema
+
+## Output
+
+Yield a structured JSON object matching this schema:
+- status (string, required, enum: ["approved","changes_requested"])
+- summary (string, required)
+- suggestions (array of object, required)
+  - id (string, required)
+  - disposition (string, required, enum: ["fix","optional","architect","human-awareness","human-async"])
+  - summary (string, required)
+  - detail (string, optional)
+  - location (object, optional)
+    - file (string, required)
+    - line (integer, optional)

@@ -1,0 +1,91 @@
+checks:
+  - id: red-test
+    status: pass
+    message: "red-test passed: all 8 tests fail when prod changes are restored to
+      test-first commit"
+    details:
+      command: cd plugins/software-factory && bun test test/prompts.test.ts
+        test/human-involvement-config.test.ts --reporter=junit
+        --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-redtest-1794167425278-b1pul2emq26.xml
+      junitCaseCount: 34
+      junitCaseIds:
+        - "prompts: PromptLibrary & preflightPrompts.loads agent definition with
+          frontmatter tools, description, and body"
+        - "prompts: PromptLibrary & preflightPrompts.step fragments no longer
+          duplicate agent-level shared includes"
+        - "prompts: PromptLibrary & preflightPrompts.throws with descriptive
+          error listing missing variables when render fails"
+        - "prompts: PromptLibrary & preflightPrompts.overrides directory shadows
+          builtin directory"
+        - "prompts: PromptLibrary & preflightPrompts.in-memory overrides shadow
+          both override directories and builtin"
+        - "prompts: PromptLibrary & preflightPrompts.preflight passes with zero
+          errors on real pipeline.default.yaml"
+        - "prompts: PromptLibrary & preflightPrompts.preflight flags unknown
+          agent definitions"
+        - "prompts: PromptLibrary & preflightPrompts.preflight flags unknown
+          step fragments"
+        - "prompts: PromptLibrary & preflightPrompts.preflight flags unknown
+          placeholders that the engine does not supply"
+        - "prompts: PromptLibrary & preflightPrompts.preflight covers every
+          engine-invoked orchestration fragment"
+        - "prompts: PromptLibrary & preflightPrompts.preflight render check
+          fails when a fragment needs vars outside KNOWN_VARS"
+        - "prompts: PromptLibrary & preflightPrompts.loadCriteriaBundle reads
+          declared criteria files and skips missing ones"
+        - "prompts: PromptLibrary & preflightPrompts.formatDispositionsSection
+          lists allowed set and filters human-stop"
+        - "prompts: PromptLibrary & preflightPrompts.close-up step fragments
+          bind to closeup schemas, not the review shape"
+        - "prompts: PromptLibrary & preflightPrompts.review-type step fragments
+          consume dispositionsCriteria"
+        - "prompts: PromptLibrary & preflightPrompts.every agent definition
+          includes the workspace containment instructions"
+        - "prompts: PromptLibrary & preflightPrompts.infra agent prompt and
+          schema instruct recording red gates as baseline without workarounds"
+        - "prompts: concern fragment matrix
+          (adr-prompt-fragment-matrix).registers concernsYaml for every
+          concern-producing and triaging fragment"
+        - "prompts: concern fragment matrix (adr-prompt-fragment-matrix).renders
+          Open Concerns and Raise concerns instructions on all 19 matrix
+          fragments"
+        - "prompts: concern fragment matrix (adr-prompt-fragment-matrix).renders
+          Human involvement criteria and the condense rule on triage fragments"
+        - "prompts: concern fragment matrix (adr-prompt-fragment-matrix).keeps
+          per-fragment additions <=15 non-empty lines and total additions <=80"
+        - "prompts: concern fragment matrix
+          (adr-prompt-fragment-matrix).switches autonomous and detailed criteria
+          inside a rendered matrix fragment"
+        - human-involvement pipeline configuration.defaults to autonomous mode
+          with concern raise/digest/blocking policy
+        - human-involvement pipeline configuration.layers humanInvolvement and
+          concern thresholds through project and task configs
+        - human-involvement pipeline configuration.applies overrides last and
+          supports null deletion of concern keys
+        - human-involvement pipeline configuration.schema accepts all modes and
+          thresholds, rejects unknown values, and stays closed at root
+        - human-involvement pipeline configuration.ships commented
+          autonomous/principal/detailed presets with a blocking table
+        - human-involvement pipeline configuration.registers a terse
+          human-involvement criteria fragment and loads it
+        - human-involvement pipeline configuration.registers concernsYaml for
+          producers and humanInvolvementCriteria for triagers
+        - human-involvement pipeline configuration.preflight accepts the new
+          vars on matrix fragments and rejects them elsewhere
+        - human-involvement mode switching at prompt time.selects the active
+          mode section plus the shared ADR blocking table
+        - human-involvement mode switching at prompt time.renders empty
+          involvement criteria when no fragment is configured
+        - human-involvement mode switching at prompt time.lets callers provide
+          hydrated concernsYaml without dropping the criteria
+        - human-involvement criteria reach triager prompts.renders sentinel
+          criteria in every triage fragment of the matrix
+      junitTruncated: false
+      collected: true
+      collectionErrors: []
+  - id: test-diff
+    status: pass
+    message: test-diff generated (0 test files, 0 bytes)
+    details:
+      diff: ""
+      files: []

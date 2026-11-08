@@ -7,10 +7,78 @@ import {
   preflightPrompts,
   loadCriteriaBundle,
   formatDispositionsSection,
+  formatHumanInvolvementCriteria,
   ENGINE_STEP_FRAGMENTS,
 } from "../src/core/prompts.js";
+import { KNOWN_VARS } from "../src/core/prompt-vars.js";
 import { loadPipelineConfig } from "../src/core/config/loader.js";
 import type { PipelineConfig } from "../src/core/artifacts.js";
+
+/**
+ * Fragment matrix (docs/adr/adr-prompt-fragment-matrix.md): every fragment that
+ * receives hydrated open concerns. Producers raise concerns; reviewers,
+ * architects, close-ups, and QA additionally triage them.
+ */
+const CONCERN_FRAGMENTS = [
+  "steps/develop",
+  "steps/test-first",
+  "steps/simple-implement",
+  "steps/fix-round",
+  "steps/poc",
+  "steps/test-assumptions",
+  "steps/research",
+  "steps/review",
+  "steps/qa",
+  "steps/plan-review",
+  "steps/wave-close-up",
+  "steps/plan-close-up",
+  "steps/architect-plan",
+  "steps/architect-revise",
+  "steps/architect-resume",
+  "steps/architect-wave-report",
+  "steps/architect-closeup",
+  "steps/architect-consult-item",
+  "steps/architect-consult-nonitem",
+] as const;
+
+/** Triage fragments that receive the active human-involvement criteria. */
+const HUMAN_INVOLVEMENT_FRAGMENTS = new Set<string>([
+  "steps/review",
+  "steps/qa",
+  "steps/plan-review",
+  "steps/wave-close-up",
+  "steps/plan-close-up",
+  "steps/architect-plan",
+  "steps/architect-revise",
+  "steps/architect-resume",
+  "steps/architect-wave-report",
+  "steps/architect-closeup",
+  "steps/architect-consult-item",
+  "steps/architect-consult-nonitem",
+]);
+
+/** Non-empty line counts before the concern/human-involvement sections landed. */
+const FRAGMENT_BASELINE_LINES: Record<string, number> = {
+  "steps/develop": 14,
+  "steps/test-first": 17,
+  "steps/simple-implement": 13,
+  "steps/fix-round": 16,
+  "steps/poc": 12,
+  "steps/test-assumptions": 13,
+  "steps/research": 14,
+  "steps/review": 24,
+  "steps/qa": 20,
+  "steps/plan-review": 27,
+  "steps/wave-close-up": 14,
+  "steps/plan-close-up": 16,
+  "steps/architect-plan": 31,
+  "steps/architect-revise": 15,
+  "steps/architect-resume": 14,
+  "steps/architect-wave-report": 18,
+  "steps/architect-closeup": 16,
+  "steps/architect-consult-item": 21,
+  "steps/architect-consult-nonitem": 17,
+};
 
 describe("prompts: PromptLibrary & preflightPrompts", () => {
   const builtinDir = path.resolve("agents");
@@ -34,6 +102,7 @@ describe("prompts: PromptLibrary & preflightPrompts", () => {
       assignment: "Build feature X",
       target: "Unit tests",
       citations: "src/index.ts:1-10",
+      concernsYaml: "",
     });
 
     expect(rendered).toContain("Build feature X");
@@ -44,11 +113,17 @@ describe("prompts: PromptLibrary & preflightPrompts", () => {
   it("throws with descriptive error listing missing variables when render fails", () => {
     const lib = loadPromptLibrary({ builtinDir });
 
-    expect(() => {
+    const renderWithMissingVars = () =>
       lib.render("steps/develop", {
         assignment: "Only assignment provided",
       });
-    }).toThrow(/Missing required prompt variables for "steps\/develop": target, citations/);
+
+    expect(renderWithMissingVars).toThrow(
+      /Missing required prompt variables for "steps\/develop":/
+    );
+    expect(renderWithMissingVars).toThrow(/target/);
+    expect(renderWithMissingVars).toThrow(/citations/);
+    expect(renderWithMissingVars).toThrow(/concernsYaml/);
   });
 
   it("overrides directory shadows builtin directory", () => {
@@ -248,6 +323,8 @@ tools:
       task: "t",
       waveReport: "w",
       infra: "i",
+      humanInvolvementCriteria: "h",
+      concernsYaml: "",
     });
     expect(wave).toContain("wave-closeup.schema.json");
     expect(wave).not.toContain("suggestions");
@@ -256,6 +333,8 @@ tools:
       intent: "i",
       plan: "p",
       context: "c",
+      humanInvolvementCriteria: "h",
+      concernsYaml: "",
     });
     expect(plan).toContain("plan-closeup.schema.json");
     expect(plan).not.toContain("suggestions");
@@ -316,5 +395,151 @@ tools:
     expect(schema.properties.testRunner.properties.junitArg.description).toContain("{path}");
     expect(schema.properties.testRunner.properties.selectorArgs.description).toContain("selectors");
     expect(schema.properties.gates.description).toContain("baseline");
+  });
+});
+
+describe("prompts: concern fragment matrix (adr-prompt-fragment-matrix)", () => {
+  const builtinDir = path.resolve("agents");
+
+  function sampleVars(fragment: string): Record<string, string> {
+    const vars: Record<string, string> = {};
+    for (const name of KNOWN_VARS[fragment] ?? []) vars[name] = `sample-${name}`;
+    return vars;
+  }
+
+  it("registers concernsYaml for every concern-producing and triaging fragment", () => {
+    for (const fragment of CONCERN_FRAGMENTS) {
+      for (const key of [fragment, fragment.replace(/^steps\//, "")]) {
+        expect({ key, vars: KNOWN_VARS[key] }).toEqual({
+          key,
+          vars: expect.arrayContaining(["concernsYaml"]),
+        });
+      }
+    }
+
+    // Producers raise concerns but never triage them: no involvement criteria.
+    for (const fragment of CONCERN_FRAGMENTS.filter(
+      (fragment) => !HUMAN_INVOLVEMENT_FRAGMENTS.has(fragment)
+    )) {
+      expect(KNOWN_VARS[fragment]).not.toContain("humanInvolvementCriteria");
+    }
+
+    // Triage and infra never participate in the concern funnel.
+    for (const key of ["steps/triage", "triage", "steps/infra", "infra"]) {
+      expect(KNOWN_VARS[key]).not.toContain("concernsYaml");
+      expect(KNOWN_VARS[key]).not.toContain("humanInvolvementCriteria");
+    }
+  });
+
+  it("renders Open Concerns and Raise concerns instructions on all 19 matrix fragments", () => {
+    const lib = loadPromptLibrary({ builtinDir });
+    const concernSentinel = "CONCERNS-SENTINEL-YAML";
+
+    for (const fragment of CONCERN_FRAGMENTS) {
+      expect({ fragment, placeholders: lib.placeholders(fragment) }).toEqual({
+        fragment,
+        placeholders: expect.arrayContaining(["concernsYaml"]),
+      });
+
+      const rendered = lib.render(fragment, {
+        ...sampleVars(fragment),
+        concernsYaml: concernSentinel,
+      });
+
+      expect({ fragment, openConcerns: rendered.includes("## Open Concerns") }).toEqual({
+        fragment,
+        openConcerns: true,
+      });
+      expect({ fragment, hydrated: rendered.includes(concernSentinel) }).toEqual({
+        fragment,
+        hydrated: true,
+      });
+      expect({ fragment, raise: /Raise concerns/.test(rendered) }).toEqual({
+        fragment,
+        raise: true,
+      });
+    }
+  });
+
+  it("renders Human involvement criteria and the condense rule on triage fragments", () => {
+    const lib = loadPromptLibrary({ builtinDir });
+    const criteriaSentinel = "HI-CRITERIA-SENTINEL";
+
+    for (const fragment of HUMAN_INVOLVEMENT_FRAGMENTS) {
+      expect({ fragment, placeholders: lib.placeholders(fragment) }).toEqual({
+        fragment,
+        placeholders: expect.arrayContaining(["humanInvolvementCriteria"]),
+      });
+
+      const rendered = lib.render(fragment, {
+        ...sampleVars(fragment),
+        humanInvolvementCriteria: criteriaSentinel,
+        concernsYaml: "",
+      });
+
+      expect({ fragment, section: rendered.includes("## Human involvement") }).toEqual({
+        fragment,
+        section: true,
+      });
+      expect({ fragment, criteria: rendered.includes(criteriaSentinel) }).toEqual({
+        fragment,
+        criteria: true,
+      });
+      expect({ fragment, condense: /condens/i.test(rendered) }).toEqual({
+        fragment,
+        condense: true,
+      });
+    }
+  });
+
+  it("keeps per-fragment additions <=15 non-empty lines and total additions <=80", () => {
+    let totalAdded = 0;
+
+    for (const fragment of CONCERN_FRAGMENTS) {
+      const basename = `${fragment.replace(/^steps\//, "")}.md`;
+      const text = fs.readFileSync(path.join(builtinDir, "steps", basename), "utf8");
+      const lines = text.split("\n").filter((line) => line.trim().length > 0).length;
+      const added = lines - FRAGMENT_BASELINE_LINES[fragment]!;
+
+      expect({ fragment, withinFragmentBudget: added <= 15 }).toEqual({
+        fragment,
+        withinFragmentBudget: true,
+      });
+      totalAdded += added;
+    }
+
+    expect({ totalAdded, withinTotalBudget: totalAdded <= 80 }).toEqual({
+      totalAdded,
+      withinTotalBudget: true,
+    });
+  });
+
+  it("switches autonomous and detailed criteria inside a rendered matrix fragment", () => {
+    const { config } = loadPipelineConfig();
+    const bundle = loadCriteriaBundle(config.criteria);
+    const lib = loadPromptLibrary({ builtinDir });
+
+    const renderFor = (mode: "autonomous" | "detailed"): string => {
+      const vars = sampleVars("steps/review");
+      vars.humanInvolvementCriteria = formatHumanInvolvementCriteria(
+        bundle.humanInvolvement,
+        mode
+      );
+      return lib.render("steps/review", vars);
+    };
+
+    const autonomous = renderFor("autonomous");
+    const detailed = renderFor("detailed");
+
+    expect(autonomous).toContain("## Human involvement");
+    expect(autonomous).toContain("Block only explicit high-severity");
+    expect(autonomous).not.toContain(
+      "Block external-interface changes and major internal-interface"
+    );
+
+    expect(detailed).toContain(
+      "Block external-interface changes and major internal-interface"
+    );
+    expect(detailed).not.toContain("Block only explicit high-severity");
   });
 });

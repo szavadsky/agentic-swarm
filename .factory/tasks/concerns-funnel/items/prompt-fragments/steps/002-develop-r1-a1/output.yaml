@@ -1,0 +1,67 @@
+status: ok
+summary: "Implemented the ADR prompt-fragment matrix: registered concernsYaml
+  for the seven producer families (develop, test-first, simple-implement,
+  fix-round, poc, test-assumptions, research; both prefixed and bare keys) in
+  KNOWN_VARS, and wired the concern funnel into all 19 step fragments. Producers
+  now render a 4-line ## Open Concerns block (header + {{concernsYaml}} + scope
+  line + 'Raise concerns' line, no human-involvement criteria). All 12 triagers
+  (review, qa, plan-review, two close-ups, seven architect fragments) render ##
+  Human involvement {{humanInvolvementCriteria}} plus the Open Concerns block
+  with a raise/triage/condense rule; review gained the missing HI section and
+  raise line, plan-review gained the raise/condense line, architect-plan/revise
+  gained the OC block. Per-fragment additions are 1-5 non-empty lines (<=15) and
+  total additions are 78 (<=80). All 34 target tests pass, typecheck is clean,
+  prompt preflight returns no errors, and the full plugin suite passes 389 tests
+  with 2 skips and 0 failures."
+target:
+  selectors:
+    - test/prompts.test.ts
+    - test/human-involvement-config.test.ts
+  expectRed:
+    - "test/prompts.test.ts::prompts: PromptLibrary & preflightPrompts.throws
+      with descriptive error listing missing variables when render fails"
+    - "test/prompts.test.ts::prompts: concern fragment matrix
+      (adr-prompt-fragment-matrix).registers concernsYaml for every
+      concern-producing and triaging fragment"
+    - "test/prompts.test.ts::prompts: concern fragment matrix
+      (adr-prompt-fragment-matrix).renders Open Concerns and Raise concerns
+      instructions on all 19 matrix fragments"
+    - "test/prompts.test.ts::prompts: concern fragment matrix
+      (adr-prompt-fragment-matrix).renders Human involvement criteria and the
+      condense rule on triage fragments"
+    - "test/prompts.test.ts::prompts: concern fragment matrix
+      (adr-prompt-fragment-matrix).switches autonomous and detailed criteria
+      inside a rendered matrix fragment"
+    - test/human-involvement-config.test.ts::human-involvement pipeline
+      configuration.registers concernsYaml for producers and
+      humanInvolvementCriteria for triagers
+    - test/human-involvement-config.test.ts::human-involvement pipeline
+      configuration.preflight accepts the new vars on matrix fragments and
+      rejects them elsewhere
+    - test/human-involvement-config.test.ts::human-involvement criteria reach
+      triager prompts.renders sentinel criteria in every triage fragment of the
+      matrix
+evidence:
+  - bun test test/prompts.test.ts test/human-involvement-config.test.ts -> 34
+    pass, 0 fail (465 expect calls)
+  - bun run typecheck -> tsc --noEmit exit 0
+  - "bun test (full plugin suite) -> 391 tests across 65 files: 389 pass, 2
+    skip, 0 fail"
+  - Programmatic prompt preflight via loadPipelineConfig + loadPromptLibrary +
+    preflightPrompts on agents/ -> [] (no errors)
+  - Line-budget script over all 19 matrix fragments -> per-fragment deltas 1-5
+    (<=15), total 78 (<=80)
+  - Sentinel grep over matrix -> all 19 fragments contain '## Open Concerns' and
+    'Raise concerns'; all 12 triagers also contain '## Human involvement' and
+    'condens'
+concerns:
+  - "Total fragment addition budget is tight: 78 of the allowed 80 non-empty
+    lines are consumed, leaving only 2 lines of headroom for future fragment
+    edits."
+  - Producer fragments intentionally do not receive humanInvolvementCriteria,
+    matching the raise-never-triage rule; triage/infra/integrate fragments
+    remain outside the funnel.
+notes: New sections are appended at the end of each fragment; review keeps its
+  pre-existing Open Concerns/triage block and gains a separate HI section, while
+  plan-review keeps its existing HI/OC blocks and only gains the raise/condense
+  rule.

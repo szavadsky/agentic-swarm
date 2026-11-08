@@ -18,3 +18,8 @@ Revise the iteration execution plan (`plan-N.yaml`) in response to adversarial f
 
 ## Human involvement
 {{humanInvolvementCriteria}}
+
+## Open Concerns
+{{concernsYaml}}
+
+- Raise concerns with evidence; condense stale detail instead of repeating it.

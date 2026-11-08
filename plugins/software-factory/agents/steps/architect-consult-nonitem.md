@@ -20,3 +20,11 @@ Context: {{context}}
 
 ## Tech Debt
 {{debt}}
+
+## Human involvement
+{{humanInvolvementCriteria}}
+
+## Open Concerns
+{{concernsYaml}}
+
+- Raise concerns with evidence; condense stale detail instead of repeating it.

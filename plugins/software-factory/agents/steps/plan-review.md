@@ -34,3 +34,5 @@ Conduct adversarial review of the architect's proposed plan, critiquing mileston
 
 ## Open Concerns
 {{concernsYaml}}
+
+- Raise concerns with evidence; triage pre-existing ids as above and condense stale detail.

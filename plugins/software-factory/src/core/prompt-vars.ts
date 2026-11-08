@@ -52,35 +52,35 @@ export const KNOWN_VARS: Record<string, string[]> = {
   infra: ["task", "intent", "context"],
 
   // Item development & verification steps
-  "steps/develop": ["assignment", "target", "citations"],
-  develop: ["assignment", "target", "citations"],
+  "steps/develop": ["assignment", "target", "citations", "concernsYaml"],
+  develop: ["assignment", "target", "citations", "concernsYaml"],
 
-  "steps/test-first": ["assignment", "citations"],
-  "test-first": ["assignment", "citations"],
+  "steps/test-first": ["assignment", "citations", "concernsYaml"],
+  "test-first": ["assignment", "citations", "concernsYaml"],
   "steps/qa": ["assignment", "checks", "testDiff", "diff", "dispositionsCriteria", "humanInvolvementCriteria", "concernsYaml"],
   qa: ["assignment", "checks", "testDiff", "diff", "dispositionsCriteria", "humanInvolvementCriteria", "concernsYaml"],
 
   "steps/review": ["assignment", "checks", "diff", "dispositionsCriteria", "humanInvolvementCriteria", "concernsYaml"],
   review: ["assignment", "checks", "diff", "dispositionsCriteria", "humanInvolvementCriteria", "concernsYaml"],
 
-  "steps/fix-round": ["assignment", "feedback", "checks", "diff"],
-  "fix-round": ["assignment", "feedback", "checks", "diff"],
+  "steps/fix-round": ["assignment", "feedback", "checks", "diff", "concernsYaml"],
+  "fix-round": ["assignment", "feedback", "checks", "diff", "concernsYaml"],
 
-  "steps/simple-implement": ["intent", "citations"],
-  "simple-implement": ["intent", "citations"],
+  "steps/simple-implement": ["intent", "citations", "concernsYaml"],
+  "simple-implement": ["intent", "citations", "concernsYaml"],
 
   "steps/integrate": ["item", "diff"],
   integrate: ["item", "diff"],
 
   // Spikes
-  "steps/research": ["assignment", "intent", "citations"],
-  research: ["assignment", "intent", "citations"],
+  "steps/research": ["assignment", "intent", "citations", "concernsYaml"],
+  research: ["assignment", "intent", "citations", "concernsYaml"],
 
-  "steps/poc": ["assignment", "context"],
-  poc: ["assignment", "context"],
+  "steps/poc": ["assignment", "context", "concernsYaml"],
+  poc: ["assignment", "context", "concernsYaml"],
 
-  "steps/test-assumptions": ["assignment", "context"],
-  "test-assumptions": ["assignment", "context"],
+  "steps/test-assumptions": ["assignment", "context", "concernsYaml"],
+  "test-assumptions": ["assignment", "context", "concernsYaml"],
 
   // Project manager steps
   "steps/pm-edits": ["plan", "kinds", "citations", "limits", "storyKindsCriteria"],

@@ -1,0 +1,42 @@
+status: approved
+summary: "Fix-round verified against engine contracts: qa + 6 architect
+  fragments now raise-only, 3 close-ups use concernResolutions
+  (resolve/carry/propagate matches schemas); both prior optionals applied.
+  Independent evidence: targeted 34/34 files pass; full suite 389 pass/2 skip/0
+  fail; typecheck clean; preflight green; budgets independently recomputed vs
+  git baseline 68b41ed = 78/80 total, max 5/fragment; sentinels OC+Raise on all
+  19, HI+var+condense on all 12 triagers, no HI on producers; test files
+  byte-identical to test-first baseline so prior red-test evidence (8 assertion
+  failures) remains valid; no test weakening in fix round (only 12 markdown
+  fragments changed). Two non-blocking test-maintenance gaps noted."
+suggestions:
+  - id: matrix-comments-mislabel-triagers
+    disposition: optional
+    summary: Test comments still label architects/QA as triagers, contradicting
+      engine contract
+    detail: prompts.test.ts:16-20 says reviewers, architects, close-ups, and QA
+      'additionally triage them'; human-involvement-config.test.ts:58-62 says
+      'Only triagers (reviewers/architects/close-ups/qa) also receive the
+      human-involvement criteria'. Engine isTriagerAgent
+      (review-policy.ts:16-22) returns true only for
+      reviewer/plan-reviewer/wave-close-up/plan-close-up; architects and qa have
+      no dismiss/triage channel, and this fix round just reworded their prompts
+      to raise-only. Update the comments to distinguish HI consumers from engine
+      triagers so the old false model is not reintroduced.
+    location:
+      file: plugins/software-factory/test/prompts.test.ts
+      line: 19
+  - id: non-triager-prompt-contract-unpinned
+    disposition: optional
+    summary: Corrected raise-only prompt contract has no regression assertion
+    detail: The fix round removed triage/dismiss instructions from qa.md and six
+      architect fragments and switched the three close-ups to
+      concernResolutions, but tests only assert the generic 'Raise concerns'
+      sentinel and /condens/i (prompts.test.ts:488). The prior prompt/schema
+      contradiction escaped review precisely because tests did not assert the
+      negative contract. Consider rendering each non-triager fragment and
+      asserting it lacks 'dismiss'/'triage pre-existing ids', and that
+      wave/plan/architect close-ups reference 'concernResolutions'.
+    location:
+      file: plugins/software-factory/test/prompts.test.ts
+      line: 488

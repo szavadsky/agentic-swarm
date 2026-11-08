@@ -16,3 +16,11 @@ Wave Report: {{waveReport}}
 
 ## Infrastructure Gates
 {{infra}}
+
+## Human involvement
+{{humanInvolvementCriteria}}
+
+## Open Concerns
+{{concernsYaml}}
+
+- Raise concerns with evidence; record concernResolutions with resolve/carry/propagate and condense stale detail.

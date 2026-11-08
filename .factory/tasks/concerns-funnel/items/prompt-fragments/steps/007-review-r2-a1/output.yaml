@@ -1,0 +1,58 @@
+status: approved
+summary: "Approved: 19-fragment concern matrix matches engine contracts
+  (producers raise-only, qa/6 architects reworded raise-only, 3 close-ups use
+  concernResolutions resolve/carry/propagate), KNOWN_VARS registers concernsYaml
+  in both key forms, budgets verified 78/80 (baselines match base commit
+  68b41ed), targeted 34/34 and full suite 389 pass/2 skip/0 fail, typecheck
+  clean; no test weakening. Remaining findings are optional test-hygiene items."
+suggestions:
+  - id: test-comments-mislabel-triagers
+    disposition: optional
+    summary: Test comments still label QA/architects as 'triagers', contradicting
+      engine isTriagerAgent
+    detail: isTriagerAgent (src/core/review-policy.ts:16-22) returns true only for
+      reviewer, plan-reviewer, wave-close-up, plan-close-up. QA and the seven
+      architect fragments are non-triagers (no dismiss channel; this fix round
+      reworded them to raise-only), yet prompts.test.ts:20 says 'reviewers,
+      architects, close-ups, and QA additionally triage them' and
+      human-involvement-config.test.ts:59 says 'Only triagers
+      (reviewers/architects/close-ups/qa)'. Reword these comments to
+      'human-involvement/concern consumers' and reserve 'triager' for the
+      engine's isTriagerAgent set, so the round-1 false model is not
+      reintroduced.
+    location:
+      file: plugins/software-factory/test/prompts.test.ts
+      line: 20
+  - id: non-triager-prompt-contract-unpinned
+    disposition: optional
+    summary: Corrected raise-only / concernResolutions prompt contracts have no
+      regression assertion
+    detail: The fix round removed triage/dismiss/dispositions wording from qa.md and
+      six architect fragments and switched wave/plan/architect close-ups to
+      concernResolutions, but the tests only assert positive sentinels ('Raise
+      concerns' at prompts.test.ts:457, /condens/i at :488). Nothing pins that
+      non-triager fragments lack 'dismiss'/'triage pre-existing ids' or that the
+      three close-ups reference concernResolutions. The prior prompt-vs-schema
+      contradiction escaped review precisely because no negative contract was
+      asserted; consider a table-driven test over the 12 HI fragments
+      (non-engine-triager -> no dismiss/triage wording; close-ups ->
+      concernResolutions resolve/carry/propagate).
+    location:
+      file: plugins/software-factory/test/prompts.test.ts
+      line: 488
+  - id: budget-net-delta-can-mask-additions
+    disposition: optional
+    summary: Budget test counts net non-empty delta against editable baselines, so
+      deletions can offset additions
+    detail: prompts.test.ts:495-515 computes current non-empty lines minus
+      hard-coded FRAGMENT_BASELINE_LINES, so a future edit that deletes 10 lines
+      and adds 20 in the same fragment passes per-fragment <=15 and can also
+      stay under total <=80; the baseline map is hand-maintained and can be
+      raised to bypass the guard. The stated budget is 'added lines per fragment
+      <=15, total <=80'. Current change is genuinely 78/80 (verified against
+      68b41ed) so this is non-blocking, but consider asserting added >= 0 and/or
+      counting actual diff additions from the pre-change commit instead of net
+      line count.
+    location:
+      file: plugins/software-factory/test/prompts.test.ts
+      line: 502

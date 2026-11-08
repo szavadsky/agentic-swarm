@@ -1,0 +1,92 @@
+status: ok
+summary: "Authored the test-first contract for the full prompt fragment matrix
+  (adr-prompt-fragment-matrix). prompts.test.ts now pins: KNOWN_VARS
+  concernsYaml registration on all 19 producer/triager fragments (develop,
+  test-first, simple-implement, fix-round, poc, test-assumptions, research,
+  review, qa, plan-review, wave/plan close-ups, 7 architect fragments) and
+  humanInvolvementCriteria only on the 12 triager fragments; rendered sentinels
+  (`## Open Concerns`, `Raise concerns`, hydrated concerns sentinel) on all 19;
+  `## Human involvement` + criteria sentinel + condense rule on the 12 triagers;
+  per-fragment added-line budget <=15 and total <=80 against pre-change
+  non-empty baselines; and autonomous-vs-detailed mode switching through a
+  rendered review fragment. human-involvement-config.test.ts now reflects the
+  full FRAGMENT_MATRIX (producers receive concernsYaml but not HI; triage/infra
+  stay outside), verifies preflight accepts producer concernsYaml while
+  rejecting it on triage, and extends the HI sentinel render test to every
+  triager fragment. smoke-fixes.test.ts and two close-up render tests were
+  updated to pass the newly required vars so the suite stays green after
+  implementation. No production files were modified."
+target:
+  selectors:
+    - test/prompts.test.ts
+    - test/human-involvement-config.test.ts
+  expectRed:
+    - "test/prompts.test.ts::prompts: PromptLibrary & preflightPrompts.throws
+      with descriptive error listing missing variables when render fails"
+    - "test/prompts.test.ts::prompts: concern fragment matrix
+      (adr-prompt-fragment-matrix).registers concernsYaml for every
+      concern-producing and triaging fragment"
+    - "test/prompts.test.ts::prompts: concern fragment matrix
+      (adr-prompt-fragment-matrix).renders Open Concerns and Raise concerns
+      instructions on all 19 matrix fragments"
+    - "test/prompts.test.ts::prompts: concern fragment matrix
+      (adr-prompt-fragment-matrix).renders Human involvement criteria and the
+      condense rule on triage fragments"
+    - "test/prompts.test.ts::prompts: concern fragment matrix
+      (adr-prompt-fragment-matrix).switches autonomous and detailed criteria
+      inside a rendered matrix fragment"
+    - test/human-involvement-config.test.ts::human-involvement pipeline
+      configuration.registers concernsYaml for producers and
+      humanInvolvementCriteria for triagers
+    - test/human-involvement-config.test.ts::human-involvement pipeline
+      configuration.preflight accepts the new vars on matrix fragments and
+      rejects them elsewhere
+    - test/human-involvement-config.test.ts::human-involvement criteria reach
+      triager prompts.renders sentinel criteria in every triage fragment of the
+      matrix
+evidence:
+  - cd plugins/software-factory && TMPDIR=/tmp bun install -> 13 packages
+    installed; bun/yaml/ajv/type packages available so the new tests collect and
+    execute
+  - cd plugins/software-factory && TMPDIR=/tmp bun run typecheck -> exit 0, no
+    diagnostics
+  - cd plugins/software-factory && TMPDIR=/tmp bun test test/prompts.test.ts
+    test/human-involvement-config.test.ts -> 26 pass, 8 fail, 185 expect()
+    calls; every failure is an assertion failure (no import/collection errors)
+  - JUnit run (--reporter=junit
+    --reporter-outfile=/tmp/prompt-fragments-target.xml) -> tests=34,
+    failures=8, errors=0; failing ids match the eight declared expectRed targets
+  - cd plugins/software-factory && TMPDIR=/tmp bun test --timeout 30000 -> 381
+    pass, 2 skip, 8 fail across 391 tests / 65 files; the only failures are the
+    declared red target tests (no baseline regressions)
+  - git status --short -> only plugins/software-factory/test/prompts.test.ts,
+    test/human-involvement-config.test.ts, and test/smoke-fixes.test.ts
+    modified; production code untouched
+concerns:
+  - "Budget test pins pre-change non-empty line counts for the 19 fragments:
+    added lines must stay <=15 per fragment and <=80 total. Tightest path is ~80
+    lines, so the implementation should use 3-line sections and reuse existing
+    review/plan-review/architect-plan lines where possible."
+  - "The sentinel contract is literal: every concern fragment must contain `##
+    Open Concerns`, `{{concernsYaml}}`, and the phrase `Raise concerns`; every
+    triager must contain `## Human involvement`, `{{humanInvolvementCriteria}}`,
+    and a line matching /condens/i. Producers must NOT contain
+    humanInvolvementCriteria."
+  - Existing direct-render tests in smoke-fixes.test.ts and the close-up render
+    tests were updated to supply concernsYaml/humanInvolvementCriteria so they
+    remain green once the fragments gain the placeholders; the missing-variable
+    assertion was made order-independent (checks target, citations, concernsYaml
+    independently).
+  - KNOWN_VARS must register both prefixed (steps/foo) and bare (foo) keys for
+    all 7 new producer fragments; the matrix tests assert both.
+notes: "Green-step guidance: (1) extend prompt-vars.ts with concernsYaml for
+  develop/test-first/simple-implement/fix-round/poc/test-assumptions/research in
+  both key forms, leaving humanInvolvementCriteria off producers; (2) append
+  terse `## Open Concerns` + `{{concernsYaml}}` + `Raise concerns` lines to all
+  19 listed fragments; (3) add `## Human involvement` +
+  `{{humanInvolvementCriteria}}` + a condense rule to the 12 triager fragments
+  (architect-plan/revise already have the HI heading and only need
+  OC+raise+condense; review already has OC+condense and needs HI+raise;
+  plan-review already has HI+OC+condense and only needs raise); (4) keep added
+  non-empty lines <=15 per fragment and <=80 total; (5) run preflight
+  (prompts.preflight test) and bun run typecheck."

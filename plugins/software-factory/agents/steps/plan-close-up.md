@@ -19,3 +19,11 @@ Audit completed iteration work against original plan milestones, Gherkin scenari
 
 ## Context
 {{context}}
+
+## Human involvement
+{{humanInvolvementCriteria}}
+
+## Open Concerns
+{{concernsYaml}}
+
+- Raise concerns with evidence; record concernResolutions with resolve/carry/propagate and condense stale detail.
