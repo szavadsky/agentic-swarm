@@ -1,0 +1,11 @@
+id: awareness-plan-2-autonomous-halt-deviation
+ref: plan-2
+disposition: human-awareness
+question: Spec autonomous defers blocking until unblocked work drains, but
+  implementation routes blocking ADRs at plan time and halts immediately
+  (iteration.ts:481-490). Plan ADR accepts immediate halt for iteration 2 with
+  docs in ARCHITECTURE 8.11/human-involvement.md, drain scheduling future work.
+  High-impact tradeoff operator should be aware of; architect can decide now.
+  Ensure docs mark deviation explicitly.
+status: open
+createdAt: 2026-11-08T18:40:51.284Z
