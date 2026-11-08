@@ -1,0 +1,10 @@
+context: wave
+decision: continue
+rationale: "Wave 6 complete: 2/2 merged (concerns-store-v2, modes-prompts-v2),
+  tree clean, typecheck pass, test fail->pass improved with no regressions. M1
+  store foundation done; M2 triage deps satisfied. No failures, blocked, or debt
+  requiring plan change."
+text: "Proceed to wave 7: reviewer-triage-v2 + plan-reviewer-triage-v2 in
+  parallel (both unblocked by store-v2 merge). Triage owns concernsYaml
+  hydration, exact-id partition, isTriager gate, dismiss-detail enforcement per
+  plan."
