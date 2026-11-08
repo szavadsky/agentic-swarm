@@ -110,11 +110,14 @@ project config: location of orcehstrationFolder, folderForPreservedADRs, scripts
      - saga: each epic runs as an independent factory launch in its own workspace (parallel epics possible); merges inside an epic escalate to the epic's architect; merging epics at the saga wave end escalates to the saga architect
      - docs show each use case (single task, story waves, epic, saga with parallel epics, conflict resolution and escalation paths, status/cleanup/gc) and how it is handled
      - "no models" tests: end-to-end tests through the real omp harness with a scripted mock model provider (no paid models), covering isolation, merges/conflicts/escalations, saga/epic launches, restart and gc
+     - repo rules hydration: omp does not put AGENTS.md in subagent context, so the factory hydrates repo rules itself — architect and every implementer-chain agent (developer, qa, reviewer across items/epics) receive the repo's rules in their prompts (deterministic resolution from the target repo), verified by an end-to-end check that rules reached each role
 20. architect context economy: cache coherence and compaction (part of the same self-host complex task as 19)
      - (a) compact the architect session before a resume that will miss the provider prompt cache (cache TTL expired / model switched), so an uncached resume does not re-pay the full history
      - (b) keep the prompt cache warm while the architect is on standby between turns (waves running), when cheaper than the expected uncached resume; leverage omp mechanics where available
      - decide defaults by measured cost (usage/cache-read tokens in records); each mechanism configurable, and explicitly off where it does not pay
      - v1 lesson: architect output was intentionally schema-free and telegraphic; extracting the relevant per-item task and context from that markdown was the (cheap) PM's job. Re-evaluate v2's schema-bound architect plan output against this (an expensive repair turn was observed in the fire test) — e.g. architect writes telegraphic md, PM structures it into the plan/edits schemas
+     - (c) session launching must never break the provider prompt cache: normal additive sessions only, never rewrite a session transcript; the harness is audited so resumed turns append (no history reconstruction), prompt prefixes stay byte-stable across turns (no timestamps/random/temp-path interpolation into the cached prefix), and the generated omp overlay is byte-stable given the same config
+     - (d) optional optimizations only after (c) holds: focused compaction/handoff summaries on resume, on IRC escalation reply, and on restart — each measured against the uncached-resume cost and configurable/off by default where it does not pay
 
 Fire testing:
      develop initial version. launch ietration by iteration; babysit
