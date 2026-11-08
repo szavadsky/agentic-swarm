@@ -1,0 +1,40 @@
+id: decision-spike-saga-commit-1794104673241
+context: item
+item: spike-saga-commit
+afterRecord: 002-review-a1
+decision: accept-with-debt
+timestamp: 2026-11-08T02:24:33.241Z
+rationale: Research answered all 5 questions with line-grounded evidence plus
+  execution probes; review approved with only optional nits; tree clean with no
+  prod code. Merge quality-gate failure cannot be caused by a read-only spike
+  and matches the known red baseline (TMPDIR head-guard). Re-running or
+  splitting a complete spike wastes budget and blocks 3 gated items.
+text: "Binding downstream directives from accepted findings: concerns-store: one
+  file per fingerprint id, writeYamlAtomic distinct files, KeyedMutex(taskDir)
+  only for status/source RMW merges, NEVER wrap commitAll in
+  repo.writeLock.runExclusive (non-reentrant deadlock proven), write explicit
+  taskWt path + immediate commitAll, add concerns/** to startup recovery +
+  reconcileConcerns from committed records (derive stays read-only), ingest
+  errors must not change step status (act-phase hook with internal handling).
+  Hydration: append concerns LAST in buildArchitectHydration (tail-slice keeps
+  it) or add registered concernsYaml var in prompt-vars.ts; recompute before
+  wave-report (iteration-start snapshot stale). Derive: collectRoutedBlockers
+  owner derive/task.ts; thread blockedBy into deriveItemState or post-process
+  before every deriveWaveState call; debt in debtSet block. Digest:
+  tousertoreview reuse REQUIRES derive/item blocking change (any open matching
+  ref blocks today) or separate digest dir. Triage: partition concern entries
+  out of fix-loop; plan-review has no writeArtifact so re-apply verdicts
+  idempotently. Consults: avoid seq-allocated filenames under parallel consults
+  (fingerprint ids or lock); trigger from wave act phase. Saga: copy
+  filtered/condensed child concerns at runChildTask engine.ts:246-274 for every
+  child status; forward child human questions to root mailbox (rootTaskDir
+  unused today). Note pre-existing next-iteration->failed mapping."
+debt: "spike-saga-commit merge gate failure is environmental, not content:
+  read-only spike with zero prod diff, research ok, review approved; baseline
+  test gate is red (2 head-guard TMPDIR failures). Findings accepted as
+  authoritative. Unapplied reviewer optional nits carried as debt: qualify 'epic
+  state ONLY from child-closeup' (isMerged precedence), prefix inline paths with
+  plugins/software-factory/, scope removeWorktree claim to epic child worktrees,
+  fold contextPack key into findings (strict fact-finder schema allows only
+  status/summary/findings/sources/recommendations). Consumers must apply these
+  mentally."

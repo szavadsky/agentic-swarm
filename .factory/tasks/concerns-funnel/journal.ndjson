@@ -92,3 +92,5 @@
 {"type":"item_merged","item":"spike-text-budget","sha":"4ddf99a5a4030206ae83b8767bafc5cab6b8a6c7","conflictResolved":false,"ts":"2026-11-08T02:24:05.745Z"}
 {"type":"item_merge_started","item":"spike-saga-commit","branch":"topic/concerns-funnel--spike-saga-commit","ts":"2026-11-08T02:24:05.745Z"}
 {"type":"item_merge_failed","item":"spike-saga-commit","error":"Quality gates failed on merge path for spike-saga-commit","ts":"2026-11-08T02:24:08.470Z"}
+{"type":"step_started","task":"concerns-funnel","step":"consult-spike-saga-commit","attempt":1,"recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/013-consult-spike-saga-commit-a1","ts":"2026-11-08T02:24:08.511Z"}
+{"type":"step_timeout","task":"concerns-funnel","step":"consult-spike-saga-commit","timeoutSec":1200,"ts":"2026-11-08T02:24:08.516Z"}
