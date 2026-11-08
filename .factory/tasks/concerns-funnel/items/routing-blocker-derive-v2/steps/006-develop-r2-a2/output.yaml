@@ -1,0 +1,41 @@
+concerns:
+  - Full-suite engine tests are timing-marginal on a shared loaded host (several
+    heavy runTask tests take 5-8s vs bun's 5s default; bun 1.4.3 honors no
+    global timeout config). Only the reported failing test was stabilized; other
+    engine tests may flake under extreme load in future runs.
+  - Timeout-only fix intentionally scoped to the single reported failing test to
+    avoid out-of-assignment churn; no assertions in any test were modified.
+evidence:
+  - bun test test/engine/routing-blocker-derive.test.ts
+    test/plan-scheduler.test.ts -> 27 pass, 0 fail (all 11 expectRed cases
+    assert-pass)
+  - bun run typecheck (tsc --noEmit) -> pass, exit 0
+  - bun test test/engine/blocked-closeup-iteration.test.ts (default invocation,
+    after fix) -> 1 pass in 5.42s (would have timed out at 5s default without
+    the bump)
+  - bun test (full suite, final, no concurrent load) -> EXIT=0, 364 pass, 2
+    skip, 0 fail, 1671 expect() calls, 121.73s
+  - "Pre-existing-flake proof: story src changes fully reverted in scratch tree
+    -> same test times out at 5.18s under default timeout; timing distributions
+    overlap fully with/without changes (no-patch 5.0-7.7s vs current 4.7-7.9s);
+    per-test timeout arg verified working in bun 1.4.3 via isolated probe
+    (bunfig [test] timeout is NOT honored)"
+  - "Regression-safety proof: applyConcernTriage only transitions pre-existing
+    stored concerns (absent in engine fixtures) and FakeHarness outputs carry no
+    concerns, so routed-blocker seeds are empty in existing engine scenarios and
+    blockedByConcern/empty-seed behavior is identical to the story-base inline
+    fixpoint (verified by reading story-base wave.ts); consult test that flaked
+    under self-inflicted load passes 3/3 in isolation"
+  - "git diff: exactly 1 file, +4/-1 lines, test-only (}, 30_000) + comment);
+    prod diff unchanged at 218/300 budget lines"
+notes: Assignment implementation (collectRoutedBlockers, blockedByConcern
+  single-owner fixpoint, withRoutedBlocking pending-only integration,
+  deriveWave/deriveTask/iteration threading) was complete and green from prior
+  attempts; this attempt verified it, addressed the reported gate failure with a
+  minimal timeout-only fix, and confirmed the full gate green.
+status: ok
+summary: Targets green (27/27), typecheck pass, full suite green (364 pass, 0
+  fail). Addressed the reported gate failure (blocked-closeup-iteration 5s
+  timeout flake, proven pre-existing via revert-tree reproduction) with a
+  minimal 4-line timeout-only fix to that single test; no assertions or prod
+  code touched, budget unchanged at 218/300.

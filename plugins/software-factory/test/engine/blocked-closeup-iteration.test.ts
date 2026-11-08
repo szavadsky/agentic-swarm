@@ -260,5 +260,8 @@ describe("Engine: Blocked close-up starts iteration N+1 (§8.4.1, Finding 6)", (
 
     // Verify architect-plan-2 had prior closeup context
     expect(iter2PromptSeen).toContain("Prior Close-up closeup-1.yaml");
-  });
+    // Heavy test: two full runTask cycles (git worktrees + harness). Measured
+    // 4.7-7.9s on a loaded host, over bun's 5s default; allow 30s. No
+    // assertion is changed.
+  }, 30_000);
 });
