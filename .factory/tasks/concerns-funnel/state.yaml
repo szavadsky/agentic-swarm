@@ -178,41 +178,46 @@ items:
     mergedAt: 2026-11-08T04:44:15-05:00
   routing-blocker-derive-v2:
     kind: dev
-    status: ready
+    status: merged
     branch: topic/concerns-funnel--routing-blocker-derive-v2
     attempts: 2
     fixRounds: 2
     spendUsd: 0.39260192
     currentStep: review
+    mergedAt: 2026-11-08T06:58:27-05:00
   routing-human-debt-v2:
     kind: dev
-    status: ready
+    status: merged
     branch: topic/concerns-funnel--routing-human-debt-v2
     attempts: 1
     fixRounds: 1
-    spendUsd: 0.13819299999999998
-    currentStep: review
+    spendUsd: 0.14427299999999998
+    currentStep: integrate
+    mergedAt: 2026-11-08T07:01:48-05:00
   adr-blocking-digest-v2:
     kind: dev
-    status: pending
+    status: running
     branch: topic/concerns-funnel--adr-blocking-digest-v2
     attempts: 1
-    fixRounds: 1
-    spendUsd: 0
+    fixRounds: 3
+    spendUsd: 0.459328
+    currentStep: review
   routing-architect-consult-v2:
     kind: dev
-    status: pending
+    status: ready
     branch: topic/concerns-funnel--routing-architect-consult-v2
     attempts: 1
     fixRounds: 1
-    spendUsd: 0
+    spendUsd: 0.198996
+    currentStep: review
   status-state-surface-v2:
     kind: dev
-    status: pending
+    status: ready
     branch: topic/concerns-funnel--status-state-surface-v2
     attempts: 1
     fixRounds: 1
-    spendUsd: 0
+    spendUsd: 0.10916100000000001
+    currentStep: review
   funnel-closeups-v2:
     kind: dev
     status: pending
@@ -415,20 +420,53 @@ debt:
     slug"
   - "[routing-human-debt-v2] First blocking question wins in readdir order with
     no priority"
-budgetSpentUsd: 3.073703919999999
+  - "[adr-blocking-digest-v2] Revise-path ADRs not persisted or routed"
+  - "[adr-blocking-digest-v2] Missing md coverage for explicit-false/missing
+    consequences"
+  - "[adr-blocking-digest-v2] Redundant mailbox scan duplicates derive logic"
+  - "[adr-blocking-digest-v2] Unsanitized ADR id used as filename"
+  - "[adr-blocking-digest-v2] Revise prompt omits blocking guidance"
+  - "[adr-blocking-digest-v2] Revise-path ADR re-persist/halt has no test"
+  - "[adr-blocking-digest-v2] Explicit blocking:false markdown and
+    missing-consequences fallback unasserted"
+  - "[adr-blocking-digest-v2] Detailed-mode ADR disposition accepts either value
+    and mode->disposition mapping is undocumented"
+  - "[adr-blocking-digest-v2] Revise-path ADR re-persist and blocked halt have
+    no test"
+  - "[adr-blocking-digest-v2] human-async blocking ADRs still halt the whole
+    task; mapping undocumented and weakly pinned"
+  - "[routing-architect-consult-v2] Cap concerns hydration section below full
+    hydrationBytes"
+  - "[routing-architect-consult-v2] Sanitize concern id in consult stepId"
+  - "[routing-architect-consult-v2] Sanitize concern id in consult stepId/path"
+  - "[routing-architect-consult-v2] Export runConcernConsult from flows barrel"
+  - "[routing-architect-consult-v2] Align concern consult prompt fragment with
+    default decision context"
+  - "[status-state-surface-v2] Warn on unknown status/missing kind, not just
+    parse errors"
+  - "[status-state-surface-v2] Explicitly exclude human-awareness from Blocking
+    classify"
+  - "[status-state-surface-v2] Pin root concerns required and numeric bounds"
+  - "[status-state-surface-v2] Warn on semantic-invalid concern files, not just
+    parse throws"
+  - "[status-state-surface-v2] Document or handle implicit-ref item blockers in
+    Blocking split"
+  - "[status-state-surface-v2] Reuse single concern listing for
+    counts/routed/debt"
+budgetSpentUsd: 3.908542919999999
 spendByRole:
   alt-workhorse:
-    costUsd: 0.610814
-    inputTokens: 2966643
-    outputTokens: 1089683
+    costUsd: 0.7638559999999999
+    inputTokens: 3594621
+    outputTokens: 1406443
   workhorse:
-    costUsd: 2.18160192
-    inputTokens: 4555290
-    outputTokens: 1346689
+    costUsd: 2.80505792
+    inputTokens: 6113802
+    outputTokens: 1676372
   architect:
-    costUsd: 0.264773
-    inputTokens: 2402551
-    outputTokens: 81235
+    costUsd: 0.32311399999999996
+    inputTokens: 2984509
+    outputTokens: 81963
   alt-architect:
     costUsd: 0.016515000000000002
     inputTokens: 72452
@@ -438,18 +476,14 @@ spendByItem:
     costUsd: 0.251577
     inputTokens: 593198
     outputTokens: 339057
-  spike-saga-commit:
-    costUsd: 0.131932
-    inputTokens: 263905
-    outputTokens: 109900
-  spike-text-budget:
-    costUsd: 0.060779
-    inputTokens: 139871
-    outputTokens: 72059
   concerns-store-v2:
     costUsd: 0.613799
     inputTokens: 2193288
     outputTokens: 413791
+  routing-human-debt-v2:
+    costUsd: 0.14427299999999998
+    inputTokens: 381176
+    outputTokens: 153421
   concerns-contracts-schemas:
     costUsd: 0.13946999999999998
     inputTokens: 384518
@@ -470,6 +504,10 @@ spendByItem:
     costUsd: 0.107439
     inputTokens: 280717
     outputTokens: 125290
+  adr-blocking-digest-v2:
+    costUsd: 0.459328
+    inputTokens: 1415535
+    outputTokens: 291425
   concerns-contracts-types:
     costUsd: 0.063129
     inputTokens: 178070
@@ -478,12 +516,24 @@ spendByItem:
     costUsd: 0.268401
     inputTokens: 734306
     outputTokens: 188631
-  routing-human-debt-v2:
-    costUsd: 0.13819299999999998
-    inputTokens: 364883
-    outputTokens: 148762
+  spike-text-budget:
+    costUsd: 0.060779
+    inputTokens: 139871
+    outputTokens: 72059
+  spike-saga-commit:
+    costUsd: 0.131932
+    inputTokens: 263905
+    outputTokens: 109900
+  status-state-surface-v2:
+    costUsd: 0.10916100000000001
+    inputTokens: 270524
+    outputTokens: 128516
+  routing-architect-consult-v2:
+    costUsd: 0.198996
+    inputTokens: 463902
+    outputTokens: 217893
   (orchestration):
-    costUsd: 0.6038309999999999
-    inputTokens: 3143307
-    outputTokens: 379539
-lastUpdated: 2026-11-08T11:58:27.856Z
+    costUsd: 0.665105
+    inputTokens: 3745501
+    outputTokens: 384217
+lastUpdated: 2026-11-08T13:40:47.342Z
