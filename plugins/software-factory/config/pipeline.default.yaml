@@ -92,8 +92,9 @@ models:
 # Per-agent timeouts: `timeoutSec` caps a single agent turn. Step-level
 # `timeoutSec` (in flows) overrides the agent default; when neither is set the
 # harness default applies (300s). Timeouts measure active (monotonic) time, so
-# machine sleep never burns the budget. Long-horizon agents (developer,
-# architect) get 1200s; bounded review/discovery agents get 900s.
+# machine sleep never burns the budget. Tiers: poc/architect 2h (7200s),
+# tdd/dev/qa 90m (5400s), fact-finder/review 1h (3600s), quick scoping/summary
+# agents 15m (900s).
 #
 # Extra agents can be added here with:
 #   my-agent:
@@ -110,26 +111,26 @@ agents:
     timeoutSec: 900
   architect:
     role: architect
-    timeoutSec: 1200
+    timeoutSec: 7200
   plan-reviewer:
     role: alt-architect
-    timeoutSec: 900
+    timeoutSec: 3600
   pm:
     role: pm
     timeoutSec: 900
     tools: [] # yield-only: PM structures architect outlines from injected prompt vars, no file tools (frontmatter says the same; config wins if they drift)
   developer:
     role: workhorse
-    timeoutSec: 1200
+    timeoutSec: 5400
   qa:
     role: task-reviewer
-    timeoutSec: 900
+    timeoutSec: 5400
   reviewer:
     role: task-reviewer
-    timeoutSec: 900
+    timeoutSec: 3600
   fact-finder:
     role: workhorse
-    timeoutSec: 900
+    timeoutSec: 3600
   wave-close-up:
     role: wave-close-up
     timeoutSec: 900
