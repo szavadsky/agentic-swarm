@@ -680,7 +680,7 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
         },
       });
     } catch (err: any) {
-      await appendJournal(taskDir, { type: "concern_ingest_error", task, item, step: stepId, error: err?.message || String(err) });
+      try { await appendJournal(taskDir, { type: "concern_ingest_error", task, item, step: stepId, error: err?.message || String(err) }); } catch { /* Journal failure must not change step status. */ }
     }
   }
 

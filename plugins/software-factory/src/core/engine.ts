@@ -369,11 +369,13 @@ export async function runTask(
   try {
     await reconcileConcerns({ taskDir, taskWt, repo });
   } catch (err: any) {
-    await appendJournal(taskDir, {
-      type: "concern_reconcile_error",
-      task,
-      error: err?.message || String(err),
-    });
+    try {
+      await appendJournal(taskDir, {
+        type: "concern_reconcile_error",
+        task,
+        error: err?.message || String(err),
+      });
+    } catch { /* Journal failure must not crash startup. */ }
   }
 
   // 3. Load pipeline config and setup semaphores (§2)

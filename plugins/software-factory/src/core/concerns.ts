@@ -76,7 +76,7 @@ export async function aggregateConcerns(
     if (!c.summary?.trim()) throw new Error("Concern summary is required");
     if (c.severity && !(c.severity in RANK)) throw new Error(`Unknown concern severity: ${String(c.severity)}`);
   }
-  for (const d of remarkables) if (!d?.chosen?.trim()) throw new Error("Remarkable decision requires chosen");
+  for (const d of remarkables) if (!d?.chosen?.trim() || !Array.isArray(d?.alternatives) || typeof d?.why !== "string" || !d.why.trim()) throw new Error("Remarkable decision requires chosen/alternatives/why");
 
   const at = atOf(ctx), dir = dirOf(ctx.taskDir);
   const stored = await locks.runExclusive(ctx.taskDir, async () => {
@@ -105,11 +105,11 @@ export async function listOpenConcerns(taskDir: string): Promise<StoredConcernAr
     if (err?.code === "ENOENT") return [];
     throw err;
   }
-  const records = await Promise.all(names.filter((n) => n.endsWith(".yaml")).map(async (name) => {
+  const records = await Promise.all(names.filter((n) => n.startsWith("c-") && n.endsWith(".yaml")).map(async (name) => {
     try { return await readYaml<StoredConcernArtifact>(path.join(dir, name)); } catch { return undefined; }
   }));
   return records
-    .filter((r): r is StoredConcernArtifact => r?.status === "open")
+    .filter((r): r is StoredConcernArtifact => r?.status === "open" && typeof r?.kind === "string")
     .sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? "") || a.id.localeCompare(b.id));
 }
 
@@ -141,7 +141,7 @@ export async function applyConcernTriage(
     if (s.disposition === "dismiss" && !s.detail?.trim()) throw new Error(`Dismiss triage for ${s.id} requires detail`);
     return [s.id, (record) => s.disposition === "dismiss"
       ? { ...record, status: "dismissed", disposition: s.disposition, dismissReason: s.detail!.trim() }
-      : { ...record, status: "routed", disposition: s.disposition }];
+      : { ...record, status: "routed", disposition: s.disposition, dismissReason: undefined }];
   });
   return mutate(ctx, ops, "factory: concerns triaged");
 }
@@ -191,7 +191,7 @@ async function committedStepRecords(ctx: ConcernStoreContext): Promise<Committed
   return records;
 }
 
-/** Rebuilds concern artifacts from committed step records; merging keeps it idempotent. */
+/** Rebuilds concern artifacts from committed step records; merging keeps it idempotent. Startup calls it after repairWorktree, so the worktree matches HEAD and ls-tree enumeration is authoritative. */
 export async function reconcileConcerns(ctx: ConcernStoreContext): Promise<StoredConcernArtifact[]> {
   const reconciled: StoredConcernArtifact[] = [];
   for (const r of await committedStepRecords(ctx)) {

@@ -535,9 +535,20 @@ describe("Concern store", () => {
         createdAt: "2026-01-01T00:00:00.000Z",
       })
     );
+    await writeYamlAtomic(path.join(taskDir, "concerns", "rm-5555555555.yaml"), {
+      id: "rm-5555555555",
+      chosen: "A decision",
+      alternatives: ["Other"],
+      why: "reasons",
+      status: "open",
+      source: { record: "001-architect-plan-a1", agent: "architect" },
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
 
     const open = await listOpenConcerns(taskDir);
     expect(open.map((c) => c.id)).toEqual(["c-2222222222", "c-1111111111"]);
+    expect(open.every((c) => typeof c.kind === "string" && typeof c.detail === "string")).toBe(true);
   });
 
   it("triages only exact-id suggestions and persists dismiss reasons", async () => {
