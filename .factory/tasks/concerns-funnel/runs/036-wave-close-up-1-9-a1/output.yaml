@@ -1,0 +1,22 @@
+blockedItems: []
+failedItems: []
+iteration: 1
+mergedItems:
+  - adr-blocking-digest-v2
+  - status-state-surface-v2
+recommendations:
+  - Proceed to Architect Wave Report for Wave 9; no follow-up hygiene actions
+    required.
+  - Engine will commit the pending journal.ndjson update as part of normal
+    close-up finalization; no manual tree cleanup needed.
+status: complete
+summary: "Wave 9 complete: both items (adr-blocking-digest-v2,
+  status-state-surface-v2) merged cleanly. Tree hygiene PASS: no untracked junk,
+  no stray temp/build artifacts (*.tmp/*.orig/*.rej absent), no merge conflict
+  markers in plugins/ (strict ^<<<<<<</^=======/^>>>>>>> scan clean; ===== hits
+  under .factory/ are test-output banner lines, not conflicts). Only modified
+  file is engine-managed .factory/tasks/concerns-funnel/journal.ndjson (2-line
+  append, pending engine commit). Gates per diff table: typecheck pass/pass
+  green (matches baseline), test fail->pass IMPROVED (baseline head-guard
+  failures resolved). No regressions; no failed or blocked items."
+wave: 9
