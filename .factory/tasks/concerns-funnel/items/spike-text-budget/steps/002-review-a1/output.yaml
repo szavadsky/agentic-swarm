@@ -1,0 +1,39 @@
+status: approved
+summary: "Spike verified: 11 tests pass 3x, no prod code, all byte-budget covers
+  met; 3 optional hardenings."
+suggestions:
+  - detail: Only the 5000B wave aggregate is cross-checked through production git()
+      (trim one trailing newline); item diffs (2499B/2500B, the review-triage
+      budget source) are measured solely via TmpRepo.git which uses trimEnd().
+      They coincide for single-trailing-newline diffs, but asserting item diffs
+      through git() would lock the byte-identity assumption for both budget
+      sources.
+    disposition: optional
+    id: verify-item-diffs-through-prod-git
+    location:
+      file: plugins/software-factory/test/engine/funnel-text-budget.test.ts
+      line: 307
+    summary: Cross-check item diffs through production git() wrapper, not just wave
+      aggregate
+  - detail: Terse rendering of 3 concerns (~1KB) fits under the 2000B code cap
+      without truncation, so the wave close-up test passes via detail-dropping
+      alone. The hard-truncate path is exercised at 500/350/320/0 caps but never
+      at 2000; a many-concerns case with terse YAML >2000B would cover
+      truncation at the code cap.
+    disposition: optional
+    id: force-truncation-at-2000-cap
+    location:
+      file: plugins/software-factory/test/engine/funnel-text-budget.test.ts
+      line: 333
+    summary: Add many-concerns case forcing hard truncation at the 2000-byte cap
+  - detail: Comment attributes the +1 separator byte to production git()
+      single-newline trim, but waveDiff/itemDiffs on lines 287-288 and 217 are
+      measured via TmpRepo.git (trimEnd). Both coincide here; naming the actual
+      measurement path keeps the additivity note accurate if diff capture
+      semantics change.
+    disposition: optional
+    id: trim-semantics-comment
+    location:
+      file: plugins/software-factory/test/engine/funnel-text-budget.test.ts
+      line: 297
+    summary: Clarify trim-semantics comment to name TmpRepo trimEnd measurement path
