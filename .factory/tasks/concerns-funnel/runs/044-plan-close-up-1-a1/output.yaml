@@ -1,0 +1,80 @@
+iteration: 1
+remainingMilestones:
+  - m1-contracts-aggregate
+  - m2-triage-modes
+  - m4-funnel-surface
+  - m5-docs
+completedMilestones:
+  - m3-routing
+status: next-iteration
+summary: "Skeptical audit of iteration 1 (concerns-funnel). M1
+  store/schemas/review-policy substantially delivered and well-tested
+  (fingerprint identity, merge longer-detail/max-severity, open+source, retry
+  dedup, defaults medium/detail=summary, unknown-kind strict reject, producer
+  aggregation, reviewer new-then-triage ordering, resolveReviewAllowed
+  precedence+dismiss injection) but scenario 8 partially fails:
+  dismissed+escalated sets source.escalated=true yet hydrateConcernsYaml
+  (open-only) and buildArchitectHydration (open|routed) never surface dismissed
+  escalations in digest/architect hydration, and no test covers surfacing. TS
+  output types stale (DeveloperOutput concerns?: string[],
+  FactFinder/WaveCloseup/PlanCloseup/Decision/Review lack
+  concerns/remarkable/resolutions fields) vs schemas. M2 triage core verified
+  (steps/review concernsYaml terse + triage instructions,
+  dismiss+detail->dismissed+dismissReason no mailbox/debt,
+  dismiss-without-detail errors step, QA gate no-op, routed persist, debt
+  predicate without tech-debt disposition, plan-reviewer partition excludes
+  triage from fix-loop, pipeline presets + blocking table + human-involvement
+  criteria) but scenario 7 fails: steps/review and steps/qa fragments lack
+  {{humanInvolvementCriteria}},
+  architect-plan/revise/wave-report/resume/consult/closeup and
+  wave/plan-close-up fragments lack
+  {{concernsYaml}}/{{humanInvolvementCriteria}} placeholders (engine injects
+  vars but fragments drop them); condensing rule output-bytes<input-bytes
+  missing (only weak 'keep short' line); fixRequired computed but never consumed
+  by item-machine (behaviorally correct via hasIssues/hasHumanBlock, contract
+  deviation). M3 fully verified:
+  collectRoutedBlockers+scheduler.blockedByConcern pure fixpoint union cascade
+  deps-only, deriveWave/deriveItem pending-only no writes, wave-act
+  decisions/concern-<cid>.yaml exactly-once restart-idempotent,
+  buildArchitectHydration includes open|routed concerns, human-async blocks
+  [item] continues, human-stop blocks task/item halts exit 10, awareness
+  blocks=[] digest continues, blocking vs remarkable ADRs per mode with full md,
+  debt [item] summary. M4 mostly missing: only counts/status pass (missing
+  zeros, corrupt skip+warn, CLI Concerns + Blocking vs Digest). No prod byte
+  caps (step-runner fixed 8000 vs min(diff,2000)/min(input,500);
+  funnel-text-budget is spike-local helper only), no concernConfirms
+  schema/logic (pendingResolution propose verified, accept/reject missing), no
+  simple-item fallback auto-route, no runChildTask
+  propagateEpicConcerns/source.epic/parent hydration (runChildTask only records
+  child-closeup), wave/plan-close-up fragments have no concerns wiring. M5
+  missing: ARCHITECTURE §1 row 18 still 'Deliberately not hand-built', no
+  §6.2/§8 funnel docs, README untouched, no prompts.test line-budget assertion.
+  Gates (typecheck/bun test TMPDIR=/tmp) not run: read-only auditor, no bash."
+techDebt:
+  - "M1 escalation surfacing: dismissed escalated flag set but excluded from
+    hydrate (open-only) and architect hydration (open|routed); no
+    digest/hydration surfacing or test"
+  - "M1 stale TS producer types: DeveloperOutput concerns string[], missing
+    structured concerns/remarkable/resolutions on
+    FactFinder/WaveCloseup/PlanCloseup/Decision/ReviewArtifact vs schemas"
+  - "M2 prompt wiring: steps/review + steps/qa lack humanInvolvementCriteria;
+    architect-plan/revise/wave-report/resume/consult-item/nonitem/closeup +
+    wave/plan-close-up lack concernsYaml/humanInvolvementCriteria placeholders;
+    mode criteria not reaching reviewer"
+  - "M2 contract: triage fixRequired unused by item-machine (behavioral parity
+    via hasIssues/hasHumanBlock); human-stop/awareness on concern ids not
+    deduped to q-concern-* (only human-async is)"
+  - "M2/M4 condensing: no output<input rule in reviewer/architect/close-up
+    prompts; no prod funnel caps (fixed hydrationBytes 8000)"
+  - "M4 missing: concernConfirms accept/reject schema + apply
+    (resolved/routed/propagated/clear)"
+  - "M4 missing: simple-item explicit + auto-route fallback
+    (tech-debt->optional, others->architect, human-* never)"
+  - "M4 missing: epic->saga propagation (propagateEpicConcerns timing, condensed
+    copy source.epic, parent detail<child, saga hydration)"
+  - "M5 missing: ARCHITECTURE §1 row 18 + §6.2 + §8
+    (lifecycle/funnel/routing/modes/partition/producer-matrix/resilience/exit-1\
+    0), README, fragment matrix 8 + 15/60 debloat check in prompts.test"
+  - "Uncertainty: full gates (bun run typecheck + TMPDIR=/tmp bun test) not
+    executed by read-only audit; pre-existing td-tmpdir-split head-guard
+    failures assumed out of scope"
