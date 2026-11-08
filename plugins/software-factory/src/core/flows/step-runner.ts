@@ -27,9 +27,14 @@ import { isTriagerAgent, resolveReviewAllowed } from "../review-policy.js";
 import {
   aggregateConcerns,
   applyCloseupResolutions,
-  applyConcernTriage,
-  partitionSuggestions,
+  listOpenConcerns,
 } from "../concerns.js";
+import {
+  applyReviewTriage,
+  renderConcernsYaml,
+  TriageValidationError,
+  type ReviewTriageOutcome,
+} from "../triage.js";
 import { resolveStepRole, resolveRole, type ResolvedRole } from "../config/roles.js";
 import { captureHead, enforceHead } from "../git/guard.js";
 import { commitAll } from "../git/commit.js";
@@ -87,6 +92,7 @@ export interface StepRunResult {
   usage?: Usage;
   branchChanged?: boolean;
   headMoved?: boolean;
+  triage?: ReviewTriageOutcome;
 }
 
 /**
@@ -178,13 +184,13 @@ function inferTaskWorktree(taskDir: string, task: string, orchestrationFolder: s
 async function ingestStepConcerns(opts: {
   taskDir: string; taskWt: string; repo: any; output: unknown;
   source: { record: string; agent: string; step: string; item?: string; iteration?: number };
-}): Promise<void> {
+}): Promise<ReviewTriageOutcome | undefined> {
   const data = (opts.output ?? {}) as Record<string, any>;
   const concerns = ["concerns", "newConcerns"].flatMap((f) => (Array.isArray(data[f]) ? data[f] : []));
   const remarkables = Array.isArray(data.remarkable) ? data.remarkable : [];
   const suggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
   const resolutions = Array.isArray(data.concernResolutions) ? data.concernResolutions : [];
-  if (!concerns.length && !remarkables.length && !suggestions.length && !resolutions.length) return;
+  if (!concerns.length && !remarkables.length && !suggestions.length && !resolutions.length) return undefined;
 
   // Triage only ids that existed before this step, so new concerns cannot self-dismiss.
   let existing: string[] = [];
@@ -196,9 +202,17 @@ async function ingestStepConcerns(opts: {
   }
   const ctx = { taskDir: opts.taskDir, taskWt: opts.taskWt, repo: opts.repo };
   if (concerns.length || remarkables.length) await aggregateConcerns({ ...ctx, source: opts.source }, concerns, remarkables);
-  const { triage } = partitionSuggestions(suggestions, existing);
-  if (triage.length) await applyConcernTriage({ ...ctx, suggestions: triage, isTriager: isTriagerAgent(opts.source.agent) });
+  const triage = suggestions.length > 0
+    ? await applyReviewTriage({
+        ...ctx,
+        suggestions,
+        concernIds: existing,
+        isTriager: isTriagerAgent(opts.source.agent),
+        ...(opts.source.item ? { item: opts.source.item } : {}),
+      })
+    : undefined;
   if (resolutions.length) await applyCloseupResolutions({ ...ctx, resolutions, by: opts.source.agent });
+  return triage;
 }
 
 /**
@@ -279,12 +293,16 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
   // 4. Render prompt and agent definition. Appends compact ## Output section (§6.4)
   const fragment = stepFragment ?? `steps/${stepId}`;
   const criteriaBundle = loadCriteriaBundle(pipeline.criteria);
+  const openConcerns = await listOpenConcerns(taskDir);
+  const concernsYaml = openConcerns.length > 0
+    ? renderConcernsYaml(openConcerns, pipeline.limits?.hydrationBytes ?? 8000)
+    : "";
   const effectivePromptVars: Record<string, string> = {
     humanInvolvementCriteria: formatHumanInvolvementCriteria(
       criteriaBundle.humanInvolvement,
       pipeline.humanInvolvement
     ),
-    concernsYaml: "",
+    concernsYaml,
     ...promptVars,
   };
   let promptText: string;
@@ -679,9 +697,10 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
   }
 
   // Producer concerns feed the taskWt store after the canonical artifact write.
+  let triageOutcome: ReviewTriageOutcome | undefined;
   if (finalStatus === "ok") {
     try {
-      await ingestStepConcerns({
+      triageOutcome = await ingestStepConcerns({
         taskDir, taskWt, repo, output: validatedData,
         source: {
           record: dirName, agent, step: stepId,
@@ -690,7 +709,12 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
         },
       });
     } catch (err: any) {
-      try { await appendJournal(taskDir, { type: "concern_ingest_error", task, item, step: stepId, error: err?.message || String(err) }); } catch { /* Journal failure must not change step status. */ }
+      if (err instanceof TriageValidationError) {
+        finalStatus = "error";
+        validationError = `Review triage failed: ${err.message}`;
+      } else {
+        try { await appendJournal(taskDir, { type: "concern_ingest_error", task, item, step: stepId, error: err?.message || String(err) }); } catch { /* Journal failure must not change step status. */ }
+      }
     }
   }
 
@@ -752,5 +776,6 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
     usage: totalUsage,
     branchChanged,
     headMoved,
+    ...(triageOutcome ? { triage: triageOutcome } : {}),
   };
 }

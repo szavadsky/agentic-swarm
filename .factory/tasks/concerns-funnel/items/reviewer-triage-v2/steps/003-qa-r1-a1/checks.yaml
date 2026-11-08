@@ -1,0 +1,61 @@
+checks:
+  - id: red-test
+    status: pass
+    message: "red-test passed: all 11 tests fail when prod changes are restored to
+      test-first commit"
+    details:
+      command: cd plugins/software-factory && bun test
+        test/engine/reviewer-triage.test.ts --reporter=junit
+        --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-redtest-1794129418447-wkx372cxsqg.xml
+      junitCaseCount: 11
+      junitCaseIds:
+        - Reviewer triage (§8.7, §18).hydrates steps/review with terse concern
+          fields and triage instructions
+        - Reviewer triage (§8.7, §18).partitions exact-id triage from findings
+          and flags fix once
+        - Reviewer triage (§8.7, §18).renders condensing concern YAML without
+          detail and within the byte cap
+        - Reviewer triage (§8.7, §18).dismisses a concern with its reason and
+          routes nothing
+        - Reviewer triage (§8.7, §18).persists routed dispositions and applies
+          the debt predicate without a tech-debt disposition
+        - Reviewer triage (§8.7, §18).returns fixRequired once for
+          fix-on-concern and keeps it in the fix loop
+        - Reviewer triage (§8.7, §18).writes one deduped q-concern mailbox entry
+          for human-async triage
+        - Reviewer triage (§8.7, §18).rejects dismiss triage without detail and
+          leaves the concern unchanged
+        - Reviewer triage (§8.7, §18).fails the review step when a dismiss
+          triage lacks detail
+        - "Reviewer triage (§8.7, §18).gates non-triagers: QA matching a concern
+          id is a no-op"
+        - Reviewer triage (§8.7, §18).blocks the item with a single q-concern
+          mailbox entry in the engine flow
+      junitTruncated: false
+      collected: true
+      collectionErrors: []
+  - id: test-diff
+    status: pass
+    message: test-diff generated (1 test files, 525 bytes)
+    details:
+      diff: >-
+        diff --git a/plugins/software-factory/test/smoke-fixes.test.ts
+        b/plugins/software-factory/test/smoke-fixes.test.ts
+
+        index cb903e0..d282558 100644
+
+        --- a/plugins/software-factory/test/smoke-fixes.test.ts
+
+        +++ b/plugins/software-factory/test/smoke-fixes.test.ts
+
+        @@ -87,6 +87,7 @@ describe("Smoke fixes acceptance tests (§6.4, §7, §8,
+        §9)", () => {
+                 checks: "sample checks",
+                 diff: "sample diff",
+                 dispositionsCriteria: "sample dispositions",
+        +        concernsYaml: "",
+               },
+               reviewSchema
+             );
+      files:
+        - plugins/software-factory/test/smoke-fixes.test.ts

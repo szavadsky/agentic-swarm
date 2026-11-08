@@ -1,0 +1,16 @@
+status: approved
+summary: 11 triage tests green, full suite 346/0, typecheck pass; no weakening,
+  red->green consistent
+suggestions:
+  - id: condensing-full-without-affects-skipped
+    disposition: optional
+    summary: renderConcernsYaml skips full-without-affects variant, may shed entry
+      unnecessarily
+    detail: "triedFull guard skips variant[1] count==len even though dropping
+      affects changes bytes; when full-with-affects exceeds cap but
+      full-without-affects would fit, code sheds trailing entry instead. Still
+      meets byte cap/valid YAML, so non-blocking polish: key guard by serialized
+      content or affects-presence."
+    location:
+      file: plugins/software-factory/src/core/triage.ts
+      line: 100

@@ -1,0 +1,53 @@
+status: approved
+summary: 11 triage tests green, gates pass; exact-id triage, dismiss validation,
+  dedup mailbox verified; no blocking defects
+suggestions:
+  - id: fix-feedback-includes-triage-ids
+    disposition: optional
+    summary: Fix-loop feedback includes triage ids instead of findings only
+    detail: item-machine builds fix/optional feedback from
+      latestReviewOutput.suggestions filtered only by disposition, without
+      partitioning triage vs findings. An optional triage (routed debt)
+      piggybacks into next develop round as OPTIONAL when a fix co-occurs,
+      contradicting 'excluding triage ids from fix-loop' and review.md 'never
+      restate triaged concern'. Filter via partitionReviewSuggestions findings
+      or exclude known concern ids.
+    location:
+      file: plugins/software-factory/src/core/flows/item-machine.ts
+      line: 523
+  - id: render-sheds-before-condensing
+    disposition: optional
+    summary: renderConcernsYaml sheds entries before dropping affects/truncating
+    detail: "Nested loops try all counts per variant, so variant[0] sheds trailing
+      entries before variant[1] (drop affects) or truncated variants are tried;
+      triedFull also skips full-without-affects. Contradicts docstring order
+      'condenses summaries, drops affects, then sheds'. Still meets byte cap, so
+      polish: iterate counts outer / variants inner, or key guard by content."
+    location:
+      file: plugins/software-factory/src/core/triage.ts
+      line: 97
+  - id: duplicate-partition-and-listing
+    disposition: optional
+    summary: Exact-id partition and concerns-dir listing triplicated with divergent
+      filters
+    detail: partitionSuggestions (concerns.ts) vs partitionReviewSuggestions
+      (triage.ts) duplicate exact-id filter; concerns-dir readdir duplicated in
+      listOpenConcerns (c-*.yaml+open+ENOTDIR-swallow), step-runner ingest (all
+      *.yaml, ENOENT-only), item-machine mailbox filter (all *.yaml,
+      ENOENT-only). Extract single helper for concern-id set; deprecate old
+      partition or delegate.
+    location:
+      file: plugins/software-factory/src/core/flows/item-machine.ts
+      line: 714
+  - id: plan-review-triager-lacks-instructions
+    disposition: optional
+    summary: Non-review triagers lack dismiss/condensing instructions but share
+      validation
+    detail: isTriagerAgent includes plan-reviewer (review schema with dismiss) but
+      plan-review.md has no concernsYaml/triage/dismiss-detail instructions;
+      step-runner now fails any triager step on dismiss-without-detail
+      (TriageValidationError) vs prior journaled generic Error. Either scope
+      validation message per agent or add triage section to plan-review prompt.
+    location:
+      file: plugins/software-factory/agents/steps/plan-review.md
+      line: 1
