@@ -1,0 +1,59 @@
+status: ok
+summary: "Added the concern/remarkable type surface to
+  plugins/software-factory/src/core/artifacts.ts:
+  ConcernKind/ConcernSeverity/ConcernStatus vocabularies, Concern,
+  RemarkableDecision, ConcernSource, PendingConcernResolution,
+  StoredConcernArtifact (required id, lifecycle
+  status/disposition/dismissReason, source with escalated?, optional
+  pendingResolution), added 'dismiss' to ReviewDisposition, PlanAdr.blocking?,
+  and PipelineConfig.humanInvolvement +
+  concerns{raiseAllowlist,minDigestSeverity,minBlockingSeverity} + reviewPolicy
+  with canonical `default` plus legacy `allowedDispositions` alias and per-agent
+  entries. Types only; no schemas, runtime, or repair logic. Target test went
+  from 5 failures to 5 passes; typecheck and the full suite are green with 70
+  net prod lines added (budget 80)."
+target:
+  selectors:
+    - test/contracts/concern-artifact-types.test.ts
+  expectRed:
+    - Concern artifact types.exposes structured concerns and remarkable
+      decisions with strict vocabularies
+    - Concern artifact types.stores concern lifecycle metadata including pending
+      resolution and escalation
+    - Concern artifact types.adds dismiss to review dispositions without a
+      tech-debt value
+    - Concern artifact types.marks plan ADRs as blocking or remarkable
+    - Concern artifact types.adds human involvement modes, concern thresholds,
+      and canonical review policy to pipeline config
+evidence:
+  - "Baseline red verified: `cd plugins/software-factory && TMPDIR=/tmp bun test
+    test/contracts/concern-artifact-types.test.ts` -> 0 pass / 5 fail (missing
+    ConcernSeverity, PlanAdr.blocking, humanInvolvement, concerns)."
+  - "Target green: `cd plugins/software-factory && TMPDIR=/tmp bun test
+    test/contracts/concern-artifact-types.test.ts` -> 5 pass / 0 fail, 5
+    expect() calls."
+  - "Typecheck: `cd plugins/software-factory && TMPDIR=/tmp bun run typecheck`
+    -> exit 0."
+  - "Full project suite: `cd plugins/software-factory && TMPDIR=/tmp bun test`
+    -> 287 pass / 2 skip / 0 fail across 52 files."
+  - "Diff scope and budget: `git diff --stat` shows only
+    plugins/software-factory/src/core/artifacts.ts, 71 insertions / 1 deletion
+    (70 net prod lines, <= 80 budget); `git status --porcelain` confirms no
+    other modified files."
+concerns:
+  - Runtime still resolves dispositions via the legacy
+    `reviewPolicy.allowedDispositions` (src/core/flows/item-machine.ts:632,
+    src/core/flows/step-runner.ts:222); canonical `default` is type-only until
+    the policy/runtime split.
+  - ReviewSuggestion.disposition remains `ReviewDisposition | string`, which
+    collapses to `string`, so 'dismiss' is not statically enforced on that field
+    (pre-existing shape, intentionally untouched).
+  - Concern.detail is modeled as required per docs/factory.v2.md §18 field list
+    and all fixtures; revisit if the schema split wants it optional. Concern.id
+    is optional (engine assigns the fingerprint id on aggregation) while
+    StoredConcernArtifact.id is required.
+notes: "Inserted concern types between AssignmentArtifact and ReviewDisposition
+  in src/core/artifacts.ts; PlanAdr gained optional blocking?: boolean;
+  PipelineConfig gained humanInvolvement, concerns thresholds, and an explicit
+  reviewPolicy default/allowedDispositions pair while retaining the per-agent
+  index signature so existing configs and lookups compile unchanged."

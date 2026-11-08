@@ -1,0 +1,115 @@
+checks:
+  - id: gates
+    status: pass
+    message: Gates passed (2 gates)
+    details:
+      - id: typecheck
+        command: cd plugins/software-factory && bun run typecheck
+        status: pass
+        durationMs: 2392
+        details: $ tsc --noEmit
+      - id: test
+        command: cd plugins/software-factory && bun test
+        status: pass
+        durationMs: 97791
+        details: |-
+          bun test v1.4.3 (c6da4a4d3)
+          ================================================================
+          Task: status-test-task [ACTIVE]
+          Kind: unclassified | Iteration: 1 | Wave: 1
+          Worktree: (none - main checkout)
+          Config path: /home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/factory-test-repo-hTeVdg/.factory/pipeline.yaml
+          Budget spent: $0.0000
+          ----------------------------------------------------------------
+          Waves & Items:
+            Wave 1:
+          ================================================================
+
+
+          test/cli/cli.test.ts:
+          [factory lock] Stale run lock for task "stale-lock-task" (PID 9999999 on host Slava-Yoga) taken over by PID 1486004
+          [factory lock] Stale run lock for task "competing-takeover-task" (PID 9999999 on host Slava-Yoga) taken over by PID 1486004
+          [factory lock] Stale run lock for task "journal-worktree-task" (PID 9999999 on host Slava-Yoga) taken over by PID 1486004
+
+          test/engine/head-guard.test.ts:
+          126 |   const stdout = res.stdout.replace(/\r?\n$/, "");
+          127 |   const stderr = res.stderr;
+          128 |   const code = res.code ?? 0;
+          129 | 
+          130 |   if (code !== 0 && !opts?.allowFail) {
+          131 |     throw new GitError(args.join(" "), code, stderr, stdout);
+                          ^
+          GitError: git add -A failed with exit code 128:
+          fatal: not a git repository (or any of the parent directories): .git
+
+           command: "add -A",
+              code: 128,
+            stderr: "fatal: not a git repository (or any of the parent directories): .git\n",
+            stdout: "",
+
+                at git (/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel--concerns-contracts-types/plugins/software-factory/src/core/git/exec.ts:131:11)
+                at async <anonymous> (/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel--concerns-contracts-types/plugins/software-factory/src/core/git/commit.ts:23:13)
+                at async runExclusive (/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel--concerns-contracts-types/plugins/software-factory/src/core/mutex.ts:39:20)
+          (fail) Engine: HEAD guard resilience (§7) > detects when an agent commits and resets --soft to before.sha, keeping changes staged [32.53ms]
+          126 |   const stdout = res.stdout.replace(/\r?\n$/, "");
+          127 |   const stderr = res.stderr;
+          128 |   const code = res.code ?? 0;
+          129 | 
+          130 |   if (code !== 0 && !opts?.allowFail) {
+          131 |     throw new GitError(args.join(" "), code, stderr, stdout);
+                          ^
+          GitError: git add -A failed with exit code 128:
+          fatal: not a git repository (or any of the parent directories): .git
+
+           command: "add -A",
+              code: 128,
+            stderr: "fatal: not a git repository (or any of the parent directories): .git\n",
+            stdout: "",
+
+                at git (/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel--concerns-contracts-types/plugins/software-factory/src/core/git/exec.ts:131:11)
+                at async <anonymous> (/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel--concerns-contracts-types/plugins/software-factory/src/core/git/commit.ts:23:13)
+                at async runExclusive (/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel--concerns-contracts-types/plugins/software-factory/src/core/mutex.ts:39:20)
+          (fail) Engine: HEAD guard resilience (§7) > detects when an agent switches branch and restores original branch, keeping changes [24.96ms]
+
+           285 pass
+           2 skip
+           2 fail
+           1139 expect() calls
+          Ran 289 tests across 52 files. [48.65s]
+        failingTests:
+          - "Engine: HEAD guard resilience (§7).detects when an agent commits
+            and resets --soft to before.sha, keeping changes staged"
+          - "Engine: HEAD guard resilience (§7).detects when an agent switches
+            branch and restores original branch, keeping changes"
+  - id: target-green
+    status: pass
+    message: "target-green passed: selected tests passed"
+    details:
+      command: cd plugins/software-factory && bun test
+        test/contracts/concern-artifact-types.test.ts --reporter=junit
+        --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-green-1794112984620-9kweetfxfo.xml
+      junitCaseCount: 5
+      junitCaseIds:
+        - Concern artifact types.exposes structured concerns and remarkable
+          decisions with strict vocabularies
+        - Concern artifact types.stores concern lifecycle metadata including
+          pending resolution and escalation
+        - Concern artifact types.adds dismiss to review dispositions without a
+          tech-debt value
+        - Concern artifact types.marks plan ADRs as blocking or remarkable
+        - Concern artifact types.adds human involvement modes, concern
+          thresholds, and canonical review policy to pipeline config
+      junitTruncated: false
+      collected: true
+      collectionErrors: []
+  - id: size
+    status: pass
+    message: "size passed: 72/300 production lines changed"
+    details:
+      changedLines:
+        added: 71
+        deleted: 1
+        total: 72
+        files:
+          - plugins/software-factory/src/core/artifacts.ts
+      limit: 300

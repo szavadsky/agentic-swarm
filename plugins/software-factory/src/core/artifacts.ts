@@ -121,8 +121,19 @@ export interface PipelineConfig {
   budget?: PipelineBudget;
   diversity?: "warn" | "error" | "off";
   harness?: string;
+  /** How aggressively the human is consulted (`autonomous` is least, `detailed` most). */
+  humanInvolvement?: "autonomous" | "principal" | "detailed";
+  concerns?: {
+    /** Agents allowed to raise concerns from their structured output. */
+    raiseAllowlist?: string[];
+    minDigestSeverity?: ConcernSeverity;
+    minBlockingSeverity?: ConcernSeverity;
+  };
   reviewPolicy?: {
+    /** Canonical default dispositions for agents without a specific entry. */
     default?: string[];
+    /** Legacy alias for `default`, kept for existing pipeline configs. */
+    allowedDispositions?: string[];
     [agent: string]: string[] | undefined;
   };
   criteria?: Record<string, string>;
@@ -238,6 +249,8 @@ export interface PlanAdr {
   context: string;
   decision: string;
   consequences?: string;
+  /** Needs a human decision per the active involvement mode. */
+  blocking?: boolean;
 }
 
 export interface PlanArtifact {
@@ -285,13 +298,70 @@ export interface AssignmentArtifact {
   escalate?: boolean;
 }
 
+export type ConcernKind = "tech-debt" | "assumption" | "blocker" | "risk" | "question";
+
+export type ConcernSeverity = "low" | "medium" | "high";
+
+export type ConcernStatus = "open" | "dismissed" | "routed" | "resolved";
+
+/** A structured "see something, say something" report from any agent output. */
+export interface Concern {
+  /** Stable fingerprint id; assigned by the engine when the concern is aggregated. */
+  id?: string;
+  kind: ConcernKind;
+  summary: string;
+  detail: string;
+  location?: {
+    file: string;
+    line?: number;
+  };
+  severity: ConcernSeverity;
+  /** Item, epic, or plan refs the concern affects. */
+  affects?: string[];
+}
+
+export interface RemarkableDecision {
+  chosen: string;
+  alternatives: string[];
+  why: string;
+}
+
+export interface ConcernSource {
+  record: string;
+  agent: string;
+  step?: string;
+  item?: string;
+  iteration?: number;
+  escalated?: boolean;
+}
+
+export interface PendingConcernResolution {
+  action: "resolve" | "carry" | "propagate";
+  note?: string;
+  by: string;
+  at: string;
+}
+
+/** A concern persisted under the task's `concerns/` folder. */
+export interface StoredConcernArtifact extends Concern {
+  id: string;
+  status: ConcernStatus;
+  disposition?: ReviewDisposition;
+  dismissReason?: string;
+  source: ConcernSource;
+  pendingResolution?: PendingConcernResolution;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type ReviewDisposition =
   | "fix"
   | "optional"
   | "architect"
   | "human-awareness"
   | "human-async"
-  | "human-stop";
+  | "human-stop"
+  | "dismiss";
 
 export interface ReviewSuggestion {
   id: string;
