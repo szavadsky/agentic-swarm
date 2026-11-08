@@ -1,0 +1,49 @@
+status: approved
+summary: 5 target pass, neighbors 13 pass; mailbox/exit/debt routing verified,
+  no weakening
+suggestions:
+  - detail: writeQuestion drops empty blocks (steer.ts:83 `length>0`), so awareness
+      file has no `blocks` field; test `?? []` (line 226) passes for undefined
+      or []. Semantically non-blocking via early return, but file lacks explicit
+      `[]` and `[]` for other dispositions would fallback to ref-blocking.
+      Consider persisting `[]` and asserting `blocks` strictly.
+    disposition: optional
+    id: awareness-blocks-persistence
+    location:
+      file: plugins/software-factory/test/engine/routing-human-debt.test.ts
+      line: 226
+    summary: Awareness blocks [] dropped to undefined, masked by ?? [] assertion
+  - detail: deriveTaskState leaves all-human-async every-blocked as active
+      (task.ts:243-248) while iteration halts every-blocked as blocked exit 10
+      (iteration.ts:1085-1091). Single-item async then yields RunResult blocked
+      but state.yaml active (humans-only, never read for decisions). Preserves
+      old single-item exit-10 test while satisfying new derive not-blocked test,
+      but statuses diverge. Consider aligning derive/iteration or documenting
+      all-parked halt.
+    disposition: optional
+    id: all-async-derive-vs-halt
+    location:
+      file: plugins/software-factory/src/core/derive/task.ts
+      line: 243
+    summary: All-async derive active vs iteration halt blocked diverge
+  - detail: isDebtConcern includes status resolved with disposition optional,
+      assignment wording says optional routed only. Debt test covers routed
+      optional positive and routed fix negative but has no resolved-optional
+      fixture, so over/under-collection unverified. Add resolved-optional
+      concern and pin in/out per canonical predicate.
+    disposition: optional
+    id: debt-resolved-optional-gap
+    location:
+      file: plugins/software-factory/test/engine/routing-human-debt.test.ts
+      line: 284
+    summary: Resolved optional debt inclusion unpinned by test
+  - detail: Derive test uses not.toBe(blocked) for task/item continuation (lines
+      114,140-141). Verifies non-blocking but allows any other status
+      (active/pending/failed/done). Consider pinning exact expected derive
+      status (active/pending) to prevent false pass on failed.
+    disposition: optional
+    id: loose-not-blocked-assertions
+    location:
+      file: plugins/software-factory/test/engine/routing-human-debt.test.ts
+      line: 113
+    summary: not.toBe(blocked) assertions allow any non-blocked status
