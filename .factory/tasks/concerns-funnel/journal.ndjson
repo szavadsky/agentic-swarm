@@ -1276,3 +1276,17 @@
 {"type":"item_merge_failed","item":"routing-architect-consult-v2","error":"Quality gates failed on merge path for routing-architect-consult-v2: test","ts":"2026-11-08T14:17:42.143Z"}
 {"type":"step_started","task":"concerns-funnel","step":"consult-routing-architect-consult-v2","attempt":1,"recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/035-consult-routing-architect-consult-v2-a1","ts":"2026-11-08T14:17:42.326Z"}
 {"type":"step_timeout_armed","task":"concerns-funnel","step":"consult-routing-architect-consult-v2","timeoutSec":1200,"ts":"2026-11-08T14:17:42.342Z"}
+{"type":"step_finished","task":"concerns-funnel","step":"consult-routing-architect-consult-v2","attempt":1,"status":"ok","sessionId":"01a1b894-4755-7787-a1ed-8df6c7a062a2","usage":{"inputTokens":679322,"outputTokens":4052,"costUsd":0.070099},"ts":"2026-11-08T14:19:02.200Z"}
+{"type":"decision_made","context":"item","item":"routing-architect-consult-v2","decision":"retry-with-guidance","decisionPath":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/decisions/017-item-routing-architect-consult-v2.yaml","ts":"2026-11-08T14:19:02.201Z"}
+{"type":"item_merge_started","item":"adr-blocking-digest-v2","branch":"topic/concerns-funnel--adr-blocking-digest-v2","ts":"2026-11-08T14:19:02.202Z"}
+{"type":"item_merge_phase","item":"adr-blocking-digest-v2","phase":"merge-parent-into-child","ts":"2026-11-08T14:19:02.212Z"}
+{"type":"item_merge_phase","item":"adr-blocking-digest-v2","phase":"verify-checks","ts":"2026-11-08T14:19:02.337Z"}
+{"type":"item_merge_phase","item":"adr-blocking-digest-v2","phase":"merge-child-into-parent","ts":"2026-11-08T14:23:14.850Z"}
+{"type":"item_merge_phase","item":"adr-blocking-digest-v2","phase":"remove-worktree","ts":"2026-11-08T14:23:14.940Z"}
+{"type":"item_merged","item":"adr-blocking-digest-v2","sha":"8ac510acaa8b131dc0d5957cea528f9b089f2f0c","conflictResolved":false,"ts":"2026-11-08T14:23:15.021Z"}
+{"type":"item_merge_started","item":"status-state-surface-v2","branch":"topic/concerns-funnel--status-state-surface-v2","ts":"2026-11-08T14:23:15.022Z"}
+{"type":"item_merge_phase","item":"status-state-surface-v2","phase":"merge-parent-into-child","ts":"2026-11-08T14:23:15.024Z"}
+{"type":"item_merge_phase","item":"status-state-surface-v2","phase":"verify-checks","ts":"2026-11-08T14:23:15.135Z"}
+{"type":"item_merge_phase","item":"status-state-surface-v2","phase":"merge-child-into-parent","ts":"2026-11-08T14:24:38.726Z"}
+{"type":"item_merge_phase","item":"status-state-surface-v2","phase":"remove-worktree","ts":"2026-11-08T14:24:38.796Z"}
+{"type":"item_merged","item":"status-state-surface-v2","sha":"7d61882ae6c4425649ea4f350f5abeea0c5a80ab","conflictResolved":false,"ts":"2026-11-08T14:24:38.883Z"}
