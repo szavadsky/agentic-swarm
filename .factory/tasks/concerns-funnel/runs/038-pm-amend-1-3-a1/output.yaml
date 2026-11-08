@@ -1,0 +1,88 @@
+amendmentIndex: 3
+items:
+  - assignment: "Act-phase ONLY merge-repair rerun (pure derive already merged in
+      routing-blocker-derive-v2; do NOT touch derive/task.ts or scheduler).
+      Implement wave-act newly-blocked check writing
+      decisions/concern-<cid>.yaml exactly once (restart idempotent,
+      runExclusive + atomic write) plus buildArchitectHydration concernsYaml
+      extension appended LAST (open+routed, capped sub-budget, plan-reviewer
+      path stays open-only) per adr-routing-derived-state and
+      adr-concern-store-taskwt. Do NOT redesign: rebase the exact ready
+      routing-architect-consult-v2 diff onto current topic tip, verify wave-9
+      sibling conflict resolution kept ALL THREE diffs (consult +
+      adr-blocking-digest-v2 + status-state-surface-v2), pull the exact
+      merge-gate failure (failing test names + output from evidence) and fix
+      root cause. Out of scope: 4 optional nits (carry to docs-finish). Gates:
+      bun run typecheck and TMPDIR=/tmp bun test
+      test/engine/concerns-funnel.test.ts then full suite. Behavior must satisfy
+      m3-routing: single consult file on newly-blocked, restart writes no second
+      file, architect hydration contains concern id+summary."
+    citations:
+      - adr-routing-derived-state
+      - adr-concern-store-taskwt
+      - adr-triage-suggestions-dismiss
+    deps:
+      - modes-prompts-v2
+      - routing-blocker-derive-v2
+    kind: dev
+    milestone: m3-routing
+    outlineRef: routing-architect-consult-v3
+    slug: routing-architect-consult-v3
+    title: Architect consult and hydration (merge repair)
+    wave: 10
+  - assignment: "Scheduling-repair rewave of funnel-closeups-v2: identical scope,
+      now depends on routing-architect-consult-v3 (wave 9 closed, v2 consult can
+      never merge). Hydrate wave/plan-close-up and architect reports with
+      concernsYaml capped per spike-text-budget (UTF-8 bytes: code steps
+      min(diffBytes,2000), zero-diff orchestration min(inputBytes,500), engine
+      truncates hydrated var only, reviewer/architect prompts require
+      output<input) per adr-funnel-text-budget. Implement concernResolutions
+      resolve/carry/propagate via applyCloseupResolutions (status stays routed,
+      pendingResolution set) plus architect concernConfirms accept/reject
+      (resolved/routed/propagated or clear pending), propagate to parent
+      concerns/ copy for epics or human digest otherwise, simple-item explicit
+      resolutions plus auto-route fallback (kind tech-debt to optional/debt,
+      other kinds to architect/carry, human-* never auto) per
+      adr-closeup-retriage and adr-resilience. Gates: bun run typecheck,
+      TMPDIR=/tmp bun test. Behavior: byte budgets enforced, pending/confirm
+      lifecycle, simple fallback."
+    citations:
+      - adr-funnel-text-budget
+      - adr-closeup-retriage
+      - adr-resilience
+    deps:
+      - adr-blocking-digest-v2
+      - routing-architect-consult-v3
+      - spike-text-budget
+    kind: dev
+    milestone: m4-funnel-surface
+    outlineRef: funnel-closeups
+    slug: funnel-closeups-v3
+    title: Funnel close-ups and simple triage (re-wave v3)
+    wave: 11
+  - assignment: "Scheduling-repair rewave of saga-propagate-v2: identical scope, now
+      depends on routing-architect-consult-v3. Implement runChildTask
+      propagateEpicConcerns per spike-saga-commit verified timing: after child
+      completion before cleanup/merge, condensed parent copies with source.epic,
+      exactly one copy for open concerns, dismissed stays local, parent detail
+      bytes < child detail bytes (assert), extended parent
+      buildArchitectHydration concernsYaml so saga architect sees id+summary.
+      Follow adr-concern-store-taskwt serialization/immediate-commit and
+      adr-funnel-text-budget condensing; corrupt-skip vs strict-fail per
+      adr-resilience. Gates: bun run typecheck, TMPDIR=/tmp bun test. Behavior:
+      one condensed copy, dismissed excluded, saga input contains id."
+    citations:
+      - adr-concern-store-taskwt
+      - adr-funnel-text-budget
+      - adr-remarkable-store
+    deps:
+      - routing-architect-consult-v3
+      - spike-saga-commit
+    escalate: true
+    kind: dev
+    milestone: m4-funnel-surface
+    outlineRef: saga-propagate
+    slug: saga-propagate-v3
+    title: Epic to saga propagation (re-wave v3)
+    wave: 11
+iteration: 1
