@@ -1,0 +1,40 @@
+slug: epic-saga-propagate
+kind: dev
+title: Epic to saga propagation
+assignment: "Requires hydration-fingerprint-caps (saga hydration must show epic
+  copies). Own engine.runChildTask -> propagateEpicConcerns per
+  adr-epic-push-condensed; spike-saga-commit/Decision 002 authoritative; no
+  ingest/confirm logic. Call
+  propagateEpicConcerns({childTaskDir,parentTaskDir,parentWt,epic}) after
+  runIteration before child-closeup write, every status: push open+routed (skip
+  dismissed); c-* copies get summary [epic] <child summary>, id=recomputed
+  fingerprint, status open, source {epic, record epic:<epic>/<child-record>};
+  child rm-* propagate as parent rm-* with chosen prefixed [epic], id
+  recomputed, why condensed. Condense UTF-8 char-safe: detail<=120B verbatim;
+  else cut to min(500B,half) on char boundary (strictly shorter). Writes use
+  aggregate opts {commit:false}; parent-side propagate+closeup+add+commit
+  serialized under KeyedMutex(parentWt) (never repo.writeLock); existing single
+  commit covers copies+closeup; restart-idempotent merge preserving parent
+  triage. Forward childTaskDir/steer/tousertoreview entries with blocks.length>0
+  to parent.taskDir/steer/tousertoreview as q-epic-<epic>-<orig>, blocks mapped
+  (child item slugs->epic; child-task-level->parent task slug; default [epic]).
+  No back-sync (child complete, forwarded parent-owned). Copies open/unrouted ->
+  no parent halt; halt only via forwarded questions. Behavior tests: one
+  condensed copy incl rm-*, dismissed local, tiny-detail verbatim, 800B detail
+  <=500B strictly shorter char-safe, saga architect concernsYaml contains epic
+  id+summary, restart no dup, forwarded q-epic-* with mapped blocks, no parent
+  exit-10 from copies. Verify: bun run typecheck + TMPDIR=/tmp bun test. Budget
+  ~190 prod lines."
+outlineRef: epic-saga-propagate
+milestone: m2-contracts-epic
+wave: 2
+deps:
+  - hydration-fingerprint-caps
+scenarioRefs:
+  - m2-contracts-epic:2
+  - m2-contracts-epic:3
+citations:
+  - plugins/software-factory/src/core/steer.ts:59-88
+  - plugins/software-factory/src/core/fingerprint.ts:20-50
+  - docs/factory.v2.md:89-103
+escalate: true

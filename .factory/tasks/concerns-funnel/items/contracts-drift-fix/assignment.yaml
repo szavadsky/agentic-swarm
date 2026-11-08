@@ -1,0 +1,33 @@
+slug: contracts-drift-fix
+kind: dev
+title: Producer type and schema drift
+assignment: "Schemas + TS only, no ingest/apply/runtime, no hydration, no
+  routing. Own artifacts.ts + review-schema.ts + review.schema.json +
+  wave-report output + plan-closeup + decisions schemas per
+  adr-closeup-lifecycle-resolved (schema half). artifacts.ts: DeveloperOutput
+  concerns Concern[], ReviewArtifact newConcerns + remarkable,
+  FactFinder/WaveCloseup/PlanCloseup/Decision concerns/remarkable,
+  ConcernConfirms + ConcernResolution types (concernConfirms?:
+  [{id,confirm:accept|reject,note?}], concernResolution?:
+  {id,action:resolve|carry}). review-schema.ts + review.schema.json: add
+  remarkable (fix additionalProperties failure). Wave-report output +
+  plan-closeup schemas: concernConfirms. decisions.schema + DecisionArtifact:
+  concernResolution. Normalize ALL concern Detail->lowercase detail across
+  schemas (fix developer-output capital-D bug). Triage/infra/pm-edit schemas
+  still reject concerns (no change). Behavior/contract tests: structured
+  concerns/remarkable from developer (incl
+  poc/test-assumptions/test-first/simple-implement/fix-round), fact-finder (incl
+  research), qa, reviewer/plan-reviewer newConcerns+remarkable, plan/revise,
+  decisions concernResolution, close-ups concernResolutions, architect
+  concernConfirms all validate + typecheck with matching TS; lowercase detail
+  validates and persists; reviewer remarkable passes; triage/infra/pm-edit
+  reject. Verify: bun run typecheck + preflight. Budget ~140 prod lines."
+outlineRef: contracts-drift-fix
+milestone: m2-contracts-epic
+wave: 1
+scenarioRefs:
+  - m2-contracts-epic:1
+citations:
+  - docs/factory.v2.md:89-103
+  - plugins/software-factory/src/core/artifacts.ts:313-325
+  - plugins/software-factory/src/core/records/review-schema.ts:5-52

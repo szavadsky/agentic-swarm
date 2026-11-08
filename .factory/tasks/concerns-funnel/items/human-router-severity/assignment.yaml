@@ -1,0 +1,50 @@
+slug: human-router-severity
+kind: dev
+title: Human router and severity policy
+assignment: "Requires hydration-fingerprint-caps (consumes
+  hydrateStepConcerns/listHydratedConcerns sets). Own triage
+  routeHumanDisposition + ingest gates + derive threading per
+  adr-human-router-single + adr-severity-policy-active + adr-hydrated-sets rm
+  rules. Single routeHumanDisposition in triage for all triagers at ingest:
+  human-async q-concern-<cid> blocks=[item]|[task]; human-stop blocks item+task
+  + exit-10; human-awareness, routed rm-*, dismissed+escalated -> digest via
+  writeQuestion human-awareness blocks=[] (q-concern-/q-escalated-), never
+  blocking/halting; dedup by existence. item-machine raw path skips ALL
+  concern-id human-* (no double-write). Severity: gate key source.agent (never
+  fragment): developer covers
+  develop/poc/test-assumptions/test-first/simple-implement/fix-round,
+  fact-finder covers research, architect covers architect-*; shipped 8-agent
+  allowlist already complete — no entries added, commentary documents
+  fragment->agent mapping. Effective defaults medium/high (code fallback
+  identical). Order: schema validation first, then ingest allowlist skip+journal
+  with step ok. Digest iff severity>=minDigest; blocks iff severity>=minBlocking
+  else downgrade to digest (stop loses exit-10); rm-* exempt. Own derive:
+  collectRoutedBlockers(taskDir,minBlocking) blocks only
+  kind=blocker+routed+severity>=minBlocking; deriveTaskState/withRoutedBlocking
+  thread pipeline.concerns.minBlockingSeverity (fallback high); debt predicate
+  unchanged. Explicit fixture severities keep suite green. Behavior tests:
+  plan/close-up routing, routed architect visible in next architect hydration,
+  dismiss keeps file with dismissReason and no effects, rm digest blocks=[]
+  never halts, async no exit-10 vs blocking stop single q + exit-10, allowlist
+  skip+journal+ok, downgrade + derive unblocked, no double-write, low blocker
+  not blocked but hydrated/digested. Verify: bun run typecheck + TMPDIR=/tmp bun
+  test. Budget ~280 prod lines."
+outlineRef: human-router-severity
+milestone: m3-routing-lifecycle
+wave: 2
+deps:
+  - hydration-fingerprint-caps
+scenarioRefs:
+  - m3-routing-lifecycle:1
+  - m3-routing-lifecycle:2
+  - m3-routing-lifecycle:3
+  - m3-routing-lifecycle:4
+  - m3-routing-lifecycle:5
+  - m3-routing-lifecycle:6
+  - m3-routing-lifecycle:7
+citations:
+  - plugins/software-factory/src/core/steer.ts:59-88
+  - plugins/software-factory/src/core/derive/task.ts:167-205
+  - plugins/software-factory/src/core/records/review-schema.ts:5-52
+  - plugins/software-factory/src/core/flows/item-machine.ts:628-647
+escalate: true

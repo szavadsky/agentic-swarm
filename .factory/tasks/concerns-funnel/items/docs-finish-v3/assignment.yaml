@@ -1,0 +1,37 @@
+slug: docs-finish-v3
+kind: dev
+title: Docs and suite consolidation
+assignment: "Requires all six implementation items (docs describe landed
+  behavior). Own docs + config commentary + final gates per
+  adr-autonomous-immediate-halt. Deliverables: ARCHITECTURE §1 row 18 (drop
+  'Deliberately not hand-built'), new §8.11 Concerns + updates to
+  §5/§6.2/§8.7/§10/§11/§13, README concerns/modes section, pipeline.default.yaml
+  + pipeline commentary sync (severity defaults medium/high, agent-keyed
+  allowlist, fragment->agent mapping, no new allowlist entries),
+  human-involvement.md + §8.11 immediate-halt deviation note (autonomous
+  immediate halt accepted, drain scheduling future work, ref
+  awareness-plan-2-autonomous-halt-deviation). Ensure prompts.test KNOWN_VARS
+  matrix + 15-per-fragment/80-total budgets pass; consolidated coverage for
+  gaps. Grep-asserted: '8.11 Concerns', 'immediate halt', README 'concerns',
+  row-18 replacement, config commentary matches landed severity/router
+  semantics. Final gates: bun run typecheck + TMPDIR=/tmp bun test green. No
+  prod behavior change beyond commentary/docs. Budget ~100 prod lines
+  (docs/config)."
+outlineRef: docs-finish-v3
+milestone: m4-docs-gates
+wave: 4
+deps:
+  - closeup-lifecycle-resolve
+  - contracts-drift-fix
+  - epic-saga-propagate
+  - human-router-severity
+  - hydration-fingerprint-caps
+  - prompt-fragments
+scenarioRefs:
+  - m4-docs-gates:1
+  - m4-docs-gates:2
+  - m4-docs-gates:3
+citations:
+  - plugins/software-factory/docs/ARCHITECTURE.md:39
+  - docs/factory.v2.md:89-103
+  - plugins/software-factory/src/cli/status.ts:83-105

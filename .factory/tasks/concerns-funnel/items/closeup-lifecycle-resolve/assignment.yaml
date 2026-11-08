@@ -1,0 +1,39 @@
+slug: closeup-lifecycle-resolve
+kind: dev
+title: Close-up lifecycle and unblock
+assignment: "Requires contracts-drift-fix (schemas/TS), epic-saga-propagate
+  (propagate helper for accept+propagate), human-router-severity
+  (router/derive). Own ingest + apply only per adr-closeup-lifecycle-resolved
+  (no schema edits). ingestStepConcerns reads concernConfirms +
+  concernResolution; consults.ts concernResolution passthrough; cross-emission
+  guard (honor only concern consults + closeup/architect contexts, else
+  ignore+journal); ordering: consult apply at decision commit, confirms at
+  architect ingest. Resolutions->pendingResolution with status unchanged;
+  confirms accept: resolve->resolved, carry->routed+architect, propagate->parent
+  copy/digest via epic helper; reject clears pending, preserves status, no
+  disposition. Consult act phase applies resolve->resolved at decision commit
+  (unblocks next derive). Wave-close-up fallback over triage-less open (open, no
+  pendingResolution, no disposition): tech-debt->optional (in derived debt
+  list), assumption|risk|question->architect; kind=blocker stays open for
+  explicit triage; fallback never assigns human-* dispositions. Behavior tests:
+  pending/confirm accept matrix (resolved/routed/propagated), reject preserves
+  open with no disposition, consult resolve unblocks by id on next derive, guard
+  ignores item-consult resolution with journal, simple-item fallback + debt
+  inclusion, blocker stays open, resolved reachable. Verify: bun run typecheck +
+  TMPDIR=/tmp bun test. Budget ~240 prod lines."
+outlineRef: closeup-lifecycle-resolve
+milestone: m3-routing-lifecycle
+wave: 3
+deps:
+  - contracts-drift-fix
+  - epic-saga-propagate
+  - human-router-severity
+scenarioRefs:
+  - m3-routing-lifecycle:8
+  - m3-routing-lifecycle:9
+  - m3-routing-lifecycle:10
+citations:
+  - plugins/software-factory/src/core/derive/task.ts:167-205
+  - plugins/software-factory/src/core/steer.ts:59-88
+  - plugins/software-factory/src/core/flows/iteration.ts:439-485
+escalate: true

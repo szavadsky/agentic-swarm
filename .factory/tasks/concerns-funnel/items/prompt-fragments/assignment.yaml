@@ -1,0 +1,32 @@
+slug: prompt-fragments
+kind: dev
+title: Fragment matrix and raise instructions
+assignment: "Own prompt-vars.ts + fragments + prompts.test matrix per
+  adr-prompt-fragment-matrix (no hydration bytes, no router). KNOWN_VARS gains
+  concernsYaml on
+  steps/develop,develop,steps/test-first,test-first,steps/simple-implement,simp\
+  le-implement,steps/fix-round,fix-round,steps/poc,poc,steps/test-assumptions,t\
+  est-assumptions,steps/research,research (+humanInvolvementCriteria only where
+  already registered). Sections: producers
+  (develop-family+poc/test-assumptions/research) get 3-line ## Open Concerns
+  {{concernsYaml}} + 1-line raise (no HI: raise never triage);
+  triagers/architects/close-ups/qa get HI section + condense rule appended.
+  Deltas: architect-plan/revise add OC+raise; review adds HI+condense;
+  plan-review adds raise+condense; rest per matrix. Budgets: added lines per
+  fragment <=15, total <=80 (2-3-line sections); prompts.test asserts
+  per-fragment sentinels (## Open Concerns + Raise concerns on all 19; ## Human
+  involvement on review/qa/plan-review/architect-*/close-ups) + budgets; update
+  human-involvement-config.test.ts non-consumer assertion (develop leaves,
+  triage/infra stay) + FRAGMENT_MATRIX. Behavior tests: sections render with
+  sentinels, mode switch (pipeline.yaml humanInvolvement detailed) changes
+  criteria, budget assertions pass. Verify: preflight + bun run typecheck.
+  Budget ~120 prod lines."
+outlineRef: prompt-fragments
+milestone: m1-hydration-prompts
+wave: 1
+scenarioRefs:
+  - m1-hydration-prompts:5
+citations:
+  - plugins/software-factory/src/core/flows/item-machine.ts:628-647
+  - plugins/software-factory/src/core/flows/iteration.ts:439-485
+  - docs/factory.v2.md:89-103
