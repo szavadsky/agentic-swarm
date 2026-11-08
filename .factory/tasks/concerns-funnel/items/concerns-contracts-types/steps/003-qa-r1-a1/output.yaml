@@ -1,0 +1,15 @@
+status: approved
+summary: "Types contract verified: 5/5 green, typecheck+full suite pass, 72
+  lines, no weakening"
+suggestions:
+  - id: review-suggestion-disposition-widened
+    disposition: optional
+    summary: ReviewSuggestion.disposition collapses to string, dismiss not enforced
+      there
+    detail: ReviewDisposition correctly adds dismiss and rejects tech-debt, but
+      ReviewSuggestion.disposition is ReviewDisposition|string (collapses to
+      string). Pre-existing shape intentionally untouched in this type-only
+      split; consider tightening in policy/runtime split.
+    location:
+      file: plugins/software-factory/src/core/artifacts.ts
+      line: 368
