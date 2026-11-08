@@ -1,0 +1,64 @@
+status: changes_requested
+summary: ADR markdown/routing/exit-10 works and gates pass, but the active
+  human-involvement table never reaches any prompt, so architects cannot
+  classify blocking per mode; two optionals on revise coverage and mode mapping
+  documentation
+suggestions:
+  - id: human-involvement-criteria-never-rendered
+    disposition: fix
+    summary: "Mode table injected nowhere: architects told to mark blocking per a
+      table they never see"
+    detail: "Verified by rendering every registered fragment with sentinel vars:
+      `step-runner.ts:300-307` computes `humanInvolvementCriteria` (and
+      `prompt-vars.ts:96-122` registers it for architect/review/qa/close-up
+      steps), but no fragment contains `{{humanInvolvementCriteria}}` — probe
+      shows the marker absent from steps/architect-plan, architect-revise,
+      plan-review, review, qa, wave-close-up, plan-close-up,
+      architect-resume/wave-report/closeup. `preflightPrompts` only validates
+      unknown placeholders, so this passes silently. Consequently
+      `agents/steps/architect-plan.md:14` and `architect-revise.md:10` instruct
+      the architect to set `blocking: true` 'only when the active
+      human-involvement table needs a human decision', but the criteria text
+      (agents/criteria/human-involvement.md mode/blocking table) never reaches
+      the model: blocking-vs-remarkable classification is unguided, so
+      remarkable decisions can halt the task or blocking ones be downgraded.
+      Required by assignment 'blocking routed per mode table'. Fix: add
+      `{{humanInvolvementCriteria}}` sections to architect-plan.md and
+      architect-revise.md (and plan-review.md, which triages ADR/concern
+      blocking per FRAGMENT_MATRIX), or inject the formatted criteria into the
+      agent definition; add a prompt-render test asserting a sentinel criteria
+      string appears in the architect-plan prompt (precedent:
+      test/human-involvement-config.test.ts)."
+    location:
+      file: plugins/software-factory/agents/steps/architect-plan.md
+      line: 14
+  - id: revise-adr-repersist-untested
+    disposition: optional
+    summary: Revise-path ADR re-persist and blocked halt have no test
+    detail: iteration.ts:557-596 now re-runs persistAdrs on architect-revise
+      writeArtifact and returns blocked on a task-blocking open question, but no
+      test exercises an ADR added/flipped during revise. The prior QA round
+      flagged this too. Add a revise scenario (plan-review fix suggestion ->
+      architect-revise emits a blocking ADR -> mailbox entry + exit 10) or
+      explicitly record as debt; otherwise the new branch can regress silently.
+    location:
+      file: plugins/software-factory/src/core/flows/iteration.ts
+      line: 563
+  - id: mode-disposition-mapping-undocumented
+    disposition: optional
+    summary: human-async blocking ADRs still halt the whole task; mapping
+      undocumented and weakly pinned
+    detail: adrs.ts:14-18 maps blocking ADRs to human-stop (autonomous) or
+      human-async (principal/detailed), while persistAdrs always sets
+      blocks:["task"] (adrs.ts:69), so in principal/detailed the task still
+      halts with exit 10 even though dispositions.md describes human-async as
+      pausing an item while unrelated work proceeds. The mode-table test accepts
+      either label for detailed
+      (test/engine/adr-blocking-digest.test.ts:364,381), so a regression to
+      human-stop there would pass. Document the mode->disposition/blocks
+      contract in agents/criteria/human-involvement.md and pin detailed's
+      deterministic disposition in the test, or confirm and encode the intended
+      async-non-halting behavior.
+    location:
+      file: plugins/software-factory/src/core/flows/adrs.ts
+      line: 14
