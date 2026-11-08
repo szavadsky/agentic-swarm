@@ -1,0 +1,181 @@
+status: changes_requested
+summary: Bounds pass (5/8 milestones, 15/50 items, unique slugs, acyclic) but
+  triage/routing/funnel contracts ambiguous, scenarios unfalsifiable, spike
+  ordering broken
+suggestions:
+  - id: triage-findings-conflation
+    disposition: fix
+    summary: suggestions[] reuse conflates concern routing with
+      fix-loop/mailbox/approval triggers
+    detail: "Exact-id partitions triage vs findings but
+      hasAsync/hasIssues/mailbox/plan-approval process ALL suggestions
+      (item-machine 711-760, iteration 481). Routing as fix would spuriously
+      trigger fix-loop/plan-revise; routing as human-async double-writes mailbox
+      (concern route + normal handling). Need partition contract: triage ids
+      update concerns/ only, excluded from fix-loop/approval triggers, mailbox
+      dedup; define fix-on-concern-id semantics."
+    location:
+      file: plugins/software-factory/src/core/flows/item-machine.ts
+      line: 748
+  - id: tech-debt-disposition-invalid
+    disposition: fix
+    summary: Plan invents tech-debt disposition absent from ReviewDisposition enum
+    detail: M2 scenario lists fix/architect/human-*/tech-debt dispositions and M4
+      auto-routes tech-debt, but ReviewDisposition is
+      fix|optional|architect|human-awareness|human-async|human-stop with no
+      tech-debt. Breaks generateReviewSchema enum validation. Must define debt
+      routing as (kind==tech-debt && routed) or optional-disposition, or add new
+      disposition with policy/schema/handler updates.
+    location:
+      file: plugins/software-factory/src/core/artifacts.ts
+      line: 288
+  - id: reviewpolicy-resolver-dismiss
+    disposition: fix
+    summary: ReviewPolicy precedence and dismiss injection for triagers undefined
+    detail: Plan promises canonical reviewPolicy.default + dismiss for triagers but
+      omits precedence (per-agent > default > builtin), dismiss injection rule
+      (auto-append for triagers vs explicit allow), and QA exclusion. Current
+      item-machine fallback is legacy ?? agent ?? builtin (wrong order) and
+      step-runner reads only legacy key; generateReviewSchema has no dismiss.
+      Need resolveReviewAllowed(pipeline,agent,isTriager) contract used by
+      prompt+schema paths.
+    location:
+      file: plugins/software-factory/src/core/flows/item-machine.ts
+      line: 631
+  - id: triage-persistence-gating
+    disposition: fix
+    summary: QA non-triager unenforceable; dismiss reason has no field mapping
+    detail: step-runner gives QA review schema yet plan says QA never triages;
+      item-machine writeArtifact triages any suggestions output without
+      agent/stepId gate, so QA matching id would triage. ReviewSuggestion lacks
+      reason field but scenarios require dismissReason persisted. Need isTriager
+      gate (reviewer/plan-reviewer/close-up only) and reason mapping (detail
+      required when dismiss+match -> dismissReason) with schema/code
+      enforcement.
+    location:
+      file: plugins/software-factory/src/core/flows/step-runner.ts
+      line: 93
+  - id: store-spike-ordering
+    disposition: fix
+    summary: Immediate taskWt commit not gated by race/restart spike
+    detail: ADR decides direct taskWt writes + immediate commit, but
+      spike-saga-commit verifying race/restart/derive boundary gates only
+      routing-blocker-derive/saga-propagate. concerns-store implementing the
+      commit deps only concerns-contracts, so risky impl precedes findings.
+      Parallel items (maxParallelItems 4) sharing taskWt risk index.lock/lost
+      update. Add spike dep to concerns-store or narrow ADR to hypothesis;
+      define serialization + restart idempotency.
+    location:
+      file: plugins/software-factory/src/core/flows/item-machine.ts
+      line: 707
+  - id: human-stop-redefinition
+    disposition: fix
+    summary: human-stop redefined from exit-10 halt to blocked without contract update
+    detail: ADR/scenario redefines stop as blocked-terminal with engine continues
+      without halt, but dispositions.md and ARCHITECTURE 8.7 define human-stop
+      as tousertoreview + exit 10 halt; item-machine only human-async returns
+      blocked. No docs/exit-code update specified. Scenario unfalsifiable (exit
+      code vs wave scheduling?). Preserve exit-10 or version change with
+      falsifiable blocked-vs-halt assertions.
+    location:
+      file: plugins/software-factory/agents/criteria/dispositions.md
+      line: 12
+  - id: funnel-invariant-unproven
+    disposition: fix
+    summary: Funnel less-detail invariant has no condensing contract or size assertions
+    detail: Spec requires less detail per level and never more text than code
+      summarized. Plan caps only close-up hydration at
+      max(500,min(diffBytes,2000)) with floor 500 violating never-more on
+      zero-diff steps (fact-finder/plan-review). No reviewer->architect->human
+      condensing prompts or size assertions (parent<child, digest<input, UTF-8
+      bytes). Scenarios say within budget without concrete diff/budget. Need
+      diff source per level + falsifiable size checks.
+    location:
+      file: docs/factory.v2.md
+      line: 97
+  - id: closeup-pending-contract
+    disposition: fix
+    summary: Close-up pending-confirm and propagate/auto-route contract missing
+    detail: Scenario says resolutions persisted pending architect confirm with
+      actions resolve|carry|propagate, but stored statuses are
+      open|dismissed|routed|resolved with no pending; WaveCloseupArtifact lacks
+      resolutions. Confirm seam (decisions output field? hydration var?),
+      propagate target (parent/human?), and simple-item auto-route transitions
+      (tech-debt->debt bypassing exact-id?) undefined. Need record shape,
+      pending representation, confirm/propagate semantics.
+    location:
+      file: plugins/software-factory/src/core/artifacts.ts
+      line: 335
+  - id: producer-matrix-incomplete
+    disposition: fix
+    summary: Every-producer coverage omits agents and remarkable mapping
+    detail: Spec says every agent output may carry concerns[]; plan lists
+      developer/fact-finder/review/plan/decisions/closeups but omits
+      triage/infra/pm/qa/poc/test-assumptions without rationale. Remarkable[]
+      per schema not enumerated; reviewer dual-role ordering (aggregate new
+      before triage? self-dismiss?) and consult aggregation seam (runItemConsult
+      writeArtifact) unspecified. Need producer matrix + ordering.
+    location:
+      file: plugins/software-factory/src/core/artifacts.ts
+      line: 318
+  - id: blocker-derive-contract
+    disposition: fix
+    summary: Blocker derive misnames components and merges pure/act in one scenario
+    detail: Interface says classify never blocks on awareness but classify handles
+      operator answers, not blocking; should be derive/task status. Precompute
+      owner for concernBlocked:Set and deriveItemState consumption without
+      circular dep missing; cascade fixpoint vs blockedByFailure reuse
+      unspecified. Scenario merges pure derive + act consult write, violating
+      ADR, and omits restart exactly-once dedup. Split scenarios + name
+      owner/dedup.
+    location:
+      file: plugins/software-factory/src/core/derive/wave.ts
+      line: 23
+  - id: saga-hydration-assumption
+    disposition: fix
+    summary: Epic-to-parent propagation assumes hydration that does not read concerns
+    detail: Assumption claims parent hydration already reads parent concerns/, but
+      buildArchitectHydration reads only plans/closeups/steering/decisions.
+      Child concerns live under namespaced childTaskDir on child branch; merge
+      does not copy to parent concerns/. Copy timing (before merge/cleanup?),
+      source.epic shape, hydration var (debt/steering vs concernsYaml), and
+      condensed-size assertion (< child) undefined. Correct assumption + define
+      seam.
+    location:
+      file: plugins/software-factory/src/core/flows/iteration.ts
+      line: 111
+  - id: resilience-contracts
+    disposition: optional
+    summary: Corrupt-skip and strict-fail diverge from throw/partial patterns
+      without ADR
+    detail: Derive throws on corrupt triage/plan/steer/decisions but plan skips
+      corrupt concerns; single unknown-kind concern fails entire step
+      (retry->failure) vs partial aggregate + warn. Either divergence needs ADR
+      justification plus restart/retry behavior (reword merge, idempotent
+      re-aggregate, no clobber of existing files).
+    location:
+      file: plugins/software-factory/src/core/derive/task.ts
+      line: 62
+  - id: prompt-vars-enumeration
+    disposition: optional
+    summary: KNOWN_VARS fragment list and terse check unfalsifiable
+    detail: Interfaces list concernsYaml/humanInvolvementCriteria but do not
+      enumerate all fragments needing KNOWN_VARS + descriptions (review,
+      plan-review, wave/plan-close-up,
+      architect-plan/wave-report/closeup/consults). M5 terse prompts has no
+      measurable check. Provide fragment matrix + debloat assertion
+      (skill/check, line budget).
+    location:
+      file: plugins/software-factory/src/core/prompt-vars.ts
+      line: 44
+  - id: merge-escalation-hidden
+    disposition: human-awareness
+    summary: Severity escalation on dismissed concerns stays hidden by merge policy
+    detail: Merge keeps max severity and longer/latest detail but never reopens
+      dismissed/routed/resolved except via triage. Escalated risk on dismissed
+      concern stays dismissed/hidden. Architect can decide now (reopen on
+      escalation vs keep + digest surfacing), but operator should be aware of
+      hidden-escalation tradeoff.
+    location:
+      file: docs/factory.v2.md
+      line: 91

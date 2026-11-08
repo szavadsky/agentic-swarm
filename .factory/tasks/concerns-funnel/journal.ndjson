@@ -30,3 +30,5 @@
 {"type":"step_started","task":"concerns-funnel","step":"architect-revise-1-1","attempt":1,"recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/008-architect-revise-1-1-a1","ts":"2026-11-08T00:42:46.091Z"}
 {"type":"step_timeout","task":"concerns-funnel","step":"architect-revise-1-1","timeoutSec":1200,"ts":"2026-11-08T00:42:46.095Z"}
 {"type":"step_finished","task":"concerns-funnel","step":"architect-revise-1-1","attempt":1,"status":"ok","sessionId":"01a1b894-4755-7787-a1ed-8df6c7a062a2","usage":{"inputTokens":30062,"outputTokens":13361,"costUsd":0.005741},"ts":"2026-11-08T00:44:20.144Z"}
+{"type":"step_started","task":"concerns-funnel","step":"plan-review-1-2","attempt":1,"recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/009-plan-review-1-2-a1","ts":"2026-11-08T00:44:20.180Z"}
+{"type":"step_timeout","task":"concerns-funnel","step":"plan-review-1-2","timeoutSec":900,"ts":"2026-11-08T00:44:20.182Z"}
