@@ -9,7 +9,7 @@ import { commitAll } from "../../src/core/git/commit.js";
 import { git } from "../../src/core/git/exec.js";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 
-describe("Scope, size, simple-guard, and custom checks (§9)", () => {
+describe("Scope, size, and custom checks (§9)", () => {
   let tmpRepo: TmpRepo;
   let wtRoot: string;
   let repo: Repo;
@@ -148,33 +148,24 @@ describe("Scope, size, simple-guard, and custom checks (§9)", () => {
     expect(resSimple.summary).toContain("exceeded limit");
   });
 
-  it("simple-guard checks simple scratch limits, rejects test content modifications and new deps", async () => {
-    // 1. Clean small prod change
+  it("size with kind simple enforces simpleMaxProdLines (conversion budget)", async () => {
+    // 1. Clean small prod change is under budget
     fs.writeFileSync(path.join(tmpRepo.dir, "src", "tiny.ts"), "export const x = 1;\n", "utf8");
     await commitAll(repo, tmpRepo.dir, "tiny prod change");
 
     const ctxOk = makeContext({ kind: "simple" });
-    const resOk = await runCheck("simple-guard", ctxOk);
+    const resOk = await runCheck("size", ctxOk);
     expect(resOk.ok).toBe(true);
 
-    // 2. Reject modifying test logic in simple task
-    fs.writeFileSync(path.join(tmpRepo.dir, "tests", "index.test.ts"), "// modified test logic\n", "utf8");
-    await commitAll(repo, tmpRepo.dir, "modify test");
+    // 2. Over-budget change fails size (drives no-behavior conversion in ingest)
+    const big = Array.from({ length: 20 }, (_, i) => `export const v${i} = ${i};`).join("\n") + "\n";
+    fs.writeFileSync(path.join(tmpRepo.dir, "src", "big.ts"), big, "utf8");
+    await commitAll(repo, tmpRepo.dir, "big prod change");
 
-    const ctxTestFail = makeContext({ kind: "simple" });
-    const resTestFail = await runCheck("simple-guard", ctxTestFail);
-    expect(resTestFail.ok).toBe(false);
-    expect(resTestFail.summary).toContain("not rename-only");
-
-    // 3. Reject adding new dependency or config file in simple task
-    await git(tmpRepo.dir, ["reset", "--hard", baseSha]);
-    fs.writeFileSync(path.join(tmpRepo.dir, "package.json"), "{}", "utf8");
-    await commitAll(repo, tmpRepo.dir, "add package.json");
-
-    const ctxDepFail = makeContext({ kind: "simple" });
-    const resDepFail = await runCheck("simple-guard", ctxDepFail);
-    expect(resDepFail.ok).toBe(false);
-    expect(resDepFail.summary).toContain("added new dependency or config file");
+    const ctxOver = makeContext({ kind: "simple" });
+    const resOver = await runCheck("size", ctxOver);
+    expect(resOver.ok).toBe(false);
+    expect(resOver.summary).toContain("exceeded limit");
   });
 
   it("poc-scope restricts changes to the item poc dir", async () => {
@@ -252,33 +243,6 @@ describe("Scope, size, simple-guard, and custom checks (§9)", () => {
     expect(resTestsOnly.ok).toBe(true);
   });
 
-  it("simple-guard accepts pure R100 renames but rejects R<100 edits", async () => {
-    // Create a test file with enough content that an edit drops similarity below 100
-    const lines = Array.from({ length: 20 }, (_, i) => `export const t${i} = ${i};`);
-    fs.writeFileSync(path.join(tmpRepo.dir, "tests", "big.test.ts"), lines.join("\n") + "\n", "utf8");
-    await commitAll(repo, tmpRepo.dir, "add big test");
-    const renameBase = (await git(tmpRepo.dir, ["rev-parse", "HEAD"])).stdout.trim();
-
-    // 1. Pure rename (content identical) -> accepted
-    await git(tmpRepo.dir, ["mv", "tests/big.test.ts", "tests/big-renamed.test.ts"]);
-    await commitAll(repo, tmpRepo.dir, "rename test");
-    const ctxPure = makeContext({ kind: "simple", base: renameBase });
-    const resPure = await runCheck("simple-guard", ctxPure);
-    expect(resPure.ok).toBe(true);
-
-    // 2. Rename + content edit (R<100) -> rejected
-    await git(tmpRepo.dir, ["reset", "--hard", renameBase]);
-    await git(tmpRepo.dir, ["mv", "tests/big.test.ts", "tests/big-renamed.test.ts"]);
-    fs.appendFileSync(
-      path.join(tmpRepo.dir, "tests", "big-renamed.test.ts"),
-      "export const edited = true;\nexport const edited2 = true;\n"
-    );
-    await commitAll(repo, tmpRepo.dir, "rename and edit test");
-    const ctxEdited = makeContext({ kind: "simple", base: renameBase });
-    const resEdited = await runCheck("simple-guard", ctxEdited);
-    expect(resEdited.ok).toBe(false);
-    expect(resEdited.summary).toContain("not rename-only");
-  });
 
   it("custom check: expect:fail, quoting, cwd:task, timeout", async () => {
     // File with a space exercises placeholder shell-quoting

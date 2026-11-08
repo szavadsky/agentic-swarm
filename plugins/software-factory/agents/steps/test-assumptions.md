@@ -9,9 +9,13 @@ Author permanent automated tests that explicitly verify third-party library beha
 - Test infra first: verify failure detection. Prove tests fail when assumptions are violated.
 - Verification: run tests via `bash` using project test runner; ensure tests pass cleanly on current environment.
 - Output: yield structured output per `developer-output.schema.json` (`status: ok` with executed verification in `evidence`).
+- Fix-round re-entry: when `Review Feedback` below is non-empty, address ONLY the listed concerns with targeted follow-up work; do NOT regenerate the suite from scratch.
 
 ## Assignment
 {{assignment}}
 
 ## Context
 {{context}}
+
+## Review Feedback
+{{feedback}}

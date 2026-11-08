@@ -175,12 +175,16 @@ export class OmpHarness implements Harness {
   public async run(run: AgentRun): Promise<AgentOutcome> {
     const { sessionsDir, promptsDir, systemPromptsDir, overlayPath } = this.ensureRuntimeDirs(run.cwd);
 
-    // 1. Prepare system prompt file from definition body
+    // 1. Prepare system prompt file from definition body. The filename is
+    // deterministic per agent+session (content is byte-stable) so prompt
+    // caches hold even if the runner keys by path; prompt-turn files below
+    // keep unique names since their content differs per turn.
     const agentBody = extractAgentBody(run.definition);
     const sanitizedAgent = run.agent.replace(/[^a-zA-Z0-9_-]/g, "_");
+    const sessionKey = (run.session?.resume ?? "fresh").replace(/[^a-zA-Z0-9_-]/g, "_");
     const systemPromptPath = path.join(
       systemPromptsDir,
-      `${sanitizedAgent}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}.md`
+      `${sanitizedAgent}-${sessionKey}.md`
     );
     fs.writeFileSync(systemPromptPath, agentBody, "utf8");
 
@@ -346,7 +350,9 @@ export class OmpHarness implements Harness {
       if (killTimer) clearTimeout(killTimer);
       try {
         if (fs.existsSync(promptPath)) fs.unlinkSync(promptPath);
-        if (fs.existsSync(systemPromptPath)) fs.unlinkSync(systemPromptPath);
+        // System-prompt file is deterministic per agent+session (content
+        // byte-stable) and intentionally kept: prompt caches keyed by path
+        // hold across runs only if the path survives.
       } catch {}
     }
     const parsed = parser.getResult();
@@ -385,6 +391,7 @@ export class OmpHarness implements Harness {
         usage: parsed.usage,
         transcriptBytes,
         stdoutBytes: totalStdoutBytes,
+        toolCallCount: parsed.toolCallCount,
       };
     }
 
@@ -416,6 +423,7 @@ export class OmpHarness implements Harness {
           transient: false,
           transcriptBytes,
           stdoutBytes: totalStdoutBytes,
+          toolCallCount: parsed.toolCallCount,
         };
       }
 
@@ -428,6 +436,7 @@ export class OmpHarness implements Harness {
           usage: parsed.usage,
           transcriptBytes,
           stdoutBytes: totalStdoutBytes,
+          toolCallCount: parsed.toolCallCount,
         };
       }
 
@@ -442,6 +451,7 @@ export class OmpHarness implements Harness {
         transient: false,
         transcriptBytes,
         stdoutBytes: totalStdoutBytes,
+        toolCallCount: parsed.toolCallCount,
       };
     }
 
@@ -453,6 +463,7 @@ export class OmpHarness implements Harness {
       usage: parsed.usage,
       transcriptBytes,
       stdoutBytes: totalStdoutBytes,
+      toolCallCount: parsed.toolCallCount,
     };
   }
 

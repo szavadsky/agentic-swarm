@@ -48,6 +48,7 @@ export type AgentOutcome =
       usage?: Usage;
       transcriptBytes?: number;
       stdoutBytes?: number;
+      toolCallCount?: number;
     }
   | {
       ok: false;
@@ -61,4 +62,5 @@ export type AgentOutcome =
       timedOut?: boolean;
       transcriptBytes?: number;
       stdoutBytes?: number;
+      toolCallCount?: number;
     };

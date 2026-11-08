@@ -86,6 +86,7 @@ describe("classifyOmpOutcome", () => {
         usage: {},
         stopReason: "abort",
         rawEvents: [],
+        toolCallCount: 0,
         errors: ["Context aborted"],
       },
     });
@@ -103,6 +104,7 @@ describe("classifyOmpOutcome", () => {
         usage: {},
         stopReason: "error",
         rawEvents: [],
+        toolCallCount: 0,
         errors: ["Fatal model error"],
       },
     });

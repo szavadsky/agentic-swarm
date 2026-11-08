@@ -28,7 +28,6 @@ export const ATTACHABLE_BUILTIN_CHECK_IDS = new Set([
   "red-test",
   "test-diff",
   "size",
-  "simple-guard",
   "poc-scope",
 ]);
 

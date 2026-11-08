@@ -110,7 +110,7 @@ describe("Engine: Step resilience — render errors, transient retry, sessionLos
       pipeline,
       project,
       prompts,
-      promptVars: { assignment: "a", target: "t", citations: "[]" },
+      promptVars: { assignment: "a", target: "t", citations: "[]", feedback: "" },
     });
 
     expect(res.ok).toBe(true);
@@ -151,7 +151,7 @@ describe("Engine: Step resilience — render errors, transient retry, sessionLos
       pipeline,
       project,
       prompts,
-      promptVars: { assignment: "a", target: "t", citations: "[]" },
+      promptVars: { assignment: "a", target: "t", citations: "[]", feedback: "" },
     });
 
     expect(res.ok).toBe(true);
@@ -393,7 +393,7 @@ describe("Engine: Step resilience — render errors, transient retry, sessionLos
       pipeline,
       project,
       prompts,
-      promptVars: { assignment: "a", target: "t", citations: "[]" },
+      promptVars: { assignment: "a", target: "t", citations: "[]", feedback: "" },
     });
 
     expect(res.ok).toBe(true);
@@ -473,7 +473,7 @@ describe("Engine: Step resilience — render errors, transient retry, sessionLos
         pipeline,
         project,
         prompts,
-        promptVars: { assignment: "a", target: "t", citations: "[]" },
+        promptVars: { assignment: "a", target: "t", citations: "[]", feedback: "" },
       });
     } catch (err: any) {
       expect(err.message).toContain("Simulated SIGKILL mid-turn");
@@ -516,7 +516,7 @@ describe("Engine: Step resilience — render errors, transient retry, sessionLos
       pipeline,
       project,
       prompts,
-      promptVars: { assignment: "a", target: "t", citations: "[]" },
+      promptVars: { assignment: "a", target: "t", citations: "[]", feedback: "" },
     });
 
     expect(res2.ok).toBe(true);
@@ -638,7 +638,7 @@ describe("Engine: Step resilience — render errors, transient retry, sessionLos
       pipeline: customPipeline,
       project,
       prompts,
-      promptVars: { assignment: "a", target: "t", citations: "[]" },
+      promptVars: { assignment: "a", target: "t", citations: "[]", feedback: "" },
     });
 
     expect(res.ok).toBe(false);
@@ -693,7 +693,7 @@ describe("Engine: Step resilience — render errors, transient retry, sessionLos
         pipeline,
         project,
         prompts,
-        promptVars: { assignment: "a", target: "t", citations: "[]" },
+        promptVars: { assignment: "a", target: "t", citations: "[]", feedback: "" },
       });
 
       expect(res.ok).toBe(true);
@@ -736,7 +736,7 @@ describe("Engine: Step resilience — render errors, transient retry, sessionLos
         pipeline,
         project,
         prompts,
-        promptVars: { assignment: "a", target: "t", citations: "[]" },
+        promptVars: { assignment: "a", target: "t", citations: "[]", feedback: "" },
       });
     } catch {}
 

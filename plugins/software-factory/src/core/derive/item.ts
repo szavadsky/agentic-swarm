@@ -51,6 +51,8 @@ export interface DerivedItemState {
   mergedAt?: string;
   consultCount: number;
   lastFailingCheckFingerprint?: string;
+  /** Failing-check fingerprints for the current decision series, oldest→newest. */
+  failingCheckFingerprints: string[];
   suggestionFingerprints: string[];
   decisionFingerprints: string[];
 }
@@ -128,6 +130,7 @@ export async function deriveItemState(opts: {
   }
 
   const records: ItemStepRecordInfo[] = [];
+  const recordFailingFingerprints = new Map<string, string>();
   let interruptionCount = 0;
   let lastFailingCheckFingerprint: string | undefined;
 
@@ -169,10 +172,23 @@ export async function deriveItemState(opts: {
         try {
           checks = await readYaml(checksPath);
           if (checks && typeof checks === "object" && "checks" in checks) {
-            const checkList = (checks as any).checks as Array<{ ok?: boolean; summary?: string }>;
-            const failing = checkList?.find((c) => !c.ok);
-            if (failing && failing.summary) {
-              lastFailingCheckFingerprint = fingerprintCheckFailure(failing.summary);
+            // checks.yaml entries use {id, status: pass|fail|skipped, message}
+            // (legacy shape {ok, summary} is tolerated for old records).
+            const checkList = (checks as any).checks as Array<{
+              id?: string;
+              status?: string;
+              message?: string;
+              ok?: boolean;
+              summary?: string;
+            }>;
+            const failing = checkList?.find((c) => c && (c.status === "fail" || c.ok === false));
+            const failingText = failing
+              ? (`${failing.id ?? ""} ${failing.message ?? failing.summary ?? ""}`.trim() || undefined)
+              : undefined;
+            if (failing && failingText) {
+              const fp = fingerprintCheckFailure(failingText);
+              recordFailingFingerprints.set(ent.name, fp);
+              lastFailingCheckFingerprint = fp;
             }
           }
         } catch (err: any) {
@@ -430,6 +446,12 @@ export async function deriveItemState(opts: {
     }
   }
 
+  // Failing-check fingerprints for the current series (oldest→newest), for the
+  // no-progress detector (§12.2): same failure twice short-circuits to consult.
+  const failingCheckFingerprints = seriesRecords
+    .map((r) => recordFailingFingerprints.get(r.dirName))
+    .filter((fp): fp is string => typeof fp === "string");
+
   return {
     slug: itemSlug,
     kind,
@@ -451,6 +473,7 @@ export async function deriveItemState(opts: {
     mergedAt,
     consultCount,
     lastFailingCheckFingerprint,
+    failingCheckFingerprints,
     suggestionFingerprints,
     decisionFingerprints,
   };

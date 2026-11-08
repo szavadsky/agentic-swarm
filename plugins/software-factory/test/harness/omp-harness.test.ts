@@ -333,4 +333,36 @@ wait
       try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
     }
   });
+
+  it("two run() calls for the same agent+session reuse the same system-prompt path", async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "omp-sysprompt-reuse-"));
+    const mockBinary = path.join(tmpDir, "mock-noop-omp.sh");
+    fs.writeFileSync(
+      mockBinary,
+      '#!/bin/sh\necho \'{"type":"session","id":"sess-reuse-1"}\'\necho \'{"type":"turn_end","message":{"role":"assistant","content":[{"type":"text","text":"{\\"ok\\":true}"}],"stopReason":"stop"}}\'\n',
+      { mode: 0o755 }
+    );
+    try {
+      const harness = new OmpHarness({ ompBinary: mockBinary, runtimeDir: tmpDir });
+      const baseRun = {
+        agent: "developer",
+        definition: "---\nname: developer\n---\n\n# Dev\n",
+        role: "workhorse",
+        models: ["m"],
+        tools: [],
+        cwd: tmpDir,
+        outputSchema: {},
+        label: "reuse-test",
+        session: { resume: "sess-reuse-1", keep: true },
+      };
+      await harness.run({ ...baseRun, prompt: "first" });
+      await harness.run({ ...baseRun, prompt: "second" });
+      const sysDir = path.join(tmpDir, "system-prompts");
+      const files = fs.readdirSync(sysDir);
+      expect(files).toHaveLength(1);
+      expect(files[0]).toBe("developer-sess-reuse-1.md");
+    } finally {
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+    }
+  });
 });

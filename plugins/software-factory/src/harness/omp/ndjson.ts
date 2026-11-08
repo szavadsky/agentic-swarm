@@ -23,6 +23,7 @@ export class OmpNdjsonParser {
   private costUsd = 0;
   private stopReason?: string;
   private errors: string[] = [];
+  private toolCallCount = 0;
 
   constructor(private opts?: OmpNdjsonParserOptions) {}
   /**
@@ -120,6 +121,9 @@ export class OmpNdjsonParser {
         break;
 
       case "tool_execution_start":
+        // Every tool invocation (including the terminal yield) counts toward
+        // the exploration-budget journal warning in step-runner.
+        this.toolCallCount++;
         if (event.toolName === "yield" || event.toolName?.endsWith(":yield")) {
           if (event.args?.data !== undefined) {
             this.yieldData = event.args.data;
@@ -174,6 +178,7 @@ export class OmpNdjsonParser {
       stopReason: this.stopReason,
       rawEvents: [],
       errors: this.errors,
+      toolCallCount: this.toolCallCount,
     };
   }
 }

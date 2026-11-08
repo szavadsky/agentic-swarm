@@ -62,7 +62,8 @@
             "items": { "type": "string" }
           },
           "escalate": { "type": "boolean" },
-          "replanAfter": { "type": "boolean" }
+          "replanAfter": { "type": "boolean" },
+          "prodBudgetHint": { "type": "integer", "minimum": 0, "description": "Advisory sizing hint: architect's estimated production lines changed for this item, for review against storyMaxProdLines/simpleMaxProdLines. Never blocks or fails the plan." }
         },
         "additionalProperties": false
       }

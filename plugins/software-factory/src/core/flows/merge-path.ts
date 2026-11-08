@@ -72,6 +72,7 @@ export async function mergeItem(params: MergeItemParams): Promise<MergeItemResul
     const preMergeTree = await treeOf(childWt);
 
     // 1. In child worktree: merge parent into child (§7)
+    await appendJournal(taskDir, { type: "item_merge_phase", item: item.slug, phase: "merge-parent-into-child" });
     const mergeParentRes = await mergeParentInto(repo, childWt, parentBranch);
     let conflictResolved = false;
 
@@ -143,6 +144,7 @@ export async function mergeItem(params: MergeItemParams): Promise<MergeItemResul
     // 2. Tree comparison and check verification if tree differs (§7, §9)
     const postMergeTree = await treeOf(childWt);
     if (postMergeTree !== preMergeTree) {
+      await appendJournal(taskDir, { type: "item_merge_phase", item: item.slug, phase: "verify-checks" });
       let infra: InfraArtifact | undefined;
       const infraPath = path.join(taskDir, "infra.yaml");
       if (fs.existsSync(infraPath)) {
@@ -198,9 +200,16 @@ export async function mergeItem(params: MergeItemParams): Promise<MergeItemResul
       if (infra && infra.gates && infra.gates.length > 0) {
         const gatesOutcome = await runGates(checkCtx);
         if (!gatesOutcome.ok) {
+          const failing = gatesOutcome.results.filter((r) => r.status === "fail").map((r) => r.id);
+          await appendJournal(taskDir, {
+            type: "item_merge_gates_failed",
+            item: item.slug,
+            failingGates: failing,
+            results: gatesOutcome.results.map((r) => ({ id: r.id, status: r.status })),
+          });
           return {
             ok: false,
-            error: `Quality gates failed on merge path for ${item.slug}`,
+            error: `Quality gates failed on merge path for ${item.slug}: ${failing.join(", ") || "unknown gate"}`,
           };
         }
       }
@@ -218,14 +227,15 @@ export async function mergeItem(params: MergeItemParams): Promise<MergeItemResul
     }
 
     // 3. Merge child into parent with --no-ff (§7)
+    await appendJournal(taskDir, { type: "item_merge_phase", item: item.slug, phase: "merge-child-into-parent" });
     const mergeCommitSha = await mergeChildIntoParent(
       repo,
       taskWt,
       item.branch,
       `factory: merge item ${item.slug}`
     );
-
     // 4. Remove child worktree (branch is kept)
+    await appendJournal(taskDir, { type: "item_merge_phase", item: item.slug, phase: "remove-worktree" });
     await removeWorktree(repo, childWt);
 
     // 5. Run after:item.merge hooks (§8.10)

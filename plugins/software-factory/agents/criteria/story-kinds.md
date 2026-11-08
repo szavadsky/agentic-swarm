@@ -17,8 +17,8 @@ Item classification matrix for planning and PM edits.
   - Contract: Edits strictly confined to `paths.tests`; production code paths untouched; peer code review.
 - `simple`:
   - When: Minor single-file tweak, trivial fix, or single constant update.
-  - Contract: Single step `develop` + gates + `simple-guard`. No review step.
-  - Bounds: Prod lines within `simpleMaxProdLines`; test changes rename-only (`diff -M`).
+  - Contract: Single step `develop` + gates + advisory `size`. No review step. Gates green and under `simpleMaxProdLines` merges; over budget or red gates converts to a `no-behavior` item.
+  - Bounds: Prod lines within `simpleMaxProdLines` (advisory sizing reference for conversion).
 
 ## Spike Kinds
 - `fact-finder`:

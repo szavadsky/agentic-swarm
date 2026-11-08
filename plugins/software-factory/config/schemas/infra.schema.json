@@ -31,7 +31,7 @@
         "command": { "type": "string", "description": "Base test runner shell command, e.g. 'pytest', 'cargo test', 'bun test', 'npm test'" },
         "selectorArgs": {
           "type": "array",
-          "description": "Arguments/flags to pass test selectors to the runner. E.g. ['-k'] for pytest, ['-t'] for jest, or [] if selectors are positional arguments.",
+          "description": "Flag prefix for test selectors. MUST be [] (positional) unless the runner consumes selectors behind a flag. pytest node-ids are positional: ALWAYS []. unittest dotted ids: []. bun/node paths: []. jest/vitest ['-t'] ONLY for bare keyword selectors.",
           "items": { "type": "string" }
         },
         "junitArg": { "type": "string", "description": "Flag/argument template to output JUnit XML report, with '{path}' or '{{path}}' placeholder for the file path. E.g. '--junitxml={path}' for pytest, '--reporter=junit --output={path}', or '' if unsupported." }

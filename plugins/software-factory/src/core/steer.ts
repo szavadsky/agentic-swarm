@@ -181,6 +181,18 @@ export async function classify(
   return parsed as SteerClassificationArtifact;
 }
 
+/**
+ * True when an operator answer message reads as a bare acknowledgement
+ * ("ack", "ok", "noted", "thanks", ...) rather than substantive guidance.
+ * Short messages (< 200 chars) matching ack phrasing reconcile open
+ * awareness questions to answered.
+ */
+export function isAwarenessAck(text: string): boolean {
+  const t = (text ?? "").trim().toLowerCase();
+  if (!t || t.length > 200) return false;
+  return /^(ack(\.|nowledged?)?|ok(ay)?|noted|thanks?(\s+you)?|got\s+it|understood|confirmed?|lgtm|fine|will\s+do)\b[\s.!]*$/i.test(t);
+}
+
 const steerMailboxMutexes = new KeyedMutex();
 
 export interface ProcessSteeringOptions {
@@ -196,6 +208,8 @@ export interface ProcessSteeringOptions {
 export interface ProcessSteeringResult {
   stopRequested: boolean;
   processedCount: number;
+  /** Messages skipped (classification/IO error, left pending for retry). */
+  skippedCount: number;
 }
 
 /**
@@ -213,7 +227,7 @@ export async function processSteeringMailbox(
     const relTaskDir = path.relative(taskWt, taskDir);
     const pending = await listPending(taskWt, relTaskDir);
     if (pending.length === 0) {
-      return { stopRequested: false, processedCount: 0 };
+      return { stopRequested: false, processedCount: 0, skippedCount: 0 };
     }
 
     // Load currently open questions for context
@@ -238,14 +252,30 @@ export async function processSteeringMailbox(
     const simplerRole = resolveRole("simpler", pipeline.models.roles);
     let stopRequested = false;
     let processedCount = 0;
+    let skippedCount = 0;
 
     for (const item of pending) {
-      const classification = await classify(harness, item, {
-        openQuestions,
-        role: simplerRole.role,
-        models: simplerRole.models,
-        prompts,
-      });
+      let classification: SteerClassificationArtifact;
+      try {
+        classification = await classify(harness, item, {
+          openQuestions,
+          role: simplerRole.role,
+          models: simplerRole.models,
+          prompts,
+        });
+      } catch (err: any) {
+        // Classification failure: journal and skip (message stays pending for
+        // retry) rather than aborting the whole poll or failing silently.
+        skippedCount++;
+        try {
+          await appendJournal(taskDir, {
+            type: "steer_poll_error",
+            file: item.file,
+            error: err?.message ?? String(err),
+          });
+        } catch {}
+        continue;
+      }
 
       const { from, to } = takenPaths(item.file, relTaskDir);
       const absFrom = path.join(taskWt, from);
@@ -269,7 +299,11 @@ export async function processSteeringMailbox(
         if (classification.kind === "stop") {
           stopRequested = true;
         } else if (classification.kind === "answer") {
-          // Answer matching questions exactly (Finding 16)
+          // Answer matching questions exactly (Finding 16). Awareness
+          // dispositions are informational (non-blocking); an ack-style answer
+          // reconciles ALL open awareness questions to answered so they do
+          // not linger open and re-noise the operator.
+          const ackAwareness = isAwarenessAck(item.text);
           if (fs.existsSync(touserDir)) {
             const qFiles = await fs.promises.readdir(touserDir);
             for (const qf of qFiles) {
@@ -284,7 +318,7 @@ export async function processSteeringMailbox(
                     q.id === r ||
                     (q.ref && r.endsWith(`/${q.ref}`))
                 );
-                if (q && q.status === "open" && matches) {
+                if (q && q.status === "open" && (matches || (ackAwareness && q.disposition === "human-awareness"))) {
                   q.status = "answered";
                   q.answer = item.text;
                   q.answeredAt = new Date().toISOString();
@@ -318,6 +352,6 @@ export async function processSteeringMailbox(
       processedCount++;
     }
 
-    return { stopRequested, processedCount };
+    return { stopRequested, processedCount, skippedCount };
   });
 }

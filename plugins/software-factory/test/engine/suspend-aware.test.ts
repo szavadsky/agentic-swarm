@@ -201,6 +201,7 @@ describe("Suspend awareness: active monotonic timeouts and suspend detection", (
         assignment: "Do work",
         target: "test",
         citations: "[]",
+        feedback: "",
       },
     });
     expect(res.ok).toBe(true);

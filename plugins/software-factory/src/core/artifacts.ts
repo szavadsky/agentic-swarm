@@ -97,6 +97,7 @@ export interface PipelineLimits {
   checkOutputBytes?: number;
   hydrationBytes?: number;
   stepTranscriptWarningBytes?: number;
+  stepToolCallWarning?: number;
   contextPackBytes?: number;
   timeoutNudgeSec?: number;
   minFreeDiskMb?: number;
@@ -226,6 +227,7 @@ export interface PlanItemOutline {
   deps?: string[];
   escalate?: boolean;
   replanAfter?: boolean;
+  prodBudgetHint?: number;
 }
 
 export interface PlanAssumption {
@@ -444,7 +446,10 @@ export interface CheckItemResult {
   phase?: "before" | "after";
   durationMs?: number;
   message?: string;
-  details?: string;
+  /** Structured check detail (command, JUnit ids, line counts) or legacy string. */
+  details?: unknown;
+  /** Bounded tail of the check's raw output (failing checks). */
+  output?: string;
 }
 
 export interface ChecksResultArtifact {

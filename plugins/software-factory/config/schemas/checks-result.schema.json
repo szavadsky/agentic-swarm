@@ -22,7 +22,10 @@
           },
           "durationMs": { "type": "number" },
           "message": { "type": "string" },
-          "details": { "type": "string" }
+          "details": {
+            "description": "Structured check detail (command, JUnit case ids/count, line counts) or legacy string"
+          },
+          "output": { "type": "string", "description": "Bounded tail of the check raw output (failing checks)" }
         },
         "additionalProperties": false
       }

@@ -41,7 +41,12 @@ process.on("exit", () => {
 });
 
 export function createTmpRepo(options?: { initialCommitMessage?: string }): TmpRepo {
-  const baseTmp = fs.existsSync(os.tmpdir()) ? os.tmpdir() : "/tmp";
+  // Normalize the tmp base: os.tmpdir() inherits TMPDIR, and head-guard path
+  // math breaks when TMPDIR sits under `/.factory-runtime`. Fall back to /tmp
+  // whenever the inherited dir looks factory-owned or is missing.
+  const rawTmp = os.tmpdir() ?? "";
+  const baseTmp =
+    rawTmp && fs.existsSync(rawTmp) && !rawTmp.includes(".factory") ? rawTmp : "/tmp";
   const dir = fs.mkdtempSync(path.join(baseTmp, "factory-test-repo-"));
   const worktrees: string[] = [];
 

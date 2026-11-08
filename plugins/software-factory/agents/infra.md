@@ -34,6 +34,7 @@ Infrastructure discovery specialist. Inspect repository configuration, manifests
 - Setup minimalism: `setup` commands should be the absolute minimum needed to prepare a fresh git worktree (at most 1-3 commands; empty `[]` if standard checkout works).
 - Test runner contract:
   - `command`: Base test runner shell command (e.g. `pytest`, `cargo test`, `bun test`, `npm test`).
-  - `selectorArgs`: Array of flags to pass test selectors to the runner. For pytest: `["-k"]`. For jest: `["-t"]`. For runners accepting positional selectors: `[]`.
+  - `selectorArgs`: MUST be `[]` (positional) unless the runner consumes selectors behind a flag. pytest node-ids are positional — ALWAYS `[]` (`-k` is a keyword expression and silently selects nothing for node-ids). unittest dotted ids: `[]`. bun/node file paths: `[]`. jest/vitest `["-t"]` ONLY for bare keyword selectors.
   - `junitArg`: Flag template instructing the test runner where to output JUnit XML reports. For pytest: `--junitxml={path}`. For jest: `--reporter=jest-junit` (with `JUNIT_OUTPUT_DIR`). If a placeholder `{path}` or `{{path}}` is used, the engine substitutes the report file path. If it ends with `=`, `{path}` is appended.
+  - Selector dry-run (REQUIRED): execute `<command> <one-real-selector> <junitArg>` via `bash` and confirm the named test actually ran before yielding.
 - Output MUST be the structured yield matching `infra.schema.json`. Do NOT write YAML files or orchestration files; the engine writes all artifacts from your structured yield.

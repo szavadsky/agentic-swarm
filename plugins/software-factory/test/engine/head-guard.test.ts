@@ -94,6 +94,7 @@ describe("Engine: HEAD guard resilience (§7)", () => {
         assignment: "Guard test assignment",
         target: "tests",
         citations: "[]",
+        feedback: "",
       },
     });
 
@@ -180,6 +181,7 @@ describe("Engine: HEAD guard resilience (§7)", () => {
         assignment: "Guard test assignment",
         target: "tests",
         citations: "[]",
+        feedback: "",
       },
     });
 

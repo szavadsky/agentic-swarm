@@ -644,6 +644,29 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
     );
   }
 
+  // Exploration-budget warning (PsPost5 item 10): probe transcripts showed
+  // 60-90 tool calls with heavy re-reads. Advisory only — never blocks.
+  const toolCallThreshold: number =
+    typeof pipeline.limits?.stepToolCallWarning === "number"
+      ? pipeline.limits.stepToolCallWarning
+      : 60;
+  const stepToolCalls = outcome.toolCallCount ?? 0;
+  if (stepToolCalls > toolCallThreshold) {
+    await appendJournal(taskDir, {
+      type: "step_tool_call_warning",
+      task,
+      item,
+      step: stepId,
+      attempt,
+      toolCalls: stepToolCalls,
+      threshold: toolCallThreshold,
+      traceRef: outcome.traceRef,
+    });
+    opts.log?.(
+      `[warning] Step "${stepId}" made ${stepToolCalls} tool calls (threshold ${toolCallThreshold})`
+    );
+  }
+
   function isTimeoutOutcome(o: AgentOutcome): boolean {
     if (o.ok) return false;
     if ((o as any).timedOut) return true;
@@ -986,6 +1009,16 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
       validationError = undefined;
       if (repairRes.method !== "direct") {
         repairedFrom = repairRes.method;
+        // ShPost3 #3: a non-direct accept (e.g. unknown-key strip by repair)
+        // is journaled explicitly — never silently kept.
+        await appendJournal(taskDir, {
+          type: "step_output_repaired",
+          task,
+          item,
+          step: stepId,
+          attempt,
+          method: repairRes.method,
+        });
       }
     } else {
       finalStatus = "rejected";

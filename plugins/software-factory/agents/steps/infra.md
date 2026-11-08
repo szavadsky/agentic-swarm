@@ -16,9 +16,14 @@ Discover project infrastructure, worktree bootstrap commands, test runner config
 - `setup`: Minimal shell commands to prepare a fresh worktree (e.g. `["npm install"]` or `[]`).
 - `gates`: Array of `{ "id": "...", "command": "..." }` for project checks (typecheck, lint, tests). Record existing gates as defined in the repository, even if currently failing on clean checkout.
 - `testRunner.command`: Base test command, e.g. `"pytest"` or `"bun test"`.
-- `testRunner.selectorArgs`: Flags to specify targeted test names/selectors, e.g. `["-k"]` for pytest, `["-t"]` for jest, or `[]` if positional.
+- `testRunner.selectorArgs`: MUST be `[]` (positional selectors) unless the runner family consumes selectors behind a flag. Per-runner rules:
+  - pytest: ALWAYS `[]`. Node-ids (`tests/test_math.py::test_add`) are positional; `-k` takes a keyword EXPRESSION and silently selects nothing when given a node-id. The engine builds `<command> <selector...> <junitArg>`.
+  - unittest (`python -m unittest`): ALWAYS `[]`. Dotted ids (`tests.test_math.TestAdd.test_x`) are positional.
+  - bun / node test runners: `[]` (file paths positional).
+  - jest/vitest keyword filter: `["-t"]` ONLY when selectors are bare keyword strings (no `::`, `/`, or dotted module paths). If selectors may be file paths, use `[]`.
 - `testRunner.junitArg`: Argument format for writing JUnit XML report, e.g. `"--junitxml={path}"` for pytest. The engine replaces `{path}` with the temporary JUnit report path.
 - `notes`: Optional array of strings detailing operator actions or configuration suggestions (e.g. advising to exclude the orchestration folder from project linters/formatters).
+- Selector dry-run (REQUIRED): after choosing `testRunner`, run the selection yourself with `bash`: execute `<command> <one-real-selector> <junitArg-with-tmp-path>` and confirm the named test actually ran (not "0 selected" / "no tests found"). If the runner cannot select a single test, record that in `notes` and prefer a gate-based target instead.
 ## Task
 {{task}}
 

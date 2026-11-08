@@ -3,6 +3,7 @@ export type { GitOptions, GitResult } from "./exec.js";
 
 export {
   changedFiles,
+  untrackedFiles,
   numstat,
   changedLines,
   matchGlobs,
@@ -13,6 +14,7 @@ export type {
   NumstatEntry,
   ChangedLinesResult,
 } from "./diff.js";
+export { countUntrackedLines } from "./untracked-lines.js";
 
 export {
   validateSlug,

@@ -45,6 +45,21 @@ export function matchGlobs(filePath: string, globs: string[]): boolean {
 }
 
 /**
+ * Returns untracked files (excluding ignored) as ChangedFile entries with status "?".
+ * Uses `git ls-files --others --exclude-standard -z` for NUL-safe parsing.
+ */
+export async function untrackedFiles(wt: string): Promise<ChangedFile[]> {
+  const res = await git(wt, ["ls-files", "--others", "--exclude-standard", "-z"], {
+    allowFail: true,
+  });
+  if (res.code !== 0 || !res.stdout) return [];
+  return res.stdout
+    .split("\0")
+    .filter((p) => p.length > 0)
+    .map((p) => ({ path: p, status: "?" }));
+}
+
+/**
  * Returns changed files between base and head with detected renames.
  */
 export async function changedFiles(

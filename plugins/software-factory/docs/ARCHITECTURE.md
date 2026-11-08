@@ -340,8 +340,8 @@ Hook checks run and their failures are collected; hook agents are journaled (`ho
 | target-green | after / retry-step | selected tests pass |
 | red-test | before QA / retry-step | temp detached worktree at item tip with `paths.prod` restored to the test-first commit (+ `infra.setup` rerun) → `expectRed` ids fail; bootstrap targets run in place expecting non-zero exit |
 | test-diff | before QA / info | always-ok diff of `paths.tests` since test-first (or branch point) |
-| size | after / retry-or-consult | prod changed lines ≤ `storyMaxProdLines` (or `simpleMaxProdLines` for kind `simple`) |
-| simple-guard | simple pre-check / convert | prod lines ≤ `simpleMaxProdLines`; test changes must be pure R100 renames (any add/modify/delete fails); no new dep/config files and no dependency edits in package.json/requirements/pyproject |
+| size | after / warn | prod changed lines vs `storyMaxProdLines` — advisory only (no rejection, no consult on size alone; scope is the architect's judgment) |
+| (simple path) | simple pre-check / convert | `gates` must be green + advisory size check; over `simpleMaxProdLines` or red gates → convert to a `no-behavior` item (never reject). No mechanical content rules. |
 | poc-scope | after / retry-step | changes only under `{orchestrationFolder}/{task}/items/{item}/poc/` (step records excluded) |
 | custom `checks.<id>` | configurable | command, `expect` pass/fail, `cwd: item|task`, placeholders `{{worktree}} {{wt}} {{changedProd}} {{changedTests}} {{base}} {{head}} {{task}} {{item}}`, `gateTimeoutSec`/step timeout; own mutation guard (fails + journals); declared `onFail` not dispatched today |
 

@@ -111,6 +111,29 @@ export function parseJunit(xml: string): ParsedJunit {
   return { collected, errors, cases };
 }
 
+/**
+ * Structurally validates a testRunner config at infra time. Returns error
+ * strings (empty = valid). Catches the PsPost5 launch-5 class: pytest with
+ * `selectorArgs: ["-k"]`, which silently selects nothing for node-ids.
+ */
+export function validateTestRunner(runner: InfraArtifact["testRunner"]): string[] {
+  const errors: string[] = [];
+  if (!runner || typeof runner.command !== "string" || runner.command.trim() === "") {
+    errors.push("testRunner.command must be a non-empty string");
+    return errors;
+  }
+  const cmd = runner.command.toLowerCase();
+  const prefix = (runner.selectorArgs ?? []).join(" ");
+  const isPytest = /(^|[\s/"'])pytest(\s|$)/.test(cmd) || cmd.includes("pytest");
+  const isUnittest = cmd.includes("-m unittest") || /(^|[\s/"'])unittest(\s|$)/.test(cmd);
+  if ((isPytest || isUnittest) && (runner.selectorArgs ?? []).length > 0) {
+    errors.push(
+      `testRunner.selectorArgs must be [] for ${isPytest ? "pytest" : "unittest"} (node-ids are positional; got [${prefix}])`
+    );
+  }
+  return errors;
+}
+
 export function shellQuote(arg: string): string {
   if (/^[a-zA-Z0-9_\-\.\/:=]+$/.test(arg)) {
     return arg;
@@ -119,8 +142,29 @@ export function shellQuote(arg: string): string {
 }
 
 /**
+ * True when a selector looks like a test node-id that runners consume
+ * positionally: pytest `path/to/test.py::test_fn`, unittest-style dotted ids
+ * (`tests.test_mod.TestClass.test_x`), or plain test file paths. Such
+ * selectors must never be passed behind a flag prefix like pytest `-k`
+ * (keyword expression) or they silently select nothing.
+ */
+export function isPositionalSelector(sel: string): boolean {
+  if (!sel) return false;
+  if (sel.includes("::")) return true; // pytest node-id
+  if (/^[\w-]+\/[\w\-./]*\.(py|ts|js|mjs|cjs|tsx|jsx|go|rs|java|rb)\b/.test(sel)) return true; // file path
+  if (/^[A-Za-z_][\w]*(\.[\w]+){2,}$/.test(sel)) return true; // dotted id (module.Class.test)
+  return false;
+}
+
+/**
  * Builds a shell-safe target test execution command from infra runner configuration,
  * target selectors, and junit report path.
+ *
+ * Selectors are positional by default. A `selectorArgs` prefix (e.g. jest `-t`)
+ * is honored ONLY when no selector looks like a runner node-id that must be
+ * positional (pytest `path::test`, unittest dotted ids, file paths). This
+ * guards against infra configs like pytest `selectorArgs: ["-k"]`, where `-k`
+ * takes a keyword expression and a node-id would silently select nothing.
  */
 export function buildTargetCommand(
   infra: InfraArtifact,
@@ -140,9 +184,13 @@ export function buildTargetCommand(
   const parts: string[] = [runner.command];
 
   if ("selectors" in target && target.selectors && target.selectors.length > 0) {
-    if (runner.selectorArgs && runner.selectorArgs.length > 0) {
+    const usePrefix =
+      runner.selectorArgs &&
+      runner.selectorArgs.length > 0 &&
+      !target.selectors.some(isPositionalSelector);
+    if (usePrefix) {
       for (const sel of target.selectors) {
-        parts.push(...runner.selectorArgs, shellQuote(sel));
+        parts.push(...runner.selectorArgs!, shellQuote(sel));
       }
     } else {
       for (const sel of target.selectors) {

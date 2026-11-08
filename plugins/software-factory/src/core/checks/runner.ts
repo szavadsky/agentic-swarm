@@ -3,8 +3,9 @@ import path from "node:path";
 import os from "node:os";
 import { runProcess, type ProcessResult } from "../proc.js";
 import { fingerprintText } from "../fingerprint.js";
-import { changedFiles, numstat, changedLines, diffText, matchGlobs } from "../git/diff.js";
+import { changedFiles, untrackedFiles, numstat, changedLines, diffText, matchGlobs } from "../git/diff.js";
 import type { ChangedFile } from "../git/diff.js";
+import { countUntrackedLines } from "../git/untracked-lines.js";
 import { headOf } from "../git/commit.js";
 import { git } from "../git/exec.js";
 import { parseBranch } from "../git/naming.js";
@@ -17,19 +18,6 @@ import { appendJournal } from "../journal.js";
 const DEFAULT_TEST_GLOBS = ["test/**", "tests/**", "**/*.test.*", "**/*.spec.*"];
 const DEFAULT_PROD_GLOBS = ["src/**", "lib/**", "*.ts", "*.js", "*.mjs", "*.cjs", "*.py", "*.go", "*.rs", "*.java", "*.c", "*.cpp", "*.h", "pkg/**", "app/**"];
 const DEFAULT_GATE_TIMEOUT_SEC = 900;
-const CONFIG_FILE_GLOBS = [
-  "package.json",
-  "package-lock.json",
-  "bun.lockb",
-  "requirements.txt",
-  "pyproject.toml",
-  "Cargo.toml",
-  "Cargo.lock",
-  "go.mod",
-  "go.sum",
-  "*.config.*",
-  "tsconfig*.json",
-];
 
 function getGlobs(configured?: string | string[], defaults: string[] = []): string[] {
   if (!configured) return defaults;
@@ -48,10 +36,79 @@ function timedOutSummary(what: string, timeout: number): string {
   return `${what} timed out after ${timeout}s`;
 }
 
-/** True when a rename kept identical content (R parsed without edit, or no similarity info). */
-function isPureRename(f: Pick<ChangedFile, "status"> & { similarity?: number }): boolean {
-  return f.status === "R" && (f.similarity === undefined || f.similarity === 100);
+/** Cap on JUnit case ids persisted per target-check detail (bounded checks.yaml). */
+const MAX_JUNIT_DETAIL_IDS = 50;
+
+/**
+ * Structured detail for target-red/target-green/red-test results: the executed
+ * command plus JUnit case ids/count. Persisted into checks.yaml so failures
+ * are diagnosable from records (no re-running the suite to see the command).
+ */
+export interface TargetCheckDetail {
+  command: string;
+  junitCaseCount: number;
+  junitCaseIds: string[];
+  junitTruncated: boolean;
+  collected: boolean;
+  collectionErrors: string[];
 }
+
+function targetDetail(
+  command: string,
+  parsed?: { collected: boolean; errors: string[]; cases: { id: string }[] }
+): TargetCheckDetail {
+  const ids = parsed ? parsed.cases.map((c) => c.id) : [];
+  return {
+    command,
+    junitCaseCount: ids.length,
+    junitCaseIds: ids.slice(0, MAX_JUNIT_DETAIL_IDS),
+    junitTruncated: ids.length > MAX_JUNIT_DETAIL_IDS,
+    collected: parsed ? parsed.collected : false,
+    collectionErrors: parsed ? parsed.errors : [],
+  };
+}
+
+/**
+ * Prod-line count for size checks: tracked numstat plus full line counts of
+ * untracked files matching the globs (each untracked file counts as added).
+ * Untracked union only applies for live-worktree heads (undefined/"HEAD").
+ */
+async function sizeChangedLines(ctx: CheckContext, globs: string[]) {
+  const lines = await changedLines(ctx.wt, ctx.base, ctx.head, globs);
+  if (ctx.head !== undefined && ctx.head !== "HEAD") return lines;
+  const extra = await countUntrackedLines(ctx.wt, globs);
+  return {
+    added: lines.added + extra.added,
+    deleted: lines.deleted,
+    total: lines.total + extra.added,
+    files: [...lines.files, ...extra.files],
+  };
+}
+
+/**
+ * Scope-check file set: tracked changes (base..head) plus untracked files.
+ * Untracked entries carry status "?" and are treated as new (added) files by
+ * callers. Untracked union only applies when head is undefined or "HEAD"
+ * (live worktree); explicit historical heads skip it since the worktree does
+ * not reflect that range (e.g. red-test's temp-worktree restore).
+ */
+async function scopeChangedFiles(
+  wt: string,
+  base: string,
+  head?: string
+): Promise<ChangedFile[]> {
+  const tracked = await changedFiles(wt, base, head);
+  if (head !== undefined && head !== "HEAD") return tracked;
+  const seen = new Set(tracked.map((f) => f.path));
+  const untracked = (await untrackedFiles(wt)).filter((f) => !seen.has(f.path));
+  return [...tracked, ...untracked];
+}
+
+/** True when a scope entry counts as a newly added file (tracked add or untracked). */
+function isAddedEntry(f: ChangedFile): boolean {
+  return f.status === "A" || f.status === "?";
+}
+
 
 /**
  * Drops engine record paths under the orchestration folder (step records, runs, etc.).
@@ -159,8 +216,6 @@ async function executeCheck(name: string, ctx: CheckContext): Promise<CheckResul
       return checkTestDiff(ctx);
     case "size":
       return checkSize(ctx);
-    case "simple-guard":
-      return checkSimpleGuard(ctx);
     case "poc-scope":
       return checkPocScope(ctx);
     default: {
@@ -225,19 +280,20 @@ async function checkTestFirstScope(ctx: CheckContext): Promise<CheckResult> {
   const prodGlobs = getGlobs(ctx.project.paths?.prod, DEFAULT_PROD_GLOBS);
   const maxStubLines = ctx.limits.stubMaxProdLines ?? 40;
 
-  const allChanged = await changedFiles(ctx.wt, ctx.base, ctx.head);
+  const allChanged = await scopeChangedFiles(ctx.wt, ctx.base, ctx.head);
   const changed = withoutOrchestrationRecords(allChanged, ctx);
   const stats = await numstat(ctx.wt, ctx.base, ctx.head);
 
   const testFiles: string[] = [];
   const newProdFiles: string[] = [];
+  const untrackedStubPaths: string[] = [];
   let stubProdLines = 0;
 
   for (const f of changed) {
     if (matchGlobs(f.path, testGlobs)) {
       testFiles.push(f.path);
     } else if (matchGlobs(f.path, prodGlobs)) {
-      if (f.status !== "A") {
+      if (!isAddedEntry(f)) {
         const summary = `Modified prod file not allowed in test-first: ${f.path} (status: ${f.status})`;
         return {
           name: "test-first-scope",
@@ -251,6 +307,8 @@ async function checkTestFirstScope(ctx: CheckContext): Promise<CheckResult> {
       const stat = stats.find((s) => s.path === f.path);
       if (stat && stat.added !== undefined && !Number.isNaN(stat.added)) {
         stubProdLines += stat.added;
+      } else if (f.status === "?") {
+        untrackedStubPaths.push(f.path);
       }
     } else {
       const summary = `File outside test and prod paths changed in test-first: ${f.path}`;
@@ -262,6 +320,12 @@ async function checkTestFirstScope(ctx: CheckContext): Promise<CheckResult> {
         fingerprint: fingerprintText(summary),
       };
     }
+  }
+
+  // Untracked stubs have no numstat entry; count their lines from disk in one pass.
+  if (untrackedStubPaths.length > 0) {
+    const extra = await countUntrackedLines(ctx.wt, untrackedStubPaths);
+    stubProdLines += extra.added;
   }
 
   if (stubProdLines > maxStubLines) {
@@ -288,7 +352,7 @@ async function checkTestFirstScope(ctx: CheckContext): Promise<CheckResult> {
 
 async function checkTestsOnly(ctx: CheckContext): Promise<CheckResult> {
   const testGlobs = getGlobs(ctx.project.paths?.tests, DEFAULT_TEST_GLOBS);
-  const allChanged = await changedFiles(ctx.wt, ctx.base, ctx.head);
+  const allChanged = await scopeChangedFiles(ctx.wt, ctx.base, ctx.head);
   const changed = withoutOrchestrationRecords(allChanged, ctx);
 
   const nonTestFiles: string[] = [];
@@ -369,6 +433,7 @@ async function checkTargetRed(ctx: CheckContext): Promise<CheckResult> {
       summary,
       output,
       fingerprint: ok ? fingerprintText("target-red gate ok") : fingerprintText(summary),
+      details: targetDetail(cmd),
     };
   }
 
@@ -393,6 +458,7 @@ async function checkTargetRed(ctx: CheckContext): Promise<CheckResult> {
       summary,
       output,
       fingerprint: ok ? fingerprintText("target-red custom ok") : fingerprintText(summary),
+      details: targetDetail(ctx.target.command),
     };
   }
 
@@ -440,72 +506,78 @@ async function checkTargetRed(ctx: CheckContext): Promise<CheckResult> {
 
     if (!xml.trim()) {
       // Junit was not generated; check if suite crashed during collection
-      const summary = `Test execution produced no JUnit XML (exit code ${procRes.code})`;
+      const summary = `Test execution produced no JUnit XML (exit code ${procRes.code}). Command: ${cmd}`;
       return {
         name: "target-red",
         ok: false,
         summary,
         output: tailCap(procOutput, ctx.outputBytes),
         fingerprint: fingerprintText(summary),
+        details: targetDetail(cmd),
       };
     }
 
     const parsed = parseJunit(xml);
 
     if (!parsed.collected) {
-      const summary = `Test suite failed collection: ${parsed.errors.join("; ") || "collection error"}`;
+      const summary = `Test suite failed collection: ${parsed.errors.join("; ") || "collection error"}. Command: ${cmd}`;
       return {
         name: "target-red",
         ok: false,
         summary,
         output: tailCap(procOutput, ctx.outputBytes),
         fingerprint: fingerprintText(summary),
+        details: targetDetail(cmd, parsed),
       };
     }
 
     for (const expectId of expectRed) {
       const match = findMatchingCase(parsed.cases, expectId);
       if (!match) {
-        const summary = `Expected red test missing from suite: ${expectId}`;
+        const summary = `Expected red test missing from suite: ${expectId} (JUnit has ${parsed.cases.length} cases; ids: ${parsed.cases.slice(0, 10).map((c) => c.id).join(", ")}${parsed.cases.length > 10 ? ", ..." : ""}). Command: ${cmd}`;
         return {
           name: "target-red",
           ok: false,
           summary,
           output: tailCap(procOutput, ctx.outputBytes),
           fingerprint: fingerprintText(summary),
+          details: targetDetail(cmd, parsed),
         };
       }
 
       if (match.status === "error") {
-        const summary = `Expected red test errored instead of failing assertion: ${expectId}`;
+        const summary = `Expected red test errored instead of failing assertion: ${expectId}. Command: ${cmd}`;
         return {
           name: "target-red",
           ok: false,
           summary,
           output: tailCap(procOutput, ctx.outputBytes),
           fingerprint: fingerprintText(summary),
+          details: targetDetail(cmd, parsed),
         };
       }
 
       if (match.status === "pass") {
-        const summary = `Expected red test passed: ${expectId}`;
+        const summary = `Expected red test passed: ${expectId}. Command: ${cmd}`;
         return {
           name: "target-red",
           ok: false,
           summary,
           output: tailCap(procOutput, ctx.outputBytes),
           fingerprint: fingerprintText(summary),
+          details: targetDetail(cmd, parsed),
         };
       }
 
       if (match.status === "skip") {
-        const summary = `Expected red test was skipped: ${expectId}`;
+        const summary = `Expected red test was skipped: ${expectId}. Command: ${cmd}`;
         return {
           name: "target-red",
           ok: false,
           summary,
           output: tailCap(procOutput, ctx.outputBytes),
           fingerprint: fingerprintText(summary),
+          details: targetDetail(cmd, parsed),
         };
       }
     }
@@ -517,6 +589,7 @@ async function checkTargetRed(ctx: CheckContext): Promise<CheckResult> {
       summary,
       output: tailCap(procOutput, ctx.outputBytes),
       fingerprint: fingerprintText("target-red ok"),
+      details: targetDetail(cmd, parsed),
     };
   } finally {
     if (fs.existsSync(tmpJunit)) {
@@ -556,6 +629,7 @@ async function checkTargetGreen(ctx: CheckContext): Promise<CheckResult> {
       summary,
       output,
       fingerprint: ok ? fingerprintText("target-green gate ok") : fingerprintText(summary),
+      details: targetDetail(cmd),
     };
   }
 
@@ -579,6 +653,7 @@ async function checkTargetGreen(ctx: CheckContext): Promise<CheckResult> {
       summary,
       output,
       fingerprint: ok ? fingerprintText("target-green custom ok") : fingerprintText(summary),
+      details: targetDetail(ctx.target.command),
     };
   }
 
@@ -606,52 +681,57 @@ async function checkTargetGreen(ctx: CheckContext): Promise<CheckResult> {
     const procOutput = (procRes.stdout + "\n" + procRes.stderr).trim();
 
     if (procRes.code !== 0 && !fs.existsSync(tmpJunit)) {
-      const summary = `Target test command failed with exit code ${procRes.code}`;
+      const summary = `Target test command failed with exit code ${procRes.code}. Command: ${cmd}`;
       return {
         name: "target-green",
         ok: false,
         summary,
         output: tailCap(procOutput, ctx.outputBytes),
         fingerprint: fingerprintText(summary),
+        details: targetDetail(cmd),
       };
     }
 
+    let parsed: ReturnType<typeof parseJunit> | undefined;
     if (fs.existsSync(tmpJunit)) {
       const xml = await fs.promises.readFile(tmpJunit, "utf8");
-      const parsed = parseJunit(xml);
+      parsed = parseJunit(xml);
 
       if (!parsed.collected) {
-        const summary = `Test suite failed collection: ${parsed.errors.join("; ") || "collection error"}`;
+        const summary = `Test suite failed collection: ${parsed.errors.join("; ") || "collection error"}. Command: ${cmd}`;
         return {
           name: "target-green",
           ok: false,
           summary,
           output: tailCap(procOutput, ctx.outputBytes),
           fingerprint: fingerprintText(summary),
+          details: targetDetail(cmd, parsed),
         };
       }
 
       const failing = parsed.cases.filter((c) => c.status === "fail" || c.status === "error");
       if (failing.length > 0) {
-        const summary = `Tests failed: ${failing.map((c) => c.id).join(", ")}`;
+        const summary = `Tests failed: ${failing.map((c) => c.id).join(", ")}. Command: ${cmd}`;
         return {
           name: "target-green",
           ok: false,
           summary,
           output: tailCap(procOutput, ctx.outputBytes),
           fingerprint: fingerprintText(summary),
+          details: targetDetail(cmd, parsed),
         };
       }
     }
 
     if (procRes.code !== 0) {
-      const summary = `Target command failed with exit code ${procRes.code}`;
+      const summary = `Target command failed with exit code ${procRes.code}. Command: ${cmd}`;
       return {
         name: "target-green",
         ok: false,
         summary,
         output: tailCap(procOutput, ctx.outputBytes),
         fingerprint: fingerprintText(summary),
+        details: targetDetail(cmd, parsed),
       };
     }
 
@@ -662,6 +742,7 @@ async function checkTargetGreen(ctx: CheckContext): Promise<CheckResult> {
       summary,
       output: tailCap(procOutput, ctx.outputBytes),
       fingerprint: fingerprintText("target-green ok"),
+      details: targetDetail(cmd, parsed),
     };
   } finally {
     if (fs.existsSync(tmpJunit)) {
@@ -822,13 +903,14 @@ async function checkRedTest(ctx: CheckContext): Promise<CheckResult> {
     const procOutput = (procRes.stdout + "\n" + procRes.stderr).trim();
 
     if (!fs.existsSync(tmpJunit)) {
-      const summary = `red-test: tests failed to produce JUnit XML (exit code ${procRes.code})`;
+      const summary = `red-test: tests failed to produce JUnit XML (exit code ${procRes.code}). Command: ${cmd}`;
       return {
         name: "red-test",
         ok: false,
         summary,
         output: tailCap(procOutput, ctx.outputBytes),
         fingerprint: fingerprintText(summary),
+        details: targetDetail(cmd),
       };
     }
 
@@ -836,48 +918,52 @@ async function checkRedTest(ctx: CheckContext): Promise<CheckResult> {
     const parsed = parseJunit(xml);
 
     if (!parsed.collected) {
-      const summary = `red-test: suite failed collection when prod restored: ${parsed.errors.join("; ")}`;
+      const summary = `red-test: suite failed collection when prod restored: ${parsed.errors.join("; ")}. Command: ${cmd}`;
       return {
         name: "red-test",
         ok: false,
         summary,
         output: tailCap(procOutput, ctx.outputBytes),
         fingerprint: fingerprintText(summary),
+        details: targetDetail(cmd, parsed),
       };
     }
 
     for (const expectId of expectRed) {
       const match = findMatchingCase(parsed.cases, expectId);
       if (!match) {
-        const summary = `red-test: expected test missing from suite: ${expectId}`;
+        const summary = `red-test: expected test missing from suite: ${expectId} (JUnit has ${parsed.cases.length} cases). Command: ${cmd}`;
         return {
           name: "red-test",
           ok: false,
           summary,
           output: tailCap(procOutput, ctx.outputBytes),
           fingerprint: fingerprintText(summary),
+          details: targetDetail(cmd, parsed),
         };
       }
 
       if (match.status === "pass") {
-        const summary = `red-test failed: test ${expectId} passes even without production code changes`;
+        const summary = `red-test failed: test ${expectId} passes even without production code changes. Command: ${cmd}`;
         return {
           name: "red-test",
           ok: false,
           summary,
           output: tailCap(procOutput, ctx.outputBytes),
           fingerprint: fingerprintText(summary),
+          details: targetDetail(cmd, parsed),
         };
       }
 
       if (match.status !== "fail") {
-        const summary = `red-test: test ${expectId} did not fail with assertion failure (status: ${match.status})`;
+        const summary = `red-test: test ${expectId} did not fail with assertion failure (status: ${match.status}). Command: ${cmd}`;
         return {
           name: "red-test",
           ok: false,
           summary,
           output: tailCap(procOutput, ctx.outputBytes),
           fingerprint: fingerprintText(summary),
+          details: targetDetail(cmd, parsed),
         };
       }
     }
@@ -889,6 +975,7 @@ async function checkRedTest(ctx: CheckContext): Promise<CheckResult> {
       summary,
       output: tailCap(procOutput, ctx.outputBytes),
       fingerprint: fingerprintText("red-test ok"),
+      details: targetDetail(cmd, parsed),
     };
   } finally {
     // Clean up temp worktree always
@@ -912,12 +999,22 @@ async function checkTestDiff(ctx: CheckContext): Promise<CheckResult> {
   const diffHead = ctx.head ?? "HEAD";
   const testGlobs = getGlobs(ctx.project.paths?.tests, DEFAULT_TEST_GLOBS);
 
-  const changed = await changedFiles(ctx.wt, diffBase, diffHead);
+  const changed = await scopeChangedFiles(ctx.wt, diffBase, diffHead === "HEAD" ? undefined : diffHead);
   const testFiles = changed.filter((f) => matchGlobs(f.path, testGlobs)).map((f) => f.path);
 
   let rawDiff = "";
   if (testFiles.length > 0) {
     rawDiff = await diffText(ctx.wt, diffBase, diffHead, testFiles);
+    // diffText omits untracked files; append their full content as new-file hunks.
+    const untrackedTests = changed.filter((f) => f.status === "?" && testFiles.includes(f.path));
+    for (const f of untrackedTests) {
+      try {
+        const content = await fs.promises.readFile(path.join(ctx.wt, f.path), "utf8");
+        rawDiff += `\n--- /dev/null\n+++ b/${f.path}\n${content.endsWith("\n") ? content : content + "\n"}`;
+      } catch {
+        // Unreadable (binary/deleted between listing and read): file list still names it.
+      }
+    }
   }
 
   const summary = `test-diff generated (${testFiles.length} test files, ${rawDiff.length} bytes)`;
@@ -939,7 +1036,7 @@ async function checkSize(ctx: CheckContext): Promise<CheckResult> {
     : (ctx.limits.storyMaxProdLines ?? 300);
 
   const prodGlobs = getGlobs(ctx.project.paths?.prod, DEFAULT_PROD_GLOBS);
-  const lines = await changedLines(ctx.wt, ctx.base, ctx.head, prodGlobs);
+  const lines = await sizeChangedLines(ctx, prodGlobs);
 
   if (lines.total > limit) {
     const summary = `Production changes (${lines.total} lines) exceeded limit (${limit} lines) for kind ${ctx.kind ?? "story"}`;
@@ -964,82 +1061,6 @@ async function checkSize(ctx: CheckContext): Promise<CheckResult> {
   };
 }
 
-async function checkSimpleGuard(ctx: CheckContext): Promise<CheckResult> {
-  const limit = ctx.limits.simpleMaxProdLines ?? 20;
-  const prodGlobs = getGlobs(ctx.project.paths?.prod, DEFAULT_PROD_GLOBS);
-  const testGlobs = getGlobs(ctx.project.paths?.tests, DEFAULT_TEST_GLOBS);
-
-  // 1. Prod line count limit
-  const lines = await changedLines(ctx.wt, ctx.base, ctx.head, prodGlobs);
-  if (lines.total > limit) {
-    const summary = `Simple task prod lines (${lines.total}) exceeded simpleMaxProdLines (${limit})`;
-    return {
-      name: "simple-guard",
-      ok: false,
-      summary,
-      output: "",
-      fingerprint: fingerprintText(summary),
-    };
-  }
-
-  // 2. Test changes rename-only (diff -M): only pure R100 renames pass,
-  // R<100 (renamed with content edits) still modifies test logic.
-  const changed = await changedFiles(ctx.wt, ctx.base, ctx.head);
-  for (const f of changed) {
-    if (matchGlobs(f.path, testGlobs)) {
-      if (!isPureRename(f)) {
-        const summary = `Simple task test change not rename-only: ${f.path} (status: ${f.status})`;
-        return {
-          name: "simple-guard",
-          ok: false,
-          summary,
-          output: "",
-          fingerprint: fingerprintText(summary),
-        };
-      }
-    }
-  }
-
-  // 3. No new deps or modified dependency configurations
-  for (const f of changed) {
-    if (matchGlobs(f.path, CONFIG_FILE_GLOBS)) {
-      if (f.status === "A") {
-        const summary = `Simple task added new dependency or config file: ${f.path}`;
-        return {
-          name: "simple-guard",
-          ok: false,
-          summary,
-          output: "",
-          fingerprint: fingerprintText(summary),
-        };
-      }
-      if (
-        f.status === "M" &&
-        (f.path.endsWith("package.json") ||
-          f.path.endsWith("requirements.txt") ||
-          f.path.endsWith("pyproject.toml"))
-      ) {
-        const summary = `Simple task modified dependencies in ${f.path}`;
-        return {
-          name: "simple-guard",
-          ok: false,
-          summary,
-          output: "",
-          fingerprint: fingerprintText(summary),
-        };
-      }
-    }
-  }
-
-  const summary = `simple-guard satisfied (${lines.total} prod lines, no test logic changes or new deps)`;
-  return {
-    name: "simple-guard",
-    ok: true,
-    summary,
-    output: "",
-    fingerprint: fingerprintText("simple-guard ok"),
-  };
-}
 
 async function checkPocScope(ctx: CheckContext): Promise<CheckResult> {
   const orch = (ctx.project.orchestrationFolder ?? "").replace(/\/+$/, "");
@@ -1048,7 +1069,7 @@ async function checkPocScope(ctx: CheckContext): Promise<CheckResult> {
       ? [`${orch}/${ctx.task}/items/${ctx.item}/poc/**`]
       : ["**/poc/**"];
 
-  const allChanged = await changedFiles(ctx.wt, ctx.base, ctx.head);
+  const allChanged = await scopeChangedFiles(ctx.wt, ctx.base, ctx.head);
   // Step records live next to the poc dir; keep only the poc dir, drop other records.
   const changed = withoutOrchestrationRecords(allChanged, ctx, pocGlobs);
   const outsideFiles: string[] = [];
@@ -1088,7 +1109,7 @@ async function checkCustom(
   const prodGlobs = getGlobs(ctx.project.paths?.prod, DEFAULT_PROD_GLOBS);
   const testGlobs = getGlobs(ctx.project.paths?.tests, DEFAULT_TEST_GLOBS);
 
-  const changed = await changedFiles(ctx.wt, ctx.base, ctx.head);
+  const changed = await scopeChangedFiles(ctx.wt, ctx.base, ctx.head);
   const changedProd = changed
     .filter((f) => matchGlobs(f.path, prodGlobs))
     .map((f) => shellQuote(f.path))

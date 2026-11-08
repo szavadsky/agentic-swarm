@@ -10,7 +10,7 @@ import { AsyncMutex, KeyedMutex } from "../../src/core/mutex.js";
 import type { PipelineConfig, ProjectConfig, SteerItemArtifact } from "../../src/core/artifacts.js";
 import { readYaml } from "../../src/core/records/io.js";
 
-describe("Engine: Sessions rehydration, budget exceed, and simple-guard fallback (§8.1, §12.4, §12.5)", () => {
+describe("Engine: Sessions rehydration, budget exceed, and simple conversion (§8.1, §12.4, §12.5)", () => {
   let tmpRepo: TmpRepo;
 
   beforeEach(() => {
@@ -189,8 +189,8 @@ describe("Engine: Sessions rehydration, budget exceed, and simple-guard fallback
     expect(fs.readdirSync(touserDir).length).toBe(1);
   });
 
-  it("handles simple-guard fallback: converts to no-behavior item when prod lines exceed limit (§8.1.4)", async () => {
-    const task = "simple-guard-fallback";
+  it("handles simple conversion: over-budget size converts to no-behavior item (§8.1.4)", async () => {
+    const task = "simple-size-fallback";
     const orchFolder = ".factory";
     const taskDir = path.join(tmpRepo.dir, orchFolder, task);
     fs.mkdirSync(taskDir, { recursive: true });
@@ -278,7 +278,7 @@ describe("Engine: Sessions rehydration, budget exceed, and simple-guard fallback
       return { ok: true, data: { status: "ok", summary: "Implementation done" } };
     });
 
-    // Run engine: simple-guard fails -> scratch branch converted to no-behavior item (§8.1.4)
+    // Run engine: size over budget -> scratch branch converted to no-behavior item (§8.1.4)
     await runTask(
       {
         harness,

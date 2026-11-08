@@ -141,7 +141,7 @@ agents:
 # ==============================================================================
 # Custom mechanical checks executed by the engine.
 # Built-in checks (schema, citations, plan-limits, gates, tests-only, test-first-scope,
-# target-red, target-green, red-test, test-diff, size, simple-guard, poc-scope) do not
+# target-red, target-green, red-test, test-diff, size, poc-scope) do not
 # need declarations here. schema/citations/plan-limits are engine-internal and
 # cannot be attached to steps or hooks.
 #
@@ -236,14 +236,15 @@ hooks: {}
 #           focus: code
 #       fixLoopTo: develop
 flows:
-  # Simple pre-checks for triage-simple work (gates + simple-guard). Oversized
-  # work converts to a `no-behavior` item on the renamed scratch branch.
+  # Simple pre-checks for triage-simple work (gates + advisory size). Over
+  # simpleMaxProdLines (or red gates) converts to a `no-behavior` item on the
+  # renamed scratch branch; under budget with green gates merges.
   simple:
     steps:
       - id: develop
         agent: developer
         stepFragment: simple-implement
-        checks: [gates, simple-guard]
+        checks: [gates, size]
 
   # Story kinds (configurable):
   story:
@@ -351,8 +352,8 @@ limits:
   maxInfraRetriesExpensive: 1     # Transient retries cap for budget.expensiveRoles
   gateRetries: 1                  # Re-runs for flaky gate detection
   gateTimeoutSec: 900             # Per-gate command timeout (sec); real suites need minutes, not seconds
-  storyMaxProdLines: 300          # Production lines changed cap for stories
-  simpleMaxProdLines: 20          # Production lines changed cap for simple items (strictly small/trivial scope; >20 lines must be story)
+  storyMaxProdLines: 300          # Advisory sizing hint for reviews (over-budget never rejects a step — no hard gate, no consult on size alone)
+  simpleMaxProdLines: 20          # Advisory size bound for simple items (over-budget converts to a no-behavior item, never rejects)
   maxMilestones: 8                # Maximum milestones per plan
   maxItemsPerPlan: 50             # Maximum items per plan
   checkOutputBytes: 4000          # Tail byte cap for check command output

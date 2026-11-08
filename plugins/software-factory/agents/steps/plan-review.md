@@ -7,6 +7,7 @@ Conduct adversarial review of the architect's proposed plan, critiquing mileston
 - SKEPTICAL REVIEW: scrutinize the plan against project intent and real codebase constraints.
 - Scrutiny checklist (numeric bounds come from the `{{limits}}` section; do not invent numbers):
   - Plan bounds: milestone/item counts within limits, acyclic dependencies, unique slugs.
+  - Size estimates (advisory only, never blocking): outlines may carry a `prodBudgetHint` (estimated prod lines); note missing hints and hints above the kind's sizing reference (`storyMaxProdLines`/`simpleMaxProdLines` in `{{limits}}`) as advisory observations. A plan is never failed, looped, or consulted on sizing hints alone.
   - Scenario completeness: are scenarios falsifiable, concrete, and comprehensive?
   - Contract clarity: do directional interfaces establish clear caller/callee contracts?
   - Risk isolation: are technical unknowns and third-party dependencies isolated into spikes?

@@ -37,6 +37,7 @@ export const PROMPT_VAR_DESCRIPTIONS: Record<string, string> = {
   storyKindsCriteria: "Story and spike kinds criteria file contents (criteria.story-kinds)",
   contextPack: "Condensed, citation-backed context document covering module maps, signatures, excerpts, conventions, and open questions",
   maxBytes: "Maximum allowed byte cap for the artifact or document",
+  gateDiff: "Structured gate/tool diff table (baseline-vs-now per-gate status) for regression judgment",
 };
 
 /**
@@ -55,11 +56,11 @@ export const KNOWN_VARS: Record<string, string[]> = {
 
 
   // Item development & verification steps
-  "steps/develop": ["assignment", "target", "citations"],
-  develop: ["assignment", "target", "citations"],
+  "steps/develop": ["assignment", "target", "citations", "feedback"],
+  develop: ["assignment", "target", "citations", "feedback"],
 
-  "steps/test-first": ["assignment", "citations"],
-  "test-first": ["assignment", "citations"],
+  "steps/test-first": ["assignment", "citations", "feedback"],
+  "test-first": ["assignment", "citations", "feedback"],
   "steps/qa": ["assignment", "checks", "testDiff", "diff", "dispositionsCriteria"],
   qa: ["assignment", "checks", "testDiff", "diff", "dispositionsCriteria"],
 
@@ -76,14 +77,14 @@ export const KNOWN_VARS: Record<string, string[]> = {
   integrate: ["item", "diff"],
 
   // Spikes
-  "steps/research": ["assignment", "intent", "citations"],
-  research: ["assignment", "intent", "citations"],
+  "steps/research": ["assignment", "intent", "citations", "feedback"],
+  research: ["assignment", "intent", "citations", "feedback"],
 
-  "steps/poc": ["assignment", "context"],
-  poc: ["assignment", "context"],
+  "steps/poc": ["assignment", "context", "feedback"],
+  poc: ["assignment", "context", "feedback"],
 
-  "steps/test-assumptions": ["assignment", "context"],
-  "test-assumptions": ["assignment", "context"],
+  "steps/test-assumptions": ["assignment", "context", "feedback"],
+  "test-assumptions": ["assignment", "context", "feedback"],
 
   // Project manager steps
   "steps/pm-edits": ["plan", "kinds", "citations", "limits", "storyKindsCriteria"],
@@ -152,8 +153,8 @@ export const KNOWN_VARS: Record<string, string[]> = {
   "architect-consult-nonitem": ["task", "context", "feedback", "debt", "contextPack"],
 
   // Close-up and review checkpoints
-  "steps/wave-close-up": ["task", "waveReport", "infra"],
-  "wave-close-up": ["task", "waveReport", "infra"],
+  "steps/wave-close-up": ["task", "waveReport", "infra", "gateDiff"],
+  "wave-close-up": ["task", "waveReport", "infra", "gateDiff"],
 
   "steps/plan-close-up": ["intent", "plan", "context"],
   "plan-close-up": ["intent", "plan", "context"],

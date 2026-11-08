@@ -70,6 +70,7 @@ describe("Smoke fixes acceptance tests (§6.4, §7, §8, §9)", () => {
         assignment: "sample assignment",
         target: "sample target",
         citations: "sample citations",
+        feedback: "",
       },
       devSchema
     );

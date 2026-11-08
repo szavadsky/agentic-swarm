@@ -34,6 +34,7 @@ describe("prompts: PromptLibrary & preflightPrompts", () => {
       assignment: "Build feature X",
       target: "Unit tests",
       citations: "src/index.ts:1-10",
+      feedback: "",
     });
 
     expect(rendered).toContain("Build feature X");
@@ -48,7 +49,7 @@ describe("prompts: PromptLibrary & preflightPrompts", () => {
       lib.render("steps/develop", {
         assignment: "Only assignment provided",
       });
-    }).toThrow(/Missing required prompt variables for "steps\/develop": target, citations/);
+    }).toThrow(/Missing required prompt variables for "steps\/develop": target, citations, feedback/);
   });
 
   it("overrides directory shadows builtin directory", () => {
@@ -248,6 +249,7 @@ tools:
       task: "t",
       waveReport: "w",
       infra: "i",
+      gateDiff: "g",
     });
     expect(wave).toContain("wave-closeup.schema.json");
     expect(wave).not.toContain("suggestions");

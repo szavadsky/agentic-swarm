@@ -96,6 +96,10 @@ export async function runItemConsult(
     item,
     assignment: assignmentYaml,
     priorAttempts: priorAttemptsText,
+    // Consult callers pass the committed branch diffstat (base..HEAD) plus
+    // failing check summaries — never bare unstaged `git diff` (empty
+    // post-commit) or generic "Step failed repeatedly" text. ShPost3 showed
+    // blind consults hallucinate evidence ("empty diff, scope paralysis").
     diff: diffText,
     feedback: feedbackText,
     debt: debtText ?? "",

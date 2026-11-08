@@ -112,6 +112,7 @@ describe("Engine: Merge path conflict -> integrate (§7)", () => {
       interruptionCount: 0,
       suggestionFingerprints: [],
       decisionFingerprints: [],
+      failingCheckFingerprints: [],
       consultCount: 0,
     };
 
@@ -220,6 +221,7 @@ describe("Engine: Merge path conflict -> integrate (§7)", () => {
       interruptionCount: 0,
       suggestionFingerprints: [],
       decisionFingerprints: [],
+      failingCheckFingerprints: [],
       consultCount: 0,
     };
 
@@ -345,6 +347,7 @@ describe("Engine: Merge path conflict -> integrate (§7)", () => {
       interruptionCount: 0,
       suggestionFingerprints: [],
       decisionFingerprints: [],
+      failingCheckFingerprints: [],
       consultCount: 0,
     };
 

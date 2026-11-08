@@ -226,6 +226,44 @@ export function validatePlan(
 }
 
 /**
+ * Advisory-only mechanical check on plan item size estimates (ShPost3 #6):
+ * notes outlines without an explicit `prodBudgetHint` and hints above the
+ * kind's size budget. A 359-line item blew a 300 budget no reviewer saw
+ * because the plan carried no estimate. Returns advisory warnings only —
+ * never errors, never a consult trigger, never a retry; plans exceeding
+ * hints must never loop or fail on this account.
+ */
+export function checkOutlineBudgets(
+  plan: PlanArtifact,
+  ctx: { limits: PipelineLimits }
+): string[] {
+  const warnings: string[] = [];
+  const outlines: PlanItemOutline[] = Array.isArray(plan?.itemOutlines) ? plan.itemOutlines : [];
+  const storyLimit = ctx.limits?.storyMaxProdLines ?? 300;
+  const simpleLimit = ctx.limits?.simpleMaxProdLines ?? 20;
+  for (const o of outlines) {
+    if (!o || typeof o !== "object") continue;
+    const slug = (o as PlanItemOutline).slug ?? "(missing slug)";
+    const kind = (o as PlanItemOutline).kind ?? "";
+    const hint = (o as PlanItemOutline).prodBudgetHint;
+    if (hint === undefined) {
+      // Spikes/fact-finding produce no prod diff; only sized kinds merit hints.
+      if (kind !== "fact-finder" && kind !== "poc" && kind !== "test-assumptions" && kind !== "epic") {
+        warnings.push(`Advisory: outline "${slug}" (${kind || "unknown kind"}) has no prodBudgetHint sizing hint`);
+      }
+      continue;
+    }
+    const limit = kind === "simple" ? simpleLimit : storyLimit;
+    if (typeof hint === "number" && hint > limit) {
+      warnings.push(
+        `Advisory: outline "${slug}" estimates ${hint} prod lines, above the ${limit}-line ${kind === "simple" ? "simpleMaxProdLines" : "storyMaxProdLines"} sizing reference`
+      );
+    }
+  }
+  return warnings;
+}
+
+/**
  * Validates a proposed plan edits artifact produced by PM against plan, limits, and historical execution (§8.4, §9).
  *
  * Rules:

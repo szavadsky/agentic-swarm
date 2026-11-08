@@ -24,6 +24,7 @@ export interface OmpParsedResult {
   stopReason?: string;
   rawEvents: unknown[];
   errors: string[];
+  toolCallCount: number;
 }
 
 export interface OmpRunTurnOptions {

@@ -12,6 +12,57 @@ import type { StatusEntry } from "../git/status.js";
 import { buildGateWithJunitCommand, parseJunit, type ParsedJunit } from "./junit.js";
 import { assertDiskSpace } from "../disk-space.js";
 
+/**
+ * Builds a structured gate/tool diff section (baseline-vs-now per-gate exit
+ * status) for the wave close-up prompt (PsPost5 item 9). The close-up must
+ * judge regressions from this table — never by comparing raw gate output
+ * text, which produced false "strictly fewer violations" claims.
+ *
+ * `now` entries come from a fresh `runGates` on the merged task branch;
+ * baseline entries from gates-baseline.yaml. Exit codes are not recorded by
+ * runGates, so status transitions carry the signal (pass/fail/flaky).
+ */
+export function buildGateDiffSection(
+  baseline: GatesBaselineArtifact | undefined,
+  now: GateBaselineEntry[]
+): string {
+  const baseById = new Map((baseline?.gates ?? []).map((g) => [g.id, g]));
+  const lines = [
+    "| gate | baseline | now | verdict |",
+    "| --- | --- | --- | --- |",
+  ];
+  const verdictFor = (baseStatus: string, nowStatus: string): string => {
+    if (nowStatus === "pass" && baseStatus !== "pass") return "IMPROVED (was failing at baseline)";
+    if (nowStatus !== "pass" && baseStatus === "pass") return "REGRESSION (was green at baseline)";
+    if (nowStatus !== "pass") return "still failing (matches baseline; not a regression)";
+    return "green (matches baseline)";
+  };
+  for (const cur of now) {
+    const base = baseById.get(cur.id);
+    const baseStatus = base?.status ?? "(no baseline entry)";
+    lines.push(`| ${cur.id} | ${baseStatus} | ${cur.status} | ${verdictFor(baseStatus, cur.status)} |`);
+    const nowNew = ((cur as { failingTests?: string[] }).failingTests ?? []).filter(
+      (id) => !(base?.failingTests ?? []).includes(id)
+    );
+    if (nowNew.length > 0) {
+      lines.push(`| | | | new failing tests: ${nowNew.slice(0, 10).join(", ")}${nowNew.length > 10 ? ", ..." : ""} |`);
+    }
+    const improved = (cur.improvements ?? []).slice(0, 10);
+    if (improved.length > 0) {
+      lines.push(`| | | | fixed since baseline: ${improved.join(", ")}${(cur.improvements ?? []).length > 10 ? ", ..." : ""} |`);
+    }
+    baseById.delete(cur.id);
+  }
+  for (const [id, base] of baseById) {
+    lines.push(`| ${id} | ${base.status} | (not run) | gate removed from infra; treat as unknown, not a fix |`);
+  }
+  lines.push(
+    "",
+    "Judge regressions ONLY from this table: a gate counts as fixed only when its row shows now=pass after baseline=fail. Raw output text may differ for unrelated reasons (timing, ordering, truncation) — never infer fixes from text comparison."
+  );
+  return lines.join("\n");
+}
+
 /** Marker embedded in gate details when the gate command timed out. */
 export const GATE_TIMED_OUT_MARKER = "gate timed out";
 

@@ -147,6 +147,8 @@ Steering log (user decisions recorded by the orchestrator during the build; newe
      - PM is non-technical by construction: no file tools (yield only), minimal delta-only output, outlineRef must name an architect-provided outline, context = injected plan + task status only; architect gets tools + injected task status + status-file paths
      - agent tools: per-agent tool sets configurable (`agents.<name>.tools`); tool profiles and loop prevention are spec item 21 (self-host)
      - sessions: additive-only, never rewrite transcripts; prompt prefixes and overlay byte-stable (spec 20c); repo rules hydrated by the factory (spec 19)
+     - sizes are advisory, never hard gates: no limit on architect output size or code/prod size (over-budget warns, consults never on size alone; scope is the architect's judgment, compact tasks are its job)
+     - simple-guard's mechanical rules (rename-only tests, dep-file bans) removed as nonsense — simple path guarded by gates + advisory size with conversion routing only
 
                                                    
 

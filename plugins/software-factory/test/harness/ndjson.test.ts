@@ -179,4 +179,16 @@ describe("OmpNdjsonParser", () => {
     expect(result.finalAssistantText.startsWith("AAA")).toBe(true);
     expect(result.finalAssistantText.endsWith("ZZZ")).toBe(true);
   });
+
+  it("counts tool_execution_start events as toolCallCount", () => {
+    const parser = new OmpNdjsonParser();
+    parser.feedLine('{"type":"session","id":"sess-tools"}');
+    parser.feedLine('{"type":"tool_execution_start","toolName":"read"}');
+    parser.feedLine('{"type":"tool_execution_end","toolName":"read"}');
+    parser.feedLine('{"type":"tool_execution_start","toolName":"bash"}');
+    parser.feedLine('{"type":"tool_execution_end","toolName":"bash"}');
+    parser.feedLine('{"type":"tool_execution_start","toolName":"yield","args":{"data":{"status":"ok"}}}');
+    const result = parser.getResult();
+    expect(result.toolCallCount).toBe(3);
+  });
 });

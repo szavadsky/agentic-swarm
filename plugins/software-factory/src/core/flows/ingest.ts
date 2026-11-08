@@ -32,6 +32,7 @@ import { appendJournal } from "../journal.js";
 import { refreshStateYaml } from "../derive/task.js";
 import { loadCriteriaBundle } from "../prompts.js";
 import { runGates } from "../checks/gates.js";
+import { validateTestRunner } from "../checks/junit.js";
 import { runCheck } from "../checks/runner.js";
 import type { CheckContext } from "../checks/types.js";
 import type { Semaphore } from "../mutex.js";
@@ -502,6 +503,13 @@ export async function runIngest(params: IngestParams): Promise<IngestResult> {
         if (!rawInfra || !rawInfra.gates || !rawInfra.testRunner) {
           throw new Error("Infra step failed: missing gates or testRunner in output");
         }
+        // Structural testRunner validation (PsPost5 item 1): reject configs
+        // that cannot select node-ids (pytest/unittest with selectorArgs).
+        // The agent additionally dry-runs a real selector via bash per prompt.
+        const runnerErrors = validateTestRunner(rawInfra.testRunner);
+        if (runnerErrors.length > 0) {
+          throw new Error(`Infra testRunner invalid: ${runnerErrors.join("; ")}`);
+        }
         infra = {
           setup: rawInfra.setup ?? [],
           gates: rawInfra.gates,
@@ -608,7 +616,9 @@ export async function runIngest(params: IngestParams): Promise<IngestResult> {
     await commitAll(repo, scratch.path, "factory(simple): implement");
     await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
 
-    // Run configured simple flow checks (gates, simple-guard) (§8.1.4)
+    // Run configured simple flow checks (gates + advisory size) (§8.1.4).
+    // Gates green and under simpleMaxProdLines merges; over budget or red
+    // gates converts to a no-behavior item (never a rejection, just a reroute).
     const checkCtx: CheckContext = {
       repo,
       wt: scratch.path,
@@ -625,7 +635,7 @@ export async function runIngest(params: IngestParams): Promise<IngestResult> {
       outputBytes: pipeline.limits?.checkOutputBytes ?? 4096,
     };
 
-    const configuredChecks = pipeline.flows?.simple?.steps?.[0]?.checks ?? ["gates", "simple-guard"];
+    const configuredChecks = pipeline.flows?.simple?.steps?.[0]?.checks ?? ["gates", "size"];
     let guardPassed = implRes.ok;
     for (const cName of configuredChecks) {
       if (!guardPassed) break;
@@ -658,11 +668,11 @@ export async function runIngest(params: IngestParams): Promise<IngestResult> {
         simpleDone: true,
       };
     } else {
-      // Guard failure or gate attempts exhausted: scratch branch becomes no-behavior item (§8.1.4)
+      // Over budget or red gates: scratch branch becomes no-behavior item (§8.1.4)
       await appendJournal(taskDir, {
         type: "simple_guard_fallback",
         task,
-        reason: "simple guard failed, converting to no-behavior item",
+        reason: "simple size/gates over budget, converting to no-behavior item",
       });
 
       // Write assignment for simple item

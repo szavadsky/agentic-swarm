@@ -18,6 +18,7 @@ import type { Harness } from "../../harness/types.js";
 import { git } from "../git/exec.js";
 import { runAgentStep, type StepRunResult } from "./step-runner.js";
 import { runItemConsult } from "./consults.js";
+import { buildConsultFailureContext } from "./consult-context.js";
 import { runSeamHooks } from "./seams.js";
 import { appendJournal } from "../journal.js";
 import { writeQuestion } from "../steer.js";
@@ -32,7 +33,7 @@ import {
 } from "../loops.js";
 import { loadCriteriaBundle, formatDispositionsSection } from "../prompts.js";
 import { runCheck } from "../checks/runner.js";
-import type { CheckContext } from "../checks/types.js";
+import { tailCap, type CheckContext } from "../checks/types.js";
 import type { BudgetTracker } from "../budget.js";
 import type { Semaphore } from "../mutex.js";
 import { readYaml, readText, writeYamlAtomic } from "../records/io.js";
@@ -146,6 +147,48 @@ export function getDefaultFlowForKind(kind: string, pipeline: PipelineConfig): F
   }
 }
 
+const DEFAULT_RETRY_PROD_GLOBS = ["src/**", "lib/**", "*.ts", "*.js", "*.mjs", "*.cjs", "*.py", "*.go", "*.rs", "*.java", "*.c", "*.cpp", "*.h", "pkg/**", "app/**"];
+
+function getGlobsFromProject(project: ProjectConfig): string[] {
+  const configured = project.paths?.prod;
+  if (!configured) return DEFAULT_RETRY_PROD_GLOBS;
+  return Array.isArray(configured) ? configured : [configured];
+}
+
+async function sizeChangedLinesForRetry(wt: string, base: string, globs: string[]) {
+  const { changedLines } = await import("../git/diff.js");
+  const { countUntrackedLines } = await import("../git/untracked-lines.js");
+  const lines = await changedLines(wt, base, undefined, globs);
+  const extra = await countUntrackedLines(wt, globs);
+  return { total: lines.total + extra.added };
+}
+
+/**
+ * Maps a live CheckResult into the persisted CheckItemResult form: structured
+ * details (command, JUnit ids, line counts) plus a bounded output tail on
+ * failures so checks.yaml is diagnosable without re-running checks.
+ */
+function toCheckItemResult(cRes: {
+  name: string;
+  ok: boolean;
+  summary: string;
+  output: string;
+  details?: unknown;
+}): CheckItemResult {
+  const item: CheckItemResult = {
+    id: cRes.name,
+    status: cRes.ok ? "pass" : "fail",
+    message: cRes.summary,
+  };
+  if (cRes.details !== undefined) {
+    item.details = cRes.details;
+  }
+  if (!cRes.ok && cRes.output) {
+    item.output = tailCap(cRes.output, 2000);
+  }
+  return item;
+}
+
 /**
  * Runs one step or transition for an item (§8.2, §8.3, §9, §12).
  */
@@ -208,12 +251,17 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
         limit: bCheck.limit,
       });
 
-      // Check loop detector for consults before triggering
-      const diffRes = await git(childWt, ["diff"], { allowFail: true });
+      // Check loop detector for consults before triggering. Diff basis is the
+      // committed branch diff (base..HEAD), never bare unstaged `git diff`.
+      const budgetCtx = await buildConsultFailureContext({
+        wt: childWt,
+        base: parentBranch,
+        recordDir: path.join(childWt, path.relative(taskWt, taskDir), "items", itemSlug, "steps"),
+      });
       const cCheck = checkConsultsPerItem(
         itemState.consultCount,
         maxConsults,
-        Boolean(diffRes.stdout.trim()),
+        Boolean(budgetCtx.diffstat.trim()),
         itemState.decisionFingerprints
       );
 
@@ -227,7 +275,7 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
         item: itemSlug,
         assignmentYaml: JSON.stringify(itemState.assignment ?? {}),
         priorAttemptsText: "Item budget limit exceeded",
-        diffText: "",
+        diffText: budgetCtx.diffstat,
         feedbackText: `Spent $${bCheck.spent.toFixed(2)}, limit is $${bCheck.limit}`,
         afterRecord: itemState.records[itemState.records.length - 1]?.dirName,
         taskDir,
@@ -367,14 +415,33 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
             return { done: true, status: "failed" };
           }
 
-          // Consult architect (§12.2)
+          // Consult architect (§12.2). Feedback hydrates the latest fix-list
+          // plus failing check summaries so the architect sees what the fix
+          // rounds attempted — never a bare "exhausted without resolution".
+          const fixSuggestions = latestReviewOutput?.suggestions?.filter((s) => s.disposition === "fix") ?? [];
+          const fixSummary = fixSuggestions.map((s) => `- [FIX] ${s.summary}${s.detail ? `: ${s.detail}` : ""}`).join("\n");
+          const fixRetryCtx = await buildConsultFailureContext({
+            wt: childWt,
+            base: parentBranch,
+            recordDir: path.join(childWt, path.relative(taskWt, taskDir), "items", itemSlug, "steps", lastRecord.dirName),
+          });
+          const fixFeedback = [
+            `Fix rounds exhausted (${upcomingRound}/${maxFixRounds}) without resolution.`,
+            fixSummary ? `Latest fix requests:\n${fixSummary}` : "",
+            fixRetryCtx.failingCheckSummaries.length > 0
+              ? `Failing checks on last round:\n${fixRetryCtx.failingCheckSummaries.join("\n")}`
+              : "",
+            fixRetryCtx.feedbackText && fixRetryCtx.feedbackText !== "Step failed repeatedly"
+              ? fixRetryCtx.feedbackText
+              : "",
+          ].filter(Boolean).join("\n\n");
           await runItemConsult({
             task,
             item: itemSlug,
             assignmentYaml: JSON.stringify(itemState.assignment ?? {}),
             priorAttemptsText: `Fix rounds exhausted (${upcomingRound}/${maxFixRounds})`,
             diffText: codeDiffRes.stdout,
-            feedbackText: "Fix rounds exhausted without resolution",
+            feedbackText: fixFeedback,
             afterRecord: lastRecord.dirName,
             taskDir,
             taskWt,
@@ -433,19 +500,34 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
         attempt = lastRecord.attempt + 1;
       }
 
-      // Check step attempts bound and no-progress detector (§12.2)
+      // Check step attempts bound and no-progress detector (§12.2). The series
+      // fingerprints end with the current (last-record) failure: pass it as the
+      // current fingerprint so same-failure-twice short-circuits to consult.
+      const seriesFps = itemState.failingCheckFingerprints ?? [];
+      const currentFp = seriesFps.length > 0 ? seriesFps[seriesFps.length - 1] : undefined;
       const attemptsCheck = checkStepAttempts(
         attempt,
         maxStepAttempts,
-        itemState.lastFailingCheckFingerprint ? [itemState.lastFailingCheckFingerprint] : []
+        seriesFps.slice(0, -1),
+        currentFp
       );
 
       if (attemptsCheck.exhausted || attemptsCheck.noProgress) {
-        const diffRes = await git(childWt, ["diff"], { allowFail: true });
+        // Grounded consult context (PsPost5 items 2/3): committed diffstat on
+        // the checks base (never bare unstaged `git diff`, empty post-commit),
+        // failing check summaries, and hydrated last-failure feedback.
+        const relTaskDir = path.relative(taskWt, taskDir);
+        const lastRecordDir = path.join(childWt, relTaskDir, "items", itemSlug, "steps", lastRecord.dirName);
+        const failureCtx = await buildConsultFailureContext({
+          wt: childWt,
+          base: parentBranch,
+          recordDir: lastRecordDir,
+          fallbackError: lastRecord.meta.error,
+        });
         const cCheck = checkConsultsPerItem(
           itemState.consultCount,
           maxConsults,
-          Boolean(diffRes.stdout.trim()),
+          Boolean(failureCtx.diffstat.trim()),
           itemState.decisionFingerprints
         );
         if (cCheck.exhausted || cCheck.noProgress) {
@@ -453,13 +535,25 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
           return { done: true, status: "failed" };
         }
 
+        // Exhaustion phrasing names completed attempts (never "attempt 3/2").
+        const completedAttempts = Math.max(0, attempt - 1);
+        const attemptsPhrase = attemptsCheck.noProgress && !attemptsCheck.exhausted
+          ? `Same failing check twice in a row for ${lastRecord.name} (no progress; next would be attempt ${attempt})`
+          : `${completedAttempts} attempt${completedAttempts === 1 ? "" : "s"} recorded for ${lastRecord.name} (all rejected); next would be ${attempt} > max ${maxStepAttempts}`;
+        const priorAttemptsText = [
+          attemptsPhrase,
+          failureCtx.failingCheckSummaries.length > 0
+            ? `Failing checks:\n${failureCtx.failingCheckSummaries.join("\n")}`
+            : "",
+        ].filter(Boolean).join("\n\n");
+
         await runItemConsult({
           task,
           item: itemSlug,
           assignmentYaml: JSON.stringify(itemState.assignment ?? {}),
-          priorAttemptsText: `Step attempts exhausted for ${lastRecord.name} (attempt ${attempt}/${maxStepAttempts})`,
-          diffText: diffRes.stdout,
-          feedbackText: lastRecord.meta.error || "Step failed repeatedly",
+          priorAttemptsText,
+          diffText: failureCtx.diffstat,
+          feedbackText: failureCtx.feedbackText,
           afterRecord: lastRecord.dirName,
           taskDir,
           taskWt,
@@ -483,7 +577,13 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
   }
 
   // 4. Prepare prompt variables and check runner wiring (§9, §10, Finding 9 & 11)
-  const diffRes = await git(childWt, ["diff"], { allowFail: true });
+  // Step `diff` shows the committed branch diff against the checks base plus
+  // any uncommitted work — never bare unstaged `git diff` alone (empty
+  // post-commit, which blinded reviewers and consults).
+  const stepDiffRes = await git(childWt, ["diff", `${parentBranch}..HEAD`], { allowFail: true });
+  const stepPendingRes = await git(childWt, ["diff"], { allowFail: true });
+  const stepDiffText = [stepDiffRes.stdout, stepPendingRes.stdout].filter((s) => s && s.trim()).join("\n");
+  const diffRes = { stdout: stepDiffText };
   const assignmentYaml = itemState.assignment
     ? JSON.stringify(itemState.assignment, null, 2)
     : "";
@@ -529,7 +629,7 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
     }
   }
 
-  // Build feedback for fix rounds or retries (Finding 11)
+  // Build feedback for fix rounds or retries (Finding 11; ShPost3 retry gap).
   let feedbackText = itemState.guidanceText ?? "";
   if (answeredAsyncFeedback) {
     feedbackText = feedbackText ? `${feedbackText}\n${answeredAsyncFeedback}` : answeredAsyncFeedback;
@@ -544,6 +644,43 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
       .map((s) => `- [OPTIONAL] ${s.summary}${s.detail ? `: ${s.detail}` : ""}`)
       .join("\n");
     feedbackText = [feedbackText, fixList, optionalList].filter(Boolean).join("\n\n");
+  }
+  // Check-reject retry: hydrate the failing check (id+message+detail) plus the
+  // current prod-line budget so the retry fixes the failure instead of
+  // re-verifying from scratch. Failing-check detail includes the executed
+  // command and JUnit case ids for target checks.
+  if (isRetrying && records.length > 0) {
+    const lastRec = records[records.length - 1]!;
+    if (lastRec.meta.status === "rejected") {
+      const retryCtx = await buildConsultFailureContext({
+        wt: childWt,
+        base: parentBranch,
+        recordDir: path.join(childWt, path.relative(taskWt, taskDir), "items", itemSlug, "steps", lastRec.dirName),
+        fallbackError: lastRec.meta.error,
+      });
+      const retryParts = [retryCtx.feedbackText];
+      // Size-budget position: current prod lines vs limit (live worktree).
+      try {
+        const prodGlobs = getGlobsFromProject(project);
+        const lines = await sizeChangedLinesForRetry(childWt, parentBranch, prodGlobs);
+        const isSimple = itemState.kind === "simple";
+        const limitName = isSimple ? "simpleMaxProdLines" : "storyMaxProdLines";
+        const limit = isSimple
+          ? (limits.simpleMaxProdLines ?? 20)
+          : (limits.storyMaxProdLines ?? 300);
+        retryParts.push(
+          `Budget: ${lines.total} prod lines changed vs ${limitName} ${limit} (kind ${itemState.kind}). ` +
+          `Shrink the diff or escalate; do not re-verify green checks from scratch.`
+        );
+      } catch {
+        // Budget position is advisory; never block the retry on git errors.
+      }
+      retryParts.push(
+        `Fix-or-escalate: address the failing check above directly. If the failure is unsatisfiable or the budget cannot be met, yield status failed/blocked with evidence instead of burning another attempt.`
+      );
+      const retryBlock = retryParts.filter(Boolean).join("\n\n");
+      feedbackText = feedbackText ? `${feedbackText}\n\n${retryBlock}` : retryBlock;
+    }
   }
 
   // Wire per-step checks by phase (§9, Finding 9)
@@ -600,7 +737,7 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
           let ok = true;
           for (const cName of beforeChecksList) {
             const cRes = await runCheck(cName, checkCtx);
-            results.push({ id: cRes.name, status: cRes.ok ? "pass" : "fail", message: cRes.summary });
+            results.push(toCheckItemResult(cRes));
             if (!cRes.ok) {
               ok = false;
               failingCheckSummaries.push(`[${cName}] ${cRes.summary}`);
@@ -625,7 +762,7 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
           let ok = true;
           for (const cName of afterChecksList) {
             const cRes = await runCheck(cName, checkCtx);
-            results.push({ id: cRes.name, status: cRes.ok ? "pass" : "fail", message: cRes.summary });
+            results.push(toCheckItemResult(cRes));
             if (!cRes.ok) {
               ok = false;
               failingCheckSummaries.push(`[${cName}] ${cRes.summary}`);
@@ -635,7 +772,11 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
         }
       : undefined;
 
-  // Use steps/fix-round on fix loop re-entry (Finding 11)
+  // Fix-round re-entry for ANY agent (PsPost5 item 4): the step fragment stays
+  // agent-specific, but the re-entry prompt carries the Review Feedback section
+  // (see promptVars.feedback below) so non-developer agents (fact-finder,
+  // researcher) do not re-run the byte-identical original prompt. Developer
+  // re-entry keeps the dedicated steps/fix-round fragment.
   const isFixRoundReentry = isFixReentry && currentStep.agent === "developer";
   const stepFragment = isFixRoundReentry
     ? "steps/fix-round"
