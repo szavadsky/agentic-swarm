@@ -21,3 +21,5 @@
 {"type":"step_transcript_size_warning","task":"concerns-funnel","step":"context-pack","attempt":1,"sizeBytes":11171036,"thresholdBytes":5242880,"traceRef":"/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/sessions/2026-11-08T00-27-27-552Z_01a1b88d-8fc0-75fd-85cc-f9a7695a74f0.jsonl","ts":"2026-11-08T00:34:47.410Z"}
 {"type":"step_finished","task":"concerns-funnel","step":"context-pack","attempt":1,"status":"ok","sessionId":"01a1b88d-8fc0-75fd-85cc-f9a7695a74f0","usage":{"inputTokens":302947,"outputTokens":39294,"costUsd":0.209599},"ts":"2026-11-08T00:34:47.465Z"}
 {"type":"iteration_started","iteration":1,"ts":"2026-11-08T00:34:47.528Z"}
+{"type":"step_started","task":"concerns-funnel","step":"architect-plan-1","attempt":1,"recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/006-architect-plan-1-a1","ts":"2026-11-08T00:34:47.560Z"}
+{"type":"step_timeout","task":"concerns-funnel","step":"architect-plan-1","timeoutSec":1200,"ts":"2026-11-08T00:34:47.563Z"}

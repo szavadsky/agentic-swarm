@@ -1,0 +1,386 @@
+iteration: 1
+milestones:
+  - directionalInterfaces:
+      - "artifacts.ts: Concern, ConcernKind, ConcernSeverity, ConcernStatus,
+        RemarkableDecision, StoredConcernArtifact; ReviewDisposition += dismiss;
+        PlanAdr.blocking?: boolean; StateArtifact.concernCounts?"
+      - "config/schemas/developer-output.schema.json, plan.schema.json,
+        wave-closeup.schema.json, plan-closeup.schema.json,
+        pipeline.schema.json: structured concerns[] + remarkableDecisions[] +
+        blocking + humanInvolvement"
+      - "src/core/concerns.ts: concernFingerprint(c)->string;
+        aggregateConcerns(taskDir, raw[], source)->StoredConcernArtifact[];
+        listOpenConcerns(taskDir)->StoredConcernArtifact[]"
+      - "src/core/records/review-schema.ts: generateReviewSchema(allowed) admits
+        dismiss for triager roles"
+    id: m1-contracts-aggregate
+    scenarios:
+      - Given a developer step emitting concerns [{kind:blocker, summary,
+        detail, severity, affects}] When the step commits Then
+        taskDir/concerns/c-<fp10>.yaml exists with status open and source.record
+        pointing at the step record
+      - Given the same concern re-emitted on retry or restart When aggregation
+        runs Then no second file is created and existing triage status is
+        preserved
+      - Given an invalid concern payload When validateAndRepair runs Then output
+        is repaired or rejected per schema without breaking existing outputs
+    title: Contracts and aggregation foundation
+  - directionalInterfaces:
+      - prompt-vars KNOWN_VARS += concernsYaml;
+        formatConcernsSection(concerns)->string terse capped list
+      - item-machine.ts review promptVars + writeArtifact triage persistence via
+        applyConcernTriage(taskDir, suggestions)
+      - iteration.ts plan-review promptVars + writeArtifact triage persistence
+        (same vocabulary)
+      - "agents/reviewer.md, agents/plan-reviewer.md,
+        agents/criteria/dispositions.md: terse confirm/dismiss/condense
+        fragment"
+    id: m2-triage
+    scenarios:
+      - Given open concerns from develop/QA When review runs Then the prompt
+        receives concernsYaml with id/kind/severity/summary/affects and terse
+        triage instructions
+      - Given reviewer emits suggestion {id:<concernId>, disposition:dismiss}
+        with reason When review commits Then concerns/<id>.yaml has status
+        dismissed plus dismissReason and no routing occurs
+      - Given architect plan emits concerns and remarkable decisions When
+        plan-review runs Then plan-reviewer triages them with the same
+        vocabulary and non-dismissed items stay open
+    title: Reviewer triage with dismiss
+  - directionalInterfaces:
+      - "src/core/concerns.ts: routeConcerns(taskDir, triaged)->{blockedItems,
+        mailboxWrites, debtAdds}; markConcernRouted(taskDir, id, disposition)"
+      - derive/task.ts debt += routed tech-debt concerns; derive/wave.ts +
+        scheduler blockedByConcern() transitive fixpoint; consults.ts blocker
+        trigger
+      - steer.ts writeQuestion reuse for human-async/human-stop/blocking ADR;
+        awareness/digest writes with blocks:[]
+    id: m3-routing
+    scenarios:
+      - Given a triaged blocker concern with affects:[dependent-item] When
+        routing runs Then the dependent item derives blocked and an architect
+        consult decision is written
+      - Given a triaged tech-debt concern When state derives Then
+        deriveTaskState debt includes its summary and close-ups can list it
+      - Given triaged human-async/human-stop/human-awareness concerns When
+        routing runs Then mailbox q-*.yaml files are written with blocks set for
+        async/stop and empty blocks for awareness digest
+      - Given plan ADRs with blocking true and false When plan commits Then
+        blocking ADR creates a mailbox question per mode while remarkable ADR
+        appears only in the digest
+    title: Routing to blocked, architect, mailbox, debt
+  - directionalInterfaces:
+      - iteration.ts buildArchitectHydration() += openConcernsDigest (condensed,
+        byte-capped); close-up promptVars += openConcernsYaml; close-up
+        writeArtifact re-triage
+      - "engine.ts runChildTask: propagateEpicConcerns(childTaskDir,
+        parentTaskDir, epicSlug) condensed copies with source.epic"
+      - derive/task.ts toStateArtifact().concerns counts; cli/status.ts Concerns
+        + digest rendering
+    id: m4-funnel-surface
+    replanAfter: true
+    scenarios:
+      - Given open concerns at wave end When wave-close-up and
+        architect-wave-report run Then the close-up lists condensed open
+        concerns within the byte budget and the architect output resolves or
+        carries each
+      - Given a child epic finishing with undismissed epic concerns When
+        runChildTask completes Then the parent concerns/ gains condensed copies
+        hydrating the saga architect next turn
+      - Given concerns in mixed statuses When state refreshes and factory status
+        runs Then state.yaml and CLI show {open, dismissed, routed, resolved}
+        counts plus remarkable digest
+    title: Funnel, close-ups, saga propagation, surfacing
+  - directionalInterfaces:
+      - "config/schemas/pipeline.schema.json + PipelineConfig.humanInvolvement?:
+        autonomous|principal|detailed; config/pipeline.default.yaml commented
+        presets"
+      - agents/criteria/human-involvement.md + prompts.ts loadCriteriaBundle
+        wiring; KNOWN_VARS += humanInvolvementCriteria
+      - docs/ARCHITECTURE.md §1 row 18 + §6.2 + §8, README.md, config commentary
+    id: m5-modes-docs
+    scenarios:
+      - "Given pipeline.yaml humanInvolvement: principal When reviewer and
+        architect prompts render Then the mode-specific criteria fragment is
+        included and preflightPrompts passes"
+      - Given the default config When an operator reads pipeline.default.yaml
+        Then commented autonomous/principal/detailed presets explain mailbox vs
+        digest behavior per mode
+      - Given implementation complete When docs are read Then ARCHITECTURE.md,
+        README, and config commentary describe concerns/ lifecycle, funnel,
+        ADRs, and modes with terse prompts
+    title: Human-involvement modes and docs
+uncertainties:
+  - description: Exact byte-cap and condense point for funnel text budget (diff
+      bytes vs fixed cap) and where truncation applies without losing stored
+      detail.
+    id: u-text-budget
+    spikeOutlines:
+      - "test-assumptions: probe diff sizes vs concern detail sizes in existing
+        fixtures; confirm min(diffBytes,2000) cap keeps prompts terse without
+        empty digests"
+  - description: Whether epic concern propagation should copy files into parent
+      concerns/ at child completion or only summarize in child-closeup.yaml for
+      architect hydration.
+    id: u-saga-propagation
+    spikeOutlines:
+      - "fact-finder: verify runChildTask commit point and parent hydration read
+        path; confirm parent-copy with source.epic survives worktree cleanup and
+        derives correctly"
+itemOutlines:
+  - deps: []
+    description: "Define Concern/RemarkableDecision/StoredConcernArtifact,
+      ReviewDisposition+dismiss, PlanAdr.blocking,
+      PipelineConfig.humanInvolvement, StateArtifact concern counts in
+      artifacts.ts; update
+      developer-output/plan/wave-closeup/plan-closeup/pipeline schemas +
+      generateReviewSchema dismiss support. Tests: typecheck + preflight +
+      schema repair path via FakeHarness invalid-concern fixture."
+    kind: story
+    milestoneId: m1-contracts-aggregate
+    slug: concerns-contracts
+    title: Concern contracts, schemas, dismiss vocabulary
+  - deps:
+      - concerns-contracts
+    description: "Implement src/core/concerns.ts (fingerprint, aggregateConcerns,
+      listOpenConcerns, applyConcernTriage, atomic YAML, idempotent dedup
+      preserving dismissed/routed status + source record pointer). Wire
+      aggregation into item-machine develop/qa/review and iteration
+      architect/plan writeArtifact writing taskWt concerns/. Behavior tests in
+      test/engine/concerns-funnel.test.ts: file created with open+source, retry
+      dedup single file. Run: cd plugins/software-factory && TMPDIR=/tmp bun
+      test test/engine/concerns-funnel.test.ts."
+    kind: story
+    milestoneId: m1-contracts-aggregate
+    slug: concerns-store
+    title: Concerns store with fingerprint aggregation
+  - deps:
+      - concerns-store
+    description: "Item reviewer triage: unify reviewAllowed resolver
+      (prompt+schema), add concernsYaml KNOWN_VAR + terse formatConcernsSection,
+      update reviewer.md + dispositions criteria (confirm/dismiss/condense),
+      persist triage in review writeArtifact via applyConcernTriage. Behavior
+      tests: dismiss with reason -> dismissed no routing;
+      fix/architect/human/tech-debt dispositions persist. Keep prompts terse."
+    kind: story
+    milestoneId: m2-triage
+    slug: reviewer-triage
+    title: Workhorse reviewer concern triage
+  - deps:
+      - concerns-store
+    description: "Architect-output path: aggregate architect plan/revise
+      concerns+remarkable decisions, hydrate plan-review prompt with
+      concernsYaml, same dismiss vocabulary in plan-reviewer.md, persist triage
+      identically. Behavior tests: architect concern dismissed vs confirmed by
+      plan-reviewer; remarkable decisions stored under
+      concerns/remarkable-*.yaml or decisions note."
+    kind: story
+    milestoneId: m2-triage
+    slug: plan-reviewer-triage
+    title: Plan-reviewer triage for architect output
+  - deps:
+      - reviewer-triage
+      - plan-reviewer-triage
+    description: "Blocker: map affects[] to item slugs, extend derive/wave +
+      scheduler blockedByConcern with transitive fixpoint, trigger
+      runItemConsult decision write on newly blocked. Architect: write open
+      architect-disposition digest consumed by buildArchitectHydration for
+      wave-report/next-plan. Behavior tests: blocker on dependent -> derived
+      blocked + decisions/ file; architect concern appears in next architect
+      turn input."
+    escalate: true
+    kind: story
+    milestoneId: m3-routing
+    slug: routing-blocker-architect
+    title: Blocker and architect routing
+  - deps:
+      - reviewer-triage
+    description: "human-async/human-stop -> writeQuestion with blocks per
+      disposition; human-awareness -> tousertoreview digest entry with blocks:[]
+      never blocking; tech-debt kind or routed tech-debt disposition ->
+      deriveTaskState debt set. Behavior tests: mailbox files per disposition,
+      debt includes [item] summary, awareness never halts engine."
+    kind: story
+    milestoneId: m3-routing
+    slug: routing-human-debt
+    title: Human mailbox and tech-debt routing
+  - deps:
+      - routing-human-debt
+    description: "End-to-end blocking vs remarkable ADRs: full ADR md
+      (title/context/decision/consequences/blocking), blocking:true -> mailbox
+      question gated by humanInvolvement mode, blocking:false/remarkable ->
+      digest only never waiting. Behavior tests: blocking creates q-* with
+      blocks, remarkable appears only in digest/status."
+    kind: story
+    milestoneId: m3-routing
+    slug: adr-blocking-digest
+    title: Blocking vs remarkable ADR routing
+  - deps:
+      - routing-blocker-architect
+      - adr-blocking-digest
+    description: "Hydrate wave-close-up/plan-close-up +
+      architect-wave-report/architect-closeup with condensed openConcernsDigest
+      (byte-cap min(diffBytes,2000)); close-up reviewers re-triage
+      (resolve/carry/propagate); runChildTask propagates undismissed epic
+      concerns as condensed parent copies with source.epic. Behavior tests:
+      close-up lists + re-triage, epic concern reaches saga architect input."
+    escalate: true
+    kind: story
+    milestoneId: m4-funnel-surface
+    replanAfter: true
+    slug: funnel-closeups-saga
+    title: Funnel close-ups and epic-saga propagation
+  - deps:
+      - concerns-store
+    description: "Add concerns {open,dismissed,routed,resolved} counts to
+      toStateArtifact/refreshStateYaml/state.schema.json; render Concerns line +
+      remarkable digest in cli/status.ts alongside questions/debt. Behavior
+      tests: mixed-status fixtures -> state.yaml counts + CLI output contains
+      counts."
+    kind: story
+    milestoneId: m4-funnel-surface
+    slug: status-state-surface
+    title: State counts and factory status surfacing
+  - deps:
+      - reviewer-triage
+      - plan-reviewer-triage
+    description: "Add humanInvolvement to pipeline.schema.json + loader/merge,
+      commented autonomous/principal/detailed presets in pipeline.default.yaml,
+      agents/criteria/human-involvement.md terse fragment + KNOWN_VARS +
+      loadCriteriaBundle wiring into reviewer/architect prompts. Behavior tests:
+      mode switch changes criteria inclusion + blocking-ADR/mailbox behavior;
+      preflightPrompts green."
+    kind: story
+    milestoneId: m5-modes-docs
+    slug: modes-prompts
+    title: Human-involvement modes and prompt wiring
+  - deps:
+      - funnel-closeups-saga
+      - status-state-surface
+      - modes-prompts
+    description: "Update docs/ARCHITECTURE.md §1 row 18 + §6.2 concerns/ + §8
+      funnel/routing/modes, README, config commentary; debloat-check prompts;
+      consolidate test/engine/concerns-funnel.test.ts + steer/CLI coverage.
+      Final gates: cd plugins/software-factory && bun run typecheck &&
+      TMPDIR=/tmp bun test."
+    kind: story
+    milestoneId: m5-modes-docs
+    slug: docs-finish
+    title: Docs, config commentary, suite consolidation
+assumptions:
+  - assumption: Gates run with TMPDIR=/tmp (or equivalent non-.factory-runtime tmp)
+      so the 2 pre-existing head-guard failures do not mask regressions.
+    why: Infra baseline is red (269 pass/2 fail) only because TMPDIR under
+      .factory-runtime breaks the '/.factory' worktree split; suite is green
+      (271 pass) with TMPDIR=/tmp. No fix in this task scope.
+  - assumption: Concern fingerprint = sha1/sha256 over normalized
+      {kind,summary,detail?,location?,affects?} (reuse fingerprintObject); id
+      c-{hash10} stable across steps/attempts/restarts.
+    why: Matches steer.ts writeQuestion and fingerprint.ts precedent; gives dedup
+      without central sequence.
+  - assumption: Per-agent reviewPolicy override divergence (item-machine prompt vs
+      step-runner schema) will be unified into one resolver helper in M1/M2.
+    why: Dismiss must appear in both prompt criteria and JSON-schema enum or triage
+      fails validation; current code resolves them in two places.
+  - assumption: Epic->saga propagation copies condensed concern records into parent
+      concerns/ with source.epic set, in runChildTask after child-closeup.yaml.
+    why: Parent architect hydration already reads parent concerns/; copy avoids
+      cross-taskDir reads and survives child worktree cleanup.
+techDebt:
+  - category: adjacent
+    description: Pre-existing head-guard gate failures (2 fail) when TMPDIR sits
+      under .factory-runtime because step-runner splits taskDir on '/.factory'.
+      Baseline red; green with TMPDIR=/tmp. Out of scope for concerns-funnel.
+    id: td-tmpdir-split
+  - category: impacting
+    description: "reviewAllowed resolved in two places: item-machine prompt uses
+      global-or-per-agent fallback while step-runner schema uses only global
+      allowedDispositions, so per-agent dismiss could fail validation."
+    id: td-reviewpolicy-divergence
+    resolution: Unify into single resolveReviewAllowed(pipeline, agent) helper used
+      by both prompt wiring and generateReviewSchema in
+      concerns-contracts/reviewer-triage.
+  - category: impacting
+    description: ADR markdown writer persists only title+context, dropping
+      decision/consequences, and PlanAdr lacks blocking flag.
+    id: td-adr-md-truncated
+    resolution: "Fix in adr-blocking-digest: write full ADR md with
+      decision/consequences/blocking and add blocking to type+schema."
+  - category: impacting
+    description: human-awareness and human-stop dispositions currently ignored (only
+      human-async writes mailbox), and debt derivation ignores routed concerns.
+    id: td-human-debt-gaps
+    resolution: "Fix in routing-human-debt: route awareness to non-blocking digest,
+      stop with halt semantics, and extend deriveTaskState debt with routed
+      tech-debt concerns."
+adrs:
+  - context: "Item steps commit only childWt (topic/{task}--{item}) while
+      {task}/concerns/ lives on taskWt (topic/{task}). Precedent: writeQuestion
+      and refreshStateYaml already write taskWt files during item steps,
+      committed at wave merge/edits."
+    decision: Aggregate directly to taskWt/{task}/concerns/{id}.yaml inside step
+      writeArtifact seams (item-machine + iteration). No per-item staging dir,
+      no dual-worktree commit. Task-level commit at existing merge/edit points
+      covers concerns.
+    id: adr-concern-store-taskwt
+    title: Aggregate concerns directly to taskWt concerns/
+    consequences: Simplest invariant; matches steer/state precedent. Wave-merge
+      commits must include concerns/ (already commitAll taskWt). Restart/retry
+      dedup must be idempotent since file may exist uncommitted.
+  - context: "Reviewers must triage worker concerns with review vocabulary plus
+      dismiss. Options: reuse suggestions[] with id=concernId, or add separate
+      concernTriage[] branch."
+    decision: Reuse ReviewArtifact.suggestions[] with disposition enum extended by
+      dismiss. Match suggestion.id to concern id for triage; other suggestions
+      remain normal review findings. Single vocabulary, single schema path.
+    id: adr-triage-suggestions-dismiss
+    title: Triage via suggestions[] plus dismiss
+    consequences: Zero new top-level review branch; generateReviewSchema +
+      dispositionsCriteria carry dismiss for triager roles only. Triage
+      persistence matches on id prefix c-; unmatched ids ignored.
+  - context: Routing must affect scheduling (blocker), next architect input
+      (architect), mailbox (human-*), and debt list (tech-debt) without forking
+      source of truth.
+    decision: "Concerns stay authoritative in concerns/{id}.yaml with status
+      open|dismissed|routed|resolved + disposition. All effects derived or
+      written once at triage time: blocked via derive/scheduler reading routed
+      blockers, architect via hydration file, human-* via writeQuestion, debt
+      via deriveTaskState reading routed tech-debt."
+    id: adr-routing-derived-state
+    title: File-authoritative concerns, derived routing effects
+    consequences: No duplicate state; restarts re-derive identically. Triage write
+      must atomically update concern status + side-effect write
+      (mailbox/consult) in same writeArtifact call.
+  - context: "Remarkable decisions and human-awareness must surface without
+      blocking. Options: new steer/digest/ dir vs reuse tousertoreview with
+      non-blocking semantics."
+    decision: Reuse steer/tousertoreview/{id}.yaml with disposition human-awareness,
+      blocks:[] (empty), status open. Digest = filtered view of non-blocking
+      awareness items. No new top-level dir.
+    id: adr-digest-mailbox
+    title: Digest as non-blocking tousertoreview entries
+    consequences: factory status + existing mailbox loop render it with zero new
+      watch paths. Engine must never treat empty-blocks awareness items as
+      blockers.
+  - context: Spec requires autonomous|principal|detailed presets selectable per
+      task. pipeline.schema.json has additionalProperties:false at root.
+    decision: Add top-level PipelineConfig.humanInvolvement enum with default
+      autonomous, plus commented presets in config/pipeline.default.yaml and
+      agents/criteria/human-involvement.md fragment wired through
+      loadCriteriaBundle into reviewer/architect prompts.
+    id: adr-humaninvolvement-config
+    title: Top-level humanInvolvement mode + criteria fragment
+    consequences: Clean layering (default->project->task); per-task override
+      trivial. Requires pipeline.schema.json + artifacts.ts + KNOWN_VARS +
+      preflight updates together.
+  - context: "Spec funnel rule: each level passes up less detail, never more text
+      than code summarized. Needs enforcement without brittle failures."
+    decision: "Prompt-guided condensing (terse fragments) plus mechanical cap in
+      engine: condensed concern detail truncated to min(diffBytes, 2000 chars)
+      when hydrating close-ups/reports; full detail stays in
+      concerns/{id}.yaml."
+    id: adr-funnel-text-budget
+    title: Prompt condensing plus hydration byte-cap
+    consequences: Funnel bloat bounded without rejecting agent output. Cap applied
+      only to hydrated promptVars (concernsYaml/openConcernsDigest), never to
+      stored artifact.
