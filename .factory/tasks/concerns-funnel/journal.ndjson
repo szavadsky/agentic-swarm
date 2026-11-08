@@ -1296,3 +1296,4 @@
 {"type":"scheduler_wait","wave":9,"iteration":1,"reason":"wave-end merge + close-up gates + close-up turn","gapWallMs":969503,"gapActiveMs":969503,"merges":["routing-architect-consult-v2","adr-blocking-digest-v2","status-state-surface-v2"],"ts":"2026-11-08T14:27:08.162Z"}
 {"type":"step_started","task":"concerns-funnel","step":"architect-wave-report-1-9","attempt":1,"recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/037-architect-wave-report-1-9-a1","ts":"2026-11-08T14:27:08.548Z"}
 {"type":"step_timeout_armed","task":"concerns-funnel","step":"architect-wave-report-1-9","timeoutSec":1200,"ts":"2026-11-08T14:27:08.552Z"}
+{"type":"step_finished","task":"concerns-funnel","step":"architect-wave-report-1-9","attempt":1,"status":"ok","sessionId":"01a1b894-4755-7787-a1ed-8df6c7a062a2","usage":{"inputTokens":48331,"outputTokens":4117,"costUsd":0.009917},"ts":"2026-11-08T14:28:09.715Z"}
