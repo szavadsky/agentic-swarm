@@ -16,7 +16,7 @@ export async function repairWorktree(
   repo: Repo,
   wt: string,
   kind: "task" | "item",
-  opts: { operatorEditable: string[] }
+  opts: { operatorEditable: string[]; commitGlobs?: string[] }
 ): Promise<{ actions: string[] }> {
   return repo.writeLock.runExclusive(async () => {
     const actions: string[] = [];
@@ -50,12 +50,21 @@ export async function repairWorktree(
       return { actions };
     }
 
-    // Task worktree: partition into operator-editable vs stray dirt
+    // Task worktree: partition into engine-owned, operator-editable, and stray dirt
+    const engineFiles: string[] = [];
     const operatorFiles: string[] = [];
     for (const entry of entries) {
-      if (matchGlobs(entry.path, opts.operatorEditable)) {
+      if (matchGlobs(entry.path, opts.commitGlobs ?? [])) {
+        engineFiles.push(entry.path);
+      } else if (matchGlobs(entry.path, opts.operatorEditable)) {
         operatorFiles.push(entry.path);
       }
+    }
+
+    if (engineFiles.length > 0) {
+      await git(wt, ["add", "--", ...engineFiles], { env });
+      await git(wt, ["commit", "-m", "factory: concern store recovery"], { env });
+      actions.push("commit_concerns");
     }
 
     if (operatorFiles.length > 0) {

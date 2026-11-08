@@ -31,6 +31,7 @@ import { runIngest, isTriageDone, isInfraDone } from "./flows/ingest.js";
 import { runIteration } from "./flows/iteration.js";
 import { runSeamHooks } from "./flows/seams.js";
 import { readYaml, writeYamlAtomic, readText } from "./records/io.js";
+import { reconcileConcerns } from "./concerns.js";
 import { listPending, classify, takenPaths } from "./steer.js";
 import { resolveRole } from "./config/roles.js";
 import { installShutdownHandlers } from "./shutdown.js";
@@ -324,6 +325,7 @@ export async function runTask(
 
   // 2. Start-up repair restricted to §6.3.6 list (Finding 1 & 19)
   await repairWorktree(repo, taskWt, "task", {
+    commitGlobs: [`${orchFolder}/${task}/concerns/**`],
     operatorEditable: [
       "INTENT.md",
       "**/INTENT.md",
@@ -357,6 +359,17 @@ export async function runTask(
   }
 
   await repairInterruptedRecords(taskDir);
+
+  // Rebuild concerns lost in a crash from committed step records (§18).
+  try {
+    await reconcileConcerns({ taskDir, taskWt, repo });
+  } catch (err: any) {
+    await appendJournal(taskDir, {
+      type: "concern_reconcile_error",
+      task,
+      error: err?.message || String(err),
+    });
+  }
 
   // 3. Load pipeline config and setup semaphores (§2)
   pipeline = await pipelineFor(taskDir);

@@ -1,0 +1,88 @@
+status: ok
+summary: "Implemented the taskWt concern store in src/core/concerns.ts: stable
+  fingerprints over kind/normalized summary/location/sorted affects; atomic
+  one-file-per-fingerprint aggregation with longer/latest detail, max severity,
+  advanced updatedAt/lastSeen, dismissed-status preservation and escalation;
+  exact-id triage gated by isTriager; close-up pending resolutions; suggestion
+  partitioning; idempotent reconciliation from committed step records; and
+  remarkable-decision rm-* artifacts. Wired all producer seams through
+  step-runner (concerns, newConcerns, remarkable, suggestions,
+  concernResolutions, including consult writeArtifact), with reviewer triage
+  restricted to pre-existing concern ids and ingest failures journaled as
+  concern_ingest_error without changing step status. Added concerns/** startup
+  recovery commit and task startup reconcile."
+target:
+  selectors:
+    - test/engine/concerns-funnel.test.ts
+  expectRed:
+    - test/engine/concerns-funnel.test.ts::Concern store.fingerprints concern
+      identity, ignoring detail, severity, and affect order
+    - test/engine/concerns-funnel.test.ts::Concern store.aggregates a developer
+      concern to one open taskWt file with defaults, source, and immediate
+      commit
+    - test/engine/concerns-funnel.test.ts::Concern store.merges re-emitted
+      concerns into one file with longer detail, max severity, and advanced
+      timestamps
+    - test/engine/concerns-funnel.test.ts::Concern store.keeps dismissed status
+      and flags escalation when a higher severity is re-emitted
+    - test/engine/concerns-funnel.test.ts::Concern store.lists only open
+      concerns in stable order
+    - test/engine/concerns-funnel.test.ts::Concern store.triages only exact-id
+      suggestions and persists dismiss reasons
+    - test/engine/concerns-funnel.test.ts::Concern store.routes non-dismiss
+      triage dispositions and gates non-triagers
+    - test/engine/concerns-funnel.test.ts::Concern store.rejects dismiss triage
+      without detail and leaves the concern unchanged
+    - test/engine/concerns-funnel.test.ts::Concern store.partitions suggestions
+      by exact concern id
+    - test/engine/concerns-funnel.test.ts::Concern store.records close-up
+      pending resolutions without changing concern status
+    - test/engine/concerns-funnel.test.ts::Concern store.aggregates remarkable
+      decisions into rm-* files and triages them by exact id
+    - test/engine/concerns-funnel.test.ts::Concern store.rejects unknown concern
+      kinds without partial writes and leaves existing files untouched
+    - test/engine/concerns-funnel.test.ts::Concern store.writes distinct
+      fingerprints concurrently without deadlock or lost commits
+    - test/engine/concerns-funnel.test.ts::Concern store.serializes concurrent
+      merges of the same fingerprint into one merged file
+    - "test/engine/concerns-funnel.test.ts::Concern store.wires reviewer output:
+      aggregate new concerns before triaging pre-existing ids only"
+    - test/engine/concerns-funnel.test.ts::Concern store.wires consult
+      writeArtifact producers to the concern store
+    - "test/engine/concerns-funnel.test.ts::Concern store.wires close-up
+      producers: aggregates concerns and applies resolutions"
+    - test/engine/concerns-funnel.test.ts::Concern store.aggregates concerns and
+      remarkable decisions across producer schemas
+    - test/engine/concerns-funnel.test.ts::Concern store.reconciles missing
+      concerns from committed step records idempotently
+    - test/engine/concerns-funnel.test.ts::Concern store.commits stray concerns
+      files during startup recovery instead of stashing them
+    - test/engine/concerns-funnel.test.ts::Concern store.keeps step status ok
+      and journals an ingest error when concern ingestion fails
+evidence:
+  - "bun run typecheck (in plugins/software-factory): exit 0 after final changes"
+  - "TMPDIR=/tmp bun test test/engine/concerns-funnel.test.ts: 22 pass, 0 fail,
+    202 expect() calls"
+  - "TMPDIR=/tmp bun test test/engine/concerns-funnel.test.ts --rerun-each 2: 44
+    pass, 0 fail, proving concurrent merge serialization is stable"
+  - "TMPDIR=/tmp bun test (full suite, isolated run): 324 pass, 2 skip, 0 fail,
+    1395 expect() calls"
+  - "git diff --check: clean"
+  - "Baseline qa-red-test timeout check: the same 5s test-timeout sensitivity
+    reproduces without these changes under current machine load, confirming it
+    is environmental and unrelated"
+  - git stash was used only for the baseline comparison and was popped; git
+    status shows only the five intended production files modified
+concerns:
+  - Unrelated qa-red-test integration tests are timing-sensitive against Bun's
+    5s per-test default and can time out under high machine load; the full suite
+    passed when run in isolation and the failure reproduces on the pre-change
+    baseline.
+  - Concern ingestion uses the task-wide KeyedMutex keyed by taskDir, so
+    distinct-fingerprint writes are serialized per task rather than truly
+    parallel; this is required for safe per-task RMW and still passed the
+    concurrency tests.
+notes: commitAll is called outside the KeyedMutex and never inside
+  repo.writeLock.runExclusive (commitAll acquires repo.writeLock internally).
+  Startup recovery commits stray concerns/** files before any stash; task
+  startup calls reconcileConcerns read-only against committed step records.
