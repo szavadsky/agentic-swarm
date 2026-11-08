@@ -16,9 +16,9 @@ import {
   concernMailboxId,
   isDebtConcern,
   partitionReviewSuggestions,
-  renderConcernsYaml,
   type ReviewTriageOutcome,
 } from "../../src/core/triage.js";
+import * as triageModule from "../../src/core/triage.js";
 import type {
   PipelineConfig,
   ProjectConfig,
@@ -156,7 +156,7 @@ describe("Reviewer triage (§8.7, §18)", () => {
         assignment: "Review the item",
         checks: "",
         testDiff: "",
-        diff: "",
+        diff: "d".repeat(3000),
         dispositionsCriteria: "",
       },
     });
@@ -227,7 +227,7 @@ describe("Reviewer triage (§8.7, §18)", () => {
     expect(qa.fixRequired).toBe(false);
   });
 
-  it("renders condensing concern YAML without detail and within the byte cap", () => {
+  it("renders condensed concern YAML without detail and within the byte cap", async () => {
     const concerns = [
       storedConcern({
         id: "c-aaaaaaaaaa",
@@ -245,8 +245,19 @@ describe("Reviewer triage (§8.7, §18)", () => {
         detail: "e".repeat(600),
       }),
     ];
+    for (const concern of concerns) await writeConcern(concern);
 
-    const rendered = renderConcernsYaml(concerns);
+    const hydrate = (
+      triageModule as unknown as {
+        hydrateStepConcerns?: (
+          taskDir: string,
+          request: { stepRole: string; diffBytes: number }
+        ) => Promise<string>;
+      }
+    ).hydrateStepConcerns;
+    if (!hydrate) throw new Error("hydrateStepConcerns is not implemented");
+
+    const rendered = await hydrate(taskDir, { stepRole: "review", diffBytes: 8000 });
     const parsed = yaml.parse(rendered);
     expect(Array.isArray(parsed)).toBe(true);
     expect(parsed).toHaveLength(2);
@@ -268,7 +279,7 @@ describe("Reviewer triage (§8.7, §18)", () => {
       Buffer.byteLength(JSON.stringify(concerns), "utf8")
     );
 
-    const capped = renderConcernsYaml(concerns, 120);
+    const capped = await hydrate(taskDir, { stepRole: "review", diffBytes: 120 });
     expect(Buffer.byteLength(capped, "utf8")).toBeLessThanOrEqual(120);
     expect(capped).not.toContain("\uFFFD");
   });
