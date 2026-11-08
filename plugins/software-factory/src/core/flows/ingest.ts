@@ -24,8 +24,9 @@ import {
 } from "../git/index.js";
 import { writeYamlAtomic, writeTextAtomic, readYaml, readText } from "../records/io.js";
 import { verifyCitations } from "../records/citations.js";
-import { parseStepRecordDirName } from "../records/step-record.js";
+import { parseStepRecordDirName, getNextStepAttempt } from "../records/step-record.js";
 import { runAgentStep, type StepRunResult } from "./step-runner.js";
+export { getNextStepAttempt };
 import { runSeamHooks } from "./seams.js";
 import { appendJournal } from "../journal.js";
 import { refreshStateYaml } from "../derive/task.js";
@@ -318,65 +319,6 @@ export async function runContextPackStep(params: ContextPackParams): Promise<Ste
   return res;
 }
 
-export function getNextStepAttempt(runsDir: string, stepId: string, maxInterruptions = 3): number {
-  if (!fs.existsSync(runsDir)) return 1;
-  try {
-    const entries = fs.readdirSync(runsDir);
-    const matching = entries
-      .map(parseStepRecordDirName)
-      .filter((p): p is { seq: number; name: string; attempt: number } => p !== null && p.name === stepId)
-      .sort((a, b) => b.seq - a.seq || b.attempt - a.attempt);
-
-    if (matching.length === 0) return 1;
-    const latest = matching[0]!;
-    const metaPath = path.join(
-      runsDir,
-      `${String(latest.seq).padStart(3, "0")}-${stepId}-a${latest.attempt}`,
-      "meta.yaml"
-    );
-    let status: string | undefined;
-    if (fs.existsSync(metaPath)) {
-      try {
-        const meta = readYamlSync(metaPath) as any;
-        status = meta?.status;
-      } catch {}
-    }
-
-    if (status === "interrupted") {
-      let interruptions = 0;
-      for (const m of matching) {
-        const mPath = path.join(
-          runsDir,
-          `${String(m.seq).padStart(3, "0")}-${stepId}-a${m.attempt}`,
-          "meta.yaml"
-        );
-        try {
-          const meta = readYamlSync(mPath) as any;
-          if (meta?.status === "interrupted") interruptions++;
-        } catch {}
-      }
-      if (interruptions < maxInterruptions) {
-        return latest.attempt;
-      } else {
-        return latest.attempt + 1;
-      }
-    } else if (status === "error") {
-      return latest.attempt;
-    } else if (status === "ok") {
-      return latest.attempt;
-    } else {
-      return latest.attempt + 1;
-    }
-  } catch {
-    return 1;
-  }
-}
-
-function readYamlSync(filePath: string): unknown {
-  const content = fs.readFileSync(filePath, "utf8");
-  const yaml = require("yaml");
-  return yaml.parse(content);
-}
 
 /**
  * Runs the ingest flow: triage -> citation verification -> infra -> routing (§8.1).
@@ -634,8 +576,10 @@ export async function runIngest(params: IngestParams): Promise<IngestResult> {
         "scratch"
       );
     }
+    const implAttempt = getNextStepAttempt(runsDir, "simple-implement", pipeline.limits?.maxInterruptions ?? 3);
     const implRes = await runAgentStep({
       task,
+      attempt: implAttempt,
       stepId: "simple-implement",
       stepFragment: "steps/simple-implement",
       agent: "developer",

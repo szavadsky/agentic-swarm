@@ -20,7 +20,10 @@ import {
   startStepRecord,
   finishStepRecord,
   parseStepRecordDirName,
+  findOkCommittedRecord,
+  getNextStepAttempt,
   type StartStepRecordParams,
+  type OkCommittedStepRecord,
 } from "../records/step-record.js";
 import { readYaml, writeYamlAtomic } from "../records/io.js";
 import { validateAndRepair } from "../records/repair.js";
@@ -41,6 +44,8 @@ export const TIMEOUT_NUDGE_PROMPT =
 
 export const INTERRUPTED_RESUME_PROMPT =
   "you were interrupted; continue and yield";
+
+export { findOkCommittedRecord, getNextStepAttempt, type OkCommittedStepRecord };
 export interface StepRunOptions {
   task: string;
   item?: string;
@@ -185,6 +190,36 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
     turnsSemaphore,
    } = opts;
 
+  // 0. For orchestration steps (item is undefined): derive done-ness from an ok committed record (§8.4)
+  if (!item) {
+    let existingOk = await findOkCommittedRecord(recordsDir, stepId, opts.taskWt);
+    if (existingOk) {
+      let artifactWritten = true;
+      if (opts.writeArtifact) {
+        try {
+          await opts.writeArtifact(existingOk.output);
+        } catch (err: any) {
+          artifactWritten = false;
+        }
+      }
+      if (artifactWritten) {
+        await appendJournal(taskDir, {
+          type: "step_reused",
+          task,
+          step: stepId,
+          recordDir: existingOk.recordDir,
+        });
+        return {
+          ok: true,
+          status: "ok",
+          output: existingOk.output,
+          meta: existingOk.meta,
+          sessionId: existingOk.meta.session,
+        };
+      }
+    }
+  }
+
   // Disk-space guard check before step execution (§limits.minFreeDiskMb)
   const repoRoot = repo?.mainRoot ?? cwd ?? process.cwd();
   const worktreeRoot = repo?.worktreeRoot ?? project?.worktreeRoot;
@@ -197,7 +232,11 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
     taskWt: opts.taskWt,
     repo,
   });
-  const attempt = opts.attempt ?? 1;
+  const attempt =
+    opts.attempt ??
+    (!item
+      ? getNextStepAttempt(recordsDir, stepId, pipeline.limits?.maxInterruptions ?? 3)
+      : 1);
   const fixRound = opts.fixRound ?? 1;
   const isEscalated = opts.isEscalated ?? false;
 

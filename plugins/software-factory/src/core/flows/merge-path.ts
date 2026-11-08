@@ -10,7 +10,7 @@ import {
   removeWorktree,
   treeOf,
 } from "../git/index.js";
-import { runAgentStep } from "./step-runner.js";
+import { runAgentStep, getNextStepAttempt } from "./step-runner.js";
 import { runSeamHooks } from "./seams.js";
 import { appendJournal } from "../journal.js";
 import { runGates } from "../checks/gates.js";
@@ -87,8 +87,10 @@ export async function mergeItem(params: MergeItemParams): Promise<MergeItemResul
       const relTaskDir = path.relative(taskWt, taskDir);
       const recordsDir = path.join(childWt, relTaskDir, "items", item.slug, "steps");
 
+      const integrateAttempt = getNextStepAttempt(recordsDir, "integrate", pipeline.limits?.maxInterruptions ?? 3);
       const integrateRes = await runAgentStep({
         task,
+        attempt: integrateAttempt,
         item: item.slug,
         stepId: "integrate",
         stepFragment: "steps/integrate",

@@ -8,9 +8,9 @@ import type {
   SteerItemArtifact,
 } from "../artifacts.js";
 import type { Harness } from "../../harness/types.js";
-import { writeYamlAtomic, readText } from "../records/io.js";
+import { writeYamlAtomic, readYaml, readText } from "../records/io.js";
 import { writeQuestion } from "../steer.js";
-import { runAgentStep } from "./step-runner.js";
+import { runAgentStep, getNextStepAttempt } from "./step-runner.js";
 import { appendJournal } from "../journal.js";
 import type { Semaphore } from "../mutex.js";
 import type { BudgetTracker } from "../budget.js";
@@ -107,9 +107,13 @@ export async function runItemConsult(
   let decisionArtifact: (DecisionArtifact & { item?: string; afterRecord?: string }) | undefined;
   let decisionPath = "";
 
+  const consultStepId = `consult-${item}`;
+  const consultAttempt = getNextStepAttempt(runsDir, consultStepId, pipeline.limits?.maxInterruptions ?? 3);
+
   const stepRes = await runAgentStep({
     task,
-    stepId: `consult-${item}`,
+    attempt: consultAttempt,
+    stepId: consultStepId,
     stepFragment: "steps/architect-consult-item",
     agent: "architect",
     role: "architect",
@@ -131,6 +135,20 @@ export async function runItemConsult(
     writeArtifact: async (output: unknown) => {
       const raw = output as any;
       const decisionVal = raw?.decision ?? "retry-with-guidance";
+      let existingDecisionFile: string | undefined;
+      if (fs.existsSync(decisionsDir)) {
+        const files = await fs.promises.readdir(decisionsDir);
+        const match = files.filter((f) => f.includes(`item-${item}.yaml`)).sort().pop();
+        if (match) existingDecisionFile = match;
+      }
+      if (existingDecisionFile) {
+        decisionPath = path.join(decisionsDir, existingDecisionFile);
+        try {
+          decisionArtifact = await readYaml(decisionPath);
+        } catch {}
+      }
+      if (decisionArtifact) return;
+
       let nextSeq = 1;
       if (fs.existsSync(decisionsDir)) {
         const existing = await fs.promises.readdir(decisionsDir);
@@ -142,7 +160,6 @@ export async function runItemConsult(
           }
         }
       }
-
       decisionArtifact = {
         id: `decision-${item}-${Date.now()}`,
         context: "item",
@@ -236,9 +253,14 @@ export async function runNonItemConsult(
   let decisionArtifact: DecisionArtifact | undefined;
   let decisionPath = "";
 
+  const seamClean = seam.replace(/[^a-zA-Z0-9_-]/g, "_");
+  const consultStepId = `consult-${seamClean}`;
+  const consultAttempt = getNextStepAttempt(runsDir, consultStepId, pipeline.limits?.maxInterruptions ?? 3);
+
   const stepRes = await runAgentStep({
     task,
-    stepId: `consult-${seam.replace(/[^a-zA-Z0-9_-]/g, "_")}`,
+    attempt: consultAttempt,
+    stepId: consultStepId,
     stepFragment: "steps/architect-consult-nonitem",
     agent: "architect",
     role: "architect",
@@ -260,6 +282,20 @@ export async function runNonItemConsult(
     writeArtifact: async (output: unknown) => {
       const raw = output as any;
       const decisionVal = raw?.decision ?? "accept-with-debt";
+      let existingDecisionFile: string | undefined;
+      if (fs.existsSync(decisionsDir)) {
+        const files = await fs.promises.readdir(decisionsDir);
+        const match = files.filter((f) => f.includes(`nonitem-${seamClean}.yaml`) || f.includes("nonitem.yaml")).sort().pop();
+        if (match) existingDecisionFile = match;
+      }
+      if (existingDecisionFile) {
+        decisionPath = path.join(decisionsDir, existingDecisionFile);
+        try {
+          decisionArtifact = await readYaml(decisionPath);
+        } catch {}
+      }
+      if (decisionArtifact) return;
+
       let nextSeq = 1;
       if (fs.existsSync(decisionsDir)) {
         const existing = await fs.promises.readdir(decisionsDir);
@@ -271,7 +307,6 @@ export async function runNonItemConsult(
           }
         }
       }
-
       decisionArtifact = {
         id: `decision-nonitem-${Date.now()}`,
         context: "non-item",

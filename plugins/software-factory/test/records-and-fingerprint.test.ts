@@ -8,6 +8,8 @@ import {
   parseStepRecordDirName,
   startStepRecord,
   finishStepRecord,
+  findOkCommittedRecord,
+  getNextStepAttempt,
 } from "../src/core/records/step-record.js";
 import { validateAndRepair, checkLeafValuePresence } from "../src/core/records/repair.js";
 import { generateReviewSchema } from "../src/core/records/review-schema.js";
@@ -157,5 +159,129 @@ describe("Repair validator reuse & leaf guard word boundaries (§6.4)", () => {
       schema,
     });
     expect(commented.ok).toBe(false);
+  });
+});
+
+describe("Orchestration step record done-ness and attempt derivation (§8.4, §12.2)", () => {
+  let testRunsDir: string;
+
+  beforeAll(() => {
+    testRunsDir = fs.mkdtempSync(path.join(os.tmpdir(), "factory-orch-records-test-"));
+  });
+
+  afterAll(() => {
+    fs.rmSync(testRunsDir, { recursive: true, force: true });
+  });
+
+  it("getNextStepAttempt returns 1 when no records exist", () => {
+    expect(getNextStepAttempt(testRunsDir, "plan-review-1-1", 3)).toBe(1);
+    expect(getNextStepAttempt(path.join(testRunsDir, "nonexistent"), "plan-review-1-1", 3)).toBe(1);
+  });
+
+  it("getNextStepAttempt increments attempt on rejected step", async () => {
+    const recDir = path.join(testRunsDir, "001-plan-review-1-1-a1");
+    fs.mkdirSync(recDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(recDir, "meta.yaml"),
+      yaml.stringify({ seq: 1, name: "plan-review-1-1", attempt: 1, status: "rejected" })
+    );
+
+    expect(getNextStepAttempt(testRunsDir, "plan-review-1-1", 3)).toBe(2);
+
+    // Subsequent rejected attempt increments again
+    const recDir2 = path.join(testRunsDir, "002-plan-review-1-1-a2");
+    fs.mkdirSync(recDir2, { recursive: true });
+    fs.writeFileSync(
+      path.join(recDir2, "meta.yaml"),
+      yaml.stringify({ seq: 2, name: "plan-review-1-1", attempt: 2, status: "rejected" })
+    );
+
+    expect(getNextStepAttempt(testRunsDir, "plan-review-1-1", 3)).toBe(3);
+  });
+
+  it("getNextStepAttempt does not count interrupted until maxInterruptions", () => {
+    const stepDir = fs.mkdtempSync(path.join(os.tmpdir(), "factory-interrupted-test-"));
+    try {
+      // First interruption
+      const r1 = path.join(stepDir, "001-arch-revise-1-1-a1");
+      fs.mkdirSync(r1, { recursive: true });
+      fs.writeFileSync(
+        path.join(r1, "meta.yaml"),
+        yaml.stringify({ seq: 1, name: "arch-revise-1-1", attempt: 1, status: "interrupted" })
+      );
+      expect(getNextStepAttempt(stepDir, "arch-revise-1-1", 3)).toBe(1);
+
+      // Second interruption
+      const r2 = path.join(stepDir, "002-arch-revise-1-1-a1");
+      fs.mkdirSync(r2, { recursive: true });
+      fs.writeFileSync(
+        path.join(r2, "meta.yaml"),
+        yaml.stringify({ seq: 2, name: "arch-revise-1-1", attempt: 1, status: "interrupted" })
+      );
+      expect(getNextStepAttempt(stepDir, "arch-revise-1-1", 3)).toBe(1);
+
+      // Third interruption reaches maxInterruptions (3) -> increments attempt
+      const r3 = path.join(stepDir, "003-arch-revise-1-1-a1");
+      fs.mkdirSync(r3, { recursive: true });
+      fs.writeFileSync(
+        path.join(r3, "meta.yaml"),
+        yaml.stringify({ seq: 3, name: "arch-revise-1-1", attempt: 1, status: "interrupted" })
+      );
+      expect(getNextStepAttempt(stepDir, "arch-revise-1-1", 3)).toBe(2);
+    } finally {
+      fs.rmSync(stepDir, { recursive: true, force: true });
+    }
+  });
+
+  it("getNextStepAttempt does not consume attempt on harness error", () => {
+    const stepDir = fs.mkdtempSync(path.join(os.tmpdir(), "factory-error-test-"));
+    try {
+      const r1 = path.join(stepDir, "001-step-err-a1");
+      fs.mkdirSync(r1, { recursive: true });
+      fs.writeFileSync(
+        path.join(r1, "meta.yaml"),
+        yaml.stringify({ seq: 1, name: "step-err", attempt: 1, status: "error" })
+      );
+      expect(getNextStepAttempt(stepDir, "step-err", 3)).toBe(1);
+    } finally {
+      fs.rmSync(stepDir, { recursive: true, force: true });
+    }
+  });
+
+  it("findOkCommittedRecord finds ok record and reuses output", async () => {
+    const stepDir = fs.mkdtempSync(path.join(os.tmpdir(), "factory-find-ok-test-"));
+    try {
+      expect(await findOkCommittedRecord(stepDir, "rev-1")).toBeNull();
+
+      const r1 = path.join(stepDir, "001-rev-1-a1");
+      fs.mkdirSync(r1, { recursive: true });
+      fs.writeFileSync(
+        path.join(r1, "meta.yaml"),
+        yaml.stringify({ seq: 1, name: "rev-1", attempt: 1, status: "rejected" })
+      );
+      expect(await findOkCommittedRecord(stepDir, "rev-1")).toBeNull();
+
+      const r2 = path.join(stepDir, "002-rev-1-a2");
+      fs.mkdirSync(r2, { recursive: true });
+      fs.writeFileSync(
+        path.join(r2, "meta.yaml"),
+        yaml.stringify({ seq: 2, name: "rev-1", attempt: 2, status: "ok", session: "sess-abc" })
+      );
+      fs.writeFileSync(
+        path.join(r2, "output.yaml"),
+        yaml.stringify({ status: "approved", summary: "Looks great" })
+      );
+
+      const found = await findOkCommittedRecord(stepDir, "rev-1");
+      expect(found).not.toBeNull();
+      expect(found?.name).toBe("rev-1");
+      expect(found?.attempt).toBe(2);
+      expect(found?.seq).toBe(2);
+      expect(found?.meta.session).toBe("sess-abc");
+      expect((found?.output as any)?.status).toBe("approved");
+      expect((found?.output as any)?.summary).toBe("Looks great");
+    } finally {
+      fs.rmSync(stepDir, { recursive: true, force: true });
+    }
   });
 });

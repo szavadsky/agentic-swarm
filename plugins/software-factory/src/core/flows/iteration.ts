@@ -19,7 +19,7 @@ import { git } from "../git/exec.js";
 import { childBranch } from "../git/naming.js";
 import { ensureChildWorktree, commitAll, removeWorktree } from "../git/index.js";
 import { writeYamlAtomic, writeTextAtomic, readYaml, readText } from "../records/io.js";
-import { runAgentStep } from "./step-runner.js";
+import { runAgentStep, findOkCommittedRecord, getNextStepAttempt } from "./step-runner.js";
 import { writeQuestion } from "../steer.js";
 import { runItemConsult } from "./consults.js";
 import { isContextPackStale, isContextPackEnabled, runContextPackStep } from "./ingest.js";
@@ -38,20 +38,17 @@ import { PersistentAgent } from "../sessions.js";
 import { Semaphore } from "../mutex.js";
 import type { BudgetTracker } from "../budget.js";
 
-async function hasOkRecord(recordsDir: string, stepPrefix: string): Promise<boolean> {
-  if (!fs.existsSync(recordsDir)) return false;
-  try {
-    const entries = await fs.promises.readdir(recordsDir);
-    for (const ent of entries) {
-      if (ent.includes(stepPrefix)) {
-        const metaPath = path.join(recordsDir, ent, "meta.yaml");
-        if (fs.existsSync(metaPath)) {
-          const meta = await readYaml<StepMetaArtifact>(metaPath);
-          if (meta && meta.status === "ok") return true;
-        }
-      }
+async function findOkCommittedRevise(
+  runsDir: string,
+  iteration: number,
+  taskWt: string,
+  maxRounds = 5
+): Promise<boolean> {
+  for (let r = 1; r <= maxRounds; r++) {
+    if (await findOkCommittedRecord(runsDir, `architect-revise-${iteration}-${r}`, taskWt)) {
+      return true;
     }
-  } catch {}
+  }
   return false;
 }
 
@@ -203,7 +200,7 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
         const m = /^closeup-(\d+)\.yaml$/.exec(name);
         if (m) {
           const cIter = parseInt(m[1]!, 10);
-          const closeupOk = await hasOkRecord(runsDir, `architect-closeup-${cIter}`);
+          const closeupOk = await findOkCommittedRecord(runsDir, `architect-closeup-${cIter}`, taskWt);
           if (closeupOk) {
             existingCloseups++;
           }
@@ -361,8 +358,8 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
   let plan: PlanArtifact | undefined;
 
   const planOk =
-    (await hasOkRecord(runsDir, `architect-plan-${iteration}`)) ||
-    (await hasOkRecord(runsDir, `architect-revise-${iteration}`));
+    (await findOkCommittedRecord(runsDir, `architect-plan-${iteration}`, taskWt)) ||
+    (await findOkCommittedRevise(runsDir, iteration, taskWt, maxPlanReviewRounds));
 
   if (fs.existsSync(planPath) && planOk) {
     try {
@@ -403,9 +400,12 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
 
   if (!plan) {
     // Architect generates plan-N (§8.4.2)
+    const planStepId = `architect-plan-${iteration}`;
+    const planAttempt = getNextStepAttempt(runsDir, planStepId, pipeline.limits?.maxInterruptions ?? 3);
     const planStepRes = await runAgentStep({
       task,
-      stepId: `architect-plan-${iteration}`,
+      attempt: planAttempt,
+      stepId: planStepId,
       stepFragment: "steps/architect-plan",
       agent: "architect",
       role: "architect",
@@ -486,7 +486,7 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
   if (fs.existsSync(editsPath)) {
     try {
       edits = await readYaml<PlanEditsArtifact>(editsPath);
-      const pmOk = await hasOkRecord(runsDir, `pm-edits-${iteration}`);
+      const pmOk = await findOkCommittedRecord(runsDir, `pm-edits-${iteration}`, taskWt);
       const assignmentsExist =
         edits &&
         Array.isArray(edits.items) &&
@@ -511,8 +511,10 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
     while (reviewRound <= maxPlanReviewRounds) {
     // Check if review round record already exists
     const revRecordName = `plan-review-${iteration}-${reviewRound}`;
+    const revAttempt = getNextStepAttempt(runsDir, revRecordName, pipeline.limits?.maxInterruptions ?? 3);
     const revStepRes = await runAgentStep({
       task,
+      attempt: revAttempt,
       stepId: revRecordName,
       stepFragment: "steps/plan-review",
       agent: "plan-reviewer",
@@ -582,9 +584,12 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
     }
 
     // Architect turn (revise) (§8.4.3)
+    const reviseStepId = `architect-revise-${iteration}-${reviewRound}`;
+    const reviseAttempt = getNextStepAttempt(runsDir, reviseStepId, pipeline.limits?.maxInterruptions ?? 3);
     const reviseRes = await runAgentStep({
       task,
-      stepId: `architect-revise-${iteration}-${reviewRound}`,
+      attempt: reviseAttempt,
+      stepId: reviseStepId,
       stepFragment: "steps/architect-revise",
       agent: "architect",
       role: "architect",
@@ -634,9 +639,12 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
   // 4. PM edits (§8.4.4, Finding 12 & 13)
   const { kindsDescription, validKindNames } = buildKindsPromptVar(pipeline, !isChildTask);
   if (!editsDone) {
+    const pmStepId = `pm-edits-${iteration}`;
+    const pmAttempt = getNextStepAttempt(runsDir, pmStepId, pipeline.limits?.maxInterruptions ?? 3);
     const pmStepRes = await runAgentStep({
       task,
-      stepId: `pm-edits-${iteration}`,
+      attempt: pmAttempt,
+      stepId: pmStepId,
       stepFragment: "steps/pm-edits",
       agent: "pm",
       role: "alt-workhorse",
@@ -784,7 +792,7 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
     // Check if wave close-up already completed for this wave (Finding 24)
     const waveArtifactPath = path.join(taskDir, "waves", `wave-${iteration}.${w}.yaml`);
     if (fs.existsSync(waveArtifactPath)) {
-      const waveOk = await hasOkRecord(runsDir, `architect-wave-report-${iteration}-${w}`);
+      const waveOk = await findOkCommittedRecord(runsDir, `architect-wave-report-${iteration}-${w}`, taskWt);
       if (waveOk) {
         continue;
       }
@@ -938,9 +946,12 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
       .filter((b) => b.status === "pending" && b.deps.some((d) => failedSlugs.includes(d) || waveState.blocked.some((x) => x.slug === d)))
       .map((b) => b.slug);
     const waveSummary = `Wave ${w} completed. Merged items: ${mergeResults.filter((m) => m.ok).map((m) => m.slug).join(", ")}${failedSlugs.length > 0 ? ` Failed items: ${failedSlugs.join(", ")}` : ""}${blockedByFailureSlugs.length > 0 ? ` Blocked-by-failure items: ${blockedByFailureSlugs.join(", ")}` : ""}`;
+    const waveCloseupStepId = `wave-close-up-${iteration}-${w}`;
+    const waveCloseupAttempt = getNextStepAttempt(runsDir, waveCloseupStepId, pipeline.limits?.maxInterruptions ?? 3);
     const waveCloseupRes = await runAgentStep({
       task,
-      stepId: `wave-close-up-${iteration}-${w}`,
+      attempt: waveCloseupAttempt,
+      stepId: waveCloseupStepId,
       stepFragment: "steps/wave-close-up",
       agent: "wave-close-up",
       role: "alt-workhorse",
@@ -967,9 +978,12 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
 
     // Architect turn on wave report (§8.4.6)
     let waveDecision = "continue";
+    const waveReportStepId = `architect-wave-report-${iteration}-${w}`;
+    const waveReportAttempt = getNextStepAttempt(runsDir, waveReportStepId, pipeline.limits?.maxInterruptions ?? 3);
     const waveReportRes = await runAgentStep({
       task,
-      stepId: `architect-wave-report-${iteration}-${w}`,
+      attempt: waveReportAttempt,
+      stepId: waveReportStepId,
       stepFragment: "steps/architect-wave-report",
       agent: "architect",
       role: "architect",
@@ -1040,9 +1054,12 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
         const amendEditsPath = path.join(planDir, `edits-${iteration}.${amendmentCount}.yaml`);
         await writeYamlAtomic(amendPlanPath, plan);
 
+        const pmAmendStepId = `pm-amend-${iteration}-${amendmentCount}`;
+        const pmAmendAttempt = getNextStepAttempt(runsDir, pmAmendStepId, pipeline.limits?.maxInterruptions ?? 3);
         const pmAmendRes = await runAgentStep({
           task,
-          stepId: `pm-amend-${iteration}-${amendmentCount}`,
+          attempt: pmAmendAttempt,
+          stepId: pmAmendStepId,
           stepFragment: "steps/pm-amend",
           agent: "pm",
           role: "alt-workhorse",
@@ -1159,9 +1176,12 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
   }
 
   // 7. Plan close-up (§8.4.7, Finding 5 & 6)
+  const planCloseupStepId = `plan-close-up-${iteration}`;
+  const planCloseupAttempt = getNextStepAttempt(runsDir, planCloseupStepId, pipeline.limits?.maxInterruptions ?? 3);
   const planCloseupRes = await runAgentStep({
     task,
-    stepId: `plan-close-up-${iteration}`,
+    attempt: planCloseupAttempt,
+    stepId: planCloseupStepId,
     stepFragment: "steps/plan-close-up",
     agent: "plan-close-up",
     role: "alt-workhorse",
@@ -1187,9 +1207,12 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
 
 
   let closeupArtifact: PlanCloseupArtifact | undefined;
+  const archCloseupStepId = `architect-closeup-${iteration}`;
+  const archCloseupAttempt = getNextStepAttempt(runsDir, archCloseupStepId, pipeline.limits?.maxInterruptions ?? 3);
   const archCloseupRes = await runAgentStep({
     task,
-    stepId: `architect-closeup-${iteration}`,
+    attempt: archCloseupAttempt,
+    stepId: archCloseupStepId,
     stepFragment: "steps/architect-closeup",
     agent: "architect",
     role: "architect",
