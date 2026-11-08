@@ -100,6 +100,7 @@ export interface PipelineLimits {
   contextPackBytes?: number;
   timeoutNudgeSec?: number;
   minFreeDiskMb?: number;
+  steerPollSec?: number;
   [key: string]: unknown;
 }
 

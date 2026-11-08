@@ -53,6 +53,8 @@ export interface ItemMachineOptions {
   turnsSemaphore?: Semaphore;
   architectSessionId?: string;
   log?: (msg: string) => void;
+  rootTaskWt?: string;
+  rootTaskDir?: string;
 }
 
 export interface ItemMachineTickResult {
@@ -179,6 +181,7 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
     taskWt,
     childWt,
     pipeline,
+    rootTaskDir: opts.rootTaskDir,
   });
 
   if (
@@ -229,6 +232,8 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
         afterRecord: itemState.records[itemState.records.length - 1]?.dirName,
         taskDir,
         taskWt,
+        rootTaskWt: opts.rootTaskWt,
+        rootTaskDir: opts.rootTaskDir,
         repo,
         harness,
         pipeline,
@@ -255,19 +260,30 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
   let answeredAsyncFeedback = "";
 
   // Check for answered human-async questions (§8.7)
-  const steerDir = path.join(taskDir, "steer", "tousertoreview");
-  if (fs.existsSync(steerDir)) {
-    try {
-      const qFiles = await fs.promises.readdir(steerDir);
-      for (const qf of qFiles) {
-        if (!qf.endsWith(".yaml")) continue;
-        const q = await readYaml<SteerItemArtifact>(path.join(steerDir, qf));
-        if ((q.ref === itemSlug || q.ref === `${task}/${itemSlug}`) && q.status === "answered" && q.answer) {
-          answeredAsyncFeedback += `\nHuman answer to question "${q.question}":\n${q.answer}\n`;
+  const steerDirs = [path.join(taskDir, "steer", "tousertoreview")];
+  if (opts.rootTaskDir && path.resolve(opts.rootTaskDir) !== path.resolve(taskDir)) {
+    steerDirs.push(path.join(opts.rootTaskDir, "steer", "tousertoreview"));
+  }
+  for (const steerDir of steerDirs) {
+    if (fs.existsSync(steerDir)) {
+      try {
+        const qFiles = await fs.promises.readdir(steerDir);
+        for (const qf of qFiles) {
+          if (!qf.endsWith(".yaml")) continue;
+          const q = await readYaml<SteerItemArtifact>(path.join(steerDir, qf));
+          if (
+            (q.ref === itemSlug ||
+              q.ref === `${task}/${itemSlug}` ||
+              (opts.rootTaskDir && q.ref === `${path.basename(opts.rootTaskDir)}/${itemSlug}`)) &&
+            q.status === "answered" &&
+            q.answer
+          ) {
+            answeredAsyncFeedback += `\nHuman answer to question "${q.question}":\n${q.answer}\n`;
+          }
         }
+      } catch {
+        // ignore
       }
-    } catch {
-      // ignore
     }
   }
 
@@ -691,6 +707,8 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
     sessionMode,
     cwd: childWt,
     taskWt,
+    rootTaskWt: opts.rootTaskWt,
+    rootTaskDir: opts.rootTaskDir,
     taskDir,
     recordsDir,
     repo,
@@ -713,7 +731,9 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
           for (const q of asyncQuestions) {
             const cleanSuggestionId = (q.id || "s").replace(/[^a-z0-9_-]/gi, "-");
             const qId = `q-${itemSlug}-${cleanSuggestionId}`;
-            await writeQuestion(taskWt, taskDir, {
+            const targetWt = opts.rootTaskWt ?? taskWt;
+            const targetDir = opts.rootTaskDir ?? taskDir;
+            await writeQuestion(targetWt, targetDir, {
               id: qId,
               ref: itemSlug,
               disposition: "human-async",
@@ -727,7 +747,9 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
           for (const q of awarenessQuestions) {
             const cleanSuggestionId = (q.id || "s").replace(/[^a-z0-9_-]/gi, "-");
             const qId = `awareness-${itemSlug}-${cleanSuggestionId}`;
-            await writeQuestion(taskWt, taskDir, {
+            const targetWt = opts.rootTaskWt ?? taskWt;
+            const targetDir = opts.rootTaskDir ?? taskDir;
+            await writeQuestion(targetWt, targetDir, {
               id: qId,
               ref: itemSlug,
               disposition: "human-awareness",

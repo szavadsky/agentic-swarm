@@ -74,6 +74,8 @@ export interface StepRunOptions {
   customSchema?: JSONSchema;
   log?: (msg: string) => void;
   taskWt: string;
+  rootTaskWt?: string;
+  rootTaskDir?: string;
   timeoutSec?: number;
   budgetTracker?: BudgetTracker;
   iteration?: number;
@@ -715,7 +717,7 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
         ? `cost_cap_exceeded (${currentCost.toFixed(2)} USD >= ${perStepUsdCap} USD)`
         : `retries_exhausted (${infraRetries}/${maxInfraRetries})`;
       const escalationQId = `escalation-${item ? `${item}-` : ""}${stepId}-a${attempt}`;
-      await writeQuestion(wtToCommit, taskDir, {
+      await writeQuestion(opts.rootTaskWt ?? wtToCommit, opts.rootTaskDir ?? taskDir, {
         id: escalationQId,
         ref: item ?? stepId,
         disposition: "human-async",

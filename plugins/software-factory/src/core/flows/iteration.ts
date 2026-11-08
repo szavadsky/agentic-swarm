@@ -20,7 +20,7 @@ import { childBranch } from "../git/naming.js";
 import { ensureChildWorktree, commitAll, removeWorktree } from "../git/index.js";
 import { writeYamlAtomic, writeTextAtomic, readYaml, readText } from "../records/io.js";
 import { runAgentStep, findOkCommittedRecord, getNextStepAttempt } from "./step-runner.js";
-import { writeQuestion } from "../steer.js";
+import { writeQuestion, processSteeringMailbox } from "../steer.js";
 import { runItemConsult } from "./consults.js";
 import { isContextPackStale, isContextPackEnabled, runContextPackStep } from "./ingest.js";
 import { mergeItem } from "./merge-path.js";
@@ -68,6 +68,9 @@ export interface IterationParams {
   runTaskChild?: (epicSlug: string) => Promise<any>;
   log?: (msg: string) => void;
   isChildTask?: boolean;
+  rootTaskWt?: string;
+  rootTaskDir?: string;
+  rootTask?: string;
 }
 
 export interface IterationResult {
@@ -236,7 +239,7 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
       try {
         const prevEdits = await readYaml<PlanEditsArtifact>(editsFile);
         for (const it of prevEdits.items ?? []) {
-          const st = await deriveItemState({ taskDir, itemSlug: it.slug, parentBranch, taskWt, pipeline });
+          const st = await deriveItemState({ taskDir, itemSlug: it.slug, parentBranch, taskWt, pipeline, rootTaskDir: params.rootTaskDir });
           if (st.status === "merged") count++;
         }
       } catch (err: any) {
@@ -559,7 +562,7 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
       for (const q of awarenessSuggestions) {
         const cleanSuggestionId = (q.id || "s").replace(/[^a-z0-9_-]/gi, "-");
         const qId = `awareness-plan-${iteration}-${cleanSuggestionId}`;
-        await writeQuestion(taskWt, taskDir, {
+        await writeQuestion(params.rootTaskWt ?? taskWt, params.rootTaskDir ?? taskDir, {
           id: qId,
           ref: `plan-${iteration}`,
           disposition: "human-awareness",
@@ -783,7 +786,7 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
 
   const initialStates = await Promise.all(
     currentIterationItems.map((slug) =>
-      deriveItemState({ taskDir, itemSlug: slug, parentBranch, taskWt, pipeline, project })
+      deriveItemState({ taskDir, itemSlug: slug, parentBranch, taskWt, pipeline, project, rootTaskDir: params.rootTaskDir })
     )
   );
 
@@ -801,7 +804,7 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
     // Collect item states
     let itemStates = await Promise.all(
       currentIterationItems.map((slug) =>
-        deriveItemState({ taskDir, itemSlug: slug, parentBranch, taskWt, pipeline })
+        deriveItemState({ taskDir, itemSlug: slug, parentBranch, taskWt, pipeline, rootTaskDir: params.rootTaskDir })
       )
     );
     let waveState = deriveWaveState({ wave: w, items: itemStates });
@@ -812,73 +815,149 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
 
     await appendJournal(taskDir, { type: "wave_started", wave: w, iteration });
 
-    // Run wave items until wave can merge or complete
-    let waveTicks = 0;
-    while (!waveState.canMerge && !waveState.isComplete && waveTicks < 50) {
-      waveTicks++;
+    // Active runs poll the root mailbox during wave execution (§8.8):
+    // between item steps and at least every `limits.steerPollSec` (default 60s).
+    const mailboxWt = params.rootTaskWt ?? taskWt;
+    const mailboxDir = params.rootTaskDir ?? taskDir;
+    const mailboxTask = params.rootTask ?? task;
+    const rawPollSec = pipeline.limits?.steerPollSec;
+    const steerPollSec =
+      typeof rawPollSec === "number" && Number.isFinite(rawPollSec) && rawPollSec > 0
+        ? rawPollSec
+        : 60;
+    let stopRequested = false;
 
-      if (budgetTracker) {
-        const itBudgetCheck = budgetTracker.checkIterationBudget(iteration);
-        if (itBudgetCheck.exceeded) {
-          await appendJournal(taskDir, { type: "iteration_budget_exceeded", iteration });
+    const pollSteering = async () => {
+      const res = await processSteeringMailbox({
+        taskWt: mailboxWt,
+        taskDir: mailboxDir,
+        harness,
+        pipeline,
+        prompts,
+        repo,
+        task: mailboxTask,
+      });
+      if (res.stopRequested) stopRequested = true;
+    };
+
+    let steerTimer: ReturnType<typeof setInterval> | undefined;
+    const startTimer = () => {
+      if (steerTimer) return;
+      steerTimer = setInterval(() => {
+        pollSteering().catch(() => {});
+      }, steerPollSec * 1000);
+      if (typeof (steerTimer as any).unref === "function") {
+        (steerTimer as any).unref();
+      }
+    };
+    const stopTimer = () => {
+      if (steerTimer) {
+        clearInterval(steerTimer);
+        steerTimer = undefined;
+      }
+    };
+
+    try {
+      startTimer();
+
+      // Run wave items until wave can merge or complete
+      let waveTicks = 0;
+      while (!waveState.canMerge && !waveState.isComplete && waveTicks < 50) {
+        waveTicks++;
+
+        // Poll mailbox at the start of each wave tick (§8.8)
+        await pollSteering();
+        if (stopRequested) break;
+
+        if (budgetTracker) {
+          const itBudgetCheck = budgetTracker.checkIterationBudget(iteration);
+          if (itBudgetCheck.exceeded) {
+            await appendJournal(taskDir, { type: "iteration_budget_exceeded", iteration });
+            break;
+          }
+        }
+
+        // Re-derive states after polling (answers may have unblocked items)
+        itemStates = await Promise.all(
+          currentIterationItems.map((slug) =>
+            deriveItemState({ taskDir, itemSlug: slug, parentBranch, taskWt, pipeline, rootTaskDir: params.rootTaskDir })
+          )
+        );
+        waveState = deriveWaveState({ wave: w, items: itemStates });
+        if (waveState.canMerge || waveState.isComplete) break;
+
+        const activeItems = [...waveState.running, ...waveState.runnable];
+        if (activeItems.length === 0) {
           break;
         }
-      }
 
-      const activeItems = [...waveState.running, ...waveState.runnable];
-      if (activeItems.length === 0) {
-        break;
-      }
+        // Finding 25: Run wave items concurrently up to maxParallelItems
+        const itemSemaphore = new Semaphore(maxParallelItems);
+        const batch = activeItems.slice(0, maxParallelItems);
 
-      // Finding 25: Run wave items concurrently up to maxParallelItems
-      const itemSemaphore = new Semaphore(maxParallelItems);
-      const batch = activeItems.slice(0, maxParallelItems);
+        await Promise.all(
+          batch.map(async (it) => {
+            const release = await itemSemaphore.acquire();
+            try {
+              if (stopRequested) return;
+              // If epic item: run child task on parent branch (Finding 7)
+              if (it.kind === "epic" && runTaskChild) {
+                const childRes = await runTaskChild(it.slug);
+                // Child status is reflected in deriveItemState
+                return;
+              }
 
-      await Promise.all(
-        batch.map(async (it) => {
-          const release = await itemSemaphore.acquire();
-          try {
-            // If epic item: run child task on parent branch (Finding 7)
-            if (it.kind === "epic" && runTaskChild) {
-              const childRes = await runTaskChild(it.slug);
-              // Child status is reflected in deriveItemState
-              return;
+              // Ensure child worktree
+              const child = await ensureChildWorktree(repo, { branch: parentBranch, path: taskWt }, it.slug);
+
+              // Tick item machine
+              await tickItemMachine({
+                task,
+                itemSlug: it.slug,
+                parentBranch,
+                taskWt,
+                childWt: child.path,
+                taskDir,
+                repo,
+                harness,
+                pipeline,
+                project,
+                prompts,
+                budgetTracker,
+                turnsSemaphore,
+                architectSessionId,
+                rootTaskWt: params.rootTaskWt,
+                rootTaskDir: params.rootTaskDir,
+              });
+
+              // Poll mailbox between item steps (§8.8)
+              await pollSteering();
+            } finally {
+              release();
             }
+          })
+        );
 
-            // Ensure child worktree
-            const child = await ensureChildWorktree(repo, { branch: parentBranch, path: taskWt }, it.slug);
+        // Refresh states after batch
+        itemStates = await Promise.all(
+          currentIterationItems.map((slug) =>
+            deriveItemState({ taskDir, itemSlug: slug, parentBranch, taskWt, pipeline, rootTaskDir: params.rootTaskDir })
+          )
+        );
+        waveState = deriveWaveState({ wave: w, items: itemStates });
+        await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
+      }
 
-            // Tick item machine
-            await tickItemMachine({
-              task,
-              itemSlug: it.slug,
-              parentBranch,
-              taskWt,
-              childWt: child.path,
-              taskDir,
-              repo,
-              harness,
-              pipeline,
-              project,
-              prompts,
-              budgetTracker,
-              turnsSemaphore,
-              architectSessionId,
-            });
-          } finally {
-            release();
-          }
-        })
-      );
-
-      // Refresh states after batch
-      itemStates = await Promise.all(
-        currentIterationItems.map((slug) =>
-          deriveItemState({ taskDir, itemSlug: slug, parentBranch, taskWt, pipeline })
-        )
-      );
-      waveState = deriveWaveState({ wave: w, items: itemStates });
-      await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
+      if (stopRequested) {
+        await appendJournal(taskDir, { type: "task_stopped_by_user", task });
+        return {
+          iteration,
+          status: "stopped",
+          architectSessionId,
+        };
+      }
+    } finally {
+      stopTimer();
     }
 
     // 6. Wave end merge path (§8.4.6, §7)
@@ -935,6 +1014,8 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
             turnsSemaphore,
             budgetTracker,
             iteration,
+            rootTaskWt: params.rootTaskWt,
+            rootTaskDir: params.rootTaskDir,
           });
         }
       }
@@ -1148,7 +1229,7 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
         }
         const amendedStates = await Promise.all(
           currentIterationItems.map((slug) =>
-            deriveItemState({ taskDir, itemSlug: slug, parentBranch, taskWt, pipeline, project })
+            deriveItemState({ taskDir, itemSlug: slug, parentBranch, taskWt, pipeline, project, rootTaskDir: params.rootTaskDir })
           )
         );
         maxWave = Math.max(maxWave, amendedStates.reduce((m, it) => Math.max(m, it.wave), 1));
@@ -1162,7 +1243,7 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
   // Check if any items are blocked on human questions (§8.2)
   const allCurrentStates = await Promise.all(
     currentIterationItems.map((slug) =>
-      deriveItemState({ taskDir, itemSlug: slug, parentBranch, taskWt, pipeline })
+      deriveItemState({ taskDir, itemSlug: slug, parentBranch, taskWt, pipeline, rootTaskDir: params.rootTaskDir })
     )
   );
   const hasBlockedItems = allCurrentStates.some((it) => it.status === "blocked");
@@ -1252,7 +1333,7 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
       // If blocked close-up, write question to tousertoreview (Finding 6)
       if (rawCloseup.status === "blocked") {
         const qId = `closeup-${iteration}`;
-        await writeQuestion(taskWt, taskDir, {
+        await writeQuestion(params.rootTaskWt ?? taskWt, params.rootTaskDir ?? taskDir, {
           id: qId,
           ref: "plan",
           disposition: "human-async",

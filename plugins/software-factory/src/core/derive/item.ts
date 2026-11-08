@@ -66,6 +66,7 @@ export async function deriveItemState(opts: {
   pipeline?: PipelineConfig;
   project?: ProjectConfig;
   kindConfig?: FlowKindConfig;
+  rootTaskDir?: string;
 }): Promise<DerivedItemState> {
   const { taskDir, itemSlug, parentBranch, taskWt, childWt, pipeline, project } = opts;
   const itemDir = path.join(taskDir, "items", itemSlug);
@@ -242,27 +243,36 @@ export async function deriveItemState(opts: {
 
   // 3. Read steering questions
   let openSteerQuestion: SteerItemArtifact | undefined;
-  const steerDir = path.join(taskDir, "steer", "tousertoreview");
-  if (fs.existsSync(steerDir)) {
-    const sentries = await fs.promises.readdir(steerDir, { withFileTypes: true });
-    for (const sent of sentries) {
-      if (!sent.isFile() || !sent.name.endsWith(".yaml")) continue;
-      try {
-        const qPath = path.join(steerDir, sent.name);
-        const q = await readYaml<SteerItemArtifact>(qPath);
-        if (
-          q &&
-          q.status === "open" &&
-          (q.ref === itemSlug || q.ref === `${path.basename(taskDir)}/${itemSlug}`)
-        ) {
-          openSteerQuestion = q;
-          break;
-        }
-      } catch (err: any) {
-        if (err?.code !== "ENOENT") {
-          throw new Error(`Corrupt steer question file at ${path.join(steerDir, sent.name)}: ${err?.message ?? err}`);
+  const steerDirs = [path.join(taskDir, "steer", "tousertoreview")];
+  if (opts.rootTaskDir && path.resolve(opts.rootTaskDir) !== path.resolve(taskDir)) {
+    steerDirs.push(path.join(opts.rootTaskDir, "steer", "tousertoreview"));
+  }
+  for (const steerDir of steerDirs) {
+    if (fs.existsSync(steerDir)) {
+      const sentries = await fs.promises.readdir(steerDir, { withFileTypes: true });
+      for (const sent of sentries) {
+        if (!sent.isFile() || !sent.name.endsWith(".yaml")) continue;
+        try {
+          const qPath = path.join(steerDir, sent.name);
+          const q = await readYaml<SteerItemArtifact>(qPath);
+          if (
+            q &&
+            q.status === "open" &&
+            (q.ref === itemSlug ||
+              q.ref === `${path.basename(taskDir)}/${itemSlug}` ||
+              (opts.rootTaskDir && q.ref === `${path.basename(opts.rootTaskDir)}/${itemSlug}`) ||
+              q.blocks?.includes(itemSlug))
+          ) {
+            openSteerQuestion = q;
+            break;
+          }
+        } catch (err: any) {
+          if (err?.code !== "ENOENT") {
+            throw new Error(`Corrupt steer question file at ${path.join(steerDir, sent.name)}: ${err?.message ?? err}`);
+          }
         }
       }
+      if (openSteerQuestion) break;
     }
   }
 

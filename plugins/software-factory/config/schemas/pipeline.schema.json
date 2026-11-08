@@ -181,7 +181,8 @@
         "hydrationBytes": { "type": "integer", "minimum": 1000 },
         "contextPackBytes": { "type": "integer", "minimum": 1000 },
         "timeoutNudgeSec": { "type": "integer", "minimum": 1 },
-        "minFreeDiskMb": { "type": "integer", "minimum": 1 }
+        "minFreeDiskMb": { "type": "integer", "minimum": 1 },
+        "steerPollSec": { "type": "integer", "minimum": 1 }
       },
       "additionalProperties": true
     },

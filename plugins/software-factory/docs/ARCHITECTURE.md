@@ -297,7 +297,7 @@ Schema enum + prompt section generated from the agent's allowed set and `criteri
 ### 8.8 Steering mailbox (root task only)
 - `steer/tousertoreview/{id}.yaml` {id, ref: `{epic?}/{item?}` | plan, disposition, question, draftDecision, blocks, status}.
 - `steer/fromuserpending/*` free text. Processing is single-flight per tick: `complete(@simpler)` → {refs, kind: answer|directive|stop, urgency: now|next-architect-call, summary} → one commit: `git mv` to `fromusertaken/`, classification yaml, effects (answers close/unblock items). Directives carry `deliveredAt` (architect record id) once sent; undelivered ones go with the next architect turn (`now` → immediate queued turn). `stop` → finish running steps, exit 10.
-- Active run (root or epic) polls the root mailbox. `factory steer` / `factory status` operate on it.
+- Active run (root or epic) polls the root mailbox: at every engine tick AND during wave execution, between item steps plus at least every `limits.steerPollSec` (default 60s). Mailbox commits serialize through the repo git-write mutex; single-flight per task. `factory steer` / `factory status` operate on it.
 
 ### 8.9 Not in v2
 Pushing branches (operator's job), parallel epics.

@@ -36,6 +36,8 @@ export interface ItemConsultParams {
   turnsSemaphore?: Semaphore;
   budgetTracker?: BudgetTracker;
   iteration?: number;
+  rootTaskWt?: string;
+  rootTaskDir?: string;
 }
 
 export interface NonItemConsultParams {
@@ -182,7 +184,7 @@ export async function runItemConsult(
 
       if (decisionVal === "human-async" && raw?.question) {
         const qId = `q-${item}-${String(nextSeq).padStart(3, "0")}`;
-        await writeQuestion(taskWt, taskDir, {
+        await writeQuestion(params.rootTaskWt ?? taskWt, params.rootTaskDir ?? taskDir, {
           id: qId,
           ref: item,
           disposition: "human-async",

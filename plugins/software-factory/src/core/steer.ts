@@ -6,10 +6,16 @@ import type { Harness } from "../harness/types.js";
 import type {
   SteerItemArtifact,
   SteerClassificationArtifact,
+  PipelineConfig,
 } from "./artifacts.js";
 import type { PromptLibrary } from "./prompts.js";
-import { writeYamlAtomic } from "./records/io.js";
+import { writeYamlAtomic, readYaml } from "./records/io.js";
 import { defaultSchemaCache } from "./records/schema-cache.js";
+import { resolveRole } from "./config/roles.js";
+import { appendJournal } from "./journal.js";
+import { git } from "./git/exec.js";
+import { KeyedMutex } from "./mutex.js";
+import type { Repo } from "./git/repo.js";
 
 /**
  * Lists pending operator messages from the root task worktree mailbox (§8.8).
@@ -173,4 +179,145 @@ export async function classify(
   }
 
   return parsed as SteerClassificationArtifact;
+}
+
+const steerMailboxMutexes = new KeyedMutex();
+
+export interface ProcessSteeringOptions {
+  taskWt: string;
+  taskDir: string;
+  harness: Harness;
+  pipeline: PipelineConfig;
+  prompts: PromptLibrary | any;
+  repo: Repo;
+  task: string;
+}
+
+export interface ProcessSteeringResult {
+  stopRequested: boolean;
+  processedCount: number;
+}
+
+/**
+ * Processes steering mailbox single-flight (§8.8, Finding 17).
+ * Reads pending messages from steer/fromuserpending/*, classifies via @simpler,
+ * and atomically commits to the task worktree under repo.writeLock.
+ */
+export async function processSteeringMailbox(
+  opts: ProcessSteeringOptions
+): Promise<ProcessSteeringResult> {
+  const { taskWt, taskDir, harness, pipeline, prompts, repo, task } = opts;
+  const mutexKey = path.resolve(taskDir);
+
+  return steerMailboxMutexes.runExclusive(mutexKey, async () => {
+    const relTaskDir = path.relative(taskWt, taskDir);
+    const pending = await listPending(taskWt, relTaskDir);
+    if (pending.length === 0) {
+      return { stopRequested: false, processedCount: 0 };
+    }
+
+    // Load currently open questions for context
+    const openQuestions: SteerItemArtifact[] = [];
+    const touserDir = path.join(taskDir, "steer", "tousertoreview");
+    if (fs.existsSync(touserDir)) {
+      const qFiles = await fs.promises.readdir(touserDir);
+      for (const qf of qFiles) {
+        if (!qf.endsWith(".yaml")) continue;
+        const qPath = path.join(touserDir, qf);
+        try {
+          const q = await readYaml<SteerItemArtifact>(qPath);
+          if (q && q.status === "open") openQuestions.push(q);
+        } catch (err: any) {
+          if (err?.code !== "ENOENT") {
+            throw new Error(`Corrupt steer question at ${qPath}: ${err?.message ?? err}`);
+          }
+        }
+      }
+    }
+
+    const simplerRole = resolveRole("simpler", pipeline.models.roles);
+    let stopRequested = false;
+    let processedCount = 0;
+
+    for (const item of pending) {
+      const classification = await classify(harness, item, {
+        openQuestions,
+        role: simplerRole.role,
+        models: simplerRole.models,
+        prompts,
+      });
+
+      const { from, to } = takenPaths(item.file, relTaskDir);
+      const absFrom = path.join(taskWt, from);
+      const absTo = path.join(taskWt, to);
+      await fs.promises.mkdir(path.dirname(absTo), { recursive: true });
+
+      // Atomic commit for mailbox processing (§8.8, Finding 17)
+      // Serialized through repo.writeLock to avoid racing item commits
+      await repo.writeLock.runExclusive(async () => {
+        const env = repo.identityEnv();
+
+        // Stage from first so git mv works even for newly dropped untracked files
+        await git(taskWt, ["add", "--", from], { env, allowFail: true });
+        const mvRes = await git(taskWt, ["mv", "-f", from, to], { env, allowFail: true });
+        if (mvRes.code !== 0 && fs.existsSync(absFrom)) {
+          await fs.promises.rename(absFrom, absTo);
+        }
+
+        await writeYamlAtomic(`${absTo}.classification.yaml`, classification);
+
+        if (classification.kind === "stop") {
+          stopRequested = true;
+        } else if (classification.kind === "answer") {
+          // Answer matching questions exactly (Finding 16)
+          if (fs.existsSync(touserDir)) {
+            const qFiles = await fs.promises.readdir(touserDir);
+            for (const qf of qFiles) {
+              if (!qf.endsWith(".yaml")) continue;
+              const qPath = path.join(touserDir, qf);
+              try {
+                const q = await readYaml<SteerItemArtifact>(qPath);
+                const matches = classification.refs.some(
+                  (r) =>
+                    q.ref === r ||
+                    q.ref === `${task}/${r}` ||
+                    q.id === r ||
+                    (q.ref && r.endsWith(`/${q.ref}`))
+                );
+                if (q && q.status === "open" && matches) {
+                  q.status = "answered";
+                  q.answer = item.text;
+                  q.answeredAt = new Date().toISOString();
+                  await writeYamlAtomic(qPath, q);
+                }
+              } catch (err: any) {
+                if (err?.code !== "ENOENT") {
+                  throw new Error(`Corrupt steer question at ${qPath}: ${err?.message ?? err}`);
+                }
+              }
+            }
+          }
+        }
+
+        await git(taskWt, ["add", "-A"], { env, allowFail: true });
+        const diffCheck = await git(taskWt, ["diff", "--cached", "--quiet"], {
+          allowFail: true,
+          env,
+        });
+        if (diffCheck.code !== 0) {
+          await git(taskWt, ["commit", "-m", `factory: process steering message ${item.file}`], { env });
+        }
+      });
+
+      await appendJournal(taskDir, {
+        type: "steer_processed",
+        file: item.file,
+        classification,
+      });
+
+      processedCount++;
+    }
+
+    return { stopRequested, processedCount };
+  });
 }

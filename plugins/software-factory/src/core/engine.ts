@@ -37,8 +37,7 @@ import {
 import { runIteration } from "./flows/iteration.js";
 import { runSeamHooks } from "./flows/seams.js";
 import { readYaml, writeYamlAtomic, readText } from "./records/io.js";
-import { listPending, classify, takenPaths } from "./steer.js";
-import { resolveRole } from "./config/roles.js";
+import { processSteeringMailbox } from "./steer.js";
 import { installShutdownHandlers } from "./shutdown.js";
  import { initFactoryRuntimeTmp } from "./runtime-tmp.js";
 import { assertDiskSpace, LowDiskSpaceStopError, type DiskSpaceProbe } from "./disk-space.js";
@@ -114,102 +113,6 @@ async function repairInterruptedRecords(taskDir: string): Promise<void> {
   }
 }
 
-/**
- * Processes steering mailbox single-flight using steer.ts API (§8.8, Finding 17).
- */
-async function processSteeringMailbox(
-  taskWt: string,
-  taskDir: string,
-  harness: Harness,
-  pipeline: PipelineConfig,
-  prompts: any,
-  repo: any,
-  task: string
-): Promise<{ stopRequested: boolean }> {
-  const relTaskDir = path.relative(taskWt, taskDir);
-  const pending = await listPending(taskWt, relTaskDir);
-  if (pending.length === 0) {
-    return { stopRequested: false };
-  }
-
-  // Load currently open questions for context
-  const openQuestions: SteerItemArtifact[] = [];
-  const touserDir = path.join(taskDir, "steer", "tousertoreview");
-  if (fs.existsSync(touserDir)) {
-    const qFiles = await fs.promises.readdir(touserDir);
-    for (const qf of qFiles) {
-      if (!qf.endsWith(".yaml")) continue;
-      const qPath = path.join(touserDir, qf);
-      try {
-        const q = await readYaml<SteerItemArtifact>(qPath);
-        if (q && q.status === "open") openQuestions.push(q);
-      } catch (err: any) {
-        if (err?.code !== "ENOENT") {
-          throw new Error(`Corrupt steer question at ${qPath}: ${err?.message ?? err}`);
-        }
-      }
-    }
-  }
-
-  const simplerRole = resolveRole("simpler", pipeline.models.roles);
-  let stopRequested = false;
-
-  for (const item of pending) {
-    const classification = await classify(harness, item, {
-      openQuestions,
-      role: simplerRole.role,
-      models: simplerRole.models,
-      prompts,
-    });
-
-    const { from, to } = takenPaths(item.file, relTaskDir);
-    const absTo = path.join(taskWt, to);
-    await fs.promises.mkdir(path.dirname(absTo), { recursive: true });
-    // One atomic commit per §8.8: git mv to fromusertaken/, classification yaml, effects
-    await git(taskWt, ["mv", from, to]);
-    await writeYamlAtomic(`${absTo}.classification.yaml`, classification);
-
-    if (classification.kind === "stop") {
-      stopRequested = true;
-    } else if (classification.kind === "answer") {
-      // Answer matching questions exactly (Finding 16)
-      if (fs.existsSync(touserDir)) {
-        const qFiles = await fs.promises.readdir(touserDir);
-        for (const qf of qFiles) {
-          if (!qf.endsWith(".yaml")) continue;
-          const qPath = path.join(touserDir, qf);
-          try {
-            const q = await readYaml<SteerItemArtifact>(qPath);
-            const matches = classification.refs.some(
-              (r) => q.ref === r || q.ref === `${task}/${r}` || q.id === r
-            );
-            if (q && q.status === "open" && matches) {
-              q.status = "answered";
-              q.answer = item.text;
-              await writeYamlAtomic(qPath, q);
-            }
-          } catch (err: any) {
-            if (err?.code !== "ENOENT") {
-              throw new Error(`Corrupt steer question at ${qPath}: ${err?.message ?? err}`);
-            }
-          }
-        }
-      }
-    }
-
-    // Atomic commit for mailbox processing (§8.8, Finding 17)
-    await git(taskWt, ["add", "-A"], { allowFail: true });
-    await commitAll(repo, taskWt, `factory: process steering message ${item.file}`);
-
-    await appendJournal(taskDir, {
-      type: "steer_processed",
-      file: item.file,
-      classification,
-    });
-  }
-
-  return { stopRequested };
-}
 
 /**
  * Runs an epic as a child task on the parent branch (§8.6, Finding 7).
@@ -223,6 +126,8 @@ export async function runChildTask(
     maxIterations?: number;
     budgetTracker?: BudgetTracker;
     rootTaskDir?: string;
+    rootTaskWt?: string;
+    rootTask?: string;
   }
 ): Promise<RunResult> {
   try {
@@ -251,6 +156,10 @@ export async function runChildTask(
   const budgetTracker = opts?.budgetTracker ?? new BudgetTracker(pipeline.budget);
 
   // 3. Child iterations (child skips classification; kind fixed by parent plan)
+  // Epic child tasks poll the ROOT mailbox (§8.8)
+  const rootTaskWt = opts?.rootTaskWt ?? parent.path;
+  const rootTaskDir = opts?.rootTaskDir ?? parent.taskDir;
+  const rootTask = opts?.rootTask ?? path.basename(parent.taskDir);
   const itRes = await runIteration({
     task: `${parentTaskSlug}--${epicSlug}`,
     taskDir: childTaskDir,
@@ -263,6 +172,9 @@ export async function runChildTask(
     prompts,
     budgetTracker,
     isChildTask: true,
+    rootTaskWt,
+    rootTaskDir,
+    rootTask,
     log,
   });
 
@@ -271,7 +183,7 @@ export async function runChildTask(
   const parentItemDir = path.join(parent.taskDir, "items", epicSlug);
   await fs.promises.mkdir(parentItemDir, { recursive: true });
   const childStatus =
-    itRes.status === "done" ? "done" : itRes.status === "blocked" ? "blocked" : "failed";
+    itRes.status === "done" ? "done" : itRes.status === "blocked" || itRes.status === "stopped" ? "blocked" : "failed";
   await writeYamlAtomic(path.join(parentItemDir, "child-closeup.yaml"), {
     epic: epicSlug,
     status: childStatus,
@@ -282,8 +194,8 @@ export async function runChildTask(
   await commitAll(repo, parent.path, `factory: record epic ${epicSlug} child status ${childStatus}`);
 
     return {
-      status: itRes.status === "done" ? "done" : itRes.status === "blocked" ? "blocked" : "failed",
-      exitCode: itRes.status === "done" ? 0 : itRes.status === "blocked" ? 10 : 1,
+      status: itRes.status === "done" ? "done" : itRes.status === "blocked" || itRes.status === "stopped" ? "blocked" : "failed",
+      exitCode: itRes.status === "done" ? 0 : itRes.status === "blocked" || itRes.status === "stopped" ? 10 : 1,
       summary: `Epic ${epicSlug} child task ${itRes.status}`,
     };
   } catch (err: any) {
@@ -418,15 +330,15 @@ export async function runTask(
     ticks++;
 
     // a. Process steering mailbox single-flight (§8.8, Finding 17)
-    const steerRes = await processSteeringMailbox(
+    const steerRes = await processSteeringMailbox({
       taskWt,
       taskDir,
       harness,
       pipeline,
       prompts,
       repo,
-      task
-    );
+      task,
+    });
     if (steerRes.stopRequested) {
       await appendJournal(taskDir, { type: "task_stopped_by_user", task });
       return {
@@ -644,6 +556,25 @@ export async function runTask(
           turnsSemaphore,
           budgetTracker,
         });
+        // Poll mailbox between item steps in the simple path too (§8.8)
+        const steerRes = await processSteeringMailbox({
+          taskWt,
+          taskDir,
+          harness,
+          pipeline,
+          prompts,
+          repo,
+          task,
+        });
+        if (steerRes.stopRequested) {
+          await appendJournal(taskDir, { type: "task_stopped_by_user", task });
+          await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
+          return {
+            status: "blocked",
+            exitCode: 10,
+            summary: `Task ${task} stopped by steering command`,
+          };
+        }
         simpleItemState = await deriveItemState({
           taskDir,
           itemSlug: "simple",
@@ -740,6 +671,8 @@ export async function runTask(
             maxIterations: opts?.maxIterations,
             budgetTracker,
             rootTaskDir: taskDir!,
+            rootTaskWt: taskWt!,
+            rootTask: task!,
           }
         );
       },
@@ -755,12 +688,15 @@ export async function runTask(
         exitCode: 0,
         summary: `Task ${task} completed successfully`,
       };
-    } else if (itRes.status === "blocked") {
+    } else if (itRes.status === "blocked" || itRes.status === "stopped") {
       await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
       return {
         status: "blocked",
         exitCode: 10,
-        summary: `Task ${task} blocked at iteration ${itRes.iteration}`,
+        summary:
+          itRes.status === "stopped"
+            ? `Task ${task} stopped by steering command`
+            : `Task ${task} blocked at iteration ${itRes.iteration}`,
       };
     } else if (itRes.status === "failed") {
       await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
