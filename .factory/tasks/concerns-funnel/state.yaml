@@ -31,12 +31,13 @@ items:
     mergedAt: 2026-11-07T21:22:06-05:00
   concerns-contracts-types:
     kind: dev
-    status: ready
+    status: merged
     branch: topic/concerns-funnel--concerns-contracts-types
     attempts: 1
     fixRounds: 1
     spendUsd: 0.063129
     currentStep: review
+    mergedAt: 2026-11-07T23:50:13-05:00
   concerns-store:
     kind: dev
     status: pending
@@ -53,18 +54,20 @@ items:
     spendUsd: 0
   concerns-contracts-policy:
     kind: dev
-    status: pending
+    status: ready
     branch: topic/concerns-funnel--concerns-contracts-policy
-    attempts: 1
+    attempts: 2
     fixRounds: 1
-    spendUsd: 0
+    spendUsd: 0.107439
+    currentStep: review
   concerns-contracts-schemas:
     kind: dev
-    status: pending
+    status: ready
     branch: topic/concerns-funnel--concerns-contracts-schemas
-    attempts: 1
+    attempts: 2
     fixRounds: 1
-    spendUsd: 0
+    spendUsd: 0.13946999999999998
+    currentStep: review
   plan-reviewer-triage:
     kind: dev
     status: pending
@@ -182,20 +185,37 @@ debt:
     measurement path"
   - "[concerns-contracts-types] ReviewSuggestion.disposition collapses to
     string, dismiss not enforced there"
-budgetSpentUsd: 0.8839840000000002
+  - "[concerns-contracts-policy] Deduplicate hardcoded builtin fallback arrays
+    to BUILTIN_REVIEW_DISPOSITIONS"
+  - "[concerns-contracts-policy] Iteration plan-review prompt dispositions lack
+    direct automated coverage"
+  - "[concerns-contracts-policy] Single-source builtin fallback arrays to
+    BUILTIN_REVIEW_DISPOSITIONS"
+  - "[concerns-contracts-policy] Close-up triager marking is inert under current
+    schemas; pin with test or comment"
+  - "[concerns-contracts-schemas] DeveloperOutputArtifact.concerns type still
+    string[] vs structured schema"
+  - "[concerns-contracts-schemas] Out-of-scope step-runner fallback fix is
+    correct but lacks direct test"
+  - "[concerns-contracts-schemas] concernResolutions test allows superset enum"
+  - "[concerns-contracts-schemas] TS artifact interfaces lag structured schemas;
+    store story must reconcile"
+  - "[concerns-contracts-schemas] inferTaskWorktree fix correct but lacks direct
+    unit test"
+budgetSpentUsd: 1.141687
 spendByRole:
   alt-workhorse:
-    costUsd: 0.171117
-    inputTokens: 572955
-    outputTokens: 437823
+    costUsd: 0.216589
+    inputTokens: 770750
+    outputTokens: 548733
   workhorse:
-    costUsd: 0.635158
-    inputTokens: 1136939
-    outputTokens: 367629
+    costUsd: 0.840899
+    inputTokens: 1625095
+    outputTokens: 517811
   architect:
-    costUsd: 0.061194
-    inputTokens: 473664
-    outputTokens: 60684
+    costUsd: 0.06768400000000001
+    inputTokens: 521581
+    outputTokens: 64173
   alt-architect:
     costUsd: 0.016515000000000002
     inputTokens: 72452
@@ -205,6 +225,10 @@ spendByItem:
     costUsd: 0.251577
     inputTokens: 593198
     outputTokens: 339057
+  concerns-contracts-policy:
+    costUsd: 0.107439
+    inputTokens: 280717
+    outputTokens: 125290
   concerns-contracts-types:
     costUsd: 0.063129
     inputTokens: 178070
@@ -217,8 +241,12 @@ spendByItem:
     costUsd: 0.131932
     inputTokens: 263905
     outputTokens: 109900
+  concerns-contracts-schemas:
+    costUsd: 0.13946999999999998
+    inputTokens: 384518
+    outputTokens: 125976
   (orchestration):
-    costUsd: 0.376567
-    inputTokens: 1080966
-    outputTokens: 311516
-lastUpdated: 2026-11-08T04:50:16.836Z
+    costUsd: 0.38736099999999996
+    inputTokens: 1149599
+    outputTokens: 324831
+lastUpdated: 2026-11-08T05:52:18.748Z
