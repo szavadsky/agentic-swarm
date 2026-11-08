@@ -1,0 +1,69 @@
+status: ok
+summary: Implemented unified concern hydration with step-role byte caps,
+  hydrated concern sets, and affects-independent fingerprints with legacy
+  rename-merge. Triage now owns
+  hydrateStepConcerns/listHydratedConcerns/renderConcernsYaml; step-runner
+  injects concernsYaml only when the caller does not supply it, computing
+  review/qa diff bytes, close-up task-diff bytes via injectable gitFn, and
+  planning input bytes from KNOWN_VARS. Iteration supplies close-up parentBranch
+  and architect hydration no longer duplicates concerns; hydrateConcernsYaml was
+  deleted. Concerns merge now unions affects while preserving terminal status,
+  and aggregate migrates legacy affects-keyed files to stable ids. All target
+  tests, typecheck, and the full suite pass.
+target:
+  selectors:
+    - test/engine/hydration-fingerprint-caps.test.ts
+  expectRed:
+    - Hydration caps (adr-hydration-single-cap).caps review hydration at
+      min(diffBytes, 2000) bytes
+    - Hydration caps (adr-hydration-single-cap).caps plan-review hydration at
+      min(inputBytes, 500) bytes
+    - Hydration caps (adr-hydration-single-cap).caps wave-close-up hydration at
+      min(taskDiffBytes, 2000) bytes
+    - Hydration caps (adr-hydration-single-cap).returns empty hydration for zero
+      and tiny caps
+    - Hydration caps (adr-hydration-single-cap).injects review concernsYaml by
+      diff bytes and lets caller-supplied values win
+    - Hydration caps (adr-hydration-single-cap).computes close-up task diff
+      bytes through the injected git function
+    - Hydration caps (adr-hydration-single-cap).hydrates architect turns from
+      concernsYaml without a duplicate concerns section
+    - Hydrated concern sets (adr-hydrated-sets).hydrates open concerns with
+      pending resolutions for review
+    - Hydrated concern sets (adr-hydrated-sets).includes routed concerns for
+      close-ups but not for review
+    - Hydrated concern sets (adr-hydrated-sets).hydrates open remarkables as
+      terse remarkable records
+    - Hydrated concern sets (adr-hydrated-sets).includes dismissed escalated
+      concerns only in the architect set
+    - Concern identity and affects union
+      (adr-fingerprint-affects-union).fingerprints kind, normalized summary, and
+      location without affects
+    - Concern identity and affects union (adr-fingerprint-affects-union).unions
+      affects without forking and preserves terminal status
+    - Concern identity and affects union (adr-fingerprint-affects-union).renames
+      a legacy affects-keyed file to the stable id
+evidence:
+  - cd plugins/software-factory && TMPDIR=/tmp bun test
+    test/engine/hydration-fingerprint-caps.test.ts -> 15 pass, 0 fail, 89
+    expect() calls
+  - cd plugins/software-factory && bun run typecheck -> tsc --noEmit exited 0
+  - cd plugins/software-factory && TMPDIR=/tmp bun test -> 399 pass, 2 skip, 0
+    fail, 401 tests across 66 files (95.78s)
+  - git diff --stat -> only src/core/concerns.ts, src/core/flows/iteration.ts,
+    src/core/flows/step-runner.ts, src/core/triage.ts changed; 163 insertions/61
+    deletions within prod budget
+  - Manual diff review confirmed hydrateConcernsYaml removed, no
+    prompt-fragment/router/epic/ingest changes, and architect hydration contains
+    no duplicate concerns section
+concerns:
+  - Legacy rename-merge intentionally treats the incoming detail as
+    authoritative when migrating a pre-union-fingerprint file, while ordinary
+    merges retain the longer stored detail per existing behavior.
+  - Hydration injection is gated on KNOWN_VARS registering concernsYaml for the
+    fragment, so custom unregistered fragments with a hand-added placeholder
+    rely on caller-supplied concernsYaml.
+notes: Step-runner accepts parentBranch and gitFn for close-up task-diff byte
+  computation; iteration passes parentBranch to wave and plan close-ups.
+  renderConcernsYaml now renders pre-shaped records and returns '' when no
+  record fits the cap.
