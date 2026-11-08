@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
-import yaml from "yaml";
 import type { Concern, ConcernCounts, ConcernSeverity, ConcernSource, RemarkableDecision, ReviewSuggestion, StoredConcernArtifact } from "./artifacts.js";
 import type { Repo } from "./git/repo.js";
 import { commitAll } from "./git/commit.js";
@@ -117,7 +116,7 @@ export async function aggregateConcerns(
         if (migrated) { existing = migrated.record; legacyFile = migrated.file; }
       }
       const merged = mergeConcern(existing, input, ctx.source, at);
-      if (legacyFile) merged.detail = (input.detail ?? input.summary).trim();
+      if (legacyFile && input.detail?.trim()) merged.detail = input.detail.trim();
       if (existing && !legacyFile && pick(existing) === pick(merged) && (existing.source?.lastSeen ?? "") >= at) { out.push(existing); continue; }
       await writeYamlAtomic(file, merged);
       if (legacyFile) await fs.promises.unlink(legacyFile);
