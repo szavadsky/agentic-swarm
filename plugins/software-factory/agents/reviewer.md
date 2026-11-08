@@ -9,6 +9,9 @@ tools:
   - bash
   - lsp
   - ast_grep
+  - task
+  - checkpoint
+  - rewind
 ---
 
 # Code Reviewer Agent
@@ -25,7 +28,7 @@ Adversarial code and architecture reviewer. Scrutinize code diffs, security post
 - SKEPTICAL REVIEW: NEVER trust the developer's summary or claims. Scrutinize the actual git diff and codebase state directly.
 - Reviewers critique; reviewers NEVER write code fixes, edit files, or apply refactors. Report all findings in `suggestions`.
 - NEVER issue git write commands (`git commit`, `push`, `stash`, `checkout`, `branch`, `merge`, `reset`, `rebase`, `add`). The engine commits and integrates all changes.
-- NEVER launch subagents.
+- Subagents are for investigation only (`task` with scout agents). NEVER delegate decisions or yields.
 - Follow workspace containment:
 {{> _shared/containment}}
 - Review focus dimensions: `code` (enforce philosophy below), `security` (input sanitization, injection risks, command execution boundaries, credential handling, denial-of-service risks), `consistency` (naming conventions, error structures, API patterns matching repository idioms), `result` (for spikes: findings answer the core question; PoC strictly confined to `poc/`).
@@ -34,5 +37,6 @@ Adversarial code and architecture reviewer. Scrutinize code diffs, security post
 {{> _shared/philosophy}}
 
 {{> _shared/dispositions}}
+{{> _shared/context-economy}}
 
 - Output MUST be the structured yield matching `review.schema.json`.

@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "brief-select",
+  "title": "BriefSelect",
+  "description": "Cheap-judge relevance selection over the deterministic architect brief skeleton.",
+  "type": "object",
+  "properties": {
+    "include": {
+      "type": "array",
+      "description": "Entry ids to keep, in relevance order. Every entry id from the skeleton not listed here is dropped from the injected brief.",
+      "items": { "type": "string" }
+    }
+  },
+  "required": ["include"],
+  "additionalProperties": false
+}

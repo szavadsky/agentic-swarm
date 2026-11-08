@@ -460,13 +460,25 @@ criteria:
 # (skipped for kind `simple`):
 # a cheap workhorse agent (fact-finder role/agent, FRESH session) builds a
 # condensed, citation-backed context document (context-pack.md) covering module
-# maps, signatures, excerpts, conventions, and open questions, capped by
-# limits.contextPackBytes (fallback: limits.hydrationBytes, then 40000).
+# maps, signatures, excerpts, conventions, and open questions. No byte cap —
+# the turn budget is the bound.
 # Expensive architect turns work primarily from prepared context and triage citations
 # under an explicit exploration budget instead of broad codebase scans.
 # Stale rule: iteration 1 stale iff not done; later iterations stale iff any
 # non-.factory file changed since the pack commit (step id `context-pack-{N}`).
 contextPack: true
+
+# ==============================================================================
+# Tools (§5, §10)
+# ==============================================================================
+# `defaults`: tools for an agent whose definition carries no tools list.
+# `structuredOutput`: tools always appended when the turn needs structured output.
+# Per-agent sets live in the agent definition frontmatter, overridable per
+# layer via `agents.<name>.tools` (empty = yield-only, subject to
+# `structuredOutput` when a schema is attached).
+tools:
+  defaults: [edit, bash]
+  structuredOutput: [yield]
 
 # ==============================================================================
 # Prompts (§5, §10)

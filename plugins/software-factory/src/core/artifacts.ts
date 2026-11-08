@@ -134,6 +134,12 @@ export interface PipelineConfig {
   };
   criteria?: Record<string, string>;
   contextPack?: boolean;
+  tools?: {
+    /** Tools for an agent whose definition carries no tools list. */
+    defaults?: string[];
+    /** Tools always appended when the turn needs structured output. */
+    structuredOutput?: string[];
+  };
   prompts?: {
     overrides?: Record<string, unknown>;
     extraSkillDirs?: string[];

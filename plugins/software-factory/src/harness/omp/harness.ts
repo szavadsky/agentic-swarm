@@ -244,10 +244,13 @@ export class OmpHarness implements Harness {
     );
     fs.writeFileSync(systemPromptPath, agentBody, "utf8");
 
-    // 2. Prepare tools allowlist (ensure yield is present for structured output)
+    // 2. Prepare tools allowlist (append pipeline.tools.structuredOutput when a schema needs it)
     const tools = [...run.tools];
-    if (run.outputSchema && !tools.includes("yield")) {
-      tools.push("yield");
+    if (run.outputSchema) {
+      const extra = this.pipeline?.tools?.structuredOutput ?? ["yield"];
+      for (const t of extra) {
+        if (!tools.includes(t)) tools.push(t);
+      }
     }
 
     // 3. Prepare prompt file (@file syntax for robust argument passing)

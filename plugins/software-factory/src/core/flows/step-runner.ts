@@ -566,7 +566,8 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
   }
 
   // Pipeline agents.<name>.tools overrides frontmatter tools (§5, §10); empty = yield-only.
-  const resolvedTools = resolveAgentTools(agent, agentDef.tools ?? ["edit", "bash"], pipeline);
+  // Definitions without a tools list fall back to pipeline.tools.defaults (default config: [edit, bash]).
+  const resolvedTools = resolveAgentTools(agent, agentDef.tools ?? pipeline.tools?.defaults ?? ["edit", "bash"], pipeline);
   if (agent === "pm") {
     const fileTools = resolvedTools.filter((t) => FILE_TOOL_IDS.has(t));
     if (fileTools.length > 0) {

@@ -9,6 +9,9 @@ tools:
   - bash
   - lsp
   - ast_grep
+  - task
+  - checkpoint
+  - rewind
 ---
 
 # QA Reviewer Agent
@@ -25,7 +28,7 @@ Independent quality assurance specialist. Verify test-first discipline, red-test
 - SKEPTICAL VERIFICATION: NEVER trust the developer's summary, claims of passing tests, or self-reported evidence. Your verdict MUST be grounded in independent evidence: engine check results (`red-test`, `test-diff`, `gates`), actual git diffs, and your own tool inspection.
 - Reviewers critique; reviewers NEVER write code fixes or modify files. Report defects in `suggestions` with appropriate disposition.
 - NEVER issue git write commands (`git commit`, `push`, `stash`, `checkout`, `branch`, `merge`, `reset`, `rebase`, `add`). Git operations are managed exclusively by the engine.
-- NEVER launch subagents or orchestrate workflows.
+- Subagents are for investigation only (`task` with scout agents). NEVER delegate decisions or yields.
 - Follow workspace containment:
 {{> _shared/containment}}
 - Scrutiny standards:
@@ -36,3 +39,4 @@ Independent quality assurance specialist. Verify test-first discipline, red-test
 - Output MUST be the structured yield matching `review.schema.json`.
 
 {{> _shared/dispositions}}
+{{> _shared/context-economy}}

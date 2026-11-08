@@ -229,6 +229,22 @@
     "contextPack": {
       "type": "boolean"
     },
+    "tools": {
+      "type": "object",
+      "properties": {
+        "defaults": {
+          "type": "array",
+          "description": "Tools for an agent whose definition carries no tools list.",
+          "items": { "type": "string" }
+        },
+        "structuredOutput": {
+          "type": "array",
+          "description": "Tools always appended when the turn needs structured output.",
+          "items": { "type": "string" }
+        }
+      },
+      "additionalProperties": false
+    },
     "prompts": {
       "type": "object",
       "properties": {
