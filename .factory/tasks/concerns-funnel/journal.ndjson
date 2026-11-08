@@ -1416,3 +1416,6 @@
 {"type":"step_finished","task":"concerns-funnel","step":"plan-close-up-1","attempt":1,"status":"ok","sessionId":"01a1bc2e-2a36-710d-a776-de39e5ef9036","usage":{"inputTokens":133972,"outputTokens":27630,"costUsd":0.026683},"ts":"2026-11-08T17:38:16.387Z"}
 {"type":"step_started","task":"concerns-funnel","step":"architect-closeup-1","attempt":1,"recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/045-architect-closeup-1-a1","ts":"2026-11-08T17:38:17.060Z"}
 {"type":"step_timeout_armed","task":"concerns-funnel","step":"architect-closeup-1","timeoutSec":1200,"ts":"2026-11-08T17:38:17.065Z"}
+{"type":"step_finished","task":"concerns-funnel","step":"architect-closeup-1","attempt":1,"status":"ok","sessionId":"01a1b894-4755-7787-a1ed-8df6c7a062a2","usage":{"inputTokens":30293,"outputTokens":2726,"costUsd":0.008791},"ts":"2026-11-08T17:38:51.204Z"}
+{"type":"closeup_written","iteration":1,"status":"next-iteration","ts":"2026-11-08T17:38:51.205Z"}
+{"type":"iteration_started","iteration":2,"ts":"2026-11-08T17:38:53.358Z"}

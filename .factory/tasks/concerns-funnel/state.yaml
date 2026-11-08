@@ -1,7 +1,7 @@
 task: concerns-funnel
 kind: epic
 status: active
-iteration: 1
+iteration: 2
 currentWave: 1
 items:
   concerns-contracts:
@@ -266,16 +266,6 @@ items:
     fixRounds: 1
     spendUsd: 0
 debt:
-  - Pre-existing head-guard failures when TMPDIR sits under .factory-runtime
-    because step-runner splits on /.factory. Baseline red; green with
-    TMPDIR=/tmp. Out of scope.
-  - reviewAllowed resolved in two places with non-canonical allowedDispositions
-    key and wrong fallback order, so per-agent dismiss could fail schema
-    validation.
-  - ADR writer persists only title plus context and PlanAdr lacks blocking;
-    human-stop contract drifted from exit-10.
-  - human-awareness and human-stop ignored, debt derivation ignores routed
-    concerns, status lists digest as blocking.
   - "spike-saga-commit merge gate failure is environmental, not content:
     read-only spike with zero prod diff, research ok, review approved; baseline
     test gate is red (2 head-guard TMPDIR failures). Findings accepted as
@@ -505,20 +495,20 @@ debt:
     inconsistent with documented branch-from-HEAD worktrees"
   - "[funnel-closeups-v3] Propagated parent copy retains child source.item,
     writes undeclared source.epic, and can clobber/lengthen parent records"
-budgetSpentUsd: 5.207602919999999
+budgetSpentUsd: 5.24307692
 spendByRole:
   alt-workhorse:
-    costUsd: 1.133326
-    inputTokens: 6042650
-    outputTokens: 1706345
+    costUsd: 1.160009
+    inputTokens: 6176622
+    outputTokens: 1733975
   workhorse:
     costUsd: 3.4052009199999995
     inputTokens: 7273975
     outputTokens: 2038382
   architect:
-    costUsd: 0.6525609999999998
-    inputTokens: 5965746
-    outputTokens: 104121
+    costUsd: 0.6613519999999998
+    inputTokens: 5996039
+    outputTokens: 106847
   alt-architect:
     costUsd: 0.016515000000000002
     inputTokens: 72452
@@ -593,7 +583,7 @@ spendByItem:
     inputTokens: 463902
     outputTokens: 217893
   (orchestration):
-    costUsd: 1.0096659999999997
-    inputTokens: 6814114
-    outputTokens: 436335
-lastUpdated: 2026-11-08T17:21:42.910Z
+    costUsd: 1.04514
+    inputTokens: 6978379
+    outputTokens: 466691
+lastUpdated: 2026-11-08T17:38:53.004Z
