@@ -94,3 +94,5 @@
 {"type":"item_merge_failed","item":"spike-saga-commit","error":"Quality gates failed on merge path for spike-saga-commit","ts":"2026-11-08T02:24:08.470Z"}
 {"type":"step_started","task":"concerns-funnel","step":"consult-spike-saga-commit","attempt":1,"recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/013-consult-spike-saga-commit-a1","ts":"2026-11-08T02:24:08.511Z"}
 {"type":"step_timeout","task":"concerns-funnel","step":"consult-spike-saga-commit","timeoutSec":1200,"ts":"2026-11-08T02:24:08.516Z"}
+{"type":"step_finished","task":"concerns-funnel","step":"consult-spike-saga-commit","attempt":1,"status":"ok","sessionId":"01a1b894-4755-7787-a1ed-8df6c7a062a2","usage":{"inputTokens":32364,"outputTokens":2869,"costUsd":0.00436},"ts":"2026-11-08T02:24:33.287Z"}
+{"type":"decision_made","context":"item","item":"spike-saga-commit","decision":"accept-with-debt","decisionPath":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/decisions/002-item-spike-saga-commit.yaml","ts":"2026-11-08T02:24:33.287Z"}
