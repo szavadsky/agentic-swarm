@@ -152,6 +152,7 @@ Steering log (user decisions recorded by the orchestrator during the build; newe
      - simple-guard's mechanical rules (rename-only tests, dep-file bans) removed as nonsense — simple path guarded by gates + advisory size with conversion routing only
      - agent turn budgets: poc/architect 2h, tdd/dev/qa 90m, fact-finder/review 1h, quick scoping/summary agents 45m (active monotonic time, sleep excluded)
      - timeout floor 45m for every agent (harness backstop included); progress-based extension up to 2x on judged meaningful progress is spec item 21 scope (self-host tool-policy task)
+     - hoop removal: per-step/per-item budget raised to fit long turns (8→25/40 USD); hydration 40→128KB (architect keeps its own plan); timeout-nudge/resume budget defaults to half the step timeout instead of pinned 5m; verified no work-loss paths (HEAD guard soft-resets, rejects keep worktree, citations drop-with-journal)
 
                                                    
 

@@ -360,11 +360,13 @@ limits:
   maxMilestones: 8                # Maximum milestones per plan
   maxItemsPerPlan: 50             # Maximum items per plan
   checkOutputBytes: 4000          # Tail byte cap for check command output
-  hydrationBytes: 40000           # Hydration context cap (plans, close-ups, taken steering, decisions)
-  contextPackBytes: 40000         # Byte cap for generated context-pack.md (defaults to hydrationBytes)
+  hydrationBytes: 128000          # Hydration context cap (plans, close-ups, taken steering, decisions) — must fit the architect's own prior plan
+  # contextPackBytes unset: context-pack.md cap follows hydrationBytes; pin only to override:
+  # contextPackBytes: 40000
   # stepTranscriptWarningBytes defaults to 5242880 (5 MiB) when absent; uncomment to pin:
   # stepTranscriptWarningBytes: 5242880
-  timeoutNudgeSec: 300            # Timeout for the finalize-nudge retry on resumable timeouts (and interrupted resumes)
+  # timeoutNudgeSec unset: finalize-nudge retries and interrupted resumes default to HALF the step's own timeout (coherent with 45m-2h turns); pin only to override:
+  # timeoutNudgeSec: 300
   # steerPollSec defaults to 60 when absent; uncomment to pin:
   # steerPollSec: 60
   maxEmptyWaves: 3               # Consecutive empty-complete waves before architect consult (instead of another empty wave)
@@ -383,8 +385,8 @@ limits:
 budget:
   perTaskUsd: 100
   perIterationUsd: 30
-  perItemUsd: 8
-  perStepUsd: 8
+  perItemUsd: 40
+  perStepUsd: 25
   expensiveRoles:                 # Roles capped by limits.maxInfraRetriesExpensive
     - architect
     - task-escalation
