@@ -1,0 +1,12 @@
+seq: 8
+name: develop
+attempt: 1
+fixRound: 2
+agent: developer
+role: alt-workhorse
+models:
+  - opencode-go/muse-spark-1.3-contributor
+  - opencode-go/deepseek-v4.1-flash
+timeoutSec: 1200
+status: started
+startedAt: 2026-11-08T13:41:43.823Z
