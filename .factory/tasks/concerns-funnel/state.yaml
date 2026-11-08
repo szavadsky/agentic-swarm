@@ -10,90 +10,109 @@ items:
     branch: topic/concerns-funnel--concerns-contracts
     attempts: 2
     fixRounds: 2
+    spendUsd: 0.251577
+    currentStep: develop
   spike-saga-commit:
     kind: fact-finder
     status: ready
     branch: topic/concerns-funnel--spike-saga-commit
     attempts: 1
     fixRounds: 1
+    spendUsd: 0.131932
+    currentStep: review
   spike-text-budget:
     kind: test-assumptions
-    status: ready
+    status: merged
     branch: topic/concerns-funnel--spike-text-budget
     attempts: 1
     fixRounds: 1
+    spendUsd: 0.060779
+    currentStep: review
+    mergedAt: 2026-11-07T21:22:06-05:00
   concerns-store:
     kind: dev
     status: pending
     branch: topic/concerns-funnel--concerns-store
     attempts: 1
     fixRounds: 1
+    spendUsd: 0
   modes-prompts:
     kind: dev
     status: pending
     branch: topic/concerns-funnel--modes-prompts
     attempts: 1
     fixRounds: 1
+    spendUsd: 0
   plan-reviewer-triage:
     kind: dev
     status: pending
     branch: topic/concerns-funnel--plan-reviewer-triage
     attempts: 1
     fixRounds: 1
+    spendUsd: 0
   reviewer-triage:
     kind: dev
     status: pending
     branch: topic/concerns-funnel--reviewer-triage
     attempts: 1
     fixRounds: 1
+    spendUsd: 0
   routing-blocker-derive:
     kind: dev
     status: pending
     branch: topic/concerns-funnel--routing-blocker-derive
     attempts: 1
     fixRounds: 1
+    spendUsd: 0
   routing-human-debt:
     kind: dev
     status: pending
     branch: topic/concerns-funnel--routing-human-debt
     attempts: 1
     fixRounds: 1
+    spendUsd: 0
   adr-blocking-digest:
     kind: dev
     status: pending
     branch: topic/concerns-funnel--adr-blocking-digest
     attempts: 1
     fixRounds: 1
+    spendUsd: 0
   routing-architect-consult:
     kind: dev
     status: pending
     branch: topic/concerns-funnel--routing-architect-consult
     attempts: 1
     fixRounds: 1
+    spendUsd: 0
   status-state-surface:
     kind: dev
     status: pending
     branch: topic/concerns-funnel--status-state-surface
     attempts: 1
     fixRounds: 1
+    spendUsd: 0
   funnel-closeups:
     kind: dev
     status: pending
     branch: topic/concerns-funnel--funnel-closeups
     attempts: 1
     fixRounds: 1
+    spendUsd: 0
   saga-propagate:
     kind: dev
     status: pending
     branch: topic/concerns-funnel--saga-propagate
     attempts: 1
     fixRounds: 1
+    spendUsd: 0
   docs-finish:
     kind: dev
     status: pending
     branch: topic/concerns-funnel--docs-finish
     attempts: 1
     fixRounds: 1
+    spendUsd: 0
 debt:
   - Pre-existing head-guard failures when TMPDIR sits under .factory-runtime
     because step-runner splits on /.factory. Baseline red; green with
@@ -105,6 +124,15 @@ debt:
     human-stop contract drifted from exit-10.
   - human-awareness and human-stop ignored, debt derivation ignores routed
     concerns, status lists digest as blocking.
+  - "spike-saga-commit merge gate failure is environmental, not content:
+    read-only spike with zero prod diff, research ok, review approved; baseline
+    test gate is red (2 head-guard TMPDIR failures). Findings accepted as
+    authoritative. Unapplied reviewer optional nits carried as debt: qualify
+    'epic state ONLY from child-closeup' (isMerged precedence), prefix inline
+    paths with plugins/software-factory/, scope removeWorktree claim to epic
+    child worktrees, fold contextPack key into findings (strict fact-finder
+    schema allows only status/summary/findings/sources/recommendations).
+    Consumers must apply these mentally."
   - "[concerns-contracts] Review fallback duplicates canonical dispositions
     instead of importing the constant"
   - "[concerns-contracts] resolveReviewAllowed could return ReviewDisposition[]
@@ -130,5 +158,39 @@ debt:
     2000-byte cap"
   - "[spike-text-budget] Clarify trim-semantics comment to name TmpRepo trimEnd
     measurement path"
-budgetSpentUsd: 0.313079
-lastUpdated: 2026-11-08T02:22:06.955Z
+budgetSpentUsd: 0.800895
+spendByRole:
+  alt-workhorse:
+    costUsd: 0.15788
+    inputTokens: 510196
+    outputTokens: 405947
+  workhorse:
+    costUsd: 0.585266
+    inputTokens: 1021628
+    outputTokens: 323609
+  architect:
+    costUsd: 0.041234
+    inputTokens: 274114
+    outputTokens: 59120
+  alt-architect:
+    costUsd: 0.016515000000000002
+    inputTokens: 72452
+    outputTokens: 42292
+spendByItem:
+  concerns-contracts:
+    costUsd: 0.251577
+    inputTokens: 593198
+    outputTokens: 339057
+  spike-saga-commit:
+    costUsd: 0.131932
+    inputTokens: 263905
+    outputTokens: 109900
+  spike-text-budget:
+    costUsd: 0.060779
+    inputTokens: 139871
+    outputTokens: 72059
+  (orchestration):
+    costUsd: 0.356607
+    inputTokens: 881416
+    outputTokens: 309952
+lastUpdated: 2026-11-08T04:32:09.785Z

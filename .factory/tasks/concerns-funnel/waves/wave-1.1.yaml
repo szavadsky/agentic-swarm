@@ -1,9 +1,0 @@
-wave: 1
-iteration: 1
-status: has_failures
-mergedItems:
-  - spike-text-budget
-failedItems:
-  - spike-saga-commit
-blockedItems: []
-summary: "Wave 1 completed. Merged items: spike-text-budget"

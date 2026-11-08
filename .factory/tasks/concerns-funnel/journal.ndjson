@@ -105,3 +105,6 @@
 {"type":"step_started","task":"concerns-funnel","step":"pm-amend-1-1","attempt":1,"recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/016-pm-amend-1-1-a1","ts":"2026-11-08T02:28:32.322Z"}
 {"type":"step_timeout","task":"concerns-funnel","step":"pm-amend-1-1","timeoutSec":900,"ts":"2026-11-08T02:28:32.325Z"}
 {"type":"step_transcript_size_warning","task":"concerns-funnel","step":"pm-amend-1-1","attempt":1,"sizeBytes":5633315,"thresholdBytes":5242880,"traceRef":"/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/sessions/2026-11-08T02-28-32-529Z_01a1b8fc-6a91-7070-ba9b-a055bc1a0dc8.jsonl","ts":"2026-11-08T02:40:16.516Z"}
+{"type":"task_started","task":"concerns-funnel","branch":"topic/concerns-funnel","ts":"2026-11-08T04:32:09.351Z"}
+{"type":"iteration_started","iteration":1,"ts":"2026-11-08T04:32:09.897Z"}
+{"type":"wave_report_old_format_rerun","wave":1,"iteration":1,"recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/015-architect-wave-report-1-1-a1","ts":"2026-11-08T04:32:10.144Z"}
