@@ -1,0 +1,12 @@
+iteration: 1
+status: next-iteration
+summary: "Iteration 1 delivered M3 routing fully (pure derive + exactly-once
+  consult + hydration + human/ADR/debt) plus M1 store/contracts and M2 triage
+  cores, all green. Audit verified remaining gaps hold: M1 escalation surfacing
+  + stale TS types; M2 fragment wiring partial (steps/review lacks
+  humanInvolvementCriteria; architect reports/consults and close-ups lack
+  concernsYaml/criteria); M4 funnel caps/confirms/fallback/saga propagation
+  missing (only counts/status); M5 docs untouched — verified ARCHITECTURE §1 row
+  18 still 'Deliberately not hand-built'. Tail unmergeable this iteration
+  (amendments 3/3, funnel-closeups-v3 running, saga/docs pending on stale deps).
+  Proceed to iteration 2 with the audited remainder."
