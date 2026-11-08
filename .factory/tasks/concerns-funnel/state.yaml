@@ -196,11 +196,11 @@ items:
     mergedAt: 2026-11-08T07:01:48-05:00
   adr-blocking-digest-v2:
     kind: dev
-    status: running
+    status: ready
     branch: topic/concerns-funnel--adr-blocking-digest-v2
-    attempts: 1
-    fixRounds: 3
-    spendUsd: 0.459328
+    attempts: 2
+    fixRounds: 1
+    spendUsd: 0.670065
     currentStep: review
   routing-architect-consult-v2:
     kind: dev
@@ -435,6 +435,14 @@ debt:
     no test"
   - "[adr-blocking-digest-v2] human-async blocking ADRs still halt the whole
     task; mapping undocumented and weakly pinned"
+  - "[adr-blocking-digest-v2] Explicit blocking:false md and
+    missing-consequences fallback unasserted"
+  - "[adr-blocking-digest-v2] Detailed-mode test accepts either disposition
+    while impl is deterministic"
+  - "[adr-blocking-digest-v2] Revise re-persist leaves stale mailbox entries on
+    ADR flip/removal"
+  - "[adr-blocking-digest-v2] Detailed-mode disposition loose in test, mode
+    mapping undocumented"
   - "[routing-architect-consult-v2] Cap concerns hydration section below full
     hydrationBytes"
   - "[routing-architect-consult-v2] Sanitize concern id in consult stepId"
@@ -453,20 +461,20 @@ debt:
     Blocking split"
   - "[status-state-surface-v2] Reuse single concern listing for
     counts/routed/debt"
-budgetSpentUsd: 3.908542919999999
+budgetSpentUsd: 4.183431919999999
 spendByRole:
   alt-workhorse:
-    costUsd: 0.7638559999999999
-    inputTokens: 3594621
-    outputTokens: 1406443
+    costUsd: 0.9618059999999999
+    inputTokens: 5142532
+    outputTokens: 1468993
   workhorse:
-    costUsd: 2.80505792
-    inputTokens: 6113802
-    outputTokens: 1676372
+    costUsd: 2.81784492
+    inputTokens: 6145882
+    outputTokens: 1686299
   architect:
-    costUsd: 0.32311399999999996
-    inputTokens: 2984509
-    outputTokens: 81963
+    costUsd: 0.38726599999999994
+    inputTokens: 3586577
+    outputTokens: 83652
   alt-architect:
     costUsd: 0.016515000000000002
     inputTokens: 72452
@@ -505,9 +513,9 @@ spendByItem:
     inputTokens: 280717
     outputTokens: 125290
   adr-blocking-digest-v2:
-    costUsd: 0.459328
-    inputTokens: 1415535
-    outputTokens: 291425
+    costUsd: 0.670065
+    inputTokens: 2995526
+    outputTokens: 363902
   concerns-contracts-types:
     costUsd: 0.063129
     inputTokens: 178070
@@ -533,7 +541,7 @@ spendByItem:
     inputTokens: 463902
     outputTokens: 217893
   (orchestration):
-    costUsd: 0.665105
-    inputTokens: 3745501
-    outputTokens: 384217
-lastUpdated: 2026-11-08T13:40:47.342Z
+    costUsd: 0.7292569999999998
+    inputTokens: 4347569
+    outputTokens: 385906
+lastUpdated: 2026-11-08T14:10:58.631Z
