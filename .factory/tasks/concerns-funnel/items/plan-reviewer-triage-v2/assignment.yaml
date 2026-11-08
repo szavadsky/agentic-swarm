@@ -1,0 +1,13 @@
+slug: plan-reviewer-triage-v2
+kind: dev
+title: Plan-reviewer triage
+assignment: "Plan-reviewer triage: aggregate plan/revise concerns + remarkable
+  rm-*, hydrate steps/plan-review with concernsYaml, same exact-id partition and
+  dismiss vocabulary as item reviewer, non-dismissed become routed. Tests:
+  dismissed vs routed, rm-* triaged, debt predicate (kind tech-debt routed OR
+  disposition optional routed), no approval trigger from triage ids."
+outlineRef: plan-reviewer-triage-v2
+milestone: m2-triage-modes
+wave: 7
+deps:
+  - concerns-store-v2

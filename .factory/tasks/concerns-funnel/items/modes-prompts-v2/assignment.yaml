@@ -1,0 +1,19 @@
+slug: modes-prompts-v2
+kind: dev
+title: Modes, thresholds, prompt wiring
+assignment: "Implement humanInvolvement + concerns thresholds:
+  schema/loader/merge, PipelineConfig.humanInvolvement default autonomous +
+  concerns {raiseAllowlist,minDigestSeverity,minBlockingSeverity}, commented
+  autonomous/principal/detailed presets with blocking table in
+  config/pipeline.default.yaml, terse agents/criteria/human-involvement.md
+  fragment, KNOWN_VARS concernsYaml + humanInvolvementCriteria wired per
+  fragment matrix. Behavior: mode switch changes criteria fragment and
+  blocking-ADR routing; preflight green. Must precede all routing items. Verify:
+  typecheck + preflightPrompts."
+outlineRef: modes-prompts-v2
+milestone: m2-triage-modes
+wave: 6
+deps:
+  - concerns-contracts-policy
+  - concerns-contracts-schemas
+  - concerns-contracts-types

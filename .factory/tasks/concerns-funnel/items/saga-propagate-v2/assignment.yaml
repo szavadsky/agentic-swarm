@@ -1,0 +1,16 @@
+slug: saga-propagate-v2
+kind: dev
+title: Epic to saga propagation
+assignment: "runChildTask propagateEpicConcerns after child completion before
+  cleanup/merge (engine.ts:246-274) for every child status: condensed parent
+  copies with source.epic, parent detail < child detail, extended parent
+  concernsYaml hydration (append LAST, recompute before wave-report); forward
+  child human questions to root mailbox. Spike-saga-commit findings
+  authoritative. Tests: exactly one copy, dismissed stays local, saga architect
+  input contains id."
+outlineRef: saga-propagate-v2
+milestone: m4-funnel-surface
+wave: 10
+deps:
+  - routing-architect-consult-v2
+escalate: true

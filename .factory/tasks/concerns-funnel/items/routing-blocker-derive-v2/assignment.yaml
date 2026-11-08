@@ -1,0 +1,18 @@
+slug: routing-blocker-derive-v2
+kind: dev
+title: Blocker derive
+assignment: "Pure derive only, no writes: derive/task.ts
+  collectRoutedBlockers(taskDir)->Set + deriveWave/deriveItem integration
+  (thread blockedBy into deriveItemState or post-process before every
+  deriveWaveState call), scheduler.blockedByConcern reusing blockedByFailure
+  fixpoint, union with failure-blocked, cascade only over declared deps.
+  Spike-saga-commit findings authoritative. Tests: dependent blocked,
+  non-dependent unaffected, transitive via declared deps only."
+outlineRef: routing-blocker-derive-v2
+milestone: m3-routing
+wave: 8
+deps:
+  - modes-prompts-v2
+  - plan-reviewer-triage-v2
+  - reviewer-triage-v2
+escalate: true

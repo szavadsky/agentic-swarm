@@ -1,0 +1,6 @@
+id: decision-amend-remove-routing-blocker-derive
+context: wave
+item: routing-blocker-derive
+decision: split
+rationale: Amendment removed pending item routing-blocker-derive
+timestamp: 2026-11-08T06:03:02.906Z

@@ -1,0 +1,16 @@
+slug: docs-finish-v2
+kind: dev
+title: Docs and suite consolidation
+assignment: "Update ARCHITECTURE section 1 row 18 + 6.2 + 8, README, config
+  commentary, dispositions.md; fragment matrix + 15/60 debloat check (each
+  fragment <=15 lines, total growth <=60); consolidate
+  test/engine/concerns-funnel.test.ts + steer/CLI coverage. Final gates: bun run
+  typecheck and TMPDIR=/tmp bun test."
+outlineRef: docs-finish-v2
+milestone: m5-docs
+wave: 11
+deps:
+  - funnel-closeups-v2
+  - modes-prompts-v2
+  - saga-propagate-v2
+  - status-state-surface-v2

@@ -1,0 +1,16 @@
+slug: reviewer-triage-v2
+kind: dev
+title: Workhorse reviewer triage
+assignment: "Item reviewer triage: hydrate steps/review with concernsYaml
+  (id/kind/severity/summary/affects), isTriager gate, exact-id
+  partitionSuggestions excluding triage ids from fix-loop/approval/normal
+  mailbox, fix-on-concern returns fixRequired once, mailbox dedup
+  q-concern-<cid>, dismiss requires non-empty detail persisted to dismissReason
+  else step errors, condensing output<input, debt predicate with no tech-debt
+  disposition. Tests: dismiss no routing, routed persists, QA non-triager no-op,
+  missing detail errors, fix-once, no double mailbox."
+outlineRef: reviewer-triage-v2
+milestone: m2-triage-modes
+wave: 7
+deps:
+  - concerns-store-v2

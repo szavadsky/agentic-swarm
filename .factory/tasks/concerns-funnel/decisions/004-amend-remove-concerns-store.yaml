@@ -1,0 +1,6 @@
+id: decision-amend-remove-concerns-store
+context: wave
+item: concerns-store
+decision: split
+rationale: Amendment removed pending item concerns-store
+timestamp: 2026-11-08T06:03:02.905Z

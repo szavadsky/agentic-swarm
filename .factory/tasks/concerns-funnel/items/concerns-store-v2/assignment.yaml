@@ -1,0 +1,24 @@
+slug: concerns-store-v2
+kind: dev
+title: Concerns store with merge and commit
+assignment: "Implement src/core/concerns.ts: concernFingerprint over
+  {kind,normalizedSummary,location,sortedAffects} excluding detail/severity,
+  aggregateConcerns with merge (longer/latest detail, max severity,
+  updatedAt/lastSeen advance) + source.escalated on severity rise without
+  reopening, listOpenConcerns, applyConcernTriage exact-id + isTriager gate,
+  applyCloseupResolutions, partitionSuggestions. Atomic YAML +
+  KeyedMutex(taskDir) for RMW only + immediate taskWt commitAll; NEVER wrap
+  commitAll in repo.writeLock.runExclusive. Explicit taskWt path, one file per
+  fingerprint, concerns/** startup recovery + reconcileConcerns from committed
+  records (derive read-only), ingest errors must not change step status. Wire
+  all producer seams incl consult writeArtifact; reviewer aggregates new then
+  triages pre-existing only. Spike-saga-commit findings authoritative, do not
+  re-run. Tests in test/engine/concerns-funnel.test.ts. Verify: bun run
+  typecheck + TMPDIR=/tmp bun test."
+outlineRef: concerns-store-v2
+milestone: m1-contracts-aggregate
+wave: 6
+deps:
+  - concerns-contracts-policy
+  - concerns-contracts-schemas
+  - concerns-contracts-types

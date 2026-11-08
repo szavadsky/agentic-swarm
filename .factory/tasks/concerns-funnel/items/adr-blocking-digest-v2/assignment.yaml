@@ -1,0 +1,13 @@
+slug: adr-blocking-digest-v2
+kind: dev
+title: Blocking vs remarkable ADRs
+assignment: "Blocking vs remarkable ADRs: full ADR md
+  title/context/decision/consequences/blocking, blocking routed per mode table
+  with exit-10 when stop, remarkable digest-only never waiting, dispositions.md
+  exit-10 preserved. Tests: blocking mailbox+blocks, remarkable digest only."
+outlineRef: adr-blocking-digest-v2
+milestone: m3-routing
+wave: 9
+deps:
+  - modes-prompts-v2
+  - routing-human-debt-v2

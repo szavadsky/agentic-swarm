@@ -1,0 +1,6 @@
+id: decision-amend-remove-status-state-surface
+context: wave
+item: status-state-surface
+decision: split
+rationale: Amendment removed pending item status-state-surface
+timestamp: 2026-11-08T06:03:02.906Z

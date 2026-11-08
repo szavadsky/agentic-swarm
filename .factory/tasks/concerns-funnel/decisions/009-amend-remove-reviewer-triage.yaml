@@ -1,0 +1,6 @@
+id: decision-amend-remove-reviewer-triage
+context: wave
+item: reviewer-triage
+decision: split
+rationale: Amendment removed pending item reviewer-triage
+timestamp: 2026-11-08T06:03:02.906Z

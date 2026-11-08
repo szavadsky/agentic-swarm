@@ -1,0 +1,14 @@
+slug: routing-architect-consult-v2
+kind: dev
+title: Architect consult and hydration
+assignment: "Act phase only: wave-act newly-blocked check writes
+  decisions/concern-<cid>.yaml exactly once (restart idempotent) +
+  buildArchitectHydration concernsYaml extension for wave-report/next-plan.
+  Tests: single consult file, restart writes no duplicate, architect input
+  contains concern id+summary."
+outlineRef: routing-architect-consult-v2
+milestone: m3-routing
+wave: 9
+deps:
+  - modes-prompts-v2
+  - routing-blocker-derive-v2

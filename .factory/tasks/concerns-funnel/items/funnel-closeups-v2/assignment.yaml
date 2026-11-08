@@ -1,0 +1,18 @@
+slug: funnel-closeups-v2
+kind: dev
+title: Funnel close-ups and simple triage
+assignment: "Hydrate wave/plan-close-up and architect reports with concernsYaml
+  capped per spike-text-budget (code min(diffBytes,2000), zero-diff
+  min(inputBytes,500) UTF-8 bytes, output<input): concernResolutions pending +
+  architect concernConfirms accept/reject, propagate to parent/digest,
+  simple-item explicit + auto-route fallback (tech-debt->optional,
+  others->architect, human-* never auto). Apply spike nits: production git()
+  wrapper cross-check, many-concerns 2000B truncation case, trim semantics.
+  Tests: byte budgets, pending/confirm, simple fallback."
+outlineRef: funnel-closeups-v2
+milestone: m4-funnel-surface
+wave: 10
+deps:
+  - adr-blocking-digest-v2
+  - routing-architect-consult-v2
+  - spike-text-budget

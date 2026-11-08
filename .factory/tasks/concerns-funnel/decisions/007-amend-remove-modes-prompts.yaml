@@ -1,0 +1,6 @@
+id: decision-amend-remove-modes-prompts
+context: wave
+item: modes-prompts
+decision: split
+rationale: Amendment removed pending item modes-prompts
+timestamp: 2026-11-08T06:03:02.905Z

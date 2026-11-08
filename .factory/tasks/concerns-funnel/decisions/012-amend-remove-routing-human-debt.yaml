@@ -1,0 +1,6 @@
+id: decision-amend-remove-routing-human-debt
+context: wave
+item: routing-human-debt
+decision: split
+rationale: Amendment removed pending item routing-human-debt
+timestamp: 2026-11-08T06:03:02.906Z

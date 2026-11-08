@@ -1,0 +1,15 @@
+slug: routing-human-debt-v2
+kind: dev
+title: Human mailbox and debt routing
+assignment: "Human mailbox + debt routing: human-async blocks [item] and
+  continues without exit-10, human-stop blocks task/item + exit-10 halt +
+  blocked derive, human-awareness blocks [] digest-only never blocking/exiting,
+  debt predicate kind==tech-debt routed/resolved OR disposition==optional
+  routed. Tests: mailbox files per disposition, exit 10 on stop, awareness
+  continues, debt includes [item] summary."
+outlineRef: routing-human-debt-v2
+milestone: m3-routing
+wave: 8
+deps:
+  - modes-prompts-v2
+  - reviewer-triage-v2

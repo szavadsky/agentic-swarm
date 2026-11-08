@@ -1,0 +1,6 @@
+id: decision-amend-remove-adr-blocking-digest
+context: wave
+item: adr-blocking-digest
+decision: split
+rationale: Amendment removed pending item adr-blocking-digest
+timestamp: 2026-11-08T06:03:02.905Z

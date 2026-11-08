@@ -1,0 +1,13 @@
+slug: status-state-surface-v2
+kind: dev
+title: State counts and status surfacing
+assignment: "Sole owner StateArtifact.concerns {open,dismissed,routed,resolved}:
+  state.schema, toStateArtifact/refreshStateYaml (missing dir zeros, corrupt
+  skip+warn), CLI Concerns plus separate Blocking vs Digest sections. Tests:
+  counts, missing/corrupt handling, CLI sections."
+outlineRef: status-state-surface-v2
+milestone: m4-funnel-surface
+wave: 9
+deps:
+  - concerns-store-v2
+  - routing-human-debt-v2
