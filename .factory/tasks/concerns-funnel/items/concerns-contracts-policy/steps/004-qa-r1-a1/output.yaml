@@ -1,0 +1,25 @@
+status: approved
+summary: 10/10 target green, typecheck green, full suite 297 pass; resolver
+  precedence/triager gating correct, no weakening
+suggestions:
+  - id: builtin-dedup
+    disposition: optional
+    summary: Deduplicate hardcoded builtin fallback arrays to
+      BUILTIN_REVIEW_DISPOSITIONS
+    detail: review-policy.ts exports BUILTIN_REVIEW_DISPOSITIONS but
+      review-schema.ts:11 and step-runner.ts:104 keep literal copies. Resolver
+      never returns empty so fallbacks are dead, but single-source the constant
+      to prevent drift.
+    location:
+      file: plugins/software-factory/src/core/records/review-schema.ts
+      line: 11
+  - id: iteration-prompt-coverage
+    disposition: optional
+    summary: Iteration plan-review prompt dispositions lack direct automated coverage
+    detail: iteration.ts:463-467 wiring verified by inspection and schema path
+      covered via plan-reviewer FakeHarness step test, but no runIteration test
+      asserts promptVars dispositionsCriteria. Consider a tickItemMachine-style
+      input.md assertion for plan-review.
+    location:
+      file: plugins/software-factory/src/core/flows/iteration.ts
+      line: 463
