@@ -18,7 +18,8 @@ import { childBranch } from "../git/naming.js";
 import { ensureChildWorktree, commitAll, removeWorktree } from "../git/index.js";
 import { writeYamlAtomic, writeTextAtomic, readYaml, readText } from "../records/io.js";
 import { runAgentStep } from "./step-runner.js";
-import { writeQuestion } from "../steer.js";
+import { hasOpenTaskBlockingQuestion, writeQuestion } from "../steer.js";
+import { persistAdrs } from "./adrs.js";
 import { runItemConsult } from "./consults.js";
 import { mergeItem } from "./merge-path.js";
 import { tickItemMachine } from "./item-machine.js";
@@ -383,14 +384,15 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
         };
         await writeYamlAtomic(planPath, plan);
 
-        // Write ADRs if specified (§8.4.2)
+        // Write full ADR records and route blocking/remarkable ones (§8.4.2, §18)
         if (plan.adrs && project.adrFolder) {
-          const adrDir = path.join(taskWt, project.adrFolder);
-          await fs.promises.mkdir(adrDir, { recursive: true });
-          for (const adr of plan.adrs) {
-            const adrFile = path.join(adrDir, `${adr.id}.md`);
-            await writeTextAtomic(adrFile, `# ${adr.title}\n\n${adr.context}\n`);
-          }
+          await persistAdrs({
+            taskWt,
+            taskDir,
+            adrFolder: project.adrFolder,
+            adrs: plan.adrs,
+            mode: pipeline.humanInvolvement,
+          });
         }
       },
     });
@@ -408,6 +410,17 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
       architectSessionId = planStepRes.sessionId;
     }
     await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
+
+    // A blocking ADR routed at plan time parks the task: halt before waves so
+    // the derive loop reports blocked and exits 10 (§18 blocking table).
+    if (await hasOpenTaskBlockingQuestion(taskDir)) {
+      return {
+        iteration,
+        status: "blocked",
+        plan,
+        architectSessionId,
+      };
+    }
   }
 
   // Check if PM edits are already completed
