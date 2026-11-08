@@ -324,8 +324,13 @@ export async function runTask(
     parentBranch = `topic/${task}`;
 
   // 2. Start-up repair restricted to §6.3.6 list (Finding 1 & 19)
+  // Concerns are engine-owned: commit them before stray-dirt repair stashes them.
+  if (fs.existsSync(path.join(taskDir, "concerns"))) {
+    await commitAll(repo, taskWt, "factory: concern store recovery", {
+      paths: [`${orchFolder}/${task}/concerns`],
+    });
+  }
   await repairWorktree(repo, taskWt, "task", {
-    commitGlobs: [`${orchFolder}/${task}/concerns/**`],
     operatorEditable: [
       "INTENT.md",
       "**/INTENT.md",

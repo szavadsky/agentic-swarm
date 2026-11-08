@@ -1,14 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
-import type {
-  Concern,
-  ConcernSeverity,
-  ConcernSource,
-  RemarkableDecision,
-  ReviewSuggestion,
-  StoredConcernArtifact,
-} from "./artifacts.js";
+import type { Concern, ConcernSeverity, ConcernSource, RemarkableDecision, ReviewSuggestion, StoredConcernArtifact } from "./artifacts.js";
 import type { Repo } from "./git/repo.js";
 import { commitAll } from "./git/commit.js";
 import { git } from "./git/exec.js";
@@ -20,380 +13,194 @@ export type ConcernInput = Pick<Concern, "kind" | "summary" | "location" | "affe
 export interface ConcernStoreContext { taskDir: string; taskWt: string; repo: Repo; now?: () => Date }
 export interface ConcernResolution { id: string; action: "resolve" | "carry" | "propagate"; note?: string }
 
-const CONCERN_KINDS = new Set(["tech-debt", "assumption", "blocker", "risk", "question"]);
-const SEVERITY_RANK: Record<ConcernSeverity, number> = { low: 0, medium: 1, high: 2 };
-
+type Obj = Record<string, any>;
+type Patch = (record: Obj, at: string) => Obj;
+const KINDS = new Set(["tech-debt", "assumption", "blocker", "risk", "question"]);
+const RANK: Record<ConcernSeverity, number> = { low: 0, medium: 1, high: 2 };
 /** Serializes read-modify-write cycles of one task's concern store. */
-const concernLocks = new KeyedMutex();
-
-function concernsDir(taskDir: string): string {
-  return path.join(taskDir, "concerns");
-}
-
-function nowIso(ctx: { now?: () => Date }): string {
-  return (ctx.now?.() ?? new Date()).toISOString();
-}
-
-function normalizeText(value: string): string {
-  return value.trim().replace(/\s+/g, " ").toLowerCase();
-}
-
-function sortedAffects(affects?: string[]): string[] {
-  return [...new Set((affects ?? []).map((a) => a.trim()))].sort();
-}
-
-function hash10(parts: unknown[]): string {
-  return createHash("sha256").update(JSON.stringify(parts)).digest("hex").slice(0, 10);
-}
+const locks = new KeyedMutex();
+const dirOf = (taskDir: string) => path.join(taskDir, "concerns");
+const atOf = (ctx: { now?: () => Date }) => (ctx.now?.() ?? new Date()).toISOString();
+const norm = (s: string) => s.trim().replace(/\s+/g, " ").toLowerCase();
+const affectsOf = (a?: string[]) => [...new Set((a ?? []).map((x) => x.trim()))].sort();
+const hash = (prefix: string, parts: unknown[]) =>
+  `${prefix}-${createHash("sha256").update(JSON.stringify(parts)).digest("hex").slice(0, 10)}`;
+const rmId = (d: RemarkableDecision) => hash("rm", [norm(d.chosen), affectsOf(d.alternatives)]);
 
 /** Stable concern identity: kind, normalized summary, location, sorted affects. */
-export function concernFingerprint(concern: ConcernInput): string {
-  const location = concern.location
-    ? [concern.location.file.trim(), concern.location.line ?? null]
-    : [null, null];
-  return `c-${hash10([concern.kind, normalizeText(concern.summary), ...location, sortedAffects(concern.affects)])}`;
-}
-
-function remarkableFingerprint(decision: RemarkableDecision): string {
-  return `rm-${hash10([normalizeText(decision.chosen), sortedAffects(decision.alternatives)])}`;
-}
-
-function validateConcerns(concerns: ConcernInput[]): void {
-  for (const concern of concerns) {
-    if (!CONCERN_KINDS.has(concern.kind)) {
-      throw new Error(`Unknown concern kind: ${String(concern.kind)}`);
-    }
-    if (!concern.summary?.trim()) {
-      throw new Error("Concern summary is required");
-    }
-    if (concern.severity && !(concern.severity in SEVERITY_RANK)) {
-      throw new Error(`Unknown concern severity: ${String(concern.severity)}`);
-    }
-  }
+export function concernFingerprint(c: ConcernInput): string {
+  return hash("c", [c.kind, norm(c.summary), c.location?.file.trim() ?? null, c.location?.line ?? null, affectsOf(c.affects)]);
 }
 
 async function readExisting<T>(file: string): Promise<T | undefined> {
-  try {
-    return await readYaml<T>(file);
-  } catch (err: any) {
+  try { return await readYaml<T>(file); } catch (err: any) {
     if (err?.code === "ENOENT") return undefined;
     throw err;
   }
 }
 
-function maxSeverity(a: ConcernSeverity, b: ConcernSeverity): ConcernSeverity {
-  return SEVERITY_RANK[a] >= SEVERITY_RANK[b] ? a : b;
-}
-
-function mergeConcern(
-  existing: StoredConcernArtifact | undefined,
-  input: ConcernInput,
-  source: ConcernSource,
-  at: string
-): StoredConcernArtifact {
+function mergeConcern(existing: StoredConcernArtifact | undefined, input: ConcernInput, source: ConcernSource, at: string): StoredConcernArtifact {
   const incomingDetail = (input.detail ?? input.summary).trim();
-  const detail =
-    incomingDetail.length >= (existing?.detail?.length ?? -1)
-      ? incomingDetail
-      : existing!.detail;
   const incomingSeverity = input.severity ?? "medium";
-  const severity = existing ? maxSeverity(existing.severity, incomingSeverity) : incomingSeverity;
-  const escalated =
-    Boolean(existing?.source?.escalated) ||
-    (existing !== undefined && SEVERITY_RANK[incomingSeverity] > SEVERITY_RANK[existing.severity]);
-  const affects = input.affects
-    ? sortedAffects(input.affects)
-    : existing?.affects
-      ? existing.affects
-      : undefined;
-
+  const detail = existing?.detail && existing.detail.length > incomingDetail.length ? existing.detail : incomingDetail;
+  const severity = existing && RANK[existing.severity] >= RANK[incomingSeverity] ? existing.severity : incomingSeverity;
+  const escalated = Boolean(existing?.source?.escalated) || (existing !== undefined && RANK[incomingSeverity] > RANK[existing.severity]);
+  const location = input.location ?? existing?.location;
+  const affects = input.affects ? affectsOf(input.affects) : existing?.affects;
   return {
-    id: concernFingerprint(input),
-    kind: existing?.kind ?? input.kind,
-    summary: existing?.summary ?? input.summary.trim(),
-    detail,
-    ...(input.location ?? existing?.location
-      ? { location: input.location ?? existing!.location }
-      : {}),
-    ...(affects ? { affects } : {}),
-    severity,
+    ...(existing ?? {}), id: concernFingerprint(input), kind: existing?.kind ?? input.kind,
+    summary: existing?.summary ?? input.summary.trim(), detail,
+    ...(location ? { location } : {}), ...(affects ? { affects } : {}), severity,
     status: existing?.status ?? "open",
-    ...(existing?.disposition ? { disposition: existing.disposition } : {}),
-    ...(existing?.dismissReason ? { dismissReason: existing.dismissReason } : {}),
-    ...(existing?.pendingResolution ? { pendingResolution: existing.pendingResolution } : {}),
-    source: {
-      ...existing?.source,
-      ...source,
-      ...(escalated ? { escalated: true } : {}),
-      lastSeen: at,
-    },
-    createdAt: existing?.createdAt ?? at,
-    updatedAt: at,
+    source: { ...(existing?.source ?? {}), ...source, ...(escalated ? { escalated: true } : {}), lastSeen: at },
+    createdAt: existing?.createdAt ?? at, updatedAt: at,
   };
 }
 
-interface StoredRemarkable extends RemarkableDecision {
-  id: string;
-  status: "open" | "dismissed";
-  source: ConcernSource;
-  dismissReason?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-function mergeRemarkable(
-  existing: StoredRemarkable | undefined,
-  input: RemarkableDecision,
-  source: ConcernSource,
-  at: string
-): StoredRemarkable {
-  const why =
-    input.why.length >= (existing?.why?.length ?? -1) ? input.why : existing!.why;
+function mergeRemarkable(existing: Obj | undefined, input: RemarkableDecision, source: ConcernSource, at: string): Obj {
   return {
-    id: remarkableFingerprint(input),
-    chosen: existing?.chosen ?? input.chosen,
-    alternatives: existing?.alternatives ?? input.alternatives,
-    why,
+    ...(existing ?? {}), id: rmId(input), chosen: input.chosen, alternatives: input.alternatives,
+    why: input.why.length >= (existing?.why?.length ?? -1) ? input.why : existing!.why,
     status: existing?.status ?? "open",
-    ...(existing?.dismissReason ? { dismissReason: existing.dismissReason } : {}),
-    source: { ...existing?.source, ...source, lastSeen: at },
-    createdAt: existing?.createdAt ?? at,
-    updatedAt: at,
+    source: { ...(existing?.source ?? {}), ...source, lastSeen: at },
+    createdAt: existing?.createdAt ?? at, updatedAt: at,
   };
 }
 
-/**
- * Merges producer concerns (and remarkable decisions) into one taskWt file per
- * fingerprint. Validation runs before any write so a bad payload is atomic.
- */
+/** Merges producer concerns and remarkable decisions, one taskWt file per fingerprint. */
 export async function aggregateConcerns(
-  ctx: ConcernStoreContext & { source: ConcernSource },
-  concerns: ConcernInput[],
-  remarkables: RemarkableDecision[] = []
+  ctx: ConcernStoreContext & { source: ConcernSource }, concerns: ConcernInput[], remarkables: RemarkableDecision[] = []
 ): Promise<StoredConcernArtifact[]> {
-  validateConcerns(concerns);
-  for (const decision of remarkables) {
-    if (!decision?.chosen?.trim()) throw new Error("Remarkable decision requires chosen");
+  for (const c of concerns) {
+    if (!KINDS.has(c.kind)) throw new Error(`Unknown concern kind: ${String(c.kind)}`);
+    if (!c.summary?.trim()) throw new Error("Concern summary is required");
+    if (c.severity && !(c.severity in RANK)) throw new Error(`Unknown concern severity: ${String(c.severity)}`);
   }
+  for (const d of remarkables) if (!d?.chosen?.trim()) throw new Error("Remarkable decision requires chosen");
 
-  const at = nowIso(ctx);
-  const dir = concernsDir(ctx.taskDir);
-  const stored: StoredConcernArtifact[] = [];
-  let changed = false;
-
-  await concernLocks.runExclusive(ctx.taskDir, async () => {
+  const at = atOf(ctx), dir = dirOf(ctx.taskDir);
+  const stored = await locks.runExclusive(ctx.taskDir, async () => {
+    const out: StoredConcernArtifact[] = [];
     for (const input of concerns) {
-      const id = concernFingerprint(input);
-      const file = path.join(dir, `${id}.yaml`);
+      const file = path.join(dir, `${concernFingerprint(input)}.yaml`);
       const merged = mergeConcern(await readExisting(file), input, ctx.source, at);
       await writeYamlAtomic(file, merged);
-      stored.push(merged);
-      changed = true;
+      out.push(merged);
     }
     for (const decision of remarkables) {
-      const id = remarkableFingerprint(decision);
-      const file = path.join(dir, `${id}.yaml`);
-      const merged = mergeRemarkable(await readExisting(file), decision, ctx.source, at);
-      await writeYamlAtomic(file, merged);
-      changed = true;
+      const file = path.join(dir, `${rmId(decision)}.yaml`);
+      await writeYamlAtomic(file, mergeRemarkable(await readExisting(file), decision, ctx.source, at));
     }
+    return out;
   });
-
-  if (changed) {
-    await commitAll(ctx.repo, ctx.taskWt, `factory: concerns ${ctx.source.record}`);
-  }
+  if (concerns.length || remarkables.length) await commitAll(ctx.repo, ctx.taskWt, `factory: concerns ${ctx.source.record}`);
   return stored;
 }
 
 /** Returns open concerns ordered by creation time then id. */
 export async function listOpenConcerns(taskDir: string): Promise<StoredConcernArtifact[]> {
-  const dir = concernsDir(taskDir);
+  const dir = dirOf(taskDir);
   let names: string[];
-  try {
-    names = await fs.promises.readdir(dir);
-  } catch (err: any) {
+  try { names = await fs.promises.readdir(dir); } catch (err: any) {
     if (err?.code === "ENOENT") return [];
     throw err;
   }
-
-  const open: StoredConcernArtifact[] = [];
-  for (const name of names.sort()) {
-    if (!name.endsWith(".yaml")) continue;
-    try {
-      const record = await readYaml<StoredConcernArtifact>(path.join(dir, name));
-      if (record?.status === "open") open.push(record);
-    } catch {
-      // Corrupt entries stay on disk for operators; they must not break startup.
-    }
-  }
-  return open.sort(
-    (a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? "") || a.id.localeCompare(b.id)
-  );
+  const records = await Promise.all(names.filter((n) => n.endsWith(".yaml")).map(async (name) => {
+    try { return await readYaml<StoredConcernArtifact>(path.join(dir, name)); } catch { return undefined; }
+  }));
+  return records
+    .filter((r): r is StoredConcernArtifact => r?.status === "open")
+    .sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? "") || a.id.localeCompare(b.id));
 }
 
-/** Applies review triage to pre-existing concerns only; findings are ignored. */
+async function mutate(ctx: ConcernStoreContext, ops: Array<[string, Patch]>, message: string): Promise<StoredConcernArtifact[]> {
+  const at = atOf(ctx), dir = dirOf(ctx.taskDir);
+  const updated = await locks.runExclusive(ctx.taskDir, async () => {
+    const out: StoredConcernArtifact[] = [];
+    for (const [id, patch] of ops) {
+      if (id !== path.basename(id)) continue;
+      const file = path.join(dir, `${id}.yaml`);
+      const existing = await readExisting<Obj>(file);
+      if (!existing) continue;
+      const next = { ...patch(existing, at), updatedAt: at };
+      await writeYamlAtomic(file, next);
+      out.push(next as StoredConcernArtifact);
+    }
+    return out;
+  });
+  if (updated.length) await commitAll(ctx.repo, ctx.taskWt, message);
+  return updated;
+}
+
+/** Applies review triage to pre-existing concerns only; ordinary findings are ignored. */
 export async function applyConcernTriage(
   ctx: ConcernStoreContext & { suggestions: ReviewSuggestion[]; isTriager: boolean }
 ): Promise<StoredConcernArtifact[]> {
   if (!ctx.isTriager) return [];
-  for (const suggestion of ctx.suggestions) {
-    if (suggestion.disposition === "dismiss" && !suggestion.detail?.trim()) {
-      throw new Error(`Dismiss triage for ${suggestion.id} requires detail`);
-    }
-  }
-
-  const at = nowIso(ctx);
-  const dir = concernsDir(ctx.taskDir);
-  const updated = await concernLocks.runExclusive(ctx.taskDir, async () => {
-    const records: StoredConcernArtifact[] = [];
-    for (const suggestion of ctx.suggestions) {
-      if (suggestion.id !== path.basename(suggestion.id)) continue;
-      const file = path.join(dir, `${suggestion.id}.yaml`);
-      const existing = await readExisting<Record<string, any>>(file);
-      if (!existing) continue;
-      const dismissed = suggestion.disposition === "dismiss";
-      const next = {
-        ...existing,
-        status: dismissed ? "dismissed" : "routed",
-        disposition: suggestion.disposition,
-        ...(dismissed ? { dismissReason: suggestion.detail!.trim() } : {}),
-        updatedAt: at,
-      };
-      await writeYamlAtomic(file, next);
-      records.push(next as StoredConcernArtifact);
-    }
-    return records;
+  const ops = ctx.suggestions.map((s): [string, Patch] => {
+    if (s.disposition === "dismiss" && !s.detail?.trim()) throw new Error(`Dismiss triage for ${s.id} requires detail`);
+    return [s.id, (record) => s.disposition === "dismiss"
+      ? { ...record, status: "dismissed", disposition: s.disposition, dismissReason: s.detail!.trim() }
+      : { ...record, status: "routed", disposition: s.disposition }];
   });
-
-  if (updated.length > 0) {
-    await commitAll(ctx.repo, ctx.taskWt, `factory: concerns triaged`);
-  }
-  return updated;
+  return mutate(ctx, ops, "factory: concerns triaged");
 }
 
-/** Records close-up resolutions as pending; status changes are a later decision. */
-export async function applyCloseupResolutions(
+/** Records close-up resolutions as pending; changing status is a later decision. */
+export function applyCloseupResolutions(
   ctx: ConcernStoreContext & { resolutions: ConcernResolution[]; by: string }
 ): Promise<StoredConcernArtifact[]> {
-  const at = nowIso(ctx);
-  const dir = concernsDir(ctx.taskDir);
-  const updated = await concernLocks.runExclusive(ctx.taskDir, async () => {
-    const records: StoredConcernArtifact[] = [];
-    for (const resolution of ctx.resolutions) {
-      if (resolution.id !== path.basename(resolution.id)) continue;
-      const file = path.join(dir, `${resolution.id}.yaml`);
-      const existing = await readExisting<Record<string, any>>(file);
-      if (!existing) continue;
-      const next = {
-        ...existing,
-        pendingResolution: {
-          action: resolution.action,
-          ...(resolution.note !== undefined ? { note: resolution.note } : {}),
-          by: ctx.by,
-          at,
-        },
-        updatedAt: at,
-      };
-      await writeYamlAtomic(file, next);
-      records.push(next as StoredConcernArtifact);
-    }
-    return records;
-  });
-
-  if (updated.length > 0) {
-    await commitAll(ctx.repo, ctx.taskWt, `factory: concerns resolved by ${ctx.by}`);
-  }
-  return updated;
+  const ops = ctx.resolutions.map((r): [string, Patch] => [r.id, (record, at) => ({
+    ...record, pendingResolution: { action: r.action, ...(r.note !== undefined ? { note: r.note } : {}), by: ctx.by, at },
+  })]);
+  return mutate(ctx, ops, `factory: concerns resolved by ${ctx.by}`);
 }
 
-/** Splits review suggestions into concern triage vs ordinary findings by exact id. */
+/** Splits review suggestions into concern triage vs findings by exact id. */
 export function partitionSuggestions(
-  suggestions: ReviewSuggestion[],
-  concernIds: Iterable<string>
+  suggestions: ReviewSuggestion[], concernIds: Iterable<string>
 ): { triage: ReviewSuggestion[]; findings: ReviewSuggestion[] } {
   const ids = new Set(concernIds);
-  const triage: ReviewSuggestion[] = [];
-  const findings: ReviewSuggestion[] = [];
-  for (const suggestion of suggestions) {
-    (ids.has(suggestion.id) ? triage : findings).push(suggestion);
-  }
-  return { triage, findings };
+  return {
+    triage: suggestions.filter((s) => ids.has(s.id)),
+    findings: suggestions.filter((s) => !ids.has(s.id)),
+  };
 }
 
-interface CommittedRecord {
-  name: string;
-  item?: string;
-  meta: Record<string, any>;
-  output: Record<string, any>;
-}
-
-async function committedPaths(ctx: ConcernStoreContext): Promise<Set<string>> {
-  const res = await git(ctx.taskWt, ["ls-tree", "-r", "--name-only", "HEAD"], {
-    allowFail: true,
-    env: ctx.repo.identityEnv(),
-  });
-  return new Set(res.code === 0 ? res.stdout.split("\n").filter(Boolean) : []);
-}
+interface CommittedRecord { name: string; item?: string; meta: Obj; output: Obj }
 
 async function committedStepRecords(ctx: ConcernStoreContext): Promise<CommittedRecord[]> {
-  const committed = await committedPaths(ctx);
+  const res = await git(ctx.taskWt, ["ls-tree", "-r", "--name-only", "HEAD"], { allowFail: true, env: ctx.repo.identityEnv() });
+  if (res.code !== 0) return [];
+  const committed = new Set(res.stdout.split("\n").filter(Boolean));
+  const prefix = path.relative(ctx.taskWt, ctx.taskDir).replace(/\\/g, "/");
   const records: CommittedRecord[] = [];
-  const scan = async (dir: string, item?: string) => {
-    if (!fs.existsSync(dir)) return;
-    const entries = await fs.promises.readdir(dir, { withFileTypes: true });
-    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
-      if (!entry.isDirectory()) continue;
-      const recordDir = path.join(dir, entry.name);
-      const metaPath = path.join(recordDir, "meta.yaml");
-      const outputPath = path.join(recordDir, "output.yaml");
-      if (!fs.existsSync(metaPath) || !fs.existsSync(outputPath)) continue;
-      const metaRel = path.relative(ctx.taskWt, metaPath).replace(/\\/g, "/");
-      const outputRel = path.relative(ctx.taskWt, outputPath).replace(/\\/g, "/");
-      if (!committed.has(metaRel) || !committed.has(outputRel)) continue;
-      try {
-        const meta = await readYaml<Record<string, any>>(metaPath);
-        if (meta?.status !== "ok") continue;
-        const output = await readYaml<Record<string, any>>(outputPath);
-        records.push({ name: entry.name, ...(item ? { item } : {}), meta, output });
-      } catch {
-        // A corrupt record is not a usable derivation input.
-      }
-    }
-  };
-
-  const itemsDir = path.join(ctx.taskDir, "items");
-  if (fs.existsSync(itemsDir)) {
-    const items = await fs.promises.readdir(itemsDir, { withFileTypes: true });
-    for (const entry of items.sort((a, b) => a.name.localeCompare(b.name))) {
-      if (entry.isDirectory()) {
-        await scan(path.join(itemsDir, entry.name, "steps"), entry.name);
-      }
-    }
+  for (const metaRel of [...committed].sort()) {
+    const outputRel = metaRel.replace(/meta\.yaml$/, "output.yaml");
+    if (!metaRel.startsWith(`${prefix}/`) || outputRel === metaRel || !committed.has(outputRel)) continue;
+    const parts = metaRel.slice(prefix.length + 1).split("/");
+    const item = parts[0] === "items" && parts.length === 5 ? parts[1] : undefined;
+    if (!item && (parts[0] !== "runs" || parts.length !== 3)) continue;
+    try {
+      const meta = await readYaml<Obj>(path.join(ctx.taskWt, metaRel));
+      if (meta?.status !== "ok") continue;
+      records.push({ name: parts[parts.length - 2]!, ...(item ? { item } : {}), meta,
+        output: await readYaml<Obj>(path.join(ctx.taskWt, outputRel)) });
+    } catch { /* A corrupt record is not a usable derivation input. */ }
   }
-  await scan(path.join(ctx.taskDir, "runs"));
   return records;
 }
 
-/**
- * Rebuilds missing concern artifacts from committed step records. Step records
- * are only read; aggregation remains idempotent through fingerprint merging.
- */
+/** Rebuilds concern artifacts from committed step records; merging keeps it idempotent. */
 export async function reconcileConcerns(ctx: ConcernStoreContext): Promise<StoredConcernArtifact[]> {
   const reconciled: StoredConcernArtifact[] = [];
-  for (const record of await committedStepRecords(ctx)) {
-    const concerns = [...(record.output.concerns ?? []), ...(record.output.newConcerns ?? [])]
-      .filter((c: any) => c && typeof c === "object") as ConcernInput[];
-    const remarkables = Array.isArray(record.output.remarkable)
-      ? (record.output.remarkable as RemarkableDecision[])
-      : [];
-    if (concerns.length === 0 && remarkables.length === 0) continue;
-
-    const source: ConcernSource = {
-      record: record.name,
-      agent: String(record.meta.agent ?? "unknown"),
-      ...(record.meta.name ? { step: String(record.meta.name) } : {}),
-      ...(record.item ? { item: record.item } : {}),
-    };
+  for (const r of await committedStepRecords(ctx)) {
+    const concerns = [...(r.output.concerns ?? []), ...(r.output.newConcerns ?? [])]
+      .filter((c: any) => c && typeof c === "object");
+    const remarkables = Array.isArray(r.output.remarkable) ? r.output.remarkable : [];
+    if (!concerns.length && !remarkables.length) continue;
+    const source: ConcernSource = { record: r.name, agent: String(r.meta.agent ?? "unknown"),
+      ...(r.meta.name ? { step: String(r.meta.name) } : {}), ...(r.item ? { item: r.item } : {}) };
     reconciled.push(...(await aggregateConcerns({ ...ctx, source }, concerns, remarkables)));
   }
   return reconciled;

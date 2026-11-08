@@ -12,8 +12,6 @@ import type {
   PipelineConfig,
   PipelineLimits,
   ProjectConfig,
-  RemarkableDecision,
-  ReviewSuggestion,
   StepMetaArtifact,
   StepMetaStatus,
   CheckItemResult,
@@ -31,8 +29,6 @@ import {
   applyCloseupResolutions,
   applyConcernTriage,
   partitionSuggestions,
-  type ConcernInput,
-  type ConcernResolution,
 } from "../concerns.js";
 import { resolveStepRole, resolveRole, type ResolvedRole } from "../config/roles.js";
 import { captureHead, enforceHead } from "../git/guard.js";
@@ -177,82 +173,31 @@ function inferTaskWorktree(taskDir: string, task: string, orchestrationFolder: s
   return matches ? path.resolve(taskDir, ...tail.map(() => "..")) : taskDir;
 }
 
-async function existingConcernIds(taskDir: string): Promise<string[]> {
-  try {
-    const names = await fs.promises.readdir(path.join(taskDir, "concerns"));
-    return names.filter((name) => name.endsWith(".yaml")).map((name) => name.slice(0, -5));
-  } catch (err: any) {
-    if (err?.code === "ENOENT") return [];
-    throw err;
-  }
-}
-
-/**
- * Feeds a step's producer fields into the taskWt concern store (§18).
- * Reviewer triage only targets concerns that existed before this step, so a
- * concern raised in the same output can never dismiss itself.
- */
+/** Feeds a step's producer fields into the taskWt concern store (§18). */
 async function ingestStepConcerns(opts: {
-  task: string;
-  item?: string;
-  stepId: string;
-  agent: string;
-  record: string;
-  iteration?: number;
-  taskDir: string;
-  taskWt: string;
-  repo: any;
-  output: unknown;
+  taskDir: string; taskWt: string; repo: any; output: unknown;
+  source: { record: string; agent: string; step: string; item?: string; iteration?: number };
 }): Promise<void> {
   const data = (opts.output ?? {}) as Record<string, any>;
-  const concerns: ConcernInput[] = [];
-  for (const field of ["concerns", "newConcerns"]) {
-    if (Array.isArray(data[field])) concerns.push(...data[field]);
-  }
-  const remarkables: RemarkableDecision[] = Array.isArray(data.remarkable)
-    ? data.remarkable
-    : [];
-  const suggestions: ReviewSuggestion[] = Array.isArray(data.suggestions)
-    ? data.suggestions
-    : [];
-  const resolutions: ConcernResolution[] = Array.isArray(data.concernResolutions)
-    ? data.concernResolutions
-    : [];
-  if (
-    concerns.length === 0 &&
-    remarkables.length === 0 &&
-    suggestions.length === 0 &&
-    resolutions.length === 0
-  ) {
-    return;
-  }
+  const concerns = ["concerns", "newConcerns"].flatMap((f) => (Array.isArray(data[f]) ? data[f] : []));
+  const remarkables = Array.isArray(data.remarkable) ? data.remarkable : [];
+  const suggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
+  const resolutions = Array.isArray(data.concernResolutions) ? data.concernResolutions : [];
+  if (!concerns.length && !remarkables.length && !suggestions.length && !resolutions.length) return;
 
-  const existing = await existingConcernIds(opts.taskDir);
+  // Triage only ids that existed before this step, so new concerns cannot self-dismiss.
+  let existing: string[] = [];
+  try {
+    existing = (await fs.promises.readdir(path.join(opts.taskDir, "concerns")))
+      .filter((n) => n.endsWith(".yaml")).map((n) => n.slice(0, -5));
+  } catch (err: any) {
+    if (err?.code !== "ENOENT") throw err;
+  }
   const ctx = { taskDir: opts.taskDir, taskWt: opts.taskWt, repo: opts.repo };
-  const source = {
-    record: opts.record,
-    agent: opts.agent,
-    step: opts.stepId,
-    ...(opts.item ? { item: opts.item } : {}),
-    ...(opts.iteration !== undefined ? { iteration: opts.iteration } : {}),
-  };
-
-  if (concerns.length > 0 || remarkables.length > 0) {
-    await aggregateConcerns({ ...ctx, source }, concerns, remarkables);
-  }
-  if (suggestions.length > 0) {
-    const { triage } = partitionSuggestions(suggestions, existing);
-    if (triage.length > 0) {
-      await applyConcernTriage({
-        ...ctx,
-        suggestions: triage,
-        isTriager: isTriagerAgent(opts.agent),
-      });
-    }
-  }
-  if (resolutions.length > 0) {
-    await applyCloseupResolutions({ ...ctx, resolutions, by: opts.agent });
-  }
+  if (concerns.length || remarkables.length) await aggregateConcerns({ ...ctx, source: opts.source }, concerns, remarkables);
+  const { triage } = partitionSuggestions(suggestions, existing);
+  if (triage.length) await applyConcernTriage({ ...ctx, suggestions: triage, isTriager: isTriagerAgent(opts.source.agent) });
+  if (resolutions.length) await applyCloseupResolutions({ ...ctx, resolutions, by: opts.source.agent });
 }
 
 /**
@@ -714,38 +659,28 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
   }
 
   // 12. Write canonical artifact before finishing meta so both land in the same commit (§6.2, Invariant 5)
-  if (finalStatus === "ok") {
-    if (opts.writeArtifact) {
-      try {
-        await opts.writeArtifact(validatedData);
-      } catch (err: any) {
-        finalStatus = "error";
-        validationError = `Failed writing canonical artifact: ${err?.message || err}`;
-      }
+  if (finalStatus === "ok" && opts.writeArtifact) {
+    try {
+      await opts.writeArtifact(validatedData);
+    } catch (err: any) {
+      finalStatus = "error";
+      validationError = `Failed writing canonical artifact: ${err?.message || err}`;
     }
-    if (finalStatus === "ok") {
-      try {
-        await ingestStepConcerns({
-          task,
-          item,
-          stepId,
-          agent,
-          record: dirName,
-          iteration: opts.iteration,
-          taskDir,
-          taskWt,
-          repo,
-          output: validatedData,
-        });
-      } catch (err: any) {
-        await appendJournal(taskDir, {
-          type: "concern_ingest_error",
-          task,
-          item,
-          step: stepId,
-          error: err?.message || String(err),
-        });
-      }
+  }
+
+  // Producer concerns feed the taskWt store after the canonical artifact write.
+  if (finalStatus === "ok") {
+    try {
+      await ingestStepConcerns({
+        taskDir, taskWt, repo, output: validatedData,
+        source: {
+          record: dirName, agent, step: stepId,
+          ...(item ? { item } : {}),
+          ...(opts.iteration !== undefined ? { iteration: opts.iteration } : {}),
+        },
+      });
+    } catch (err: any) {
+      await appendJournal(taskDir, { type: "concern_ingest_error", task, item, step: stepId, error: err?.message || String(err) });
     }
   }
 
