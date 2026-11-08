@@ -1,0 +1,9 @@
+id: awareness-plan-1-digest-mailbox-reuse
+ref: plan-1
+disposition: human-awareness
+question: ADR avoids new dir but relies on engine never treating empty-blocks
+  awareness as blocker; factory status currently lists all openSteerQuestions as
+  blocking questions. Confirm status/derive/classify filtering keeps digest
+  low-noise per fire-test.
+status: open
+createdAt: 2026-11-08T00:42:46.058Z

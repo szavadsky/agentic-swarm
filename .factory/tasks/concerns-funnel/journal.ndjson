@@ -26,3 +26,4 @@
 {"type":"step_finished","task":"concerns-funnel","step":"architect-plan-1","attempt":1,"status":"ok","sessionId":"01a1b894-4755-7787-a1ed-8df6c7a062a2","usage":{"inputTokens":31333,"outputTokens":10971,"costUsd":0.005328},"ts":"2026-11-08T00:36:13.511Z"}
 {"type":"step_started","task":"concerns-funnel","step":"plan-review-1-1","attempt":1,"recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/007-plan-review-1-1-a1","ts":"2026-11-08T00:36:13.543Z"}
 {"type":"step_timeout","task":"concerns-funnel","step":"plan-review-1-1","timeoutSec":900,"ts":"2026-11-08T00:36:13.552Z"}
+{"type":"step_finished","task":"concerns-funnel","step":"plan-review-1-1","attempt":1,"status":"ok","sessionId":"01a1b895-9737-7735-84d6-04c14e9f463d","usage":{"inputTokens":37299,"outputTokens":18254,"costUsd":0.007819},"ts":"2026-11-08T00:42:46.057Z"}
