@@ -6,5 +6,16 @@ question: Merge keeps max severity and longer/latest detail but never reopens
   concern stays dismissed/hidden. Architect can decide now (reopen on escalation
   vs keep + digest surfacing), but operator should be aware of hidden-escalation
   tradeoff.
-status: open
+status: answered
 createdAt: 2026-11-08T00:51:48.888Z
+answer: >
+  Operator acknowledges both plan-1 awareness items: (1) digest mailbox reuse —
+  confirmed that digest/awareness dispositions must stay low-noise and
+  non-blocking; status/derive/classify filtering keeps them out of the blocking
+  set (verify in the funnel implementation; flag if any code path treats an
+  empty-blocks awareness item as blocking). (2) merge escalation hidden —
+  decision: keep dismissed/routed/resolved as terminal-in-merge, and surface
+  escalated-severity-on-dismissed concerns in the digest (keep + digest
+  surfacing). Triage remains the only path to reopen. No further action on these
+  two.
+answeredAt: 2026-11-08T11:47:35.720Z
