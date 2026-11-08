@@ -1,0 +1,12 @@
+context: wave
+decision: continue
+rationale: "Wave 3 complete: 2/2 merged (schemas + policy), tree clean,
+  typecheck pass, test fail->pass improved with no regressions. All M1 contract
+  children now merged; concerns-store and modes-prompts deps satisfied. No
+  failures, blocked, or new debt requiring plan change."
+text: "Proceed to next wave (concerns-store + modes-prompts in parallel).
+  concerns-store: implement src/core/concerns.ts per binding directives (one
+  file per fingerprint, KeyedMutex RMW only, immediate taskWt commit,
+  reconcileConcerns, defaults severity->medium/detail->summary, unknown-kind
+  strict error). modes-prompts: humanInvolvement + thresholds + criteria
+  fragment + KNOWN_VARS wiring."

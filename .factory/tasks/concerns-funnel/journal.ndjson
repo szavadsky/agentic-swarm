@@ -388,3 +388,5 @@
 {"type":"step_started","task":"concerns-funnel","step":"wave-close-up-1-3","attempt":1,"recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/020-wave-close-up-1-3-a1","ts":"2026-11-08T05:55:01.202Z"}
 {"type":"step_timeout_armed","task":"concerns-funnel","step":"wave-close-up-1-3","timeoutSec":900,"ts":"2026-11-08T05:55:01.206Z"}
 {"type":"step_finished","task":"concerns-funnel","step":"wave-close-up-1-3","attempt":1,"status":"ok","sessionId":"01a1b9b9-74eb-74b0-8666-b452e94f4769","usage":{"inputTokens":12187,"outputTokens":4359,"costUsd":0.002154},"ts":"2026-11-08T05:55:35.143Z"}
+{"type":"step_started","task":"concerns-funnel","step":"architect-wave-report-1-3","attempt":1,"recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/021-architect-wave-report-1-3-a1","ts":"2026-11-08T05:55:35.387Z"}
+{"type":"step_timeout_armed","task":"concerns-funnel","step":"architect-wave-report-1-3","timeoutSec":1200,"ts":"2026-11-08T05:55:35.391Z"}
