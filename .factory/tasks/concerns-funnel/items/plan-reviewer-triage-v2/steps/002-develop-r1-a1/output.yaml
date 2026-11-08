@@ -1,0 +1,45 @@
+status: ok
+summary: "Implemented plan-reviewer triage: plan-review prompts hydrate open
+  c-*/rm-* funnel items via concernsYaml, review suggestions are partitioned by
+  exact pre-step concern ids so triage ids never request a plan revision, and
+  deriveTaskState adds routed tech-debt or routed disposition=optional concern
+  summaries to debt. Added triage guidance to the plan-review step prompt and
+  registered concernsYaml. All four target tests pass, typecheck is clean, and
+  the full suite is green."
+target:
+  selectors:
+    - test/engine/plan-reviewer-triage.test.ts
+  expectRed:
+    - test/engine/plan-reviewer-triage.test.ts::Plan-reviewer triage.hydrates
+      plan-review with plan concerns and triages dismiss vs routed ids
+    - test/engine/plan-reviewer-triage.test.ts::Plan-reviewer triage.aggregates
+      architect-revise concerns and remarkable rm-* for the next review round
+    - test/engine/plan-reviewer-triage.test.ts::Plan-reviewer triage.keeps
+      triage ids out of the plan fix loop so they never trigger a revision
+    - test/engine/plan-reviewer-triage.test.ts::Plan-reviewer triage.derives
+      debt from routed tech-debt concerns and routed optional dispositions only
+evidence:
+  - cd plugins/software-factory && bun test
+    test/engine/plan-reviewer-triage.test.ts -> 4 pass, 0 fail (all target
+    expectRed cases green).
+  - cd plugins/software-factory && bun run typecheck -> exit 0, no TypeScript
+    errors.
+  - cd plugins/software-factory && bun test -> 339 pass, 2 skip, 0 fail across
+    341 tests / 57 files.
+  - cd plugins/software-factory && bun test
+    test/engine/plan-reviewer-triage.test.ts test/engine/concerns-funnel.test.ts
+    test/human-involvement-config.test.ts -> 37 pass, 0 fail.
+  - git diff --check -> exit 0 (no whitespace errors); working tree only
+    contains the five intended production files.
+concerns:
+  - Hydration includes open concerns and remarkable decisions only;
+    dismissed/routed artifacts are intentionally omitted from plan-review
+    rounds.
+  - Plan-review record replay behavior was unchanged; the exact-id snapshot is
+    taken per round before the reviewer call, mirroring step-runner ingestion.
+notes: Changed src/core/concerns.ts (listConcerns/listOpenConcerns refactor,
+  listConcernIds, hydrateConcernsYaml), src/core/flows/iteration.ts (per-round
+  hydration + partition before fix detection), src/core/derive/task.ts (routed
+  concern debt predicate), src/core/prompt-vars.ts and
+  agents/steps/plan-review.md (concernsYaml registration and prompt section). No
+  test files were modified.

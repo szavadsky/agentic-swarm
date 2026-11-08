@@ -28,6 +28,11 @@ import { refreshStateYaml } from "../derive/task.js";
 import { appendJournal } from "../journal.js";
 import { loadCriteriaBundle, formatDispositionsSection } from "../prompts.js";
 import { isTriagerAgent, resolveReviewAllowed } from "../review-policy.js";
+import {
+  hydrateConcernsYaml,
+  listConcernIds,
+  partitionSuggestions,
+} from "../concerns.js";
 import { checkPlanReviewRounds, checkIterations, checkAmendments } from "../loops.js";
 import { validateEdits } from "../plan/limits.js";
 import { applyEdits } from "../plan/apply.js";
@@ -436,6 +441,10 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
     const reviewFingerprints: string[] = [];
 
     while (reviewRound <= maxPlanReviewRounds) {
+    // Triage ids are those that existed before this review round; capturing
+    // them here mirrors the step-runner exact-id partition.
+    const knownConcernIds = await listConcernIds(taskDir);
+    const concernsYaml = await hydrateConcernsYaml(taskDir);
     // Check if review round record already exists
     const revRecordName = `plan-review-${iteration}-${reviewRound}`;
     const revStepRes = await runAgentStep({
@@ -457,6 +466,7 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
         plan: JSON.stringify(plan, null, 2),
         intent: intentText,
         context: contextYaml,
+        concernsYaml,
         limits: JSON.stringify(limits, null, 2),
         dispositionsCriteria: formatDispositionsSection(
           loadCriteriaBundle(pipeline.criteria).dispositions,
@@ -483,7 +493,13 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
     }
 
     const revOutput = revStepRes.output as ReviewArtifact | undefined;
-    const fixSuggestions = revOutput?.suggestions?.filter((s) => s.disposition === "fix");
+    // Triage ids are exact-id concern/remarkable decisions, not plan findings;
+    // they never request a revision or influence approval.
+    const { findings } = partitionSuggestions(
+      revOutput?.suggestions ?? [],
+      knownConcernIds
+    );
+    const fixSuggestions = findings.filter((s) => s.disposition === "fix");
 
     if (!fixSuggestions || fixSuggestions.length === 0) {
       break; // Plan approved!

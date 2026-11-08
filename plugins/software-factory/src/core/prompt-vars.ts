@@ -159,8 +159,8 @@ export const KNOWN_VARS: Record<string, string[]> = {
   "steps/plan-close-up": ["intent", "plan", "context", "humanInvolvementCriteria", "concernsYaml"],
   "plan-close-up": ["intent", "plan", "context", "humanInvolvementCriteria", "concernsYaml"],
 
-  "steps/plan-review": ["plan", "intent", "context", "limits", "dispositionsCriteria", "humanInvolvementCriteria"],
-  "plan-review": ["plan", "intent", "context", "limits", "dispositionsCriteria", "humanInvolvementCriteria"],
+  "steps/plan-review": ["plan", "intent", "context", "limits", "dispositionsCriteria", "humanInvolvementCriteria", "concernsYaml"],
+  "plan-review": ["plan", "intent", "context", "limits", "dispositionsCriteria", "humanInvolvementCriteria", "concernsYaml"],
 
   // System fragments
   "system/steer-classify": [],

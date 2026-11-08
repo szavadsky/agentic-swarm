@@ -16,6 +16,7 @@ import { readYaml, writeYamlAtomic } from "../records/io.js";
 import { deriveItemState, type DerivedItemState } from "./item.js";
 import { deriveWaveState, type DerivedWaveState } from "./wave.js";
 import { BudgetTracker } from "../budget.js";
+import { listConcerns } from "../concerns.js";
 import { git } from "../git/exec.js";
 import { isAncestor } from "../git/commit.js";
 
@@ -188,6 +189,12 @@ export async function deriveTaskState(opts: {
           throw new Error(`Corrupt decision file at ${dPath}: ${err?.message ?? err}`);
         }
       }
+    }
+  }
+  // From concerns: routed tech-debt, or any routed concern dispositioned optional
+  for (const concern of await listConcerns(taskDir)) {
+    if (concern.status === "routed" && (concern.kind === "tech-debt" || concern.disposition === "optional")) {
+      debtSet.add(concern.summary);
     }
   }
   // From review suggestions with disposition optional
