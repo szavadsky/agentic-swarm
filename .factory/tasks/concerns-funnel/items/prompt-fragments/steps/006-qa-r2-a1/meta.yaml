@@ -8,5 +8,12 @@ models:
   - opencode-go/deepseek-v4.1-flash
   - opencode-go/muse-spark-1.3-contributor
 timeoutSec: 5400
-status: started
+status: ok
 startedAt: 2026-11-08T21:54:17.239Z
+session: 01a1bd27-bcbb-75eb-a5d5-1dd7297d966f
+endedAt: 2026-11-08T22:02:42.756Z
+usage:
+  inputTokens: 243013
+  outputTokens: 24984
+  costUsd: 0.062691
+traceRef: /home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/sessions/2026-11-08T21-54-20-475Z_01a1bd27-bcbb-75eb-a5d5-1dd7297d966f
