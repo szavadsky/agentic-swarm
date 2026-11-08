@@ -22,20 +22,20 @@ items:
     currentStep: review
   hydration-fingerprint-caps:
     kind: dev
-    status: running
+    status: ready
     branch: topic/concerns-funnel--hydration-fingerprint-caps
     attempts: 1
-    fixRounds: 3
-    spendUsd: 0.38945699999999994
-    currentStep: qa
+    fixRounds: 1
+    spendUsd: 0.720326
+    currentStep: review
   prompt-fragments:
     kind: dev
-    status: running
+    status: ready
     branch: topic/concerns-funnel--prompt-fragments
     attempts: 1
     fixRounds: 2
-    spendUsd: 0.233481
-    currentStep: qa
+    spendUsd: 0.32775099999999996
+    currentStep: review
   spike-saga-commit:
     kind: fact-finder
     status: ready
@@ -368,6 +368,14 @@ debt:
     if hydration returns empty"
   - "[hydration-fingerprint-caps] Develop-family hydration branch unreachable
     until KNOWN_VARS registers concernsYaml"
+  - "[hydration-fingerprint-caps] Develop-family hydration dormant until
+    prompt-fragments registers concernsYaml in KNOWN_VARS"
+  - "[hydration-fingerprint-caps] Legacy migration merges first same-identity
+    match only"
+  - "[hydration-fingerprint-caps] Replace dynamic triage lookup with direct
+    imports now green"
+  - "[hydration-fingerprint-caps] Develop-family hydration dormant until
+    prompt-fragments registers concernsYaml"
   - "[prompt-fragments] Total fragment budget at 78/80 leaves 2 lines headroom"
   - "[prompt-fragments] plan-review missing blank line between concernsYaml and
     raise line"
@@ -377,6 +385,12 @@ debt:
     contradicting engine contract"
   - "[prompt-fragments] Corrected raise-only prompt contract has no regression
     assertion"
+  - "[prompt-fragments] Test comments still label QA/architects as 'triagers',
+    contradicting engine isTriagerAgent"
+  - "[prompt-fragments] Corrected raise-only / concernResolutions prompt
+    contracts have no regression assertion"
+  - "[prompt-fragments] Budget test counts net non-empty delta against editable
+    baselines, so deletions can offset additions"
   - "[spike-saga-commit] Qualify 'epic state derived ONLY from
     child-closeup.yaml' — isMerged takes precedence"
   - "[spike-saga-commit] Inline citation paths missing plugins/software-factory/
@@ -586,20 +600,20 @@ debt:
     inconsistent with documented branch-from-HEAD worktrees"
   - "[funnel-closeups-v3] Propagated parent copy retains child source.item,
     writes undeclared source.epic, and can clobber/lengthen parent records"
-budgetSpentUsd: 6.266042920000002
+budgetSpentUsd: 6.714819920000002
 spendByRole:
   alt-workhorse:
-    costUsd: 1.4248859999999999
-    inputTokens: 7337244
-    outputTokens: 2223563
+    costUsd: 1.755755
+    inputTokens: 8785175
+    outputTokens: 2442090
   workhorse:
-    costUsd: 4.089036919999999
-    inputTokens: 8930797
-    outputTokens: 2466887
+    costUsd: 4.183306919999999
+    inputTokens: 9279844
+    outputTokens: 2494852
   architect:
-    costUsd: 0.7082619999999998
-    inputTokens: 6338453
-    outputTokens: 156985
+    costUsd: 0.7318999999999999
+    inputTokens: 6565606
+    outputTokens: 159335
   alt-architect:
     costUsd: 0.043858
     inputTokens: 181661
@@ -670,23 +684,23 @@ spendByItem:
     inputTokens: 263905
     outputTokens: 109900
   prompt-fragments:
-    costUsd: 0.233481
-    inputTokens: 920135
-    outputTokens: 243146
+    costUsd: 0.32775099999999996
+    inputTokens: 1269182
+    outputTokens: 271111
   routing-architect-consult-v2:
     costUsd: 0.198996
     inputTokens: 463902
     outputTokens: 217893
   hydration-fingerprint-caps:
-    costUsd: 0.38945699999999994
-    inputTokens: 1073199
-    outputTokens: 362465
+    costUsd: 0.720326
+    inputTokens: 2521130
+    outputTokens: 580992
   contracts-drift-fix:
     costUsd: 0.16688999999999998
     inputTokens: 450079
     outputTokens: 214518
   (orchestration):
-    costUsd: 1.278278
-    inputTokens: 7804033
-    outputTokens: 680913
-lastUpdated: 2026-11-08T22:15:09.953Z
+    costUsd: 1.301916
+    inputTokens: 8031186
+    outputTokens: 683263
+lastUpdated: 2026-11-08T23:48:33.137Z
