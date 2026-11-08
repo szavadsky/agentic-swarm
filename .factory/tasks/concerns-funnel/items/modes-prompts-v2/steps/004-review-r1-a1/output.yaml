@@ -1,0 +1,56 @@
+status: approved
+summary: "Modes/thresholds/prompt wiring verified: schema+defaults+layering
+  correct, KNOWN_VARS matrix exact, mode-filtered criteria injection works,
+  typecheck clean, 11/11 green, preflight green. No blocking defects; 4
+  hardening nits."
+suggestions:
+  - id: caller-can-override-filtered-criteria
+    disposition: optional
+    summary: Caller promptVars can silently override engine-filtered
+      humanInvolvementCriteria
+    detail: "effectivePromptVars spreads ...promptVars after the engine-computed
+      humanInvolvementCriteria, so any future caller passing
+      humanInvolvementCriteria (following the
+      triageCriteria/dispositionsCriteria caller-supplied precedent) would
+      bypass mode filtering with unfiltered text. No current caller does this,
+      so behavior is correct today. Consider engine-wins for
+      humanInvolvementCriteria ({...promptVars, humanInvolvementCriteria:
+      filtered}) while keeping caller-wins for concernsYaml, which the test
+      explicitly requires."
+    location:
+      file: plugins/software-factory/src/core/flows/step-runner.ts
+      line: 255
+  - id: mode-list-triplicated
+    disposition: optional
+    summary: HUMAN_INVOLVEMENT_MODES is a third source of truth for the mode enum
+    detail: "The mode set now lives in three places: pipeline.schema.json enum,
+      PipelineConfig union in artifacts.ts, and the Set in prompts.ts. A fourth
+      mode added to schema/types but not the Set would silently degrade to a
+      shared section leaking into every mode. Consider a single exported const
+      array deriving the type."
+    location:
+      file: plugins/software-factory/src/core/prompts.ts
+      line: 66
+  - id: criteria-comment-missing-entry
+    disposition: optional
+    summary: pipeline.default.yaml criteria comment block omits human-involvement
+      consumption
+    detail: The §5/§8.7 comment documents how triage/dispositions/story-kinds are
+      consumed (var name + filtering), but the new human-involvement key was
+      added without a matching entry explaining mode-section filtering via
+      formatHumanInvolvementCriteria. Add one line for consistency.
+    location:
+      file: plugins/software-factory/config/pipeline.default.yaml
+      line: 440
+  - id: blocking-table-duplicated
+    disposition: optional
+    summary: ADR blocking table duplicated verbatim in config comments and criteria
+      fragment
+    detail: Identical tables in pipeline.default.yaml comments and
+      agents/criteria/human-involvement.md agree today, but no check enforces
+      agreement — only row presence per file. A future edit to one will silently
+      desync config docs from prompt policy. Consider a cross-file consistency
+      assertion or a note pointing editors at both copies.
+    location:
+      file: plugins/software-factory/config/pipeline.default.yaml
+      line: 426

@@ -1,0 +1,70 @@
+status: ok
+summary: "Implemented humanInvolvement mode + concern thresholds: added schema
+  properties and closed concerns object, default pipeline values (autonomous,
+  raise allowlist, medium digest / high blocking) with commented
+  autonomous/principal/detailed presets and ADR blocking table, registered a
+  1.1KB agents/criteria/human-involvement.md fragment, added
+  concernsYaml/humanInvolvementCriteria to KNOWN_VARS per the fragment matrix,
+  and wired step-runner to inject the active mode's criteria section plus
+  caller-provided hydrated concernsYaml. Target test file is fully green and
+  typecheck passes; full suite passes with an enlarged per-test timeout."
+target:
+  selectors:
+    - test/human-involvement-config.test.ts
+  expectRed:
+    - human-involvement pipeline configuration.defaults to autonomous mode with
+      concern raise/digest/blocking policy
+    - human-involvement pipeline configuration.layers humanInvolvement and
+      concern thresholds through project and task configs
+    - human-involvement pipeline configuration.applies overrides last and
+      supports null deletion of concern keys
+    - human-involvement pipeline configuration.schema accepts all modes and
+      thresholds, rejects unknown values, and stays closed at root
+    - human-involvement pipeline configuration.ships commented
+      autonomous/principal/detailed presets with a blocking table
+    - human-involvement pipeline configuration.registers a terse
+      human-involvement criteria fragment and loads it
+    - human-involvement pipeline configuration.registers concernsYaml and
+      humanInvolvementCriteria for the fragment matrix
+    - human-involvement pipeline configuration.preflight accepts the new vars on
+      matrix fragments and rejects them elsewhere
+    - human-involvement mode switching at prompt time.selects the active mode
+      section plus the shared ADR blocking table
+    - human-involvement mode switching at prompt time.renders empty involvement
+      criteria when no fragment is configured
+    - human-involvement mode switching at prompt time.lets callers provide
+      hydrated concernsYaml without dropping the criteria
+evidence:
+  - cd plugins/software-factory && bun test
+    test/human-involvement-config.test.ts -> 11 pass, 0 fail, 100 expect() calls
+  - cd plugins/software-factory && bun run typecheck -> tsc --noEmit, exit code 0
+  - cd plugins/software-factory && TMPDIR=/tmp bun test --timeout 15000 -> 314
+    pass, 2 skip, 0 fail across 316 tests / 56 files
+  - cd plugins/software-factory && bun test test/prompts.test.ts
+    test/config-layering.test.ts test/contracts/concern-artifact-types.test.ts
+    -> 24 pass, 0 fail
+  - cd plugins/software-factory && bun test test/engine/qa-red-test.test.ts
+    test/engine/sessions-budget-simple.test.ts
+    test/engine/blocked-closeup-iteration.test.ts
+    test/engine/step-resilience.test.ts test/engine/crash-restart.test.ts -> 15
+    pass, 0 fail
+  - git diff --numstat + new criteria file -> 177 production lines changed
+    (budget 300)
+  - Default-timeout full suite runs showed only variable 5s per-test timeouts in
+    pre-existing engine tests (different file each run); each affected file
+    passes standalone, and the suite is green with --timeout 15000
+concerns:
+  - The project's pre-existing engine tests use a 5s per-test timeout and are
+    load-sensitive when the swarm runs suites concurrently; varying tests time
+    out on default gate runs but pass standalone, so gate retries or a
+    normalized timeout/load environment may be needed.
+  - concernsYaml is injected as an empty default here; actual concern-store
+    hydration belongs to the later routing/funnel items.
+  - Blocking-ADR enforcement is currently policy text/table only; mechanical
+    routing per mode is implemented by the dependent ADR-blocking/routing items.
+notes: step-runner now merges engine-supplied
+  humanInvolvementCriteria/concernsYaml before caller promptVars, so
+  caller-hydrated concerns win while the active mode criteria is always
+  retained. loadCriteriaBundle returns the full human-involvement text;
+  formatHumanInvolvementCriteria keeps shared sections plus only the active mode
+  section.

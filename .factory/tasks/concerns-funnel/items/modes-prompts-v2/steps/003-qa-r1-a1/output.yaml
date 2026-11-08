@@ -1,0 +1,37 @@
+status: approved
+summary: "dev item verified: 11/11 target green, typecheck clean, no weakening,
+  matrix + mode-switch behavior correct"
+suggestions:
+  - detail: FRAGMENT_MATRIX declares plan-review gets humanInvolvementCriteria only,
+      and implementation complies (prompt-vars.ts:162-163). Test uses
+      arrayContaining for presence plus negative checks only for
+      develop/triage/infra (test:272-275), so a future addition of concernsYaml
+      to plan-review would still pass. Add not.toContain(concernsYaml) for
+      plan-review keys.
+    disposition: optional
+    id: plan-review-concerns-negative
+    location:
+      file: plugins/software-factory/test/human-involvement-config.test.ts
+      line: 261
+    summary: "Harden matrix test: assert plan-review excludes concernsYaml"
+  - detail: Autonomous case asserts not DETAILED but not PRINCIPAL; detailed case
+      asserts not AUTONOMOUS but not PRINCIPAL; principal case asserts no
+      inactive absence. Implementation correctly filters (prompts.ts:68-84) but
+      tests would miss partial leakage of the unchecked mode. Assert both
+      inactive markers absent in each mode.
+    disposition: optional
+    id: mode-filter-both-inactives
+    location:
+      file: plugins/software-factory/test/human-involvement-config.test.ts
+      line: 392
+    summary: "Harden mode-switch tests: check both inactive markers absent"
+  - detail: Empty-fragment case only asserts not contains ADR-RULE (test:422). Any
+      non-marker garbage would also pass. Assert the criteria block renders
+      empty, e.g. prompt contains ARCHITECT CRITERIA followed by empty/concerns
+      boundary.
+    disposition: optional
+    id: empty-criteria-exact
+    location:
+      file: plugins/software-factory/test/human-involvement-config.test.ts
+      line: 417
+    summary: "Harden empty-criteria test: assert exact empty rendering"

@@ -1,0 +1,83 @@
+status: ok
+summary: "Authored test/human-involvement-config.test.ts (11 behavior tests, no
+  production changes) specifying: humanInvolvement default autonomous; concerns
+  {raiseAllowlist (8 concern-producing agents), minDigestSeverity: medium,
+  minBlockingSeverity: high}; schema acceptance/rejection and root closure;
+  project/task/override layering incl. null deletion; commented
+  autonomous/principal/detailed presets with a blocking table in
+  config/pipeline.default.yaml; a terse criteria.human-involvement fragment with
+  per-mode sections; loadCriteriaBundle exposure; KNOWN_VARS matrix registration
+  for concernsYaml + humanInvolvementCriteria; preflight acceptance on matrix
+  fragments and rejection elsewhere; and engine-rendered architect-plan prompts
+  that select the active mode's ADR blocking rules (with empty default and
+  caller-provided concernsYaml). All 11 tests are red on current code as
+  assertion/behavior failures; typecheck passes and existing
+  prompt/config/policy tests remain green."
+target:
+  selectors:
+    - test/human-involvement-config.test.ts
+  expectRed:
+    - human-involvement pipeline configuration.defaults to autonomous mode with
+      concern raise/digest/blocking policy
+    - human-involvement pipeline configuration.layers humanInvolvement and
+      concern thresholds through project and task configs
+    - human-involvement pipeline configuration.applies overrides last and
+      supports null deletion of concern keys
+    - human-involvement pipeline configuration.schema accepts all modes and
+      thresholds, rejects unknown values, and stays closed at root
+    - human-involvement pipeline configuration.ships commented
+      autonomous/principal/detailed presets with a blocking table
+    - human-involvement pipeline configuration.registers a terse
+      human-involvement criteria fragment and loads it
+    - human-involvement pipeline configuration.registers concernsYaml and
+      humanInvolvementCriteria for the fragment matrix
+    - human-involvement pipeline configuration.preflight accepts the new vars on
+      matrix fragments and rejects them elsewhere
+    - human-involvement mode switching at prompt time.selects the active mode
+      section plus the shared ADR blocking table
+    - human-involvement mode switching at prompt time.renders empty involvement
+      criteria when no fragment is configured
+    - human-involvement mode switching at prompt time.lets callers provide
+      hydrated concernsYaml without dropping the criteria
+evidence:
+  - bun test test/human-involvement-config.test.ts -> 0 pass, 11 fail; every
+    failure is an assertion/behavior failure, no collection or import errors
+  - bun test test/human-involvement-config.test.ts --reporter=junit
+    --reporter-outfile=/tmp/target-hi.xml; parseJunit reports collected=true, 11
+    cases, all status 'fail', 0 suite errors
+  - All declared expectRed ids exactly match parsed JUnit ids (verified
+    programmatically)
+  - bun run typecheck -> exit 0
+  - bun test test/prompts.test.ts test/config-layering.test.ts
+    test/review-policy.test.ts -> 29 pass, 0 fail
+  - git status --short -> only '?? test/human-involvement-config.test.ts' (no
+    production files touched)
+concerns:
+  - The mode-selection tests require the engine (runAgentStep) to inject
+    humanInvolvementCriteria centrally, selected from
+    pipeline.criteria['human-involvement'] by '## <mode>' headings plus the
+    shared blocking-table preamble; empty string when no fragment is configured.
+  - The tests require concernsYaml to default to an empty engine-supplied value
+    while caller-provided promptVars.concernsYaml wins.
+  - "The declared fragment matrix is:
+    review/qa/wave-close-up/plan-close-up/architect-plan/architect-revise/archi\
+    tect-resume/architect-wave-report/architect-closeup/architect-consult-item/\
+    architect-consult-nonitem get both vars; plan-review gets
+    humanInvolvementCriteria only; develop/triage/infra must not get them."
+  - "Default raiseAllowlist is defined as the concern-producing agents:
+    developer, fact-finder, architect, qa, reviewer, plan-reviewer,
+    wave-close-up, plan-close-up."
+notes: "Implementation guidance for the green step: (1) add humanInvolvement
+  enum + concerns object (raiseAllowlist array of strings,
+  minDigestSeverity/minBlockingSeverity low|medium|high,
+  additionalProperties:false) to config/schemas/pipeline.schema.json; (2) set
+  active defaults in config/pipeline.default.yaml and add commented
+  autonomous/principal/detailed presets with a markdown blocking table
+  mentioning ADRs; (3) add criteria.human-involvement ->
+  agents/criteria/human-involvement.md with a shared 'Blocking table (ADRs and
+  concerns)' section followed by '## autonomous', '## principal', '## detailed'
+  sections; (4) extend CriteriaBundle/loadCriteriaBundle with humanInvolvement;
+  (5) add PROMPT_VAR_DESCRIPTIONS + KNOWN_VARS entries per the matrix above; (6)
+  inject humanInvolvementCriteria and concernsYaml defaults in runAgentStep
+  before rendering, with caller promptVars taking precedence; (7) wire the new
+  placeholders into the matrix step fragments so preflight stays green."

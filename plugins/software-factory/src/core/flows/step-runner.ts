@@ -35,6 +35,7 @@ import { captureHead, enforceHead } from "../git/guard.js";
 import { commitAll } from "../git/commit.js";
 import { git } from "../git/exec.js";
 import { appendJournal } from "../journal.js";
+import { loadCriteriaBundle, formatHumanInvolvementCriteria } from "../prompts.js";
 import { registerActiveStep, unregisterActiveStep } from "../shutdown.js";
 import { getClock, detectSuspend } from "../clock.js";
 import type { Semaphore } from "../mutex.js";
@@ -277,12 +278,21 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
 
   // 4. Render prompt and agent definition. Appends compact ## Output section (§6.4)
   const fragment = stepFragment ?? `steps/${stepId}`;
+  const criteriaBundle = loadCriteriaBundle(pipeline.criteria);
+  const effectivePromptVars: Record<string, string> = {
+    humanInvolvementCriteria: formatHumanInvolvementCriteria(
+      criteriaBundle.humanInvolvement,
+      pipeline.humanInvolvement
+    ),
+    concernsYaml: "",
+    ...promptVars,
+  };
   let promptText: string;
   let agentDef: { body: string; tools: string[]; description: string };
   try {
     promptText = prompts.renderStepPrompt
-      ? prompts.renderStepPrompt(fragment, promptVars, outputSchema)
-      : prompts.render(fragment, promptVars);
+      ? prompts.renderStepPrompt(fragment, effectivePromptVars, outputSchema)
+      : prompts.render(fragment, effectivePromptVars);
     agentDef = prompts.agentDefinition(agent);
   } catch (err: any) {
     const errorMsg = `Prompt or agent definition error for step ${stepId}: ${err?.message || err}`;
