@@ -1,0 +1,23 @@
+debt: []
+failedItems: []
+iteration: 1
+mergedItems: []
+recommendations:
+  - Confirm the root cause of the test-gate improvement (TMPDIR normalization vs
+    '/.factory' split fix in step-runner) so the green state is durable and not
+    run-environment luck.
+  - Update gates-baseline.yaml to the new green state (test pass) so future
+    regressions are detectable against a passing baseline instead of a red one.
+status: complete
+summary: "Wave 4 (iteration 1): 0 items merged — wave report lists no merged
+  items and no 'factory: merge item' commits exist since wave_started (only
+  engine bookkeeping commits). Tree clean: zero untracked files, git diff
+  --check clean, strict conflict-marker check empty (git grep for '^<<<<<<<
+  '/'^>>>>>>> ' and exactly-7-'=' all empty; generic grep hits are only
+  decorative '===' separator lines in baseline logs/orchestration records). Only
+  modified file is engine-managed journal.ndjson (+2 lines for this close-up
+  step). Gates vs baseline (judged ONLY from Gate Diff table): typecheck
+  pass->pass, no regression; test fail->pass IMPROVED — the red baseline (2
+  pre-existing head-guard failures under inherited TMPDIR) is now green. No
+  regressions; wave complete."
+wave: 4
