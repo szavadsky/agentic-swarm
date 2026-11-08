@@ -108,3 +108,12 @@
 {"type":"task_started","task":"concerns-funnel","branch":"topic/concerns-funnel","ts":"2026-11-08T04:32:09.351Z"}
 {"type":"iteration_started","iteration":1,"ts":"2026-11-08T04:32:09.897Z"}
 {"type":"wave_report_old_format_rerun","wave":1,"iteration":1,"recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/015-architect-wave-report-1-1-a1","ts":"2026-11-08T04:32:10.144Z"}
+{"type":"wave_started","wave":1,"iteration":1,"ts":"2026-11-08T04:32:10.284Z"}
+{"type":"item_merge_started","item":"spike-saga-commit","branch":"topic/concerns-funnel--spike-saga-commit","ts":"2026-11-08T04:32:10.286Z"}
+{"type":"item_merge_phase","item":"spike-saga-commit","phase":"merge-parent-into-child","ts":"2026-11-08T04:32:10.292Z"}
+{"type":"item_merge_phase","item":"spike-saga-commit","phase":"verify-checks","ts":"2026-11-08T04:32:10.339Z"}
+{"type":"item_merge_gates_failed","item":"spike-saga-commit","failingGates":["typecheck"],"results":[{"id":"typecheck","status":"fail"},{"id":"test","status":"pass"}],"ts":"2026-11-08T04:32:13.249Z"}
+{"type":"item_merge_failed","item":"spike-saga-commit","error":"Quality gates failed on merge path for spike-saga-commit: typecheck","ts":"2026-11-08T04:32:13.249Z"}
+{"type":"step_reused","task":"concerns-funnel","step":"consult-spike-saga-commit","recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/013-consult-spike-saga-commit-a1","ts":"2026-11-08T04:32:13.275Z"}
+{"type":"decision_made","context":"item","item":"spike-saga-commit","decision":"accept-with-debt","decisionPath":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/decisions/002-item-spike-saga-commit.yaml","ts":"2026-11-08T04:32:13.276Z"}
+{"type":"step_reused","task":"concerns-funnel","step":"wave-close-up-1-1","recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/014-wave-close-up-1-1-a1","ts":"2026-11-08T04:34:14.600Z"}
