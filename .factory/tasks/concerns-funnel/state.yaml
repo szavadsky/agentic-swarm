@@ -252,12 +252,12 @@ items:
     spendUsd: 0
   funnel-closeups-v3:
     kind: dev
-    status: running
+    status: blocked
     branch: topic/concerns-funnel--funnel-closeups-v3
-    attempts: 2
-    fixRounds: 3
-    spendUsd: 0.567034
-    currentStep: review
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0.630073
+    currentStep: develop
   saga-propagate-v3:
     kind: dev
     status: pending
@@ -505,20 +505,20 @@ debt:
     inconsistent with documented branch-from-HEAD worktrees"
   - "[funnel-closeups-v3] Propagated parent copy retains child source.item,
     writes undeclared source.epic, and can clobber/lengthen parent records"
-budgetSpentUsd: 5.03943392
+budgetSpentUsd: 5.191372919999999
 spendByRole:
   alt-workhorse:
-    costUsd: 1.066817
-    inputTokens: 5611949
-    outputTokens: 1664794
+    costUsd: 1.129856
+    inputTokens: 6022110
+    outputTokens: 1699759
   workhorse:
     costUsd: 3.4052009199999995
     inputTokens: 7273975
     outputTokens: 2038382
   architect:
-    costUsd: 0.5509009999999999
-    inputTokens: 5091066
-    outputTokens: 98266
+    costUsd: 0.6398009999999998
+    inputTokens: 5911475
+    outputTokens: 100854
   alt-architect:
     costUsd: 0.016515000000000002
     inputTokens: 72452
@@ -569,9 +569,9 @@ spendByItem:
     inputTokens: 2995526
     outputTokens: 363902
   funnel-closeups-v3:
-    costUsd: 0.567034
-    inputTokens: 1252603
-    outputTokens: 393802
+    costUsd: 0.630073
+    inputTokens: 1662764
+    outputTokens: 428767
   concerns-contracts-types:
     costUsd: 0.063129
     inputTokens: 178070
@@ -593,7 +593,7 @@ spendByItem:
     inputTokens: 463902
     outputTokens: 217893
   (orchestration):
-    costUsd: 0.9045359999999999
-    inputTokens: 5918894
-    outputTokens: 423894
-lastUpdated: 2026-11-08T16:39:56.096Z
+    costUsd: 0.9934359999999999
+    inputTokens: 6739303
+    outputTokens: 426482
+lastUpdated: 2026-11-08T17:16:36.355Z

@@ -1,0 +1,9 @@
+id: escalation-funnel-closeups-v3-develop-a1
+ref: funnel-closeups-v3
+disposition: human-async
+question: 'Step "develop" for item "funnel-closeups-v3" stopped due to
+  retries_exhausted (3/3). Error: Execution timed out'
+blocks:
+  - funnel-closeups-v3
+status: open
+createdAt: 2026-11-08T17:16:33.299Z
