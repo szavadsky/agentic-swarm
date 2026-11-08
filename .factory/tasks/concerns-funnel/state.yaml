@@ -29,6 +29,14 @@ items:
     spendUsd: 0.060779
     currentStep: review
     mergedAt: 2026-11-07T21:22:06-05:00
+  concerns-contracts-types:
+    kind: dev
+    status: ready
+    branch: topic/concerns-funnel--concerns-contracts-types
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0.063129
+    currentStep: review
   concerns-store:
     kind: dev
     status: pending
@@ -40,6 +48,20 @@ items:
     kind: dev
     status: pending
     branch: topic/concerns-funnel--modes-prompts
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0
+  concerns-contracts-policy:
+    kind: dev
+    status: pending
+    branch: topic/concerns-funnel--concerns-contracts-policy
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0
+  concerns-contracts-schemas:
+    kind: dev
+    status: pending
+    branch: topic/concerns-funnel--concerns-contracts-schemas
     attempts: 1
     fixRounds: 1
     spendUsd: 0
@@ -158,20 +180,22 @@ debt:
     2000-byte cap"
   - "[spike-text-budget] Clarify trim-semantics comment to name TmpRepo trimEnd
     measurement path"
-budgetSpentUsd: 0.800895
+  - "[concerns-contracts-types] ReviewSuggestion.disposition collapses to
+    string, dismiss not enforced there"
+budgetSpentUsd: 0.8839840000000002
 spendByRole:
   alt-workhorse:
-    costUsd: 0.15788
-    inputTokens: 510196
-    outputTokens: 405947
+    costUsd: 0.171117
+    inputTokens: 572955
+    outputTokens: 437823
   workhorse:
-    costUsd: 0.585266
-    inputTokens: 1021628
-    outputTokens: 323609
+    costUsd: 0.635158
+    inputTokens: 1136939
+    outputTokens: 367629
   architect:
-    costUsd: 0.041234
-    inputTokens: 274114
-    outputTokens: 59120
+    costUsd: 0.061194
+    inputTokens: 473664
+    outputTokens: 60684
   alt-architect:
     costUsd: 0.016515000000000002
     inputTokens: 72452
@@ -181,16 +205,20 @@ spendByItem:
     costUsd: 0.251577
     inputTokens: 593198
     outputTokens: 339057
-  spike-saga-commit:
-    costUsd: 0.131932
-    inputTokens: 263905
-    outputTokens: 109900
+  concerns-contracts-types:
+    costUsd: 0.063129
+    inputTokens: 178070
+    outputTokens: 75896
   spike-text-budget:
     costUsd: 0.060779
     inputTokens: 139871
     outputTokens: 72059
+  spike-saga-commit:
+    costUsd: 0.131932
+    inputTokens: 263905
+    outputTokens: 109900
   (orchestration):
-    costUsd: 0.356607
-    inputTokens: 881416
-    outputTokens: 309952
-lastUpdated: 2026-11-08T04:32:09.785Z
+    costUsd: 0.376567
+    inputTokens: 1080966
+    outputTokens: 311516
+lastUpdated: 2026-11-08T04:50:16.836Z
