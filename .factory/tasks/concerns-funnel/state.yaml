@@ -5,15 +5,13 @@ iteration: 1
 currentWave: 1
 items: {}
 debt:
-  - Pre-existing head-guard gate failures (2 fail) when TMPDIR sits under
-    .factory-runtime because step-runner splits taskDir on '/.factory'. Baseline
-    red; green with TMPDIR=/tmp. Out of scope for concerns-funnel.
-  - "reviewAllowed resolved in two places: item-machine prompt uses
-    global-or-per-agent fallback while step-runner schema uses only global
-    allowedDispositions, so per-agent dismiss could fail validation."
-  - ADR markdown writer persists only title+context, dropping
-    decision/consequences, and PlanAdr lacks blocking flag.
-  - human-awareness and human-stop dispositions currently ignored (only
-    human-async writes mailbox), and debt derivation ignores routed concerns.
-budgetSpentUsd: 0.262994
-lastUpdated: 2026-11-08T00:36:13.518Z
+  - Pre-existing head-guard failures when TMPDIR sits under .factory-runtime
+    because step-runner splits on /.factory. Baseline red; green with
+    TMPDIR=/tmp. Out of scope.
+  - reviewAllowed resolved in two places with non-canonical allowedDispositions
+    key, so per-agent dismiss could fail schema validation.
+  - ADR writer persists only title plus context and PlanAdr lacks blocking.
+  - human-awareness and human-stop ignored and debt derivation ignores routed
+    concerns; status lists digest as blocking.
+budgetSpentUsd: 0.276554
+lastUpdated: 2026-11-08T00:44:20.155Z
