@@ -7,16 +7,20 @@
 #   3. <repo>/{orchestrationFolder}/{task}/pipeline.yaml (task-specific pipeline overrides)
 #
 # Merging semantics across layers:
-#   - Maps (objects) are deeply merged.
+#   - Maps (objects) are deeply merged, EXCEPT models.roles.<name> defs which
+#     replace atomically per layer (a {alias} override drops model+fallbacks).
 #   - Arrays are replaced (not concatenated).
 #   - Explicit `null` values delete the corresponding key from the merged map.
+#   - Task layer is read from the task worktree after the first run; preflight
+#     validates that effective pipeline.
 #
 # Layer-override example (<repo>/.factory/pipeline.yaml):
 #   limits:
 #     maxParallelItems: 8        # deep-merged scalar override
 #     checkOutputBytes: null     # `null` deletes the key from the merged map
-#   reviewPolicy:
-#     default: [fix, optional]   # arrays are REPLACED, not concatenated
+#   models:
+#     roles:
+#       architect: { alias: alt-architect }   # atomic role replacement
 #   agents:
 #     docs-writer:               # new map keys are added
 #       role: workhorse
@@ -32,6 +36,7 @@
 #
 # Fallback resolution expands recursively and deduplicates while preserving primary first.
 # Cycles in alias chains are detected and rejected at preflight.
+# Role defs replace atomically per layer: overriding one key drops the rest.
 models:
   roles:
     # Primary workhorse for development, triage, infra, fact-finding
@@ -67,7 +72,8 @@ models:
     pm:
       alias: alt-workhorse
 
-    # Architect role for high-level decomposition, milestones, consults
+    # Architect role for high-level decomposition, milestones, consults.
+    # Overridable per task (fire tests alias it to a cheap role).
     architect:
       model: anthropic/claude-opus-5-5:max
       fallbacks: [alt-architect]
@@ -78,14 +84,16 @@ models:
 # ==============================================================================
 # Agents (§5, §10)
 # ==============================================================================
-# Maps agent names to their default role, per-agent timeout, and tool exposures.
+# Maps agent names to their default role and per-agent timeout.
+# Tools come from the agent definition frontmatter (agents/*.md), not this file.
 # Built-in agents: triage, infra, architect, plan-reviewer, pm, developer,
 #                  qa, reviewer, fact-finder, wave-close-up, plan-close-up.
 #
 # Per-agent timeouts: `timeoutSec` caps a single agent turn. Step-level
 # `timeoutSec` (in flows) overrides the agent default; when neither is set the
-# harness default applies. Long-horizon agents (developer, architect) get 1200s;
-# bounded review/discovery agents get 900s.
+# harness default applies (300s). Timeouts measure active (monotonic) time, so
+# machine sleep never burns the budget. Long-horizon agents (developer,
+# architect) get 1200s; bounded review/discovery agents get 900s.
 #
 # Extra agents can be added here with:
 #   my-agent:
@@ -93,7 +101,6 @@ models:
 #     timeoutSec: 900
 #     definition: .factory/agents/my-agent.md   # Path to definition or inline
 #     output: developer | review | path/to/schema.json
-#     tools: [bash, edit]
 agents:
   triage:
     role: workhorse
@@ -135,15 +142,19 @@ agents:
 # Custom mechanical checks executed by the engine.
 # Built-in checks (schema, citations, plan-limits, gates, tests-only, test-first-scope,
 # target-red, target-green, red-test, test-diff, size, simple-guard, poc-scope) do not
-# need declarations here.
+# need declarations here. schema/citations/plan-limits are engine-internal and
+# cannot be attached to steps or hooks.
 #
 # Built-in "gates" ratchet:
 # - Gates green in gates-baseline.yaml must remain green.
 # - For test runner gates with junitArg: evaluated per-test. Fails iff any failing or
 #   erroring test ID (or collection error) was not present in the baseline. Newly
-#   passing baseline failures are reported as improvements.
+#   passing baseline failures are reported as improvements. Old-format red baselines
+#   lacking per-test ids are backfilled by re-running the gate at the baseline commit.
 # - Gates without junitArg stay green-only ratchet (pre-existing baseline failures do
 #   not fail the whole gate run).
+# - Any gate/check that dirties the worktree is restored, flagged
+#   `mutatesWorktree`, fails, and journals `worktree_mutation_detected`.
 #
 # To define a custom check:
 # checks:
@@ -153,7 +164,8 @@ agents:
 #     cwd: item                       # item | task
 #     timeoutSec: 900
 #     phase: after                    # before | after
-#     onFail: fix-loop                # retry-step | fix-loop | consult | feed
+#     onFail: fix-loop                # retry-step | fix-loop | consult | feed (declared; not dispatched per mode today)
+# Placeholders: {{worktree}} {{wt}} {{base}} {{head}} {{task}} {{item}} {{changedProd}} {{changedTests}}.
 checks: {}
 
 # ==============================================================================
@@ -165,6 +177,10 @@ checks: {}
 #   item.start, item.step.{id}, item.accept, item.merge,
 #   wave.start, wave.merge, wave.closeup,
 #   iteration.start, iteration.closeup, task.done.
+# Wired today: before/after item.step.{id}, after item.merge, after task.done.
+# Hook checks run; hook agents are only journaled, and hook results do not fail
+# the seam. Synthetic-item creation for code-writing hook agents is not
+# implemented; preflight only rejects the self-triggering combo.
 #
 # Example:
 # hooks:
@@ -173,8 +189,6 @@ checks: {}
 #       when: { kinds: [dev] }
 #   after:wave.merge:
 #     - agent: docs-writer
-# Note: Code-writing agents (output: developer) at non-item seams create synthetic
-# items. Synthetic items never fire hooks to prevent self-triggering loops.
 hooks: {}
 
 # ==============================================================================
@@ -186,10 +200,10 @@ hooks: {}
 #   - id: step identifier (e.g. develop, qa, review)
 #   - agent: agent name defined in `agents`
 #   - role: optional role override
-#   - retryRole: role to swap to on retry (fix round >= 2)
+#   - retryRole: role to swap to on retry (fix round >= 2); rotated developer rounds use a fresh session
 #   - escalatable: if true, uses `task-escalation` when item is escalated
-#   - session: fresh | reuse (reuse preserves session context across turns)
-#   - checks: array of check IDs to execute at this step
+#   - session: fresh | reuse (default reuse; reuse resumes the kept session, falling back to the recorded interrupted session)
+#   - checks: array of check IDs to execute at this step (red-test/test-diff/phase-before run before the agent; the rest after; any failure records `rejected`)
 #   - focus: domain focus for reviewer prompt (e.g. code, security, result)
 #   - stepFragment: optional fragment name in agents/steps/{fragment}.md (defaults to step id).
 #     Use it whenever the step id is generic but the prompt must be kind-specific
@@ -205,8 +219,8 @@ hooks: {}
 #   3. stepFragment: if a step needs a kind-specific prompt, add
 #      `agents/steps/<fragment>.md` and set `stepFragment` on the step.
 #      Otherwise the step renders `agents/steps/<id>.md`.
-#   4. per-kind limits: optional `limits:` map on the kind overrides global
-#      `limits` for items of that kind (e.g. tighter `storyMaxProdLines`).
+#   4. per-kind limits: optional `limits:` map on the kind (schema-accepted but
+#      not read by the engine today; global `limits` apply).
 #   Example:
 #   story:
 #     docs-only:
@@ -222,7 +236,8 @@ hooks: {}
 #           focus: code
 #       fixLoopTo: develop
 flows:
-  # Simple item: single develop step, no review
+  # Simple pre-checks for triage-simple work (gates + simple-guard). Oversized
+  # work converts to a `no-behavior` item on the renamed scratch branch.
   simple:
     steps:
       - id: develop
@@ -318,20 +333,22 @@ flows:
 # Limits (§5, §12.2)
 # ==============================================================================
 # Hard thresholds for loops, parallelism, size budgets, and output caps.
+# Note: src/core/loops.ts DEFAULT_LIMITS differ (they are fallback defaults for
+# direct helper use, not the effective pipeline — this file wins).
 limits:
   maxParallelItems: 4             # Concurrently executing items per task wave
   maxParallelTurns: 6             # Concurrent harness turns across the whole run
-  stubMaxProdLines: 40            # Max added prod lines allowed during test-first step
+  stubMaxProdLines: 40            # Max added prod lines in NEW stub files during test-first (modified prod files always fail)
   maxStepAttempts: 2              # Attempts per step before consult
-  maxInterruptions: 3             # Tolerated interruptions before fatal error
+  maxInterruptions: 3             # Interrupted/started reuses the same attempt number until this cap, then +1
   maxFixRounds: 3                 # Iterative fix rounds before consult
   maxConsultsPerItem: 2           # Architect consults per item before fail
-  maxSplitDepth: 1                # Hierarchy split depth limit
+  maxSplitDepth: 1                # Declared only; split-depth is not enforced today
   maxPlanReviewRounds: 2          # Architect <-> plan-reviewer rounds
-  maxAmendmentsPerIteration: 3    # Mid-iteration plan amendments
-  maxIterations: 6                # Max iterations per task
-  maxInfraRetries: 3              # Retries for infrastructure/harness setup
-  maxInfraRetriesExpensive: 1     # Transient retries cap for expensive roles
+  maxAmendmentsPerIteration: 3    # Mid-iteration plan amendments (past the cap, amendments are skipped)
+  maxIterations: 6                # Max iterations per task (past the cap, iteration returns blocked)
+  maxInfraRetries: 3              # Transient harness retries for cheap roles (backoff; exhaustion escalates, never consumes fix rounds)
+  maxInfraRetriesExpensive: 1     # Transient retries cap for budget.expensiveRoles
   gateRetries: 1                  # Re-runs for flaky gate detection
   gateTimeoutSec: 900             # Per-gate command timeout (sec); real suites need minutes, not seconds
   storyMaxProdLines: 300          # Production lines changed cap for stories
@@ -339,31 +356,40 @@ limits:
   maxMilestones: 8                # Maximum milestones per plan
   maxItemsPerPlan: 50             # Maximum items per plan
   checkOutputBytes: 4000          # Tail byte cap for check command output
-  hydrationBytes: 40000           # Hydration context cap for architect sessions
+  hydrationBytes: 40000           # Hydration context cap (plans, close-ups, taken steering, decisions)
   contextPackBytes: 40000         # Byte cap for generated context-pack.md (defaults to hydrationBytes)
-  timeoutNudgeSec: 300            # Reduced timeout for session-resume timeout retries
-  # Disk-space guard: minimum free disk space required across worktreeRoot, repoRoot,
-  # and system temp filesystems. Preflight fails and engine steps/gates cleanly halt below this.
+  # stepTranscriptWarningBytes defaults to 5242880 (5 MiB) when absent; uncomment to pin:
+  # stepTranscriptWarningBytes: 5242880
+  timeoutNudgeSec: 300            # Timeout for the finalize-nudge retry on resumable timeouts (and interrupted resumes)
+  # steerPollSec defaults to 60 when absent; uncomment to pin:
+  # steerPollSec: 60
+  # Disk-space guard: minimum free disk space required across worktreeRoot,
+  # runtime tmp, repoRoot, and system temp filesystems. Preflight fails; engine
+  # ticks, steps, and gates raise low-disk-space and stop with exit 10 below this.
   minFreeDiskMb: 2048             # Minimum free disk space (MB) required on repo, worktree, and tmp filesystems
 
 # ==============================================================================
 # Budget (§5, §12.5)
 # ==============================================================================
 # Monetary limits (USD) enforced when harness reports token usage.
+# Exceed behavior: item -> consult, iteration -> wave loop break, task ->
+# human-stop question + exit 10, step (`perStepUsd`, checked against the
+# step's accumulated cost during transient retries) -> stable-id escalation.
 budget:
   perTaskUsd: 100
   perIterationUsd: 30
   perItemUsd: 8
   perStepUsd: 8
-  expensiveRoles:
+  expensiveRoles:                 # Roles capped by limits.maxInfraRetriesExpensive
     - architect
     - task-escalation
 # ==============================================================================
 # Model Diversity (§5, §12.4)
 # ==============================================================================
-# Enforces model independence between producer and reviewer.
-# "warn": log warning if developer and reviewer share primary model.
-# "error": fail preflight if developer and reviewer share primary model.
+# Enforces model independence between producer and reviewer pairs:
+# workhorse vs task-reviewer, architect vs alt-architect (primary models).
+# "warn": preflight warning on shared primary model.
+# "error": fail preflight on shared primary model.
 # "off": disable check.
 diversity: warn
 
@@ -377,13 +403,18 @@ harness: omp
 # Review Policy & Dispositions (§5, §8.7)
 # ==============================================================================
 # Configures allowed reviewer dispositions and feedback policies.
+# NOTE: the engine currently uses a hardcoded fallback set
+# ["fix", "optional", "architect", "human-awareness", "human-async"] plus an
+# optional per-agent `reviewPolicy.<agent>` override in item flows; the
+# `default:` key below is documentation until it is wired. Keep it as the
+# intended default.
 # Dispositions:
 #   - fix: sends item back to fixLoopTo
-#   - optional: non-blocking debt
-#   - architect: architect consult for resolution
-#   - human-awareness: architect decides; recorded for human review
+#   - optional: appended to feedback on the next fix round; durable debt comes from accept-with-debt
+#   - architect: consult path (direct disposition trigger not wired today)
+#   - human-awareness: informational tousertoreview item, no forced architect turn
 #   - human-async: item blocks awaiting operator response; other items continue
-#   - human-stop: halts pipeline and exits 10 (deliberately absent from default)
+#   - human-stop: blocks terminal success like fix (no immediate exit-10 path wired today)
 reviewPolicy:
   default:
     - fix
@@ -396,7 +427,8 @@ reviewPolicy:
 # Criteria (§5, §8.7)
 # ==============================================================================
 # Paths to criteria markdown files (resolved relative to plugin root, or to the
-# repo root when overridden in <repo>/.factory/pipeline.yaml).
+# repo root when the key is overridden in <repo>/.factory/pipeline.yaml).
+# Missing files are skipped silently (prompts render without that section).
 #
 # How each file is consumed by the engine:
 #   - triage: rendered into the triage step prompt (`triageCriteria` var) and
@@ -418,13 +450,16 @@ criteria:
 # ==============================================================================
 # Context Pack (§8.1, §12.5)
 # ==============================================================================
-# Ingest sub-step executed after infra and before the first architect turn:
-# a cheap workhorse agent (fact-finder role/agent) builds a condensed, citation-backed
-# context document (context-pack.md) covering module maps, signatures, excerpts,
-# conventions, and open questions, capped by limits.contextPackBytes.
+# Ingest sub-step executed after infra and before the first architect turn
+# (skipped for kind `simple`):
+# a cheap workhorse agent (fact-finder role/agent, FRESH session) builds a
+# condensed, citation-backed context document (context-pack.md) covering module
+# maps, signatures, excerpts, conventions, and open questions, capped by
+# limits.contextPackBytes (fallback: limits.hydrationBytes, then 40000).
 # Expensive architect turns work primarily from prepared context and triage citations
 # under an explicit exploration budget instead of broad codebase scans.
-# Refreshed across iterations only when task worktree code changes (stale).
+# Stale rule: iteration 1 stale iff not done; later iterations stale iff any
+# non-.factory file changed since the pack commit (step id `context-pack-{N}`).
 contextPack: true
 
 # ==============================================================================
@@ -434,15 +469,18 @@ contextPack: true
 #
 # `overrides` maps a fragment key to a replacement body:
 #   - fragment key: agent name ("developer"), step fragment ("steps/develop" or
-#     bare "develop"), shared include ("_shared/philosophy"), or system fragment.
-#   - value: either a plain string (new body, frontmatter tools/description kept
-#     from the file) or an object {body, tools, description} replacing all three.
+#     bare "develop"), shared include ("_shared/philosophy"), or system fragment
+#     (several spellings incl. ".md" variants are accepted).
+#   - value: either a plain string (new body) or an object {body, tools,
+#     description}. For agent defs, the object form replaces all three
+#     (tools/description default to empty); a plain string keeps the file's
+#     frontmatter tools/description.
 #   Example:
 #   overrides:
 #     steps/develop: "Custom develop prompt. Assignment: {{assignment}} ..."
 #     reviewer: { body: "Custom reviewer ... {{dispositionsCriteria}}", tools: [read, grep], description: "Custom" }
-#   Override bodies may use {{> include}} and {{placeholder}}; unknown
-#   placeholders fail preflight (checked against KNOWN_VARS).
+#   Override bodies may use {{> include}} and {{placeholder}}; missing vars and
+#   unknown placeholders fail preflight (checked against KNOWN_VARS).
 #
 # Shadowing order (first hit wins): in-memory `overrides` -> `extraSkillDirs`
 # in order -> built-in agents/ directory.

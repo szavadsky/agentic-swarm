@@ -7,18 +7,20 @@
 # Tasks live at `{orchestrationFolder}/{task}/INTENT.md`.
 orchestrationFolder: .factory/tasks
 
-# Folder where architectural decision records (ADRs) are written by architect.
+# Folder where the engine writes plan ADRs (`{adr.id}.md`, title + context).
 adrFolder: docs/adr
 
 # Root directory for task and item git worktrees.
-# MUST live outside the main repository working tree (sibling directory).
+# MUST live outside the main repository working tree (sibling directory);
+# the runtime dir (`{worktreeRoot}/.factory-runtime`) and on-disk TMPDIR live here too.
 # `factory init` replaces `repo` with the repository's directory name.
 worktreeRoot: ../repo.factory-wt
 
 # Script hints for the infra agent to derive automated gates and build steps.
-# These are HINTS only (free-form strings, any key); the infra agent probes and declares
-# the real commands in infra.yaml. Uncomment the block and adjust to match your
-# toolchain, or leave commented when the repo has no such step.
+# These are HINTS only (free-form strings, any key; never executed directly by
+# the engine); the infra agent probes and declares the real commands in infra.yaml.
+# Uncomment the block and adjust to match your toolchain, or leave commented
+# when the repo has no such step.
 # scripts:
 #   setup: "bun install"
 #   compile: "bun run build"
@@ -28,8 +30,9 @@ worktreeRoot: ../repo.factory-wt
 # File paths and globs used by mechanical checks.
 # Used by: tests-only, test-first-scope, red-test, test-diff, size,
 # simple-guard, poc-scope (prod/test classification), and target command building.
-# WARNING: wrong globs silently weaken every scope check — prod files not matched
-# by `prod` escape size/guard limits, and test files not matched by `tests` escape
+# Engine falls back to built-in defaults when a list is missing, but an explicit
+# wrong glob silently weakens every scope check — prod files not matched by
+# `prod` escape size/guard limits, and test files not matched by `tests` escape
 # tests-only/test-diff enforcement. Keep both lists in sync with the repo layout.
 paths:
   tests:
@@ -40,4 +43,6 @@ paths:
     - "src/**"
 
 # Optional directories containing additional agent skills or prompt assets.
+# Declared but not consumed by the engine today (prompt variants use
+# pipeline.prompts.extraSkillDirs instead).
 skillDirs: []

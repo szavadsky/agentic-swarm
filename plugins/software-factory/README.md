@@ -42,7 +42,7 @@ Migrate authentication middleware to use JWT verification with public key cachin
 ```
 
 ### Step 3: Run Preflight Checks
-Verify repository cleanliness, configuration validity, prompt templates, and harness readiness:
+Verify repository cleanliness, disk space, configuration validity, prompt templates, schemas, and harness readiness:
 ```bash
 bun run --cwd /path/to/plugins/software-factory factory preflight modernize-auth --repo .
 ```
@@ -52,13 +52,13 @@ Launch the autonomous orchestrator:
 ```bash
 bun run --cwd /path/to/plugins/software-factory factory run modernize-auth --repo .
 ```
-Exit codes:
+Exit codes (`factory run` runs preflight first and refuses to start on failure or a live lock holder):
 - `0`: Task completed successfully (`done`).
-- `10`: Execution paused pending operator answer to a `tousertoreview` question (`blocked`).
+- `10`: Execution paused pending operator answer to a `tousertoreview` question (`blocked`, incl. budget/disk stops and operator `stop`).
 - `1`: Failure or unrecoverable error.
 
 ### Step 5: Check Status & Steer
-Inspect the progress tree, waves, item statuses, and open operator questions:
+Inspect derived state: waves, item statuses, spend by role/item, running steps with elapsed time, open operator questions, and debt:
 ```bash
 bun run --cwd /path/to/plugins/software-factory factory status modernize-auth --repo .
 ```
@@ -67,6 +67,7 @@ To provide guidance, answers, or directives:
 ```bash
 bun run --cwd /path/to/plugins/software-factory factory steer modernize-auth --repo . "Prioritize Redis cache implementation"
 ```
+Steering is polled at every engine tick and during waves (between item steps plus every `limits.steerPollSec`, default 60s). `stop` finishes running steps, then exits 10.
 
 ---
 
@@ -75,17 +76,17 @@ bun run --cwd /path/to/plugins/software-factory factory steer modernize-auth --r
 Configuration layers in three tiers:
 1. **Base Pipeline**: `config/pipeline.default.yaml` defines default model roles, story kinds, agent roles, checks, and limits.
 2. **Project Pipeline Overrides**: `<repo>/.factory/pipeline.yaml` (optional project-wide overrides).
-3. **Task-Specific Overrides**: `<repo>/{orchestrationFolder}/{task}/pipeline.yaml` (task-specific overrides).
+3. **Task-Specific Overrides**: `<repo>/{orchestrationFolder}/{task}/pipeline.yaml` (task-specific overrides; read from the task worktree after the first run, so a cheap per-task `models.roles.architect` override is honored).
 
 Merging semantics:
-- Objects are deeply merged.
+- Objects are deeply merged, except `models.roles.<name>` defs which replace atomically per layer.
 - Arrays are replaced.
 - Explicit `null` values delete the corresponding key.
 
 Canonical schemas are located in `config/schemas/` (`pipeline.schema.json`, `project.schema.json`, `state.schema.json`, etc.).
 
 ### Runtime State & Child Process TMPDIR
-Runtime state is placed outside the main checkout in `{worktreeRoot}/.factory-runtime/`. Every child process spawned by the factory (`omp` turns, gates, checks, git) runs with `TMPDIR` (and `TMP`/`TEMP`) pointing to `{worktreeRoot}/.factory-runtime/tmp/` on disk to avoid exhausting memory-backed OS `/tmp` tmpfs. Entries from prior runs are purged at run start. Disk-space guards enforce minimum free disk space (`limits.minFreeDiskMb`, default 2048 MB) across repoRoot, worktreeRoot, and OS temp dir before preflight and before each step/gate run (stopping cleanly with exit code 10 on low disk space).
+Runtime state is placed outside the main checkout in `{worktreeRoot}/.factory-runtime/` (run locks, omp sessions/prompts/overlay). Every child process spawned by the factory (`omp` turns, gates, checks, git) runs with `TMPDIR` (and `TMP`/`TEMP`) pointing to `{worktreeRoot}/.factory-runtime/tmp/` on disk to avoid exhausting memory-backed OS `/tmp` tmpfs. The dir is created at run start, entries from prior runs are purged, and the previous env is restored at run end. Disk-space guards enforce minimum free disk space (`limits.minFreeDiskMb`, default 2048 MB) across worktreeRoot, runtime tmp, repoRoot, and OS temp dir in preflight, at engine ticks, and before each step/gate run (raising a `low-disk-space` question and stopping cleanly with exit code 10). Timeouts are suspend-aware (monotonic active timers): machine sleep never burns the budget.
 
 ---
 
@@ -94,9 +95,9 @@ Runtime state is placed outside the main checkout in `{worktreeRoot}/.factory-ru
 | Command | Usage | Description |
 |---|---|---|
 | `init` | `factory init [--repo <path>]` | Initializes `.factory/project.yaml` from template and commits to git. |
-| `preflight` | `factory preflight <task> [--repo <path>]` | Verifies repository cleanliness, configs, prompt templates, schemas, and harness binary. |
-| `run` | `factory run <task\|path/INTENT.md> [--repo <path>] [--max-iterations N]` | Drives the task derive-act-commit loop to completion. |
-| `status` | `factory status <task> [--repo <path>]` | Compact summary of task state, items, waves, budgets, and open review questions. |
+| `preflight` | `factory preflight <task> [--repo <path>]` | Verifies repository cleanliness, disk space, configs (effective pipeline from the task worktree when present), prompt templates, schemas, harness binary, and run lock. |
+| `run` | `factory run <task\|path/INTENT.md> [--repo <path>] [--max-iterations N]` | Preflights, then drives the task derive-act-commit loop to completion (always resumes). |
+| `status` | `factory status <task> [--repo <path>]` | Derived state: kind/iteration/wave, spend by role/item, running steps with elapsed, items, open questions, debt. |
 | `steer` | `factory steer <task> "<text>" [--repo <path>]` | Submits operator directives/answers to the root task mailbox. |
 
 ---
@@ -104,7 +105,7 @@ Runtime state is placed outside the main checkout in `{worktreeRoot}/.factory-ru
 ## 5. Documentation & Architecture
 
 - **Architecture Specification**: `docs/ARCHITECTURE.md` (§0–§14)
-- **Harness Adapter**: `docs/OMP_ADAPTER.md` (CLI templates, overlay keys, NDJSON parsing, error classification)
+- **Harness Adapter**: `docs/OMP_ADAPTER.md` (CLI templates, overlay keys, NDJSON parsing, error classification, prompt-cache safety)
 - **End-to-End Validation**: `docs/FIRE_TEST.md` (Live verification on sample targets)
 
 ---

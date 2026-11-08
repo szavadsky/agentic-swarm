@@ -6,10 +6,10 @@ This document specifies the integration between the Software-Factory v2 orchestr
 
 ## 1. Overview & Topology
 
-The software factory runs as an external TypeScript/Bun process (`src/core/engine.ts`). Each agent turn is executed as an independent `omp` subprocess via `Bun.spawn`:
+The software factory runs as an external TypeScript/Bun process (`src/core/engine.ts`). Each agent turn is executed as an independent `omp` subprocess via `Bun.spawn` (`src/harness/omp/harness.ts`):
 
 - **Stateless Subprocess Execution**: The orchestrator manages git worktrees, step records, and schema validation. OMP processes run headless in `--mode json`.
-- **Session Continuity**: Multi-turn roles (e.g. Architect, Triage) persist conversational context across independent process invocations using `--session-dir <dir>` and `--resume <sessionId>`.
+- **Session Continuity**: Multi-turn roles (e.g. Architect, Triage) persist conversational context across independent process invocations using `--session-dir <dir>` and `--resume <sessionId>`. The engine persists the id to `meta.yaml` at turn start via `onSession` (`src/core/flows/step-runner.ts:438-460`) and resumes it after restarts; `--session-dir` is always passed, `--resume` only when an id is known (`src/harness/omp/harness.ts:201-213`).
 - **Structured Output**: Delivered via the built-in `yield` tool or JSON extraction from model text, followed by Ajv schema enforcement.
 - **Fail-Fast & Repair**: Invalid outputs return `{ ok: false, data: rawOutput }`, feeding the engine's structural repair pipeline (`src/core/records/repair.ts`).
 
@@ -24,10 +24,11 @@ omp --cwd <worktreePath> \
     --mode json \
     --model @<roleName> \
     --session-dir <runtimeDir>/sessions \
-    --tools <tool1,tool2,...,yield> \
-    --system-prompt <runtimeDir>/system-prompts/<agent>-<ts>.md \
-    -p @<runtimeDir>/prompts/prompt-<ts>.txt
+    --tools=<tool1,tool2,...,yield> \
+    --system-prompt <runtimeDir>/system-prompts/<agent>-<ts>-<rand>.md \
+    -p @<runtimeDir>/prompts/prompt-<ts>-<rand>.txt
 ```
+(`yield` is appended when a schema is present; prompt files are unlinked after exit. `src/harness/omp/harness.ts:175-223`.)
 
 ### 2.2 Resumed Turn (Architect / Continuous Context)
 ```bash
@@ -37,29 +38,31 @@ omp --cwd <worktreePath> \
     --model @<roleName> \
     --session-dir <runtimeDir>/sessions \
     --resume <sessionId> \
-    --tools <tool1,tool2,...,yield> \
-    --system-prompt <runtimeDir>/system-prompts/<agent>-<ts>.md \
-    -p @<runtimeDir>/prompts/prompt-<ts>.txt
+    --tools=<tool1,tool2,...,yield> \
+    --system-prompt <runtimeDir>/system-prompts/<agent>-<ts>-<rand>.md \
+    -p @<runtimeDir>/prompts/prompt-<ts>-<rand>.txt
 ```
+(OMP loads history from disk; the factory sends only the new turn prompt — or a short nudge on timeout/interrupted resume. No history reconstruction. `src/harness/omp/harness.ts:201-213`, `src/core/flows/step-runner.ts:372-373,759-766`.)
 
 ### 2.3 Stateless Small JSON Completion / Repair (`complete()`)
 ```bash
-omp -p @<runtimeDir>/prompts/complete-<ts>.txt \
+omp -p @<runtimeDir>/prompts/complete-<ts>-<rand>.txt \
     --no-session \
     --tools= \
     --config <runtimeDir>/omp-overlay.yaml \
     --mode json \
     --model @<roleName>
 ```
+(Single combined system+prompt+schema file; no `--session-dir`/`--resume`. `src/harness/omp/harness.ts:471-490`.)
 
 ---
 
 ## 3. Configuration Overlay (`omp-overlay.yaml`)
 
-Generated dynamically on each run under `<runtimeDir>/omp-overlay.yaml` from the effective (root + task layered) `PipelineConfig.models.roles`.
+Regenerated on every turn under `<runtimeDir>/omp-overlay.yaml` from the effective (root + task layered) `PipelineConfig.models.roles` (`src/harness/omp/harness.ts:125-136`, `src/harness/omp/overlay.ts:26-100`). Generation is deterministic for a given pipeline (no timestamps/randomness); roles that fail resolution are left unmapped for preflight to catch.
 `<runtimeDir>` is placed strictly outside the main repository checkout (resolving to `{worktreeRoot}/.factory-runtime/` via `resolveRuntimeDir` and `project.yaml`).
 
-Every child process spawned by the factory (omp turns, gates, checks, git) runs with `TMPDIR` (and `TMP`/`TEMP`) set to `{worktreeRoot}/.factory-runtime/tmp/` on disk (created at run start; entries older than the current run are purged at start). This prevents test runners (e.g. pytest) and git from filling OS tmpfs mounts.
+Every child process spawned by the factory (omp turns, gates, checks, git) runs with `TMPDIR` (and `TMP`/`TEMP`) set to `{worktreeRoot}/.factory-runtime/tmp/` on disk — created at run start (`initFactoryRuntimeTmp`), prior-run entries purged at start, restored on run end (`src/core/runtime-tmp.ts`). Git inherits it via `runProcess`; omp sets it explicitly per spawn. This prevents test runners (e.g. pytest) and git from filling OS tmpfs mounts.
 ```yaml
 modelRoles:
   workhorse: opencode-go/deepseek-v4.1-flash:max
@@ -113,43 +116,55 @@ Stdout emits streaming NDJSON objects (`--mode json`):
 
 1. **Session Initialization (`session`)**:
    `{"type":"session","id":"01a1b3dc-...","timestamp":"2026-11-07T...","cwd":"..."}`
-   Captured immediately for transcript tracking (`traceRef`).
+   Captured immediately for transcript tracking (`traceRef`); also streamed to the engine via `onSession` so the id is committed to `meta.yaml` before the turn finishes.
 2. **Turn Completion (`turn_end`)**:
-   Contains `message.content`, `message.usage` (`input`, `output`, `cacheRead`, `cost.total`), and `stopReason`.
+   Assistant-role messages only: accumulates `content` text parts, `toolCall` yield parts, `message.usage` (`input`, `output`, `cost.total`; streamed via `onUsage`), and `stopReason`. Non-assistant turns are ignored.
 3. **Structured Yield**:
-   When `--tools` includes `yield`, model invocations emit `toolCall` events with name `yield` and `arguments.data`. Captured as primary candidate data.
+   When `--tools` includes `yield`, model invocations emit `turn_end.toolCall`, `agent_end` toolCall, `tool_execution_start` (`args.data`), or `tool_execution_end` (`result.details.data`) events with name `yield` (or `*:yield`). Captured as primary candidate data (later events overwrite earlier ones).
 4. **Text JSON Extraction**:
-   If no tool call occurred, extracts JSON (or fenced ` ```json ` blocks) from the **last assistant turn's text** (overwriting intermediate turns rather than concatenating transcript text; assistant text bounded to 256 KiB).
+   If no tool call occurred, extracts JSON (direct parse → fenced block → outermost `{...}`/`[...]`) from the **last assistant turn's text** (overwriting intermediate turns rather than concatenating transcript text; per-turn text head/tail-truncated to 256 KiB). Candidate stays raw text when extraction fails.
 5. **Memory-Bounded Streaming**:
-   `OmpNdjsonParser` stream-parses lines without buffering raw event trees (`rawEvents` is never accumulated in memory). Multi-megabyte tool execution traces (e.g. bash loop ASTs) that do not contain `yield` are fast-skipped before parsing. Stderr is captured via `HeadTailBuffer` capped at 64 KiB preserving head and tail diagnostics.
+   `OmpNdjsonParser` stream-parses lines without buffering raw event trees (`rawEvents` is never accumulated in memory). Lines over 64 KiB mentioning tool execution/result without `yield` are fast-skipped before parsing. Stderr is captured via `HeadTailBuffer` capped at 64 KiB preserving head and tail diagnostics. Non-JSON lines (e.g. `Wall time: ...`) are skipped; errors capped at 50 × 2 KiB.
 6. **StopReason Honor**:
-   Turns ending with `stopReason: "abort"` or `stopReason: "error"` are classified as failures even if the process exit code is 0.
+   Turns ending with `stopReason: "abort"` or `"error"` are classified as failures even if the process exit code is 0, as is any other non-`stop`/`toolUse` stop reason on exit 0 without yield data.
 7. **Schema Enforcement**:
-   Validates candidate data against `AgentRun.outputSchema`. On schema violation, returns `{ ok: false, error: ajvError, data: rawOutput, transient: false }`, allowing the engine's `validateAndRepair` pipeline to repair structure.
+   Validates candidate data against `AgentRun.outputSchema`. On schema violation, returns `{ ok: false, error: ajvError, data: rawOutput, transient: false }`, allowing the engine's `validateAndRepair` pipeline to repair structure. `complete()` instead throws on schema mismatch.
 ## 5. Failure Classification Matrix
 
 | Category | Indicators | Engine Action |
 |---|---|---|
-| **Transient Error** (`transient: true`) | Process timeout; killed by `SIGTERM` (143) / `SIGKILL` (137); HTTP 429, 500, 502, 503, 504; socket hangup; `ECONNRESET`; `ETIMEDOUT`; `overloaded`; `quota exceeded`. | Retried via `maxInfraRetries` with backoff; does not consume item fix rounds. |
-| **Session Lost** (`sessionLost: true`) | `resumeRequested === true` and session transcript not found or OMP prints `Session "..." not found`. | Triggers engine rehydration from artifacts (`src/core/sessions.ts`). |
-| **Agent / Model Failure** (`transient: false`) | Exit code 1; invalid arguments; model refusal; stopReason `abort`. | Advances step fix rounds or triggers consult. |
+| **Transient Error** (`transient: true`) | Process timeout (`timedOut`, 143); killed by `SIGKILL` (137); rate-limit/quota/overloaded, HTTP 429/500/502/503/504, `ECONNRESET`/`ETIMEDOUT`/`ENOTFOUND`, socket hangup, connection reset, fetch failed, network error, temporary failure, service unavailable, bad gateway, gateway timeout, internal server error, context deadline exceeded (`src/harness/omp/classify.ts`). Suspend detected during the turn also forces transient. | Retried via `maxInfraRetries` / `maxInfraRetriesExpensive` with backoff; timeout on a resumable session first retries with the finalize nudge under `limits.timeoutNudgeSec`; exhaustion escalates to a stable-id question; does not consume item fix rounds. |
+| **Session Lost** (`sessionLost: true`) | `resumeRequested === true` and transcript missing: `Session "…" not found`, no/unknown session, failed to load session, cannot resume, session file not found. | Fresh session (`resume: undefined`) with the full prompt; journaled `session_lost_rehydrated`. Only `sessionLost` triggers the fresh-session fallback. |
+| **Agent / Model Failure** (`transient: false`) | Exit code 1; invalid arguments; model refusal; stopReason `abort`/`error` (or other unexpected stop on exit 0 without yield). | Step ends `rejected` (consult via bounds/no-progress); transient-timeout path does not apply. |
 
 ---
 
 ## 6. Process Lifecycle, Timeouts & Run Lock
 
-### 6.1 Process Isolation, Process Groups & Timeouts
 - **Process Group Isolation**: All `omp` invocations are spawned with `detached: true` creating independent process groups (`PGID = proc.pid`).
-- **Group Termination on Timeout**: Per-step timeout (`AgentRun.timeoutSec` or `defaultTimeoutMs`) fires `SIGTERM` to the child's process group (`-proc.pid`), followed by `SIGKILL` after a grace period. This terminates all grandchildren (e.g. bash loops, sleep commands) and never touches the orchestrator's process group.
-- **Factory Process Signals (SIGINT/SIGTERM)**: The orchestrator installs process signal handlers that terminate all active child process groups and mark running steps with `status: "interrupted"` cleanly in `meta.yaml` and `journal.ndjson`.
+- **Group Termination on Timeout**: Per-step timeout (`AgentRun.timeoutSec` or harness `defaultTimeoutMs`, 300s) fires `SIGTERM` to the child's process group (`-proc.pid`), followed by `SIGKILL` after 3s. This terminates all grandchildren (e.g. bash loops, sleep commands) and never touches the orchestrator's process group.
+- **Suspend-aware active timers**: timeouts measure monotonic active time (`src/core/clock.ts`), so machine sleep never burns the budget; a suspend spanning a turn journals `system_suspend_detected` and forces transient classification. Same mechanism guards gates, checks, and `complete()`.
+- **Factory Process Signals (SIGINT/SIGTERM)**: The orchestrator installs process signal handlers that terminate all active child process groups (500ms grace) and mark running steps with `status: "interrupted"` cleanly in `meta.yaml` and `journal.ndjson`, preserving session id and usage; exits 130 (SIGINT) / 143 (SIGTERM).
 - **Transcript / Stdout Size Guard**: An engine-side guard tracks per-step stdout and transcript size; if size exceeds `limits.stepTranscriptWarningBytes` (default 5 MiB), a `step_transcript_size_warning` audit event is recorded to `journal.ndjson`.
-- **`complete()` Timeout**: Spawns `omp -p` detached with an active timer; on timeout, fires `SIGTERM` followed by `SIGKILL` to its process group and rejects with an explicit timeout error.
+- **`complete()` Timeout**: Spawns `omp -p` detached with an active timer; on timeout, fires `SIGTERM` followed by `SIGKILL` to its process group and throws an explicit timeout error. Non-zero exit, abort/error stop, or schema mismatch also throw.
 ### 6.2 Atomic Run Lock (`acquireRunLock`)
-- Lock files live at `<runtimeDir>/locks/<task>.lock` outside git tracking.
+- Lock files live at `{worktreeRoot}/.factory-runtime/locks/<task>.lock` outside git tracking.
 - Acquired atomically using `fs.openSync(lockPath, "wx")`.
 - On `EEXIST`:
   - If the lock was created by another host (`host !== os.hostname()`), acquisition is safely refused (`null`).
   - If the PID is alive on the current host, acquisition is refused (`null`).
-  - If the PID is dead on the current host, the lock is taken over atomically via a temporary file write and `fs.renameSync(tmpPath, lockPath)`.
+  - If the PID is dead on the current host (or the file is corrupt), the lock is taken over via an exclusive `.takeover` marker plus atomic rename.
   - Takeovers emit a console warning notice and append a `lock_takeover` audit event to `{taskDir}/journal.ndjson`.
   - `release()` removes the lock file only if the lock still belongs to the active process PID and host.
+
+---
+
+## 7. Prompt-cache safety
+
+Resumed turns are true additive appends: `--resume` + `--session-dir`, new turn (or short nudge) only, no history reconstruction, no transcript rewriting. System-prompt file content is byte-stable per agent (`extractAgentBody`); only transport filenames embed timestamps. Overlay generation is deterministic per pipeline. Stateless `complete()` uses `--no-session`.
+- Resumed turns: `src/harness/omp/harness.ts:208-213`, `src/core/flows/step-runner.ts:372-373,759-766` — safe.
+- System-prompt stability: `src/harness/omp/harness.ts:178-185`, `src/core/prompts.ts:218-313`, `src/core/prompt-vars.ts:12-40` — safe (unknown only if omp keyed cache by path rather than content).
+- No transcript rewriting: `src/harness/omp/harness.ts:100-170,354-355` — safe.
+- `complete()`: `src/harness/omp/harness.ts:471-490` — safe (no cache expectation).
+- Overlay: `src/harness/omp/overlay.ts:26-100`, `src/harness/omp/harness.ts:125-136` — safe.
+- Cross-process resume / sessionLost fallback (`src/core/sessions.ts:113-138`, `src/core/flows/step-runner.ts:654-690,832-854`) starts a cold session — expected break, keep as is.
