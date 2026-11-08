@@ -1,0 +1,32 @@
+id: decision-hydration-fingerprint-caps-1794176143790
+context: item
+item: hydration-fingerprint-caps
+afterRecord: 006-qa-r2-a1
+decision: retry-with-guidance
+timestamp: 2026-11-08T22:15:43.790Z
+rationale: "Both remaining FIX items are test-strengthening gaps, not prod
+  defects: cap tests render 185-249 bytes (never truncate, so any cap value
+  passes) and the legacy detail-preservation gate at concerns.ts:119 has no
+  regression coverage. Prod implementation is accepted; one test-only round
+  closes both with falsifiable assertions."
+text: "Test-only round for hydration-fingerprint-caps (no prod changes
+  expected): 1) Cap discrimination tests: build fixtures whose UNCAPPED terse
+  serialization exceeds each cap (many concerns or long summaries). Review
+  (diffBytes 5000) and wave-close-up (taskDiffBytes 5000): assert rendered <=
+  2000 AND > 500 bytes (proves 2000 applied, not 500) and assert condensation
+  actually occurred (compare against uncapped render: fewer id lines or
+  truncated-summary marker). Plan-review: use inputBytes < 500 (e.g. 294) with
+  payload > input; assert rendered <= inputBytes and < input bytes (proves
+  min(input,500)). Add a runAgentStep-level plan-review case WITHOUT caller
+  concernsYaml override and with large prompt inputs incl.
+  debt/steering/concernsYaml/humanInvolvementCriteria values, asserting
+  hydration excludes those four keys from the inputBytes sum (direct
+  hydrateStepConcerns calls do not cover step-runner summation). 2) Legacy gate
+  regression test: seed a legacy old-hash file (affects-bearing id) with stored
+  detail LONGER than summary; re-emit the same concern omitting detail; assert
+  stored detail survives, affects union equals [new,old], new stable id file
+  exists, legacy file removed. Sanity-check the test fails when the gate is
+  reverted to merged.detail = (input.detail ?? input.summary).trim(). Verify:
+  bun run typecheck + TMPDIR=/tmp bun test on the item's test file(s), then full
+  suite green."
+persist: true
