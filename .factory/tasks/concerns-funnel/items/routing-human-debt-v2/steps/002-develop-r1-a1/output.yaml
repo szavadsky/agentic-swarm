@@ -1,0 +1,51 @@
+status: ok
+summary: Implemented human mailbox disposition routing and debt collection.
+  Added a shared questionBlocks predicate so human-awareness never blocks, while
+  human-async blocks [item] and human-stop blocks [item, task]. Review
+  suggestions now write mailbox entries for all three human dispositions
+  (human-stop writes blocks [item, task]; awareness writes digest-only with no
+  blocks), item ticks halt on human-async/human-stop, task derivation treats
+  human-async items as parked rather than task-blocking, and iteration halts
+  only when every item is blocked or a human-stop is raised. Task debt now uses
+  the canonical isDebtConcern predicate (routed/resolved tech-debt or routed
+  optional) and prefixes entries with [item].
+target:
+  selectors:
+    - test/engine/routing-human-debt.test.ts
+  expectRed:
+    - test/engine/routing-human-debt.test.ts::Human mailbox and debt routing
+      (§8.7, §18).derives item blocking and task continuation per human
+      disposition
+    - test/engine/routing-human-debt.test.ts::Human mailbox and debt routing
+      (§8.7, §18).halts with exit 10 and writes a task/item human-stop mailbox
+      entry
+    - test/engine/routing-human-debt.test.ts::Human mailbox and debt routing
+      (§8.7, §18).writes a digest-only human-awareness entry and continues to
+      completion
+    - test/engine/routing-human-debt.test.ts::Human mailbox and debt routing
+      (§8.7, §18).keeps running other items while one item waits on human-async
+    - test/engine/routing-human-debt.test.ts::Human mailbox and debt routing
+      (§8.7, §18).collects debt with [item] prefixes for routed/resolved
+      tech-debt and routed optional concerns
+evidence:
+  - cd plugins/software-factory && bun test
+    test/engine/routing-human-debt.test.ts -> 5 pass, 0 fail, 28 expect() calls
+    (all five target cases green)
+  - cd plugins/software-factory && bun run typecheck -> tsc --noEmit exited 0
+    with no diagnostics
+  - cd plugins/software-factory && bun test -> 355 pass, 2 skip, 0 fail across
+    59 files (1664 expect calls)
+  - cd plugins/software-factory && bun test
+    test/engine/human-async-steering.test.ts test/engine/reviewer-triage.test.ts
+    test/engine/blocked-closeup-iteration.test.ts -> 13 pass, 0 fail (existing
+    routing/blocking behavior preserved)
+  - git status shows only the five intended production files modified; no test
+    files or fixtures changed
+concerns:
+  - An iteration whose items are all human-async blocked still halts with exit
+    10 to preserve existing single-item human-async behavior; human-async only
+    lets the task continue when other items make progress.
+notes: Mailbox ids are deterministic (q-<item>-<suggestion-id>), so re-running
+  the same review does not duplicate or clobber an answered question. Concern-id
+  human-async suggestions remain triaged via q-concern-*; human-stop and
+  human-awareness suggestions always reach the item mailbox.

@@ -17,6 +17,8 @@ import { deriveItemState, type DerivedItemState } from "./item.js";
 import { deriveWaveState, type DerivedWaveState } from "./wave.js";
 import { BudgetTracker } from "../budget.js";
 import { listConcerns } from "../concerns.js";
+import { isDebtConcern } from "../triage.js";
+import { questionBlocks } from "../steer.js";
 import { git } from "../git/exec.js";
 import { isAncestor } from "../git/commit.js";
 
@@ -191,11 +193,11 @@ export async function deriveTaskState(opts: {
       }
     }
   }
-  // From concerns: routed tech-debt, or any routed concern dispositioned optional
+  // From concerns: debt predicate (routed/resolved tech-debt, routed optional)
   for (const concern of await listConcerns(taskDir)) {
-    if (concern.status === "routed" && (concern.kind === "tech-debt" || concern.disposition === "optional")) {
-      debtSet.add(concern.summary);
-    }
+    if (!isDebtConcern(concern)) continue;
+    const item = concern.source?.item ?? concern.affects?.[0];
+    debtSet.add(item ? `[${item}] ${concern.summary}` : concern.summary);
   }
   // From review suggestions with disposition optional
   for (const it of items) {
@@ -219,8 +221,8 @@ export async function deriveTaskState(opts: {
   // 9. Overall task status determination (§6.3 Invariant 4)
   let status: "active" | "blocked" | "done" | "failed" = "active";
 
-  const hasTaskLevelOpenQuestion = openSteerQuestions.some(
-    (q) => q.status === "open" && (q.ref === "plan" || q.ref === task || q.blocks?.includes("task"))
+  const hasTaskLevelOpenQuestion = openSteerQuestions.some((q) =>
+    questionBlocks(q, "task")
   );
 
   if (hasTaskLevelOpenQuestion) {
@@ -230,7 +232,7 @@ export async function deriveTaskState(opts: {
   } else if (lastCloseup?.status === "blocked") {
     // Finding 6: An answered blocked close-up starts iteration N+1
     const closeupQuestion = openSteerQuestions.find(
-      (q) => q.ref === "plan" || q.id === `closeup-${iteration}`
+      (q) => questionBlocks(q, "task") || q.id === `closeup-${iteration}`
     );
     if (closeupQuestion && closeupQuestion.status === "open") {
       status = "blocked";
@@ -239,7 +241,11 @@ export async function deriveTaskState(opts: {
       status = "active";
     }
   } else if (items.length > 0 && items.every((it) => it.status === "blocked")) {
-    status = "blocked";
+    // human-async parks an item, not the task; only mixed/other blocks halt it.
+    const blockedByNonAsync = items.some(
+      (it) => it.status === "blocked" && it.openSteerQuestion?.disposition !== "human-async"
+    );
+    if (blockedByNonAsync) status = "blocked";
   } else if (items.length > 0 && items.some((it) => it.status === "failed")) {
     status = "failed";
   } else if (triage?.kind === "simple") {
