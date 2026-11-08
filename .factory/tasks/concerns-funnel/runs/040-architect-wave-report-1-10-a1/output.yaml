@@ -1,0 +1,20 @@
+context: wave
+decision: continue
+rationale: "Wave 10 complete: routing-architect-consult-v3 merged (42b7fac),
+  tree clean, typecheck pass, test fail->pass improved, no
+  failures/blocked/debt. Docs dependency mismatch is real (docs-finish-v2 still
+  refs superseded funnel-closeups-v2/saga-propagate-v2 which can never merge, so
+  wave.ts:84 keeps docs pending forever) BUT amendments are exhausted (3/3 used)
+  — no amend path remains this iteration. Also same-wave deps (funnel/saga/docs
+  all wave 11) cannot satisfy merged-deps within the wave anyway. Correct path
+  is end-iteration via plan close-up now that M3 routing + hydration are
+  complete, and re-plan docs + funnel/saga tail in iteration 2 — but this turn
+  offers no replan carrier. Continue lets wave 11 run funnel/saga-v3 (runnable),
+  then close-up handles docs carryover."
+text: "Proceed to wave 11: funnel-closeups-v3 + saga-propagate-v3 (both
+  runnable, consult-v3 merged). docs-finish-v2 will stall this iteration (deps
+  point at superseded -v2 slugs + same-wave dep violation + amendments 3/3
+  exhausted); do NOT force it. Plan close-up must carry docs + any unfinished
+  funnel/saga tail into iteration 2 with corrected deps (docs ->
+  funnel-closeups-v3, saga-propagate-v3). Wave-11 outcome decides whether
+  iteration closes on M1-M3+M4-partial or needs the tail finished first."
