@@ -9,9 +9,11 @@ debt:
     because step-runner splits on /.factory. Baseline red; green with
     TMPDIR=/tmp. Out of scope.
   - reviewAllowed resolved in two places with non-canonical allowedDispositions
-    key, so per-agent dismiss could fail schema validation.
-  - ADR writer persists only title plus context and PlanAdr lacks blocking.
-  - human-awareness and human-stop ignored and debt derivation ignores routed
-    concerns; status lists digest as blocking.
-budgetSpentUsd: 0.276554
-lastUpdated: 2026-11-08T00:44:20.155Z
+    key and wrong fallback order, so per-agent dismiss could fail schema
+    validation.
+  - ADR writer persists only title plus context and PlanAdr lacks blocking;
+    human-stop contract drifted from exit-10.
+  - human-awareness and human-stop ignored, debt derivation ignores routed
+    concerns, status lists digest as blocking.
+budgetSpentUsd: 0.292805
+lastUpdated: 2026-11-08T00:53:51.132Z
