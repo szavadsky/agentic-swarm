@@ -1,0 +1,10 @@
+context: wave
+decision: continue
+rationale: Wave 1 fully merged (hydration-fingerprint-caps, contracts-drift-fix,
+  prompt-fragments), tree clean, typecheck pass, test gate improved from
+  baseline fail to pass. No failed/blocked items; wave-2 deps satisfied. No plan
+  change warranted.
+text: "Proceed to wave 2 (human-router-severity, epic-saga-propagate). Note for
+  docs-finish-v3: wave close-up observed the 2 pre-existing head-guard TMPDIR
+  failures no longer reproduce — verify during final gates whether the TMPDIR
+  operator-action note still holds and update commentary accordingly."

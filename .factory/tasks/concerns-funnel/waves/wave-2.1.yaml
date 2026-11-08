@@ -1,0 +1,11 @@
+wave: 1
+iteration: 2
+status: complete
+mergedItems:
+  - hydration-fingerprint-caps
+  - contracts-drift-fix
+  - prompt-fragments
+failedItems: []
+blockedItems: []
+summary: "Wave 1 completed. Merged items: hydration-fingerprint-caps,
+  contracts-drift-fix, prompt-fragments"
