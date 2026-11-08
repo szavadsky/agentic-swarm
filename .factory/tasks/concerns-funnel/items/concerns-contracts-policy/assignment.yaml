@@ -1,0 +1,26 @@
+slug: concerns-contracts-policy
+kind: dev
+title: Canonical review-policy resolver
+assignment: "Resolver only (split 3/3, decision 001; deps: types). New
+  src/core/review-policy.ts resolveReviewAllowed(pipeline,agent,isTriager):
+  precedence per-agent array > default > builtin
+  [fix,optional,architect,human-awareness,human-async]; legacy
+  reviewPolicy.allowedDispositions read-alias for default; append dismiss iff
+  isTriager. Wire single resolver into item-machine review promptVars,
+  step-runner schema path, iteration plan-review prompt+schema, and
+  generateReviewSchema (dismiss enum only for triagers; QA never). Verify:
+  typecheck + FakeHarness review-step behavior (reviewer accepts dismiss
+  id-match; QA rejects dismiss). Prod budget <=100 lines. Run TMPDIR=/tmp bun
+  test + typecheck."
+outlineRef: concerns-contracts-policy
+milestone: m1-contracts-aggregate
+wave: 3
+deps:
+  - concerns-contracts-types
+scenarioRefs:
+  - m1-contracts-aggregate:s7
+citations:
+  - docs/factory.v2.md:89-103
+  - plugins/software-factory/src/core/records/review-schema.ts:5-52
+  - plugins/software-factory/src/core/flows/item-machine.ts:628-647
+  - plugins/software-factory/src/core/flows/iteration.ts:439-485

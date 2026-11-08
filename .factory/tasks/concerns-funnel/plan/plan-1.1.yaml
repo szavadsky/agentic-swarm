@@ -237,16 +237,20 @@ itemOutlines:
     slug: concerns-contracts
     title: Concern contracts and canonical review policy
   - deps:
-      - concerns-contracts
-      - spike-saga-commit
-    description: "Implement src/core/concerns.ts (fingerprint identity, merge with
-      escalated flag, aggregate/list/triage/closeup/partition, atomic YAML plus
-      runExclusive plus immediate taskWt commit, restart idempotent). Wire all
-      producer seams including consult writeArtifact; reviewer ordering
-      aggregates new then triages pre-existing only. Behavior tests:
-      open+source, retry dedup, reword merge preserving status plus escalation
-      surfacing, rm-* aggregate, precedence/injection. Run TMPDIR=/tmp bun test
-      test/engine/concerns-funnel.test.ts."
+      - concerns-contracts-policy
+      - concerns-contracts-schemas
+      - concerns-contracts-types
+    description: Implement src/core/concerns.ts (fingerprint identity,
+      merge+escalated, aggregate/list/triage/closeup/partition, atomic YAML +
+      KeyedMutex(taskDir) for RMW only + immediate taskWt commitAll, restart
+      idempotent). NEVER wrap commitAll in repo.writeLock.runExclusive
+      (deadlock). Explicit taskWt path, one file per fingerprint, concerns/**
+      startup recovery + reconcileConcerns from committed records (derive
+      read-only), ingest errors must not change step status. Wire all producer
+      seams incl consult writeArtifact; reviewer aggregates new then triages
+      pre-existing only. Spike-saga-commit findings authoritative (no re-run).
+      Behavior tests in test/engine/concerns-funnel.test.ts. Run TMPDIR=/tmp bun
+      test.
     kind: story
     milestoneId: m1-contracts-aggregate
     slug: concerns-store
@@ -276,27 +280,30 @@ itemOutlines:
     slug: plan-reviewer-triage
     title: Plan-reviewer triage
   - deps:
-      - concerns-contracts
-    description: "humanInvolvement plus concerns thresholds schema/loader/merge,
+      - concerns-contracts-policy
+      - concerns-contracts-schemas
+      - concerns-contracts-types
+    description: "humanInvolvement + concerns thresholds schema/loader/merge,
       commented autonomous/principal/detailed presets with blocking table,
       agents/criteria/human-involvement.md terse fragment, KNOWN_VARS
-      concernsYaml plus humanInvolvementCriteria with descriptions wired per
-      fragment matrix. Behavior tests: mode switch changes criteria and
-      blocking-ADR behavior; preflight green. Precedes all routing."
+      concernsYaml + humanInvolvementCriteria wired per fragment matrix.
+      Behavior: mode switch changes criteria and blocking-ADR behavior;
+      preflight green. Precedes all routing."
     kind: story
     milestoneId: m2-triage-modes
     slug: modes-prompts
     title: Modes, thresholds, prompt wiring
   - deps:
+      - modes-prompts
       - plan-reviewer-triage
       - reviewer-triage
-      - modes-prompts
-      - spike-saga-commit
-    description: "Pure derive only: derive/task collectRoutedBlockers plus
-      deriveWave/deriveItem integration, scheduler.blockedByConcern reusing
-      fixpoint, union with failure-blocked, cascade only declared deps, no
-      writes. Behavior tests: dependent blocked, non-dep unaffected, transitive
-      via deps only."
+    description: "Pure derive only: derive/task.ts
+      collectRoutedBlockers(taskDir)->Set + deriveWave/deriveItem integration
+      (thread blockedBy into deriveItemState or post-process before every
+      deriveWaveState call), scheduler.blockedByConcern reusing fixpoint, union
+      with failure-blocked, cascade only declared deps, no writes. Spike
+      findings authoritative. Behavior: dependent blocked, non-dep unaffected,
+      transitive via deps only."
     escalate: true
     kind: story
     milestoneId: m3-routing
@@ -343,11 +350,13 @@ itemOutlines:
       - routing-architect-consult
       - spike-text-budget
     description: "Hydrate wave/plan-close-up and architect reports with concernsYaml
-      capped per spike (UTF-8 bytes), concernResolutions pending plus architect
+      capped per spike (code min(diff,2000), zero-diff min(input,500) UTF-8
+      bytes, output<input), concernResolutions pending + architect
       concernConfirms accept/reject, propagate to parent/digest, simple-item
-      explicit plus auto-route fallback (tech-debt to optional, others to
-      architect, human never auto). Behavior tests: concrete byte budgets,
-      pending/confirm, simple fallback."
+      explicit + auto-route fallback (tech-debt->optional, others->architect,
+      human-* never auto). Apply spike nits: cross-check diffs via production
+      git() wrapper, add many-concerns 2000B truncation case, clarify trim
+      semantics. Behavior: byte budgets, pending/confirm, simple fallback."
     kind: story
     milestoneId: m4-funnel-surface
     replanAfter: true
@@ -355,11 +364,13 @@ itemOutlines:
     title: Funnel close-ups and simple triage
   - deps:
       - routing-architect-consult
-      - spike-saga-commit
-    description: "runChildTask propagateEpicConcerns per spike: after child
-      completion before cleanup/merge, condensed parent copies source.epic with
-      parent detail smaller than child, extended parent concernsYaml hydration.
-      Behavior tests: one copy, dismissed stays local, saga input contains id."
+    description: "runChildTask propagateEpicConcerns: after child completion before
+      cleanup/merge (engine.ts:246-274) for every child status, condensed parent
+      copies source.epic with parent detail < child, extended parent
+      concernsYaml hydration (append LAST, recompute before wave-report);
+      forward child human questions to root mailbox. Spike findings
+      authoritative. Behavior: one copy, dismissed stays local, saga input
+      contains id."
     escalate: true
     kind: story
     milestoneId: m4-funnel-surface
@@ -391,6 +402,49 @@ itemOutlines:
     milestoneId: m5-docs
     slug: docs-finish
     title: Docs and suite consolidation
+  - deps: []
+    description: "Types only. In src/core/artifacts.ts add
+      Concern/ConcernKind/ConcernSeverity/ConcernStatus, RemarkableDecision,
+      StoredConcernArtifact (+pendingResolution?, source.escalated?),
+      ReviewDisposition+dismiss (no tech-debt value), PlanAdr.blocking,
+      PipelineConfig.humanInvolvement+concerns{raiseAllowlist,minDigestSeverity\
+      ,minBlockingSeverity}, reviewPolicy.default canonical + legacy
+      allowedDispositions alias in type. No JSON, no runtime, no repair
+      (deferred to concerns-store). Verify: bun run typecheck. Prod budget <=80
+      lines."
+    kind: story
+    milestoneId: m1-contracts-aggregate
+    slug: concerns-contracts-types
+    title: Concern artifact types
+  - deps:
+      - concerns-contracts-types
+    description: "Schemas only. Inline (no cross-file $ref) shared
+      concern/remarkable definitions into developer-output, fact-finder-output,
+      qa, poc, test-assumptions, review newConcerns, plan, decisions,
+      wave/plan-closeup (+concernResolutions), architect wave-report/closeup;
+      triage/infra/pm-edit untouched. severity/detail optional (runtime defaults
+      in store); kind strict enum so unknown kind fails validation with no
+      write. Dismiss detail-required at runtime, not JSON schema. Verify:
+      typecheck + prompts.test preflight + one FakeHarness case in
+      test/engine/concerns-funnel.test.ts. Budget <=200 lines JSON."
+    kind: story
+    milestoneId: m1-contracts-aggregate
+    slug: concerns-contracts-schemas
+    title: Concern producer schemas
+  - deps:
+      - concerns-contracts-types
+    description: "Resolver only. New src/core/review-policy.ts
+      resolveReviewAllowed(pipeline,agent,isTriager): per-agent > default >
+      builtin [fix,optional,architect,human-awareness,human-async]; legacy
+      allowedDispositions read-alias for default; append dismiss iff isTriager.
+      Wire into item-machine review promptVars, step-runner schema path,
+      iteration plan-review prompt+schema, generateReviewSchema. QA never
+      dismiss. Verify: typecheck + FakeHarness (reviewer accepts dismiss, QA
+      rejects). Budget <=100 lines."
+    kind: story
+    milestoneId: m1-contracts-aggregate
+    slug: concerns-contracts-policy
+    title: Canonical review-policy resolver
 assumptions:
   - assumption: Gates run with TMPDIR=/tmp so the 2 pre-existing head-guard failures
       do not mask regressions.

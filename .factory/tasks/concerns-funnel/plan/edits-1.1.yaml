@@ -1,0 +1,76 @@
+iteration: 1
+amendmentIndex: 1
+items:
+  - assignment: "Types only (split 1/3 of concerns-contracts per decision 001;
+      unblocks schemas+policy). In src/core/artifacts.ts add
+      Concern/ConcernKind/ConcernSeverity/ConcernStatus, RemarkableDecision,
+      StoredConcernArtifact (+pendingResolution?, source.escalated?),
+      ReviewDisposition+dismiss (no tech-debt value), PlanAdr.blocking,
+      PipelineConfig.humanInvolvement+concerns{raiseAllowlist,minDigestSeverity\
+      ,minBlockingSeverity}, reviewPolicy.default canonical + legacy
+      allowedDispositions alias in type. No JSON schemas, no runtime, no repair
+      logic (deferred to concerns-store). Do not implement
+      aggregate/repair/triage; do not use cross-file $ref. Prod budget <=80
+      lines. Verify: bun run typecheck. Run with TMPDIR=/tmp."
+    citations:
+      - docs/factory.v2.md:89-103
+      - plugins/software-factory/src/core/artifacts.ts:313-325
+    kind: dev
+    milestone: m1-contracts-aggregate
+    outlineRef: concerns-contracts-types
+    slug: concerns-contracts-types
+    title: Concern artifact types
+    wave: 2
+  - assignment: "Schemas only (split 2/3, decision 001; deps: types). Inline (no
+      cross-file $ref) shared concern/remarkable definitions into
+      developer-output, fact-finder-output, qa, poc, test-assumptions, review
+      newConcerns, plan, decisions, wave/plan-closeup (+concernResolutions),
+      architect wave-report/closeup outputs; leave triage/infra/pm-edit
+      untouched. severity/detail optional at schema level (defaults applied at
+      runtime by concerns-store); kind strict enum so unknown kind fails
+      validation with no write. Dismiss detail-required enforced at runtime
+      (store), not JSON. Verify: typecheck + prompts.test preflight + one
+      FakeHarness behavior case in test/engine/concerns-funnel.test.ts (valid
+      concerns pass, unknown kind errors no write). Prod budget <=200 lines
+      JSON. Run TMPDIR=/tmp bun test + typecheck."
+    citations:
+      - docs/factory.v2.md:89-103
+      - plugins/software-factory/src/core/artifacts.ts:313-325
+      - plugins/software-factory/src/core/records/review-schema.ts:5-52
+    deps:
+      - concerns-contracts-types
+    kind: dev
+    milestone: m1-contracts-aggregate
+    outlineRef: concerns-contracts-schemas
+    scenarioRefs:
+      - m1-contracts-aggregate:s4
+      - m1-contracts-aggregate:s5
+    slug: concerns-contracts-schemas
+    title: Concern producer schemas
+    wave: 3
+  - assignment: "Resolver only (split 3/3, decision 001; deps: types). New
+      src/core/review-policy.ts resolveReviewAllowed(pipeline,agent,isTriager):
+      precedence per-agent array > default > builtin
+      [fix,optional,architect,human-awareness,human-async]; legacy
+      reviewPolicy.allowedDispositions read-alias for default; append dismiss
+      iff isTriager. Wire single resolver into item-machine review promptVars,
+      step-runner schema path, iteration plan-review prompt+schema, and
+      generateReviewSchema (dismiss enum only for triagers; QA never). Verify:
+      typecheck + FakeHarness review-step behavior (reviewer accepts dismiss
+      id-match; QA rejects dismiss). Prod budget <=100 lines. Run TMPDIR=/tmp
+      bun test + typecheck."
+    citations:
+      - docs/factory.v2.md:89-103
+      - plugins/software-factory/src/core/records/review-schema.ts:5-52
+      - plugins/software-factory/src/core/flows/item-machine.ts:628-647
+      - plugins/software-factory/src/core/flows/iteration.ts:439-485
+    deps:
+      - concerns-contracts-types
+    kind: dev
+    milestone: m1-contracts-aggregate
+    outlineRef: concerns-contracts-policy
+    scenarioRefs:
+      - m1-contracts-aggregate:s7
+    slug: concerns-contracts-policy
+    title: Canonical review-policy resolver
+    wave: 3

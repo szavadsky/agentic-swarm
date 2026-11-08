@@ -1,0 +1,27 @@
+slug: concerns-contracts-schemas
+kind: dev
+title: Concern producer schemas
+assignment: "Schemas only (split 2/3, decision 001; deps: types). Inline (no
+  cross-file $ref) shared concern/remarkable definitions into developer-output,
+  fact-finder-output, qa, poc, test-assumptions, review newConcerns, plan,
+  decisions, wave/plan-closeup (+concernResolutions), architect
+  wave-report/closeup outputs; leave triage/infra/pm-edit untouched.
+  severity/detail optional at schema level (defaults applied at runtime by
+  concerns-store); kind strict enum so unknown kind fails validation with no
+  write. Dismiss detail-required enforced at runtime (store), not JSON. Verify:
+  typecheck + prompts.test preflight + one FakeHarness behavior case in
+  test/engine/concerns-funnel.test.ts (valid concerns pass, unknown kind errors
+  no write). Prod budget <=200 lines JSON. Run TMPDIR=/tmp bun test +
+  typecheck."
+outlineRef: concerns-contracts-schemas
+milestone: m1-contracts-aggregate
+wave: 3
+deps:
+  - concerns-contracts-types
+scenarioRefs:
+  - m1-contracts-aggregate:s4
+  - m1-contracts-aggregate:s5
+citations:
+  - docs/factory.v2.md:89-103
+  - plugins/software-factory/src/core/artifacts.ts:313-325
+  - plugins/software-factory/src/core/records/review-schema.ts:5-52

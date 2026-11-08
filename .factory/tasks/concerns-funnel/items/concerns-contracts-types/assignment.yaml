@@ -1,0 +1,20 @@
+slug: concerns-contracts-types
+kind: dev
+title: Concern artifact types
+assignment: "Types only (split 1/3 of concerns-contracts per decision 001;
+  unblocks schemas+policy). In src/core/artifacts.ts add
+  Concern/ConcernKind/ConcernSeverity/ConcernStatus, RemarkableDecision,
+  StoredConcernArtifact (+pendingResolution?, source.escalated?),
+  ReviewDisposition+dismiss (no tech-debt value), PlanAdr.blocking,
+  PipelineConfig.humanInvolvement+concerns{raiseAllowlist,minDigestSeverity,min\
+  BlockingSeverity}, reviewPolicy.default canonical + legacy allowedDispositions
+  alias in type. No JSON schemas, no runtime, no repair logic (deferred to
+  concerns-store). Do not implement aggregate/repair/triage; do not use
+  cross-file $ref. Prod budget <=80 lines. Verify: bun run typecheck. Run with
+  TMPDIR=/tmp."
+outlineRef: concerns-contracts-types
+milestone: m1-contracts-aggregate
+wave: 2
+citations:
+  - docs/factory.v2.md:89-103
+  - plugins/software-factory/src/core/artifacts.ts:313-325
