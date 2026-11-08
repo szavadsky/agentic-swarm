@@ -437,3 +437,18 @@ describe("human-involvement mode switching at prompt time", () => {
     expect(run.prompt).toContain("PRINCIPAL-ADR-RULE");
   });
 });
+
+describe("human-involvement criteria reach architect prompts", () => {
+  it("renders sentinel criteria in architect-plan, architect-revise, and plan-review", () => {
+    const lib = loadPromptLibrary({ builtinDir: agentsDir });
+    const sentinel = "SENTINEL-HUMAN-INVOLVEMENT-CRITERIA";
+    const fragments = ["steps/architect-plan", "steps/architect-revise", "steps/plan-review"];
+    for (const fragment of fragments) {
+      const vars: Record<string, string> = {};
+      for (const v of KNOWN_VARS[fragment] ?? []) vars[v] = `sample-${v}`;
+      vars.humanInvolvementCriteria = sentinel;
+      expect(lib.placeholders(fragment)).toContain("humanInvolvementCriteria");
+      expect(lib.render(fragment, vars)).toContain(sentinel);
+    }
+  });
+});

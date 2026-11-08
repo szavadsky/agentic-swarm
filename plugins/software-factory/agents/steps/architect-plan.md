@@ -11,7 +11,7 @@ Design the iteration execution plan (`plan-N.yaml`) decomposing task intent into
 - Assumptions: document assumptions with rationale (`why`) and optional disposition if human confirmation is desired.
 - Epics (root task only): define child epics for major subsystems (depth 1 only); each epic outline requires complete `intent` text.
 - Tech debt: categorize technical debt as `adjacent`, `impacting`, or `blocking`. Impacting and blocking debt MUST include explicit resolutions.
-- ADRs: record architectural decision records (`id`, `title`, `context`, `decision`, `consequences`) for non-trivial design choices.
+- ADRs: record architectural decision records (`id`, `title`, `context`, `decision`, `consequences`, `blocking`) for non-trivial design choices. Set `blocking: true` only when the active human-involvement table needs a human decision; remarkable ADRs (absent/`false`) go to the digest and never wait.
 - Escalation: flag `escalate: true` on item outlines where domain complexity exceeds standard implementation.
 - Output: yield the plan matching `plan.schema.json`.
 
@@ -36,3 +36,6 @@ Iteration: {{iteration}}
 
 ## Limits
 {{limits}}
+
+## Human involvement
+{{humanInvolvementCriteria}}

@@ -1,0 +1,35 @@
+status: approved
+summary: 5 ADR + sentinel render green, typecheck clean, no weakening; blocking
+  halts exit-10, remarkable digest-only, prompts wired
+suggestions:
+  - id: revise-adr-reroute-untested
+    disposition: optional
+    summary: Revise-path ADR re-persist/halt has no test
+    detail: "persistAdrs re-runs on architect-revise writeArtifact
+      (iteration.ts:563) with blocked halt (iteration.ts:589), but no test
+      scripts revise emitting/flipping a blocking ADR. Add revise scenario
+      asserting mailbox human-stop + blocks:[task] + blocked/exit-10.
+      Non-blocking: required contract covered, gates green."
+    location:
+      file: plugins/software-factory/src/core/flows/iteration.ts
+      line: 563
+  - id: adr-md-edge-coverage
+    disposition: optional
+    summary: Explicit blocking:false md and missing-consequences fallback unasserted
+    detail: renderAdrMarkdown falls back to Not recorded. (adrs.ts:30); md
+      assertions cover unmarked remarkable (false) and blocking true only. Add
+      one md assertion for explicit blocking:false with omitted consequences to
+      pin fallback.
+    location:
+      file: plugins/software-factory/src/core/flows/adrs.ts
+      line: 30
+  - id: detailed-mode-disposition-loose
+    disposition: optional
+    summary: Detailed-mode test accepts either disposition while impl is deterministic
+    detail: Mode test allows human-async or human-stop for detailed (test:364) but
+      blockingAdrDisposition returns human-async for principal/detailed
+      (adrs.ts:17). Pin detailed to human-async and document mode->disposition
+      table; both still halt via blocks:[task] so modes differ only in label.
+    location:
+      file: plugins/software-factory/test/engine/adr-blocking-digest.test.ts
+      line: 364

@@ -1,0 +1,85 @@
+checks:
+  - id: gates
+    status: pass
+    message: "Gates passed (2 gates, improvements: Engine: HEAD guard resilience
+      (§7).detects when an agent commits and resets --soft to before.sha,
+      keeping changes staged, Engine: HEAD guard resilience (§7).detects when an
+      agent switches branch and restores original branch, keeping changes)"
+    details:
+      - id: typecheck
+        command: cd plugins/software-factory && bun run typecheck
+        status: pass
+        durationMs: 4118
+        details: $ tsc --noEmit
+      - id: test
+        command: cd plugins/software-factory && bun test
+        status: pass
+        durationMs: 81663
+        details: |-
+          bun test v1.4.3 (c6da4a4d3)
+          ================================================================
+          Task: status-test-task [ACTIVE]
+          Kind: unclassified | Iteration: 1 | Wave: 1
+          Worktree: (none - main checkout)
+          Config path: /home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/factory-test-repo-5nmg1j/.factory/pipeline.yaml
+          Budget spent: $0.0000
+          ----------------------------------------------------------------
+          Waves & Items:
+            Wave 1:
+          ================================================================
+
+
+          test/cli/cli.test.ts:
+          [factory lock] Stale run lock for task "stale-lock-task" (PID 9999999 on host Slava-Yoga) taken over by PID 682277
+          [factory lock] Stale run lock for task "competing-takeover-task" (PID 9999999 on host Slava-Yoga) taken over by PID 682277
+          [factory lock] Stale run lock for task "journal-worktree-task" (PID 9999999 on host Slava-Yoga) taken over by PID 682277
+
+           374 pass
+           2 skip
+           0 fail
+           1749 expect() calls
+          Ran 376 tests across 61 files. [81.51s]
+          [Improvements: Engine: HEAD guard resilience (§7).detects when an agent commits and resets --soft to before.sha, keeping changes staged, Engine: HEAD guard resilience (§7).detects when an agent switches branch and restores original branch, keeping changes]
+        improvements:
+          - "Engine: HEAD guard resilience (§7).detects when an agent commits
+            and resets --soft to before.sha, keeping changes staged"
+          - "Engine: HEAD guard resilience (§7).detects when an agent switches
+            branch and restores original branch, keeping changes"
+  - id: target-green
+    status: pass
+    message: "target-green passed: selected tests passed"
+    details:
+      command: cd plugins/software-factory && bun test
+        test/engine/adr-blocking-digest.test.ts --reporter=junit
+        --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-green-1794143915033-7vv4mcj6nq.xml
+      junitCaseCount: 5
+      junitCaseIds:
+        - Blocking vs remarkable ADRs (§18).writes full ADR markdown with
+          context, decision, consequences, and blocking status
+        - Blocking vs remarkable ADRs (§18).routes a blocking ADR to the mailbox
+          with task blocks and halts with exit 10
+        - Blocking vs remarkable ADRs (§18).reports a remarkable ADR in the
+          digest and lets the run complete
+        - Blocking vs remarkable ADRs (§18).respects the active mode table for
+          blocking and remarkable ADRs
+        - Blocking vs remarkable ADRs (§18).routes a blocking ADR without
+          adrFolder and still halts with exit 10
+      junitTruncated: false
+      collected: true
+      collectionErrors: []
+  - id: size
+    status: pass
+    message: "size passed: 140/300 production lines changed"
+    details:
+      changedLines:
+        added: 125
+        deleted: 15
+        total: 140
+        files:
+          - plugins/software-factory/agents/architect.md
+          - plugins/software-factory/agents/steps/architect-plan.md
+          - plugins/software-factory/agents/steps/architect-revise.md
+          - plugins/software-factory/config/schemas/plan.schema.json
+          - plugins/software-factory/src/core/flows/adrs.ts
+          - plugins/software-factory/src/core/flows/iteration.ts
+      limit: 300

@@ -1,0 +1,51 @@
+status: approved
+summary: "Independent QA approves: typecheck clean; ADR target 5/5 pass; full
+  suite 374 pass / 2 skip / 0 fail (1749 expects, 61 files); test diff additive
+  only (helper opts default + 5th no-adrFolder regression test), no weakening;
+  engine red-test covered the 4 unchanged target cases and the new test provably
+  fails on round-1 gated code; dispositions.md untouched; adrFolder-gating fix,
+  revise re-persist/halt, sanitization and duplicate-scan removal all verified
+  in code."
+suggestions:
+  - id: revise-adr-reroute-untested
+    disposition: optional
+    summary: Revise-path ADR re-persist/halt has no test
+    detail: "persistAdrs is now called from the architect-revise writeArtifact
+      (iteration.ts:563) and a blocked derive status halts the iteration
+      (iteration.ts:589), but no test scripts architect-revise-1-1 with `adrs`;
+      the existing revise tests (plan-reviewer-triage.test.ts) omit ADRs. Add
+      one revise scenario with a newly blocking ADR (or remarkable->blocking
+      flip) asserting the mailbox human-stop entry, blocks:[task] and
+      blocked/exit-10 so this branch is regression-protected. Non-blocking: the
+      item's required contract is covered and all gates are green."
+    location:
+      file: plugins/software-factory/src/core/flows/iteration.ts
+      line: 563
+  - id: adr-md-edge-coverage
+    disposition: optional
+    summary: Explicit blocking:false markdown and missing-consequences fallback
+      unasserted
+    detail: renderAdrMarkdown falls back to "Not recorded." when consequences is
+      blank/absent (adrs.ts:30) and renders the remarkable text for
+      blocking:false; markdown assertions cover only the unmarked remarkable ADR
+      and the blocking:true ADR. Add one markdown assertion for an explicit
+      blocking:false ADR with omitted consequences to pin the fallback. Carried
+      over from the prior QA round.
+    location:
+      file: plugins/software-factory/src/core/flows/adrs.ts
+      line: 30
+  - id: detailed-mode-disposition-documented
+    disposition: optional
+    summary: Detailed-mode ADR disposition accepts either value and
+      mode->disposition mapping is undocumented
+    detail: The mode-table test allows detailed mode to produce human-async or
+      human-stop (test line 364), so a mapping regression would pass, while
+      blockingAdrDisposition deterministically returns human-async for
+      principal/detailed (adrs.ts:17). If that mapping is intended, pin it in
+      the test and document the mode->disposition table (autonomous human-stop,
+      principal/detailed human-async) in the human-involvement criteria; note
+      both mappings still block the whole task via blocks:[task], so modes
+      currently differ only in disposition label.
+    location:
+      file: plugins/software-factory/test/engine/adr-blocking-digest.test.ts
+      line: 364

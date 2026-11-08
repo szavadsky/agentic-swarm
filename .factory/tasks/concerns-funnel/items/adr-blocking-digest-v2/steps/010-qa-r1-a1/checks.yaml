@@ -1,0 +1,118 @@
+checks:
+  - id: red-test
+    status: pass
+    message: "red-test passed: all 4 tests fail when prod changes are restored to
+      test-first commit"
+    details:
+      command: cd plugins/software-factory && bun test
+        test/engine/adr-blocking-digest.test.ts --reporter=junit
+        --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-redtest-1794146264467-i7zvv9zr6c.xml
+      junitCaseCount: 5
+      junitCaseIds:
+        - Blocking vs remarkable ADRs (§18).writes full ADR markdown with
+          context, decision, consequences, and blocking status
+        - Blocking vs remarkable ADRs (§18).routes a blocking ADR to the mailbox
+          with task blocks and halts with exit 10
+        - Blocking vs remarkable ADRs (§18).reports a remarkable ADR in the
+          digest and lets the run complete
+        - Blocking vs remarkable ADRs (§18).respects the active mode table for
+          blocking and remarkable ADRs
+        - Blocking vs remarkable ADRs (§18).routes a blocking ADR without
+          adrFolder and still halts with exit 10
+      junitTruncated: false
+      collected: true
+      collectionErrors: []
+  - id: test-diff
+    status: pass
+    message: test-diff generated (3 test files, 3740 bytes)
+    details:
+      diff: |-
+        diff --git a/plugins/software-factory/test/engine/adr-blocking-digest.test.ts b/plugins/software-factory/test/engine/adr-blocking-digest.test.ts
+        index f72835f..0cfabd4 100644
+        --- a/plugins/software-factory/test/engine/adr-blocking-digest.test.ts
+        +++ b/plugins/software-factory/test/engine/adr-blocking-digest.test.ts
+        @@ -117,7 +117,8 @@ describe("Blocking vs remarkable ADRs (§18)", () => {
+           async function runAdrPlan(
+             task: string,
+             mode: NonNullable<PipelineConfig["humanInvolvement"]>,
+        -    adrs: Array<Record<string, unknown>>
+        +    adrs: Array<Record<string, unknown>>,
+        +    opts: { adrFolder?: string } = { adrFolder: "docs/adr" }
+           ): Promise<AdrRun> {
+             taskDirFor(task);
+             const worktreeRoot = path.join(tmpRepo.dir + `-${task}-wt`);
+        @@ -128,7 +129,7 @@ describe("Blocking vs remarkable ADRs (§18)", () => {
+         
+             const project: ProjectConfig = {
+               orchestrationFolder: ORCH,
+        -      adrFolder: "docs/adr",
+        +      ...(opts.adrFolder ? { adrFolder: opts.adrFolder } : {}),
+               worktreeRoot,
+             };
+             const pipeline: PipelineConfig = {
+        @@ -386,4 +387,26 @@ describe("Blocking vs remarkable ADRs (§18)", () => {
+               expect(remarkable[0]!.blocks ?? []).toEqual([]);
+             }
+           }, 60000);
+        +  it("routes a blocking ADR without adrFolder and still halts with exit 10", async () => {
+        +    const { res, deployedTaskDir } = await runAdrPlan(
+        +      "adr-no-folder",
+        +      "autonomous",
+        +      [BLOCKING_ADR],
+        +      {}
+        +    );
+        +
+        +    expect(res.status).toBe("blocked");
+        +    expect(res.exitCode).toBe(10);
+        +
+        +    const entries = await mailbox(deployedTaskDir);
+        +    const blocking = entriesFor(entries, BLOCKING_ADR);
+        +    expect(blocking).toHaveLength(1);
+        +    expect(blocking[0]!.disposition).toBe("human-stop");
+        +    expect(blocking[0]!.blocks ?? []).toContain("task");
+        +
+        +    const state = await readYaml<StateArtifact>(
+        +      path.join(deployedTaskDir, "state.yaml")
+        +    );
+        +    expect(state.status).toBe("blocked");
+        +  }, 30000);
+         });
+        diff --git a/plugins/software-factory/test/human-involvement-config.test.ts b/plugins/software-factory/test/human-involvement-config.test.ts
+        index 9695c32..72c1649 100644
+        --- a/plugins/software-factory/test/human-involvement-config.test.ts
+        +++ b/plugins/software-factory/test/human-involvement-config.test.ts
+        @@ -437,3 +437,18 @@ describe("human-involvement mode switching at prompt time", () => {
+             expect(run.prompt).toContain("PRINCIPAL-ADR-RULE");
+           });
+         });
+        +
+        +describe("human-involvement criteria reach architect prompts", () => {
+        +  it("renders sentinel criteria in architect-plan, architect-revise, and plan-review", () => {
+        +    const lib = loadPromptLibrary({ builtinDir: agentsDir });
+        +    const sentinel = "SENTINEL-HUMAN-INVOLVEMENT-CRITERIA";
+        +    const fragments = ["steps/architect-plan", "steps/architect-revise", "steps/plan-review"];
+        +    for (const fragment of fragments) {
+        +      const vars: Record<string, string> = {};
+        +      for (const v of KNOWN_VARS[fragment] ?? []) vars[v] = `sample-${v}`;
+        +      vars.humanInvolvementCriteria = sentinel;
+        +      expect(lib.placeholders(fragment)).toContain("humanInvolvementCriteria");
+        +      expect(lib.render(fragment, vars)).toContain(sentinel);
+        +    }
+        +  });
+        +});
+        diff --git a/plugins/software-factory/test/smoke-fixes.test.ts b/plugins/software-factory/test/smoke-fixes.test.ts
+        index d282558..d7ec62f 100644
+        --- a/plugins/software-factory/test/smoke-fixes.test.ts
+        +++ b/plugins/software-factory/test/smoke-fixes.test.ts
+        @@ -52,6 +52,7 @@ describe("Smoke fixes acceptance tests (§6.4, §7, §8, §9)", () => {
+                 infra: "sample infra",
+                 debt: "sample debt",
+                 steering: "sample steering",
+        +        humanInvolvementCriteria: "sample criteria",
+               },
+               planSchema
+             );
+      files:
+        - plugins/software-factory/test/engine/adr-blocking-digest.test.ts
+        - plugins/software-factory/test/human-involvement-config.test.ts
+        - plugins/software-factory/test/smoke-fixes.test.ts
