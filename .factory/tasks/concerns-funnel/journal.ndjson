@@ -1113,3 +1113,4 @@
 {"type":"item_merged","item":"plan-reviewer-triage-v2","sha":"ce0aceeabc3b7f7b122d29957759a7e8d6d6256a","conflictResolved":false,"ts":"2026-11-08T10:00:35.650Z"}
 {"type":"step_started","task":"concerns-funnel","step":"wave-close-up-1-7","attempt":1,"recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/030-wave-close-up-1-7-a1","ts":"2026-11-08T10:01:57.770Z"}
 {"type":"step_timeout_armed","task":"concerns-funnel","step":"wave-close-up-1-7","timeoutSec":900,"ts":"2026-11-08T10:01:57.776Z"}
+{"type":"step_finished","task":"concerns-funnel","step":"wave-close-up-1-7","attempt":1,"status":"ok","sessionId":"01a1ba9b-8a28-73ba-821e-55b6ca413fd3","usage":{"inputTokens":13833,"outputTokens":4968,"costUsd":0.002493},"ts":"2026-11-08T10:02:39.752Z"}
