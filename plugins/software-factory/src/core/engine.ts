@@ -442,7 +442,12 @@ export async function runTask(
     }
 
     if (taskState.status === "blocked") {
-      await appendJournal(taskDir, { type: "task_blocked", task });
+      await appendJournal(taskDir, {
+        type: "task_blocked",
+        task,
+        items: taskState.items.filter((it) => it.status === "blocked").map((it) => it.slug),
+        questions: taskState.openSteerQuestions.map((q) => ({ id: q.id, ref: q.ref })),
+      });
       return {
         status: "blocked",
         exitCode: 10,

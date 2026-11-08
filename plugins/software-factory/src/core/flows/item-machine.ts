@@ -319,10 +319,14 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
         for (const qf of qFiles) {
           if (!qf.endsWith(".yaml")) continue;
           const q = await readYaml<SteerItemArtifact>(path.join(steerDir, qf));
+          const isBlockingDisposition = q.disposition === "human-async" || q.disposition === "human-stop";
           if (
-            (q.ref === itemSlug ||
-              q.ref === `${task}/${itemSlug}` ||
-              (opts.rootTaskDir && q.ref === `${path.basename(opts.rootTaskDir)}/${itemSlug}`)) &&
+            (q.blocks?.includes(itemSlug) ||
+              (!Array.isArray(q.blocks) &&
+                isBlockingDisposition &&
+                (q.ref === itemSlug ||
+                  q.ref === `${task}/${itemSlug}` ||
+                  (opts.rootTaskDir && q.ref === `${path.basename(opts.rootTaskDir)}/${itemSlug}`)))) &&
             q.status === "answered" &&
             q.answer
           ) {

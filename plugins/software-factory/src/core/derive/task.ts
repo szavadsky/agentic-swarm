@@ -281,9 +281,14 @@ export async function deriveTaskState(opts: {
   // 9. Overall task status determination (§6.3 Invariant 4)
   let status: "active" | "blocked" | "done" | "failed" = "active";
 
-  const hasTaskLevelOpenQuestion = openSteerQuestions.some(
-    (q) => q.status === "open" && (q.ref === "plan" || q.ref === task || q.blocks?.includes("task"))
-  );
+  const hasTaskLevelOpenQuestion = openSteerQuestions.some((q) => {
+    if (q.status !== "open" || q.disposition === "human-awareness") return false;
+    if (Array.isArray(q.blocks)) return q.blocks.includes("task");
+    return (
+      (q.ref === "plan" || q.ref === task) &&
+      (q.disposition === "human-async" || q.disposition === "human-stop")
+    );
+  });
 
   if (hasTaskLevelOpenQuestion) {
     status = "blocked";
@@ -292,7 +297,9 @@ export async function deriveTaskState(opts: {
   } else if (lastCloseup?.status === "blocked") {
     // Finding 6: An answered blocked close-up starts iteration N+1
     const closeupQuestion = openSteerQuestions.find(
-      (q) => q.ref === "plan" || q.id === `closeup-${iteration}`
+      (q) =>
+        (q.ref === "plan" || q.id === `closeup-${iteration}`) &&
+        q.disposition !== "human-awareness"
     );
     if (closeupQuestion && closeupQuestion.status === "open") {
       status = "blocked";

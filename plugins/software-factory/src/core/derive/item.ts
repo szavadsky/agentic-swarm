@@ -58,6 +58,24 @@ export interface DerivedItemState {
 }
 
 /**
+ * Whether an open steer question blocks the given item slug (§8.7, §8.8).
+ * `human-awareness` is informational and never blocks. An explicit `blocks`
+ * list (including `[]`) is authoritative. Files predating the `blocks` field
+ * block only when their disposition is blocking (`human-async`/`human-stop`)
+ * and the ref addresses this item.
+ */
+export function steerQuestionBlocksSlug(
+  q: SteerItemArtifact,
+  slug: string,
+  refMatches: boolean
+): boolean {
+  if (!q || q.status !== "open") return false;
+  if (q.disposition === "human-awareness") return false;
+  if (Array.isArray(q.blocks)) return q.blocks.includes(slug);
+  return refMatches && (q.disposition === "human-async" || q.disposition === "human-stop");
+}
+
+/**
  * Derives state of a single item from assignment, step records, decisions, steering, and git (§6, §8).
  */
 export async function deriveItemState(opts: {
@@ -273,14 +291,12 @@ export async function deriveItemState(opts: {
         try {
           const qPath = path.join(steerDir, sent.name);
           const q = await readYaml<SteerItemArtifact>(qPath);
-          if (
-            q &&
-            q.status === "open" &&
-            (q.ref === itemSlug ||
-              q.ref === `${path.basename(taskDir)}/${itemSlug}` ||
-              (opts.rootTaskDir && q.ref === `${path.basename(opts.rootTaskDir)}/${itemSlug}`) ||
-              q.blocks?.includes(itemSlug))
-          ) {
+          if (!q || q.status !== "open") continue;
+          const refMatches =
+            q.ref === itemSlug ||
+            q.ref === `${path.basename(taskDir)}/${itemSlug}` ||
+            (opts.rootTaskDir ? q.ref === `${path.basename(opts.rootTaskDir)}/${itemSlug}` : false);
+          if (steerQuestionBlocksSlug(q, itemSlug, refMatches)) {
             openSteerQuestion = q;
             break;
           }

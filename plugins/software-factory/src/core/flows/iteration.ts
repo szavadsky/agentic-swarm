@@ -1703,8 +1703,18 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
       deriveItemState({ taskDir, itemSlug: slug, parentBranch, taskWt, pipeline, rootTaskDir: params.rootTaskDir })
     )
   );
-  const hasBlockedItems = allCurrentStates.some((it) => it.status === "blocked");
-  if (hasBlockedItems) {
+  const blockedItems = allCurrentStates.filter((it) => it.status === "blocked");
+  if (blockedItems.length > 0) {
+    await appendJournal(taskDir, {
+      type: "iteration_blocked",
+      iteration,
+      items: blockedItems.map((it) => it.slug),
+      questions: blockedItems.flatMap((it) =>
+        it.openSteerQuestion
+          ? [{ id: it.openSteerQuestion.id, ref: it.openSteerQuestion.ref, item: it.slug }]
+          : []
+      ),
+    });
     return {
       iteration,
       status: "blocked",
