@@ -1,0 +1,23 @@
+blockedItems: []
+failedItems: []
+iteration: 2
+mergedItems:
+  - hydration-fingerprint-caps
+  - contracts-drift-fix
+  - prompt-fragments
+recommendations:
+  - Proceed to iteration 2 wave 2 (human-router-severity, epic-saga-propagate);
+    deps on wave 1 hydration/contracts are satisfied.
+  - "Note the test-gate improvement (baseline fail -> now pass): the 2
+    pre-existing head-guard TMPDIR failures no longer reproduce; consider
+    whether the baseline record still needs the TMPDIR operator-action note."
+status: complete
+summary: "Iteration 2 wave 1 complete: all 3 scheduled items
+  (hydration-fingerprint-caps, contracts-drift-fix, prompt-fragments) merged
+  (merge commits 22c9ce3, 8d7134f, ef04b24). Tree hygiene clean: no untracked
+  files, no stray artifacts; git diff --check passes and strict conflict-marker
+  scan (^(<{7}|>{7})) finds nothing — the only modified file is the
+  engine-managed journal.ndjson. Gates vs baseline: typecheck pass (green,
+  matches baseline); test IMPROVED from baseline fail to now pass. No
+  regressions; no failed or blocked items."
+wave: 1
