@@ -1,0 +1,39 @@
+status: approved
+summary: "Schemas correct: inline strict enums, no-write proven, gates green; 3
+  optional debts"
+suggestions:
+  - detail: "Schemas now emit structured {kind,summary}+ objects but TS interfaces
+      still reflect legacy shapes: DeveloperOutputArtifact.concerns is string[]
+      (artifacts.ts:393), ReviewArtifact lacks newConcerns,
+      FactFinder/Wave/PlanCloseup/Decision lack concerns/remarkable/resolutions.
+      Nothing reads these fields yet so no gate breaks; runtime/store split must
+      reconcile to Concern[]/RemarkableDecision types. Out of schemas-only
+      scope."
+    disposition: optional
+    id: artifact-types-mismatch
+    location:
+      file: plugins/software-factory/src/core/artifacts.ts
+      line: 393
+    summary: TS artifact interfaces lag structured schemas; store story must reconcile
+  - detail: "inferTaskWorktree correctly matches full orchestrationFolder/task
+      suffix instead of first '/.factory' substring, fixing TMPDIR under
+      .factory-runtime/tmp. Prod callsites pass taskWt explicitly so risk is
+      fallback-only. No direct unit test: TMPDIR=/tmp runs pass with or without
+      the fix, so a regression would only surface in harness TMPDIR. Add a small
+      unit test for suffix match/mismatch."
+    disposition: optional
+    id: step-runner-fallback-test
+    location:
+      file: plugins/software-factory/src/core/flows/step-runner.ts
+      line: 162
+    summary: inferTaskWorktree fix correct but lacks direct unit test
+  - detail: Line 334 uses .some(!includes) so a superset enum (e.g. extra 'archive')
+      would pass as long as resolve|carry|propagate are present. Current impl is
+      exactly the 3 and dismiss is separately rejected, so no live defect.
+      Tighten to exact set equality like the kind/severity checks.
+    disposition: optional
+    id: resolutions-enum-exactness
+    location:
+      file: plugins/software-factory/test/contracts/concern-schemas.test.ts
+      line: 334
+    summary: concernResolutions test allows superset enum

@@ -156,6 +156,18 @@ export function resolveStepSchema(
 }
 
 /**
+ * Infers the task worktree from `<taskWt>/<orchestrationFolder>/<task>`.
+ * Matches the folder boundary rather than the first `/.factory` substring so
+ * temp roots such as `.factory-runtime/tmp` are not mistaken for it.
+ */
+function inferTaskWorktree(taskDir: string, task: string, orchestrationFolder: string): string {
+  const tail = [...orchestrationFolder.split(/[\\/]/).filter(Boolean), task];
+  const parts = taskDir.split(/[\\/]/);
+  const matches = tail.every((seg, i) => parts[parts.length - tail.length + i] === seg);
+  return matches ? path.resolve(taskDir, ...tail.map(() => "..")) : taskDir;
+}
+
+/**
  * Runs a single agent turn/step per §6.1, §6.3, §6.4.
  */
 export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult> {
@@ -215,7 +227,8 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
   const recordDir = path.join(recordsDir, dirName);
 
   // Identify worktree that contains recordDir
-  const taskWt = opts.taskWt ?? (taskDir.includes("/.factory") ? taskDir.split("/.factory")[0]! : taskDir);
+  const taskWt =
+    opts.taskWt ?? inferTaskWorktree(taskDir, task, project.orchestrationFolder ?? ".factory");
   const wtToCommit = recordDir.startsWith(cwd) ? cwd : taskWt;
 
   // 3. Resolve schema
