@@ -1,0 +1,15 @@
+context: wave
+decision: continue
+rationale: Wave 4 merged 0 items with no failures, blocked, or debt; tree clean
+  and both gates green (test fail->pass improved, no regression). All M1
+  contract children are merged, so concerns-store and modes-prompts deps are
+  satisfied and runnable. No plan content change is warranted; the empty wave is
+  a scheduling gap, not a scope or design failure.
+text: "Proceed to next wave running concerns-store + modes-prompts in parallel
+  (both unblocked: types+schemas+policy merged). concerns-store owns
+  src/core/concerns.ts per binding directives (one file per fingerprint,
+  KeyedMutex RMW only, immediate taskWt commit, reconcileConcerns,
+  severity->medium/detail->summary defaults, unknown-kind strict error).
+  Operator: confirm why the red baseline turned green (TMPDIR normalization vs
+  code fix) and update gates-baseline.yaml to the green state so regressions are
+  detectable."
