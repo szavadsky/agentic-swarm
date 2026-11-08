@@ -266,6 +266,12 @@ items:
     fixRounds: 1
     spendUsd: 0
 debt:
+  - Pre-existing head-guard failures when TMPDIR sits under .factory-runtime
+    because step-runner splits on /.factory. Baseline red; green with
+    TMPDIR=/tmp. Out of scope.
+  - Unapplied spike-saga-commit reviewer optional nits (qualify
+    epic-state-from-child-closeup with isMerged precedence, prefix inline paths,
+    scope removeWorktree claim, fold contextPack key). Consumers apply mentally.
   - "spike-saga-commit merge gate failure is environmental, not content:
     read-only spike with zero prod diff, research ok, review approved; baseline
     test gate is red (2 head-guard TMPDIR failures). Findings accepted as
@@ -495,7 +501,7 @@ debt:
     inconsistent with documented branch-from-HEAD worktrees"
   - "[funnel-closeups-v3] Propagated parent copy retains child source.item,
     writes undeclared source.epic, and can clobber/lengthen parent records"
-budgetSpentUsd: 5.39773992
+budgetSpentUsd: 5.41584892
 spendByRole:
   alt-workhorse:
     costUsd: 1.160009
@@ -506,9 +512,9 @@ spendByRole:
     inputTokens: 7621030
     outputTokens: 2128726
   architect:
-    costUsd: 0.6613519999999998
-    inputTokens: 5996039
-    outputTokens: 106847
+    costUsd: 0.6794609999999999
+    inputTokens: 6134335
+    outputTokens: 126871
   alt-architect:
     costUsd: 0.016515000000000002
     inputTokens: 72452
@@ -583,7 +589,7 @@ spendByItem:
     inputTokens: 463902
     outputTokens: 217893
   (orchestration):
-    costUsd: 1.199803
-    inputTokens: 7325434
-    outputTokens: 557035
-lastUpdated: 2026-11-08T18:03:56.893Z
+    costUsd: 1.217912
+    inputTokens: 7463730
+    outputTokens: 577059
+lastUpdated: 2026-11-08T18:06:37.421Z
