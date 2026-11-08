@@ -5,5 +5,14 @@ question: 'Step "develop" for item "funnel-closeups-v3" stopped due to
   retries_exhausted (3/3). Error: Execution timed out'
 blocks:
   - funnel-closeups-v3
-status: open
+status: answered
 createdAt: 2026-11-08T17:16:33.299Z
+answer: >
+  Answer to escalation-funnel-closeups-v3-develop-a1: RETRY the develop step by
+  resuming its session (01a1bc09 — the work is productive, not stuck: 49 reads
+  were targeted verification, tests were written and a bun test run was 2s from
+  output when the 20m active timeout fired). Guidance for the resumed turn: skip
+  re-exploration, finish the funnel-closeups test run, fix only red failures,
+  then yield. If it times out again, split the remaining verification into a
+  smaller follow-up rather than a third full turn.
+answeredAt: 2026-11-08T17:21:41.722Z

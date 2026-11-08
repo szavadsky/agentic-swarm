@@ -1,0 +1,8 @@
+refs:
+  - funnel-closeups-v3
+  - escalation-funnel-closeups-v3-develop-a1
+kind: answer
+urgency: next-architect-call
+summary: "Retry develop by resuming session 01a1bc09 with skip-re-exploration
+  guidance: finish funnel-closeups test run, fix only red failures, yield; split
+  verification if it times out again."
