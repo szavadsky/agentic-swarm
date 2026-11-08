@@ -1,0 +1,164 @@
+status: changes_requested
+summary: "changes_requested: bounds pass, 12 blocking contract/scope/ownership
+  gaps; sizing advisory ok"
+suggestions:
+  - id: contracts-detail-casing
+    disposition: fix
+    summary: contracts scope omits Detail/detail casing mismatch breaking validation
+    detail: All 7 schemas use capital Detail (developer-output:68, wave-closeup:42,
+      plan:142, etc.) while artifacts.ts Concern.detail is lowercase and
+      concerns.ts mergeConcern reads input.detail. Detail is dropped, epic
+      800B->500B scenario untestable, m2s1 TS-mirror claim false. Require
+      contracts-drift-fix to own casing fix plus regression test.
+    location:
+      file: plugins/software-factory/config/schemas/developer-output.schema.json
+      line: 68
+  - id: allowlist-fragment-agent-mismatch
+    disposition: fix
+    summary: raiseAllowlist adds poc/test-assumptions fragments that never match
+      agent gate
+    detail: Spike poc/test-assumptions run as agent developer with stepFragment
+      poc/test-assumptions (pipeline.default.yaml:290,302). ingestStepConcerns
+      gates on source.agent, so entries poc/test-assumptions are dead. ADR
+      adr-severity-policy-active full-matrix wrong. Require gate-key definition
+      (agent vs stepId vs fragment) and corrected allowlist.
+    location:
+      file: plugins/software-factory/config/pipeline.default.yaml
+      line: 290
+  - id: decision-020-unknown
+    disposition: fix
+    summary: Decision 020 fixes referenced but text absent; discarded branch cannot
+      guide items
+    detail: Assumption discards funnel-closeups-v3 yet hydration/closeup claim
+      Decision 020 fixes 1/2/4 and 3. No Decision 020 in plan ADRs or repo.
+      Unverified assumption baked into dev stories violates risk isolation.
+      Require inline Decision 020 text or spike.
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 44
+  - id: hydration-contract-ambiguous
+    disposition: fix
+    summary: hydrateStepConcerns bytes source, git diff, and '' semantics underspecified
+    detail: inputBytes allowlisted var set undefined; caller vs callee byte
+      computation split unclear; wave diff (m1s1) vs task-branch diff (ADR)
+      contradiction; git args/seam for tests missing; zero-cap '' vs empty-store
+      [] vs standing heading undefined. step-runner:296 computes for all steps
+      and iteration:527 also computes - double-compute/override race. Require
+      per-stepRole var list, git spec, '' semantics, skip rule.
+    location:
+      file: plugins/software-factory/src/core/flows/step-runner.ts
+      line: 296
+  - id: epic-truncate-edge
+    disposition: fix
+    summary: epic detail half-cut min-20 violates strictly-shorter and UTF-8 safety
+    detail: 400B detail half-cut to 200 loses info; 10B detail min-20 expands to 20
+      violating funnel; chars-vs-bytes mismatch risks splitting codepoints. ADR
+      adr-epic-push-condensed needs UTF-8-safe spec with tiny-detail exemption
+      and explicit method.
+    location:
+      file: plugins/software-factory/src/core/engine.ts
+      line: 209
+  - id: epic-contract-gaps
+    disposition: fix
+    summary: epic propagation omits remarkable, commit ownership, concurrency,
+      forwarding lifecycle
+    detail: rm-* has chosen not summary - no rule; aggregate commitAll vs single
+      add+commit conflict (needs commit:false); parallel epics race on parent
+      concerns dir (KeyedMutex RMW but git commit race); child mailbox path
+      undefined; q-epic blocks=[epic] downgrades task-blocks unjustified; no
+      answer-sync so parent stays blocked after child unblocked.
+    location:
+      file: plugins/software-factory/src/core/engine.ts
+      line: 274
+  - id: consult-resolution-dropped
+    disposition: fix
+    summary: runConcernConsult drops concernResolution; no item owns consults.ts
+      persistence
+    detail: consults.ts:388-402 picks explicit DecisionArtifact fields omitting
+      concernResolution, so closeup resolve->resolved never persists for concern
+      consults. contracts owns schema, closeup owns ingest/apply, consults.ts
+      unowned. decisions.schema shared by all consults needs cross-emission
+      guard; wave-report vs closeup ordering undefined.
+    location:
+      file: plugins/software-factory/src/core/flows/consults.ts
+      line: 388
+  - id: derive-severity-bypass
+    disposition: fix
+    summary: severity downgrade ineffective; derive blocks ignore
+      minBlockingSeverity and unowned
+    detail: collectRoutedBlockers (derive/task:50) blocks on kind+status only. Low
+      blocker downgraded to digest (no mailbox blocks) still blocks via derive.
+      No item owns derive/task.ts or scheduler. Require derive update owned with
+      severity-aware predicate.
+    location:
+      file: plugins/software-factory/src/core/derive/task.ts
+      line: 50
+  - id: fallback-blocker-scope
+    disposition: fix
+    summary: wave-close-up fallback auto-blocks via blocker->architect and misstates
+      human-*
+    detail: Fallback others->architect includes blocker causing auto-block without
+      triage; tech-debt->optional disposition vs kind confusion; human-* never
+      auto-routed vacuous (concerns have kinds, untriaged have no disposition);
+      scenario conflates pending resolutions with triage. Require fallback
+      excluding blocker or severity-gated plus terminology fix.
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 226
+  - id: fragment-matrix-incomplete
+    disposition: fix
+    summary: fragment budget infeasible, matrix misses spike fragments, breaks
+      existing test
+    detail: 12 fragments in 60 lines avg 5 insufficient for both sections+raise
+      (develop needs 6-8); poc/test-assumptions/research produce concerns but
+      absent from matrix and KNOWN_VARS; extension breaks
+      human-involvement-config.test:273 asserting develop lacks vars - no owner
+      for test update; no sentinel strings/baseline for falsifiability.
+    location:
+      file: plugins/software-factory/test/human-involvement-config.test.ts
+      line: 61
+  - id: scenarios-unfalsifiable
+    disposition: fix
+    summary: key Gherkin scenarios lack concrete sentinels, baselines, producer lists
+    detail: m1s5 lists 12 fragments with vague appear; m2s1 all-pass without
+      producer enumeration; m3s9 explicit-resolutions-triage wording; m4
+      docs-read checks lack grep assertions. Require per-fragment sentinels,
+      baseline commit for line delta, explicit producer matrix, grep-based docs
+      assertions.
+    location:
+      file: plugins/software-factory/src/core/prompt-vars.ts
+      line: 46
+  - id: awareness-item-unowned
+    disposition: fix
+    summary: autonomous-halt awareness notification has no producing item
+    detail: Assumption plus ADR adr-autonomous-immediate-halt claim
+      awareness-plan-2-autonomous-halt-deviation filed, but 7 itemOutlines
+      contain no steer/tousertoreview write. Require docs-finish-v3 or new item
+      to own mailbox write.
+    location:
+      file: plugins/software-factory/src/core/flows/adrs.ts
+      line: 14
+  - id: docs-interface-tasklist
+    disposition: optional
+    summary: m4 directionalInterfaces is task list not caller/callee contract
+    detail: "Lists doc sections not interface. Polish: reword as deliverable or drop
+      interface for docs milestone."
+    location:
+      file: plugins/software-factory/docs/ARCHITECTURE.md
+      line: 39
+  - id: artificial-deps
+    disposition: optional
+    summary: closeup on prompt-fragments and prompt on hydration serialize unnecessarily
+    detail: Backend ingest/apply independent of prompt text; KNOWN_VARS extension
+      independent of hydration impl. Deps force 4-wave critical path; dropping
+      increases parallelism within maxParallelItems 4.
+  - id: tmpdir-debt-category
+    disposition: optional
+    summary: td-tmpdir-split adjacent may be impacting for hydration git work
+    detail: Hydration adds production git() taskDiff sensitive to worktree inference
+      (inferTaskWorktree) under .factory-runtime TMPDIR. TMPDIR=/tmp workaround
+      masks regressions. Suggest impacting with resolution or explicit
+      justification.
+    location:
+      file: plugins/software-factory/src/core/flows/step-runner.ts
+      line: 176
