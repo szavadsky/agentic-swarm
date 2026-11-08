@@ -7,6 +7,7 @@ import {
   preflightPrompts,
   loadCriteriaBundle,
   formatDispositionsSection,
+  resolveAgentTools,
   ENGINE_STEP_FRAGMENTS,
 } from "../src/core/prompts.js";
 import { loadPipelineConfig } from "../src/core/config/loader.js";
@@ -100,10 +101,30 @@ tools:
     expect(rendered).toBe("Custom Develop Step: Task 1 and Value 2");
   });
 
+  it("agentDefinition returns undefined tools when absent, [] only when explicitly empty", () => {
+    const lib = loadPromptLibrary({
+      builtinDir,
+      overrides: {
+        "tool-less": "---\nname: tool-less\ndescription: no tools key\n---\n\nBody text",
+        "yield-only": "---\nname: yield-only\ntools: []\ndescription: empty tools\n---\n\nBody text",
+        "with-tools": "---\nname: with-tools\ntools: [read]\ndescription: has tools\n---\n\nBody text",
+      },
+    });
+    // Missing tools list → undefined so `?? pipeline.tools?.defaults` fires.
+    expect(lib.agentDefinition("tool-less").tools).toBeUndefined();
+    // Explicitly empty → [] (yield-only preserved through ??).
+    expect(lib.agentDefinition("yield-only").tools).toEqual([]);
+    expect(lib.agentDefinition("with-tools").tools).toEqual(["read"]);
+    // Real pm.md carries an explicit empty list; a tool-less custom definition gets defaults.
+    const realLib = loadPromptLibrary({ builtinDir });
+    expect(realLib.agentDefinition("pm").tools).toEqual([]);
+    const pipeline = { tools: { defaults: ["edit", "bash"] } } as unknown as PipelineConfig;
+    expect(resolveAgentTools("custom", lib.agentDefinition("tool-less").tools ?? pipeline.tools?.defaults ?? ["edit", "bash"], pipeline)).toEqual(["edit", "bash"]);
+    expect(resolveAgentTools("custom", lib.agentDefinition("yield-only").tools ?? pipeline.tools?.defaults ?? ["edit", "bash"], pipeline)).toEqual([]);
+  });
   it("preflight passes with zero errors on real pipeline.default.yaml", () => {
     const { config: pipeline } = loadPipelineConfig();
     const lib = loadPromptLibrary({ builtinDir });
-
     const errors = preflightPrompts(lib, pipeline);
     expect(errors).toEqual([]);
   });

@@ -96,6 +96,8 @@ export interface PipelineLimits {
   maxItemsPerPlan?: number;
   checkOutputBytes?: number;
   stepTranscriptWarningBytes?: number;
+  /** Advisory tool-call threshold journaling step_tool_call_warning (default 60). */
+  stepToolCallWarning?: number;
   timeoutNudgeSec?: number;
   minFreeDiskMb?: number;
   steerPollSec?: number;

@@ -8,7 +8,10 @@ import { formatOutputSchemaSection } from "./records/schema-format.js";
 export interface PromptLibrary {
   agentDefinition(agent: string): {
     body: string;
-    tools: string[];
+    // undefined when the definition carries no tools list (frontmatter.tools
+    // absent); [] only when explicitly empty (yield-only). Lets `??` in
+    // callers distinguish "missing" (→ pipeline.tools.defaults) from "none".
+    tools?: string[];
     description: string;
   };
   render(fragment: string, vars: Record<string, string>): string;
@@ -250,7 +253,7 @@ export function loadPromptLibrary(opts: {
   return {
     agentDefinition(agent: string): {
       body: string;
-      tools: string[];
+      tools?: string[];
       description: string;
     } {
       const targetFrag = agent.endsWith(".md") ? agent : `${agent}.md`;
@@ -266,14 +269,14 @@ export function loadPromptLibrary(opts: {
           const body = typeof record.body === "string" ? record.body : "";
           const tools = Array.isArray(record.tools)
             ? (record.tools as string[])
-            : [];
+            : undefined;
           const description =
             typeof record.description === "string" ? record.description : "";
           const resolvedBody = body.replace(
             /\{\{>\s*([a-zA-Z0-9_./-]+)\s*\}\}/g,
             (_m, inc) => loadAndResolveIncludes(inc, searchDirs, inMemoryOverrides)
           );
-          return { body: resolvedBody.trim(), tools, description };
+          return tools === undefined ? { body: resolvedBody.trim(), description } : { body: resolvedBody.trim(), tools, description };
         } else {
           content = "";
         }
@@ -310,17 +313,19 @@ export function loadPromptLibrary(opts: {
 
         const tools = Array.isArray(frontmatter.tools)
           ? (frontmatter.tools as string[])
-          : [];
+          : undefined;
         const description =
           typeof frontmatter.description === "string"
             ? frontmatter.description
             : "";
 
-        return {
-          body: finalBody,
-          tools,
-          description,
-        };
+        return tools === undefined
+          ? { body: finalBody, description }
+          : {
+              body: finalBody,
+              tools,
+              description,
+            };
       }
 
       // Without frontmatter
@@ -340,7 +345,6 @@ export function loadPromptLibrary(opts: {
 
       return {
         body: finalBody,
-        tools: [],
         description: "",
       };
     },

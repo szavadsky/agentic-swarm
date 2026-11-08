@@ -150,12 +150,14 @@ Steering log (user decisions recorded by the orchestrator during the build; newe
      - sessions: additive-only, never rewrite transcripts; prompt prefixes and overlay byte-stable (spec 20c); repo rules hydrated by the factory (spec 19)
      - sizes are advisory, never hard gates: no limit on architect output size or code/prod size (over-budget warns, consults never on size alone; scope is the architect's judgment, compact tasks are its job)
      - simple-guard's mechanical rules (rename-only tests, dep-file bans) removed as nonsense — simple path guarded by gates + advisory size with conversion routing only
-     - agent turn budgets: poc/architect 2h, tdd/dev/qa 90m, fact-finder/review 1h, quick scoping/summary agents 45m (active monotonic time, sleep excluded)
+     - agent turn budgets: architect 2h, developer/qa 90m, fact-finder/reviewer 1h, quick scoping/summary agents (triage/infra/close-ups/pm) 45m (active monotonic time, sleep excluded; developer steps run on poc steps)
      - timeout floor 45m for every agent (harness backstop included); progress-based extension up to 2x on judged meaningful progress is spec item 21 scope (self-host tool-policy task)
      - hoop removal: per-step/per-item budget raised to fit long turns (8→25/40 USD); hydration 40→128KB (architect keeps its own plan); timeout-nudge/resume budget defaults to half the step timeout instead of pinned 5m; verified no work-loss paths (HEAD guard soft-resets, rejects keep worktree, citations drop-with-journal)
      - no hard caps on injected context: hydration/context-pack byte caps removed entirely (the old tail-truncation silently dropped the architect's own prior plans first); architect reads full files with normal tools + injected task status; runaway protection is budgets + turn limits only
      - tools are config, not hardcoded: pipeline.tools.defaults/structuredOutput in the default file (code fallbacks only for hand-built test pipelines); checkpoint enabled in overlay; architect/developer/reviewer/fact-finder/qa carry task+checkpoint+rewind
      - checkpoint/rewind are NOT omp agent tools (harness-level only; wiring them killed a live run) — reverted to task-only scouts; run-start tool probe fails fast on unknown names instead of mid-run
+     - checkpoint/rewind restored as agent tools (43513fa): the live-run failure was an old-overlay ordering artifact (overlay written after the first turn), not bad tool names — verified resolving with checkpoint.enabled=true; tools remain config-driven via pipeline.tools
+     - launch-error fail-fast (c22e49e): bad tool/flag/config errors (unknown --tools names incl. singular forms, unavailable built-ins, bad flags) fail the run fast with attempts/consults unburned instead of degrading to slow rejected/consult handling
 
                                                    
 

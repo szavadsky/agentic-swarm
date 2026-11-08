@@ -383,7 +383,8 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
   const effectiveTimeoutSec = opts.timeoutSec ?? pipeline.agents?.[agent]?.timeoutSec;
   const timeoutNudge =
     (pipeline.limits?.timeoutNudgeSec as number | undefined) ??
-    (effectiveTimeoutSec ? Math.max(1, Math.floor(effectiveTimeoutSec / 2)) : 300);
+    // Half the 2_700_000ms harness backstop when no step/agent timeout applies.
+    (effectiveTimeoutSec ? Math.max(1, Math.floor(effectiveTimeoutSec / 2)) : 1350);
 
   const initialTimeoutSec = isResumingInterrupted ? timeoutNudge : effectiveTimeoutSec;
   const initialSession = resumeInterruptedSessionId ?? (keepSession ? opts.existingSessionId : undefined);
@@ -569,7 +570,8 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
   // Definitions without a tools list fall back to pipeline.tools.defaults (default config: [edit, bash]).
   const resolvedTools = resolveAgentTools(agent, agentDef.tools ?? pipeline.tools?.defaults ?? ["edit", "bash"], pipeline);
   if (agent === "pm") {
-    const fileTools = resolvedTools.filter((t) => FILE_TOOL_IDS.has(t));
+    const structured = pipeline.tools?.structuredOutput ?? ["yield"];
+    const fileTools = [...resolvedTools, ...structured].filter((t) => FILE_TOOL_IDS.has(t));
     if (fileTools.length > 0) {
       const guardError = `PM agent step "${stepId}" carries file tools [${fileTools.join(", ")}] after tool resolution; PM is yield-only by construction`;
       const finalMeta = await finishStepRecord({ recordDir, status: "error", error: guardError });
@@ -656,6 +658,7 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
       step: stepId,
       error: outcome.error,
     });
+    unregisterActiveStep(recordDir);
     throw new Error(`Harness launch error at step "${stepId}"${item ? ` (item "${item}")` : ""}: ${outcome.error} (fix config/prompts and restart; no attempts consumed)`);
   }
   if (outcome.sessionId) {
@@ -847,7 +850,8 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
         retryPrompt = TIMEOUT_NUDGE_PROMPT;
         const reduced =
           (pipeline.limits?.timeoutNudgeSec as number | undefined) ??
-          (effectiveTimeoutSec ? Math.max(1, Math.floor(effectiveTimeoutSec / 2)) : 300);
+          // Half the 2_700_000ms harness backstop when no step/agent timeout applies.
+          (effectiveTimeoutSec ? Math.max(1, Math.floor(effectiveTimeoutSec / 2)) : 1350);
         retryTimeoutSec = reduced;
         await appendJournal(taskDir, {
           type: "turn_timeout_nudge",

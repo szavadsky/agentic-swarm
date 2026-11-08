@@ -54,7 +54,7 @@ flowchart LR
 
 - `factory run` = preflight → run lock → `engine.run(task)`: loop derive → act → commit until the task is `done`, `blocked` (human), `failed`, or `stopped` (budget/limits). Epics run as child tasks in the same process. Exit code: `0` done, `10` blocked on human, `1` failed/error. Restart at any time = run again.
 - A turn = one harness call: a fresh session or a resumed one (`session.resume`). Persistent roles (triage, architect) keep a session id committed to `meta.yaml` at turn start via `onSession`; restarts resume the recorded id, including an interrupted step's session (short continue-and-yield prompt under `limits.timeoutNudgeSec`). Resume failure (`sessionLost`) → fresh session hydrated from records. Concurrent ordinary turns are bounded by the global turns semaphore; per-session FIFO exists only in the `PersistentAgent` helper.
-- Transient timeout: a resumable kept session is resumed once with a short finalize nudge (`time budget exhausted: stop exploring, yield your result now…`) under `limits.timeoutNudgeSec` (default 300); a fresh session is used only on `sessionLost`. See §12.3.
+- Transient timeout: a resumable kept session is resumed once with a short finalize nudge (`time budget exhausted: stop exploring, yield your result now…`) under `limits.timeoutNudgeSec`; when the step has no effective timeout the nudge defaults to half the 45m harness backstop (1350s). A fresh session is used only on `sessionLost`. See §12.3.
 - Concurrency: `limits.maxParallelItems` item flows per task; `limits.maxParallelTurns` concurrent harness turns across the whole run (global semaphore; turns, not flows, so nested epics cannot deadlock).
 - Run lock `{worktreeRoot}/.factory-runtime/locks/{rootTask}.lock` (pid, host, start); dead pid → takeover (console warning + journaled). The path is outside the main checkout.
 
@@ -103,10 +103,9 @@ export interface AgentRun {
   timeoutSec?: number; onSession?: (sid: string) => void; onUsage?: (u: Usage) => void;
 }
 export type AgentOutcome =
-  | { ok: true;  data: unknown; sessionId?: string; traceRef?: string; usage?: Usage; transcriptBytes?: number; stdoutBytes?: number }
-  | { ok: false; error: string; data?: unknown; sessionId?: string; traceRef?: string; usage?: Usage; transcriptBytes?: number; stdoutBytes?: number;
-      transient?: boolean; sessionLost?: boolean; timedOut?: boolean };
-```
+  | { ok: true;  data: unknown; sessionId?: string; traceRef?: string; usage?: Usage; transcriptBytes?: number; stdoutBytes?: number; toolCallCount?: number }
+  | { ok: false; error: string; data?: unknown; sessionId?: string; traceRef?: string; usage?: Usage; transcriptBytes?: number; stdoutBytes?: number; toolCallCount?: number;
+      transient?: boolean; sessionLost?: boolean; launchError?: boolean; timedOut?: boolean };
 
 Rules: core never imports harness code (only `src/harness/types.ts` types); adapters hold no orchestration logic and never see git policy. `complete` output is always re-validated by the engine. The fake harness replays scripted outcomes by `label` and records calls. The omp adapter's launch templates, output extraction and config generation are in `docs/OMP_ADAPTER.md` (from the omp spike). `timedOut` + `transcriptBytes`/`stdoutBytes` feed the nudge-retry and transcript-size guard paths (§12.3).
 
@@ -166,10 +165,10 @@ limits: { maxParallelItems: 4, maxParallelTurns: 6, maxStepAttempts: 2, maxInter
           maxSplitDepth: 1, maxPlanReviewRounds: 2, maxAmendmentsPerIteration: 3, maxIterations: 6,
           maxInfraRetries: 3, maxInfraRetriesExpensive: 1, gateRetries: 1, gateTimeoutSec: 900,
           storyMaxProdLines: 300, simpleMaxProdLines: 20, stubMaxProdLines: 40,
-          maxMilestones: 8, maxItemsPerPlan: 50, checkOutputBytes: 4000, hydrationBytes: 40000,
-          contextPackBytes: 40000, timeoutNudgeSec: 300, minFreeDiskMb: 2048, steerPollSec: 60,
+          maxMilestones: 8, maxItemsPerPlan: 50, checkOutputBytes: 4000,
+          stepToolCallWarning: 60, minFreeDiskMb: 2048, steerPollSec: 60,
           stepTranscriptWarningBytes: 5MiB }
-budget: { perTaskUsd: 100, perIterationUsd: 30, perItemUsd: 8, perStepUsd: 8, expensiveRoles: [architect, task-escalation] }   # enforced when harness reports usage
+budget: { perTaskUsd: 100, perIterationUsd: 30, perItemUsd: 40, perStepUsd: 25, expensiveRoles: [architect, task-escalation] }   # enforced when harness reports usage
 diversity: warn
 harness: omp
 reviewPolicy:
@@ -229,7 +228,7 @@ Canonical artifacts (plan, edits, wave, closeup, decisions) are written in the s
 1. `triage` (persistent session, cwd = scratch worktree on `topic/{task}--scratch` from the task tip): returns `triage.yaml` {kind, rationale, size, risks} + `context.yaml` citations `{file, lines: "a-b", anchors[], summary}` (always). Kinds: `simple` (docs/renames/trivial splits, ≤~10–20 lines, no classes/collaborating functions, zero tradeoffs) vs `story` (more, or any tradeoff/design/interface choice) per `agents/criteria/triage.md`; `simpleMaxProdLines: 20` enforces the bound mechanically.
 2. Citations verified (file exists, range in bounds, all anchors in range); failures dropped immediately and journaled (`citations_dropped`).
 3. `infra` if `infra.yaml` missing (epics inherit; copies parent files in): validates/derives setup commands, gates `{id, command}`, `testRunner` {command, selectorArgs, junitArg}, runs gates → `gates-baseline.yaml`.
-4. `context-pack` after infra, before architect, when enabled (`pipeline.contextPack`, default on) and kind ≠ `simple` (fresh session, fact-finder agent/role, fragment `steps/context-pack.md`, capped by `limits.contextPackBytes` → `hydrationBytes` → 40000): builds `context-pack.md`. Stale rule (`isContextPackStale`): iteration ≤1 stale iff not done; iteration >1 stale iff any non-`.factory` file changed since the pack commit. Refreshed in later iterations under step id `context-pack-{N}`.
+4. `context-pack` after infra, before architect, when enabled (`pipeline.contextPack`, default on) and kind ≠ `simple` (fresh session, fact-finder agent/role, fragment `steps/context-pack.md`; whole history injected, no byte cap): builds `context-pack.md`. Stale rule (`isContextPackStale`): iteration ≤1 stale iff not done; iteration >1 stale iff any non-`.factory` file changed since the pack commit. Refreshed in later iterations under step id `context-pack-{N}`.
 5. Route: `simple` → resumed triage session `simple-implement` turn (developer) in the same scratch worktree → configured `flows.simple` checks (`gates`, `simple-guard`) → green: merge to task branch. Guard/check failure: the scratch branch is renamed to the `simple` item branch and a `no-behavior` assignment is written (QA + review added; work kept; status via the normal item flow). Non-simple: scratch worktree removed; story/spike/epic/saga all run the iteration flow (§8.4). Child epic tasks skip classification (kind fixed) and inherit infra.
 
 ### 8.2 Item step machine
@@ -409,7 +408,7 @@ Run lock; repo mutex + `gc.auto=0`; hooks disabled (`core.hooksPath=/dev/null`);
 Producer and reviewer split within class (developer `workhorse` ↔ qa/reviewer `alt-workhorse`; architect ↔ plan-reviewer `alt-architect`). Alt on retry: from fix round 2 the developer runs `retryRole` (`alt-workhorse`); for that round reviewing steps resolving to the same primary model swap to the producer's base role (`workhorse`) — only when the producer step actually declares `retryRole`. A rotated round starts a fresh developer session. Escalated items: `escalatable` steps use `task-escalation`. `diversity` checks workhorse/task-reviewer and architect/alt-architect primary equality at preflight (`warn`/`error`/`off`).
 
 ### 12.5 Token economy
-Cache-ordered prompts; assignments carry only their citations + milestone excerpt; `session: reuse` by default for item steps (fresh only when configured or on rotated developer rounds); timeout retry resumes kept session with short engine nudge and reduced timeout; cheap fact-finder pre-builds `context-pack.md` so expensive architect works from prepared context within an explicit exploration budget instead of broad scans; tail-capped check output; hydration from plans/close-ups/taken-steering/decisions capped at `hydrationBytes`; `simpler` for mechanical text; failing `before` checks skip the agent; transcript/stdout over `stepTranscriptWarningBytes` journals a warning; usage → records + `state` totals (task runs + item worktrees + epic children, by role and item); `budget` exceed: item → consult, iteration → wave loop break, task → `human-stop` item + exit 10.
+Cache-ordered prompts; assignments carry only their citations + milestone excerpt; `session: reuse` by default for item steps (fresh only when configured or on rotated developer rounds); timeout retry resumes kept session with short engine nudge and reduced timeout; cheap fact-finder pre-builds `context-pack.md` so expensive architect works from prepared context within an explicit exploration budget instead of broad scans; tail-capped check output; whole history from plans/close-ups/taken-steering/decisions injected with no byte caps (budgets + turn limits are the only runaway guards); `simpler` for mechanical text; failing `before` checks skip the agent; transcript/stdout over `stepTranscriptWarningBytes` journals a warning; usage → records + `state` totals (task runs + item worktrees + epic children, by role and item); `budget` exceed: item → consult, iteration → wave loop break, task → `human-stop` item + exit 10.
 
 ## 13. Testing & fire test
 - `bun test` (fake harness + temp git repos), behavior only: crash/restart at each commit point, interrupted not counted, fix loop → consult → escalate, alt-on-retry swap, dispositions incl. human-async blocking dependents and answer re-run, steering single-flight + wave polling + stop, edits validation, target-red rejects collection errors, red-test catches tests that pass without the prod change, merge path conflict → integrate, HEAD guard, branch naming, session resume threading + sessionLost rehydration, gates mutation guard + per-test ratchet + backfill, suspend-aware timers, disk guards, spend scan dedup.

@@ -23,6 +23,7 @@ export const DEFAULT_LIMITS: Required<PipelineLimits> = {
   maxItemsPerPlan: 50,
   checkOutputBytes: 4000,
   stepTranscriptWarningBytes: 5 * 1024 * 1024,
+  stepToolCallWarning: 60,
   timeoutNudgeSec: 2700,
   minFreeDiskMb: 2048,
   steerPollSec: 60,

@@ -5,6 +5,7 @@ import path from "node:path";
 import {
   extractAgentBody,
   extractJsonFromText,
+  parseUnknownToolNames,
   OmpHarness,
 } from "../../src/harness/omp/harness.js";
 
@@ -64,6 +65,16 @@ Hope this helps.
 
   it("extractJsonFromText throws when no JSON structure is found", () => {
     expect(() => extractJsonFromText("Not JSON at all")).toThrow();
+  });
+
+  it("parseUnknownToolNames parses singular and unknown-tool forms, strips periods, dedupes", () => {
+    expect(parseUnknownToolNames("Error: Built-in tools unavailable in this session: checkpoint, rewind.\nRun `omp --help`.")).toEqual(["checkpoint", "rewind"]);
+    expect(parseUnknownToolNames("Error: Built-in tool unavailable in this session: rewind.")).toEqual(["rewind"]);
+    expect(parseUnknownToolNames("Error: Unknown tools in --tools: frobnicate, bogus.")).toEqual(["frobnicate", "bogus"]);
+    expect(parseUnknownToolNames("Error: Unknown tool in --tools: frobnicate.")).toEqual(["frobnicate"]);
+    expect(parseUnknownToolNames("Error: Built-in tools unavailable in this session: checkpoint.\nError: Unknown tools in --tools: frobnicate.")).toEqual(["checkpoint", "frobnicate"]);
+    expect(parseUnknownToolNames("Error: Built-in tools unavailable in this session: rewind, rewind.")).toEqual(["rewind"]);
+    expect(parseUnknownToolNames("some unrelated failure")).toEqual([]);
   });
 });
 

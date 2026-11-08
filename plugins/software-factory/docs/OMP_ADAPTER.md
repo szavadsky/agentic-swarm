@@ -94,7 +94,7 @@ eval:
 title:
   generator: none         # Disable async title generation calls
 checkpoint:
-  enabled: false          # Disable interactive git checkpoint reminders
+  enabled: true           # Mounts checkpoint/rewind agent tools (agents opt in via tools list)
 advisor:
   enabled: false          # Disable passive advisor prompts
 bash:
@@ -136,17 +136,19 @@ Stdout emits streaming NDJSON objects (`--mode json`):
 | **Transient Error** (`transient: true`) | Process timeout (`timedOut`, 143); killed by `SIGKILL` (137); rate-limit/quota/overloaded, HTTP 429/500/502/503/504, `ECONNRESET`/`ETIMEDOUT`/`ENOTFOUND`, socket hangup, connection reset, fetch failed, network error, temporary failure, service unavailable, bad gateway, gateway timeout, internal server error, context deadline exceeded (`src/harness/omp/classify.ts`). Suspend detected during the turn also forces transient. | Retried via `maxInfraRetries` / `maxInfraRetriesExpensive` with backoff; timeout on a resumable session first retries with the finalize nudge under `limits.timeoutNudgeSec`; exhaustion escalates to a stable-id question; does not consume item fix rounds. |
 | **Session Lost** (`sessionLost: true`) | `resumeRequested === true` and transcript missing: `Session "…" not found`, no/unknown session, failed to load session, cannot resume, session file not found. | Fresh session (`resume: undefined`) with the full prompt; journaled `session_lost_rehydrated`. Only `sessionLost` triggers the fresh-session fallback. |
 | **Agent / Model Failure** (`transient: false`) | Exit code 1; invalid arguments; model refusal; stopReason `abort`/`error` (or other unexpected stop on exit 0 without yield). | Step ends `rejected` (consult via bounds/no-progress); transient-timeout path does not apply. |
+| **Launch / Config Error** (`launchError: true`) | Bad tool/flag/config: `Unknown tool(s) in --tools: …` (exit 2), `Built-in tool(s) unavailable in this session: …` (singular or plural), `no such tool`, unknown/invalid/unrecognized flags, failed flag/option/config parsing (`src/harness/omp/classify.ts` `LAUNCH_ERROR_PATTERNS`). | Not transient and not an agent failure: no attempts consumed, no repair, no consult — the step-runner throws and the run fails fast with the error surfaced (fix config/prompts and restart; resume continues from records). Run-start `validateTools` probe catches bad names before any turn. |
 
 ---
 
 ## 6. Process Lifecycle, Timeouts & Run Lock
 
 - **Process Group Isolation**: All `omp` invocations are spawned with `detached: true` creating independent process groups (`PGID = proc.pid`).
-- **Group Termination on Timeout**: Per-step timeout (`AgentRun.timeoutSec` or harness `defaultTimeoutMs`, 300s) fires `SIGTERM` to the child's process group (`-proc.pid`), followed by `SIGKILL` after 3s. This terminates all grandchildren (e.g. bash loops, sleep commands) and never touches the orchestrator's process group.
+- **Group Termination on Timeout**: Per-step timeout (`AgentRun.timeoutSec` or harness `defaultTimeoutMs`, 2700s) fires `SIGTERM` to the child's process group (`-proc.pid`), followed by `SIGKILL` after 3s. This terminates all grandchildren (e.g. bash loops, sleep commands) and never touches the orchestrator's process group.
 - **Suspend-aware active timers**: timeouts measure monotonic active time (`src/core/clock.ts`), so machine sleep never burns the budget; a suspend spanning a turn journals `system_suspend_detected` and forces transient classification. Same mechanism guards gates, checks, and `complete()`.
 - **Factory Process Signals (SIGINT/SIGTERM)**: The orchestrator installs process signal handlers that terminate all active child process groups (500ms grace) and mark running steps with `status: "interrupted"` cleanly in `meta.yaml` and `journal.ndjson`, preserving session id and usage; exits 130 (SIGINT) / 143 (SIGTERM).
 - **Transcript / Stdout Size Guard**: An engine-side guard tracks per-step stdout and transcript size; if size exceeds `limits.stepTranscriptWarningBytes` (default 5 MiB), a `step_transcript_size_warning` audit event is recorded to `journal.ndjson`.
 - **`complete()` Timeout**: Spawns `omp -p` detached with an active timer; on timeout, fires `SIGTERM` followed by `SIGKILL` to its process group and throws an explicit timeout error. Non-zero exit, abort/error stop, or schema mismatch also throw.
+- **Run-Start Tool Probe** (`OmpHarness.validateTools`): before the first turn, the engine unions `pipeline.tools.structuredOutput` with every agent's resolved tools (`agents.<name>.tools` override → frontmatter `tools` → `pipeline.tools.defaults`) and runs one cheap `--no-session --tools=<union>` turn. omp's tool-error stderr (`Built-in tool(s) unavailable…`, `Unknown tool(s) in --tools: …`, parsed by `parseUnknownToolNames`: split/trim/strip periods/dedupe/union) names unknown tools; a non-empty result throws `Unknown omp tool names … (from pipeline.tools/agents — fix config or agent frontmatter)` before any agent turn runs.
 ### 6.2 Atomic Run Lock (`acquireRunLock`)
 - Lock files live at `{worktreeRoot}/.factory-runtime/locks/<task>.lock` outside git tracking.
 - Acquired atomically using `fs.openSync(lockPath, "wx")`.

@@ -930,6 +930,47 @@ describe("Engine: amend delta semantics, resumed repair, removal, tool-less PM (
       },
     });
 
+    expect(res.meta.error).toContain("yield-only");
+    expect(harness.calls.length).toBe(0);
+    const journal = fs.readFileSync(path.join(taskDir, "journal.ndjson"), "utf8");
+    expect(journal).toContain("pm_tools_guard_rejected");
+  });
+
+  it("step-runner guard rejects a PM step when structuredOutput carries file tools", async () => {
+    const task = "pm-guard-structured-task";
+    const taskDir = path.join(tmpRepo.dir, orchFolder, task);
+    const recordsDir = path.join(taskDir, "runs");
+    fs.mkdirSync(recordsDir, { recursive: true });
+    const harness = new FakeHarness();
+    const pipeline = makePipeline();
+    // structuredOutput ['yield','read'] appends a file tool to the PM turn → reject.
+    pipeline.tools = { defaults: ["edit", "bash"], structuredOutput: ["yield", "read"] } as any;
+
+    const res = await runAgentStep({
+      task,
+      stepId: "pm-edits-1",
+      stepFragment: "steps/pm-edits",
+      agent: "pm",
+      role: "alt-workhorse",
+      cwd: tmpRepo.dir,
+      taskWt: tmpRepo.dir,
+      taskDir,
+      recordsDir,
+      repo: repoObj,
+      harness,
+      pipeline,
+      project,
+      prompts,
+      promptVars: {
+        plan: "{}",
+        taskStatus: "s",
+        kinds: "k",
+        citations: "c",
+        limits: "l",
+        storyKindsCriteria: "sc",
+      },
+    });
+
     expect(res.ok).toBe(false);
     expect(res.status).toBe("error");
     expect(res.meta.error).toContain("yield-only");
@@ -937,7 +978,6 @@ describe("Engine: amend delta semantics, resumed repair, removal, tool-less PM (
     const journal = fs.readFileSync(path.join(taskDir, "journal.ndjson"), "utf8");
     expect(journal).toContain("pm_tools_guard_rejected");
   });
-
   it("removeItemSlugs with superseded + pending slugs applies (pending superseded, superseded no-op journaled)", async () => {
     const task = "amend-remove-mixed-task";
     setupTask(tmpRepo, task, orchFolder);

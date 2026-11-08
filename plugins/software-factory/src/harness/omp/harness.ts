@@ -118,6 +118,29 @@ export function extractJsonFromText(text: string): unknown {
 
   throw new Error(`Failed to extract valid JSON from text: ${trimmed.slice(0, 200)}...`);
 }
+/**
+ * Parses omp's tool-error stderr for unknown tool names (pure, unit-tested).
+ * Matches both the plural and singular "Built-in tool(s) unavailable in this
+ * session: ..." and "Unknown tool(s) in --tools: ..." forms (exit 2 shapes
+ * observed live); splits on commas, trims, strips trailing periods, dedupes,
+ * and returns the union.
+ */
+export function parseUnknownToolNames(stderr: string): string[] {
+  const found = new Set<string>();
+  const patterns = [
+    /Built-in tools? unavailable in this session: ([^\n.]+)/i,
+    /Unknown tools? in --tools: ([^\n.]+)/i,
+  ];
+  for (const pat of patterns) {
+    const m = stderr.match(pat);
+    if (!m) continue;
+    for (const part of (m[1] ?? "").split(",")) {
+      const name = part.trim().replace(/\.+$/, "").trim();
+      if (name) found.add(name);
+    }
+  }
+  return [...found];
+}
 
 /**
  * Harness implementation wrapping the Oh-My-Pi (`omp`) CLI (§4, spike 2).
@@ -146,9 +169,10 @@ export class OmpHarness implements Harness {
 
   /**
    * Probe which tool names omp accepts. One cheap `--no-session` turn with the
-   * union; omp's "Built-in tools unavailable in this session: a, b" stderr names
-   * the unknown ones. Returns [] when all resolve (or the probe itself fails
-   * for a non-tool reason — callers treat that as inconclusive, not clean).
+   * union; omp's tool-error stderr ("Built-in tool(s) unavailable in this
+   * session: ...", "Unknown tool(s) in --tools: ...") names the unknown ones.
+   * Returns [] when all resolve (or the probe itself fails for a non-tool
+   * reason — callers treat that as inconclusive, not clean).
    */
   public async validateTools(tools: string[]): Promise<string[]> {
     const { spawn } = await import("node:child_process");
@@ -169,9 +193,7 @@ export class OmpHarness implements Harness {
         proc.on("close", () => { clearTimeout(t); resolve(); });
         proc.on("error", () => { clearTimeout(t); resolve(); });
       });
-      const m = stderr.match(/Built-in tools unavailable in this session: ([^\n]+)/);
-      if (!m) return [];
-      return (m[1] ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+      return parseUnknownToolNames(stderr);
     } finally {
       try { if (fs.existsSync(promptPath)) fs.unlinkSync(promptPath); } catch {}
     }
@@ -212,7 +234,7 @@ export class OmpHarness implements Harness {
         // Fallback minimal overlay
         fs.writeFileSync(
           overlayPath,
-          "eval:\n  autoBackground:\n    enabled: false\ntitle:\n  generator: none\ncheckpoint:\n  enabled: false\nadvisor:\n  enabled: false\nbash:\n  gitGuard: false\n  allowCompoundCommands: true\nmnemopi:\n  polyphonicRecall: false\n  enhancedRecall: false\n  proactiveLinking: false\nupdate:\n  auto: false\n",
+          "eval:\n  autoBackground:\n    enabled: false\ntitle:\n  generator: none\ncheckpoint:\n  enabled: true\nadvisor:\n  enabled: false\nbash:\n  gitGuard: false\n  allowCompoundCommands: true\nmnemopi:\n  polyphonicRecall: false\n  enhancedRecall: false\n  proactiveLinking: false\nupdate:\n  auto: false\n",
           "utf8"
         );
       }

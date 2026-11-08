@@ -115,6 +115,9 @@ describe("classifyOmpOutcome", () => {
   it("classifies tool/flag errors as launch errors, not agent failures", () => {
     for (const stderr of [
       "Error: Built-in tools unavailable in this session: checkpoint, rewind.\nRun `omp --help` for available flags.",
+      "Error: Built-in tool unavailable in this session: rewind.",
+      "Error: Unknown tools in --tools: frobnicate.",
+      "Error: Unknown tool in --tools: frobnicate.",
       "Error: unknown flag --frobnicate",
     ]) {
       const res = classifyOmpOutcome({ exitCode: 1, stderr });

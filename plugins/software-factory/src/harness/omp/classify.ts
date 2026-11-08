@@ -30,7 +30,8 @@ const SESSION_LOST_PATTERNS: RegExp[] = [
   /session\s+file\s+not\s+found/i,
 ];
 const LAUNCH_ERROR_PATTERNS: RegExp[] = [
-  /built-in tools unavailable/i,
+  /built-in tools? unavailable/i,
+  /unknown tools? in --tools/i,
   /no such tool/i,
   /unknown flag/i,
   /unrecognized (flag|option|argument)/i,
