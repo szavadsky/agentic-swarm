@@ -1172,6 +1172,20 @@ describe("Concern store", () => {
     expect(stored.status).toBe("open");
     expect(stored.source.record).toBe("001-develop-a1");
     expect(stored.source.agent).toBe("developer");
+    // Replay derives timestamps from meta.endedAt, not wall-clock.
+    expect(stored.updatedAt).toBe("2026-01-01T00:01:00.000Z");
+    expect(stored.createdAt).toBe("2026-01-01T00:01:00.000Z");
+    expect(stored.source.lastSeen).toBe("2026-01-01T00:01:00.000Z");
+
+    // A second startup is a byte- and commit-level no-op.
+    const fileHash = (f: string) => fs.readFileSync(f, "utf8");
+    const beforeBytes = fileHash(path.join(concernsDir, files[0]!));
+    const beforeHead = tmpRepo.git(["rev-parse", "HEAD"], { cwd: taskWt }).stdout.trim();
+    const replay = await reconcileConcerns({ taskDir, taskWt, repo });
+    expect(replay).toHaveLength(1);
+    expect(fileHash(path.join(concernsDir, files[0]!))).toBe(beforeBytes);
+    expect(tmpRepo.git(["rev-parse", "HEAD"], { cwd: taskWt }).stdout.trim()).toBe(beforeHead);
+    expect(tmpRepo.git(["status", "--porcelain"], { cwd: taskWt }).stdout).toBe("");
 
     // Simulate an earlier triage: a second reconcile must preserve it and not
     // duplicate the file.

@@ -26,6 +26,7 @@ const affectsOf = (a?: string[]) => [...new Set((a ?? []).map((x) => x.trim()))]
 const hash = (prefix: string, parts: unknown[]) =>
   `${prefix}-${createHash("sha256").update(JSON.stringify(parts)).digest("hex").slice(0, 10)}`;
 const rmId = (d: RemarkableDecision) => hash("rm", [norm(d.chosen), affectsOf(d.alternatives)]);
+const pick = (r: Obj) => JSON.stringify([r.detail ?? r.why ?? 0, r.severity ?? 0, r.chosen ?? 0, r.alternatives ?? 0, r.status, r.disposition ?? 0, r.source?.record, r.source?.agent, r.source?.step, r.source?.item, !!r.source?.escalated]);
 
 /** Stable concern identity: kind, normalized summary, location, sorted affects. */
 export function concernFingerprint(c: ConcernInput): string {
@@ -52,7 +53,7 @@ function mergeConcern(existing: StoredConcernArtifact | undefined, input: Concer
     summary: existing?.summary ?? input.summary.trim(), detail,
     ...(location ? { location } : {}), ...(affects ? { affects } : {}), severity,
     status: existing?.status ?? "open",
-    source: { ...(existing?.source ?? {}), ...source, ...(escalated ? { escalated: true } : {}), lastSeen: at },
+    source: { ...(existing?.source ?? {}), ...source, ...(escalated ? { escalated: true } : {}), lastSeen: (existing?.source?.lastSeen ?? "") > at ? existing!.source!.lastSeen! : at },
     createdAt: existing?.createdAt ?? at, updatedAt: at,
   };
 }
@@ -62,14 +63,14 @@ function mergeRemarkable(existing: Obj | undefined, input: RemarkableDecision, s
     ...(existing ?? {}), id: rmId(input), chosen: input.chosen, alternatives: input.alternatives,
     why: input.why.length >= (existing?.why?.length ?? -1) ? input.why : existing!.why,
     status: existing?.status ?? "open",
-    source: { ...(existing?.source ?? {}), ...source, lastSeen: at },
+    source: { ...(existing?.source ?? {}), ...source, lastSeen: (existing?.source?.lastSeen ?? "") > at ? existing!.source!.lastSeen! : at },
     createdAt: existing?.createdAt ?? at, updatedAt: at,
   };
 }
 
 /** Merges producer concerns and remarkable decisions, one taskWt file per fingerprint. */
 export async function aggregateConcerns(
-  ctx: ConcernStoreContext & { source: ConcernSource }, concerns: ConcernInput[], remarkables: RemarkableDecision[] = []
+  ctx: ConcernStoreContext & { source: ConcernSource }, concerns: ConcernInput[], remarkables: RemarkableDecision[] = [], opts: { at?: string; commit?: boolean; dirty?: boolean } = {}
 ): Promise<StoredConcernArtifact[]> {
   for (const c of concerns) {
     if (!KINDS.has(c.kind)) throw new Error(`Unknown concern kind: ${String(c.kind)}`);
@@ -77,23 +78,30 @@ export async function aggregateConcerns(
     if (c.severity && !(c.severity in RANK)) throw new Error(`Unknown concern severity: ${String(c.severity)}`);
   }
   for (const d of remarkables) if (!d?.chosen?.trim() || !Array.isArray(d?.alternatives) || typeof d?.why !== "string" || !d.why.trim()) throw new Error("Remarkable decision requires chosen/alternatives/why");
-
-  const at = atOf(ctx), dir = dirOf(ctx.taskDir);
+  const at = opts.at ?? atOf(ctx), dir = dirOf(ctx.taskDir);
+  let dirty = false;
   const stored = await locks.runExclusive(ctx.taskDir, async () => {
     const out: StoredConcernArtifact[] = [];
     for (const input of concerns) {
       const file = path.join(dir, `${concernFingerprint(input)}.yaml`);
-      const merged = mergeConcern(await readExisting(file), input, ctx.source, at);
+      const existing = await readExisting<StoredConcernArtifact>(file);
+      const merged = mergeConcern(existing, input, ctx.source, at);
+      if (existing && pick(existing) === pick(merged) && (existing.source?.lastSeen ?? "") >= at) { out.push(existing); continue; }
       await writeYamlAtomic(file, merged);
-      out.push(merged);
+      dirty = true; out.push(merged);
     }
     for (const decision of remarkables) {
       const file = path.join(dir, `${rmId(decision)}.yaml`);
-      await writeYamlAtomic(file, mergeRemarkable(await readExisting(file), decision, ctx.source, at));
+      const existing = await readExisting<Obj>(file);
+      const merged = mergeRemarkable(existing, decision, ctx.source, at);
+      if (existing && pick(existing) === pick(merged) && (existing.source?.lastSeen ?? "") >= at) continue;
+      await writeYamlAtomic(file, merged);
+      dirty = true;
     }
     return out;
   });
-  if (concerns.length || remarkables.length) await commitAll(ctx.repo, ctx.taskWt, `factory: concerns ${ctx.source.record}`);
+  opts.dirty = dirty;
+  if (dirty && opts.commit !== false) await commitAll(ctx.repo, ctx.taskWt, `factory: concerns ${ctx.source.record}`);
   return stored;
 }
 
@@ -193,15 +201,20 @@ async function committedStepRecords(ctx: ConcernStoreContext): Promise<Committed
 
 /** Rebuilds concern artifacts from committed step records; merging keeps it idempotent. Startup calls it after repairWorktree, so the worktree matches HEAD and ls-tree enumeration is authoritative. */
 export async function reconcileConcerns(ctx: ConcernStoreContext): Promise<StoredConcernArtifact[]> {
+  const records = await committedStepRecords(ctx);
+  records.sort((a, b) => String(a.meta.endedAt ?? "").localeCompare(String(b.meta.endedAt ?? "")) || (a.meta.seq ?? 0) - (b.meta.seq ?? 0) || a.name.localeCompare(b.name));
   const reconciled: StoredConcernArtifact[] = [];
-  for (const r of await committedStepRecords(ctx)) {
-    const concerns = [...(r.output.concerns ?? []), ...(r.output.newConcerns ?? [])]
-      .filter((c: any) => c && typeof c === "object");
+  let dirty = false;
+  for (const r of records) {
+    const concerns = [...(r.output.concerns ?? []), ...(r.output.newConcerns ?? [])].filter((c: any) => c && typeof c === "object");
     const remarkables = Array.isArray(r.output.remarkable) ? r.output.remarkable : [];
     if (!concerns.length && !remarkables.length) continue;
-    const source: ConcernSource = { record: r.name, agent: String(r.meta.agent ?? "unknown"),
-      ...(r.meta.name ? { step: String(r.meta.name) } : {}), ...(r.item ? { item: r.item } : {}) };
-    reconciled.push(...(await aggregateConcerns({ ...ctx, source }, concerns, remarkables)));
+    const source: ConcernSource = { record: r.name, agent: String(r.meta.agent ?? "unknown"), ...(r.meta.name ? { step: String(r.meta.name) } : {}), ...(r.item ? { item: r.item } : {}) };
+    const at = typeof r.meta.endedAt === "string" && r.meta.endedAt ? r.meta.endedAt : atOf(ctx);
+    const o: { at: string; commit: false; dirty?: boolean } = { at, commit: false };
+    reconciled.push(...(await aggregateConcerns({ ...ctx, source }, concerns, remarkables, o)));
+    dirty = dirty || !!o.dirty;
   }
+  if (dirty) await commitAll(ctx.repo, ctx.taskWt, "factory: concerns reconcile");
   return reconciled;
 }
