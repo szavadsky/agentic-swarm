@@ -1,0 +1,17 @@
+seq: 55
+name: consult-hydration-fingerprint-caps
+attempt: 1
+agent: architect
+role: architect
+models:
+  - opencode-go/muse-spark-1.3-contributor
+session: 01a1b894-4755-7787-a1ed-8df6c7a062a2
+timeoutSec: 7200
+status: ok
+startedAt: 2026-11-08T22:15:10.112Z
+endedAt: 2026-11-08T22:15:43.793Z
+usage:
+  inputTokens: 227153
+  outputTokens: 2350
+  costUsd: 0.023638
+traceRef: /home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/sessions/2026-11-08T00-34-47-765Z_01a1b894-4755-7787-a1ed-8df6c7a062a2.jsonl
