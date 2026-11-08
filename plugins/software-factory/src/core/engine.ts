@@ -31,6 +31,7 @@ import { runIngest, isTriageDone, isInfraDone } from "./flows/ingest.js";
 import { runIteration } from "./flows/iteration.js";
 import { runSeamHooks } from "./flows/seams.js";
 import { readYaml, writeYamlAtomic, readText } from "./records/io.js";
+import { reconcileConcerns } from "./concerns.js";
 import { listPending, classify, takenPaths } from "./steer.js";
 import { resolveRole } from "./config/roles.js";
 import { installShutdownHandlers } from "./shutdown.js";
@@ -323,6 +324,12 @@ export async function runTask(
     parentBranch = `topic/${task}`;
 
   // 2. Start-up repair restricted to §6.3.6 list (Finding 1 & 19)
+  // Concerns are engine-owned: commit them before stray-dirt repair stashes them.
+  if (fs.existsSync(path.join(taskDir, "concerns"))) {
+    await commitAll(repo, taskWt, "factory: concern store recovery", {
+      paths: [`${orchFolder}/${task}/concerns`],
+    });
+  }
   await repairWorktree(repo, taskWt, "task", {
     operatorEditable: [
       "INTENT.md",
@@ -357,6 +364,19 @@ export async function runTask(
   }
 
   await repairInterruptedRecords(taskDir);
+
+  // Rebuild concerns lost in a crash from committed step records (§18).
+  try {
+    await reconcileConcerns({ taskDir, taskWt, repo });
+  } catch (err: any) {
+    try {
+      await appendJournal(taskDir, {
+        type: "concern_reconcile_error",
+        task,
+        error: err?.message || String(err),
+      });
+    } catch { /* Journal failure must not crash startup. */ }
+  }
 
   // 3. Load pipeline config and setup semaphores (§2)
   pipeline = await pipelineFor(taskDir);

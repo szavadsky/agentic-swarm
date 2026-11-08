@@ -1,0 +1,46 @@
+concerns:
+  - Full-suite gate (TMPDIR=/tmp bun test) was launched but still running in
+    background when time budget expired; non-regression beyond the target file
+    is unverified in this round — prior full-suite state was green and the
+    change is scoped to concerns.ts + one test.
+  - "Optional review suggestions (rm-* return typing, scoped commitAll paths, r2
+    regression tests, consult taskWt passing) intentionally not addressed:
+    fix-round scope is the single fix item and time budget was exhausted."
+  - "New reconcile commit message is 'factory: concerns reconcile' (single
+    commit); no test asserts on concern commit message text, verified by target
+    green."
+evidence:
+  - "Typecheck: `cd plugins/software-factory && bun run typecheck` => exit 0 ($
+    tsc --noEmit, no errors)."
+  - "Target: `cd plugins/software-factory && TMPDIR=/tmp bun test
+    test/engine/concerns-funnel.test.ts` => 22 pass, 0 fail, 210 expect() calls
+    (was 202; +8 new idempotency assertions)."
+  - "Idempotency verified by strengthened test: after first reconcile,
+    updatedAt/createdAt/source.lastSeen equal meta.endedAt
+    (2026-01-01T00:01:00.000Z); second reconcile leaves concern file bytes
+    identical, `git rev-parse HEAD` unchanged, and `git status --porcelain`
+    clean."
+  - "Live-merge behavior preserved: existing merge/escalation/concurrency/triage
+    tests all still pass (write-on-diff always triggers for new source.record,
+    so updatedAt/lastSeen still advance on live re-emit)."
+  - "Size: `git diff --numstat 87a7682 -- plugins/software-factory/src` =>
+    artifacts 2/0, concerns 220/0, engine 20/0, step-runner 49/0 = 291 changed
+    lines total, under the 300 limit."
+  - "`git diff --check` => clean (no whitespace errors)."
+  - "Lock discipline kept: KeyedMutex(taskDir) wraps RMW only; commitAll
+    (single, at end, only if dirty) runs outside the mutex and is never wrapped
+    in repo.writeLock; ingest-error handling untouched."
+notes: "Fix implements the architect's 4-point plan: (1) aggregateConcerns takes
+  opts.at (default wall-clock; reconcile passes meta.endedAt); (2)
+  write-only-on-diff via pick() over detail/why, severity, chosen/alternatives,
+  status, disposition, source identity, escalated — skip writeYamlAtomic when
+  equal and lastSeen>=at, else write with updatedAt=at and lastSeen=max; (3)
+  reconcileConcerns sorts committed ok records by endedAt (fallback seq/name),
+  replays with commit:false, tracks dirty, single commitAll only if dirty; (4)
+  test asserts byte-identical files + unchanged HEAD + endedAt-derived
+  timestamps on replay."
+status: ok
+summary: "Fixed reconcile idempotency: deterministic endedAt-derived timestamps,
+  write-only-on-diff merges, single dirty-gated commit per reconcile, and a
+  strengthened byte/HEAD-level idempotency test. Typecheck clean, 22/22 target
+  green, 291/300 prod lines."

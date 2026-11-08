@@ -1,0 +1,27 @@
+status: approved
+summary: "Approved: 22/22 target green, full suite 324 pass, typecheck clean,
+  idempotency fix verified byte+HEAD, no test weakening"
+suggestions:
+  - id: corrupt-concern-silent-skip
+    disposition: optional
+    summary: listOpenConcerns silently drops unreadable YAML with no signal
+    detail: Line 117 catch returns undefined for any read/parse error, so a corrupt
+      concerns/c-*.yaml vanishes from triage with no journal/log. Behavior for
+      valid files verified correct; no test covers corrupt path. Consider
+      journaling filename; non-blocking.
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 117
+  - id: multirecord-reconcile-ordering-uncovered
+    disposition: optional
+    summary: Single-record test does not pin multi-record endedAt ordering or
+      single-commit batching
+    detail: Reconcile sorts by meta.endedAt/seq/name and batches to one commitAll if
+      dirty (concerns.ts:205,218), but the strengthened test uses one record so
+      it proves replay no-op (bytes+HEAD unchanged) without distinguishing
+      N-commits vs 1-commit on first reconcile. Consider a 2-record test
+      asserting endedAt order and one new HEAD; current coverage proves the
+      reported churn defect is fixed.
+    location:
+      file: plugins/software-factory/test/engine/concerns-funnel.test.ts
+      line: 1128

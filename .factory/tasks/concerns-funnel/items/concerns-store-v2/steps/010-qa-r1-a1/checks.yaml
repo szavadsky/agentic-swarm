@@ -1,0 +1,143 @@
+checks:
+  - id: red-test
+    status: pass
+    message: "red-test passed: all 21 tests fail when prod changes are restored to
+      test-first commit"
+    details:
+      command: cd plugins/software-factory && bun test
+        test/engine/concerns-funnel.test.ts --reporter=junit
+        --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-redtest-1794125951569-j99dv4bzm3.xml
+      junitCaseCount: 22
+      junitCaseIds:
+        - Concern funnel schemas.valid concerns pass validation and unknown
+          kinds reject with no artifact write
+        - Concern store.fingerprints concern identity, ignoring detail,
+          severity, and affect order
+        - Concern store.aggregates a developer concern to one open taskWt file
+          with defaults, source, and immediate commit
+        - Concern store.merges re-emitted concerns into one file with longer
+          detail, max severity, and advanced timestamps
+        - Concern store.keeps dismissed status and flags escalation when a
+          higher severity is re-emitted
+        - Concern store.lists only open concerns in stable order
+        - Concern store.triages only exact-id suggestions and persists dismiss
+          reasons
+        - Concern store.routes non-dismiss triage dispositions and gates
+          non-triagers
+        - Concern store.rejects dismiss triage without detail and leaves the
+          concern unchanged
+        - Concern store.partitions suggestions by exact concern id
+        - Concern store.records close-up pending resolutions without changing
+          concern status
+        - Concern store.aggregates remarkable decisions into rm-* files and
+          triages them by exact id
+        - Concern store.rejects unknown concern kinds without partial writes and
+          leaves existing files untouched
+        - Concern store.writes distinct fingerprints concurrently without
+          deadlock or lost commits
+        - Concern store.serializes concurrent merges of the same fingerprint
+          into one merged file
+        - "Concern store.wires reviewer output: aggregate new concerns before
+          triaging pre-existing ids only"
+        - Concern store.wires consult writeArtifact producers to the concern
+          store
+        - "Concern store.wires close-up producers: aggregates concerns and
+          applies resolutions"
+        - Concern store.aggregates concerns and remarkable decisions across
+          producer schemas
+        - Concern store.reconciles missing concerns from committed step records
+          idempotently
+        - Concern store.commits stray concerns files during startup recovery
+          instead of stashing them
+        - Concern store.keeps step status ok and journals an ingest error when
+          concern ingestion fails
+      junitTruncated: false
+      collected: true
+      collectionErrors: []
+  - id: test-diff
+    status: pass
+    message: test-diff generated (1 test files, 2382 bytes)
+    details:
+      diff: >-
+        diff --git
+        a/plugins/software-factory/test/engine/concerns-funnel.test.ts
+        b/plugins/software-factory/test/engine/concerns-funnel.test.ts
+
+        index ef4bafb..a1f0728 100644
+
+        --- a/plugins/software-factory/test/engine/concerns-funnel.test.ts
+
+        +++ b/plugins/software-factory/test/engine/concerns-funnel.test.ts
+
+        @@ -535,9 +535,20 @@ describe("Concern store", () => {
+                 createdAt: "2026-01-01T00:00:00.000Z",
+               })
+             );
+        +    await writeYamlAtomic(path.join(taskDir, "concerns",
+        "rm-5555555555.yaml"), {
+
+        +      id: "rm-5555555555",
+
+        +      chosen: "A decision",
+
+        +      alternatives: ["Other"],
+
+        +      why: "reasons",
+
+        +      status: "open",
+
+        +      source: { record: "001-architect-plan-a1", agent: "architect" },
+
+        +      createdAt: "2026-01-01T00:00:00.000Z",
+
+        +      updatedAt: "2026-01-01T00:00:00.000Z",
+
+        +    });
+         
+             const open = await listOpenConcerns(taskDir);
+             expect(open.map((c) => c.id)).toEqual(["c-2222222222", "c-1111111111"]);
+        +    expect(open.every((c) => typeof c.kind === "string" && typeof
+        c.detail === "string")).toBe(true);
+           });
+         
+           it("triages only exact-id suggestions and persists dismiss reasons", async () => {
+        @@ -1161,6 +1172,20 @@ describe("Concern store", () => {
+             expect(stored.status).toBe("open");
+             expect(stored.source.record).toBe("001-develop-a1");
+             expect(stored.source.agent).toBe("developer");
+        +    // Replay derives timestamps from meta.endedAt, not wall-clock.
+
+        +    expect(stored.updatedAt).toBe("2026-01-01T00:01:00.000Z");
+
+        +    expect(stored.createdAt).toBe("2026-01-01T00:01:00.000Z");
+
+        +    expect(stored.source.lastSeen).toBe("2026-01-01T00:01:00.000Z");
+
+        +
+
+        +    // A second startup is a byte- and commit-level no-op.
+
+        +    const fileHash = (f: string) => fs.readFileSync(f, "utf8");
+
+        +    const beforeBytes = fileHash(path.join(concernsDir, files[0]!));
+
+        +    const beforeHead = tmpRepo.git(["rev-parse", "HEAD"], { cwd: taskWt
+        }).stdout.trim();
+
+        +    const replay = await reconcileConcerns({ taskDir, taskWt, repo });
+
+        +    expect(replay).toHaveLength(1);
+
+        +    expect(fileHash(path.join(concernsDir,
+        files[0]!))).toBe(beforeBytes);
+
+        +    expect(tmpRepo.git(["rev-parse", "HEAD"], { cwd: taskWt
+        }).stdout.trim()).toBe(beforeHead);
+
+        +    expect(tmpRepo.git(["status", "--porcelain"], { cwd: taskWt
+        }).stdout).toBe("");
+         
+             // Simulate an earlier triage: a second reconcile must preserve it and not
+             // duplicate the file.
+      files:
+        - plugins/software-factory/test/engine/concerns-funnel.test.ts
