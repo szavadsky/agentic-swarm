@@ -29,6 +29,7 @@ export const DEFAULT_LIMITS: Required<PipelineLimits> = {
   timeoutNudgeSec: 300,
   minFreeDiskMb: 2048,
   steerPollSec: 60,
+  maxEmptyWaves: 3,
 };
 
 export function resolveLimits(limits?: PipelineLimits): Required<PipelineLimits> {

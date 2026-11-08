@@ -102,6 +102,8 @@ export interface PipelineLimits {
   timeoutNudgeSec?: number;
   minFreeDiskMb?: number;
   steerPollSec?: number;
+  /** Consecutive empty-complete waves before architect consult (default 3). */
+  maxEmptyWaves?: number;
   [key: string]: unknown;
 }
 

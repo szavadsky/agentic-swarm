@@ -596,6 +596,19 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
     timeoutSec: initialTimeoutSec,
     onSession,
     onUsage: (u) => onTurnUsage(u),
+    onModelFallback: async ({ from, to, reason }) => {
+      try {
+        await appendJournal(taskDir, {
+          type: "harness_model_fallback",
+          task,
+          item,
+          step: stepId,
+          from,
+          to,
+          reason,
+        });
+      } catch {}
+    },
   };
 
   let outcome: AgentOutcome;
@@ -1015,6 +1028,7 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
           system: "Output valid JSON according to schema.",
           prompt: repairPrompt,
           schema: sch,
+          onModelFallback: agentRun.onModelFallback,
         });
       },
       relaunch: async () => {
@@ -1026,6 +1040,7 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
             session: { resume: undefined, keep: keepSession },
             onSession,
             onUsage: (u) => onTurnUsage(u),
+            onModelFallback: agentRun.onModelFallback,
           });
           commitTurnUsage(res.usage);
           return res;

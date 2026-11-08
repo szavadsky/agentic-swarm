@@ -86,11 +86,13 @@ export function nextWave(items: SchedItem[], order: string[]): string | null {
  * Computes the runnable items for the active wave respecting dependencies,
  * maximum concurrency, and PM scheduling order (§8.4).
  *
- * An item is runnable iff:
  * 1. It belongs to the active wave
  * 2. Its status is "pending"
  * 3. All items listed in its `deps` have status "done"
- *
+ * 4. No UNMERGED dep sits in the active wave or a later wave (dep-wave
+ *    order: such a dep cannot complete before this item runs, so the item
+ *    must wait — a forward-dep scheduling fault surfaces via wave-state
+ *    blocking, never by running the item early).
  * Up to (maxParallel - running) items are returned, preserving PM order.
  */
 export function runnable(
@@ -104,17 +106,36 @@ export function runnable(
     return [];
   }
 
+  const normWave = (w: unknown): string => String(w);
+  const waveRank = (w: unknown): number => {
+    const n = typeof w === "number" ? w : Number(String(w));
+    return Number.isNaN(n) ? Number.POSITIVE_INFINITY : n;
+  };
+  const activeRank = waveRank(wave);
+  const bySlug = new Map(items.map((i) => [i.slug, i]));
   const doneSlugs = new Set(
     items.filter((i) => i.status === "done").map((i) => i.slug)
   );
 
   const pendingItemsInWave = items.filter(
-    (i) => String(i.wave) === String(wave) && i.status === "pending"
+    (i) => normWave(i.wave) === normWave(wave) && i.status === "pending"
   );
 
   const runnableSlugs: string[] = [];
 
   for (const item of pendingItemsInWave) {
+    // Dep-wave order (D5): an unmerged dep in this wave or a later wave can
+    // never complete before this item runs, so the item waits (forward-dep
+    // fault surfaces via wave-state blocking, never by running early).
+    let depWaveOrdered = true;
+    for (const dep of item.deps) {
+      const depItem = bySlug.get(dep);
+      if (depItem && depItem.status !== "done" && waveRank(depItem.wave) >= activeRank) {
+        depWaveOrdered = false;
+        break;
+      }
+    }
+    if (!depWaveOrdered) continue;
     const depsDone = item.deps.every((dep) => doneSlugs.has(dep));
     if (depsDone) {
       runnableSlugs.push(item.slug);

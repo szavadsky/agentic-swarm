@@ -351,7 +351,7 @@ describe("Engine: amend delta semantics, resumed repair, removal, tool-less PM (
     expect(fs.existsSync(path.join(deployedTaskDir, "plan", "edits-1.1.yaml"))).toBe(false);
   });
 
-  it("removeItemSlugs supersedes pending items and rejects running/merged ones", async () => {
+  it("removeItemSlugs rejects merged/running removals but valid parts still apply (D2)", async () => {
     const task = "amend-remove-task";
     setupTask(tmpRepo, task, orchFolder);
     const pipeline = makePipeline();
@@ -377,7 +377,9 @@ describe("Engine: amend delta semantics, resumed repair, removal, tool-less PM (
       ok: true,
       data: { wave: 1, iteration: 1, status: "complete", mergedItems: ["base-1"], summary: "Wave 1 ok" },
     });
-    // Amend removes pending stale-1 AND (invalidly) merged base-1 → whole amendment discarded
+    // Amend removes pending stale-1 AND (invalidly) merged base-1 → the base-1
+    // removal is rejected + journaled, but valid parts still apply (D2):
+    // stale-1 superseded, fresh-1 scheduled.
     harness.scriptOutcome(`${task}/runs/architect-wave-report-1-1#a1`, {
       ok: true,
       data: {
@@ -400,19 +402,18 @@ describe("Engine: amend delta semantics, resumed repair, removal, tool-less PM (
         ],
       },
     });
-    // stale-1 still runs in wave 2 (removal was rejected with the amendment)
-    harness.scriptOutcome(`${task}/items/stale-1/develop#a1`, (run) => {
-      fs.writeFileSync(path.join(run.cwd, "stale.txt"), "stale\n");
-      return { ok: true, data: { status: "ok", summary: "Stale done" } };
+    // fresh-1 runs in wave 2 (valid part applied); stale-1 was superseded.
+    harness.scriptOutcome(`${task}/items/fresh-1/develop#a1`, (run) => {
+      fs.writeFileSync(path.join(run.cwd, "fresh.txt"), "fresh\n");
+      return { ok: true, data: { status: "ok", summary: "Fresh done" } };
     });
     harness.scriptOutcome(`${task}/runs/wave-close-up-1-2#a1`, {
       ok: true,
-      data: { wave: 2, iteration: 1, status: "complete", mergedItems: ["stale-1"], summary: "Wave 2 ok" },
+      data: { wave: 2, iteration: 1, status: "complete", mergedItems: ["fresh-1"], summary: "Wave 2 ok" },
     });
     harness.scriptOutcome(`${task}/runs/architect-wave-report-1-2#a1`, (run) => {
-      // The discarded-amendment note surfaces in the NEXT wave-report prompt
-      expect(run.prompt).toContain("Discarded amendments");
-      expect(run.prompt).toContain("base-1");
+      // No whole-amend discard: the next report sees no discarded-amendment note.
+      expect(run.prompt).not.toContain("Discarded amendments");
       return {
         ok: true,
         data: { id: "dec-c", context: "wave", decision: "continue", timestamp: new Date().toISOString() },
@@ -429,11 +430,15 @@ describe("Engine: amend delta semantics, resumed repair, removal, tool-less PM (
     const taskWtPath = path.join(worktreeRoot, `topic_${task}`);
     const deployedTaskDir = path.join(taskWtPath, orchFolder, task);
     const journal = fs.readFileSync(path.join(deployedTaskDir, "journal.ndjson"), "utf8");
-    expect(journal).toContain("pm_amend_validation_failed");
-    expect(journal).toContain("pm_amend_discarded");
-    // fresh-1 never scheduled; stale-1 ran normally
-    expect(fs.existsSync(path.join(deployedTaskDir, "items", "fresh-1", "assignment.yaml"))).toBe(false);
-    expect(fs.existsSync(path.join(taskWtPath, "stale.txt"))).toBe(true);
+    // Invalid removal rejected with reason; valid parts applied.
+    expect(journal).toContain("pm_amend_removals_dropped");
+    // JSON-escaped in the ndjson line.
+    expect(journal).toContain('removeItemSlugs cannot remove \\"base-1\\" with status \\"merged\\"');
+    expect(journal).not.toContain("pm_amend_discarded");
+    // fresh-1 scheduled and merged; stale-1 superseded (never ran).
+    expect(fs.existsSync(path.join(deployedTaskDir, "items", "fresh-1", "assignment.yaml"))).toBe(true);
+    expect(fs.existsSync(path.join(taskWtPath, "fresh.txt"))).toBe(true);
+    expect(fs.existsSync(path.join(taskWtPath, "stale.txt"))).toBe(false);
   });
 
   it("removeItemSlugs with pending-only slugs applies: item superseded and skipped", async () => {
@@ -1094,7 +1099,7 @@ describe("Engine: amend delta semantics, resumed repair, removal, tool-less PM (
     expect(res.status).toBe("done");
   });
 
-  it("removeItemSlugs on a running item still errors (protection preserved)", async () => {
+  it("removeItemSlugs on a running item is rejected but valid additions still apply (D2)", async () => {
     const task = "amend-remove-running-task";
     setupTask(tmpRepo, task, orchFolder);
     const pipeline = makePipeline();
@@ -1122,7 +1127,7 @@ describe("Engine: amend delta semantics, resumed repair, removal, tool-less PM (
     });
     // slow-1 holds a committed `started` record (crashed mid-turn in a prior
     // run): deriveItemState reports it as running, so the wave-1 amend
-    // removing it must be rejected and the whole amendment discarded.
+    // removing it is rejected — but the valid fresh-1 addition still applies.
     harness.scriptOutcome(`${task}/runs/architect-wave-report-1-1#a1`, () => {
       const taskWtPath = path.join(worktreeRoot, `topic_${task}`);
       const deployedTaskDir = path.join(taskWtPath, orchFolder, task);
@@ -1156,14 +1161,19 @@ describe("Engine: amend delta semantics, resumed repair, removal, tool-less PM (
         ],
       },
     });
-    // slow-1 retries its turn in wave 2 (started → attempt 2) and merges.
+    // fresh-1 runs in wave 2 (valid part applied); slow-1 retries its turn
+    // (started → attempt 2) and merges.
+    harness.scriptOutcome(`${task}/items/fresh-1/develop#a1`, (run) => {
+      fs.writeFileSync(path.join(run.cwd, "fresh.txt"), "fresh\n");
+      return { ok: true, data: { status: "ok", summary: "Fresh done" } };
+    });
     harness.scriptOutcome(`${task}/items/slow-1/develop#a2`, (run) => {
       fs.writeFileSync(path.join(run.cwd, "slow.txt"), "slow\n");
       return { ok: true, data: { status: "ok", summary: "Slow done" } };
     });
     harness.scriptOutcome(`${task}/runs/wave-close-up-1-2#a1`, {
       ok: true,
-      data: { wave: 2, iteration: 1, status: "complete", mergedItems: ["slow-1"], summary: "Wave 2 ok" },
+      data: { wave: 2, iteration: 1, status: "complete", mergedItems: ["slow-1", "fresh-1"], summary: "Wave 2 ok" },
     });
     harness.scriptOutcome(`${task}/runs/architect-wave-report-1-2#a1`, {
       ok: true,
@@ -1180,12 +1190,13 @@ describe("Engine: amend delta semantics, resumed repair, removal, tool-less PM (
     const taskWtPath = path.join(worktreeRoot, `topic_${task}`);
     const deployedTaskDir = path.join(taskWtPath, orchFolder, task);
     const journal = fs.readFileSync(path.join(deployedTaskDir, "journal.ndjson"), "utf8");
-    expect(journal).toContain("pm_amend_validation_failed");
+    // Running-item removal rejected with reason; valid addition applied.
+    expect(journal).toContain("pm_amend_removals_dropped");
     // JSON-escaped in the ndjson line.
     expect(journal).toContain('removeItemSlugs cannot remove \\"slow-1\\" with status \\"running\\"');
-    expect(journal).toContain("pm_amend_discarded");
-    // fresh-1 never scheduled; slow-1 ran and merged normally.
-    expect(fs.existsSync(path.join(deployedTaskDir, "items", "fresh-1", "assignment.yaml"))).toBe(false);
+    // fresh-1 scheduled and merged; slow-1 ran and merged normally.
+    expect(fs.existsSync(path.join(deployedTaskDir, "items", "fresh-1", "assignment.yaml"))).toBe(true);
+    expect(fs.existsSync(path.join(taskWtPath, "fresh.txt"))).toBe(true);
     expect(fs.existsSync(path.join(taskWtPath, "slow.txt"))).toBe(true);
   });
 

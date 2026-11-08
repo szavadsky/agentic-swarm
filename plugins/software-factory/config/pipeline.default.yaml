@@ -365,6 +365,7 @@ limits:
   timeoutNudgeSec: 300            # Timeout for the finalize-nudge retry on resumable timeouts (and interrupted resumes)
   # steerPollSec defaults to 60 when absent; uncomment to pin:
   # steerPollSec: 60
+  maxEmptyWaves: 3               # Consecutive empty-complete waves before architect consult (instead of another empty wave)
   # Disk-space guard: minimum free disk space required across worktreeRoot,
   # runtime tmp, repoRoot, and system temp filesystems. Preflight fails; engine
   # ticks, steps, and gates raise low-disk-space and stop with exit 10 below this.

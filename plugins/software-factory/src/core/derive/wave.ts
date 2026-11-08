@@ -80,7 +80,9 @@ export function deriveWaveState(opts: {
         blocked.push(it);
         continue;
       }
-      // Check dependencies
+      // Check dependencies. Dep-wave order (D5): an item never runs before
+      // its deps' waves complete — verified by the branch post-mortem
+      // (waves 9/10 audits correctly waited on unmerged wave-11 deps).
       let depsOk = true;
       let depBlocked = false;
 

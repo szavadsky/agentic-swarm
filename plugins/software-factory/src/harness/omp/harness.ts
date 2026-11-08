@@ -16,6 +16,56 @@ import { getFactoryTmpDir } from "../../core/runtime-tmp.js";
 const ajv = createAjv();
 const MAX_STDERR_BYTES = 64 * 1024; // 64 KB
 /**
+ * Detects model-resolution failures (unresolvable @role / unknown model id):
+ * omp exits non-zero and stderr names a model problem (no API key/credential
+ * for the provider, unknown model, /model hint). Such failures must advance
+ * the caller's fallback walk immediately instead of hanging on one dead model.
+ */
+export function isModelResolutionError(stderr: string, exitCode: number): boolean {
+  if (exitCode === 0) return false;
+  const text = stderr ?? "";
+  return (
+    /No API key found for/i.test(text) ||
+    /applyMissingCredentialFallback/i.test(text) ||
+    /[Mm]odel\s+"[^"]+"\s+not\s+found/i.test(text) ||
+    /unknown\s+model/i.test(text) ||
+    /use \/model to select a model/i.test(text)
+  );
+}
+
+/**
+ * Builds the `--model` argument candidates for a fallback walk: primary
+ * @role first, then each fallback as a literal model unless it is role-shaped
+ * (starts with @ or resolves as a configured role name via `resolveName`).
+ */
+export function buildModelCandidates(opts: {
+  role: string;
+  models: string[];
+  resolveName?: (name: string) => boolean;
+}): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const push = (arg: string) => {
+    if (!arg || seen.has(arg)) return;
+    seen.add(arg);
+    out.push(arg);
+  };
+  push(opts.role.startsWith("@") ? opts.role : `@${opts.role}`);
+  for (const m of opts.models ?? []) {
+    if (!m) continue;
+    if (m.startsWith("@")) {
+      push(m);
+      continue;
+    }
+    if (opts.resolveName?.(m)) {
+      push(`@${m}`);
+      continue;
+    }
+    push(m);
+  }
+  return out;
+}
+/**
  * Strips YAML frontmatter from an agent definition body (§10, spike 2).
  */
 export function extractAgentBody(definition: string): string {
@@ -171,6 +221,12 @@ export class OmpHarness implements Harness {
 
   /**
    * Executes one turn of an agent session (§4).
+   * Model fallback walk (D3): primary @role first, then each fallback as a
+   * literal model (or @role when role-shaped). Fallback applies only before
+   * a session exists — on resume the recorded model is kept (single
+   * candidate, never switch mid-session). A model-resolution failure
+   * (unresolvable @role / unknown model id) advances immediately to the next
+   * candidate; any other failure returns at once.
    */
   public async run(run: AgentRun): Promise<AgentOutcome> {
     const { sessionsDir, promptsDir, systemPromptsDir, overlayPath } = this.ensureRuntimeDirs(run.cwd);
@@ -201,14 +257,62 @@ export class OmpHarness implements Harness {
     );
     fs.writeFileSync(promptPath, run.prompt, "utf8");
 
+    // 4. Model candidates: a fresh turn walks primary + fallbacks; a resume
+    // keeps the recorded model (single candidate, never switch mid-session).
+    const candidates = run.session?.resume
+      ? [run.role.startsWith("@") ? run.role : `@${run.role}`]
+      : buildModelCandidates({
+          role: run.role,
+          models: run.models ?? [],
+          resolveName: (name) => Boolean(this.pipeline?.models?.roles?.[name]),
+        });
+
+    let lastOutcome: AgentOutcome | undefined;
+    try {
+      for (let ci = 0; ci < candidates.length; ci++) {
+        const modelArg = candidates[ci]!;
+        const attempt = await this.runAttempt({ run, modelArg, tools, systemPromptPath, promptPath, sessionsDir, overlayPath });
+        if (attempt.ok) return attempt.outcome;
+        lastOutcome = attempt.outcome;
+        if (attempt.modelResolutionError && ci + 1 < candidates.length) {
+          try {
+            await run.onModelFallback?.({
+              from: modelArg,
+              to: candidates[ci + 1]!,
+              reason: (attempt.outcome as { error?: string }).error ?? "",
+            });
+          } catch {}
+          continue;
+        }
+        return attempt.outcome;
+      }
+      return lastOutcome!;
+  } finally {
+      try { if (fs.existsSync(promptPath)) fs.unlinkSync(promptPath); } catch {}
+    }
+  }
+
+  /**
+   * One omp turn against a single --model argument.
+   */
+  private async runAttempt(opts: {
+    run: AgentRun;
+    modelArg: string;
+    tools: string[];
+    systemPromptPath: string;
+    promptPath: string;
+    sessionsDir: string;
+    overlayPath: string;
+  }): Promise<{ ok: boolean; outcome: AgentOutcome; modelResolutionError: boolean }> {
+    const { run, modelArg, tools, systemPromptPath, promptPath, sessionsDir, overlayPath } = opts;
+
     // 4. Build command arguments
-    const roleArg = run.role.startsWith("@") ? run.role : `@${run.role}`;
     const args: string[] = [
       this.ompBinary,
       "--cwd", run.cwd,
       "--config", overlayPath,
       "--mode", "json",
-      "--model", roleArg,
+      "--model", modelArg,
       "--session-dir", sessionsDir,
     ];
 
@@ -248,9 +352,13 @@ export class OmpHarness implements Harness {
       });
     } catch (err: any) {
       return {
-        ok: false,
-        error: `Failed to spawn omp: ${err.message}`,
-        transient: true,
+        ok: false as const,
+        outcome: {
+          ok: false as const,
+          error: `Failed to spawn omp: ${err.message}`,
+          transient: true,
+        },
+        modelResolutionError: false,
       };
     }
 
@@ -348,12 +456,7 @@ export class OmpHarness implements Harness {
       }
       activeTimer.cancel();
       if (killTimer) clearTimeout(killTimer);
-      try {
-        if (fs.existsSync(promptPath)) fs.unlinkSync(promptPath);
-        // System-prompt file is deterministic per agent+session (content
-        // byte-stable) and intentionally kept: prompt caches keyed by path
-        // hold across runs only if the path survives.
-      } catch {}
+      // promptPath is shared across fallback candidates: only run() deletes it.
     }
     const parsed = parser.getResult();
     const sessionId = parsed.sessionId ?? run.session?.resume;
@@ -380,7 +483,7 @@ export class OmpHarness implements Harness {
       if (suspendDetected) {
         classification.transient = true;
       }
-      return {
+      const outcome: AgentOutcome = {
         ok: false,
         error: classification.error ?? `Process failed with exit code ${exitCode}`,
         transient: classification.transient,
@@ -393,6 +496,7 @@ export class OmpHarness implements Harness {
         stdoutBytes: totalStdoutBytes,
         toolCallCount: parsed.toolCallCount,
       };
+      return { ok: false, outcome, modelResolutionError: isModelResolutionError(stderrText, exitCode) };
     }
 
     // 9. Extract candidate structured output
@@ -413,7 +517,7 @@ export class OmpHarness implements Harness {
         const schemaId = (run.outputSchema as any).$id as string | undefined;
         validate = (schemaId ? ajv.getSchema(schemaId) : undefined) ?? ajv.compile(run.outputSchema);
       } catch (compileErr: any) {
-        return {
+        const outcome: AgentOutcome = {
           ok: false,
           error: `Output schema compilation failed: ${compileErr.message}`,
           data: candidateData ?? parsed.finalAssistantText,
@@ -425,10 +529,11 @@ export class OmpHarness implements Harness {
           stdoutBytes: totalStdoutBytes,
           toolCallCount: parsed.toolCallCount,
         };
+        return { ok: false, outcome, modelResolutionError: false };
       }
 
       if (candidateData !== undefined && validate(candidateData)) {
-        return {
+        const outcome: AgentOutcome = {
           ok: true,
           data: candidateData,
           sessionId,
@@ -438,10 +543,11 @@ export class OmpHarness implements Harness {
           stdoutBytes: totalStdoutBytes,
           toolCallCount: parsed.toolCallCount,
         };
+        return { ok: true, outcome, modelResolutionError: false };
       }
 
       const errorsStr = formatAjvErrors(validate.errors);
-      return {
+      const outcome: AgentOutcome = {
         ok: false,
         error: `Agent output failed schema validation:\n${errorsStr}`,
         data: candidateData ?? parsed.finalAssistantText,
@@ -453,9 +559,10 @@ export class OmpHarness implements Harness {
         stdoutBytes: totalStdoutBytes,
         toolCallCount: parsed.toolCallCount,
       };
+      return { ok: false, outcome, modelResolutionError: false };
     }
 
-    return {
+    const outcome: AgentOutcome = {
       ok: true,
       data: candidateData ?? parsed.finalAssistantText,
       sessionId,
@@ -465,10 +572,16 @@ export class OmpHarness implements Harness {
       stdoutBytes: totalStdoutBytes,
       toolCallCount: parsed.toolCallCount,
     };
+    return { ok: true, outcome, modelResolutionError: false };
   }
 
   /**
    * Executes a stateless small completion / structural repair (§4, spike 2).
+   * Fallback walk (D3): primary @role first, then each fallback as a
+   * literal model (or @role when role-shaped); first success wins. A
+   * model-resolution failure (exit 1 + model text, unknown model) advances
+   * immediately to the next candidate without consuming the attempt budget;
+   * any other failure throws at once (repair paths retry at their own level).
    */
   public async complete(c: {
     role: string;
@@ -478,6 +591,7 @@ export class OmpHarness implements Harness {
     schema: JSONSchema;
     timeoutSec?: number;
     timeoutMs?: number;
+    onModelFallback?: (info: { from: string; to: string; reason: string }) => void | Promise<unknown>;
   }): Promise<unknown> {
     const cwd = process.cwd();
     const { promptsDir, overlayPath } = this.ensureRuntimeDirs(cwd);
@@ -489,7 +603,48 @@ export class OmpHarness implements Harness {
     );
     fs.writeFileSync(promptPath, fullPrompt, "utf8");
 
-    const roleArg = c.role.startsWith("@") ? c.role : `@${c.role}`;
+    const candidates = buildModelCandidates({
+      role: c.role,
+      models: c.models ?? [],
+      resolveName: (name) => Boolean(this.pipeline?.models?.roles?.[name]),
+    });
+    let lastError: unknown;
+    try {
+      for (let ci = 0; ci < candidates.length; ci++) {
+        const modelArg = candidates[ci]!;
+        try {
+          return await this.completeAttempt({ c, modelArg, cwd, promptPath, overlayPath });
+        } catch (err: any) {
+          lastError = err;
+          const msg = err?.message ?? String(err);
+          const resolution = /exit code 1/.test(msg) && isModelResolutionError(msg, 1);
+          if (resolution && ci + 1 < candidates.length) {
+            try {
+              await c.onModelFallback?.({ from: modelArg, to: candidates[ci + 1]!, reason: msg });
+            } catch {}
+            continue;
+          }
+          throw err;
+        }
+      }
+      throw lastError;
+    } finally {
+      try { if (fs.existsSync(promptPath)) fs.unlinkSync(promptPath); } catch {}
+    }
+  }
+
+  /**
+   * One stateless completion against a single --model argument.
+   */
+  private async completeAttempt(opts: {
+    c: { schema: JSONSchema; timeoutSec?: number; timeoutMs?: number };
+    modelArg: string;
+    cwd: string;
+    promptPath: string;
+    overlayPath: string;
+  }): Promise<unknown> {
+    const { c, modelArg, cwd, promptPath, overlayPath } = opts;
+    const timeoutMs = c.timeoutMs ?? (c.timeoutSec != null && c.timeoutSec > 0 ? c.timeoutSec * 1000 : this.defaultTimeoutMs);
     const args: string[] = [
       this.ompBinary,
       "-p", `@${promptPath}`,
@@ -497,10 +652,8 @@ export class OmpHarness implements Harness {
       "--tools=",
       "--config", overlayPath,
       "--mode", "json",
-      "--model", roleArg,
+      "--model", modelArg,
     ];
-
-    let proc: ReturnType<typeof spawn>;
     const factoryTmp = getFactoryTmpDir() ?? path.join(this.runtimeDir ?? os.tmpdir(), "tmp");
     try { fs.mkdirSync(factoryTmp, { recursive: true }); } catch {}
     const tmpEnv: Record<string, string> = {
@@ -508,6 +661,7 @@ export class OmpHarness implements Harness {
       TMP: factoryTmp,
       TEMP: factoryTmp,
     };
+    let proc: ReturnType<typeof spawn>;
     try {
       proc = spawn(args, {
         cwd,
@@ -520,9 +674,10 @@ export class OmpHarness implements Harness {
         },
       });
     } catch (err: any) {
-      try { if (fs.existsSync(promptPath)) fs.unlinkSync(promptPath); } catch {}
       throw new Error(`Failed to spawn omp complete: ${err.message}`);
     }
+
+
 
     if (proc.pid && proc.pid > 0) {
       registerChildGroup(proc.pid);
@@ -547,7 +702,6 @@ export class OmpHarness implements Harness {
     const clock = getClock();
     const startWall = clock.now();
     const startMono = clock.monotonic();
-    const timeoutMs = c.timeoutMs ?? (c.timeoutSec != null && c.timeoutSec > 0 ? c.timeoutSec * 1000 : this.defaultTimeoutMs);
     const activeTimer = createActiveTimer(
       timeoutMs,
       () => {
@@ -603,9 +757,7 @@ export class OmpHarness implements Harness {
       }
       activeTimer.cancel();
       if (killTimer) clearTimeout(killTimer);
-      try {
-        if (fs.existsSync(promptPath)) fs.unlinkSync(promptPath);
-      } catch {}
+      // promptPath is shared across fallback candidates: only complete() deletes it.
     }
 
     if (timedOut) {

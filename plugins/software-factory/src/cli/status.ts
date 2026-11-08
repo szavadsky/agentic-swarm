@@ -128,6 +128,14 @@ export async function runStatus(opts: StatusOptions): Promise<number> {
     }
   }
 
+  if (derived.deadSteerFiles && derived.deadSteerFiles.length > 0) {
+    console.log(`----------------------------------------------------------------`);
+    console.log(`DEAD STEERING MAILBOX (operator input never processed):`);
+    for (const d of derived.deadSteerFiles) {
+      console.log(`  ! ${d.file} dead after ${d.errors} consecutive classify errors — fix the classifier model, then re-drop the message`);
+    }
+  }
+
   if (derived.debt && derived.debt.length > 0) {
     console.log(`----------------------------------------------------------------`);
     console.log(`Recorded Technical Debt:`);

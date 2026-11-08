@@ -689,10 +689,31 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
 
   // Wire per-step checks by phase (§9, Finding 9)
   const stepChecks = currentStep.checks ?? [];
-  const beforeChecksList = stepChecks.filter(
+  // Red-test is vacuous for kinds whose contract forbids prod changes
+  // (tests-only, no-behavior): no prod change is possible by design, so the
+  // check always "passes without prod change" — a false failure (D6).
+  // Exempt via the flows config contract (tests-only check absent from the
+  // kind's steps, i.e. no step promises prod behavior), never a hardcoded
+  // kind list: any kind whose steps never include target-red/target-green is
+  // prod-read-only and skips red-test with a journaled exemption.
+  const kindSteps = kindFlow.steps ?? [];
+  const kindPromisesProdBehavior = kindSteps.some((s) =>
+    (s.checks ?? []).some((c) => c === "target-red" || c === "target-green")
+  );
+  const redTestExempt = !kindPromisesProdBehavior;
+  if (redTestExempt && stepChecks.includes("red-test")) {
+    await appendJournal(taskDir, {
+      type: "red_test_exempt",
+      item: itemSlug,
+      kind: itemState.kind,
+      reason: "kind contract forbids prod changes (no target-red/target-green in kind steps); red-test vacuous",
+    });
+  }
+  const effectiveStepChecks = redTestExempt ? stepChecks.filter((c) => c !== "red-test") : stepChecks;
+  const beforeChecksList = effectiveStepChecks.filter(
     (c) => c === "red-test" || c === "test-diff" || pipeline.checks?.[c]?.phase === "before"
   );
-  const afterChecksList = stepChecks.filter((c) => !beforeChecksList.includes(c));
+  const afterChecksList = effectiveStepChecks.filter((c) => !beforeChecksList.includes(c));
   // Derive testFirstCommit durably via git log on the newest ok test-first record's meta.yaml
   let testFirstCommit: string | undefined;
   const okTestFirstRecords = records.filter(

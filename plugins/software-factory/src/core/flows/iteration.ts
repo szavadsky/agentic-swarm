@@ -24,7 +24,7 @@ import { ensureChildWorktree, commitAll, removeWorktree } from "../git/index.js"
 import { writeYamlAtomic, writeTextAtomic, readYaml, readText } from "../records/io.js";
 import { runAgentStep, findOkCommittedRecord, getNextStepAttempt } from "./step-runner.js";
 import { writeQuestion, processSteeringMailbox } from "../steer.js";
-import { runItemConsult } from "./consults.js";
+import { runItemConsult, runNonItemConsult } from "./consults.js";
 import { isContextPackStale, isContextPackEnabled, runContextPackStep } from "./ingest.js";
 import { mergeItem } from "./merge-path.js";
 import { tickItemMachine } from "./item-machine.js";
@@ -214,6 +214,25 @@ export function buildSchedulerWaitEvent(opts: {
     merges: opts.merges,
   };
 }
+
+/**
+ * Reads the current consecutive empty-wave streak for this iteration (D4):
+ * the streak of the latest `empty_wave_streak` event in the same iteration,
+ * or 0 when the last wave made progress. Journal scans are append-only, so
+ * the latest event carries the running count.
+ */
+async function readEmptyStreak(taskDir: string, iteration: number): Promise<number> {
+  const events = await readJournal(taskDir);
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i] as { type?: string; iteration?: number; streak?: number };
+    if (e.iteration !== undefined && e.iteration !== iteration) break;
+    if (e.type === "empty_wave_streak") {
+      return typeof e.streak === "number" ? e.streak : 0;
+    }
+  }
+  return 0;
+}
+
 /**
  * Builds the existing-items list for validateEdits from committed assignments.
  * Waves come from assignment.yaml so amended-item dep waves validate against
@@ -1260,6 +1279,69 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
       }
     }
 
+    // Empty-wave streak guard (D4): after ticking, a wave with no merges and
+    // no failures is an empty-complete wave — it ran the full close-up +
+    // report ceremony with no progress. At `limits.maxEmptyWaves` consecutive
+    // such waves (default 3), consult the architect via the existing
+    // non-item consult path — asking continue-with-direction / end-iteration
+    // — instead of running another empty close-up + report ceremony.
+    // Journal the streak every empty wave; a progress wave resets it to 0.
+    {
+      const progressed = mergeResults.some((m) => m.ok) || waveState.failed.length > 0;
+      if (progressed) {
+        const streakSoFar = await readEmptyStreak(taskDir, iteration);
+        if (streakSoFar > 0) {
+          await appendJournal(taskDir, {
+            type: "empty_wave_streak",
+            wave: w,
+            iteration,
+            streak: 0,
+            blocked: waveState.blocked.map((b) => b.slug),
+          });
+        }
+      } else {
+        const streakSoFar = await readEmptyStreak(taskDir, iteration);
+        const streak = streakSoFar + 1;
+        await appendJournal(taskDir, {
+          type: "empty_wave_streak",
+          wave: w,
+          iteration,
+          streak,
+          blocked: waveState.blocked.map((b) => b.slug),
+        });
+        const maxEmpty = (pipeline.limits as Record<string, unknown> | undefined)?.["maxEmptyWaves"];
+        const maxEmptyWaves = typeof maxEmpty === "number" && Number.isFinite(maxEmpty) && maxEmpty > 0 ? Math.floor(maxEmpty) : 3;
+        if (streak >= maxEmptyWaves) {
+          const consultRes = await runNonItemConsult({
+            task,
+            seam: `empty-waves-${iteration}`,
+            contextText: `Waves completed with no progress for ${streak} consecutive waves (latest wave ${w}). Blocked: ${waveState.blocked.map((b) => b.slug).join(", ") || "(none)"}.`,
+            feedbackText: `Decide: continue with direction (fix-item), end-iteration (accept-with-debt), escalate to operator (human-async), or abort.`,
+            taskDir,
+            taskWt,
+            repo,
+            harness,
+            pipeline,
+            project,
+            prompts,
+            architectSessionId,
+            turnsSemaphore,
+            budgetTracker,
+            iteration,
+          });
+          architectSessionId = consultRes.sessionId ?? architectSessionId;
+          const d = consultRes.decision.decision;
+          if (d === "end-iteration" || d === "abort" || d === "accept-with-debt") break;
+          if (d === "fix-item" && consultRes.decision.outline) {
+            const o = consultRes.decision.outline as unknown as Record<string, unknown>;
+            const slug = typeof o["slug"] === "string" ? (o["slug"] as string) : undefined;
+            if (slug && !currentIterationItems.includes(slug)) currentIterationItems.push(slug);
+          }
+          continue;
+        }
+      }
+    }
+
     // Wave close-up (§8.4.6); dependents of failed items go into the report (§8.2)
     const failedSlugs = waveState.failed.map((f) => f.slug);
     const blockedByFailureSlugs = waveState.blocked
@@ -1431,6 +1513,21 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
     // Handle wave-report amend decision (§8.4.6, Finding 31)
     if (waveDecision === "amend") {
       const aCheck = checkAmendments(amendmentCount, maxAmendments);
+      if (aCheck.exhausted) {
+        // Amendment budget exhausted: drop loudly, never silently — the
+        // architect's outlines/removals are journaled with the cap so the
+        // next report can re-decide within budget or end the iteration.
+        const dropped = waveReportRes.output as (DecisionArtifact & { outlines?: PlanItemOutline[]; removeItemSlugs?: string[] }) | undefined;
+        await appendJournal(taskDir, {
+          type: "pm_amend_discarded",
+          iteration,
+          wave: w,
+          amendment: amendmentCount + 1,
+          note: `Amendment budget exhausted (${amendmentCount}/${maxAmendments}); amend decision dropped`,
+          outlines: Array.isArray(dropped?.outlines) ? (dropped!.outlines as PlanItemOutline[]).map((o) => (o as PlanItemOutline)?.slug).filter(Boolean) : [],
+          removeItemSlugs: Array.isArray(dropped?.removeItemSlugs) ? dropped!.removeItemSlugs : [],
+        });
+      }
       if (!aCheck.exhausted) {
         amendmentCount++;
         const waveDecisionArtifact = waveReportRes.output as (DecisionArtifact & { outlines?: PlanItemOutline[]; removeItemSlugs?: string[] }) | undefined;
@@ -1596,7 +1693,18 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
             });
             await discardAmendment(`PM amend output invalid after resumed repair: ${amendErrors.join("; ")}`, amendErrors);
           } else if (amendEdits.items.length === 0 && removeItemSlugs.length === 0) {
-            await discardAmendment("PM amend delta empty after dropping re-emitted existing items; continuing current waves");
+            // Empty delta discards the PM items, but the architect's outlines
+            // merged into plan-N.k above still stand (D2): journal what was
+            // kept vs dropped so the drop is never silent.
+            await appendJournal(taskDir, {
+              type: "pm_amend_discarded",
+              iteration,
+              wave: w,
+              amendment: amendmentCount,
+              note: "PM amend delta empty after dropping re-emitted existing items; architect outlines kept in plan; continuing current waves",
+              keptOutlines: decisionOutlines.map((o) => (o as PlanItemOutline)?.slug).filter(Boolean),
+            });
+            await discardAmendment("PM amend delta empty after dropping re-emitted existing items; architect outlines kept in plan; continuing current waves");
           } else {
             // removeItemSlugs supersedes PENDING items only; running/merged are protected.
             // Already-superseded/already-removed slugs are idempotent no-ops: the
@@ -1623,7 +1731,10 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
             // applyEdits so re-applying the same removal writes no duplicate
             // decision files.
             const effectiveRemovals = slugsToSupersede;
-            if (removalErrors.length > 0) {
+            // Removal-invalid must not swallow the valid parts (D2): apply
+            // the PM delta items (and any no-op-excluded valid removals) and
+            // journal exactly which removal slugs were dropped and why.
+            if (removalErrors.length > 0 && amendEdits.items.length === 0 && effectiveRemovals.length === 0) {
               await appendJournal(taskDir, {
                 type: "pm_amend_validation_failed",
                 iteration,
@@ -1632,68 +1743,91 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
                 errors: removalErrors,
               });
               await discardAmendment(`Amend removal invalid: ${removalErrors.join("; ")}`, removalErrors);
-            } else if (amendEdits.items.length === 0 && effectiveRemovals.length === 0) {
-              // Only already-superseded removals (or nothing at all): journal the
-              // no-op, then discard without an empty commit.
-              if (removalNoops.length > 0) {
-                await appendJournal(taskDir, {
-                  type: "amend_remove_noop",
-                  iteration,
-                  wave: w,
-                  amendment: amendmentCount,
-                  slugs: removalNoops,
-                });
-              }
-              await discardAmendment(
-                removalNoops.length > 0
-                  ? `Amend removal no-op: ${removalNoops.join(", ")} already superseded; nothing to apply`
-                  : "PM amend delta empty after dropping re-emitted existing items; continuing current waves"
-              );
             } else {
-              if (removalNoops.length > 0) {
+              if (removalErrors.length > 0) {
                 await appendJournal(taskDir, {
-                  type: "amend_remove_noop",
+                  type: "pm_amend_removals_dropped",
                   iteration,
                   wave: w,
                   amendment: amendmentCount,
-                  slugs: removalNoops,
+                  errors: removalErrors,
+                  noops: removalNoops,
+                  appliedItems: amendEdits.items.map((i) => i.slug),
+                  appliedRemovals: effectiveRemovals,
                 });
+                // Fall through with the valid subset: PM items + valid removals still apply.
               }
-              await writeYamlAtomic(amendEditsPath, amendEdits);
-              let nextDecisionSeq = 1;
-              const amendDecisionsDir = path.join(taskDir, "decisions");
-              if (effectiveRemovals.length > 0 && fs.existsSync(amendDecisionsDir)) {
-                for (const name of await fs.promises.readdir(amendDecisionsDir)) {
-                  const m = /^(\d{3})-/.exec(name);
-                  if (m) nextDecisionSeq = Math.max(nextDecisionSeq, parseInt(m[1]!, 10) + 1);
+              if (amendEdits.items.length === 0 && effectiveRemovals.length === 0) {
+                // Only no-ops (or nothing at all): journal, then discard
+                // without an empty commit. The architect's outlines merged
+                // into plan-N.k above still stand (D2).
+                if (removalNoops.length > 0) {
+                  await appendJournal(taskDir, {
+                    type: "amend_remove_noop",
+                    iteration,
+                    wave: w,
+                    amendment: amendmentCount,
+                    slugs: removalNoops,
+                  });
+                }
+                await appendJournal(taskDir, {
+                  type: "pm_amend_discarded",
+                  iteration,
+                  wave: w,
+                  amendment: amendmentCount,
+                  note: "Amend removal no-op (already superseded); architect outlines kept in plan; nothing to apply",
+                  keptOutlines: decisionOutlines.map((o) => (o as PlanItemOutline)?.slug).filter(Boolean),
+                  noops: removalNoops,
+                });
+                await discardAmendment(
+                  removalNoops.length > 0
+                    ? `Amend removal no-op: ${removalNoops.join(", ")} already superseded; architect outlines kept in plan; nothing to apply`
+                    : "PM amend delta empty after dropping re-emitted existing items; architect outlines kept in plan; continuing current waves"
+                );
+              } else {
+                if (removalNoops.length > 0 && removalErrors.length === 0) {
+                  await appendJournal(taskDir, {
+                    type: "amend_remove_noop",
+                    iteration,
+                    wave: w,
+                    amendment: amendmentCount,
+                    slugs: removalNoops,
+                  });
+                }
+                await writeYamlAtomic(amendEditsPath, amendEdits);
+                let nextDecisionSeq = 1;
+                const amendDecisionsDir = path.join(taskDir, "decisions");
+                if (effectiveRemovals.length > 0 && fs.existsSync(amendDecisionsDir)) {
+                  for (const name of await fs.promises.readdir(amendDecisionsDir)) {
+                    const m = /^(\d{3})-/.exec(name);
+                    if (m) nextDecisionSeq = Math.max(nextDecisionSeq, parseInt(m[1]!, 10) + 1);
+                  }
+                }
+                const applied = applyEdits(amendEdits, { taskDir, plan: plan!, removeItemSlugs: effectiveRemovals, nextDecisionSeq });
+                for (const f of applied.files) {
+                  await fs.promises.mkdir(path.dirname(f.path), { recursive: true });
+                  await writeTextAtomic(f.path, f.content);
+                }
+                await git(taskWt, ["add", "-A"], { allowFail: true });
+                await commitAll(repo, taskWt, `factory: apply plan amendment ${iteration}.${amendmentCount}`);
+                // Re-plan remaining waves with the amended items (§8.4.6, Finding 31)
+                for (const added of amendEdits.items) {
+                  if (!currentIterationItems.includes(added.slug)) {
+                    currentIterationItems.push(added.slug);
+                  }
+                }
+                const amendedStates = await Promise.all(
+                  currentIterationItems.map((slug) =>
+                    deriveItemState({ taskDir, itemSlug: slug, parentBranch, taskWt, pipeline, project, rootTaskDir: params.rootTaskDir })
+                  )
+                );
+                maxWave = Math.max(maxWave, amendedStates.reduce((m, it) => Math.max(m, it.wave), 1));
                 }
               }
-              const applied = applyEdits(amendEdits, { taskDir, plan: plan!, removeItemSlugs: effectiveRemovals, nextDecisionSeq });
-              for (const f of applied.files) {
-                await fs.promises.mkdir(path.dirname(f.path), { recursive: true });
-                await writeTextAtomic(f.path, f.content);
-              }
-              await git(taskWt, ["add", "-A"], { allowFail: true });
-              await commitAll(repo, taskWt, `factory: apply plan amendment ${iteration}.${amendmentCount}`);
-              // Re-plan remaining waves with the amended items (§8.4.6, Finding 31)
-              for (const added of amendEdits.items) {
-                if (!currentIterationItems.includes(added.slug)) {
-                  currentIterationItems.push(added.slug);
-                }
-              }
-              const amendedStates = await Promise.all(
-                currentIterationItems.map((slug) =>
-                  deriveItemState({ taskDir, itemSlug: slug, parentBranch, taskWt, pipeline, project, rootTaskDir: params.rootTaskDir })
-                )
-              );
-              maxWave = Math.max(maxWave, amendedStates.reduce((m, it) => Math.max(m, it.wave), 1));
             }
           }
         }
       }
-    } else if (waveDecision === "end-iteration") {
-      break;
-    }
     await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
   }
 

@@ -10,6 +10,17 @@ export interface Usage {
   costUsd?: number;
 }
 
+export interface ModelFallbackInfo {
+  /** Model argument that failed (e.g. `@simpler`). */
+  from: string;
+  /** Model argument tried next (literal model or @role). */
+  to: string;
+  /** Failure reason for the `from` model. */
+  reason: string;
+}
+
+export type OnModelFallback = (info: ModelFallbackInfo) => void | Promise<unknown>;
+
 export interface Harness {
   run(l: AgentRun): Promise<AgentOutcome>; // one turn (fresh or resumed)
   complete(c: {
@@ -20,6 +31,7 @@ export interface Harness {
     schema: JSONSchema;
     timeoutSec?: number;
     timeoutMs?: number;
+    onModelFallback?: OnModelFallback;
   }): Promise<unknown>;
 }
 
@@ -35,6 +47,7 @@ export interface AgentRun {
   label: string;
   session: { resume?: string; keep: boolean }; // resume: session id from prior outcome; keep: leave resumable
   timeoutSec?: number;
+  onModelFallback?: OnModelFallback;
   onSession?: (sessionId: string) => void | Promise<void>;
   onUsage?: (usage: Usage) => void | Promise<void>;
 }

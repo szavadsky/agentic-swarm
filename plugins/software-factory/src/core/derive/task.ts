@@ -19,6 +19,7 @@ import { deriveWaveState, type DerivedWaveState } from "./wave.js";
 import { scanSpendFromDisk, type SpendTotals } from "../budget.js";
 import { git } from "../git/exec.js";
 import { isAncestor } from "../git/commit.js";
+import { readJournal } from "../journal.js";
 
 export interface DerivedRunningStep {
   item?: string;
@@ -48,6 +49,8 @@ export interface DerivedTaskState {
   runningSteps: DerivedRunningStep[];
   hasOpenSteerQuestions: boolean;
   openSteerQuestions: SteerItemArtifact[];
+  /** Files whose steering mailbox is dead (steer_poll_dead, never since processed). */
+  deadSteerFiles: Array<{ file: string; errors: number }>;
   lastCloseup?: PlanCloseupArtifact;
   toStateArtifact(): StateArtifact;
 }
@@ -435,9 +438,35 @@ export async function deriveTaskState(opts: {
     runningSteps,
     hasOpenSteerQuestions: openSteerQuestions.length > 0,
     openSteerQuestions,
+    deadSteerFiles: await deriveDeadSteerFiles(taskDir),
     lastCloseup,
     toStateArtifact,
   };
+}
+
+/**
+ * Derives the operator-visible steer dead-letter set (D3): every
+ * `steer_poll_dead` file with no later `steer_processed` for the same file.
+ * Pure journal scan; never throws (corrupt journal reads as empty).
+ */
+export async function deriveDeadSteerFiles(
+  taskDir: string
+): Promise<Array<{ file: string; errors: number }>> {
+  let events: Array<{ type?: string; file?: string; errors?: number }>;
+  try {
+    events = (await readJournal(taskDir)) as Array<{ type?: string; file?: string; errors?: number }>;
+  } catch {
+    return [];
+  }
+  const dead = new Map<string, number>();
+  for (const e of events) {
+    if (e.type === "steer_poll_dead" && e.file) {
+      dead.set(e.file, typeof e.errors === "number" ? e.errors : 0);
+    } else if (e.type === "steer_processed" && e.file) {
+      dead.delete(e.file);
+    }
+  }
+  return [...dead.entries()].map(([file, errors]) => ({ file, errors }));
 }
 
 /**

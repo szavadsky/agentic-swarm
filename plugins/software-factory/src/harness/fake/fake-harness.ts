@@ -117,6 +117,7 @@ export class FakeHarness implements Harness {
     system: string;
     prompt: string;
     schema: JSONSchema;
+    onModelFallback?: (info: { from: string; to: string; reason: string }) => void | Promise<unknown>;
   }): Promise<unknown> {
     this.calls.push({ type: "complete", complete: c });
 

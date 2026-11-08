@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import yaml from "yaml";
-import type { Harness } from "../harness/types.js";
+import type { Harness, OnModelFallback } from "../harness/types.js";
 import type {
   SteerItemArtifact,
   SteerClassificationArtifact,
@@ -12,7 +12,7 @@ import type { PromptLibrary } from "./prompts.js";
 import { writeYamlAtomic, readYaml } from "./records/io.js";
 import { defaultSchemaCache } from "./records/schema-cache.js";
 import { resolveRole } from "./config/roles.js";
-import { appendJournal } from "./journal.js";
+import { appendJournal, readJournal } from "./journal.js";
 import { git } from "./git/exec.js";
 import { KeyedMutex } from "./mutex.js";
 import type { Repo } from "./git/repo.js";
@@ -127,6 +127,7 @@ export async function classify(
     role: string;
     models: string[];
     prompts: PromptLibrary;
+    onModelFallback?: OnModelFallback;
   }
 ): Promise<SteerClassificationArtifact> {
   const system = ctx.prompts.render("system/steer-classify", {});
@@ -151,6 +152,7 @@ export async function classify(
     system,
     prompt,
     schema,
+    onModelFallback: ctx.onModelFallback,
   });
 
   let parsed: unknown = raw;
@@ -262,17 +264,53 @@ export async function processSteeringMailbox(
           role: simplerRole.role,
           models: simplerRole.models,
           prompts,
+          onModelFallback: async ({ from, to, reason }) => {
+            try {
+              await appendJournal(taskDir, {
+                type: "harness_model_fallback",
+                task,
+                step: "steer-classify",
+                from,
+                to,
+                reason,
+              });
+            } catch {}
+          },
         });
       } catch (err: any) {
         // Classification failure: journal and skip (message stays pending for
         // retry) rather than aborting the whole poll or failing silently.
         skippedCount++;
+        const errMsg = err?.message ?? String(err);
         try {
           await appendJournal(taskDir, {
             type: "steer_poll_error",
             file: item.file,
-            error: err?.message ?? String(err),
+            error: errMsg,
           });
+        } catch {}
+        // Steer dead-letter (D3): after 5 consecutive steer_poll_errors on
+        // the same file, journal steer_poll_dead so operator deafness is
+        // never silent (surfaced in `factory status`).
+        try {
+          const events = await readJournal(taskDir);
+          let consecutive = 0;
+          for (let i = events.length - 1; i >= 0; i--) {
+            const e = events[i] as { type?: string; file?: string };
+            if (e.type === "steer_poll_dead" && e.file === item.file) break;
+            if (e.type === "steer_processed" && (e as { file?: string }).file === item.file) break;
+            if (e.type === "steer_poll_error" && e.file === item.file) {
+              consecutive++;
+              continue;
+            }
+          }
+          if (consecutive >= 5) {
+            await appendJournal(taskDir, {
+              type: "steer_poll_dead",
+              file: item.file,
+              errors: consecutive,
+            });
+          }
         } catch {}
         continue;
       }
