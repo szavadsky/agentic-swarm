@@ -1,0 +1,27 @@
+status: approved
+summary: "Canonical resolver correct: precedence, legacy alias, triager-only
+  dismiss verified; all 4 surfaces wired, 10/10 green, typecheck green"
+suggestions:
+  - detail: review-policy.ts exports BUILTIN_REVIEW_DISPOSITIONS but
+      review-schema.ts:11 and step-runner.ts:104 keep literal copies of the same
+      5 dispositions. Resolver never returns empty so the fallbacks are
+      currently dead code, but import the constant to prevent drift.
+    disposition: optional
+    id: builtin-dedup
+    location:
+      file: plugins/software-factory/src/core/records/review-schema.ts
+      line: 11
+    summary: Single-source builtin fallback arrays to BUILTIN_REVIEW_DISPOSITIONS
+  - detail: isTriagerAgent returns true for wave-close-up/plan-close-up, but
+      resolveStepSchema routes those agents to wave-closeup/plan-closeup schemas
+      which have no disposition enum, so the dismiss grant is currently inert
+      and untested (tests cover reviewer/plan-reviewer/qa only). Either add a
+      resolver-level test pinning close-up triager status or comment that the
+      grant is forward-looking for funnel triage.
+    disposition: optional
+    id: closeup-triager-inert
+    location:
+      file: plugins/software-factory/src/core/review-policy.ts
+      line: 16
+    summary: Close-up triager marking is inert under current schemas; pin with test
+      or comment
