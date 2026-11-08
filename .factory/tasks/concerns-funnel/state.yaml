@@ -501,7 +501,7 @@ debt:
     inconsistent with documented branch-from-HEAD worktrees"
   - "[funnel-closeups-v3] Propagated parent copy retains child source.item,
     writes undeclared source.epic, and can clobber/lengthen parent records"
-budgetSpentUsd: 5.41584892
+budgetSpentUsd: 5.43156392
 spendByRole:
   alt-workhorse:
     costUsd: 1.160009
@@ -516,9 +516,9 @@ spendByRole:
     inputTokens: 6134335
     outputTokens: 126871
   alt-architect:
-    costUsd: 0.016515000000000002
-    inputTokens: 72452
-    outputTokens: 42292
+    costUsd: 0.03223
+    inputTokens: 131928
+    outputTokens: 80452
 spendByItem:
   concerns-contracts:
     costUsd: 0.251577
@@ -589,7 +589,7 @@ spendByItem:
     inputTokens: 463902
     outputTokens: 217893
   (orchestration):
-    costUsd: 1.217912
-    inputTokens: 7463730
-    outputTokens: 577059
-lastUpdated: 2026-11-08T18:06:37.421Z
+    costUsd: 1.2336270000000003
+    inputTokens: 7523206
+    outputTokens: 615219
+lastUpdated: 2026-11-08T18:41:12.230Z
