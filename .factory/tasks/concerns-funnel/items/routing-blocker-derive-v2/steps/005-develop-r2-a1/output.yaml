@@ -1,0 +1,31 @@
+status: ok
+summary: Unified routed-blocker seeding to pending-only and single-sourced the
+  failure-union fixpoint on scheduler.blockedByConcern. withRoutedBlocking now
+  blocks only status==pending (removing non-terminal/TERMINAL divergence);
+  deriveWaveState and deriveTaskState both reuse blockedByConcern with a
+  scheduler-input mapping; added running/ready-seed regression tests at
+  item/wave/task levels plus a wave-loop comment. All gates green.
+evidence:
+  - bun test test/engine/routing-blocker-derive.test.ts
+    test/plan-scheduler.test.ts -> 27 pass, 0 fail, 53 expects (11 original
+    targets + 3 new running/ready regression tests)
+  - bun test with --test-name-pattern retro-block|running/ready|leaves running
+    -> 3 pass, 8 filtered out, proving new regression tests execute
+  - bun run typecheck (tsc --noEmit) -> exit 0
+  - bun test (full project suite, bg_1) -> 364 pass, 2 skip, 0 fail, 1671
+    expects across 59 files
+  - "Adjacent suites: routing-blocker + scheduler + consult-decision-application
+    + plan-reviewer-triage -> 34 pass; concerns-funnel + plan-apply +
+    plan-limits -> 41 pass"
+  - "grep verify: wave.ts/task.ts no longer import
+    cascadePendingBlocked/blockedByFailure directly; TERMINAL_ITEM_STATUSES
+    removed (pending-only subsumes terminal guard)"
+concerns:
+  - Pending-only means running/ready routed seeds stay schedulable by design
+    (matches §8.2 precedent); dependents of in-flight seeds are not cascaded.
+notes: "FIX routed-seed-predicate-divergence: item/task/wave/scheduler now all
+  seed pending-only. FIX wave-reuse-blockedByConcern: wave.ts and task.ts both
+  call blockedByConcern (one fixpoint owner). OPTIONAL
+  task-wave-blockedby-comment applied (one-line comment). Other optionals
+  (iteration end-of-wave check, naming unification) left as tech debt per
+  scope."

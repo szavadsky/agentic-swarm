@@ -13,12 +13,13 @@ import type {
   TriageArtifact,
 } from "../artifacts.js";
 import { readYaml, writeYamlAtomic } from "../records/io.js";
-import { deriveItemState, type DerivedItemState } from "./item.js";
+import { deriveItemState, withRoutedBlocking, type DerivedItemState } from "./item.js";
 import { deriveWaveState, type DerivedWaveState } from "./wave.js";
 import { BudgetTracker } from "../budget.js";
 import { listConcerns } from "../concerns.js";
 import { isDebtConcern } from "../triage.js";
 import { questionBlocks } from "../steer.js";
+import { blockedByConcern } from "../plan/scheduler.js";
 import { git } from "../git/exec.js";
 import { isAncestor } from "../git/commit.js";
 
@@ -38,6 +39,21 @@ export interface DerivedTaskState {
   openSteerQuestions: SteerItemArtifact[];
   lastCloseup?: PlanCloseupArtifact;
   toStateArtifact(): StateArtifact;
+}
+
+/**
+ * Collects item slugs named by routed blocker concerns (adr-routing-derived-state).
+ * Pure read: the concern store is authoritative; derive never writes.
+ */
+export async function collectRoutedBlockers(taskDir: string): Promise<Set<string>> {
+  const affected = new Set<string>();
+  for (const concern of await listConcerns(taskDir)) {
+    if (concern.kind !== "blocker" || concern.status !== "routed") continue;
+    for (const slug of concern.affects ?? []) {
+      affected.add(slug);
+    }
+  }
+  return affected;
 }
 
 /**
@@ -129,23 +145,43 @@ export async function deriveTaskState(opts: {
 
   // 5. Items
   const items: DerivedItemState[] = [];
-  const itemMap: Record<string, DerivedItemState> = {};
   const itemsDir = path.join(taskDir, "items");
   if (fs.existsSync(itemsDir)) {
     const itemEntries = await fs.promises.readdir(itemsDir, { withFileTypes: true });
     for (const ent of itemEntries) {
       if (!ent.isDirectory()) continue;
-      const itState = await deriveItemState({
-        taskDir,
-        itemSlug: ent.name,
-        parentBranch,
-        taskWt,
-        pipeline,
-        project,
-      });
-      items.push(itState);
-      itemMap[ent.name] = itState;
+      items.push(
+        await deriveItemState({
+          taskDir,
+          itemSlug: ent.name,
+          parentBranch,
+          taskWt,
+          pipeline,
+          project,
+        })
+      );
     }
+  }
+
+  // 5b. Routed blockers (adr-routing-derived-state): a routed blocker concern
+  // blocks the pending items it affects and their declared dependents,
+  // transitively. The failure-union fixpoint has one owner
+  // (blockedByConcern); task only maps derive statuses onto scheduler
+  // inputs. Pending-only seeding matches §8.2 and keeps itemMap consistent
+  // with deriveWaveState/iteration.
+  const routedNames = await collectRoutedBlockers(taskDir);
+  const schedItems = items.map((it) => ({
+    slug: it.slug,
+    wave: String(it.wave),
+    deps: it.deps,
+    status: it.status as "pending" | "running" | "done" | "failed" | "blocked" | "abandoned",
+  }));
+  const routedBlocked = new Set<string>(blockedByConcern(schedItems, routedNames));
+  const itemMap: Record<string, DerivedItemState> = {};
+  for (let i = 0; i < items.length; i++) {
+    const blocked = withRoutedBlocking(items[i]!, routedBlocked);
+    items[i] = blocked;
+    itemMap[blocked.slug] = blocked;
   }
 
   // Sort items deterministically by wave then slug
@@ -156,6 +192,8 @@ export async function deriveTaskState(opts: {
   const maxWave = items.reduce((max, it) => Math.max(max, it.wave), 1);
   let currentWave: number | undefined;
 
+  // Items are already routed-blocked above, so wave calls intentionally omit
+  // blockedBy (seeds now carry status blocked, not pending).
   for (let w = 1; w <= maxWave; w++) {
     const waveState = deriveWaveState({ wave: w, items });
     waves.push(waveState);

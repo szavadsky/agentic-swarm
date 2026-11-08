@@ -1,0 +1,50 @@
+status: ok
+summary: "Resolved the single merge conflict in
+  plugins/software-factory/src/core/derive/task.ts. The conflict was purely
+  additive in the import block: HEAD adds `isDebtConcern` (used at task.ts:236)
+  and `questionBlocks` (used at task.ts:266,276); topic/concerns-funnel adds
+  `blockedByConcern` (used at task.ts:179 for the routed-blocker fixpoint).
+  Combined all three imports, preserving both sides' intent — they are
+  complementary, since both branches converge on `blockedByConcern` as the
+  single failure-union fixpoint owner with `withRoutedBlocking` mapping
+  pending→blocked above it. No other files contained conflict markers, and the
+  auto-merged files (item.ts, wave.ts, iteration.ts, plan/index.ts,
+  plan/scheduler.ts) are semantically coherent with the resolution. Typecheck
+  and the full test suite pass."
+target:
+  gate: cd plugins/software-factory && bun run typecheck && bun test
+evidence:
+  - "grep for conflict markers across plugins/src/test: only
+    plugins/software-factory/src/core/derive/task.ts:20-25 had markers; all
+    other files clean"
+  - "Resolved conflict #1 at task.ts:20-25 by combining both import lines
+    groups: isDebtConcern, questionBlocks, blockedByConcern"
+  - Full-tree marker scan (grep -rIn over repo excluding .git/node_modules)
+    returned zero <<<<<<<, =======, >>>>>>> lines
+  - git diff --check exit code 0 (no conflict-marker or whitespace errors)
+  - "git ls-files -u lists task.ts still unmerged in index (expected: staging is
+    the engine's job; file content is conflict-free)"
+  - cd plugins/software-factory && bun run typecheck -> exit 0 (TYPECHECK_OK),
+    no diagnostics
+  - cd plugins/software-factory && bun test -> 369 pass, 2 skip, 0 fail, 1699
+    expect() calls across 60 files/371 tests (77.03s)
+  - cd plugins/software-factory && bun test
+    test/engine/routing-blocker-derive.test.ts test/plan-scheduler.test.ts -> 27
+    pass, 0 fail, 53 expect() calls
+  - "Semantic review: task.ts:166-185 uses blockedByConcern(schedItems,
+    routedNames) then withRoutedBlocking per item; wave.ts:46-57 applies the
+    same fixpoint with optional blockedBy seeds; iteration.ts passes
+    collectRoutedBlockers(taskDir) into deriveWaveState; plan/index.ts
+    re-exports blockedByConcern"
+concerns:
+  - task.ts:195-196 intentionally omits blockedBy when calling deriveWaveState
+    because items already carry status 'blocked' at that point; this relies on
+    the derive-status ordering in task.ts (5b before 6) and would silently
+    regress if the order changed
+  - The engine must `git add` task.ts to clear the unmerged index entry; the
+    resolution is content-complete but not staged (git write operations are out
+    of scope for this step)
+notes: Conflict was a one-line-group additive overlap; no textual or semantic
+  divergence found in the remaining auto-merged files. Both branches
+  independently implemented the same ADR (adr-routing-derived-state) fixpoint
+  ownership, so the merge reduces to importing all three symbols.
