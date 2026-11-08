@@ -61,7 +61,7 @@ const DEFAULT_RAISE_ALLOWLIST = [
 const FRAGMENT_MATRIX: Record<string, string[]> = {
   review: ["humanInvolvementCriteria", "concernsYaml"],
   qa: ["humanInvolvementCriteria", "concernsYaml"],
-  "plan-review": ["humanInvolvementCriteria"],
+  "plan-review": ["humanInvolvementCriteria", "concernsYaml"],
   "wave-close-up": ["humanInvolvementCriteria", "concernsYaml"],
   "plan-close-up": ["humanInvolvementCriteria", "concernsYaml"],
   "architect-plan": ["humanInvolvementCriteria", "concernsYaml"],

@@ -1,0 +1,25 @@
+evidence:
+  - cd plugins/software-factory && bun test
+    test/engine/plan-reviewer-triage.test.ts -> 4 pass, 0 fail (FIX debt
+    negative case + open-only hydration assertions green)
+  - cd plugins/software-factory && bun test
+    test/engine/plan-reviewer-triage.test.ts test/engine/concerns-funnel.test.ts
+    test/human-involvement-config.test.ts -> 37 pass, 0 fail (target +
+    neighbors, incl. updated plan-review FRAGMENT_MATRIX)
+  - cd plugins/software-factory && bun run typecheck -> exit 0 ($ tsc --noEmit)
+  - cd plugins/software-factory && bun test -> 339 pass, 2 skip, 0 fail across
+    341 tests / 57 files (full suite non-regression)
+  - git diff --check -> exit 0 (no whitespace errors); verified
+    routed-risk/architect fixture asserts not in debt and round-2 prompt
+    excludes triaged id
+notes: "No production code changes needed: predicate in src/core/derive/task.ts
+  already implements routed AND (tech-debt OR optional); fix-round only
+  strengthened tests. Verified uncommitted diff already contained all three
+  reviewer items."
+status: ok
+summary: "Verified fix-round test hardening: added routed risk/architect
+  negative fixture to debt test so status==routed alone fails, extended round-2
+  hydration test to assert open-only filtering (round-2 excludes triaged plan
+  concern), and updated plan-review FRAGMENT_MATRIX to include concernsYaml.
+  Target 4 pass, neighbors 37 pass, full suite 339 pass, typecheck clean."
+concerns: []

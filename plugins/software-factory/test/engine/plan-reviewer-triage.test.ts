@@ -244,26 +244,46 @@ describe("Plan-reviewer triage", () => {
 
   it("aggregates architect-revise concerns and remarkable rm-* for the next review round", async () => {
     const harness = new FakeHarness();
+    const planConcernId = concernFingerprint({
+      kind: "tech-debt",
+      summary: "Plan seeds a triaged concern before round one",
+      affects: ["m1"],
+    });
     const reviseConcernId = concernFingerprint({
       kind: "assumption",
       summary: "Plan assumes an in-memory queue survives restart",
       affects: ["m1"],
     });
+    let firstPrompt = "";
     let secondPrompt = "";
 
     harness.scriptOutcome(`${TASK}/runs/architect-plan-1#a1`, {
       ok: true,
-      data: planData(),
-    });
-    harness.scriptOutcome(`${TASK}/runs/plan-review-1-1#a1`, {
-      ok: true,
-      data: {
-        status: "changes_requested",
-        summary: "Plan needs a durability story",
-        suggestions: [
-          { id: "s-plan-gap", disposition: "fix", summary: "Add durability to the plan" },
+      data: planData({
+        concerns: [
+          {
+            kind: "tech-debt",
+            summary: "Plan seeds a triaged concern before round one",
+            detail: "Seeded so round two proves open-only hydration",
+            severity: "medium",
+            affects: ["m1"],
+          },
         ],
-      },
+      }),
+    });
+    harness.scriptOutcome(`${TASK}/runs/plan-review-1-1#a1`, (run) => {
+      firstPrompt = run.prompt;
+      return {
+        ok: true,
+        data: {
+          status: "changes_requested",
+          summary: "Plan needs a durability story",
+          suggestions: [
+            { id: "s-plan-gap", disposition: "fix", summary: "Add durability to the plan" },
+            { id: planConcernId, disposition: "optional", summary: "Seeded plan concern routed" },
+          ],
+        },
+      };
     });
     harness.scriptOutcome(`${TASK}/runs/architect-revise-1-1#a1`, {
       ok: true,
@@ -325,6 +345,9 @@ describe("Plan-reviewer triage", () => {
     expect(rmId).toMatch(/^rm-[0-9a-f]{10}$/);
 
     // Non-dismiss dispositions route; the remarkable file routes too.
+    const planConcern = await storedConcern(planConcernId);
+    expect(planConcern.status).toBe("routed");
+    expect(planConcern.disposition).toBe("optional");
     const routedConcern = await storedConcern(reviseConcernId);
     expect(routedConcern.status).toBe("routed");
     expect(routedConcern.disposition).toBe("architect");
@@ -334,9 +357,12 @@ describe("Plan-reviewer triage", () => {
     expect(remarkable.status).toBe("routed");
     expect(remarkable.disposition).toBe("optional");
 
-    // Round two is hydrated with the revise concern and remarkable id.
+    // Hydration is open-only: round one sees the seeded concern, round two
+    // sees only the revise concern and remarkable id.
+    expect(firstPrompt).toContain(planConcernId);
     expect(secondPrompt).toContain(reviseConcernId);
     expect(secondPrompt).toContain(rmId);
+    expect(secondPrompt).not.toContain(planConcernId);
   });
 
   it("keeps triage ids out of the plan fix loop so they never trigger a revision", async () => {
@@ -460,6 +486,15 @@ describe("Plan-reviewer triage", () => {
         dismissReason: "not worth tracking",
       })
     );
+    await writeYamlAtomic(
+      path.join(dir, "c-riskrouted.yaml"),
+      stored("c-riskrouted", {
+        kind: "risk",
+        summary: "Routed risk without optional is not debt",
+        status: "routed",
+        disposition: "architect",
+      })
+    );
 
     const state = await deriveTaskState({
       taskDir,
@@ -473,5 +508,6 @@ describe("Plan-reviewer triage", () => {
     expect(state.debt).toContain("Defer contract hardening");
     expect(state.debt).not.toContain("Open debt stays a concern");
     expect(state.debt).not.toContain("Dismissed optional is not debt");
+    expect(state.debt).not.toContain("Routed risk without optional is not debt");
   });
 });
