@@ -121,11 +121,11 @@ items:
     spendUsd: 0
   concerns-store-v2:
     kind: dev
-    status: running
+    status: ready
     branch: topic/concerns-funnel--concerns-store-v2
-    attempts: 2
-    fixRounds: 3
-    spendUsd: 0.48322400000000004
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0.613799
     currentStep: review
   funnel-closeups:
     kind: dev
@@ -316,6 +316,20 @@ debt:
     remarkable pre-lock validation) has no regression tests"
   - "[concerns-store-v2] Consult runAgentStep calls omit taskWt, relying on path
     inference that mis-resolves epic child task dirs"
+  - "[concerns-store-v2] listOpenConcerns silently drops unreadable YAML with no
+    signal"
+  - "[concerns-store-v2] Single-record test does not pin multi-record endedAt
+    ordering or single-commit batching"
+  - "[concerns-store-v2] listOpenConcerns silently drops corrupt YAML with no
+    signal"
+  - "[concerns-store-v2] KINDS/RANK duplicate schema single source of truth"
+  - "[concerns-store-v2] Live aggregate/mutate/reconcile use unscoped commitAll
+    on taskWt"
+  - "[concerns-store-v2] Reconcile can regress source identity while preserving
+    newer lastSeen"
+  - "[concerns-store-v2] Consult runAgentStep calls omit explicit taskWt"
+  - "[concerns-store-v2] Triage/closeup return StoredConcernArtifact for rm-*
+    records"
   - "[modes-prompts-v2] Harden matrix test: assert plan-review excludes
     concernsYaml"
   - "[modes-prompts-v2] Harden mode-switch tests: check both inactive markers
@@ -329,20 +343,20 @@ debt:
     human-involvement consumption"
   - "[modes-prompts-v2] ADR blocking table duplicated verbatim in config
     comments and criteria fragment"
-budgetSpentUsd: 1.826748
+budgetSpentUsd: 2.003756
 spendByRole:
   alt-workhorse:
-    costUsd: 0.30556599999999984
-    inputTokens: 1246876
-    outputTokens: 690346
+    costUsd: 0.43614099999999983
+    inputTokens: 2219508
+    outputTokens: 754774
   workhorse:
     costUsd: 1.389019
     inputTokens: 2727951
     outputTokens: 891870
   architect:
-    costUsd: 0.115648
-    inputTokens: 935546
-    outputTokens: 77812
+    costUsd: 0.162081
+    inputTokens: 1376929
+    outputTokens: 80585
   alt-architect:
     costUsd: 0.016515000000000002
     inputTokens: 72452
@@ -377,11 +391,11 @@ spendByItem:
     inputTokens: 178070
     outputTokens: 75896
   concerns-store-v2:
-    costUsd: 0.48322400000000004
-    inputTokens: 1220656
-    outputTokens: 349363
+    costUsd: 0.613799
+    inputTokens: 2193288
+    outputTokens: 413791
   (orchestration):
-    costUsd: 0.449527
-    inputTokens: 1643914
-    outputTokens: 367443
-lastUpdated: 2026-11-08T07:43:30.910Z
+    costUsd: 0.49595999999999996
+    inputTokens: 2085297
+    outputTokens: 370216
+lastUpdated: 2026-11-08T08:43:11.628Z
