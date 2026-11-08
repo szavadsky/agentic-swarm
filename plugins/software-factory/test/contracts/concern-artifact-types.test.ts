@@ -387,10 +387,10 @@ const review: ReviewArtifact = {
 // @ts-expect-error developer concerns are structured concerns, not free-form strings
 const stringConcerns: DeveloperOutputArtifact = { status: "ok", summary: "x", concerns: ["tech debt"] };
 
-// @ts-expect-error concern detail is lowercase; capital Detail is not part of the contract
 const capitalDetail: DeveloperOutputArtifact = {
   status: "ok",
   summary: "x",
+  // @ts-expect-error capital Detail is not part of the contract
   concerns: [{ kind: "risk", summary: "x", Detail: "wrong casing" }],
 };
 

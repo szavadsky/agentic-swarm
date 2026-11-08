@@ -47,6 +47,23 @@ export function generateReviewSchema(
           additionalProperties: false,
         },
       },
+      remarkable: {
+        type: "array",
+        description: "Remarkable decisions or tradeoffs with the chosen option, alternatives, and why",
+        items: {
+          type: "object",
+          required: ["chosen", "alternatives", "why"],
+          additionalProperties: false,
+          properties: {
+            chosen: { type: "string" },
+            why: { type: "string" },
+            alternatives: {
+              type: "array",
+              items: { type: "string" },
+            },
+          },
+        },
+      },
       newConcerns: {
         type: "array",
         description: "New concerns discovered during review",
