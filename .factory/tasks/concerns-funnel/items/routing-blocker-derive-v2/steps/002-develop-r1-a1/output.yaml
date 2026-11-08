@@ -1,0 +1,62 @@
+status: ok
+summary: Implemented routed-blocker derive (pure derive, no writes). Added
+  scheduler.blockedByConcern + shared cascadePendingBlocked fixpoint;
+  derive/wave now unions routed-blocker seeds with blockedByFailure over
+  declared deps; derive/item accepts blockedBy and blocks non-terminal items via
+  withRoutedBlocking; derive/task exports collectRoutedBlockers (routed blocker
+  concerns' affects) and post-processes all items through the transitive
+  declared-dep cascade before wave derivation; iteration loop threads
+  collectRoutedBlockers into both deriveWaveState calls. All 11 target cases
+  pass.
+target:
+  selectors:
+    - test/engine/routing-blocker-derive.test.ts
+    - test/plan-scheduler.test.ts
+  expectRed:
+    - "plan/scheduler: blockedByConcern.blocks concern-affected items and their
+      declared dependents in PM order"
+    - "plan/scheduler: blockedByConcern.unions concern blocking with the
+      failure-blocked fixpoint over declared deps"
+    - "plan/scheduler: blockedByConcern.ignores refs naming no item and never
+      blocks a done item"
+    - "derive/task: collectRoutedBlockers.collects affects of routed blocker
+      concerns and ignores other statuses and kinds"
+    - "derive/task: collectRoutedBlockers.returns an empty set when the task has
+      no concerns directory"
+    - "derive/wave: routed blocker integration.routes a concern-affected item
+      and its declared dependents to blocked"
+    - "derive/wave: routed blocker integration.cascades transitively over
+      declared deps only"
+    - "derive/item: routed blocker integration.blocks only the item named by a
+      routed blocker"
+    - "derive/item: routed blocker integration.keeps a terminal item status over
+      routed blocking"
+    - "derive/task: routed blocker scenario.blocks affected items and declared
+      dependents, leaving non-dependents pending without writes"
+    - "derive/task: routed blocker scenario.derives the task blocked when every
+      item is in the routed blocker cascade"
+evidence:
+  - bun test test/engine/routing-blocker-derive.test.ts
+    test/plan-scheduler.test.ts -> 24 pass, 0 fail, 43 expects (covers all 11
+    target cases, including the no-writes snapshot-tree assertion)
+  - bun run typecheck (tsc --noEmit) -> exit 0 on final diff
+  - bun test (full project suite) -> 361 pass, 2 skip, 0 fail, 1661 expects
+    across 59 files
+  - bun test test/engine/routing-blocker-derive.test.ts
+    test/plan-scheduler.test.ts test/plan-apply.test.ts test/plan-limits.test.ts
+    test/engine/plan-reviewer-triage.test.ts -> 47 pass, 0 fail on final diff
+    after adding the plan barrel export
+  - git diff --stat -> 6 prod files changed, no test files modified
+concerns:
+  - collectRoutedBlockers trusts concern.affects verbatim; refs naming a
+    non-existent item are inert by construction but are not validated
+  - blockedByConcern/cascadePendingBlocked only block pending items, so already
+    running or ready work is not retro-blocked at scheduler level (derive
+    item-level blocking does cover ready/running non-terminal states)
+  - iteration.ts now reads the concern store on every wave derivation (cheap,
+    but recomputed per refresh to pick up newly routed concerns)
+notes: blockedByConcern returns slugs in PM order, unions blockedByFailure and
+  the concern seeds, then cascades to a fixpoint over declared deps only.
+  deriveTaskState derives items first, computes the routed cascade, then applies
+  withRoutedBlocking so itemMap and every wave state see blocked statuses before
+  wave derivation; terminal outcomes (merged/failed/superseded) are preserved.

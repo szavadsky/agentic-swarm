@@ -34,6 +34,50 @@ export function blockedByFailure(items: SchedItem[]): string[] {
 }
 
 /**
+ * Expands blocked slugs to a fixpoint over declared `deps` (§8.2): a pending
+ * item depending on any blocked slug can never run, so it is blocked too.
+ * Mutates `blocked` in place and returns it.
+ */
+export function cascadePendingBlocked<T extends { slug: string; deps: string[]; status: string }>(
+  items: T[],
+  blocked: Set<string>
+): Set<string> {
+  let grew = blocked.size > 0;
+  while (grew) {
+    grew = false;
+    for (const item of items) {
+      if (item.status !== "pending" || blocked.has(item.slug) || !item.deps.some((d) => blocked.has(d))) {
+        continue;
+      }
+      blocked.add(item.slug);
+      grew = true;
+    }
+  }
+  return blocked;
+}
+
+/**
+ * Returns the slugs blocked by routed concern blockers (adr-routing-derived-state).
+ *
+ * `concernBlocked` names items that routed blocker concerns affect. A pending
+ * affected item is blocked, and pending items depending on any blocked slug are
+ * blocked transitively to a fixpoint. The result unions with `blockedByFailure`
+ * so callers see one failure/concern picture. Refs naming no item, terminal
+ * items, and non-pending work are ignored. Preserves input (PM) order.
+ */
+export function blockedByConcern(items: SchedItem[], concernBlocked: Iterable<string>): string[] {
+  const bySlug = new Map(items.map((i) => [i.slug, i]));
+  const blocked = new Set(blockedByFailure(items));
+  for (const slug of concernBlocked) {
+    if (bySlug.get(slug)?.status === "pending") {
+      blocked.add(slug);
+    }
+  }
+  cascadePendingBlocked(items, blocked);
+  return items.filter((i) => blocked.has(i.slug)).map((i) => i.slug);
+}
+
+/**
  * Determines the next wave to execute according to wave sequence order (§8.4).
  *
  * Waves execute sequentially. A wave is active as long as any item in it

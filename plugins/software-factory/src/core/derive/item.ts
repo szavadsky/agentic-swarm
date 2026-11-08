@@ -54,6 +54,28 @@ export interface DerivedItemState {
   decisionFingerprints: string[];
 }
 
+/** Terminal item outcomes: routed blockers never override these (§8.2). */
+export const TERMINAL_ITEM_STATUSES: ReadonlySet<DerivedItemState["status"]> = new Set([
+  "merged",
+  "failed",
+  "superseded",
+]);
+
+/**
+ * Applies routed concern blocking (adr-routing-derived-state): an item named by
+ * a routed blocker concern derives `blocked` unless it already reached a
+ * terminal outcome.
+ */
+export function withRoutedBlocking(
+  state: DerivedItemState,
+  blockedBy?: ReadonlySet<string>
+): DerivedItemState {
+  if (!blockedBy?.has(state.slug) || TERMINAL_ITEM_STATUSES.has(state.status)) {
+    return state;
+  }
+  return { ...state, status: "blocked" };
+}
+
 /**
  * Derives state of a single item from assignment, step records, decisions, steering, and git (§6, §8).
  */
@@ -66,6 +88,8 @@ export async function deriveItemState(opts: {
   pipeline?: PipelineConfig;
   project?: ProjectConfig;
   kindConfig?: FlowKindConfig;
+  /** Slugs named by routed blocker concerns (adr-routing-derived-state). */
+  blockedBy?: Iterable<string>;
 }): Promise<DerivedItemState> {
   const { taskDir, itemSlug, parentBranch, taskWt, childWt, pipeline, project } = opts;
   const itemDir = path.join(taskDir, "items", itemSlug);
@@ -424,28 +448,31 @@ export async function deriveItemState(opts: {
     }
   }
 
-  return {
-    slug: itemSlug,
-    kind,
-    title,
-    wave,
-    deps,
-    status,
-    assignment,
-    branch,
-    records,
-    currentStepId: records[records.length - 1]?.name,
-    currentAttempt,
-    currentFixRound,
-    isEscalated,
-    freshSeries: retryDecision && decisionIsFresh,
-    interruptionCount,
-    guidanceText,
-    openSteerQuestion,
-    mergedAt,
-    consultCount,
-    lastFailingCheckFingerprint,
-    suggestionFingerprints,
-    decisionFingerprints,
-  };
+  return withRoutedBlocking(
+    {
+      slug: itemSlug,
+      kind,
+      title,
+      wave,
+      deps,
+      status,
+      assignment,
+      branch,
+      records,
+      currentStepId: records[records.length - 1]?.name,
+      currentAttempt,
+      currentFixRound,
+      isEscalated,
+      freshSeries: retryDecision && decisionIsFresh,
+      interruptionCount,
+      guidanceText,
+      openSteerQuestion,
+      mergedAt,
+      consultCount,
+      lastFailingCheckFingerprint,
+      suggestionFingerprints,
+      decisionFingerprints,
+    },
+    opts.blockedBy ? new Set(opts.blockedBy) : undefined
+  );
 }

@@ -24,7 +24,7 @@ import { mergeItem } from "./merge-path.js";
 import { tickItemMachine } from "./item-machine.js";
 import { deriveItemState } from "../derive/item.js";
 import { deriveWaveState } from "../derive/wave.js";
-import { refreshStateYaml } from "../derive/task.js";
+import { refreshStateYaml, collectRoutedBlockers } from "../derive/task.js";
 import { appendJournal } from "../journal.js";
 import { loadCriteriaBundle, formatDispositionsSection } from "../prompts.js";
 import { isTriagerAgent, resolveReviewAllowed } from "../review-policy.js";
@@ -729,7 +729,11 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
         deriveItemState({ taskDir, itemSlug: slug, parentBranch, taskWt, pipeline })
       )
     );
-    let waveState = deriveWaveState({ wave: w, items: itemStates });
+    let waveState = deriveWaveState({
+      wave: w,
+      items: itemStates,
+      blockedBy: await collectRoutedBlockers(taskDir),
+    });
 
     if (waveState.items.length === 0 || waveState.items.every((it) => it.status === "merged")) {
       continue;
@@ -802,7 +806,11 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
           deriveItemState({ taskDir, itemSlug: slug, parentBranch, taskWt, pipeline })
         )
       );
-      waveState = deriveWaveState({ wave: w, items: itemStates });
+      waveState = deriveWaveState({
+        wave: w,
+        items: itemStates,
+        blockedBy: await collectRoutedBlockers(taskDir),
+      });
       await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
     }
 

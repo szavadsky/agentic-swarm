@@ -1,5 +1,5 @@
 import type { DerivedItemState } from "./item.js";
-import { blockedByFailure } from "../plan/scheduler.js";
+import { blockedByFailure, cascadePendingBlocked } from "../plan/scheduler.js";
 
 export interface DerivedWaveState {
   wave: number;
@@ -24,6 +24,8 @@ export function deriveWaveState(opts: {
   wave: number;
   items: DerivedItemState[];
   maxParallelItems?: number;
+  /** Slugs named by routed blocker concerns; cascaded over declared deps. */
+  blockedBy?: Iterable<string>;
 }): DerivedWaveState {
   const { wave, items } = opts;
   const waveItems = items.filter((it) => it.wave === wave || (it.wave < wave && it.status === "blocked"));
@@ -41,25 +43,23 @@ export function deriveWaveState(opts: {
     allBySlug.set(it.slug, it);
   }
 
-  // Dependents of failed items become blocked-by-failure, cascaded transitively
-  // to a fixpoint (§8.2): an item blocked this way blocks its own dependents.
+  // Dependents of failed items become blocked-by-failure, and items named by
+  // routed blocker concerns become blocked; both cascade transitively over
+  // declared deps to a fixpoint (§8.2, adr-routing-derived-state).
   const schedItems = items.map((it) => ({
     slug: it.slug,
     wave: String(it.wave),
     deps: it.deps,
     status: it.status as "pending" | "running" | "done" | "failed" | "blocked" | "abandoned",
   }));
-  const failureBlocked = new Set<string>(blockedByFailure(schedItems));
-  let grew = failureBlocked.size > 0;
-  while (grew) {
-    grew = false;
-    for (const it of items) {
-      if (it.status === "pending" && !failureBlocked.has(it.slug) && it.deps.some((d) => failureBlocked.has(d))) {
-        failureBlocked.add(it.slug);
-        grew = true;
-      }
+  const blockedSlugs = new Set<string>(blockedByFailure(schedItems));
+  const bySlug = new Map(items.map((it) => [it.slug, it]));
+  for (const slug of opts.blockedBy ?? []) {
+    if (bySlug.get(slug)?.status === "pending") {
+      blockedSlugs.add(slug);
     }
   }
+  cascadePendingBlocked(items, blockedSlugs);
 
   for (const it of waveItems) {
     if (it.status === "merged") {
@@ -75,8 +75,8 @@ export function deriveWaveState(opts: {
     } else if (it.status === "blocked") {
       blocked.push(it);
     } else if (it.status === "pending") {
-      // Blocked-by-failure (transitive fixpoint computed above) routes to blocked.
-      if (failureBlocked.has(it.slug)) {
+      // Blocked by failure or a routed concern (transitive fixpoint computed above).
+      if (blockedSlugs.has(it.slug)) {
         blocked.push(it);
         continue;
       }
