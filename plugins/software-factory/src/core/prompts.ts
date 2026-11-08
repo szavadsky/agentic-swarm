@@ -452,7 +452,7 @@ export const ENGINE_STEP_FRAGMENTS: string[] = [
   "steps/plan-close-up",
 ];
 
-export const SYSTEM_FRAGMENTS: string[] = ["system/steer-classify", "system/repair"];
+export const SYSTEM_FRAGMENTS: string[] = ["system/steer-classify", "system/brief-select", "system/repair"];
 
 /**
  * Validates prompt configuration at preflight (§10, §11).

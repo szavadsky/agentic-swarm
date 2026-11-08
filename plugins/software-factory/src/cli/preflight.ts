@@ -315,7 +315,7 @@ export async function runPreflight(opts: PreflightOptions): Promise<PreflightRes
         "steps/architect-closeup", "steps/plan-review", "steps/pm-edits", "steps/pm-amend",
         "steps/wave-close-up", "steps/architect-wave-report", "steps/fix-round",
         "steps/architect-consult-item", "steps/architect-consult-nonitem",
-        "system/steer-classify", "system/repair"
+        "system/steer-classify", "system/brief-select", "system/repair"
       ];
       for (const frag of standardOrchFragments) {
         fragmentsToCheck.add(frag);

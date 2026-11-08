@@ -37,7 +37,7 @@ export const PROMPT_VAR_DESCRIPTIONS: Record<string, string> = {
   storyKindsCriteria: "Story and spike kinds criteria file contents (criteria.story-kinds)",
   contextPack: "Condensed, citation-backed context document covering module maps, signatures, excerpts, conventions, and open questions",
   gateDiff: "Structured gate/tool diff table (baseline-vs-now per-gate status) for regression judgment",
-  taskStatus: "Compact derived task status block: items (slug/kind/wave/status/outlineRef), waves, merged/blocked/failed lists, open steer questions with answers",
+  hydrationContext: "Deterministic architect brief: relevance-selected one-line entries (id, section, headline) with task-relative file paths for full detail",
 };
 
 /**
@@ -167,6 +167,9 @@ export const KNOWN_VARS: Record<string, string[]> = {
   // System fragments
   "system/steer-classify": [],
   "steer-classify": [],
+
+  "system/brief-select": [],
+  "brief-select": [],
 
   "system/repair": [],
   repair: [],

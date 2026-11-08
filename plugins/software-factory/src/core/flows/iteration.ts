@@ -39,7 +39,7 @@ import { applyEdits } from "../plan/apply.js";
 import { getClock } from "../clock.js";
 import { buildGateDiffSection, runGates } from "../checks/gates.js";
 import type { CheckContext } from "../checks/types.js";
-import { resolveRole } from "../config/roles.js";
+import { buildArchitectBrief } from "../brief.js";
 import { PersistentAgent } from "../sessions.js";
 import { Semaphore } from "../mutex.js";
 import type { BudgetTracker } from "../budget.js";
@@ -256,64 +256,6 @@ async function buildExistingList(taskDir: string): Promise<{ slug: string; statu
 }
 
 /**
- * Builds a structured hydration summary: prior plans, close-ups, taken steering, decisions (§4, §8.4.2).
- * No byte cap — the architect's own history is injected whole; runaway protection is budgets + turn limits.
- */
-async function buildArchitectHydration(
-  taskDir: string
-): Promise<string> {
-  const parts: string[] = [];
-
-  // 1. Prior plans
-  const planDir = path.join(taskDir, "plan");
-  if (fs.existsSync(planDir)) {
-    const files = (await fs.promises.readdir(planDir)).sort();
-    for (const f of files) {
-      if (f.startsWith("plan-") && f.endsWith(".yaml")) {
-        const content = await readText(path.join(planDir, f));
-        parts.push(`--- Prior Plan ${f} ---\n${content}`);
-      }
-    }
-  }
-
-  if (fs.existsSync(taskDir)) {
-    const entries = (await fs.promises.readdir(taskDir)).sort();
-    for (const f of entries) {
-      if (f.startsWith("closeup-") && f.endsWith(".yaml")) {
-        const content = await readText(path.join(taskDir, f));
-        parts.push(`--- Prior Close-up ${f} ---\n${content}`);
-      }
-    }
-  }
-
-  // 3. Taken steering answers
-  const takenDir = path.join(taskDir, "steer", "fromusertaken");
-  if (fs.existsSync(takenDir)) {
-    const sfiles = (await fs.promises.readdir(takenDir)).sort();
-    for (const sf of sfiles) {
-      if (!sf.endsWith(".yaml")) {
-        const text = await readText(path.join(takenDir, sf));
-        parts.push(`--- Steering Directive/Answer (${sf}) ---\n${text}`);
-      }
-    }
-  }
-
-  // 4. Decisions
-  const decisionsDir = path.join(taskDir, "decisions");
-  if (fs.existsSync(decisionsDir)) {
-    const dfiles = (await fs.promises.readdir(decisionsDir)).sort();
-    for (const df of dfiles) {
-      if (df.endsWith(".yaml")) {
-        const text = await readText(path.join(decisionsDir, df));
-        parts.push(`--- Decision ${df} ---\n${text}`);
-      }
-    }
-  }
-
-  return parts.join("\n\n");
-}
-
-/**
  * Runs a full architect iteration (§8.4).
  */
 export async function runIteration(params: IterationParams): Promise<IterationResult> {
@@ -434,9 +376,6 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
       }
     }
   }
-  // Build hydration context
-  const hydrationContext = await buildArchitectHydration(taskDir);
-
   const intentText = fs.existsSync(path.join(taskDir, "INTENT.md"))
     ? await readText(path.join(taskDir, "INTENT.md"))
     : "";
@@ -544,6 +483,20 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
     : "";
 
   if (!plan) {
+    // Fresh brief for this plan turn: resumed runs with an existing plan skip
+    // both the architect turn and the judge cost (§8.4.2).
+    const hydrationContext = await buildArchitectBrief({
+      taskDir,
+      task,
+      taskWt,
+      parentBranch,
+      pipeline,
+      iteration,
+      rootTaskDir: params.rootTaskDir,
+      goal: `architect-plan-${iteration}: draft the iteration execution plan`,
+      harness,
+      prompts,
+    });
     // Architect generates plan-N (§8.4.2)
     const planStepId = `architect-plan-${iteration}`;
     const planAttempt = getNextStepAttempt(runsDir, planStepId, pipeline.limits?.maxInterruptions ?? 3);
@@ -1438,6 +1391,19 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
     const waveReportStatusBlock = await buildTaskStatusBlock({
       taskDir, taskWt, parentBranch, itemSlugs: currentIterationItems, iteration, amendmentCount, pipeline, rootTaskDir: params.rootTaskDir,
     });
+    // Fresh brief for this wave's goal: wave state evolved since the plan turn.
+    const waveHydrationContext = await buildArchitectBrief({
+      taskDir,
+      task,
+      taskWt,
+      parentBranch,
+      pipeline,
+      iteration,
+      rootTaskDir: params.rootTaskDir,
+      goal: `${waveReportStepId}: evaluate wave ${w} results and decide continue/amend/end-iteration`,
+      harness,
+      prompts,
+    });
     const waveReportAttempt = getNextStepAttempt(runsDir, waveReportStepId, pipeline.limits?.maxInterruptions ?? 3);
     const waveReportRes = await runAgentStep({
       task,
@@ -1460,8 +1426,8 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
       promptVars: {
         plan: JSON.stringify(plan, null, 2),
         waveReport: waveReportWaveReportText,
-        debt: hydrationContext,
-        steering: hydrationContext,
+        debt: waveHydrationContext,
+        steering: waveHydrationContext,
         contextPack: contextPackText,
         taskStatus: waveReportStatusBlock,
       },

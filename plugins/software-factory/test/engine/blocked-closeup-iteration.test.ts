@@ -258,7 +258,7 @@ describe("Engine: Blocked close-up starts iteration N+1 (§8.4.1, Finding 6)", (
     expect(closeup2.status).toBe("complete");
     expect(closeup2.iteration).toBe(2);
 
-    // Verify architect-plan-2 had prior closeup context
-    expect(iter2PromptSeen).toContain("Prior Close-up closeup-1.yaml");
+    // Verify architect-plan-2 had prior closeup context (one-line brief entry with file path)
+    expect(iter2PromptSeen).toContain("[closeup:closeup-1.yaml]");
   });
 });

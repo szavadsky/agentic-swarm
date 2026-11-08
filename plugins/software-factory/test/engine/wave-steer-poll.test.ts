@@ -193,12 +193,17 @@ describe("Engine: mid-wave steering mailbox polling (§8.8)", () => {
       ok: true,
       data: { status: "approved", summary: "LGTM", suggestions: [] },
     });
-    harness.scriptComplete(() => ({
-      refs: ["item-x"],
-      kind: "directive",
-      urgency: "next-architect-call",
-      summary: "Use tabs",
-    }));
+    // NB: the architect brief judge shares harness.complete with steer-classify.
+    // Dispatch on the system prompt so each consumer gets a schema-valid reply.
+    harness.defaultCompleteHandler = async ({ system }) => {
+      if (system.includes("relevance filter")) return { include: ["item:item-x"] };
+      return {
+        refs: ["item-x"],
+        kind: "directive",
+        urgency: "next-architect-call",
+        summary: "Use tabs",
+      };
+    };
 
     const res = await runTask(
       { harness, repo: repoObj, project, pipelineFor: async () => pipeline, prompts },
@@ -253,12 +258,15 @@ describe("Engine: mid-wave steering mailbox polling (§8.8)", () => {
       reviewRan = true;
       return { ok: true, data: { status: "approved", summary: "x", suggestions: [] } };
     });
-    harness.scriptComplete(() => ({
-      refs: [],
-      kind: "stop",
-      urgency: "now",
-      summary: "Operator stop",
-    }));
+    harness.defaultCompleteHandler = async ({ system }) => {
+      if (system.includes("relevance filter")) return { include: ["item:item-s"] };
+      return {
+        refs: [],
+        kind: "stop",
+        urgency: "now",
+        summary: "Operator stop",
+      };
+    };
 
     const res = await runTask(
       { harness, repo: repoObj, project, pipelineFor: async () => pipeline, prompts },
@@ -324,12 +332,15 @@ describe("Engine: mid-wave steering mailbox polling (§8.8)", () => {
       ok: true,
       data: { status: "approved", summary: "LGTM", suggestions: [] },
     });
-    harness.scriptComplete(() => ({
-      refs: ["item-q"],
-      kind: "answer",
-      urgency: "now",
-      summary: "Use Option A",
-    }));
+    harness.defaultCompleteHandler = async ({ system }) => {
+      if (system.includes("relevance filter")) return { include: ["item:item-q"] };
+      return {
+        refs: ["item-q"],
+        kind: "answer",
+        urgency: "now",
+        summary: "Use Option A",
+      };
+    };
 
     // Single run: the mid-wave answer must unblock item-q before the wave ends
     const res = await runTask(
@@ -440,12 +451,15 @@ describe("Engine: mid-wave steering mailbox polling (§8.8)", () => {
       data: { iteration: 1, status: "complete", summary: "Child task delivered" },
     });
     scriptCloseups(harness, task);
-    harness.scriptComplete(() => ({
-      refs: ["child-item"],
-      kind: "directive",
-      urgency: "next-architect-call",
-      summary: "Root directive",
-    }));
+    harness.defaultCompleteHandler = async ({ system }) => {
+      if (system.includes("relevance filter")) return { include: ["item:big-epic", "item:child-item"] };
+      return {
+        refs: ["child-item"],
+        kind: "directive",
+        urgency: "next-architect-call",
+        summary: "Root directive",
+      };
+    };
 
     const res = await runTask(
       { harness, repo: repoObj, project, pipelineFor: async () => pipeline, prompts },
