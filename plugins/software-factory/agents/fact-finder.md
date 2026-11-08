@@ -13,6 +13,8 @@ tools:
   - mcp__webmcp_scrape_batch
   - mcp__webmcp_search_engine_batch
   - task
+  - checkpoint
+  - rewind
 ---
 
 # Fact-Finder Agent

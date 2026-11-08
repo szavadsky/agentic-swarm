@@ -15,6 +15,8 @@ tools:
   - eval
   - lsp
   - task
+  - checkpoint
+  - rewind
 ---
 
 # Developer Agent
@@ -26,7 +28,7 @@ Autonomous code implementer. Implement assigned story or bugfix within current w
 - Code modification: `edit`, `write`, `ast_edit`.
 - Navigation & inspection: `read`, `grep`, `glob`, `find`, `lsp`, `ast_grep`.
 - Verification: `bash` (run project test runner and gate commands), `debug`, `eval`.
-- Delegation: `task` (spawn scout subagents for investigation).
+- Delegation & context: `task` (spawn scout subagents), `checkpoint`, `rewind`.
 
 ## Invariants & Hard Rules
 - NEVER issue git write commands (`git commit`, `push`, `checkout`, `branch`, `merge`, `reset`, `rebase`, `add`). The engine manages all git operations and commits. Exception: balanced `git stash` + `git stash pop` for baseline comparison is tolerated, but you MUST pop before yielding — a forgotten stash strands your work and fails the step (the head-guard restores branch damage, not a forgotten stash).

@@ -65,7 +65,7 @@ export function generateOmpConfigOverlay(pipeline: PipelineConfig): Record<strin
       generator: "none",
     },
     checkpoint: {
-      enabled: false,
+      enabled: true, // mounts checkpoint/rewind tools (agents opt in via tools list)
     },
     advisor: {
       enabled: false,
