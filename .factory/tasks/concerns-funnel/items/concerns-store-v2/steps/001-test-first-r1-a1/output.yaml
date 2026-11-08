@@ -1,0 +1,121 @@
+status: ok
+summary: "Authored 21 test-first behavior tests for the taskWt concern store in
+  test/engine/concerns-funnel.test.ts, plus a 40-line compile stub at
+  src/core/concerns.ts (at the stubMaxProdLines budget). Tests specify
+  fingerprint identity (kind + normalized summary + location + sorted affects;
+  detail/severity ignored), aggregate merge (defaults, longer/latest detail, max
+  severity, updatedAt/source.lastSeen advance, source.escalated on severity rise
+  without reopening dismissed), listOpenConcerns, exact-id triage with isTriager
+  gate and dismiss-detail enforcement, close-up pending resolutions
+  (resolve/carry/propagate), partitionSuggestions, rm-* remarkable aggregation,
+  unknown-kind no-partial-write, concurrent RMW/commit, reviewer
+  new-then-preexisting triage ordering, consult/close-up/producer-matrix seam
+  wiring, reconcileConcerns from committed records, concerns/** startup
+  recovery, and ingest-error step-status isolation. No existing production code
+  was modified. Verified: typecheck green; target file red with 21 assertion
+  failures and 0 errors; full suite has only those 21 failures."
+target:
+  selectors:
+    - test/engine/concerns-funnel.test.ts
+  expectRed:
+    - test/engine/concerns-funnel.test.ts::Concern store.fingerprints concern
+      identity, ignoring detail, severity, and affect order
+    - test/engine/concerns-funnel.test.ts::Concern store.aggregates a developer
+      concern to one open taskWt file with defaults, source, and immediate
+      commit
+    - test/engine/concerns-funnel.test.ts::Concern store.merges re-emitted
+      concerns into one file with longer detail, max severity, and advanced
+      timestamps
+    - test/engine/concerns-funnel.test.ts::Concern store.keeps dismissed status
+      and flags escalation when a higher severity is re-emitted
+    - test/engine/concerns-funnel.test.ts::Concern store.lists only open
+      concerns in stable order
+    - test/engine/concerns-funnel.test.ts::Concern store.triages only exact-id
+      suggestions and persists dismiss reasons
+    - test/engine/concerns-funnel.test.ts::Concern store.routes non-dismiss
+      triage dispositions and gates non-triagers
+    - test/engine/concerns-funnel.test.ts::Concern store.rejects dismiss triage
+      without detail and leaves the concern unchanged
+    - test/engine/concerns-funnel.test.ts::Concern store.partitions suggestions
+      by exact concern id
+    - test/engine/concerns-funnel.test.ts::Concern store.records close-up
+      pending resolutions without changing concern status
+    - test/engine/concerns-funnel.test.ts::Concern store.aggregates remarkable
+      decisions into rm-* files and triages them by exact id
+    - test/engine/concerns-funnel.test.ts::Concern store.rejects unknown concern
+      kinds without partial writes and leaves existing files untouched
+    - test/engine/concerns-funnel.test.ts::Concern store.writes distinct
+      fingerprints concurrently without deadlock or lost commits
+    - test/engine/concerns-funnel.test.ts::Concern store.serializes concurrent
+      merges of the same fingerprint into one merged file
+    - "test/engine/concerns-funnel.test.ts::Concern store.wires reviewer output:
+      aggregate new concerns before triaging pre-existing ids only"
+    - test/engine/concerns-funnel.test.ts::Concern store.wires consult
+      writeArtifact producers to the concern store
+    - "test/engine/concerns-funnel.test.ts::Concern store.wires close-up
+      producers: aggregates concerns and applies resolutions"
+    - test/engine/concerns-funnel.test.ts::Concern store.aggregates concerns and
+      remarkable decisions across producer schemas
+    - test/engine/concerns-funnel.test.ts::Concern store.reconciles missing
+      concerns from committed step records idempotently
+    - test/engine/concerns-funnel.test.ts::Concern store.commits stray concerns
+      files during startup recovery instead of stashing them
+    - test/engine/concerns-funnel.test.ts::Concern store.keeps step status ok
+      and journals an ingest error when concern ingestion fails
+evidence:
+  - "cd plugins/software-factory && TMPDIR=/tmp bun run typecheck: exit 0 (tsc
+    --noEmit, no errors)."
+  - "cd plugins/software-factory && TMPDIR=/tmp bun test
+    test/engine/concerns-funnel.test.ts: 1 pass (pre-existing schema test), 21
+    fail, 0 errors — red for every new test."
+  - "JUnit run (bun test ... --reporter=junit
+    --reporter-outfile=/tmp/junit-concerns-store-final.xml) parsed with the
+    repo's own src/core/checks/junit.ts: 22 cases, collected=true, 1 pass, 21
+    fail, 0 error."
+  - "Replayed the engine's normaliseCaseId/findMatchingCase logic over the JUnit
+    ids for all 21 declared expectRed node ids: 21/21 matched with status fail."
+  - "cd plugins/software-factory && TMPDIR=/tmp bun test (full suite): 303 pass,
+    2 skip, 21 fail; the only failures are the 21 new concern store tests (no
+    collateral regressions)."
+  - "Test infra proven first: the pre-existing schema test in the same file
+    still passes, and the new tests execute (not collection/import failures)
+    because the 40-line stub lets the module compile."
+  - "git status --short: only M
+    plugins/software-factory/test/engine/concerns-funnel.test.ts and ??
+    plugins/software-factory/src/core/concerns.ts; no existing production code
+    touched."
+concerns:
+  - The seam tests pin step-runner as the single ingestion hook for validated
+    outputs (including custom writeArtifact flows such as consults). This is the
+    only way to satisfy 'wire all producer seams' and 'ingest errors must not
+    change step status' without duplicating try/catch in every flow; per-flow
+    wiring alone will not make the reviewer/consult/close-up seam tests green.
+  - The merge test requires source.lastSeen to be an ISO timestamp advanced to
+    the merge time. ConcernSource currently lacks lastSeen, so the develop step
+    must extend the type (or persist an equivalent field) for the tests to pass.
+  - listOpenConcerns is specified as status === 'open' only; routed concerns are
+    intentionally not asserted either way, but close-up hydration
+    (funnel-closeups) will need a broader 'active concerns' listing if it must
+    re-triage routed items.
+  - The ingest-failure test requires a journal event of type
+    'concern_ingest_error' and that the step remains status ok; the
+    implementation should use that event name (or the test/contract must be
+    aligned).
+  - Scenario s8's digest/architect-hydration surfacing of source.escalated is
+    deferred to the routing/hydration stories; this suite asserts only the
+    store-level flag and that dismissed status is not reopened.
+  - The test file grew by ~1080 lines; docs-finish already owns consolidating
+    test/engine/concerns-funnel.test.ts, but the develop step should not add
+    much more test volume.
+  - The stub is exactly 40 added lines (configured stubMaxProdLines=40), so it
+    cannot grow during test-first without tripping test-first-scope.
+notes: "Stub API (src/core/concerns.ts): concernFingerprint(ConcernInput),
+  aggregateConcerns(ctx{taskDir,taskWt,repo,now?}+source, ConcernInput[],
+  RemarkableDecision[]), listOpenConcerns(taskDir),
+  applyConcernTriage(ctx+suggestions+isTriager),
+  applyCloseupResolutions(ctx+resolutions+by), partitionSuggestions(suggestions,
+  ids), reconcileConcerns(ctx). Tests inject a clock (now?: () => Date) for
+  deterministic createdAt/updatedAt/lastSeen assertions. Red was verified with 0
+  JUnit <error> entries; bun maps thrown errors to <failure>, but all failures
+  currently occur at expect assertions. All 21 ids use the JUnit native form
+  `file::Describe.Test` confirmed against the engine's matcher."

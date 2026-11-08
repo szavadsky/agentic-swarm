@@ -1,0 +1,64 @@
+checks:
+  - id: test-first-scope
+    status: pass
+    message: test-first-scope passed (1 test files, 1 new prod stubs with 40 lines)
+    details:
+      testFiles:
+        - plugins/software-factory/test/engine/concerns-funnel.test.ts
+      newProdFiles:
+        - plugins/software-factory/src/core/concerns.ts
+      stubProdLines: 40
+  - id: target-red
+    status: pass
+    message: "target-red passed: all 21 expected tests failed with assertion failures"
+    details:
+      command: cd plugins/software-factory && bun test
+        test/engine/concerns-funnel.test.ts --reporter=junit
+        --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-1794118739883-p4tmzxy96j.xml
+      junitCaseCount: 22
+      junitCaseIds:
+        - Concern funnel schemas.valid concerns pass validation and unknown
+          kinds reject with no artifact write
+        - Concern store.fingerprints concern identity, ignoring detail,
+          severity, and affect order
+        - Concern store.aggregates a developer concern to one open taskWt file
+          with defaults, source, and immediate commit
+        - Concern store.merges re-emitted concerns into one file with longer
+          detail, max severity, and advanced timestamps
+        - Concern store.keeps dismissed status and flags escalation when a
+          higher severity is re-emitted
+        - Concern store.lists only open concerns in stable order
+        - Concern store.triages only exact-id suggestions and persists dismiss
+          reasons
+        - Concern store.routes non-dismiss triage dispositions and gates
+          non-triagers
+        - Concern store.rejects dismiss triage without detail and leaves the
+          concern unchanged
+        - Concern store.partitions suggestions by exact concern id
+        - Concern store.records close-up pending resolutions without changing
+          concern status
+        - Concern store.aggregates remarkable decisions into rm-* files and
+          triages them by exact id
+        - Concern store.rejects unknown concern kinds without partial writes and
+          leaves existing files untouched
+        - Concern store.writes distinct fingerprints concurrently without
+          deadlock or lost commits
+        - Concern store.serializes concurrent merges of the same fingerprint
+          into one merged file
+        - "Concern store.wires reviewer output: aggregate new concerns before
+          triaging pre-existing ids only"
+        - Concern store.wires consult writeArtifact producers to the concern
+          store
+        - "Concern store.wires close-up producers: aggregates concerns and
+          applies resolutions"
+        - Concern store.aggregates concerns and remarkable decisions across
+          producer schemas
+        - Concern store.reconciles missing concerns from committed step records
+          idempotently
+        - Concern store.commits stray concerns files during startup recovery
+          instead of stashing them
+        - Concern store.keeps step status ok and journals an ingest error when
+          concern ingestion fails
+      junitTruncated: false
+      collected: true
+      collectionErrors: []
