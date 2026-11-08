@@ -1,0 +1,34 @@
+status: changes_requested
+summary: Target 4 pass, typecheck clean, no weakening; debt predicate test
+  allows false pass
+suggestions:
+  - id: debt-predicate-missing-negative
+    disposition: fix
+    summary: Debt test omits routed non-tech-debt non-optional negative case
+    detail: "Test4 has 2 positives (routed tech-debt, routed optional) and 2
+      negatives (open, dismissed) but no routed risk/architect fixture.
+      Predicate status==routed alone would pass all 4, so OR clause (kind
+      tech-debt OR disposition optional) unverified. Add c- fixture kind risk
+      status routed disposition architect/fix and assert not in debt.
+      Independent runs: target 4 pass, neighbors 37 pass, typecheck exit 0."
+    location:
+      file: plugins/software-factory/test/engine/plan-reviewer-triage.test.ts
+      line: 410
+  - id: plan-review-matrix-stale
+    disposition: optional
+    summary: Human-involvement matrix omits new concernsYaml for plan-review
+    detail: KNOWN_VARS now includes concernsYaml for plan-review but FRAGMENT_MATRIX
+      still lists only humanInvolvementCriteria. Passes via arrayContaining but
+      docs drift. Update matrix to include concernsYaml.
+    location:
+      file: plugins/software-factory/test/human-involvement-config.test.ts
+      line: 64
+  - id: hydration-open-only-unverified
+    disposition: optional
+    summary: Hydration open-only filtering not asserted across rounds
+    detail: hydrateConcernsYaml filters status open but tests only assert inclusion
+      of pre-triage ids; hydrate-all would still pass. Consider asserting
+      round-2 prompt excludes previously dismissed/routed ids.
+    location:
+      file: plugins/software-factory/test/engine/plan-reviewer-triage.test.ts
+      line: 338

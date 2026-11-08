@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
+import yaml from "yaml";
 import type { Concern, ConcernSeverity, ConcernSource, RemarkableDecision, ReviewSuggestion, StoredConcernArtifact } from "./artifacts.js";
 import type { Repo } from "./git/repo.js";
 import { commitAll } from "./git/commit.js";
@@ -105,8 +106,8 @@ export async function aggregateConcerns(
   return stored;
 }
 
-/** Returns open concerns ordered by creation time then id. */
-export async function listOpenConcerns(taskDir: string): Promise<StoredConcernArtifact[]> {
+/** Returns every stored concern artifact, ordered by creation time then id. */
+export async function listConcerns(taskDir: string): Promise<StoredConcernArtifact[]> {
   const dir = dirOf(taskDir);
   let names: string[];
   try { names = await fs.promises.readdir(dir); } catch (err: any) {
@@ -117,8 +118,47 @@ export async function listOpenConcerns(taskDir: string): Promise<StoredConcernAr
     try { return await readYaml<StoredConcernArtifact>(path.join(dir, name)); } catch { return undefined; }
   }));
   return records
-    .filter((r): r is StoredConcernArtifact => r?.status === "open" && typeof r?.kind === "string")
+    .filter((r): r is StoredConcernArtifact => typeof r?.kind === "string")
     .sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? "") || a.id.localeCompare(b.id));
+}
+
+/** Returns open concerns ordered by creation time then id. */
+export async function listOpenConcerns(taskDir: string): Promise<StoredConcernArtifact[]> {
+  return (await listConcerns(taskDir)).filter((r) => r.status === "open");
+}
+
+/** Returns every stored concern/remarkable id for exact-id triage partitioning. */
+export async function listConcernIds(taskDir: string): Promise<string[]> {
+  const dir = dirOf(taskDir);
+  try {
+    return (await fs.promises.readdir(dir))
+      .filter((name) => name.endsWith(".yaml"))
+      .map((name) => name.slice(0, -".yaml".length));
+  } catch (err: any) {
+    if (err?.code === "ENOENT") return [];
+    throw err;
+  }
+}
+
+/** Renders open concerns and remarkable decisions as prompt YAML (§18). */
+export async function hydrateConcernsYaml(taskDir: string): Promise<string> {
+  const dir = dirOf(taskDir);
+  let names: string[];
+  try { names = await fs.promises.readdir(dir); } catch (err: any) {
+    if (err?.code === "ENOENT") return "[]";
+    throw err;
+  }
+  const items = await Promise.all(
+    names
+      .filter((name) => (name.startsWith("c-") || name.startsWith("rm-")) && name.endsWith(".yaml"))
+      .map(async (name) => {
+        try { return await readYaml<Record<string, any>>(path.join(dir, name)); } catch { return undefined; }
+      })
+  );
+  const open = items
+    .filter((r): r is Record<string, any> => r?.status === "open" && typeof r.id === "string")
+    .sort((a, b) => String(a.createdAt ?? "").localeCompare(String(b.createdAt ?? "")) || String(a.id).localeCompare(String(b.id)));
+  return open.length ? yaml.stringify(open).trimEnd() : "[]";
 }
 
 async function mutate(ctx: ConcernStoreContext, ops: Array<[string, Patch]>, message: string): Promise<StoredConcernArtifact[]> {

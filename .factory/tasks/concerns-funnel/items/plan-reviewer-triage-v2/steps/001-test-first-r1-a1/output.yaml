@@ -1,0 +1,57 @@
+status: ok
+summary: "Authored
+  plugins/software-factory/test/engine/plan-reviewer-triage.test.ts with four
+  behavior specs for plan-reviewer triage: plan/revise concerns + remarkable
+  rm-* aggregation with steps/plan-review concernsYaml hydration (dismiss vs
+  routed, rm triage), triage ids excluded from the plan fix loop/approval, and
+  the routed tech-debt / routed-optional debt predicate via deriveTaskState. All
+  four specs fail red with assertion failures against current production;
+  typecheck passes; the full suite reports 335 pass, 2 skip, 4 fail (only the
+  new specs)."
+target:
+  selectors:
+    - test/engine/plan-reviewer-triage.test.ts
+  expectRed:
+    - test/engine/plan-reviewer-triage.test.ts::Plan-reviewer triage.hydrates
+      plan-review with plan concerns and triages dismiss vs routed ids
+    - test/engine/plan-reviewer-triage.test.ts::Plan-reviewer triage.aggregates
+      architect-revise concerns and remarkable rm-* for the next review round
+    - test/engine/plan-reviewer-triage.test.ts::Plan-reviewer triage.keeps
+      triage ids out of the plan fix loop so they never trigger a revision
+    - test/engine/plan-reviewer-triage.test.ts::Plan-reviewer triage.derives
+      debt from routed tech-debt concerns and routed optional dispositions only
+evidence:
+  - '`cd plugins/software-factory && TMPDIR=/tmp bun test
+    test/engine/plan-reviewer-triage.test.ts --reporter=junit
+    --reporter-outfile=/tmp/junit-final.xml` -> 0 pass, 4 fail; JUnit shows all
+    four testcases as <failure type="AssertionError">, no
+    <error>/collection/import failures.'
+  - "Ran the repo's own target-red check (`runCheck(\"target-red\", ...)`) with
+    the exact selectors/expectRed above and the committed infra.yaml runner:
+    ok=true, summary \"target-red passed: all 4 expected tests failed with
+    assertion failures\"."
+  - "`cd plugins/software-factory && TMPDIR=/tmp bun run typecheck` -> exit 0."
+  - "`cd plugins/software-factory && TMPDIR=/tmp bun test` -> 335 pass, 2 skip,
+    4 fail; the only failures are the four new plan-reviewer-triage specs,
+    proving runner/fixtures and no baseline regressions."
+  - "`git status --short` -> only the new test file
+    `plugins/software-factory/test/engine/plan-reviewer-triage.test.ts`; no
+    production code touched."
+concerns:
+  - Plan/revise concern+remarkable aggregation already works through the generic
+    runAgentStep ingestStepConcerns seam; the red assertions come from missing
+    plan-review concernsYaml hydration, triage-id exclusion from the plan fix
+    loop, and concern-backed debt derivation.
+  - The tests drive runIteration with FakeHarness and deliberately stop at
+    pm-edits with an empty items payload, so assertions target plan-review side
+    effects without needing wave/item scripting.
+  - Hydration assertions only require the exact concern/rm ids to appear in the
+    rendered plan-review prompt, leaving the concrete YAML layout to the
+    implementation while enforcing id/kind/severity/summary visibility
+    indirectly.
+notes: "Implementation targets: hydrate steps/plan-review in iteration.ts (and
+  add `{{concernsYaml}}` + KNOWN_VARS via concerns.ts formatting), split
+  plan-review suggestions with partitionSuggestions and filter triage ids out of
+  the fixSuggestions/approval branch, and make deriveTaskState debt include
+  routed tech-debt or routed disposition=optional concern files. Test-first
+  scope only; production code remains untouched."

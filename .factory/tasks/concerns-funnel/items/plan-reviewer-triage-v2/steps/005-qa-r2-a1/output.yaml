@@ -1,0 +1,17 @@
+status: approved
+summary: "Independent QA confirmed: fix-round changes are test-only and strictly
+  strengthen coverage. Test diff vs test-first commit adds (never removes)
+  assertions: routed risk/architect negative fixture for the debt predicate,
+  round-1 inclusion + round-2 exclusion for open-only hydration, and
+  concernsYaml in the plan-review FRAGMENT_MATRIX (stronger arrayContaining
+  expectation). No production code changed in r2 (73/6 lines still match r1).
+  Verified target test 4 pass / 36 expects, neighbor trio 37 pass / 346 expects,
+  full suite 339 pass / 2 skip / 0 fail / 1539 expects, typecheck exit 0, git
+  diff --check clean, tree clean. Baseline commit a7bf9bd lacks
+  hydrateConcernsYaml/listConcernIds, plan-review concernsYaml wiring,
+  triage-aware fix detection, and concern-backed debt, so every target test
+  retains red-on-baseline assertions (missing prompt ids, revision trigger,
+  missing debt); red-test evidence from the prior QA round plus this inspection
+  confirms dev-story discipline. Prior QA fix (debt predicate negative) and both
+  optionals (matrix, open-only hydration) are resolved."
+suggestions: []

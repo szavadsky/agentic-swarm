@@ -1,0 +1,29 @@
+checks:
+  - id: test-first-scope
+    status: pass
+    message: test-first-scope passed (1 test files, 0 new prod stubs with 0 lines)
+    details:
+      testFiles:
+        - plugins/software-factory/test/engine/plan-reviewer-triage.test.ts
+      newProdFiles: []
+      stubProdLines: 0
+  - id: target-red
+    status: pass
+    message: "target-red passed: all 4 expected tests failed with assertion failures"
+    details:
+      command: cd plugins/software-factory && bun test
+        test/engine/plan-reviewer-triage.test.ts --reporter=junit
+        --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-1794128305653-4zayyjpf8nr.xml
+      junitCaseCount: 4
+      junitCaseIds:
+        - Plan-reviewer triage.hydrates plan-review with plan concerns and
+          triages dismiss vs routed ids
+        - Plan-reviewer triage.aggregates architect-revise concerns and
+          remarkable rm-* for the next review round
+        - Plan-reviewer triage.keeps triage ids out of the plan fix loop so they
+          never trigger a revision
+        - Plan-reviewer triage.derives debt from routed tech-debt concerns and
+          routed optional dispositions only
+      junitTruncated: false
+      collected: true
+      collectionErrors: []

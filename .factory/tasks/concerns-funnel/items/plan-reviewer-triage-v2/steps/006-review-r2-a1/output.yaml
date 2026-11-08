@@ -1,0 +1,77 @@
+status: approved
+summary: "Independently verified (not trusting reports): diff touches only 5
+  prod files (+79/-6 within 300 budget) plus 2 test files; concerns.ts adds
+  listConcerns/listConcernIds/hydrateConcernsYaml, iteration.ts snapshots exact
+  ids per round, hydrates plan-review, and partitions suggestions before fix
+  detection; derive/task.ts adds routed tech-debt / routed-optional debt. Ran
+  target file (4 pass, 36 expects), typecheck (exit 0), neighbor quartet (48
+  pass) and full suite (339 pass, 2 skip, 0 fail, 1539 expects); git diff
+  --check clean; no debug/TODO leftovers; test diff vs test-first commit only
+  adds assertions (routed risk/architect debt negative,
+  round-1-inclusion/round-2-exclusion hydration, plan-review FRAGMENT_MATRIX now
+  stricter) — no weakening; recorded target-red still valid because every
+  hydrated assertion and the partition/debt assertions depend on prod code
+  absent at the test-first commit. Assignment scope (dismiss vs routed, rm-*
+  triage, debt predicate, no approval trigger from triage ids) is implemented
+  and covered. Remaining findings are non-blocking polish."
+suggestions:
+  - id: hydration-payload-assertion
+    disposition: optional
+    summary: Hydration test asserts only ids; ids-only payload would pass all four specs
+    detail: "test lines 238-241 and 360-365 only assert that concern/rm ids appear
+      in the rendered plan-review prompt. A regression where hydrateConcernsYaml
+      emits just `open.map(r => r.id)` (dropping kind/severity/summary/detail,
+      i.e. everything the plan reviewer needs to decide dismiss vs route) would
+      keep all four tests green, so the item's central 'hydrate
+      steps/plan-review with concernsYaml' contract is only partly pinned. Add
+      one cheap assertion on payload content, e.g.
+      `expect(reviewRun.prompts[0]).toContain(\"Plan retry glue duplicates the
+      adapter\")` and `toContain(\"severity: medium\")`, or slice the '## Open
+      Concerns' section and yaml.parse it. Production code is correct today;
+      this is test hardening, so non-blocking."
+    location:
+      file: plugins/software-factory/test/engine/plan-reviewer-triage.test.ts
+      line: 241
+  - id: dead-fix-suggestions-guard
+    disposition: optional
+    summary: "`!fixSuggestions` guard is now dead code after switching to
+      partitionSuggestions"
+    detail: partitionSuggestions always returns arrays (`suggestions.filter(...)`),
+      so `fixSuggestions = findings.filter(...)` is never undefined and the
+      `!fixSuggestions ||` half of the guard at line 504 can never be true. Repo
+      philosophy explicitly prunes manual runtime checks covered by static
+      types; reduce to `if (fixSuggestions.length === 0)`. No behavioral impact.
+    location:
+      file: plugins/software-factory/src/core/flows/iteration.ts
+      line: 504
+  - id: duplicate-exact-id-snapshot
+    disposition: optional
+    summary: Item-reviewer and plan-reviewer id snapshots are two separate
+      implementations of the same rule
+    detail: Assignment requires the 'same exact-id partition' as the item reviewer,
+      but step-runner.ts:189-194 snapshots ids with an inline readdir/slice
+      while iteration.ts:446 uses the new listConcernIds. They are byte-for-byte
+      equivalent today, yet the invariant now rests on two copies. Have
+      step-runner's ingestStepConcerns reuse listConcernIds (and let
+      hydrateConcernsYaml build on listConcerns instead of re-reading the dir a
+      third time with its own ENOENT handling) so the partition cannot drift
+      when the store layout changes.
+    location:
+      file: plugins/software-factory/src/core/flows/step-runner.ts
+      line: 192
+  - id: hydration-uncapped-vs-funnel-budget
+    disposition: optional
+    summary: Plan-review hydration is unbounded and bypasses the documented funnel
+      byte budget
+    detail: hydrateConcernsYaml emits every open concern/remarkable record verbatim
+      (detail, source, timestamps, lastSeen) into every plan-review round. The
+      repo's funnel budget spike (test/engine/funnel-text-budget.test.ts) states
+      the contract that 'caps apply to hydrated promptVars' and that zero-diff
+      orchestration steps get min(plan/context inputBytes, 500) bytes;
+      plan-review is such a step. This is explicitly the funnel-closeups item's
+      contract to implement, so no change is required here, but the plan-review
+      path should be included when that wrapper lands (cap + condense, not raw
+      dump).
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 144
