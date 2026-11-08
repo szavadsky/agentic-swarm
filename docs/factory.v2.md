@@ -122,6 +122,7 @@ project config: location of orcehstrationFolder, folderForPreservedADRs, scripts
      - per-agent/per-step tool sets configurable in pipeline config (`agents.<name>.tools` overrides the agent definition; presets for research vs read-only vs none); defaults measured, not guessed
      - observed failure modes: with bash, agents use it for everything; read-only tools + bash sometimes send agents into thinking loops. The harness gets tool-use loop detection (repeated tool patterns, turn budgets tied to tool use) and prompt guidance; a thinking loop consults/escalates instead of burning silently
      - PM stays tool-less by construction (yield only); repo-rules hydration (19) and status hydration keep tool-less roles effective
+     - progress-based extension (complement of loop detection): near the turn timeout, a cheap judge model inspects the last ~10 min of the turn (tool calls, edits, test runs); meaningful progress (not a loop) grants up to 2x extension, once; a loop lets the timeout fire and escalates per the loop path. Measured and configurable like the other mechanisms
 
 Fire testing:
      develop initial version. launch ietration by iteration; babysit
@@ -149,7 +150,8 @@ Steering log (user decisions recorded by the orchestrator during the build; newe
      - sessions: additive-only, never rewrite transcripts; prompt prefixes and overlay byte-stable (spec 20c); repo rules hydrated by the factory (spec 19)
      - sizes are advisory, never hard gates: no limit on architect output size or code/prod size (over-budget warns, consults never on size alone; scope is the architect's judgment, compact tasks are its job)
      - simple-guard's mechanical rules (rename-only tests, dep-file bans) removed as nonsense — simple path guarded by gates + advisory size with conversion routing only
-     - agent turn budgets: poc/architect 2h, tdd/dev/qa 90m, fact-finder/review 1h, quick scoping/summary agents 15m (active monotonic time, sleep excluded)
+     - agent turn budgets: poc/architect 2h, tdd/dev/qa 90m, fact-finder/review 1h, quick scoping/summary agents 45m (active monotonic time, sleep excluded)
+     - timeout floor 45m for every agent (harness backstop included); progress-based extension up to 2x on judged meaningful progress is spec item 21 scope (self-host tool-policy task)
 
                                                    
 

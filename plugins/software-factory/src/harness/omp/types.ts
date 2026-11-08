@@ -10,7 +10,7 @@ export interface OmpHarnessOptions {
   pipeline?: PipelineConfig;
   /** Root directory for runtime state (sessions, prompts, overlay). Defaults to cwd/.factory-runtime */
   runtimeDir?: string;
-  /** Default execution timeout per turn in milliseconds (defaults to 300_000 = 5m) */
+  /** Default execution timeout per turn in milliseconds (defaults to 2_700_000 = 45m) */
   timeoutMs?: number;
 }
 

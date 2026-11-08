@@ -131,7 +131,7 @@ export class OmpHarness implements Harness {
 
   constructor(opts: OmpHarnessOptions = {}) {
     this.ompBinary = opts.ompBinary ?? process.env.OMP_PATH ?? Bun.which("omp") ?? "/home/slava/.bun/bin/omp";
-    this.defaultTimeoutMs = opts.timeoutMs ?? 300_000;
+    this.defaultTimeoutMs = opts.timeoutMs ?? 2_700_000;
     this.configOverlayPath = opts.configOverlayPath;
     this.runtimeDir = opts.runtimeDir;
     this.pipeline = opts.pipeline;
