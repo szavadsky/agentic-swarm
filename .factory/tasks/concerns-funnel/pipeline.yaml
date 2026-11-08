@@ -1,0 +1,6 @@
+# Task-level override (operator): initial fire-test launches use the cheaper muse model as architect.
+models:
+  roles:
+    architect:
+      model: opencode-go/muse-spark-1.3-contributor
+      fallbacks: []
