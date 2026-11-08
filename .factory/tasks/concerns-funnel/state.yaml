@@ -229,12 +229,13 @@ items:
     spendUsd: 0
   routing-architect-consult-v3:
     kind: dev
-    status: ready
+    status: merged
     branch: topic/concerns-funnel--routing-architect-consult-v3
     attempts: 1
     fixRounds: 1
     spendUsd: 0.11368900000000001
     currentStep: review
+    mergedAt: 2026-11-08T10:03:00-05:00
   saga-propagate-v2:
     kind: dev
     status: superseded
@@ -251,11 +252,12 @@ items:
     spendUsd: 0
   funnel-closeups-v3:
     kind: dev
-    status: pending
+    status: running
     branch: topic/concerns-funnel--funnel-closeups-v3
-    attempts: 1
-    fixRounds: 1
-    spendUsd: 0
+    attempts: 2
+    fixRounds: 3
+    spendUsd: 0.567034
+    currentStep: review
   saga-propagate-v3:
     kind: dev
     status: pending
@@ -493,20 +495,30 @@ debt:
     verified without assertion"
   - "[routing-architect-consult-v3] Concern decision trusts LLM
     id/context/timestamp unlike sibling consults"
-budgetSpentUsd: 4.386796919999999
+  - "[funnel-closeups-v3] Propagated parent copy retains child disposition on
+    open status"
+  - "[funnel-closeups-v3] Zero-diff budget ignores task/infra vars for wave
+    close-up"
+  - "[funnel-closeups-v3] No prompt guidance tells the architect to emit
+    concernConfirms; schema-only discoverability"
+  - "[funnel-closeups-v3] measureCodeDiffBytes hardcodes ref 'main',
+    inconsistent with documented branch-from-HEAD worktrees"
+  - "[funnel-closeups-v3] Propagated parent copy retains child source.item,
+    writes undeclared source.epic, and can clobber/lengthen parent records"
+budgetSpentUsd: 5.03943392
 spendByRole:
   alt-workhorse:
-    costUsd: 0.9979399999999999
-    inputTokens: 5300356
-    outputTokens: 1558025
+    costUsd: 1.066817
+    inputTokens: 5611949
+    outputTokens: 1664794
   workhorse:
-    costUsd: 2.90505992
-    inputTokens: 6318382
-    outputTokens: 1749060
+    costUsd: 3.4052009199999995
+    inputTokens: 7273975
+    outputTokens: 2038382
   architect:
-    costUsd: 0.467282
-    inputTokens: 4314230
-    outputTokens: 91821
+    costUsd: 0.5509009999999999
+    inputTokens: 5091066
+    outputTokens: 98266
   alt-architect:
     costUsd: 0.016515000000000002
     inputTokens: 72452
@@ -516,14 +528,6 @@ spendByItem:
     costUsd: 0.251577
     inputTokens: 593198
     outputTokens: 339057
-  spike-saga-commit:
-    costUsd: 0.131932
-    inputTokens: 263905
-    outputTokens: 109900
-  spike-text-budget:
-    costUsd: 0.060779
-    inputTokens: 139871
-    outputTokens: 72059
   concerns-store-v2:
     costUsd: 0.613799
     inputTokens: 2193288
@@ -564,6 +568,10 @@ spendByItem:
     costUsd: 0.670065
     inputTokens: 2995526
     outputTokens: 363902
+  funnel-closeups-v3:
+    costUsd: 0.567034
+    inputTokens: 1252603
+    outputTokens: 393802
   concerns-contracts-types:
     costUsd: 0.063129
     inputTokens: 178070
@@ -572,12 +580,20 @@ spendByItem:
     costUsd: 0.268401
     inputTokens: 734306
     outputTokens: 188631
+  spike-text-budget:
+    costUsd: 0.060779
+    inputTokens: 139871
+    outputTokens: 72059
+  spike-saga-commit:
+    costUsd: 0.131932
+    inputTokens: 263905
+    outputTokens: 109900
   routing-architect-consult-v2:
     costUsd: 0.198996
     inputTokens: 463902
     outputTokens: 217893
   (orchestration):
-    costUsd: 0.8189329999999998
-    inputTokens: 5127475
-    outputTokens: 415160
-lastUpdated: 2026-11-08T15:03:03.819Z
+    costUsd: 0.9045359999999999
+    inputTokens: 5918894
+    outputTokens: 423894
+lastUpdated: 2026-11-08T16:39:56.096Z
