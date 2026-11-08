@@ -1,0 +1,21 @@
+blockedItems: []
+debt: []
+failedItems: []
+iteration: 1
+mergedItems:
+  - concerns-contracts-schemas
+  - concerns-contracts-policy
+recommendations:
+  - Proceed to next wave; no operator action required — both gates green and
+    tree clean.
+status: complete
+summary: "Wave 3 (iteration 1): 2/2 items merged (concerns-contracts-schemas,
+  concerns-contracts-policy). Tree clean: zero untracked files, no stray
+  tmp/log/orig/rej/dist/coverage artifacts, git diff --check clean, no real
+  conflict markers (git grep for '^<<<<<<< '/'^>>>>>>> ' empty; generic grep
+  hits only docs/comments/test expectations/agent docs/run logs). Only modified
+  file is engine-managed .factory/tasks/concerns-funnel/journal.ndjson. Gates vs
+  baseline (judged ONLY from Gate Diff table): typecheck pass→pass green
+  (matches baseline, no regression); test fail→pass IMPROVED (was failing at
+  baseline). No regressions."
+wave: 3
