@@ -1,0 +1,69 @@
+status: approved
+summary: "Concerns store v2 r2 approved: endedAt-derived reconcile timestamps,
+  write-on-diff, single dirty-gated commit; typecheck clean, target 22/22 per
+  dev evidence; no blocking defect found. Full-suite non-regression and
+  strengthened idempotency test bytes unverified by reviewer (time budget)."
+suggestions:
+  - disposition: optional
+    id: corrupt-concern-silent-skip
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 117
+    summary: listOpenConcerns silently drops corrupt YAML with no signal
+    detail: catch-all returns undefined, so a corrupt concerns/c-*.yaml vanishes
+      from triage/hydration. Valid-file behavior correct; consider journaling
+      filename. Pre-existing, non-blocking.
+  - disposition: optional
+    id: kinds-rank-hardcoded-enum
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 18
+    summary: KINDS/RANK duplicate schema single source of truth
+    detail: Hardcoded Set duplicates ConcernKind/ConcernSeverity from artifacts.ts
+      and JSON schemas. Live path is schema-validated first so low risk, but
+      direct aggregateConcerns callers can drift from schema. Derive or import
+      canonical enum.
+  - disposition: optional
+    id: unscoped-concern-commits
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 104
+    summary: Live aggregate/mutate/reconcile use unscoped commitAll on taskWt
+    detail: commitAll without paths runs git add -A, sweeping journal step_started,
+      repairInterruptedRecords writes, or other taskWt dirt into concern commits
+      with misleading messages. Recovery commit is correctly scoped to
+      concerns/. Consider paths-scoped commits for aggregate/mutate/reconcile.
+  - disposition: optional
+    id: reconcile-source-regress
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 56
+    summary: Reconcile can regress source identity while preserving newer lastSeen
+    detail: mergeConcern unconditionally overwrites source with incoming record but
+      keeps lastSeen=max. Replaying older merged records (001/002) over a newer
+      live unmerged concern (003) regresses source.record to 002 while lastSeen
+      stays at 003 wall-clock, leaving source/lastSeen inconsistent. No test
+      covers live-ahead-of-HEAD; consider preserving source when at < existing
+      lastSeen.
+  - disposition: optional
+    id: consult-taskwt-inference
+    location:
+      file: plugins/software-factory/src/core/flows/consults.ts
+      line: 104
+    summary: Consult runAgentStep calls omit explicit taskWt
+    detail: Both consults have taskWt in params but do not pass it to runAgentStep,
+      relying on inferTaskWorktree. Inference succeeds for normal tasks but
+      fails for epic child dirs (childTaskDir ends parent/epic vs tail
+      parent--epic), yielding taskWt=taskDir. Git cwd discovery masks the
+      failure for commits but committedStepRecords prefix breaks. Pass taskWt
+      explicitly.
+  - disposition: optional
+    id: remarkable-return-typing
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 144
+    summary: Triage/closeup return StoredConcernArtifact for rm-* records
+    detail: mutate casts Obj to StoredConcernArtifact, so triaging rm-* remarkable
+      files returns objects lacking kind/detail/severity typed as
+      StoredConcernArtifact. Runtime works; type a union (StoredConcernArtifact
+      | StoredRemarkable) or narrow callers.
