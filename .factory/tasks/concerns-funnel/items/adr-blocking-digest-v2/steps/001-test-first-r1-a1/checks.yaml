@@ -1,0 +1,29 @@
+checks:
+  - id: test-first-scope
+    status: pass
+    message: test-first-scope passed (1 test files, 0 new prod stubs with 0 lines)
+    details:
+      testFiles:
+        - plugins/software-factory/test/engine/adr-blocking-digest.test.ts
+      newProdFiles: []
+      stubProdLines: 0
+  - id: target-red
+    status: pass
+    message: "target-red passed: all 4 expected tests failed with assertion failures"
+    details:
+      command: cd plugins/software-factory && bun test
+        test/engine/adr-blocking-digest.test.ts --reporter=junit
+        --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-1794140321411-2959obvy3if.xml
+      junitCaseCount: 4
+      junitCaseIds:
+        - Blocking vs remarkable ADRs (§18).writes full ADR markdown with
+          context, decision, consequences, and blocking status
+        - Blocking vs remarkable ADRs (§18).routes a blocking ADR to the mailbox
+          with task blocks and halts with exit 10
+        - Blocking vs remarkable ADRs (§18).reports a remarkable ADR in the
+          digest and lets the run complete
+        - Blocking vs remarkable ADRs (§18).respects the active mode table for
+          blocking and remarkable ADRs
+      junitTruncated: false
+      collected: true
+      collectionErrors: []

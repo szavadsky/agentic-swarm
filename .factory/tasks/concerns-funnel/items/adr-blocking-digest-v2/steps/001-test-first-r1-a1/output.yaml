@@ -1,0 +1,74 @@
+status: ok
+summary: "Authored test/engine/adr-blocking-digest.test.ts with four behavior
+  tests covering §18 blocking-vs-remarkable ADR routing. Tests specify: (1) full
+  ADR markdown with title/Context/Decision/Consequences/Blocking status; (2)
+  autonomous blocking ADR creates a task-blocking human-stop mailbox entry,
+  derives a blocked state, halts with exit 10, and dispositions.md keeps the
+  exit-10 contract; (3) a remarkable (unmarked) ADR appears only as a
+  human-awareness digest entry with empty blocks and lets the run complete exit
+  0; (4) the active mode table is respected: blocking ADRs are never remarkable
+  (autonomous human-stop, principal human-async, detailed
+  human-stop|human-async) while remarkable ADRs stay digest-only in every mode.
+  No production files were modified; all four tests are red on current code."
+target:
+  selectors:
+    - test/engine/adr-blocking-digest.test.ts
+  expectRed:
+    - test/engine/adr-blocking-digest.test.ts::Blocking vs remarkable ADRs
+      (§18).writes full ADR markdown with context, decision, consequences, and
+      blocking status
+    - test/engine/adr-blocking-digest.test.ts::Blocking vs remarkable ADRs
+      (§18).routes a blocking ADR to the mailbox with task blocks and halts with
+      exit 10
+    - test/engine/adr-blocking-digest.test.ts::Blocking vs remarkable ADRs
+      (§18).reports a remarkable ADR in the digest and lets the run complete
+    - test/engine/adr-blocking-digest.test.ts::Blocking vs remarkable ADRs
+      (§18).respects the active mode table for blocking and remarkable ADRs
+evidence:
+  - cd plugins/software-factory && bun install -> dependencies installed
+    (yaml/ajv/typescript), runner usable
+  - cd plugins/software-factory && bun run typecheck -> exit 0, no diagnostics
+  - cd plugins/software-factory && bun test
+    test/engine/adr-blocking-digest.test.ts -> 4 fail, 0 pass, 7 expect() calls;
+    failures are assertion failures, no import/collection errors
+  - cd plugins/software-factory && bun test
+    test/engine/adr-blocking-digest.test.ts --reporter=junit
+    --reporter-outfile=/tmp/adr-target-final.xml -> JUnit has tests="4", 4
+    <failure>, 0 <error> (target-red compatible)
+  - Default workspace TMPDIR run
+    (TMPDIR=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp) ->
+    same 4 failing target tests, 0 errors
+  - cd plugins/software-factory && TMPDIR=/tmp bun test --timeout 30000 -> 369
+    pass, 2 skip, 4 fail across 375 tests / 61 files; the 4 failures are exactly
+    the new target tests
+  - Direct AJV check of config/schemas/plan.schema.json with
+    adrs[0].blocking=true -> rejected by additionalProperties, confirming the
+    missing schema/type/writer/routing feature is the red cause
+  - cd plugins/software-factory && git status --short -> only '??
+    test/engine/adr-blocking-digest.test.ts'; no production changes
+concerns:
+  - "Mode disposition mapping is pinned by the tests: autonomous routes an
+    explicit blocking ADR as human-stop; principal uses human-async; detailed
+    accepts human-stop or human-async. This follows the plan's blocking-table
+    decision (autonomous blocks only on blocking ADR/high human-stop; principal
+    adds human-async; detailed adds all human-*)."
+  - Tests expect the mailbox question to identify the ADR via question text or
+    ref (id/title) so the operator can act on it; the implementation must
+    include that identity.
+  - The current plan.schema.json rejects PlanAdr.blocking, so the blocking test
+    cases fail at plan-step validation until the schema is extended; after that
+    they still require routing/halt behavior to pass.
+  - Existing routing-human-debt behavior (human-async/human-awareness review
+    dispositions) must remain unchanged; this suite only adds mode gating for
+    ADRs.
+notes: "Implementation guidance for the green step: (1) add optional `blocking`
+  to the plan schema's adrs items (type already has PlanAdr.blocking); (2) write
+  full ADR markdown with `# title`, `## Context`, `## Decision`, `##
+  Consequences`, `## Blocking`; (3) at plan commit, route ADRs via
+  writeQuestion: blocking -> blocks:[\"task\"] (autonomous human-stop,
+  principal/detailed human-async), remarkable -> human-awareness with blocks:[];
+  (4) ensure an open blocking-ADR question makes runIteration return blocked and
+  runTask return exit 10 with state.yaml blocked; (5) leave the human-stop
+  exit-10 text in agents/criteria/dispositions.md intact. Tests use the real
+  runTask/FakeHarness fixture and inspect the deployed task worktree's docs/adr
+  and steer/tousertoreview files."
