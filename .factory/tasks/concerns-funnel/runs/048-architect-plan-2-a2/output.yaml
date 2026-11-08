@@ -1,0 +1,328 @@
+adrs:
+  - context: Two hydration helpers diverge (hydrateConcernsYaml full-detail uncapped
+      vs renderConcernsYaml terse capped); spike byte contract lives only in
+      tests; plan-review overrides terse value with full records;
+      buildArchitectHydration caps JS length not UTF-8; escalated dismissed
+      invisible.
+    decision: "Single owner: triage.ts hydrateStepConcerns + renderConcernsYaml.
+      Step-role UTF-8 caps on promptVars only (stored artifacts keep full
+      detail): review/qa min(diff,2000), wave/plan-close-up min(task-diff,2000),
+      plan-review/architect* min(input,500) where input=sum registered input
+      vars. Terse shape id/kind/severity/summary/affects? plus pendingResolution
+      whenever present. Zero-cap returns ''. Plan-review drops full-record
+      override. buildArchitectHydration UTF-8 capped, concerns LAST, escalated
+      notes included."
+    id: adr-hydration-single-cap
+    title: Single hydration module with step-role byte caps
+  - context: Fingerprint includes sorted affects, so re-emitting a concern with an
+      added item/epic ref forks a second file instead of merging; dedup only
+      holds for identical affects.
+    decision: Identity is kind+normalized summary+location only; affects merged as
+      sorted-union on re-emit. Severity keeps max, detail keeps longer/latest,
+      updatedAt/lastSeen advance, terminal statuses preserved, escalated flag on
+      severity rise. Refines adr-fingerprint-merge.
+    id: adr-fingerprint-affects-union
+    title: Fingerprint identity without affects, union merge
+  - context: Only review/plan-review consume concernsYaml;
+      architect/close-up/consult/develop/qa fragments lack sections though
+      KNOWN_VARS registers them; preflight silent on unused vars; no prompt
+      tells producers to raise concerns/remarkable.
+    decision: "Add terse <=5-line ## Open Concerns {{concernsYaml}} + ## Human
+      involvement {{humanInvolvementCriteria}} + 1-line raise instruction to
+      architect-plan/revise/resume/wave-report/closeup/consults,
+      wave/plan-close-up, develop/qa/review per KNOWN_VARS matrix.
+      Reviewer/architect/close-up carry condensing rule
+      output-bytes<input-bytes. 15/60 debloat enforced in prompts.test."
+    id: adr-prompt-fragment-matrix
+    title: Full fragment matrix with raise instructions
+  - context: raiseAllowlist/minDigestSeverity/minBlockingSeverity
+      typed/validated/shipped but never read; no semantics for who may raise or
+      what reaches digest vs blocking.
+    decision: raiseAllowlist enforced at step-runner ingest (agent absent -> skip
+      file + journal, step stays ok; default all). Severity order
+      low<medium<high; digest written only if severity>=minDigestSeverity;
+      blocks set only if severity>=minBlockingSeverity else downgraded to digest
+      (stop loses exit-10). Defaults low/low = no-op preserving iteration-1
+      behavior; tasks opt into filtering.
+    id: adr-severity-policy-active
+    title: Active severity and allowlist policy
+  - context: applyReviewTriage writes only human-async; awareness/stop rely on
+      item-machine raw suggestions, so plan/close-up/architect human
+      dispositions never reach mailbox; rm-* has no digest; item-machine
+      double-writes stop/awareness concern ids.
+    decision: "Single routeHumanDisposition in triage.ts for all triagers at ingest:
+      human-async q-concern-<cid> blocks=[item] or [task] when task-level;
+      human-stop blocks item+task (task-level [task]) + exit-10; human-awareness
+      and routed rm-* blocks=[] digest-only, never blocking/halting. Dedup by
+      file existence. item-machine excludes ALL concern-id human-* from raw
+      path."
+    id: adr-human-router-single
+    title: Single human-disposition router with digest
+  - context: applyCloseupResolutions records pending only with no applier; resolved
+      unreachable in prod; consult decisions never transition concerns so
+      blocked-by-concern never unblocks; simple items have no reviewer.
+    decision: "Close-up proposes via concernResolutions (status unchanged, pending
+      set); architect wave-report/closeup confirms via concernConfirms:
+      accept+resolve->resolved, accept+carry->routed+architect,
+      accept+propagate->parent copy/digest; reject clears pending, preserves
+      status, sets no disposition. Consult decision with resolution
+      resolve->resolved, unblocking on next derive. Wave-close-up act fallback
+      for untriaged open: tech-debt->optional, others->architect, human-* never
+      auto."
+    id: adr-closeup-lifecycle-resolved
+    title: Close-up propose/confirm lifecycle with unblock
+  - context: runChildTask writes only child-closeup status; child concerns/ isolated
+      under child task dir; saga architect never sees epic concerns; spec
+      requires epic->saga propagate with review/steer.
+    decision: "Push on child close in runChildTask after completion before
+      cleanup/merge for every child status: copy open+routed (skip dismissed) as
+      condensed parent files (summary kept, detail strictly shorter, source.epic
+      + child record prefix, status open), restart-idempotent by fingerprint.
+      Parent buildArchitectHydration extended LAST, recomputed before
+      wave-report. Forward child human blocking questions to root mailbox."
+    id: adr-epic-push-condensed
+    title: Epic push with condensed parent copies
+  - context: Mode table says autonomous defers blocking until unblocked work drains,
+      but implementation routes blocking ADRs at plan time and halts
+      immediately; deferral needs drain scheduling.
+    decision: Keep immediate halt as accepted deviation for iteration 2 (simpler,
+      preserves exit-10 contract, matches tested behavior). Document in
+      ARCHITECTURE 8.11 and human-involvement.md; drain-then-block scheduling is
+      future work.
+    id: adr-autonomous-immediate-halt
+    title: Autonomous immediate halt accepted
+assumptions:
+  - assumption: Gates run with TMPDIR=/tmp so the 2 pre-existing head-guard failures
+      do not mask regressions.
+    why: Baseline red only under .factory-runtime TMPDIR; suite green with
+      TMPDIR=/tmp. Out of scope.
+  - assumption: Spike findings spike-text-budget (byte caps) and spike-saga-commit
+      (serialization/derive/commit/propagation) remain authoritative; no re-run.
+    why: Both accepted in iteration 1 with binding downstream directives;
+      iteration-2 items implement them.
+  - assumption: Dismissed/routed/resolved stay terminal-in-merge;
+      escalated-severity-on-dismissed surfaces in digest + architect hydration;
+      triage is the only reopen path.
+    why: Operator directive 1794112659180 decided keep + digest surfacing.
+  - assumption: funnel-closeups-v3 unmerged work is discarded; its Decision 020
+      persist guidance (4 fixes) is baked into hydration-fingerprint-caps (fixes
+      1/2/4) and closeup-lifecycle-resolve (fix 3).
+    why: Iteration 1 closed with v3 running/unmerged; reimplementing correctly
+      avoids rebasing stale branch state.
+  - assumption: Severity defaults low/low (no filtering) preserving iteration-1
+      behavior; tasks opt into noise reduction via pipeline.yaml.
+    why: Unblocks landing the policy without changing merged routing behavior by
+      default.
+itemOutlines:
+  - deps: []
+    description: Own concerns.ts + triage.ts hydration + step-runner injection +
+      iteration hydration bytes. hydrateStepConcerns step-role UTF-8 caps
+      (review/qa min(diff,2000); close-ups min(task-diff,2000);
+      plan-review/architect* min(input,500)); terse shape with pendingResolution
+      whenever present; zero-cap ''. Drop plan-review full-record override;
+      architect hydration UTF-8, concerns LAST, escalated notes. Fingerprint
+      identity kind+summary+location; affects union merge. Carry Decision 020
+      fixes 1/2/4 + regression tests. Behavior tests only. Verify typecheck +
+      TMPDIR=/tmp bun test.
+    kind: story
+    milestoneId: m1-hydration-prompts
+    prodBudgetHint: 240
+    slug: hydration-fingerprint-caps
+    title: Unified hydration, caps, fingerprint
+  - deps: []
+    description: "Fix TS/schema drift only. artifacts.ts: DeveloperOutput concerns
+      Concern[], ReviewArtifact newConcerns + remarkable,
+      FactFinder/WaveCloseup/PlanCloseup/Decision concerns/remarkable fields.
+      review-schema.ts + review.schema.json: add remarkable so reviewers report
+      tradeoffs without additionalProperties failure. No runtime changes.
+      Behavior tests: per-producer validation; triage/infra/pm-edit still reject
+      concerns. Verify typecheck + preflight."
+    kind: story
+    milestoneId: m3-contracts-epic
+    prodBudgetHint: 80
+    slug: contracts-drift-fix
+    title: Producer type and schema drift
+  - deps:
+      - hydration-fingerprint-caps
+    description: "Add terse <=5-line ## Open Concerns + ## Human involvement +
+      1-line raise instruction to
+      architect-plan/revise/resume/wave-report/closeup/consults,
+      wave/plan-close-up, develop/qa/review per KNOWN_VARS matrix; condensing
+      output<input in reviewer/architect/close-up. Respect 15/60 debloat; extend
+      prompts.test sentinel render assertions. Behavior tests: sections present;
+      mode switch changes criteria. Verify preflight + typecheck."
+    kind: story
+    milestoneId: m1-hydration-prompts
+    prodBudgetHint: 120
+    slug: prompt-fragments
+    title: Fragment matrix and raise instructions
+  - deps:
+      - hydration-fingerprint-caps
+    description: "Single routeHumanDisposition in triage.ts for all triagers: async
+      blocks [item]/[task], stop blocks item+task + exit-10, awareness + routed
+      rm-* digest-only blocks=[]; dedup q-concern-<cid>; item-machine excludes
+      all concern-id human-* from raw path. Severity: raiseAllowlist ingest gate
+      (skip+journal, default all); minDigest/minBlocking thresholds (default
+      low/low) filter digest and downgrade sub-threshold blocking. Behavior
+      tests: plan/close-up routing, rm digest, allowlist skip, downgrade, no
+      double-write, exit-10 only blocking stop."
+    escalate: true
+    kind: story
+    milestoneId: m2-routing-lifecycle
+    prodBudgetHint: 270
+    slug: human-router-severity
+    title: Human router and severity policy
+  - deps:
+      - hydration-fingerprint-caps
+    description: "runChildTask propagateEpicConcerns after completion before
+      cleanup/merge for every child status: push open+routed (skip dismissed) as
+      condensed parent copies (detail shorter, source.epic + child prefix,
+      status open), restart-idempotent; extend parent hydration LAST recomputed
+      before wave-report; forward child human blocking questions to root
+      mailbox. Spike-saga-commit directives authoritative. Behavior tests: one
+      condensed copy, dismissed local, saga input contains id, restart no dup,
+      question forwarded."
+    escalate: true
+    kind: story
+    milestoneId: m3-contracts-epic
+    prodBudgetHint: 180
+    slug: epic-saga-propagate
+    title: Epic to saga propagation
+  - deps:
+      - epic-saga-propagate
+      - human-router-severity
+      - prompt-fragments
+    description: "Close-up propose/confirm lifecycle + unblock + simple fallback.
+      concernResolutions->pending (status unchanged); concernConfirms accept
+      (resolve->resolved, carry->routed+architect, propagate->parent/digest) /
+      reject (clear pending, preserve status, no disposition) per Decision 020
+      fix 3. Consult resolve decision->resolved unblocks dependents.
+      Wave-close-up fallback: tech-debt->optional, others->architect, human-*
+      never. Behavior tests: pending/confirm matrix, reject preserves open,
+      consult unblock, simple fallback, resolved reachable."
+    escalate: true
+    kind: story
+    milestoneId: m2-routing-lifecycle
+    prodBudgetHint: 220
+    slug: closeup-lifecycle-resolve
+    title: Close-up lifecycle and unblock
+  - deps:
+      - closeup-lifecycle-resolve
+      - contracts-drift-fix
+      - epic-saga-propagate
+      - human-router-severity
+      - hydration-fingerprint-caps
+      - prompt-fragments
+    description: "Update ARCHITECTURE §1 row 18 + §5 + §6.2 + §8.7 + new §8.11 + §10
+      + §11 + §13, README concerns/modes section, config commentary sync with
+      landed severity/router semantics, human-involvement.md immediate-halt
+      note; prompts.test 15/60 debloat assertion; consolidate concerns behavior
+      coverage. Final gates: bun run typecheck + TMPDIR=/tmp bun test green."
+    kind: story
+    milestoneId: m4-docs-gates
+    prodBudgetHint: 100
+    slug: docs-finish-v3
+    title: Docs and suite consolidation
+iteration: 2
+milestones:
+  - directionalInterfaces:
+      - "src/core/concerns.ts: concernFingerprint(kind+summary+location) +
+        affects-union merge + escalated flag; listHydratedConcerns"
+      - "src/core/triage.ts: hydrateStepConcerns step-role UTF-8 caps +
+        renderConcernsYaml terse + pending visibility + zero-cap ''"
+      - step-runner.ts injection + iteration.ts plan-review/architect hydration
+        (UTF-8 bytes, concerns LAST, escalated notes)
+      - agents/steps/* fragments + KNOWN_VARS matrix + 15/60 debloat
+    id: m1-hydration-prompts
+    scenarios:
+      - Given wave diff 5000 bytes and open concerns 3000 bytes When
+        wave-close-up hydrates Then concernsYaml is <=2000 bytes and < wave diff
+        in UTF-8 bytes
+      - Given zero-diff plan-review with 4000-byte input in iteration 2+ When
+        hydrating Then concernsYaml is <=500 bytes and < input bytes
+      - Given a dismissed concern re-emitted with higher severity When merge and
+        hydration run Then status stays dismissed, source.escalated=true, and
+        the escalation appears in digest and architect hydration
+      - Given the same concern re-emitted with added affects When merge runs
+        Then a single file holds union affects with no fork
+      - Given architect, close-up, consult, develop, qa, and review prompts
+        render When preflight and render run Then concernsYaml and
+        humanInvolvementCriteria sections with terse raise and condense
+        instructions appear within budgets
+      - Given zero-byte diff and input When hydrating Then concernsYaml is ''
+        with no concerns block
+    title: Hydration, caps, fingerprint, prompts
+  - directionalInterfaces:
+      - src/core/triage.ts routeHumanDisposition + severity gates
+        (raiseAllowlist/minDigest/minBlocking) + q-concern-<cid> dedup;
+        item-machine concern-id exclusion
+      - src/core/concerns.ts applyCloseupResolutions/applyConcernConfirms +
+        resolveConcern; consult decision resolve seam; wave-close-up simple
+        fallback
+    id: m2-routing-lifecycle
+    scenarios:
+      - Given plan-reviewer triaging human-stop on a concern id When the step
+        commits Then a single q-concern-<cid> blocks task/item, derive marks
+        blocked, and the engine halts with exit 10
+      - Given a routed rm-* remarkable or human-awareness When routing runs Then
+        the digest entry has blocks=[] and never blocks or halts
+      - Given raiseAllowlist excluding qa and minBlockingSeverity high When QA
+        emits a concern and a low human-stop routes Then the QA file is skipped
+        and the stop is downgraded to digest
+      - Given wave-close-up emitting concernResolutions When it commits Then
+        pendingResolution is set with status unchanged; architect
+        concernConfirms accept applies resolved/routed/propagated and reject
+        clears pending preserving status
+      - Given a consult decision resolving a blocker When the decision commits
+        Then the concern becomes resolved and the dependent unblocks on next
+        derive
+      - Given a simple item with open concerns and no reviewer When
+        wave-close-up runs Then explicit resolutions triage them; fallback
+        auto-routes tech-debt to optional and others to architect, never human-*
+    title: Human routing, severity, lifecycle
+  - directionalInterfaces:
+      - artifacts.ts structured concerns/remarkable + review-schema.ts
+        remarkable; producer schemas otherwise unchanged
+      - engine.ts runChildTask propagateEpicConcerns (condensed push,
+        source.epic, parent hydration, child question forward)
+    id: m3-contracts-epic
+    scenarios:
+      - Given structured concerns and remarkable in developer, fact-finder, qa,
+        close-up, decision, and reviewer outputs When validation and typecheck
+        run Then all pass with matching TS types and reviewer remarkable no
+        longer fails additionalProperties
+      - Given a child epic finishing with one dismissed and one open concern
+        with 800-byte detail When runChildTask completes Then the parent gains
+        exactly one condensed copy with source.epic and detail <800 bytes while
+        dismissed stays local
+      - Given a propagated epic concern When the saga architect hydrates Then
+        concernsYaml contains the epic id and summary; a restart creates no
+        duplicate; child human questions are forwarded to the root mailbox
+    title: Contracts and epic propagation
+  - directionalInterfaces:
+      - docs/ARCHITECTURE.md §1/§5/§6.2/§8.7/§8.11/§10/§11/§13 + README +
+        pipeline.default.yaml commentary + human-involvement.md
+      - prompts.test fragment matrix + 15/60 debloat assertion; TMPDIR=/tmp gates
+    id: m4-docs-gates
+    scenarios:
+      - Given implementation complete When docs are read Then ARCHITECTURE,
+        README, config commentary, and dispositions describe concerns lifecycle,
+        funnel sizes, partition, producer matrix, exit-10, modes, and counts
+        with terse prompts
+      - Given prompt fragments When prompts.test runs Then KNOWN_VARS matrix and
+        15/60 budgets pass
+      - Given the full suite When gates run with TMPDIR=/tmp Then typecheck and
+        bun test pass
+    title: Docs and gates
+techDebt:
+  - category: adjacent
+    description: Pre-existing head-guard failures when TMPDIR sits under
+      .factory-runtime because step-runner splits on /.factory. Baseline red;
+      green with TMPDIR=/tmp. Out of scope.
+    id: td-tmpdir-split
+  - category: adjacent
+    description: Unapplied spike-saga-commit reviewer optional nits (qualify
+      epic-state-from-child-closeup with isMerged precedence, prefix inline
+      paths, scope removeWorktree claim, fold contextPack key). Consumers apply
+      mentally.
+    id: td-spike-nits
