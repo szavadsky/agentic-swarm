@@ -1,0 +1,42 @@
+checks:
+  - id: test-first-scope
+    status: pass
+    message: test-first-scope passed (1 test files, 1 new prod stubs with 10 lines)
+    details:
+      testFiles:
+        - plugins/software-factory/test/review-policy.test.ts
+      newProdFiles:
+        - plugins/software-factory/src/core/review-policy.ts
+      stubProdLines: 10
+  - id: target-red
+    status: pass
+    message: "target-red passed: all 10 expected tests failed with assertion failures"
+    details:
+      command: cd plugins/software-factory && bun test test/review-policy.test.ts
+        --reporter=junit
+        --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-1794114998665-my9mbzuj14.xml
+      junitCaseCount: 10
+      junitCaseIds:
+        - Review policy resolution (§8.7, §18).falls back to the canonical
+          builtin dispositions
+        - Review policy resolution (§8.7, §18).prefers a per-agent policy over
+          default and default over builtin
+        - Review policy resolution (§8.7, §18).reads legacy allowedDispositions
+          as the default alias
+        - Review policy resolution (§8.7, §18).appends dismiss for triagers
+          without duplicates
+        - Review policy resolution (§8.7, §18).never grants dismiss to
+          non-triagers, even when configured
+        - Generated review schema gating (§8.7).offers dismiss only when the
+          resolved policy comes from a triager
+        - FakeHarness review-step dispositions (§8.7, §18).reviewer accepts a
+          dismiss suggestion whose id matches a concern
+        - FakeHarness review-step dispositions (§8.7, §18).plan-reviewer is a
+          triager and may dismiss architect concerns
+        - FakeHarness review-step dispositions (§8.7, §18).qa rejects dismiss
+          even when the legacy policy lists it
+        - Item-machine review prompt uses the canonical resolver (§8.7).renders
+          dismiss in the reviewer dispositions when the agent is a triager
+      junitTruncated: false
+      collected: true
+      collectionErrors: []

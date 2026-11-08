@@ -1,0 +1,151 @@
+checks:
+  - id: test-first-scope
+    status: pass
+    message: test-first-scope passed (1 test files, 1 new prod stubs with 10 lines)
+    details:
+      testFiles:
+        - plugins/software-factory/test/review-policy.test.ts
+      newProdFiles:
+        - plugins/software-factory/src/core/review-policy.ts
+      stubProdLines: 10
+  - id: target-red
+    status: fail
+    message: "Expected red test missing from suite:
+      test/review-policy.test.ts::Review policy resolution (§8.7, §18) > falls
+      back to the canonical builtin dispositions (JUnit has 10 cases; ids:
+      Review policy resolution (§8.7, §18).falls back to the canonical builtin
+      dispositions, Review policy resolution (§8.7, §18).prefers a per-agent
+      policy over default and default over builtin, Review policy resolution
+      (§8.7, §18).reads legacy allowedDispositions as the default alias, Review
+      policy resolution (§8.7, §18).appends dismiss for triagers without
+      duplicates, Review policy resolution (§8.7, §18).never grants dismiss to
+      non-triagers, even when configured, Generated review schema gating
+      (§8.7).offers dismiss only when the resolved policy comes from a triager,
+      FakeHarness review-step dispositions (§8.7, §18).reviewer accepts a
+      dismiss suggestion whose id matches a concern, FakeHarness review-step
+      dispositions (§8.7, §18).plan-reviewer is a triager and may dismiss
+      architect concerns, FakeHarness review-step dispositions (§8.7, §18).qa
+      rejects dismiss even when the legacy policy lists it, Item-machine review
+      prompt uses the canonical resolver (§8.7).renders dismiss in the reviewer
+      dispositions when the agent is a triager). Command: cd
+      plugins/software-factory && bun test test/review-policy.test.ts
+      --reporter=junit
+      --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-ru\
+      ntime/tmp/junit-1794114262035-xr3xv7ttly.xml"
+    details:
+      command: cd plugins/software-factory && bun test test/review-policy.test.ts
+        --reporter=junit
+        --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-1794114262035-xr3xv7ttly.xml
+      junitCaseCount: 10
+      junitCaseIds:
+        - Review policy resolution (§8.7, §18).falls back to the canonical
+          builtin dispositions
+        - Review policy resolution (§8.7, §18).prefers a per-agent policy over
+          default and default over builtin
+        - Review policy resolution (§8.7, §18).reads legacy allowedDispositions
+          as the default alias
+        - Review policy resolution (§8.7, §18).appends dismiss for triagers
+          without duplicates
+        - Review policy resolution (§8.7, §18).never grants dismiss to
+          non-triagers, even when configured
+        - Generated review schema gating (§8.7).offers dismiss only when the
+          resolved policy comes from a triager
+        - FakeHarness review-step dispositions (§8.7, §18).reviewer accepts a
+          dismiss suggestion whose id matches a concern
+        - FakeHarness review-step dispositions (§8.7, §18).plan-reviewer is a
+          triager and may dismiss architect concerns
+        - FakeHarness review-step dispositions (§8.7, §18).qa rejects dismiss
+          even when the legacy policy lists it
+        - Item-machine review prompt uses the canonical resolver (§8.7).renders
+          dismiss in the reviewer dispositions when the agent is a triager
+      junitTruncated: false
+      collected: true
+      collectionErrors: []
+    output: >-
+      bun test v1.4.3 (c6da4a4d3)
+
+
+
+      test/review-policy.test.ts:
+
+      49 |   return properties.suggestions.items.properties.disposition.enum;
+
+      50 | }
+
+      51 | 
+
+      52 | describe("Review policy resolution (§8.7, §18)", () => {
+
+      53 |   it("falls back to the canonical builtin dispositions", () => {
+
+      54 |     expect(resolveReviewAllowed(pipelineWith(), "reviewer",
+      false)).toEqual(
+                                                                               ^
+      error: expect(received).toEqual(expected)
+
+
+      - [
+
+      -   "fix",
+
+      -   "optional",
+
+      -   "architect",
+
+      -   "human-awareness",
+
+      -   "human-async",
+
+      - ]
+
+      + []
+
+
+      - Expected  - 7
+
+      + Received  + 1
+
+            at <anonymous> (/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel--concerns-contracts-policy/plugins/software-factory/test/review-policy.test.ts:54:69)
+      (fail) Review policy resolution (§8.7, §18) > falls back to the canonical
+      builtin dispositions [0.58ms]
+
+      63 |     const pipeline = pipelineWith({
+
+      64 |       default: ["fix", "optional"],
+
+      65 |       reviewer: ["architect"],
+
+      66 |     });
+
+      67 | 
+
+      68 |     expect(resolveReviewAllowed(pipeline, "reviewer",
+      false)).toEqual([
+                                                                         ^
+      error: expect(received).toEqual(expected)
+
+
+      - [
+
+      -   "architect",
+
+      - ]
+
+      + []
+
+
+      - Expected  - 3
+
+      + Received  + 1
+
+            at <anonymous> (/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-fun
+      ... [truncated 7138 bytes] ...
+
+      (fail) Item-machine review prompt uses the canonical resolver (§8.7) >
+      renders dismiss in the reviewer dispositions when the agent is a triager
+      [165.40ms]
+
+       0 pass
+       10 fail
+       11 expect() calls
+      Ran 10 tests across 1 file. [678.00ms]

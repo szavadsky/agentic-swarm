@@ -1,0 +1,58 @@
+status: ok
+summary: "Re-declared the target-red ids in Bun's JUnit node-id form. The test
+  suite itself was already correct: `test/review-policy.test.ts` contains 10 red
+  tests against the `resolveReviewAllowed` stub (returns []), while typecheck
+  passes. The prior rejection was an id-format mismatch — Bun's JUnit joins the
+  describe path and test name with `.`, so the `describe > test` form was not
+  matched by the engine's normalization. All 10 corrected ids now resolve to
+  failing (assertion) JUnit cases."
+target:
+  selectors:
+    - test/review-policy.test.ts
+  expectRed:
+    - test/review-policy.test.ts::Review policy resolution (§8.7, §18).falls
+      back to the canonical builtin dispositions
+    - test/review-policy.test.ts::Review policy resolution (§8.7, §18).prefers a
+      per-agent policy over default and default over builtin
+    - test/review-policy.test.ts::Review policy resolution (§8.7, §18).reads
+      legacy allowedDispositions as the default alias
+    - test/review-policy.test.ts::Review policy resolution (§8.7, §18).appends
+      dismiss for triagers without duplicates
+    - test/review-policy.test.ts::Review policy resolution (§8.7, §18).never
+      grants dismiss to non-triagers, even when configured
+    - test/review-policy.test.ts::Generated review schema gating (§8.7).offers
+      dismiss only when the resolved policy comes from a triager
+    - test/review-policy.test.ts::FakeHarness review-step dispositions (§8.7,
+      §18).reviewer accepts a dismiss suggestion whose id matches a concern
+    - test/review-policy.test.ts::FakeHarness review-step dispositions (§8.7,
+      §18).plan-reviewer is a triager and may dismiss architect concerns
+    - test/review-policy.test.ts::FakeHarness review-step dispositions (§8.7,
+      §18).qa rejects dismiss even when the legacy policy lists it
+    - test/review-policy.test.ts::Item-machine review prompt uses the canonical
+      resolver (§8.7).renders dismiss in the reviewer dispositions when the
+      agent is a triager
+evidence:
+  - "cd plugins/software-factory && TMPDIR=/tmp bun test
+    test/review-policy.test.ts --reporter=junit
+    --reporter-outfile=/tmp/junit-review-policy.xml: exit 1, 0 pass / 10 fail,
+    all failures are assertion failures (no collection or import errors)"
+  - "Parsed the generated JUnit XML with the repo's own `parseJunit`
+    (src/core/checks/junit.ts): 10 test cases, collected=true; ids are
+    `<describe path>.<test name>`"
+  - "Applied the repo's target-red matcher normalization
+    (src/core/checks/runner.ts `normaliseCaseId` + `findMatchingCase`) to all 10
+    declared expectRed ids: 10/10 matched, each with status `fail`"
+  - "cd plugins/software-factory && TMPDIR=/tmp bun run typecheck (`tsc
+    --noEmit`): exit 0"
+  - "git status --short: clean; no production code changed in this attempt
+    beyond the pre-existing 10-line `resolveReviewAllowed` stub"
+concerns:
+  - Bun's JUnit reporter separates describe/test with `.` (not ` > `), so target
+    ids must use `file::Describe.Test` form; the engine's `normaliseCaseId` only
+    maps `::` and `/` to dots, leaving a literal ` > ` unmatched.
+notes: "Test-first scope only: the 10 cases already specify precedence
+  (per-agent > default > builtin), legacy allowedDispositions alias,
+  triager-only dismiss append/dedup, generated schema gating, FakeHarness
+  step-runner acceptance/rejection, and item-machine prompt dispositions.
+  Production behavior remains unimplemented (stub returns []), which is the
+  intended red state."

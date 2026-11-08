@@ -23,6 +23,7 @@ import {
 } from "../records/step-record.js";
 import { validateAndRepair } from "../records/repair.js";
 import { generateReviewSchema } from "../records/review-schema.js";
+import { isTriagerAgent, resolveReviewAllowed } from "../review-policy.js";
 import { resolveStepRole, resolveRole, type ResolvedRole } from "../config/roles.js";
 import { captureHead, enforceHead } from "../git/guard.js";
 import { commitAll } from "../git/commit.js";
@@ -232,7 +233,11 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
 
   // 3. Resolve schema
   const pluginRoot = path.resolve(import.meta.dir ?? __dirname, "../../..");
-  const allowedDispositions = pipeline.reviewPolicy?.allowedDispositions;
+  const allowedDispositions = resolveReviewAllowed(
+    pipeline,
+    agent,
+    isTriagerAgent(agent)
+  );
   const outputSchema =
     opts.customSchema ??
     resolveStepSchema(pluginRoot, agent, stepId, allowedDispositions);

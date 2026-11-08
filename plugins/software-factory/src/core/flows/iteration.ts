@@ -27,6 +27,7 @@ import { deriveWaveState } from "../derive/wave.js";
 import { refreshStateYaml } from "../derive/task.js";
 import { appendJournal } from "../journal.js";
 import { loadCriteriaBundle, formatDispositionsSection } from "../prompts.js";
+import { isTriagerAgent, resolveReviewAllowed } from "../review-policy.js";
 import { checkPlanReviewRounds, checkIterations, checkAmendments } from "../loops.js";
 import { validateEdits } from "../plan/limits.js";
 import { applyEdits } from "../plan/apply.js";
@@ -459,7 +460,11 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
         limits: JSON.stringify(limits, null, 2),
         dispositionsCriteria: formatDispositionsSection(
           loadCriteriaBundle(pipeline.criteria).dispositions,
-          pipeline.reviewPolicy?.allowedDispositions ?? ["fix", "optional", "architect", "human-awareness", "human-async"]
+          resolveReviewAllowed(
+            pipeline,
+            "plan-reviewer",
+            isTriagerAgent("plan-reviewer")
+          )
         ),
       },
       turnsSemaphore,

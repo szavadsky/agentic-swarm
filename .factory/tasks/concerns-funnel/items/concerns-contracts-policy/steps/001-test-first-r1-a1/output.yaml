@@ -1,0 +1,63 @@
+status: ok
+summary: Authored test/review-policy.test.ts with 10 specs covering the
+  canonical resolver (precedence per-agent > default > legacy
+  allowedDispositions > builtin, dismiss append/dedup only for triagers, QA
+  never), generated-schema dismiss gating, FakeHarness review-step behavior
+  (reviewer/plan-reviewer accept a dismiss suggestion id-matched to a concern;
+  QA rejects dismiss even when the legacy policy lists it), and item-machine
+  review promptVars rendering dismiss for a triager. Added only a new 8-line
+  interface stub src/core/review-policy.ts so the new tests import/typecheck;
+  existing production code is untouched. All 10 specs fail red with assertion
+  errors on the current implementation.
+target:
+  selectors:
+    - test/review-policy.test.ts
+  expectRed:
+    - test/review-policy.test.ts::Review policy resolution (§8.7, §18) > falls
+      back to the canonical builtin dispositions
+    - test/review-policy.test.ts::Review policy resolution (§8.7, §18) > prefers
+      a per-agent policy over default and default over builtin
+    - test/review-policy.test.ts::Review policy resolution (§8.7, §18) > reads
+      legacy allowedDispositions as the default alias
+    - test/review-policy.test.ts::Review policy resolution (§8.7, §18) > appends
+      dismiss for triagers without duplicates
+    - test/review-policy.test.ts::Review policy resolution (§8.7, §18) > never
+      grants dismiss to non-triagers, even when configured
+    - test/review-policy.test.ts::Generated review schema gating (§8.7) > offers
+      dismiss only when the resolved policy comes from a triager
+    - test/review-policy.test.ts::FakeHarness review-step dispositions (§8.7,
+      §18) > reviewer accepts a dismiss suggestion whose id matches a concern
+    - test/review-policy.test.ts::FakeHarness review-step dispositions (§8.7,
+      §18) > plan-reviewer is a triager and may dismiss architect concerns
+    - test/review-policy.test.ts::FakeHarness review-step dispositions (§8.7,
+      §18) > qa rejects dismiss even when the legacy policy lists it
+    - test/review-policy.test.ts::Item-machine review prompt uses the canonical
+      resolver (§8.7) > renders dismiss in the reviewer dispositions when the
+      agent is a triager
+evidence:
+  - "`TMPDIR=/tmp bun test test/review-policy.test.ts` -> 0 pass, 10 fail; every
+    failure is an assertion error (expect(...).toEqual/toContain/toBe), no
+    import/syntax/compile errors."
+  - Bun JUnit reporter (`--reporter=junit
+    --reporter-outfile=/tmp/review-policy-junit.xml`) confirms all 10 testcases
+    execute and fail with AssertionError under the file/describe suites.
+  - "`bun run typecheck` -> exit 0 with the new interface stub (tests compile;
+    new modules collect)."
+  - "`git status --short` shows only two new files: src/core/review-policy.ts
+    (8-line test-first stub, within the 40-line stub budget) and
+    test/review-policy.test.ts; no existing production file modified."
+concerns:
+  - The iteration plan-review prompt wiring is not directly exercised by an
+    end-to-end runIteration test; its schema path is covered via the
+    plan-reviewer FakeHarness step test, and the promptVar call site will be a
+    one-line resolver substitution verified in the develop step.
+  - QA-never enforcement is asserted at resolver, generated-schema, and
+    runAgentStep levels; if a config explicitly grants dismiss to a non-triager
+    the resolver is expected to strip it (tested).
+  - generateReviewSchema keeps its one-argument signature; gating flows from the
+    resolver's triager-aware disposition list rather than a second schema flag.
+notes: "Test-first red target: all 10 specs in test/review-policy.test.ts fail
+  on current production. The stub `resolveReviewAllowed` deliberately returns []
+  so failures are assertion-based, not import/compile-based. Next step:
+  implement the resolver and wire item-machine promptVars, step-runner schema
+  path, and iteration plan-review prompt+schema."
