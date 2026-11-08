@@ -12,3 +12,7 @@
 {"type":"step_transcript_size_warning","task":"concerns-funnel","step":"infra","attempt":1,"sizeBytes":7635420,"thresholdBytes":5242880,"traceRef":"/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/sessions/2026-11-07T19-01-26-390Z_01a1b763-14f6-75bb-b2e9-d16c50eee3d8","ts":"2026-11-07T19:08:28.351Z"}
 {"type":"step_finished","task":"concerns-funnel","step":"infra","attempt":1,"status":"ok","sessionId":"01a1b763-14f6-75bb-b2e9-d16c50eee3d8","usage":{"inputTokens":80345,"outputTokens":29784,"costUsd":0.036009},"ts":"2026-11-07T19:10:39.122Z"}
 {"type":"iteration_started","iteration":1,"ts":"2026-11-07T19:10:39.243Z"}
+{"type":"record_marked_interrupted","recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/004-architect-plan-1-a1","ts":"2026-11-08T00:27:27.209Z"}
+{"type":"lock_takeover","task":"concerns-funnel","previousPid":3583877,"previousHost":"Slava-Yoga","newPid":85389,"newHost":"Slava-Yoga","ts":"2026-11-08T00:27:27.220Z"}
+{"type":"task_started","task":"concerns-funnel","branch":"topic/concerns-funnel","ts":"2026-11-08T00:27:27.221Z"}
+{"type":"ingest_started","task":"concerns-funnel","ts":"2026-11-08T00:27:27.266Z"}
