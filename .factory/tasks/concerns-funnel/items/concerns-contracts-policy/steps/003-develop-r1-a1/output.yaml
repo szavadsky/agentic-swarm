@@ -1,0 +1,54 @@
+status: ok
+summary: Implemented the canonical review-policy resolver and wired it into
+  every review surface. `resolveReviewAllowed` now applies per-agent > default >
+  legacy `allowedDispositions` > builtin precedence, dedupes entries, appends
+  `dismiss` only for triagers, and strips `dismiss` for non-triagers.
+  `isTriagerAgent` marks reviewer/plan-reviewer/close-up reviewers. Item-machine
+  review prompts, plan-review prompts, and the step-runner schema path now all
+  resolve dispositions through this single resolver, so generated review schemas
+  offer `dismiss` only to triagers and never to QA. Target tests 10/10 green,
+  typecheck green, full suite 297 pass / 2 skip / 0 fail.
+target:
+  selectors:
+    - test/review-policy.test.ts
+  expectRed:
+    - test/review-policy.test.ts::Review policy resolution (§8.7, §18).falls
+      back to the canonical builtin dispositions
+    - test/review-policy.test.ts::Review policy resolution (§8.7, §18).prefers a
+      per-agent policy over default and default over builtin
+    - test/review-policy.test.ts::Review policy resolution (§8.7, §18).reads
+      legacy allowedDispositions as the default alias
+    - test/review-policy.test.ts::Review policy resolution (§8.7, §18).appends
+      dismiss for triagers without duplicates
+    - test/review-policy.test.ts::Review policy resolution (§8.7, §18).never
+      grants dismiss to non-triagers, even when configured
+    - test/review-policy.test.ts::Generated review schema gating (§8.7).offers
+      dismiss only when the resolved policy comes from a triager
+    - test/review-policy.test.ts::FakeHarness review-step dispositions (§8.7,
+      §18).reviewer accepts a dismiss suggestion whose id matches a concern
+    - test/review-policy.test.ts::FakeHarness review-step dispositions (§8.7,
+      §18).plan-reviewer is a triager and may dismiss architect concerns
+    - test/review-policy.test.ts::FakeHarness review-step dispositions (§8.7,
+      §18).qa rejects dismiss even when the legacy policy lists it
+    - test/review-policy.test.ts::Item-machine review prompt uses the canonical
+      resolver (§8.7).renders dismiss in the reviewer dispositions when the
+      agent is a triager
+evidence:
+  - "`TMPDIR=/tmp bun test test/review-policy.test.ts` -> 10 pass, 0 fail, 28
+    expect() calls."
+  - "`bun run typecheck` (tsc --noEmit) -> exit 0."
+  - "`TMPDIR=/tmp bun test` (full suite) -> 297 pass, 2 skip, 0 fail across 53
+    files."
+  - "Red baseline before implementation: same target file failed 10/10,
+    confirming tests exercised the new behavior."
+  - "`git diff --numstat` -> 59 added / 11 removed lines across 4 prod files,
+    within the <=100 line budget."
+concerns:
+  - "`test/engine/blocked-closeup-iteration.test.ts` runs close to Bun's default
+    5s timeout and failed once while the full suite ran concurrently in the
+    background; it passed in the final clean full-suite run and in repeated
+    isolated runs. This is pre-existing timing sensitivity, not caused by the
+    resolver change."
+notes: "Resolver stub from test-first was replaced; no test files were modified.
+  Triager set follows the documented funnel: reviewer, plan-reviewer,
+  wave-close-up, plan-close-up."

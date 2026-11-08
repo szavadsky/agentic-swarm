@@ -31,6 +31,7 @@ import {
   fingerprintSuggestions,
 } from "../loops.js";
 import { loadCriteriaBundle, formatDispositionsSection } from "../prompts.js";
+import { isTriagerAgent, resolveReviewAllowed } from "../review-policy.js";
 import { runCheck } from "../checks/runner.js";
 import type { CheckContext } from "../checks/types.js";
 import type { BudgetTracker } from "../budget.js";
@@ -628,10 +629,11 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
   // Criteria bundle for review prompts (§8.7); allowed dispositions mirror the
   // schema binding in step-runner so prompt and validation agree.
   const criteriaBundle = loadCriteriaBundle(pipeline.criteria);
-  const reviewAllowed =
-    pipeline.reviewPolicy?.allowedDispositions ??
-    pipeline.reviewPolicy?.[currentStep.agent] ??
-    ["fix", "optional", "architect", "human-awareness", "human-async"];
+  const reviewAllowed = resolveReviewAllowed(
+    pipeline,
+    currentStep.agent,
+    isTriagerAgent(currentStep.agent)
+  );
 
   const promptVars: Record<string, string> = {
     assignment: assignmentYaml,
