@@ -1,0 +1,345 @@
+checks:
+  - id: red-test
+    status: pass
+    message: "red-test passed: all 11 tests fail when prod changes are restored to
+      test-first commit"
+    details:
+      command: cd plugins/software-factory && bun test
+        test/engine/routing-blocker-derive.test.ts test/plan-scheduler.test.ts
+        --reporter=junit
+        --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-redtest-1794138460122-rzh61p5t5p.xml
+      junitCaseCount: 27
+      junitCaseIds:
+        - "plan/scheduler: nextWave.returns current active wave while items are
+          pending or running"
+        - "plan/scheduler: nextWave.advances to next wave when all items in
+          current wave are terminal"
+        - "plan/scheduler: nextWave.returns null when all items across all waves
+          are terminal"
+        - "plan/scheduler: nextWave.automatically sorts numeric waves when order
+          is omitted"
+        - "plan/scheduler: nextWave.treats pending items with failed/abandoned
+          deps as blocked for wave advancement"
+        - "plan/scheduler: nextWave.reports directly blocked items; transitive
+          cascade is the engine's job"
+        - "plan/scheduler: runnable.respects dependencies: pending item only
+          runs when all deps are done"
+        - "plan/scheduler: runnable.respects active wave filter"
+        - "plan/scheduler: runnable.respects maxParallel concurrency limit and
+          current running count"
+        - "plan/scheduler: runnable.preserves PM order"
+        - "plan/scheduler: runnable.never returns items whose deps failed"
+        - "plan/scheduler: blockedByFailure.returns pending items with failed or
+          abandoned deps, in PM order"
+        - "plan/scheduler: blockedByFailure.returns empty when no dep has failed
+          or been abandoned"
+        - "plan/scheduler: blockedByConcern.blocks concern-affected items and
+          their declared dependents in PM order"
+        - "plan/scheduler: blockedByConcern.unions concern blocking with the
+          failure-blocked fixpoint over declared deps"
+        - "plan/scheduler: blockedByConcern.ignores refs naming no item and
+          never blocks a done item"
+        - "derive/task: collectRoutedBlockers.collects affects of routed blocker
+          concerns and ignores other statuses and kinds"
+        - "derive/task: collectRoutedBlockers.returns an empty set when the task
+          has no concerns directory"
+        - "derive/wave: routed blocker integration.routes a concern-affected
+          item and its declared dependents to blocked"
+        - "derive/wave: routed blocker integration.cascades transitively over
+          declared deps only"
+        - "derive/wave: routed blocker integration.ignores running/ready seeds
+          and does not cascade from them"
+        - "derive/item: routed blocker integration.blocks only the item named by
+          a routed blocker"
+        - "derive/item: routed blocker integration.keeps a terminal item status
+          over routed blocking"
+        - "derive/item: routed blocker integration.does not retro-block
+          running/ready items named by a routed blocker"
+        - "derive/task: routed blocker scenario.blocks affected items and
+          declared dependents, leaving non-dependents pending without writes"
+        - "derive/task: routed blocker scenario.derives the task blocked when
+          every item is in the routed blocker cascade"
+        - "derive/task: routed blocker scenario.leaves running/ready seeds and
+          their dependents schedulable at task level"
+      junitTruncated: false
+      collected: true
+      collectionErrors: []
+  - id: test-diff
+    status: pass
+    message: test-diff generated (2 test files, 5696 bytes)
+    details:
+      diff: >-
+        diff --git
+        a/plugins/software-factory/test/engine/blocked-closeup-iteration.test.ts
+        b/plugins/software-factory/test/engine/blocked-closeup-iteration.test.ts
+
+        index 7fec5d7..db9117c 100644
+
+        ---
+        a/plugins/software-factory/test/engine/blocked-closeup-iteration.test.ts
+
+        +++
+        b/plugins/software-factory/test/engine/blocked-closeup-iteration.test.ts
+
+        @@ -260,5 +260,8 @@ describe("Engine: Blocked close-up starts iteration
+        N+1 (§8.4.1, Finding 6)", (
+         
+             // Verify architect-plan-2 had prior closeup context
+             expect(iter2PromptSeen).toContain("Prior Close-up closeup-1.yaml");
+        -  });
+
+        +    // Heavy test: two full runTask cycles (git worktrees + harness).
+        Measured
+
+        +    // 4.7-7.9s on a loaded host, over bun's 5s default; allow 30s. No
+
+        +    // assertion is changed.
+
+        +  }, 30_000);
+         });
+        diff --git
+        a/plugins/software-factory/test/engine/routing-blocker-derive.test.ts
+        b/plugins/software-factory/test/engine/routing-blocker-derive.test.ts
+
+        index a43e763..d18513d 100644
+
+        ---
+        a/plugins/software-factory/test/engine/routing-blocker-derive.test.ts
+
+        +++
+        b/plugins/software-factory/test/engine/routing-blocker-derive.test.ts
+
+        @@ -73,6 +73,32 @@ function writeItem(
+             "utf8"
+           );
+         }
+        +function writeStepRecord(
+
+        +  taskDir: string,
+
+        +  slug: string,
+
+        +  opts: { name: string; status: string }
+
+        +): void {
+
+        +  const dir = path.join(taskDir, "items", slug, "steps",
+        `001-${opts.name}-a1`);
+
+        +  fs.mkdirSync(dir, { recursive: true });
+
+        +  fs.writeFileSync(path.join(dir, "input.md"), "prompt\n", "utf8");
+
+        +  fs.writeFileSync(
+
+        +    path.join(dir, "meta.yaml"),
+
+        +    [
+
+        +      "seq: 1",
+
+        +      `name: ${opts.name}`,
+
+        +      "attempt: 1",
+
+        +      "agent: developer",
+
+        +      "role: workhorse",
+
+        +      "models: [test]",
+
+        +      `status: ${opts.status}`,
+
+        +      "startedAt: 2026-01-01T00:00:00.000Z",
+
+        +      "endedAt: 2026-01-01T00:00:01.000Z",
+
+        +    ].join("\n") + "\n",
+
+        +    "utf8"
+
+        +  );
+
+        +  fs.writeFileSync(path.join(dir, "output.yaml"), "status: ok\nsummary:
+        done\n", "utf8");
+
+        +}
+
+        +
+         
+         function writeConcern(
+           taskDir: string,
+        @@ -226,6 +252,25 @@ describe("derive/wave: routed blocker integration",
+        () => {
+             expect(wave.blocked.map((i) => i.slug).sort()).toEqual(["child", "grandchild", "seed"]);
+             expect(wave.runnable.map((i) => i.slug)).toEqual(["side"]);
+           });
+        +
+
+        +  it("ignores running/ready seeds and does not cascade from them", ()
+        => {
+
+        +    const items = [
+
+        +      derivedItem({ slug: "running-seed", wave: 8, status: "running"
+        }),
+
+        +      derivedItem({ slug: "ready-seed", wave: 8, status: "ready" }),
+
+        +      derivedItem({ slug: "running-dependent", wave: 8, deps:
+        ["running-seed"] }),
+
+        +      derivedItem({ slug: "ready-dependent", wave: 8, deps:
+        ["ready-seed"] }),
+
+        +    ];
+
+        +
+
+        +    const wave = deriveWaveState({
+
+        +      wave: 8,
+
+        +      items,
+
+        +      blockedBy: new Set(["running-seed", "ready-seed"]),
+
+        +    } as WaveDeriveOpts);
+
+        +
+
+        +    expect(wave.blocked.map((i) => i.slug)).toEqual([]);
+
+        +    expect(wave.running.map((i) => i.slug)).toEqual(["running-seed"]);
+
+        +    expect(wave.ready.map((i) => i.slug)).toEqual(["ready-seed"]);
+
+        +  });
+         });
+         
+         describe("derive/item: routed blocker integration", () => {
+        @@ -288,6 +333,31 @@ describe("derive/item: routed blocker integration",
+        () => {
+             expect(abandoned.status).toBe("failed");
+             expect(blockedOne.status).toBe("blocked");
+           });
+        +
+
+        +  it("does not retro-block running/ready items named by a routed
+        blocker", async () => {
+
+        +    const taskDir = makeTaskDir();
+
+        +    writeItem(taskDir, "in-flight");
+
+        +    writeItem(taskDir, "finished");
+
+        +    const blockedBy = new Set(["in-flight", "finished"]);
+
+        +    writeStepRecord(taskDir, "in-flight", { name: "develop", status:
+        "started" });
+
+        +    writeStepRecord(taskDir, "finished", { name: "review", status: "ok"
+        });
+
+        +
+
+        +    const inFlight = await deriveItemState({
+
+        +      taskDir,
+
+        +      itemSlug: "in-flight",
+
+        +      parentBranch: "topic/routing-blocker",
+
+        +      blockedBy,
+
+        +    } as ItemDeriveOpts);
+
+        +    const finished = await deriveItemState({
+
+        +      taskDir,
+
+        +      itemSlug: "finished",
+
+        +      parentBranch: "topic/routing-blocker",
+
+        +      blockedBy,
+
+        +    } as ItemDeriveOpts);
+
+        +
+
+        +    expect(inFlight.status).toBe("running");
+
+        +    expect(finished.status).toBe("ready");
+
+        +  });
+         });
+         
+         describe("derive/task: routed blocker scenario", () => {
+        @@ -340,4 +410,29 @@ describe("derive/task: routed blocker scenario", ()
+        => {
+             expect(state.itemMap["dependent"]?.status).toBe("blocked");
+             expect(state.status).toBe("blocked");
+           });
+        +
+
+        +  it("leaves running/ready seeds and their dependents schedulable at
+        task level", async () => {
+
+        +    const taskDir = makeTaskDir();
+
+        +    writeItem(taskDir, "running-seed", { wave: 1 });
+
+        +    writeItem(taskDir, "ready-seed", { wave: 1 });
+
+        +    writeItem(taskDir, "running-dependent", { wave: 1, deps:
+        ["running-seed"] });
+
+        +    writeItem(taskDir, "ready-dependent", { wave: 1, deps:
+        ["ready-seed"] });
+
+        +    writeStepRecord(taskDir, "running-seed", { name: "develop", status:
+        "started" });
+
+        +    writeStepRecord(taskDir, "ready-seed", { name: "review", status:
+        "ok" });
+
+        +    writeConcern(taskDir, {
+
+        +      id: "c-routed-blocker",
+
+        +      kind: "blocker",
+
+        +      status: "routed",
+
+        +      summary: "Late-arriving blocker names in-flight work",
+
+        +      affects: ["running-seed", "ready-seed"],
+
+        +    });
+
+        +
+
+        +    const state = await deriveTaskModule.deriveTaskState({ taskDir,
+        task: "routing-blocker" });
+
+        +
+
+        +    expect(state.itemMap["running-seed"]?.status).toBe("running");
+
+        +    expect(state.itemMap["ready-seed"]?.status).toBe("ready");
+
+        +    expect(state.itemMap["running-dependent"]?.status).toBe("pending");
+
+        +    expect(state.itemMap["ready-dependent"]?.status).toBe("pending");
+
+        +    expect(state.waves.find((w) => w.wave === 1)?.blocked.map((i) =>
+        i.slug)).toEqual([]);
+
+        +  });
+         });
+      files:
+        - plugins/software-factory/test/engine/blocked-closeup-iteration.test.ts
+        - plugins/software-factory/test/engine/routing-blocker-derive.test.ts

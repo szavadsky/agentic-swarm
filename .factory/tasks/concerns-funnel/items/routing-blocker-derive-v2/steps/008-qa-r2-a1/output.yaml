@@ -1,0 +1,50 @@
+status: approved
+summary: "Red→green verified: engine red-test shows all 11 target cases failed
+  on the test-first production baseline, and the current tree passes 27/27
+  target tests. Fix-round FIX items are resolved (single pending-only predicate
+  across item/wave/task/scheduler; wave+task reuse blockedByConcern). Test diff
+  contains only additions (3 regression tests locking pending-only seeding) plus
+  a documented 5s→30s timeout raise on an unrelated 2-cycle integration test; no
+  assertions deleted, relaxed, or mocked. Implementation is pure derive (tree
+  snapshot test), collectRoutedBlockers filters routed blocker concerns,
+  blockedByConcern unions blockedByFailure and cascades over declared deps only,
+  and both iteration deriveWaveState calls thread blockedBy. Typecheck and
+  target tests independently green; engine full-suite gate recorded 364 pass / 2
+  skip / 0 fail."
+suggestions:
+  - id: test-first-seams-retained
+    disposition: optional
+    summary: Test-first dynamic-export fallbacks remain after implementation
+    detail: "Both suites still resolve the now-existing exports via `as unknown as`
+      dynamic lookup with inert fallbacks (empty Set in
+      routing-blocker-derive.test.ts:24; empty array in
+      plan-scheduler.test.ts:5), and ItemDeriveOpts/WaveDeriveOpts casts at
+      routing-blocker-derive.test.ts:28 mask the real signatures. Behavior still
+      fails if exports disappear (fallbacks make assertions fail), so this is
+      polish, not weakening: direct static imports would restore compile-time
+      checking and fail fast."
+    location:
+      file: plugins/software-factory/test/engine/routing-blocker-derive.test.ts
+      line: 24
+  - id: heavy-test-timeout-ceiling
+    disposition: optional
+    summary: Unrelated heavy test now relies on a 30s timeout ceiling
+    detail: blocked-closeup-iteration.test.ts:266 raises the per-test timeout 5s→30s
+      without touching assertions or coverage. My independent run measured 4.57s
+      wall, so the 5s default was genuinely marginal and the bump is not test
+      weakening; however the two-runTask-cycle test remains timing-sensitive —
+      consider splitting/speeding the harness in deferred debt rather than only
+      raising the ceiling.
+    location:
+      file: plugins/software-factory/test/engine/blocked-closeup-iteration.test.ts
+      line: 266
+  - id: cascade-helper-public-surface
+    disposition: optional
+    summary: cascadePendingBlocked is exported but has no external callers
+    detail: After unifying wave/task on blockedByConcern, cascadePendingBlocked
+      (scheduler.ts:41) is only used inside scheduler.ts; its generic export is
+      unnecessary public API surface. Making it module-private (or exporting
+      only blockedByConcern) keeps the scheduler contract tight.
+    location:
+      file: plugins/software-factory/src/core/plan/scheduler.ts
+      line: 41
