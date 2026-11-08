@@ -1,0 +1,29 @@
+slug: routing-architect-consult-v3
+kind: dev
+title: Architect consult and hydration (merge repair)
+assignment: "Act-phase ONLY merge-repair rerun (pure derive already merged in
+  routing-blocker-derive-v2; do NOT touch derive/task.ts or scheduler).
+  Implement wave-act newly-blocked check writing decisions/concern-<cid>.yaml
+  exactly once (restart idempotent, runExclusive + atomic write) plus
+  buildArchitectHydration concernsYaml extension appended LAST (open+routed,
+  capped sub-budget, plan-reviewer path stays open-only) per
+  adr-routing-derived-state and adr-concern-store-taskwt. Do NOT redesign:
+  rebase the exact ready routing-architect-consult-v2 diff onto current topic
+  tip, verify wave-9 sibling conflict resolution kept ALL THREE diffs (consult +
+  adr-blocking-digest-v2 + status-state-surface-v2), pull the exact merge-gate
+  failure (failing test names + output from evidence) and fix root cause. Out of
+  scope: 4 optional nits (carry to docs-finish). Gates: bun run typecheck and
+  TMPDIR=/tmp bun test test/engine/concerns-funnel.test.ts then full suite.
+  Behavior must satisfy m3-routing: single consult file on newly-blocked,
+  restart writes no second file, architect hydration contains concern
+  id+summary."
+outlineRef: routing-architect-consult-v3
+milestone: m3-routing
+wave: 10
+deps:
+  - modes-prompts-v2
+  - routing-blocker-derive-v2
+citations:
+  - adr-routing-derived-state
+  - adr-concern-store-taskwt
+  - adr-triage-suggestions-dismiss

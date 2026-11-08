@@ -1,0 +1,6 @@
+id: decision-amend-remove-saga-propagate-v2
+context: wave
+item: saga-propagate-v2
+decision: split
+rationale: Amendment removed pending item saga-propagate-v2
+timestamp: 2026-11-08T14:30:22.915Z

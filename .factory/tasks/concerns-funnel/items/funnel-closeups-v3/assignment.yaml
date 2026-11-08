@@ -1,0 +1,29 @@
+slug: funnel-closeups-v3
+kind: dev
+title: Funnel close-ups and simple triage (re-wave v3)
+assignment: "Scheduling-repair rewave of funnel-closeups-v2: identical scope,
+  now depends on routing-architect-consult-v3 (wave 9 closed, v2 consult can
+  never merge). Hydrate wave/plan-close-up and architect reports with
+  concernsYaml capped per spike-text-budget (UTF-8 bytes: code steps
+  min(diffBytes,2000), zero-diff orchestration min(inputBytes,500), engine
+  truncates hydrated var only, reviewer/architect prompts require output<input)
+  per adr-funnel-text-budget. Implement concernResolutions
+  resolve/carry/propagate via applyCloseupResolutions (status stays routed,
+  pendingResolution set) plus architect concernConfirms accept/reject
+  (resolved/routed/propagated or clear pending), propagate to parent concerns/
+  copy for epics or human digest otherwise, simple-item explicit resolutions
+  plus auto-route fallback (kind tech-debt to optional/debt, other kinds to
+  architect/carry, human-* never auto) per adr-closeup-retriage and
+  adr-resilience. Gates: bun run typecheck, TMPDIR=/tmp bun test. Behavior: byte
+  budgets enforced, pending/confirm lifecycle, simple fallback."
+outlineRef: funnel-closeups
+milestone: m4-funnel-surface
+wave: 11
+deps:
+  - adr-blocking-digest-v2
+  - routing-architect-consult-v3
+  - spike-text-budget
+citations:
+  - adr-funnel-text-budget
+  - adr-closeup-retriage
+  - adr-resilience

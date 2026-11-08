@@ -1,0 +1,25 @@
+slug: saga-propagate-v3
+kind: dev
+title: Epic to saga propagation (re-wave v3)
+assignment: "Scheduling-repair rewave of saga-propagate-v2: identical scope, now
+  depends on routing-architect-consult-v3. Implement runChildTask
+  propagateEpicConcerns per spike-saga-commit verified timing: after child
+  completion before cleanup/merge, condensed parent copies with source.epic,
+  exactly one copy for open concerns, dismissed stays local, parent detail bytes
+  < child detail bytes (assert), extended parent buildArchitectHydration
+  concernsYaml so saga architect sees id+summary. Follow
+  adr-concern-store-taskwt serialization/immediate-commit and
+  adr-funnel-text-budget condensing; corrupt-skip vs strict-fail per
+  adr-resilience. Gates: bun run typecheck, TMPDIR=/tmp bun test. Behavior: one
+  condensed copy, dismissed excluded, saga input contains id."
+outlineRef: saga-propagate
+milestone: m4-funnel-surface
+wave: 11
+deps:
+  - routing-architect-consult-v3
+  - spike-saga-commit
+citations:
+  - adr-concern-store-taskwt
+  - adr-funnel-text-budget
+  - adr-remarkable-store
+escalate: true
