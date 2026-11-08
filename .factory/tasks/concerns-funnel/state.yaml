@@ -204,20 +204,20 @@ debt:
     store story must reconcile"
   - "[concerns-contracts-schemas] inferTaskWorktree fix correct but lacks direct
     unit test"
-budgetSpentUsd: 1.1758999999999997
+budgetSpentUsd: 1.1860089999999999
 spendByRole:
   alt-workhorse:
-    costUsd: 0.21874299999999997
-    inputTokens: 782937
-    outputTokens: 553092
+    costUsd: 0.22332299999999997
+    inputTokens: 799635
+    outputTokens: 566437
   workhorse:
     costUsd: 0.8408990000000001
     inputTokens: 1625095
     outputTokens: 517811
   architect:
-    costUsd: 0.099743
-    inputTokens: 841245
-    outputTokens: 64637
+    costUsd: 0.105272
+    inputTokens: 886701
+    outputTokens: 66358
   alt-architect:
     costUsd: 0.016515000000000002
     inputTokens: 72452
@@ -236,9 +236,9 @@ spendByItem:
     inputTokens: 139871
     outputTokens: 72059
   (orchestration):
-    costUsd: 0.42157399999999995
-    inputTokens: 1481450
-    outputTokens: 329654
+    costUsd: 0.431683
+    inputTokens: 1543604
+    outputTokens: 344720
   concerns-contracts-schemas:
     costUsd: 0.13946999999999998
     inputTokens: 384518
@@ -251,4 +251,4 @@ spendByItem:
     costUsd: 0.063129
     inputTokens: 178070
     outputTokens: 75896
-lastUpdated: 2026-11-08T05:55:53.458Z
+lastUpdated: 2026-11-08T05:59:02.059Z
