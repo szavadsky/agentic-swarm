@@ -24,6 +24,7 @@ export interface ItemStepRecordInfo {
   seq: number;
   name: string;
   attempt: number;
+  fixRound: number | null;
   meta: StepMetaArtifact;
   output?: unknown;
   checks?: unknown;
@@ -190,6 +191,7 @@ export async function deriveItemState(opts: {
         seq: parsed.seq,
         name: parsed.name,
         attempt: parsed.attempt,
+        fixRound: parsed.fixRound ?? meta.fixRound ?? null,
         meta,
         output,
         checks,

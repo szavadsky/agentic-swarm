@@ -14,19 +14,46 @@ import {
 } from "./io.js";
 import { areFilesCommitted } from "../git/commit.js";
 
+export interface ParsedStepRecordDirName {
+  seq: number;
+  name: string;
+  attempt: number;
+  /** Fix round encoded in the dir name (`-rN`), or null when absent (legacy records). */
+  fixRound: number | null;
+}
+
 /**
- * Parses directory name into seq, name, attempt.
+ * Parses directory name into seq, name, attempt, and optional fix round.
+ * Accepts both legacy `NNN-<step>-aA` and fix-round `NNN-<step>-rR-aA` names.
  */
 export function parseStepRecordDirName(
   dirName: string
-): { seq: number; name: string; attempt: number } | null {
-  const match = dirName.match(/^(\d{3})-([a-zA-Z0-9_.-]+)-a(\d+)$/);
+): ParsedStepRecordDirName | null {
+  const match = dirName.match(/^(\d{3})-([a-zA-Z0-9_.-]+?)(?:-r(\d+))?-a(\d+)$/);
   if (!match) return null;
   return {
     seq: parseInt(match[1]!, 10),
     name: match[2]!,
-    attempt: parseInt(match[3]!, 10),
+    attempt: parseInt(match[4]!, 10),
+    fixRound: match[3] !== undefined ? parseInt(match[3]!, 10) : null,
   };
+}
+
+/**
+ * Formats a step record directory name. Item steps include the fix round
+ * (`NNN-<step>-rR-aA`); orchestration steps keep the legacy `NNN-<step>-aA` form.
+ */
+export function formatStepRecordDirName(opts: {
+  seq: number;
+  stepId: string;
+  attempt: number;
+  fixRound?: number;
+}): string {
+  const seq = String(opts.seq).padStart(3, "0");
+  if (opts.fixRound !== undefined) {
+    return `${seq}-${opts.stepId}-r${opts.fixRound}-a${opts.attempt}`;
+  }
+  return `${seq}-${opts.stepId}-a${opts.attempt}`;
 }
 
 export interface StartStepRecordParams {
@@ -140,13 +167,12 @@ export async function findOkCommittedRecord(
   try {
     const entries = await fs.promises.readdir(recordsDir);
     const matching = entries
-      .map(parseStepRecordDirName)
-      .filter((p): p is { seq: number; name: string; attempt: number } => p !== null && p.name === stepId)
-      .sort((a, b) => b.seq - a.seq || b.attempt - a.attempt);
+      .map((dirName) => ({ dirName, parsed: parseStepRecordDirName(dirName) }))
+      .filter((e): e is { dirName: string; parsed: ParsedStepRecordDirName } => e.parsed !== null && e.parsed.name === stepId)
+      .sort((a, b) => b.parsed.seq - a.parsed.seq || b.parsed.attempt - a.parsed.attempt);
 
     for (const m of matching) {
-      const dirName = `${String(m.seq).padStart(3, "0")}-${stepId}-a${m.attempt}`;
-      const recDir = path.join(recordsDir, dirName);
+      const recDir = path.join(recordsDir, m.dirName);
       const metaPath = path.join(recDir, "meta.yaml");
       if (!fs.existsSync(metaPath)) continue;
 
@@ -175,10 +201,10 @@ export async function findOkCommittedRecord(
       }
 
       return {
-        seq: m.seq,
-        name: m.name,
-        attempt: m.attempt,
-        dirName,
+        seq: m.parsed.seq,
+        name: m.parsed.name,
+        attempt: m.parsed.attempt,
+        dirName: m.dirName,
         recordDir: recDir,
         meta,
         output,
@@ -202,17 +228,13 @@ export function getNextStepAttempt(
   try {
     const entries = fs.readdirSync(recordsDir);
     const matching = entries
-      .map(parseStepRecordDirName)
-      .filter((p): p is { seq: number; name: string; attempt: number } => p !== null && p.name === stepId)
-      .sort((a, b) => b.seq - a.seq || b.attempt - a.attempt);
+      .map((dirName) => ({ dirName, parsed: parseStepRecordDirName(dirName) }))
+      .filter((e): e is { dirName: string; parsed: ParsedStepRecordDirName } => e.parsed !== null && e.parsed.name === stepId)
+      .sort((a, b) => b.parsed.seq - a.parsed.seq || b.parsed.attempt - a.parsed.attempt);
 
     if (matching.length === 0) return 1;
     const latest = matching[0]!;
-    const metaPath = path.join(
-      recordsDir,
-      `${String(latest.seq).padStart(3, "0")}-${stepId}-a${latest.attempt}`,
-      "meta.yaml"
-    );
+    const metaPath = path.join(recordsDir, latest.dirName, "meta.yaml");
     let status: string | undefined;
     if (fs.existsSync(metaPath)) {
       try {
@@ -225,11 +247,7 @@ export function getNextStepAttempt(
     if (status === "interrupted" || status === "started") {
       let interruptions = 0;
       for (const m of matching) {
-        const mPath = path.join(
-          recordsDir,
-          `${String(m.seq).padStart(3, "0")}-${stepId}-a${m.attempt}`,
-          "meta.yaml"
-        );
+        const mPath = path.join(recordsDir, m.dirName, "meta.yaml");
         try {
           const content = fs.readFileSync(mPath, "utf8");
           const meta = yaml.parse(content) as any;
@@ -239,17 +257,17 @@ export function getNextStepAttempt(
         } catch {}
       }
       if (interruptions < maxInterruptions) {
-        return latest.attempt;
+        return latest.parsed.attempt;
       } else {
-        return latest.attempt + 1;
+        return latest.parsed.attempt + 1;
       }
     } else if (status === "error") {
-      return latest.attempt;
+      return latest.parsed.attempt;
     } else if (status === "ok") {
-      return latest.attempt;
+      return latest.parsed.attempt;
     } else {
       // e.g. "rejected"
-      return latest.attempt + 1;
+      return latest.parsed.attempt + 1;
     }
   } catch {
     return 1;

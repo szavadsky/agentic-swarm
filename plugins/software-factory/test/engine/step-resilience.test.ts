@@ -425,7 +425,7 @@ describe("Engine: Step resilience — render errors, transient retry, sessionLos
     // Create an item with corrupt meta.yaml
     const itemSlug = "corrupt-item";
     const itemDir = path.join(taskDir, "items", itemSlug);
-    const stepDir = path.join(itemDir, "steps", "001-develop-a1");
+    const stepDir = path.join(itemDir, "steps", "001-develop-r1-a1");
     fs.mkdirSync(stepDir, { recursive: true });
     const corruptMetaPath = path.join(stepDir, "meta.yaml");
     fs.writeFileSync(corruptMetaPath, "::: invalid: yaml: {{{\n");
@@ -442,7 +442,7 @@ describe("Engine: Step resilience — render errors, transient retry, sessionLos
 
     expect(res.status).toBe("failed");
     expect(res.exitCode).toBe(1);
-    expect(res.summary).toContain("001-develop-a1/meta.yaml");
+    expect(res.summary).toContain("001-develop-r1-a1/meta.yaml");
   });
 
   it("kill mid-turn (FakeHarness throws after onSession) -> restart resumes that session id", async () => {

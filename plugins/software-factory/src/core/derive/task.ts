@@ -6,6 +6,7 @@ import type {
   PlanCloseupArtifact,
   PipelineConfig,
   ProjectConfig,
+  SpendBreakdown,
   StateArtifact,
   StateItemInfo,
   StepMetaArtifact,
@@ -15,9 +16,20 @@ import type {
 import { readYaml, writeYamlAtomic } from "../records/io.js";
 import { deriveItemState, type DerivedItemState } from "./item.js";
 import { deriveWaveState, type DerivedWaveState } from "./wave.js";
-import { BudgetTracker } from "../budget.js";
+import { scanSpendFromDisk, type SpendTotals } from "../budget.js";
 import { git } from "../git/exec.js";
 import { isAncestor } from "../git/commit.js";
+
+export interface DerivedRunningStep {
+  item?: string;
+  step: string;
+  record: string;
+  agent: string;
+  role: string;
+  model?: string;
+  startedAt: string;
+  elapsedMs: number;
+}
 
 export interface DerivedTaskState {
   task: string;
@@ -31,6 +43,9 @@ export interface DerivedTaskState {
   waves: DerivedWaveState[];
   debt: string[];
   budgetSpentUsd: number;
+  spendByRole: Record<string, SpendTotals>;
+  spendByItem: Record<string, SpendTotals>;
+  runningSteps: DerivedRunningStep[];
   hasOpenSteerQuestions: boolean;
   openSteerQuestions: SteerItemArtifact[];
   lastCloseup?: PlanCloseupArtifact;
@@ -204,11 +219,65 @@ export async function deriveTaskState(opts: {
     }
   }
 
-  // 8. Budget spent
-  const budgetTracker = new BudgetTracker();
-  await budgetTracker.reconcileFromDisk(taskDir);
-  const budgetSpentUsd = budgetTracker.getTaskSpend().costUsd;
+  // 8. Budget spent from ALL records (task runs, live item worktrees, epic children)
+  const spendScan = await scanSpendFromDisk({ taskDir, taskWt, parentBranch });
+  const budgetSpentUsd = spendScan.total.costUsd;
+  const spendByRole: Record<string, SpendTotals> = Object.fromEntries(
+    [...spendScan.byRole.entries()].map(([k, v]) => [k, { ...v }])
+  );
+  const spendByItem: Record<string, SpendTotals> = Object.fromEntries(
+    [...spendScan.byItem.entries()].map(([k, v]) => [k, { ...v }])
+  );
 
+  // 8b. Currently running steps (meta.status === "started", not yet finished).
+  const runningSteps: DerivedRunningStep[] = [];
+  const nowMs = Date.now();
+  const runsDir = path.join(taskDir, "runs");
+  if (fs.existsSync(runsDir)) {
+    const rEntries = await fs.promises.readdir(runsDir, { withFileTypes: true });
+    for (const ent of rEntries) {
+      if (!ent.isDirectory()) continue;
+      const metaPath = path.join(runsDir, ent.name, "meta.yaml");
+      if (!fs.existsSync(metaPath)) continue;
+      try {
+        const meta = await readYaml<StepMetaArtifact>(metaPath);
+        if (meta?.status === "started" && meta.startedAt) {
+          const startedMs = Date.parse(meta.startedAt);
+          runningSteps.push({
+            step: meta.name ?? ent.name,
+            record: ent.name,
+            agent: meta.agent,
+            role: meta.role,
+            model: meta.models?.[0],
+            startedAt: meta.startedAt,
+            elapsedMs: Number.isNaN(startedMs) ? 0 : Math.max(0, nowMs - startedMs),
+          });
+        }
+      } catch (err: any) {
+        if (err?.code !== "ENOENT") {
+          throw new Error(`Corrupt step record meta at ${metaPath}: ${err?.message ?? err}`);
+        }
+      }
+    }
+  }
+  for (const it of items) {
+    for (const rec of it.records) {
+      if (rec.meta.status === "started" && rec.meta.startedAt) {
+        const startedMs = Date.parse(rec.meta.startedAt);
+        runningSteps.push({
+          item: it.slug,
+          step: rec.meta.name ?? rec.name,
+          record: rec.dirName,
+          agent: rec.meta.agent,
+          role: rec.meta.role,
+          model: rec.meta.models?.[0],
+          startedAt: rec.meta.startedAt,
+          elapsedMs: Number.isNaN(startedMs) ? 0 : Math.max(0, nowMs - startedMs),
+        });
+      }
+    }
+  }
+  runningSteps.sort((a, b) => a.startedAt.localeCompare(b.startedAt));
   // 9. Overall task status determination (§6.3 Invariant 4)
   let status: "active" | "blocked" | "done" | "failed" = "active";
 
@@ -317,9 +386,16 @@ export async function deriveTaskState(opts: {
         branch: it.branch,
         attempts: it.currentAttempt,
         fixRounds: it.currentFixRound,
+        spendUsd: spendByItem[it.slug]?.costUsd ?? 0,
+        currentStep: it.currentStepId,
         mergedAt: it.mergedAt,
       };
     }
+    const toBreakdown = (totals: SpendTotals): SpendBreakdown => ({
+      costUsd: totals.costUsd,
+      inputTokens: totals.inputTokens,
+      outputTokens: totals.outputTokens,
+    });
     return {
       task,
       kind: triage?.kind,
@@ -329,6 +405,8 @@ export async function deriveTaskState(opts: {
       items: itemsRecord,
       debt: Array.from(debtSet),
       budgetSpentUsd,
+      spendByRole: Object.fromEntries(Object.entries(spendByRole).map(([k, v]) => [k, toBreakdown(v)])),
+      spendByItem: Object.fromEntries(Object.entries(spendByItem).map(([k, v]) => [k, toBreakdown(v)])),
       lastUpdated: new Date().toISOString(),
     };
   };
@@ -345,6 +423,9 @@ export async function deriveTaskState(opts: {
     waves,
     debt: Array.from(debtSet),
     budgetSpentUsd,
+    spendByRole,
+    spendByItem,
+    runningSteps,
     hasOpenSteerQuestions: openSteerQuestions.length > 0,
     openSteerQuestions,
     lastCloseup,

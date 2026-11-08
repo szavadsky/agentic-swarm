@@ -423,6 +423,7 @@ export interface StepMetaArtifact {
   seq?: number;
   name?: string;
   attempt?: number;
+  fixRound?: number;
   agent: string;
   role: string;
   models: string[];
@@ -449,15 +450,22 @@ export interface CheckItemResult {
 export interface ChecksResultArtifact {
   checks: CheckItemResult[];
 }
-
 export interface StateItemInfo {
   kind: string;
   status: string;
   branch?: string;
   attempts?: number;
   fixRounds?: number;
+  spendUsd?: number;
+  currentStep?: string;
   assignedAt?: string;
   mergedAt?: string;
+}
+
+export interface SpendBreakdown {
+  costUsd: number;
+  inputTokens: number;
+  outputTokens: number;
 }
 
 export interface StateArtifact {
@@ -469,5 +477,7 @@ export interface StateArtifact {
   items: Record<string, StateItemInfo>;
   debt?: string[];
   budgetSpentUsd?: number;
+  spendByRole?: Record<string, SpendBreakdown>;
+  spendByItem?: Record<string, SpendBreakdown>;
   lastUpdated: string;
 }

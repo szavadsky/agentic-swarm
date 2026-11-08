@@ -306,7 +306,7 @@ export async function runTask(
 
   // Budget tracker (§12.5)
   const budgetTracker = new BudgetTracker(pipeline.budget);
-  await budgetTracker.reconcileFromDisk(taskDir);
+  await budgetTracker.reconcileFromDisk(taskDir, { taskWt, parentBranch });
 
   if (opts?.lockTakeoverEvent) {
     await appendJournal(taskDir, {

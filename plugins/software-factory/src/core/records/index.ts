@@ -11,10 +11,12 @@ export { generateReviewSchema } from "./review-schema.js";
 
 export {
   parseStepRecordDirName,
+  formatStepRecordDirName,
   startStepRecord,
   finishStepRecord,
 } from "./step-record.js";
 export type {
+  ParsedStepRecordDirName,
   StartStepRecordParams,
   FinishStepRecordParams,
 } from "./step-record.js";

@@ -325,11 +325,12 @@ describe("Engine: Merge path conflict -> integrate (§7)", () => {
       branch: childBranch,
       records: [
         {
-          dirName: "001-develop-a1",
+          dirName: "001-develop-r1-a1",
           seq: 1,
           name: "develop",
           attempt: 1,
-          meta: { seq: 1, name: "develop", attempt: 1, agent: "developer", role: "workhorse", models: ["m"], status: "ok", startedAt: new Date().toISOString() },
+          fixRound: 1,
+          meta: { seq: 1, name: "develop", attempt: 1, fixRound: 1, agent: "developer", role: "workhorse", models: ["m"], status: "ok", startedAt: new Date().toISOString() },
           output: {
             status: "ok",
             summary: "Done",

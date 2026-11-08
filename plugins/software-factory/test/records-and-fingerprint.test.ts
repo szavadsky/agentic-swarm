@@ -45,7 +45,8 @@ describe("Fingerprint & step record I/O (§6.1, §12.2)", () => {
 
   it("parses step record directory names", () => {
     const parsed = parseStepRecordDirName("003-develop-a2");
-    expect(parsed).toEqual({ seq: 3, name: "develop", attempt: 2 });
+    expect(parsed).toEqual({ seq: 3, name: "develop", attempt: 2, fixRound: null });
+    expect(parseStepRecordDirName("003-develop-r2-a1")).toEqual({ seq: 3, name: "develop", attempt: 1, fixRound: 2 });
     expect(parseStepRecordDirName("invalid-dir")).toBeNull();
   });
 

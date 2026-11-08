@@ -236,7 +236,7 @@ fi
     expect(qaBeforeChecksRan).toBe(true);
 
     // Verify QA step record checks.yaml contains passing red-test check
-    const qaRecordDir = path.join(worktreeRoot, `topic_${task}`, orchFolder, task, "items", "calc-item", "steps", "003-qa-a1");
+    const qaRecordDir = path.join(worktreeRoot, `topic_${task}`, orchFolder, task, "items", "calc-item", "steps", "003-qa-r1-a1");
     const qaChecksPath = path.join(qaRecordDir, "checks.yaml");
     expect(fs.existsSync(qaChecksPath)).toBe(true);
     const checksData = await readYaml<{ checks?: Array<{ id: string; status: string; message?: string }> }>(qaChecksPath);
@@ -419,7 +419,7 @@ exit 0
       task
     );
     const childWtDir = path.join(worktreeRoot, `topic_${task}--taut-item`);
-    const qaRecordDir = path.join(childWtDir, orchFolder, task, "items", "taut-item", "steps", "003-qa-a1");
+    const qaRecordDir = path.join(childWtDir, orchFolder, task, "items", "taut-item", "steps", "003-qa-r1-a1");
 
     const qaChecksPath = path.join(qaRecordDir, "checks.yaml");
     expect(fs.existsSync(qaChecksPath)).toBe(true);
@@ -639,7 +639,7 @@ fi
     expect(restartResult.exitCode).toBe(0);
 
     // Verify QA step record has passing red-test check derived from testFirstCommit
-    const qaRecordDir = path.join(worktreeRoot, `topic_${task}`, orchFolder, task, "items", "restart-item", "steps", "003-qa-a1");
+    const qaRecordDir = path.join(worktreeRoot, `topic_${task}`, orchFolder, task, "items", "restart-item", "steps", "003-qa-r1-a1");
     const qaChecksPath = path.join(qaRecordDir, "checks.yaml");
     expect(fs.existsSync(qaChecksPath)).toBe(true);
     const checksData = await readYaml<{ checks?: Array<{ id: string; status: string; message?: string }> }>(qaChecksPath);

@@ -8,6 +8,7 @@
     "seq": { "type": "integer" },
     "name": { "type": "string" },
     "attempt": { "type": "integer" },
+    "fixRound": { "type": "integer", "minimum": 1 },
     "agent": { "type": "string" },
     "role": { "type": "string" },
     "models": {

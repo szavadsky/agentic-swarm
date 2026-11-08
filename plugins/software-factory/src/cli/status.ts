@@ -9,6 +9,16 @@ export interface StatusOptions {
   task: string;
 }
 
+function formatElapsed(ms: number): string {
+  const totalSec = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) return `${h}h${String(m).padStart(2, "0")}m`;
+  if (m > 0) return `${m}m${String(s).padStart(2, "0")}s`;
+  return `${s}s`;
+}
+
 /**
  * Prints compact derived state for a task (§11).
  */
@@ -62,20 +72,41 @@ export async function runStatus(opts: StatusOptions): Promise<number> {
   console.log(`Worktree: ${hasWt ? taskWt : "(none - main checkout)"}`);
   console.log(`Config path: ${configPath}`);
   console.log(`Budget spent: $${derived.budgetSpentUsd.toFixed(4)}`);
+  const roleEntries = Object.entries(derived.spendByRole).sort((a, b) => b[1].costUsd - a[1].costUsd);
+  if (roleEntries.length > 0) {
+    console.log(`  by role: ${roleEntries.map(([role, t]) => `${role} $${t.costUsd.toFixed(4)}`).join(" | ")}`);
+  }
+  const itemEntries = Object.entries(derived.spendByItem).sort((a, b) => b[1].costUsd - a[1].costUsd);
+  if (itemEntries.length > 0) {
+    console.log(`  by item: ${itemEntries.map(([item, t]) => `${item} $${t.costUsd.toFixed(4)}`).join(" | ")}`);
+  }
   console.log(`----------------------------------------------------------------`);
+
+  if (derived.runningSteps.length > 0) {
+    console.log(`Running:`);
+    for (const r of derived.runningSteps) {
+      const where = r.item ? `${r.item}/${r.step}` : r.step;
+      console.log(`  - ${where} [${r.record}] ${r.agent}/${r.role}${r.model ? ` (${r.model})` : ""} elapsed ${formatElapsed(r.elapsedMs)}`);
+    }
+    console.log(`----------------------------------------------------------------`);
+  }
 
   if (derived.waves && derived.waves.length > 0) {
     console.log(`Waves & Items:`);
     for (const wave of derived.waves) {
       console.log(`  Wave ${wave.wave}:`);
       for (const item of wave.items) {
-        console.log(`    - ${item.slug} [${item.status}] (${item.kind ?? "item"})`);
+        const spend = derived.spendByItem[item.slug]?.costUsd ?? 0;
+        const step = item.currentStepId ? ` step=${item.currentStepId}` : "";
+        console.log(`    - ${item.slug} [${item.status}] (${item.kind ?? "item"}) $${spend.toFixed(4)}${step}`);
       }
     }
   } else if (derived.items && derived.items.length > 0) {
     console.log(`Items:`);
     for (const item of derived.items) {
-      console.log(`  - ${item.slug} [${item.status}] (${item.kind ?? "item"})`);
+      const spend = derived.spendByItem[item.slug]?.costUsd ?? 0;
+      const step = item.currentStepId ? ` step=${item.currentStepId}` : "";
+      console.log(`  - ${item.slug} [${item.status}] (${item.kind ?? "item"}) $${spend.toFixed(4)}${step}`);
     }
   } else {
     console.log(`Items: None scheduled yet`);

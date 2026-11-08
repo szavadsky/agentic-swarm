@@ -20,6 +20,7 @@ import {
   startStepRecord,
   finishStepRecord,
   parseStepRecordDirName,
+  formatStepRecordDirName,
   findOkCommittedRecord,
   getNextStepAttempt,
   type StartStepRecordParams,
@@ -272,7 +273,14 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
     }
   }
 
-  const dirName = `${String(nextSeq).padStart(3, "0")}-${stepId}-a${attempt}`;
+  // Item steps encode the fix round in the record name so a restarted
+  // series after a fix round is unambiguous (`NNN-<step>-rR-aA`).
+  const dirName = formatStepRecordDirName({
+    seq: nextSeq,
+    stepId,
+    attempt,
+    ...(item ? { fixRound } : {}),
+  });
   const recordDir = path.join(recordsDir, dirName);
 
   // Identify worktree that contains recordDir
@@ -303,6 +311,7 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
         seq: nextSeq,
         name: stepId,
         attempt,
+        ...(item ? { fixRound } : {}),
         agent,
         role: resolvedRole.role,
         models: resolvedRole.models,
@@ -369,6 +378,7 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
       seq: nextSeq,
       name: stepId,
       attempt,
+      ...(item ? { fixRound } : {}),
       agent,
       role: resolvedRole.role,
       models: resolvedRole.models,
@@ -1033,6 +1043,7 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
     opts.budgetTracker.recordUsage({
       item,
       iteration: opts.iteration,
+      role: resolvedRole.role,
       usage: getCurrentTotalUsage(),
     });
   }

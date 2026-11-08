@@ -24,6 +24,8 @@
           "branch": { "type": "string" },
           "attempts": { "type": "integer" },
           "fixRounds": { "type": "integer" },
+          "spendUsd": { "type": "number", "minimum": 0 },
+          "currentStep": { "type": "string" },
           "assignedAt": { "type": "string" },
           "mergedAt": { "type": "string" }
         },
@@ -35,6 +37,32 @@
       "items": { "type": "string" }
     },
     "budgetSpentUsd": { "type": "number", "minimum": 0 },
+    "spendByRole": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["costUsd", "inputTokens", "outputTokens"],
+        "properties": {
+          "costUsd": { "type": "number", "minimum": 0 },
+          "inputTokens": { "type": "number", "minimum": 0 },
+          "outputTokens": { "type": "number", "minimum": 0 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "spendByItem": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["costUsd", "inputTokens", "outputTokens"],
+        "properties": {
+          "costUsd": { "type": "number", "minimum": 0 },
+          "inputTokens": { "type": "number", "minimum": 0 },
+          "outputTokens": { "type": "number", "minimum": 0 }
+        },
+        "additionalProperties": false
+      }
+    },
     "lastUpdated": { "type": "string" }
   },
   "additionalProperties": false
