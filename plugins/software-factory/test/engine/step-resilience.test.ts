@@ -243,6 +243,7 @@ describe("Engine: Step resilience — render errors, transient retry, sessionLos
         debt: "",
         steering: "",
         limits: "{}",
+        taskStatus: "test_taskStatus",
       },
     });
 
@@ -335,6 +336,7 @@ describe("Engine: Step resilience — render errors, transient retry, sessionLos
         debt: "",
         steering: "",
         limits: "{}",
+        taskStatus: "test_taskStatus",
       },
     });
 
@@ -577,7 +579,7 @@ describe("Engine: Step resilience — render errors, transient retry, sessionLos
       pipeline: customPipeline,
       project,
       prompts,
-      promptVars: { task, iteration: "1", intent: "t", context: "[]", contextPack: "", infra: "", debt: "", steering: "", limits: "{}" },
+      promptVars: { task, iteration: "1", intent: "t", context: "[]", contextPack: "", infra: "", debt: "", steering: "", limits: "{}", taskStatus: "test_taskStatus" },
     });
 
     expect(res.ok).toBe(false);

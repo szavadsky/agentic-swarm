@@ -340,4 +340,25 @@ tools:
     expect(stepPrompt).toContain("≤ 12 most relevant citations");
     expect(stepPrompt).toContain("engine verifies citations and automatically drops");
   });
+
+  it("PM agent is yield-only and PM/architect fragments consume taskStatus", () => {
+    const lib = loadPromptLibrary({ builtinDir });
+    const pm = lib.agentDefinition("pm");
+    expect(pm.tools).toEqual([]);
+    expect(pm.body).toContain("Yield only");
+    for (const frag of [
+      "steps/pm-edits",
+      "steps/pm-amend",
+      "steps/pm-single-item",
+      "steps/architect-plan",
+      "steps/architect-revise",
+      "steps/architect-wave-report",
+      "steps/architect-closeup",
+    ]) {
+      expect(lib.placeholders(frag)).toContain("taskStatus");
+    }
+    expect(lib.placeholders("steps/pm-amend")).toContain("feedback");
+    const amend = lib.render("steps/pm-amend", { plan: "p", taskStatus: "s", feedback: "f", waveReport: "w" });
+    expect(amend).toContain("Delta ONLY");
+  });
 });

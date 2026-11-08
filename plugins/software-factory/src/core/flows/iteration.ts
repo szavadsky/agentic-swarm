@@ -2,9 +2,12 @@ import fs from "node:fs";
 import path from "node:path";
 import type {
   AssignmentArtifact,
+  DecisionArtifact,
+  GateBaselineEntry,
   PlanArtifact,
   PlanCloseupArtifact,
   PlanEditsArtifact,
+  PlanItemOutline,
   PipelineConfig,
   ProjectConfig,
   WaveCloseupArtifact,
@@ -28,11 +31,13 @@ import { tickItemMachine } from "./item-machine.js";
 import { deriveItemState } from "../derive/item.js";
 import { deriveWaveState } from "../derive/wave.js";
 import { refreshStateYaml } from "../derive/task.js";
-import { appendJournal } from "../journal.js";
+import { appendJournal, readJournal } from "../journal.js";
 import { loadCriteriaBundle, formatDispositionsSection } from "../prompts.js";
 import { checkPlanReviewRounds, checkIterations, checkAmendments } from "../loops.js";
 import { validateEdits } from "../plan/limits.js";
 import { applyEdits } from "../plan/apply.js";
+import { buildGateDiffSection, runGates } from "../checks/gates.js";
+import type { CheckContext } from "../checks/types.js";
 import { resolveRole } from "../config/roles.js";
 import { PersistentAgent } from "../sessions.js";
 import { Semaphore } from "../mutex.js";
@@ -106,6 +111,89 @@ function buildKindsPromptVar(
     lines.push(`- **epic**: large multi-milestone initiative decomposed into child iterations`);
   }
   return { kindsDescription: lines.join("\n"), validKindNames };
+}
+
+/**
+ * Builds the compact {{taskStatus}} block from derived state (§8.4, §10).
+ * Items: slug/kind/wave/status/outlineRef; waves + merged/blocked/failed lists;
+ * open steer questions with answers. Deterministic: no fallbacks, no swallowed
+ * errors — corrupt files throw like the rest of the iteration flow.
+ */
+export async function buildTaskStatusBlock(opts: {
+  taskDir: string;
+  taskWt: string;
+  parentBranch: string;
+  itemSlugs: string[];
+  iteration: number;
+  amendmentCount: number;
+  pipeline: PipelineConfig;
+  rootTaskDir?: string;
+}): Promise<string> {
+  const { taskDir, taskWt, parentBranch, itemSlugs, iteration, amendmentCount, pipeline } = opts;
+  const lines: string[] = [`iteration: ${iteration}`, `amendments: ${amendmentCount}`];
+
+  const states = await Promise.all(
+    itemSlugs.map((slug) =>
+      deriveItemState({ taskDir, itemSlug: slug, parentBranch, taskWt, pipeline, rootTaskDir: opts.rootTaskDir })
+    )
+  );
+  lines.push("items:");
+  if (states.length === 0) {
+    lines.push("  (none scheduled yet)");
+  }
+  for (const st of states) {
+    lines.push(
+      `  - ${st.slug} kind=${st.kind} wave=${st.wave} status=${st.status} outlineRef=${st.assignment?.outlineRef ?? "(none)"}`
+    );
+  }
+
+  const waves = [...new Set(states.map((s) => s.wave))].sort((a, b) => a - b);
+  lines.push(`waves: ${waves.length > 0 ? waves.join(", ") : "(none)"}`);
+  const byStatus = (s: string) => states.filter((st) => st.status === s).map((st) => st.slug);
+  lines.push(`merged: ${byStatus("merged").join(", ") || "(none)"}`);
+  lines.push(`blocked: ${byStatus("blocked").join(", ") || "(none)"}`);
+  lines.push(`failed: ${byStatus("failed").join(", ") || "(none)"}`);
+
+  const steerDirs = [path.join(taskDir, "steer", "tousertoreview")];
+  if (opts.rootTaskDir && path.resolve(opts.rootTaskDir) !== path.resolve(taskDir)) {
+    steerDirs.push(path.join(opts.rootTaskDir, "steer", "tousertoreview"));
+  }
+  const steerLines: string[] = [];
+  for (const dir of steerDirs) {
+    if (!fs.existsSync(dir)) continue;
+    const files = (await fs.promises.readdir(dir)).filter((f) => f.endsWith(".yaml")).sort();
+    for (const f of files) {
+      const q = await readYaml<SteerItemArtifact>(path.join(dir, f));
+      if (!q || q.status !== "open") continue;
+      steerLines.push(`  - ${q.id} ref=${q.ref} disposition=${q.disposition}: ${q.question}`);
+      if (q.answer) steerLines.push(`    answer: ${q.answer}`);
+    }
+  }
+  lines.push("open steer questions:");
+  lines.push(...(steerLines.length > 0 ? steerLines : ["  (none)"]));
+  return lines.join("\n");
+}
+
+/**
+ * Builds the existing-items list for validateEdits from committed assignments.
+ * Waves come from assignment.yaml so amended-item dep waves validate against
+ * real history. Missing items dir = no history (fresh plan), not an error.
+ */
+async function buildExistingList(taskDir: string): Promise<{ slug: string; status: string; wave?: string | number }[]> {
+  const list: { slug: string; status: string; wave?: string | number }[] = [];
+  const itemsDir = path.join(taskDir, "items");
+  if (!fs.existsSync(itemsDir)) return list;
+  const slugs = (await fs.promises.readdir(itemsDir)).sort();
+  for (const slug of slugs) {
+    const assignmentPath = path.join(itemsDir, slug, "assignment.yaml");
+    let wave: number | undefined;
+    if (fs.existsSync(assignmentPath)) {
+      const assignment = await readYaml<AssignmentArtifact>(assignmentPath);
+      if (assignment?.wave !== undefined) wave = Number(assignment.wave);
+    }
+    list.push({ slug, status: "existing", ...(wave !== undefined ? { wave } : {}) });
+  }
+  return list;
 }
 
 /**
@@ -405,6 +493,9 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
     // Architect generates plan-N (§8.4.2)
     const planStepId = `architect-plan-${iteration}`;
     const planAttempt = getNextStepAttempt(runsDir, planStepId, pipeline.limits?.maxInterruptions ?? 3);
+    const planStatusBlock = await buildTaskStatusBlock({
+      taskDir, taskWt, parentBranch, itemSlugs: [], iteration, amendmentCount: 0, pipeline, rootTaskDir: params.rootTaskDir,
+    });
     const planStepRes = await runAgentStep({
       task,
       attempt: planAttempt,
@@ -433,6 +524,7 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
         debt: hydrationContext,
         steering: hydrationContext,
         limits: JSON.stringify(limits, null, 2),
+        taskStatus: planStatusBlock,
       },
       turnsSemaphore,
       budgetTracker,
@@ -589,6 +681,9 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
     // Architect turn (revise) (§8.4.3)
     const reviseStepId = `architect-revise-${iteration}-${reviewRound}`;
     const reviseAttempt = getNextStepAttempt(runsDir, reviseStepId, pipeline.limits?.maxInterruptions ?? 3);
+    const reviseStatusBlock = await buildTaskStatusBlock({
+      taskDir, taskWt, parentBranch, itemSlugs: [], iteration, amendmentCount: 0, pipeline, rootTaskDir: params.rootTaskDir,
+    });
     const reviseRes = await runAgentStep({
       task,
       attempt: reviseAttempt,
@@ -611,6 +706,7 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
         plan: JSON.stringify(plan, null, 2),
         planReview: JSON.stringify(revOutput, null, 2),
         contextPack: contextPackText,
+        taskStatus: reviseStatusBlock,
       },
       turnsSemaphore,
       budgetTracker,
@@ -644,6 +740,9 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
   if (!editsDone) {
     const pmStepId = `pm-edits-${iteration}`;
     const pmAttempt = getNextStepAttempt(runsDir, pmStepId, pipeline.limits?.maxInterruptions ?? 3);
+    const pmStatusBlock = await buildTaskStatusBlock({
+      taskDir, taskWt, parentBranch, itemSlugs: [], iteration, amendmentCount: 0, pipeline, rootTaskDir: params.rootTaskDir,
+    });
     const pmStepRes = await runAgentStep({
       task,
       attempt: pmAttempt,
@@ -651,6 +750,7 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
       stepFragment: "steps/pm-edits",
       agent: "pm",
       role: "alt-workhorse",
+      sessionMode: "reuse",
       cwd: taskWt,
       taskWt,
       taskDir,
@@ -662,6 +762,7 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
       prompts,
       promptVars: {
         plan: JSON.stringify(plan, null, 2),
+        taskStatus: pmStatusBlock,
         kinds: kindsDescription,
         citations: contextYaml,
         limits: JSON.stringify(limits, null, 2),
@@ -682,7 +783,7 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
       };
     }
 
-    const rawEdits = pmStepRes.output as any;
+    let rawEdits = pmStepRes.output as any;
     if (!rawEdits || !Array.isArray(rawEdits.items) || rawEdits.items.length === 0) {
       return {
         iteration,
@@ -699,22 +800,67 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
     };
 
     // Validate edits with limits and configured kinds (Finding 13)
-    const existingList: { slug: string; status: string; wave?: string | number }[] = [];
-    const itemsDir = path.join(taskDir, "items");
-    if (fs.existsSync(itemsDir)) {
-      const existingSlugs = await fs.promises.readdir(itemsDir);
-      for (const es of existingSlugs) {
-        existingList.push({ slug: es, status: "existing" });
-      }
-    }
+    const existingList = await buildExistingList(taskDir);
 
-    const validationErrors = validateEdits(edits, {
+    let validationErrors = validateEdits(edits, {
       plan,
       limits,
       kinds: validKindNames,
       isRootTask: !isChildTask,
       existing: existingList,
     });
+
+    // ONE resumed repair turn in the SAME PM session: errors only, no plan resend (§8.4.4).
+    // Recorded as the step's next attempt (same stepId, full record/commit/budget accounting).
+    if (validationErrors.length > 0 && pmStepRes.sessionId) {
+      const pmRepairRes = await runAgentStep({
+        task,
+        attempt: pmAttempt + 1,
+        stepId: pmStepId,
+        stepFragment: "steps/pm-edits",
+        agent: "pm",
+        role: "alt-workhorse",
+        sessionMode: "reuse",
+        existingSessionId: pmStepRes.sessionId,
+        resumedRepair: true,
+        repairFeedback: `Your previous output failed deterministic validation with these errors (fix ONLY these; do not re-render the full plan, do not invent new items):\n${validationErrors.map((e) => `- ${e}`).join("\n")}`,
+        cwd: taskWt,
+        taskWt,
+        taskDir,
+        recordsDir: runsDir,
+        repo,
+        harness,
+        pipeline,
+        project,
+        prompts,
+        promptVars: {
+          plan: JSON.stringify(plan, null, 2),
+          taskStatus: pmStatusBlock,
+          kinds: kindsDescription,
+          citations: contextYaml,
+          limits: JSON.stringify(limits, null, 2),
+          storyKindsCriteria: loadCriteriaBundle(pipeline.criteria).storyKinds ?? "",
+        },
+        turnsSemaphore,
+        budgetTracker,
+        iteration,
+      });
+      if (pmRepairRes.ok && pmRepairRes.output && Array.isArray((pmRepairRes.output as any).items)) {
+        rawEdits = pmRepairRes.output as any;
+        edits = { iteration, amendmentIndex: 0, items: rawEdits.items };
+        validationErrors = validateEdits(edits, {
+          plan,
+          limits,
+          kinds: validKindNames,
+          isRootTask: !isChildTask,
+          existing: existingList,
+        });
+        await appendJournal(taskDir, {
+          type: "pm_edits_repaired",
+          errors: validationErrors,
+        });
+      }
+    }
 
     if (validationErrors.length > 0) {
       await appendJournal(taskDir, {
@@ -792,10 +938,31 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
 
   let maxWave = initialStates.reduce((max, it) => Math.max(max, it.wave), 1);
   for (let w = 1; w <= maxWave; w++) {
+    // Restart-safety: an ok amend record WITHOUT structural outlines is old-format — re-run, never reuse.
+    const pendingWaveReportId = `architect-wave-report-${iteration}-${w}`;
+    const pendingWaveReport = await findOkCommittedRecord(runsDir, pendingWaveReportId, taskWt);
+    if (
+      pendingWaveReport?.output &&
+      (pendingWaveReport.output as any).decision === "amend" &&
+      !Array.isArray((pendingWaveReport.output as any).outlines)
+    ) {
+      await appendJournal(taskDir, {
+        type: "wave_report_old_format_rerun",
+        wave: w,
+        iteration,
+        recordDir: pendingWaveReport.recordDir,
+      });
+      for (const f of ["output.yaml", "meta.yaml", "input.md", "checks.yaml"]) {
+        await fs.promises.rm(path.join(pendingWaveReport.recordDir, f), { force: true });
+      }
+      await fs.promises.rm(path.join(taskDir, "waves", `wave-${iteration}.${w}.yaml`), { force: true });
+      await git(taskWt, ["add", "-A"], { allowFail: true });
+      await commitAll(repo, taskWt, `factory: invalidate old-format wave report ${pendingWaveReportId}`);
+    }
     // Check if wave close-up already completed for this wave (Finding 24)
     const waveArtifactPath = path.join(taskDir, "waves", `wave-${iteration}.${w}.yaml`);
     if (fs.existsSync(waveArtifactPath)) {
-      const waveOk = await findOkCommittedRecord(runsDir, `architect-wave-report-${iteration}-${w}`, taskWt);
+      const waveOk = await findOkCommittedRecord(runsDir, pendingWaveReportId, taskWt);
       if (waveOk) {
         continue;
       }
@@ -828,16 +995,38 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
     let stopRequested = false;
 
     const pollSteering = async () => {
-      const res = await processSteeringMailbox({
-        taskWt: mailboxWt,
-        taskDir: mailboxDir,
-        harness,
-        pipeline,
-        prompts,
-        repo,
-        task: mailboxTask,
-      });
+      let res;
+      try {
+        res = await processSteeringMailbox({
+          taskWt: mailboxWt,
+          taskDir: mailboxDir,
+          harness,
+          pipeline,
+          prompts,
+          repo,
+          task: mailboxTask,
+        });
+      } catch (err: any) {
+        await appendJournal(taskDir, {
+          type: "steer_poll_error",
+          task,
+          wave: w,
+          iteration,
+          error: err?.message ?? String(err),
+        });
+        return;
+      }
       if (res.stopRequested) stopRequested = true;
+      if (res.processedCount > 0 || res.skippedCount > 0) {
+        await appendJournal(taskDir, {
+          type: "steer_poll",
+          task,
+          wave: w,
+          iteration,
+          processed: res.processedCount,
+          skipped: res.skippedCount,
+        });
+      }
     };
 
     let steerTimer: ReturnType<typeof setInterval> | undefined;
@@ -1029,6 +1218,36 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
     const waveSummary = `Wave ${w} completed. Merged items: ${mergeResults.filter((m) => m.ok).map((m) => m.slug).join(", ")}${failedSlugs.length > 0 ? ` Failed items: ${failedSlugs.join(", ")}` : ""}${blockedByFailureSlugs.length > 0 ? ` Blocked-by-failure items: ${blockedByFailureSlugs.join(", ")}` : ""}`;
     const waveCloseupStepId = `wave-close-up-${iteration}-${w}`;
     const waveCloseupAttempt = getNextStepAttempt(runsDir, waveCloseupStepId, pipeline.limits?.maxInterruptions ?? 3);
+    // Engine runs gates on the merged task branch; the close-up judges ONLY from this diff table.
+    let gateDiffSection = "(no infra gates configured)";
+    if (infraArtifact?.gates && infraArtifact.gates.length > 0) {
+      const closeupCheckCtx: CheckContext = {
+        repo,
+        wt: taskWt,
+        base: parentBranch,
+        project,
+        pipeline,
+        infra: infraArtifact,
+        kind: "wave-close-up",
+        task,
+        taskWt,
+        taskDir,
+        limits: pipeline.limits ?? {},
+        outputBytes: pipeline.limits?.checkOutputBytes ?? 4096,
+      };
+      const gatesOutcome = await runGates(closeupCheckCtx);
+      let closeupBaseline: GatesBaselineArtifact | undefined;
+      if (actualBaselinePath) {
+        try {
+          closeupBaseline = await readYaml<GatesBaselineArtifact>(actualBaselinePath);
+        } catch (err: any) {
+          if (err?.code !== "ENOENT") {
+            throw new Error(`Corrupt gates baseline at ${actualBaselinePath}: ${err?.message ?? err}`);
+          }
+        }
+      }
+      gateDiffSection = buildGateDiffSection(closeupBaseline, gatesOutcome.results);
+    }
     const waveCloseupRes = await runAgentStep({
       task,
       attempt: waveCloseupAttempt,
@@ -1049,6 +1268,7 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
         task,
         waveReport: waveSummary,
         infra: infraYaml,
+        gateDiff: gateDiffSection,
       },
       turnsSemaphore,
       budgetTracker,
@@ -1060,6 +1280,20 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
     // Architect turn on wave report (§8.4.6)
     let waveDecision = "continue";
     const waveReportStepId = `architect-wave-report-${iteration}-${w}`;
+    // Surface discarded-amendment notes (this wave's predecessors) so the architect can re-decide.
+    const journalEvents = await readJournal(taskDir);
+    const discardedNotes = journalEvents
+      .filter((e) => e.type === "pm_amend_discarded" && (e as any).iteration === iteration)
+      .map((e) => `- discarded amendment (wave ${(e as any).wave}): ${(e as any).note ?? "PM output invalid"}`);
+    const waveReportWaveReportText = [
+      waveCloseupRes.output ? JSON.stringify(waveCloseupRes.output, null, 2) : waveSummary,
+      ...(discardedNotes.length > 0
+        ? [`\nDiscarded amendments (re-decide within the amendment budget):\n${discardedNotes.join("\n")}`]
+        : []),
+    ].join("\n");
+    const waveReportStatusBlock = await buildTaskStatusBlock({
+      taskDir, taskWt, parentBranch, itemSlugs: currentIterationItems, iteration, amendmentCount, pipeline, rootTaskDir: params.rootTaskDir,
+    });
     const waveReportAttempt = getNextStepAttempt(runsDir, waveReportStepId, pipeline.limits?.maxInterruptions ?? 3);
     const waveReportRes = await runAgentStep({
       task,
@@ -1081,10 +1315,11 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
       prompts,
       promptVars: {
         plan: JSON.stringify(plan, null, 2),
-        waveReport: waveCloseupRes.output ? JSON.stringify(waveCloseupRes.output, null, 2) : waveSummary,
+        waveReport: waveReportWaveReportText,
         debt: hydrationContext,
         steering: hydrationContext,
         contextPack: contextPackText,
+        taskStatus: waveReportStatusBlock,
       },
       turnsSemaphore,
       budgetTracker,
@@ -1131,10 +1366,36 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
       const aCheck = checkAmendments(amendmentCount, maxAmendments);
       if (!aCheck.exhausted) {
         amendmentCount++;
+        const waveDecisionArtifact = waveReportRes.output as (DecisionArtifact & { outlines?: PlanItemOutline[]; removeItemSlugs?: string[] }) | undefined;
+        const decisionOutlines: PlanItemOutline[] = Array.isArray(waveDecisionArtifact?.outlines) ? (waveDecisionArtifact!.outlines as PlanItemOutline[]) : [];
+        const removeItemSlugs: string[] = Array.isArray(waveDecisionArtifact?.removeItemSlugs) ? (waveDecisionArtifact!.removeItemSlugs as string[]) : [];
+
+        // Architect owns outlines: merge decision.outlines into plan.itemOutlines (replace by slug, append new).
+        const mergedOutlines: PlanItemOutline[] = [...(plan!.itemOutlines ?? [])];
+        const outlineIdx = new Map<string, number>(mergedOutlines.map((o, i) => [o.slug, i]));
+        for (const o of decisionOutlines) {
+          const slug = (o as PlanItemOutline | undefined)?.slug;
+          if (typeof slug !== "string" || slug.length === 0) {
+            throw new Error(`Amend decision outlines entry missing slug (wave ${w}, iteration ${iteration})`);
+          }
+          const at = outlineIdx.get(slug);
+          if (at !== undefined) {
+            mergedOutlines[at] = o;
+          } else {
+            outlineIdx.set(slug, mergedOutlines.length);
+            mergedOutlines.push(o);
+          }
+        }
+        plan = { ...plan!, itemOutlines: mergedOutlines };
+
         const amendPlanPath = path.join(planDir, `plan-${iteration}.${amendmentCount}.yaml`);
         const amendEditsPath = path.join(planDir, `edits-${iteration}.${amendmentCount}.yaml`);
         await writeYamlAtomic(amendPlanPath, plan);
 
+        const amendFeedback = waveDecisionArtifact?.planDelta ?? waveDecisionArtifact?.rationale ?? "Wave amendment";
+        const amendStatusBlock = await buildTaskStatusBlock({
+          taskDir, taskWt, parentBranch, itemSlugs: currentIterationItems, iteration, amendmentCount, pipeline, rootTaskDir: params.rootTaskDir,
+        });
         const pmAmendStepId = `pm-amend-${iteration}-${amendmentCount}`;
         const pmAmendAttempt = getNextStepAttempt(runsDir, pmAmendStepId, pipeline.limits?.maxInterruptions ?? 3);
         const pmAmendRes = await runAgentStep({
@@ -1144,6 +1405,7 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
           stepFragment: "steps/pm-amend",
           agent: "pm",
           role: "alt-workhorse",
+          sessionMode: "reuse",
           cwd: taskWt,
           taskWt,
           taskDir,
@@ -1155,7 +1417,8 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
           prompts,
           promptVars: {
             plan: JSON.stringify(plan, null, 2),
-            feedback: (waveReportRes.output as any)?.rationale ?? "Wave amendment",
+            taskStatus: amendStatusBlock,
+            feedback: amendFeedback,
             waveReport: waveSummary,
           },
           turnsSemaphore,
@@ -1163,76 +1426,162 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
           iteration,
         });
 
-        if (!pmAmendRes.ok || !pmAmendRes.output) {
+        const discardAmendment = async (note: string, errors?: string[]) => {
           await appendJournal(taskDir, {
-            type: "pm_amend_failed",
-            error: pmAmendRes.meta.error ?? "PM amend step failed",
-          });
-          return {
+            type: "pm_amend_discarded",
             iteration,
-            status: "failed",
-            plan,
-            architectSessionId,
-          };
-        }
-
-        const rawAmendEdits = pmAmendRes.output as any;
-        const amendEdits: PlanEditsArtifact = {
-          iteration,
-          amendmentIndex: amendmentCount,
-          items: rawAmendEdits.items ?? [],
+            wave: w,
+            amendment: amendmentCount,
+            note,
+            ...(errors ? { errors } : {}),
+          });
         };
 
-        const existingList: { slug: string; status: string; wave?: string | number }[] = [];
-        const itemsDir = path.join(taskDir, "items");
-        if (fs.existsSync(itemsDir)) {
-          const existingSlugs = await fs.promises.readdir(itemsDir);
-          for (const es of existingSlugs) {
-            existingList.push({ slug: es, status: "existing" });
-          }
-        }
-
-        const validationErrors = validateEdits(amendEdits, {
-          plan,
-          limits,
-          kinds: validKindNames,
-          isRootTask: !isChildTask,
-          existing: existingList,
-        });
-
-        if (validationErrors.length > 0) {
-          await appendJournal(taskDir, {
-            type: "pm_amend_validation_failed",
-            errors: validationErrors,
-          });
-          return {
+        if (!pmAmendRes.ok || !pmAmendRes.output) {
+          // Amendments are optional progress: a failed PM turn discards the amendment, never the iteration.
+          await discardAmendment(`PM amend step failed: ${pmAmendRes.meta.error ?? "no output"}`);
+        } else {
+          let rawAmendEdits = pmAmendRes.output as any;
+          const coerceDelta = (raw: any): PlanEditsArtifact => ({
             iteration,
-            status: "failed",
-            plan,
-            architectSessionId,
-          };
-        }
+            amendmentIndex: amendmentCount,
+            items: Array.isArray(raw?.items) ? raw.items : [],
+          });
+          let amendEdits = coerceDelta(rawAmendEdits);
 
-        await writeYamlAtomic(amendEditsPath, amendEdits);
-        const applied = applyEdits(amendEdits, { taskDir, plan });
-        for (const f of applied.files) {
-          await fs.promises.mkdir(path.dirname(f.path), { recursive: true });
-          await writeTextAtomic(f.path, f.content);
-        }
-        await git(taskWt, ["add", "-A"], { allowFail: true });
-        await commitAll(repo, taskWt, `factory: apply plan amendment ${iteration}.${amendmentCount}`);
-        // Re-plan remaining waves with the amended items (§8.4.6, Finding 31)
-        for (const added of amendEdits.items) {
-          if (!currentIterationItems.includes(added.slug)) {
-            currentIterationItems.push(added.slug);
+          // Delta semantics: defensively drop re-emitted existing slugs (never fail on them).
+          const dropReemitted = async (editsToFilter: PlanEditsArtifact): Promise<PlanEditsArtifact> => {
+            const known = new Set((await buildExistingList(taskDir)).map((e) => e.slug));
+            const dropped = editsToFilter.items.filter((it) => it?.slug && known.has(it.slug)).map((it) => it.slug);
+            if (dropped.length > 0) {
+              await appendJournal(taskDir, {
+                type: "amend_existing_dropped",
+                iteration,
+                wave: w,
+                amendment: amendmentCount,
+                slugs: dropped,
+              });
+            }
+            return { ...editsToFilter, items: editsToFilter.items.filter((it) => !(it?.slug && known.has(it.slug))) };
+          };
+          amendEdits = await dropReemitted(amendEdits);
+
+          const validateAmend = async (editsToValidate: PlanEditsArtifact): Promise<string[]> => {
+            const existingList = await buildExistingList(taskDir);
+            return validateEdits(editsToValidate, {
+              plan: plan!,
+              limits,
+              kinds: validKindNames,
+              isRootTask: !isChildTask,
+              existing: existingList,
+            });
+          };
+
+          let amendErrors = await validateAmend(amendEdits);
+
+          // ONE resumed repair turn in the SAME PM session: errors only, no plan resend.
+          // Recorded as the step's next attempt (same stepId, full record/commit/budget accounting).
+          if (amendErrors.length > 0 && pmAmendRes.sessionId) {
+            const pmAmendRepairRes = await runAgentStep({
+              task,
+              attempt: pmAmendAttempt + 1,
+              stepId: pmAmendStepId,
+              stepFragment: "steps/pm-amend",
+              agent: "pm",
+              role: "alt-workhorse",
+              sessionMode: "reuse",
+              existingSessionId: pmAmendRes.sessionId,
+              resumedRepair: true,
+              repairFeedback: `Your previous output failed deterministic validation with these errors (fix ONLY these; yield NEW items only, never re-emit existing ones, never invent outlineRefs):\n${amendErrors.map((e) => `- ${e}`).join("\n")}`,
+              cwd: taskWt,
+              taskWt,
+              taskDir,
+              recordsDir: runsDir,
+              repo,
+              harness,
+              pipeline,
+              project,
+              prompts,
+              promptVars: {
+                plan: JSON.stringify(plan, null, 2),
+                taskStatus: amendStatusBlock,
+                feedback: amendFeedback,
+                waveReport: waveSummary,
+              },
+              turnsSemaphore,
+              budgetTracker,
+              iteration,
+            });
+            if (pmAmendRepairRes.ok && pmAmendRepairRes.output) {
+              rawAmendEdits = pmAmendRepairRes.output as any;
+              amendEdits = await dropReemitted(coerceDelta(rawAmendEdits));
+              amendErrors = await validateAmend(amendEdits);
+            }
+          }
+
+          if (amendErrors.length > 0) {
+            await appendJournal(taskDir, {
+              type: "pm_amend_validation_failed",
+              iteration,
+              wave: w,
+              amendment: amendmentCount,
+              errors: amendErrors,
+            });
+            await discardAmendment(`PM amend output invalid after resumed repair: ${amendErrors.join("; ")}`, amendErrors);
+          } else if (amendEdits.items.length === 0 && removeItemSlugs.length === 0) {
+            await discardAmendment("PM amend delta empty after dropping re-emitted existing items; continuing current waves");
+          } else {
+            // removeItemSlugs supersedes PENDING items only; running/merged are protected.
+            const removalErrors: string[] = [];
+            for (const slug of removeItemSlugs) {
+              const st = await deriveItemState({ taskDir, itemSlug: slug, parentBranch, taskWt, pipeline, rootTaskDir: params.rootTaskDir });
+              if (!st.assignment) {
+                removalErrors.push(`removeItemSlugs references unknown item "${slug}"`);
+              } else if (st.status !== "pending") {
+                removalErrors.push(`removeItemSlugs cannot remove "${slug}" with status "${st.status}" (pending only)`);
+              }
+            }
+            if (removalErrors.length > 0) {
+              await appendJournal(taskDir, {
+                type: "pm_amend_validation_failed",
+                iteration,
+                wave: w,
+                amendment: amendmentCount,
+                errors: removalErrors,
+              });
+              await discardAmendment(`Amend removal invalid: ${removalErrors.join("; ")}`, removalErrors);
+            } else {
+              await writeYamlAtomic(amendEditsPath, amendEdits);
+              let nextDecisionSeq = 1;
+              const amendDecisionsDir = path.join(taskDir, "decisions");
+              if (removeItemSlugs.length > 0 && fs.existsSync(amendDecisionsDir)) {
+                for (const name of await fs.promises.readdir(amendDecisionsDir)) {
+                  const m = /^(\d{3})-/.exec(name);
+                  if (m) nextDecisionSeq = Math.max(nextDecisionSeq, parseInt(m[1]!, 10) + 1);
+                }
+              }
+              const applied = applyEdits(amendEdits, { taskDir, plan: plan!, removeItemSlugs, nextDecisionSeq });
+              for (const f of applied.files) {
+                await fs.promises.mkdir(path.dirname(f.path), { recursive: true });
+                await writeTextAtomic(f.path, f.content);
+              }
+              await git(taskWt, ["add", "-A"], { allowFail: true });
+              await commitAll(repo, taskWt, `factory: apply plan amendment ${iteration}.${amendmentCount}`);
+              // Re-plan remaining waves with the amended items (§8.4.6, Finding 31)
+              for (const added of amendEdits.items) {
+                if (!currentIterationItems.includes(added.slug)) {
+                  currentIterationItems.push(added.slug);
+                }
+              }
+              const amendedStates = await Promise.all(
+                currentIterationItems.map((slug) =>
+                  deriveItemState({ taskDir, itemSlug: slug, parentBranch, taskWt, pipeline, project, rootTaskDir: params.rootTaskDir })
+                )
+              );
+              maxWave = Math.max(maxWave, amendedStates.reduce((m, it) => Math.max(m, it.wave), 1));
+            }
           }
         }
-        const amendedStates = await Promise.all(
-          currentIterationItems.map((slug) =>
-            deriveItemState({ taskDir, itemSlug: slug, parentBranch, taskWt, pipeline, project, rootTaskDir: params.rootTaskDir })
-          )
-        );
-        maxWave = Math.max(maxWave, amendedStates.reduce((m, it) => Math.max(m, it.wave), 1));
       }
     } else if (waveDecision === "end-iteration") {
       break;
@@ -1290,6 +1639,9 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
   let closeupArtifact: PlanCloseupArtifact | undefined;
   const archCloseupStepId = `architect-closeup-${iteration}`;
   const archCloseupAttempt = getNextStepAttempt(runsDir, archCloseupStepId, pipeline.limits?.maxInterruptions ?? 3);
+  const archCloseupStatusBlock = await buildTaskStatusBlock({
+    taskDir, taskWt, parentBranch, itemSlugs: currentIterationItems, iteration, amendmentCount, pipeline, rootTaskDir: params.rootTaskDir,
+  });
   const archCloseupRes = await runAgentStep({
     task,
     attempt: archCloseupAttempt,
@@ -1313,6 +1665,7 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
       plan: JSON.stringify(plan, null, 2),
       intent: intentText,
       contextPack: contextPackText,
+      taskStatus: archCloseupStatusBlock,
     },
     turnsSemaphore,
     budgetTracker,

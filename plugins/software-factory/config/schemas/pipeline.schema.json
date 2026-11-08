@@ -48,6 +48,7 @@
           "role": { "type": "string" },
           "tools": {
             "type": "array",
+            "description": "Tool allowlist for this agent; when present it OVERRIDES the agent definition's frontmatter tools (arrays replace). An explicit empty array means yield-only (no tools; harness still appends yield).",
             "items": { "type": "string" }
           },
           "definition": { "type": "string" },

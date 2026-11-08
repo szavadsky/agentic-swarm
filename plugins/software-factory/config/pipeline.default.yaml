@@ -117,6 +117,7 @@ agents:
   pm:
     role: pm
     timeoutSec: 900
+    tools: [] # yield-only: PM structures architect outlines from injected prompt vars, no file tools (frontmatter says the same; config wins if they drift)
   developer:
     role: workhorse
     timeoutSec: 1200

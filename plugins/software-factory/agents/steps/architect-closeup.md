@@ -10,6 +10,7 @@ Determine the final iteration outcome following the completeness audit by the pl
   - `next-iteration`: scope remains unfulfilled; proceed to iteration N+1 with updated requirements and hydrated context.
   - `blocked`: execution cannot proceed without human operator resolution. Formulate a precise, answerable `question` for the operator.
 - Yield `{iteration, status, summary, question?, completedMilestones?, remainingMilestones?, techDebt?}`. Copy milestone/tech-debt lists from the audit when they still hold.
+- Status grounding: the `Task Status` block below is derived from committed records + git — trust it over session memory. For detail read status files under the task dir: `state.yaml`, `items/*/assignment.yaml`, `waves/`, `decisions/`, `steer/tousertoreview/`.
 - Rationale required: ground your decision in the plan close-up audit findings, verifying whether all milestones and Gherkin scenarios are genuinely delivered.
 
 ## Plan Close-Up Audit
@@ -23,3 +24,6 @@ Determine the final iteration outcome following the completeness audit by the pl
 
 ## Context Pack
 {{contextPack}}
+
+## Task Status
+{{taskStatus}}

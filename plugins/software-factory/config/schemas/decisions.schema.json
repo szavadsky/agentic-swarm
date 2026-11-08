@@ -36,8 +36,13 @@
     "persist": { "type": "boolean", "description": "Whether guidance persists across subsequent attempts" },
     "outlines": {
       "type": "array",
-      "description": "Decomposed item outlines when decision is split",
+      "description": "Decomposed item outlines when decision is split, or new/replacement item outlines when decision is amend (PlanItemOutline shape: slug, kind, title, description?, milestoneId?, deps?, etc.)",
       "items": { "type": "object" }
+    },
+    "removeItemSlugs": {
+      "type": "array",
+      "description": "Slugs of pending items to remove / supersede when decision is amend",
+      "items": { "type": "string" }
     },
     "outline": { "type": "object", "description": "Item outline to schedule when decision is fix-item" },
     "debt": { "type": "string", "description": "Technical debt description when decision is accept-with-debt" },

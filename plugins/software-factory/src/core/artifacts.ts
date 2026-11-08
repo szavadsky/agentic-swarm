@@ -380,6 +380,7 @@ export interface DecisionArtifact {
   text?: string;
   persist?: boolean;
   outlines?: unknown[];
+  removeItemSlugs?: string[];
   outline?: unknown;
   debt?: string;
   reason?: string;

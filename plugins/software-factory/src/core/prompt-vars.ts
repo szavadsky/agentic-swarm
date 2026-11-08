@@ -38,6 +38,7 @@ export const PROMPT_VAR_DESCRIPTIONS: Record<string, string> = {
   contextPack: "Condensed, citation-backed context document covering module maps, signatures, excerpts, conventions, and open questions",
   maxBytes: "Maximum allowed byte cap for the artifact or document",
   gateDiff: "Structured gate/tool diff table (baseline-vs-now per-gate status) for regression judgment",
+  taskStatus: "Compact derived task status block: items (slug/kind/wave/status/outlineRef), waves, merged/blocked/failed lists, open steer questions with answers",
 };
 
 /**
@@ -87,14 +88,14 @@ export const KNOWN_VARS: Record<string, string[]> = {
   "test-assumptions": ["assignment", "context", "feedback"],
 
   // Project manager steps
-  "steps/pm-edits": ["plan", "kinds", "citations", "limits", "storyKindsCriteria"],
-  "pm-edits": ["plan", "kinds", "citations", "limits", "storyKindsCriteria"],
+  "steps/pm-edits": ["plan", "taskStatus", "kinds", "citations", "limits", "storyKindsCriteria"],
+  "pm-edits": ["plan", "taskStatus", "kinds", "citations", "limits", "storyKindsCriteria"],
 
-  "steps/pm-amend": ["plan", "feedback", "waveReport"],
-  "pm-amend": ["plan", "feedback", "waveReport"],
+  "steps/pm-amend": ["plan", "taskStatus", "feedback", "waveReport"],
+  "pm-amend": ["plan", "taskStatus", "feedback", "waveReport"],
 
-  "steps/pm-single-item": ["intent", "citations", "kinds", "storyKindsCriteria"],
-  "pm-single-item": ["intent", "citations", "kinds", "storyKindsCriteria"],
+  "steps/pm-single-item": ["intent", "citations", "kinds", "storyKindsCriteria", "taskStatus"],
+  "pm-single-item": ["intent", "citations", "kinds", "storyKindsCriteria", "taskStatus"],
 
   // Architect steps
   "steps/architect-plan": [
@@ -107,6 +108,7 @@ export const KNOWN_VARS: Record<string, string[]> = {
     "steering",
     "limits",
     "contextPack",
+    "taskStatus",
   ],
   "architect-plan": [
     "task",
@@ -118,19 +120,20 @@ export const KNOWN_VARS: Record<string, string[]> = {
     "steering",
     "limits",
     "contextPack",
+    "taskStatus",
   ],
 
-  "steps/architect-revise": ["plan", "planReview", "contextPack"],
-  "architect-revise": ["plan", "planReview", "contextPack"],
+  "steps/architect-revise": ["plan", "planReview", "contextPack", "taskStatus"],
+  "architect-revise": ["plan", "planReview", "contextPack", "taskStatus"],
 
   "steps/architect-resume": ["plan", "waveReport", "steering", "contextPack"],
   "architect-resume": ["plan", "waveReport", "steering", "contextPack"],
 
-  "steps/architect-wave-report": ["plan", "waveReport", "debt", "steering", "contextPack"],
-  "architect-wave-report": ["plan", "waveReport", "debt", "steering", "contextPack"],
+  "steps/architect-wave-report": ["plan", "waveReport", "debt", "steering", "contextPack", "taskStatus"],
+  "architect-wave-report": ["plan", "waveReport", "debt", "steering", "contextPack", "taskStatus"],
 
-  "steps/architect-closeup": ["closeup", "plan", "intent", "contextPack"],
-  "architect-closeup": ["closeup", "plan", "intent", "contextPack"],
+  "steps/architect-closeup": ["closeup", "plan", "intent", "contextPack", "taskStatus"],
+  "architect-closeup": ["closeup", "plan", "intent", "contextPack", "taskStatus"],
 
   "steps/architect-consult-item": [
     "item",

@@ -7,10 +7,10 @@ Evaluate the results of a completed execution wave, assess spike findings and ac
 - Exploration budget: evaluate wave progress from the current plan, wave report, spike findings, and the prepared context pack (`{{contextPack}}`). Read code ONLY to verify a specific integration decision (few targeted reads, never broad scans). Translate new unknowns into spike outlines or plan amendments instead of in-turn investigation. Keep terse.
 - Outcome options (yield `decision` matching `decisions.schema.json` with `context: "wave"`):
   - `continue`: wave succeeded; proceed to the next scheduled wave.
-  - `amend`: revise remaining plan items based on wave learnings or spike results. Provide structured plan delta for PM edits.
+  - `amend`: revise remaining plan items based on wave learnings or spike results. Yield `outlines` = the NEW or REPLACEMENT PlanItemOutline entries for the amendment (same shape as plan `itemOutlines`: slug, kind, title, description?, milestoneId?, deps?, escalate?), PLUS optional `removeItemSlugs` naming PENDING (never merged/running) items the new items replace, PLUS `planDelta` prose describing the change for the PM. NEVER yield `amend` without `outlines`: an amendment with no new outlines is `continue`.
   - `end-iteration`: halt remaining waves early and transition directly to plan close-up (e.g. goal accomplished early or severe pivot required).
-- Amendment discipline: stay within the configured amendment budget. Do not alter already merged wave history.
 - Integrate spike findings: use `findings.md` and PoC results from finished spikes to inform subsequent item outlines.
+- Status grounding: the `Task Status` block below is derived from committed records + git — trust it over session memory. For detail read status files under the task dir: `state.yaml`, `items/*/assignment.yaml`, `waves/`, `decisions/`, `steer/tousertoreview/`.
 
 ## Current Plan
 {{plan}}
@@ -26,3 +26,6 @@ Evaluate the results of a completed execution wave, assess spike findings and ac
 
 ## Context Pack
 {{contextPack}}
+
+## Task Status
+{{taskStatus}}

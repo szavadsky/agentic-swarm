@@ -19,6 +19,39 @@ export interface PromptLibrary {
   ): string;
   placeholders(fragment: string): string[];
 }
+
+/**
+ * Resolves the effective tool list for an agent step (§5, §10).
+ *
+ * `pipeline.agents.<name>.tools`, when present, OVERRIDES the agent
+ * definition's frontmatter tools (arrays replace per config merge semantics).
+ * An explicit empty array means yield-only: the agent gets no tools and the
+ * harness still appends `yield` for structured output.
+ */
+export function resolveAgentTools(
+  agent: string,
+  frontmatterTools: string[],
+  pipeline?: Pick<PipelineConfig, "agents">
+): string[] {
+  const override = pipeline?.agents?.[agent]?.tools;
+  if (override !== undefined) return [...override];
+  return [...frontmatterTools];
+}
+
+/**
+ * File-reading and code-search tools. A yield-only agent (e.g. PM) MUST NOT
+ * carry any of these after tool resolution; the step-runner rejects such
+ * steps deterministically before launch so the PM stays non-technical by
+ * construction.
+ */
+export const FILE_TOOL_IDS = new Set([
+  "read",
+  "grep",
+  "glob",
+  "find",
+  "lsp",
+  "ast_grep",
+]);
 export interface CriteriaBundle {
   triage?: string;
   dispositions?: string;

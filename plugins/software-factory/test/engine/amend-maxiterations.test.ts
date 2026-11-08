@@ -92,7 +92,7 @@ describe("Engine: Wave-report amend + maxIterations (§8.4.6, §12.2)", () => {
       data: { setup: [], gates: [{ id: "t", command: "true" }], testRunner: { command: "true" } },
     });
 
-    // Iteration 1: plan with two outlines (second added via amend)
+    // Iteration 1: plan with the first outline only; the amend decision introduces the second
     harness.scriptOutcome(`${task}/runs/architect-plan-1#a1`, {
       ok: true,
       data: {
@@ -100,7 +100,6 @@ describe("Engine: Wave-report amend + maxIterations (§8.4.6, §12.2)", () => {
         milestones: [{ id: "m1", title: "M1" }],
         itemOutlines: [
           { slug: "first-1", kind: "dev", title: "First", milestoneId: "m1" },
-          { slug: "added-1", kind: "dev", title: "Added", milestoneId: "m1" },
         ],
       },
     });
@@ -128,7 +127,7 @@ describe("Engine: Wave-report amend + maxIterations (§8.4.6, §12.2)", () => {
       data: { wave: 1, iteration: 1, status: "complete", mergedItems: ["first-1"], summary: "Wave 1 ok" },
     });
 
-    // Wave report decides AMEND with a plan delta
+    // Wave report decides AMEND with structural outlines + planDelta prose
     harness.scriptOutcome(`${task}/runs/architect-wave-report-1-1#a1`, {
       ok: true,
       data: {
@@ -136,6 +135,8 @@ describe("Engine: Wave-report amend + maxIterations (§8.4.6, §12.2)", () => {
         context: "wave",
         decision: "amend",
         rationale: "Need an extra hardening item",
+        planDelta: "Add hardening item added-1 in wave 2",
+        outlines: [{ slug: "added-1", kind: "dev", title: "Added", milestoneId: "m1" }],
         timestamp: new Date().toISOString(),
       },
     });
@@ -271,7 +272,7 @@ describe("Engine: Wave-report amend + maxIterations (§8.4.6, §12.2)", () => {
     expect(res.exitCode).toBe(10);
   });
 
-  it("validates PM amendment edits and rejects invalid kind", async () => {
+  it("unfixable PM amendment is discarded and waves continue (never fails the iteration)", async () => {
     const task = "amend-validate-task";
     const orchFolder = ".factory";
     const taskDir = path.join(tmpRepo.dir, orchFolder, task);
@@ -324,11 +325,11 @@ describe("Engine: Wave-report amend + maxIterations (§8.4.6, §12.2)", () => {
     });
     harness.scriptOutcome(`${task}/runs/architect-wave-report-1-1#a1`, {
       ok: true,
-      data: { id: "dec-amend", context: "wave", decision: "amend", rationale: "Add bad kind", timestamp: new Date().toISOString() },
+      data: { id: "dec-amend", context: "wave", decision: "amend", rationale: "Add bad kind", outlines: [{ slug: "bad-item", kind: "dev", title: "Bad", milestoneId: "m1" }], timestamp: new Date().toISOString() },
     });
 
-    // PM amend produces an invalid kind "unknown-kind"
-    harness.scriptOutcome(`${task}/runs/pm-amend-1-1#a1`, {
+    // PM amend produces an invalid kind "unknown-kind", twice (initial + resumed repair)
+    const badAmend = {
       ok: true,
       data: {
         iteration: 1,
@@ -337,6 +338,18 @@ describe("Engine: Wave-report amend + maxIterations (§8.4.6, §12.2)", () => {
           { slug: "bad-item", outlineRef: "bad-item", kind: "unknown-kind", title: "Bad", assignment: "Bad", milestone: "m1", wave: 2 },
         ],
       },
+    } as const;
+    harness.scriptOutcome(`${task}/runs/pm-amend-1-1#a1`, badAmend);
+    harness.scriptOutcome(`${task}/runs/pm-amend-1-1#a2`, badAmend);
+
+    // Waves continue after the discard: close-up ends the iteration
+    harness.scriptOutcome(`${task}/runs/plan-close-up-1#a1`, {
+      ok: true,
+      data: { iteration: 1, status: "complete", summary: "All done" },
+    });
+    harness.scriptOutcome(`${task}/runs/architect-closeup-1#a1`, {
+      ok: true,
+      data: { iteration: 1, status: "complete", summary: "Delivered" },
     });
 
     const res = await runTask(
@@ -344,12 +357,13 @@ describe("Engine: Wave-report amend + maxIterations (§8.4.6, §12.2)", () => {
       task
     );
 
-    // PM amend validation failure returns status: failed
-    expect(res.status).toBe("failed");
+    // Discarded amendment continues waves; iteration completes
+    expect(res.status).toBe("done");
 
     const taskWtPath = path.join(worktreeRoot, `topic_${task}`);
     const journal = fs.readFileSync(path.join(taskWtPath, orchFolder, task, "journal.ndjson"), "utf8");
     expect(journal).toContain("pm_amend_validation_failed");
+    expect(journal).toContain("pm_amend_discarded");
   });
 
   it("restores amended items and amendment count across restart", async () => {
@@ -373,7 +387,7 @@ describe("Engine: Wave-report amend + maxIterations (§8.4.6, §12.2)", () => {
       data: { setup: [], gates: [{ id: "t", command: "true" }], testRunner: { command: "true" } },
     });
 
-    // Iteration 1 plan
+    // Iteration 1 plan (amend decision introduces the amended-item outline structurally)
     harness.scriptOutcome(`${task}/runs/architect-plan-1#a1`, {
       ok: true,
       data: {
@@ -381,7 +395,6 @@ describe("Engine: Wave-report amend + maxIterations (§8.4.6, §12.2)", () => {
         milestones: [{ id: "m1", title: "M1" }],
         itemOutlines: [
           { slug: "base-1", kind: "dev", title: "Base", milestoneId: "m1" },
-          { slug: "amended-item", kind: "dev", title: "Amended", milestoneId: "m1" },
         ],
       },
     });
@@ -408,7 +421,7 @@ describe("Engine: Wave-report amend + maxIterations (§8.4.6, §12.2)", () => {
     });
     harness.scriptOutcome(`${task}/runs/architect-wave-report-1-1#a1`, {
       ok: true,
-      data: { id: "dec-amend", context: "wave", decision: "amend", rationale: "Add wave 2 item", timestamp: new Date().toISOString() },
+      data: { id: "dec-amend", context: "wave", decision: "amend", rationale: "Add wave 2 item", planDelta: "Add wave 2 item", outlines: [{ slug: "amended-item", kind: "dev", title: "Amended", milestoneId: "m1" }], timestamp: new Date().toISOString() },
     });
 
     // PM amend produces amended-item in wave 2

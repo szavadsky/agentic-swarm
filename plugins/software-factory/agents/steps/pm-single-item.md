@@ -4,6 +4,7 @@
 Generate the item specification and execution assignment for a single-item task.
 
 ## Rules
+- Yield only: you have NO file tools. Everything you need is below (`{{intent}}`, `{{citations}}`, `{{kinds}}`, `{{taskStatus}}`). NEVER reference files you cannot see.
 - Kind classification: select the appropriate kind from the `kinds` guide below (`simple`, `dev`, `no-behavior`, `test-only`, or spike kind).
 - Assignment authoring: author an explicit, self-contained implementation specification detailing target files, behavioral contracts, acceptance scenarios, and testing criteria.
 - Citations scoping: attach only verified citations relevant to the single item.
@@ -20,3 +21,6 @@ Generate the item specification and execution assignment for a single-item task.
 
 ## Story Kinds Criteria
 {{storyKindsCriteria}}
+
+## Task Status
+{{taskStatus}}

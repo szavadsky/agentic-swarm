@@ -14,7 +14,9 @@ Design the iteration execution plan (`plan-N.yaml`) decomposing task intent into
 - Tech debt: categorize technical debt as `adjacent`, `impacting`, or `blocking`. Impacting and blocking debt MUST include explicit resolutions.
 - ADRs: record architectural decision records (`id`, `title`, `context`, `decision`, `consequences`) for non-trivial design choices.
 - Escalation: flag `escalate: true` on item outlines where domain complexity exceeds standard implementation.
+- Advisory sizing hint: give each item outline an explicit `prodBudgetHint` (estimated prod lines changed) as a sizing reference for review against `storyMaxProdLines`/`simpleMaxProdLines` in `{{limits}}`.
 - Infrastructure & quality gates: review declared gates, baseline status, and notes in `{{infra}}`. If any gate mutates the worktree (`mutatesWorktree: true`) or has operator action notes (e.g. linter scanning orchestration folder), account for it in your plan (e.g. adding check flags, excluding folders, or addressing via tech debt/spikes).
+- Status grounding (iterations > 1): the `Task Status` block below is derived from committed records + git. For detail read status files under the task dir: `state.yaml`, `items/*/assignment.yaml`, `waves/`, `decisions/`, `steer/tousertoreview/`.
 - Output: yield the plan matching `plan.schema.json`.
 
 ## Task & Iteration
@@ -41,3 +43,6 @@ Iteration: {{iteration}}
 
 ## Limits
 {{limits}}
+
+## Task Status
+{{taskStatus}}

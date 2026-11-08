@@ -28,8 +28,9 @@ import {
 } from "../records/step-record.js";
 import { readYaml, writeYamlAtomic } from "../records/io.js";
 import { validateAndRepair } from "../records/repair.js";
-import { generateReviewSchema } from "../records/review-schema.js";
+import { resolveAgentTools, FILE_TOOL_IDS } from "../prompts.js";
 import { resolveStepRole, resolveRole, type ResolvedRole } from "../config/roles.js";
+import { generateReviewSchema } from "../records/review-schema.js";
 import { captureHead, enforceHead } from "../git/guard.js";
 import { commitAll } from "../git/commit.js";
 import { git } from "../git/exec.js";
@@ -62,6 +63,9 @@ export interface StepRunOptions {
   attempt?: number;
   sessionMode?: "fresh" | "reuse";
   existingSessionId?: string;
+  /** Resumed validation-repair turn: send ONLY repairFeedback as the prompt on the resumed session (no fragment render, no done-ness reuse). */
+  resumedRepair?: boolean;
+  repairFeedback?: string;
   cwd: string;
   taskDir: string;
   recordsDir: string;
@@ -194,7 +198,8 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
    } = opts;
 
   // 0. For orchestration steps (item is undefined): derive done-ness from an ok committed record (§8.4)
-  if (!item) {
+  // Resumed-repair turns never reuse: they repair the previous output, so a committed ok must not shadow them.
+  if (!item && !opts.resumedRepair) {
     let existingOk = await findOkCommittedRecord(recordsDir, stepId, opts.taskWt);
     if (existingOk) {
       let artifactWritten = true;
@@ -295,14 +300,26 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
     resolveStepSchema(pluginRoot, agent, stepId, allowedDispositions);
 
   // 4. Render prompt and agent definition. Appends compact ## Output section (§6.4)
+  // Resumed-repair: errors-only prompt on the live session — never re-render the full fragment.
   const fragment = stepFragment ?? `steps/${stepId}`;
   let promptText: string;
   let agentDef: { body: string; tools: string[]; description: string };
   try {
-    promptText = prompts.renderStepPrompt
-      ? prompts.renderStepPrompt(fragment, promptVars, outputSchema)
-      : prompts.render(fragment, promptVars);
-    agentDef = prompts.agentDefinition(agent);
+    if (opts.resumedRepair) {
+      if (!opts.repairFeedback) {
+        throw new Error(`Resumed-repair turn for step ${stepId} requires repairFeedback`);
+      }
+      if (!opts.existingSessionId) {
+        throw new Error(`Resumed-repair turn for step ${stepId} requires existingSessionId`);
+      }
+      promptText = opts.repairFeedback;
+      agentDef = prompts.agentDefinition(agent);
+    } else {
+      promptText = prompts.renderStepPrompt
+        ? prompts.renderStepPrompt(fragment, promptVars, outputSchema)
+        : prompts.render(fragment, promptVars);
+      agentDef = prompts.agentDefinition(agent);
+    }
   } catch (err: any) {
     const errorMsg = `Prompt or agent definition error for step ${stepId}: ${err?.message || err}`;
     const startMeta = await startStepRecord({
@@ -548,13 +565,27 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
     });
   }
 
+  // Pipeline agents.<name>.tools overrides frontmatter tools (§5, §10); empty = yield-only.
+  const resolvedTools = resolveAgentTools(agent, agentDef.tools ?? ["edit", "bash"], pipeline);
+  if (agent === "pm") {
+    const fileTools = resolvedTools.filter((t) => FILE_TOOL_IDS.has(t));
+    if (fileTools.length > 0) {
+      const guardError = `PM agent step "${stepId}" carries file tools [${fileTools.join(", ")}] after tool resolution; PM is yield-only by construction`;
+      const finalMeta = await finishStepRecord({ recordDir, status: "error", error: guardError });
+      await commitAll(repo, wtToCommit, `factory${item ? `(${item})` : ""}: ${stepId} a${attempt} [error]`);
+      await appendJournal(taskDir, { type: "pm_tools_guard_rejected", task, item, step: stepId, tools: fileTools });
+      unregisterActiveStep(recordDir);
+      return { ok: false, status: "error", meta: finalMeta };
+    }
+  }
+
   const agentRun: AgentRun = {
     agent,
     definition: agentDef.body || agentDef.description || agent,
     prompt: initialPrompt,
     role: resolvedRole.role,
     models: resolvedRole.models,
-    tools: agentDef.tools ?? ["edit", "bash"],
+    tools: resolvedTools,
     cwd,
     outputSchema,
     label,

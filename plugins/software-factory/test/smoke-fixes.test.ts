@@ -53,6 +53,7 @@ describe("Smoke fixes acceptance tests (§6.4, §7, §8, §9)", () => {
         debt: "sample debt",
         steering: "sample steering",
         contextPack: "sample context pack",
+        taskStatus: "sample task status",
       },
       planSchema
     );

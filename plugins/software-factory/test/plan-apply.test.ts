@@ -132,9 +132,35 @@ describe("plan/apply: applyEdits", () => {
         },
       ],
     };
-
     const result = applyEdits(edits, { taskDir: "task-root", plan });
     const filePaths = result.files.map((f) => f.path);
     expect(filePaths).toContain("task-root/plan/edits-1.2.yaml");
+  });
+
+  it("emits supersede decisions for removeItemSlugs (amend path)", () => {
+    const edits: PlanEditsArtifact = {
+      iteration: 1,
+      amendmentIndex: 1,
+      items: [
+        {
+          slug: "fresh-1",
+          kind: "dev",
+          title: "Fresh",
+          assignment: "Fresh work",
+          outlineRef: "data-model",
+          milestone: "m1",
+          wave: 2,
+        },
+      ],
+    };
+
+    const result = applyEdits(edits, { taskDir: "task-root", plan, removeItemSlugs: ["stale-1", "stale-2"], nextDecisionSeq: 4 });
+    const filePaths = result.files.map((f) => f.path);
+    expect(filePaths).toContain("task-root/decisions/004-amend-remove-stale-1.yaml");
+    expect(filePaths).toContain("task-root/decisions/005-amend-remove-stale-2.yaml");
+    const decision = yaml.parse(result.files.find((f) => f.path.endsWith("amend-remove-stale-1.yaml"))!.content) as any;
+    expect(decision.decision).toBe("split");
+    expect(decision.item).toBe("stale-1");
+    expect(decision.context).toBe("wave");
   });
 });

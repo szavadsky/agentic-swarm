@@ -4,6 +4,8 @@
 Deconstruct the approved architectural plan into scheduled, executable item specifications (`edits` artifact).
 
 ## Rules
+- Yield only: you have NO file tools. Everything you need is below (`{{plan}}`, `{{taskStatus}}`, kinds guides, `{{limits}}`). NEVER reference files you cannot see.
+- Structure ONLY architect-provided outlines: every item's `outlineRef` MUST name an outline slug from `{{plan}}`. NEVER invent items or guess outlines — an unknown `outlineRef` fails validation.
 - Item fields: for each planned item, specify `slug`, `kind`, `title`, `assignment`, `outlineRef`, `milestone`, `wave`, `deps`, `scenarioRefs`, and `citations`.
 - Kinds selection: assign item kinds using the guides below (`dev`, `no-behavior`, `test-only`, `fact-finder`, `poc`, `test-assumptions`, `simple`, `epic` where allowed).
 - Wave scheduling:
@@ -16,6 +18,9 @@ Deconstruct the approved architectural plan into scheduled, executable item spec
 
 ## Plan
 {{plan}}
+
+## Task Status
+{{taskStatus}}
 
 ## Story Kinds Guide
 {{kinds}}
