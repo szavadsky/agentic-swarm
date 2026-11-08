@@ -1,0 +1,30 @@
+status: changes_requested
+summary: Legacy migration clobbers stored detail on detail-less input;
+  caps/sets/fingerprint/unions otherwise verified
+suggestions:
+  - id: legacy-migration-detail-clobber
+    disposition: fix
+    summary: Legacy rename-merge overwrites stored detail with summary fallback when
+      incoming detail is omitted
+    detail: concerns.ts:120 unconditionally sets merged.detail=(input.detail ??
+      input.summary).trim() on legacy migration, bypassing mergeConcern's
+      longer-wins. ConcernInput.detail is optional and aggregate validation
+      doesn't require it (concerns.ts:12-13,101-105), and the test suite itself
+      emits detail-less concerns ({...identity, affects}) — so a detail-less
+      emission triggering migration would degrade a rich stored legacy detail to
+      the bare summary. Gate the overwrite on incoming detail presence (e.g.
+      only when input.detail?.trim() is non-empty), preserving the test-mandated
+      incoming-wins when detail is supplied (migration test provides 'new
+      detail').
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 120
+  - id: dead-yaml-import
+    disposition: optional
+    summary: Remove dead yaml import left after hydrateConcernsYaml deletion
+    detail: concerns.ts:4 imports yaml but zero yaml.* call sites remain (verified
+      via grep; only '.yaml' filename strings). Typecheck doesn't flag it, but
+      prune per wrapper/redundancy discipline.
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 4

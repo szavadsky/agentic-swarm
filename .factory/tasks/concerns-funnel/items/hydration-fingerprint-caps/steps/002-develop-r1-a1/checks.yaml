@@ -1,0 +1,113 @@
+checks:
+  - id: gates
+    status: pass
+    message: "Gates passed (2 gates, improvements: Engine: HEAD guard resilience
+      (§7).detects when an agent commits and resets --soft to before.sha,
+      keeping changes staged, Engine: HEAD guard resilience (§7).detects when an
+      agent switches branch and restores original branch, keeping changes)"
+    details:
+      - id: typecheck
+        command: cd plugins/software-factory && bun run typecheck
+        status: pass
+        durationMs: 4842
+        details: $ tsc --noEmit
+      - id: test
+        command: cd plugins/software-factory && bun test
+        status: pass
+        durationMs: 86983
+        details: |-
+          bun test v1.4.3 (c6da4a4d3)
+          ================================================================
+          Task: status-test-task [ACTIVE]
+          Kind: unclassified | Iteration: 1 | Wave: 1
+          Worktree: (none - main checkout)
+          Config path: /home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/factory-test-repo-uqQUSR/.factory/pipeline.yaml
+          Budget spent: $0.0000
+          ----------------------------------------------------------------
+          Waves & Items:
+            Wave 1:
+          Concerns: open 0 | dismissed 0 | routed 0 | resolved 0
+          ----------------------------------------------------------------
+          Blocking Questions:
+            (none)
+          ----------------------------------------------------------------
+          Digest Questions:
+            (none)
+          ================================================================
+
+
+          test/cli/cli.test.ts:
+          [factory lock] Stale run lock for task "stale-lock-task" (PID 9999999 on host Slava-Yoga) taken over by PID 2445226
+          [factory lock] Stale run lock for task "competing-takeover-task" (PID 9999999 on host Slava-Yoga) taken over by PID 2445226
+          [factory lock] Stale run lock for task "journal-worktree-task" (PID 9999999 on host Slava-Yoga) taken over by PID 2445226
+
+           399 pass
+           2 skip
+           0 fail
+           1893 expect() calls
+          Ran 401 tests across 66 files. [86.84s]
+          [Improvements: Engine: HEAD guard resilience (§7).detects when an agent commits and resets --soft to before.sha, keeping changes staged, Engine: HEAD guard resilience (§7).detects when an agent switches branch and restores original branch, keeping changes]
+        improvements:
+          - "Engine: HEAD guard resilience (§7).detects when an agent commits
+            and resets --soft to before.sha, keeping changes staged"
+          - "Engine: HEAD guard resilience (§7).detects when an agent switches
+            branch and restores original branch, keeping changes"
+  - id: target-green
+    status: pass
+    message: "target-green passed: selected tests passed"
+    details:
+      command: cd plugins/software-factory && bun test
+        test/engine/hydration-fingerprint-caps.test.ts --reporter=junit
+        --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-green-1794167322564-vet1yejp31.xml
+      junitCaseCount: 15
+      junitCaseIds:
+        - Hydration caps (adr-hydration-single-cap).caps review hydration at
+          min(diffBytes, 2000) bytes
+        - Hydration caps (adr-hydration-single-cap).caps plan-review hydration
+          at min(inputBytes, 500) bytes
+        - Hydration caps (adr-hydration-single-cap).caps wave-close-up hydration
+          at min(taskDiffBytes, 2000) bytes
+        - Hydration caps (adr-hydration-single-cap).returns empty hydration for
+          zero and tiny caps
+        - Hydration caps (adr-hydration-single-cap).injects review concernsYaml
+          by diff bytes and lets caller-supplied values win
+        - Hydration caps (adr-hydration-single-cap).computes close-up task diff
+          bytes through the injected git function
+        - Hydration caps (adr-hydration-single-cap).hydrates architect turns
+          from concernsYaml without a duplicate concerns section
+        - Hydrated concern sets (adr-hydrated-sets).hydrates open concerns with
+          pending resolutions for review
+        - Hydrated concern sets (adr-hydrated-sets).includes routed concerns for
+          close-ups but not for review
+        - Hydrated concern sets (adr-hydrated-sets).hydrates open remarkables as
+          terse remarkable records
+        - Hydrated concern sets (adr-hydrated-sets).includes dismissed escalated
+          concerns only in the architect set
+        - Hydrated concern sets (adr-hydrated-sets).counts concerns only, never
+          remarkables
+        - Concern identity and affects union
+          (adr-fingerprint-affects-union).fingerprints kind, normalized summary,
+          and location without affects
+        - Concern identity and affects union
+          (adr-fingerprint-affects-union).unions affects without forking and
+          preserves terminal status
+        - Concern identity and affects union
+          (adr-fingerprint-affects-union).renames a legacy affects-keyed file to
+          the stable id
+      junitTruncated: false
+      collected: true
+      collectionErrors: []
+  - id: size
+    status: pass
+    message: "size passed: 224/300 production lines changed"
+    details:
+      changedLines:
+        added: 163
+        deleted: 61
+        total: 224
+        files:
+          - plugins/software-factory/src/core/concerns.ts
+          - plugins/software-factory/src/core/flows/iteration.ts
+          - plugins/software-factory/src/core/flows/step-runner.ts
+          - plugins/software-factory/src/core/triage.ts
+      limit: 300

@@ -1,0 +1,35 @@
+status: approved
+summary: Verified caps/sets/fingerprint/legacy; typecheck+target+full suite
+  green; strengthened tests falsifiable; no weakening
+suggestions:
+  - id: develop-family-dormant-cross-item
+    disposition: optional
+    summary: Develop-family hydration dormant until prompt-fragments registers
+      concernsYaml in KNOWN_VARS
+    detail: hydrateStepConcerns maps develop-family to 500B inputBytes branch
+      (triage.ts) but step-runner gates on knownVars.includes(concernsYaml) and
+      develop-family KNOWN_VARS lack the entry. Consistent with item scope (no
+      prompt fragments); coordinate with prompt-fragments item to add
+      placeholder + registry entries.
+    location:
+      file: plugins/software-factory/src/core/flows/step-runner.ts
+      line: 306
+  - id: legacy-multi-fork-single-merge
+    disposition: optional
+    summary: Legacy migration merges first same-identity match only
+    detail: legacyConcern returns first kind+normSummary+location match; once stable
+      file exists scan is skipped, so hypothetical multiple affects-keyed forks
+      would leave duplicates. Compliant with singular rename-merge/no-GC spec;
+      consider documenting or merging all matches.
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 75
+  - id: test-dynamic-lookup-cleanup
+    disposition: optional
+    summary: Replace dynamic triage lookup with direct imports now green
+    detail: Test file accesses hydrateStepConcerns/listHydratedConcerns via dynamic
+      namespace cast to allow red-phase collection; direct named imports would
+      now catch signature drift at compile time. No behavior impact.
+    location:
+      file: plugins/software-factory/test/engine/hydration-fingerprint-caps.test.ts
+      line: 61

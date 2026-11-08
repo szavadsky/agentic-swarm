@@ -1,7 +1,10 @@
+import fs from "node:fs";
+import path from "node:path";
 import yaml from "yaml";
 import type { ReviewSuggestion, StoredConcernArtifact } from "./artifacts.js";
-import { applyConcernTriage } from "./concerns.js";
+import { applyConcernTriage, listConcerns } from "./concerns.js";
 import type { Repo } from "./git/repo.js";
+import { readYaml } from "./records/io.js";
 import { writeQuestion } from "./steer.js";
 
 /** Exact-id reviewer triage over review suggestions (§8.7, §18). */
@@ -65,7 +68,20 @@ function terseConcern(c: StoredConcernArtifact): Record<string, unknown> {
     severity: c.severity,
     summary: c.summary,
     ...(c.affects && c.affects.length > 0 ? { affects: c.affects } : {}),
+    ...(c.pendingResolution ? { pendingResolution: c.pendingResolution } : {}),
+    ...(c.status !== "open" ? { status: c.status } : {}),
+    ...(c.disposition ? { disposition: c.disposition } : {}),
+    ...(c.dismissReason ? { dismissReason: c.dismissReason } : {}),
+    ...(c.source?.escalated ? { escalated: true } : {}),
   };
+}
+
+export interface HydrateStepConcernsRequest {
+  stepRole: string;
+  inputBytes?: number;
+  diffBytes?: number;
+  taskDiffBytes?: number;
+  consumer?: string;
 }
 
 const utf8Bytes = (text: string) => Buffer.byteLength(text, "utf8");
@@ -74,16 +90,84 @@ const serialize = (records: Array<Record<string, unknown>>) =>
 const truncateChars = (text: string, max: number) =>
   Array.from(text).slice(0, max).join("");
 
+/** Normalizes step ids/fragments to their hydration role family. */
+function hydrationRole(stepRole: string): string {
+  const role = stepRole.replace(/^steps\//, "");
+  if (role === "architect" || role.startsWith("architect-")) return "architect";
+  if (role.startsWith("plan-review")) return "plan-review";
+  if (role.startsWith("plan-close-up")) return "plan-close-up";
+  if (role.startsWith("wave-close-up")) return "wave-close-up";
+  if (role === "review" || role === "qa") return role;
+  if (["develop", "test-first", "fix-round", "simple-implement", "integrate", "research", "poc", "test-assumptions"].includes(role)) return "develop";
+  return role;
+}
+
+function hydrationConsumer(role: string, consumer?: string): string {
+  if (consumer) return consumer;
+  if (role === "plan-review" || role === "develop" || role === "review" || role === "qa") return role;
+  if (role === "wave-close-up" || role === "plan-close-up") return "closeup";
+  return role === "architect" ? "architect" : role;
+}
+
+async function listOpenRemarkables(taskDir: string): Promise<Array<Record<string, unknown>>> {
+  const dir = path.join(taskDir, "concerns");
+  let names: string[];
+  try { names = await fs.promises.readdir(dir); } catch (err: any) {
+    if (err?.code === "ENOENT" || err?.code === "ENOTDIR") return [];
+    throw err;
+  }
+  const records = await Promise.all(
+    names.filter((name) => name.startsWith("rm-") && name.endsWith(".yaml")).map(async (name) => {
+      try { return await readYaml<Record<string, any>>(path.join(dir, name)); } catch { return undefined; }
+    })
+  );
+  return records
+    .filter((r): r is Record<string, any> => r?.status === "open" && typeof r.id === "string" && typeof r.chosen === "string")
+    .sort((a, b) => String(a.createdAt ?? "").localeCompare(String(b.createdAt ?? "")) || String(a.id).localeCompare(String(b.id)))
+    .map((r) => ({ id: r.id, kind: "remarkable", summary: r.chosen }));
+}
+
+/** Hydrated concern set per consumer (adr-hydrated-sets). */
+export async function listHydratedConcerns(
+  taskDir: string,
+  consumer: string
+): Promise<Array<Record<string, unknown>>> {
+  const includeRouted = consumer === "closeup" || consumer === "architect";
+  const includeEscalated = consumer === "architect";
+  const concerns = (await listConcerns(taskDir)).filter((c) =>
+    c.status === "open" ||
+    (includeRouted && c.status === "routed") ||
+    (includeEscalated && c.status === "dismissed" && Boolean(c.source?.escalated))
+  );
+  return [...concerns.map(terseConcern), ...(await listOpenRemarkables(taskDir))];
+}
+
+/** Caps hydration for a step role: review/qa by diff, close-ups by task diff, planning by prompt input. */
+export async function hydrateStepConcerns(
+  taskDir: string,
+  request: HydrateStepConcernsRequest
+): Promise<string> {
+  const role = hydrationRole(request.stepRole);
+  const cap = role === "review" || role === "qa"
+    ? Math.min(request.diffBytes ?? 0, 2000)
+    : role === "wave-close-up" || role === "plan-close-up"
+      ? Math.min(request.taskDiffBytes ?? 0, 2000)
+      : Math.min(request.inputBytes ?? 0, 500);
+  if (cap <= 0) return "";
+  const records = await listHydratedConcerns(taskDir, hydrationConsumer(role, request.consumer));
+  return records.length > 0 ? renderConcernsYaml(records, cap) : "";
+}
+
 /**
- * Renders open concerns as terse, byte-capped YAML for prompt hydration.
- * Detail is dropped; over-budget output condenses summaries, drops affects,
- * then sheds trailing entries until the UTF-8 byte ceiling is met.
+ * Renders terse concern records as byte-capped prompt YAML. Over-budget output
+ * condenses summaries, drops affects, then sheds trailing entries; empty output
+ * is returned when no record fits the ceiling.
  */
 export function renderConcernsYaml(
-  concerns: StoredConcernArtifact[],
+  records: Array<Record<string, unknown>>,
   maxBytes = 8000
 ): string {
-  const records = concerns.map(terseConcern);
+  if (maxBytes <= 0 || records.length === 0) return "";
   const variants: Array<{ records: Array<Record<string, unknown>>; summaryLimit?: number }> = [
     { records },
     { records: records.map(({ affects: _affects, ...rest }) => rest) },
@@ -110,7 +194,7 @@ export function renderConcernsYaml(
       if (utf8Bytes(text) <= maxBytes) return text;
     }
   }
-  return serialize([]);
+  return "";
 }
 
 /**

@@ -1,0 +1,73 @@
+status: changes_requested
+summary: "Verified dev story: typecheck and full suite green (399 pass, 2 skip,
+  0 fail; target files 50 pass); red-test premise confirmed from test-first
+  baseline (no hydrateStepConcerns/listHydratedConcerns, affects still in
+  fingerprint) and tests unchanged since. Production diff scoped to the four
+  owned files. Blocking: cap tests never exercise the role caps
+  (185/249/195-byte fixtures), so wrong role maxima pass; the fix-round legacy
+  detail gate has no regression test. Optional: architect UTF-8 cap assertions
+  can pass on empty output; develop-family branch dormant pending
+  KNOWN_VARS/prompt-fragments."
+suggestions:
+  - id: cap-tests-do-not-reach-caps
+    disposition: fix
+    summary: Role-cap tests never reach their caps; all-500/2000 implementations pass
+    detail: "Measured with the exact fixtures: review diffBytes 5000 and 320 both
+      render 185 bytes; plan-review inputBytes 4000 and 294 both render 249;
+      wave-close-up taskDiffBytes 5000 and 2000 both render 195. Every assertion
+      (<=2000, <=500, <input, <taskDiff) therefore passes with no truncation, so
+      a regression applying 500 (or 2000) to every role passes the whole suite;
+      only the 0/1/3-byte test exercises capping. The plan-review test also
+      calls hydrateStepConcerns directly, so step-runner's inputBytes
+      summation/exclusions are unverified. Fix: build payloads whose uncapped
+      serialization exceeds each cap (many concerns or long summaries); assert
+      <= exact cap and > smaller cap for review/wave (proves 2000), use input
+      <500 with payload >input (proves min(inputBytes,500)), assert
+      condensation/dropping actually occurred, and add a runAgentStep
+      plan-review case with a {{concernsYaml}} override and large prompt
+      inputs."
+    location:
+      file: plugins/software-factory/test/engine/hydration-fingerprint-caps.test.ts
+      line: 207
+  - id: legacy-detail-fix-uncovered
+    disposition: fix
+    summary: Fix-round legacy detail-preservation gate lacks a regression test
+    detail: The review-required gate at concerns.ts:119 (`legacyFile &&
+      input.detail?.trim()`) has no committed regression test. The only legacy
+      migration test (line 793) always supplies 'new detail'; its later
+      detail-less re-emit targets an already-stable id, so legacyFile is unset
+      and the gate is never hit. A regression back to `merged.detail =
+      (input.detail ?? input.summary).trim()` would pass the suite. Add a
+      legacy-file migration case that omits detail and uses stored detail longer
+      than the summary, asserting the stored detail survives, affects union is
+      [new,old], and the legacy file is removed; verify it fails on the pre-fix
+      code.
+    location:
+      file: plugins/software-factory/test/engine/hydration-fingerprint-caps.test.ts
+      line: 793
+  - id: architect-utf8-cap-vacuous
+    disposition: optional
+    summary: Architect UTF-8 cap assertions pass vacuously if hydration returns empty
+    detail: At lines 506-509, `utf8Bytes(debt|steering) <= 20` and absence of U+FFFD
+      also hold for empty strings, so a regression where buildArchitectHydration
+      returns '' passes. The 120x Han-character decision fixture guarantees
+      truncation executes; assert debt/steering are non-empty (or contain tail
+      decision content) to make the UTF-8 boundary check meaningful.
+    location:
+      file: plugins/software-factory/test/engine/hydration-fingerprint-caps.test.ts
+      line: 506
+  - id: develop-family-hydration-dormant
+    disposition: optional
+    summary: Develop-family hydration branch unreachable until KNOWN_VARS registers
+      concernsYaml
+    detail: step-runner gates injection on `knownVars.includes('concernsYaml')`;
+      prompt-vars.ts entries for
+      develop/test-first/fix-round/simple-implement/integrate/research/poc/test-assumptions
+      lack concernsYaml, so the develop-family 500-byte branch is never invoked
+      in production. This is consistent with the item excluding prompt fragments
+      (human-involvement-config.test.ts explicitly rejects concernsYaml on
+      develop), but the prompt-fragments item must add both the {{concernsYaml}}
+      placeholder and registry entries; document/coordinate the dependency.
+    location:
+      file: plugins/software-factory/src/core/flows/step-runner.ts
+      line: 306

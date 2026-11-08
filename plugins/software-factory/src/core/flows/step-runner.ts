@@ -27,14 +27,14 @@ import { isTriagerAgent, resolveReviewAllowed } from "../review-policy.js";
 import {
   aggregateConcerns,
   applyCloseupResolutions,
-  listOpenConcerns,
 } from "../concerns.js";
 import {
   applyReviewTriage,
-  renderConcernsYaml,
+  hydrateStepConcerns,
   TriageValidationError,
   type ReviewTriageOutcome,
 } from "../triage.js";
+import { KNOWN_VARS } from "../prompt-vars.js";
 import { resolveStepRole, resolveRole, type ResolvedRole } from "../config/roles.js";
 import { captureHead, enforceHead } from "../git/guard.js";
 import { commitAll } from "../git/commit.js";
@@ -70,6 +70,8 @@ export interface StepRunOptions {
   project: ProjectConfig;
   prompts: any;
   promptVars: Record<string, string>;
+  parentBranch?: string;
+  gitFn?: typeof git;
   turnsSemaphore?: Semaphore;
   customSchema?: JSONSchema;
   log?: (msg: string) => void;
@@ -293,18 +295,35 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
   // 4. Render prompt and agent definition. Appends compact ## Output section (§6.4)
   const fragment = stepFragment ?? `steps/${stepId}`;
   const criteriaBundle = loadCriteriaBundle(pipeline.criteria);
-  const openConcerns = await listOpenConcerns(taskDir);
-  const concernsYaml = openConcerns.length > 0
-    ? renderConcernsYaml(openConcerns, pipeline.limits?.hydrationBytes ?? 8000)
-    : "";
   const effectivePromptVars: Record<string, string> = {
     humanInvolvementCriteria: formatHumanInvolvementCriteria(
       criteriaBundle.humanInvolvement,
       pipeline.humanInvolvement
     ),
-    concernsYaml,
     ...promptVars,
   };
+  const knownVars = KNOWN_VARS[fragment] ?? KNOWN_VARS[fragment.replace(/^steps\//, "")] ?? [];
+  if (!Object.hasOwn(promptVars, "concernsYaml") && knownVars.includes("concernsYaml")) {
+    const stepRole = fragment.replace(/^steps\//, "");
+    if (stepRole === "review" || stepRole === "qa") {
+      effectivePromptVars.concernsYaml = await hydrateStepConcerns(taskDir, {
+        stepRole,
+        diffBytes: Buffer.byteLength(promptVars.diff ?? "", "utf8"),
+      });
+    } else if (stepRole.startsWith("wave-close-up") || stepRole.startsWith("plan-close-up")) {
+      const diff = await (opts.gitFn ?? git)(taskWt, ["diff", `${opts.parentBranch ?? `topic/${task}`}...HEAD`], { allowFail: true });
+      effectivePromptVars.concernsYaml = await hydrateStepConcerns(taskDir, {
+        stepRole,
+        taskDiffBytes: diff.code === 0 ? Buffer.byteLength(diff.stdout, "utf8") : 0,
+      });
+    } else {
+      const excluded = new Set(["concernsYaml", "humanInvolvementCriteria", "debt", "steering"]);
+      const inputBytes = knownVars
+        .filter((key) => !excluded.has(key))
+        .reduce((total, key) => total + Buffer.byteLength(promptVars[key] ?? "", "utf8"), 0);
+      effectivePromptVars.concernsYaml = await hydrateStepConcerns(taskDir, { stepRole, inputBytes });
+    }
+  }
   let promptText: string;
   let agentDef: { body: string; tools: string[]; description: string };
   try {
