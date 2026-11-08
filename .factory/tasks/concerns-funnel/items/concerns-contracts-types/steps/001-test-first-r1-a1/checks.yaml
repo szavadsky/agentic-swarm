@@ -1,0 +1,30 @@
+checks:
+  - id: test-first-scope
+    status: pass
+    message: test-first-scope passed (1 test files, 0 new prod stubs with 0 lines)
+    details:
+      testFiles:
+        - plugins/software-factory/test/contracts/concern-artifact-types.test.ts
+      newProdFiles: []
+      stubProdLines: 0
+  - id: target-red
+    status: pass
+    message: "target-red passed: all 5 expected tests failed with assertion failures"
+    details:
+      command: cd plugins/software-factory && bun test
+        test/contracts/concern-artifact-types.test.ts --reporter=junit
+        --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-1794112737752-821o8dc41yq.xml
+      junitCaseCount: 5
+      junitCaseIds:
+        - Concern artifact types.exposes structured concerns and remarkable
+          decisions with strict vocabularies
+        - Concern artifact types.stores concern lifecycle metadata including
+          pending resolution and escalation
+        - Concern artifact types.adds dismiss to review dispositions without a
+          tech-debt value
+        - Concern artifact types.marks plan ADRs as blocking or remarkable
+        - Concern artifact types.adds human involvement modes, concern
+          thresholds, and canonical review policy to pipeline config
+      junitTruncated: false
+      collected: true
+      collectionErrors: []
