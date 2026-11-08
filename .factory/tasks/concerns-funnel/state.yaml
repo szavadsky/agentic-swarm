@@ -6,7 +6,7 @@ currentWave: 1
 items:
   concerns-contracts:
     kind: dev
-    status: running
+    status: superseded
     branch: topic/concerns-funnel--concerns-contracts
     attempts: 2
     fixRounds: 2
@@ -130,5 +130,5 @@ debt:
     2000-byte cap"
   - "[spike-text-budget] Clarify trim-semantics comment to name TmpRepo trimEnd
     measurement path"
-budgetSpentUsd: 0.298402
-lastUpdated: 2026-11-08T02:21:06.632Z
+budgetSpentUsd: 0.313079
+lastUpdated: 2026-11-08T02:22:06.955Z

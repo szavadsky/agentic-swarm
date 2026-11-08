@@ -86,3 +86,9 @@
 {"type":"step_finished","task":"concerns-funnel","item":"concerns-contracts","step":"develop","attempt":2,"status":"rejected","sessionId":"01a1b8e9-e560-73a4-95f0-4a71018b378d","usage":{"inputTokens":66677,"outputTokens":65748,"costUsd":0.024961},"ts":"2026-11-08T02:21:06.148Z"}
 {"type":"step_started","task":"concerns-funnel","step":"consult-concerns-contracts","attempt":1,"recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/012-consult-concerns-contracts-a1","ts":"2026-11-08T02:21:06.724Z"}
 {"type":"step_timeout","task":"concerns-funnel","step":"consult-concerns-contracts","timeoutSec":1200,"ts":"2026-11-08T02:21:06.731Z"}
+{"type":"step_finished","task":"concerns-funnel","step":"consult-concerns-contracts","attempt":1,"status":"ok","sessionId":"01a1b894-4755-7787-a1ed-8df6c7a062a2","usage":{"inputTokens":122081,"outputTokens":7565,"costUsd":0.014677},"ts":"2026-11-08T02:22:06.678Z"}
+{"type":"decision_made","context":"item","item":"concerns-contracts","decision":"split","decisionPath":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/decisions/001-item-concerns-contracts.yaml","ts":"2026-11-08T02:22:06.678Z"}
+{"type":"item_merge_started","item":"spike-text-budget","branch":"topic/concerns-funnel--spike-text-budget","ts":"2026-11-08T02:22:06.958Z"}
+{"type":"item_merged","item":"spike-text-budget","sha":"4ddf99a5a4030206ae83b8767bafc5cab6b8a6c7","conflictResolved":false,"ts":"2026-11-08T02:24:05.745Z"}
+{"type":"item_merge_started","item":"spike-saga-commit","branch":"topic/concerns-funnel--spike-saga-commit","ts":"2026-11-08T02:24:05.745Z"}
+{"type":"item_merge_failed","item":"spike-saga-commit","error":"Quality gates failed on merge path for spike-saga-commit","ts":"2026-11-08T02:24:08.470Z"}
