@@ -1395,3 +1395,5 @@
 {"type":"infra_retry_escalated","task":"concerns-funnel","item":"funnel-closeups-v3","step":"develop","attempt":1,"reason":"retries_exhausted","costUsd":0.063039,"retries":3,"maxRetries":3,"questionId":"escalation-funnel-closeups-v3-develop-a1","ts":"2026-11-08T17:16:33.302Z"}
 {"type":"step_finished","task":"concerns-funnel","item":"funnel-closeups-v3","step":"develop","attempt":1,"status":"error","sessionId":"01a1bc09-36c4-74b2-97dd-4fc276d07826","usage":{"inputTokens":410161,"outputTokens":34965,"costUsd":0.063039},"ts":"2026-11-08T17:16:33.391Z"}
 {"type":"empty_wave_streak","wave":11,"iteration":1,"streak":1,"blocked":["funnel-closeups-v3"],"ts":"2026-11-08T17:16:36.365Z"}
+{"type":"step_started","task":"concerns-funnel","step":"wave-close-up-1-11","attempt":1,"recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/042-wave-close-up-1-11-a1","ts":"2026-11-08T17:18:01.609Z"}
+{"type":"step_timeout_armed","task":"concerns-funnel","step":"wave-close-up-1-11","timeoutSec":900,"ts":"2026-11-08T17:18:01.615Z"}
