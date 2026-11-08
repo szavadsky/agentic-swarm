@@ -360,9 +360,8 @@ limits:
   maxMilestones: 8                # Maximum milestones per plan
   maxItemsPerPlan: 50             # Maximum items per plan
   checkOutputBytes: 4000          # Tail byte cap for check command output
-  hydrationBytes: 128000          # Hydration context cap (plans, close-ups, taken steering, decisions) — must fit the architect's own prior plan
-  # contextPackBytes unset: context-pack.md cap follows hydrationBytes; pin only to override:
-  # contextPackBytes: 40000
+  # No hydration/context-pack byte caps by design: the architect's history and the
+  # prepared context pack are injected whole; runaway protection is budgets + turn limits.
   # stepTranscriptWarningBytes defaults to 5242880 (5 MiB) when absent; uncomment to pin:
   # stepTranscriptWarningBytes: 5242880
   # timeoutNudgeSec unset: finalize-nudge retries and interrupted resumes default to HALF the step's own timeout (coherent with 45m-2h turns); pin only to override:

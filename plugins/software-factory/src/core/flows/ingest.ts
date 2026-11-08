@@ -258,11 +258,6 @@ export async function runContextPackStep(params: ContextPackParams): Promise<Ste
   const stepId = params.stepId ?? "context-pack";
   const runsDir = path.join(taskDir, "runs");
   const attempt = getNextStepAttempt(runsDir, stepId, pipeline.limits?.maxInterruptions ?? 3);
-  const maxBytes =
-    (pipeline.limits?.contextPackBytes as number | undefined) ??
-    (pipeline.limits?.hydrationBytes as number | undefined) ??
-    40000;
-
   const packPath = path.join(taskDir, "context-pack.md");
 
   const contextStr =
@@ -291,7 +286,6 @@ export async function runContextPackStep(params: ContextPackParams): Promise<Ste
       task,
       intent: intentText,
       context: contextStr,
-      maxBytes: String(maxBytes),
     },
     turnsSemaphore,
     budgetTracker,
@@ -308,10 +302,6 @@ export async function runContextPackStep(params: ContextPackParams): Promise<Ste
       }
       if (!content) {
         content = typeof output === "string" ? output : JSON.stringify(output, null, 2);
-      }
-      if (Buffer.byteLength(content, "utf8") > maxBytes) {
-        const buf = Buffer.from(content, "utf8");
-        content = buf.subarray(0, maxBytes).toString("utf8");
       }
       await writeTextAtomic(packPath, content);
     },

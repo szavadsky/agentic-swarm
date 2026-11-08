@@ -95,10 +95,7 @@ export interface PipelineLimits {
   maxMilestones?: number;
   maxItemsPerPlan?: number;
   checkOutputBytes?: number;
-  hydrationBytes?: number;
   stepTranscriptWarningBytes?: number;
-  stepToolCallWarning?: number;
-  contextPackBytes?: number;
   timeoutNudgeSec?: number;
   minFreeDiskMb?: number;
   steerPollSec?: number;

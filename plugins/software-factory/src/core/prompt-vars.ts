@@ -36,7 +36,6 @@ export const PROMPT_VAR_DESCRIPTIONS: Record<string, string> = {
   dispositionsCriteria: "Review dispositions criteria file contents filtered to allowed dispositions (criteria.dispositions)",
   storyKindsCriteria: "Story and spike kinds criteria file contents (criteria.story-kinds)",
   contextPack: "Condensed, citation-backed context document covering module maps, signatures, excerpts, conventions, and open questions",
-  maxBytes: "Maximum allowed byte cap for the artifact or document",
   gateDiff: "Structured gate/tool diff table (baseline-vs-now per-gate status) for regression judgment",
   taskStatus: "Compact derived task status block: items (slug/kind/wave/status/outlineRef), waves, merged/blocked/failed lists, open steer questions with answers",
 };
@@ -52,8 +51,8 @@ export const KNOWN_VARS: Record<string, string[]> = {
 
   "steps/infra": ["task", "intent", "context"],
   infra: ["task", "intent", "context"],
-  "steps/context-pack": ["task", "intent", "context", "maxBytes"],
-  "context-pack": ["task", "intent", "context", "maxBytes"],
+  "steps/context-pack": ["task", "intent", "context"],
+  "context-pack": ["task", "intent", "context"],
 
 
   // Item development & verification steps

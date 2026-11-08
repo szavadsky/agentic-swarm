@@ -32,7 +32,6 @@ function makePipeline(overrides?: Partial<PipelineConfig>): PipelineConfig {
     },
     limits: {
       maxInfraRetries: 3,
-      contextPackBytes: 1000,
     },
     contextPack: true,
     ...overrides,
@@ -145,15 +144,15 @@ describe("Engine: Context Pack ingest sub-step and architect integration (§8.1,
     expect(architectRun).toBeDefined();
   });
 
-  it("context-pack caps document size at limits.contextPackBytes", async () => {
-    const task = "context-pack-cap";
+  it("context-pack writes the whole document (no byte cap)", async () => {
+    const task = "context-pack-nocap";
     const taskDir = path.join(tmpRepo.dir, ".factory", task);
     fs.mkdirSync(taskDir, { recursive: true });
     fs.writeFileSync(path.join(taskDir, "INTENT.md"), "Large context task\n", "utf8");
-    tmpRepo.commit("Add intent for context-pack-cap");
+    tmpRepo.commit("Add intent for context-pack-nocap");
 
     const harness = new FakeHarness();
-    const largeFindings = "A".repeat(5000); // 5000 bytes > 500 bytes cap
+    const largeFindings = "A".repeat(5000);
 
     harness.scriptOutcome(`${task}/runs/context-pack#a1`, {
       ok: true,
@@ -164,19 +163,13 @@ describe("Engine: Context Pack ingest sub-step and architect integration (§8.1,
       },
     });
 
-    const tightPipeline = makePipeline({
-      limits: {
-        contextPackBytes: 500,
-      },
-    });
-
     const res = await runContextPackStep({
       task,
       taskDir,
       taskWt: tmpRepo.dir,
       repo: repoObj,
       harness,
-      pipeline: tightPipeline,
+      pipeline: makePipeline(),
       project,
       prompts,
       intentText: "Large context task",
@@ -186,8 +179,7 @@ describe("Engine: Context Pack ingest sub-step and architect integration (§8.1,
     expect(res.ok).toBe(true);
     const packPath = path.join(taskDir, "context-pack.md");
     expect(fs.existsSync(packPath)).toBe(true);
-    const writtenBytes = Buffer.byteLength(fs.readFileSync(packPath, "utf8"), "utf8");
-    expect(writtenBytes).toBe(500);
+    expect(fs.readFileSync(packPath, "utf8")).toBe(largeFindings);
   });
 
   it("architect prompt receives {{contextPack}} contents and exploration budget", async () => {

@@ -53,7 +53,7 @@ describe("Config layering semantics (§5)", () => {
       overrides: {
         limits: {
           maxParallel: 12,
-          hydrationBytes: null,
+          stubMaxProdLines: null,
         },
       },
     });
@@ -61,8 +61,8 @@ describe("Config layering semantics (§5)", () => {
     expect(config.limits.maxParallel).toBe(12);
     expect(config.limits.maxParallelItems).toBe(4);
     expect(config.limits.maxParallelTurns).toBe(6);
-    expect(config.limits.stubMaxProdLines).toBe(40);
-    expect("hydrationBytes" in config.limits).toBe(false);
+    expect(config.limits.maxItemsPerPlan).toBe(50);
+    expect("stubMaxProdLines" in config.limits).toBe(false);
     expect(config.models.roles.workhorse).toBeDefined();
    });
 

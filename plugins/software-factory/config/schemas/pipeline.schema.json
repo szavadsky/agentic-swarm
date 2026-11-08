@@ -179,8 +179,6 @@
         "maxMilestones": { "type": "integer", "minimum": 1 },
         "maxItemsPerPlan": { "type": "integer", "minimum": 1 },
         "checkOutputBytes": { "type": "integer", "minimum": 100 },
-        "hydrationBytes": { "type": "integer", "minimum": 1000 },
-        "contextPackBytes": { "type": "integer", "minimum": 1000 },
         "timeoutNudgeSec": { "type": "integer", "minimum": 1 },
         "minFreeDiskMb": { "type": "integer", "minimum": 1 },
         "steerPollSec": { "type": "integer", "minimum": 1 },

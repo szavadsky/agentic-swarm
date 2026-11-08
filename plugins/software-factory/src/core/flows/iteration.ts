@@ -256,11 +256,11 @@ async function buildExistingList(taskDir: string): Promise<{ slug: string; statu
 }
 
 /**
- * Builds a structured hydration summary capped at hydrationBytes (§4, §8.4.2).
+ * Builds a structured hydration summary: prior plans, close-ups, taken steering, decisions (§4, §8.4.2).
+ * No byte cap — the architect's own history is injected whole; runaway protection is budgets + turn limits.
  */
 async function buildArchitectHydration(
-  taskDir: string,
-  maxBytes: number
+  taskDir: string
 ): Promise<string> {
   const parts: string[] = [];
 
@@ -310,11 +310,7 @@ async function buildArchitectHydration(
     }
   }
 
-  const combined = parts.join("\n\n");
-  if (combined.length <= maxBytes) {
-    return combined;
-  }
-  return combined.slice(combined.length - maxBytes);
+  return parts.join("\n\n");
 }
 
 /**
@@ -365,7 +361,6 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
   const maxPlanReviewRounds = limits.maxPlanReviewRounds ?? 3;
   const maxParallelItems = limits.maxParallelItems ?? 2;
   const maxAmendments = limits.maxAmendmentsPerIteration ?? 3;
-  const hydrationBytes = limits.hydrationBytes ?? 65536;
 
   // Check iteration bounds and zero-progress detector (Finding 14)
   if (iteration > maxIterations) {
@@ -440,7 +435,7 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
     }
   }
   // Build hydration context
-  const hydrationContext = await buildArchitectHydration(taskDir, hydrationBytes);
+  const hydrationContext = await buildArchitectHydration(taskDir);
 
   const intentText = fs.existsSync(path.join(taskDir, "INTENT.md"))
     ? await readText(path.join(taskDir, "INTENT.md"))

@@ -7,7 +7,7 @@ Build a condensed, citation-backed context pack document (`context-pack.md`) for
 - Fact-finder discipline: explore the repository with targeted queries (`read`, `grep`, `glob`, `find`, `lsp`, `ast_grep`).
 - Strictly read-only on repository files: do NOT edit or write code files. NEVER issue git write commands or launch subagents.
 - Evidence-grounded: every section must include concrete file paths and line ranges (`path/to/file.ext:start-end`).
-- Budget cap: the entire context pack document MUST be strictly condensed and fit within {{maxBytes}} bytes. Prioritize high-signal architecture details over verbose dumps.
+- Condensed but complete: no byte cap — cover everything the architect needs, prioritizing high-signal architecture details over verbose dumps.
 - Deliverable: yield structured output matching `fact-finder-output.schema.json` with `findings` containing the complete markdown context pack document. Do NOT write files directly; the engine writes `context-pack.md`.
 
 ## Context Pack Document Structure
