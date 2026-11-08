@@ -1,0 +1,21 @@
+status: ok
+summary: Fixed listOpenConcerns rm-* type leak (filter c-*.yaml + require kind),
+  hardened remarkable pre-lock validation, cleared stale dismissReason on routed
+  triage, guarded reconcile/ingest journal writes, documented reconcile HEAD
+  assumption; 22/22 target green, full suite 324 pass.
+evidence:
+  - "bun run typecheck in plugins/software-factory: exit 0"
+  - "TMPDIR=/tmp bun test test/engine/concerns-funnel.test.ts: 22 pass, 0 fail,
+    203 expect() calls"
+  - "TMPDIR=/tmp bun test (full suite): 324 pass, 2 skip, 0 fail, 1396 expect()
+    calls across 55 files"
+  - "git diff --check: clean (DIFFCHECK_OK)"
+  - "Extended 'lists only open concerns' test with open rm-*.yaml fixture +
+    kind/detail contract assertion: passes, proving rm-* excluded"
+concerns:
+  - "Skipped optional KINDS/RANK schema-derivation: would touch shared
+    constants/schemas beyond this fix scope; existing duplication retained
+    intentionally."
+notes: FIX list-open-includes-remarkables resolved. Optionals addressed except
+  kinds-duplicate-schema-source (deferred as broader refactor). No unrelated
+  changes.

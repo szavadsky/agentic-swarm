@@ -1,0 +1,86 @@
+status: ok
+summary: Shrank the concerns-store production diff from 556 to 276 changed lines
+  (under the 300-line limit) without changing behavior. Rewrote
+  src/core/concerns.ts compactly (207 lines) while preserving
+  fingerprint/merge/triage/close-up/partition/reconcile semantics; consolidated
+  the step-runner ingestion seam and call site; moved concern-store startup
+  recovery from repairWorktree into a pre-repair engine commit (restoring
+  repair.ts to baseline). Target file passes 22/22 and the full suite passes.
+target:
+  selectors:
+    - test/engine/concerns-funnel.test.ts
+  expectRed:
+    - test/engine/concerns-funnel.test.ts::Concern store.fingerprints concern
+      identity, ignoring detail, severity, and affect order
+    - test/engine/concerns-funnel.test.ts::Concern store.aggregates a developer
+      concern to one open taskWt file with defaults, source, and immediate
+      commit
+    - test/engine/concerns-funnel.test.ts::Concern store.merges re-emitted
+      concerns into one file with longer detail, max severity, and advanced
+      timestamps
+    - test/engine/concerns-funnel.test.ts::Concern store.keeps dismissed status
+      and flags escalation when a higher severity is re-emitted
+    - test/engine/concerns-funnel.test.ts::Concern store.lists only open
+      concerns in stable order
+    - test/engine/concerns-funnel.test.ts::Concern store.triages only exact-id
+      suggestions and persists dismiss reasons
+    - test/engine/concerns-funnel.test.ts::Concern store.routes non-dismiss
+      triage dispositions and gates non-triagers
+    - test/engine/concerns-funnel.test.ts::Concern store.rejects dismiss triage
+      without detail and leaves the concern unchanged
+    - test/engine/concerns-funnel.test.ts::Concern store.partitions suggestions
+      by exact concern id
+    - test/engine/concerns-funnel.test.ts::Concern store.records close-up
+      pending resolutions without changing concern status
+    - test/engine/concerns-funnel.test.ts::Concern store.aggregates remarkable
+      decisions into rm-* files and triages them by exact id
+    - test/engine/concerns-funnel.test.ts::Concern store.rejects unknown concern
+      kinds without partial writes and leaves existing files untouched
+    - test/engine/concerns-funnel.test.ts::Concern store.writes distinct
+      fingerprints concurrently without deadlock or lost commits
+    - test/engine/concerns-funnel.test.ts::Concern store.serializes concurrent
+      merges of the same fingerprint into one merged file
+    - "test/engine/concerns-funnel.test.ts::Concern store.wires reviewer output:
+      aggregate new concerns before triaging pre-existing ids only"
+    - test/engine/concerns-funnel.test.ts::Concern store.wires consult
+      writeArtifact producers to the concern store
+    - "test/engine/concerns-funnel.test.ts::Concern store.wires close-up
+      producers: aggregates concerns and applies resolutions"
+    - test/engine/concerns-funnel.test.ts::Concern store.aggregates concerns and
+      remarkable decisions across producer schemas
+    - test/engine/concerns-funnel.test.ts::Concern store.reconciles missing
+      concerns from committed step records idempotently
+    - test/engine/concerns-funnel.test.ts::Concern store.commits stray concerns
+      files during startup recovery instead of stashing them
+    - test/engine/concerns-funnel.test.ts::Concern store.keeps step status ok
+      and journals an ingest error when concern ingestion fails
+evidence:
+  - "Size check: `git diff --numstat 87a7682 -- plugins/software-factory/src` =>
+    artifacts.ts 2/0, concerns.ts 207/0, engine.ts 18/0, step-runner.ts 49/0 =
+    276 changed lines total (limit 300); repair.ts restored to baseline with
+    zero delta."
+  - "Typecheck: `cd plugins/software-factory && bun run typecheck` => exit 0."
+  - "Target: `cd plugins/software-factory && TMPDIR=/tmp bun test
+    test/engine/concerns-funnel.test.ts` => 22 pass, 0 fail, 202 expect()
+    calls."
+  - "Full suite: `cd plugins/software-factory && TMPDIR=/tmp bun test` => 324
+    pass, 2 skip, 0 fail across 55 files (80.9s)."
+  - "Flake confirmation: first full-suite run hit two 5s timeouts in
+    qa-red-test.test.ts; the file alone passes 3/3 (9.8s) and
+    amend-maxiterations.test.ts alone passes 4/4 (5.7s), matching the same
+    load-related timeouts seen in the prior attempt's gate run."
+  - "`git diff --check` => exit 0 (no whitespace errors)."
+concerns:
+  - Full-suite 5s per-test timeouts are load-flaky in subprocess-spawning engine
+    tests (qa-red-test, amend-maxiterations); each file passes in isolation and
+    the full suite passed on re-run, so this is pre-existing harness flakiness
+    rather than a code regression.
+notes: "Behavior preserved while shrinking: concern identity ignores
+  detail/severity/affect order; aggregation merges longer-or-equal detail, max
+  severity, preserves status/disposition/dismissReason/pendingResolution,
+  advances updatedAt/lastSeen and sets source.escalated on severity rise; atomic
+  YAML writes + KeyedMutex(taskDir) guard RMW and commitAll runs outside
+  repo.writeLock. Startup recovery now commits concerns/ via commitAll before
+  stray-dirt repair instead of adding commitGlobs to repairWorktree, removing
+  the repair.ts delta. Reconcile derives read-only from committed step records
+  using git ls-tree and remains idempotent."

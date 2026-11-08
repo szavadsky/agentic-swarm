@@ -1,0 +1,16 @@
+status: approved
+summary: "Concerns store v2 approved: 22/22 target green, typecheck clean,
+  genuine 21-test red, no weakening, lock discipline verified"
+suggestions:
+  - detail: "listOpenConcerns catches all YAML read errors and silently drops the
+      file (line 109: catch { return undefined }). A corrupt concerns/*.yaml
+      therefore vanishes from triage/hydration with no signal. Consider
+      journaling or logging the offending filename so corruption is diagnosable;
+      behavior for valid files is correct and no test covers this path, so
+      non-blocking."
+    disposition: optional
+    id: corrupt-concern-silent-skip
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 109
+    summary: listOpenConcerns silently skips corrupt YAML instead of surfacing it

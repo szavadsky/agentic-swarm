@@ -1,0 +1,115 @@
+checks:
+  - id: gates
+    status: pass
+    message: "Gates passed (2 gates, improvements: Engine: HEAD guard resilience
+      (§7).detects when an agent commits and resets --soft to before.sha,
+      keeping changes staged, Engine: HEAD guard resilience (§7).detects when an
+      agent switches branch and restores original branch, keeping changes)"
+    details:
+      - id: typecheck
+        command: cd plugins/software-factory && bun run typecheck
+        status: pass
+        durationMs: 4115
+        details: $ tsc --noEmit
+      - id: test
+        command: cd plugins/software-factory && bun test
+        status: pass
+        durationMs: 214345
+        details: |-
+          bun test v1.4.3 (c6da4a4d3)
+          ================================================================
+          Task: status-test-task [ACTIVE]
+          Kind: unclassified | Iteration: 1 | Wave: 1
+          Worktree: (none - main checkout)
+          Config path: /home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/factory-test-repo-DhnsNA/.factory/pipeline.yaml
+          Budget spent: $0.0000
+          ----------------------------------------------------------------
+          Waves & Items:
+            Wave 1:
+          ================================================================
+
+
+          test/cli/cli.test.ts:
+          [factory lock] Stale run lock for task "stale-lock-task" (PID 9999999 on host Slava-Yoga) taken over by PID 2737241
+          [factory lock] Stale run lock for task "competing-takeover-task" (PID 9999999 on host Slava-Yoga) taken over by PID 2737241
+          [factory lock] Stale run lock for task "journal-worktree-task" (PID 9999999 on host Slava-Yoga) taken over by PID 2737241
+
+           324 pass
+           2 skip
+           0 fail
+           1395 expect() calls
+          Ran 326 tests across 55 files. [99.73s]
+          [Improvements: Engine: HEAD guard resilience (§7).detects when an agent commits and resets --soft to before.sha, keeping changes staged, Engine: HEAD guard resilience (§7).detects when an agent switches branch and restores original branch, keeping changes]
+        improvements:
+          - "Engine: HEAD guard resilience (§7).detects when an agent commits
+            and resets --soft to before.sha, keeping changes staged"
+          - "Engine: HEAD guard resilience (§7).detects when an agent switches
+            branch and restores original branch, keeping changes"
+  - id: target-green
+    status: pass
+    message: "target-green passed: selected tests passed"
+    details:
+      command: cd plugins/software-factory && bun test
+        test/engine/concerns-funnel.test.ts --reporter=junit
+        --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-green-1794120748753-kzhys7rw6n.xml
+      junitCaseCount: 22
+      junitCaseIds:
+        - Concern funnel schemas.valid concerns pass validation and unknown
+          kinds reject with no artifact write
+        - Concern store.fingerprints concern identity, ignoring detail,
+          severity, and affect order
+        - Concern store.aggregates a developer concern to one open taskWt file
+          with defaults, source, and immediate commit
+        - Concern store.merges re-emitted concerns into one file with longer
+          detail, max severity, and advanced timestamps
+        - Concern store.keeps dismissed status and flags escalation when a
+          higher severity is re-emitted
+        - Concern store.lists only open concerns in stable order
+        - Concern store.triages only exact-id suggestions and persists dismiss
+          reasons
+        - Concern store.routes non-dismiss triage dispositions and gates
+          non-triagers
+        - Concern store.rejects dismiss triage without detail and leaves the
+          concern unchanged
+        - Concern store.partitions suggestions by exact concern id
+        - Concern store.records close-up pending resolutions without changing
+          concern status
+        - Concern store.aggregates remarkable decisions into rm-* files and
+          triages them by exact id
+        - Concern store.rejects unknown concern kinds without partial writes and
+          leaves existing files untouched
+        - Concern store.writes distinct fingerprints concurrently without
+          deadlock or lost commits
+        - Concern store.serializes concurrent merges of the same fingerprint
+          into one merged file
+        - "Concern store.wires reviewer output: aggregate new concerns before
+          triaging pre-existing ids only"
+        - Concern store.wires consult writeArtifact producers to the concern
+          store
+        - "Concern store.wires close-up producers: aggregates concerns and
+          applies resolutions"
+        - Concern store.aggregates concerns and remarkable decisions across
+          producer schemas
+        - Concern store.reconciles missing concerns from committed step records
+          idempotently
+        - Concern store.commits stray concerns files during startup recovery
+          instead of stashing them
+        - Concern store.keeps step status ok and journals an ingest error when
+          concern ingestion fails
+      junitTruncated: false
+      collected: true
+      collectionErrors: []
+  - id: size
+    status: pass
+    message: "size passed: 276/300 production lines changed"
+    details:
+      changedLines:
+        added: 276
+        deleted: 0
+        total: 276
+        files:
+          - plugins/software-factory/src/core/artifacts.ts
+          - plugins/software-factory/src/core/concerns.ts
+          - plugins/software-factory/src/core/engine.ts
+          - plugins/software-factory/src/core/flows/step-runner.ts
+      limit: 300

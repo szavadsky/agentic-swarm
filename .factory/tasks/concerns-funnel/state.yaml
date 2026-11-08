@@ -40,14 +40,14 @@ items:
     mergedAt: 2026-11-07T23:50:13-05:00
   concerns-store:
     kind: dev
-    status: pending
+    status: superseded
     branch: topic/concerns-funnel--concerns-store
     attempts: 1
     fixRounds: 1
     spendUsd: 0
   modes-prompts:
     kind: dev
-    status: pending
+    status: superseded
     branch: topic/concerns-funnel--modes-prompts
     attempts: 1
     fixRounds: 1
@@ -72,71 +72,157 @@ items:
     mergedAt: 2026-11-08T00:52:12-05:00
   plan-reviewer-triage:
     kind: dev
-    status: pending
+    status: superseded
     branch: topic/concerns-funnel--plan-reviewer-triage
     attempts: 1
     fixRounds: 1
     spendUsd: 0
   reviewer-triage:
     kind: dev
-    status: pending
+    status: superseded
     branch: topic/concerns-funnel--reviewer-triage
     attempts: 1
     fixRounds: 1
     spendUsd: 0
   routing-blocker-derive:
     kind: dev
-    status: pending
+    status: superseded
     branch: topic/concerns-funnel--routing-blocker-derive
     attempts: 1
     fixRounds: 1
     spendUsd: 0
   routing-human-debt:
     kind: dev
-    status: pending
+    status: superseded
     branch: topic/concerns-funnel--routing-human-debt
     attempts: 1
     fixRounds: 1
     spendUsd: 0
   adr-blocking-digest:
     kind: dev
-    status: pending
+    status: superseded
     branch: topic/concerns-funnel--adr-blocking-digest
     attempts: 1
     fixRounds: 1
     spendUsd: 0
   routing-architect-consult:
     kind: dev
-    status: pending
+    status: superseded
     branch: topic/concerns-funnel--routing-architect-consult
     attempts: 1
     fixRounds: 1
     spendUsd: 0
   status-state-surface:
     kind: dev
-    status: pending
+    status: superseded
     branch: topic/concerns-funnel--status-state-surface
     attempts: 1
     fixRounds: 1
     spendUsd: 0
+  concerns-store-v2:
+    kind: dev
+    status: running
+    branch: topic/concerns-funnel--concerns-store-v2
+    attempts: 2
+    fixRounds: 3
+    spendUsd: 0.48322400000000004
+    currentStep: review
   funnel-closeups:
     kind: dev
-    status: pending
+    status: superseded
     branch: topic/concerns-funnel--funnel-closeups
     attempts: 1
     fixRounds: 1
     spendUsd: 0
+  modes-prompts-v2:
+    kind: dev
+    status: ready
+    branch: topic/concerns-funnel--modes-prompts-v2
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0.139671
+    currentStep: review
   saga-propagate:
     kind: dev
-    status: pending
+    status: superseded
     branch: topic/concerns-funnel--saga-propagate
     attempts: 1
     fixRounds: 1
     spendUsd: 0
   docs-finish:
     kind: dev
-    status: pending
+    status: superseded
     branch: topic/concerns-funnel--docs-finish
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0
+  plan-reviewer-triage-v2:
+    kind: dev
+    status: pending
+    branch: topic/concerns-funnel--plan-reviewer-triage-v2
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0
+  reviewer-triage-v2:
+    kind: dev
+    status: pending
+    branch: topic/concerns-funnel--reviewer-triage-v2
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0
+  routing-blocker-derive-v2:
+    kind: dev
+    status: pending
+    branch: topic/concerns-funnel--routing-blocker-derive-v2
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0
+  routing-human-debt-v2:
+    kind: dev
+    status: pending
+    branch: topic/concerns-funnel--routing-human-debt-v2
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0
+  adr-blocking-digest-v2:
+    kind: dev
+    status: pending
+    branch: topic/concerns-funnel--adr-blocking-digest-v2
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0
+  routing-architect-consult-v2:
+    kind: dev
+    status: pending
+    branch: topic/concerns-funnel--routing-architect-consult-v2
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0
+  status-state-surface-v2:
+    kind: dev
+    status: pending
+    branch: topic/concerns-funnel--status-state-surface-v2
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0
+  funnel-closeups-v2:
+    kind: dev
+    status: pending
+    branch: topic/concerns-funnel--funnel-closeups-v2
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0
+  saga-propagate-v2:
+    kind: dev
+    status: pending
+    branch: topic/concerns-funnel--saga-propagate-v2
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0
+  docs-finish-v2:
+    kind: dev
+    status: pending
+    branch: topic/concerns-funnel--docs-finish-v2
     attempts: 1
     fixRounds: 1
     spendUsd: 0
@@ -204,20 +290,59 @@ debt:
     store story must reconcile"
   - "[concerns-contracts-schemas] inferTaskWorktree fix correct but lacks direct
     unit test"
-budgetSpentUsd: 1.1860089999999999
+  - "[concerns-store-v2] listOpenConcerns silently skips corrupt YAML instead of
+    surfacing it"
+  - "[concerns-store-v2] aggregateConcerns validates only remarkable.chosen;
+    missing why throws mid-RMW after partial writes"
+  - "[concerns-store-v2] KINDS/RANK hardcode enums instead of deriving from
+    schema single source"
+  - "[concerns-store-v2] reconcile filters by HEAD ls-tree but reads worktree
+    files, can ingest dirty outputs"
+  - "[concerns-store-v2] Non-dismiss triage to routed leaves stale
+    dismissReason/pendingResolution"
+  - "[concerns-store-v2] Startup reconcile error journal can throw and crash
+    runTask unlike task_error guard"
+  - "[concerns-store-v2] listOpenConcerns still silently drops unreadable YAML
+    and only validates kind"
+  - "[concerns-store-v2] Routed triage clears dismissReason but leaves stale
+    pendingResolution; no regression test"
+  - "[concerns-store-v2] No regression test for r2 remarkable pre-lock
+    validation"
+  - "[concerns-store-v2] applyConcernTriage/applyCloseupResolutions can return
+    rm-* remarkable records typed as StoredConcernArtifact"
+  - "[concerns-store-v2] Concern writes use unscoped commitAll on taskWt,
+    sweeping unrelated dirty files into concern commits"
+  - "[concerns-store-v2] r2 hardening (routed triage clears dismissReason,
+    remarkable pre-lock validation) has no regression tests"
+  - "[concerns-store-v2] Consult runAgentStep calls omit taskWt, relying on path
+    inference that mis-resolves epic child task dirs"
+  - "[modes-prompts-v2] Harden matrix test: assert plan-review excludes
+    concernsYaml"
+  - "[modes-prompts-v2] Harden mode-switch tests: check both inactive markers
+    absent"
+  - "[modes-prompts-v2] Harden empty-criteria test: assert exact empty rendering"
+  - "[modes-prompts-v2] Caller promptVars can silently override engine-filtered
+    humanInvolvementCriteria"
+  - "[modes-prompts-v2] HUMAN_INVOLVEMENT_MODES is a third source of truth for
+    the mode enum"
+  - "[modes-prompts-v2] pipeline.default.yaml criteria comment block omits
+    human-involvement consumption"
+  - "[modes-prompts-v2] ADR blocking table duplicated verbatim in config
+    comments and criteria fragment"
+budgetSpentUsd: 1.826748
 spendByRole:
   alt-workhorse:
-    costUsd: 0.22332299999999997
-    inputTokens: 799635
-    outputTokens: 566437
+    costUsd: 0.30556599999999984
+    inputTokens: 1246876
+    outputTokens: 690346
   workhorse:
-    costUsd: 0.8408990000000001
-    inputTokens: 1625095
-    outputTokens: 517811
+    costUsd: 1.389019
+    inputTokens: 2727951
+    outputTokens: 891870
   architect:
-    costUsd: 0.105272
-    inputTokens: 886701
-    outputTokens: 66358
+    costUsd: 0.115648
+    inputTokens: 935546
+    outputTokens: 77812
   alt-architect:
     costUsd: 0.016515000000000002
     inputTokens: 72452
@@ -235,14 +360,14 @@ spendByItem:
     costUsd: 0.060779
     inputTokens: 139871
     outputTokens: 72059
-  (orchestration):
-    costUsd: 0.431683
-    inputTokens: 1543604
-    outputTokens: 344720
   concerns-contracts-schemas:
     costUsd: 0.13946999999999998
     inputTokens: 384518
     outputTokens: 125976
+  modes-prompts-v2:
+    costUsd: 0.139671
+    inputTokens: 277976
+    outputTokens: 137336
   concerns-contracts-policy:
     costUsd: 0.107439
     inputTokens: 280717
@@ -251,4 +376,12 @@ spendByItem:
     costUsd: 0.063129
     inputTokens: 178070
     outputTokens: 75896
-lastUpdated: 2026-11-08T05:59:02.059Z
+  concerns-store-v2:
+    costUsd: 0.48322400000000004
+    inputTokens: 1220656
+    outputTokens: 349363
+  (orchestration):
+    costUsd: 0.449527
+    inputTokens: 1643914
+    outputTokens: 367443
+lastUpdated: 2026-11-08T07:43:30.910Z

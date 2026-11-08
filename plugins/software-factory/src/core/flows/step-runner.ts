@@ -24,6 +24,12 @@ import {
 import { validateAndRepair } from "../records/repair.js";
 import { generateReviewSchema } from "../records/review-schema.js";
 import { isTriagerAgent, resolveReviewAllowed } from "../review-policy.js";
+import {
+  aggregateConcerns,
+  applyCloseupResolutions,
+  applyConcernTriage,
+  partitionSuggestions,
+} from "../concerns.js";
 import { resolveStepRole, resolveRole, type ResolvedRole } from "../config/roles.js";
 import { captureHead, enforceHead } from "../git/guard.js";
 import { commitAll } from "../git/commit.js";
@@ -166,6 +172,33 @@ function inferTaskWorktree(taskDir: string, task: string, orchestrationFolder: s
   const parts = taskDir.split(/[\\/]/);
   const matches = tail.every((seg, i) => parts[parts.length - tail.length + i] === seg);
   return matches ? path.resolve(taskDir, ...tail.map(() => "..")) : taskDir;
+}
+
+/** Feeds a step's producer fields into the taskWt concern store (§18). */
+async function ingestStepConcerns(opts: {
+  taskDir: string; taskWt: string; repo: any; output: unknown;
+  source: { record: string; agent: string; step: string; item?: string; iteration?: number };
+}): Promise<void> {
+  const data = (opts.output ?? {}) as Record<string, any>;
+  const concerns = ["concerns", "newConcerns"].flatMap((f) => (Array.isArray(data[f]) ? data[f] : []));
+  const remarkables = Array.isArray(data.remarkable) ? data.remarkable : [];
+  const suggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
+  const resolutions = Array.isArray(data.concernResolutions) ? data.concernResolutions : [];
+  if (!concerns.length && !remarkables.length && !suggestions.length && !resolutions.length) return;
+
+  // Triage only ids that existed before this step, so new concerns cannot self-dismiss.
+  let existing: string[] = [];
+  try {
+    existing = (await fs.promises.readdir(path.join(opts.taskDir, "concerns")))
+      .filter((n) => n.endsWith(".yaml")).map((n) => n.slice(0, -5));
+  } catch (err: any) {
+    if (err?.code !== "ENOENT") throw err;
+  }
+  const ctx = { taskDir: opts.taskDir, taskWt: opts.taskWt, repo: opts.repo };
+  if (concerns.length || remarkables.length) await aggregateConcerns({ ...ctx, source: opts.source }, concerns, remarkables);
+  const { triage } = partitionSuggestions(suggestions, existing);
+  if (triage.length) await applyConcernTriage({ ...ctx, suggestions: triage, isTriager: isTriagerAgent(opts.source.agent) });
+  if (resolutions.length) await applyCloseupResolutions({ ...ctx, resolutions, by: opts.source.agent });
 }
 
 /**
@@ -642,6 +675,22 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
     } catch (err: any) {
       finalStatus = "error";
       validationError = `Failed writing canonical artifact: ${err?.message || err}`;
+    }
+  }
+
+  // Producer concerns feed the taskWt store after the canonical artifact write.
+  if (finalStatus === "ok") {
+    try {
+      await ingestStepConcerns({
+        taskDir, taskWt, repo, output: validatedData,
+        source: {
+          record: dirName, agent, step: stepId,
+          ...(item ? { item } : {}),
+          ...(opts.iteration !== undefined ? { iteration: opts.iteration } : {}),
+        },
+      });
+    } catch (err: any) {
+      try { await appendJournal(taskDir, { type: "concern_ingest_error", task, item, step: stepId, error: err?.message || String(err) }); } catch { /* Journal failure must not change step status. */ }
     }
   }
 

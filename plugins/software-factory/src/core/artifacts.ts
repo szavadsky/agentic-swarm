@@ -333,6 +333,8 @@ export interface ConcernSource {
   item?: string;
   iteration?: number;
   escalated?: boolean;
+  /** Timestamp of the most recent re-emit for merged concerns. */
+  lastSeen?: string;
 }
 
 export interface PendingConcernResolution {
