@@ -1376,3 +1376,5 @@
 {"type":"infra_retry_started","task":"concerns-funnel","item":"funnel-closeups-v3","step":"review","attempt":1,"retry":1,"maxRetries":3,"sessionId":"01a1bbf9-b903-73a9-97e8-f2d718d10c4b","costUsd":0.204471,"ts":"2026-11-08T16:39:29.276Z"}
 {"type":"infra_retry_finished","task":"concerns-funnel","item":"funnel-closeups-v3","step":"review","attempt":1,"retry":1,"ok":true,"transient":false,"costUsd":0.23223500000000002,"ts":"2026-11-08T16:39:53.404Z"}
 {"type":"step_finished","task":"concerns-funnel","item":"funnel-closeups-v3","step":"review","attempt":1,"status":"ok","sessionId":"01a1bbf9-b903-73a9-97e8-f2d718d10c4b","usage":{"inputTokens":532468,"outputTokens":93419,"costUsd":0.23223500000000002},"ts":"2026-11-08T16:39:53.473Z"}
+{"type":"step_started","task":"concerns-funnel","step":"consult-funnel-closeups-v3","attempt":1,"recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/041-consult-funnel-closeups-v3-a1","ts":"2026-11-08T16:39:56.570Z"}
+{"type":"step_timeout_armed","task":"concerns-funnel","step":"consult-funnel-closeups-v3","timeoutSec":1200,"ts":"2026-11-08T16:39:56.575Z"}

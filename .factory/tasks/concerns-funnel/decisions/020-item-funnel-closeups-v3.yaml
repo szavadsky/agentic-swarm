@@ -1,0 +1,41 @@
+id: decision-funnel-closeups-v3-1794156080522
+context: item
+item: funnel-closeups-v3
+afterRecord: 008-review-r2-a1
+decision: retry-with-guidance
+timestamp: 2026-11-08T16:41:20.522Z
+rationale: All 4 FIX findings are probe-verified contract breaches against cited
+  spike/ADR text (wrong-cap classification, invisible pending proposals, reject
+  burying open concerns, zero-input over-hydration), not judgment calls. Each
+  has a localized mechanical fix in the item's own new code
+  (hydrateStepConcerns, terseConcern, applyConcernConfirms, renderConcernsYaml
+  edge). Base-tree check confirms the defects live in the unmerged work (no
+  hydrateStepConfirms/hydrateStepConcerns on base; base renderConcernsYaml still
+  returns serialize([])). One guided round should close all four; no split or
+  escalation warranted.
+text: "Fix funnel-closeups-v3 in one round (4 defects, all in your new code): 1)
+  STEP-ROLE CAP CLASSIFICATION: delete the `git diff main HEAD > 0` branch-state
+  inference in hydrateStepConcerns. Classify by step: review/qa steps -> UTF-8
+  bytes of promptVars.diff -> cap min(diff,2000); wave-close-up/plan-close-up ->
+  aggregated task-branch diff bytes -> min(diff,2000); plan-review +
+  architect-plan/revise/wave-report/closeup/consults -> sum of registered input
+  prompt-var bytes -> cap min(input,500). Add regression test: plan-review in
+  iteration 2+ with merged code on branch hydrates <=500 bytes and < input bytes
+  (replay the 294-byte-input probe). 2) PENDING VISIBILITY: in terseConcern emit
+  `pendingResolution` whenever the field is present, regardless of status (open
+  AND routed) — plan-close-up targets open concerns and architects must see the
+  proposal to accept/reject. Extend hydration test to assert the block for an
+  open+pending concern. 3) REJECT PRESERVES STATUS: in applyConcernConfirms,
+  reject must clear pendingResolution, set NO disposition, and keep the
+  concern's existing status (open stays open, routed stays routed); only
+  accept+resolve -> resolved, accept+carry -> routed+disposition,
+  accept+propagate -> propagate path. Add regression test: reject on an
+  open+pending concern yields status open with no disposition, and
+  listHydratedConcerns still returns it. 4) ZERO CAPS: when the computed cap is
+  0 (zero-diff branch with inputBytes===0, or diffBytes===0 for code steps)
+  return '' with no concerns block; in renderConcernsYaml return '' when
+  serialize([]) itself exceeds maxBytes. Add edge tests: all-zero prompt vars ->
+  '' hydration; 1-byte and 3-byte diff caps -> '' (not '[]'). Verify: bun run
+  typecheck + TMPDIR=/tmp bun test (full suite green); keep diff within budget,
+  no redesign beyond these four fixes."
+persist: true
