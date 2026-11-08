@@ -399,3 +399,5 @@
 {"type":"step_timeout_armed","task":"concerns-funnel","step":"architect-wave-report-1-4","timeoutSec":1200,"ts":"2026-11-08T05:58:40.553Z"}
 {"type":"step_finished","task":"concerns-funnel","step":"architect-wave-report-1-4","attempt":1,"status":"ok","sessionId":"01a1b894-4755-7787-a1ed-8df6c7a062a2","usage":{"inputTokens":45456,"outputTokens":1721,"costUsd":0.005529},"ts":"2026-11-08T05:59:01.697Z"}
 {"type":"wave_started","wave":5,"iteration":1,"ts":"2026-11-08T05:59:02.182Z"}
+{"type":"step_started","task":"concerns-funnel","step":"wave-close-up-1-5","attempt":1,"recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/024-wave-close-up-1-5-a1","ts":"2026-11-08T06:00:08.723Z"}
+{"type":"step_timeout_armed","task":"concerns-funnel","step":"wave-close-up-1-5","timeoutSec":900,"ts":"2026-11-08T06:00:08.729Z"}

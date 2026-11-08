@@ -1,0 +1,13 @@
+blockedItems: []
+failedItems: []
+iteration: 1
+mergedItems: []
+status: complete
+summary: "Wave 5 (iteration 1): wave report lists zero merged items. Tree clean:
+  zero untracked files, git diff --check clean, no real conflict markers (git
+  grep for '^<<<<<<< ' and '^>>>>>>> ' empty; generic grep hits only
+  baseline-log/separator '===' lines). Only modified file is engine-managed
+  .factory/tasks/concerns-funnel/journal.ndjson (+2 lines). Gates vs baseline
+  (judged ONLY from Gate Diff table): typecheck pass/pass green, no regression;
+  test fail->pass IMPROVED."
+wave: 5
