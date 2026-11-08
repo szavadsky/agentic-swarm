@@ -309,4 +309,157 @@ export const contract = {
 `);
     expect(errors).toEqual([]);
   });
+
+  it("types structured concerns and remarkable decisions on every producer artifact", () => {
+    const errors = typeErrors(`
+import type {
+  Concern,
+  DecisionArtifact,
+  DeveloperOutputArtifact,
+  FactFinderOutputArtifact,
+  PlanCloseupArtifact,
+  ReviewArtifact,
+  WaveCloseupArtifact,
+} from "../../src/core/artifacts.js";
+
+const concern: Concern = {
+  kind: "risk",
+  summary: "Producer types drifted from the JSON schemas",
+  detail: "The TS interfaces lag the schema fields",
+  severity: "high",
+};
+const remarkable = {
+  chosen: "Fix the producer types",
+  alternatives: ["Leave the drift in place"],
+  why: "Producers must compile against the same contract they validate against",
+};
+
+const developer: DeveloperOutputArtifact = {
+  status: "ok",
+  summary: "Implemented the change",
+  concerns: [concern],
+  remarkable: [remarkable],
+};
+
+const factFinder: FactFinderOutputArtifact = {
+  status: "ok",
+  summary: "Investigated",
+  findings: "Schemas and types drifted",
+  concerns: [concern],
+  remarkable: [remarkable],
+};
+
+const wave: WaveCloseupArtifact = {
+  wave: 1,
+  iteration: 1,
+  status: "complete",
+  mergedItems: ["item-a"],
+  summary: "Wave merged",
+  concerns: [concern],
+  remarkable: [remarkable],
+};
+
+const plan: PlanCloseupArtifact = {
+  iteration: 1,
+  status: "complete",
+  summary: "Plan complete",
+  concerns: [concern],
+  remarkable: [remarkable],
+};
+
+const decision: DecisionArtifact = {
+  id: "d-1",
+  context: "wave",
+  decision: "continue",
+  timestamp: "2026-11-08T00:00:00.000Z",
+  concerns: [concern],
+  remarkable: [remarkable],
+};
+
+const review: ReviewArtifact = {
+  status: "changes_requested",
+  summary: "Drift found",
+  suggestions: [],
+  newConcerns: [concern],
+  remarkable: [remarkable],
+};
+
+// @ts-expect-error developer concerns are structured concerns, not free-form strings
+const stringConcerns: DeveloperOutputArtifact = { status: "ok", summary: "x", concerns: ["tech debt"] };
+
+// @ts-expect-error concern detail is lowercase; capital Detail is not part of the contract
+const capitalDetail: DeveloperOutputArtifact = {
+  status: "ok",
+  summary: "x",
+  concerns: [{ kind: "risk", summary: "x", Detail: "wrong casing" }],
+};
+
+export const contract = {
+  developer,
+  factFinder,
+  wave,
+  plan,
+  decision,
+  review,
+  stringConcerns,
+  capitalDetail,
+};
+`);
+    expect(errors).toEqual([]);
+  });
+
+  it("types concern confirmations and decision resolutions with strict vocabularies", () => {
+    const errors = typeErrors(`
+import type {
+  ConcernConfirms,
+  ConcernResolution,
+  DecisionArtifact,
+  PlanCloseupArtifact,
+} from "../../src/core/artifacts.js";
+
+const accept: ConcernConfirms = { id: "c-1", confirm: "accept", note: "Confirmed after review" };
+const reject: ConcernConfirms = { id: "c-2", confirm: "reject" };
+const resolved: ConcernResolution = { id: "c-3", action: "resolve" };
+const carried: ConcernResolution = { id: "c-4", action: "carry" };
+
+const plan: PlanCloseupArtifact = {
+  iteration: 1,
+  status: "complete",
+  summary: "Plan complete",
+  concernConfirms: [accept, reject],
+};
+
+const decision: DecisionArtifact = {
+  id: "d-1",
+  context: "plan-closeup",
+  decision: "complete",
+  timestamp: "2026-11-08T00:00:00.000Z",
+  concernConfirms: [accept],
+  concernResolution: resolved,
+};
+
+// @ts-expect-error confirmations are accept or reject
+const badConfirm: ConcernConfirms = { id: "c-5", confirm: "dismiss" };
+// @ts-expect-error decision resolutions are resolve or carry
+const badAction: ConcernResolution = { id: "c-6", action: "propagate" };
+// @ts-expect-error confirmations require the concern id
+const missingConfirmId: ConcernConfirms = { confirm: "accept" };
+// @ts-expect-error resolutions require the concern id
+const missingResolutionId: ConcernResolution = { action: "carry" };
+
+export const contract = {
+  accept,
+  reject,
+  resolved,
+  carried,
+  plan,
+  decision,
+  badConfirm,
+  badAction,
+  missingConfirmId,
+  missingResolutionId,
+};
+`);
+    expect(errors).toEqual([]);
+  });
 });
