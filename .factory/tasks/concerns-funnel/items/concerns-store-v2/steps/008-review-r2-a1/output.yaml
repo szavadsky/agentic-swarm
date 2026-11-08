@@ -1,0 +1,87 @@
+status: changes_requested
+summary: "changes_requested: one fix — reconcileConcerns is not idempotent
+  (every task start rewrites all concerns with fresh updatedAt/source.lastSeen
+  and creates one commit per committed record); plus optional polish (mutate
+  return-type leak for rm-* files, unscoped concern commits, untested r2
+  hardening, consult taskWt inference). Verified independently: `TMPDIR=/tmp bun
+  test test/engine/concerns-funnel.test.ts` = 22 pass / 203 expects, `bun run
+  typecheck` exit 0. Lock discipline is correct: RMW under KeyedMutex(taskDir),
+  commitAll outside the lock and never inside repo.writeLock, hex-only
+  fingerprints and basename-guarded ids."
+suggestions:
+  - id: reconcile-not-idempotent
+    disposition: fix
+    summary: reconcileConcerns rewrites every concern with fresh updatedAt/lastSeen
+      and commits once per record on every startup
+    detail: "aggregateConcerns always calls writeYamlAtomic with at = new Date() and
+      then commitAll (concerns.ts:81-96), and reconcileConcerns replays every
+      committed ok record unconditionally on each runTask (concerns.ts:197-205;
+      engine.ts:370). So every task restart advances updatedAt and
+      source.lastSeen for all concerns (artifacts.ts:336 documents lastSeen as
+      the most recent re-emit) and adds one 'factory: concerns <record>' commit
+      per record, even when nothing was lost. The 'idempotently' test only
+      asserts file count and preserved status, so it does not catch the churn.
+      Fix: make replay deterministic — process records in meta.endedAt order and
+      derive `at` from meta.endedAt (or write only when the merged record
+      differs) so a second startup is a no-op."
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 204
+  - id: mutate-returns-remarkables-as-concerns
+    disposition: optional
+    summary: applyConcernTriage/applyCloseupResolutions can return rm-* remarkable
+      records typed as StoredConcernArtifact
+    detail: mutate() pushes the raw patched record cast to StoredConcernArtifact
+      (concerns.ts:127), and triage accepts rm-* ids (covered by the remarkable
+      triage test). A remarkable record lacks the required
+      kind/summary/detail/severity, so the advertised return type is a lie — the
+      same leak that was just fixed in listOpenConcerns. No production consumer
+      reads the return value today; narrow the return type to a record shape or
+      filter/assert before returning.
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 127
+  - id: concern-commit-unscoped
+    disposition: optional
+    summary: Concern writes use unscoped commitAll on taskWt, sweeping unrelated
+      dirty files into concern commits
+    detail: "aggregateConcerns and mutate call commitAll without paths
+      (concerns.ts:96,131), which does `git add -A` over the whole task
+      worktree. Journal appends, canonical artifacts written earlier in the same
+      step, and repaired interrupted metas can be captured under 'factory:
+      concerns …', whereas the startup recovery deliberately scopes the commit
+      to the concerns dir (engine.ts:329-331). Scope the concern commits to
+      `${orchFolder}/${task}/concerns` for consistency and to avoid committing
+      another writer's in-progress files."
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 96
+  - id: r2-hardening-untested
+    disposition: optional
+    summary: r2 hardening (routed triage clears dismissReason, remarkable pre-lock
+      validation) has no regression tests
+    detail: applyConcernTriage now clears dismissReason on non-dismiss routing
+      (concerns.ts:144) and aggregateConcerns validates chosen/alternatives/why
+      before the KeyedMutex (concerns.ts:79), but the suite only routes from an
+      open concern and only tests unknown-kind atomicity. Add a dismissed→routed
+      assertion and an invalid-remarkable no-partial-write case to lock in the
+      fixes.
+    location:
+      file: plugins/software-factory/test/engine/concerns-funnel.test.ts
+      line: 589
+  - id: consult-taskwt-inference
+    disposition: optional
+    summary: Consult runAgentStep calls omit taskWt, relying on path inference that
+      mis-resolves epic child task dirs
+    detail: consults.ts:104-120 and 226-241 do not pass taskWt although it is in
+      scope; runAgentStep falls back to inferTaskWorktree, which expects the dir
+      to end with `<orchestrationFolder>/<task>`. Epic child dirs are
+      `<childWt>/.factory/<parent>/<epic>` while the task name is
+      `<parent>--<epic>`, so taskWt resolves to taskDir. Concern files still
+      land in the right place (store keys off taskDir) and git add -A from a
+      subdirectory stages the whole worktree, so this is benign today, but the
+      store context's taskWt is wrong and would break if commits are scoped (see
+      unscoped-commit finding). Pass taskWt explicitly.
+    location:
+      file: plugins/software-factory/src/core/flows/consults.ts
+      line: 104
