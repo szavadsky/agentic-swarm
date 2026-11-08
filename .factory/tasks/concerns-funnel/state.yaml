@@ -266,9 +266,10 @@ items:
     fixRounds: 1
     spendUsd: 0
 debt:
-  - Pre-existing head-guard failures when TMPDIR sits under .factory-runtime
-    because step-runner splits on /.factory. Baseline red; green with
-    TMPDIR=/tmp. Out of scope.
+  - "Pre-existing head-guard failures when TMPDIR sits under .factory-runtime:
+    inferTaskWorktree matches a folder-boundary tail (not a naive substring
+    split) yet the 2 failures persist via a different path. Baseline red; green
+    with TMPDIR=/tmp. Out of scope."
   - Unapplied spike-saga-commit reviewer optional nits (qualify
     epic-state-from-child-closeup with isMerged precedence, prefix inline paths,
     scope removeWorktree claim, fold contextPack key). Consumers apply mentally.
@@ -501,7 +502,7 @@ debt:
     inconsistent with documented branch-from-HEAD worktrees"
   - "[funnel-closeups-v3] Propagated parent copy retains child source.item,
     writes undeclared source.epic, and can clobber/lengthen parent records"
-budgetSpentUsd: 5.43156392
+budgetSpentUsd: 5.43555892
 spendByRole:
   alt-workhorse:
     costUsd: 1.160009
@@ -512,9 +513,9 @@ spendByRole:
     inputTokens: 7621030
     outputTokens: 2128726
   architect:
-    costUsd: 0.6794609999999999
-    inputTokens: 6134335
-    outputTokens: 126871
+    costUsd: 0.6834559999999998
+    inputTokens: 6136986
+    outputTokens: 143841
   alt-architect:
     costUsd: 0.03223
     inputTokens: 131928
@@ -589,7 +590,7 @@ spendByItem:
     inputTokens: 463902
     outputTokens: 217893
   (orchestration):
-    costUsd: 1.2336270000000003
-    inputTokens: 7523206
-    outputTokens: 615219
-lastUpdated: 2026-11-08T18:41:12.230Z
+    costUsd: 1.2376220000000002
+    inputTokens: 7525857
+    outputTokens: 632189
+lastUpdated: 2026-11-08T18:47:07.096Z
