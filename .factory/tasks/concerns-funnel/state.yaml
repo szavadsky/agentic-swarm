@@ -160,34 +160,38 @@ items:
     spendUsd: 0
   plan-reviewer-triage-v2:
     kind: dev
-    status: ready
+    status: merged
     branch: topic/concerns-funnel--plan-reviewer-triage-v2
     attempts: 1
     fixRounds: 2
     spendUsd: 0.268401
     currentStep: review
+    mergedAt: 2026-11-08T04:59:22-05:00
   reviewer-triage-v2:
     kind: dev
-    status: ready
+    status: merged
     branch: topic/concerns-funnel--reviewer-triage-v2
     attempts: 1
     fixRounds: 1
     spendUsd: 0.162881
     currentStep: review
+    mergedAt: 2026-11-08T04:44:15-05:00
   routing-blocker-derive-v2:
     kind: dev
-    status: pending
+    status: ready
     branch: topic/concerns-funnel--routing-blocker-derive-v2
-    attempts: 1
-    fixRounds: 1
-    spendUsd: 0
+    attempts: 2
+    fixRounds: 2
+    spendUsd: 0.39260192
+    currentStep: review
   routing-human-debt-v2:
     kind: dev
-    status: pending
+    status: ready
     branch: topic/concerns-funnel--routing-human-debt-v2
     attempts: 1
     fixRounds: 1
-    spendUsd: 0
+    spendUsd: 0.13819299999999998
+    currentStep: review
   adr-blocking-digest-v2:
     kind: dev
     status: pending
@@ -369,20 +373,62 @@ debt:
     triplicated with divergent filters"
   - "[reviewer-triage-v2] Non-review triagers lack dismiss/condensing
     instructions but share validation"
-budgetSpentUsd: 2.4866849999999996
+  - "[routing-blocker-derive-v2] Replace test-first fallback seams with direct
+    imports"
+  - "[routing-blocker-derive-v2] Drop now-redundant blockedBy option casts"
+  - "[routing-blocker-derive-v2] Wave report conflates routed-blocked with
+    failure-blocked"
+  - "[routing-blocker-derive-v2] Iteration end-of-wave blocked check derives
+    without blockedBy, misses routed blockers"
+  - "[routing-blocker-derive-v2] Unify blockedBy vs concernBlocked/routedNames
+    naming for the same set"
+  - "[routing-blocker-derive-v2] Document why deriveTaskState wave calls omit
+    blockedBy"
+  - "[routing-blocker-derive-v2] Test-first dynamic-export fallbacks remain
+    after implementation"
+  - "[routing-blocker-derive-v2] Unrelated heavy test now relies on a 30s
+    timeout ceiling"
+  - "[routing-blocker-derive-v2] cascadePendingBlocked is exported but has no
+    external callers"
+  - "[routing-blocker-derive-v2] deriveTaskState now also marks failure-blocked
+    items blocked (union), an untested semantic change"
+  - "[routing-blocker-derive-v2] DerivedItemState->SchedItem mapping and status
+    cast duplicated in wave.ts and task.ts"
+  - '[routing-blocker-derive-v2] Wave report labels routed-blocked dependents
+    "Blocked-by-failure"; dep-less routed seeds omitted'
+  - "[routing-blocker-derive-v2] Unrelated 2-cycle integration test now relies
+    on a 30s timeout ceiling"
+  - "[routing-blocker-derive-v2] Test-first dynamic-export seams and option
+    casts remain after implementation"
+  - "[routing-human-debt-v2] Awareness blocks [] dropped to undefined, masked by
+    ?? [] assertion"
+  - "[routing-human-debt-v2] All-async derive active vs iteration halt blocked
+    diverge"
+  - "[routing-human-debt-v2] Resolved optional debt inclusion unpinned by test"
+  - "[routing-human-debt-v2] not.toBe(blocked) assertions allow any non-blocked
+    status"
+  - "[routing-human-debt-v2] writeQuestion drops [] so awareness file lacks
+    explicit blocks"
+  - "[routing-human-debt-v2] All-async derive active diverges from iteration
+    halt blocked"
+  - "[routing-human-debt-v2] Debt prefixes with affects[0] even when not an item
+    slug"
+  - "[routing-human-debt-v2] First blocking question wins in readdir order with
+    no priority"
+budgetSpentUsd: 3.073703919999999
 spendByRole:
   alt-workhorse:
-    costUsd: 0.492837
-    inputTokens: 2514692
-    outputTokens: 859361
+    costUsd: 0.610814
+    inputTokens: 2966643
+    outputTokens: 1089683
   workhorse:
-    costUsd: 1.7662909999999998
-    inputTokens: 3563990
-    outputTokens: 1129696
+    costUsd: 2.18160192
+    inputTokens: 4555290
+    outputTokens: 1346689
   architect:
-    costUsd: 0.211042
-    inputTokens: 1865956
-    outputTokens: 80876
+    costUsd: 0.264773
+    inputTokens: 2402551
+    outputTokens: 81235
   alt-architect:
     costUsd: 0.016515000000000002
     inputTokens: 72452
@@ -392,6 +438,14 @@ spendByItem:
     costUsd: 0.251577
     inputTokens: 593198
     outputTokens: 339057
+  spike-saga-commit:
+    costUsd: 0.131932
+    inputTokens: 263905
+    outputTokens: 109900
+  spike-text-budget:
+    costUsd: 0.060779
+    inputTokens: 139871
+    outputTokens: 72059
   concerns-store-v2:
     costUsd: 0.613799
     inputTokens: 2193288
@@ -404,6 +458,14 @@ spendByItem:
     costUsd: 0.139671
     inputTokens: 277976
     outputTokens: 137336
+  reviewer-triage-v2:
+    costUsd: 0.162881
+    inputTokens: 378362
+    outputTokens: 150077
+  routing-blocker-derive-v2:
+    costUsd: 0.39260192
+    inputTokens: 1064535
+    outputTokens: 293585
   concerns-contracts-policy:
     costUsd: 0.107439
     inputTokens: 280717
@@ -416,20 +478,12 @@ spendByItem:
     costUsd: 0.268401
     inputTokens: 734306
     outputTokens: 188631
-  spike-text-budget:
-    costUsd: 0.060779
-    inputTokens: 139871
-    outputTokens: 72059
-  spike-saga-commit:
-    costUsd: 0.131932
-    inputTokens: 263905
-    outputTokens: 109900
-  reviewer-triage-v2:
-    costUsd: 0.162881
-    inputTokens: 378362
-    outputTokens: 150077
+  routing-human-debt-v2:
+    costUsd: 0.13819299999999998
+    inputTokens: 364883
+    outputTokens: 148762
   (orchestration):
-    costUsd: 0.547607
-    inputTokens: 2592879
-    outputTokens: 374212
-lastUpdated: 2026-11-08T09:59:22.493Z
+    costUsd: 0.6038309999999999
+    inputTokens: 3143307
+    outputTokens: 379539
+lastUpdated: 2026-11-08T11:58:27.856Z

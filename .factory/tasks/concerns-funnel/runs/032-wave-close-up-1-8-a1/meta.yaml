@@ -1,0 +1,11 @@
+seq: 32
+name: wave-close-up-1-8
+attempt: 1
+agent: wave-close-up
+role: alt-workhorse
+models:
+  - opencode-go/muse-spark-1.3-contributor
+  - opencode-go/deepseek-v4.1-flash
+timeoutSec: 900
+status: started
+startedAt: 2026-11-08T12:04:27.292Z
