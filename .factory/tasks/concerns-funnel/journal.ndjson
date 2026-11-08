@@ -878,3 +878,5 @@
 {"type":"item_merge_phase","item":"modes-prompts-v2","phase":"merge-child-into-parent","ts":"2026-11-08T08:46:14.847Z"}
 {"type":"item_merge_phase","item":"modes-prompts-v2","phase":"remove-worktree","ts":"2026-11-08T08:46:14.914Z"}
 {"type":"item_merged","item":"modes-prompts-v2","sha":"6d322399d37057ae2f81cefa9c528ba0dc0041c3","conflictResolved":false,"ts":"2026-11-08T08:46:14.970Z"}
+{"type":"step_started","task":"concerns-funnel","step":"wave-close-up-1-6","attempt":1,"recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/028-wave-close-up-1-6-a1","ts":"2026-11-08T08:47:28.853Z"}
+{"type":"step_timeout_armed","task":"concerns-funnel","step":"wave-close-up-1-6","timeoutSec":900,"ts":"2026-11-08T08:47:28.857Z"}

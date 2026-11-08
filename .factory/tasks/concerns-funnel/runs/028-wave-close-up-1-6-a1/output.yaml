@@ -1,0 +1,19 @@
+blockedItems: []
+debt: []
+failedItems: []
+iteration: 1
+mergedItems:
+  - concerns-store-v2
+  - modes-prompts-v2
+recommendations:
+  - Proceed to next wave / architect wave report; no hygiene or gate blockers.
+  - Engine to commit the routine journal.ndjson append as part of normal
+    baseline hygiene.
+status: complete
+summary: "Wave 6 complete: both items (concerns-store-v2, modes-prompts-v2)
+  merged cleanly with no conflicts. Tree hygiene clean: no untracked files, no
+  stray temp/build artifacts, no merge conflict markers in plugins/docs; the
+  sole modified file is the engine-owned .factory journal append for this step.
+  Gates: no regressions — typecheck pass/pass (green, matches baseline), test
+  fail->pass IMPROVED (baseline head-guard failures now green)."
+wave: 6
