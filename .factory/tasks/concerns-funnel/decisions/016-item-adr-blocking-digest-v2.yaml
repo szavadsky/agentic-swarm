@@ -1,0 +1,30 @@
+id: decision-adr-blocking-digest-v2-1794145301769
+context: item
+item: adr-blocking-digest-v2
+afterRecord: 007-review-r2-a1
+decision: retry-with-guidance
+timestamp: 2026-11-08T13:41:41.769Z
+rationale: "Reviewer defect verified and valid: humanInvolvementCriteria is
+  computed (step-runner.ts:300-304) and registered in KNOWN_VARS for
+  architect/review steps (prompt-vars.ts:95-131), but zero fragments under
+  agents/ contain the {{humanInvolvementCriteria}} placeholder, so the
+  mode/blocking table is computed then silently dropped — preflight cannot catch
+  unused vars. Architects must classify blocking per a table they never see,
+  making blocking-vs-remarkable routing unguided. Fix is small and localized (3
+  fragment edits + 1 render test); no split or escalation warranted."
+text: "Fix in adr-blocking-digest-v2 (one round): 1) Add a terse
+  `{{humanInvolvementCriteria}}` section to agents/steps/architect-plan.md,
+  agents/steps/architect-revise.md, and agents/steps/plan-review.md (plan-review
+  triages ADR/concern blocking per matrix). Insert after the existing
+  criteria/dispositions block with a short heading (e.g. `## Human involvement`
+  + placeholder only, no prose duplication — criteria text comes from
+  agents/criteria/human-involvement.md via formatHumanInvolvementCriteria). Keep
+  each addition ≤5 lines to respect the 15/60 debloat budget. 2) Do NOT touch
+  step-runner computation or KNOWN_VARS registration (already correct). 3) Add a
+  prompt-render test (extend test/human-involvement-config.test.ts): render
+  architect-plan, architect-revise, and plan-review prompts with a sentinel
+  humanInvolvementCriteria string and assert the sentinel appears in each
+  rendered prompt. 4) Verify: bun run typecheck + TMPDIR=/tmp bun test
+  (prompts.test preflight must stay green). Out of scope: steps/review
+  placeholder (triage items own it), digest/blocking logic changes."
+persist: true
