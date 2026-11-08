@@ -36,6 +36,7 @@ import { loadCriteriaBundle, formatDispositionsSection } from "../prompts.js";
 import { checkPlanReviewRounds, checkIterations, checkAmendments } from "../loops.js";
 import { validateEdits } from "../plan/limits.js";
 import { applyEdits } from "../plan/apply.js";
+import { getClock } from "../clock.js";
 import { buildGateDiffSection, runGates } from "../checks/gates.js";
 import type { CheckContext } from "../checks/types.js";
 import { resolveRole } from "../config/roles.js";
@@ -174,6 +175,45 @@ export async function buildTaskStatusBlock(opts: {
   return lines.join("\n");
 }
 
+/**
+ * Idle threshold for the wave-end stretch (merge + close-up gates + close-up
+ * turn) before it is journaled as a scheduler_wait event (post-mortem Finding:
+ * a multi-minute wave_started→close-up gap with no journal explanation).
+ */
+export const SCHEDULER_IDLE_THRESHOLD_MS = 60_000;
+
+/**
+ * Builds the scheduler_wait journal event for a wave-end stretch that exceeded
+ * the idle threshold. Pure (no clock reads): callers pass the measured
+ * wall/active gaps so the shape is unit-testable with a fake clock.
+ * Wall beyond active = machine suspend, not engine idle — reported separately.
+ * Returns undefined when the gap is within threshold (nothing to journal).
+ */
+export function buildSchedulerWaitEvent(opts: {
+  wave: number;
+  iteration: number;
+  gapWallMs: number;
+  gapActiveMs: number;
+  readyCount: number;
+  hasGates: boolean;
+  merges: string[];
+}): Record<string, unknown> | undefined {
+  if (opts.gapWallMs <= SCHEDULER_IDLE_THRESHOLD_MS) return undefined;
+  return {
+    type: "scheduler_wait",
+    wave: opts.wave,
+    iteration: opts.iteration,
+    reason:
+      opts.readyCount > 0
+        ? "wave-end merge + close-up gates + close-up turn"
+        : opts.hasGates
+          ? "close-up gates + close-up turn"
+          : "close-up turn (no ready items, no gates)",
+    gapWallMs: Math.round(opts.gapWallMs),
+    gapActiveMs: Math.round(Math.max(0, opts.gapActiveMs)),
+    merges: opts.merges,
+  };
+}
 /**
  * Builds the existing-items list for validateEdits from committed assignments.
  * Waves come from assignment.yaml so amended-item dep waves validate against
@@ -1150,6 +1190,16 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
     }
 
     // 6. Wave end merge path (§8.4.6, §7)
+    // Scheduler-idle instrumentation (post-mortem Finding: a multi-minute gap
+    // between wave_started and the close-up step with no journal explanation).
+    // Whatever runs between — ready-item merges, gates on the merged branch,
+    // the semaphore wait inside the next step — leaves no trace. Timestamp both
+    // ends with the engine clock (fake-clock friendly) and journal a
+    // scheduler_wait event when the gap exceeds 60s so the next post-mortem
+    // has a reason attached.
+    const waveEndClock = getClock();
+    const waveEndStartWall = waveEndClock.now();
+    const waveEndStartMono = waveEndClock.monotonic();
     const mergeResults: Array<{ slug: string; ok: boolean; sha?: string }> = [];
     if (waveState.ready.length > 0) {
       for (const readyItem of waveState.ready) {
@@ -1274,6 +1324,23 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
       budgetTracker,
       iteration,
     });
+    // Idle-gap accounting: the step above returns only after its semaphore wait,
+    // gates, and harness turn. Journal the reason whenever the wave-end stretch
+    // exceeds 60s (wall-clock beyond monotonic = machine suspend, not engine idle).
+    {
+      const gapWallMs = waveEndClock.now() - waveEndStartWall;
+      const gapMonoMs = waveEndClock.monotonic() - waveEndStartMono;
+      const evt = buildSchedulerWaitEvent({
+        wave: w,
+        iteration,
+        gapWallMs,
+        gapActiveMs: gapMonoMs,
+        readyCount: waveState.ready.length,
+        hasGates: Boolean(infraArtifact?.gates && infraArtifact.gates.length > 0),
+        merges: mergeResults.map((m) => m.slug),
+      });
+      if (evt) await appendJournal(taskDir, evt as { type: string; [key: string]: unknown });
+    }
 
 
 
@@ -1532,15 +1599,30 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
             await discardAmendment("PM amend delta empty after dropping re-emitted existing items; continuing current waves");
           } else {
             // removeItemSlugs supersedes PENDING items only; running/merged are protected.
+            // Already-superseded/already-removed slugs are idempotent no-ops: the
+            // engine's own terminal state for prior splits/amends (Finding: the first
+            // amend could never apply once its target was split). No-ops journal
+            // amend_remove_noop and are excluded from the supersede decisions so
+            // re-applying the same removal is a clean no-op.
             const removalErrors: string[] = [];
+            const removalNoops: string[] = [];
+            const slugsToSupersede: string[] = [];
             for (const slug of removeItemSlugs) {
               const st = await deriveItemState({ taskDir, itemSlug: slug, parentBranch, taskWt, pipeline, rootTaskDir: params.rootTaskDir });
               if (!st.assignment) {
                 removalErrors.push(`removeItemSlugs references unknown item "${slug}"`);
+              } else if (st.status === "superseded") {
+                removalNoops.push(slug);
               } else if (st.status !== "pending") {
                 removalErrors.push(`removeItemSlugs cannot remove "${slug}" with status "${st.status}" (pending only)`);
+              } else {
+                slugsToSupersede.push(slug);
               }
             }
+            // Effective removals are the pending subset; no-ops never reach
+            // applyEdits so re-applying the same removal writes no duplicate
+            // decision files.
+            const effectiveRemovals = slugsToSupersede;
             if (removalErrors.length > 0) {
               await appendJournal(taskDir, {
                 type: "pm_amend_validation_failed",
@@ -1550,17 +1632,43 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
                 errors: removalErrors,
               });
               await discardAmendment(`Amend removal invalid: ${removalErrors.join("; ")}`, removalErrors);
+            } else if (amendEdits.items.length === 0 && effectiveRemovals.length === 0) {
+              // Only already-superseded removals (or nothing at all): journal the
+              // no-op, then discard without an empty commit.
+              if (removalNoops.length > 0) {
+                await appendJournal(taskDir, {
+                  type: "amend_remove_noop",
+                  iteration,
+                  wave: w,
+                  amendment: amendmentCount,
+                  slugs: removalNoops,
+                });
+              }
+              await discardAmendment(
+                removalNoops.length > 0
+                  ? `Amend removal no-op: ${removalNoops.join(", ")} already superseded; nothing to apply`
+                  : "PM amend delta empty after dropping re-emitted existing items; continuing current waves"
+              );
             } else {
+              if (removalNoops.length > 0) {
+                await appendJournal(taskDir, {
+                  type: "amend_remove_noop",
+                  iteration,
+                  wave: w,
+                  amendment: amendmentCount,
+                  slugs: removalNoops,
+                });
+              }
               await writeYamlAtomic(amendEditsPath, amendEdits);
               let nextDecisionSeq = 1;
               const amendDecisionsDir = path.join(taskDir, "decisions");
-              if (removeItemSlugs.length > 0 && fs.existsSync(amendDecisionsDir)) {
+              if (effectiveRemovals.length > 0 && fs.existsSync(amendDecisionsDir)) {
                 for (const name of await fs.promises.readdir(amendDecisionsDir)) {
                   const m = /^(\d{3})-/.exec(name);
                   if (m) nextDecisionSeq = Math.max(nextDecisionSeq, parseInt(m[1]!, 10) + 1);
                 }
               }
-              const applied = applyEdits(amendEdits, { taskDir, plan: plan!, removeItemSlugs, nextDecisionSeq });
+              const applied = applyEdits(amendEdits, { taskDir, plan: plan!, removeItemSlugs: effectiveRemovals, nextDecisionSeq });
               for (const f of applied.files) {
                 await fs.promises.mkdir(path.dirname(f.path), { recursive: true });
                 await writeTextAtomic(f.path, f.content);

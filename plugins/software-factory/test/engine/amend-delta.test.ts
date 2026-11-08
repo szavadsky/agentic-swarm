@@ -6,6 +6,7 @@ import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 import { FakeHarness } from "../../src/harness/fake/fake-harness.js";
 import { runTask } from "../../src/core/engine.js";
 import { runAgentStep } from "../../src/core/flows/step-runner.js";
+import { buildSchedulerWaitEvent, SCHEDULER_IDLE_THRESHOLD_MS } from "../../src/core/flows/iteration.js";
 import { Repo } from "../../src/core/git/repo.js";
 import { loadPromptLibrary, resolveAgentTools } from "../../src/core/prompts.js";
 import type { PipelineConfig, ProjectConfig, PlanArtifact } from "../../src/core/artifacts.js";
@@ -932,6 +933,130 @@ describe("Engine: amend delta semantics, resumed repair, removal, tool-less PM (
     expect(journal).toContain("pm_tools_guard_rejected");
   });
 
+  it("removeItemSlugs with superseded + pending slugs applies (pending superseded, superseded no-op journaled)", async () => {
+    const task = "amend-remove-mixed-task";
+    setupTask(tmpRepo, task, orchFolder);
+    const pipeline = makePipeline();
+    const harness = new FakeHarness();
+    scriptIngest(harness, task);
+    scriptPlan(
+      harness,
+      task,
+      [
+        { slug: "base-1", kind: "dev", title: "Base", milestoneId: "m1" },
+        { slug: "stale-1", kind: "dev", title: "Stale", milestoneId: "m1" },
+      ],
+      [
+        { slug: "base-1", outlineRef: "base-1", kind: "dev", title: "Base", assignment: "Work", milestone: "m1", wave: 1 },
+        { slug: "stale-1", outlineRef: "stale-1", kind: "dev", title: "Stale", assignment: "Stale work", milestone: "m1", wave: 2 },
+      ]
+    );
+    harness.scriptOutcome(`${task}/items/base-1/develop#a1`, {
+      ok: true,
+      data: { status: "ok", summary: "Base done" },
+    });
+    harness.scriptOutcome(`${task}/runs/wave-close-up-1-1#a1`, {
+      ok: true,
+      data: { wave: 1, iteration: 1, status: "complete", mergedItems: ["base-1"], summary: "Wave 1 ok" },
+    });
+    // First amend removes pending stale-1 → superseded, applies alongside a
+    // second wave-2 pending item. The wave-2 report then amends AGAIN removing
+    // the now-superseded stale-1 plus the still-pending extra-1: stale-1 is a
+    // no-op (amend_remove_noop), extra-1 is superseded, and the whole second
+    // amend applies with no validation failure.
+    harness.scriptOutcome(`${task}/runs/architect-wave-report-1-1#a1`, {
+      ok: true,
+      data: {
+        id: "dec-amend-1",
+        context: "wave",
+        decision: "amend",
+        planDelta: "Replace stale with fresh",
+        outlines: [
+          { slug: "fresh-1", kind: "dev", title: "Fresh", milestoneId: "m1" },
+          { slug: "extra-1", kind: "dev", title: "Extra", milestoneId: "m1" },
+        ],
+        removeItemSlugs: ["stale-1"],
+        timestamp: new Date().toISOString(),
+      },
+    });
+    harness.scriptOutcome(`${task}/runs/pm-amend-1-1#a1`, {
+      ok: true,
+      data: {
+        iteration: 1,
+        amendmentIndex: 1,
+        items: [
+          { slug: "fresh-1", outlineRef: "fresh-1", kind: "dev", title: "Fresh", assignment: "F", milestone: "m1", wave: 2 },
+          { slug: "extra-1", outlineRef: "extra-1", kind: "dev", title: "Extra", assignment: "X", milestone: "m1", wave: 3 },
+        ],
+      },
+    });
+    harness.scriptOutcome(`${task}/items/fresh-1/develop#a1`, {
+      ok: true,
+      data: { status: "ok", summary: "Fresh done" },
+    });
+    harness.scriptOutcome(`${task}/runs/wave-close-up-1-2#a1`, {
+      ok: true,
+      data: { wave: 2, iteration: 1, status: "complete", mergedItems: ["fresh-1"], summary: "Wave 2 ok" },
+    });
+    // Second amend: stale-1 is superseded by now (no-op), extra-1 pending (removed).
+    harness.scriptOutcome(`${task}/runs/architect-wave-report-1-2#a1`, {
+      ok: true,
+      data: {
+        id: "dec-amend-2",
+        context: "wave",
+        decision: "amend",
+        planDelta: "Replace extra with final",
+        outlines: [{ slug: "final-1", kind: "dev", title: "Final", milestoneId: "m1" }],
+        removeItemSlugs: ["stale-1", "extra-1"],
+        timestamp: new Date().toISOString(),
+      },
+    });
+    harness.scriptOutcome(`${task}/runs/pm-amend-1-2#a1`, {
+      ok: true,
+      data: {
+        iteration: 1,
+        amendmentIndex: 2,
+        items: [
+          { slug: "final-1", outlineRef: "final-1", kind: "dev", title: "Final", assignment: "Fin", milestone: "m1", wave: 3 },
+        ],
+      },
+    });
+    harness.scriptOutcome(`${task}/items/final-1/develop#a1`, (run) => {
+      fs.writeFileSync(path.join(run.cwd, "final.txt"), "final\n");
+      return { ok: true, data: { status: "ok", summary: "Final done" } };
+    });
+    harness.scriptOutcome(`${task}/runs/wave-close-up-1-3#a1`, {
+      ok: true,
+      data: { wave: 3, iteration: 1, status: "complete", mergedItems: ["final-1"], summary: "Wave 3 ok" },
+    });
+    harness.scriptOutcome(`${task}/runs/architect-wave-report-1-3#a1`, {
+      ok: true,
+      data: { id: "dec-c", context: "wave", decision: "continue", timestamp: new Date().toISOString() },
+    });
+    scriptCloseup(harness, task);
+
+    const res = await runTask(
+      { harness, repo: repoObj, project, pipelineFor: async () => pipeline, prompts },
+      task
+    );
+    expect(res.status).toBe("done");
+
+    const taskWtPath = path.join(worktreeRoot, `topic_${task}`);
+    const deployedTaskDir = path.join(taskWtPath, orchFolder, task);
+    const journal = fs.readFileSync(path.join(deployedTaskDir, "journal.ndjson"), "utf8");
+    // No validation failure anywhere; the superseded re-removal journaled a no-op.
+    expect(journal).not.toContain("pm_amend_validation_failed");
+    expect(journal).toContain("amend_remove_noop");
+    expect(journal).toContain("stale-1");
+    // Both real removals wrote supersede decisions; the no-op wrote none.
+    const decisions = fs.readdirSync(path.join(deployedTaskDir, "decisions"));
+    expect(decisions.filter((d) => d.includes("amend-remove-stale-1")).length).toBe(1);
+    expect(decisions.some((d) => d.includes("amend-remove-extra-1"))).toBe(true);
+    // extra-1 never ran (superseded); final-1 did and merged.
+    expect(harness.calls.some((c) => c.type === "run" && (c as any).run.label.startsWith(`${task}/items/extra-1/`))).toBe(false);
+    expect(fs.existsSync(path.join(taskWtPath, "final.txt"))).toBe(true);
+  });
+
   it("wave-close-up receives the engine gateDiff table", async () => {
     const task = "gatediff-task";
     setupTask(tmpRepo, task, orchFolder);
@@ -967,5 +1092,123 @@ describe("Engine: amend delta semantics, resumed repair, removal, tool-less PM (
       task
     );
     expect(res.status).toBe("done");
+  });
+
+  it("removeItemSlugs on a running item still errors (protection preserved)", async () => {
+    const task = "amend-remove-running-task";
+    setupTask(tmpRepo, task, orchFolder);
+    const pipeline = makePipeline();
+    const harness = new FakeHarness();
+    scriptIngest(harness, task);
+    scriptPlan(
+      harness,
+      task,
+      [
+        { slug: "base-1", kind: "dev", title: "Base", milestoneId: "m1" },
+        { slug: "slow-1", kind: "dev", title: "Slow", milestoneId: "m1" },
+      ],
+      [
+        { slug: "base-1", outlineRef: "base-1", kind: "dev", title: "Base", assignment: "Work", milestone: "m1", wave: 1 },
+        { slug: "slow-1", outlineRef: "slow-1", kind: "dev", title: "Slow", assignment: "Work", milestone: "m1", wave: 2 },
+      ]
+    );
+    harness.scriptOutcome(`${task}/items/base-1/develop#a1`, {
+      ok: true,
+      data: { status: "ok", summary: "Base done" },
+    });
+    harness.scriptOutcome(`${task}/runs/wave-close-up-1-1#a1`, {
+      ok: true,
+      data: { wave: 1, iteration: 1, status: "complete", mergedItems: ["base-1"], summary: "Wave 1 ok" },
+    });
+    // slow-1 holds a committed `started` record (crashed mid-turn in a prior
+    // run): deriveItemState reports it as running, so the wave-1 amend
+    // removing it must be rejected and the whole amendment discarded.
+    harness.scriptOutcome(`${task}/runs/architect-wave-report-1-1#a1`, () => {
+      const taskWtPath = path.join(worktreeRoot, `topic_${task}`);
+      const deployedTaskDir = path.join(taskWtPath, orchFolder, task);
+      const stepsDir = path.join(deployedTaskDir, "items", "slow-1", "steps", "001-develop-r1-a1");
+      fs.mkdirSync(stepsDir, { recursive: true });
+      fs.writeFileSync(path.join(stepsDir, "input.md"), "seeded running turn\n");
+      fs.writeFileSync(
+        path.join(stepsDir, "meta.yaml"),
+        yaml.stringify({ seq: 1, name: "develop", attempt: 1, fixRound: 1, agent: "developer", role: "workhorse", models: ["m"], status: "started", startedAt: new Date().toISOString() })
+      );
+      return {
+        ok: true,
+        data: {
+          id: "dec-amend",
+          context: "wave",
+          decision: "amend",
+          planDelta: "Replace slow",
+          outlines: [{ slug: "fresh-1", kind: "dev", title: "Fresh", milestoneId: "m1" }],
+          removeItemSlugs: ["slow-1"],
+          timestamp: new Date().toISOString(),
+        },
+      };
+    });
+    harness.scriptOutcome(`${task}/runs/pm-amend-1-1#a1`, {
+      ok: true,
+      data: {
+        iteration: 1,
+        amendmentIndex: 1,
+        items: [
+          { slug: "fresh-1", outlineRef: "fresh-1", kind: "dev", title: "Fresh", assignment: "F", milestone: "m1", wave: 2 },
+        ],
+      },
+    });
+    // slow-1 retries its turn in wave 2 (started → attempt 2) and merges.
+    harness.scriptOutcome(`${task}/items/slow-1/develop#a2`, (run) => {
+      fs.writeFileSync(path.join(run.cwd, "slow.txt"), "slow\n");
+      return { ok: true, data: { status: "ok", summary: "Slow done" } };
+    });
+    harness.scriptOutcome(`${task}/runs/wave-close-up-1-2#a1`, {
+      ok: true,
+      data: { wave: 2, iteration: 1, status: "complete", mergedItems: ["slow-1"], summary: "Wave 2 ok" },
+    });
+    harness.scriptOutcome(`${task}/runs/architect-wave-report-1-2#a1`, {
+      ok: true,
+      data: { id: "dec-c", context: "wave", decision: "continue", timestamp: new Date().toISOString() },
+    });
+    scriptCloseup(harness, task);
+
+    const res = await runTask(
+      { harness, repo: repoObj, project, pipelineFor: async () => pipeline, prompts },
+      task
+    );
+    expect(res.status).toBe("done");
+
+    const taskWtPath = path.join(worktreeRoot, `topic_${task}`);
+    const deployedTaskDir = path.join(taskWtPath, orchFolder, task);
+    const journal = fs.readFileSync(path.join(deployedTaskDir, "journal.ndjson"), "utf8");
+    expect(journal).toContain("pm_amend_validation_failed");
+    // JSON-escaped in the ndjson line.
+    expect(journal).toContain('removeItemSlugs cannot remove \\"slow-1\\" with status \\"running\\"');
+    expect(journal).toContain("pm_amend_discarded");
+    // fresh-1 never scheduled; slow-1 ran and merged normally.
+    expect(fs.existsSync(path.join(deployedTaskDir, "items", "fresh-1", "assignment.yaml"))).toBe(false);
+    expect(fs.existsSync(path.join(taskWtPath, "slow.txt"))).toBe(true);
+  });
+
+  it("buildSchedulerWaitEvent: below threshold → undefined; above → shaped event", () => {
+    expect(
+      buildSchedulerWaitEvent({ wave: 3, iteration: 1, gapWallMs: 1000, gapActiveMs: 1000, readyCount: 0, hasGates: false, merges: [] })
+    ).toBeUndefined();
+    expect(
+      buildSchedulerWaitEvent({ wave: 3, iteration: 1, gapWallMs: SCHEDULER_IDLE_THRESHOLD_MS, gapActiveMs: 1000, readyCount: 0, hasGates: false, merges: [] })
+    ).toBeUndefined();
+    const evt = buildSchedulerWaitEvent({ wave: 3, iteration: 1, gapWallMs: 211_632, gapActiveMs: 211_000, readyCount: 0, hasGates: true, merges: [] });
+    expect(evt).toMatchObject({
+      type: "scheduler_wait",
+      wave: 3,
+      iteration: 1,
+      reason: "close-up gates + close-up turn",
+      gapWallMs: 211_632,
+      gapActiveMs: 211_000,
+      merges: [],
+    });
+    const mergeEvt = buildSchedulerWaitEvent({ wave: 2, iteration: 1, gapWallMs: 90_000, gapActiveMs: 1000, readyCount: 2, hasGates: true, merges: ["a-1"] });
+    expect((mergeEvt as any).reason).toBe("wave-end merge + close-up gates + close-up turn");
+    const turnEvt = buildSchedulerWaitEvent({ wave: 4, iteration: 1, gapWallMs: 61_000, gapActiveMs: 61_000, readyCount: 0, hasGates: false, merges: [] });
+    expect((turnEvt as any).reason).toBe("close-up turn (no ready items, no gates)");
   });
 });
