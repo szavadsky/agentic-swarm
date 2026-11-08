@@ -6,14 +6,18 @@ import type {
   PipelineConfig,
   ProjectConfig,
   SteerItemArtifact,
+  StoredConcernArtifact,
 } from "../artifacts.js";
 import type { Harness } from "../../harness/types.js";
 import { writeYamlAtomic } from "../records/io.js";
 import { writeQuestion } from "../steer.js";
 import { runAgentStep } from "./step-runner.js";
 import { appendJournal } from "../journal.js";
-import type { Semaphore } from "../mutex.js";
+import { KeyedMutex, type Semaphore } from "../mutex.js";
 import type { BudgetTracker } from "../budget.js";
+
+/** Serializes routed-concern consults so one decision file is written once. */
+const concernLocks = new KeyedMutex();
 
 export interface ItemConsultParams {
   task: string;
@@ -283,6 +287,131 @@ export async function runNonItemConsult(
     type: "decision_made",
     context: "non-item",
     seam,
+    decision: decisionArtifact.decision,
+    decisionPath,
+  });
+
+  return { decision: decisionArtifact, sessionId: stepRes.sessionId };
+}
+
+export interface ConcernConsultParams {
+  task: string;
+  concern: StoredConcernArtifact;
+  taskDir: string;
+  taskWt: string;
+  repo: any;
+  harness: Harness;
+  pipeline: PipelineConfig;
+  project: ProjectConfig;
+  prompts: any;
+  architectSessionId?: string;
+  turnsSemaphore?: Semaphore;
+  budgetTracker?: BudgetTracker;
+  iteration?: number;
+}
+
+/**
+ * Runs one architect consult for a routed blocker concern (§18,
+ * adr-routing-derived-state). `decisions/concern-<cid>.yaml` is the canonical
+ * artifact; its existence is the idempotency guard, so a restarted act phase
+ * neither repeats the turn nor rewrites the decision.
+ */
+export async function runConcernConsult(
+  params: ConcernConsultParams
+): Promise<{ decision?: DecisionArtifact; sessionId?: string }> {
+  const decisionPath = path.join(params.taskDir, "decisions", `concern-${params.concern.id}.yaml`);
+  return concernLocks.runExclusive(decisionPath, () => consultConcernOnce(params, decisionPath));
+}
+
+async function consultConcernOnce(
+  params: ConcernConsultParams,
+  decisionPath: string
+): Promise<{ decision?: DecisionArtifact; sessionId?: string }> {
+  const {
+    task,
+    concern,
+    taskDir,
+    taskWt,
+    repo,
+    harness,
+    pipeline,
+    project,
+    prompts,
+    architectSessionId,
+    turnsSemaphore,
+    budgetTracker,
+    iteration,
+  } = params;
+
+  if (fs.existsSync(decisionPath)) {
+    return { sessionId: architectSessionId };
+  }
+
+  const runsDir = path.join(taskDir, "runs");
+  await fs.promises.mkdir(path.dirname(decisionPath), { recursive: true });
+  const affects = (concern.affects ?? []).join(", ");
+  const promptVars: Record<string, string> = {
+    task,
+    context: [
+      `Routed blocker concern ${concern.id}`,
+      `Summary: ${concern.summary}`,
+      `Severity: ${concern.severity}${affects ? `; blocks: ${affects}` : ""}`,
+    ].join("\n"),
+    feedback: concern.detail ?? concern.summary,
+    debt: "",
+  };
+
+  let decisionArtifact: DecisionArtifact | undefined;
+  const stepRes = await runAgentStep({
+    task,
+    stepId: `consult-concern-${concern.id}`,
+    stepFragment: "steps/architect-consult-nonitem",
+    agent: "architect",
+    role: "architect",
+    sessionMode: "reuse",
+    existingSessionId: architectSessionId,
+    cwd: taskWt,
+    taskDir,
+    recordsDir: runsDir,
+    repo,
+    harness,
+    pipeline,
+    project,
+    prompts,
+    promptVars,
+    turnsSemaphore,
+    budgetTracker,
+    iteration,
+    writeArtifact: async (output: unknown) => {
+      if (fs.existsSync(decisionPath)) return;
+      const raw = output as any;
+      decisionArtifact = {
+        id: String(raw?.id ?? `decision-concern-${concern.id}`),
+        context: (raw?.context ?? "wave") as DecisionContext,
+        decision: String(raw?.decision ?? "continue"),
+        timestamp: String(raw?.timestamp ?? new Date().toISOString()),
+        rationale: raw?.rationale,
+        text: raw?.text,
+        persist: raw?.persist,
+        outlines: raw?.outlines,
+        outline: raw?.outline,
+        debt: raw?.debt,
+        reason: raw?.reason,
+        question: raw?.question,
+        planDelta: raw?.planDelta,
+      };
+      await writeYamlAtomic(decisionPath, decisionArtifact);
+    },
+  });
+
+  if (!stepRes.ok || !decisionArtifact) {
+    throw new Error(`Concern consult for ${concern.id} failed: ${stepRes.meta.error || "no output"}`);
+  }
+
+  await appendJournal(taskDir, {
+    type: "decision_made",
+    context: "concern",
+    concern: concern.id,
     decision: decisionArtifact.decision,
     decisionPath,
   });

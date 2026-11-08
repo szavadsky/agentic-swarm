@@ -1,0 +1,75 @@
+status: ok
+summary: "Authored the exact ready routing-architect-consult-v2 engine test file
+  at plugins/software-factory/test/engine/routing-architect-consult.test.ts (no
+  production edits, no stubs). Both scenarios are behaviorally red on current
+  production because no decisions/concern-<cid>.yaml is written: JUnit reports 2
+  <failure> (0 <error>) with the declared ids. Merge-repair root cause
+  investigated: the v2 merge tree 74739d6 passes the full suite under both
+  TMPDIR=/tmp and a factory-runtime-style TMPDIR, so the wave-9 gate failure was
+  environmental/flaky, not a deterministic defect. A 3-way rebase of the v2 diff
+  onto current tip yields exactly one conflict (iteration.ts import block);
+  resolving it by keeping persistAdrs (adr-blocking-digest-v2) plus
+  runConcernConsult (this item) makes the resolved scratch tree pass the full
+  suite (384 pass, 2 skip, 0 fail), including all sibling suites."
+target:
+  selectors:
+    - test/engine/routing-architect-consult.test.ts
+  expectRed:
+    - "Routing: architect consult and hydration.writes one concern decision file
+      and hydrates architect turns with routed concerns"
+    - "Routing: architect consult and hydration.restart after a mid-iteration
+      failure neither repeats the consult nor rewrites the decision"
+evidence:
+  - Added
+    plugins/software-factory/test/engine/routing-architect-consult.test.ts,
+    byte-identical to the ready v2 test diff (sha1
+    bbd08caeb9e3cd8a70a154d9dfb6e8f1efc26ad7 on both).
+  - cd plugins/software-factory && bun run typecheck -> exit 0 (tsc --noEmit
+    clean with the new test).
+  - TMPDIR=/tmp bun test test/engine/routing-architect-consult.test.ts -> 0
+    pass, 2 fail, 4 expect() calls; failures are expect().toEqual assertion
+    failures (expected ['concern-c-0123456789.yaml'], received []), not
+    import/collection errors.
+  - "JUnit reporter: 2 <testcase> entries with classname 'Routing: architect
+    consult and hydration' and 2 <failure> tags (0 <error>), ids exactly match
+    expectRed."
+  - TMPDIR=/tmp bun test (full suite) -> 382 pass, 2 skip, 2 fail across 65
+    files; only the two newly declared red tests fail, proving no collateral
+    regression on current production.
+  - Targeted red test re-run with a factory-runtime-style TMPDIR
+    (<worktree>/.tmp-repro/.factory-runtime/tmp) -> 0 pass, 2 fail with the same
+    assertion, so target-red is TMPDIR-independent.
+  - "Merge-gate evidence: in-repo journal.ndjson records only
+    item_merge_gates_failed {failingGates:['test']} for v2 with no per-test
+    names; extracting merge tree 74739d6 and running the full suite -> 371 pass,
+    2 skip, 0 fail (373 tests/61 files) under TMPDIR=/tmp and again under the
+    factory-runtime-style TMPDIR, so the recorded gate failure was
+    flaky/environmental."
+  - "Rebase simulation on current tip: 3-way merge of iteration.ts (base
+    abc124d, ours current e9d0440, theirs v2 a58cfd2) -> single conflict in the
+    import block; resolution keeps both 'persistAdrs' and 'runConcernConsult'.
+    Resolved scratch tree: typecheck pass; targeted consult +
+    adr-blocking-digest + state-concern-counts + status-concerns suites -> 13
+    pass, 0 fail; full suite -> 384 pass, 2 skip, 0 fail (386 tests/65 files)."
+  - git status --porcelain -> only '??
+    plugins/software-factory/test/engine/routing-architect-consult.test.ts'; all
+    scratch repro dirs removed.
+concerns:
+  - The exact v2 merge-gate failure is not persisted in-repo beyond
+    failingGates:["test"]; reproduction shows the merge tree is green, so the
+    prior failure cannot be attributed to a deterministic test defect. The
+    durable repair is the rebase onto current tip plus TMPDIR-normalized gates.
+  - "Develop must not copy the v2 branch's stale iteration.ts wholesale: the
+    only rebase conflict is the import block, and the resolution must retain
+    BOTH persistAdrs (adr-blocking-digest-v2) and runConcernConsult (this item).
+    Dropping persistAdrs is caught by test/engine/adr-blocking-digest.test.ts."
+  - The 4 optional nits (concerns hydration sub-budget, concern-id sanitize,
+    flows barrel export, consult prompt-context alignment) remain out of scope
+    and are carried to docs-finish as instructed.
+notes: "Test-first only: no production files were modified and no interface
+  stubs were needed. The test file is the exact ready v2 test diff; its green
+  contract was pre-verified in a scratch copy with the v2 production diff
+  rebased onto current tip, so Develop can apply the same minimal resolution and
+  expect the full suite to go green. Selector is relative to
+  plugins/software-factory (the repo's only Bun package); expectRed ids are the
+  native bun JUnit classname.name ids."
