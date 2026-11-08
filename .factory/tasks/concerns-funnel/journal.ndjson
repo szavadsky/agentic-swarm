@@ -1326,3 +1326,5 @@
 {"type":"item_merge_phase","item":"routing-architect-consult-v3","phase":"merge-child-into-parent","ts":"2026-11-08T15:03:03.836Z"}
 {"type":"item_merge_phase","item":"routing-architect-consult-v3","phase":"remove-worktree","ts":"2026-11-08T15:03:03.891Z"}
 {"type":"item_merged","item":"routing-architect-consult-v3","sha":"42b7faccaee312e09b971a4d5a94d775c7051118","conflictResolved":false,"ts":"2026-11-08T15:03:03.971Z"}
+{"type":"step_started","task":"concerns-funnel","step":"wave-close-up-1-10","attempt":1,"recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/039-wave-close-up-1-10-a1","ts":"2026-11-08T15:04:50.321Z"}
+{"type":"step_timeout_armed","task":"concerns-funnel","step":"wave-close-up-1-10","timeoutSec":900,"ts":"2026-11-08T15:04:50.326Z"}

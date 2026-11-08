@@ -1,0 +1,20 @@
+blockedItems: []
+debt: []
+failedItems: []
+iteration: 1
+mergedItems:
+  - routing-architect-consult-v3
+recommendations: []
+status: complete
+summary: "Wave 10 (iteration 1): 1/1 items merged (routing-architect-consult-v3;
+  merge commit 42b7fac). Real code change: src/core/flows/consults.ts (+131/-2),
+  src/core/flows/iteration.ts (+95), new
+  test/engine/routing-architect-consult.test.ts (435 lines). Tree clean: zero
+  untracked files, no stray tmp/bak/orig/rej/test-output/coverage artifacts, git
+  diff --check clean, strict conflict-marker check empty (git grep for '^<<<<<<<
+  ' and '^>>>>>>> ' both empty; generic grep hits only docs/comments/test
+  expectations/agent docs/orchestration records). Only modified file is
+  engine-managed .factory/tasks/concerns-funnel/journal.ndjson (+2 lines,
+  pending engine commit). Gates vs baseline (judged ONLY from Gate Diff table):
+  typecheck pass/pass green, no regression; test fail->pass IMPROVED."
+wave: 10
