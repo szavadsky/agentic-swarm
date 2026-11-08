@@ -98,3 +98,4 @@
 {"type":"decision_made","context":"item","item":"spike-saga-commit","decision":"accept-with-debt","decisionPath":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/decisions/002-item-spike-saga-commit.yaml","ts":"2026-11-08T02:24:33.287Z"}
 {"type":"step_started","task":"concerns-funnel","step":"wave-close-up-1-1","attempt":1,"recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/014-wave-close-up-1-1-a1","ts":"2026-11-08T02:24:33.327Z"}
 {"type":"step_timeout","task":"concerns-funnel","step":"wave-close-up-1-1","timeoutSec":900,"ts":"2026-11-08T02:24:33.332Z"}
+{"type":"step_finished","task":"concerns-funnel","step":"wave-close-up-1-1","attempt":1,"status":"ok","sessionId":"01a1b8f8-c58d-759a-b790-936393e21d69","usage":{"inputTokens":22577,"outputTokens":13280,"costUsd":0.005197},"ts":"2026-11-08T02:28:10.147Z"}
