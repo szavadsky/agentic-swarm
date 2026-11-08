@@ -1247,3 +1247,5 @@
 {"type":"infra_retry_started","task":"concerns-funnel","item":"adr-blocking-digest-v2","step":"review","attempt":1,"retry":1,"maxRetries":3,"sessionId":"01a1bb55-8a00-736b-a13c-6e20c88ca8c8","costUsd":0.127714,"ts":"2026-11-08T13:40:09.303Z"}
 {"type":"infra_retry_finished","task":"concerns-funnel","item":"adr-blocking-digest-v2","step":"review","attempt":1,"retry":1,"ok":true,"transient":false,"costUsd":0.161798,"ts":"2026-11-08T13:40:44.769Z"}
 {"type":"step_finished","task":"concerns-funnel","item":"adr-blocking-digest-v2","step":"review","attempt":1,"status":"ok","sessionId":"01a1bb55-8a00-736b-a13c-6e20c88ca8c8","usage":{"inputTokens":584805,"outputTokens":36098,"costUsd":0.161798},"ts":"2026-11-08T13:40:44.843Z"}
+{"type":"step_started","task":"concerns-funnel","step":"consult-adr-blocking-digest-v2","attempt":1,"recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/034-consult-adr-blocking-digest-v2-a1","ts":"2026-11-08T13:40:47.794Z"}
+{"type":"step_timeout_armed","task":"concerns-funnel","step":"consult-adr-blocking-digest-v2","timeoutSec":1200,"ts":"2026-11-08T13:40:47.800Z"}
