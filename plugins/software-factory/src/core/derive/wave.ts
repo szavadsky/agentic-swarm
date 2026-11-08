@@ -1,5 +1,5 @@
 import type { DerivedItemState } from "./item.js";
-import { blockedByFailure, cascadePendingBlocked } from "../plan/scheduler.js";
+import { blockedByConcern } from "../plan/scheduler.js";
 
 export interface DerivedWaveState {
   wave: number;
@@ -45,21 +45,16 @@ export function deriveWaveState(opts: {
 
   // Dependents of failed items become blocked-by-failure, and items named by
   // routed blocker concerns become blocked; both cascade transitively over
-  // declared deps to a fixpoint (§8.2, adr-routing-derived-state).
+  // declared deps to a fixpoint (§8.2, adr-routing-derived-state). The
+  // failure-union fixpoint has one owner (blockedByConcern); wave only maps
+  // derive statuses onto scheduler inputs.
   const schedItems = items.map((it) => ({
     slug: it.slug,
     wave: String(it.wave),
     deps: it.deps,
     status: it.status as "pending" | "running" | "done" | "failed" | "blocked" | "abandoned",
   }));
-  const blockedSlugs = new Set<string>(blockedByFailure(schedItems));
-  const bySlug = new Map(items.map((it) => [it.slug, it]));
-  for (const slug of opts.blockedBy ?? []) {
-    if (bySlug.get(slug)?.status === "pending") {
-      blockedSlugs.add(slug);
-    }
-  }
-  cascadePendingBlocked(items, blockedSlugs);
+  const blockedSlugs = new Set<string>(blockedByConcern(schedItems, opts.blockedBy ?? []));
 
   for (const it of waveItems) {
     if (it.status === "merged") {

@@ -13,11 +13,11 @@ import type {
   TriageArtifact,
 } from "../artifacts.js";
 import { readYaml, writeYamlAtomic } from "../records/io.js";
-import { deriveItemState, withRoutedBlocking, TERMINAL_ITEM_STATUSES, type DerivedItemState } from "./item.js";
+import { deriveItemState, withRoutedBlocking, type DerivedItemState } from "./item.js";
 import { deriveWaveState, type DerivedWaveState } from "./wave.js";
 import { BudgetTracker } from "../budget.js";
 import { listConcerns } from "../concerns.js";
-import { cascadePendingBlocked } from "../plan/scheduler.js";
+import { blockedByConcern } from "../plan/scheduler.js";
 import { git } from "../git/exec.js";
 import { isAncestor } from "../git/commit.js";
 
@@ -162,15 +162,19 @@ export async function deriveTaskState(opts: {
   }
 
   // 5b. Routed blockers (adr-routing-derived-state): a routed blocker concern
-  // blocks the items it affects and their declared dependents, transitively.
+  // blocks the pending items it affects and their declared dependents,
+  // transitively. The failure-union fixpoint has one owner
+  // (blockedByConcern); task only maps derive statuses onto scheduler
+  // inputs. Pending-only seeding matches §8.2 and keeps itemMap consistent
+  // with deriveWaveState/iteration.
   const routedNames = await collectRoutedBlockers(taskDir);
-  const routedBlocked = new Set<string>();
-  for (const it of items) {
-    if (routedNames.has(it.slug) && !TERMINAL_ITEM_STATUSES.has(it.status)) {
-      routedBlocked.add(it.slug);
-    }
-  }
-  cascadePendingBlocked(items, routedBlocked);
+  const schedItems = items.map((it) => ({
+    slug: it.slug,
+    wave: String(it.wave),
+    deps: it.deps,
+    status: it.status as "pending" | "running" | "done" | "failed" | "blocked" | "abandoned",
+  }));
+  const routedBlocked = new Set<string>(blockedByConcern(schedItems, routedNames));
   const itemMap: Record<string, DerivedItemState> = {};
   for (let i = 0; i < items.length; i++) {
     const blocked = withRoutedBlocking(items[i]!, routedBlocked);
@@ -186,6 +190,8 @@ export async function deriveTaskState(opts: {
   const maxWave = items.reduce((max, it) => Math.max(max, it.wave), 1);
   let currentWave: number | undefined;
 
+  // Items are already routed-blocked above, so wave calls intentionally omit
+  // blockedBy (seeds now carry status blocked, not pending).
   for (let w = 1; w <= maxWave; w++) {
     const waveState = deriveWaveState({ wave: w, items });
     waves.push(waveState);

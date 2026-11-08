@@ -54,23 +54,18 @@ export interface DerivedItemState {
   decisionFingerprints: string[];
 }
 
-/** Terminal item outcomes: routed blockers never override these (§8.2). */
-export const TERMINAL_ITEM_STATUSES: ReadonlySet<DerivedItemState["status"]> = new Set([
-  "merged",
-  "failed",
-  "superseded",
-]);
-
 /**
- * Applies routed concern blocking (adr-routing-derived-state): an item named by
- * a routed blocker concern derives `blocked` unless it already reached a
- * terminal outcome.
+ * Applies routed concern blocking (adr-routing-derived-state): a pending item
+ * named by a routed blocker concern derives `blocked`. Pending-only matches
+ * the §8.2 blocked-by-failure precedent and avoids retro-blocking in-flight
+ * (running/ready) work, keeping deriveTaskState consistent with
+ * deriveWaveState/blockedByConcern which seed pending items only.
  */
 export function withRoutedBlocking(
   state: DerivedItemState,
   blockedBy?: ReadonlySet<string>
 ): DerivedItemState {
-  if (!blockedBy?.has(state.slug) || TERMINAL_ITEM_STATUSES.has(state.status)) {
+  if (!blockedBy?.has(state.slug) || state.status !== "pending") {
     return state;
   }
   return { ...state, status: "blocked" };

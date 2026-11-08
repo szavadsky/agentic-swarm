@@ -73,6 +73,32 @@ function writeItem(
     "utf8"
   );
 }
+function writeStepRecord(
+  taskDir: string,
+  slug: string,
+  opts: { name: string; status: string }
+): void {
+  const dir = path.join(taskDir, "items", slug, "steps", `001-${opts.name}-a1`);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, "input.md"), "prompt\n", "utf8");
+  fs.writeFileSync(
+    path.join(dir, "meta.yaml"),
+    [
+      "seq: 1",
+      `name: ${opts.name}`,
+      "attempt: 1",
+      "agent: developer",
+      "role: workhorse",
+      "models: [test]",
+      `status: ${opts.status}`,
+      "startedAt: 2026-01-01T00:00:00.000Z",
+      "endedAt: 2026-01-01T00:00:01.000Z",
+    ].join("\n") + "\n",
+    "utf8"
+  );
+  fs.writeFileSync(path.join(dir, "output.yaml"), "status: ok\nsummary: done\n", "utf8");
+}
+
 
 function writeConcern(
   taskDir: string,
@@ -226,6 +252,25 @@ describe("derive/wave: routed blocker integration", () => {
     expect(wave.blocked.map((i) => i.slug).sort()).toEqual(["child", "grandchild", "seed"]);
     expect(wave.runnable.map((i) => i.slug)).toEqual(["side"]);
   });
+
+  it("ignores running/ready seeds and does not cascade from them", () => {
+    const items = [
+      derivedItem({ slug: "running-seed", wave: 8, status: "running" }),
+      derivedItem({ slug: "ready-seed", wave: 8, status: "ready" }),
+      derivedItem({ slug: "running-dependent", wave: 8, deps: ["running-seed"] }),
+      derivedItem({ slug: "ready-dependent", wave: 8, deps: ["ready-seed"] }),
+    ];
+
+    const wave = deriveWaveState({
+      wave: 8,
+      items,
+      blockedBy: new Set(["running-seed", "ready-seed"]),
+    } as WaveDeriveOpts);
+
+    expect(wave.blocked.map((i) => i.slug)).toEqual([]);
+    expect(wave.running.map((i) => i.slug)).toEqual(["running-seed"]);
+    expect(wave.ready.map((i) => i.slug)).toEqual(["ready-seed"]);
+  });
 });
 
 describe("derive/item: routed blocker integration", () => {
@@ -288,6 +333,31 @@ describe("derive/item: routed blocker integration", () => {
     expect(abandoned.status).toBe("failed");
     expect(blockedOne.status).toBe("blocked");
   });
+
+  it("does not retro-block running/ready items named by a routed blocker", async () => {
+    const taskDir = makeTaskDir();
+    writeItem(taskDir, "in-flight");
+    writeItem(taskDir, "finished");
+    const blockedBy = new Set(["in-flight", "finished"]);
+    writeStepRecord(taskDir, "in-flight", { name: "develop", status: "started" });
+    writeStepRecord(taskDir, "finished", { name: "review", status: "ok" });
+
+    const inFlight = await deriveItemState({
+      taskDir,
+      itemSlug: "in-flight",
+      parentBranch: "topic/routing-blocker",
+      blockedBy,
+    } as ItemDeriveOpts);
+    const finished = await deriveItemState({
+      taskDir,
+      itemSlug: "finished",
+      parentBranch: "topic/routing-blocker",
+      blockedBy,
+    } as ItemDeriveOpts);
+
+    expect(inFlight.status).toBe("running");
+    expect(finished.status).toBe("ready");
+  });
 });
 
 describe("derive/task: routed blocker scenario", () => {
@@ -339,5 +409,30 @@ describe("derive/task: routed blocker scenario", () => {
 
     expect(state.itemMap["dependent"]?.status).toBe("blocked");
     expect(state.status).toBe("blocked");
+  });
+
+  it("leaves running/ready seeds and their dependents schedulable at task level", async () => {
+    const taskDir = makeTaskDir();
+    writeItem(taskDir, "running-seed", { wave: 1 });
+    writeItem(taskDir, "ready-seed", { wave: 1 });
+    writeItem(taskDir, "running-dependent", { wave: 1, deps: ["running-seed"] });
+    writeItem(taskDir, "ready-dependent", { wave: 1, deps: ["ready-seed"] });
+    writeStepRecord(taskDir, "running-seed", { name: "develop", status: "started" });
+    writeStepRecord(taskDir, "ready-seed", { name: "review", status: "ok" });
+    writeConcern(taskDir, {
+      id: "c-routed-blocker",
+      kind: "blocker",
+      status: "routed",
+      summary: "Late-arriving blocker names in-flight work",
+      affects: ["running-seed", "ready-seed"],
+    });
+
+    const state = await deriveTaskModule.deriveTaskState({ taskDir, task: "routing-blocker" });
+
+    expect(state.itemMap["running-seed"]?.status).toBe("running");
+    expect(state.itemMap["ready-seed"]?.status).toBe("ready");
+    expect(state.itemMap["running-dependent"]?.status).toBe("pending");
+    expect(state.itemMap["ready-dependent"]?.status).toBe("pending");
+    expect(state.waves.find((w) => w.wave === 1)?.blocked.map((i) => i.slug)).toEqual([]);
   });
 });
