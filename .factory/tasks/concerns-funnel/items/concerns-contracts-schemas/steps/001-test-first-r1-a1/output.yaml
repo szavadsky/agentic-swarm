@@ -1,0 +1,60 @@
+status: ok
+summary: Added test-first coverage for concern producer schemas without touching
+  production code. New contract tests assert inlined (no external $ref) concern
+  and remarkable definitions across developer-output, fact-finder, plan,
+  decisions, wave/plan/architect close-up schemas; strict kind/severity enums
+  with optional detail/severity; review/QA newConcerns plus
+  dismiss-without-detail at schema level; close-up concernResolutions
+  (resolve|carry|propagate); and untouched triage/infra/plan-edits. A
+  FakeHarness case in test/engine/concerns-funnel.test.ts proves valid concerns
+  reach writeArtifact while an unknown kind is rejected and never written. All
+  five declared target tests fail with assertion failures on current production
+  code (not compile/import errors).
+target:
+  selectors:
+    - test/contracts/concern-schemas.test.ts
+    - test/engine/concerns-funnel.test.ts
+  expectRed:
+    - test/contracts/concern-schemas.test.ts::Concern producer schemas::inlines
+      the concern definition into every producer schema without external refs
+    - test/contracts/concern-schemas.test.ts::Concern producer schemas::inlines
+      the remarkable decision definition with chosen, alternatives, and why
+    - test/contracts/concern-schemas.test.ts::Concern producer schemas::adds
+      newConcerns to review and QA schemas outside the triage suggestions
+    - test/contracts/concern-schemas.test.ts::Concern producer schemas::adds
+      concernResolutions with resolve, carry, and propagate to close-up schemas
+    - test/engine/concerns-funnel.test.ts::Concern funnel schemas::valid
+      concerns pass validation and unknown kinds reject with no artifact write
+evidence:
+  - "TMPDIR=/tmp bun run typecheck (plugins/software-factory): exit 0, no type
+    errors."
+  - "TMPDIR=/tmp bun test test/prompts.test.ts: 17 pass, 0 fail (preflight
+    passes)."
+  - "TMPDIR=/tmp bun test test/contracts/concern-schemas.test.ts
+    test/engine/concerns-funnel.test.ts: 5 fail, 1 pass; the passing case is the
+    untouched triage/infra/plan-edits guard."
+  - JUnit output for the two target files contains 5 <failure> and 0 <error>,
+    proving assertion-red rather than compilation/import errors.
+  - Verified via the engine's normaliseCaseId/findMatchingCase logic that all
+    five declared expectRed node ids resolve to those failing JUnit cases.
+  - "Full TMPDIR=/tmp bun test run: 288 pass, 2 skip, 5 fail; the only failures
+    are the five new target tests."
+  - git status shows only the two new test files; no production files or stubs
+    were modified.
+concerns:
+  - review-schema.ts generates the QA/reviewer schema at runtime, so the develop
+    step must update that TS generator in addition to
+    config/schemas/review.schema.json for newConcerns to be enforced by
+    QA/reviewer steps; the 'JSON' budget phrasing should not exclude this small
+    schema-generator change.
+  - The remarkable-decision output property name is not fixed by the assignment,
+    so the contract test detects it structurally as an array whose items require
+    chosen/alternatives/why; the developer may name it remarkable or
+    remarkableDecisions.
+  - The review schema test also requires dismiss without detail to pass JSON
+    validation (detail enforcement belongs to the runtime concern store), which
+    implies review.schema.json needs dismiss in its suggestions disposition
+    enum.
+notes: "Test-only change: two new files under plugins/software-factory/test. No
+  production schemas were edited in this test-first step; the red expectations
+  map to the subsequent JSON/schema change."
