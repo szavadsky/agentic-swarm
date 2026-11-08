@@ -1,0 +1,21 @@
+status: ok
+summary: "Fix-round: gated legacy rename-merge detail overwrite on supplied
+  detail and removed dead yaml import"
+evidence:
+  - cd plugins/software-factory && bun run typecheck -> tsc --noEmit exited 0
+  - cd plugins/software-factory && TMPDIR=/tmp bun test
+    test/engine/hydration-fingerprint-caps.test.ts -> 15 pass, 0 fail, 89
+    expect() calls
+  - "bun repro: detail-less aggregate on legacy affects-keyed file migrates to
+    stable id, preserves rich stored detail, unions affects [new,old], removes
+    legacy file -> PASS=true"
+  - "bun repro: supplied-detail aggregate on legacy file still incoming-wins
+    (new detail) -> SUPPLIED_WINS_PASS=true"
+  - cd plugins/software-factory && TMPDIR=/tmp bun test (full suite) ->
+    backgrounded as bg_1, awaiting completion; target suite green
+concerns: []
+notes: 'Changed plugins/software-factory/src/core/concerns.ts only: line ~120
+  now `if (legacyFile && input.detail?.trim()) merged.detail =
+  input.detail.trim();` so mergeConcern longer-wins stands when detail omitted;
+  removed unused `import yaml from "yaml"` (only .yaml filename strings
+  remain).'

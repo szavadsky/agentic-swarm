@@ -1,0 +1,39 @@
+status: approved
+summary: Caps, sets, fingerprint-union, legacy rename verified in code; gates
+  green; no defects
+suggestions:
+  - detail: hydrateStepConcerns maps
+      develop/test-first/fix-round/simple-implement/integrate/research/poc/test-assumptions
+      to the 500B inputBytes branch, but step-runner gates injection on
+      knownVars.includes(concernsYaml) and develop-family KNOWN_VARS entries
+      lack it (verified prompt-vars.ts:55-70), so the branch is never invoked in
+      production. Consistent with item scope (no prompt fragments);
+      prompt-fragments item must add placeholder plus registry entries.
+    disposition: optional
+    id: develop-family-dormant-cross-item
+    location:
+      file: plugins/software-factory/src/core/flows/step-runner.ts
+      line: 306
+    summary: Develop-family hydration dormant until prompt-fragments registers
+      concernsYaml
+  - detail: legacyConcern returns the first kind plus normalized-summary plus
+      location match; once the stable file exists the scan is skipped, so
+      hypothetical multiple affects-keyed forks for one identity would leave
+      duplicates. Compliant with singular rename-merge and no-GC spec; consider
+      merging all matches or documenting single-merge sufficiency.
+    disposition: optional
+    id: legacy-multi-fork-single-merge
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 75
+    summary: Legacy migration merges first same-identity match only
+  - detail: Test file accesses hydrateStepConcerns and listHydratedConcerns via
+      dynamic namespace cast to allow red-phase collection; now green, direct
+      named imports would catch signature drift at compile time. No behavior
+      impact.
+    disposition: optional
+    id: test-dynamic-lookup-cleanup
+    location:
+      file: plugins/software-factory/test/engine/hydration-fingerprint-caps.test.ts
+      line: 61
+    summary: Replace dynamic triage lookup with direct imports now green

@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
-import yaml from "yaml";
 import type { Concern, ConcernCounts, ConcernSeverity, ConcernSource, RemarkableDecision, ReviewSuggestion, StoredConcernArtifact } from "./artifacts.js";
 import type { Repo } from "./git/repo.js";
 import { commitAll } from "./git/commit.js";
@@ -27,11 +26,12 @@ const affectsOf = (a?: string[]) => [...new Set((a ?? []).map((x) => x.trim()))]
 const hash = (prefix: string, parts: unknown[]) =>
   `${prefix}-${createHash("sha256").update(JSON.stringify(parts)).digest("hex").slice(0, 10)}`;
 const rmId = (d: RemarkableDecision) => hash("rm", [norm(d.chosen), affectsOf(d.alternatives)]);
-const pick = (r: Obj) => JSON.stringify([r.detail ?? r.why ?? 0, r.severity ?? 0, r.chosen ?? 0, r.alternatives ?? 0, r.status, r.disposition ?? 0, r.source?.record, r.source?.agent, r.source?.step, r.source?.item, !!r.source?.escalated]);
+const pick = (r: Obj) => JSON.stringify([r.detail ?? r.why ?? 0, r.severity ?? 0, r.chosen ?? 0, r.alternatives ?? 0, r.status, r.disposition ?? 0, r.affects ?? 0, r.pendingResolution ?? 0, r.source?.record, r.source?.agent, r.source?.step, r.source?.item, !!r.source?.escalated]);
+const locationOf = (l?: { file?: string; line?: number }) => [l?.file?.trim() ?? null, l?.line ?? null] as const;
 
-/** Stable concern identity: kind, normalized summary, location, sorted affects. */
+/** Stable concern identity: kind, normalized summary, location. */
 export function concernFingerprint(c: ConcernInput): string {
-  return hash("c", [c.kind, norm(c.summary), c.location?.file.trim() ?? null, c.location?.line ?? null, affectsOf(c.affects)]);
+  return hash("c", [c.kind, norm(c.summary), ...locationOf(c.location)]);
 }
 
 async function readExisting<T>(file: string): Promise<T | undefined> {
@@ -48,7 +48,9 @@ function mergeConcern(existing: StoredConcernArtifact | undefined, input: Concer
   const severity = existing && RANK[existing.severity] >= RANK[incomingSeverity] ? existing.severity : incomingSeverity;
   const escalated = Boolean(existing?.source?.escalated) || (existing !== undefined && RANK[incomingSeverity] > RANK[existing.severity]);
   const location = input.location ?? existing?.location;
-  const affects = input.affects ? affectsOf(input.affects) : existing?.affects;
+  const affects = input.affects
+    ? affectsOf([...(existing?.affects ?? []), ...input.affects])
+    : existing?.affects;
   return {
     ...(existing ?? {}), id: concernFingerprint(input), kind: existing?.kind ?? input.kind,
     summary: existing?.summary ?? input.summary.trim(), detail,
@@ -69,6 +71,28 @@ function mergeRemarkable(existing: Obj | undefined, input: RemarkableDecision, s
   };
 }
 
+/** Finds a pre-union fingerprint file for the same identity so it can be rename-merged. */
+async function legacyConcern(dir: string, input: ConcernInput): Promise<{ file: string; record: StoredConcernArtifact } | undefined> {
+  let names: string[];
+  try { names = await fs.promises.readdir(dir); } catch (err: any) {
+    if (err?.code === "ENOENT") return undefined;
+    throw err;
+  }
+  const [file, line] = locationOf(input.location);
+  for (const name of names.sort()) {
+    if (!name.startsWith("c-") || !name.endsWith(".yaml")) continue;
+    const candidate = path.join(dir, name);
+    try {
+      const record = await readYaml<StoredConcernArtifact>(candidate);
+      if (record?.kind !== input.kind || typeof record?.summary !== "string") continue;
+      const [rfile, rline] = locationOf(record.location);
+      if (norm(record.summary) !== norm(input.summary) || rfile !== file || rline !== line) continue;
+      return { file: candidate, record };
+    } catch { /* Corrupt entries are not migration candidates. */ }
+  }
+  return undefined;
+}
+
 /** Merges producer concerns and remarkable decisions, one taskWt file per fingerprint. */
 export async function aggregateConcerns(
   ctx: ConcernStoreContext & { source: ConcernSource }, concerns: ConcernInput[], remarkables: RemarkableDecision[] = [], opts: { at?: string; commit?: boolean; dirty?: boolean } = {}
@@ -85,10 +109,17 @@ export async function aggregateConcerns(
     const out: StoredConcernArtifact[] = [];
     for (const input of concerns) {
       const file = path.join(dir, `${concernFingerprint(input)}.yaml`);
-      const existing = await readExisting<StoredConcernArtifact>(file);
+      let existing = await readExisting<StoredConcernArtifact>(file);
+      let legacyFile: string | undefined;
+      if (!existing) {
+        const migrated = await legacyConcern(dir, input);
+        if (migrated) { existing = migrated.record; legacyFile = migrated.file; }
+      }
       const merged = mergeConcern(existing, input, ctx.source, at);
-      if (existing && pick(existing) === pick(merged) && (existing.source?.lastSeen ?? "") >= at) { out.push(existing); continue; }
+      if (legacyFile && input.detail?.trim()) merged.detail = input.detail.trim();
+      if (existing && !legacyFile && pick(existing) === pick(merged) && (existing.source?.lastSeen ?? "") >= at) { out.push(existing); continue; }
       await writeYamlAtomic(file, merged);
+      if (legacyFile) await fs.promises.unlink(legacyFile);
       dirty = true; out.push(merged);
     }
     for (const decision of remarkables) {
@@ -166,27 +197,6 @@ export async function listConcernIds(taskDir: string): Promise<string[]> {
     if (err?.code === "ENOENT") return [];
     throw err;
   }
-}
-
-/** Renders open concerns and remarkable decisions as prompt YAML (§18). */
-export async function hydrateConcernsYaml(taskDir: string): Promise<string> {
-  const dir = dirOf(taskDir);
-  let names: string[];
-  try { names = await fs.promises.readdir(dir); } catch (err: any) {
-    if (err?.code === "ENOENT") return "[]";
-    throw err;
-  }
-  const items = await Promise.all(
-    names
-      .filter((name) => (name.startsWith("c-") || name.startsWith("rm-")) && name.endsWith(".yaml"))
-      .map(async (name) => {
-        try { return await readYaml<Record<string, any>>(path.join(dir, name)); } catch { return undefined; }
-      })
-  );
-  const open = items
-    .filter((r): r is Record<string, any> => r?.status === "open" && typeof r.id === "string")
-    .sort((a, b) => String(a.createdAt ?? "").localeCompare(String(b.createdAt ?? "")) || String(a.id).localeCompare(String(b.id)));
-  return open.length ? yaml.stringify(open).trimEnd() : "[]";
 }
 
 async function mutate(ctx: ConcernStoreContext, ops: Array<[string, Patch]>, message: string): Promise<StoredConcernArtifact[]> {

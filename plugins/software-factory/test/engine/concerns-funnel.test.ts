@@ -317,7 +317,7 @@ describe("Concern store", () => {
     });
   }
 
-  it("fingerprints concern identity, ignoring detail, severity, and affect order", () => {
+  it("fingerprints concern identity, ignoring detail, severity, and affects", () => {
     const identity = {
       kind: "risk" as const,
       summary: "  Flaky   GATE ",
@@ -339,7 +339,9 @@ describe("Concern store", () => {
     expect(
       concernFingerprint({ ...identity, location: { file: "src/core/example.ts", line: 8 } })
     ).not.toBe(fp);
-    expect(concernFingerprint({ ...identity, affects: ["item-a"] })).not.toBe(fp);
+    // Affects are merged as a union, not part of the identity (adr-fingerprint-affects-union).
+    expect(concernFingerprint({ ...identity, affects: ["item-a"] })).toBe(fp);
+    expect(concernFingerprint({ ...identity, affects: [] })).toBe(fp);
   });
 
   it("aggregates a developer concern to one open taskWt file with defaults, source, and immediate commit", async () => {

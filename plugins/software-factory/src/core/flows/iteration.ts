@@ -30,12 +30,10 @@ import { appendJournal } from "../journal.js";
 import { loadCriteriaBundle, formatDispositionsSection } from "../prompts.js";
 import { isTriagerAgent, resolveReviewAllowed } from "../review-policy.js";
 import {
-  hydrateConcernsYaml,
   listConcernIds,
   listConcerns,
   partitionSuggestions,
 } from "../concerns.js";
-import { renderConcernsYaml } from "../triage.js";
 import { checkPlanReviewRounds, checkIterations, checkAmendments } from "../loops.js";
 import { validateEdits } from "../plan/limits.js";
 import { applyEdits } from "../plan/apply.js";
@@ -169,23 +167,13 @@ async function buildArchitectHydration(
     }
   }
 
-  // 5. Concerns (adr-routing-derived-state): routed and open concerns give
-  // every architect turn the terse decision context the act phase acts on.
-  // Appended last so the byte cap never evicts it.
-  const actionableConcerns = (await listConcerns(taskDir)).filter(
-    (c) => c.status === "open" || c.status === "routed"
-  );
-  if (actionableConcerns.length > 0) {
-    parts.push(
-      `--- Concerns ---\n${renderConcernsYaml(actionableConcerns, maxBytes)}`
-    );
-  }
-
+  // Concerns are hydrated only through concernsYaml (adr-hydration-single-cap).
   const combined = parts.join("\n\n");
-  if (combined.length <= maxBytes) {
-    return combined;
-  }
-  return combined.slice(combined.length - maxBytes);
+  const buf = Buffer.from(combined, "utf8");
+  if (buf.length <= maxBytes) return combined;
+  let start = buf.length - maxBytes;
+  while (start < buf.length && (buf[start]! & 0b1100_0000) === 0b1000_0000) start++;
+  return buf.subarray(start).toString("utf8");
 }
 
 /**
@@ -524,7 +512,6 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
     // Triage ids are those that existed before this review round; capturing
     // them here mirrors the step-runner exact-id partition.
     const knownConcernIds = await listConcernIds(taskDir);
-    const concernsYaml = await hydrateConcernsYaml(taskDir);
     // Check if review round record already exists
     const revRecordName = `plan-review-${iteration}-${reviewRound}`;
     const revStepRes = await runAgentStep({
@@ -546,7 +533,6 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
         plan: JSON.stringify(plan, null, 2),
         intent: intentText,
         context: contextYaml,
-        concernsYaml,
         limits: JSON.stringify(limits, null, 2),
         dispositionsCriteria: formatDispositionsSection(
           loadCriteriaBundle(pipeline.criteria).dispositions,
@@ -1025,6 +1011,7 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
         waveReport: waveSummary,
         infra: infraYaml,
       },
+      parentBranch,
       turnsSemaphore,
       budgetTracker,
       iteration,
@@ -1252,6 +1239,7 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
       plan: JSON.stringify(plan, null, 2),
       context: contextYaml,
     },
+    parentBranch,
     turnsSemaphore,
     budgetTracker,
     iteration,
