@@ -1,0 +1,15 @@
+blockedItems: []
+failedItems: []
+iteration: 1
+mergedItems:
+  - routing-blocker-derive-v2
+  - routing-human-debt-v2
+recommendations:
+  - Proceed to Architect Wave Report for wave 8; no operator action required.
+status: complete
+summary: "Wave 8 complete: 2/2 items merged (routing-blocker-derive-v2,
+  routing-human-debt-v2). Tree clean: no untracked junk, no conflict markers in
+  source tree (strict marker scan clean; only engine-managed journal.ndjson
+  modified). Gates vs baseline: typecheck pass->pass green (matches baseline),
+  test fail->pass IMPROVED. No regressions."
+wave: 8

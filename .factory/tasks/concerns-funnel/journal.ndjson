@@ -1148,3 +1148,5 @@
 {"type":"item_merge_phase","item":"routing-human-debt-v2","phase":"merge-child-into-parent","ts":"2026-11-08T12:03:08.730Z"}
 {"type":"item_merge_phase","item":"routing-human-debt-v2","phase":"remove-worktree","ts":"2026-11-08T12:03:08.792Z"}
 {"type":"item_merged","item":"routing-human-debt-v2","sha":"d01a0ebdeeef984a76f62c6dd6d940c94f35186c","conflictResolved":true,"ts":"2026-11-08T12:03:08.853Z"}
+{"type":"step_started","task":"concerns-funnel","step":"wave-close-up-1-8","attempt":1,"recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/032-wave-close-up-1-8-a1","ts":"2026-11-08T12:04:27.338Z"}
+{"type":"step_timeout_armed","task":"concerns-funnel","step":"wave-close-up-1-8","timeoutSec":900,"ts":"2026-11-08T12:04:27.343Z"}
