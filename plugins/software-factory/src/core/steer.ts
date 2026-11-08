@@ -8,7 +8,7 @@ import type {
   SteerClassificationArtifact,
 } from "./artifacts.js";
 import type { PromptLibrary } from "./prompts.js";
-import { writeYamlAtomic, readYaml } from "./records/io.js";
+import { writeYamlAtomic } from "./records/io.js";
 import { defaultSchemaCache } from "./records/schema-cache.js";
 
 /**
@@ -119,29 +119,6 @@ export function questionBlocks(q: SteerItemArtifact, target: string): boolean {
   if (Array.isArray(q.blocks)) return q.blocks.includes(target);
   if (q.ref === target || q.ref.endsWith(`/${target}`)) return true;
   return target === "task" && q.ref === "plan";
-}
-
-/**
- * True when an open question in the task mailbox blocks the task itself
- * (§8.7). The plan step checks this after routing ADRs so a blocking decision
- * halts the run (exit 10) instead of running the remaining waves.
- */
-export async function hasOpenTaskBlockingQuestion(taskDir: string): Promise<boolean> {
-  const dir = path.join(taskDir, "steer", "tousertoreview");
-  if (!fs.existsSync(dir)) return false;
-  const names = (await fs.promises.readdir(dir)).filter((n) => n.endsWith(".yaml"));
-  for (const name of names) {
-    const qPath = path.join(dir, name);
-    try {
-      const q = await readYaml<SteerItemArtifact>(qPath);
-      if (q && questionBlocks(q, "task")) return true;
-    } catch (err: any) {
-      if (err?.code !== "ENOENT") {
-        throw new Error(`Corrupt steer question file at ${qPath}: ${err?.message ?? err}`);
-      }
-    }
-  }
-  return false;
 }
 
 /**

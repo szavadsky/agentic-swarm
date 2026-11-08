@@ -1,0 +1,27 @@
+evidence:
+  - bun run typecheck (plugins/software-factory) -> tsc --noEmit clean, exit 0
+  - bun test test/engine/adr-blocking-digest.test.ts -> 5 pass, 0 fail, 50
+    expect() calls (4 original + new no-adrFolder test)
+  - "New test 'routes a blocking ADR without adrFolder and still halts with exit
+    10' verified: runAdrPlan with {} (no adrFolder) asserts res blocked + exit
+    10, mailbox human-stop with blocks:[task], state.yaml blocked"
+  - Regression subset routing-human-debt + human-async-steering +
+    story-happy-path -> 7 pass, 0 fail
+  - Full suite bun test -> 374 pass, 2 skip, 0 fail, 1749 expect() calls across
+    61 files [101.63s] (bg_1)
+  - "dispositions.md preserved: git diff on agents/criteria/dispositions.md
+    empty; grep confirms 'human-stop ... exit code 10' contract intact"
+  - "Verified fix scope: persistAdrs adrFolder optional (markdown gated, routing
+    always runs), iteration.ts gates only on plan.adrs, revise re-persists ADRs
+    + halts on blocked derive status, hasOpenTaskBlockingQuestion removed in
+    favor of refreshStateYaml status, ADR id sanitized, architect-revise.md
+    keeps bounds rule plus blocking guidance"
+status: ok
+summary: "Fix-round: blocking/remarkable ADR routing no longer gated on optional
+  adrFolder (markdown gated, mailbox routing always runs) with new no-adrFolder
+  test asserting human-stop + blocks:[task] + blocked/exit-10. Kept revise
+  re-persist+halt, derive-status halt (removed redundant scan), ADR-id
+  sanitization, and revise-prompt blocking guidance; restored the bounds rule
+  the prompt edit had dropped. All 5 ADR tests and full suite (374 pass) green,
+  typecheck clean, dispositions.md exit-10 contract preserved."
+concerns: []

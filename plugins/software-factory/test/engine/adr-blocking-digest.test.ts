@@ -117,7 +117,8 @@ describe("Blocking vs remarkable ADRs (§18)", () => {
   async function runAdrPlan(
     task: string,
     mode: NonNullable<PipelineConfig["humanInvolvement"]>,
-    adrs: Array<Record<string, unknown>>
+    adrs: Array<Record<string, unknown>>,
+    opts: { adrFolder?: string } = { adrFolder: "docs/adr" }
   ): Promise<AdrRun> {
     taskDirFor(task);
     const worktreeRoot = path.join(tmpRepo.dir + `-${task}-wt`);
@@ -128,7 +129,7 @@ describe("Blocking vs remarkable ADRs (§18)", () => {
 
     const project: ProjectConfig = {
       orchestrationFolder: ORCH,
-      adrFolder: "docs/adr",
+      ...(opts.adrFolder ? { adrFolder: opts.adrFolder } : {}),
       worktreeRoot,
     };
     const pipeline: PipelineConfig = {
@@ -386,4 +387,26 @@ describe("Blocking vs remarkable ADRs (§18)", () => {
       expect(remarkable[0]!.blocks ?? []).toEqual([]);
     }
   }, 60000);
+  it("routes a blocking ADR without adrFolder and still halts with exit 10", async () => {
+    const { res, deployedTaskDir } = await runAdrPlan(
+      "adr-no-folder",
+      "autonomous",
+      [BLOCKING_ADR],
+      {}
+    );
+
+    expect(res.status).toBe("blocked");
+    expect(res.exitCode).toBe(10);
+
+    const entries = await mailbox(deployedTaskDir);
+    const blocking = entriesFor(entries, BLOCKING_ADR);
+    expect(blocking).toHaveLength(1);
+    expect(blocking[0]!.disposition).toBe("human-stop");
+    expect(blocking[0]!.blocks ?? []).toContain("task");
+
+    const state = await readYaml<StateArtifact>(
+      path.join(deployedTaskDir, "state.yaml")
+    );
+    expect(state.status).toBe("blocked");
+  }, 30000);
 });
