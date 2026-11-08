@@ -1,0 +1,77 @@
+status: changes_requested
+summary: "changes_requested: sentinels+budgets green but qa/architect/close-up
+  triage wording contradicts engine triager/schema contracts"
+suggestions:
+  - detail: "Engine: isTriagerAgent('qa')=false (review-policy.ts:16-22) so
+      resolveReviewAllowed strips dismiss (review-policy.ts:42) and
+      generateReviewSchema excludes it; qa Dispositions Criteria will not list
+      dismiss. Yet qa.md:35 says 'triage ... with the allowed dispositions and
+      condense or dismiss'. Dismiss would fail schema validation; concern-id
+      with fix would be treated as findings not triage (triage.ts:31-32) and
+      mis-trigger fix-loop in item-machine. Tests only check /condens/i so green
+      suite misses this. Reword to raise-only + condense without
+      triage/dismiss."
+    disposition: fix
+    id: qa-triage-dismiss-non-triager
+    location:
+      file: plugins/software-factory/agents/steps/qa.md
+      line: 35
+    summary: QA instructs dismiss triage but qa is non-triager with dismiss excluded
+      from schema
+  - detail: "All 7 run as agent 'architect' (isTriager=false) with no suggestions
+      channel: plan/revise->plan.schema.json,
+      resume/wave-report/consults->decisions.schema.json (only
+      concerns/remarkable, additionalProperties:false),
+      closeup->plan-closeup.schema.json (only concernResolutions). KNOWN_VARS
+      architect-* lacks dispositionsCriteria so 'allowed dispositions' dangles.
+      5 fragments instruct dispositions+dismiss (resume:27, wave-report:32,
+      closeup:29, consult-item:36, consult-nonitem:30); plan:46/revise:25
+      instruct triage via HI table. Suggestions would fail validation and be
+      ignored for triage (triage.ts:129-130). Reword 6 plan/decisions architects
+      to raise-only+condense; closeup to concernResolutions
+      resolve/carry/propagate."
+    disposition: fix
+    id: architect-triage-no-channel
+    location:
+      file: plugins/software-factory/agents/steps/architect-consult-item.md
+      line: 36
+    summary: Architect fragments instruct dispositions triage but schemas have no
+      suggestions and agent is non-triager
+  - detail: wave-close-up, plan-close-up, architect-closeup bind to
+      wave/plan-closeup schemas (step-runner.ts:129-130,135,143,145-146,
+      additionalProperties:false, no suggestions, only concernResolutions
+      resolve/carry/propagate). KNOWN_VARS lacks dispositionsCriteria for these
+      fragments so 'allowed dispositions' is undefined. Prompt
+      dispositions/dismiss instruction cannot validate; correct channel is
+      concernResolutions which ingestStepConcerns always applies
+      (step-runner.ts:214, no isTriager gate). Reword to 'Raise concerns...;
+      record concernResolutions with resolve/carry/propagate and condense stale
+      detail'.
+    disposition: fix
+    id: closeup-triage-wrong-mechanism
+    location:
+      file: plugins/software-factory/agents/steps/wave-close-up.md
+      line: 26
+    summary: Close-ups instruct dispositions/dismiss but must use concernResolutions
+  - detail: Line 37 raise/condense line directly abuts {{concernsYaml}} line 36 with
+      no blank line, unlike all other 18 matrix fragments which separate
+      placeholder and instruction. Visual/template inconsistency only. Insert
+      blank line; still within per-fragment budget.
+    disposition: optional
+    id: plan-review-missing-blank-line
+    location:
+      file: plugins/software-factory/agents/steps/plan-review.md
+      line: 37
+    summary: plan-review missing blank line between concernsYaml and raise line
+  - detail: Raise line sits under '## Human involvement' (line 34) not under '##
+      Open Concerns' (line 18), unlike other 18 fragments where Raise lives in
+      OC block. Tests pass via whole-fragment grep but agent/human parsing is
+      inconsistent; HI section should hold only criteria. Move raise to OC block
+      after line 23.
+    disposition: optional
+    id: review-raise-under-hi-heading
+    location:
+      file: plugins/software-factory/agents/steps/review.md
+      line: 37
+    summary: review Raise line misplaced under Human involvement instead of Open
+      Concerns
