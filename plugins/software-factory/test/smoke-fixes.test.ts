@@ -87,6 +87,7 @@ describe("Smoke fixes acceptance tests (§6.4, §7, §8, §9)", () => {
         checks: "sample checks",
         diff: "sample diff",
         dispositionsCriteria: "sample dispositions",
+        concernsYaml: "",
       },
       reviewSchema
     );

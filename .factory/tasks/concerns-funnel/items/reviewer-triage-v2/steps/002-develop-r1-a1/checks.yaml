@@ -1,0 +1,96 @@
+checks:
+  - id: gates
+    status: pass
+    message: "Gates passed (2 gates, improvements: Engine: HEAD guard resilience
+      (§7).detects when an agent commits and resets --soft to before.sha,
+      keeping changes staged, Engine: HEAD guard resilience (§7).detects when an
+      agent switches branch and restores original branch, keeping changes)"
+    details:
+      - id: typecheck
+        command: cd plugins/software-factory && bun run typecheck
+        status: pass
+        durationMs: 3647
+        details: $ tsc --noEmit
+      - id: test
+        command: cd plugins/software-factory && bun test
+        status: pass
+        durationMs: 67705
+        details: |-
+          bun test v1.4.3 (c6da4a4d3)
+          ================================================================
+          Task: status-test-task [ACTIVE]
+          Kind: unclassified | Iteration: 1 | Wave: 1
+          Worktree: (none - main checkout)
+          Config path: /home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/factory-test-repo-CVEw9C/.factory/pipeline.yaml
+          Budget spent: $0.0000
+          ----------------------------------------------------------------
+          Waves & Items:
+            Wave 1:
+          ================================================================
+
+
+          test/cli/cli.test.ts:
+          [factory lock] Stale run lock for task "stale-lock-task" (PID 9999999 on host Slava-Yoga) taken over by PID 3298764
+          [factory lock] Stale run lock for task "competing-takeover-task" (PID 9999999 on host Slava-Yoga) taken over by PID 3298764
+          [factory lock] Stale run lock for task "journal-worktree-task" (PID 9999999 on host Slava-Yoga) taken over by PID 3298764
+
+           346 pass
+           2 skip
+           0 fail
+           1600 expect() calls
+          Ran 348 tests across 57 files. [67.56s]
+          [Improvements: Engine: HEAD guard resilience (§7).detects when an agent commits and resets --soft to before.sha, keeping changes staged, Engine: HEAD guard resilience (§7).detects when an agent switches branch and restores original branch, keeping changes]
+        improvements:
+          - "Engine: HEAD guard resilience (§7).detects when an agent commits
+            and resets --soft to before.sha, keeping changes staged"
+          - "Engine: HEAD guard resilience (§7).detects when an agent switches
+            branch and restores original branch, keeping changes"
+  - id: target-green
+    status: pass
+    message: "target-green passed: selected tests passed"
+    details:
+      command: cd plugins/software-factory && bun test
+        test/engine/reviewer-triage.test.ts --reporter=junit
+        --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-green-1794129408976-qr45ctppnpq.xml
+      junitCaseCount: 11
+      junitCaseIds:
+        - Reviewer triage (§8.7, §18).hydrates steps/review with terse concern
+          fields and triage instructions
+        - Reviewer triage (§8.7, §18).partitions exact-id triage from findings
+          and flags fix once
+        - Reviewer triage (§8.7, §18).renders condensing concern YAML without
+          detail and within the byte cap
+        - Reviewer triage (§8.7, §18).dismisses a concern with its reason and
+          routes nothing
+        - Reviewer triage (§8.7, §18).persists routed dispositions and applies
+          the debt predicate without a tech-debt disposition
+        - Reviewer triage (§8.7, §18).returns fixRequired once for
+          fix-on-concern and keeps it in the fix loop
+        - Reviewer triage (§8.7, §18).writes one deduped q-concern mailbox entry
+          for human-async triage
+        - Reviewer triage (§8.7, §18).rejects dismiss triage without detail and
+          leaves the concern unchanged
+        - Reviewer triage (§8.7, §18).fails the review step when a dismiss
+          triage lacks detail
+        - "Reviewer triage (§8.7, §18).gates non-triagers: QA matching a concern
+          id is a no-op"
+        - Reviewer triage (§8.7, §18).blocks the item with a single q-concern
+          mailbox entry in the engine flow
+      junitTruncated: false
+      collected: true
+      collectionErrors: []
+  - id: size
+    status: pass
+    message: "size passed: 236/300 production lines changed"
+    details:
+      changedLines:
+        added: 224
+        deleted: 12
+        total: 236
+        files:
+          - plugins/software-factory/agents/steps/review.md
+          - plugins/software-factory/src/core/concerns.ts
+          - plugins/software-factory/src/core/flows/item-machine.ts
+          - plugins/software-factory/src/core/flows/step-runner.ts
+          - plugins/software-factory/src/core/triage.ts
+      limit: 300

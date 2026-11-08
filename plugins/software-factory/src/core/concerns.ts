@@ -110,7 +110,7 @@ export async function listOpenConcerns(taskDir: string): Promise<StoredConcernAr
   const dir = dirOf(taskDir);
   let names: string[];
   try { names = await fs.promises.readdir(dir); } catch (err: any) {
-    if (err?.code === "ENOENT") return [];
+    if (err?.code === "ENOENT" || err?.code === "ENOTDIR") return [];
     throw err;
   }
   const records = await Promise.all(names.filter((n) => n.startsWith("c-") && n.endsWith(".yaml")).map(async (name) => {

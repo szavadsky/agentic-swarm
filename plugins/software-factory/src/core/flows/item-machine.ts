@@ -707,10 +707,21 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
     beforeChecks,
     afterChecks,
     writeArtifact: async (output: unknown) => {
-      // Persist human-async questions atomically with the review record (Finding 23)
+      // Persist human-async questions atomically with the review record (Finding 23).
+      // Concern ids are triaged separately (q-concern-*) and never use this mailbox.
       if (output && typeof output === "object" && "suggestions" in (output as any)) {
         const rev = output as ReviewArtifact;
-        const asyncQuestions = rev.suggestions?.filter((s) => s.disposition === "human-async");
+        const concernIds = new Set<string>();
+        try {
+          for (const name of await fs.promises.readdir(path.join(taskDir, "concerns"))) {
+            if (name.endsWith(".yaml")) concernIds.add(name.slice(0, -5));
+          }
+        } catch (err: any) {
+          if (err?.code !== "ENOENT") throw err;
+        }
+        const asyncQuestions = rev.suggestions?.filter(
+          (s) => s.disposition === "human-async" && !concernIds.has(s.id)
+        );
         if (asyncQuestions && asyncQuestions.length > 0) {
           for (const q of asyncQuestions) {
             const cleanSuggestionId = (q.id || "s").replace(/[^a-z0-9_-]/gi, "-");
