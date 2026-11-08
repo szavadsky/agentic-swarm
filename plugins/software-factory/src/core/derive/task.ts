@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type {
+  ConcernCounts,
   DecisionArtifact,
   PlanArtifact,
   PlanCloseupArtifact,
@@ -16,7 +17,7 @@ import { readYaml, writeYamlAtomic } from "../records/io.js";
 import { deriveItemState, withRoutedBlocking, type DerivedItemState } from "./item.js";
 import { deriveWaveState, type DerivedWaveState } from "./wave.js";
 import { BudgetTracker } from "../budget.js";
-import { listConcerns } from "../concerns.js";
+import { countConcerns, listConcerns } from "../concerns.js";
 import { isDebtConcern } from "../triage.js";
 import { questionBlocks } from "../steer.js";
 import { blockedByConcern } from "../plan/scheduler.js";
@@ -35,6 +36,7 @@ export interface DerivedTaskState {
   waves: DerivedWaveState[];
   debt: string[];
   budgetSpentUsd: number;
+  concerns: ConcernCounts;
   hasOpenSteerQuestions: boolean;
   openSteerQuestions: SteerItemArtifact[];
   lastCloseup?: PlanCloseupArtifact;
@@ -355,6 +357,8 @@ export async function deriveTaskState(opts: {
     status = "active";
   }
 
+  const concerns = await countConcerns(taskDir);
+
   const toStateArtifact = (): StateArtifact => {
     const itemsRecord: Record<string, StateItemInfo> = {};
     for (const it of items) {
@@ -374,6 +378,7 @@ export async function deriveTaskState(opts: {
       iteration,
       currentWave,
       items: itemsRecord,
+      concerns,
       debt: Array.from(debtSet),
       budgetSpentUsd,
       lastUpdated: new Date().toISOString(),
@@ -392,6 +397,7 @@ export async function deriveTaskState(opts: {
     waves,
     debt: Array.from(debtSet),
     budgetSpentUsd,
+    concerns,
     hasOpenSteerQuestions: openSteerQuestions.length > 0,
     openSteerQuestions,
     lastCloseup,

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import yaml from "yaml";
-import type { Concern, ConcernSeverity, ConcernSource, RemarkableDecision, ReviewSuggestion, StoredConcernArtifact } from "./artifacts.js";
+import type { Concern, ConcernCounts, ConcernSeverity, ConcernSource, RemarkableDecision, ReviewSuggestion, StoredConcernArtifact } from "./artifacts.js";
 import type { Repo } from "./git/repo.js";
 import { commitAll } from "./git/commit.js";
 import { git } from "./git/exec.js";
@@ -125,6 +125,34 @@ export async function listConcerns(taskDir: string): Promise<StoredConcernArtifa
 /** Returns open concerns ordered by creation time then id. */
 export async function listOpenConcerns(taskDir: string): Promise<StoredConcernArtifact[]> {
   return (await listConcerns(taskDir)).filter((r) => r.status === "open");
+}
+
+/**
+ * Counts stored concerns per status for the hollow state view (§18).
+ * A missing directory is zeroes; corrupt entries are skipped with a warning
+ * because the materialized view must never fail derivation.
+ */
+export async function countConcerns(taskDir: string): Promise<ConcernCounts> {
+  const counts: ConcernCounts = { open: 0, dismissed: 0, routed: 0, resolved: 0 };
+  const dir = dirOf(taskDir);
+  let names: string[];
+  try {
+    names = await fs.promises.readdir(dir);
+  } catch (err: any) {
+    if (err?.code === "ENOENT" || err?.code === "ENOTDIR") return counts;
+    throw err;
+  }
+  for (const name of names.filter((n) => n.startsWith("c-") && n.endsWith(".yaml"))) {
+    try {
+      const concern = await readYaml<StoredConcernArtifact>(path.join(dir, name));
+      if (typeof concern?.kind === "string" && Object.hasOwn(counts, concern.status)) {
+        counts[concern.status as keyof ConcernCounts]++;
+      }
+    } catch (err: any) {
+      console.warn(`[factory] Skipping corrupt concern file ${name}: ${err?.message ?? err}`);
+    }
+  }
+  return counts;
 }
 
 /** Returns every stored concern/remarkable id for exact-id triage partitioning. */

@@ -1,0 +1,37 @@
+status: approved
+summary: "Approved: 7/7 target green, 376 pass full suite, typecheck pass, no
+  weakening, red-green credible"
+suggestions:
+  - detail: countConcerns warns only on read/parse throws; valid YAML with unknown
+      status or missing kind is silently ignored (mirrors listConcerns filter).
+      Consider warn naming file for semantic-invalid entries so operators can
+      find bad status values; currently only syntax-corrupt warns.
+    disposition: optional
+    id: count-unknown-status-silent
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 148
+    summary: Warn on unknown status/missing kind, not just parse errors
+  - detail: status isBlocking is disposition==human-stop || blocks.length>0 ||
+      questionBlocks(task). questionBlocks explicitly returns false for
+      human-awareness, but isBlocking would mark awareness-with-blocks as
+      Blocking via blocks.length. No current writer creates that shape
+      (awareness persists without blocks), so theoretical; explicit awareness
+      exclusion would align CLI with steer contract.
+    disposition: optional
+    id: status-awareness-exclusion
+    location:
+      file: plugins/software-factory/src/cli/status.ts
+      line: 84
+    summary: Explicitly exclude human-awareness from Blocking classify
+  - detail: Schema test pins inner required/all-four/integer-via-open-string and
+      additionalProperties, but does not assert root concerns required
+      (implementation added it) nor minimum:0/float rejection for all keys.
+      Adding validate(base)==false and negative/float cases would lock the
+      required-view contract.
+    disposition: optional
+    id: schema-outer-required-pinning
+    location:
+      file: plugins/software-factory/test/contracts/state-concern-schema.test.ts
+      line: 27
+    summary: Pin root concerns required and numeric bounds

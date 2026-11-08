@@ -1,0 +1,38 @@
+checks:
+  - id: test-first-scope
+    status: pass
+    message: test-first-scope passed (3 test files, 0 new prod stubs with 0 lines)
+    details:
+      testFiles:
+        - plugins/software-factory/test/cli/status-concerns.test.ts
+        - plugins/software-factory/test/contracts/state-concern-schema.test.ts
+        - plugins/software-factory/test/engine/state-concern-counts.test.ts
+      newProdFiles: []
+      stubProdLines: 0
+  - id: target-red
+    status: pass
+    message: "target-red passed: all 7 expected tests failed with assertion failures"
+    details:
+      command: cd plugins/software-factory && bun test
+        test/engine/state-concern-counts.test.ts
+        test/contracts/state-concern-schema.test.ts
+        test/cli/status-concerns.test.ts --reporter=junit
+        --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-1794140137748-4qiu0m8fyqk.xml
+      junitCaseCount: 7
+      junitCaseIds:
+        - factory status concern surfacing (§18).prints concern counts and
+          separates blocking from digest questions
+        - factory status concern surfacing (§18).prints zero counts when the
+          task has no concerns yet
+        - State schema concern counts.accepts concern status counts and rejects
+          incomplete ones
+        - StateArtifact concern counts (§18).counts stored concerns by status
+        - StateArtifact concern counts (§18).reports zero counts when the
+          concerns directory is missing
+        - StateArtifact concern counts (§18).skips corrupt concern files and
+          warns instead of failing derivation
+        - StateArtifact concern counts (§18).refreshStateYaml materializes the
+          counts into state.yaml
+      junitTruncated: false
+      collected: true
+      collectionErrors: []

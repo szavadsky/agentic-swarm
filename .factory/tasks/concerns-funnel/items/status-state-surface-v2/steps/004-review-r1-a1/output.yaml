@@ -1,0 +1,56 @@
+status: approved
+summary: "Approved: counts/CLI/schema match assignment, 7 target green,
+  typecheck pass, no concrete defect"
+suggestions:
+  - id: status-awareness-exclusion
+    disposition: optional
+    summary: Explicitly exclude human-awareness from Blocking classify
+    detail: "isBlocking is disposition==human-stop || blocks.length>0 ||
+      questionBlocks(task). questionBlocks returns false for human-awareness,
+      but blocks.length>0 would mark awareness-with-blocks as Blocking,
+      contradicting steer.ts digest-only contract and derive (never blocks).
+      Unreachable today (awareness always written with blocks []/omitted per
+      item-machine), so polish: add disposition!==human-awareness guard for
+      contract alignment."
+    location:
+      file: plugins/software-factory/src/cli/status.ts
+      line: 84
+  - id: count-semantic-invalid-silent
+    disposition: optional
+    summary: Warn on semantic-invalid concern files, not just parse throws
+    detail: "countConcerns warns only when readYaml throws. Valid YAML with missing
+      kind, null/empty file, or unknown status is silently skipped (line 148
+      hasOwn check), diverging from listConcerns length with no operator signal.
+      Assignment corrupt skip+warn tested only for syntax errors, so current
+      behavior passes; consider warn naming file for semantic-invalid to avoid
+      silent undercount. Unknown: whether empty/null YAML should count as
+      corrupt."
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 148
+  - id: status-implicit-ref-gap
+    disposition: optional
+    summary: Document or handle implicit-ref item blockers in Blocking split
+    detail: isBlocking checks explicit blocks non-empty or task-blocking only. A
+      human-async with ref=item and no blocks field blocks that item via
+      questionBlocks fallback (ref wins) in deriveItemState, but shows as Digest
+      in status. No current writer emits that shape (item-machine/consults
+      always set blocks for async; triage-without-item uses concern-id ref), so
+      unreachable in practice; test q-empty-blocks pins Digest for synthetic
+      async+empty-blocks. Clarify Blocking means explicit-blocks-or-task vs
+      blocks-anything.
+    location:
+      file: plugins/software-factory/src/cli/status.ts
+      line: 84
+  - id: derive-triple-concern-read
+    disposition: optional
+    summary: Reuse single concern listing for counts/routed/debt
+    detail: deriveTaskState reads concerns/ 3x per tick
+      (collectRoutedBlockers->listConcerns, debt loop listConcerns,
+      countConcerns readdir+read). Correct but 3x IO and theoretical TOCTOU skew
+      between routed set and counts. Consider deriving counts from one
+      listConcerns pass (adding warn-on-corrupt there) in future refactor; not
+      blocking.
+    location:
+      file: plugins/software-factory/src/core/derive/task.ts
+      line: 360

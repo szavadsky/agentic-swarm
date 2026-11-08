@@ -1,0 +1,56 @@
+status: ok
+summary: "Authored three test files (7 tests) specifying StateArtifact.concerns
+  {open,dismissed,routed,resolved}: state.schema validation,
+  toStateArtifact/refreshStateYaml counts with missing-directory zeros and
+  corrupt-file skip+warn, and `factory status` rendering Concerns counts plus
+  separate Blocking vs Digest sections. All tests fail on current production
+  code with assertion failures only; typecheck passes; no production files
+  modified."
+target:
+  selectors:
+    - test/engine/state-concern-counts.test.ts
+    - test/contracts/state-concern-schema.test.ts
+    - test/cli/status-concerns.test.ts
+  expectRed:
+    - test/engine/state-concern-counts.test.ts::StateArtifact concern counts
+      (§18)::counts stored concerns by status
+    - test/engine/state-concern-counts.test.ts::StateArtifact concern counts
+      (§18)::reports zero counts when the concerns directory is missing
+    - test/engine/state-concern-counts.test.ts::StateArtifact concern counts
+      (§18)::skips corrupt concern files and warns instead of failing derivation
+    - test/engine/state-concern-counts.test.ts::StateArtifact concern counts
+      (§18)::refreshStateYaml materializes the counts into state.yaml
+    - test/contracts/state-concern-schema.test.ts::State schema concern
+      counts::accepts concern status counts and rejects incomplete ones
+    - test/cli/status-concerns.test.ts::factory status concern surfacing
+      (§18)::prints concern counts and separates blocking from digest questions
+    - test/cli/status-concerns.test.ts::factory status concern surfacing
+      (§18)::prints zero counts when the task has no concerns yet
+evidence:
+  - TMPDIR=/tmp bun test test/engine/state-concern-counts.test.ts
+    test/contracts/state-concern-schema.test.ts test/cli/status-concerns.test.ts
+    => 0 pass, 7 fail; every failure is an assertion mismatch (concerns
+    undefined, schema rejected counts, CLI text missing), proving target-red.
+  - "JUnit probe (`bun test ... --reporter=junit`): 7 <failure> elements, 0
+    <error> elements; each declared expectRed id matched a failing case with the
+    runner's id normalization."
+  - bun run typecheck => exit 0 (test files compile against current production
+    types).
+  - TMPDIR=/tmp bun test (full suite) => 369 pass, 2 skip, 7 fail; only the
+    newly authored red tests fail, so no collateral breakage in existing tests.
+  - git status --short => only the three new test files are untracked; no
+    production/config files were modified.
+concerns:
+  - "CLI contract is test-defined: one `Concerns:` line listing
+    open/dismissed/routed/resolved counts (order-sensitive), then a Blocking
+    section before a Digest section; digest includes human-awareness and
+    empty/absent-blocks questions per adr-digest-mailbox."
+  - Corrupt-file warning is accepted on either console.warn or console.error,
+    but the message must name the corrupt file so operators can find it.
+  - Schema test requires all four count keys and integer types inside `concerns`
+    when present, while leaving the root `concerns` property optional to match
+    the schema's existing optional-field convention.
+notes: Tests build on the existing concern store and steer mailbox APIs; no new
+  production modules or stubs were needed. Derived-state tests use direct task
+  directories, and CLI tests exercise the documented default `.factory/tasks`
+  orchestration folder.

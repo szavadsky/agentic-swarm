@@ -518,6 +518,14 @@ export interface StateItemInfo {
   mergedAt?: string;
 }
 
+/** Concern-store totals surfaced on state.yaml (§18). */
+export interface ConcernCounts {
+  open: number;
+  dismissed: number;
+  routed: number;
+  resolved: number;
+}
+
 export interface StateArtifact {
   task: string;
   kind?: string;
@@ -525,6 +533,7 @@ export interface StateArtifact {
   iteration: number;
   currentWave?: number;
   items: Record<string, StateItemInfo>;
+  concerns: ConcernCounts;
   debt?: string[];
   budgetSpentUsd?: number;
   lastUpdated: string;

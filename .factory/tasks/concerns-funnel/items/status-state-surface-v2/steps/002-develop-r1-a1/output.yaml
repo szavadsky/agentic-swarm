@@ -1,0 +1,52 @@
+status: ok
+summary: Added StateArtifact.concerns counts {open,dismissed,routed,resolved} to
+  the state contract, derived from the concern store via a new countConcerns
+  helper (missing dir -> zeros, corrupt files skipped with a filename-bearing
+  warning), materialized through toStateArtifact/refreshStateYaml, and surfaced
+  by `factory status` with a Concerns line plus separate Blocking and Digest
+  question sections (human-stop/blocking-disposition questions vs
+  awareness/non-blocking notes). Updated state.schema.json to require all four
+  non-negative integer counts with additionalProperties:false. All 7 target
+  tests pass; full suite and typecheck pass.
+target:
+  selectors:
+    - test/engine/state-concern-counts.test.ts
+    - test/contracts/state-concern-schema.test.ts
+    - test/cli/status-concerns.test.ts
+  expectRed:
+    - test/engine/state-concern-counts.test.ts::StateArtifact concern counts
+      (§18)::counts stored concerns by status
+    - test/engine/state-concern-counts.test.ts::StateArtifact concern counts
+      (§18)::reports zero counts when the concerns directory is missing
+    - test/engine/state-concern-counts.test.ts::StateArtifact concern counts
+      (§18)::skips corrupt concern files and warns instead of failing derivation
+    - test/engine/state-concern-counts.test.ts::StateArtifact concern counts
+      (§18)::refreshStateYaml materializes the counts into state.yaml
+    - test/contracts/state-concern-schema.test.ts::State schema concern
+      counts::accepts concern status counts and rejects incomplete ones
+    - test/cli/status-concerns.test.ts::factory status concern surfacing
+      (§18)::prints concern counts and separates blocking from digest questions
+    - test/cli/status-concerns.test.ts::factory status concern surfacing
+      (§18)::prints zero counts when the task has no concerns yet
+evidence:
+  - bun test test/engine/state-concern-counts.test.ts
+    test/contracts/state-concern-schema.test.ts test/cli/status-concerns.test.ts
+    -> 7 pass, 0 fail, 22 expect() calls
+  - bun run typecheck (tsc --noEmit) -> exit 0
+  - bun test (full plugin suite) -> 376 pass, 2 skip, 0 fail across 63 files
+  - bun test test/cli/cli.test.ts test/engine/routing-human-debt.test.ts
+    test/engine/concerns-funnel.test.ts test/contracts/concern-schemas.test.ts
+    -> 48 pass, 0 fail
+  - git status --short confirms only five production files changed (state
+    schema, status CLI, artifacts, concerns store, task derive); no stray stubs
+concerns:
+  - countConcerns warns on every derivation/refresh for each corrupt concern
+    file; acceptable per skip+warn contract but noisy if a corrupt file lingers.
+  - StateArtifact.concerns and state.schema are now required, so any external
+    producer of state.yaml must include all four totals (no in-repo producer
+    besides deriveTaskState).
+notes: Counts are computed after item/status derivation inside deriveTaskState
+  so the read reflects concerns persisted earlier in the same tick;
+  toStateArtifact stays synchronous as the tests require. Blocking
+  classification treats human-stop, any non-empty `blocks` list, or a task-level
+  block as blocking; human-awareness and empty-blocks notes go to Digest.

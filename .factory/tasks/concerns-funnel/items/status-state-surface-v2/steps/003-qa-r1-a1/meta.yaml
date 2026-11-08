@@ -1,0 +1,19 @@
+seq: 3
+name: qa
+attempt: 1
+fixRound: 1
+agent: qa
+role: alt-workhorse
+models:
+  - opencode-go/muse-spark-1.3-contributor
+  - opencode-go/deepseek-v4.1-flash
+timeoutSec: 900
+status: ok
+startedAt: 2026-11-08T12:31:17.490Z
+session: 01a1bb24-48e9-7766-9d6a-bcf6dc36d3cd
+endedAt: 2026-11-08T12:43:52.950Z
+usage:
+  inputTokens: 45539
+  outputTokens: 36982
+  costUsd: 0.013246
+traceRef: /home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/sessions/2026-11-08T12-31-19-785Z_01a1bb24-48e9-7766-9d6a-bcf6dc36d3cd.jsonl
