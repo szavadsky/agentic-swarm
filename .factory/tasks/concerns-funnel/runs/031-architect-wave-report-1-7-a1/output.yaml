@@ -1,0 +1,9 @@
+context: wave
+decision: continue
+rationale: "Wave 7 complete: 2/2 merged (reviewer-triage-v2,
+  plan-reviewer-triage-v2; commits ce0acee/bda78da), tree clean, typecheck pass,
+  test fail->pass improved with no regressions. M2 triage done; M3 routing deps
+  satisfied. No failures, blocked, or debt requiring plan change."
+text: "Proceed to wave 8: routing-blocker-derive-v2 + routing-human-debt-v2 in
+  parallel (deps all merged). Derive owns collectRoutedBlockers +
+  blockedByConcern pure; human-debt owns mailbox + debt predicate + exit-10."
