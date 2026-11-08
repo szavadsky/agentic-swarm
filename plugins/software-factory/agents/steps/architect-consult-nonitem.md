@@ -20,3 +20,11 @@ Context: {{context}}
 
 ## Tech Debt
 {{debt}}
+
+## Human involvement
+{{humanInvolvementCriteria}}
+
+## Open Concerns
+{{concernsYaml}}
+
+- Raise concerns with evidence; triage pre-existing ids with the allowed dispositions and condense or dismiss stale ones.

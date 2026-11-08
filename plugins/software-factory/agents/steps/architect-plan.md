@@ -39,3 +39,8 @@ Iteration: {{iteration}}
 
 ## Human involvement
 {{humanInvolvementCriteria}}
+
+## Open Concerns
+{{concernsYaml}}
+
+- Raise concerns with evidence; triage pre-existing ids using the human-involvement table and condense stale detail.

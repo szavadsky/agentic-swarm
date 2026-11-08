@@ -30,3 +30,8 @@ Conduct adversarial peer code review on completed changes, evaluating implementa
 
 ## Code Diff
 {{diff}}
+
+## Human involvement
+{{humanInvolvementCriteria}}
+
+- Raise concerns with evidence when review uncovers new cross-cutting issues.

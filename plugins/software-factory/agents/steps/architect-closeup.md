@@ -19,3 +19,11 @@ Determine the final iteration outcome following the completeness audit by the pl
 
 ## Task Intent
 {{intent}}
+
+## Human involvement
+{{humanInvolvementCriteria}}
+
+## Open Concerns
+{{concernsYaml}}
+
+- Raise concerns with evidence; triage pre-existing ids with the allowed dispositions and condense or dismiss stale ones.

@@ -22,3 +22,11 @@ Evaluate the results of a completed execution wave, assess spike findings and ac
 
 ## Steering Directives
 {{steering}}
+
+## Human involvement
+{{humanInvolvementCriteria}}
+
+## Open Concerns
+{{concernsYaml}}
+
+- Raise concerns with evidence; triage pre-existing ids with the allowed dispositions and condense or dismiss stale ones.
