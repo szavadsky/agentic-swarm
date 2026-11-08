@@ -1,0 +1,44 @@
+blockedItems: []
+debt:
+  - "Pre-existing test-gate red baseline persists: 2 head-guard failures when
+    TMPDIR sits under .factory-runtime (step-runner splits on /.factory); green
+    with TMPDIR=/tmp. Out of scope for this wave."
+  - "concerns-contracts split continues: schemas + policy children (wave 3, deps
+    on types) still pending after this 1/3 split merge."
+  - "QA nit carried: ReviewSuggestion.disposition is ReviewDisposition|string
+    (collapses to string), so 'dismiss' is not statically enforced there;
+    pre-existing shape intentionally untouched in this type-only split."
+  - Runtime still resolves dispositions via legacy
+    reviewPolicy.allowedDispositions (item-machine.ts, step-runner.ts);
+    canonical `default` is type-only until the policy split.
+  - Concern.detail modeled as required per docs/factory.v2.md §18 field list;
+    revisit optional-at-schema question in the schemas split.
+failedItems: []
+iteration: 1
+mergedItems:
+  - concerns-contracts-types
+recommendations:
+  - Proceed to wave 3 (concerns-contracts-schemas, concerns-contracts-policy),
+    both unblocked by this types merge.
+  - Normalize TMPDIR=/tmp for gate/merge runs or fix the '/.factory' split in
+    step-runner so the inherited red baseline does not gate future merges.
+  - Tighten ReviewSuggestion.disposition and wire the canonical
+    reviewPolicy.default resolver in the policy split; keep runtime off the
+    legacy alias.
+status: complete
+summary: "Wave 2 (iteration 1): 1/1 wave-2 items merged
+  (concerns-contracts-types: concern/remarkable type surface in
+  plugins/software-factory/src/core/artifacts.ts — Concern vocabularies,
+  RemarkableDecision, StoredConcernArtifact, ReviewDisposition+dismiss,
+  PlanAdr.blocking, PipelineConfig humanInvolvement/concerns/reviewPolicy; 5/5
+  contract tests red→green, QA approved + review approved, clean merge 80b5d47
+  conflictResolved=false). Tree clean: zero untracked files, no stray
+  tmp/log/orig/rej/dist/coverage/bak artifacts, git diff --check clean, no real
+  conflict markers (git grep for '^<<<<<<< '/'^>>>>>>> ' empty; generic grep
+  hits only docs/comments/test expectations/baseline logs/separator lines). Only
+  modified file is engine-managed journal.ndjson (+2 lines for this close-up
+  step). Gates vs baseline (judged ONLY from Gate Diff table): typecheck
+  pass→pass green, no regression; test fail→fail still failing, matches red
+  baseline, not a regression (pre-existing head-guard TMPDIR issue; item
+  evidence shows TMPDIR=/tmp fully green at 287 pass/2 skip/0 fail)."
+wave: 2

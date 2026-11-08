@@ -181,3 +181,5 @@
 {"type":"item_merge_phase","item":"concerns-contracts-types","phase":"merge-child-into-parent","ts":"2026-11-08T04:50:16.850Z"}
 {"type":"item_merge_phase","item":"concerns-contracts-types","phase":"remove-worktree","ts":"2026-11-08T04:50:16.888Z"}
 {"type":"item_merged","item":"concerns-contracts-types","sha":"80b5d47d4075cc31dbd8f4ca5435f1d7643322b3","conflictResolved":false,"ts":"2026-11-08T04:50:16.932Z"}
+{"type":"step_started","task":"concerns-funnel","step":"wave-close-up-1-2","attempt":1,"recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/018-wave-close-up-1-2-a1","ts":"2026-11-08T04:52:15.370Z"}
+{"type":"step_timeout_armed","task":"concerns-funnel","step":"wave-close-up-1-2","timeoutSec":900,"ts":"2026-11-08T04:52:15.374Z"}
