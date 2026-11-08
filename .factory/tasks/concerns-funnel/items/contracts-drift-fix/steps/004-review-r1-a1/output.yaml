@@ -1,0 +1,40 @@
+status: approved
+summary: "contracts-drift-fix approved: producer schemas + TS aligned,
+  vocabularies exact, lowercase detail byte-verified, untouched schemas reject,
+  typecheck + 17/17 contracts green"
+suggestions:
+  - id: concern-resolution-name-collision
+    disposition: optional
+    summary: ConcernResolution defined twice with different enums;
+      CloseupConcernResolution duplicates concerns.ts shape
+    detail: artifacts.ts:337 ConcernResolution is resolve|carry while concerns.ts:15
+      ConcernResolution is resolve|carry|propagate; new CloseupConcernResolution
+      duplicates the latter. No build break (separate modules, no conflicting
+      import today) and out of schema-half scope; unify on one canonical type
+      when runtime wiring lands.
+    location:
+      file: plugins/software-factory/src/core/artifacts.ts
+      line: 337
+  - id: ts-json-requiredness-drift
+    disposition: optional
+    summary: TS Concern requires detail+severity while JSON schemas require
+      kind+summary only (pre-existing)
+    detail: All 7 producer concern items require only kind+summary with
+      additionalProperties:false; TS Concern requires detail+severity.
+      Pre-existing and developer-disclosed; runtime ConcernInput already models
+      optional-with-defaults. Consider a producer input type or documenting the
+      contract in a follow-up.
+    location:
+      file: plugins/software-factory/src/core/artifacts.ts
+      line: 308
+  - id: resolution-note-superset
+    disposition: optional
+    summary: ConcernResolution note? is a harmless superset of assignment {id,action}
+    detail: Assignment pins concernResolution {id, action:resolve|carry};
+      implementation adds optional note in both artifacts.ts and
+      decisions.schema.json. Optional-only, consistent with
+      concernConfirms/close-up items, no test rejects it. Pin note acceptance
+      explicitly in contract tests if the vocabulary must be exact.
+    location:
+      file: plugins/software-factory/config/schemas/decisions.schema.json
+      line: 84
