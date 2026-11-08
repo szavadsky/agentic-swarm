@@ -1,5 +1,21 @@
 import { describe, expect, it } from "bun:test";
+import * as schedulerModule from "../src/core/plan/scheduler.js";
 import { blockedByFailure, nextWave, runnable, type SchedItem } from "../src/core/plan/scheduler.js";
+
+const blockedByConcernImpl = (
+  schedulerModule as unknown as {
+    blockedByConcern?: (items: SchedItem[], concernBlocked: Iterable<string>) => string[];
+  }
+).blockedByConcern;
+
+/**
+ * Test-first seam: while the scheduler does not yet export `blockedByConcern`,
+ * the inert fallback keeps module collection alive so the behavioural
+ * assertions fail as assertion failures (target-red), not import errors.
+ */
+function blockedByConcern(items: SchedItem[], concernBlocked: Iterable<string>): string[] {
+  return blockedByConcernImpl ? blockedByConcernImpl(items, concernBlocked) : [];
+}
 
 describe("plan/scheduler: nextWave", () => {
   it("returns current active wave while items are pending or running", () => {
@@ -170,5 +186,45 @@ describe("plan/scheduler: blockedByFailure", () => {
     ];
 
     expect(blockedByFailure(items)).toEqual([]);
+  });
+});
+
+describe("plan/scheduler: blockedByConcern", () => {
+  it("blocks concern-affected items and their declared dependents in PM order", () => {
+    const items: SchedItem[] = [
+      { slug: "seed", wave: "8", deps: [], status: "pending" },
+      { slug: "dependent", wave: "8", deps: ["seed"], status: "pending" },
+      { slug: "independent", wave: "8", deps: [], status: "pending" },
+    ];
+
+    expect(blockedByConcern(items, ["seed"])).toEqual(["seed", "dependent"]);
+  });
+
+  it("unions concern blocking with the failure-blocked fixpoint over declared deps", () => {
+    const items: SchedItem[] = [
+      { slug: "failed", wave: "8", deps: [], status: "failed" },
+      { slug: "failure-dependent", wave: "8", deps: ["failed"], status: "pending" },
+      { slug: "failure-transitive", wave: "8", deps: ["failure-dependent"], status: "pending" },
+      { slug: "seed", wave: "8", deps: [], status: "pending" },
+      { slug: "concern-dependent", wave: "8", deps: ["seed"], status: "pending" },
+      { slug: "independent", wave: "8", deps: [], status: "pending" },
+    ];
+
+    expect(blockedByConcern(items, ["seed"])).toEqual([
+      "failure-dependent",
+      "failure-transitive",
+      "seed",
+      "concern-dependent",
+    ]);
+  });
+
+  it("ignores refs naming no item and never blocks a done item", () => {
+    const items: SchedItem[] = [
+      { slug: "already-done", wave: "8", deps: [], status: "done" },
+      { slug: "seed", wave: "8", deps: [], status: "pending" },
+      { slug: "other", wave: "8", deps: [], status: "pending" },
+    ];
+
+    expect(blockedByConcern(items, ["plan", "already-done", "seed"])).toEqual(["seed"]);
   });
 });
