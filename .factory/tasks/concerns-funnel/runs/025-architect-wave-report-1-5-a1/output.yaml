@@ -1,0 +1,203 @@
+context: wave
+decision: amend
+outlines:
+  - deps:
+      - concerns-contracts-policy
+      - concerns-contracts-schemas
+      - concerns-contracts-types
+    description: Implement src/core/concerns.ts (fingerprint identity,
+      merge+escalated, aggregate/list/triage/closeup/partition, atomic YAML +
+      KeyedMutex(taskDir) RMW-only + immediate taskWt commitAll, restart
+      idempotent). NEVER wrap commitAll in repo.writeLock.runExclusive. Explicit
+      taskWt path, one file per fingerprint, concerns/** recovery +
+      reconcileConcerns (derive read-only), ingest errors must not change step
+      status. Wire all producer seams incl consult writeArtifact; reviewer
+      aggregates new then triages pre-existing only. Spike-saga-commit findings
+      authoritative. Behavior tests in test/engine/concerns-funnel.test.ts. Run
+      TMPDIR=/tmp bun test.
+    kind: story
+    milestoneId: m1-contracts-aggregate
+    slug: concerns-store-v2
+    title: Concerns store with merge and commit
+  - deps:
+      - concerns-contracts-policy
+      - concerns-contracts-schemas
+      - concerns-contracts-types
+    description: "humanInvolvement + concerns thresholds schema/loader/merge,
+      commented autonomous/principal/detailed presets with blocking table,
+      agents/criteria/human-involvement.md terse fragment, KNOWN_VARS
+      concernsYaml + humanInvolvementCriteria per fragment matrix. Behavior:
+      mode switch changes criteria and blocking-ADR behavior; preflight green.
+      Precedes all routing."
+    kind: story
+    milestoneId: m2-triage-modes
+    slug: modes-prompts-v2
+    title: Modes, thresholds, prompt wiring
+  - deps:
+      - concerns-store-v2
+    description: "Item reviewer triage with concernsYaml in steps/review, isTriager
+      gate, exact-id partition excluding triage ids from
+      fix-loop/approval/normal mailbox, fix-on-concern fixRequired once, mailbox
+      dedup q-concern-<cid>, dismiss detail to dismissReason, condensing
+      output<input, debt predicate (no tech-debt disposition). Behavior: dismiss
+      no routing, routed persist, QA no-op, missing detail errors, fix-once, no
+      double mailbox."
+    kind: story
+    milestoneId: m2-triage-modes
+    slug: reviewer-triage-v2
+    title: Workhorse reviewer triage
+  - deps:
+      - concerns-store-v2
+    description: "Architect path: aggregate plan/revise concerns + remarkable rm-*,
+      hydrate steps/plan-review with concernsYaml, same exact-id partition and
+      dismiss vocabulary, non-dismissed become routed. Behavior: dismissed vs
+      routed, rm-* triaged, debt predicate, no approval trigger from triage
+      ids."
+    kind: story
+    milestoneId: m2-triage-modes
+    slug: plan-reviewer-triage-v2
+    title: Plan-reviewer triage
+  - deps:
+      - modes-prompts-v2
+      - plan-reviewer-triage-v2
+      - reviewer-triage-v2
+    description: "Pure derive only: derive/task.ts collectRoutedBlockers +
+      deriveWave/deriveItem integration (thread blockedBy into deriveItemState
+      or post-process before every deriveWaveState call),
+      scheduler.blockedByConcern reusing fixpoint, union with failure-blocked,
+      cascade only declared deps, no writes. Spike findings authoritative.
+      Behavior: dependent blocked, non-dep unaffected, transitive via deps
+      only."
+    escalate: true
+    kind: story
+    milestoneId: m3-routing
+    slug: routing-blocker-derive-v2
+    title: Blocker derive
+  - deps:
+      - modes-prompts-v2
+      - reviewer-triage-v2
+    description: "human-async blocks [item] and continues, human-stop blocks
+      task/item + exit-10 halt + blocked derive, awareness blocks [] digest
+      never blocking/exiting, debt predicate kind tech-debt routed or
+      disposition optional routed. Behavior: mailbox files per disposition, exit
+      10 on stop, awareness continues, debt includes [item] summary."
+    kind: story
+    milestoneId: m3-routing
+    slug: routing-human-debt-v2
+    title: Human mailbox and debt routing
+  - deps:
+      - modes-prompts-v2
+      - routing-blocker-derive-v2
+    description: "Act phase only: wave-act newly-blocked check writes
+      decisions/concern-<cid>.yaml exactly once (restart idempotent) +
+      buildArchitectHydration concernsYaml extension for wave-report/next-plan.
+      Behavior: single consult file, restart no duplicate, architect input
+      contains id+summary."
+    kind: story
+    milestoneId: m3-routing
+    slug: routing-architect-consult-v2
+    title: Architect consult and hydration
+  - deps:
+      - modes-prompts-v2
+      - routing-human-debt-v2
+    description: "Full ADR md title/context/decision/consequences/blocking, blocking
+      routed per mode table with exit-10 when stop, remarkable digest-only never
+      waiting, dispositions.md exit-10 preserved. Behavior: blocking
+      mailbox+blocks, remarkable digest only."
+    kind: story
+    milestoneId: m3-routing
+    slug: adr-blocking-digest-v2
+    title: Blocking vs remarkable ADRs
+  - deps:
+      - concerns-store-v2
+      - routing-human-debt-v2
+    description: "Sole owner StateArtifact.concerns
+      {open,dismissed,routed,resolved}, state.schema,
+      toStateArtifact/refreshStateYaml (missing zeros, corrupt skip+warn), CLI
+      Concerns plus Blocking vs Digest. Behavior: counts, missing/corrupt, CLI
+      sections."
+    kind: story
+    milestoneId: m4-funnel-surface
+    slug: status-state-surface-v2
+    title: State counts and status surfacing
+  - deps:
+      - adr-blocking-digest-v2
+      - routing-architect-consult-v2
+      - spike-text-budget
+    description: "Hydrate wave/plan-close-up and architect reports with concernsYaml
+      capped per spike (code min(diff,2000), zero-diff min(input,500) UTF-8
+      bytes, output<input), concernResolutions pending + architect
+      concernConfirms accept/reject, propagate to parent/digest, simple-item
+      explicit + auto-route fallback (tech-debt->optional, others->architect,
+      human-* never auto). Spike nits: production git() wrapper, many-concerns
+      2000B case, trim semantics. Behavior: byte budgets, pending/confirm,
+      simple fallback."
+    kind: story
+    milestoneId: m4-funnel-surface
+    replanAfter: true
+    slug: funnel-closeups-v2
+    title: Funnel close-ups and simple triage
+  - deps:
+      - routing-architect-consult-v2
+    description: "runChildTask propagateEpicConcerns after child completion before
+      cleanup/merge (engine.ts:246-274) for every child status, condensed parent
+      copies source.epic with parent detail < child, extended parent
+      concernsYaml hydration (append LAST, recompute before wave-report);
+      forward child human questions to root mailbox. Spike findings
+      authoritative. Behavior: one copy, dismissed stays local, saga input
+      contains id."
+    escalate: true
+    kind: story
+    milestoneId: m4-funnel-surface
+    replanAfter: true
+    slug: saga-propagate-v2
+    title: Epic to saga propagation
+  - deps:
+      - funnel-closeups-v2
+      - modes-prompts-v2
+      - saga-propagate-v2
+      - status-state-surface-v2
+    description: "Update ARCHITECTURE section 1 row 18 + 6.2 + 8, README, config
+      commentary, dispositions.md; fragment matrix + 15/60 debloat check;
+      consolidate test/engine/concerns-funnel.test.ts + steer/CLI coverage.
+      Final gates: bun run typecheck and TMPDIR=/tmp bun test."
+    kind: story
+    milestoneId: m5-docs
+    slug: docs-finish-v2
+    title: Docs and suite consolidation
+planDelta: "Amendment 2/3 (scheduling repair, no scope change): waves 4-5 ran
+  empty because 9 pending items are orphaned in already-closed waves 2-5. Root
+  cause verified in code: iteration wave loop (iteration.ts:700-720) skips
+  closed waves, and deriveWaveState (wave.ts:29) carries forward only blocked
+  items from past waves, never pending items whose deps merged late; amendment 1
+  updated deps without re-waving. Fix: version all 12 pending items to -v2 slugs
+  (list in outlines), remove the 12 stale originals via removeItemSlugs, and
+  have PM schedule the -v2 chain into fresh waves 6+ in strict topological order
+  (store-v2+modes-v2 first and parallel; triages next; derive next; consults
+  next; closeups/saga next; docs last). Dependents must sit in strictly later
+  waves than their deps, never the same wave. Spike-saga-commit (ready, wave 1,
+  zero prod diff) stays as-is: findings authoritative, do not re-run. Gates
+  green (test fail->pass improved); operator should update gates-baseline.yaml
+  to green."
+rationale: "Waves 4 AND 5 both merged 0 items with zero failures and green
+  gates: classic scheduling stall, not content failure. 9 pending items sit in
+  closed waves 2-5 where the engine never revisits them (verified: closed-wave
+  skip + wave filter carries only blocked, not pending). Same-slug outline
+  updates do not re-wave (proven by amendment 1). Only fix within budget is
+  version-to--v2 + remove originals so PM assigns fresh future waves."
+removeItemSlugs:
+  - adr-blocking-digest
+  - concerns-store
+  - docs-finish
+  - funnel-closeups
+  - modes-prompts
+  - plan-reviewer-triage
+  - reviewer-triage
+  - routing-architect-consult
+  - routing-blocker-derive
+  - routing-human-debt
+  - saga-propagate
+  - status-state-surface
+text: "Next wave: run concerns-store-v2 + modes-prompts-v2 in parallel (deps all
+  merged). Then triages, then routing chain per deps. Do not schedule any -v2
+  item in the same wave as its deps."
