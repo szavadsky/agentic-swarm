@@ -1397,3 +1397,5 @@
 {"type":"empty_wave_streak","wave":11,"iteration":1,"streak":1,"blocked":["funnel-closeups-v3"],"ts":"2026-11-08T17:16:36.365Z"}
 {"type":"step_started","task":"concerns-funnel","step":"wave-close-up-1-11","attempt":1,"recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/042-wave-close-up-1-11-a1","ts":"2026-11-08T17:18:01.609Z"}
 {"type":"step_timeout_armed","task":"concerns-funnel","step":"wave-close-up-1-11","timeoutSec":900,"ts":"2026-11-08T17:18:01.615Z"}
+{"type":"step_finished","task":"concerns-funnel","step":"wave-close-up-1-11","attempt":1,"status":"ok","sessionId":"01a1bc2a-c4c1-731a-8202-4327af5e97f4","usage":{"inputTokens":20540,"outputTokens":6586,"costUsd":0.00347},"ts":"2026-11-08T17:19:12.585Z"}
+{"type":"scheduler_wait","wave":11,"iteration":1,"reason":"close-up gates + close-up turn","gapWallMs":156224,"gapActiveMs":156224,"merges":[],"ts":"2026-11-08T17:19:12.585Z"}
