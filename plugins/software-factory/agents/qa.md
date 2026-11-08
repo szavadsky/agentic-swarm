@@ -10,8 +10,6 @@ tools:
   - lsp
   - ast_grep
   - task
-  - checkpoint
-  - rewind
 ---
 
 # QA Reviewer Agent

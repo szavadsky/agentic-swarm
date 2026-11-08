@@ -145,6 +145,39 @@ export class OmpHarness implements Harness {
   }
 
   /**
+   * Probe which tool names omp accepts. One cheap `--no-session` turn with the
+   * union; omp's "Built-in tools unavailable in this session: a, b" stderr names
+   * the unknown ones. Returns [] when all resolve (or the probe itself fails
+   * for a non-tool reason — callers treat that as inconclusive, not clean).
+   */
+  public async validateTools(tools: string[]): Promise<string[]> {
+    const { spawn } = await import("node:child_process");
+    const cwd = process.cwd();
+    const { promptsDir, overlayPath } = this.ensureRuntimeDirs(cwd);
+    const promptPath = path.join(promptsDir, `tool-probe-${Date.now()}.txt`);
+    fs.writeFileSync(promptPath, "Reply with exactly: TOOLS_OK", "utf8");
+    try {
+      const proc = spawn(
+        this.ompBinary,
+        ["-p", `@${promptPath}`, "--no-session", `--tools=${tools.join(",")}`, "--config", overlayPath, "--mode", "json"],
+        { cwd, stdio: ["ignore", "pipe", "pipe"] }
+      );
+      let stderr = "";
+      proc.stderr?.on("data", (d: Buffer) => { stderr += d.toString("utf8"); });
+      await new Promise<void>((resolve) => {
+        const t = setTimeout(() => { try { proc.kill("SIGKILL"); } catch {} resolve(); }, 120_000);
+        proc.on("close", () => { clearTimeout(t); resolve(); });
+        proc.on("error", () => { clearTimeout(t); resolve(); });
+      });
+      const m = stderr.match(/Built-in tools unavailable in this session: ([^\n]+)/);
+      if (!m) return [];
+      return (m[1] ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+    } finally {
+      try { if (fs.existsSync(promptPath)) fs.unlinkSync(promptPath); } catch {}
+    }
+  }
+
+  /**
    * Resolves the runtime directory and ensures its subfolders exist.
    */
   private ensureRuntimeDirs(cwd: string): {

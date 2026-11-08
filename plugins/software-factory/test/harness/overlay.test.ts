@@ -48,7 +48,7 @@ describe("OMP config overlay generation", () => {
     // 3. Unattended keys
     expect(overlay.eval.autoBackground.enabled).toBe(false);
     expect(overlay.title.generator).toBe("none");
-    expect(overlay.checkpoint.enabled).toBe(true);
+    expect(overlay.checkpoint.enabled).toBe(false);
     expect(overlay.advisor.enabled).toBe(false);
     expect(overlay.bash.gitGuard).toBe(false);
     expect(overlay.bash.allowCompoundCommands).toBe(true);

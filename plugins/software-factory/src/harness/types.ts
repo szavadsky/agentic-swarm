@@ -23,6 +23,8 @@ export type OnModelFallback = (info: ModelFallbackInfo) => void | Promise<unknow
 
 export interface Harness {
   run(l: AgentRun): Promise<AgentOutcome>; // one turn (fresh or resumed)
+  /** Probe which tool names omp accepts; returns the unknown ones. Optional — engines skip when absent. */
+  validateTools?(tools: string[]): Promise<string[]>;
   complete(c: {
     role: string;
     models: string[];

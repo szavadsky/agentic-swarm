@@ -155,6 +155,7 @@ Steering log (user decisions recorded by the orchestrator during the build; newe
      - hoop removal: per-step/per-item budget raised to fit long turns (8→25/40 USD); hydration 40→128KB (architect keeps its own plan); timeout-nudge/resume budget defaults to half the step timeout instead of pinned 5m; verified no work-loss paths (HEAD guard soft-resets, rejects keep worktree, citations drop-with-journal)
      - no hard caps on injected context: hydration/context-pack byte caps removed entirely (the old tail-truncation silently dropped the architect's own prior plans first); architect reads full files with normal tools + injected task status; runaway protection is budgets + turn limits only
      - tools are config, not hardcoded: pipeline.tools.defaults/structuredOutput in the default file (code fallbacks only for hand-built test pipelines); checkpoint enabled in overlay; architect/developer/reviewer/fact-finder/qa carry task+checkpoint+rewind
+     - checkpoint/rewind are NOT omp agent tools (harness-level only; wiring them killed a live run) — reverted to task-only scouts; run-start tool probe fails fast on unknown names instead of mid-run
 
                                                    
 

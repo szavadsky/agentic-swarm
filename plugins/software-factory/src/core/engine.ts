@@ -300,6 +300,24 @@ export async function runTask(
     pipeline.limits.maxIterations = opts.maxIterations;
   }
 
+  // 3b. Validate configured tool names against omp once (fail fast, not mid-run)
+  if (harness.validateTools && process.env.FACTORY_SKIP_TOOL_PROBE !== "1") {
+    const { resolveAgentTools } = await import("./prompts.js");
+    const union = new Set<string>(pipeline.tools?.structuredOutput ?? []);
+    for (const agent of Object.keys(pipeline.agents ?? {})) {
+      try {
+        const def = prompts.agentDefinition(agent);
+        for (const t of resolveAgentTools(agent, def.tools ?? pipeline.tools?.defaults ?? [], pipeline)) union.add(t);
+      } catch { /* unknown agent definition: preflight/prompts owns that error */ }
+    }
+    if (union.size > 0) {
+      const unknown = await harness.validateTools([...union]);
+      if (unknown.length > 0) {
+        throw new Error(`Unknown omp tool names in agent/config tool sets: ${unknown.join(", ")} (from pipeline.tools/agents — fix config or agent frontmatter)`);
+      }
+    }
+  }
+
   const limits = pipeline.limits ?? {};
   const maxParallelTurns = limits.maxParallelTurns ?? 4;
   const turnsSemaphore = new Semaphore(maxParallelTurns);
