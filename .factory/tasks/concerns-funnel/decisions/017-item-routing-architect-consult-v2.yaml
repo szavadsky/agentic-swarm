@@ -1,0 +1,30 @@
+id: decision-routing-architect-consult-v2-1794147542063
+context: item
+item: routing-architect-consult-v2
+afterRecord: 004-review-r1-a1
+decision: retry-with-guidance
+timestamp: 2026-11-08T14:19:02.063Z
+rationale: "Item is implementation-complete and review-clean: target tests
+  red->green verified, QA approved, reviewer approved with only optionals,
+  develop gates green (371 pass, typecheck pass, size 213/300). Merge-path test
+  failure with no new fix requests points to merge-time causes (stale
+  base/conflict resolution with wave-9 siblings touching iteration.ts,
+  environmental TMPDIR/head-guard flake, or cross-test interference) rather than
+  a design defect. No split/escalation warranted."
+text: "Retry routing-architect-consult-v2 merge in one round: 1) Pull the exact
+  merge-gate failure (failing test names + output), not the develop gate —
+  report them in evidence. 2) Rebase onto current topic tip; wave-9 siblings
+  (adr-blocking-digest-v2, status-state-surface-v2) also touch
+  iteration.ts/derive — verify conflict resolution kept BOTH this item's
+  consultRoutedBlockers call sites + hydration section AND sibling changes. 3)
+  Reproduce with TMPDIR=/tmp: targeted file first, then full `bun test`; if
+  failures are head-guard/TMPDIR flakes or lock/timeout flakes, re-run clean and
+  note it. 4) If failures are real regressions, fix narrowly without redesign:
+  consult must fire only for kind==blocker && status==routed with
+  affects∩blocked-wave-items, guard on decisions/concern-<cid>.yaml existence
+  (no rewrite, no second turn on restart); hydration section stays
+  LAST-appended, open+routed only, plan-reviewer path stays open-only. 5) Do NOT
+  apply the 4 optional nits unless they fix the failure
+  (sub-budget/sanitize/barrel/prompt-align are debt for docs-finish). Keep diff
+  within budget."
+persist: false
