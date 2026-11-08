@@ -26,4 +26,4 @@ Audit completed iteration work against original plan milestones, Gherkin scenari
 ## Open Concerns
 {{concernsYaml}}
 
-- Raise concerns with evidence; triage pre-existing ids with the allowed dispositions and condense or dismiss stale ones.
+- Raise concerns with evidence; record concernResolutions with resolve/carry/propagate and condense stale detail.

@@ -1,0 +1,24 @@
+evidence:
+  - bun test test/prompts.test.ts test/human-involvement-config.test.ts -> 34
+    pass, 0 fail, 465 expect() calls (matrix sentinels, budgets, mode-switch
+    green)
+  - "bun test (full plugin suite) -> 391 tests across 65 files: 389 pass, 2
+    skip, 0 fail, 2067 expect() calls"
+  - bun run typecheck -> tsc --noEmit exit 0
+  - grep triage/dismiss over qa.md + architect-*.md + wave/plan-close-up.md ->
+    no matches (EXIT:1); grep condense over same 10 files -> 10 matches; grep
+    concernResolutions confirms wave-close-up:26, plan-close-up:29,
+    architect-closeup:29; grep 'Raise concerns' =1 per file on all 10; grep
+    'triage pre-existing ids with the allowed dispositions' over agents/steps ->
+    0
+  - "manual read: review.md raise line now under ## Open Concerns (line 24) with
+    HI section holding only criteria; plan-review.md has blank line between
+    {{concernsYaml}} and raise line"
+status: ok
+summary: "Fix-round: reworded qa + 6 plan/decisions architect fragments to
+  raise-only + condense (no triage/dismiss/dispositions); reworded
+  wave/plan/architect close-ups to concernResolutions resolve/carry/propagate +
+  condense; applied both optionals (plan-review blank line, review raise moved
+  to OC block). Same line counts so budgets unchanged; all target + full gates
+  green."
+concerns: []

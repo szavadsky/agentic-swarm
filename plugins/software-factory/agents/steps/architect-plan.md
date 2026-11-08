@@ -43,4 +43,4 @@ Iteration: {{iteration}}
 ## Open Concerns
 {{concernsYaml}}
 
-- Raise concerns with evidence; triage pre-existing ids using the human-involvement table and condense stale detail.
+- Raise concerns with evidence; condense stale detail instead of repeating it.
