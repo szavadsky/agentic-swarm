@@ -18,6 +18,7 @@ import { childBranch } from "../git/naming.js";
 import { isAncestor } from "../git/commit.js";
 import { fingerprintSuggestions, fingerprintCheckFailure } from "../loops.js";
 import { getDefaultFlowForKind } from "../flows/item-machine.js";
+import { questionBlocks } from "../steer.js";
 
 export interface ItemStepRecordInfo {
   dirName: string;
@@ -275,11 +276,7 @@ export async function deriveItemState(opts: {
       try {
         const qPath = path.join(steerDir, sent.name);
         const q = await readYaml<SteerItemArtifact>(qPath);
-        if (
-          q &&
-          q.status === "open" &&
-          (q.ref === itemSlug || q.ref === `${taskDir.split("/").pop()}/${itemSlug}`)
-        ) {
+        if (q && questionBlocks(q, itemSlug)) {
           openSteerQuestion = q;
           break;
         }

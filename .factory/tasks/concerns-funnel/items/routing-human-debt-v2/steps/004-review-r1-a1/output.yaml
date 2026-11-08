@@ -1,0 +1,47 @@
+status: approved
+summary: Mailbox/debt routing correct; 5 target green, gates pass, no fix defects
+suggestions:
+  - id: awareness-blocks-not-persisted
+    disposition: optional
+    summary: writeQuestion drops [] so awareness file lacks explicit blocks
+    detail: steer.ts:83 only persists blocks when length>0, so awareness blocks []
+      becomes undefined. Behavior still non-blocking via questionBlocks early
+      return, but file deviates from assignment blocks [] and
+      explicit-blocks-wins contract (undefined falls back to ref). Test masks
+      with ?? []. Persist [] via Array.isArray check and assert strict equality.
+    location:
+      file: plugins/software-factory/src/core/steer.ts
+      line: 83
+  - id: all-async-derive-vs-halt
+    disposition: optional
+    summary: All-async derive active diverges from iteration halt blocked
+    detail: deriveTaskState leaves every-blocked all-async as active
+      (blockedByNonAsync false) while runIteration halts everyItemBlocked as
+      blocked exit 10. Single-item async yields RunResult blocked but state.yaml
+      active. Preserves old single-item exit-10 test while satisfying new derive
+      not-blocked test. Align layers (e.g. derive blocked when every blocked,
+      test continuation with multi-item) or document all-parked halt.
+    location:
+      file: plugins/software-factory/src/core/derive/task.ts
+      line: 243
+  - id: debt-affects-fallback-prefix
+    disposition: optional
+    summary: Debt prefixes with affects[0] even when not an item slug
+    detail: task.ts prefixes concern debt with source.item ?? affects[0]. Plan-level
+      concerns have affects like m1/wave-2, producing [m1] summary misleading as
+      [item]. Only prefix when source.item present (or validate affects against
+      item slugs), else keep unprefixed.
+    location:
+      file: plugins/software-factory/src/core/derive/task.ts
+      line: 199
+  - id: item-open-question-priority
+    disposition: optional
+    summary: First blocking question wins in readdir order with no priority
+    detail: deriveItemState breaks on first questionBlocks match in filesystem
+      order. With multiple blockers (async+stop) openSteerQuestion.disposition
+      is non-deterministic, affecting task blockedByNonAsync and iteration
+      humanStopBlocked checks. Sort filenames or prioritize human-stop over
+      human-async for determinism.
+    location:
+      file: plugins/software-factory/src/core/derive/item.ts
+      line: 260

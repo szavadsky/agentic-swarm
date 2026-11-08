@@ -1,0 +1,62 @@
+status: ok
+summary: "Authored 5 test-first behavior tests in
+  test/engine/routing-human-debt.test.ts specifying human mailbox routing and
+  debt accounting. Tests pin: human-async blocks only [item] and lets the task
+  continue without a blocked derive/exit-10; human-stop writes a mailbox entry
+  blocking item+task, derives blocked state and halts runTask with exit 10;
+  human-awareness writes a digest entry with empty blocks and never blocks or
+  exits; and derive debt includes '[item] summary' entries for routed/resolved
+  tech-debt concerns and routed optional concerns. No production code was
+  modified (only the new test file exists). Verified typecheck green; target
+  file red with 5 assertion failures and 0 errors; JUnit ids match all declared
+  expectRed ids with status fail; full suite has exactly those 5 failures (350
+  pass, 2 skip)."
+target:
+  selectors:
+    - test/engine/routing-human-debt.test.ts
+  expectRed:
+    - test/engine/routing-human-debt.test.ts::Human mailbox and debt routing
+      (§8.7, §18).derives item blocking and task continuation per human
+      disposition
+    - test/engine/routing-human-debt.test.ts::Human mailbox and debt routing
+      (§8.7, §18).halts with exit 10 and writes a task/item human-stop mailbox
+      entry
+    - test/engine/routing-human-debt.test.ts::Human mailbox and debt routing
+      (§8.7, §18).writes a digest-only human-awareness entry and continues to
+      completion
+    - test/engine/routing-human-debt.test.ts::Human mailbox and debt routing
+      (§8.7, §18).keeps running other items while one item waits on human-async
+    - test/engine/routing-human-debt.test.ts::Human mailbox and debt routing
+      (§8.7, §18).collects debt with [item] prefixes for routed/resolved
+      tech-debt and routed optional concerns
+evidence:
+  - "cd plugins/software-factory && TMPDIR=/tmp bun run typecheck: exit 0 (tsc
+    --noEmit)."
+  - "cd plugins/software-factory && TMPDIR=/tmp bun test
+    test/engine/routing-human-debt.test.ts --reporter=junit
+    --reporter-outfile=/tmp/routing-junit.xml: exit 1, 0 pass / 5 fail / 0
+    errors; every failure is an expect() assertion failure (not.toBe, toBe,
+    toHaveLength, toEqual), so target-red is genuine."
+  - "JUnit verification with src/core/checks/junit.ts parseJunit plus the
+    engine's normaliseCaseId/findMatchingCase logic: all 5 declared expectRed
+    ids resolve to cases with status fail and collected=true."
+  - "cd plugins/software-factory && TMPDIR=/tmp bun test: 350 pass, 2 skip, 5
+    fail across 59 files; the only failures are the 5 new routing-human-debt
+    tests, so existing behavior is unregressed."
+  - "git status --short: only '??
+    plugins/software-factory/test/engine/routing-human-debt.test.ts'; no
+    existing production or test files modified."
+concerns:
+  - The human-async test pins exit code 0 / status done when an async-blocked
+    item coexists with completed work, per the assignment wording 'continues
+    without exit-10'; the develop step will need iteration/derive changes so
+    async item blocking does not terminate the run as blocked.
+  - The derive test asserts human-awareness entries referencing an item remain
+    non-blocking, so derive logic must become disposition-aware (or awareness
+    entries must never be treated as item-blocking refs).
+notes: Tests use the existing public APIs runTask,
+  deriveItemState/deriveTaskState and writeQuestion, so no interface stubs were
+  needed. All close-up/plan steps are scripted so current (incorrect) paths
+  terminate in assertions rather than FakeHarness 'no scripted outcome' errors.
+  Test ids use bun's JUnit classname.name form with the file selector prefix
+  accepted by the engine id normalizer.

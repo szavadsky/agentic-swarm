@@ -1,0 +1,31 @@
+checks:
+  - id: test-first-scope
+    status: pass
+    message: test-first-scope passed (1 test files, 0 new prod stubs with 0 lines)
+    details:
+      testFiles:
+        - plugins/software-factory/test/engine/routing-human-debt.test.ts
+      newProdFiles: []
+      stubProdLines: 0
+  - id: target-red
+    status: pass
+    message: "target-red passed: all 5 expected tests failed with assertion failures"
+    details:
+      command: cd plugins/software-factory && bun test
+        test/engine/routing-human-debt.test.ts --reporter=junit
+        --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-1794133065617-zxskj7pgta.xml
+      junitCaseCount: 5
+      junitCaseIds:
+        - Human mailbox and debt routing (§8.7, §18).derives item blocking and
+          task continuation per human disposition
+        - Human mailbox and debt routing (§8.7, §18).halts with exit 10 and
+          writes a task/item human-stop mailbox entry
+        - Human mailbox and debt routing (§8.7, §18).writes a digest-only
+          human-awareness entry and continues to completion
+        - Human mailbox and debt routing (§8.7, §18).keeps running other items
+          while one item waits on human-async
+        - Human mailbox and debt routing (§8.7, §18).collects debt with [item]
+          prefixes for routed/resolved tech-debt and routed optional concerns
+      junitTruncated: false
+      collected: true
+      collectionErrors: []

@@ -1088,8 +1088,15 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
       deriveItemState({ taskDir, itemSlug: slug, parentBranch, taskWt, pipeline })
     )
   );
-  const hasBlockedItems = allCurrentStates.some((it) => it.status === "blocked");
-  if (hasBlockedItems) {
+  // human-async parks one item while the rest of the plan moves on; only an
+  // entirely parked iteration or a human-stop halts the run.
+  const everyItemBlocked =
+    allCurrentStates.length > 0 &&
+    allCurrentStates.every((it) => it.status === "blocked");
+  const humanStopBlocked = allCurrentStates.some(
+    (it) => it.status === "blocked" && it.openSteerQuestion?.disposition === "human-stop"
+  );
+  if (everyItemBlocked || humanStopBlocked) {
     return {
       iteration,
       status: "blocked",

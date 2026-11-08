@@ -707,8 +707,8 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
     beforeChecks,
     afterChecks,
     writeArtifact: async (output: unknown) => {
-      // Persist human-async questions atomically with the review record (Finding 23).
-      // Concern ids are triaged separately (q-concern-*) and never use this mailbox.
+      // Persist human-* questions atomically with the review record (Finding 23).
+      // human-async concern ids are triaged separately (q-concern-*).
       if (output && typeof output === "object" && "suggestions" in (output as any)) {
         const rev = output as ReviewArtifact;
         const concernIds = new Set<string>();
@@ -719,21 +719,27 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
         } catch (err: any) {
           if (err?.code !== "ENOENT") throw err;
         }
-        const asyncQuestions = rev.suggestions?.filter(
-          (s) => s.disposition === "human-async" && !concernIds.has(s.id)
+        const humanSuggestions = rev.suggestions?.filter(
+          (s) =>
+            s.disposition === "human-stop" ||
+            s.disposition === "human-awareness" ||
+            (s.disposition === "human-async" && !concernIds.has(s.id))
         );
-        if (asyncQuestions && asyncQuestions.length > 0) {
-          for (const q of asyncQuestions) {
-            const cleanSuggestionId = (q.id || "s").replace(/[^a-z0-9_-]/gi, "-");
-            const qId = `q-${itemSlug}-${cleanSuggestionId}`;
-            await writeQuestion(taskWt, taskDir, {
-              id: qId,
-              ref: itemSlug,
-              disposition: "human-async",
-              question: q.detail || q.summary,
-              blocks: [itemSlug],
-            });
-          }
+        for (const q of humanSuggestions ?? []) {
+          const cleanSuggestionId = (q.id || "s").replace(/[^a-z0-9_-]/gi, "-");
+          const blocks =
+            q.disposition === "human-stop"
+              ? [itemSlug, "task"]
+              : q.disposition === "human-async"
+                ? [itemSlug]
+                : [];
+          await writeQuestion(taskWt, taskDir, {
+            id: `q-${itemSlug}-${cleanSuggestionId}`,
+            ref: itemSlug,
+            disposition: q.disposition,
+            question: q.detail || q.summary,
+            blocks,
+          });
         }
       }
     },
@@ -758,11 +764,11 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
     item: itemSlug,
   });
 
-  // Check if any human-async suggestions blocked the item
-  const hasAsync = (stepRes.output as any)?.suggestions?.some(
-    (s: any) => s.disposition === "human-async"
+  // Human dispositions block the item; human-awareness is digest-only and lands here as success.
+  const hasHumanBlock = (stepRes.output as any)?.suggestions?.some(
+    (s: any) => s.disposition === "human-async" || s.disposition === "human-stop"
   );
-  if (hasAsync) {
+  if (hasHumanBlock) {
     return { done: true, status: "blocked", stepRan: currentStep.id };
   }
 

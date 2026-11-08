@@ -1,0 +1,30 @@
+checks:
+  - id: red-test
+    status: pass
+    message: "red-test passed: all 5 tests fail when prod changes are restored to
+      test-first commit"
+    details:
+      command: cd plugins/software-factory && bun test
+        test/engine/routing-human-debt.test.ts --reporter=junit
+        --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-redtest-1794133684507-r233vaeh6o.xml
+      junitCaseCount: 5
+      junitCaseIds:
+        - Human mailbox and debt routing (§8.7, §18).derives item blocking and
+          task continuation per human disposition
+        - Human mailbox and debt routing (§8.7, §18).halts with exit 10 and
+          writes a task/item human-stop mailbox entry
+        - Human mailbox and debt routing (§8.7, §18).writes a digest-only
+          human-awareness entry and continues to completion
+        - Human mailbox and debt routing (§8.7, §18).keeps running other items
+          while one item waits on human-async
+        - Human mailbox and debt routing (§8.7, §18).collects debt with [item]
+          prefixes for routed/resolved tech-debt and routed optional concerns
+      junitTruncated: false
+      collected: true
+      collectionErrors: []
+  - id: test-diff
+    status: pass
+    message: test-diff generated (0 test files, 0 bytes)
+    details:
+      diff: ""
+      files: []
