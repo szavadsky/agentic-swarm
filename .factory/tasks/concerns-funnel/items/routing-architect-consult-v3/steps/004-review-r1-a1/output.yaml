@@ -1,0 +1,29 @@
+status: approved
+summary: "Approved: act-phase consult + hydration rebase correct, idempotent,
+  siblings preserved, gates green"
+suggestions:
+  - detail: Lines 373-374 claim routed concerns reach plan/wave-report 'without
+      changing the open-only reviewer hydration' but the test captures only
+      planPrompt and waveReports, never the plan-review prompt. Implementation
+      does preserve open-only (iteration.ts still uses hydrateConcernsYaml for
+      plan-review, plan-reviewer-triage suite green), so no behavior defect;
+      tighten the comment or capture the reviewer prompt in docs-finish.
+    disposition: optional
+    id: test-comment-overclaims-reviewer-coverage
+    location:
+      file: plugins/software-factory/test/engine/routing-architect-consult.test.ts
+      line: 374
+    summary: Test comment claims reviewer hydration verified without assertion
+  - detail: runConcernConsult builds id/context/timestamp from raw LLM output with
+      fallbacks, while runItemConsult/runNonItemConsult hardcode id, context,
+      and timestamp. Schema-valid so no broken contract (no readers key on these
+      fields; only file name and decision asserted), but hardcoding context
+      'wave' would match the sibling pattern and stop the LLM emitting
+      item/non-item context for a concern file. Polish only; no redesign in this
+      merge-repair.
+    disposition: optional
+    id: concern-artifact-trusts-llm-metadata
+    location:
+      file: plugins/software-factory/src/core/flows/consults.ts
+      line: 389
+    summary: Concern decision trusts LLM id/context/timestamp unlike sibling consults
