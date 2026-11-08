@@ -1,0 +1,23 @@
+slug: spike-saga-commit
+kind: fact-finder
+title: "Spike: saga propagation, commit, derive boundary"
+assignment: "Read-only fact-finder verifying epic propagation timing, taskWt
+  serialization/restart, and pure-derive vs act-phase boundary
+  (adr-concern-store-taskwt, adr-routing-derived-state). Verify: runChildTask
+  parent-copy timing after child completion before cleanup/merge, parent
+  buildArchitectHydration extension seam for concernsYaml, taskWt runExclusive
+  serialization under 4 parallel items, writeYamlAtomic + immediate taskWt
+  commit idempotency on retry/restart, collectRoutedBlockers owner in
+  derive/task.ts. Produce items/{item}/findings.md + structured findings; no
+  prod code. Gates concerns-store, routing-blocker-derive, saga-propagate."
+outlineRef: spike-saga-commit
+milestone: m1-contracts-aggregate
+wave: 1
+scenarioRefs:
+  - m1-contracts-aggregate:s2
+  - m3-routing:s2
+  - m4-funnel-surface:s5
+citations:
+  - docs/factory.v2.md:89-103
+  - plugins/software-factory/src/core/flows/iteration.ts:439-485
+  - plugins/software-factory/src/core/derive/task.ts:167-205

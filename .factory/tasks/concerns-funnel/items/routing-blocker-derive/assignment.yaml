@@ -1,0 +1,28 @@
+slug: routing-blocker-derive
+kind: dev
+title: Blocker derive
+assignment: "Test-first dev building on reviewer-triage + plan-reviewer-triage +
+  modes-prompts + spike-saga-commit: pure derive only, no writes
+  (adr-routing-derived-state). In derive/task.ts implement
+  collectRoutedBlockers(taskDir)->Set reading routed kind==blocker affects;
+  integrate into deriveWave/deriveItem; in scheduler implement
+  blockedByConcern(items,concernBlocked) reusing blockedByFailure fixpoint,
+  union with failure-blocked, cascade only over declared deps. Non-dependents
+  unaffected; transitive blocking follows declared deps only. Tests: dependent
+  blocked with no writes, non-dep unaffected, transitive via deps only. Run
+  TMPDIR=/tmp bun test + typecheck. Escalation: pure-derive boundary + fixpoint
+  reuse risk; consult architect if derive seam differs from spike."
+outlineRef: routing-blocker-derive
+milestone: m3-routing
+wave: 4
+deps:
+  - plan-reviewer-triage
+  - reviewer-triage
+  - modes-prompts
+  - spike-saga-commit
+scenarioRefs:
+  - m3-routing:s1
+citations:
+  - docs/factory.v2.md:89-103
+  - plugins/software-factory/src/core/derive/task.ts:167-205
+escalate: true

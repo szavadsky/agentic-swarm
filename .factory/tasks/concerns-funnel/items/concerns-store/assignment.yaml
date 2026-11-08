@@ -1,0 +1,40 @@
+slug: concerns-store
+kind: dev
+title: Concerns store with merge and commit
+assignment: "Test-first dev building on concerns-contracts + spike-saga-commit
+  findings: src/core/concerns.ts store with merge+commit
+  (adr-concern-store-taskwt, adr-fingerprint-merge, adr-producer-matrix,
+  adr-triage-suggestions-dismiss ordering, adr-resilience). Implement
+  concernFingerprint over {kind,normalizedSummary,location,sortedAffects}
+  excluding detail/severity (trim/collapse/lowercase), aggregateConcerns merge
+  (detail longer/latest, severity max, updatedAt/lastSeen advance, never clobber
+  dismissed/routed/resolved; escalated=true on severity rise surfaced to
+  digest/hydration), listOpenConcerns, applyConcernTriage exact-id + isTriager,
+  applyCloseupResolutions, partitionSuggestions. Write directly to
+  taskWt/{task}/concerns/c-<fp10>.yaml and rm-<hash10>.yaml via writeYamlAtomic
+  + runExclusive + immediate taskWt commit when concerns/ or steer/ changed;
+  distinct fingerprints distinct files; restart idempotent; corrupt skip+warn,
+  unknown kind fails step with no partial write. Wire all producer seams incl
+  consult writeArtifact; reviewer ordering aggregate new then triage
+  pre-existing ids only (no same-step self-dismiss). Tests in
+  test/engine/concerns-funnel.test.ts: open+source.record, retry dedup, reword
+  merge preserving status, escalation surfacing, rm-* aggregate. Run TMPDIR=/tmp
+  bun test test/engine/concerns-funnel.test.ts + typecheck."
+outlineRef: concerns-store
+milestone: m1-contracts-aggregate
+wave: 2
+deps:
+  - concerns-contracts
+  - spike-saga-commit
+scenarioRefs:
+  - m1-contracts-aggregate:s1
+  - m1-contracts-aggregate:s2
+  - m1-contracts-aggregate:s5
+  - m1-contracts-aggregate:s6
+  - m1-contracts-aggregate:s8
+citations:
+  - docs/factory.v2.md:89-103
+  - plugins/software-factory/src/core/artifacts.ts:313-325
+  - plugins/software-factory/src/core/fingerprint.ts:20-50
+  - plugins/software-factory/src/core/flows/item-machine.ts:628-647
+  - plugins/software-factory/src/core/flows/iteration.ts:439-485

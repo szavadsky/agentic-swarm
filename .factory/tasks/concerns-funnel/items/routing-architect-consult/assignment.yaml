@@ -1,0 +1,24 @@
+slug: routing-architect-consult
+kind: dev
+title: Architect consult and hydration
+assignment: "Test-first dev building on modes-prompts + routing-blocker-derive:
+  act phase only for architect routing (adr-routing-derived-state act part). In
+  triage writeArtifact + wave-act newly-blocked check write
+  decisions/concern-<cid>.yaml exactly once idempotent on restart (check
+  existence before write); extend buildArchitectHydration with concernsYaml
+  digest {id,summary,...} for wave-report/next-plan. Tests: single consult file,
+  restart writes no duplicate, architect input contains id+summary. Run
+  TMPDIR=/tmp bun test + typecheck."
+outlineRef: routing-architect-consult
+milestone: m3-routing
+wave: 5
+deps:
+  - modes-prompts
+  - routing-blocker-derive
+scenarioRefs:
+  - m3-routing:s2
+  - m3-routing:s3
+citations:
+  - docs/factory.v2.md:89-103
+  - plugins/software-factory/src/core/flows/iteration.ts:439-485
+  - plugins/software-factory/src/core/derive/task.ts:167-205

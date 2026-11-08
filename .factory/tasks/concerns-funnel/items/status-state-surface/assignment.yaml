@@ -1,0 +1,23 @@
+slug: status-state-surface
+kind: dev
+title: State counts and status surfacing
+assignment: "Test-first dev building on concerns-store + routing-human-debt:
+  sole owner state counts + CLI surfacing (adr-digest-mailbox split,
+  adr-resilience missing/corrupt). Define StateArtifact.concerns
+  {open,dismissed,routed,resolved} + state.schema; implement
+  toStateArtifact/refreshStateYaml (missing dir zeros, corrupt skip+warn
+  excluded from counts); in cli/status.ts render Concerns plus separate Blocking
+  vs Digest sections (blocking blocks.length>0, digest awareness+empty). Tests:
+  counts, missing/corrupt, CLI sections. Run TMPDIR=/tmp bun test + typecheck."
+outlineRef: status-state-surface
+milestone: m4-funnel-surface
+wave: 5
+deps:
+  - concerns-store
+  - routing-human-debt
+scenarioRefs:
+  - m4-funnel-surface:s6
+citations:
+  - docs/factory.v2.md:89-103
+  - plugins/software-factory/src/core/derive/task.ts:167-205
+  - plugins/software-factory/src/cli/status.ts:83-105

@@ -1,0 +1,31 @@
+slug: modes-prompts
+kind: dev
+title: Modes, thresholds, prompt wiring
+assignment: "Test-first dev building on concerns-contracts: modes/thresholds +
+  prompt wiring (adr-humaninvolvement-config, adr-funnel-text-budget prompt
+  part, adr-reviewpolicy-canonical usage). Extend PipelineConfig + loader/merge
+  with humanInvolvement default autonomous + concerns {raiseAllowlist default
+  all, minDigestSeverity, minBlockingSeverity}; add commented
+  autonomous/principal/detailed presets with blocking table + raise/threshold
+  examples in config/pipeline.default.yaml; add terse
+  agents/criteria/human-involvement.md fragment. Wire KNOWN_VARS + descriptions
+  for concernsYaml in steps/review, steps/plan-review, steps/wave-close-up,
+  steps/plan-close-up, architect-plan, architect-wave-report, architect-closeup,
+  architect-consult-* and humanInvolvementCriteria in review, plan-review,
+  architect-* per 8-fragment matrix (each <=15 lines, total growth <=60). Tests:
+  mode switch changes criteria + blocking-ADR behavior; preflightPrompts green;
+  prompts.test line-count assert. Precedes all routing. Run bun run typecheck +
+  TMPDIR=/tmp bun test."
+outlineRef: modes-prompts
+milestone: m2-triage-modes
+wave: 2
+deps:
+  - concerns-contracts
+scenarioRefs:
+  - m2-triage-modes:s7
+  - m3-routing:s7
+  - m5-docs:s2
+citations:
+  - docs/factory.v2.md:89-103
+  - plugins/software-factory/src/core/flows/item-machine.ts:628-647
+  - plugins/software-factory/src/core/flows/iteration.ts:439-485

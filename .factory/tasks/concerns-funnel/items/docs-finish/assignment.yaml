@@ -1,0 +1,30 @@
+slug: docs-finish
+kind: dev
+title: Docs and suite consolidation
+assignment: "Dev consolidation building on funnel-closeups + modes-prompts +
+  saga-propagate + status-state-surface: docs + suite consolidation. Update
+  docs/ARCHITECTURE.md section 1 row 18 + 6.2 concerns/ + 8
+  funnel/routing/modes/partition/producer-matrix/resilience/exit-10, README.md,
+  config commentary, agents/criteria/dispositions.md human-stop exit-10
+  preserved; enforce fragment matrix 8 fragments + debloat <=15/<=60 with
+  preflight + line-count assert in prompts.test; consolidate
+  test/engine/concerns-funnel.test.ts + steer/CLI coverage. Test-first where
+  code asserts added; docs edits no prod behavior change. Final gates: bun run
+  typecheck and TMPDIR=/tmp bun test green."
+outlineRef: docs-finish
+milestone: m5-docs
+wave: 7
+deps:
+  - funnel-closeups
+  - modes-prompts
+  - saga-propagate
+  - status-state-surface
+scenarioRefs:
+  - m5-docs:s1
+  - m5-docs:s2
+  - m5-docs:s3
+citations:
+  - docs/factory.v2.md:89-103
+  - plugins/software-factory/docs/ARCHITECTURE.md:39
+  - plugins/software-factory/src/core/flows/iteration.ts:439-485
+  - plugins/software-factory/src/cli/status.ts:83-105

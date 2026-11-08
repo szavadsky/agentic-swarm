@@ -1,0 +1,27 @@
+slug: adr-blocking-digest
+kind: dev
+title: Blocking vs remarkable ADRs
+assignment: "Test-first dev building on modes-prompts + routing-human-debt:
+  blocking vs remarkable ADRs (adr-humaninvolvement-config,
+  adr-remarkable-store, adr-digest-mailbox, adr-human-stop,
+  td-adr-md-truncated). Write full ADR md
+  title/context/decision/consequences/blocking (fix truncated writer);
+  PlanAdr.blocking routed per mode table (autonomous blocks only blocking ADR or
+  high human-stop; principal adds human-async+high; detailed adds all human-*),
+  stop triggers exit 10; remarkable digest-only never waiting unless elevated to
+  blocking ADR; preserve dispositions.md exit-10 contract. Tests: blocking
+  mailbox+blocks, remarkable digest only, mode table respected. Run TMPDIR=/tmp
+  bun test + typecheck."
+outlineRef: adr-blocking-digest
+milestone: m3-routing
+wave: 5
+deps:
+  - modes-prompts
+  - routing-human-debt
+scenarioRefs:
+  - m3-routing:s7
+citations:
+  - docs/factory.v2.md:89-103
+  - plugins/software-factory/src/core/steer.ts:59-88
+  - plugins/software-factory/src/core/derive/task.ts:167-205
+  - plugins/software-factory/src/cli/status.ts:83-105

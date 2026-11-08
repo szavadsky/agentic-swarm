@@ -1,0 +1,36 @@
+slug: concerns-contracts
+kind: dev
+title: Concern contracts and canonical review policy
+assignment: "Test-first dev: concern contracts + canonical review policy
+  (adr-producer-matrix, adr-reviewpolicy-canonical, adr-fingerprint-merge
+  identity, adr-remarkable-store, adr-resilience). In src/core/artifacts.ts
+  define Concern {kind,summary,detail?,location?,severity?,affects?},
+  RemarkableDecision, StoredConcernArtifact (+pendingResolution?,
+  source.escalated?), ReviewDisposition+dismiss (no tech-debt disposition),
+  PlanAdr.blocking,
+  PipelineConfig.humanInvolvement+concerns{raiseAllowlist,minDigestSeverity,min\
+  BlockingSeverity}, reviewPolicy.default canonical. In config/schemas add
+  shared concern/remarkable partial to developer, fact-finder, qa, poc,
+  test-assumptions, review newConcerns, plan, decisions, wave/plan-closeup
+  (+concernResolutions), architect reports; leave triage/infra/pm-edit without
+  concerns; dismiss detail-required. In src/core/review-policy.ts implement
+  resolveReviewAllowed(pipeline,agent,isTriager) precedence
+  per-agent>default>builtin [fix,optional,architect,human-awareness,human-async]
+  + dismiss injection for triagers, legacy allowedDispositions alias,
+  generateReviewSchema uses it. Repair: missing severity->medium, missing
+  detail->summary; unknown kind strict error with no write. Tests: preflight,
+  precedence/injection, defaults vs reject. Keep prod diff <=300 lines. Gates:
+  bun run typecheck."
+outlineRef: concerns-contracts
+milestone: m1-contracts-aggregate
+wave: 1
+scenarioRefs:
+  - m1-contracts-aggregate:s3
+  - m1-contracts-aggregate:s4
+  - m1-contracts-aggregate:s5
+  - m1-contracts-aggregate:s7
+citations:
+  - docs/factory.v2.md:89-103
+  - plugins/software-factory/src/core/artifacts.ts:313-325
+  - plugins/software-factory/src/core/records/review-schema.ts:5-52
+  - plugins/software-factory/src/core/fingerprint.ts:20-50

@@ -1,0 +1,27 @@
+slug: plan-reviewer-triage
+kind: dev
+title: Plan-reviewer triage
+assignment: "Test-first dev building on concerns-store: architect plan-reviewer
+  triage mirroring workhorse vocabulary (adr-triage-suggestions-dismiss,
+  adr-remarkable-store, adr-routing-derived-state). Aggregate plan/revise
+  concerns[] + remarkable rm-* via shared partial; hydrate steps/plan-review
+  with concernsYaml; in iteration plan-review writeArtifact with isTriager gate
+  for plan-reviewer: same exact-id partition + dismiss vocabulary
+  (detail->dismissReason, missing detail errors), non-dismissed become routed,
+  triage ids excluded from approval triggers; rm-* triaged same path; debt
+  predicate without tech-debt disposition. Update agents/plan-reviewer +
+  criteria fragments tersely. Tests: dismissed vs routed, rm-* triaged, debt
+  predicate, no approval from triage ids. Run TMPDIR=/tmp bun test + typecheck."
+outlineRef: plan-reviewer-triage
+milestone: m2-triage-modes
+wave: 3
+deps:
+  - concerns-store
+scenarioRefs:
+  - m2-triage-modes:s1
+  - m2-triage-modes:s6
+citations:
+  - docs/factory.v2.md:89-103
+  - plugins/software-factory/src/core/flows/iteration.ts:439-485
+  - plugins/software-factory/src/core/records/review-schema.ts:5-52
+  - plugins/software-factory/src/core/artifacts.ts:313-325

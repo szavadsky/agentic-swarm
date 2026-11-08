@@ -1,0 +1,25 @@
+slug: saga-propagate
+kind: dev
+title: Epic to saga propagation
+assignment: "Test-first dev building on routing-architect-consult +
+  spike-saga-commit: epic-to-saga propagation (adr-concern-store-taskwt timing,
+  parent hydration extension). In engine runChildTask after child completion
+  before cleanup/merge call propagateEpicConcerns: condensed parent copies with
+  source.epic, only open/routed (dismissed stays local), parent detail < child
+  detail with size assert; extend parent buildArchitectHydration concernsYaml to
+  include propagated ids. Tests: one copy, dismissed stays local, saga architect
+  input contains id, detail shrunk. Run TMPDIR=/tmp bun test + typecheck.
+  Escalation: timing/serialization risk per spike; consult if seam differs.
+  Note: replan checkpoint follows this item."
+outlineRef: saga-propagate
+milestone: m4-funnel-surface
+wave: 6
+deps:
+  - routing-architect-consult
+  - spike-saga-commit
+scenarioRefs:
+  - m4-funnel-surface:s5
+citations:
+  - docs/factory.v2.md:89-103
+  - plugins/software-factory/src/core/flows/iteration.ts:439-485
+escalate: true

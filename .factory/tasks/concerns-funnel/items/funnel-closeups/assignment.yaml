@@ -1,0 +1,35 @@
+slug: funnel-closeups
+kind: dev
+title: Funnel close-ups and simple triage
+assignment: "Test-first dev building on adr-blocking-digest +
+  routing-architect-consult + spike-text-budget: funnel close-ups + simple
+  triage (adr-funnel-text-budget, adr-closeup-retriage, adr-producer-matrix
+  closeup). Hydrate wave/plan-close-up + architect reports with concernsYaml
+  capped per spike (UTF-8 bytes: code min(diffBytes,2000), zero-diff
+  min(inputBytes,500), condensing output<input, engine truncates hydrated var
+  only). Add closeup schemas concernResolutions resolve/carry/propagate +
+  concerns[]/remarkable[] + StoredConcern.pendingResolution{action,note,by,at};
+  wave-close-up proposes via applyCloseupResolutions (status stays routed,
+  pending set); architect-wave-report concernConfirms accept/reject applies
+  resolved/routed/propagated or clears pending; propagate to parent concerns/
+  copy (epics) or human digest unless elevated to blocking ADR. Simple-item
+  fallback at wave-close-up: explicit resolutions triage; auto-route
+  tech-debt->optional (debt), others->architect (carry), human-* never auto.
+  Tests: concrete byte budgets + pending/confirm + fallback. Run TMPDIR=/tmp bun
+  test + typecheck. Note: replan checkpoint follows this item."
+outlineRef: funnel-closeups
+milestone: m4-funnel-surface
+wave: 6
+deps:
+  - adr-blocking-digest
+  - routing-architect-consult
+  - spike-text-budget
+scenarioRefs:
+  - m4-funnel-surface:s1
+  - m4-funnel-surface:s2
+  - m4-funnel-surface:s3
+  - m4-funnel-surface:s4
+citations:
+  - docs/factory.v2.md:89-103
+  - plugins/software-factory/src/core/flows/iteration.ts:439-485
+  - plugins/software-factory/src/core/artifacts.ts:313-325

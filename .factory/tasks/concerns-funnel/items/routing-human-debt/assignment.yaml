@@ -1,0 +1,29 @@
+slug: routing-human-debt
+kind: dev
+title: Human mailbox and debt routing
+assignment: "Test-first dev building on reviewer-triage + modes-prompts: human
+  mailbox + debt routing (adr-digest-mailbox, adr-human-stop,
+  adr-humaninvolvement-config blocking table, adr-routing-derived-state debt).
+  Via steer writeQuestion: human-async blocks [item] continues no exit 10;
+  human-stop blocks task/item, item-machine blocked terminal, derive blocked,
+  engine halts exit 10 at next mailbox check until answered/dismissed; awareness
+  blocks [] digest-only never blocking/exiting; derive/task splits blocking
+  (blocks.length>0) vs digest (awareness+empty). Debt predicate (kind tech-debt
+  routed/resolved OR disposition optional routed) surfaced as [item] summary.
+  Tests: mailbox files per disposition, exit 10 on stop, awareness continues,
+  debt includes [item] summary. Run TMPDIR=/tmp bun test + typecheck."
+outlineRef: routing-human-debt
+milestone: m3-routing
+wave: 4
+deps:
+  - reviewer-triage
+  - modes-prompts
+scenarioRefs:
+  - m3-routing:s4
+  - m3-routing:s5
+  - m3-routing:s6
+citations:
+  - docs/factory.v2.md:89-103
+  - plugins/software-factory/src/core/steer.ts:59-88
+  - plugins/software-factory/src/core/derive/task.ts:167-205
+  - plugins/software-factory/src/cli/status.ts:83-105

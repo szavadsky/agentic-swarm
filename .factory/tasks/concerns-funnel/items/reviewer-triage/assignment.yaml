@@ -1,0 +1,35 @@
+slug: reviewer-triage
+kind: dev
+title: Workhorse reviewer triage
+assignment: "Test-first dev building on concerns-store: workhorse reviewer
+  triage (adr-triage-suggestions-dismiss, adr-digest-mailbox,
+  adr-routing-derived-state debt predicate). Hydrate steps/review promptVars
+  with concernsYaml {id,kind,severity,summary,affects} + terse triage
+  instructions with condensing output<input; update agents/reviewer +
+  criteria/dispositions + human-involvement fragments. In item-machine review
+  writeArtifact with isTriager gate (reviewer only, QA non-triager no-op):
+  partitionSuggestions exact-id c-/rm- split, triage ids update concerns/ only
+  excluded from fix-loop/approval/normal mailbox; dismiss requires non-empty
+  detail -> status dismissed + dismissReason else step errors; routed persists
+  disposition; fix-on-concern sets fixRequired once for owning item; human-async
+  writes single q-concern-<cid> deduped (normal path skipped). Debt predicate
+  (kind tech-debt routed/resolved OR disposition optional routed), no tech-debt
+  disposition. Tests: dismiss no routing/mailbox/debt/blocked/approval, routed
+  persist, QA no-op, missing detail errors, fix-once, no double mailbox. Run
+  TMPDIR=/tmp bun test + typecheck."
+outlineRef: reviewer-triage
+milestone: m2-triage-modes
+wave: 3
+deps:
+  - concerns-store
+scenarioRefs:
+  - m2-triage-modes:s1
+  - m2-triage-modes:s2
+  - m2-triage-modes:s3
+  - m2-triage-modes:s4
+  - m2-triage-modes:s5
+citations:
+  - docs/factory.v2.md:89-103
+  - plugins/software-factory/src/core/records/review-schema.ts:5-52
+  - plugins/software-factory/src/core/flows/item-machine.ts:628-647
+  - plugins/software-factory/src/core/derive/task.ts:167-205
