@@ -1,0 +1,10 @@
+id: awareness-plan-1-merge-escalation-hidden
+ref: plan-1
+disposition: human-awareness
+question: Merge keeps max severity and longer/latest detail but never reopens
+  dismissed/routed/resolved except via triage. Escalated risk on dismissed
+  concern stays dismissed/hidden. Architect can decide now (reopen on escalation
+  vs keep + digest surfacing), but operator should be aware of hidden-escalation
+  tradeoff.
+status: open
+createdAt: 2026-11-08T00:51:48.888Z
