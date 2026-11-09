@@ -1,0 +1,11 @@
+id: awareness-schema-detail-normalize-v4-baseline-premise-false
+ref: schema-detail-normalize-v4
+disposition: human-awareness
+question: "Hex ground truth (64=d low, 44=D cap): all 7 schemas 0 cap-quoted
+  keys (review 2 low, 6 producers 1 low each); concerns.ts:82 guard 2e 64 low;
+  epic-saga 248/307/313/319 low reads; funnel 0 cap-dot. No schema/guard/test
+  flip was needed. Test-first invented legacy Detail->detail normalization to
+  get honest red. Operator should note decision-026 closure rests on
+  already-green baseline, not the claimed RED gap."
+status: open
+createdAt: 2026-11-09T13:54:20.080Z
