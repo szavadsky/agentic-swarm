@@ -1,0 +1,120 @@
+status: changes_requested
+summary: "4 fix block closure: prompt-criteria pollution, ambiguous test target,
+  incomplete S8.11 scenario, inaccessible context-pack source; plus 3 optional
+  and 1 awareness"
+suggestions:
+  - id: human-involvement-halt-prompt-pollution
+    disposition: fix
+    summary: Docs item edits prompt criteria with deviation note, contradicting
+      no-behavior-change contract
+    detail: "docs-finish-v5 claims 'no behavior change' (M2 interface) and
+      assumption freezes behavior except prompts.ts+dispositions.md, yet ADR
+      adr-autonomous-immediate-halt and item require a halt note in
+      agents/criteria/human-involvement.md. That file is prompt criteria: loaded
+      via loadCriteriaBundle, formatted by formatHumanInvolvementCriteria
+      (prompts.ts:68-84), rendered into every triager prompt via
+      humanInvolvementCriteria var (step-runner.ts:422-425). Any added note
+      appears in all modes' prompts (shared sections kept), violating debloat
+      and confusing agents with engine deviation history. Fix: remove
+      human-involvement.md from docs-finish; keep halt deviation in ARCHITECTURE
+      S8.11 only (yaml comments if needed, never criteria)."
+    location:
+      file: plugins/software-factory/agents/criteria/human-involvement.md
+      line: 1
+  - id: allowlist-test-target-ambiguity
+    disposition: fix
+    summary: Allowlist item leaves target file ambiguous with '(or concern-contracts
+      suite)'
+    detail: "Item says 'extend test/human-involvement-config.test.ts (or
+      concern-contracts suite)'. The alternative is a suite (multiple files:
+      concern-artifact-types, concern-schemas, etc.), not a file, so developer
+      cannot deterministically place the test. Existing yaml-vs-local assertion
+      lives in human-involvement-config.test.ts:154-157 with a local copy at
+      :46-55 that already duplicates src/core/concerns.ts:35-44. Splitting risks
+      a third/fourth copy. Fix: pick one file (prefer
+      human-involvement-config.test.ts), import DEFAULT_RAISE_ALLOWLIST from src
+      instead of duplicating, and refactor the local constant to the import."
+    location:
+      file: plugins/software-factory/test/human-involvement-config.test.ts
+      line: 46
+  - id: s811-scenario-incomplete
+    disposition: fix
+    summary: S8.11 scenario omits required ADR semantics behind vague 'edge semantics'
+    detail: "M2 scenario 2 lists 10 topics plus 'edge semantics' but item requires
+      documenting immediate-halt deviation, triage-coverage limitation
+      (consult/wave-report/closeup via hydration+fallback, simple-task stays
+      open), remarkable threshold-exemption plus c-only counts plus
+      no-retention, and engine-owned concerns/ note. None appear explicitly in
+      the Then, so sentinel coverage is not falsifiable and scenario is not
+      comprehensive per checklist. Fix: enumerate each ADR semantic explicitly
+      in the scenario Then (halt, coverage, remarkable/counts/retention,
+      engine-owned)."
+    location:
+      file: plugins/software-factory/docs/ARCHITECTURE.md
+      line: 304
+  - id: docs-source-context-pack-inaccessible
+    disposition: fix
+    summary: Docs item sources deviations from inaccessible context-pack instead of
+      repo citations
+    detail: "docs-finish-v5 says 'source: context-pack S6 D1-D11 + plan ADRs'.
+      Context-pack is an orchestration artifact, not repo code; developers
+      cannot inspect orchestration records per workspace containment. M2
+      scenario 1 requires S1 row to record five deviations (epic-config,
+      close-up-dismiss, saga-semantics, immediate-halt, triage-coverage) but
+      plan ADRs cover only three; saga and close-up-dismiss have no repo
+      citation. Fix: replace context-pack ref with explicit repo citations (e.g.
+      docs/adr/adr-closeup-no-suggestions-triage.md, adr-epic-push-condensed.md,
+      src files) or add plan ADRs restating them."
+    location:
+      file: plugins/software-factory/docs/ARCHITECTURE.md
+      line: 39
+  - id: m2-scenario4-attribution
+    disposition: optional
+    summary: README/yaml/criteria scenario lumps three files without per-file mapping
+    detail: "'commentary documents dismiss auto-append plus fragment->agent mapping,
+      and halt is noted' does not say which file holds which. Item maps
+      yaml->dismiss/mapping and criteria->halt, but scenario Given lists all
+      three. Polish: split into per-file assertions (README Concerns section;
+      pipeline.default.yaml reviewPolicy+concerns comments; halt note location
+      after fix-1)."
+    location:
+      file: plugins/software-factory/config/pipeline.default.yaml
+      line: 386
+  - id: m1-schema-interface-misstatement
+    disposition: optional
+    summary: M1 interface misstates review schema as consumer of dispositions.md row
+    detail: "Interface says 'prompts + generated review schema <- dispositions.md
+      row', but generateReviewSchema(review-schema.ts:5) takes
+      allowedDispositions array from resolveReviewAllowed, never reads
+      dispositions.md. Only prompt text consumes the row. No wrong
+      implementation (outline correctly scopes to prompts.ts+md+render test),
+      but contract text conflates two independent mechanisms. Polish: split into
+      prompt-text contract vs schema-enum contract."
+    location:
+      file: plugins/software-factory/src/core/records/review-schema.ts
+      line: 5
+  - id: tmpdir-debt-category
+    disposition: optional
+    summary: td-tmpdir-split labeled adjacent though it gates verification
+    detail: "Baseline red without TMPDIR=/tmp; every item/scenario must run gates
+      with the workaround. That is impacting (affects task, has workaround), not
+      adjacent. Resolution is documented (TMPDIR=/tmp), so only the label
+      understates. Polish: recategorize to impacting."
+    location:
+      file: plugins/software-factory/src/core/flows/step-runner.ts
+      line: 571
+  - id: funnel-triage-coverage-awareness
+    disposition: human-awareness
+    summary: Simple-task and non-plan architect triage gaps accepted without
+      operator record
+    detail: adr-funnel-triage-coverage accepts simple-task concerns stay open
+      forever (simple flow ARCHITECTURE.md:146 has only develop, no
+      review/waves/fallback which runs only for wave-close-up per
+      step-runner.ts:319) and consult/wave-report/closeup architect output
+      bypasses plan-reviewer. Assumptions claim operator notified only for halt
+      and epic-config deviations. Architect can decide closure, but operator
+      should have an informational record that part of spec triage is deferred.
+      Create awareness record; no blocking decision needed.
+    location:
+      file: plugins/software-factory/docs/ARCHITECTURE.md
+      line: 146

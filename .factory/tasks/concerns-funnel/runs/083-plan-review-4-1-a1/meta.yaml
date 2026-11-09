@@ -6,5 +6,12 @@ role: alt-architect
 models:
   - opencode-go/muse-spark-1.3-contributor
 timeoutSec: 3600
-status: started
+status: ok
 startedAt: 2026-11-09T07:33:09.157Z
+session: 01a1bf39-a98d-77b2-9f58-32a2056498a1
+endedAt: 2026-11-09T07:45:31.868Z
+usage:
+  inputTokens: 20913
+  outputTokens: 25861
+  costUsd: 0.007584
+traceRef: /home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/sessions/2026-11-09T07-33-09-645Z_01a1bf39-a98d-77b2-9f58-32a2056498a1
