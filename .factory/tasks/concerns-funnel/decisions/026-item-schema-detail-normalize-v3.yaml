@@ -1,0 +1,36 @@
+id: decision-schema-detail-normalize-v3-1794226595727
+context: item
+item: schema-detail-normalize-v3
+afterRecord: 004-qa-r1-a2
+decision: retry-with-guidance
+timestamp: 2026-11-09T12:16:35.727Z
+rationale: "Root cause is test-first scope violation plus incomplete develop,
+  not a prod defect. Test-first added an out-of-scope remarkable why byte-test
+  (+44 lines) violating 'fix reads, do NOT duplicate': mergeRemarkable uses char
+  .length by design (concerns.ts:91-99), byte-based why is a new requirement
+  outside m0, so the test fails on base AND after develop and can never go
+  green. Red-test 'missing' is the stale target for that test (space-joined name
+  vs JUnit dot IDs) -- moot once the test is deleted. Develop also missed
+  required scope: diff shows only concerns.ts + test file, no 6-schema
+  normalization and no epic-saga :248/:307/:313/:319 fixes. Mechanical one-round
+  repair; QA exhaustion (2/2) is excused by wrong-scope test-first."
+text: "One develop round, no test-first re-run: 1) DELETE the entire new
+  'remarkable merge keeps the longest stored why' describe block from
+  test/contracts/schema-detail-normalize.test.ts -- do not keep, rename, or fix
+  it. Do NOT touch mergeRemarkable; byte-based why is out of scope. 2)
+  Keep/verify the concerns.ts:74 guard fix (capital-D read -> all-lowercase
+  detail) with a :raw read. 3) Normalize Detail->detail in the 6 runtime schemas
+  + reference review.schema.json; verify each with :raw reads, never grep alone.
+  4) Fix MUST-FIX positive reads to lowercase-d:
+  epic-saga-propagate.test.ts:248/307/313/319 and
+  schema-detail-normalize.test.ts:234/263; sweep funnel-text-budget.test.ts +
+  others via :raw. MUST-PRESERVE all negative fixtures capital-D (schema-detail
+  absence/rejection payloads, concern-schemas rejection payloads,
+  concern-artifact-types ts-expect-error). 5) Verify: tsc --noEmit clean,
+  TMPDIR=/tmp targeted suites (schema-detail-normalize, concern-schemas,
+  concern-artifact-types, epic-saga), then TMPDIR=/tmp full suite green.
+  RED-TEST NOTE: the remarkable expectation is VOID -- it names a deleted
+  out-of-scope test. QA on retry must evaluate red-to-green via the existing
+  longest-wins (:234/:263) and contract suites, not the deleted name; a stale
+  'missing remarkable test' gate result must not reject."
+persist: true
