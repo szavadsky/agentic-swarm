@@ -14,28 +14,31 @@ items:
     currentStep: develop
   contracts-drift-fix:
     kind: dev
-    status: ready
+    status: merged
     branch: topic/concerns-funnel--contracts-drift-fix
     attempts: 1
     fixRounds: 1
     spendUsd: 0.16688999999999998
     currentStep: review
+    mergedAt: 2026-11-08T18:50:09-05:00
   hydration-fingerprint-caps:
     kind: dev
-    status: ready
+    status: merged
     branch: topic/concerns-funnel--hydration-fingerprint-caps
     attempts: 1
     fixRounds: 1
     spendUsd: 0.720326
     currentStep: review
+    mergedAt: 2026-11-08T18:48:33-05:00
   prompt-fragments:
     kind: dev
-    status: ready
+    status: merged
     branch: topic/concerns-funnel--prompt-fragments
     attempts: 1
     fixRounds: 2
     spendUsd: 0.32775099999999996
     currentStep: review
+    mergedAt: 2026-11-08T18:51:44-05:00
   spike-saga-commit:
     kind: fact-finder
     status: ready
@@ -71,18 +74,20 @@ items:
     spendUsd: 0
   epic-saga-propagate:
     kind: dev
-    status: pending
+    status: ready
     branch: topic/concerns-funnel--epic-saga-propagate
     attempts: 1
-    fixRounds: 1
-    spendUsd: 0
+    fixRounds: 2
+    spendUsd: 0.37333400000000005
+    currentStep: review
   human-router-severity:
     kind: dev
-    status: pending
+    status: ready
     branch: topic/concerns-funnel--human-router-severity
     attempts: 1
     fixRounds: 1
-    spendUsd: 0
+    spendUsd: 0.206566
+    currentStep: review
   modes-prompts:
     kind: dev
     status: superseded
@@ -407,6 +412,23 @@ debt:
     measurement path"
   - "[concerns-contracts-types] ReviewSuggestion.disposition collapses to
     string, dismiss not enforced there"
+  - "[epic-saga-propagate] Stale test comment/redundant cast around source.epic"
+  - "[epic-saga-propagate] Stale test comment and redundant cast around
+    source.epic"
+  - "[epic-saga-propagate] Open-status filter for forwarded questions is not
+    documented in code"
+  - "[human-router-severity] reconcileConcerns re-aggregates skipped concerns
+    without allowlist gate"
+  - "[human-router-severity] Add drift guard asserting DEFAULT_RAISE_ALLOWLIST
+    equals shipped config"
+  - "[human-router-severity] Dismissed rm-* still digests; spec says routed rm-*
+    only"
+  - "[human-router-severity] Hardcoded high fallback duplicates severity policy
+    constant"
+  - "[human-router-severity] Routed consults ignore minBlockingSeverity on
+    shared slugs"
+  - "[human-router-severity] concernIds snapshot predates seam hooks, diverges
+    from ingest existing"
   - "[concerns-contracts-policy] Deduplicate hardcoded builtin fallback arrays
     to BUILTIN_REVIEW_DISPOSITIONS"
   - "[concerns-contracts-policy] Iteration plan-review prompt dispositions lack
@@ -600,20 +622,20 @@ debt:
     inconsistent with documented branch-from-HEAD worktrees"
   - "[funnel-closeups-v3] Propagated parent copy retains child source.item,
     writes undeclared source.epic, and can clobber/lengthen parent records"
-budgetSpentUsd: 6.714819920000002
+budgetSpentUsd: 7.3316529200000025
 spendByRole:
   alt-workhorse:
-    costUsd: 1.755755
-    inputTokens: 8785175
-    outputTokens: 2442090
+    costUsd: 1.8297150000000002
+    inputTokens: 9093842
+    outputTokens: 2587858
   workhorse:
-    costUsd: 4.183306919999999
-    inputTokens: 9279844
-    outputTokens: 2494852
+    costUsd: 4.692652919999999
+    inputTokens: 10362154
+    outputTokens: 2794314
   architect:
-    costUsd: 0.7318999999999999
-    inputTokens: 6565606
-    outputTokens: 159335
+    costUsd: 0.7654269999999999
+    inputTokens: 6900295
+    outputTokens: 159624
   alt-architect:
     costUsd: 0.043858
     inputTokens: 181661
@@ -623,10 +645,18 @@ spendByItem:
     costUsd: 0.251577
     inputTokens: 593198
     outputTokens: 339057
+  contracts-drift-fix:
+    costUsd: 0.16688999999999998
+    inputTokens: 450079
+    outputTokens: 214518
   concerns-store-v2:
     costUsd: 0.613799
     inputTokens: 2193288
     outputTokens: 413791
+  hydration-fingerprint-caps:
+    costUsd: 0.720326
+    inputTokens: 2521130
+    outputTokens: 580992
   routing-human-debt-v2:
     costUsd: 0.14427299999999998
     inputTokens: 381176
@@ -647,6 +677,10 @@ spendByItem:
     costUsd: 0.10916100000000001
     inputTokens: 270524
     outputTokens: 128516
+  prompt-fragments:
+    costUsd: 0.32775099999999996
+    inputTokens: 1269182
+    outputTokens: 271111
   routing-architect-consult-v3:
     costUsd: 0.11368900000000001
     inputTokens: 278071
@@ -663,10 +697,6 @@ spendByItem:
     costUsd: 0.670065
     inputTokens: 2995526
     outputTokens: 363902
-  funnel-closeups-v3:
-    costUsd: 0.630073
-    inputTokens: 1662764
-    outputTokens: 428767
   concerns-contracts-types:
     costUsd: 0.063129
     inputTokens: 178070
@@ -675,32 +705,32 @@ spendByItem:
     costUsd: 0.268401
     inputTokens: 734306
     outputTokens: 188631
+  epic-saga-propagate:
+    costUsd: 0.37333400000000005
+    inputTokens: 895689
+    outputTokens: 273259
   spike-text-budget:
     costUsd: 0.060779
     inputTokens: 139871
     outputTokens: 72059
+  funnel-closeups-v3:
+    costUsd: 0.630073
+    inputTokens: 1662764
+    outputTokens: 428767
+  human-router-severity:
+    costUsd: 0.206566
+    inputTokens: 470606
+    outputTokens: 168535
   spike-saga-commit:
     costUsd: 0.131932
     inputTokens: 263905
     outputTokens: 109900
-  prompt-fragments:
-    costUsd: 0.32775099999999996
-    inputTokens: 1269182
-    outputTokens: 271111
   routing-architect-consult-v2:
     costUsd: 0.198996
     inputTokens: 463902
     outputTokens: 217893
-  hydration-fingerprint-caps:
-    costUsd: 0.720326
-    inputTokens: 2521130
-    outputTokens: 580992
-  contracts-drift-fix:
-    costUsd: 0.16688999999999998
-    inputTokens: 450079
-    outputTokens: 214518
   (orchestration):
-    costUsd: 1.301916
-    inputTokens: 8031186
-    outputTokens: 683263
-lastUpdated: 2026-11-08T23:48:33.137Z
+    costUsd: 1.3388490000000002
+    inputTokens: 8390557
+    outputTokens: 686988
+lastUpdated: 2026-11-09T01:55:17.891Z
