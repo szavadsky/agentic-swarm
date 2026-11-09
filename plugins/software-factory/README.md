@@ -107,7 +107,7 @@ Every agent output may raise structured `concerns[]` and `remarkable[]` decision
 humanInvolvement: principal
 concerns:
   raiseAllowlist: [developer, fact-finder, architect, qa, reviewer, plan-reviewer, wave-close-up, plan-close-up]
-  minDigestSeverity: medium
+  minDigestSeverity: low
   minBlockingSeverity: medium
 
 # detailed: also block external-interface and major internal-interface changes
