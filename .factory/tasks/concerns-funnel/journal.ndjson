@@ -2239,3 +2239,4 @@
 {"type":"step_started","task":"concerns-funnel","step":"plan-close-up-4","attempt":1,"recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/094-plan-close-up-4-a1","ts":"2026-11-09T11:00:34.382Z"}
 {"type":"step_timeout_armed","task":"concerns-funnel","step":"plan-close-up-4","timeoutSec":2700,"ts":"2026-11-09T11:00:34.387Z"}
 {"type":"step_tool_call_warning","task":"concerns-funnel","step":"plan-close-up-4","attempt":1,"toolCalls":62,"threshold":60,"traceRef":"/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/sessions/2026-11-09T11-00-34-677Z_01a1bff7-8ef5-7117-9fff-44000ec74ee3","ts":"2026-11-09T11:05:50.676Z"}
+{"type":"step_finished","task":"concerns-funnel","step":"plan-close-up-4","attempt":1,"status":"ok","sessionId":"01a1bff7-8ef5-7117-9fff-44000ec74ee3","usage":{"inputTokens":65370,"outputTokens":30362,"costUsd":0.015188},"ts":"2026-11-09T11:05:50.766Z"}
