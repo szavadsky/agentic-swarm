@@ -28,6 +28,8 @@ export interface PropagateEpicConcernsOptions {
   parentTaskDir: string;
   parentWt: string;
   epic: string;
+  /** Restricts the push to these child concern ids (architect-confirmed propagate). */
+  concernIds?: Iterable<string>;
 }
 
 const VERBATIM_BYTES = 120;
@@ -151,8 +153,11 @@ export async function propagateEpicConcerns(
   opts: PropagateEpicConcernsOptions
 ): Promise<void> {
   const { childTaskDir, parentTaskDir, parentWt, epic } = opts;
+  const only = opts.concernIds ? new Set(opts.concernIds) : undefined;
   const concerns = (await listConcerns(childTaskDir)).filter(
-    (concern) => concern.status === "open" || concern.status === "routed"
+    (concern) =>
+      (concern.status === "open" || concern.status === "routed") &&
+      (!only || only.has(concern.id))
   );
   const remarkables = await readOpenRemarkables(childTaskDir);
   const ctx: ConcernWriteContext = { taskDir: parentTaskDir, taskWt: parentWt };

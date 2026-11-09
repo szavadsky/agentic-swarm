@@ -9,12 +9,14 @@ import type {
 } from "../../harness/types.js";
 import type {
   AgentConfig,
+  CheckItemResult,
+  ConcernConfirms,
+  ConcernResolution,
   PipelineConfig,
   PipelineLimits,
   ProjectConfig,
   StepMetaArtifact,
   StepMetaStatus,
-  CheckItemResult,
 } from "../artifacts.js";
 import {
   startStepRecord,
@@ -27,8 +29,13 @@ import { isTriagerAgent, resolveReviewAllowed } from "../review-policy.js";
 import {
   aggregateConcerns,
   applyCloseupResolutions,
+  applyConcernConfirms,
+  applyConcernResolution,
+  applyWaveCloseupFallback,
   DEFAULT_RAISE_ALLOWLIST,
+  listConcerns,
 } from "../concerns.js";
+import { propagateEpicConcerns } from "./epic-propagation.js";
 import {
   applyReviewTriage,
   hydrateStepConcerns,
@@ -193,7 +200,19 @@ async function ingestStepConcerns(opts: {
   const remarkables = Array.isArray(data.remarkable) ? data.remarkable : [];
   const suggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
   const resolutions = Array.isArray(data.concernResolutions) ? data.concernResolutions : [];
-  if (!concerns.length && !remarkables.length && !suggestions.length && !resolutions.length) return undefined;
+  const confirms: ConcernConfirms[] = Array.isArray(data.concernConfirms) ? data.concernConfirms : [];
+  const resolution = data.concernResolution as ConcernResolution | undefined;
+  if (
+    !concerns.length &&
+    !remarkables.length &&
+    !suggestions.length &&
+    !resolutions.length &&
+    !confirms.length &&
+    !resolution &&
+    opts.source.agent !== "wave-close-up"
+  ) {
+    return undefined;
+  }
 
   // Gate key is source.agent, never the step fragment. Skipping keeps the step
   // ok (schema validation already passed) and only journals the dropped input.
@@ -237,7 +256,67 @@ async function ingestStepConcerns(opts: {
       })
     : undefined;
   if (resolutions.length) await applyCloseupResolutions({ ...ctx, resolutions, by: opts.source.agent });
+
+  // A decision-level resolution only belongs to concern consults and architect
+  // closeup/report ingests. Other steps may share the output schema, so their
+  // cross-emitted field is deliberately dropped and journaled.
+  if (resolution) {
+    const honored =
+      opts.source.step.startsWith("consult-concern-") ||
+      opts.source.step.startsWith("architect-closeup") ||
+      opts.source.step.startsWith("architect-wave-report");
+    if (honored) {
+      await applyConcernResolution({ ...ctx, resolution, by: opts.source.agent });
+    } else {
+      await appendJournal(opts.taskDir, {
+        type: "concern_resolution_ignored",
+        task: opts.task,
+        ...(opts.source.item ? { item: opts.source.item } : {}),
+        step: opts.source.step,
+        agent: opts.source.agent,
+        concern: resolution.id,
+      });
+    }
+  }
+
+  // Architect confirmations settle pending close-up proposals. Propagate alone
+  // needs the parent store, which the epic helper owns.
+  if (confirms.length && opts.source.agent === "architect") {
+    const pending = new Map(
+      (await listConcerns(opts.taskDir)).map((concern) => [concern.id, concern.pendingResolution?.action])
+    );
+    const propagateIds = confirms
+      .filter((confirm) => confirm.confirm === "accept" && pending.get(confirm.id) === "propagate")
+      .map((confirm) => confirm.id);
+    await applyConcernConfirms({ ...ctx, confirms });
+    if (propagateIds.length) {
+      await propagateConfirmedConcerns({ ...opts, concernIds: propagateIds });
+    }
+  }
+
+  // Wave close-up fallback owns only concerns that predate its own findings.
+  if (opts.source.agent === "wave-close-up") {
+    await applyWaveCloseupFallback({ ...ctx, ids: existing });
+  }
   return triage;
+}
+
+/** Copies confirmed propagated proposals to the enclosing epic/saga task. */
+async function propagateConfirmedConcerns(opts: {
+  taskDir: string; taskWt: string; concernIds: string[];
+}): Promise<void> {
+  const parentTaskDir = path.dirname(opts.taskDir);
+  const epic = path.basename(opts.taskDir);
+  if (parentTaskDir === opts.taskDir) return;
+  // Only epic child task dirs sit under a parent task with a matching item.
+  if (!fs.existsSync(path.join(parentTaskDir, "items", epic, "assignment.yaml"))) return;
+  await propagateEpicConcerns({
+    childTaskDir: opts.taskDir,
+    parentTaskDir,
+    parentWt: opts.taskWt,
+    epic,
+    concernIds: opts.concernIds,
+  });
 }
 
 /**

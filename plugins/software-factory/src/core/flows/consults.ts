@@ -399,6 +399,7 @@ async function consultConcernOnce(
         reason: raw?.reason,
         question: raw?.question,
         planDelta: raw?.planDelta,
+        ...(raw?.concernResolution ? { concernResolution: raw.concernResolution } : {}),
       };
       await writeYamlAtomic(decisionPath, decisionArtifact);
     },
