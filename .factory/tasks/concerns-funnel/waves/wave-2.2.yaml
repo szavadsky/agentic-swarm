@@ -1,0 +1,9 @@
+wave: 2
+iteration: 2
+status: complete
+mergedItems:
+  - human-router-severity
+  - epic-saga-propagate
+failedItems: []
+blockedItems: []
+summary: "Wave 2 completed. Merged items: human-router-severity, epic-saga-propagate"

@@ -1,0 +1,11 @@
+context: wave
+decision: continue
+rationale: Wave 2 fully merged (human-router-severity, epic-saga-propagate),
+  tree clean (only engine-managed journal modified, no conflict markers,
+  diff-check clean), typecheck pass, test gate matches baseline red
+  (pre-existing head-guard TMPDIR failures, not a wave regression). No
+  failed/blocked items; wave-3 deps satisfied.
+text: "Proceed to wave 3 (closeup-lifecycle-resolve). Note for docs-finish-v3:
+  test gate remains baseline-red under .factory-runtime TMPDIR (2 head-guard
+  failures); keep TMPDIR=/tmp normalization for final gates and retain the
+  operator-action note."
