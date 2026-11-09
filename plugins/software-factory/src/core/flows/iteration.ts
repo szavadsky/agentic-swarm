@@ -28,7 +28,7 @@ import { writeQuestion, processSteeringMailbox } from "../steer.js";
 import { persistAdrs } from "./adrs.js";
 import { runItemConsult, runNonItemConsult, runConcernConsult } from "./consults.js";
 import { isContextPackStale, isContextPackEnabled, runContextPackStep } from "./ingest.js";
-import { mergeItem, MAX_MERGE_ATTEMPTS_PER_WAVE, readMergeAttempts } from "./merge-path.js";
+import { mergeItem, MAX_MERGE_ATTEMPTS_PER_WAVE, readMergeAttempts, writeMergeTargetOverride } from "./merge-path.js";
 import { tickItemMachine, persistTerminalAbandon } from "./item-machine.js";
 import { deriveItemState, withRoutedBlocking, type DerivedItemState } from "../derive/item.js";
 import { blockedByConcern } from "../plan/scheduler.js";
@@ -48,6 +48,8 @@ import { applyEdits } from "../plan/apply.js";
 import { getClock } from "../clock.js";
 import { buildGateDiffSection, runGates } from "../checks/gates.js";
 import type { CheckContext } from "../checks/types.js";
+import { sanitizeDeveloperTarget } from "../checks/junit.js";
+import { isUnknownGateTargetError } from "../checks/runner.js";
 import { buildArchitectBrief } from "../brief.js";
 import { PersistentAgent } from "../sessions.js";
 import { Semaphore } from "../mutex.js";
@@ -66,6 +68,7 @@ async function findOkCommittedRevise(
   }
   return false;
 }
+
 /**
  * Outline-counts pre-check message → repair prompt (§8.4.2a). Names concrete
  * counts and the remedy so the architect consolidates outlines, splits across
@@ -292,13 +295,15 @@ async function readEmptyStreak(taskDir: string, iteration: number): Promise<numb
  * (running/runnable/ready/waiting/blocked/terminal — total coverage), and
  * future-wave items are owned by their upcoming wave ticks, so neither can
  * be orphaned. Dep-unsatisfied past items are owned by dep completion, not
- * this tick set. Orphans get journaled loudly as `stranded_no_owner` and
- * re-queued into the current tick set (tick-top call); the pre-close-up
+ * this tick set. Tick-orphans get journaled loudly as `stranded_no_owner`
+ * and re-queued into the current tick set (tick-top call); the pre-close-up
  * call is journal-only (the post-loop redrive drives them). Bounded: the
- * same unchanged orphan set 3 times in a row throws `reconciliation_failed`
- * loudly instead of spinning (progress resets the bound). Starved
- * `ready`-unmerged items merge via the normal merge path (owner = merge
- * step). Items only: decisions/outlines/steer/epic-closeups are covered by
+ * same unchanged tick-orphan set 3 times in a row throws
+ * `reconciliation_failed` loudly instead of spinning (progress resets the
+ * bound). Merge-stuck orphans (integrate-ok-but-unmerged) route to the
+ * merge loop via `mergeDue`, never the tick set, and never count toward
+ * strikes. Starved `ready`-unmerged items merge via the normal merge path
+ * (owner = merge step). Items only: decisions/outlines/steer/epic-closeups are covered by
  * the wave-resume, consult-exhaust, empty-wave phantom, merge-requeue,
  * blocked-answer, and closeup-trust fixes — no second entity tracker.
  */
@@ -311,11 +316,12 @@ async function reconcileWaveOwnership(opts: {
   reconcileRequeues: Map<number, { sig: string; repeats: number }>;
   /** Tick-top passes true (requeue into tick set); pre-close-up passes false (journal-only). */
   requeue: boolean;
-}): Promise<{ requeued: string[] }> {
+}): Promise<{ requeued: string[]; mergeDue: string[] }> {
   const { taskDir, iteration, wave, itemStates, waveState, reconcileRequeues } = opts;
   const inWave = new Set(waveState.items.map((it) => it.slug));
   const bySlug = new Map(itemStates.map((it) => [it.slug, it]));
   const orphans: string[] = [];
+  const mergeDue: string[] = [];
   for (const it of itemStates) {
     if (isIterationTerminal(it.status)) continue;
     if (inWave.has(it.slug)) continue;
@@ -324,9 +330,23 @@ async function reconcileWaveOwnership(opts: {
     if (it.wave === wave) continue;
     const depsOk = it.deps.every((d) => bySlug.get(d)?.status === "merged");
     if (!depsOk) continue;
+    // Merge-stuck orphans are merge-owned, never tick-owned: re-queuing
+    // them into the tick set spins the reconciler (ticks can't advance an
+    // integrate-ok-but-unmerged item). The caller drives them via the merge
+    // loop instead; they never count toward requeue strikes.
+    if (isMergeStuckItem(it)) {
+      mergeDue.push(it.slug);
+      continue;
+    }
     orphans.push(it.slug);
   }
-  if (orphans.length === 0) return { requeued: [] };
+  // Pure merge-stuck waves never strike: no tick requeue happens below,
+  // so there is nothing unchanged to count. Record progress and return the
+  // merge set (G1/G3: merge loop owns them; the ledger bounds the redrive).
+  if (orphans.length === 0) {
+    if (mergeDue.length > 0) reconcileRequeues.set(wave, { sig: "", repeats: 0 });
+    return { requeued: [], mergeDue };
+  }
   const sig = orphans
     .map((s) => {
       const st = bySlug.get(s)!;
@@ -340,9 +360,10 @@ async function reconcileWaveOwnership(opts: {
       iteration,
       wave,
       slugs: orphans,
+      mergeDue,
       reason: "pre-close-up journal-only; post-loop redrive drives them",
     });
-    return { requeued: [] };
+    return { requeued: [], mergeDue };
   }
   const prev = reconcileRequeues.get(wave);
   const repeats = prev && prev.sig === sig ? prev.repeats + 1 : 1;
@@ -368,16 +389,32 @@ async function reconcileWaveOwnership(opts: {
       reason: "non-terminal items with no owner in the current wave; re-queued into the tick set",
     });
   }
-  return { requeued: orphans };
+  return { requeued: orphans, mergeDue };
+}
+
+/**
+ * True when an item is merge-stuck: non-terminal, unmerged, and its latest
+ * step record is an `ok` integrate (merge-verify pending). Such an item can
+ * never advance via the tick loop — ticking re-runs step 1 (develop) while
+ * the integrate resolution sits done-but-unmerged — so the merge loop owns
+ * it exclusively. Covers legacy items whose merge failed before the
+ * attempt ledger existed (no ledger entry) as well as current ones.
+ */
+export function isMergeStuckItem(st: DerivedItemState): boolean {
+  if (isIterationTerminal(st.status)) return false;
+  const last = st.records[st.records.length - 1];
+  if (!last) return false;
+  return last.name === "integrate" && last.meta.status === "ok";
 }
 
 /**
  * Splits the wave's non-terminal items into tick-owned stragglers vs
- * merge-owned ones (§8.4.5). A non-terminal item with a merge-attempt ledger
- * entry for this wave already went through the wave-end merge: the merge
- * loop owns its re-drive (bounded) or terminal failure — re-ticking it
- * spins the tick cap forever (integrate-ok-but-unmerged never advances via
- * ticks). Ledger unreadable = tick owns it (fail-open).
+ * merge-owned ones (§8.4.5). Merge-owned = a merge-attempt ledger entry for
+ * this wave (already went through the wave-end merge) OR merge-stuck
+ * (integrate-ok-but-unmerged, including legacy pre-ledger failures): the
+ * merge loop owns their re-drive (bounded) or terminal failure — re-ticking
+ * them spins the tick cap forever. Ledger unreadable = tick owns it
+ * (fail-open).
  */
 export async function partitionTickStragglers(
   taskDir: string,
@@ -387,6 +424,10 @@ export async function partitionTickStragglers(
   const mergeOwned: string[] = [];
   for (const it of waveState.items) {
     if (isIterationTerminal(it.status)) continue;
+    if (isMergeStuckItem(it)) {
+      mergeOwned.push(it.slug);
+      continue;
+    }
     try {
       const attempts = await readMergeAttempts(taskDir, it.slug, String(wave));
       if (attempts > 0) mergeOwned.push(it.slug);
@@ -396,6 +437,271 @@ export async function partitionTickStragglers(
   }
   const stragglers = nonTerminalWaveItems(waveState).filter((s) => !mergeOwned.includes(s));
   return { stragglers, mergeOwned };
+}
+
+export interface RedriveMergeOpts {
+  task: string;
+  taskDir: string;
+  taskWt: string;
+  parentBranch: string;
+  repo: any;
+  harness: any;
+  pipeline: PipelineConfig;
+  project: ProjectConfig;
+  prompts: any;
+  wave: number;
+  iteration: number;
+  turnsSemaphore?: Semaphore;
+  architectSessionId?: string;
+  infraGates?: Array<{ id: string }>;
+  rootTaskWt?: string;
+  rootTaskDir?: string;
+}
+
+/**
+ * Merge-redrive for a merge-owned item: consults once with the failing
+ * evidence, applies an unknown-gate correction when present, then re-merges
+ * (bounded by the attempt ledger) or fails the item terminally on
+ * exhaustion. Returns the post-consult session id. Callers journal their
+ * own entries; the helper journals only the unknown-gate correction trail
+ * (`item_merge_unknown_gate_correct`, `item_merge_verify_target` is in
+ * mergeItem) and the terminal-abandon evidence.
+ */
+export async function redriveMergeAfterConsult(
+  item: DerivedItemState,
+  failingError: string,
+  opts: RedriveMergeOpts
+): Promise<{ sessionId?: string; merged: boolean; sha?: string }> {
+  const { taskDir, wave, iteration } = opts;
+  const attemptsSoFar = await readMergeAttempts(taskDir, item.slug, String(wave));
+
+  if (attemptsSoFar >= MAX_MERGE_ATTEMPTS_PER_WAVE) {
+    await appendJournal(taskDir, {
+      type: "merge_failed_terminal",
+      wave,
+      iteration,
+      item: item.slug,
+      reason: `merge attempts exhausted (${attemptsSoFar}/${MAX_MERGE_ATTEMPTS_PER_WAVE}); evidence: ${failingError ?? "unknown"}`,
+    });
+    await persistTerminalAbandon({
+      taskDir,
+      task: opts.task,
+      parentBranch: opts.parentBranch,
+      taskWt: opts.taskWt,
+      pipeline: opts.pipeline,
+      repo: opts.repo,
+      itemSlug: item.slug,
+      reason: "merge-attempts-exhausted",
+      rationale: `Merge path failed ${attemptsSoFar}/${MAX_MERGE_ATTEMPTS_PER_WAVE} attempts with evidence: ${failingError ?? "unknown"}; abandoning so the wave gate absorbs the item as failed instead of spinning`,
+      commitMessage: `factory(${item.slug}): merge attempts exhausted, abandon`,
+    });
+    return { sessionId: opts.architectSessionId, merged: false };
+  }
+
+  const childWtPath = (
+    await ensureChildWorktree(opts.repo, { branch: opts.parentBranch, path: opts.taskWt }, item.slug)
+  ).path;
+  const diffRes = await git(childWtPath, ["diff", opts.parentBranch], { allowFail: true });
+  // A stale unknown-gate target never heals by retry: consult once WITH the
+  // known-gate list and apply the architect's corrected target to the verify
+  // (or fail terminally when nothing fits). The old retry-with-guidance
+  // record predates the loud unknown-gate error — it is not consulted here.
+  const unknownGate = isUnknownGateTargetError(failingError);
+  const knownTargetsText = unknownGate
+    ? [
+        `gates: ${(opts.infraGates ?? []).map((g) => g.id).join(", ") || "(none configured)"}`,
+        "selectors form: {selectors: [<test ids>]}",
+        "command form: {command, customTarget: true}",
+      ].join("\n")
+    : "";
+  const badId = unknownGate ? (/Unknown gate target:\s*"([^"]+)"/.exec(failingError ?? "")?.[1] ?? "unknown") : "";
+  const consultRes = await runItemConsult({
+    task: opts.task,
+    item: item.slug,
+    assignmentYaml: JSON.stringify(item.assignment ?? {}),
+    priorAttemptsText: `Merge path failed for ${item.slug} (attempt ${attemptsSoFar + 1}/${MAX_MERGE_ATTEMPTS_PER_WAVE})`,
+    diffText: diffRes.stdout,
+    feedbackText: failingError ?? "Merge path failed",
+    afterRecord: item.records[item.records.length - 1]?.dirName,
+    taskDir: opts.taskDir,
+    taskWt: opts.taskWt,
+    repo: opts.repo,
+    harness: opts.harness,
+    pipeline: opts.pipeline,
+    project: opts.project,
+    prompts: opts.prompts,
+    architectSessionId: opts.architectSessionId,
+    turnsSemaphore: opts.turnsSemaphore,
+    iteration: opts.iteration,
+    rootTaskWt: opts.rootTaskWt,
+    rootTaskDir: opts.rootTaskDir,
+    ...(unknownGate ? { unknownGateRetry: { badId, knownTargetsText } } : {}),
+  });
+  const sessionId = consultRes.sessionId ?? opts.architectSessionId;
+  await refreshStateYaml({ taskDir: opts.taskDir, task: opts.task, parentBranch: opts.parentBranch, taskWt: opts.taskWt, pipeline: opts.pipeline });
+  const postConsult = await deriveItemState({
+    taskDir: opts.taskDir,
+    itemSlug: item.slug,
+    parentBranch: opts.parentBranch,
+    taskWt: opts.taskWt,
+    pipeline: opts.pipeline,
+    rootTaskDir: opts.rootTaskDir,
+  });
+  if (postConsult.status === "failed" || postConsult.status === "superseded") {
+    await appendJournal(opts.taskDir, {
+      type: "merge_failed_terminal",
+      wave,
+      iteration,
+      item: item.slug,
+      decision: consultRes.decision.decision,
+      status: postConsult.status,
+    });
+    return { sessionId, merged: false };
+  }
+  if (postConsult.status !== "ready") {
+    return { sessionId, merged: false };
+  }
+  // Apply the corrected target (unknown-gate recovery): sanitize, then
+  // validate the gate form against the infra list. A bare unknown id would
+  // re-loop forever — fail the item terminally with the evidence instead.
+  let targetOverride = undefined as import("../artifacts.js").DeveloperTarget | undefined;
+  if (unknownGate) {
+    const corrected = sanitizeDeveloperTarget((consultRes.decision as { target?: unknown }).target);
+    if (corrected && "gate" in corrected && corrected.gate) {
+      const known = (opts.infraGates ?? []).some((g) => g.id === corrected.gate);
+      if (!known) {
+        await appendJournal(opts.taskDir, {
+          type: "merge_failed_terminal",
+          wave,
+          iteration,
+          item: item.slug,
+          reason: `architect returned unknown gate "${(corrected as { gate: string }).gate}"; evidence: ${failingError ?? "unknown"}`,
+        });
+        await persistTerminalAbandon({
+          taskDir: opts.taskDir,
+          task: opts.task,
+          parentBranch: opts.parentBranch,
+          taskWt: opts.taskWt,
+          pipeline: opts.pipeline,
+          repo: opts.repo,
+          itemSlug: item.slug,
+          reason: "merge-unknown-gate-unresolvable",
+          rationale: `Architect corrected target names unknown gate "${(corrected as { gate: string }).gate}" with evidence: ${failingError ?? "unknown"}; abandoning so the wave gate absorbs the item as failed`,
+          commitMessage: `factory(${item.slug}): unknown gate unresolvable, abandon`,
+        });
+        return { sessionId, merged: false };
+      }
+    }
+    if (corrected) {
+      targetOverride = corrected;
+      await writeMergeTargetOverride(opts.taskDir, item.slug, String(wave), corrected);
+      await appendJournal(opts.taskDir, {
+        type: "item_merge_unknown_gate_correct",
+        item: item.slug,
+        wave,
+        badId,
+        correctedTarget: corrected,
+      });
+    } else {
+      await appendJournal(opts.taskDir, {
+        type: "merge_failed_terminal",
+        wave,
+        iteration,
+        item: item.slug,
+        decision: consultRes.decision.decision,
+        status: postConsult.status,
+        reason: `unknown gate "${badId}" unresolvable (no corrected target); evidence: ${failingError ?? "unknown"}`,
+      });
+      await persistTerminalAbandon({
+        taskDir: opts.taskDir,
+        task: opts.task,
+        parentBranch: opts.parentBranch,
+        taskWt: opts.taskWt,
+        pipeline: opts.pipeline,
+        repo: opts.repo,
+        itemSlug: item.slug,
+        reason: "merge-unknown-gate-unresolvable",
+        rationale: `Merge verify targets unknown gate "${badId}" and the architect supplied no usable correction with evidence: ${failingError ?? "unknown"}; abandoning so the wave gate absorbs the item as failed`,
+        commitMessage: `factory(${item.slug}): unknown gate unresolvable, abandon`,
+      });
+      return { sessionId, merged: false };
+    }
+  }
+  // Bounded redrive: merges up to the attempt cap, then fails terminally
+  // (absorbed by the wave gate) — never spins the reconciler or ticks.
+  const attemptsNow = await readMergeAttempts(opts.taskDir, item.slug, String(wave));
+  if (attemptsNow >= MAX_MERGE_ATTEMPTS_PER_WAVE) {
+    await appendJournal(opts.taskDir, {
+      type: "merge_failed_terminal",
+      wave,
+      iteration,
+      item: item.slug,
+      decision: consultRes.decision.decision,
+      status: postConsult.status,
+      reason: `merge attempts exhausted (${attemptsNow}/${MAX_MERGE_ATTEMPTS_PER_WAVE}); evidence: ${failingError ?? "unknown"}`,
+    });
+    await persistTerminalAbandon({
+      taskDir: opts.taskDir,
+      task: opts.task,
+      parentBranch: opts.parentBranch,
+      taskWt: opts.taskWt,
+      pipeline: opts.pipeline,
+      repo: opts.repo,
+      itemSlug: item.slug,
+      reason: "merge-attempts-exhausted",
+      rationale: `Merge path failed ${attemptsNow}/${MAX_MERGE_ATTEMPTS_PER_WAVE} attempts with evidence: ${failingError ?? "unknown"}; abandoning so the wave gate absorbs the item as failed instead of spinning`,
+      commitMessage: `factory(${item.slug}): merge attempts exhausted, abandon`,
+    });
+    return { sessionId, merged: false };
+  }
+  const ensured = await ensureChildWorktree(opts.repo, { branch: opts.parentBranch, path: opts.taskWt }, item.slug);
+  const redriveRes = await mergeItem({
+    task: opts.task,
+    item: postConsult,
+    parentBranch: opts.parentBranch,
+    taskWt: opts.taskWt,
+    childWt: ensured.path,
+    repo: opts.repo,
+    harness: opts.harness,
+    pipeline: opts.pipeline,
+    project: opts.project,
+    prompts: opts.prompts,
+    taskDir: opts.taskDir,
+    wave,
+    turnsSemaphore: opts.turnsSemaphore,
+    ...(targetOverride ? { targetOverride } : {}),
+  });
+  if (!redriveRes.ok) {
+    await appendJournal(opts.taskDir, {
+      type: "item_merge_failed",
+      item: item.slug,
+      error: redriveRes.error,
+      mergeAttempt: redriveRes.mergeAttempt,
+    });
+    const exhausted = (redriveRes.mergeAttempt ?? attemptsNow + 1) >= MAX_MERGE_ATTEMPTS_PER_WAVE;
+    await appendJournal(opts.taskDir, {
+      type: exhausted ? "merge_failed_terminal" : "merge_failed_requeued",
+      wave,
+      iteration,
+      item: item.slug,
+      ...(exhausted ? { reason: `merge attempts exhausted (${redriveRes.mergeAttempt ?? attemptsNow + 1}/${MAX_MERGE_ATTEMPTS_PER_WAVE}); evidence: ${redriveRes.error ?? "unknown"}` } : {}),
+    });
+    if (exhausted) {
+      await persistTerminalAbandon({
+        taskDir: opts.taskDir,
+        task: opts.task,
+        parentBranch: opts.parentBranch,
+        taskWt: opts.taskWt,
+        pipeline: opts.pipeline,
+        repo: opts.repo,
+        itemSlug: item.slug,
+        reason: "merge-attempts-exhausted",
+        rationale: `Merge redrive failed ${redriveRes.mergeAttempt ?? attemptsNow + 1}/${MAX_MERGE_ATTEMPTS_PER_WAVE} attempts with evidence: ${redriveRes.error ?? "unknown"}; abandoning so the wave gate absorbs the item as failed instead of spinning`,
+        commitMessage: `factory(${item.slug}): merge attempts exhausted, abandon`,
+      });
+    }
+  }
+  return { sessionId, merged: redriveRes.ok, sha: redriveRes.sha };
 }
 
 /**
@@ -1869,7 +2175,7 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
     // (journal-only) — see both call sites below.
     const reconcileRequeues = new Map<number, { sig: string; repeats: number }>();
     {
-      const { requeued } = await reconcileWaveOwnership({
+      const { requeued, mergeDue } = await reconcileWaveOwnership({
         taskDir,
         iteration,
         wave: w,
@@ -1879,6 +2185,42 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
         requeue: true,
       });
       void requeued;
+      // Merge-stuck orphans route to the merge loop, never the tick set (G1):
+      // redrive each via consult+bounded-merge. A merged redrive refreshes
+      // states so the wave below sees it; failures stay merge-owned (the
+      // helper journals terminal abandon with the evidence).
+      // Orphan-redrive evidence: the latest journaled merge failure per slug
+      // (fallback: the merge-stuck marker when no failure was journaled).
+      const mergeErrBySlug = new Map<string, string>();
+      for (const e of await readJournal(taskDir)) {
+        const r = e as unknown as { type?: string; item?: string; error?: string; evidence?: string };
+        if ((r.type === "item_merge_failed" || r.type === "item_merge_gates_failed") && typeof r.item === "string" && typeof (r.error ?? r.evidence) === "string") {
+          mergeErrBySlug.set(r.item, (r.error ?? r.evidence) as string);
+        }
+      }
+      for (const slug of mergeDue) {
+        const it = itemStates.find((s) => s.slug === slug);
+        if (!it) continue;
+        const err = mergeErrBySlug.get(slug) ?? `merge-stuck orphan: integrate ok but unmerged for wave ${w}`;
+        const res = await redriveMergeAfterConsult(it, err, {
+          task, taskDir, taskWt, parentBranch, repo, harness, pipeline, project,
+          prompts, wave: w, iteration, turnsSemaphore, architectSessionId,
+          infraGates: infraArtifact?.gates, rootTaskWt: params.rootTaskWt, rootTaskDir: params.rootTaskDir,
+        });
+        architectSessionId = res.sessionId ?? architectSessionId;
+        if (res.merged) {
+          itemStates = await Promise.all(
+            currentIterationItems.map((s) =>
+              deriveItemState({ taskDir, itemSlug: s, parentBranch, taskWt, pipeline, rootTaskDir: params.rootTaskDir })
+            )
+          );
+          waveState = deriveWaveState({
+            wave: w,
+            items: itemStates,
+            blockedBy: await collectRoutedBlockers(taskDir, pipeline.concerns?.minBlockingSeverity ?? "high"),
+          });
+        }
+      }
     }
 
     // Active runs poll the root mailbox during wave execution (§8.8):
@@ -2018,7 +2360,16 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
         // ownerless past-wave stragglers are injected into this tick set.
         let reconciledExtra: DerivedItemState[] = [];
         {
-          const { requeued } = await reconcileWaveOwnership({
+          // Latest journaled merge failure per slug (orphan-redrive evidence,
+          // refreshed each tick so mid-wave failures are visible).
+          const tickMergeErrBySlug = new Map<string, string>();
+          for (const e of await readJournal(taskDir)) {
+            const r = e as unknown as { type?: string; item?: string; error?: string; evidence?: string };
+            if ((r.type === "item_merge_failed" || r.type === "item_merge_gates_failed") && typeof r.item === "string" && typeof (r.error ?? r.evidence) === "string") {
+              tickMergeErrBySlug.set(r.item, (r.error ?? r.evidence) as string);
+            }
+          }
+          const { requeued, mergeDue } = await reconcileWaveOwnership({
             taskDir,
             iteration,
             wave: w,
@@ -2031,9 +2382,48 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
             const requeuedSet = new Set(requeued);
             reconciledExtra = itemStates.filter((s) => requeuedSet.has(s.slug));
           }
+          // Merge-stuck orphans route to the merge loop, never the tick set
+          // (G1): redrive each via consult+bounded-merge here (same helper as
+          // wave-top and wave-end), grounded in the latest journaled merge
+          // failure (fallback: the merge-stuck marker). A merged redrive
+          // breaks to the merge gate via the re-derived state below.
+          for (const slug of mergeDue) {
+            const it = itemStates.find((s) => s.slug === slug);
+            if (!it) continue;
+            const err = tickMergeErrBySlug.get(slug) ?? `merge-stuck orphan: integrate ok but unmerged for wave ${w}`;
+            const res = await redriveMergeAfterConsult(it, err, {
+              task, taskDir, taskWt, parentBranch, repo, harness, pipeline, project,
+              prompts, wave: w, iteration, turnsSemaphore, architectSessionId,
+              infraGates: infraArtifact?.gates, rootTaskWt: params.rootTaskWt, rootTaskDir: params.rootTaskDir,
+            });
+            architectSessionId = res.sessionId ?? architectSessionId;
+            if (res.merged) {
+              // A merged redrive changes derive inputs: refresh states so the
+              // tick set below never ticks off a stale bucket.
+              itemStates = await Promise.all(
+                currentIterationItems.map((s) =>
+                  deriveItemState({ taskDir, itemSlug: s, parentBranch, taskWt, pipeline, rootTaskDir: params.rootTaskDir })
+                )
+              );
+              waveState = deriveWaveState({
+                wave: w,
+                items: itemStates,
+                blockedBy: await collectRoutedBlockers(taskDir, pipeline.concerns?.minBlockingSeverity ?? "high"),
+              });
+            }
+          }
         }
 
-        const activeItems = [...waveState.running, ...waveState.runnable, ...reconciledExtra];
+        // Merge-stuck items are merge-owned, never tick-owned: filter them
+        // out of the tick set even if a bucket lists them (G1). Their
+        // re-drive happens via the merge loop (wave-top reconciler redrive
+        // and the wave-end merge path below), bounded by the attempt ledger.
+        const tickableItems = [...waveState.running, ...waveState.runnable, ...reconciledExtra].filter(
+          (it) => !isMergeStuckItem(it)
+        );
+        const activeItems = tickableItems;
+        // All remaining items are merge-owned (G1): ticks cannot advance
+        // them — break to the merge gate instead of idling the tick cap.
         if (activeItems.length === 0) {
           break;
         }
@@ -2374,30 +2764,23 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
             error: mRes.error,
             mergeAttempt: mRes.mergeAttempt,
           });
-          const diffRes = await git(childWtPath, ["diff", parentBranch], { allowFail: true });
-          const consultRes = await runItemConsult({
-            task,
-            item: readyItem.slug,
-            assignmentYaml: JSON.stringify(readyItem.assignment ?? {}),
-            priorAttemptsText: `Merge path failed for ${readyItem.slug} (attempt ${mRes.mergeAttempt ?? 1}/${MAX_MERGE_ATTEMPTS_PER_WAVE})`,
-            diffText: diffRes.stdout,
-            feedbackText: mRes.error ?? "Merge path failed",
-            afterRecord: readyItem.records[readyItem.records.length - 1]?.dirName,
-            taskDir,
-            taskWt,
-            repo,
-            harness,
-            pipeline,
-            project,
-            prompts,
-            architectSessionId,
-            turnsSemaphore,
-            iteration,
-            rootTaskWt: params.rootTaskWt,
-            rootTaskDir: params.rootTaskDir,
+          // Merge failure (G2/G3): one consult with the failing evidence via
+          // the shared helper — unknown-gate consults once with the known
+          // list and applies the corrected target; exhaustion fails the item
+          // terminally (absorbed by the wave gate), never reconciler strikes.
+          const redriveRes = await redriveMergeAfterConsult(readyItem, mRes.error ?? "Merge path failed", {
+            task, taskDir, taskWt, parentBranch, repo, harness, pipeline, project,
+            prompts, wave: w, iteration, turnsSemaphore, architectSessionId,
+            infraGates: infraArtifact?.gates, rootTaskWt: params.rootTaskWt, rootTaskDir: params.rootTaskDir,
           });
-          architectSessionId = consultRes.sessionId ?? architectSessionId;
-          await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
+          architectSessionId = redriveRes.sessionId ?? architectSessionId;
+          const redriveIdx = mergeResults.findIndex((m) => m.slug === readyItem.slug);
+          if (redriveIdx >= 0) {
+            mergeResults[redriveIdx] = { slug: readyItem.slug, ok: redriveRes.merged, sha: redriveRes.sha };
+          }
+          // The helper consults and re-drives only when the item stays
+          // mergeable (`ready`). Anything else (fix-round re-entry) ticks
+          // the item machine — the merge loop never claims it.
           const postConsult = await deriveItemState({
             taskDir,
             itemSlug: readyItem.slug,
@@ -2406,83 +2789,7 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
             pipeline,
             rootTaskDir: params.rootTaskDir,
           });
-          if (postConsult.status === "failed" || postConsult.status === "superseded") {
-            await appendJournal(taskDir, {
-              type: "merge_failed_terminal",
-              wave: w,
-              iteration,
-              item: readyItem.slug,
-              decision: consultRes.decision.decision,
-              status: postConsult.status,
-            });
-          } else if (postConsult.status === "ready") {
-            // Consult kept the item mergeable (retry-with-guidance, zero content
-            // changes): re-drive the merge now, bounded by the attempt ledger.
-            const attemptsSoFar = await readMergeAttempts(taskDir, readyItem.slug, String(w));
-            if (attemptsSoFar >= MAX_MERGE_ATTEMPTS_PER_WAVE) {
-              await appendJournal(taskDir, {
-                type: "merge_failed_terminal",
-                wave: w,
-                iteration,
-                item: readyItem.slug,
-                decision: consultRes.decision.decision,
-                status: postConsult.status,
-                reason: `merge attempts exhausted (${attemptsSoFar}/${MAX_MERGE_ATTEMPTS_PER_WAVE}); evidence: ${mRes.error ?? "unknown"}`,
-              });
-              await persistTerminalAbandon({
-                taskDir, task, parentBranch, taskWt, pipeline, repo,
-                itemSlug: readyItem.slug,
-                reason: "merge-attempts-exhausted",
-                rationale: `Merge path failed ${attemptsSoFar}/${MAX_MERGE_ATTEMPTS_PER_WAVE} attempts with evidence: ${mRes.error ?? "unknown"}; abandoning so the wave gate absorbs the item as failed instead of spinning`,
-                commitMessage: `factory(${readyItem.slug}): merge attempts exhausted, abandon`,
-              });
-            } else {
-              const redriveRes = await mergeItem({
-                task,
-                item: postConsult,
-                parentBranch,
-                taskWt,
-                childWt: childWtPath,
-                repo,
-                harness,
-                pipeline,
-                project,
-                prompts,
-                taskDir,
-                wave: w,
-                turnsSemaphore,
-              });
-              const redriveIdx = mergeResults.findIndex((m) => m.slug === readyItem.slug);
-              if (redriveIdx >= 0) {
-                mergeResults[redriveIdx] = { slug: readyItem.slug, ok: redriveRes.ok, sha: redriveRes.sha };
-              }
-              if (!redriveRes.ok) {
-                await appendJournal(taskDir, {
-                  type: "item_merge_failed",
-                  item: readyItem.slug,
-                  error: redriveRes.error,
-                  mergeAttempt: redriveRes.mergeAttempt,
-                });
-                const exhausted = (redriveRes.mergeAttempt ?? attemptsSoFar + 1) >= MAX_MERGE_ATTEMPTS_PER_WAVE;
-                await appendJournal(taskDir, {
-                  type: exhausted ? "merge_failed_terminal" : "merge_failed_requeued",
-                  wave: w,
-                  iteration,
-                  item: readyItem.slug,
-                  ...(exhausted ? { reason: `merge attempts exhausted (${redriveRes.mergeAttempt ?? attemptsSoFar + 1}/${MAX_MERGE_ATTEMPTS_PER_WAVE}); evidence: ${redriveRes.error ?? "unknown"}` } : {}),
-                });
-                if (exhausted) {
-                  await persistTerminalAbandon({
-                    taskDir, task, parentBranch, taskWt, pipeline, repo,
-                    itemSlug: readyItem.slug,
-                    reason: "merge-attempts-exhausted",
-                    rationale: `Merge redrive failed ${redriveRes.mergeAttempt ?? attemptsSoFar + 1}/${MAX_MERGE_ATTEMPTS_PER_WAVE} attempts with evidence: ${redriveRes.error ?? "unknown"}; abandoning so the wave gate absorbs the item as failed instead of spinning`,
-                    commitMessage: `factory(${readyItem.slug}): merge attempts exhausted, abandon`,
-                  });
-                }
-              }
-            }
-          } else {
+          if (postConsult.status !== "failed" && postConsult.status !== "superseded" && postConsult.status !== "ready") {
             try {
               const child = await ensureChildWorktree(repo, { branch: parentBranch, path: taskWt }, readyItem.slug);
               await tickItemMachine({

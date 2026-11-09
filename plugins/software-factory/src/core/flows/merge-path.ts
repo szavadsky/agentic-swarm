@@ -34,6 +34,9 @@ export interface MergeItemParams {
   taskDir: string;
   /** Wave number driving this merge; keys the persisted attempt ledger. */
   wave?: number;
+  /** Corrected developer target (unknown-gate consult): takes precedence over
+   * the persisted override file and the record's target for verify. */
+  targetOverride?: DeveloperTarget;
   turnsSemaphore?: Semaphore;
 }
 
@@ -80,6 +83,48 @@ export async function recordMergeAttempt(taskDir: string, slug: string, waveKey:
   attempts[waveKey] = next;
   await writeYamlAtomic(p, { attempts });
   return next;
+}
+
+/**
+ * Corrected merge target per item+wave (`items/<slug>/merge-target.yaml`,
+ * `{overrides: {<waveKey>: <DeveloperTarget>}}`). Written when an
+ * unknown-gate consult returns a usable corrected target; read as the
+ * highest-priority verify target below (above the record's stale target).
+ * File-backed so restarts and later redrive paths reuse the correction.
+ */
+export async function readMergeTargetOverride(
+  taskDir: string,
+  slug: string,
+  waveKey: string
+): Promise<DeveloperTarget | undefined> {
+  const p = path.join(taskDir, "items", slug, "merge-target.yaml");
+  if (!fs.existsSync(p)) return undefined;
+  try {
+    const data = await readYaml<{ overrides?: Record<string, DeveloperTarget> }>(p);
+    return data?.overrides?.[waveKey];
+  } catch {
+    return undefined;
+  }
+}
+
+export async function writeMergeTargetOverride(
+  taskDir: string,
+  slug: string,
+  waveKey: string,
+  target: DeveloperTarget
+): Promise<void> {
+  const p = path.join(taskDir, "items", slug, "merge-target.yaml");
+  let overrides: Record<string, DeveloperTarget> = {};
+  if (fs.existsSync(p)) {
+    try {
+      const data = await readYaml<{ overrides?: Record<string, DeveloperTarget> }>(p);
+      overrides = { ...(data?.overrides ?? {}) };
+    } catch {
+      overrides = {};
+    }
+  }
+  overrides[waveKey] = target;
+  await writeYamlAtomic(p, { overrides });
 }
 
 /**
@@ -234,6 +279,26 @@ export async function mergeItem(params: MergeItemParams): Promise<MergeItemResul
           break;
         }
       }
+      // Verify-target precedence: explicit caller override (consult-applied
+      // correction) > persisted per-wave override file (survives restarts) >
+      // the record's stale target. Unknown-gate consults write the override
+      // file; every later redrive in this wave picks it up automatically.
+      const persistedOverride = await readMergeTargetOverride(taskDir, item.slug, waveKey);
+      const effectiveTarget = params.targetOverride ?? persistedOverride ?? lastDeveloperTarget;
+      const targetSource = params.targetOverride
+        ? "consult-override"
+        : persistedOverride
+          ? "override-file"
+          : lastDeveloperTarget
+            ? "record"
+            : "none";
+      await appendJournal(taskDir, {
+        type: "item_merge_verify_target",
+        item: item.slug,
+        wave: params.wave ?? item.wave,
+        targetSource,
+        target: effectiveTarget ?? null,
+      });
 
       const checkCtx: CheckContext = {
         repo,
@@ -248,7 +313,7 @@ export async function mergeItem(params: MergeItemParams): Promise<MergeItemResul
         task,
         taskWt,
         taskDir,
-        target: lastDeveloperTarget,
+        target: effectiveTarget,
         limits: pipeline.limits ?? {},
         outputBytes: pipeline.limits?.checkOutputBytes ?? 4096,
       };

@@ -48,6 +48,7 @@
     "debt": { "type": "string", "description": "Technical debt description when decision is accept-with-debt" },
     "reason": { "type": "string", "description": "Reason for abandonment or abort" },
     "question": { "type": "string", "description": "Specific question for human operator when decision is human-async or blocked" },
+    "target": { "type": "object", "description": "Corrected developer target from a merge-verify consult, applied to the merge verification instead of the record's stale target (unknown-gate recovery). One of {gate: <infra gate id>}, {selectors: [<test ids>]}, or {command, customTarget: true}.", "properties": { "gate": { "type": "string" }, "selectors": { "type": "array", "items": { "type": "string" } }, "expectRed": { "type": "array", "items": { "type": "string" } }, "command": { "type": "string" }, "customTarget": { "type": "boolean" } }, "additionalProperties": false },
     "planDelta": { "type": "string", "description": "Plan delta or amendment directives when decision is amend" },
     "timestamp": { "type": "string", "description": "ISO timestamp (assigned by engine if omitted)" },
     "concerns": {

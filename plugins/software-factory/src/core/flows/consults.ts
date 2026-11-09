@@ -3,6 +3,7 @@ import path from "node:path";
 import type {
   DecisionArtifact,
   DecisionContext,
+  DeveloperTarget,
   PipelineConfig,
   ProjectConfig,
   SteerItemArtifact,
@@ -27,6 +28,11 @@ export interface ItemConsultParams {
   diffText: string;
   feedbackText: string;
   debtText?: string;
+  /** Merge-verify consult correction pass: when set, the architect is told
+   * the merge verify failed on an unknown gate id and MUST return a corrected
+   * `target` chosen from `knownTargetsText` (or omit `target` for terminal
+   * fail). Only the unknown-gate redrive path sets this. */
+  unknownGateRetry?: { badId: string; knownTargetsText: string };
   /** Newest item record dir name at decision time; durable series pointer (§8.5). */
   afterRecord?: string;
   taskDir: string;
@@ -77,6 +83,7 @@ export async function runItemConsult(
     diffText,
     feedbackText,
     debtText,
+    unknownGateRetry,
     afterRecord,
     taskDir,
     taskWt,
@@ -89,6 +96,8 @@ export async function runItemConsult(
     turnsSemaphore,
     budgetTracker,
     iteration,
+    rootTaskWt,
+    rootTaskDir,
   } = params;
 
   const contextPackPath = path.join(taskDir, "context-pack.md");
@@ -108,6 +117,15 @@ export async function runItemConsult(
     feedback: feedbackText,
     debt: debtText ?? "",
     contextPack: contextPackText,
+    // Unknown-gate correction pass: the merge verify failed naming a gate id
+    // that does not exist. The architect MUST return a corrected `target`
+    // chosen from `knownTargetsText` — {gate: <known id>}, {selectors: [...]},
+    // or {command, customTarget: true} — or omit `target` for terminal fail.
+    ...(unknownGateRetry
+      ? {
+          unknownGate: `The merge verify failed with an unknown gate target: "${unknownGateRetry.badId}". That gate id does not exist — do NOT return it again. Return a corrected "target" chosen from the known targets below, or omit "target" (retry-with-guidance is wrong here; recommend abandon if nothing fits). Known targets:\n${unknownGateRetry.knownTargetsText}`,
+        }
+      : {}),
   };
 
   const runsDir = path.join(taskDir, "runs");
@@ -129,6 +147,7 @@ export async function runItemConsult(
       if (m) consultSeq = Math.max(consultSeq, parseInt(m[1]!, 10) + 1);
     }
   }
+
   const consultStepId = `consult-${item}-${consultSeq}`;
   const consultAttempt = 1;
 
@@ -186,12 +205,17 @@ export async function runItemConsult(
         debt: raw?.debt,
         reason: raw?.reason,
         question: raw?.question,
+        // Corrected developer target (merge-verify unknown-gate recovery):
+        // passed through when the architect supplies an object; the caller
+        // sanitizes and validates before applying. Non-objects are dropped.
+        ...(raw?.target && typeof raw.target === "object" && !Array.isArray(raw.target)
+          ? { target: raw.target as DeveloperTarget }
+          : {}),
       };
 
       const decisionFileName = `${String(nextSeq).padStart(3, "0")}-item-${item}-${consultSeq}.yaml`;
       decisionPath = path.join(decisionsDir, decisionFileName);
       await writeYamlAtomic(decisionPath, decisionArtifact);
-
       if (decisionVal === "human-async" && raw?.question) {
         const qId = `q-${item}-${String(nextSeq).padStart(3, "0")}`;
         await writeQuestion(params.rootTaskWt ?? taskWt, params.rootTaskDir ?? taskDir, {
@@ -278,6 +302,7 @@ export async function runNonItemConsult(
       if (m) consultSeq = Math.max(consultSeq, parseInt(m[1]!, 10) + 1);
     }
   }
+
   const consultStepId = `consult-${seamClean}-${consultSeq}`;
   const consultAttempt = 1;
 

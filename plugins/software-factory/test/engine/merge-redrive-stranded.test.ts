@@ -359,3 +359,146 @@ describe("Defect 3: stranded re-queue lands in a live wave and ticks", () => {
     expect(tickRes.stepRan).toBe("develop");
   });
 });
+
+describe("Follow-up: reconciler routes merge-stuck to redrive (no tick strikes); unknown-gate corrects target; exhaustion is terminal", () => {
+  let ctx: ReturnType<typeof setupCommon>;
+  beforeEach(() => {
+    ctx = setupCommon();
+  });
+  afterEach(() => {
+    ctx.tmpRepo.cleanup();
+  });
+
+  it("partitionTickStragglers treats integrate-ok legacy items as merge-owned (no ledger entry)", async () => {
+    const { tmpRepo } = ctx;
+    const taskDir = path.join(tmpRepo.dir, ".factory", "t-legacy");
+    await fs.promises.mkdir(path.join(taskDir, "items", "legacy"), { recursive: true });
+    const items = [
+      // Integrate-ok-but-unmerged with NO merge-attempt ledger entry (the
+      // live launch-12 shape: consult 011 predates the loud error).
+      { ...fakeItem("legacy", "running", 2), records: [{ name: "integrate", meta: { status: "ok" } }] },
+      fakeItem("plain", "running", 2),
+    ] as unknown as DerivedItemState[];
+    const waveState = deriveWaveState({ wave: 2, items });
+    const { stragglers, mergeOwned } = await partitionTickStragglers(taskDir, 2, waveState);
+    expect(mergeOwned).toEqual(["legacy"]);
+    expect(stragglers).toEqual(["plain"]);
+  });
+
+  it("unknown-gate redrive consults once with the known-gate list and applies the corrected target", async () => {
+    const { tmpRepo, worktreeRoot, repoObj, project, prompts, orchFolder } = ctx;
+    const task = "gap-unkgate";
+    const parentBranch = `topic/${task}`;
+    tmpRepo.createBranch(parentBranch);
+    const taskWt = path.join(worktreeRoot, `topic_${task}`);
+    tmpRepo.createWorktree(parentBranch, taskWt);
+    const taskDir = path.join(taskWt, orchFolder, task);
+    const relTask = path.join(orchFolder, task);
+
+    await fs.promises.mkdir(path.join(taskDir, "plan"), { recursive: true });
+    await writeYamlAtomic(path.join(taskDir, "plan", "plan-1.yaml"), {
+      iteration: 1,
+      milestones: [{ id: "m1", title: "M1" }],
+      itemOutlines: [{ slug: "u1", kind: "dev", title: "U1", milestoneId: "m1" }],
+    });
+    await writeYamlAtomic(path.join(taskDir, "plan", "edits-1.0.yaml"), {
+      iteration: 1, amendmentIndex: 0,
+      items: [{ slug: "u1", outlineRef: "u1", kind: "dev", title: "U1", assignment: "w", wave: 1 }],
+    });
+    await fs.promises.mkdir(path.join(taskDir, "items", "u1"), { recursive: true });
+    await writeYamlAtomic(path.join(taskDir, "items", "u1", "assignment.yaml"), {
+      slug: "u1", kind: "dev", title: "U1", assignment: "w", wave: 1, deps: [],
+    });
+    await fs.promises.writeFile(path.join(taskDir, "INTENT.md"), "unknown gate\n");
+    // Infra has exactly one gate; the record's target names a missing one.
+    await writeYamlAtomic(path.join(taskDir, "infra.yaml"), {
+      setup: [],
+      gates: [{ id: "real-gate", command: "true" }],
+      testRunner: { command: "true" },
+    });
+    await fs.promises.writeFile(path.join(taskWt, "shared.txt"), "parent v1\n");
+    await seedRecord(taskWt, path.join(relTask, "runs"), "001-architect-plan-1-a1",
+      { seq: 1, name: "architect-plan-1", attempt: 1, agent: "architect", role: "architect", models: ["m"], status: "ok", startedAt: TS(), endedAt: TS() }, { iteration: 1, milestones: [], itemOutlines: [] });
+    await seedRecord(taskWt, path.join(relTask, "runs"), "002-pm-edits-1-a1",
+      { seq: 2, name: "pm-edits-1", attempt: 1, agent: "pm", role: "alt-workhorse", models: ["m"], status: "ok", startedAt: TS(), endedAt: TS() }, { iteration: 1, items: [] });
+    // Ready with a stale {gate: 'tests'} target (the live checkers shape) —
+    // merge verify fails loudly with the known-gate list instead of exit-127.
+    const stepsRel = path.join(relTask, "items", "u1", "steps");
+    await seedRecord(taskWt, stepsRel, "001-develop-r1-a1",
+      { seq: 1, name: "develop", attempt: 1, fixRound: 1, agent: "developer", role: "workhorse", models: ["m"], status: "ok", startedAt: TS(), endedAt: TS() },
+      { status: "ok", summary: "U1 done", target: { gate: "tests" } });
+    tmpRepo.createBranch(`topic/${task}--u1`);
+    await fs.promises.writeFile(path.join(taskWt, "parent-only.txt"), "parent side\n");
+    tmpRepo.git(["add", "-A"], { cwd: taskWt });
+    tmpRepo.git(["commit", "-m", "parent advances"], { cwd: taskWt });
+    await seedRecord(taskWt, stepsRel, "002-review-r1-a1",
+      { seq: 2, name: "review", attempt: 1, fixRound: 1, agent: "reviewer", role: "alt-workhorse", models: ["m"], status: "ok", startedAt: TS(), endedAt: TS() },
+      { status: "approved", summary: "ok", suggestions: [] });
+    tmpRepo.git(["add", "-A"], { cwd: taskWt });
+    tmpRepo.git(["commit", "-m", "seed unknown gate test"], { cwd: taskWt });
+
+    const pipeline = makePipeline();
+    const harness = new FakeHarness();
+    // The single unknown-gate consult returns the corrected gate target.
+    harness.scriptOutcome(`${task}/runs/consult-u1-1#a1`, {
+      ok: true,
+      data: { id: "dec-u", context: "item", decision: "retry-with-guidance", text: "fix target", target: { gate: "real-gate" }, timestamp: TS() },
+    });
+    // Post-correction merge proves out (real-gate `true` passes → empty tree → no-op merge path is fine);
+    // wave/plan close-ups drain the iteration.
+    harness.scriptOutcome(`${task}/runs/wave-close-up-1-1#a1`, {
+      ok: true, data: { wave: 1, iteration: 1, status: "complete", mergedItems: [], failedItems: [], summary: "w" },
+    });
+    harness.scriptOutcome(`${task}/runs/architect-wave-report-1-1#a1`, {
+      ok: true, data: { id: "dec-w", context: "wave", decision: "continue", timestamp: TS() },
+    });
+    harness.scriptOutcome(`${task}/runs/plan-close-up-1#a1`, {
+      ok: true, data: { iteration: 1, status: "next-iteration", summary: "stalled" },
+    });
+    harness.scriptOutcome(`${task}/runs/architect-closeup-1#a1`, {
+      ok: true, data: { iteration: 1, status: "next-iteration", summary: "stalled" },
+    });
+
+    let threw: unknown = undefined;
+    try {
+      await runIteration({
+        task, taskDir, taskWt, parentBranch, repo: repoObj, harness, pipeline, project, prompts,
+      });
+    } catch (e) { threw = e; }
+    void threw;
+    const journal = fs.readFileSync(path.join(taskDir, "journal.ndjson"), "utf8");
+    // Correction journaled and persisted from the single unknown-gate consult.
+    expect(journal).toContain("item_merge_unknown_gate_correct");
+    expect(journal).toContain("real-gate");
+    // Only one consult turn ran for the item (consult-e1-style seq 1 file).
+    const { readdir } = await import("node:fs/promises");
+    const consultDecisions = (await readdir(path.join(taskDir, "decisions"))).filter((f) => f.includes("-item-u1-"));
+    expect(consultDecisions.length).toBe(1);
+    const { readYaml } = await import("../../src/core/records/io.js");
+    const override = await readYaml<{ overrides: Record<string, unknown> }>(path.join(taskDir, "items", "u1", "merge-target.yaml"));
+    expect((override.overrides?.["1"] as { gate: string }).gate).toBe("real-gate");
+  });
+
+  it("exhausted merge attempts fail the item terminally (absorbed, never reconciler strikes)", async () => {
+    const { tmpRepo } = ctx;
+    const taskDir = path.join(tmpRepo.dir, ".factory", "t-exhaust");
+    await fs.promises.mkdir(path.join(taskDir, "items", "e1"), { recursive: true });
+    // Ledger already at the cap for this wave.
+    await writeYamlAtomic(path.join(taskDir, "items", "e1", "merge-attempts.yaml"), { attempts: { "1": 2 } });
+    const { redriveMergeAfterConsult } = await import("../../src/core/flows/iteration.js");
+    const item = { ...fakeItem("e1", "ready", 1), branch: "topic/t-e1", records: [{ name: "integrate", meta: { status: "ok" } }] } as unknown as DerivedItemState;
+    const repoObj = new Repo({ mainRoot: tmpRepo.dir, worktreeRoot: path.join(tmpRepo.dir + "-wt") });
+    const ended = await redriveMergeAfterConsult(item, "Quality gates failed", {
+      task: "t-exhaust", taskDir, taskWt: tmpRepo.dir, parentBranch: "topic/t-exhaust",
+      repo: repoObj,
+      harness: new FakeHarness(), pipeline: makePipeline(),
+      project: { orchestrationFolder: ".factory" } as ProjectConfig, prompts: {},
+      wave: 1, iteration: 1,
+    });
+    expect(ended.merged).toBe(false);
+    const journal = fs.readFileSync(path.join(taskDir, "journal.ndjson"), "utf8");
+    expect(journal).toContain("merge_failed_terminal");
+    expect(journal).toContain("merge attempts exhausted");
+    expect(journal).not.toContain("stranded_no_owner");
+  });
+});

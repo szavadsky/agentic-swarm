@@ -213,6 +213,33 @@ export function buildTargetCommand(
 
   return parts.join(" ");
 }
+/**
+ * Sanitizes an architect-supplied corrected target (merge-verify consult,
+ * unknown-gate recovery) into a DeveloperTarget, or undefined when the
+ * shape is unusable. Accepts exactly one variant: {gate: <non-empty id>},
+ * {selectors: <non-empty string array>} (expectRed optional), or
+ * {command, customTarget: true}. Never throws; never returns a bare id
+ * that would execute as a shell command (the 127 class).
+ */
+export function sanitizeDeveloperTarget(raw: unknown): DeveloperTarget | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const t = raw as Record<string, unknown>;
+  if (typeof t["gate"] === "string" && t["gate"].trim()) {
+    return { gate: t["gate"].trim() };
+  }
+  if (Array.isArray(t["selectors"])) {
+    const selectors = t["selectors"].filter((s): s is string => typeof s === "string" && s.trim().length > 0).map((s) => s.trim());
+    if (selectors.length === 0) return undefined;
+    const expectRed = Array.isArray(t["expectRed"])
+      ? t["expectRed"].filter((s): s is string => typeof s === "string" && s.trim().length > 0).map((s) => s.trim())
+      : [];
+    return { selectors, expectRed };
+  }
+  if (t["customTarget"] === true && typeof t["command"] === "string" && t["command"].trim()) {
+    return { command: t["command"], customTarget: true as const };
+  }
+  return undefined;
+}
 
 /**
  * Augments a gate command with the test runner's JUnit argument pointing to junitPath.

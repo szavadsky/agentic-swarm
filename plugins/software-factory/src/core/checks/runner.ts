@@ -69,6 +69,17 @@ function targetDetail(
 }
 
 /**
+ * True when a gate/check failure summary is the unknown-gate-target class:
+ * the item's `{gate: <id>}` target names no configured infra gate, so the
+ * failure is a stale target spec — not a code or environment defect. The
+ * merge loop consults once with the known-gate list and applies the
+ * architect's corrected target instead of retrying the bad id.
+ */
+export function isUnknownGateTargetError(summary: string | undefined): boolean {
+  return typeof summary === "string" && summary.includes("Unknown gate target:");
+}
+
+/**
  * Prod-line count for size checks: tracked numstat plus full line counts of
  * untracked files matching the globs (each untracked file counts as added).
  * Untracked union only applies for live-worktree heads (undefined/"HEAD").
@@ -108,7 +119,6 @@ async function scopeChangedFiles(
 function isAddedEntry(f: ChangedFile): boolean {
   return f.status === "A" || f.status === "?";
 }
-
 
 /**
  * Drops engine record paths under the orchestration folder (step records, runs, etc.).
@@ -168,9 +178,7 @@ export async function runCheck(name: string, ctx: CheckContext): Promise<CheckRe
   const clock = getClock();
   const startWall = clock.now();
   const startMono = clock.monotonic();
-
   let res = await executeCheck(name, ctx);
-
   if (!res.ok) {
     const { suspendDetected, gapMs } = detectSuspend(startWall, startMono, clock);
     if (suspendDetected) {

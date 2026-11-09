@@ -504,6 +504,10 @@ export interface DecisionArtifact {
   reason?: string;
   question?: string;
   planDelta?: string;
+  /** Corrected developer target from a merge-verify consult: applied to the
+   * merge verification instead of the record's stale target (unknown-gate
+   * recovery, §7). One of {gate}, {selectors}, or {command, customTarget}. */
+  target?: DeveloperTarget;
   timestamp: string;
   concerns?: Concern[];
   remarkable?: RemarkableDecision[];
