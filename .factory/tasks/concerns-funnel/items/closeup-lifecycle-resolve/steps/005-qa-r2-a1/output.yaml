@@ -1,0 +1,68 @@
+status: approved
+summary: "Independent QA: red reproduced at test-first commit (8/8 assertion
+  failures, no collection errors), target 8/8 green, typecheck clean, full suite
+  441 pass/2 skip/0 fail; test file byte-identical to test-first commit (no
+  weakening). Prior fix verified independently: filtered epic push copies only
+  the named concern (0 remarkables/0 questions) while the unfiltered
+  end-of-child path is unchanged. No fix disposition remains: 1 architect
+  (mid-flow confirmed propagate targets the child worktree's stale parent
+  snapshot, risking add/add merge conflicts) and 2 optional test-coverage gaps."
+suggestions:
+  - id: midflow-parent-worktree
+    disposition: architect
+    summary: Mid-flow accept+propagate writes to
+      childWt/<orchestration>/<parent>/concerns (stale snapshot), not the live
+      parent; likely add/add conflict at epic integration
+    detail: "Unchanged from QA r1 and still reachable: engine.ts:234 sets
+      childTaskDir=childWt/.factory/<parent>/<epic>, so step-runner.ts:311
+      path.dirname(taskDir) resolves to the parent task dir inside the child
+      worktree, and the existence check passes because the epic item exists on
+      the parent snapshot. The copies are then committed on the child branch by
+      runAgentStep's step commit. End-of-child propagation (engine.ts:273)
+      separately adds the same concern fingerprint to the live parent branch;
+      because both copies are new files with different timestamps
+      (createdAt/updatedAt/source.lastSeen), the later mergeParentInto
+      (merge-path.ts:69) sees add/add conflicts for
+      .factory/<parent>/concerns/<id>.yaml, forcing an integrate step or failing
+      the epic merge. The target test nests the child under the parent in one
+      worktree (test/engine/closeup-lifecycle-resolve.test.ts:222), masking prod
+      topology. Architect must decide: plumb the live parent taskDir/parent.path
+      (and the parentCloseupLocks write lock) into child step context, or defer
+      confirmed propagate entirely to end-of-child propagation and adjust the
+      test contract. Note this is a cross-worktree boundary/interface decision,
+      not a routine bug."
+    location:
+      file: plugins/software-factory/src/core/flows/step-runner.ts
+      line: 311
+  - id: epic-filter-regression-test
+    disposition: optional
+    summary: Fix-round behavior (filtered push skips remarkables/questions,
+      exact-match emission guard) has no committed regression test
+    detail: "The fix is behaviorally correct (independently probed:
+      concernIds=[c-keep] copied exactly 1 concern, 0 rm-* files, 0 forwarded
+      questions; unfiltered push still copied 2 concerns + 1 remarkable + 1
+      question). But the developer verified with temporary test files that were
+      removed, and the propagate target test filters parent concerns by the c-
+      prefix (test/engine/closeup-lifecycle-resolve.test.ts:270), so a
+      regression reintroducing unfiltered remarkables/questions would still
+      pass. Suggest extending the target file with a filtered-push case
+      asserting zero remarkables and zero steer questions, plus an item slug
+      like concern-foo cross-emitting a resolution that still journals
+      concern_resolution_ignored."
+    location:
+      file: plugins/software-factory/test/engine/closeup-lifecycle-resolve.test.ts
+      line: 270
+  - id: untested-carry-honored-paths
+    disposition: optional
+    summary: Carry-via-decision and honored architect-wave-report
+      singular-resolution paths remain untested (deferred from QA r1)
+    detail: applyConcernResolution's carry branch (pending carry, status unchanged)
+      and the honored architect-closeup/architect-wave-report concernResolution
+      branch have no coverage; only consult-resolve honored and item-consult
+      ignored paths are tested. Propagate-accept still asserts only
+      pendingResolution cleared, not the child status/disposition. Non-blocking,
+      but locking these contracts now prevents silent drift in the same
+      lifecycle area.
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 302
