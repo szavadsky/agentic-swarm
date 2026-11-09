@@ -11,6 +11,8 @@ import { readYaml, writeYamlAtomic } from "./records/io.js";
 export type ConcernInput = Pick<Concern, "kind" | "summary" | "location" | "affects"> &
   Partial<Pick<Concern, "detail" | "severity">>;
 export interface ConcernStoreContext { taskDir: string; taskWt: string; repo: Repo; now?: () => Date }
+/** `repo` is only needed when the aggregation itself commits. */
+export type ConcernWriteContext = Omit<ConcernStoreContext, "repo"> & { repo?: Repo };
 export interface ConcernResolution { id: string; action: "resolve" | "carry" | "propagate"; note?: string }
 
 type Obj = Record<string, any>;
@@ -95,7 +97,7 @@ async function legacyConcern(dir: string, input: ConcernInput): Promise<{ file: 
 
 /** Merges producer concerns and remarkable decisions, one taskWt file per fingerprint. */
 export async function aggregateConcerns(
-  ctx: ConcernStoreContext & { source: ConcernSource }, concerns: ConcernInput[], remarkables: RemarkableDecision[] = [], opts: { at?: string; commit?: boolean; dirty?: boolean } = {}
+  ctx: ConcernWriteContext & { source: ConcernSource }, concerns: ConcernInput[], remarkables: RemarkableDecision[] = [], opts: { at?: string; commit?: boolean; dirty?: boolean } = {}
 ): Promise<StoredConcernArtifact[]> {
   for (const c of concerns) {
     if (!KINDS.has(c.kind)) throw new Error(`Unknown concern kind: ${String(c.kind)}`);
@@ -133,7 +135,10 @@ export async function aggregateConcerns(
     return out;
   });
   opts.dirty = dirty;
-  if (dirty && opts.commit !== false) await commitAll(ctx.repo, ctx.taskWt, `factory: concerns ${ctx.source.record}`);
+  if (dirty && opts.commit !== false) {
+    if (!ctx.repo) throw new Error("aggregateConcerns requires repo when committing");
+    await commitAll(ctx.repo, ctx.taskWt, `factory: concerns ${ctx.source.record}`);
+  }
   return stored;
 }
 
