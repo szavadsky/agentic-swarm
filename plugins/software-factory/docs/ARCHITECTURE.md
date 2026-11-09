@@ -70,7 +70,7 @@ plugins/software-factory/
     records/        step records, yaml io, ajv, repair, citation verify
     git/            naming, worktrees, repo mutex, commit, merge path, HEAD guard
     derive/         task/iteration/wave/item state from records + git
-    plan/           plan limits, edits validate/apply, scheduler
+    plan/           plan limits, edits validate/apply, failure-blocker (wave order/readiness derive in derive/wave.ts)
     flows/          ingest, item step machine, iteration, epic, consults, seams
     checks/         gates (+ratchet), targets (junit), red-test, test-diff, size, scope, custom
     steer.ts        mailbox

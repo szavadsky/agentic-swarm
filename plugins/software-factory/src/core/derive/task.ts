@@ -14,6 +14,7 @@ import type {
   TriageArtifact,
 } from "../artifacts.js";
 import { readYaml, writeYamlAtomic } from "../records/io.js";
+import { findOkCommittedRecord } from "../records/step-record.js";
 import { deriveItemState, type DerivedItemState } from "./item.js";
 import { deriveWaveState, type DerivedWaveState } from "./wave.js";
 import { scanSpendFromDisk, type SpendTotals } from "../budget.js";
@@ -57,6 +58,35 @@ export interface DerivedTaskState {
 }
 
 /**
+ * Counts committed close-up iterations (§8.4): the number of `closeup-N.yaml`
+ * files backed by an ok committed `architect-closeup-N` record — the same
+ * done-ness rule the engine uses (§8.4.1). An uncommitted or missing record
+ * means the close-up never landed, so it does not advance the iteration.
+ */
+export async function countCommittedCloseupIterations(opts: {
+  taskDir: string;
+  taskWt?: string;
+}): Promise<number> {
+  const { taskDir, taskWt } = opts;
+  if (!fs.existsSync(taskDir)) return 0;
+  const runsDir = path.join(taskDir, "runs");
+  const entries = await fs.promises.readdir(taskDir, { withFileTypes: true });
+  let count = 0;
+  for (const ent of entries) {
+    if (!ent.isFile() || !ent.name.startsWith("closeup-") || !ent.name.endsWith(".yaml")) continue;
+    const m = /^closeup-(\d+)\.yaml$/.exec(ent.name);
+    // Skip non-canonical names (closeup-latest.yaml) and N < 1: engine
+    // iterations start at 1.
+    if (!m) continue;
+    const n = parseInt(m[1]!, 10);
+    if (!Number.isFinite(n) || n < 1) continue;
+    const closeupOk = await findOkCommittedRecord(runsDir, `architect-closeup-${n}`, taskWt);
+    if (closeupOk) count++;
+  }
+  return count;
+}
+
+/**
  * Derives comprehensive task state from disk and git (§6.3 Invariant 4).
  * Pure derivation; state.yaml is a materialized view never read for decisions.
  */
@@ -84,14 +114,15 @@ export async function deriveTaskState(opts: {
     }
   }
 
-  // 2. Iteration count from existing closeup-*.yaml (§8.4)
-  let existingCloseupsCount = 0;
+  // 2. Iteration count from committed close-ups (§8.4): only a closeup-N.yaml
+  // backed by an ok committed architect-closeup-N record advances the
+  // iteration — the same done-ness rule the engine uses (§8.4.1).
+  const existingCloseupsCount = await countCommittedCloseupIterations({ taskDir, taskWt });
   let lastCloseup: PlanCloseupArtifact | undefined;
   if (fs.existsSync(taskDir)) {
     const entries = await fs.promises.readdir(taskDir, { withFileTypes: true });
     for (const ent of entries) {
       if (ent.isFile() && ent.name.startsWith("closeup-") && ent.name.endsWith(".yaml")) {
-        existingCloseupsCount++;
         const cuPath = path.join(taskDir, ent.name);
         try {
           const cu = await readYaml<PlanCloseupArtifact>(cuPath);
@@ -490,6 +521,12 @@ export async function deriveDeadSteerFiles(
 /**
  * Materializes state.yaml for humans (§6.3 Invariant 4).
  * Never read for decisions.
+ *
+ * state.yaml is a lagging materialized view: it refreshes only at
+ * tick/step/batch boundaries (via {@link refreshStateYaml}), never after
+ * every journal or decision write. Readers may see a state that predates the
+ * latest on-disk records by up to one boundary — always re-derive from
+ * records + git for decisions.
  */
 export async function materializeStateYaml(taskDir: string, state: StateArtifact): Promise<void> {
   const statePath = path.join(taskDir, "state.yaml");
@@ -499,7 +536,9 @@ export async function materializeStateYaml(taskDir: string, state: StateArtifact
 /**
  * Derives current task state and refreshes state.yaml (ToySmoke: state.yaml
  * must refresh after every step, since a whole iteration runs within one tick).
- * Never read for decisions.
+ * Never read for decisions: like {@link materializeStateYaml}, the written
+ * file is a lagging view refreshed here, not after every journal/decision
+ * write — decisions always re-derive from records + git.
  */
 export async function refreshStateYaml(opts: {
   taskDir: string;

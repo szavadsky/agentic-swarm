@@ -36,6 +36,7 @@ import { runCheck } from "../checks/runner.js";
 import { tailCap, type CheckContext } from "../checks/types.js";
 import type { BudgetTracker } from "../budget.js";
 import type { Semaphore } from "../mutex.js";
+import { commitAll } from "../git/commit.js";
 import { readYaml, readText, writeYamlAtomic } from "../records/io.js";
 
 export interface ItemMachineOptions {
@@ -66,6 +67,51 @@ export interface ItemMachineTickResult {
   fixRound?: number;
   consulted?: boolean;
 }
+
+const DEFAULT_REVIEW_ALLOWED = ["fix", "optional", "architect", "human-awareness", "human-async", "human-stop"];
+
+/**
+ * Persists a terminal `abandon` decision for an item whose consults are
+ * exhausted (§12.2). No `afterRecord` pointer: the decision stays fresh and
+ * sticky (derive maps it to `failed`), so the wave loop re-derives the item
+ * as `failed` instead of looping it `running` forever. Journal, refresh
+ * state.yaml (lags journal by design), return failed. Callers MUST keep
+ * their existing journal event too.
+ */
+async function persistConsultsExhaustedAbandon(opts: {
+  taskDir: string;
+  task: string;
+  parentBranch: string;
+  taskWt: string;
+  pipeline: PipelineConfig;
+  itemSlug: string;
+  repo: any;
+}): Promise<void> {
+  const { taskDir, task, parentBranch, taskWt, pipeline, itemSlug, repo } = opts;
+  const decisionsDir = path.join(taskDir, "decisions");
+  await fs.promises.mkdir(decisionsDir, { recursive: true });
+  let nextSeq = 1;
+  const existing = await fs.promises.readdir(decisionsDir);
+  for (const name of existing) {
+    const m = /^(\d{3})-/.exec(name);
+    if (m) nextSeq = Math.max(nextSeq, parseInt(m[1]!, 10) + 1);
+  }
+  const decisionFileName = `${String(nextSeq).padStart(3, "0")}-item-${itemSlug}-abandon.yaml`;
+  const decisionPath = path.join(decisionsDir, decisionFileName);
+  await writeYamlAtomic(decisionPath, {
+    id: `decision-${itemSlug}-consults-exhausted-${Date.now()}`,
+    context: "item",
+    item: itemSlug,
+    decision: "abandon",
+    reason: "consults-exhausted",
+    rationale: "Consult budget exhausted with no progress; abandoning item so the wave gate absorbs it as failed",
+    timestamp: new Date().toISOString(),
+  });
+  await git(taskWt, ["add", "-A"], { allowFail: true });
+  await commitAll(repo, taskWt, `factory(${itemSlug}): consults exhausted, abandon`);
+  await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
+}
+
 
 /**
  * Returns default flow configuration for a given kind (§8.3).
@@ -263,11 +309,13 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
         itemState.consultCount,
         maxConsults,
         Boolean(budgetCtx.diffstat.trim()),
-        itemState.decisionFingerprints
+        itemState.decisionFingerprints,
+        itemState.decisionFingerprints[itemState.decisionFingerprints.length - 1]
       );
 
       if (cCheck.exhausted || cCheck.noProgress) {
         await appendJournal(taskDir, { type: "item_failed_consults_exhausted", item: itemSlug });
+        await persistConsultsExhaustedAbandon({ taskDir, task, parentBranch, taskWt, pipeline, itemSlug, repo });
         return { done: true, status: "failed" };
       }
 
@@ -419,10 +467,12 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
             itemState.consultCount,
             maxConsults,
             hasDiff,
-            itemState.decisionFingerprints
+            itemState.decisionFingerprints,
+            itemState.decisionFingerprints[itemState.decisionFingerprints.length - 1]
           );
           if (cCheck.exhausted || cCheck.noProgress) {
             await appendJournal(taskDir, { type: "item_failed_consults_exhausted", item: itemSlug });
+            await persistConsultsExhaustedAbandon({ taskDir, task, parentBranch, taskWt, pipeline, itemSlug, repo });
             return { done: true, status: "failed" };
           }
 
@@ -539,10 +589,12 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
           itemState.consultCount,
           maxConsults,
           Boolean(failureCtx.diffstat.trim()),
-          itemState.decisionFingerprints
+          itemState.decisionFingerprints,
+          itemState.decisionFingerprints[itemState.decisionFingerprints.length - 1]
         );
         if (cCheck.exhausted || cCheck.noProgress) {
           await appendJournal(taskDir, { type: "item_failed_consults_exhausted", item: itemSlug });
+          await persistConsultsExhaustedAbandon({ taskDir, task, parentBranch, taskWt, pipeline, itemSlug, repo });
           return { done: true, status: "failed" };
         }
 
@@ -820,7 +872,7 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
   const reviewAllowed =
     pipeline.reviewPolicy?.allowedDispositions ??
     pipeline.reviewPolicy?.[currentStep.agent] ??
-    ["fix", "optional", "architect", "human-awareness", "human-async"];
+    DEFAULT_REVIEW_ALLOWED;
 
   const promptVars: Record<string, string> = {
     assignment: assignmentYaml,
@@ -896,12 +948,14 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
     beforeChecks,
     afterChecks,
     writeArtifact: async (output: unknown) => {
-      // Persist human-async questions atomically with the review record (Finding 23)
+      // Persist human-async + human-stop questions atomically with the
+      // review record (Finding 23): both dispositions block the item, so
+      // both get the same blocking question shape.
       if (output && typeof output === "object" && "suggestions" in (output as any)) {
         const rev = output as ReviewArtifact;
-        const asyncQuestions = rev.suggestions?.filter((s) => s.disposition === "human-async");
-        if (asyncQuestions && asyncQuestions.length > 0) {
-          for (const q of asyncQuestions) {
+        const blockingQuestions = rev.suggestions?.filter((s) => s.disposition === "human-async" || s.disposition === "human-stop");
+        if (blockingQuestions && blockingQuestions.length > 0) {
+          for (const q of blockingQuestions) {
             const cleanSuggestionId = (q.id || "s").replace(/[^a-z0-9_-]/gi, "-");
             const qId = `q-${itemSlug}-${cleanSuggestionId}`;
             const targetWt = opts.rootTaskWt ?? taskWt;
@@ -909,7 +963,7 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
             await writeQuestion(targetWt, targetDir, {
               id: qId,
               ref: itemSlug,
-              disposition: "human-async",
+              disposition: q.disposition,
               question: q.detail || q.summary,
               blocks: [itemSlug],
             });
@@ -935,32 +989,48 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
     },
   });
 
-  // Refresh state.yaml after every step (ToySmoke: budget/status visibility)
-  await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
-  // 7. Run seam hooks after:item.step.{id} (§8.10)
-  await runSeamHooks({
-    phase: "after",
-    seam: `item.step.${currentStep.id}`,
-    cwd: childWt,
-    baseRef: parentBranch,
-    kind: itemState.kind,
-    isEscalated: itemState.isEscalated,
-    pipeline,
-    project,
-    repo,
-    harness,
-    prompts,
-    taskDir,
-    item: itemSlug,
-  });
-
-  // Check if any human-async suggestions blocked the item
-  const hasAsync = (stepRes.output as any)?.suggestions?.some(
-    (s: any) => s.disposition === "human-async"
+  // Route `architect`-disposition suggestions to the consult path: when a
+  // review carries architect suggestions and no fix, trigger a consult with
+  // the suggestion text as feedback (never silently merge).
+  {
+    const out: any = stepRes.output;
+    const suggestions: any[] | undefined = out?.suggestions;
+    const hasFix = Array.isArray(suggestions) && suggestions.some((s) => s?.disposition === "fix");
+    const architectNotes = Array.isArray(suggestions) ? suggestions.filter((s) => s?.disposition === "architect") : [];
+    if (stepRes.ok && architectNotes.length > 0 && !hasFix) {
+      const feedbackText = architectNotes.map((s) => `- [ARCHITECT] ${s.summary ?? ""}${s.detail ? `: ${s.detail}` : ""}`).join("\n");
+      const lastDir = itemState.records[itemState.records.length - 1]?.dirName;
+      await runItemConsult({
+        task,
+        item: itemSlug,
+        assignmentYaml: JSON.stringify(itemState.assignment ?? {}),
+        priorAttemptsText: `Review requested architect input on ${currentStep.id}`,
+        diffText: "",
+        feedbackText,
+        ...(lastDir ? { afterRecord: lastDir } : {}),
+        taskDir,
+        taskWt,
+        repo,
+        harness,
+        pipeline,
+        project,
+        prompts,
+        architectSessionId,
+        turnsSemaphore,
+        budgetTracker,
+      });
+      await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
+      return { done: false, status: "running", stepRan: currentStep.id, consulted: true };
+    }
+  }
+  // Check if any human-async/human-stop suggestions blocked the item
+  const hasBlocking = (stepRes.output as any)?.suggestions?.some(
+    (s: any) => s.disposition === "human-async" || s.disposition === "human-stop"
   );
-  if (hasAsync) {
+  if (hasBlocking) {
     return { done: true, status: "blocked", stepRan: currentStep.id };
   }
+
 
   // Check if this was the last step and succeeded
   const isLastStep = targetStepIndex === steps.length - 1;

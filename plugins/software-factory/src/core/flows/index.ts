@@ -22,5 +22,5 @@ export {
 } from "./ingest.js";
 export type { IngestParams, IngestResult, ContextPackParams } from "./ingest.js";
 
-export { runIteration } from "./iteration.js";
+export { runIteration, enforceCloseupTrustGate } from "./iteration.js";
 export type { IterationParams, IterationResult } from "./iteration.js";

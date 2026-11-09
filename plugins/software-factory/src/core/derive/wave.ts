@@ -11,6 +11,10 @@ export interface DerivedWaveState {
   failed: DerivedItemState[];
   blocked: DerivedItemState[];
   superseded: DerivedItemState[];
+  /** Pending items waiting on unmerged, non-failed/non-blocked deps (§8.2). Never silent: holds both gates open. */
+  waiting: DerivedItemState[];
+  /** Full transitive failure-blocked slug set (fixpoint over `items`), in item order. */
+  failureBlocked: string[];
   isComplete: boolean;
   canMerge: boolean;
 }
@@ -35,6 +39,7 @@ export function deriveWaveState(opts: {
   const running: DerivedItemState[] = [];
   const blocked: DerivedItemState[] = [];
   const runnable: DerivedItemState[] = [];
+  const waiting: DerivedItemState[] = [];
   // Index all items by slug for dependency lookup
   const allBySlug = new Map<string, DerivedItemState>();
   for (const it of items) {
@@ -101,19 +106,22 @@ export function deriveWaveState(opts: {
       } else if (depsOk) {
         runnable.push(it);
       } else {
-        // Dependencies not yet merged, wait
+        // Deps not yet merged (none failed/blocked): dep-waiting, still gated.
+        waiting.push(it);
       }
     }
   }
 
-  // A wave is ready to merge if no items are currently runnable or running, and there is at least one ready item.
-  // A wave is complete if every item in it is terminal (merged, failed, superseded) or blocked.
+  // A wave is ready to merge if no items are currently runnable, running, or
+  // dep-waiting, and there is at least one ready item. A dep-waiting item may
+  // still become runnable once its deps merge, so it holds both gates open.
+  // A wave is complete only with no runnable, running, ready, or waiting items.
   // NOTE: a `ready` item is wave-terminal (it merges right after the tick
   // loop) but NOT iteration-terminal: plan-close-up must still refuse while
   // any item is merely `ready` and unmerged.
   const hasActiveWork = running.length > 0 || runnable.length > 0;
-  const canMerge = !hasActiveWork && ready.length > 0;
-  const isComplete = !hasActiveWork && ready.length === 0;
+  const canMerge = !hasActiveWork && waiting.length === 0 && ready.length > 0;
+  const isComplete = !hasActiveWork && waiting.length === 0 && ready.length === 0;
 
   return {
     wave,
@@ -125,6 +133,8 @@ export function deriveWaveState(opts: {
     failed,
     blocked,
     superseded,
+    waiting,
+    failureBlocked: items.filter((it) => failureBlocked.has(it.slug)).map((it) => it.slug),
     isComplete,
     canMerge,
   };

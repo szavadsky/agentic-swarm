@@ -192,6 +192,9 @@ export async function runChildTask(
   });
   await git(parent.path, ["add", "-A"], { allowFail: true });
   await commitAll(repo, parent.path, `factory: record epic ${epicSlug} child status ${childStatus}`);
+  // state.yaml lags journal by design: it is a materialized view refreshed
+  // here (after this decision write), never read for decisions.
+  await refreshStateYaml({ taskDir: parent.taskDir, task: path.basename(parent.taskDir), parentBranch: parent.branch, taskWt: parent.path, pipeline });
 
     return {
       status: itRes.status === "done" ? "done" : itRes.status === "blocked" || itRes.status === "stopped" ? "blocked" : "failed",

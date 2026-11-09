@@ -8,9 +8,9 @@ import type {
   SteerItemArtifact,
 } from "../artifacts.js";
 import type { Harness } from "../../harness/types.js";
-import { writeYamlAtomic, readYaml, readText } from "../records/io.js";
+import { writeYamlAtomic, readText } from "../records/io.js";
 import { writeQuestion } from "../steer.js";
-import { runAgentStep, getNextStepAttempt } from "./step-runner.js";
+import { runAgentStep } from "./step-runner.js";
 import { appendJournal } from "../journal.js";
 import type { Semaphore } from "../mutex.js";
 import type { BudgetTracker } from "../budget.js";
@@ -261,9 +261,21 @@ export async function runNonItemConsult(
   let decisionArtifact: DecisionArtifact | undefined;
   let decisionPath = "";
 
+  // Sequenced stepId per seam (S3/S4): consults never hit the step-runner
+  // done-ness reuse — every consult fires a fresh architect turn and writes
+  // a new sequential decision file. Sequence from existing decision files
+  // for the same seam so restarts resume without clobbering.
   const seamClean = seam.replace(/[^a-zA-Z0-9_-]/g, "_");
-  const consultStepId = `consult-${seamClean}`;
-  const consultAttempt = getNextStepAttempt(runsDir, consultStepId, pipeline.limits?.maxInterruptions ?? 3);
+  let consultSeq = 1;
+  if (fs.existsSync(decisionsDir)) {
+    const existing = await fs.promises.readdir(decisionsDir);
+    for (const name of existing) {
+      const m = new RegExp(`^\\d{3}-nonitem-${seamClean}-(\\d+)\\.yaml$`).exec(name);
+      if (m) consultSeq = Math.max(consultSeq, parseInt(m[1]!, 10) + 1);
+    }
+  }
+  const consultStepId = `consult-${seamClean}-${consultSeq}`;
+  const consultAttempt = 1;
 
   const stepRes = await runAgentStep({
     task,
@@ -290,20 +302,10 @@ export async function runNonItemConsult(
     writeArtifact: async (output: unknown) => {
       const raw = output as any;
       const decisionVal = raw?.decision ?? "accept-with-debt";
-      let existingDecisionFile: string | undefined;
-      if (fs.existsSync(decisionsDir)) {
-        const files = await fs.promises.readdir(decisionsDir);
-        const match = files.filter((f) => f.includes(`nonitem-${seamClean}.yaml`) || f.includes("nonitem.yaml")).sort().pop();
-        if (match) existingDecisionFile = match;
-      }
-      if (existingDecisionFile) {
-        decisionPath = path.join(decisionsDir, existingDecisionFile);
-        try {
-          decisionArtifact = await readYaml(decisionPath);
-        } catch {}
-      }
+      // One decision file per consult turn: no clobber, no load-and-return
+      // of a prior decision. Sequenced consults each write their own file,
+      // so consultCount stays truthful.
       if (decisionArtifact) return;
-
       let nextSeq = 1;
       if (fs.existsSync(decisionsDir)) {
         const existing = await fs.promises.readdir(decisionsDir);
@@ -324,9 +326,11 @@ export async function runNonItemConsult(
         debt: raw?.debt,
         reason: raw?.reason,
         question: raw?.question,
+        outline: raw?.outline,
+        outlines: raw?.outlines,
       };
 
-      const decisionFileName = `${String(nextSeq).padStart(3, "0")}-nonitem.yaml`;
+      const decisionFileName = `${String(nextSeq).padStart(3, "0")}-nonitem-${seamClean}-${consultSeq}.yaml`;
       decisionPath = path.join(decisionsDir, decisionFileName);
       await writeYamlAtomic(decisionPath, decisionArtifact);
     },

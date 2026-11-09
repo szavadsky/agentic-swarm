@@ -177,6 +177,15 @@ describe("Engine: human-async disposition & steering (§8.7, §8.8)", () => {
       ok: true,
       data: { id: "dec-1", context: "wave", decision: "continue", timestamp: new Date().toISOString() },
     });
+    // Resume re-runs wave close-up + report (new merge landed in run 2).
+    harness.scriptOutcome(`${task}/runs/wave-close-up-1-1#a2`, {
+      ok: true,
+      data: { wave: 1, iteration: 1, status: "complete", summary: "Wave report (resume)" },
+    });
+    harness.scriptOutcome(`${task}/runs/architect-wave-report-1-1#a2`, {
+      ok: true,
+      data: { id: "dec-r", context: "wave", decision: "continue", timestamp: new Date().toISOString() },
+    });
     harness.scriptOutcome(`${task}/runs/plan-close-up-1#a1`, {
       ok: true,
       data: { iteration: 1, status: "complete", summary: "Plan satisfied" },

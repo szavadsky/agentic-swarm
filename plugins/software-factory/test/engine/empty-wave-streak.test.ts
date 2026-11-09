@@ -128,10 +128,10 @@ describe("D4: empty-wave streak consults architect instead of another empty wave
         suggestions: [{ id: "s1", disposition: "human-async", summary: "Which API?", detail: "Which API should e1 use?" }],
       },
     });
-    // No wave-close-up scripted: with maxEmptyWaves=1 the consult must fire
-    // INSTEAD of the close-up + report ceremony.
+    // Empty-wave exits ALWAYS run the current wave's close-up/report
+    // ceremony first: the consult fires, then the ceremony still runs.
     let consultCalled = false;
-    harness.scriptOutcome(`${task}/runs/consult-empty-waves-1#a1`, () => {
+    harness.scriptOutcome(`${task}/runs/consult-empty-waves-1-1#a1`, () => {
       consultCalled = true;
       return {
         ok: true,
@@ -143,6 +143,14 @@ describe("D4: empty-wave streak consults architect instead of another empty wave
           timestamp: new Date().toISOString(),
         },
       };
+    });
+    harness.scriptOutcome(`${task}/runs/wave-close-up-1-1#a1`, {
+      ok: true,
+      data: { status: "complete", summary: "empty wave closed with ceremony" },
+    });
+    harness.scriptOutcome(`${task}/runs/architect-wave-report-1-1#a1`, {
+      ok: true,
+      data: { id: "dec-c", context: "wave", decision: "continue", timestamp: new Date().toISOString() },
     });
     harness.scriptOutcome(`${task}/runs/plan-close-up-1#a1`, {
       ok: true,
@@ -162,7 +170,8 @@ describe("D4: empty-wave streak consults architect instead of another empty wave
     const journal = fs.readFileSync(path.join(deployedTaskDir, "journal.ndjson"), "utf8");
     expect(journal).toContain("empty_wave_streak");
     expect(consultCalled).toBe(true);
-    expect(journal).not.toContain("wave-close-up-1-1");
+    expect(journal).toContain("wave-close-up-1-1");
+    expect(journal).toContain("empty_wave_exit");
     expect(res.status).toBe("blocked");
   });
 });

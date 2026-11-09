@@ -415,6 +415,15 @@ describe("Engine: awareness never stalls; async block journals item + question",
       fs.writeFileSync(path.join(run.cwd, "file.txt"), "option A code");
       return { ok: true, data: { status: "ok", summary: "Option A implemented" } };
     });
+    // Resume re-runs wave close-up + report (new merge landed in run 2).
+    harness.scriptOutcome(`${task}/runs/wave-close-up-1-1#a2`, {
+      ok: true,
+      data: { wave: 1, iteration: 1, status: "complete", summary: "Wave 1 report (resume)" },
+    });
+    harness.scriptOutcome(`${task}/runs/architect-wave-report-1-1#a2`, {
+      ok: true,
+      data: { id: "dec-r", context: "wave", decision: "continue", timestamp: new Date().toISOString() },
+    });
 
     const res1 = await runTask(
       { harness, repo: repoObj, project, pipelineFor: async () => pipeline, prompts },

@@ -149,7 +149,6 @@ export async function deriveItemState(opts: {
 
   const records: ItemStepRecordInfo[] = [];
   const recordFailingFingerprints = new Map<string, string>();
-  let interruptionCount = 0;
   let lastFailingCheckFingerprint: string | undefined;
 
   if (fs.existsSync(stepsDir)) {
@@ -214,10 +213,6 @@ export async function deriveItemState(opts: {
             throw new Error(`Corrupt step record checks at ${checksPath}: ${err?.message ?? err}`);
           }
         }
-      }
-
-      if (meta.status === "interrupted") {
-        interruptionCount++;
       }
 
       records.push({
@@ -395,31 +390,39 @@ export async function deriveItemState(opts: {
       if (d === "escalate") {
         isEscalated = true;
       }
-    } else if (decisionIsFresh) {
+    } else if (d === "abandon" || d === "split") {
+      // Terminal and sticky: the LATEST decision revokes by replacement, so no
+      // freshness check — a stray post-decision record never resurrects the item.
       if (d === "abandon") {
         isAbandoned = true;
-      } else if (d === "split") {
+      } else {
         isSplit = true;
-      } else if (d === "accept-with-debt") {
-        isAcceptedWithDebt = true;
       }
+    } else if (decisionIsFresh && d === "accept-with-debt") {
+      isAcceptedWithDebt = true;
     }
   }
+
+  // Interruptions count within the current decision series only (like attempts):
+  // a fresh retry series resets the interruption budget along with attempts.
+  const interruptionCount = seriesRecords.filter((r) => r.meta.status === "interrupted").length;
 
   // 6. Determine status from flow configuration (Finding 8: shared source of truth)
   let status: DerivedItemState["status"] = "pending";
   if (isMerged) {
     status = "merged";
+  } else if (isAbandoned) {
+    // The LATEST abandon/split decision overrides a recorded epic child
+    // close-up: consult beats a stale child-closeup.yaml (§8.5/§8.6).
+    status = "failed";
+  } else if (isSplit) {
+    status = "superseded";
   } else if (epicChildStatus === "failed") {
     status = "failed";
   } else if (epicChildStatus === "blocked") {
     status = "blocked";
   } else if (epicChildStatus === "done") {
     status = "ready";
-  } else if (isAbandoned) {
-    status = "failed";
-  } else if (isSplit) {
-    status = "superseded";
   } else if (openSteerQuestion) {
     status = "blocked";
   } else if (isAcceptedWithDebt) {

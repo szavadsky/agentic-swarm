@@ -8,7 +8,7 @@ export function generateReviewSchema(
   const dispositions =
     allowedDispositions.length > 0
       ? allowedDispositions
-      : ["fix", "optional", "architect", "human-awareness", "human-async"];
+      : ["fix", "optional", "architect", "human-awareness", "human-async", "human-stop"];
 
   return {
     $schema: "http://json-schema.org/draft-07/schema#",

@@ -120,7 +120,7 @@ export function resolveStepSchema(
     return generateReviewSchema(
       allowedDispositions && allowedDispositions.length > 0
         ? allowedDispositions
-        : ["fix", "optional", "architect", "human-awareness", "human-async"]
+        : ["fix", "optional", "architect", "human-awareness", "human-async", "human-stop"]
     );
   }
 

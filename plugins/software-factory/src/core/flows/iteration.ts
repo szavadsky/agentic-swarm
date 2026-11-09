@@ -28,9 +28,9 @@ import { runItemConsult, runNonItemConsult } from "./consults.js";
 import { isContextPackStale, isContextPackEnabled, runContextPackStep } from "./ingest.js";
 import { mergeItem } from "./merge-path.js";
 import { tickItemMachine } from "./item-machine.js";
-import { deriveItemState } from "../derive/item.js";
-import { deriveWaveState, isIterationTerminal, nonTerminalWaveItems } from "../derive/wave.js";
-import { refreshStateYaml } from "../derive/task.js";
+import { deriveItemState, type DerivedItemState } from "../derive/item.js";
+import { deriveWaveState, isIterationTerminal, nonTerminalWaveItems, type DerivedWaveState } from "../derive/wave.js";
+import { refreshStateYaml, countCommittedCloseupIterations } from "../derive/task.js";
 import { appendJournal, readJournal } from "../journal.js";
 import { loadCriteriaBundle, formatDispositionsSection } from "../prompts.js";
 import { checkPlanReviewRounds, checkIterations, checkAmendments } from "../loops.js";
@@ -234,6 +234,135 @@ async function readEmptyStreak(taskDir: string, iteration: number): Promise<numb
 }
 
 /**
+ * HEADLINE reconciliation invariant (§8.4.5): every non-terminal item must
+ * have an owner in the current wave/iteration. Orphan = a past-wave
+ * (`it.wave < wave`) non-terminal unblocked item: the wave loop moved on
+ * but the item never closed. Current-wave items are always bucketed
+ * (running/runnable/ready/waiting/blocked/terminal — total coverage), and
+ * future-wave items are owned by their upcoming wave ticks, so neither can
+ * be orphaned. Dep-unsatisfied past items are owned by dep completion, not
+ * this tick set. Orphans get journaled loudly as `stranded_no_owner` and
+ * re-queued into the current tick set (tick-top call); the pre-close-up
+ * call is journal-only (the post-loop redrive drives them). Bounded: the
+ * same unchanged orphan set 3 times in a row throws `reconciliation_failed`
+ * loudly instead of spinning (progress resets the bound). Starved
+ * `ready`-unmerged items merge via the normal merge path (owner = merge
+ * step). Items only: decisions/outlines/steer/epic-closeups are covered by
+ * the wave-resume, consult-exhaust, empty-wave phantom, merge-requeue,
+ * blocked-answer, and closeup-trust fixes — no second entity tracker.
+ */
+async function reconcileWaveOwnership(opts: {
+  taskDir: string;
+  iteration: number;
+  wave: number;
+  itemStates: DerivedItemState[];
+  waveState: DerivedWaveState;
+  reconcileRequeues: Map<number, { sig: string; repeats: number }>;
+  /** Tick-top passes true (requeue into tick set); pre-close-up passes false (journal-only). */
+  requeue: boolean;
+}): Promise<{ requeued: string[] }> {
+  const { taskDir, iteration, wave, itemStates, waveState, reconcileRequeues } = opts;
+  const inWave = new Set(waveState.items.map((it) => it.slug));
+  const bySlug = new Map(itemStates.map((it) => [it.slug, it]));
+  const orphans: string[] = [];
+  for (const it of itemStates) {
+    if (isIterationTerminal(it.status)) continue;
+    if (inWave.has(it.slug)) continue;
+    if (it.status === "blocked") continue;
+    if (it.wave > wave) continue;
+    if (it.wave === wave) continue;
+    const depsOk = it.deps.every((d) => bySlug.get(d)?.status === "merged");
+    if (!depsOk) continue;
+    orphans.push(it.slug);
+  }
+  if (orphans.length === 0) return { requeued: [] };
+  const sig = orphans
+    .map((s) => {
+      const st = bySlug.get(s)!;
+      return `${s}:${st.status}:${st.consultCount}:${st.records.length}`;
+    })
+    .sort()
+    .join("|");
+  if (!opts.requeue) {
+    await appendJournal(taskDir, {
+      type: "stranded_no_owner",
+      iteration,
+      wave,
+      slugs: orphans,
+      reason: "pre-close-up journal-only; post-loop redrive drives them",
+    });
+    return { requeued: [] };
+  }
+  const prev = reconcileRequeues.get(wave);
+  const repeats = prev && prev.sig === sig ? prev.repeats + 1 : 1;
+  reconcileRequeues.set(wave, { sig, repeats });
+  if (repeats > 3) {
+    await appendJournal(taskDir, {
+      type: "stranded_no_owner",
+      iteration,
+      wave,
+      slugs: orphans,
+      reason: "ownerless non-terminal items unchanged across 3 reconciler re-queues",
+    });
+    throw new Error(
+      `reconciliation_failed: wave ${wave} has ownerless non-terminal items unchanged across 3 re-queues: ${orphans.join(", ")}`
+    );
+  }
+  if (repeats === 1) {
+    await appendJournal(taskDir, {
+      type: "stranded_no_owner",
+      iteration,
+      wave,
+      slugs: orphans,
+      reason: "non-terminal items with no owner in the current wave; re-queued into the tick set",
+    });
+  }
+  return { requeued: orphans };
+}
+
+/**
+ * Close-up trust gate (§8.4.7): before mapping architect `complete` → `done`,
+ * re-derives all current items and refuses `done` over non-terminal
+ * unblocked items. Journals `closeup_complete_refused` with the offender
+ * slugs and forces `next-iteration` (or `blocked` if any offender is
+ * `blocked`) instead. Never writes/returns `done` over non-terminal items.
+ * Returns the (possibly rewritten) closeup artifact.
+ */
+export async function enforceCloseupTrustGate(opts: {
+  taskDir: string;
+  taskWt: string;
+  parentBranch: string;
+  pipeline: PipelineConfig;
+  rootTaskDir?: string;
+  iteration: number;
+  itemSlugs: string[];
+  closeup: PlanCloseupArtifact;
+}): Promise<PlanCloseupArtifact> {
+  const { taskDir, taskWt, parentBranch, pipeline, iteration, itemSlugs, closeup } = opts;
+  if (closeup.status !== "complete") return closeup;
+  const trustStates = await Promise.all(
+    itemSlugs.map((slug) =>
+      deriveItemState({ taskDir, itemSlug: slug, parentBranch, taskWt, pipeline, rootTaskDir: opts.rootTaskDir })
+    )
+  );
+  const offenders = trustStates.filter((it) => !isIterationTerminal(it.status) && it.status !== "blocked");
+  if (offenders.length === 0) return closeup;
+  await appendJournal(taskDir, {
+    type: "closeup_complete_refused",
+    iteration,
+    offenders: offenders.map((it) => it.slug),
+    statuses: Object.fromEntries(offenders.map((it) => [it.slug, it.status])),
+  });
+  const refused: PlanCloseupArtifact = {
+    ...closeup,
+    status: offenders.some((it) => it.status === "blocked") ? "blocked" : "next-iteration",
+    summary: `${closeup.summary} (complete refused: non-terminal items ${offenders.map((it) => it.slug).join(", ")})`,
+  };
+  await writeYamlAtomic(path.join(taskDir, `closeup-${iteration}.yaml`), refused);
+  return refused;
+}
+
+/**
  * Stranded-item recovery (§8.4.1): an item is stranded when a PRIOR iteration
  * closed (closeup-N.yaml committed) while the item was still mid-flow
  * (`running`/`pending`/`ready`-unmerged — anything `isIterationTerminal` rejects).
@@ -345,23 +474,9 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
   const runsDir = path.join(taskDir, "runs");
   await fs.promises.mkdir(runsDir, { recursive: true });
 
-  // 1. Determine iteration number N (§8.4.1)
-  let existingCloseups = 0;
-  if (fs.existsSync(taskDir)) {
-    const entries = await fs.promises.readdir(taskDir);
-    for (const name of entries) {
-      if (name.startsWith("closeup-") && name.endsWith(".yaml")) {
-        const m = /^closeup-(\d+)\.yaml$/.exec(name);
-        if (m) {
-          const cIter = parseInt(m[1]!, 10);
-          const closeupOk = await findOkCommittedRecord(runsDir, `architect-closeup-${cIter}`, taskWt);
-          if (closeupOk) {
-            existingCloseups++;
-          }
-        }
-      }
-    }
-  }
+  // 1. Determine iteration number N (§8.4.1): shared ok-committed-only
+  // helper with derive (never a local file scan).
+  const existingCloseups = await countCommittedCloseupIterations({ taskDir, taskWt });
 
   const iteration = existingCloseups + 1;
   const limits = pipeline.limits ?? {};
@@ -703,7 +818,7 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
         limits: JSON.stringify(limits, null, 2),
         dispositionsCriteria: formatDispositionsSection(
           loadCriteriaBundle(pipeline.criteria).dispositions,
-          pipeline.reviewPolicy?.allowedDispositions ?? ["fix", "optional", "architect", "human-awareness", "human-async"]
+          pipeline.reviewPolicy?.allowedDispositions ?? ["fix", "optional", "architect", "human-awareness", "human-async", "human-stop"]
         ),
       },
       turnsSemaphore,
@@ -1027,6 +1142,11 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
 
   let maxWave = initialStates.reduce((max, it) => Math.max(max, it.wave), 1);
   const waveRedrives = new Map<number, number>();
+  // Pending empty-wave consult exit: set inside the wave body, honored at
+  // its end (after the close-up/report ceremony always runs).
+  let pendingEmptyWaveExit: "end" | "continue" | undefined;
+  // Waves skipped as all-blocked: their items re-enter on answers (fix 6).
+  const waveBlockedSkipped = new Set<number>();
   for (let w = 1; w <= maxWave; w++) {
     const pendingWaveReportId = `architect-wave-report-${iteration}-${w}`;
     const pendingWaveReport = await findOkCommittedRecord(runsDir, pendingWaveReportId, taskWt);
@@ -1048,12 +1168,49 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
       await git(taskWt, ["add", "-A"], { allowFail: true });
       await commitAll(repo, taskWt, `factory: invalidate old-format wave report ${pendingWaveReportId}`);
     }
-    // Check if wave close-up already completed for this wave (Finding 24)
+    // Check if wave close-up already completed for this wave (Finding 24).
+    // Resume re-ticks unblocked stragglers: a wave artifact + ok report is
+    // only a skip when every item is terminal or blocked. Non-terminal
+    // unblocked items (running/pending/ready, or dep-waiting `waiting`)
+    // fall through and re-enter the tick loop. A stale epic
+    // child-closeup.yaml is cleared when the wave re-opens so the child
+    // status re-derives from the fresh run instead of the old verdict.
     const waveArtifactPath = path.join(taskDir, "waves", `wave-${iteration}.${w}.yaml`);
     if (fs.existsSync(waveArtifactPath)) {
       const waveOk = await findOkCommittedRecord(runsDir, pendingWaveReportId, taskWt);
       if (waveOk) {
-        continue;
+        const resumeStates = await Promise.all(
+          currentIterationItems.map((slug) =>
+            deriveItemState({ taskDir, itemSlug: slug, parentBranch, taskWt, pipeline, rootTaskDir: params.rootTaskDir })
+          )
+        );
+        const resumeWave = deriveWaveState({ wave: w, items: resumeStates });
+        const resumeStragglers = [
+          ...resumeWave.running,
+          ...resumeWave.runnable,
+          ...resumeWave.ready,
+          ...resumeWave.waiting,
+        ].map((it) => it.slug);
+        if (resumeStragglers.length === 0) {
+          continue;
+        }
+        await appendJournal(taskDir, {
+          type: "wave_resume_reopened",
+          wave: w,
+          iteration,
+          stragglers: resumeStragglers,
+        });
+        // Clear stale epic child-closeup verdicts so re-opened waves
+        // re-derive the child status from the fresh child run.
+        for (const slug of resumeStragglers) {
+          const closeupPath = path.join(taskDir, "items", slug, "child-closeup.yaml");
+          if (fs.existsSync(closeupPath)) {
+            try {
+              await fs.promises.rm(closeupPath, { force: true });
+              await appendJournal(taskDir, { type: "epic_closeup_cleared", wave: w, iteration, item: slug });
+            } catch {}
+          }
+        }
       }
     }
 
@@ -1071,15 +1228,53 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
     // wave artifact, no report record), so the answer path re-runs this
     // same wave on restart. Journal wave_blocked distinctly so the pause
     // is visible (not a silent wave_started with no close-up).
+    // Blocked-then-answered (§8.8): poll once and re-derive before pausing —
+    // answers that arrived since the last tick re-enter below instead of
+    // pausing over stale state.
     if (waveState.items.length > 0 && waveState.blocked.length === waveState.items.length) {
+      try {
+        await processSteeringMailbox({
+          taskWt: params.rootTaskWt ?? taskWt,
+          taskDir: params.rootTaskDir ?? taskDir,
+          harness,
+          pipeline,
+          prompts,
+          repo,
+          task: params.rootTask ?? task,
+        });
+      } catch {}
+      itemStates = await Promise.all(
+        currentIterationItems.map((slug) =>
+          deriveItemState({ taskDir, itemSlug: slug, parentBranch, taskWt, pipeline, rootTaskDir: params.rootTaskDir })
+        )
+      );
+      waveState = deriveWaveState({ wave: w, items: itemStates });
+    }
+    if (waveState.items.length > 0 && waveState.blocked.length === waveState.items.length) {
+      waveBlockedSkipped.add(w);
       await appendJournal(taskDir, { type: "wave_blocked", wave: w, iteration, items: waveState.blocked.map((b) => b.slug) });
       continue;
     }
     if (waveState.isComplete || waveState.items.length === 0) {
       continue;
     }
-
-    await appendJournal(taskDir, { type: "wave_started", wave: w, iteration });
+    // HEADLINE reconciler (§8.4.5): the map lives per-wave and the check
+    // runs (a) here at wave top, (b) at the top of each wave-tick iteration
+    // (with requeue injection into the tick set), and (c) once pre-close-up
+    // (journal-only) — see both call sites below.
+    const reconcileRequeues = new Map<number, { sig: string; repeats: number }>();
+    {
+      const { requeued } = await reconcileWaveOwnership({
+        taskDir,
+        iteration,
+        wave: w,
+        itemStates,
+        waveState,
+        reconcileRequeues,
+        requeue: true,
+      });
+      void requeued;
+    }
 
     // Active runs poll the root mailbox during wave execution (§8.8):
     // between item steps and at least every `limits.steerPollSec` (default 60s).
@@ -1154,6 +1349,11 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
       // so mid-flow items can never strand `running` (stranded-wave fix).
       const WAVE_TICK_CAP = 50;
       let waveTicks = 0;
+      // All-fail fast path (§8.4.5): when EVERY ticked item throws, the fault
+      // is infra/harness (unscripted label, worktree failure), never per-item
+      // verdicts — retrying the identical tick is futile. Siblings already
+      // finished their ticks (allSettled), so fail the wave loudly on the
+      // first all-fail tick instead of spinning.
       while (!waveState.canMerge && !waveState.isComplete && waveTicks < WAVE_TICK_CAP) {
         waveTicks++;
 
@@ -1169,7 +1369,9 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
           }
         }
 
-        // Re-derive states after polling (answers may have unblocked items)
+        // Re-derive states after polling (answers may have unblocked items).
+        // Blocked-then-answered (§8.8): newly-unblocked items re-enter their
+        // wave here — the waiting bucket covers them once the wave re-opens.
         itemStates = await Promise.all(
           currentIterationItems.map((slug) =>
             deriveItemState({ taskDir, itemSlug: slug, parentBranch, taskWt, pipeline, rootTaskDir: params.rootTaskDir })
@@ -1177,17 +1379,40 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
         );
         waveState = deriveWaveState({ wave: w, items: itemStates });
         if (waveState.canMerge || waveState.isComplete) break;
+        // HEADLINE reconciler at the top of each wave-tick iteration:
+        // ownerless past-wave stragglers are injected into this tick set.
+        let reconciledExtra: DerivedItemState[] = [];
+        {
+          const { requeued } = await reconcileWaveOwnership({
+            taskDir,
+            iteration,
+            wave: w,
+            itemStates,
+            waveState,
+            reconcileRequeues,
+            requeue: true,
+          });
+          if (requeued.length > 0) {
+            const requeuedSet = new Set(requeued);
+            reconciledExtra = itemStates.filter((s) => requeuedSet.has(s.slug));
+          }
+        }
 
-        const activeItems = [...waveState.running, ...waveState.runnable];
+        const activeItems = [...waveState.running, ...waveState.runnable, ...reconciledExtra];
         if (activeItems.length === 0) {
           break;
         }
 
-        // Finding 25: Run wave items concurrently up to maxParallelItems
+        // Finding 25: Run wave items concurrently up to maxParallelItems.
+        // Wave batch isolation: allSettled + per-item catch — one item's
+        // throw journals `wave_tick_error` and marks the wave failed-open
+        // (siblings keep ticking). After the batch, check task-level open
+        // steer questions (root mailbox human-stop/human-async blocking the
+        // task) and break to close-up if a task-level stop arrived.
         const itemSemaphore = new Semaphore(maxParallelItems);
         const batch = activeItems.slice(0, maxParallelItems);
 
-        await Promise.all(
+        const batchResults = await Promise.allSettled(
           batch.map(async (it) => {
             const release = await itemSemaphore.acquire();
             try {
@@ -1229,6 +1454,64 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
             }
           })
         );
+        for (let bi = 0; bi < batchResults.length; bi++) {
+          const r = batchResults[bi]!;
+          if (r.status === "rejected") {
+            await appendJournal(taskDir, {
+              type: "wave_tick_error",
+              wave: w,
+              iteration,
+              item: batch[bi]!.slug,
+              error: (r.reason as any)?.message ?? String(r.reason),
+            });
+          }
+        }
+        // All-fail fast path: every ticked item threw — infra/harness fault,
+        // never item verdicts. Siblings already finished (allSettled), so
+        // fail the wave loudly on this first all-fail tick.
+        if (batchResults.length > 0 && batchResults.every((r) => r.status === "rejected")) {
+          const reasons = batchResults.map((r) => (r.status === "rejected" ? ((r.reason as any)?.message ?? String(r.reason)) : "")).join("; ");
+          await appendJournal(taskDir, {
+            type: "wave_all_ticks_failed",
+            wave: w,
+            iteration,
+            ticks: 1,
+            items: batch.map((b) => b.slug),
+            error: reasons.slice(0, 500),
+          });
+          throw new Error(
+            `Wave ${w} ticking failed for every item (infra/harness fault, not item verdicts): ${reasons.slice(0, 300)}`
+          );
+        }
+        // Task-level stop: open human-stop/human-async steer question in the
+        // root mailbox blocking the task breaks to close-up.
+        {
+          let taskStop = false;
+          const stopDirs = [path.join(mailboxDir, "steer", "tousertoreview")];
+          for (const dir of stopDirs) {
+            if (!fs.existsSync(dir)) continue;
+            let files: string[] = [];
+            try {
+              files = (await fs.promises.readdir(dir)).filter((f) => f.endsWith(".yaml"));
+            } catch {}
+            for (const f of files) {
+              try {
+                const q = await readYaml<SteerItemArtifact>(path.join(dir, f));
+                if (!q || q.status !== "open") continue;
+                if (
+                  (q.disposition === "human-stop" || q.disposition === "human-async") &&
+                  (q.blocks?.includes("task") || q.blocks?.includes(mailboxTask))
+                ) {
+                  taskStop = true;
+                }
+              } catch {}
+            }
+          }
+          if (taskStop) {
+            await appendJournal(taskDir, { type: "wave_task_stop", wave: w, iteration });
+            break;
+          }
+        }
 
         // Refresh states after batch
         itemStates = await Promise.all(
@@ -1239,7 +1522,6 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
         waveState = deriveWaveState({ wave: w, items: itemStates });
         await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
       }
-
       if (stopRequested) {
         await appendJournal(taskDir, { type: "task_stopped_by_user", task });
         return {
@@ -1348,7 +1630,6 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
     // 6. Wave end merge path (§8.4.6, §7)
     // Scheduler-idle instrumentation (post-mortem Finding: a multi-minute gap
     // between wave_started and the close-up step with no journal explanation).
-    // Whatever runs between — ready-item merges, gates on the merged branch,
     // the semaphore wait inside the next step — leaves no trace. Timestamp both
     // ends with the engine clock (fake-clock friendly) and journal a
     // scheduler_wait event when the gap exceeds 60s so the next post-mortem
@@ -1383,6 +1664,12 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
 
         // On merge failure (integrate or post-merge gates), route to the item
         // fix loop via consult so the failure is acted on, not retried blindly (§7).
+        // Then re-queue the item into the fix loop: tick once via the item
+        // machine (or re-derive — if still `ready` with a NEW failure, tick
+        // again). A terminal consult decision (abandon/split → derive now
+        // `failed`/`superseded`) lets the wave gate absorb it; otherwise
+        // journal `merge_failed_requeued`. Never close the wave over a
+        // still-`ready` item without the gate noticing.
         if (!mRes.ok) {
           await appendJournal(taskDir, {
             type: "item_merge_failed",
@@ -1390,7 +1677,7 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
             error: mRes.error,
           });
           const diffRes = await git(childWtPath, ["diff", parentBranch], { allowFail: true });
-          await runItemConsult({
+          const consultRes = await runItemConsult({
             task,
             item: readyItem.slug,
             assignmentYaml: JSON.stringify(readyItem.assignment ?? {}),
@@ -1412,6 +1699,63 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
             rootTaskWt: params.rootTaskWt,
             rootTaskDir: params.rootTaskDir,
           });
+          architectSessionId = consultRes.sessionId ?? architectSessionId;
+          await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
+          const postConsult = await deriveItemState({
+            taskDir,
+            itemSlug: readyItem.slug,
+            parentBranch,
+            taskWt,
+            pipeline,
+            rootTaskDir: params.rootTaskDir,
+          });
+          if (postConsult.status === "failed" || postConsult.status === "superseded") {
+            await appendJournal(taskDir, {
+              type: "merge_failed_terminal",
+              wave: w,
+              iteration,
+              item: readyItem.slug,
+              decision: consultRes.decision.decision,
+              status: postConsult.status,
+            });
+          } else {
+            try {
+              const child = await ensureChildWorktree(repo, { branch: parentBranch, path: taskWt }, readyItem.slug);
+              await tickItemMachine({
+                task,
+                itemSlug: readyItem.slug,
+                parentBranch,
+                taskWt,
+                childWt: child.path,
+                taskDir,
+                repo,
+                harness,
+                pipeline,
+                project,
+                prompts,
+                budgetTracker,
+                turnsSemaphore,
+                architectSessionId,
+                rootTaskWt: params.rootTaskWt,
+                rootTaskDir: params.rootTaskDir,
+              });
+            } catch (err: any) {
+              await appendJournal(taskDir, {
+                type: "wave_tick_error",
+                wave: w,
+                iteration,
+                item: readyItem.slug,
+                error: err?.message ?? String(err),
+              });
+            }
+            await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
+            await appendJournal(taskDir, {
+              type: "merge_failed_requeued",
+              wave: w,
+              iteration,
+              item: readyItem.slug,
+            });
+          }
         }
       }
     }
@@ -1467,23 +1811,131 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
             iteration,
           });
           architectSessionId = consultRes.sessionId ?? architectSessionId;
+          await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
           const d = consultRes.decision.decision;
-          if (d === "end-iteration" || d === "abort" || d === "accept-with-debt") break;
-          if (d === "fix-item" && consultRes.decision.outline) {
+          // Empty-wave exits ALWAYS run the current wave's close-up/report
+          // ceremony first: record the pending exit and fall through to the
+          // ceremony below. `end` (end-iteration/abort/accept-with-debt)
+          // additionally stops all remaining waves explicitly at the end of
+          // the wave body — never silently skipping ceremony or waves.
+          if (d === "end-iteration" || d === "abort" || d === "accept-with-debt") {
+            pendingEmptyWaveExit = "end";
+          } else if (d === "fix-item" && consultRes.decision.outline) {
             const o = consultRes.decision.outline as unknown as Record<string, unknown>;
             const slug = typeof o["slug"] === "string" ? (o["slug"] as string) : undefined;
-            if (slug && !currentIterationItems.includes(slug)) currentIterationItems.push(slug);
+            if (slug) {
+              // Materialize a REAL validated assignment: build a
+              // PlanEditsArtifact-shaped delta from the outline (defaults:
+              // kind dev, title = slug, assignment = outline text), verify
+              // slug/title/assignment present and slug not already known,
+              // journal-drop `phantom_outline_dropped` on failure, else write
+              // items/<slug>/assignment.yaml, git add/commit, push into
+              // currentIterationItems, bump maxWave. Never push a bare slug.
+              const kind = typeof o["kind"] === "string" && (o["kind"] as string).length > 0 ? (o["kind"] as string) : "dev";
+              const title = typeof o["title"] === "string" && (o["title"] as string).length > 0 ? (o["title"] as string) : slug;
+              const assignmentText =
+                typeof o["assignment"] === "string" && (o["assignment"] as string).length > 0
+                  ? (o["assignment"] as string)
+                  : typeof o["description"] === "string" && (o["description"] as string).length > 0
+                    ? (o["description"] as string)
+                    : JSON.stringify(o);
+              const phantomWave = w + 1;
+              if (!slug || !title || !assignmentText || currentIterationItems.includes(slug)) {
+                await appendJournal(taskDir, {
+                  type: "phantom_outline_dropped",
+                  wave: w,
+                  iteration,
+                  slug: slug ?? "(missing)",
+                  reason: !slug ? "outline missing slug" : currentIterationItems.includes(slug) ? "slug already known" : "slug/title/assignment incomplete",
+                });
+              } else {
+                try {
+                  // Minimum validation (spec fix 4): slug/title/assignment
+                  // present, slug not already known, kind known. No
+                  // outlineRef is required — the consult outline IS the
+                  // source, so full validateEdits (which demands a plan
+                  // outlineRef) would wrongly drop it.
+                  const phantomExisting = new Set((await buildExistingList(taskDir)).map((e) => e.slug));
+                  const dropReason =
+                    !slug || !title || !assignmentText
+                      ? "slug/title/assignment incomplete"
+                      : currentIterationItems.includes(slug) || phantomExisting.has(slug)
+                        ? "slug already known"
+                        : !validKindNames.includes(kind)
+                          ? `unknown kind "${kind}"`
+                          : undefined;
+                  if (dropReason) {
+                    await appendJournal(taskDir, {
+                      type: "phantom_outline_dropped",
+                      wave: w,
+                      iteration,
+                      slug: slug ?? "(missing)",
+                      reason: dropReason,
+                    });
+                  } else {
+                    // applyEdits-style: write ONLY the assignment file
+                    // (never the edits artifact — that would clobber
+                    // plan/edits-N.yaml), then git add/commit.
+                    const assignment = {
+                      slug,
+                      kind,
+                      title,
+                      assignment: assignmentText,
+                      ...(phantomWave !== undefined ? { wave: phantomWave } : {}),
+                      deps: [] as string[],
+                    };
+                    const assignmentPath = path.join(taskDir, "items", slug, "assignment.yaml");
+                    await fs.promises.mkdir(path.dirname(assignmentPath), { recursive: true });
+                    await writeYamlAtomic(assignmentPath, assignment);
+                    await git(taskWt, ["add", "-A"], { allowFail: true });
+                    await commitAll(repo, taskWt, `factory: apply empty-wave fix-item ${slug} iteration ${iteration}`);
+                    await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
+                    currentIterationItems.push(slug);
+                    maxWave = Math.max(maxWave, phantomWave);
+                    await appendJournal(taskDir, {
+                      type: "phantom_outline_applied",
+                      wave: w,
+                      iteration,
+                      slug,
+                      phantomWave,
+                    });
+                  }
+                } catch (err: any) {
+                  await appendJournal(taskDir, {
+                    type: "phantom_outline_dropped",
+                    wave: w,
+                    iteration,
+                    slug,
+                    reason: err?.message ?? String(err),
+                  });
+                }
+              }
+            }
+            pendingEmptyWaveExit = "continue";
+          } else {
+            pendingEmptyWaveExit = "continue";
           }
-          continue;
+          // Empty-wave exits ALWAYS run the current wave's close-up/report
+          // ceremony first: record the exit and fall through to the ceremony
+          // below. `end` (end-iteration/abort/accept-with-debt) additionally
+          // stops all remaining waves explicitly at the end of the wave
+          // body — never silently skipping ceremony/waves.
+          await appendJournal(taskDir, {
+            type: "empty_wave_exit_pending",
+            wave: w,
+            iteration,
+            decision: d,
+          });
         }
       }
     }
-
-    // Wave close-up (§8.4.6); dependents of failed items go into the report (§8.2)
+    // Wave close-up (§8.4.6); dependents of failed items go into the report (§8.2).
+    // Blocked set is the wave state's transitive `failureBlocked` set
+    // (sibling-owned fixpoint over `items`), intersected with the
+    // current-wave blocked slugs for the summary.
+    const currentWaveBlocked = new Set(waveState.blocked.map((b) => b.slug));
     const failedSlugs = waveState.failed.map((f) => f.slug);
-    const blockedByFailureSlugs = waveState.blocked
-      .filter((b) => b.status === "pending" && b.deps.some((d) => failedSlugs.includes(d) || waveState.blocked.some((x) => x.slug === d)))
-      .map((b) => b.slug);
+    const blockedByFailureSlugs = (waveState.failureBlocked ?? []).filter((s) => currentWaveBlocked.has(s));
     const waveSummary = `Wave ${w} completed. Merged items: ${mergeResults.filter((m) => m.ok).map((m) => m.slug).join(", ")}${failedSlugs.length > 0 ? ` Failed items: ${failedSlugs.join(", ")}` : ""}${blockedByFailureSlugs.length > 0 ? ` Blocked-by-failure items: ${blockedByFailureSlugs.join(", ")}` : ""}`;
     const waveCloseupStepId = `wave-close-up-${iteration}-${w}`;
     const waveCloseupAttempt = getNextStepAttempt(runsDir, waveCloseupStepId, pipeline.limits?.maxInterruptions ?? 3);
@@ -1987,16 +2439,176 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
           }
         }
       }
+    // HEADLINE reconciler once pre-close-up per wave (c): re-derived states
+    // so the gate sees the ceremony's aftermath (amends, phantom items).
+    // Journal-only: the post-loop redrive below drives any orphans found.
+    {
+      const preCloseupStates = await Promise.all(
+        currentIterationItems.map((slug) =>
+          deriveItemState({ taskDir, itemSlug: slug, parentBranch, taskWt, pipeline, rootTaskDir: params.rootTaskDir })
+        )
+      );
+      const preCloseupWave = deriveWaveState({ wave: w, items: preCloseupStates });
+      await reconcileWaveOwnership({
+        taskDir,
+        iteration,
+        wave: w,
+        itemStates: preCloseupStates,
+        waveState: preCloseupWave,
+        reconcileRequeues,
+        requeue: false,
+      });
+    }
     await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
+    // Honor a pending empty-wave consult exit AFTER the ceremony ran.
+    if (pendingEmptyWaveExit !== undefined) {
+      const exitDecision = pendingEmptyWaveExit;
+      pendingEmptyWaveExit = undefined;
+      await appendJournal(taskDir, {
+        type: "empty_wave_exit",
+        wave: w,
+        iteration,
+        decision: exitDecision,
+        reason:
+          exitDecision === "end"
+            ? "empty-wave consult ended the iteration after close-up ceremony; remaining waves stopped"
+            : "empty-wave consult continued after close-up ceremony",
+      });
+      if (exitDecision === "end") {
+        w = maxWave + 1;
+        break;
+      }
+      continue;
+    }
   }
 
-  // Check if any items are blocked on human questions (§8.2)
+  // Check if any items are blocked on human questions (§8.2).
+  // Blocked-then-answered (§8.8): after `pollSteering` answers, newly
+  // unblocked items must re-enter their wave instead of returning
+  // `blocked`/proceeding to close-up. If a previously-blocked item is now
+  // unblocked-non-terminal, continue the wave loop for its wave instead of
+  // returning blocked. Also clear/re-resolve epic `child-closeup.yaml`
+  // files whose blocking questions are now answered (delete stale
+  // `blocked` closeup + journal `epic_closeup_cleared`).
   const allCurrentStates = await Promise.all(
     currentIterationItems.map((slug) =>
       deriveItemState({ taskDir, itemSlug: slug, parentBranch, taskWt, pipeline, rootTaskDir: params.rootTaskDir })
     )
   );
+  {
+    const bySlug = new Map(allCurrentStates.map((s) => [s.slug, s]));
+    for (const st of allCurrentStates) {
+      if (st.kind !== "epic") continue;
+      const closeupPath = path.join(taskDir, "items", st.slug, "child-closeup.yaml");
+      if (!fs.existsSync(closeupPath)) continue;
+      try {
+        const cc = await readYaml<{ status?: string }>(closeupPath);
+        if (cc?.status === "blocked" && st.status !== "blocked") {
+          await fs.promises.rm(closeupPath, { force: true });
+          await appendJournal(taskDir, { type: "epic_closeup_cleared", iteration, item: st.slug });
+        }
+      } catch {}
+    }
+    void bySlug;
+  }
   const blockedItems = allCurrentStates.filter((it) => it.status === "blocked");
+  // Previously-blocked now unblocked-non-terminal items re-enter their
+  // wave: drive them (ready→merge, else tick) instead of returning
+  // blocked/proceeding to close-up over them.
+  {
+    const reenterable = allCurrentStates.filter(
+      (it) => !isIterationTerminal(it.status) && it.status !== "blocked" && waveBlockedSkipped.has(it.wave)
+    );
+    if (reenterable.length > 0) {
+      await appendJournal(taskDir, {
+        type: "wave_reopened_answered",
+        iteration,
+        items: reenterable.map((it) => it.slug),
+        waves: [...new Set(reenterable.map((it) => it.wave))],
+      });
+      for (const it of reenterable) {
+        try {
+          if (it.status === "ready") {
+            const childBranchName = childBranch(parentBranch, it.slug);
+            const childWtPath = path.join(
+              repo.worktreeRoot ?? path.dirname(taskWt),
+              childBranchName.replace(/\//g, "_")
+            );
+            const mRes = await mergeItem({
+              task,
+              item: it,
+              parentBranch,
+              taskWt,
+              childWt: childWtPath,
+              repo,
+              harness,
+              pipeline,
+              project,
+              prompts,
+              taskDir,
+              turnsSemaphore,
+            });
+            if (!mRes.ok) {
+              await appendJournal(taskDir, { type: "item_merge_failed", item: it.slug, error: mRes.error });
+            }
+          } else {
+            const child = await ensureChildWorktree(repo, { branch: parentBranch, path: taskWt }, it.slug);
+            await tickItemMachine({
+              task,
+              itemSlug: it.slug,
+              parentBranch,
+              taskWt,
+              childWt: child.path,
+              taskDir,
+              repo,
+              harness,
+              pipeline,
+              project,
+              prompts,
+              budgetTracker,
+              turnsSemaphore,
+              architectSessionId,
+              rootTaskWt: params.rootTaskWt,
+              rootTaskDir: params.rootTaskDir,
+            });
+          }
+        } catch (err: any) {
+          await appendJournal(taskDir, {
+            type: "iteration_redrive_error",
+            iteration,
+            item: it.slug,
+            error: err?.message ?? String(err),
+          });
+        }
+      }
+      await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
+      const reStates = await Promise.all(
+        currentIterationItems.map((slug) =>
+          deriveItemState({ taskDir, itemSlug: slug, parentBranch, taskWt, pipeline, rootTaskDir: params.rootTaskDir })
+        )
+      );
+      const stillBlocked = reStates.filter((it) => it.status === "blocked");
+      if (stillBlocked.length > 0) {
+        await appendJournal(taskDir, {
+          type: "iteration_blocked",
+          iteration,
+          items: stillBlocked.map((it) => it.slug),
+          questions: stillBlocked.flatMap((it) =>
+            it.openSteerQuestion
+              ? [{ id: it.openSteerQuestion.id, ref: it.openSteerQuestion.ref, item: it.slug }]
+              : []
+          ),
+        });
+        return {
+          iteration,
+          status: "blocked",
+          plan,
+          architectSessionId,
+        };
+      }
+      await appendJournal(taskDir, { type: "wave_reopened_drained", iteration });
+    }
+  }
   if (blockedItems.length > 0) {
     await appendJournal(taskDir, {
       type: "iteration_blocked",
@@ -2229,7 +2841,17 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
   }
 
   await appendJournal(taskDir, { type: "closeup_written", iteration, status: closeupArtifact.status });
-  await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
+  // Close-up trust (§8.4.7): refuse `done` over non-terminal items.
+  closeupArtifact = await enforceCloseupTrustGate({
+    taskDir,
+    taskWt,
+    parentBranch,
+    pipeline,
+    rootTaskDir: params.rootTaskDir,
+    iteration,
+    itemSlugs: currentIterationItems,
+    closeup: closeupArtifact,
+  });
 
   // On next-iteration, clear architect session id for fresh session (§8.4.7)
   const nextSessionId = closeupArtifact.status === "next-iteration" ? undefined : archCloseupRes.sessionId;
