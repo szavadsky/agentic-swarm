@@ -1,0 +1,91 @@
+status: changes_requested
+summary: "changes_requested: baseline red on capital-D Detail, normalization
+  missing; ADR inventory miscount"
+suggestions:
+  - detail: "Plan assumes GREEN with lowercase detail everywhere and drops
+      normalization as stale. Live tree contradicts: 6 runtime file schemas
+      still declare capital-D Detail with additionalProperties:false
+      (developer-output:68, decisions:55, fact-finder-output:29, plan:142,
+      plan-closeup:34, wave-closeup:42, plus review.schema.json:33/65) so
+      lowercase is rejected and capital accepted; concerns.ts:72 reads
+      existing?.Detail on typed StoredConcernArtifact (only lowercase detail
+      exists) so typecheck fails and longest-wins is dead;
+      epic-saga-propagate.test.ts:307/313/319 read .Detail (undefined);
+      generated review-schema.ts:36/80 uses lowercase, so file vs generated
+      schemas disagree and lowercase-pass/capital-reject contract tests cannot
+      pass. Both milestones gate on typecheck+bun test green, unachievable
+      without normalization, and docs would document broken merge. Reintroduce
+      Detail->detail normalization item (schemas + concerns.ts:72 + test reads +
+      longest-wins test) as dep of docs-finish."
+    disposition: fix
+    id: baseline-detail-casing-red
+    location:
+      file: plugins/software-factory/config/schemas/developer-output.schema.json
+      line: 68
+    summary: "Baseline is red: capital-D Detail persists; normalization carryover
+      missing"
+  - detail: "docs-finish-v5 description inventories docs/adr/*.md as all 16 but live
+      docs/adr holds 19 one-paragraph ADRs: dismiss-criteria-row,
+      autonomous-immediate-halt, epic-config-root-only, funnel-triage-coverage,
+      remarkable-counts-semantics, closeup-no-suggestions-triage,
+      closeup-lifecycle-resolved, epic-push-condensed, human-router-single,
+      fingerprint-affects-union, hydration-single-cap, prompt-fragment-matrix,
+      severity-policy-active, concern-store-taskwt, digest-mailbox,
+      funnel-text-budget, humaninvolvement-config, routing-derived-state,
+      triage-suggestions-dismiss. Stale count risks incomplete 8.11 (e.g.
+      router/text-budget/hydration semantics missed). Replace count with all
+      under docs/adr without number."
+    disposition: fix
+    id: adr-source-inventory-miscount
+    location:
+      file: docs/adr/adr-dismiss-criteria-row.md
+      line: 1
+    summary: Docs source inventory says all 16 but docs/adr holds 19 files
+  - detail: M1 directional interface says kept as dismissed, M1 scenario says kept
+      on disk, plan ADR says kept on disk. Terse row sentinel and
+      QA-excludes/reviewer-includes test need one wording to avoid brittle
+      assertions. Align all three to ADR wording or stored status vocabulary.
+    disposition: optional
+    id: dismiss-kept-wording-drift
+    location:
+      file: plugins/software-factory/agents/criteria/dispositions.md
+      line: 12
+    summary: Dismiss row kept wording drifts between interface, scenario, and ADR
+  - detail: "M2 has two interfaces (docs sources, doc sentinels) for two items, but
+      neither names the allowlist-agreement-test contract: test imports
+      DEFAULT_RAISE_ALLOWLIST from concerns.ts:35-44 and asserts equality with
+      pipeline.default.yaml:393-401. Milestone interface coverage incomplete.
+      Add third interface test->code+YAML or fold into scenario."
+    disposition: optional
+    id: allowlist-contract-missing-interface
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 35
+    summary: No directional interface covers the allowlist agreement contract
+  - detail: M2 scenario 2 lists store, fingerprint/dedup,
+      remarkable/triage+exemption, triage contract, routing, close-up incl
+      dismiss, epic condensing, ADR table, presets, byte caps, engine-owned
+      note, halt deviation, coverage limitation, c-only counts, no-retention in
+      one Given/When/Then. Falsifiable but overloaded; single failure hides
+      which element regressed. Split into 2-3 scenarios (store/triage/routing;
+      close-up/epic/ADR; deviations/limits). Scenario 4 also duplicates the halt
+      note.
+    disposition: optional
+    id: mega-scenario-diagnosability
+    location:
+      file: plugins/software-factory/docs/ARCHITECTURE.md
+      line: 39
+    summary: M2 8.11 scenario bundles ~15 assertions; failure won't localize
+  - detail: Architect accepts via ADR that every routed rm-* digests regardless of
+      minDigestSeverity (triage.ts:108-115), counts cover c-* only
+      (concerns.ts:194-195), digest has no retention. Spec line 103 demands
+      low-noise confirmed mailbox; unconditional digest could be noisy. Operator
+      notified only via remarkable ADR digest entries, no blocking question.
+      Flag for operator awareness; architect decision stands for closure.
+    disposition: human-awareness
+    id: remarkable-threshold-exemption-accepted
+    location:
+      file: plugins/software-factory/src/core/triage.ts
+      line: 108
+    summary: Threshold-exempt remarkable digest plus c-only counts accepted without
+      block
