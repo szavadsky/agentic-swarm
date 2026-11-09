@@ -1,0 +1,29 @@
+status: ok
+summary: Removed the local DEFAULT_RAISE_ALLOWLIST duplicate from
+  test/human-involvement-config.test.ts and imported the canonical
+  DEFAULT_RAISE_ALLOWLIST from src/core/concerns.js, so the existing
+  default-pipeline assertion now compares the code constant directly against the
+  shipped config/pipeline.default.yaml allowlist. No prod files or new test
+  files were touched.
+target:
+  command: bun test test/human-involvement-config.test.ts
+  customTarget: true
+evidence:
+  - Read plugins/software-factory/test/human-involvement-config.test.ts:46-55
+    and removed the duplicated DEFAULT_RAISE_ALLOWLIST block, adding import {
+    DEFAULT_RAISE_ALLOWLIST } from "../src/core/concerns.js" instead.
+  - Confirmed src/core/concerns.ts exports DEFAULT_RAISE_ALLOWLIST (as const)
+    with the same eight agents as config/pipeline.default.yaml
+    concerns.raiseAllowlist.
+  - Verified the existing assertion at test/human-involvement-config.test.ts:145
+    now spreads the imported code constant; no third copy introduced.
+  - "Ran `bun run typecheck` in plugins/software-factory: exit 0 (tsc --noEmit)."
+  - "Ran `bun test test/human-involvement-config.test.ts`: 12 pass, 0 fail, 165
+    expect() calls."
+  - "`git status --short` shows only M
+    plugins/software-factory/test/human-involvement-config.test.ts (dependency
+    install produced no tracked changes)."
+notes: Installed workspace dependencies with `bun install --frozen-lockfile`
+  because the worktree had no node_modules; it introduced only ignored
+  node_modules content, no tracked diff.
+concerns: []

@@ -11,6 +11,7 @@ import {
   preflightPrompts,
 } from "../src/core/prompts.js";
 import { KNOWN_VARS, PROMPT_VAR_DESCRIPTIONS } from "../src/core/prompt-vars.js";
+import { DEFAULT_RAISE_ALLOWLIST } from "../src/core/concerns.js";
 import { createTmpRepo, type TmpRepo } from "./helpers/tmp-repo.js";
 import { FakeHarness } from "../src/harness/fake/fake-harness.js";
 import { runAgentStep } from "../src/core/flows/step-runner.js";
@@ -41,18 +42,6 @@ const defaultPipelinePath = path.join(pluginRoot, "config/pipeline.default.yaml"
 const agentsDir = path.join(pluginRoot, "agents");
 
 const MODES = ["autonomous", "principal", "detailed"] as const;
-
-/** Default concern policy: every agent whose output schema can raise concerns. */
-const DEFAULT_RAISE_ALLOWLIST = [
-  "developer",
-  "fact-finder",
-  "architect",
-  "qa",
-  "reviewer",
-  "plan-reviewer",
-  "wave-close-up",
-  "plan-close-up",
-];
 
 /**
  * Fragment matrix: every engine step that produces or triages concerns receives
