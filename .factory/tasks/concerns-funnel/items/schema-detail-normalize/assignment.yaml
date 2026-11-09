@@ -1,0 +1,25 @@
+slug: schema-detail-normalize
+kind: dev
+title: Lowercase detail in producer schemas + merge fix
+assignment: "Normalize concern Detail->detail to lowercase in 6 runtime file
+  schemas (decisions, developer-output, fact-finder-output, plan, plan-closeup
+  shared by architect-closeup, wave-closeup) + reference-only review.schema.json
+  for consistency. Fix concerns.ts:72 mergeConcern read from existing?.Detail to
+  existing?.detail (longest-wins). Fix 3 test reads in
+  test/engine/epic-saga-propagate.test.ts:307/313/319 from .Detail to .detail.
+  Contract: step-runner validates producer outputs against the 6 schemas —
+  lowercase detail accepted, capital-D Detail rejected with step error before
+  any store write. Tests: contract suite lowercase passes / capital-D rejected +
+  longest-wins test (200-byte stored detail survives 20-byte re-emit). Do NOT
+  touch triage/infra/pm-edit. Baseline is RED (typecheck + concern-schemas +
+  epic-saga reads); this item is part of red-to-green. Verify: typecheck +
+  TMPDIR=/tmp bun test."
+outlineRef: schema-detail-normalize
+milestone: m1-contracts-consistency
+wave: 1
+scenarioRefs:
+  - m1-contracts-consistency:1
+  - m1-contracts-consistency:2
+citations:
+  - docs/factory.v2.md:89-103
+  - plugins/software-factory/src/core/artifacts.ts:313-325

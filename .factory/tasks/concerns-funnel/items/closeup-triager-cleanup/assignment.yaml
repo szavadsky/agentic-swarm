@@ -1,0 +1,35 @@
+slug: closeup-triager-cleanup
+kind: dev
+title: Close-up triager cleanup + dismiss resolutions
+assignment: "Per adr-closeup-no-suggestions-triage: drop
+  wave-close-up/plan-close-up from isTriagerAgent so composed
+  resolveReviewAllowed(p,a,isTriagerAgent(a)) excludes dismiss for close-ups and
+  triager set equals {reviewer,plan-reviewer}. Add dismiss to
+  CloseupConcernResolution/PendingConcernResolution (artifacts.ts) + local
+  ConcernResolution (concerns.ts:16) + wave/plan-closeup schema action enums.
+  ingestStepConcerns MUST pre-flight before any mutate: every accept confirm
+  whose pending.action==dismiss requires non-empty pending.note else throw
+  TriageValidationError (step errors; all statuses+pendings preserved, no
+  partial transitions). applyConcernConfirms itself never throws
+  TriageValidationError (avoids concerns<->triage cycle). accept+dismiss ->
+  dismissed + disposition dismiss + dismissReason=pending.note trimmed + pending
+  cleared. Wave fallback never assigns dismiss; kind=blocker stays open.
+  Close-up schemas carry no suggestions[]; re-triage honored solely via
+  concernResolutions + architect concernConfirms + fallback. Tests:
+  review-policy composed triager-set exclusion, closeup-lifecycle dismiss accept
+  (with note) + error (without note, preserved state), closeup dismiss enum
+  contract case. Verify: typecheck + targeted suites + TMPDIR=/tmp full gates."
+outlineRef: closeup-triager-cleanup
+milestone: m1-contracts-consistency
+wave: 1
+scenarioRefs:
+  - m1-contracts-consistency:3
+  - m1-contracts-consistency:4
+  - m1-contracts-consistency:5
+  - m1-contracts-consistency:6
+citations:
+  - docs/factory.v2.md:89-103
+  - plugins/software-factory/src/core/artifacts.ts:313-325
+  - plugins/software-factory/src/core/records/review-schema.ts:5-52
+  - plugins/software-factory/src/core/flows/item-machine.ts:628-647
+  - plugins/software-factory/src/core/flows/iteration.ts:439-485
