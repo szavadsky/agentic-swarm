@@ -1,13 +1,33 @@
 iteration: 4
 milestones:
   - directionalInterfaces:
+      - "step-runner (caller) validates producer outputs against the 6 runtime
+        file schemas (callee contract: decisions, developer-output,
+        fact-finder-output, plan, plan-closeup shared by architect-closeup,
+        wave-closeup): lowercase detail accepted, capital-D Detail rejected with
+        step error before any store write; aggregateConcerns/mergeConcern read
+        lowercase detail with longest-wins"
+    id: m0-detail-normalize
+    scenarios:
+      - Given the 6 runtime file schemas (decisions, developer-output,
+        fact-finder-output, plan, plan-closeup incl architect-closeup,
+        wave-closeup) plus reference review schema When
+        test/contracts/concern-schemas.test.ts runs Then lowercase detail
+        validates and capital-D Detail is rejected
+      - Given a stored concern with 200-byte detail re-emitted with 20-byte
+        detail When aggregateConcerns merges Then the stored 200-byte detail
+        survives
+      - Given the full suite When gates run with TMPDIR=/tmp Then typecheck and
+        bun test pass with no regressions
+    title: Detail casing normalization
+  - directionalInterfaces:
       - "item-machine/iteration (callers) -> formatDispositionsSection(criteria,
         allowed) (callee): allowed excludes dismiss => dismiss rows/rules
         filtered from prompt criteria text (QA prompt); allowed includes dismiss
         => rows kept (reviewer prompt); mirrors existing human-stop filtering"
       - "review/plan-review step prompts (consumers) <- dispositions.md dismiss
         row (content contract): single terse row stating triager-only, reason
-        required, kept as dismissed; prompt text only, independent of the
+        required, kept on disk; prompt text only, independent of the
         review-schema enum which derives from resolveReviewAllowed"
     id: m1-dismiss-contract
     scenarios:
@@ -30,6 +50,9 @@ milestones:
       - "test/docs-concerns.test.ts (caller) asserts doc sentinels (callee
         content): every needle names content added by docs-finish-v5 and fails
         on the base tree"
+      - allowlist-agreement-test (caller) imports DEFAULT_RAISE_ALLOWLIST from
+        src/core/concerns.ts (callee code) and asserts equality with the shipped
+        concerns.raiseAllowlist in config/pipeline.default.yaml (callee data)
     id: m2-docs-gates
     scenarios:
       - Given ARCHITECTURE §1 row 18 When read Then it records item 18
@@ -38,12 +61,15 @@ milestones:
         hand-built'
       - Given ARCHITECTURE §8.11 When read Then it documents store layout,
         fingerprint/dedup, remarkable aggregation/triage with
-        threshold-exemption, triage contract, routing table, close-up
+        threshold-exemption, triage contract, routing table, byte caps as code
+        constants, and the engine-owned concerns/ note
+      - Given ARCHITECTURE §8.11 When read Then it documents close-up
         propose-confirm incl dismiss, epic condensing, ADR blocking table,
-        presets, byte caps as code constants, engine-owned concerns/ note,
-        immediate-halt deviation, triage-coverage limitation
-        (consult/wave-report/closeup via hydration+fallback, simple-task stays
-        open), c-only counts, and no-retention digest
+        presets, c-only counts, and no-retention digest
+      - Given ARCHITECTURE §8.11 When read Then it records the immediate-halt
+        deviation, the triage-coverage limitation (consult/wave-report/closeup
+        via hydration+fallback, simple-task stays open), epic-config root-only,
+        close-up-dismiss, and saga open-only semantics
       - Given ARCHITECTURE §3/§5/§6.2/§8.7/§10/§11/§13 When read Then modules,
         config sample with root-only layering, concerns/ folder, dismiss row,
         outputs, status counts, and funnel suites are all updated
@@ -51,8 +77,7 @@ milestones:
         section with per-task principal/detailed examples and status
         counts/digest output; given pipeline.default.yaml When read Then
         reviewPolicy commentary documents dismiss auto-append and the concerns
-        block documents the fragment->agent mapping; given ARCHITECTURE §8.11
-        When read Then the immediate-halt deviation is noted
+        block documents the fragment->agent mapping
       - Given test/docs-concerns.test.ts When run on base vs branch Then every
         test fails on base and passes on branch; given the allowlist agreement
         test When run Then code and shipped allowlists agree
@@ -60,6 +85,23 @@ milestones:
         bun test pass
     title: Docs closure and gates
 itemOutlines:
+  - deps: []
+    description: Normalize concern Detail->lowercase detail in 6 runtime file
+      schemas (decisions, developer-output, fact-finder-output, plan,
+      plan-closeup shared by architect-closeup, wave-closeup) + reference-only
+      review.schema.json for consistency with generated review-schema.ts.
+      One-line TS fix concerns.ts:72 (existing?.Detail -> existing?.detail)
+      restoring longest-wins. Fix ALL capital-D .Detail reads in tests
+      (epic-saga-propagate.test.ts incl :307/313/319 + any others;
+      funnel-text-budget.test.ts). Ensure contract suite asserts lowercase
+      validates + capital-D rejected (add cases if missing); add longest-wins
+      behavior test (200-byte stored survives 20-byte re-emit).
+      triage/infra/pm-edit untouched. Verify typecheck + TMPDIR=/tmp bun test.
+    kind: story
+    milestoneId: m0-detail-normalize
+    prodBudgetHint: 30
+    slug: schema-detail-normalize-v2
+    title: Lowercase detail in producer schemas + merge fix
   - deps: []
     description: "Per adr-dismiss-criteria-row: add terse dismiss row + rule to
       agents/criteria/dispositions.md; extend formatDispositionsSection
@@ -86,24 +128,23 @@ itemOutlines:
     title: Raise-allowlist agreement contract test
   - deps:
       - prompts-dismiss-filter
+      - schema-detail-normalize-v2
     description: "Docs closure over landed behavior. Repo sources ONLY (no
-      orchestration artifacts): docs/adr/*.md (all 16, esp.
-      adr-closeup-no-suggestions-triage, adr-epic-push-condensed,
-      adr-autonomous-immediate-halt, adr-epic-config-root-only),
+      orchestration artifacts): all files under docs/adr/ (no count assumed;
+      esp. adr-closeup-no-suggestions-triage, adr-epic-push-condensed,
+      adr-autonomous-immediate-halt, adr-epic-config-root-only,
+      adr-funnel-triage-coverage, adr-remarkable-counts-semantics,
+      adr-dismiss-criteria-row),
       src/core/{concerns,triage,review-policy,prompts}.ts,
       flows/{step-runner,iteration,epic-propagation,adrs}.ts, cli/status.ts,
       config/pipeline.default.yaml:359-432. ARCHITECTURE: §1 row 18 implemented
       + 5 deviations (epic-config root-only, close-up-dismiss via resolutions,
       saga open-only semantics, immediate-halt, triage-coverage limitation); new
-      §8.11 (store, fingerprint/dedup, remarkable aggregation/triage +
-      threshold-exemption, triage contract, routing table, close-up
-      propose-confirm incl dismiss, epic condensing, ADR blocking table,
-      presets, byte caps as code constants, engine-owned concerns/ note, halt
-      deviation, coverage limitation, c-only counts + no-retention); §3 modules;
-      §5 config sample + root-only fix; §6.2 concerns/ + engine-owned; §8.7
-      dismiss row; §10 outputs; §11 status; §13 suites; canonical ADR format vs
-      historical notes. README Concerns & human involvement section + §5 range
-      update. pipeline.default.yaml reviewPolicy dismiss auto-append + concerns
+      §8.11 per m2 scenarios 2a-2c; §3 modules; §5 config sample + root-only
+      fix; §6.2 concerns/ + engine-owned; §8.7 dismiss row; §10 outputs; §11
+      status; §13 suites; canonical ADR format vs historical notes. README
+      Concerns & human involvement section + §5 range update.
+      pipeline.default.yaml reviewPolicy dismiss auto-append + concerns
       fragment->agent mapping commentary. Do NOT touch
       agents/criteria/human-involvement.md (prompt criteria). New
       test/docs-concerns.test.ts with base-failing sentinels per Decision 022
@@ -115,30 +156,30 @@ itemOutlines:
     slug: docs-finish-v5
     title: Docs and suite consolidation
 assumptions:
-  - assumption: "Baseline is GREEN: 445 pass / 2 skip / 0 fail per context pack;
-      concern detail is already lowercase in all schemas,
-      ConcernInput/mergeConcern, and test reads (verified by scout
-      DetailCasingVerify with read-vs-grep agreement plus architect's own
-      reads). Closeup-3 red claims about capital-D Detail are stale; no
-      schema-detail-normalize carryover is needed."
-    why: Three independent sources (context-pack test run, scout verification,
-      architect reads) agree; planning docs closure on a green tree.
-  - assumption: Gates run with TMPDIR=/tmp; the 2 head-guard failures under
-      .factory-runtime TMPDIR remain out of scope (td-tmpdir-split).
-    why: Pre-existing environmental failure, unchanged since baseline.
-  - assumption: Behavior is frozen except prompts.ts dismiss-row filtering
-      (mirroring human-stop) plus the dispositions.md row (prompt surface).
-      Deviation history goes ONLY in ARCHITECTURE docs, never in agents/criteria
-      prompt files. Legacy fingerprint migration (Q8) is retained as tested,
-      harmless code; allowlist duplication (Q9) is locked by a contract test,
-      not refactored.
-    why: "Closure iteration: 18+ behavior/contract suites already cover the funnel;
-      bounding change avoids regressions and prompt debloat violations."
+  - assumption: "Baseline is RED: 6 runtime file schemas declare capital-D Detail
+      with additionalProperties:false (verified by :raw read, e.g.
+      developer-output.schema.json:68); concerns.ts:72 reads existing?.Detail
+      (verified by :raw read) so typecheck fails and longest-wins is dead;
+      epic-saga-propagate and funnel-text-budget tests read .Detail (verified by
+      :raw read). The context-pack 445-pass claim is contradicted by file bytes;
+      gates go green only after m0 lands. TMPDIR=/tmp still required for the 2
+      pre-existing head-guard failures."
+    why: Reviewer fix verified on exact bytes this turn; earlier lowercase readings
+      were a rendering artifact. Plan targets red-to-green via m0 before docs.
+  - assumption: Behavior is frozen except Detail->detail normalization, prompts.ts
+      dismiss-row filtering (mirroring human-stop) plus the dispositions.md row
+      (prompt surface). Deviation history goes ONLY in ARCHITECTURE docs, never
+      in agents/criteria prompt files. Legacy fingerprint migration (Q8) is
+      retained as tested, harmless code; allowlist duplication (Q9) is locked by
+      a contract test, not refactored.
+    why: "Closure iteration: bounding change to the verified gaps avoids regressions
+      and prompt debloat violations."
   - assumption: Open questions Q2/Q3/Q4/Q5/Q6/Q7/Q10 are resolved document-only via
-      the plan ADRs; operator already notified on the three deviations via
+      the plan ADRs; operator notified on the four deviations via
       awareness-plan-2-autonomous-halt-deviation,
-      awareness-plan-3-epic-config-awareness, and
-      awareness-plan-4-funnel-triage-coverage-awareness.
+      awareness-plan-3-epic-config-awareness,
+      awareness-plan-4-funnel-triage-coverage-awareness, and
+      awareness-plan-4-remarkable-threshold-exemption-accepted.
     disposition: human-awareness
     why: All are accepted-semantics documentation, not implementation gaps;
       architect decides, operator informed.
@@ -154,6 +195,15 @@ techDebt:
       epic-state precedence, prefix inline paths, scope removeWorktree claim,
       fold contextPack key). Consumers apply mentally.
     id: td-spike-nits
+  - category: impacting
+    description: Capital-D Detail in 6 runtime-bound file schemas rejects lowercase
+      detail (review.schema.json reference-only, normalized for consistency);
+      mergeConcern reads existing?.Detail so typecheck fails and longest-wins is
+      dead; epic-saga and funnel tests read .Detail.
+    id: td-detail-casing
+    resolution: "Fix in schema-detail-normalize-v2: normalize schemas +
+      concerns.ts:72 + all test reads; contract and longest-wins tests verify;
+      docs-finish-v5 depends on it."
 adrs:
   - context: agents/criteria/dispositions.md documents
       fix/optional/architect/human-* but not dismiss, while triagers are allowed
@@ -209,7 +259,9 @@ adrs:
     decision: "Document as accepted semantics in §8.11: remarkables are
       threshold-exempt digests (never blocking/halting, consistent with the
       low-noise digest directive), counts scope is c-* only, digest has no
-      retention rule. Any gating/counting/retention change is future work."
+      retention rule. Any gating/counting/retention change is future work.
+      Operator notified via
+      awareness-plan-4-remarkable-threshold-exemption-accepted."
     id: adr-remarkable-counts-semantics
     title: Remarkable digest exemption and counts scope accepted
   - context: isTriagerAgent returns true only for reviewer/plan-reviewer; close-up
