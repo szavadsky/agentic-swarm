@@ -1,0 +1,19 @@
+seq: 1
+name: test-first
+attempt: 1
+fixRound: 1
+agent: developer
+role: workhorse
+models:
+  - opencode-go/deepseek-v4.1-flash
+  - opencode-go/muse-spark-1.3-contributor
+timeoutSec: 5400
+status: ok
+startedAt: 2026-11-09T08:05:00.092Z
+session: 01a1bf56-d4b7-7649-9fd1-563e549e1900
+endedAt: 2026-11-09T08:13:46.936Z
+usage:
+  inputTokens: 115165
+  outputTokens: 49620
+  costUsd: 0.064955
+traceRef: /home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/sessions/2026-11-09T08-05-01-239Z_01a1bf56-d4b7-7649-9fd1-563e549e1900.jsonl

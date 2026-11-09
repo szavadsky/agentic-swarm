@@ -1,0 +1,39 @@
+status: ok
+summary: "No code changes this round (diff already committed): dispositions.md
+  carries the terse triager-only dismiss row/rule kept on disk,
+  formatDispositionsSection now drops dismiss rows/rules unless the allowed set
+  includes dismiss, and test/prompts.test.ts locks QA-excludes vs
+  reviewer-includes rendering. Typecheck and the target test file are green."
+target:
+  selectors:
+    - test/prompts.test.ts
+  expectRed:
+    - "prompts: dismiss disposition contract
+      (adr-dismiss-criteria-row).documents a terse triager-only dismiss row and
+      rule kept on disk"
+    - "prompts: dismiss disposition contract (adr-dismiss-criteria-row).filters
+      dismiss rows and rules unless the allowed set includes dismiss"
+    - "prompts: dismiss disposition contract (adr-dismiss-criteria-row).renders
+      dismiss criteria for triager reviewers but not QA"
+evidence:
+  - cd plugins/software-factory && bun run typecheck -> tsc --noEmit,
+    TYPECHECK_EXIT=0 (4.4s)
+  - "cd plugins/software-factory && TMPDIR=/tmp bun test test/prompts.test.ts ->
+    bun test v1.4.4: 25 pass, 0 fail, 320 expect() calls, TEST_EXIT=0 (276ms);
+    includes the three dismiss-contract cases (documents row/rule, filters
+    unless allowed, triager-includes/QA-excludes)"
+  - "git status --short clean; implementation is committed: 7e02545 adds the
+    dismiss row/rule to agents/criteria/dispositions.md and the dismiss
+    exclusion to formatDispositionsSection in src/core/prompts.ts; 669f646 adds
+    the render tests in test/prompts.test.ts"
+  - Diff is 21 prod lines vs storyMaxProdLines 300; test file fragment matrix
+    and debloat budgets pass within the 25/25 green run
+  - "Verified dismissal doc content: row marked triager-only, reason required,
+    concern kept on disk; rule mirrored on line 20"
+concerns:
+  - Full `bun test` suite was launched in the background but that job no longer
+    exists after the session restart, so only the declared target selector plus
+    typecheck gate were re-confirmed; no other test files were changed by this
+    story.
+notes: Yield-only round per review feedback; no edits made, existing committed
+  diff is the implementation.
