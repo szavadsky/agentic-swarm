@@ -1,0 +1,9 @@
+context: wave
+decision: continue
+rationale: Wave 2 was an empty wave (no merges, no failures, tree clean, gates
+  typecheck pass/pass and test fail->pass improved). schema-detail-normalize
+  still running per task status, docs-finish-v4 correctly pending on it. No
+  interface changes, spikes, or blocking debt require replanning.
+text: "Continue: allow schema-detail-normalize to finish under persisted consult
+  guidance, then run docs-finish-v4 in the next wave unchanged. Keep TMPDIR=/tmp
+  for gates."
