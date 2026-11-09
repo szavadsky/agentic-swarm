@@ -1,0 +1,80 @@
+status: changes_requested
+summary: 2 milestones/2 items within bounds but m0 interface contradicts
+  required test fix, m1 ADR creation already exists, sixth deviation leaves
+  ARCHITECTURE stale
+suggestions:
+  - id: m0-interface-untouched-contradiction
+    disposition: fix
+    summary: m0 interface wrongly claims contract test stays untouched
+    detail: Directional interface says schema-detail-normalize.test.ts stays
+      untouched, but lines 234 and 263 read merged[0]!.Detail (capital-D,
+      undefined) while StoredConcernArtifact.detail is lowercase
+      (artifacts.ts:313). Longest-wins cannot pass without fixing same file.
+      Interface contradicts item fix-ALL and must be revised to
+      untouched-only-86/106.
+    location:
+      file: plugins/software-factory/test/contracts/schema-detail-normalize.test.ts
+      line: 234
+  - id: m0-item-missing-same-file-lines
+    disposition: fix
+    summary: Item omits explicit must-fix for same-file longest-wins reads
+    detail: Item lists only epic-saga 307/313/319 and says longest-wins already
+      exists or add it, plus DO NOT touch 86/106. Given rendering trap (grep
+      missed verified Detail) and ambiguous those, dev will miss 234/263 capital
+      reads in same file. Must explicitly list 234/263 as must-fix to lowercase.
+    location:
+      file: plugins/software-factory/test/contracts/schema-detail-normalize.test.ts
+      line: 263
+  - id: m1-adr-files-already-exist
+    disposition: fix
+    summary: Item says create 2 new ADR files that already exist context-only
+    detail: docs/adr/adr-epic-mailbox-isolation.md and
+      adr-remarkable-digest-triage.md exist with title+context paragraph only,
+      no decision. New-file instruction risks overwrite confusion/idempotency
+      failure. Also omits third incomplete adr-confirm-field-instructions.md and
+      mislabels both as deviation records when remarkable-digest decision is
+      spec-consistent, not deviation. Revise to update/complete.
+    location:
+      file: docs/adr/adr-epic-mailbox-isolation.md
+      line: 3
+  - id: sixth-deviation-docs-stale
+    disposition: fix
+    summary: Sixth deviation accepted without ARCHITECTURE row update
+    detail: ARCHITECTURE.md:39 lists five deviations; plan accepts
+      epic-mailbox-isolation as sixth deviation yet forbids touching
+      ARCHITECTURE/README/config to keep docs-concerns.test.ts:87-109 sentinel
+      green. Leaves traceability stale, violating task intent to update §1 row.
+      Either update row+sentinel or record stale-docs as explicit debt.
+    location:
+      file: plugins/software-factory/docs/ARCHITECTURE.md
+      line: 39
+  - id: casing-parenthetical-ambiguous
+    disposition: optional
+    summary: One-line fix parenthetical renders identically both sides
+    detail: Item says existing?.Detail -> existing?.Detail with no visible case
+      difference due to rendering trap. Surrounding text says lowercase but
+      given three prior audit traps, spell out capital-D to lowercase-d
+      explicitly to prevent no-op edit at concerns.ts:74.
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 74
+  - id: m0-scenario-3-process-not-behavior
+    disposition: optional
+    summary: m0 scenario 3 is manual sweep procedure not falsifiable behavior
+    detail: "Given every .Detail read When swept with :raw reads Then none remain is
+      developer process, not system assertion auditable via gates. Prefer
+      behavior: typecheck passes plus contract/longest-wins suites green proves
+      no stale reads. Keep sweep as task hint, not milestone scenario."
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 74
+  - id: budget-headroom-unverified
+    disposition: optional
+    summary: Confirm fragment addition headroom before adding lines
+    detail: Item allows <=3 lines per fragment within 15/80 budgets, but current
+      total headroom not evidenced. With 19 matrix fragments, adding 6 could
+      breach total 80 if near limit. Verify current totalAdded from prompts.test
+      before committing to additions.
+    location:
+      file: plugins/software-factory/agents/steps/architect-closeup.md
+      line: 29
