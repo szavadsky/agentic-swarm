@@ -1,0 +1,18 @@
+status: approved
+summary: "Approved: byte-length longest-wins verified correct; 7 schemas
+  lowercase-strict; target 5 pass + related 54 pass + typecheck clean; no
+  scope/security issues."
+suggestions:
+  - id: legacy-override-why-comment
+    disposition: optional
+    summary: Legacy rename-merge override of longest-wins lacks a why comment
+    detail: "concerns.ts:146 (if legacyFile && input.detail) overwrites the
+      mergeConcern longest-wins result with incoming detail. Intentional per
+      developer notes (legacy regression tests depend on the gate) and
+      behavior-preserving here, but non-obvious to future readers: mergeConcern
+      just computed longest-wins, then this line discards it. Add a one-line why
+      comment per contract-separation (implementations carry non-obvious why).
+      No behavior change needed."
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 146
