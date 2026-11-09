@@ -1,0 +1,12 @@
+context: wave
+decision: continue
+rationale: "Wave 2 empty is expected, not exhausted: Task Status shows
+  schema-detail-normalize-v3 still running and closeup-confirm-instructions
+  pending on its dep. m0 retry per persisted consult 026 guidance is in flight;
+  m1 is correctly unschedulable until m0 merges. Tree clean, gates show no
+  regression (typecheck pass/pass, test fail->pass improved). Empty-wave streak
+  2/3 allows one more wave for the retry to land; no plan amendment warranted."
+text: "Continue: let schema-detail-normalize-v3 retry complete per decision 026
+  (delete remarkable why block, schemas + concerns.ts:74 + MUST-FIX reads,
+  preserve negative fixtures, :raw-verify, TMPDIR=/tmp gates), then schedule
+  closeup-confirm-instructions in wave 3."
