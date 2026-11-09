@@ -1,0 +1,14 @@
+context: wave
+decision: continue
+rationale: Wave 1 merged closeup-triager-cleanup cleanly (review approved, tree
+  clean, gates typecheck pass/pass and test fail->pass improved, zero
+  regressions). schema-detail-normalize is retrying test-first per persisted
+  consult guidance for yield-shape omission only (no code defect); it carries
+  forward normally, not failed/blocked. docs-finish-v4 stays correctly gated on
+  it. Reviewer optionals (pending-map reuse, comment wording, no-op updatedAt
+  bump) are non-blocking polish, no interface change, no spike findings to
+  integrate.
+text: "Continue: let schema-detail-normalize retry with persisted target
+  guidance, then run wave 2 docs-finish-v4 unchanged. Keep TMPDIR=/tmp for
+  gates. Defer the 3 optional nits to close-up debt; do not amend the plan for
+  them."

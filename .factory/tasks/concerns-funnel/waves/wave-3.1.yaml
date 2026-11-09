@@ -1,0 +1,8 @@
+wave: 1
+iteration: 3
+status: complete
+mergedItems:
+  - closeup-triager-cleanup
+failedItems: []
+blockedItems: []
+summary: "Wave 1 completed. Merged items: closeup-triager-cleanup"
