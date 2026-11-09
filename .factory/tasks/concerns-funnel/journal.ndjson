@@ -1662,3 +1662,5 @@
 {"type":"item_merge_phase","item":"epic-saga-propagate","phase":"merge-child-into-parent","ts":"2026-11-09T01:57:13.558Z"}
 {"type":"item_merge_phase","item":"epic-saga-propagate","phase":"remove-worktree","ts":"2026-11-09T01:57:13.644Z"}
 {"type":"item_merged","item":"epic-saga-propagate","sha":"063263effe2ee9c8716c2e59411c70538f023024","conflictResolved":false,"ts":"2026-11-09T01:57:13.778Z"}
+{"type":"step_started","task":"concerns-funnel","step":"wave-close-up-2-2","attempt":1,"recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/058-wave-close-up-2-2-a1","ts":"2026-11-09T02:01:33.284Z"}
+{"type":"step_timeout_armed","task":"concerns-funnel","step":"wave-close-up-2-2","timeoutSec":2700,"ts":"2026-11-09T02:01:33.293Z"}

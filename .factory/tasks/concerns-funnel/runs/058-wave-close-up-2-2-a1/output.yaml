@@ -1,0 +1,23 @@
+blockedItems: []
+debt:
+  - Pre-existing test gate red at baseline (2 failures in
+    test/engine/head-guard.test.ts due to TMPDIR under .factory-runtime and
+    step-runner '/.factory' split); now=flaky still failing matches baseline,
+    not a wave regression.
+failedItems: []
+iteration: 2
+mergedItems:
+  - human-router-severity
+  - epic-saga-propagate
+recommendations:
+  - Normalize TMPDIR to /tmp for gate runs or fix the step-runner '/.factory'
+    split so the test gate can go green.
+status: complete
+summary: "Wave 2 (iteration 2) completed. Merged 2/2 items:
+  human-router-severity, epic-saga-propagate. Tree hygiene clean: no untracked
+  artifacts, no conflict markers (strict git grep for ^<<<<<<< / ^>>>>>>> /
+  ^======= / ^||||||| negative), git diff --check clean; sole modification is
+  engine-managed .factory/tasks/concerns-funnel/journal.ndjson. Gates match
+  baseline with no regressions: typecheck pass->pass green; test fail->flaky
+  still failing (matches baseline red, not a regression)."
+wave: 2
