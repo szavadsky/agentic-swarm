@@ -1,0 +1,10 @@
+id: awareness-plan-3-epic-config-awareness
+ref: plan-3
+disposition: human-awareness
+question: Plan ADR documents that humanInvolvement/concerns/reviewPolicy at root
+  do not apply inside epics, deviating from ARCHITECTURE section 5 inheritance
+  claim. Operators setting mode once at root will be surprised. Document-only
+  decision is reasonable for closure scope but needs informational steer record
+  like autonomous-halt awareness.
+status: open
+createdAt: 2026-11-09T05:30:00.236Z
