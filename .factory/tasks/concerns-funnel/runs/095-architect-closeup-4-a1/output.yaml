@@ -1,0 +1,29 @@
+completedMilestones:
+  - m1-dismiss-contract
+iteration: 4
+remainingMilestones:
+  - m0-detail-normalize
+  - m2-docs-gates
+status: next-iteration
+summary: 'Iteration 4 delivered 1/3 milestones. Verified on exact file bytes:
+  m1-dismiss-contract COMPLETE (dispositions.md dismiss row + rule; prompts.ts
+  filters dismiss+human-stop by allowed set; QA/reviewer render behavior
+  landed). m0-detail-normalize NOT delivered despite its item merging: all 6
+  runtime schemas still declare capital-D "Detail" (verified
+  developer-output.schema.json:68), concerns.ts merge guard still reads
+  existing?.Detail (verified), so the lowercase contract is inverted and
+  typecheck/longest-wins/full-suite scenarios cannot pass. m2-docs-gates content
+  landed (§1 row 18 Implemented + 5 deviations verified; §8.11 + README +
+  commentary + sentinels + allowlist agreement per audit) but its gate scenario
+  is blocked on m0, and §8.11 claims longest-wins the code does not deliver.
+  Iteration 5: one small red-to-green item (6 schemas + review.schema.json +
+  merge guard + stale .Detail test reads + longest-wins/contract verification),
+  then re-verify m2 gates with no further docs edits expected.'
+techDebt:
+  - "td-detail-casing still open: 6 runtime schemas + review.schema.json
+    capital-D Detail, concerns.ts existing?.Detail guard, stale test .Detail
+    reads; blocks typecheck + contract/longest-wins/full-suite green"
+  - "docs-vs-code drift: ARCHITECTURE §8.11 claims longest-detail-wins while
+    merge guard is dead; resolves when m0 lands, then re-verify m2 gate
+    scenario"
+  - "td-tmpdir-split: gate runs need TMPDIR=/tmp workaround"
