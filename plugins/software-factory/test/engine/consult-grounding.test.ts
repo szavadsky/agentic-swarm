@@ -129,7 +129,7 @@ describe("Engine: grounded consult and retry feedback (PsPost5 2/3/6, ShPost3)",
     harness.scriptOutcome(`${task}/items/${itemSlug}/develop#a1`, bigScript);
     harness.scriptOutcome(`${task}/items/${itemSlug}/develop#a2`, bigScript);
     let consultPrompt = "";
-    harness.scriptOutcome(`${task}/runs/consult-${itemSlug}#a1`, (run) => {
+    harness.scriptOutcome(`${task}/runs/consult-${itemSlug}-1#a1`, (run) => {
       consultPrompt = (run as { prompt: string }).prompt;
       return {
         ok: true as const,

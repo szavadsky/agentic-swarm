@@ -134,7 +134,7 @@ describe("Engine: Fix loop, consult, and alt-on-retry (§8.2, §8.5, §12.4)", (
     });
 
     // 4. Architect consult: decides "escalate"
-    harness.scriptOutcome(`${task}/runs/consult-${itemSlug}#a1`, {
+    harness.scriptOutcome(`${task}/runs/consult-${itemSlug}-1#a1`, {
       ok: true,
       data: {
         id: "dec-1",

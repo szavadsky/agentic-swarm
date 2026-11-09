@@ -196,10 +196,16 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
     promptVars,
     turnsSemaphore,
    } = opts;
-
   // 0. For orchestration steps (item is undefined): derive done-ness from an ok committed record (§8.4)
   // Resumed-repair turns never reuse: they repair the previous output, so a committed ok must not shadow them.
-  if (!item && !opts.resumedRepair) {
+  // Consult steps (`consult-*`) NEVER reuse either: a second consult for the
+  // same item/seam would replay the first decision via findOkCommittedRecord,
+  // consultCount would never grow, afterRecord would go stale, and the item
+  // would sham-loop to the wave cap stranded `running` (S3/S4). Item consults
+  // get a sequenced stepId (`consult-<item>-<n>`) per call site instead, so
+  // every consult fires a fresh architect turn and writes a new decision file.
+  const isConsultStep = !item && stepId.startsWith("consult-");
+  if (!item && !opts.resumedRepair && !isConsultStep) {
     let existingOk = await findOkCommittedRecord(recordsDir, stepId, opts.taskWt);
     if (existingOk) {
       let artifactWritten = true;

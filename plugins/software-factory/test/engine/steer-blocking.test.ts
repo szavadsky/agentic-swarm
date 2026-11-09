@@ -400,14 +400,17 @@ describe("Engine: awareness never stalls; async block journals item + question",
       fs.writeFileSync(path.join(run.cwd, "file.txt"), "code");
       return { ok: true, data: { status: "ok", summary: "Developed" } };
     });
-    harness.scriptOutcome(`${task}/items/item-q/review#a1`, {
-      ok: true,
-      data: {
-        status: "changes_requested",
-        summary: "Need human input",
-        suggestions: [{ id: "s1", disposition: "human-async", summary: "A or B?", detail: "Choice" }],
+    harness.scriptOutcome(`${task}/items/item-q/review#a1`, [
+      {
+        ok: true,
+        data: {
+          status: "changes_requested",
+          summary: "Need human input",
+          suggestions: [{ id: "s1", disposition: "human-async", summary: "A or B?", detail: "Choice" }],
+        },
       },
-    });
+      { ok: true, data: { status: "approved", summary: "Approved with A", suggestions: [] } },
+    ]);
     harness.scriptOutcome(`${task}/items/item-q/develop#a2`, (run) => {
       fs.writeFileSync(path.join(run.cwd, "file.txt"), "option A code");
       return { ok: true, data: { status: "ok", summary: "Option A implemented" } };
@@ -440,10 +443,7 @@ describe("Engine: awareness never stalls; async block journals item + question",
     fs.mkdirSync(pendingDir, { recursive: true });
     fs.writeFileSync(path.join(pendingDir, "answer-01.txt"), "Use Option A please.");
     harness.scriptComplete(() => ({ refs: ["item-q"], kind: "answer", urgency: "now", summary: "Use Option A" }));
-    harness.scriptOutcome(`${task}/items/item-q/review#a2`, {
-      ok: true,
-      data: { status: "approved", summary: "Approved with A", suggestions: [] },
-    });
+
 
     const res2 = await runTask(
       { harness, repo: repoObj, project, pipelineFor: async () => pipeline, prompts },

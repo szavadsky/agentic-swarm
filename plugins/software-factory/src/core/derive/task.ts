@@ -49,10 +49,11 @@ export interface DerivedTaskState {
   runningSteps: DerivedRunningStep[];
   hasOpenSteerQuestions: boolean;
   openSteerQuestions: SteerItemArtifact[];
-  /** Files whose steering mailbox is dead (steer_poll_dead, never since processed). */
   deadSteerFiles: Array<{ file: string; errors: number }>;
   lastCloseup?: PlanCloseupArtifact;
   toStateArtifact(): StateArtifact;
+  /** Items re-queued this iteration after a prior iteration stranded them mid-flow. */
+  strandedItems: string[];
 }
 
 /**
@@ -107,6 +108,22 @@ export async function deriveTaskState(opts: {
   }
 
   const iteration = existingCloseupsCount + 1;
+
+  // Stranded marker: items whose journal shows `item_stranded` for this
+  // iteration, re-queued after a prior iteration closed mid-flow. Audit
+  // journal only (never read for decisions); status surfaces them distinctly
+  // so operators see the resume, not a mystery re-run.
+  const strandedSlugs = new Set<string>();
+  try {
+    const journalEvents = await readJournal(taskDir);
+    for (const e of journalEvents) {
+      if (e.type === "item_stranded" && (e as { iteration?: number }).iteration === iteration) {
+        const slug = (e as { item?: string }).item;
+        if (typeof slug === "string" && slug) strandedSlugs.add(slug);
+      }
+    }
+  } catch {}
+
 
   // 3. Plan for current iteration
   let plan: PlanArtifact | undefined;
@@ -440,6 +457,7 @@ export async function deriveTaskState(opts: {
     openSteerQuestions,
     deadSteerFiles: await deriveDeadSteerFiles(taskDir),
     lastCloseup,
+    strandedItems: [...strandedSlugs],
     toStateArtifact,
   };
 }

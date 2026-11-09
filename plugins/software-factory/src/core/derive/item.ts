@@ -438,10 +438,16 @@ export async function deriveItemState(opts: {
       const lastFlowStepId = configuredSteps[configuredSteps.length - 1];
 
       if (lastFlowStepId && lastRecord.name === lastFlowStepId) {
-        // Last step was completed! Check if any review requested changes
+        // Last step was completed! Check if any review requested changes.
+        // `fix` keeps the item mid-flow; `human-async`/`human-stop` do too
+        // until the operator answers (the question file persists the block
+        // even after answering, so status alone can't gate on it — the
+        // item-machine consumes the answer as feedback and re-runs).
         if (lastRecord.output && typeof lastRecord.output === "object" && "suggestions" in (lastRecord.output as any)) {
           const rev = lastRecord.output as ReviewArtifact;
-          const hasFix = rev.suggestions?.some((s) => s.disposition === "fix");
+          const hasFix = rev.suggestions?.some(
+            (s) => s.disposition === "fix" || s.disposition === "human-async" || s.disposition === "human-stop"
+          );
           if (!hasFix) {
             status = "ready";
           } else {

@@ -29,7 +29,7 @@ import { isContextPackStale, isContextPackEnabled, runContextPackStep } from "./
 import { mergeItem } from "./merge-path.js";
 import { tickItemMachine } from "./item-machine.js";
 import { deriveItemState } from "../derive/item.js";
-import { deriveWaveState } from "../derive/wave.js";
+import { deriveWaveState, isIterationTerminal, nonTerminalWaveItems } from "../derive/wave.js";
 import { refreshStateYaml } from "../derive/task.js";
 import { appendJournal, readJournal } from "../journal.js";
 import { loadCriteriaBundle, formatDispositionsSection } from "../prompts.js";
@@ -231,6 +231,72 @@ async function readEmptyStreak(taskDir: string, iteration: number): Promise<numb
     }
   }
   return 0;
+}
+
+/**
+ * Stranded-item recovery (§8.4.1): an item is stranded when a PRIOR iteration
+ * closed (closeup-N.yaml committed) while the item was still mid-flow
+ * (`running`/`pending`/`ready`-unmerged — anything `isIterationTerminal` rejects).
+ * Recovery re-adds the slug to the current iteration's item list so the wave
+ * loop ticks it again; branch, step records, and attempts are untouched, so
+ * the fix round resumes where it stranded. Journals one `item_stranded`
+ * event per item per iteration (idempotent: skips slugs already journaled
+ * for this iteration).
+ */
+export async function recoverStrandedItems(opts: {
+  taskDir: string;
+  task: string;
+  taskWt: string;
+  parentBranch: string;
+  pipeline: PipelineConfig;
+  iteration: number;
+  currentIterationItems: string[];
+  rootTaskDir?: string;
+}): Promise<string[]> {
+  const { taskDir, parentBranch, pipeline, iteration } = opts;
+  const items = [...opts.currentIterationItems];
+  if (iteration <= 1) return items;
+  // Prior iteration closed iff its closeup file exists (committed).
+  const prevCloseup = path.join(taskDir, `closeup-${iteration - 1}.yaml`);
+  if (!fs.existsSync(prevCloseup)) return items;
+  const itemsDir = path.join(taskDir, "items");
+  if (!fs.existsSync(itemsDir)) return items;
+  const events = await readJournal(taskDir);
+  const alreadyJournaled = new Set(
+    events
+      .filter((e) => e.type === "item_stranded" && (e as { iteration?: number }).iteration === iteration)
+      .map((e) => String((e as { item?: string }).item ?? "")),
+  );
+  const slugs = (await fs.promises.readdir(itemsDir)).sort();
+  for (const slug of slugs) {
+    if (items.includes(slug)) continue;
+    let st;
+    try {
+      st = await deriveItemState({
+        taskDir,
+        itemSlug: slug,
+        parentBranch,
+        taskWt: opts.taskWt,
+        pipeline,
+        rootTaskDir: opts.rootTaskDir,
+      });
+    } catch {
+      continue;
+    }
+    if (isIterationTerminal(st.status)) continue;
+    items.push(slug);
+    if (!alreadyJournaled.has(slug)) {
+      await appendJournal(taskDir, {
+        type: "item_stranded",
+        item: slug,
+        iteration,
+        status: st.status,
+        step: st.currentStepId,
+        strandedFrom: iteration - 1,
+      });
+    }
+  }
+  return items;
 }
 
 /**
@@ -937,6 +1003,22 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
     }
   }
 
+  // Stranded-item recovery (§8.4.1): re-queue items whose iteration closed
+  // while they were mid-flow (`running`/`pending`/`ready`-unmerged). Recovery
+  // only re-adds the slug to this iteration's item list — branch, records,
+  // and attempts are untouched — and journals `item_stranded` once per item.
+  // The wave-report prompt then notes them so the architect sees the resume.
+  currentIterationItems = await recoverStrandedItems({
+    taskDir,
+    task,
+    taskWt,
+    parentBranch,
+    pipeline,
+    iteration,
+    currentIterationItems,
+    rootTaskDir: params.rootTaskDir,
+  });
+
   const initialStates = await Promise.all(
     currentIterationItems.map((slug) =>
       deriveItemState({ taskDir, itemSlug: slug, parentBranch, taskWt, pipeline, project, rootTaskDir: params.rootTaskDir })
@@ -944,8 +1026,8 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
   );
 
   let maxWave = initialStates.reduce((max, it) => Math.max(max, it.wave), 1);
+  const waveRedrives = new Map<number, number>();
   for (let w = 1; w <= maxWave; w++) {
-    // Restart-safety: an ok amend record WITHOUT structural outlines is old-format — re-run, never reuse.
     const pendingWaveReportId = `architect-wave-report-${iteration}-${w}`;
     const pendingWaveReport = await findOkCommittedRecord(runsDir, pendingWaveReportId, taskWt);
     if (
@@ -983,7 +1065,17 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
     );
     let waveState = deriveWaveState({ wave: w, items: itemStates });
 
-    if (waveState.items.length === 0 || waveState.items.every((it) => it.status === "merged")) {
+    // A wave whose items are ALL `blocked` (open human questions) pauses
+    // without close-up work: no merges, no wave-close-up, no report — the
+    // operator owns the next move. The wave does NOT count as closed (no
+    // wave artifact, no report record), so the answer path re-runs this
+    // same wave on restart. Journal wave_blocked distinctly so the pause
+    // is visible (not a silent wave_started with no close-up).
+    if (waveState.items.length > 0 && waveState.blocked.length === waveState.items.length) {
+      await appendJournal(taskDir, { type: "wave_blocked", wave: w, iteration, items: waveState.blocked.map((b) => b.slug) });
+      continue;
+    }
+    if (waveState.isComplete || waveState.items.length === 0) {
       continue;
     }
 
@@ -1056,9 +1148,13 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
     try {
       startTimer();
 
-      // Run wave items until wave can merge or complete
+      // Run wave items until wave can merge or complete. The 50-tick cap is
+      // a stall breaker, NEVER a normal wave exit: hitting it with items
+      // mid-flow journals wave_tick_cap_hit and re-drives instead of closing,
+      // so mid-flow items can never strand `running` (stranded-wave fix).
+      const WAVE_TICK_CAP = 50;
       let waveTicks = 0;
-      while (!waveState.canMerge && !waveState.isComplete && waveTicks < 50) {
+      while (!waveState.canMerge && !waveState.isComplete && waveTicks < WAVE_TICK_CAP) {
         waveTicks++;
 
         // Poll mailbox at the start of each wave tick (§8.8)
@@ -1152,10 +1248,103 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
           architectSessionId,
         };
       }
+
+      // Tick-cap re-drive: the cap is a stall breaker, never a wave exit.
+      // Hitting it with the wave neither mergeable nor complete means ticks
+      // stopped firing (provider stall / sham consult loop) while items are
+      // mid-flow. Journal loudly and re-drive one more batch instead of
+      // falling through to merge/close-up with stranded `running` items.
+      if (
+        waveTicks >= WAVE_TICK_CAP &&
+        !waveState.canMerge &&
+        !waveState.isComplete
+      ) {
+        const stragglers = [...waveState.running, ...waveState.runnable].map((it) => it.slug);
+        await appendJournal(taskDir, {
+          type: "wave_tick_cap_hit",
+          wave: w,
+          iteration,
+          ticks: waveTicks,
+          stragglers,
+        });
+        // Re-drive: re-derive and tick each straggler once more so a transient
+        // stall gets another chance; the gate below still refuses close-up
+        // while anything is non-terminal.
+        for (const slug of stragglers) {
+          try {
+            const child = await ensureChildWorktree(repo, { branch: parentBranch, path: taskWt }, slug);
+            await tickItemMachine({
+              task,
+              itemSlug: slug,
+              parentBranch,
+              taskWt,
+              childWt: child.path,
+              taskDir,
+              repo,
+              harness,
+              pipeline,
+              project,
+              prompts,
+              budgetTracker,
+              turnsSemaphore,
+              architectSessionId,
+              rootTaskWt: params.rootTaskWt,
+              rootTaskDir: params.rootTaskDir,
+            });
+          } catch (err: any) {
+            await appendJournal(taskDir, {
+              type: "wave_redrive_error",
+              wave: w,
+              iteration,
+              item: slug,
+              error: err?.message ?? String(err),
+            });
+          }
+        }
+        itemStates = await Promise.all(
+          currentIterationItems.map((s) =>
+            deriveItemState({ taskDir, itemSlug: s, parentBranch, taskWt, pipeline, rootTaskDir: params.rootTaskDir })
+          )
+        );
+        waveState = deriveWaveState({ wave: w, items: itemStates });
+        await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
+      }
+
+    // Wave-complete gate (§8.4.5): the wave's tick work is done when every
+    // wave item is wave-terminal (merged/failed/blocked/superseded/ready) —
+    // `ready` merges right after the tick loop, so it must NOT hold the wave
+    // open. Awaiting-fix-round or mid-step `running`/`pending` items DO keep
+    // the wave open: journal wave_not_complete and re-drive, bounded so a
+    // permanently-stalled item fails loudly instead of spinning forever.
+    {
+      const stragglers = nonTerminalWaveItems(waveState);
+      if (stragglers.length > 0) {
+        waveRedrives.set(w, (waveRedrives.get(w) ?? 0) + 1);
+        await appendJournal(taskDir, {
+          type: "wave_not_complete",
+          wave: w,
+          iteration,
+          stragglers,
+          redrive: waveRedrives.get(w),
+        });
+        if ((waveRedrives.get(w) ?? 0) > 5) {
+          await appendJournal(taskDir, {
+            type: "wave_stalled",
+            wave: w,
+            iteration,
+            stragglers,
+          });
+          throw new Error(
+            `Wave ${w} stalled with non-terminal items after 5 re-drives: ${stragglers.join(", ")} (refusing close-up; fix the stall, then restart)`
+          );
+        }
+        w--;
+        continue;
+      }
+    }
     } finally {
       stopTimer();
     }
-
     // 6. Wave end merge path (§8.4.6, §7)
     // Scheduler-idle instrumentation (post-mortem Finding: a multi-minute gap
     // between wave_started and the close-up step with no journal explanation).
@@ -1380,12 +1569,21 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
     // Surface discarded-amendment notes (this wave's predecessors) so the architect can re-decide.
     const journalEvents = await readJournal(taskDir);
     const discardedNotes = journalEvents
-      .filter((e) => e.type === "pm_amend_discarded" && (e as any).iteration === iteration)
-      .map((e) => `- discarded amendment (wave ${(e as any).wave}): ${(e as any).note ?? "PM output invalid"}`);
+      .filter((e: { type?: string; iteration?: number }) => e.type === "pm_amend_discarded" && e.iteration === iteration)
+      .map((e) => `- discarded amendment (wave ${(e as unknown as { wave?: number }).wave}): ${((e as unknown as { note?: string }).note ?? "PM output invalid")}`);
+    // Stranded resumes: tell the architect which items re-queued this wave
+    // after a prior iteration stranded them mid-flow, so the resume is
+    // deliberate rather than a mystery re-appearance.
+    const strandedNotes = journalEvents
+      .filter((e) => e.type === "item_stranded" && (e as any).iteration === iteration)
+      .map((e) => `- stranded item re-queued: ${(e as any).item} (was ${(e as any).status ?? "non-terminal"} after step ${(e as any).step ?? "?"}, stranded from iteration ${(e as any).strandedFrom ?? "?"}; branch/records preserved, fix round resumes)`);
     const waveReportWaveReportText = [
       waveCloseupRes.output ? JSON.stringify(waveCloseupRes.output, null, 2) : waveSummary,
       ...(discardedNotes.length > 0
         ? [`\nDiscarded amendments (re-decide within the amendment budget):\n${discardedNotes.join("\n")}`]
+        : []),
+      ...(strandedNotes.length > 0
+        ? [`\nStranded items resumed this iteration (prior iteration closed mid-flow):\n${strandedNotes.join("\n")}`]
         : []),
     ].join("\n");
     const waveReportStatusBlock = await buildTaskStatusBlock({
@@ -1818,6 +2016,116 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
     };
   }
 
+  // Iteration-complete gate (§8.4.7): plan-close-up runs ONLY when every
+  // iteration item is terminal (merged/failed/blocked/superseded). A `ready`
+  // item is wave-terminal but iteration-still-open (unmerged); `running` /
+  // `pending` items are mid-flow. Refuse loudly with a journal event and
+  // re-drive the non-terminal items instead of silently closing the
+  // iteration and stranding them `running` forever. Bounded: at most 5
+  // re-drive rounds, then fail loudly on a true stall.
+  for (let redrive = 0; redrive < 6; redrive++) {
+    const currentStates = await Promise.all(
+      currentIterationItems.map((slug) =>
+        deriveItemState({ taskDir, itemSlug: slug, parentBranch, taskWt, pipeline, rootTaskDir: params.rootTaskDir })
+      )
+    );
+    const nonTerminal = currentStates.filter((it) => !isIterationTerminal(it.status));
+    if (nonTerminal.length === 0) break;
+    // Answered-human-async items whose stored review still carries the
+    // disposition tick through the item machine (answer hydrated as
+    // feedback → fix re-entry → develop a2 → review approve). A
+    // `ready` item is otherwise iteration-still-open: it merges on the
+    // NEXT wave pass, so advance it immediately instead of refusing.
+    const tickable = nonTerminal.filter((it) => it.status === "ready" || it.status === "running" || it.status === "pending");
+    if (tickable.length === 0) break;
+    const slugs = nonTerminal.map((it) => it.slug);
+    await appendJournal(taskDir, {
+      type: "plan_closeup_refused",
+      iteration,
+      stragglers: slugs,
+      statuses: Object.fromEntries(nonTerminal.map((it) => [it.slug, it.status])),
+      redrive,
+    });
+    if (redrive >= 5) {
+      await appendJournal(taskDir, { type: "iteration_stalled", iteration, stragglers: slugs });
+      throw new Error(
+        `Iteration ${iteration} stalled with non-terminal items after 5 re-drives: ${slugs.join(", ")} (refusing plan-close-up; fix the stall, then restart)`
+      );
+    }
+    for (const it of nonTerminal) {
+      if (it.kind === "epic" && runTaskChild) {
+        try {
+          await runTaskChild(it.slug);
+        } catch {}
+        continue;
+      }
+      // A `ready` item is iteration-still-open only because it hasn't
+      // merged: merge it here (same path as the wave-end merge) instead
+      // of ticking the item machine (which would report `ready` again).
+      if (it.status === "ready") {
+        try {
+          const childBranchName = childBranch(parentBranch, it.slug);
+          const childWtPath = path.join(
+            repo.worktreeRoot ?? path.dirname(taskWt),
+            childBranchName.replace(/\//g, "_")
+          );
+          const mRes = await mergeItem({
+            task,
+            item: it,
+            parentBranch,
+            taskWt,
+            childWt: childWtPath,
+            repo,
+            harness,
+            pipeline,
+            project,
+            prompts,
+            taskDir,
+            turnsSemaphore,
+          });
+          if (!mRes.ok) {
+            await appendJournal(taskDir, { type: "item_merge_failed", item: it.slug, error: mRes.error });
+          }
+        } catch (err: any) {
+          await appendJournal(taskDir, {
+            type: "iteration_redrive_error",
+            iteration,
+            item: it.slug,
+            error: err?.message ?? String(err),
+          });
+        }
+        continue;
+      }
+      try {
+        const child = await ensureChildWorktree(repo, { branch: parentBranch, path: taskWt }, it.slug);
+        await tickItemMachine({
+          task,
+          itemSlug: it.slug,
+          parentBranch,
+          taskWt,
+          childWt: child.path,
+          taskDir,
+          repo,
+          harness,
+          pipeline,
+          project,
+          prompts,
+          budgetTracker,
+          turnsSemaphore,
+          architectSessionId,
+          rootTaskWt: params.rootTaskWt,
+          rootTaskDir: params.rootTaskDir,
+        });
+      } catch (err: any) {
+        await appendJournal(taskDir, {
+          type: "iteration_redrive_error",
+          iteration,
+          item: it.slug,
+          error: err?.message ?? String(err),
+        });
+      }
+    }
+  }
   // 7. Plan close-up (§8.4.7, Finding 5 & 6)
   const planCloseupStepId = `plan-close-up-${iteration}`;
   const planCloseupAttempt = getNextStepAttempt(runsDir, planCloseupStepId, pipeline.limits?.maxInterruptions ?? 3);

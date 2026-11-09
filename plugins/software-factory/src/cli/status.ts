@@ -98,7 +98,8 @@ export async function runStatus(opts: StatusOptions): Promise<number> {
       for (const item of wave.items) {
         const spend = derived.spendByItem[item.slug]?.costUsd ?? 0;
         const step = item.currentStepId ? ` step=${item.currentStepId}` : "";
-        console.log(`    - ${item.slug} [${item.status}] (${item.kind ?? "item"}) $${spend.toFixed(4)}${step}`);
+        const strandedMark = derived.strandedItems?.includes(item.slug) ? " [stranded→resumed]" : "";
+        console.log(`    - ${item.slug} [${item.status}]${strandedMark} (${item.kind ?? "item"}) $${spend.toFixed(4)}${step}`);
       }
     }
   } else if (derived.items && derived.items.length > 0) {

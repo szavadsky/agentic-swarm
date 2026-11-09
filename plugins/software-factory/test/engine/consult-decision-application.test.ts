@@ -146,7 +146,7 @@ describe("Engine: Consult decision application ends loops (§8.5, Finding 10)", 
     });
 
     // Consult decides retry-with-guidance
-    harness.scriptOutcome(`${task}/runs/consult-retry-1#a1`, {
+    harness.scriptOutcome(`${task}/runs/consult-retry-1-1#a1`, {
       ok: true,
       data: {
         id: "dec-retry",
@@ -185,7 +185,7 @@ describe("Engine: Consult decision application ends loops (§8.5, Finding 10)", 
 
     // Exactly one consult ran: the decision ended the loop instead of re-consulting.
     const consultCalls = harness.calls.filter(
-      (c) => c.type === "run" && c.run.label.includes("consult-retry-1")
+      (c) => c.type === "run" && c.run.label.includes("consult-retry-1-")
     );
     expect(consultCalls.length).toBe(1);
 
@@ -307,7 +307,7 @@ describe("Engine: Consult decision application ends loops (§8.5, Finding 10)", 
     });
 
     // Consult decides abandon
-    harness.scriptOutcome(`${task}/runs/consult-doomed-1#a1`, {
+    harness.scriptOutcome(`${task}/runs/consult-doomed-1-1#a1`, {
       ok: true,
       data: {
         id: "dec-abandon",
@@ -346,7 +346,7 @@ describe("Engine: Consult decision application ends loops (§8.5, Finding 10)", 
 
     // Exactly one consult ran
     const consultCalls = harness.calls.filter(
-      (c) => c.type === "run" && c.run.label.includes("consult-doomed-1")
+      (c) => c.type === "run" && c.run.label.includes("consult-doomed-1-")
     );
     expect(consultCalls.length).toBe(1);
 

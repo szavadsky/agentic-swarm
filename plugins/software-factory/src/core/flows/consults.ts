@@ -113,8 +113,20 @@ export async function runItemConsult(
   let decisionArtifact: (DecisionArtifact & { item?: string; afterRecord?: string }) | undefined;
   let decisionPath = "";
 
-  const consultStepId = `consult-${item}`;
-  const consultAttempt = getNextStepAttempt(runsDir, consultStepId, pipeline.limits?.maxInterruptions ?? 3);
+  // Sequenced stepId: consults never hit the step-runner done-ness reuse
+  // (S3/S4) — every consult fires a fresh architect turn and writes a new
+  // sequential decision file. Sequence from existing decision files for the
+  // same item so restarts resume without clobbering committed decisions.
+  let consultSeq = 1;
+  if (fs.existsSync(decisionsDir)) {
+    const existing = await fs.promises.readdir(decisionsDir);
+    for (const name of existing) {
+      const m = new RegExp(`^\\d{3}-item-${item}-(\\d+)\\.yaml$`).exec(name);
+      if (m) consultSeq = Math.max(consultSeq, parseInt(m[1]!, 10) + 1);
+    }
+  }
+  const consultStepId = `consult-${item}-${consultSeq}`;
+  const consultAttempt = 1;
 
   const stepRes = await runAgentStep({
     task,
@@ -141,20 +153,10 @@ export async function runItemConsult(
     writeArtifact: async (output: unknown) => {
       const raw = output as any;
       const decisionVal = raw?.decision ?? "retry-with-guidance";
-      let existingDecisionFile: string | undefined;
-      if (fs.existsSync(decisionsDir)) {
-        const files = await fs.promises.readdir(decisionsDir);
-        const match = files.filter((f) => f.includes(`item-${item}.yaml`)).sort().pop();
-        if (match) existingDecisionFile = match;
-      }
-      if (existingDecisionFile) {
-        decisionPath = path.join(decisionsDir, existingDecisionFile);
-        try {
-          decisionArtifact = await readYaml(decisionPath);
-        } catch {}
-      }
+      // One decision file per consult turn: no clobber, no load-and-return
+      // of a prior decision. Sequenced consults each write their own file,
+      // so consultCount grows and consultCount/afterRecord stay truthful.
       if (decisionArtifact) return;
-
       let nextSeq = 1;
       if (fs.existsSync(decisionsDir)) {
         const existing = await fs.promises.readdir(decisionsDir);
@@ -182,7 +184,7 @@ export async function runItemConsult(
         question: raw?.question,
       };
 
-      const decisionFileName = `${String(nextSeq).padStart(3, "0")}-item-${item}.yaml`;
+      const decisionFileName = `${String(nextSeq).padStart(3, "0")}-item-${item}-${consultSeq}.yaml`;
       decisionPath = path.join(decisionsDir, decisionFileName);
       await writeYamlAtomic(decisionPath, decisionArtifact);
 

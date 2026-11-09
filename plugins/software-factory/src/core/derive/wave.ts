@@ -108,6 +108,9 @@ export function deriveWaveState(opts: {
 
   // A wave is ready to merge if no items are currently runnable or running, and there is at least one ready item.
   // A wave is complete if every item in it is terminal (merged, failed, superseded) or blocked.
+  // NOTE: a `ready` item is wave-terminal (it merges right after the tick
+  // loop) but NOT iteration-terminal: plan-close-up must still refuse while
+  // any item is merely `ready` and unmerged.
   const hasActiveWork = running.length > 0 || runnable.length > 0;
   const canMerge = !hasActiveWork && ready.length > 0;
   const isComplete = !hasActiveWork && ready.length === 0;
@@ -125,4 +128,39 @@ export function deriveWaveState(opts: {
     isComplete,
     canMerge,
   };
+}
+
+/**
+ * Wave-close gate (§8.4.5): the wave's tick work is done when every wave item
+ * is wave-terminal (merged/failed/blocked/superseded/ready). A `ready` item
+ * still merges right after the tick loop, so it must NOT hold the wave open —
+ * otherwise any ready item re-drives the wave forever and no close-up runs.
+ * Awaiting-fix-round or mid-step `running`/`pending` items DO hold it open.
+ */
+export function isWaveTerminal(status: DerivedItemState["status"]): boolean {
+  return (
+    status === "merged" ||
+    status === "failed" ||
+    status === "blocked" ||
+    status === "superseded" ||
+    status === "ready"
+  );
+}
+
+/**
+ * Iteration-close gate (§8.4.7): plan-close-up runs ONLY when every iteration
+ * item is iteration-terminal (merged/failed/blocked/superseded). A `ready`
+ * item is wave-terminal but iteration-still-open (unmerged); `running` /
+ * `pending` items are mid-flow. Closing with either strands work `running`.
+ */
+export function isIterationTerminal(status: DerivedItemState["status"]): boolean {
+  return status === "merged" || status === "failed" || status === "blocked" || status === "superseded";
+}
+
+/**
+ * Scans the wave items for non-terminal stragglers that would block the
+ * wave-close-up gate. Returns their slugs (empty = gate passes).
+ */
+export function nonTerminalWaveItems(waveState: DerivedWaveState): string[] {
+  return waveState.items.filter((it) => !isWaveTerminal(it.status)).map((it) => it.slug);
 }

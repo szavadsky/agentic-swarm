@@ -365,7 +365,7 @@ exit 0
         },
       };
     });
-    harness.scriptOutcome(`${task}/runs/consult-taut-item#a1`, {
+    harness.scriptOutcome(`${task}/runs/consult-taut-item-1#a1`, {
       ok: true,
       data: { decision: "replan", why: "Tautology" },
     });

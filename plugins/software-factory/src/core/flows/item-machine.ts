@@ -117,6 +117,7 @@ export function getDefaultFlowForKind(kind: string, pipeline: PipelineConfig): F
       };
     case "fact-finder":
       return {
+        fixLoopTo: "research",
         steps: [
           { id: "research", agent: "fact-finder", role: "workhorse" },
           { id: "review", agent: "reviewer", role: "alt-workhorse" },
@@ -306,6 +307,7 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
   let isFixReentry = false;
   let latestReviewOutput: ReviewArtifact | undefined;
   let answeredAsyncFeedback = "";
+  let hasAsyncReview = false;
 
   // Check for answered human-async questions (§8.7)
   const steerDirs = [path.join(taskDir, "steer", "tousertoreview")];
@@ -350,10 +352,15 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
         latestReviewOutput = rev;
         const fixSuggestions = rev.suggestions?.filter((s) => s.disposition === "fix");
 
-        // Handle open human-async questions (§8.7, §8.8)
+        // Handle open human-async questions (§8.7, §8.8). An ANSWERED
+        // async question unblocks: fall through to the answered-feedback
+        // re-entry below so the step re-runs with the answer hydrated.
         const openAsync = rev.suggestions?.filter((s) => s.disposition === "human-async");
         if (openAsync && openAsync.length > 0 && itemState.openSteerQuestion) {
           return { done: true, status: "blocked" };
+        }
+        if (openAsync && openAsync.length > 0) {
+          hasAsyncReview = true;
         }
 
         if (fixSuggestions && fixSuggestions.length > 0) {
@@ -361,7 +368,7 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
         }
       }
 
-      if (fixRequested) {
+      if (fixRequested || (answeredAsyncFeedback && hasAsyncReview)) {
         // Fix loop! The upcoming re-entry round equals the number of fix-requesting
         // reviews seen so far (1 for the first re-entry) (§12.2).
         const upcomingRound = Math.max(1, itemState.suggestionFingerprints.length);
