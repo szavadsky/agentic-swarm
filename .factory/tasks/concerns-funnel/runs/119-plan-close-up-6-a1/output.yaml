@@ -1,0 +1,43 @@
+iteration: 6
+remainingMilestones:
+  - m0-detail-normalize
+  - m1-confirm-instructions
+status: next-iteration
+summary: "Iteration 6 delivered neither milestone: all 6 runtime schemas still
+  carry capital-D Detail, mergeConcern still guards on existing?.Detail (type
+  error + longest-wins dead), stale capital reads remain in
+  longest-wins/epic-saga tests, architect fragments still lack concernConfirms +
+  dismiss-note rule, 3 ADR stubs lack Decision paragraphs, and ARCHITECTURE
+  row-18 + §8.11 + docs-concerns sentinels remain at five deviations (no
+  epic-mailbox-isolation). Baseline RED persists;
+  contract/longest-wins/typecheck scenarios cannot pass."
+techDebt:
+  - "td-detail-casing OPEN: 6 runtime schemas capital-D
+    (decisions.schema.json:55, developer-output.schema.json:68,
+    fact-finder-output.schema.json:29, plan.schema.json:142,
+    plan-closeup.schema.json:34, wave-closeup.schema.json:42);
+    review.schema.json capital-D in BOTH suggestions:33 and newConcerns:65 while
+    generated review-schema.ts emits lowercase (records/review-schema.ts:36,80);
+    concerns.ts:82 guards existing?.Detail against StoredConcernArtifact.detail
+    (artifacts.ts:313,375) so typecheck fails and longest-wins always picks
+    incoming"
+  - "td-detail-casing tests STALE: schema-detail-normalize.test.ts:250/279/346 +
+    :324 read merged/listed .Detail capital (type error, must be lowercase);
+    epic-saga-propagate.test.ts:248/307/313/319 read .Detail capital; contract
+    assertions :85-86/:105-106/:114-115 correctly demand
+    lowercase-present/capital-absent so fail against current schemas"
+  - "td-confirm-instructions OPEN: agents/steps/architect-closeup.md:29 still
+    instructs concernResolutions with no concernConfirms/note-rule;
+    agents/steps/architect-wave-report.md:32 instructs neither;
+    test/prompts.test.ts has zero
+    concernConfirms/concernResolutions/dismiss-note assertions (grep no match)"
+  - "td-traceability OPEN: docs/adr/adr-confirm-field-instructions.md +
+    adr-epic-mailbox-isolation.md + adr-remarkable-digest-triage.md contain
+    title+context only, no Decision paragraph; ARCHITECTURE.md:39 row-18 says
+    five deviations; §8.11 Accepted deviations (:359-363) lists 5 bullets with
+    no epic-mailbox-isolation; docs-concerns.test.ts titles/needles still assert
+    five deviations"
+  - "td-tmpdir-split (adjacent, carried): pre-existing head-guard failures need
+    TMPDIR=/tmp workaround"
+  - "td-spike-nits (adjacent, carried): unapplied spike-saga-commit reviewer
+    nits"
