@@ -1,0 +1,47 @@
+status: approved
+summary: "Approved: single human router + severity/allowlist verified; 14 target
+  tests green, typecheck clean, no weakening."
+suggestions:
+  - id: dismissed-rm-digest
+    disposition: optional
+    summary: Dismissed rm-* still digests; spec says routed rm-* only
+    detail: "routeHumanDisposition treats any rm- id as digest (triage.ts:98,105)
+      even when disposition is dismiss. Ordinary dismiss suppresses unless
+      escalated; dismissed rm should likewise suppress to match 'routed rm-*'
+      qualifier. Suggested: early-return on dismiss without escalated before
+      remarkable check."
+    location:
+      file: plugins/software-factory/src/core/triage.ts
+      line: 98
+  - id: severity-fallback-duplication
+    disposition: optional
+    summary: Hardcoded high fallback duplicates severity policy constant
+    detail: collectRoutedBlockers default and derive/iteration threading use literal
+      'high' instead of
+      DEFAULT_CONCERN_SEVERITY_POLICY/resolveConcernSeverityPolicy. Config
+      fallback is medium/high; literals will drift if policy changes. Centralize
+      on triage policy resolver.
+    location:
+      file: plugins/software-factory/src/core/derive/task.ts
+      line: 54
+  - id: consult-severity-filter
+    disposition: optional
+    summary: Routed consults ignore minBlockingSeverity on shared slugs
+    detail: consultRoutedBlockers filters by kind+routed+affects overlap with
+      severity-filtered blocked set, but does not check concern.severity itself.
+      A low/medium blocker sharing an affects slug with a high blocker triggers
+      a spurious architect consult. Filter consult loop by minBlockingSeverity.
+    location:
+      file: plugins/software-factory/src/core/flows/iteration.ts
+      line: 208
+  - id: concern-snapshot-timing
+    disposition: optional
+    summary: concernIds snapshot predates seam hooks, diverges from ingest existing
+    detail: item-machine snapshots listConcernIds before before-seam (line 665)
+      while ingest existing snapshots after agent run. If a seam hook
+      materializes a concern, raw path would double-write (q-item-* +
+      q-concern-*). Snapshot after seam or inside writeArtifact to match ingest
+      authority.
+    location:
+      file: plugins/software-factory/src/core/flows/item-machine.ts
+      line: 665

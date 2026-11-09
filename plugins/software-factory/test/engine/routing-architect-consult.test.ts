@@ -42,7 +42,8 @@ function storedConcern(overrides: ConcernOverrides): StoredConcernArtifact {
     kind: "blocker",
     summary: `Concern ${overrides.id}`,
     detail: "detail",
-    severity: "medium",
+    // Routed blocking defaults to high (concerns.minBlockingSeverity).
+    severity: "high",
     status: "routed",
     disposition: "architect",
     source: { record: "seed-concern", agent: "test" },

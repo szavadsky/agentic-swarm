@@ -1,0 +1,88 @@
+checks:
+  - id: red-test
+    status: pass
+    message: "red-test passed: all 11 tests fail when prod changes are restored to
+      test-first commit"
+    details:
+      command: cd plugins/software-factory && bun test
+        test/engine/human-router-severity.test.ts --reporter=junit
+        --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-redtest-1794184830705-8s2qlbyfpwq.xml
+      junitCaseCount: 14
+      junitCaseIds:
+        - Single human router (adr-human-router-single).routes a plan-reviewer
+          human-stop to one concern question that blocks the task
+        - Single human router (adr-human-router-single).routes a close-up
+          human-async to the task when there is no item context
+        - Single human router (adr-human-router-single).shows a plan-reviewer
+          routed architect concern in the next architect hydration
+        - Single human router (adr-human-router-single).turns routed remarkable
+          decisions into digest-only entries regardless of disposition
+        - Single human router (adr-human-router-single).digests a dismissed
+          escalated concern as q-escalated while keeping the dismissal
+        - Single human router (adr-human-router-single).keeps an ordinary
+          dismissal on disk with its reason and produces no mailbox effect
+        - Single human router (adr-human-router-single).suppresses
+          human-awareness digests below minDigestSeverity and downgrades stops
+          below minBlockingSeverity
+        - Single human router (adr-human-router-single).digests a low-severity
+          routed blocker when minDigest is low but never derives it as blocking
+        - Severity policy in derive
+          (adr-severity-policy-active).collectRoutedBlockers filters routed
+          blockers by minBlockingSeverity, defaulting to high
+        - Severity policy in derive (adr-severity-policy-active).threads
+          pipeline.concerns.minBlockingSeverity into task derivation with a high
+          fallback
+        - Ingest allowlist (adr-severity-policy-active).skips concerns from
+          non-allowlisted agents, journals the skip, and keeps the step ok
+        - Engine human routing with concern triage
+          (adr-human-router-single).halts with exit 10 for a high-severity
+          human-stop concern, writing one q-concern entry
+        - Engine human routing with concern triage
+          (adr-human-router-single).parks a high-severity human-async item
+          without halting the task
+        - Engine human routing with concern triage
+          (adr-human-router-single).downgrades a medium-severity human-stop
+          concern to a digest and finishes unblocked
+      junitTruncated: false
+      collected: true
+      collectionErrors: []
+  - id: test-diff
+    status: pass
+    message: test-diff generated (1 test files, 1059 bytes)
+    details:
+      diff: >-
+        diff --git
+        a/plugins/software-factory/test/engine/reviewer-triage.test.ts
+        b/plugins/software-factory/test/engine/reviewer-triage.test.ts
+
+        index df5eac8..bb58e32 100644
+
+        --- a/plugins/software-factory/test/engine/reviewer-triage.test.ts
+
+        +++ b/plugins/software-factory/test/engine/reviewer-triage.test.ts
+
+        @@ -409,7 +409,7 @@ describe("Reviewer triage (§8.7, §18)", () => {
+         
+           it("writes one deduped q-concern mailbox entry for human-async triage", async () => {
+             const cid = "c-ffffffffff";
+        -    await writeConcern(storedConcern({ id: cid, kind: "question" }));
+
+        +    await writeConcern(storedConcern({ id: cid, kind: "question",
+        severity: "high" }));
+         
+             const ctx = {
+               taskDir,
+        @@ -632,7 +632,7 @@ describe("Reviewer triage (§8.7, §18)", () => {
+                 data: {
+                   status: "ok",
+                   summary: "Developed",
+        -          concerns: [{ kind: "risk", summary: concernSummary, detail:
+        "long detail" }],
+
+        +          concerns: [{ kind: "risk", summary: concernSummary, detail:
+        "long detail", severity: "high" }],
+                 },
+               };
+             });
+      files:
+        - plugins/software-factory/test/engine/reviewer-triage.test.ts

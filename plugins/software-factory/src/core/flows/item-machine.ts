@@ -20,7 +20,8 @@ import { runAgentStep, type StepRunResult } from "./step-runner.js";
 import { runItemConsult } from "./consults.js";
 import { runSeamHooks } from "./seams.js";
 import { appendJournal } from "../journal.js";
-import { writeQuestion } from "../steer.js";
+import { questionBlocks, writeQuestion } from "../steer.js";
+import { listConcernIds } from "../concerns.js";
 import { deriveItemState, type DerivedItemState } from "../derive/item.js";
 import { refreshStateYaml } from "../derive/task.js";
 import {
@@ -659,6 +660,10 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
   const recordsDir = path.join(childWt, relTaskDir, "items", itemSlug, "steps");
   await fs.promises.mkdir(recordsDir, { recursive: true });
 
+  // Concern-id human dispositions are owned by the single triage router; the
+  // raw item-machine question path must not double-write them.
+  const concernIds = new Set(await listConcernIds(taskDir));
+
   // 5. Run seam hooks before:item.step.{id} (§8.10)
   await runSeamHooks({
     phase: "before",
@@ -707,23 +712,17 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
     beforeChecks,
     afterChecks,
     writeArtifact: async (output: unknown) => {
-      // Persist human-* questions atomically with the review record (Finding 23).
-      // human-async concern ids are triaged separately (q-concern-*).
+      // Persist raw human-* questions atomically with the review record
+      // (Finding 23). Concern-id dispositions are routed once by triage
+      // (q-concern-*/q-escalated-*), so this raw path skips them entirely.
       if (output && typeof output === "object" && "suggestions" in (output as any)) {
         const rev = output as ReviewArtifact;
-        const concernIds = new Set<string>();
-        try {
-          for (const name of await fs.promises.readdir(path.join(taskDir, "concerns"))) {
-            if (name.endsWith(".yaml")) concernIds.add(name.slice(0, -5));
-          }
-        } catch (err: any) {
-          if (err?.code !== "ENOENT") throw err;
-        }
         const humanSuggestions = rev.suggestions?.filter(
           (s) =>
-            s.disposition === "human-stop" ||
-            s.disposition === "human-awareness" ||
-            (s.disposition === "human-async" && !concernIds.has(s.id))
+            (s.disposition === "human-stop" ||
+              s.disposition === "human-awareness" ||
+              s.disposition === "human-async") &&
+            !concernIds.has(s.id)
         );
         for (const q of humanSuggestions ?? []) {
           const cleanSuggestionId = (q.id || "s").replace(/[^a-z0-9_-]/gi, "-");
@@ -764,9 +763,30 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
     item: itemSlug,
   });
 
-  // Human dispositions block the item; human-awareness is digest-only and lands here as success.
-  const hasHumanBlock = (stepRes.output as any)?.suggestions?.some(
-    (s: any) => s.disposition === "human-async" || s.disposition === "human-stop"
+  // Concern-id human dispositions block only when the router wrote an open
+  // blocking question (severity downgrade/suppression keeps the item moving).
+  const routedQuestions: SteerItemArtifact[] = [];
+  for (const id of stepRes.triage?.mailboxIds ?? []) {
+    try {
+      routedQuestions.push(
+        await readYaml<SteerItemArtifact>(
+          path.join(taskDir, "steer", "tousertoreview", `${id}.yaml`)
+        )
+      );
+    } catch {
+      // A missing question file cannot block.
+    }
+  }
+  const routedBlocksItem = routedQuestions.some((q) => questionBlocks(q, itemSlug));
+  const suggestions = ((stepRes.output as any)?.suggestions ?? []) as Array<{
+    id: string;
+    disposition?: string;
+  }>;
+
+  // Human dispositions block the item; human-awareness is digest-only.
+  const hasHumanBlock = suggestions.some((s) =>
+    (s.disposition === "human-async" || s.disposition === "human-stop") &&
+    (concernIds.has(s.id) ? routedBlocksItem : true)
   );
   if (hasHumanBlock) {
     return { done: true, status: "blocked", stepRan: currentStep.id };
@@ -774,8 +794,10 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
 
   // Check if this was the last step and succeeded
   const isLastStep = targetStepIndex === steps.length - 1;
-  const hasIssues = (stepRes.output as any)?.suggestions?.some(
-    (s: any) => s.disposition === "fix" || s.disposition === "human-stop"
+  const hasIssues = suggestions.some(
+    (s) =>
+      s.disposition === "fix" ||
+      (s.disposition === "human-stop" && !concernIds.has(s.id))
   );
   const isTerminalSuccess = isLastStep && stepRes.ok && !hasIssues;
 

@@ -1,0 +1,57 @@
+checks:
+  - id: test-first-scope
+    status: pass
+    message: test-first-scope passed (3 test files, 0 new prod stubs with 0 lines)
+    details:
+      testFiles:
+        - plugins/software-factory/test/engine/routing-architect-consult.test.ts
+        - plugins/software-factory/test/engine/routing-blocker-derive.test.ts
+        - plugins/software-factory/test/engine/human-router-severity.test.ts
+      newProdFiles: []
+      stubProdLines: 0
+  - id: target-red
+    status: pass
+    message: "target-red passed: all 11 expected tests failed with assertion failures"
+    details:
+      command: cd plugins/software-factory && bun test
+        test/engine/human-router-severity.test.ts --reporter=junit
+        --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-1794183503306-zlqs678d5k8.xml
+      junitCaseCount: 14
+      junitCaseIds:
+        - Single human router (adr-human-router-single).routes a plan-reviewer
+          human-stop to one concern question that blocks the task
+        - Single human router (adr-human-router-single).routes a close-up
+          human-async to the task when there is no item context
+        - Single human router (adr-human-router-single).shows a plan-reviewer
+          routed architect concern in the next architect hydration
+        - Single human router (adr-human-router-single).turns routed remarkable
+          decisions into digest-only entries regardless of disposition
+        - Single human router (adr-human-router-single).digests a dismissed
+          escalated concern as q-escalated while keeping the dismissal
+        - Single human router (adr-human-router-single).keeps an ordinary
+          dismissal on disk with its reason and produces no mailbox effect
+        - Single human router (adr-human-router-single).suppresses
+          human-awareness digests below minDigestSeverity and downgrades stops
+          below minBlockingSeverity
+        - Single human router (adr-human-router-single).digests a low-severity
+          routed blocker when minDigest is low but never derives it as blocking
+        - Severity policy in derive
+          (adr-severity-policy-active).collectRoutedBlockers filters routed
+          blockers by minBlockingSeverity, defaulting to high
+        - Severity policy in derive (adr-severity-policy-active).threads
+          pipeline.concerns.minBlockingSeverity into task derivation with a high
+          fallback
+        - Ingest allowlist (adr-severity-policy-active).skips concerns from
+          non-allowlisted agents, journals the skip, and keeps the step ok
+        - Engine human routing with concern triage
+          (adr-human-router-single).halts with exit 10 for a high-severity
+          human-stop concern, writing one q-concern entry
+        - Engine human routing with concern triage
+          (adr-human-router-single).parks a high-severity human-async item
+          without halting the task
+        - Engine human routing with concern triage
+          (adr-human-router-single).downgrades a medium-severity human-stop
+          concern to a digest and finishes unblocked
+      junitTruncated: false
+      collected: true
+      collectionErrors: []

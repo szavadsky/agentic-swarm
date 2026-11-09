@@ -19,6 +19,29 @@ type Obj = Record<string, any>;
 type Patch = (record: Obj, at: string) => Obj;
 const KINDS = new Set(["tech-debt", "assumption", "blocker", "risk", "question"]);
 const RANK: Record<ConcernSeverity, number> = { low: 0, medium: 1, high: 2 };
+
+/** True when `severity` reaches the configured minimum threshold. */
+export function severityAtLeast(severity: ConcernSeverity, min: ConcernSeverity): boolean {
+  return RANK[severity] >= RANK[min];
+}
+
+/**
+ * Agents whose output schemas can raise concerns; mirrors the shipped
+ * `pipeline.default.yaml` allowlist. The key is the raising step's
+ * `source.agent`, never its fragment: developer covers develop/poc/
+ * test-assumptions/test-first/simple-implement/fix-round, fact-finder covers
+ * research, and architect covers architect-*.
+ */
+export const DEFAULT_RAISE_ALLOWLIST = [
+  "developer",
+  "fact-finder",
+  "architect",
+  "qa",
+  "reviewer",
+  "plan-reviewer",
+  "wave-close-up",
+  "plan-close-up",
+] as const;
 /** Serializes read-modify-write cycles of one task's concern store. */
 const locks = new KeyedMutex();
 const dirOf = (taskDir: string) => path.join(taskDir, "concerns");
