@@ -1,0 +1,18 @@
+slug: allowlist-agreement-test
+kind: test-only
+title: Raise-allowlist agreement contract test
+assignment: "Test-only, no prod changes. In
+  test/human-involvement-config.test.ts ONLY, delete the local
+  DEFAULT_RAISE_ALLOWLIST duplicate (:46-55) and import DEFAULT_RAISE_ALLOWLIST
+  from src/core/concerns.ts so the existing assertion (:154-157) directly
+  compares the code constant vs shipped concerns.raiseAllowlist in
+  config/pipeline.default.yaml. DO NOT create a new test file, a third copy, or
+  touch any prod path. Verify: typecheck + targeted suite
+  (human-involvement-config) green."
+outlineRef: allowlist-agreement-test
+milestone: m2-docs-gates
+wave: 1
+scenarioRefs:
+  - m2-docs-gates:s7
+citations:
+  - docs/factory.v2.md:89-103

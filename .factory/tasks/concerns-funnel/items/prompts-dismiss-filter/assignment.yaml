@@ -1,0 +1,24 @@
+slug: prompts-dismiss-filter
+kind: dev
+title: Dismiss criteria row + prompt filtering
+assignment: "Implement adr-dismiss-criteria-row (prod budget ~15 lines). (1) Add
+  one terse dismiss row + rule to agents/criteria/dispositions.md (triager-only,
+  reason required, kept on disk). (2) Extend formatDispositionsSection in
+  src/core/prompts.ts:90-110 to filter dismiss rows/rules when allowed excludes
+  dismiss, mirroring existing human-stop filtering; keep rows when allowed
+  includes dismiss (QA-excludes vs reviewer-includes). (3) Add render test
+  locking QA-excludes/reviewer-includes behavior. (4) Keep test/prompts.test.ts
+  fragment matrix + 15-per-fragment/80-total debloat budgets green. Verify:
+  typecheck + TMPDIR=/tmp bun test green."
+outlineRef: prompts-dismiss-filter
+milestone: m1-dismiss-contract
+wave: 1
+scenarioRefs:
+  - m1-dismiss-contract:s1
+  - m1-dismiss-contract:s2
+  - m1-dismiss-contract:s3
+  - m1-dismiss-contract:s4
+citations:
+  - docs/factory.v2.md:89-103
+  - plugins/software-factory/src/core/records/review-schema.ts:5-52
+  - plugins/software-factory/src/core/flows/item-machine.ts:628-647

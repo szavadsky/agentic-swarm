@@ -2088,3 +2088,4 @@
 {"type":"step_finished","task":"concerns-funnel","step":"architect-revise-4-2","attempt":1,"status":"ok","sessionId":"01a1b894-4755-7787-a1ed-8df6c7a062a2","usage":{"inputTokens":34251,"outputTokens":6688,"costUsd":0.007839},"ts":"2026-11-09T08:03:45.557Z"}
 {"type":"step_started","task":"concerns-funnel","step":"pm-edits-4","attempt":1,"recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/087-pm-edits-4-a1","ts":"2026-11-09T08:03:47.749Z"}
 {"type":"step_timeout_armed","task":"concerns-funnel","step":"pm-edits-4","timeoutSec":2700,"ts":"2026-11-09T08:03:47.755Z"}
+{"type":"step_finished","task":"concerns-funnel","step":"pm-edits-4","attempt":1,"status":"ok","sessionId":"01a1bf55-b743-72e1-8265-3d690f3dba2d","usage":{"inputTokens":20134,"outputTokens":9911,"costUsd":0.003996},"ts":"2026-11-09T08:04:57.457Z"}
