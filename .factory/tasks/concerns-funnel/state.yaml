@@ -74,20 +74,22 @@ items:
     spendUsd: 0
   epic-saga-propagate:
     kind: dev
-    status: ready
+    status: merged
     branch: topic/concerns-funnel--epic-saga-propagate
     attempts: 1
     fixRounds: 2
     spendUsd: 0.37333400000000005
     currentStep: review
+    mergedAt: 2026-11-08T20:55:18-05:00
   human-router-severity:
     kind: dev
-    status: ready
+    status: merged
     branch: topic/concerns-funnel--human-router-severity
     attempts: 1
     fixRounds: 1
     spendUsd: 0.206566
     currentStep: review
+    mergedAt: 2026-11-08T20:33:18-05:00
   modes-prompts:
     kind: dev
     status: superseded
@@ -97,11 +99,12 @@ items:
     spendUsd: 0
   closeup-lifecycle-resolve:
     kind: dev
-    status: pending
+    status: ready
     branch: topic/concerns-funnel--closeup-lifecycle-resolve
     attempts: 1
-    fixRounds: 1
-    spendUsd: 0
+    fixRounds: 2
+    spendUsd: 0.448594
+    currentStep: review
   concerns-contracts-policy:
     kind: dev
     status: merged
@@ -429,6 +432,23 @@ debt:
     shared slugs"
   - "[human-router-severity] concernIds snapshot predates seam hooks, diverges
     from ingest existing"
+  - "[closeup-lifecycle-resolve] Guard prefix consult-concern- collides with
+    item slugs starting with concern-"
+  - "[closeup-lifecycle-resolve] Carry-via-decision and honored
+    architect-closeup singular-resolution paths lack coverage"
+  - "[closeup-lifecycle-resolve] Fix-round behavior (filtered push skips
+    remarkables/questions, exact-match emission guard) has no committed
+    regression test"
+  - "[closeup-lifecycle-resolve] Carry-via-decision and honored
+    architect-wave-report singular-resolution paths remain untested (deferred
+    from QA r1)"
+  - "[closeup-lifecycle-resolve] fix-round filtered-push behavior (skip
+    remarkables/questions) has no committed regression test"
+  - "[closeup-lifecycle-resolve] carry-via-decision, architect-wave-report
+    singular resolution, reject disposition preservation, and propagate child
+    status lack coverage"
+  - "[closeup-lifecycle-resolve] architect close-up prompt never explains
+    concernConfirms; prod reachability of 'resolved' relies on model inference"
   - "[concerns-contracts-policy] Deduplicate hardcoded builtin fallback arrays
     to BUILTIN_REVIEW_DISPOSITIONS"
   - "[concerns-contracts-policy] Iteration plan-review prompt dispositions lack
@@ -622,20 +642,20 @@ debt:
     inconsistent with documented branch-from-HEAD worktrees"
   - "[funnel-closeups-v3] Propagated parent copy retains child source.item,
     writes undeclared source.epic, and can clobber/lengthen parent records"
-budgetSpentUsd: 7.3316529200000025
+budgetSpentUsd: 7.831535920000002
 spendByRole:
   alt-workhorse:
-    costUsd: 1.8297150000000002
-    inputTokens: 9093842
-    outputTokens: 2587858
+    costUsd: 1.9281869999999997
+    inputTokens: 9494296
+    outputTokens: 2790187
   workhorse:
-    costUsd: 4.692652919999999
-    inputTokens: 10362154
-    outputTokens: 2794314
+    costUsd: 5.04979492
+    inputTokens: 11112197
+    outputTokens: 3002040
   architect:
-    costUsd: 0.7654269999999999
-    inputTokens: 6900295
-    outputTokens: 159624
+    costUsd: 0.809696
+    inputTokens: 7342263
+    outputTokens: 159987
   alt-architect:
     costUsd: 0.043858
     inputTokens: 181661
@@ -645,18 +665,10 @@ spendByItem:
     costUsd: 0.251577
     inputTokens: 593198
     outputTokens: 339057
-  contracts-drift-fix:
-    costUsd: 0.16688999999999998
-    inputTokens: 450079
-    outputTokens: 214518
   concerns-store-v2:
     costUsd: 0.613799
     inputTokens: 2193288
     outputTokens: 413791
-  hydration-fingerprint-caps:
-    costUsd: 0.720326
-    inputTokens: 2521130
-    outputTokens: 580992
   routing-human-debt-v2:
     costUsd: 0.14427299999999998
     inputTokens: 381176
@@ -677,10 +689,6 @@ spendByItem:
     costUsd: 0.10916100000000001
     inputTokens: 270524
     outputTokens: 128516
-  prompt-fragments:
-    costUsd: 0.32775099999999996
-    inputTokens: 1269182
-    outputTokens: 271111
   routing-architect-consult-v3:
     costUsd: 0.11368900000000001
     inputTokens: 278071
@@ -697,6 +705,10 @@ spendByItem:
     costUsd: 0.670065
     inputTokens: 2995526
     outputTokens: 363902
+  funnel-closeups-v3:
+    costUsd: 0.630073
+    inputTokens: 1662764
+    outputTokens: 428767
   concerns-contracts-types:
     costUsd: 0.063129
     inputTokens: 178070
@@ -705,22 +717,34 @@ spendByItem:
     costUsd: 0.268401
     inputTokens: 734306
     outputTokens: 188631
-  epic-saga-propagate:
-    costUsd: 0.37333400000000005
-    inputTokens: 895689
-    outputTokens: 273259
   spike-text-budget:
     costUsd: 0.060779
     inputTokens: 139871
     outputTokens: 72059
-  funnel-closeups-v3:
-    costUsd: 0.630073
-    inputTokens: 1662764
-    outputTokens: 428767
+  contracts-drift-fix:
+    costUsd: 0.16688999999999998
+    inputTokens: 450079
+    outputTokens: 214518
+  hydration-fingerprint-caps:
+    costUsd: 0.720326
+    inputTokens: 2521130
+    outputTokens: 580992
+  prompt-fragments:
+    costUsd: 0.32775099999999996
+    inputTokens: 1269182
+    outputTokens: 271111
+  closeup-lifecycle-resolve:
+    costUsd: 0.448594
+    inputTokens: 1109776
+    outputTokens: 396435
   human-router-severity:
     costUsd: 0.206566
     inputTokens: 470606
     outputTokens: 168535
+  epic-saga-propagate:
+    costUsd: 0.37333400000000005
+    inputTokens: 895689
+    outputTokens: 273259
   spike-saga-commit:
     costUsd: 0.131932
     inputTokens: 263905
@@ -730,7 +754,7 @@ spendByItem:
     inputTokens: 463902
     outputTokens: 217893
   (orchestration):
-    costUsd: 1.3388490000000002
-    inputTokens: 8390557
-    outputTokens: 686988
-lastUpdated: 2026-11-09T01:55:17.891Z
+    costUsd: 1.390138
+    inputTokens: 8873246
+    outputTokens: 700971
+lastUpdated: 2026-11-09T04:01:04.155Z
