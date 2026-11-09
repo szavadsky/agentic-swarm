@@ -1,0 +1,43 @@
+status: approved
+summary: "Independent QA verified r2: target docs suite 14/14 pass; typecheck
+  exit 0; full suite 467 pass / 2 skip / 0 fail (independent run). Red is
+  genuine: base tree 0/14 fail, and tip-docs + test-first config 0/14 fail,
+  matching the engine red-test. Test file is byte-identical since test-first (no
+  weakening); agents/criteria/human-involvement.md untouched; r2 commit changes
+  only README + ARCHITECTURE (93+ docs lines within budget). Prior FIX is
+  resolved at ARCHITECTURE L334/L342 and matches src/core/triage.ts
+  routeHumanDisposition (dismissed escalated concerns emit digest-only
+  q-escalated). Two non-blocking optional docs nits remain."
+suggestions:
+  - id: readme-status-example-id
+    disposition: optional
+    summary: README status sample uses an unreachable q-escalated-rm id and an
+      inconsistent dismissed count
+    detail: "README L127 shows `[q-escalated-rm-6f7g8h9i0j] ref: c-1a2b3c4d5e` under
+      Digest Questions while the counts line says `dismissed 0`. Code only emits
+      `q-escalated-${suggestion.id}` for a dismissed escalated *concern* (c-*;
+      routeHumanDisposition in src/core/triage.ts, confirmed by
+      test/engine/human-router-severity.test.ts), while remarkables use
+      `q-concern-rm-*`; `q-escalated-rm-*` is unreachable and a q-escalated
+      entry implies dismissed >= 1. Consider `q-escalated-c-...` with `dismissed
+      1`, or `q-concern-rm-...` for a remarkable digest. The authoritative §8.11
+      contract is correct and no test asserts this sample, so this is polish
+      only."
+    location:
+      file: plugins/software-factory/README.md
+      line: 127
+  - id: awareness-plan-4-unsourced
+    disposition: optional
+    summary: awareness-plan-4 cross-reference still has no repo source
+    detail: ARCHITECTURE §8.11 triage-coverage deviation cites
+      `awareness-plan-4-funnel-triage-coverage-awareness`, but a repo search
+      finds it only in ARCHITECTURE.md and test/docs-concerns.test.ts; unlike
+      plan-2 (cited by docs/adr/adr-autonomous-immediate-halt.md), the plan-4 ID
+      is not in docs/adr/. The developer left it per the previous optional,
+      citing orchestration records. It does not block this item;
+      verifying/dropping it would keep the docs within the assignment's
+      repo-sources-only constraint, and dropping it also requires removing the
+      matching test needle.
+    location:
+      file: plugins/software-factory/docs/ARCHITECTURE.md
+      line: 360
