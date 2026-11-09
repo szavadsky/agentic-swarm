@@ -61,8 +61,16 @@ export function concernFingerprint(c: ConcernInput): string {
   return hash("c", [c.kind, norm(c.summary), ...locationOf(c.location)]);
 }
 
+/** Legacy records stored the detail as capital-D `Detail`; every read surface exposes only the lowercase contract key. */
+function normalizeStoredConcern<T>(record: T): T {
+  const obj = record as Obj | null | undefined;
+  if (!obj || !Object.hasOwn(obj, "Detail")) return record;
+  const { Detail, ...rest } = obj;
+  return { ...rest, detail: rest.detail ?? Detail } as T;
+}
+
 async function readExisting<T>(file: string): Promise<T | undefined> {
-  try { return await readYaml<T>(file); } catch (err: any) {
+  try { return normalizeStoredConcern(await readYaml<T>(file)); } catch (err: any) {
     if (err?.code === "ENOENT") return undefined;
     throw err;
   }
@@ -110,7 +118,7 @@ async function legacyConcern(dir: string, input: ConcernInput): Promise<{ file: 
     if (!name.startsWith("c-") || !name.endsWith(".yaml")) continue;
     const candidate = path.join(dir, name);
     try {
-      const record = await readYaml<StoredConcernArtifact>(candidate);
+      const record = normalizeStoredConcern(await readYaml<StoredConcernArtifact>(candidate));
       if (record?.kind !== input.kind || typeof record?.summary !== "string") continue;
       const [rfile, rline] = locationOf(record.location);
       if (norm(record.summary) !== norm(input.summary) || rfile !== file || rline !== line) continue;
@@ -176,7 +184,7 @@ export async function listConcerns(taskDir: string): Promise<StoredConcernArtifa
     throw err;
   }
   const records = await Promise.all(names.filter((n) => n.startsWith("c-") && n.endsWith(".yaml")).map(async (name) => {
-    try { return await readYaml<StoredConcernArtifact>(path.join(dir, name)); } catch { return undefined; }
+    try { return normalizeStoredConcern(await readYaml<StoredConcernArtifact>(path.join(dir, name))); } catch { return undefined; }
   }));
   return records
     .filter((r): r is StoredConcernArtifact => typeof r?.kind === "string")
@@ -205,7 +213,7 @@ export async function countConcerns(taskDir: string): Promise<ConcernCounts> {
   }
   for (const name of names.filter((n) => n.startsWith("c-") && n.endsWith(".yaml"))) {
     try {
-      const concern = await readYaml<StoredConcernArtifact>(path.join(dir, name));
+      const concern = normalizeStoredConcern(await readYaml<StoredConcernArtifact>(path.join(dir, name)));
       if (typeof concern?.kind === "string" && Object.hasOwn(counts, concern.status)) {
         counts[concern.status as keyof ConcernCounts]++;
       }
