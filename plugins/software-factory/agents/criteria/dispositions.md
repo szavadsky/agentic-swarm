@@ -10,9 +10,11 @@ Criteria for assigning disposition to review findings:
 | `human-awareness` | High-impact technical tradeoff or notable choice operator should be aware of, but architect can decide now. | Architect decides immediately; creates informational record in `steer/tousertoreview/{id}.yaml`. |
 | `human-async` | Missing business requirement, external credential needed, conflicting user intent requiring operator decision. | Creates blocking entry in `steer/tousertoreview/{id}.yaml`; item and dependents pause; unrelated items proceed. |
 | `human-stop` | Critical safety violation, catastrophic regression risk, or irreversible data loss hazard. Offered ONLY when enabled in pipeline `reviewPolicy`. | Enters `steer/tousertoreview/{id}.yaml` and halts factory execution immediately (exit code 10). |
+| `dismiss` | Stale, invalid, or already-addressed concern; triager-only, requires a reason in `detail`. Concern record is kept on disk. | Closes the concern as `dismissed` with the reason; nothing is routed. |
 
 ## Rules
 - Defect requiring code change MUST be `fix`.
 - Do NOT use `architect` for routine bugs; reserve for structural/design conflicts.
 - Do NOT use `human-async` when repo context or architecture docs provide the answer.
 - `human-stop` is restricted to critical safety/fatal conditions and only when permitted by active review policy.
+- `dismiss` is triager-only, requires a reason, and keeps the concern on disk.

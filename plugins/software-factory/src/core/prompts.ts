@@ -85,7 +85,8 @@ export function formatHumanInvolvementCriteria(
 
 /**
  * Formats the dispositions criteria section for review prompts (§8.7).
- * Drops `human-stop` rows unless the agent's allowed dispositions include it.
+ * Drops `human-stop` and `dismiss` rows/rules unless the agent's allowed
+ * dispositions include them (e.g. QA excludes both; triagers get `dismiss`).
  */
 export function formatDispositionsSection(
   dispositionsCriteria: string | undefined,
@@ -96,14 +97,14 @@ export function formatDispositionsSection(
     `Use ONLY these dispositions; any other disposition value fails validation.`,
   ];
   if (dispositionsCriteria && dispositionsCriteria.trim().length > 0) {
-    let criteriaText = dispositionsCriteria;
-    if (!allowedDispositions.includes("human-stop")) {
-      criteriaText = criteriaText
-        .split("\n")
-        .filter((line) => !line.includes("human-stop"))
-        .join("\n")
-        .trim();
-    }
+    const excluded = ["human-stop", "dismiss"].filter(
+      (d) => !allowedDispositions.includes(d)
+    );
+    const criteriaText = dispositionsCriteria
+      .split("\n")
+      .filter((line) => !excluded.some((d) => line.includes(d)))
+      .join("\n")
+      .trim();
     if (criteriaText.length > 0) lines.push(criteriaText);
   }
   return lines.join("\n");
