@@ -1,0 +1,14 @@
+context: wave
+decision: continue
+rationale: "Wave 1 has 0 merges: schema-detail-normalize-v3 failed QA 2/2 on
+  out-of-scope remarkable why byte-test plus incomplete develop (schemas +
+  epic-saga reads missing). Consult 026 already diagnosed root cause with
+  persisted retry-with-guidance; no new unknown. Tree hygiene clean, gates show
+  no regression (typecheck pass->pass, test fail->pass improved). m1 is
+  correctly sequenced after m0 via dep, so no plan amendment needed."
+text: Retry schema-detail-normalize-v3 with single develop round per decision
+  026 (delete remarkable why block, verify concerns.ts:74, normalize 6+1
+  schemas, fix MUST-FIX positive reads, preserve negative fixtures, :raw-verify,
+  TMPDIR=/tmp gates). QA must evaluate red-to-green via existing
+  longest-wins/contract suites, ignoring the stale remarkable test name. Then
+  run wave 2 closeup-confirm-instructions.
