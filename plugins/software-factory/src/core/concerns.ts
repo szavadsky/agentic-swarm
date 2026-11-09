@@ -47,6 +47,8 @@ const locks = new KeyedMutex();
 const dirOf = (taskDir: string) => path.join(taskDir, "concerns");
 const atOf = (ctx: { now?: () => Date }) => (ctx.now?.() ?? new Date()).toISOString();
 const norm = (s: string) => s.trim().replace(/\s+/g, " ").toLowerCase();
+/** Funnel budgets are measured in UTF-8 bytes, so detail retention compares bytes, not code units. */
+const utf8Bytes = (text: string) => Buffer.byteLength(text, "utf8");
 const affectsOf = (a?: string[]) => [...new Set((a ?? []).map((x) => x.trim()))].sort();
 const hash = (prefix: string, parts: unknown[]) =>
   `${prefix}-${createHash("sha256").update(JSON.stringify(parts)).digest("hex").slice(0, 10)}`;
@@ -69,7 +71,7 @@ async function readExisting<T>(file: string): Promise<T | undefined> {
 function mergeConcern(existing: StoredConcernArtifact | undefined, input: ConcernInput, source: ConcernSource, at: string): StoredConcernArtifact {
   const incomingDetail = (input.detail ?? input.summary).trim();
   const incomingSeverity = input.severity ?? "medium";
-  const detail = existing?.detail && existing.detail.length > incomingDetail.length ? existing.detail : incomingDetail;
+  const detail = existing?.detail && utf8Bytes(existing.detail) > utf8Bytes(incomingDetail) ? existing.detail : incomingDetail;
   const severity = existing && RANK[existing.severity] >= RANK[incomingSeverity] ? existing.severity : incomingSeverity;
   const escalated = Boolean(existing?.source?.escalated) || (existing !== undefined && RANK[incomingSeverity] > RANK[existing.severity]);
   const location = input.location ?? existing?.location;
