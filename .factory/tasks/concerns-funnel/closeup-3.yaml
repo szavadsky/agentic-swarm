@@ -1,0 +1,15 @@
+iteration: 3
+status: next-iteration
+summary: "Iteration 3 partially delivered: close-up triager/dismiss path
+  verified (m1 scenarios 3-5 pass; triager set, pre-flight, trimmed-note dismiss
+  all behavior-tested), but schema-detail normalization never merged
+  (schema-detail-normalize still running) and docs-finish-v4 never started.
+  Verified on live tree: all producer schemas still declare capital-D Detail
+  (e.g. developer-output.schema.json:68, plan-closeup.schema.json:34) so
+  lowercase-detail contracts must fail; concerns.ts:72 reads existing?.Detail
+  (undefined; longest-wins dead); epic-saga-propagate.test.ts:307/313/319 still
+  read .Detail; ARCHITECTURE.md:39 still 'Deliberately not hand-built' with no
+  §8.11; dispositions.md has no dismiss row; README has no Concerns section.
+  Gates cannot be green. Iteration 4: land Detail->detail normalization (schemas
+  + merge + test reads + longest-wins test) then complete docs-finish-v4 over
+  final behavior; merged closeup-triager-cleanup carries forward as-is."
