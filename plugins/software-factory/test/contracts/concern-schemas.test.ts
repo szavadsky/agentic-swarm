@@ -296,7 +296,7 @@ describe("Concern producer schemas", () => {
     expect(failures).toEqual([]);
   });
 
-  it("adds concernResolutions with resolve, carry, and propagate to close-up schemas", () => {
+  it("adds concernResolutions with resolve, carry, propagate, and dismiss to close-up schemas", () => {
     const failures: string[] = [];
     const closeups: Producer[] = [
       {
@@ -321,6 +321,10 @@ describe("Concern producer schemas", () => {
       const validate = validator(schema);
       const label = closeup.name;
 
+      if (schema.properties?.suggestions !== undefined) {
+        failures.push(`${label}: close-up schemas must not accept suggestions[]`);
+      }
+
       const item = arrayItem(schema, "concernResolutions");
       if (!item) {
         failures.push(`${label}: missing inline concernResolutions[]`);
@@ -331,8 +335,8 @@ describe("Concern producer schemas", () => {
         failures.push(`${label}: concernResolutions must require id and action`);
       }
       const actions = resolveRef(schema, item.properties?.action)?.enum ?? [];
-      if (["resolve", "carry", "propagate"].some((action) => !actions.includes(action))) {
-        failures.push(`${label}: action enum must be resolve|carry|propagate, got ${JSON.stringify(actions)}`);
+      if (["resolve", "carry", "propagate", "dismiss"].some((action) => !actions.includes(action))) {
+        failures.push(`${label}: action enum must be resolve|carry|propagate|dismiss, got ${JSON.stringify(actions)}`);
       }
 
       if (
@@ -342,13 +346,14 @@ describe("Concern producer schemas", () => {
             { id: "c-1", action: "resolve" },
             { id: "c-2", action: "carry", note: "Needs an architect decision" },
             { id: "c-3", action: "propagate" },
+            { id: "c-4", action: "dismiss", note: "Superseded by ADR-1" },
           ],
         })
       ) {
         failures.push(`${label}: valid concern resolutions rejected (${validationErrors(validate)})`);
       }
-      if (validate({ ...closeup.base, concernResolutions: [{ id: "c-4", action: "dismiss" }] })) {
-        failures.push(`${label}: dismiss action accepted for a close-up resolution`);
+      if (validate({ ...closeup.base, concernResolutions: [{ id: "c-5", action: "defer" }] })) {
+        failures.push(`${label}: unknown defer action accepted for a close-up resolution`);
       }
       if (validate({ ...closeup.base, concernResolutions: [{ action: "resolve" }] })) {
         failures.push(`${label}: resolution without concern id accepted`);

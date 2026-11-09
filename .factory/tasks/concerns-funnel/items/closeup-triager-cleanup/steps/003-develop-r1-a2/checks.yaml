@@ -1,0 +1,159 @@
+checks:
+  - id: gates
+    status: pass
+    message: "Gates passed (2 gates, improvements: Engine: HEAD guard resilience
+      (§7).detects when an agent commits and resets --soft to before.sha,
+      keeping changes staged, Engine: HEAD guard resilience (§7).detects when an
+      agent switches branch and restores original branch, keeping changes)"
+    details:
+      - id: typecheck
+        command: cd plugins/software-factory && bun run typecheck
+        status: pass
+        durationMs: 4498
+        details: $ tsc --noEmit
+      - id: test
+        command: cd plugins/software-factory && bun test
+        status: pass
+        durationMs: 102490
+        details: |-
+          bun test v1.4.4 (38afee6c8)
+          ================================================================
+          Task: status-test-task [ACTIVE]
+          Kind: unclassified | Iteration: 1 | Wave: 1
+          Worktree: (none - main checkout)
+          Config path: /home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/factory-test-repo-DkbZfI/.factory/pipeline.yaml
+          Budget spent: $0.0000
+          ----------------------------------------------------------------
+          Waves & Items:
+            Wave 1:
+          Concerns: open 0 | dismissed 0 | routed 0 | resolved 0
+          ----------------------------------------------------------------
+          Blocking Questions:
+            (none)
+          ----------------------------------------------------------------
+          Digest Questions:
+            (none)
+          ================================================================
+
+
+          test/cli/cli.test.ts:
+          [factory lock] Stale run lock for task "stale-lock-task" (PID 9999999 on host Slava-Yoga) taken over by PID 1374460
+          [factory lock] Stale run lock for task "competing-takeover-task" (PID 9999999 on host Slava-Yoga) taken over by PID 1374460
+          [factory lock] Stale run lock for task "journal-worktree-task" (PID 9999999 on host Slava-Yoga) taken over by PID 1374460
+
+           445 pass
+           2 skip
+           0 fail
+           2468 expect() calls
+          Ran 447 tests across 69 files. [102.32s]
+          [Improvements: Engine: HEAD guard resilience (§7).detects when an agent commits and resets --soft to before.sha, keeping changes staged, Engine: HEAD guard resilience (§7).detects when an agent switches branch and restores original branch, keeping changes]
+        improvements:
+          - "Engine: HEAD guard resilience (§7).detects when an agent commits
+            and resets --soft to before.sha, keeping changes staged"
+          - "Engine: HEAD guard resilience (§7).detects when an agent switches
+            branch and restores original branch, keeping changes"
+  - id: target-green
+    status: pass
+    message: "target-green passed: selected tests passed"
+    details:
+      command: cd plugins/software-factory && bun test test/review-policy.test.ts
+        test/contracts/concern-schemas.test.ts
+        test/contracts/concern-artifact-types.test.ts
+        test/engine/closeup-lifecycle-resolve.test.ts --reporter=junit
+        --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-green-1794206783584-wu0tnnlrd5.xml
+      junitCaseCount: 38
+      junitCaseIds:
+        - Review policy resolution (§8.7, §18).falls back to the canonical
+          builtin dispositions
+        - Review policy resolution (§8.7, §18).prefers a per-agent policy over
+          default and default over builtin
+        - Review policy resolution (§8.7, §18).reads legacy allowedDispositions
+          as the default alias
+        - Review policy resolution (§8.7, §18).appends dismiss for triagers
+          without duplicates
+        - Review policy resolution (§8.7, §18).never grants dismiss to
+          non-triagers, even when configured
+        - Review policy resolution (§8.7, §18).restricts the triager set to
+          reviewer and plan-reviewer
+        - Review policy resolution (§8.7, §18).composed triager resolution
+          excludes dismiss for close-ups
+        - Generated review schema gating (§8.7).offers dismiss only when the
+          resolved policy comes from a triager
+        - FakeHarness review-step dispositions (§8.7, §18).reviewer accepts a
+          dismiss suggestion whose id matches a concern
+        - FakeHarness review-step dispositions (§8.7, §18).plan-reviewer is a
+          triager and may dismiss architect concerns
+        - FakeHarness review-step dispositions (§8.7, §18).qa rejects dismiss
+          even when the legacy policy lists it
+        - Item-machine review prompt uses the canonical resolver (§8.7).renders
+          dismiss in the reviewer dispositions when the agent is a triager
+        - Concern producer schemas.inlines the concern definition into every
+          producer schema without external refs
+        - Concern producer schemas.inlines the remarkable decision definition
+          with chosen, alternatives, and why
+        - Concern producer schemas.adds newConcerns to review and QA schemas
+          outside the triage suggestions
+        - Concern producer schemas.adds concernResolutions with resolve, carry,
+          propagate, and dismiss to close-up schemas
+        - Concern producer schemas.leaves triage, infra, and plan-edit schemas
+          untouched
+        - Concern producer schemas.adds remarkable and lowercase detail to
+          reviewer, plan-reviewer, QA, and file review schemas
+        - Concern producer schemas.adds concernConfirms and concernResolution to
+          architect report decisions
+        - Concern producer schemas.adds concernConfirms to plan close-up outputs
+          while preserving concernResolutions
+        - Concern producer schemas.accepts structured concerns and remarkable
+          across every developer, fact-finder, and plan step
+        - Concern artifact types.exposes structured concerns and remarkable
+          decisions with strict vocabularies
+        - Concern artifact types.stores concern lifecycle metadata including
+          pending resolution and escalation
+        - Concern artifact types.adds dismiss to review dispositions without a
+          tech-debt value
+        - Concern artifact types.marks plan ADRs as blocking or remarkable
+        - Concern artifact types.adds human involvement modes, concern
+          thresholds, and canonical review policy to pipeline config
+        - Concern artifact types.types structured concerns and remarkable
+          decisions on every producer artifact
+        - Concern artifact types.types concern confirmations and decision
+          resolutions with strict vocabularies
+        - "Close-up lifecycle: architect confirmations.accept resolves a pending
+          resolve and derive exposes the resolved status"
+        - "Close-up lifecycle: architect confirmations.accept carries a pending
+          carry to the architect"
+        - "Close-up lifecycle: architect confirmations.accept propagates a
+          pending propagate to the parent concern store"
+        - "Close-up lifecycle: architect confirmations.reject clears the pending
+          resolution, preserving open status and disposition"
+        - "Close-up lifecycle: dismiss resolutions.accept dismisses with the
+          trimmed pending note and clears the proposal"
+        - "Close-up lifecycle: dismiss resolutions.errors before any transition
+          when an accepted dismiss proposal has no note"
+        - "Close-up lifecycle: consult unblock.consult resolve unblocks the
+          affected item on the next derive"
+        - "Close-up lifecycle: consult unblock.ignores concernResolution from an
+          item consult and journals the drop"
+        - "Close-up lifecycle: wave fallback.falls back over triage-less open
+          concerns and lists tech-debt as derived debt"
+        - "Close-up lifecycle: wave fallback.leaves blocker concerns open for
+          explicit triage"
+      junitTruncated: false
+      collected: true
+      collectionErrors: []
+  - id: size
+    status: pass
+    message: "size passed: 58/300 production lines changed"
+    details:
+      changedLines:
+        added: 43
+        deleted: 15
+        total: 58
+        files:
+          - plugins/software-factory/config/schemas/plan-closeup.schema.json
+          - plugins/software-factory/config/schemas/wave-closeup.schema.json
+          - plugins/software-factory/src/core/artifacts.ts
+          - plugins/software-factory/src/core/concerns.ts
+          - plugins/software-factory/src/core/flows/step-runner.ts
+          - plugins/software-factory/src/core/review-policy.ts
+      limit: 300

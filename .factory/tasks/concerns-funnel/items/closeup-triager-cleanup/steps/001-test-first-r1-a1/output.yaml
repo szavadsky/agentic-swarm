@@ -1,0 +1,83 @@
+status: ok
+summary: "Authored the red tests for close-up triager cleanup and dismiss
+  resolutions without touching production code. Added: (1) review-policy tests
+  asserting the triager set is exactly {reviewer, plan-reviewer} and that
+  composed resolveReviewAllowed(p,a,isTriagerAgent(a)) excludes dismiss for
+  wave-close-up/plan-close-up while retaining it for reviewer/plan-reviewer; (2)
+  closeup-lifecycle tests where architect accept of a pending dismiss with a
+  note yields status dismissed + disposition dismiss + trimmed dismissReason +
+  cleared pending, and accept of a pending dismiss without a note errors the
+  step while preserving both the dismiss proposal and a co-emitted resolve
+  proposal (no partial transitions); (3) contract tests accepting dismiss in
+  wave/plan/architect close-up concernResolutions action enums and in
+  CloseupConcernResolution/PendingConcernResolution types, plus asserting
+  close-up schemas carry no suggestions[]. Targeted run: 6 fail / 32 pass, all
+  six failures are assertion failures (JUnit <failure>, no <error>), matching
+  the declared expectRed ids. Full TMPDIR=/tmp suite: 439 pass, 2 skip, 6 fail
+  (exactly the new target tests, no regressions)."
+target:
+  selectors:
+    - test/review-policy.test.ts
+    - test/contracts/concern-schemas.test.ts
+    - test/contracts/concern-artifact-types.test.ts
+    - test/engine/closeup-lifecycle-resolve.test.ts
+  expectRed:
+    - test/review-policy.test.ts::Review policy resolution (§8.7, §18).restricts
+      the triager set to reviewer and plan-reviewer
+    - test/review-policy.test.ts::Review policy resolution (§8.7, §18).composed
+      triager resolution excludes dismiss for close-ups
+    - test/contracts/concern-schemas.test.ts::Concern producer schemas.adds
+      concernResolutions with resolve, carry, propagate, and dismiss to close-up
+      schemas
+    - test/contracts/concern-artifact-types.test.ts::Concern artifact
+      types.stores concern lifecycle metadata including pending resolution and
+      escalation
+    - "test/engine/closeup-lifecycle-resolve.test.ts::Close-up lifecycle:
+      dismiss resolutions.accept dismisses with the trimmed pending note and
+      clears the proposal"
+    - "test/engine/closeup-lifecycle-resolve.test.ts::Close-up lifecycle:
+      dismiss resolutions.errors before any transition when an accepted dismiss
+      proposal has no note"
+evidence:
+  - cd plugins/software-factory && bun install --frozen-lockfile -> dependencies
+    installed (yaml, ajv, typescript); test runner usable
+  - "Baseline before edits: TMPDIR=/tmp bun test test/review-policy.test.ts
+    test/contracts/concern-artifact-types.test.ts
+    test/contracts/concern-schemas.test.ts
+    test/engine/closeup-lifecycle-resolve.test.ts -> 34 pass, 0 fail (runner
+    healthy, fixtures work)"
+  - "After edits: same targeted command -> 32 pass, 6 fail; failures are
+    behavior assertions: isTriagerAgent includes close-ups, schema rejects
+    dismiss, types reject dismiss, accept leaves status open, no-note accept
+    does not error"
+  - "JUnit verification: bun test <4 files> --reporter=junit -> exactly 6
+    <failure> testcases and 0 <error>/collection failures; ids match all six
+    declared expectRed entries"
+  - cd plugins/software-factory && TMPDIR=/tmp bun test (full suite) -> 439
+    pass, 2 skip, 6 fail across 69 files; the only failures are the six new
+    target tests, so no existing suite regressed
+  - git status --short -> only the four test files modified; no production files
+    touched
+concerns:
+  - bun run typecheck is currently red only because the new tests reference the
+    not-yet-added `dismiss` member of
+    PendingConcernResolution/CloseupConcernResolution and the close-up schemas'
+    action enum; the green step adds those type/schema members. Runtime bun test
+    red is assertion-based, not compilation-based.
+  - The pre-flight test asserts result.meta.error matches /dismiss/i and
+    /note/i, so the implementation's TriageValidationError message must name
+    both the dismiss action and the missing note.
+  - The dismiss-accept test uses a padded note ('  Superseded by ADR-1  ') to
+    pin the trimmed dismissReason requirement.
+notes: "Implementation guidance: (1) isTriagerAgent -> only reviewer and
+  plan-reviewer; (2) add \"dismiss\" to CloseupConcernResolution,
+  PendingConcernResolution, and the local ConcernResolution in concerns.ts:16
+  plus wave/plan-closeup schema action enums (architect-closeup shares
+  plan-closeup); (3) in ingestStepConcerns, before
+  aggregateConcerns/applyReviewTriage/applyCloseupResolutions, when
+  source.agent==='architect' scan accept confirms against stored
+  pendingResolution and throw TriageValidationError for action==='dismiss' with
+  blank/absent note; (4) in applyConcernConfirms add an accept+dismiss branch
+  returning status dismissed, disposition dismiss, dismissReason pending.note
+  trimmed, pendingResolution cleared, without importing triage.ts; (5) leave
+  wave fallback untouched (never dismiss, blockers stay open)."

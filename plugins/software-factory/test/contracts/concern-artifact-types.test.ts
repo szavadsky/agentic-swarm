@@ -121,7 +121,10 @@ export const contract = {
 
   it("stores concern lifecycle metadata including pending resolution and escalation", () => {
     const errors = typeErrors(`
-import type { StoredConcernArtifact } from "../../src/core/artifacts.js";
+import type {
+  CloseupConcernResolution,
+  StoredConcernArtifact,
+} from "../../src/core/artifacts.js";
 
 const stored: StoredConcernArtifact = {
   id: "c-0123456789",
@@ -163,6 +166,19 @@ const withoutPending: StoredConcernArtifact = {
   updatedAt: "2026-11-07T00:00:00.000Z",
 };
 
+const dismissPending: StoredConcernArtifact["pendingResolution"] = {
+  action: "dismiss",
+  note: "Superseded by ADR-1",
+  by: "plan-close-up",
+  at: "2026-11-07T00:00:00.000Z",
+};
+
+const dismissResolution: CloseupConcernResolution = {
+  id: "c-0123456789",
+  action: "dismiss",
+  note: "Superseded by ADR-1",
+};
+
 // @ts-expect-error stored concerns require a stable id
 const missingId: StoredConcernArtifact = {
   kind: "risk",
@@ -175,14 +191,21 @@ const missingId: StoredConcernArtifact = {
   updatedAt: "2026-11-07T00:00:00.000Z",
 };
 const badPending: StoredConcernArtifact["pendingResolution"] = {
-  // @ts-expect-error pending actions are resolve, carry, or propagate
-  action: "dismiss",
+  // @ts-expect-error pending actions are resolve, carry, propagate, or dismiss
+  action: "defer",
   note: "Not a close-up action",
   by: "wave-close-up",
   at: "2026-11-07T00:00:00.000Z",
 };
 
-export const contract = { stored, withoutPending, missingId, badPending };
+export const contract = {
+  stored,
+  withoutPending,
+  dismissPending,
+  dismissResolution,
+  missingId,
+  badPending,
+};
 `);
     expect(errors).toEqual([]);
   });

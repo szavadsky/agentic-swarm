@@ -239,6 +239,24 @@ async function ingestStepConcerns(opts: {
     if (err?.code !== "ENOENT") throw err;
   }
   const ctx = { taskDir: opts.taskDir, taskWt: opts.taskWt, repo: opts.repo };
+  // Confirm pre-flight runs before any store mutation so a rejected dismiss
+  // proposal fails the step while preserving every status and pending
+  // resolution (no partial transitions). applyConcernConfirms itself never
+  // throws TriageValidationError, keeping the concerns/triage modules cycle-free.
+  if (confirms.length && opts.source.agent === "architect") {
+    const pendingById = new Map(
+      (await listConcerns(opts.taskDir)).map((concern) => [concern.id, concern.pendingResolution])
+    );
+    for (const confirm of confirms) {
+      if (confirm.confirm !== "accept") continue;
+      const pending = pendingById.get(confirm.id);
+      if (pending?.action === "dismiss" && !pending.note?.trim()) {
+        throw new TriageValidationError(
+          `Accepting dismiss for ${confirm.id} requires a non-empty pending note (the dismissal reason)`
+        );
+      }
+    }
+  }
   if (concerns.length || remarkables.length) await aggregateConcerns({ ...ctx, source: opts.source }, concerns, remarkables);
   const triage = suggestions.length > 0
     ? await applyReviewTriage({

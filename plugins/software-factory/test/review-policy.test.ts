@@ -8,7 +8,10 @@ import { loadPromptLibrary } from "../src/core/prompts.js";
 import { runAgentStep } from "../src/core/flows/step-runner.js";
 import { tickItemMachine } from "../src/core/flows/item-machine.js";
 import { generateReviewSchema } from "../src/core/records/review-schema.js";
-import { resolveReviewAllowed } from "../src/core/review-policy.js";
+import {
+  isTriagerAgent,
+  resolveReviewAllowed,
+} from "../src/core/review-policy.js";
 import type { PipelineConfig, ProjectConfig } from "../src/core/artifacts.js";
 
 const CANONICAL = [
@@ -131,6 +134,50 @@ describe("Review policy resolution (§8.7, §18)", () => {
         false
       )
     ).toEqual(["fix"]);
+  });
+
+  it("restricts the triager set to reviewer and plan-reviewer", () => {
+    const candidates = [
+      "reviewer",
+      "plan-reviewer",
+      "wave-close-up",
+      "plan-close-up",
+      "developer",
+      "qa",
+      "architect",
+      "fact-finder",
+    ];
+    expect(candidates.filter((agent) => isTriagerAgent(agent)).sort()).toEqual([
+      "plan-reviewer",
+      "reviewer",
+    ]);
+  });
+
+  it("composed triager resolution excludes dismiss for close-ups", () => {
+    const pipeline = pipelineWith({ default: ["fix", "dismiss"] });
+    for (const agent of ["wave-close-up", "plan-close-up"]) {
+      const allowed = resolveReviewAllowed(
+        pipeline,
+        agent,
+        isTriagerAgent(agent)
+      );
+      expect(allowed).toEqual(["fix"]);
+      expect(
+        dispositionEnum(generateReviewSchema(allowed))
+      ).not.toContain("dismiss");
+    }
+
+    for (const agent of ["reviewer", "plan-reviewer"]) {
+      const allowed = resolveReviewAllowed(
+        pipelineWith(),
+        agent,
+        isTriagerAgent(agent)
+      );
+      expect(allowed).toContain("dismiss");
+      expect(dispositionEnum(generateReviewSchema(allowed))).toContain(
+        "dismiss"
+      );
+    }
   });
 });
 

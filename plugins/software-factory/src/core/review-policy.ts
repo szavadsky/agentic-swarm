@@ -11,15 +11,12 @@ export const BUILTIN_REVIEW_DISPOSITIONS = [
 
 /**
  * Agents that triage worker concerns and may dismiss them (§8.7, §18):
- * the step's reviewer plus plan and close-up reviewers.
+ * the step's reviewer and the plan reviewer. Close-ups are not triagers; their
+ * re-triage flows through concernResolutions and architect concernConfirms
+ * (adr-closeup-no-suggestions-triage).
  */
 export function isTriagerAgent(agent: string): boolean {
-  return (
-    agent === "reviewer" ||
-    agent === "plan-reviewer" ||
-    agent === "wave-close-up" ||
-    agent === "plan-close-up"
-  );
+  return agent === "reviewer" || agent === "plan-reviewer";
 }
 
 /**

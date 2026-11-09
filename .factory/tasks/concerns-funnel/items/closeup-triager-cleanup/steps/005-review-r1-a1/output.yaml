@@ -1,0 +1,37 @@
+status: approved
+summary: Triager set {reviewer,plan-reviewer}, dismiss lifecycle + contracts
+  verified green
+suggestions:
+  - detail: Pre-flight reads stored pendings before any mutate
+      (step-runner.ts:246-259) and correctly throws TriageValidationError naming
+      dismiss + note; the later propagate scan (step-runner.ts:305-308) re-lists
+      the store instead of reusing pendingById. Reuse the map or a single
+      listConcerns call to avoid double I/O per architect ingest.
+    disposition: optional
+    id: reuse-preflight-pending-map
+    location:
+      file: plugins/software-factory/src/core/flows/step-runner.ts
+      line: 305
+    summary: Reuse pre-flight pending map for propagate scan
+  - detail: Comment says 'a rejected dismiss proposal fails the step' while the
+      guarded path is confirm=accept with a note-less pending dismiss
+      (confirm=reject clears without error). Reword to 'an accepted dismiss
+      proposal without a note' to avoid confusing validation-rejection with
+      confirm=reject.
+    disposition: optional
+    id: preflight-comment-wording
+    location:
+      file: plugins/software-factory/src/core/flows/step-runner.ts
+      line: 242
+    summary: Clarify pre-flight comment wording
+  - detail: applyConcernConfirms returns the record unchanged for note-less dismiss
+      (concerns.ts:298) to avoid a concerns<->triage cycle, but mutate still
+      rewrites the file with a bumped updatedAt and commits. That matches the
+      existing no-pending/reject no-op idiom, so not a defect; a future mutate
+      short-circuit on deep-equal patches would silence no-op commits.
+    disposition: optional
+    id: noop-confirm-still-commits
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 298
+    summary: No-op dismiss confirm still bumps updatedAt + commits

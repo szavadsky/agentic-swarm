@@ -1,0 +1,68 @@
+status: ok
+summary: "Close-up triager cleanup + dismiss resolutions implemented and
+  verified: isTriagerAgent restricted to {reviewer, plan-reviewer} (composed
+  resolveReviewAllowed excludes dismiss for close-ups); dismiss added to
+  CloseupConcernResolution, PendingConcernResolution, local ConcernResolution,
+  and wave/plan-closeup schema action enums; ingestStepConcerns pre-flights
+  accepted dismiss confirms before any mutation (TriageValidationError, state
+  preserved) while applyConcernConfirms never throws; accept+dismiss sets
+  dismissed/disposition dismiss/dismissReason from trimmed pending note and
+  clears the proposal; wave fallback never assigns dismiss and blockers stay
+  open. All four target suites green (38 pass, 0 fail), typecheck clean, full
+  gate suite green (445 pass, 2 skip, 0 fail)."
+target:
+  selectors:
+    - test/review-policy.test.ts
+    - test/contracts/concern-schemas.test.ts
+    - test/contracts/concern-artifact-types.test.ts
+    - test/engine/closeup-lifecycle-resolve.test.ts
+  expectRed:
+    - test/review-policy.test.ts::Review policy resolution (§8.7, §18).restricts
+      the triager set to reviewer and plan-reviewer
+    - test/review-policy.test.ts::Review policy resolution (§8.7, §18).composed
+      triager resolution excludes dismiss for close-ups
+    - test/contracts/concern-schemas.test.ts::Concern producer schemas.adds
+      concernResolutions with resolve, carry, propagate, and dismiss to close-up
+      schemas
+    - test/contracts/concern-artifact-types.test.ts::Concern artifact
+      types.stores concern lifecycle metadata including pending resolution and
+      escalation
+    - "test/engine/closeup-lifecycle-resolve.test.ts::Close-up lifecycle:
+      dismiss resolutions.accept dismisses with the trimmed pending note and
+      clears the proposal"
+    - "test/engine/closeup-lifecycle-resolve.test.ts::Close-up lifecycle:
+      dismiss resolutions.errors before any transition when an accepted dismiss
+      proposal has no note"
+evidence:
+  - cd plugins/software-factory && bun test test/review-policy.test.ts
+    test/contracts/concern-schemas.test.ts
+    test/contracts/concern-artifact-types.test.ts
+    test/engine/closeup-lifecycle-resolve.test.ts -> 38 pass, 0 fail, 147
+    expect() calls across 4 files
+  - cd plugins/software-factory && bun run typecheck (tsc --noEmit) -> exit 0,
+    TYPECHECK_OK
+  - cd plugins/software-factory && TMPDIR=/tmp bun test -> 445 pass, 2 skip, 0
+    fail, 2468 expect() calls, 447 tests across 69 files
+  - "Source inspection: plugins/software-factory/src/core/review-policy.ts
+    isTriagerAgent returns agent === 'reviewer' || agent === 'plan-reviewer';
+    resolveReviewAllowed filters dismiss for non-triagers"
+  - "Source inspection: artifacts.ts
+    CloseupConcernResolution/PendingConcernResolution and concerns.ts local
+    ConcernResolution include 'dismiss'; config/schemas/wave-closeup.schema.json
+    and plan-closeup.schema.json enums include 'dismiss'"
+  - "Source inspection: plugins/software-factory/src/core/flows/step-runner.ts
+    ingestStepConcerns pre-flights architect accept confirms against
+    listConcerns pendingResolution.dismiss notes before
+    aggregateConcerns/applyReviewTriage/applyConcernConfirms, throwing
+    TriageValidationError without mutating"
+  - "Source inspection: concerns.ts applyConcernConfirms handles dismiss with
+    trimmed pending note, never throws TriageValidationError;
+    applyWaveCloseupFallback skips blockers/open pending concerns and only
+    assigns optional/architect"
+concerns:
+  - applyConcernConfirms silently leaves the proposal intact when called
+    directly with a missing dismissal note; the step-level pre-flight is the
+    enforcing gate, as required to avoid the concerns<->triage module cycle.
+notes: Working tree contains only the engine-managed step meta.yaml
+  modification; implementation changes were already committed on the branch (58
+  prod lines, well under the 300-line budget).
