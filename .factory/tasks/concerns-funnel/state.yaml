@@ -1,7 +1,7 @@
 task: concerns-funnel
 kind: epic
 status: active
-iteration: 2
+iteration: 3
 currentWave: 1
 items:
   concerns-contracts:
@@ -328,14 +328,6 @@ items:
     fixRounds: 1
     spendUsd: 0
 debt:
-  - "Pre-existing head-guard failures when TMPDIR sits under .factory-runtime:
-    inferTaskWorktree matches a folder-boundary tail yet 2 failures persist via
-    a different path. Baseline red; green with TMPDIR=/tmp. Out of scope.
-    Hydration git uses explicit taskWt cwd (not worktree inference), so the new
-    taskDiff path is unaffected."
-  - Unapplied spike-saga-commit reviewer optional nits (qualify
-    epic-state-from-child-closeup with isMerged precedence, prefix inline paths,
-    scope removeWorktree claim, fold contextPack key). Consumers apply mentally.
   - "spike-saga-commit merge gate failure is environmental, not content:
     read-only spike with zero prod diff, research ok, review approved; baseline
     test gate is red (2 head-guard TMPDIR failures). Findings accepted as
@@ -644,20 +636,20 @@ debt:
     inconsistent with documented branch-from-HEAD worktrees"
   - "[funnel-closeups-v3] Propagated parent copy retains child source.item,
     writes undeclared source.epic, and can clobber/lengthen parent records"
-budgetSpentUsd: 7.976107920000003
+budgetSpentUsd: 8.010755920000003
 spendByRole:
   alt-workhorse:
-    costUsd: 1.9377699999999995
-    inputTokens: 9541363
-    outputTokens: 2812945
+    costUsd: 1.9655029999999996
+    inputTokens: 9671362
+    outputTokens: 2858124
   workhorse:
     costUsd: 5.11314892
     inputTokens: 11258582
     outputTokens: 3045263
   architect:
-    costUsd: 0.881331
-    inputTokens: 8016727
-    outputTokens: 164105
+    costUsd: 0.888246
+    inputTokens: 8042475
+    outputTokens: 165092
   alt-architect:
     costUsd: 0.043858
     inputTokens: 181661
@@ -760,7 +752,7 @@ spendByItem:
     inputTokens: 895689
     outputTokens: 273259
   (orchestration):
-    costUsd: 1.471356
-    inputTokens: 9594777
-    outputTokens: 727847
-lastUpdated: 2026-11-09T04:24:09.808Z
+    costUsd: 1.5060040000000001
+    inputTokens: 9750524
+    outputTokens: 774013
+lastUpdated: 2026-11-09T04:39:07.579Z
