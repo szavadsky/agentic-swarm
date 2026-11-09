@@ -2431,3 +2431,5 @@
 {"type":"step_finished","task":"concerns-funnel","step":"pm-edits-6","attempt":1,"status":"ok","sessionId":"01a1c067-4755-729d-8c97-21da7d2a81f6","usage":{"inputTokens":19803,"outputTokens":3782,"costUsd":0.002737},"ts":"2026-11-09T13:03:06.520Z"}
 {"type":"step_started","task":"concerns-funnel","step":"pm-edits-6","attempt":2,"recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/116-pm-edits-6-a2","ts":"2026-11-09T13:03:06.654Z"}
 {"type":"step_timeout_armed","task":"concerns-funnel","step":"pm-edits-6","timeoutSec":2700,"ts":"2026-11-09T13:03:06.659Z"}
+{"type":"step_finished","task":"concerns-funnel","step":"pm-edits-6","attempt":2,"status":"ok","sessionId":"01a1c067-4755-729d-8c97-21da7d2a81f6","usage":{"inputTokens":1565,"outputTokens":5377,"costUsd":0.001271},"ts":"2026-11-09T13:03:56.725Z"}
+{"type":"pm_edits_repaired","errors":[],"ts":"2026-11-09T13:03:56.726Z"}
