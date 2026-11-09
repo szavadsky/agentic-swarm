@@ -1,0 +1,101 @@
+status: changes_requested
+summary: "Blocked: m1 needs m0 dep, sweep omits :248 and breaks rejection
+  fixtures, interfaces leak work orders, fragment rewrite risks Raise/condense
+  sentinels."
+suggestions:
+  - id: dep-m1-requires-m0
+    disposition: fix
+    summary: m1 full-suite-green impossible without m0 yet deps empty
+    detail: Baseline RED verified (concerns.ts:74 reads existing?.Detail vs
+      StoredConcernArtifact.detail, 6 schemas capital-D). m1 branch without m0
+      fails typecheck/contracts, so its 'full suite green' verify + milestone
+      scenario cannot pass in parallel. Add dep closeup-confirm-instructions ->
+      schema-detail-normalize-v3 or sequence milestones/scope m1 gates.
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 74
+  - id: sweep-preservation-incomplete
+    disposition: fix
+    summary: MUST-FIX omits :248 and ONLY :86/:106 breaks rejection tests
+    detail: epic-saga :248 (openCopy!.Detail) is 4th capital read with
+      :307/:313/:319 but omitted; schema-detail :93/:111/:196 Detail payloads
+      must stay capital-D to assert rejection, as must concern-schemas
+      :450/:540/:624/:693 and concern-artifact-types :417 ts-expect-error.
+      Plan's ONLY :86/:106 would destroy rejection coverage. Expand MUST-FIX to
+      :248 and preservation to all negative-casing fixtures.
+    location:
+      file: plugins/software-factory/test/engine/epic-saga-propagate.test.ts
+      line: 248
+  - id: m0-interface-work-order
+    disposition: fix
+    summary: m0 second interface is test-edit order with line numbers
+    detail: Interfaces must be caller/callee contracts without leaks; 'ONLY :86/:106
+      stay, :234/:263 fixed' belongs in item description. Rewrite as e.g.
+      schemas (callees) accept detail/reject Detail, tests (callers) assert
+      StoredConcernArtifact.detail lowercase. Remove line numbers from
+      interface.
+    location:
+      file: plugins/software-factory/test/contracts/schema-detail-normalize.test.ts
+      line: 86
+  - id: m1-interfaces-work-orders
+    disposition: fix
+    summary: m1 interfaces narrate edits with item-as-caller
+    detail: "Both m1 interfaces describe the edit (item appends Decision, net-zero
+      replacement) with item as caller. True contracts: fragment (callee) ->
+      architect (caller) confirms instruction; ARCHITECTURE row (callee) <->
+      sentinel test (caller) needle agreement. Move edit steps to item
+      description."
+    location:
+      file: plugins/software-factory/agents/steps/architect-closeup.md
+      line: 29
+  - id: fragment-sentinel-preservation
+    disposition: fix
+    summary: Rewrite must preserve Raise/condense sentinels
+    detail: prompts.test requires /Raise concerns/ on all 19 matrix fragments and
+      /condens/i on triage fragments incl both architect files. Plan says
+      rewrite final bullet to confirms instruction without explicit
+      preserve-raise+condense; dropping either fails matrix. Specify new bullets
+      keep Raise concerns with evidence + condense clause while swapping
+      Resolutions->Confirms + dismiss note rule.
+    location:
+      file: plugins/software-factory/agents/steps/architect-wave-report.md
+      line: 29
+  - id: paths-ambiguous
+    disposition: optional
+    summary: Mixed repo/plugin-relative paths risk mis-edit
+    detail: Plan mixes docs/adr/... (repo-root) with test/docs-concerns.test.ts
+      (plugin-relative). Use repo-relative
+      plugins/software-factory/test/docs-concerns.test.ts and
+      plugins/software-factory/docs/ARCHITECTURE.md consistently.
+    location:
+      file: plugins/software-factory/test/docs-concerns.test.ts
+      line: 1
+  - id: scenarios-weak-compound
+    disposition: optional
+    summary: m0 s3/s4 and m1 s4 weak or compound; name suites
+    detail: m0 s3 'When reviewed' not command-falsifiable; s4 gate-green
+      tautological; m1 s4 triple-given should split. Scenario 1 should name
+      schema-detail-normalize + concern-schemas + concern-artifact-types suites
+      explicitly.
+    location:
+      file: plugins/software-factory/test/contracts/schema-detail-normalize.test.ts
+      line: 78
+  - id: row18-without-811
+    disposition: optional
+    summary: Sixth deviation row-only leaves S8.11 body at five
+    detail: Prior five deviations have row + S8.11 body + ADR; plan forbids other
+      ARCHITECTURE sections so S8.11 deviations list stays stale while row
+      claims six. Add S8.11 needle or record explicit deferral.
+    location:
+      file: plugins/software-factory/docs/ARCHITECTURE.md
+      line: 39
+  - id: prompt-test-placement
+    disposition: optional
+    summary: Prompt-render test location/scope unspecified; net-zero unlocked
+    detail: Specify extend prompts.test.ts asserting confirms present in both
+      renders + concernResolutions absent from architect-closeup; 15/80 budgets
+      alone do not enforce net-zero, add diff-stat check or drop net-zero from
+      scenario.
+    location:
+      file: plugins/software-factory/test/prompts.test.ts
+      line: 587
