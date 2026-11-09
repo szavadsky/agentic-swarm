@@ -1,0 +1,12 @@
+context: wave
+decision: continue
+rationale: "Wave 1 complete: schema-detail-normalize-v4 merged cleanly, 0
+  failed/blocked, tree clean, gates no regression (typecheck pass->pass, test
+  fail->pass improved vs TMPDIR baseline). m1 dep now satisfied. Casing conflict
+  resolved: hex ground truth (0x64 lowercase, 0 cap-quoted keys) + tsc pass +
+  grep no-matches converge on already-lowercase baseline; :raw capital-D display
+  is a rendering artifact (proven in iter5 when grep missed :raw-shown matches,
+  and tsc pass is incompatible with a capital-D guard on a typed record). Accept
+  v4 no-flip finding; m0 scenarios met by green baseline. Proceed to wave 2."
+text: Schedule closeup-confirm-instructions in wave 2 (dep
+  schema-detail-normalize-v4 merged). No operator action; no plan change.

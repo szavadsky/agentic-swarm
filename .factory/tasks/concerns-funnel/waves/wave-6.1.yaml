@@ -1,0 +1,8 @@
+wave: 1
+iteration: 6
+status: complete
+mergedItems:
+  - schema-detail-normalize-v4
+failedItems: []
+blockedItems: []
+summary: "Wave 1 completed. Merged items: schema-detail-normalize-v4"
