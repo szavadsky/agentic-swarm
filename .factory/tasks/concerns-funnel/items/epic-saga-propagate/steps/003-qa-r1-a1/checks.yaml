@@ -1,0 +1,34 @@
+checks:
+  - id: red-test
+    status: pass
+    message: "red-test passed: all 7 tests fail when prod changes are restored to
+      test-first commit"
+    details:
+      command: cd plugins/software-factory && bun test
+        test/engine/epic-saga-propagate.test.ts --reporter=junit
+        --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-redtest-1794184830756-mggfkshshkc.xml
+      junitCaseCount: 7
+      junitCaseIds:
+        - Epic to saga propagation (adr-epic-push-condensed).copies open and
+          routed concerns with an [epic] summary while dismissed stays local
+        - Epic to saga propagation (adr-epic-push-condensed).condenses long
+          detail and why to the byte cap on a char boundary
+        - Epic to saga propagation (adr-epic-push-condensed).is
+          restart-idempotent and preserves parent triage
+        - Epic to saga propagation (adr-epic-push-condensed).forwards blocked
+          child questions as q-epic-* with mapped blocks
+        - Epic to saga propagation (adr-epic-push-condensed).hydrates propagated
+          copies into the saga architect concernsYaml
+        - Epic to saga propagation (adr-epic-push-condensed).runTask exits 0
+          when only open copies were propagated
+        - Epic to saga propagation (adr-epic-push-condensed).propagates after a
+          failed child iteration as well
+      junitTruncated: false
+      collected: true
+      collectionErrors: []
+  - id: test-diff
+    status: pass
+    message: test-diff generated (0 test files, 0 bytes)
+    details:
+      diff: ""
+      files: []

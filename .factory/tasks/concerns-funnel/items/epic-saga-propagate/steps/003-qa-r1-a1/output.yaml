@@ -1,0 +1,30 @@
+status: changes_requested
+summary: Target 7/7 green and typecheck green verified, but epic worktree
+  retention leaks worktrees to satisfy a flawed post-merge assertion.
+suggestions:
+  - id: epic-worktree-retention-leak
+    disposition: fix
+    summary: Retaining epic child worktrees after merge leaks worktrees
+    detail: merge-path.ts skips removeWorktree for kind epic, leaving topic/*--*
+      worktrees registered on disk after every saga run. Assignment never
+      authorizes retention; ARCHITECTURE merge path requires remove worktree
+      unconditionally, and plan/Decision 002 expect parent copies to survive
+      worktree cleanup (cleanup happens). Disk/worktree-list leak accumulates
+      per epic. Revert to unconditional removeWorktree; no-back-sync must be
+      verified via branch content, not worktree path persistence.
+    location:
+      file: plugins/software-factory/src/core/flows/merge-path.ts
+      line: 226
+  - id: post-merge-child-existence-assertion
+    disposition: fix
+    summary: runTask test asserts child worktree persists after merge
+    detail: epic-saga-propagate.test.ts runTask test asserts
+      fs.existsSync(deployedChildDir/concerns/...) after full runTask including
+      wave merge, which forces the prod retention hack. No-back-sync means child
+      artifacts unmutated (already proven by unit-level before/after file
+      comparisons), not worktree persistence post-cleanup. Replace with
+      branch-content checks (git show topic/TASK--EPIC:path) or drop; then prod
+      can remove worktrees.
+    location:
+      file: plugins/software-factory/test/engine/epic-saga-propagate.test.ts
+      line: 627

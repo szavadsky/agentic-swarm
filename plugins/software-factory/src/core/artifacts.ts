@@ -350,6 +350,8 @@ export interface CloseupConcernResolution {
 export interface ConcernSource {
   record: string;
   agent: string;
+  /** Epic slug that pushed this copy into the parent task. */
+  epic?: string;
   step?: string;
   item?: string;
   iteration?: number;

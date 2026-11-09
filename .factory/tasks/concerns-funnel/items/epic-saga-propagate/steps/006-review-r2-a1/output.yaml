@@ -1,0 +1,44 @@
+status: approved
+summary: "Implementation matches the epic-saga-propagate contract (open/routed
+  c-* copies with [epic] prefix, recomputed fingerprint ids, status open, source
+  {epic, record epic:<epic>/<record>}; rm-* copies with prefixed chosen +
+  recomputed id + condensed why; UTF-8 char-safe condensation <=120B verbatim
+  else min(500B, half); commit:false writes covered by the single child-closeup
+  commit inside KeyedMutex(parentWt); restart-idempotent merge preserving parent
+  triage; q-epic-<epic>-<orig> forwarding with mapped blocks; no back-sync).
+  Previous fix findings are fully resolved: merge-path.ts is byte-identical to
+  the item baseline (0-line diff, unconditional removeWorktree) and the runTask
+  test now proves no-back-sync via child-worktree-removed + epic-branch-kept +
+  git-show content checks; test delta since test-first is only that +14/-2
+  strengthening block (no deleted assertions or relaxed matchers). Independently
+  verified: bun run typecheck exit 0; target test file 7 pass / 0 fail (90
+  expects); epic-child-task + worktrees tests 10 pass; full suite 419 pass / 2
+  skip / 0 fail across 67 files. Only two optional documentation nits remain."
+suggestions:
+  - id: stale-source-epic-test-comment
+    disposition: optional
+    summary: Stale test comment and redundant cast around source.epic
+    detail: "The helper docstring says 'artifacts.ts does not declare it yet', but
+      ConcernSource in artifacts.ts now declares `epic?: string` (added by this
+      item). The `sourceEpic` cast to `ConcernSource & { epic?: string }` is
+      therefore redundant: use `record.source.epic` directly and drop/replace
+      the stale comment so the test reflects the current contract. Cosmetic
+      only."
+    location:
+      file: plugins/software-factory/test/engine/epic-saga-propagate.test.ts
+      line: 74
+  - id: forward-status-filter-undocumented
+    disposition: optional
+    summary: Open-status filter for forwarded questions is not documented in code
+    detail: forwardBlockedQuestions forwards only child questions with `status ===
+      'open'` in addition to `blocks.length > 0` (so answered/dismissed child
+      questions cannot re-open parent blockers). That is a deliberate, sensible
+      narrowing of the assignment's literal blocks filter, but it exists only in
+      the developer yield notes; the module doc only says 'questions carrying
+      blocks are forwarded'. Document the open-only condition (module doc and/or
+      inline why comment), and consider a focused assertion covering an answered
+      child question being skipped, so the behavior is self-evident and
+      regression-protected.
+    location:
+      file: plugins/software-factory/src/core/flows/epic-propagation.ts
+      line: 112

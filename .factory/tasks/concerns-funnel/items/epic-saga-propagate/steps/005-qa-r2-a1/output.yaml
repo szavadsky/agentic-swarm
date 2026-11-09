@@ -1,0 +1,25 @@
+status: approved
+summary: "Fix-round resolves both prior fixes: merge-path.ts restored to
+  unconditional removeWorktree (byte-identical to baseline; no epic-retention
+  hack in src), and the runTask test's post-merge worktree-persistence assertion
+  replaced with worktree-removed + epic-branch-kept + git-show content checks
+  (no [epic] mutation) — test delta is +14/-2, no weakening. Independently
+  verified: typecheck exit 0, target 7/7 pass (90 expects), full suite 419
+  pass/2 skip/0 fail (421 tests). Red evidence intact (test-first stub + engine
+  target-red/red-test: 7/7 assertion failures; only post-red test change is the
+  corrected runTask block). Implementation matches assignment contract
+  (open/routed copies, [epic] summary, fingerprint ids, status open, source
+  epic/record, rm-* prefix+recompute+condense, commit:false writes under one
+  closeup commit, KeyedMutex(parentWt), idempotent merge preserving triage,
+  q-epic-* forwarding, no halt from copies)."
+suggestions:
+  - id: stale-source-epic-comment
+    disposition: optional
+    summary: Stale test comment/redundant cast around source.epic
+    detail: "Comment says 'artifacts.ts does not declare it yet', but ConcernSource
+      in artifacts.ts now declares `epic?: string` (added by this item). The
+      `sourceEpic` helper's cast is therefore redundant; use
+      `record.source.epic` and drop the stale comment. Cosmetic only."
+    location:
+      file: plugins/software-factory/test/engine/epic-saga-propagate.test.ts
+      line: 74

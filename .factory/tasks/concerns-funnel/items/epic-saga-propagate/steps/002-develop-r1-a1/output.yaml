@@ -1,0 +1,64 @@
+status: ok
+summary: "Implemented epic-to-saga concern propagation in
+  src/core/flows/epic-propagation.ts: open/routed child concerns and open child
+  remarkables become condensed [epic]-prefixed parent copies with recomputed ids
+  and source {epic, record: epic:<epic>/<child-record>}; UTF-8-char-safe
+  condensation keeps <=120B verbatim and otherwise cuts to min(500B,
+  floor(bytes/2)); child questions with blocks are forwarded as
+  q-epic-<epic>-<orig> with blocks mapped (task -> parent task slug, everything
+  else -> epic); child artifacts are never mutated. Wired propagateEpicConcerns
+  into engine.runChildTask after runIteration and before the child-closeup write
+  for every status, with propagate+closeup+git add+commit serialized under a
+  module-level KeyedMutex(parentWt) and a single existing commit covering copies
+  plus closeup. aggregateConcerns now accepts a repo-less write context for
+  commit:false, and ConcernSource declares epic. Epic child worktrees are
+  retained after merge so the child concern store stays readable for the
+  no-back-sync assertions. Target tests: 7/7 pass; full suite 419 pass, 2 skip,
+  0 fail; typecheck green."
+target:
+  selectors:
+    - test/engine/epic-saga-propagate.test.ts
+  expectRed:
+    - Epic to saga propagation (adr-epic-push-condensed).copies open and routed
+      concerns with an [epic] summary while dismissed stays local
+    - Epic to saga propagation (adr-epic-push-condensed).condenses long detail
+      and why to the byte cap on a char boundary
+    - Epic to saga propagation (adr-epic-push-condensed).is restart-idempotent
+      and preserves parent triage
+    - Epic to saga propagation (adr-epic-push-condensed).forwards blocked child
+      questions as q-epic-* with mapped blocks
+    - Epic to saga propagation (adr-epic-push-condensed).hydrates propagated
+      copies into the saga architect concernsYaml
+    - Epic to saga propagation (adr-epic-push-condensed).runTask exits 0 when
+      only open copies were propagated
+    - Epic to saga propagation (adr-epic-push-condensed).propagates after a
+      failed child iteration as well
+evidence:
+  - cd plugins/software-factory && bun run typecheck -> exit 0 (tsc --noEmit).
+  - TMPDIR=/tmp bun test test/engine/epic-saga-propagate.test.ts -> 7 pass, 0
+    fail, 86 expect() calls.
+  - TMPDIR=/tmp bun test -> 419 pass, 2 skip, 0 fail across 67 files (421
+    tests), run after the implementation rewrite.
+  - bun test test/engine/head-guard.test.ts with the default TMPDIR -> 2 pass, 0
+    fail, confirming the temp-root baseline caveat is resolved.
+  - git status --short -> only the five production files changed; the authored
+    target test file is unmodified.
+  - git diff --numstat -> 199 insertions / 19 deletions net 180 production
+    lines, within the ~190-line budget.
+concerns:
+  - Epic child worktrees are now intentionally retained after merge
+    (merge-path.ts) because the target test asserts the child concern store
+    still exists after runTask; non-epic child worktrees are still removed.
+  - Forwarding filters child questions to status=open in addition to
+    blocks.length>0 so answered/dismissed child questions cannot open new parent
+    blockers.
+  - The full suite was last run with TMPDIR=/tmp per the assignment; a
+    default-TMPDIR full gate run was started but the session was interrupted
+    before it reported (head-guard, the only known default-TMPDIR failure,
+    passes).
+notes: Copies are grouped by child source.record so each parent copy keeps its
+  own epic:<epic>/<record> provenance; aggregateConcerns is invoked per group
+  with {commit:false}, relying on its fingerprint-keyed merge to preserve parent
+  triage and stay restart-idempotent. The parent-side KeyedMutex serializes
+  concurrent epic completions without touching repo.writeLock; commitAll keeps
+  its own per-commit writeLock.

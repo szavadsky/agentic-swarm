@@ -1,0 +1,79 @@
+status: ok
+summary: "Authored 7 test-first behavior tests for epic-to-saga concern
+  propagation plus one new interface stub. New test file
+  test/engine/epic-saga-propagate.test.ts covers: open/routed concern copies
+  with [epic] summary and recomputed fingerprint ids, dismissed/resolved staying
+  local, child rm-* copies with prefixed chosen/id/condensed why, 120-byte
+  detail verbatim, 800/2000/121-byte UTF-8 char-safe condensation
+  (<=min(500B,half), strictly shorter), restart idempotence preserving parent
+  triage, q-epic-<epic>-<orig> forwarding with mapped blocks and no back-sync,
+  saga architect concernsYaml hydration containing epic id+summary, runTask exit
+  0 with open copies only, and propagation after a failed child status. Added
+  new stub src/core/flows/epic-propagation.ts exporting
+  propagateEpicConcerns/PropagateEpicConcernsOptions; no existing production
+  code touched. Red verified: all 7 tests fail by assertion on current
+  production (0/7 pass); full suite is 412 pass, 2 skip, 7 fail (only the new
+  file), typecheck green."
+target:
+  selectors:
+    - test/engine/epic-saga-propagate.test.ts
+  expectRed:
+    - Epic to saga propagation (adr-epic-push-condensed).copies open and routed
+      concerns with an [epic] summary while dismissed stays local
+    - Epic to saga propagation (adr-epic-push-condensed).condenses long detail
+      and why to the byte cap on a char boundary
+    - Epic to saga propagation (adr-epic-push-condensed).is restart-idempotent
+      and preserves parent triage
+    - Epic to saga propagation (adr-epic-push-condensed).forwards blocked child
+      questions as q-epic-* with mapped blocks
+    - Epic to saga propagation (adr-epic-push-condensed).hydrates propagated
+      copies into the saga architect concernsYaml
+    - Epic to saga propagation (adr-epic-push-condensed).runTask exits 0 when
+      only open copies were propagated
+    - Epic to saga propagation (adr-epic-push-condensed).propagates after a
+      failed child iteration as well
+evidence:
+  - "`cd plugins/software-factory && bun run typecheck` -> exit 0 after all test
+    and stub edits."
+  - "`TMPDIR=/tmp bun test test/engine/epic-saga-propagate.test.ts` -> 0 pass /
+    7 fail; every failure is an assertion about missing behavior (no
+    import/collection errors), e.g. parent copies length 0 vs expected 1/2,
+    missing q-epic-* files, empty concernsYaml."
+  - JUnit probe `bun test test/engine/epic-saga-propagate.test.ts
+    --reporter=junit --reporter-outfile=/tmp/epic-final-junit.xml` -> tests=7,
+    failures=7; all seven declared node ids present with <failure>.
+  - "`TMPDIR=/tmp bun test` full suite -> 412 pass, 2 skip, 7 fail across 67
+    files; the only failures are the seven new target tests (baseline otherwise
+    green)."
+  - "`git status --short` -> only two untracked new files:
+    plugins/software-factory/src/core/flows/epic-propagation.ts (interface stub)
+    and plugins/software-factory/test/engine/epic-saga-propagate.test.ts; no
+    existing production code modified."
+concerns:
+  - The green step must implement the helper in
+    src/core/flows/epic-propagation.ts and call it from engine.runChildTask
+    after runIteration and before the child-closeup write, for every iteration
+    status.
+  - "ConcernSource in artifacts.ts does not declare epic; the green step must
+    add `epic?: string` (tests cast around the missing type so red remains
+    behavioral)."
+  - "Question forwarding contract pinned by tests: child `q-<orig>` becomes
+    `q-epic-<epic>-<orig>` (leading q- stripped); block `task` maps to the
+    parent task slug (basename of parentTaskDir) and every other block maps to
+    the epic."
+  - The added production file is a no-op interface stub only (21 lines) and must
+    be replaced by the implementation; tests import it directly.
+  - Tests require per-child-record source.record (`epic:<epic>/<child-record>`),
+    so aggregateConcerns must be invoked per record or written equivalently with
+    commit:false.
+notes: "Implementation contract implied by tests: filter child concerns to
+  open/routed; prefix summary with `[epic] `; recompute ids via
+  concernFingerprint semantics; force status open; source {epic, record:
+  `epic:<epic>/<child-record>`}; condense detail/why with bytes<=120 verbatim
+  else UTF-8-safe cut at min(500, floor(bytes/2)); propagate open child rm-*
+  with `[epic] ` chosen, recomputed rm id, condensed why; skip
+  dismissed/resolved; reuse aggregateConcerns commit:false so existing parent
+  triage/status is preserved and restarts are idempotent; forward only child
+  questions with blocks.length>0 and never mutate child artifacts. runChildTask
+  should serialize propagation+closeup+add+commit under KeyedMutex(parentWt) and
+  keep the single child-closeup commit."

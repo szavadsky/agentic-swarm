@@ -11,7 +11,7 @@ import type {
   TriageArtifact,
 } from "./artifacts.js";
 import type { Harness } from "../harness/types.js";
-import { Semaphore } from "./mutex.js";
+import { KeyedMutex, Semaphore } from "./mutex.js";
 import { git } from "./git/exec.js";
 import { taskBranch, childBranch } from "./git/naming.js";
 import {
@@ -29,6 +29,7 @@ import { tickItemMachine } from "./flows/item-machine.js";
 import { mergeItem } from "./flows/merge-path.js";
 import { runIngest, isTriageDone, isInfraDone } from "./flows/ingest.js";
 import { runIteration } from "./flows/iteration.js";
+import { propagateEpicConcerns } from "./flows/epic-propagation.js";
 import { runSeamHooks } from "./flows/seams.js";
 import { readYaml, writeYamlAtomic, readText } from "./records/io.js";
 import { reconcileConcerns } from "./concerns.js";
@@ -203,6 +204,9 @@ async function processSteeringMailbox(
   return { stopRequested };
 }
 
+/** Serializes parent-side propagation + child-closeup commit per parent worktree. */
+const parentCloseupLocks = new KeyedMutex();
+
 /**
  * Runs an epic as a child task on the parent branch (§8.6, Finding 7).
  */
@@ -259,20 +263,31 @@ export async function runChildTask(
     log,
   });
 
-  // 4. Record the child's final close-up as the parent item status so derive
-  // and the merge path see it (§8.6, Finding 7)
+  // 4. Push open/routed child concerns and blocked questions to the parent,
+  // then record the child's final close-up as the parent item status so derive
+  // and the merge path see it (§8.6, Finding 7). One lock and one commit cover
+  // the copies plus the close-up; copies stay open, so only forwarded
+  // questions can block the parent.
   const parentItemDir = path.join(parent.taskDir, "items", epicSlug);
-  await fs.promises.mkdir(parentItemDir, { recursive: true });
-  const childStatus =
-    itRes.status === "done" ? "done" : itRes.status === "blocked" ? "blocked" : "failed";
-  await writeYamlAtomic(path.join(parentItemDir, "child-closeup.yaml"), {
-    epic: epicSlug,
-    status: childStatus,
-    iteration: itRes.iteration,
-    summary: `Epic child task finished: ${itRes.status}`,
+  await parentCloseupLocks.runExclusive(parent.path, async () => {
+    await propagateEpicConcerns({
+      childTaskDir,
+      parentTaskDir: parent.taskDir,
+      parentWt: parent.path,
+      epic: epicSlug,
+    });
+    await fs.promises.mkdir(parentItemDir, { recursive: true });
+    const childStatus =
+      itRes.status === "done" ? "done" : itRes.status === "blocked" ? "blocked" : "failed";
+    await writeYamlAtomic(path.join(parentItemDir, "child-closeup.yaml"), {
+      epic: epicSlug,
+      status: childStatus,
+      iteration: itRes.iteration,
+      summary: `Epic child task finished: ${itRes.status}`,
+    });
+    await git(parent.path, ["add", "-A"], { allowFail: true });
+    await commitAll(repo, parent.path, `factory: record epic ${epicSlug} child status ${childStatus}`);
   });
-  await git(parent.path, ["add", "-A"], { allowFail: true });
-  await commitAll(repo, parent.path, `factory: record epic ${epicSlug} child status ${childStatus}`);
 
   return {
     status: itRes.status === "done" ? "done" : itRes.status === "blocked" ? "blocked" : "failed",
