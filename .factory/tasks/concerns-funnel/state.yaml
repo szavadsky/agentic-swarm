@@ -58,12 +58,12 @@ items:
     mergedAt: 2026-11-08T18:51:44-05:00
   prompts-dismiss-filter:
     kind: dev
-    status: running
+    status: ready
     branch: topic/concerns-funnel--prompts-dismiss-filter
-    attempts: 2
+    attempts: 1
     fixRounds: 1
-    spendUsd: 0.060164999999999996
-    currentStep: develop
+    spendUsd: 0.104644
+    currentStep: review
   schema-detail-normalize:
     kind: dev
     status: running
@@ -74,12 +74,12 @@ items:
     currentStep: test-first
   schema-detail-normalize-v2:
     kind: dev
-    status: running
+    status: ready
     branch: topic/concerns-funnel--schema-detail-normalize-v2
     attempts: 1
     fixRounds: 1
-    spendUsd: 0.10362199999999999
-    currentStep: qa
+    spendUsd: 0.151314
+    currentStep: review
   spike-saga-commit:
     kind: fact-finder
     status: ready
@@ -461,6 +461,8 @@ debt:
     contracts have no regression assertion"
   - "[prompt-fragments] Budget test counts net non-empty delta against editable
     baselines, so deletions can offset additions"
+  - "[schema-detail-normalize-v2] Legacy rename-merge override of longest-wins
+    lacks a why comment"
   - "[spike-saga-commit] Qualify 'epic state derived ONLY from
     child-closeup.yaml' — isMerged takes precedence"
   - "[spike-saga-commit] Inline citation paths missing plugins/software-factory/
@@ -704,20 +706,20 @@ debt:
     inconsistent with documented branch-from-HEAD worktrees"
   - "[funnel-closeups-v3] Propagated parent copy retains child source.item,
     writes undeclared source.epic, and can clobber/lengthen parent records"
-budgetSpentUsd: 9.198593920000002
+budgetSpentUsd: 9.348801920000003
 spendByRole:
   alt-workhorse:
-    costUsd: 2.064537
-    inputTokens: 10147554
-    outputTokens: 3048019
+    costUsd: 2.1497739999999994
+    inputTokens: 10502049
+    outputTokens: 3216919
   workhorse:
-    costUsd: 5.810889919999998
-    inputTokens: 12651657
-    outputTokens: 3566211
+    costUsd: 5.817823919999999
+    inputTokens: 12672911
+    outputTokens: 3571432
   architect:
-    costUsd: 1.2247529999999998
-    inputTokens: 11067691
-    outputTokens: 223799
+    costUsd: 1.2827899999999999
+    inputTokens: 11622901
+    outputTokens: 225300
   alt-architect:
     costUsd: 0.09841399999999997
     inputTokens: 393406
@@ -800,9 +802,9 @@ spendByItem:
     inputTokens: 895689
     outputTokens: 273259
   prompts-dismiss-filter:
-    costUsd: 0.060164999999999996
-    inputTokens: 144017
-    outputTokens: 45730
+    costUsd: 0.104644
+    inputTokens: 374499
+    outputTokens: 104052
   spike-text-budget:
     costUsd: 0.060779
     inputTokens: 139871
@@ -820,9 +822,9 @@ spendByItem:
     inputTokens: 263905
     outputTokens: 109900
   schema-detail-normalize-v2:
-    costUsd: 0.10362199999999999
-    inputTokens: 225081
-    outputTokens: 125601
+    costUsd: 0.151314
+    inputTokens: 370348
+    outputTokens: 241400
   routing-architect-consult-v2:
     costUsd: 0.198996
     inputTokens: 463902
@@ -840,7 +842,7 @@ spendByItem:
     inputTokens: 146385
     outputTokens: 43223
   (orchestration):
-    costUsd: 2.1853950000000006
-    inputTokens: 13686798
-    outputTokens: 1220222
-lastUpdated: 2026-11-09T08:37:57.925Z
+    costUsd: 2.2434320000000008
+    inputTokens: 14242008
+    outputTokens: 1221723
+lastUpdated: 2026-11-09T09:14:25.461Z
