@@ -1,0 +1,11 @@
+wave: 1
+iteration: 4
+status: complete
+mergedItems:
+  - schema-detail-normalize-v2
+  - prompts-dismiss-filter
+  - allowlist-agreement-test
+failedItems: []
+blockedItems: []
+summary: "Wave 1 completed. Merged items: schema-detail-normalize-v2,
+  prompts-dismiss-filter, allowlist-agreement-test"

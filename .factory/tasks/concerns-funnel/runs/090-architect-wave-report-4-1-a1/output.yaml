@@ -1,0 +1,10 @@
+context: wave
+decision: continue
+rationale: Wave 1 delivered 3/3 items (schema-detail-normalize-v2,
+  prompts-dismiss-filter, allowlist-agreement-test; merges
+  e26ca24/149868d/40f135c). Tree clean, no conflicts, gates improved (typecheck
+  pass->pass, test fail->pass vs red baseline). m0/m1 complete; docs-finish-v5
+  deps now satisfied and proceeds in wave 2 unchanged. No failures, blocks,
+  spikes, or new debt.
+text: "Continue to wave 2: run docs-finish-v5 over the landed m0/m1 behavior.
+  Keep TMPDIR=/tmp for gates."
