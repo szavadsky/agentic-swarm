@@ -1,0 +1,9 @@
+context: wave
+decision: continue
+rationale: Wave 4 closed empty (docs-finish-v3 still running, not yet merged)
+  with clean tree and all gates green (typecheck pass, test fail->pass
+  improved). No failed/blocked items; remaining docs work proceeds in its
+  running item. No plan change warranted.
+text: "Continue to next wave; allow running docs-finish-v3 to complete and
+  merge. No operator action: test gate now green, resolving baseline
+  TMPDIR/head-guard failures."
