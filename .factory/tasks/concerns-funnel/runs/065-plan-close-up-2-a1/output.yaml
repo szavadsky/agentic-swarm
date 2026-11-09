@@ -1,0 +1,150 @@
+iteration: 2
+remainingMilestones:
+  - m2-contracts-epic
+  - m4-docs-gates
+completedMilestones:
+  - m1-hydration-prompts
+  - m3-routing-lifecycle
+status: next-iteration
+summary: >-
+  Iteration 2 audit: m1 hydration/prompts and m3 routing/lifecycle are
+  implemented with behavior tests; m2 contracts fail on the capital-D Detail
+  schema drift (file schemas reject lowercase detail, so validation tests must
+  be red and runtime validation is broken); m4 docs are untouched (ARCH row 18
+  still deliberately-unbuilt, no 8.11, README bare) and gates cannot be green.
+  Next iteration must normalize Detail->detail in 7 schema files and deliver
+  docs-finish-v3.
+
+
+  M1 HYDRATION/PROMPTS — COMPLETE. Code: triage.hydrateStepConcerns caps
+  review/qa by min(diffBytes,2000), close-ups by min(taskDiffBytes,2000),
+  planning by min(inputBytes,500), returns '' on cap<=0/empty
+  (triage.ts:234-247); renderConcernsYaml condenses/sheds to cap (254-286);
+  listHydratedConcerns per-consumer sets incl dismissed+escalated for architect
+  and open rm-* as {id,kind:remarkable,summary:chosen} (219-231);
+  concernFingerprint kind+summary+location without affects (concerns.ts:58-60),
+  mergeConcern unions affects incl terminal + escalated flag (69-87),
+  legacyConcern dual-lookup rename (100-119); buildArchitectHydration drops
+  concerns, UTF-8 capped (iteration.ts:118-175); step-runner computes bytes per
+  role, caller-supplied concernsYaml wins, injectable gitFn
+  (step-runner.ts:410-430); KNOWN_VARS registers concernsYaml on all 19
+  producer/triager fragments, HI only on 12 triagers (prompt-vars.ts:46-171);
+  all 19 step fragments render ## Open Concerns + Raise concerns, 12 triagers
+  add ## Human involvement + condense. Tests: hydration-fingerprint-caps covers
+  review/plan-review/wave caps, 0/1/3-byte '' with zero id lines, caller-wins,
+  inputBytes exclusion, gitFn injection, architect single-source without
+  duplicate section, open+pending/closeup-vs-review/rm-terse/architect-escalated
+  sets, fingerprint/union/legacy-rename; prompts.test covers 19-fragment
+  sentinels, 12-fragment HI+condense, 15/80 budgets, autonomous/detailed switch;
+  HI-config covers producer/triage split and triage/infra exclusion. Minor notes
+  (not blocking): zero-cap asserted for review only (close-up/plan-review zero
+  inferred from shared early-return); dismissed re-emit->q-escalated->architect
+  chain proven by three separate tests, no single end-to-end; standing heading
+  with '' hydration implied by static fragments, id-lines==0 asserted.
+
+
+  M2 CONTRACTS/EPIC — REMAINING (epic done, contracts failed). TS contracts
+  good: artifacts.ts has Concern/detail lowercase, RemarkableDecision,
+  ConcernConfirms, ConcernResolution/Carry, CloseupResolution/propagate,
+  ReviewArtifact newConcerns+remarkable, StoredConcern lifecycle (301-484);
+  review-schema.ts generates lowercase detail + remarkable + newConcerns. BUT
+  file schemas still declare capital-D Detail with additionalProperties:false,
+  so lowercase detail is rejected and capital-D accepted — the exact drift
+  contracts-drift-fix was to normalize: decisions.schema.json:55,
+  developer-output.schema.json:68, fact-finder-output.schema.json:29,
+  plan.schema.json:142, plan-closeup.schema.json:34,
+  wave-closeup.schema.json:42, review.schema.json:33 (suggestions Detail) + :65
+  (newConcerns Detail). The contract tests assert the opposite (lowercase
+  passes/persists, capital-D rejected) across all producers incl developer
+  poc/test-assumptions/test-first/simple-implement/fix-round,
+  fact-finder/research, plan/revise, decisions concernResolution, close-up
+  concernResolutions, architect concernConfirms (concern-schemas.test.ts), so
+  that suite must currently fail and runtime validation for file-schema agents
+  (developer/fact-finder/architect/close-ups) is broken either way (lowercase
+  fails validation; capital-D loses detail in ingest which reads lowercase).
+  Triage/infra/pm-edit correctly lack concern fields (verified). Epic
+  propagation COMPLETE: propagateEpicConcerns pushes open+routed
+  (dismissed/resolved local), [epic] summary, id recomputed, condense <=120B
+  verbatim else min(500B,half) char-safe, source.epic
+  (epic-propagation.ts:17-185); engine.runChildTask serializes under
+  parentCloseupLocks(parentWt) with single commit (engine.ts:208/272-289);
+  forwards blocked questions as q-epic-<epic>-<orig> with blocks mapped (child
+  item->epic, task->parent slug). Tests cover open+routed copy + dismissed local
+  + verbatim-120, 800/2000/121-byte condense with CJK boundaries, restart
+  idempotent + parent triage preserved, q-epic forwarding + child untouched,
+  saga architect hydration, exit-0 on copies-only, failed-child propagation.
+
+
+  M3 ROUTING/LIFECYCLE — COMPLETE (minor literal notes). Code:
+  routeHumanDisposition single router (async/stop block only >=minBlocking else
+  downgrade to awareness; awareness/rm-*/dismissed-escalated digest blocks=[];
+  below minDigest suppressed; rm-* exempt; dedup via writeQuestion existence)
+  (triage.ts:93-136); severityAtLeast + medium/high fallback (24-26,62-75);
+  DEFAULT_RAISE_ALLOWLIST 8 agents keyed on source.agent (concerns.ts:35-44);
+  ingest allowlist skip+journal step-ok, triage/existing-only,
+  resolutions->pending, consult-resolution honored only on
+  consult-concern-<id>/architect-closeup*/architect-wave-report* else journaled,
+  architect confirms + propagate via epic helper, wave fallback on pre-existing
+  ids (step-runner.ts:194-305); collectRoutedBlockers
+  kind=blocker+routed+severity>=minBlocking threaded through derive
+  (derive/task.ts:52-63,180-183; iteration.ts:820-823,922-924);
+  consultConcernOnce KeyedMutex + decisions/concern-<cid>.yaml guard with
+  concernResolution passthrough (consults.ts:321-324,352-404); item-machine raw
+  path skips ALL concern-id human-* and blocks only on router-written open
+  questions (item-machine.ts:664-665,716-801); isDebtConcern routed/resolved
+  tech-debt|optional (triage.ts:143-149) into derived debt
+  (derive/task.ts:246-250); status counts + state.yaml. Tests:
+  human-router-severity (plan-reviewer stop blocks task, close-up async blocks
+  task, next-architect hydration, rm-* digest regardless of disposition,
+  q-escalated digest + dismissal kept, ordinary dismiss kept with reason + no
+  mailbox, medium-stop downgrade + low-awareness suppression, low-blocker
+  digest-at-low + never-derived-blocking, collectRoutedBlockers high/medium/low
+  matrix + pipeline threading, allowlist skip+journal+ok + fragment-key
+  rejection, engine exit-10 stop / exit-0 async-park / exit-0 downgrade with
+  single q-concern and no double-write); closeup-lifecycle (accept
+  resolve/carry/propagate-to-parent, reject clears preserving open with no
+  disposition, consult resolve unblocks next derive, item-consult
+  ignored+journaled, fallback debt->optional in derived debt +
+  assumption/risk/question->architect + pending preserved + never human-*,
+  blocker stays open); routing-blocker-derive (derived blocked cascade,
+  write-free); routing-architect-consult (one decision file + restart
+  no-rewrite); reviewer/plan-reviewer triage (exact-id partition, dismiss
+  reason, rm dismiss/routed, debt predicate, fix-once, QA non-triager). Minor
+  literal mismatches (same code path, fixture value differs): allowlist test
+  uses developer-not-qa emitter; downgrade engine test uses medium-stop not
+  low-stop (low-stop with default medium digest is suppressed per ADR, not
+  digested — scenario underspecified on minDigest); rm-architect stored
+  routed+digest proven across two tests (stored optional + mailbox architect);
+  reject-on-routed preservation inferred from code (tested on open); same-run
+  explicit-resolutions+fallback interaction inferred from ordering (tested
+  separately); no parallel-epic race test for the mutex.
+
+
+  M4 DOCS/GATES — REMAINING. ARCHITECTURE.md §1 row 18 still reads 'Deliberately
+  not hand-built' with no §8.11 Concerns, no 'immediate halt', none of the
+  §5/§6.2/§8.7/§10/§11/§13 updates (docs/ARCHITECTURE.md:39; grep for
+  8.11/immediate-halt empty). README.md (4.1KB) has no concerns/modes section.
+  pipeline.default.yaml ships autonomous/principal/detailed presets + blocking
+  table (375-432) but commentary lacks the fragment->agent mapping (developer
+  covers develop/poc/test-assumptions/test-first/simple-implement/fix-round
+  etc.) and its autonomous row ('still blocking after unblocked work')
+  contradicts the landed immediate-halt deviation;
+  agents/criteria/human-involvement.md has no deviation note. Prompts
+  matrix/budgets code+tests exist and likely pass, but gates were not executed
+  (read-only audit, no bash/TMPDIR run) and static analysis shows the suite must
+  be red due to the Detail drift above, so 'typecheck + bun test green' is not
+  met.
+
+
+  INTENT coverage: funnel caps/condense, reviewer triage + dismiss, blocker
+  consult + architect/next-turn routing, human-*/debt routing, epic->saga
+  condensed push + question forwarding, blocking/non-blocking ADRs with
+  digest-never-waits, HI presets selectable per task, close-up/status/state.yaml
+  surfacing, terse prompts, behavior-only tests — all present except the
+  ARCH/README/config-commentary updates.
+techDebt:
+  - "td-tmpdir-split: pre-existing head-guard failures when TMPDIR sits under
+    .factory-runtime (baseline red; gates assume TMPDIR=/tmp; out of scope)"
+  - "td-spike-nits: unapplied spike-saga-commit reviewer optional nits (qualify
+    epic-state precedence, prefix inline paths, scope removeWorktree claim, fold
+    contextPack key)"
