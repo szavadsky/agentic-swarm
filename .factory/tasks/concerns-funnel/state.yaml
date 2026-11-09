@@ -125,12 +125,13 @@ items:
     spendUsd: 0
   docs-finish-v5:
     kind: dev
-    status: ready
+    status: merged
     branch: topic/concerns-funnel--docs-finish-v5
     attempts: 1
     fixRounds: 1
     spendUsd: 0.5658540000000001
     currentStep: review
+    mergedAt: 2026-11-09T05:54:56-05:00
   epic-saga-propagate:
     kind: dev
     status: merged
@@ -724,20 +725,20 @@ debt:
     inconsistent with documented branch-from-HEAD worktrees"
   - "[funnel-closeups-v3] Propagated parent copy retains child source.item,
     writes undeclared source.epic, and can clobber/lengthen parent records"
-budgetSpentUsd: 10.006968920000006
+budgetSpentUsd: 10.026585920000004
 spendByRole:
   alt-workhorse:
-    costUsd: 2.4291599999999995
-    inputTokens: 11733316
-    outputTokens: 3476693
+    costUsd: 2.4343779999999997
+    inputTokens: 11756779
+    outputTokens: 3489571
   workhorse:
     costUsd: 6.10828592
     inputTokens: 13309505
     outputTokens: 3736929
   architect:
-    costUsd: 1.371109
-    inputTokens: 12479472
-    outputTokens: 226404
+    costUsd: 1.385508
+    inputTokens: 12608950
+    outputTokens: 226698
   alt-architect:
     costUsd: 0.09841399999999997
     inputTokens: 393406
@@ -807,6 +808,10 @@ spendByItem:
     costUsd: 0.131932
     inputTokens: 263905
     outputTokens: 109900
+  routing-architect-consult-v2:
+    costUsd: 0.198996
+    inputTokens: 463902
+    outputTokens: 217893
   contracts-drift-fix:
     costUsd: 0.16688999999999998
     inputTokens: 450079
@@ -815,30 +820,18 @@ spendByItem:
     costUsd: 0.720326
     inputTokens: 2521130
     outputTokens: 580992
-  allowlist-agreement-test:
-    costUsd: 0.00643
-    inputTokens: 26723
-    outputTokens: 6210
-  docs-finish-v5:
-    costUsd: 0.5658540000000001
-    inputTokens: 1848667
-    outputTokens: 415939
+  schema-detail-normalize:
+    costUsd: 0.224583
+    inputTokens: 381919
+    outputTokens: 191751
   prompt-fragments:
     costUsd: 0.32775099999999996
     inputTokens: 1269182
     outputTokens: 271111
-  schema-detail-normalize-v2:
-    costUsd: 0.151314
-    inputTokens: 370348
-    outputTokens: 241400
   closeup-lifecycle-resolve:
     costUsd: 0.448594
     inputTokens: 1109776
     outputTokens: 396435
-  closeup-triager-cleanup:
-    costUsd: 0.113647
-    inputTokens: 392214
-    outputTokens: 101004
   human-router-severity:
     costUsd: 0.206566
     inputTokens: 470606
@@ -847,24 +840,32 @@ spendByItem:
     costUsd: 0.37333400000000005
     inputTokens: 895689
     outputTokens: 273259
-  prompts-dismiss-filter:
-    costUsd: 0.104644
-    inputTokens: 374499
-    outputTokens: 104052
-  routing-architect-consult-v2:
-    costUsd: 0.198996
-    inputTokens: 463902
-    outputTokens: 217893
-  schema-detail-normalize:
-    costUsd: 0.224583
-    inputTokens: 381919
-    outputTokens: 191751
   docs-finish-v3:
     costUsd: 0.06335400000000001
     inputTokens: 146385
     outputTokens: 43223
   (orchestration):
-    costUsd: 2.3357450000000006
-    inputTokens: 15117773
-    outputTokens: 1232159
-lastUpdated: 2026-11-09T10:54:56.211Z
+    costUsd: 2.355362000000001
+    inputTokens: 15270714
+    outputTokens: 1245331
+  allowlist-agreement-test:
+    costUsd: 0.00643
+    inputTokens: 26723
+    outputTokens: 6210
+  docs-finish-v5:
+    costUsd: 0.5658540000000001
+    inputTokens: 1848667
+    outputTokens: 415939
+  schema-detail-normalize-v2:
+    costUsd: 0.151314
+    inputTokens: 370348
+    outputTokens: 241400
+  closeup-triager-cleanup:
+    costUsd: 0.113647
+    inputTokens: 392214
+    outputTokens: 101004
+  prompts-dismiss-filter:
+    costUsd: 0.104644
+    inputTokens: 374499
+    outputTokens: 104052
+lastUpdated: 2026-11-09T11:00:34.230Z
