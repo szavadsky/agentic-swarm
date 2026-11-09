@@ -1,0 +1,99 @@
+status: changes_requested
+summary: "2 milestones/2 items within bounds, deps acyclic, RED baseline
+  verified; 3 plan gaps need revision: review suggestions casing scope, ADR
+  scenario, dismiss-note semantics"
+suggestions:
+  - id: review-suggestions-detail-scope
+    disposition: fix
+    summary: review.schema.json has two capital-D fields but plan scopes only
+      concern Detail
+    detail: Reference file carries suggestions[].Detail (line 33) AND
+      newConcerns[].Detail (line 65); generated review-schema.ts already uses
+      lowercase detail for both (suggestions + newConcerns). Plan item says
+      normalize concern Detail and scenario 1 asserts
+      lowercase-validates/capital-rejected, but schema-detail-normalize.test.ts
+      only checks newConcerns, never suggestions. A literal dev flips only
+      newConcerns, leaving reference-vs-generated mismatch on suggestions with
+      no failing test. Clarify both occurrences must flip to lowercase (or
+      explicitly scope out suggestions with justification) and add a
+      suggestions-casing assertion.
+    location:
+      file: plugins/software-factory/config/schemas/review.schema.json
+      line: 33
+  - id: adr-completion-unscenariod
+    disposition: fix
+    summary: m1 completes 3 docs/adr stubs but no scenario verifies Decision paragraphs
+    detail: Item completes adr-confirm-field-instructions,
+      adr-epic-mailbox-isolation, adr-remarkable-digest-triage (append Decision
+      paragraph, preserve stub text). m1 scenarios cover fragments (read),
+      prompts.test, row-18 + deviations (read), docs-concerns + suite — none
+      mentions docs/adr. Directional interface claims stubs expose Decision
+      paragraphs, but no Given/When/Then makes it falsifiable. Add a read
+      scenario asserting each of the three stubs contains its Decision
+      paragraph.
+    location:
+      file: docs/adr/adr-confirm-field-instructions.md
+      line: 1
+  - id: dismiss-note-rule-undefined
+    disposition: fix
+    summary: Dismiss note rule undefined and untested; engine ignores confirm.note
+      for dismiss
+    detail: applyConcernConfirms dismiss path uses pending.note (close-up proposal)
+      and ignores confirm.note; noteless accept silently leaves pending intact
+      (concerns.ts). Plan requires both architect fragments to carry the dismiss
+      note rule but never defines it (include-note-on-accept vs
+      reject-if-noteless) and the prompts.test extension only asserts
+      confirms-present / Resolutions-absent, not the note rule. If dev writes
+      include-note guidance it misleads (engine ignores it). Define exact
+      semantics (reject noteless dismiss proposals) and add a rendered-prompt
+      assertion for the note rule.
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 293
+  - id: interface-arrow-notation
+    disposition: optional
+    summary: Directional interface arrows inconsistent (<- vs -> vs <->)
+    detail: m0 entry 1 uses callees <- caller while entry 2 uses callees -> callers
+      for the same orientation; m1 entry 2 uses <-> for docs/tests (tests read
+      docs, unidirectional). Meaning decipherable but notation sloppy.
+      Standardize on one convention and make docs/tests unidirectional.
+    location:
+      file: plugins/software-factory/docs/ARCHITECTURE.md
+      line: 39
+  - id: net-zero-manual-only
+    disposition: optional
+    summary: Net-zero enforced via manual numstat, not automated test
+    detail: 15/80 debloat budgets pass even with +1 net line;
+      equal-insertions/deletions numstat check is manual (dev runs git diff).
+      Consider a prompts.test assertion pinning fragment non-empty line counts
+      to baseline so gates enforce net-zero.
+    location:
+      file: plugins/software-factory/test/prompts.test.ts
+  - id: remarkable-conditional-dead
+    disposition: optional
+    summary: remarkable-why conditional is dead (no such block exists)
+    detail: schema-detail-normalize.test.ts has only 3 describes (producer schemas,
+      write gate, longest merge); the If remarkable-why describe exists DELETE
+      clause is a no-op. Harmless due to conditional, but indicates stale
+      grounding from v3. Remove clause to avoid confusing dev.
+    location:
+      file: plugins/software-factory/test/contracts/schema-detail-normalize.test.ts
+      line: 206
+  - id: sentinel-title-stale
+    disposition: optional
+    summary: docs-concerns sentinel titles say five but will assert six
+    detail: After co-update to six deviations (epic-mailbox-isolation), test titles
+      ('with five deviations', deviations list naming 5) go stale though needles
+      pass. Update titles alongside needles for traceability.
+    location:
+      file: plugins/software-factory/test/docs-concerns.test.ts
+      line: 87
+  - id: wave-report-resolutions-absent
+    disposition: optional
+    summary: Resolutions-absent asserted only for architect-closeup, not wave-report
+    detail: Wave-report currently instructs neither; after change it gains confirms
+      and should also carry no concernResolutions. Extend prompts.test
+      Resolutions-absent assertion to both fragments for symmetry.
+    location:
+      file: plugins/software-factory/agents/steps/architect-wave-report.md
+      line: 32
