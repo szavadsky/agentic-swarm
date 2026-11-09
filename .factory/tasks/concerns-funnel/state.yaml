@@ -6,12 +6,13 @@ currentWave: 1
 items:
   closeup-triager-cleanup:
     kind: dev
-    status: ready
+    status: merged
     branch: topic/concerns-funnel--closeup-triager-cleanup
     attempts: 2
     fixRounds: 1
     spendUsd: 0.113647
     currentStep: review
+    mergedAt: 2026-11-09T02:02:12-05:00
   concerns-contracts:
     kind: dev
     status: superseded
@@ -675,20 +676,20 @@ debt:
     inconsistent with documented branch-from-HEAD worktrees"
   - "[funnel-closeups-v3] Propagated parent copy retains child source.item,
     writes undeclared source.epic, and can clobber/lengthen parent records"
-budgetSpentUsd: 8.874536920000008
+budgetSpentUsd: 8.892155920000006
 spendByRole:
   alt-workhorse:
-    costUsd: 2.0073209999999997
-    inputTokens: 9914331
-    outputTokens: 2912029
+    costUsd: 2.0129409999999996
+    inputTokens: 9940844
+    outputTokens: 2924938
   workhorse:
-    costUsd: 5.615379920000001
+    costUsd: 5.6153799200000005
     inputTokens: 12230084
     outputTokens: 3417323
   architect:
-    costUsd: 1.1728939999999999
-    inputTokens: 10743238
-    outputTokens: 196840
+    costUsd: 1.184893
+    inputTokens: 10860446
+    outputTokens: 197484
   alt-architect:
     costUsd: 0.078942
     inputTokens: 320847
@@ -754,34 +755,6 @@ spendByItem:
     costUsd: 0.060779
     inputTokens: 139871
     outputTokens: 72059
-  contracts-drift-fix:
-    costUsd: 0.16688999999999998
-    inputTokens: 450079
-    outputTokens: 214518
-  hydration-fingerprint-caps:
-    costUsd: 0.720326
-    inputTokens: 2521130
-    outputTokens: 580992
-  prompt-fragments:
-    costUsd: 0.32775099999999996
-    inputTokens: 1269182
-    outputTokens: 271111
-  closeup-lifecycle-resolve:
-    costUsd: 0.448594
-    inputTokens: 1109776
-    outputTokens: 396435
-  closeup-triager-cleanup:
-    costUsd: 0.113647
-    inputTokens: 392214
-    outputTokens: 101004
-  human-router-severity:
-    costUsd: 0.206566
-    inputTokens: 470606
-    outputTokens: 168535
-  epic-saga-propagate:
-    costUsd: 0.37333400000000005
-    inputTokens: 895689
-    outputTokens: 273259
   spike-saga-commit:
     costUsd: 0.131932
     inputTokens: 263905
@@ -790,16 +763,44 @@ spendByItem:
     costUsd: 0.198996
     inputTokens: 463902
     outputTokens: 217893
+  contracts-drift-fix:
+    costUsd: 0.16688999999999998
+    inputTokens: 450079
+    outputTokens: 214518
+  hydration-fingerprint-caps:
+    costUsd: 0.720326
+    inputTokens: 2521130
+    outputTokens: 580992
   schema-detail-normalize:
     costUsd: 0.224583
     inputTokens: 381919
     outputTokens: 191751
+  prompt-fragments:
+    costUsd: 0.32775099999999996
+    inputTokens: 1269182
+    outputTokens: 271111
+  closeup-lifecycle-resolve:
+    costUsd: 0.448594
+    inputTokens: 1109776
+    outputTokens: 396435
+  human-router-severity:
+    costUsd: 0.206566
+    inputTokens: 470606
+    outputTokens: 168535
+  epic-saga-propagate:
+    costUsd: 0.37333400000000005
+    inputTokens: 895689
+    outputTokens: 273259
   docs-finish-v3:
     costUsd: 0.06335400000000001
     inputTokens: 146385
     outputTokens: 43223
   (orchestration):
-    costUsd: 2.0315550000000004
-    inputTokens: 13030811
-    outputTokens: 1032355
-lastUpdated: 2026-11-09T07:02:12.624Z
+    costUsd: 2.0491740000000003
+    inputTokens: 13174532
+    outputTokens: 1045908
+  closeup-triager-cleanup:
+    costUsd: 0.113647
+    inputTokens: 392214
+    outputTokens: 101004
+lastUpdated: 2026-11-09T07:08:52.375Z
