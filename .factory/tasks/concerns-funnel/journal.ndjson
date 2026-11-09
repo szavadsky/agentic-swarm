@@ -2230,3 +2230,5 @@
 {"type":"item_merged","item":"docs-finish-v5","sha":"320ff02fa28f4b5a1f032898161d68953a4beb71","conflictResolved":false,"ts":"2026-11-09T10:56:31.266Z"}
 {"type":"step_started","task":"concerns-funnel","step":"wave-close-up-4-2","attempt":1,"recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/092-wave-close-up-4-2-a1","ts":"2026-11-09T10:58:05.505Z"}
 {"type":"step_timeout_armed","task":"concerns-funnel","step":"wave-close-up-4-2","timeoutSec":2700,"ts":"2026-11-09T10:58:05.509Z"}
+{"type":"step_finished","task":"concerns-funnel","step":"wave-close-up-4-2","attempt":1,"status":"ok","sessionId":"01a1bff5-4989-73d8-98e5-c7fd55541b35","usage":{"inputTokens":23463,"outputTokens":12878,"costUsd":0.005218},"ts":"2026-11-09T11:00:12.021Z"}
+{"type":"scheduler_wait","wave":2,"iteration":4,"reason":"wave-end merge + close-up gates + close-up turn","gapWallMs":315805,"gapActiveMs":315805,"merges":["docs-finish-v5"],"ts":"2026-11-09T11:00:12.022Z"}
