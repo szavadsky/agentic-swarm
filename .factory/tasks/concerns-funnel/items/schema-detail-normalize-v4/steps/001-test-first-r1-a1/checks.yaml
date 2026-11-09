@@ -1,0 +1,36 @@
+checks:
+  - id: test-first-scope
+    status: pass
+    message: test-first-scope passed (1 test files, 0 new prod stubs with 0 lines)
+    details:
+      testFiles:
+        - plugins/software-factory/test/contracts/schema-detail-normalize.test.ts
+      newProdFiles: []
+      stubProdLines: 0
+  - id: target-red
+    status: pass
+    message: "target-red passed: all 2 expected tests failed with assertion failures"
+    details:
+      command: cd plugins/software-factory && bun test
+        test/contracts/schema-detail-normalize.test.ts --reporter=junit
+        --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-1794230432152-mg8gsxbtb9n.xml
+      junitCaseCount: 7
+      junitCaseIds:
+        - lowercase concern detail in producer schemas.accepts lowercase detail
+          and rejects capital-D Detail in every producer schema
+        - lowercase concern detail in producer schemas.keeps the reference-only
+          review schema on lowercase detail
+        - step-runner concern detail write gate.stores lowercase detail and
+          rejects capital-D Detail before any store write
+        - concern detail merge keeps the longest stored value.keeps a 200-byte
+          stored detail when a 20-byte detail is re-emitted
+        - concern detail merge keeps the longest stored value.keeps the stored
+          detail with more UTF-8 bytes when the re-emit has more characters
+        - legacy capital-D stored concerns normalize to lowercase detail.lists a
+          legacy capital-D detail as lowercase detail without the legacy key
+        - legacy capital-D stored concerns normalize to lowercase detail.keeps
+          the legacy capital-D stored detail when a shorter lowercase detail is
+          re-emitted
+      junitTruncated: false
+      collected: true
+      collectionErrors: []
