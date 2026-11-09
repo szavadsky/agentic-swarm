@@ -1,0 +1,43 @@
+iteration: 3
+remainingMilestones:
+  - m1-contracts-consistency
+  - m2-docs-gates
+status: next-iteration
+summary: "Iteration 3 partially delivered: close-up triager/dismiss path
+  verified (3/6 m1 scenarios pass), but schema-detail normalization and all
+  docs/gates scenarios fail. M1: isTriagerAgent={reviewer,plan-reviewer} +
+  composed dismiss exclusion (review-policy.ts:18-43,
+  review-policy.test.ts:139-181), dismiss accept with trimmed note
+  (concerns.ts:293-299, step-runner.ts:246-259,
+  closeup-lifecycle-resolve.test.ts:306-335), and dismiss-without-note
+  pre-flight error with no partial transitions (step-runner.ts:246-259,
+  closeup-lifecycle-resolve.test.ts:337-400) all pass; dismiss enums in
+  artifacts.ts:347-372 + wave/plan-closeup schemas + contract test
+  concern-schemas.test.ts:299-364 pass. M1 gaps: all 6 runtime schemas still use
+  capital-D Detail (developer-output:68, fact-finder-output:29, plan:142,
+  decisions:55, wave-closeup:42, plan-closeup:34, plus review.schema.json:33/65)
+  so lowercase-detail contract tests
+  (concern-schemas.test.ts:445-451,537-541,621-625,688-694) must fail;
+  concerns.ts:72 reads existing?.Detail (always undefined; typecheck error,
+  longest-wins never applies) and no 200-byte/20-byte test exists;
+  epic-saga-propagate.test.ts:248,307,313,319,682 and
+  funnel-text-budget.test.ts:442,445 still read .Detail (typecheck + runtime
+  failures); gates cannot be green. M2: ARCHITECTURE.md:39 still Deliberately
+  not hand-built, no §8.11, §3/§5:117 (still claims epics inherit parent
+  layer)/§6.2/§8.7/§10:352-353 (still closeup+review)/§13 unchanged;
+  dispositions.md has no dismiss row and prompts.ts:90-110 filters only
+  human-stop (prompts.test.ts:306-318 human-stop only); README has no Concerns
+  section; pipeline.default.yaml has presets with correct severities (392-424)
+  but no fragment->agent mapping commentary; human-involvement.md:11,17-18 has
+  no immediate-halt note. Neither milestone fully delivered."
+techDebt:
+  - "td-detail-casing still open: 6 runtime schemas + review.schema.json use
+    capital-D Detail, concerns.ts:72 reads existing?.Detail, 5+ test reads use
+    .Detail; typecheck and concern-schemas/epic-saga/funnel suites red"
+  - "docs-finish-v4 not landed: ARCH §1 row 18 + §8.11 + §3/§5/§6.2/§8.7/§10/§13
+    updates, README Concerns section, dispositions dismiss row, prompts dismiss
+    filter + QA/reviewer test, pipeline fragment mapping, halt notes all
+    missing"
+  - "td-tmpdir-split (adjacent): pre-existing head-guard failures without
+    TMPDIR=/tmp remain"
+  - "td-spike-nits (adjacent): unapplied spike-saga-commit reviewer nits remain"
