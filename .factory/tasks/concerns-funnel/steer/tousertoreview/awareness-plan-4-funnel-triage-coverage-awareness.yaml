@@ -1,0 +1,13 @@
+id: awareness-plan-4-funnel-triage-coverage-awareness
+ref: plan-4
+disposition: human-awareness
+question: adr-funnel-triage-coverage accepts simple-task concerns stay open
+  forever (simple flow ARCHITECTURE.md:146 has only develop, no
+  review/waves/fallback which runs only for wave-close-up per
+  step-runner.ts:319) and consult/wave-report/closeup architect output bypasses
+  plan-reviewer. Assumptions claim operator notified only for halt and
+  epic-config deviations. Architect can decide closure, but operator should have
+  an informational record that part of spec triage is deferred. Create awareness
+  record; no blocking decision needed.
+status: open
+createdAt: 2026-11-09T07:45:31.941Z
