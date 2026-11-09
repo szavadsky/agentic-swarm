@@ -1,0 +1,25 @@
+status: approved
+summary: "Approved: single human router + severity/allowlist policy verified
+  green; no test weakening, full suite 426 pass."
+suggestions:
+  - id: reconcile-bypasses-allowlist
+    disposition: optional
+    summary: reconcileConcerns re-aggregates skipped concerns without allowlist gate
+    detail: "ingestStepConcerns journals concern_ingest_skipped and drops concerns
+      from non-allowlisted source.agent, but committed output.yaml still carries
+      those concerns and reconcileConcerns (startup, before pipelineFor)
+      re-aggregates them unfiltered. Deferred debt: thread raiseAllowlist into
+      reconcile or move reconcile after pipeline load; no assignment test covers
+      crash-recovery path."
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 304
+  - id: allowlist-constant-config-drift
+    disposition: optional
+    summary: Add drift guard asserting DEFAULT_RAISE_ALLOWLIST equals shipped config
+    detail: Code fallback mirrors config/pipeline.default.yaml 8-agent list by hand
+      with fragment->agent commentary. If shipped config changes, fallback
+      drifts silently. Add test asserting equality or load fallback from config.
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 33

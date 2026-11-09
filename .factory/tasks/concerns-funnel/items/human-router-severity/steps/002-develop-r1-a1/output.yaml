@@ -1,0 +1,68 @@
+status: ok
+summary: "Implemented the single human-disposition router and active
+  severity/allowlist policy. triage.ts now exports routeHumanDisposition plus
+  shared medium/high severity policy resolution: human-async/human-stop block
+  item+task (or task alone without item context) only at/above
+  minBlockingSeverity, downgrading to human-awareness digests below it;
+  human-awareness, routed rm-* and dismissed-escalated concerns become digest
+  questions with empty blocks (q-concern-*/q-escalated-*); below
+  minDigestSeverity nothing is surfaced; rm-* is threshold-exempt; questions
+  dedupe by id via writeQuestion. Ingest gates concerns by source.agent against
+  the shipped 8-agent allowlist (code fallback mirrors pipeline.default.yaml),
+  journals concern_ingest_skipped and keeps the step ok. derive/task.ts filters
+  routed blockers by minBlockingSeverity (default high) and
+  deriveTaskState/iteration thread pipeline.concerns.minBlockingSeverity.
+  item-machine now skips all concern-id human-* raw writes and derives item
+  blocking from the router's actual mailbox questions, so downgraded stops
+  finish unblocked while highs still halt. Updated two reviewer-triage fixtures
+  to explicit high severity per the new policy."
+target:
+  selectors:
+    - test/engine/human-router-severity.test.ts
+  expectRed:
+    - routes a plan-reviewer human-stop to one concern question that blocks the
+      task
+    - routes a close-up human-async to the task when there is no item context
+    - turns routed remarkable decisions into digest-only entries regardless of
+      disposition
+    - digests a dismissed escalated concern as q-escalated while keeping the
+      dismissal
+    - suppresses human-awareness digests below minDigestSeverity and downgrades
+      stops below minBlockingSeverity
+    - digests a low-severity routed blocker when minDigest is low but never
+      derives it as blocking
+    - collectRoutedBlockers filters routed blockers by minBlockingSeverity,
+      defaulting to high
+    - threads pipeline.concerns.minBlockingSeverity into task derivation with a
+      high fallback
+    - skips concerns from non-allowlisted agents, journals the skip, and keeps
+      the step ok
+    - halts with exit 10 for a high-severity human-stop concern, writing one
+      q-concern entry
+    - downgrades a medium-severity human-stop concern to a digest and finishes
+      unblocked
+evidence:
+  - "bun run typecheck: clean (tsc --noEmit exit 0) after all edits"
+  - "TMPDIR=/tmp bun test test/engine/human-router-severity.test.ts: 14 pass, 0
+    fail (all 11 previously-red target cases now green)"
+  - "TMPDIR=/tmp bun test (full suite): 426 pass, 2 skip, 0 fail across 428
+    tests / 67 files"
+  - "Related suites reviewer-triage, routing-human-debt, routing-blocker-derive,
+    routing-architect-consult, plan-reviewer-triage, human-async-steering,
+    adr-blocking-digest: all green after fixture-severity updates"
+  - "concerns-funnel + hydration-fingerprint-caps: 39 pass, 0 fail (router
+    consumes hydration sets without regressions)"
+concerns:
+  - reconcileConcerns rebuilds concerns from committed step records at engine
+    startup without re-applying concerns.raiseAllowlist; a skipped
+    non-allowlisted step's concerns could reappear after crash repair. The gate
+    is applied at ingest as specified, but reconcile has no pipeline config
+    available at its current call site.
+  - DEFAULT_RAISE_ALLOWLIST in code mirrors config/pipeline.default.yaml; if the
+    shipped config list changes the fallback constant must be kept in sync.
+notes: "The raw item-machine path now treats concern-id human dispositions as
+  owned by triage, and post-step blocking reads the router's actual mailbox
+  questions; this is what makes a downgraded medium human-stop neither block the
+  item nor count as a terminal issue. Two reviewer-triage fixtures were given
+  explicit severity: high because their medium severity would now (correctly)
+  downgrade human-async to a digest under the default minBlockingSeverity=high."

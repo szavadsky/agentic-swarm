@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type {
   ConcernCounts,
+  ConcernSeverity,
   DecisionArtifact,
   PlanArtifact,
   PlanCloseupArtifact,
@@ -17,7 +18,7 @@ import { readYaml, writeYamlAtomic } from "../records/io.js";
 import { deriveItemState, withRoutedBlocking, type DerivedItemState } from "./item.js";
 import { deriveWaveState, type DerivedWaveState } from "./wave.js";
 import { BudgetTracker } from "../budget.js";
-import { countConcerns, listConcerns } from "../concerns.js";
+import { countConcerns, listConcerns, severityAtLeast } from "../concerns.js";
 import { isDebtConcern } from "../triage.js";
 import { questionBlocks } from "../steer.js";
 import { blockedByConcern } from "../plan/scheduler.js";
@@ -44,13 +45,18 @@ export interface DerivedTaskState {
 }
 
 /**
- * Collects item slugs named by routed blocker concerns (adr-routing-derived-state).
- * Pure read: the concern store is authoritative; derive never writes.
+ * Collects item slugs named by routed blocker concerns at or above
+ * `minBlockingSeverity` (adr-routing-derived-state, adr-severity-policy-active).
+ * Defaults to high; pure read, the concern store is authoritative.
  */
-export async function collectRoutedBlockers(taskDir: string): Promise<Set<string>> {
+export async function collectRoutedBlockers(
+  taskDir: string,
+  minBlockingSeverity: ConcernSeverity = "high"
+): Promise<Set<string>> {
   const affected = new Set<string>();
   for (const concern of await listConcerns(taskDir)) {
     if (concern.kind !== "blocker" || concern.status !== "routed") continue;
+    if (!severityAtLeast(concern.severity, minBlockingSeverity)) continue;
     for (const slug of concern.affects ?? []) {
       affected.add(slug);
     }
@@ -171,7 +177,10 @@ export async function deriveTaskState(opts: {
   // (blockedByConcern); task only maps derive statuses onto scheduler
   // inputs. Pending-only seeding matches §8.2 and keeps itemMap consistent
   // with deriveWaveState/iteration.
-  const routedNames = await collectRoutedBlockers(taskDir);
+  const routedNames = await collectRoutedBlockers(
+    taskDir,
+    pipeline?.concerns?.minBlockingSeverity ?? "high"
+  );
   const schedItems = items.map((it) => ({
     slug: it.slug,
     wave: String(it.wave),

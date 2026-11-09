@@ -1,0 +1,75 @@
+status: ok
+summary: "Authored test-first coverage for the single human-disposition router,
+  active severity policy, ingest allowlist gating, and severity-aware routed
+  blocking. Added test/engine/human-router-severity.test.ts (14 tests: 11
+  target-red assertion failures, 3 green regression guards). Raised two
+  pre-existing routed-blocker fixture severities to explicit high so the new
+  minBlockingSeverity=high fallback keeps those suites green. No production
+  files were touched."
+target:
+  selectors:
+    - test/engine/human-router-severity.test.ts
+  expectRed:
+    - routes a plan-reviewer human-stop to one concern question that blocks the
+      task
+    - routes a close-up human-async to the task when there is no item context
+    - turns routed remarkable decisions into digest-only entries regardless of
+      disposition
+    - digests a dismissed escalated concern as q-escalated while keeping the
+      dismissal
+    - suppresses human-awareness digests below minDigestSeverity and downgrades
+      stops below minBlockingSeverity
+    - digests a low-severity routed blocker when minDigest is low but never
+      derives it as blocking
+    - collectRoutedBlockers filters routed blockers by minBlockingSeverity,
+      defaulting to high
+    - threads pipeline.concerns.minBlockingSeverity into task derivation with a
+      high fallback
+    - skips concerns from non-allowlisted agents, journals the skip, and keeps
+      the step ok
+    - halts with exit 10 for a high-severity human-stop concern, writing one
+      q-concern entry
+    - downgrades a medium-severity human-stop concern to a digest and finishes
+      unblocked
+evidence:
+  - bun run typecheck -> exit 0 (no type errors) after test additions.
+  - TMPDIR=/tmp bun test test/engine/human-router-severity.test.ts -> 3 pass, 11
+    fail, 0 errors; all 11 failures are assertion failures caused by missing
+    router/severity/allowlist behavior, not imports or syntax.
+  - "JUnit simulation against bun --reporter=junit output using the engine's
+    parseJunit/matcher semantics: all 11 declared expectRed ids matched with
+    status FAIL."
+  - TMPDIR=/tmp bun test test/engine/routing-blocker-derive.test.ts
+    test/engine/routing-architect-consult.test.ts -> 13 pass, 0 fail after
+    explicit high-severity fixture updates.
+  - TMPDIR=/tmp bun test (full plugin suite) -> 415 pass, 2 skip, 11 fail; the
+    only failures are the declared target-red tests.
+  - "Tests cover: plan/close-up itemless routing with task blocks, concern-id
+    q-concern-<cid> dedup, rm-* digest exemption, dismissed+escalated
+    q-escalated digest, ordinary dismiss retention, default medium/high
+    digest/blocking thresholds, downgrade below minBlocking, low routed blocker
+    hydrated+digested but not blocking, collectRoutedBlockers severity filtering
+    with high fallback, deriveTaskState threshold threading and fallback,
+    allowlist keyed by source.agent with journal+step ok, and engine-level async
+    (no exit 10) vs stop (single q + exit 10) vs downgraded stop (clean
+    completion)."
+concerns:
+  - Tests pin the ingest skip journal event name to `concern_ingest_skipped`
+    (with `agent`) and digest mailbox ids to `q-concern-<cid>` /
+    `q-escalated-<cid>`; these are chosen contracts the implementation must
+    match.
+  - Allowlist gating is specified at step ingest; `reconcileConcerns` rebuilds
+    concerns from committed records and may resurrect allowlist-skipped concerns
+    unless it applies the same source.agent gate.
+  - Two green regression tests (ordinary dismiss, routed architect hydration)
+    are not in expectRed; the async engine scenario is likewise green on current
+    code and guards against regressions.
+notes: The implementation must route all triager human-* dispositions through
+  triage/ingest, thread pipeline.concerns.minDigestSeverity/minBlockingSeverity
+  with medium/high fallbacks, skip concern-id human-* in the item-machine raw
+  question path (single q, no double write), and add an optional minBlocking
+  argument to collectRoutedBlockers used by deriveTaskState (fallback high). The
+  plan/close-up itemless case must write blocks:["task"]; item contexts use
+  blocks:["item"]. The engine stop test exercises a real task run and requires
+  the routed-blocker consult path, so the implementation must keep the
+  stop/digest behavior coherent across ingest, derive, and item-machine.
