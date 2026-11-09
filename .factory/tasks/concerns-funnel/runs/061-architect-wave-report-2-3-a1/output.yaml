@@ -1,0 +1,10 @@
+context: wave
+decision: continue
+rationale: Wave 3 fully merged (closeup-lifecycle-resolve) with no conflicts,
+  tree clean (only engine-managed journal modified, no markers), typecheck pass,
+  test gate improved from baseline fail to pass. No failed/blocked items; wave-4
+  docs deps satisfied.
+text: "Proceed to wave 4 (docs-finish-v3). Note for docs-finish-v3: test gate is
+  currently green including former head-guard failures — verify final gates with
+  TMPDIR=/tmp and decide whether the baseline/TMPDIR operator-action note needs
+  updating in commentary."

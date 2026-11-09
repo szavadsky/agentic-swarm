@@ -1,0 +1,8 @@
+wave: 3
+iteration: 2
+status: complete
+mergedItems:
+  - closeup-lifecycle-resolve
+failedItems: []
+blockedItems: []
+summary: "Wave 3 completed. Merged items: closeup-lifecycle-resolve"
