@@ -1,0 +1,36 @@
+checks:
+  - id: test-first-scope
+    status: pass
+    message: test-first-scope passed (1 test files, 1 new prod stubs with 21 lines)
+    details:
+      testFiles:
+        - plugins/software-factory/test/engine/epic-saga-propagate.test.ts
+      newProdFiles:
+        - plugins/software-factory/src/core/flows/epic-propagation.ts
+      stubProdLines: 21
+  - id: target-red
+    status: pass
+    message: "target-red passed: all 7 expected tests failed with assertion failures"
+    details:
+      command: cd plugins/software-factory && bun test
+        test/engine/epic-saga-propagate.test.ts --reporter=junit
+        --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-1794182996004-lqwxu1qg0bk.xml
+      junitCaseCount: 7
+      junitCaseIds:
+        - Epic to saga propagation (adr-epic-push-condensed).copies open and
+          routed concerns with an [epic] summary while dismissed stays local
+        - Epic to saga propagation (adr-epic-push-condensed).condenses long
+          detail and why to the byte cap on a char boundary
+        - Epic to saga propagation (adr-epic-push-condensed).is
+          restart-idempotent and preserves parent triage
+        - Epic to saga propagation (adr-epic-push-condensed).forwards blocked
+          child questions as q-epic-* with mapped blocks
+        - Epic to saga propagation (adr-epic-push-condensed).hydrates propagated
+          copies into the saga architect concernsYaml
+        - Epic to saga propagation (adr-epic-push-condensed).runTask exits 0
+          when only open copies were propagated
+        - Epic to saga propagation (adr-epic-push-condensed).propagates after a
+          failed child iteration as well
+      junitTruncated: false
+      collected: true
+      collectionErrors: []
