@@ -84,7 +84,7 @@ function expectConfigClosure(context: string): void {
 describe("docs: concerns funnel finish (m2-docs-gates)", () => {
   const architecture = read("docs/ARCHITECTURE.md");
 
-  it("§1 row 18 records item 18 implemented with five deviations", () => {
+  it("§1 row 18 records item 18 implemented with six deviations", () => {
     expectConfigClosure("docs closure");
     const row = architecture.split("\n").find((line) => line.startsWith("| 18 "));
     expect(row).toBeDefined();
@@ -98,11 +98,13 @@ describe("docs: concerns funnel finish (m2-docs-gates)", () => {
         "saga open-only",
         "immediate halt",
         "triage-coverage",
+        "epic mailbox isolation",
         "adr-epic-config-root-only",
         "adr-closeup-no-suggestions-triage",
         "adr-epic-push-condensed",
         "adr-autonomous-immediate-halt",
         "adr-funnel-triage-coverage",
+        "adr-epic-mailbox-isolation",
       ],
       "§1 row 18"
     );
@@ -152,6 +154,8 @@ describe("docs: concerns funnel finish (m2-docs-gates)", () => {
         "applyCloseupResolutions",
         "pendingResolution",
         "applyConcernConfirms",
+        "reject",
+        "empty pending note",
         "applyWaveCloseupFallback",
         "non-triagers",
         "propagateEpicConcerns",
@@ -178,7 +182,7 @@ describe("docs: concerns funnel finish (m2-docs-gates)", () => {
     );
   });
 
-  it("§8.11 records immediate-halt triage-coverage epic-config close-up-dismiss and saga deviations", () => {
+  it("§8.11 records immediate-halt triage-coverage epic-config close-up-dismiss saga and mailbox deviations", () => {
     expectConfigClosure("docs closure");
     const body = section(architecture, "### 8.11 Concerns funnel");
     expectContains(
@@ -200,6 +204,8 @@ describe("docs: concerns funnel finish (m2-docs-gates)", () => {
         "open-only",
         "forwarded `q-epic-*` questions",
         "adr-epic-push-condensed",
+        "task-local mailboxes",
+        "adr-epic-mailbox-isolation",
       ],
       "§8.11 deviations"
     );

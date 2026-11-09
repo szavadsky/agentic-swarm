@@ -34,4 +34,4 @@ Determine the final iteration outcome following the completeness audit by the pl
 ## Open Concerns
 {{concernsYaml}}
 
-- Raise concerns with evidence; record concernResolutions with resolve/carry/propagate and condense stale detail.
+- Raise concerns with evidence; settle pending close-up proposals with concernConfirms accept/reject (applyConcernConfirms): accept applies the pending action — resolve closes, carry routes to the architect, dismiss closes with the pending note as reason, propagate clears the local proposal for the epic push — while reject clears the proposal unchanged; accepting a dismiss proposal with an empty pending note fails the step. Condense stale detail instead of repeating it.
