@@ -1,0 +1,23 @@
+context: item
+decision: retry-with-guidance
+persist: true
+rationale: Both test-first attempts wrote the new test file but yielded output
+  with no `target` field, so the mechanical target-red check fails at
+  runner.ts:333 before running anything ('No target specified'). This is a
+  yield-shape omission, not a code problem. The item is small and well-scoped;
+  no split or escalation needed.
+text: "Retry test-first. Root cause of both rejections: your yield omitted
+  `target`. You MUST yield `target: { selectors:
+  ['test/contracts/schema-detail-normalize.test.ts'], expectRed: ['<exact
+  it/test name 1>', '<exact it/test name 2>', ...] }` where every expectRed
+  string is the EXACT name from an it()/test() block in your new file (bun-junit
+  matching is by test-name segment; minItems 1). Scope: touch ONLY paths.tests
+  (new file). Do NOT touch schemas, src, or epic-saga-propagate.test.ts in this
+  step — test-first-scope rejects prod changes; the 3 .Detail read fixes +
+  schemas + concerns.ts:72 belong to the develop step. Red semantics: each
+  expectRed id must FAIL by assertion on current prod (lowercase-detail contract
+  assertions fail against capital-D schemas; longest-wins fails because merge
+  reads existing?.Detail). Collection/import/syntax errors do NOT count as red.
+  Prove locally before yielding: cd plugins/software-factory && TMPDIR=/tmp bun
+  test test/contracts/schema-detail-normalize.test.ts and confirm your declared
+  ids fail with assertion failures."
