@@ -77,7 +77,7 @@ describe("Start-up repair (§6.3.6)", () => {
     expect(mhCheckAfter.code).not.toBe(0);
   });
 
-  it("item worktree commits uncommitted changes as interrupted", async () => {
+  it("item worktree commits orchestration dirt as recovery and stashes outside dirt", async () => {
     const intentPath = path.join(tmpRepo.dir, "INTENT.md");
     fs.writeFileSync(intentPath, "Intent", "utf8");
 
@@ -88,22 +88,33 @@ describe("Start-up repair (§6.3.6)", () => {
 
     const child = await ensureChildWorktree(repo, parent, "item-dirt");
 
-    // Leave dirty files in item worktree
+    // Orchestration dirt (task slice) + outside dirt.
+    fs.mkdirSync(path.join(child.path, ".factory", "item-task", "items", "item-dirt", "steps"), { recursive: true });
+    fs.writeFileSync(path.join(child.path, ".factory", "item-task", "journal.ndjson"), '{"type":"x"}\n', "utf8");
     fs.writeFileSync(path.join(child.path, "dirty.txt"), "half-done work", "utf8");
 
     const repairRes = await repairWorktree(repo, child.path, "item", {
+      orchestrationFolder: ".factory",
       operatorEditable: [],
     });
-    expect(repairRes.actions).toContain("commit_interrupted");
+    expect(repairRes.actions).toContain("commit_recovery");
+    expect(repairRes.actions.find((a) => a.startsWith("stash_stray:"))).toBeDefined();
 
     const logRes = await git(child.path, ["log", "-1", "--pretty=%s"]);
-    expect(logRes.stdout.trim()).toBe("interrupted");
+    expect(logRes.stdout.trim()).toBe("factory: restart recovery");
+    const showRes = await git(child.path, ["show", "HEAD:.factory/item-task/journal.ndjson"]);
+    expect(showRes.stdout).toContain('"type":"x"');
 
     const statusRes = await git(child.path, ["status", "--porcelain"]);
     expect(statusRes.stdout.trim()).toBe("");
+
+    // Outside dirt preserved in stash, recovery evidence NOT stashed.
+    const stashShow = await git(child.path, ["stash", "show", "--include-untracked", "--name-only", "stash@{0}"]);
+    expect(stashShow.stdout).toContain("dirty.txt");
+    expect(stashShow.stdout).not.toContain("journal.ndjson");
   });
 
-  it("task worktree commits operator-editable files and stashes stray dirt", async () => {
+  it("task worktree commits orchestration dirt as recovery and stashes outside stray dirt", async () => {
     const intentPath = path.join(tmpRepo.dir, "INTENT.md");
     fs.writeFileSync(intentPath, "Intent", "utf8");
 
@@ -112,39 +123,44 @@ describe("Start-up repair (§6.3.6)", () => {
       orchestrationFolder: ".factory",
     });
 
-    // 1. Edit operator-editable file (.factory/op-task/INTENT.md)
+    // 1. Orchestration dirt: operator edit + uncommitted journal + runs record.
     const taskIntent = path.join(parent.path, ".factory", "op-task", "INTENT.md");
     fs.writeFileSync(taskIntent, "# Updated Intent\nOperator edit\n", "utf8");
+    fs.writeFileSync(path.join(parent.path, ".factory", "op-task", "journal.ndjson"), '{"type":"pm_edits_validation_failed"}\n', "utf8");
+    fs.mkdirSync(path.join(parent.path, ".factory", "op-task", "runs", "001-pm-edits-1-a1"), { recursive: true });
+    fs.writeFileSync(path.join(parent.path, ".factory", "op-task", "runs", "001-pm-edits-1-a1", "input.md"), "seeded\n", "utf8");
 
-    // 2. Add stray dirt file (e.g. random tmp or log)
-    const strayFile = path.join(parent.path, "stray.log");
-    fs.writeFileSync(strayFile, "stray agent dirt\n", "utf8");
-
-    const operatorGlobs = [
-      "INTENT.md",
-      ".factory/**/INTENT.md",
-      "**/*.yaml",
-    ];
+    // 2. Outside stray dirt (target src edit + editor backup).
+    fs.writeFileSync(path.join(parent.path, "src-file.ts"), "target edit\n", "utf8");
+    fs.writeFileSync(path.join(parent.path, "notes.ts~"), "editor backup\n", "utf8");
 
     const repairRes = await repairWorktree(repo, parent.path, "task", {
-      operatorEditable: operatorGlobs,
+      orchestrationFolder: ".factory",
+      operatorEditable: ["INTENT.md", ".factory/**/INTENT.md", "**/*.yaml"],
     });
 
-    expect(repairRes.actions).toContain("commit_operator_edits");
+    expect(repairRes.actions).toContain("commit_recovery");
     const stashAction = repairRes.actions.find((a) => a.startsWith("stash_stray:"));
     expect(stashAction).toBeDefined();
 
-    // Check git log for operator edits commit
+    // Recovery commit contains orchestration evidence.
     const logRes = await git(parent.path, ["log", "-1", "--pretty=%s"]);
-    expect(logRes.stdout.trim()).toBe("factory: operator edits");
+    expect(logRes.stdout.trim()).toBe("factory: restart recovery");
+    const showJournal = await git(parent.path, ["show", "HEAD:.factory/op-task/journal.ndjson"]);
+    expect(showJournal.stdout).toContain("pm_edits_validation_failed");
+    const showIntent = await git(parent.path, ["show", "HEAD:.factory/op-task/INTENT.md"]);
+    expect(showIntent.stdout).toContain("Operator edit");
 
-    // Working directory is now completely clean
+    // Working directory is now completely clean.
     const statusRes = await git(parent.path, ["status", "--porcelain"]);
     expect(statusRes.stdout.trim()).toBe("");
 
-    // Stray dirt is safely preserved in stash
-    const stashList = await git(parent.path, ["stash", "list"]);
-    expect(stashList.stdout).toContain("factory-stray-");
+    // Outside dirt stashed, orchestration evidence NOT in stash.
+    const stashShow = await git(parent.path, ["stash", "show", "--include-untracked", "--name-only", "stash@{0}"]);
+    expect(stashShow.stdout).toContain("src-file.ts");
+    expect(stashShow.stdout).toContain("notes.ts~");
+    expect(stashShow.stdout).not.toContain("journal.ndjson");
+    expect(stashShow.stdout).not.toContain("INTENT.md");
   });
 
   it("task worktree commits a new steer/fromuserpending file instead of stashing it", async () => {
@@ -164,15 +180,16 @@ describe("Start-up repair (§6.3.6)", () => {
     fs.writeFileSync(pendingFile, "# Answer\nYes, proceed.\n", "utf8");
 
     const repairRes = await repairWorktree(repo, parent.path, "task", {
+      orchestrationFolder: ".factory",
       operatorEditable: [".factory/steer-task/steer/fromuserpending/**"],
     });
 
-    expect(repairRes.actions).toContain("commit_operator_edits");
+    expect(repairRes.actions).toContain("commit_recovery");
     expect(repairRes.actions.find((a) => a.startsWith("stash_stray:"))).toBeUndefined();
 
     // The message is committed, not stashed away.
     const logRes = await git(parent.path, ["log", "-1", "--pretty=%s"]);
-    expect(logRes.stdout.trim()).toBe("factory: operator edits");
+    expect(logRes.stdout.trim()).toBe("factory: restart recovery");
     const showRes = await git(
       parent.path,
       ["show", "HEAD:.factory/steer-task/steer/fromuserpending/msg-1.md"]
@@ -181,4 +198,5 @@ describe("Start-up repair (§6.3.6)", () => {
     const stashList = await git(parent.path, ["stash", "list"]);
     expect(stashList.stdout.trim()).toBe("");
   });
+
 });

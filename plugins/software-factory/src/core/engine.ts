@@ -260,8 +260,11 @@ export async function runTask(
     await fs.promises.mkdir(taskDir, { recursive: true });
     parentBranch = `topic/${task}`;
 
-  // 2. Start-up repair restricted to §6.3.6 list (Finding 1 & 19)
+  // 2. Start-up repair (§6.3.6): commit engine recovery evidence under the
+  // orchestration folder as "factory: restart recovery"; stash only dirt
+  // outside it. Finding 1 & 19.
   await repairWorktree(repo, taskWt, "task", {
+    orchestrationFolder: orchFolder,
     operatorEditable: [
       "INTENT.md",
       "**/INTENT.md",
@@ -285,7 +288,10 @@ export async function runTask(
             itemBranchName.replace(/\//g, "_")
           );
           if (fs.existsSync(itemWtPath)) {
-            await repairWorktree(repo, itemWtPath, "item", { operatorEditable: [] });
+            await repairWorktree(repo, itemWtPath, "item", {
+              orchestrationFolder: orchFolder,
+              operatorEditable: [],
+            });
           }
         }
       }

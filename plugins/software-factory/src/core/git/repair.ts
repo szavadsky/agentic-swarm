@@ -7,16 +7,23 @@ import type { Repo } from "./repo.js";
  * Performs start-up repair on a worktree per §6.3.6:
  * - If MERGE_HEAD exists → git merge --abort.
  * - Task worktree:
- *     uncommitted operator-editable files committed as "factory: operator edits";
- *     everything else uncommitted → git stash push -u -m factory-stray-{ts} (never discarded).
- * - Item worktree:
- *     dirty → commit "interrupted".
+ *     all tracked modifications + untracked files under
+ *     {orchestrationFolder}/** (engine records: journal.ndjson, state.yaml,
+ *     runs/, items/*\/steps, waves/, decisions/, closeup-*.yaml, plan/ — plus
+ *     operator inputs: INTENT.md, pipeline.yaml, steer/fromuserpending)
+ *     committed as "factory: restart recovery";
+ *     only remaining dirt OUTSIDE the orchestration folder (agent droppings,
+ *     target src edits, editor backups) → git stash push -u -m
+ *     factory-stray-{ts} (never discarded). Engine recovery evidence is
+ *     never stashed, so journal-keyed restart detectors stay visible.
+ * - Item worktree: same split for its task-dir slice (orchestration dir →
+ *     "factory: restart recovery", rest stashed).
  */
 export async function repairWorktree(
   repo: Repo,
   wt: string,
   kind: "task" | "item",
-  opts: { operatorEditable: string[] }
+  opts: { operatorEditable: string[]; orchestrationFolder?: string }
 ): Promise<{ actions: string[] }> {
   return repo.writeLock.runExclusive(async () => {
     const actions: string[] = [];
@@ -42,29 +49,37 @@ export async function repairWorktree(
       return { actions };
     }
 
-    if (kind === "item") {
-      // Item worktree: commit everything as "interrupted"
-      await git(wt, ["add", "-A"], { env });
-      await git(wt, ["commit", "-m", "interrupted"], { env });
-      actions.push("commit_interrupted");
-      return { actions };
-    }
+    // Recovery globs: everything under the orchestration folder (engine
+    // records + operator inputs) plus legacy operator-editable patterns
+    // (e.g. a root INTENT.md outside the orchestration folder).
+    const orch = (opts.orchestrationFolder ?? "").replace(/\\/g, "/").replace(/\/+$/, "");
+    const recoveryGlobs =
+      orch && orch !== "."
+        ? [`${orch}/**`, ...opts.operatorEditable]
+        : [...opts.operatorEditable];
 
-    // Task worktree: partition into operator-editable vs stray dirt
-    const operatorFiles: string[] = [];
+    // Partition dirt: orchestration-folder files → recovery commit;
+    // everything else → stash. Never stash engine recovery evidence.
+    const recoveryFiles: string[] = [];
     for (const entry of entries) {
-      if (matchGlobs(entry.path, opts.operatorEditable)) {
-        operatorFiles.push(entry.path);
+      if (matchGlobs(entry.path, recoveryGlobs)) {
+        recoveryFiles.push(entry.path);
       }
     }
 
-    if (operatorFiles.length > 0) {
-      await git(wt, ["add", "--", ...operatorFiles], { env });
-      await git(wt, ["commit", "-m", "factory: operator edits"], { env });
-      actions.push("commit_operator_edits");
+    if (recoveryFiles.length > 0) {
+      await git(wt, ["add", "--", ...recoveryFiles], { env });
+      const staged = await git(wt, ["diff", "--cached", "--quiet"], {
+        allowFail: true,
+        env,
+      });
+      if (staged.code !== 0) {
+        await git(wt, ["commit", "-m", "factory: restart recovery"], { env });
+        actions.push("commit_recovery");
+      }
     }
 
-    // Check if any stray dirt remains
+    // Check if any stray dirt remains (outside the orchestration folder)
     const remaining = await porcelainStatus(wt, { env });
     if (remaining.length > 0) {
       const ts = Date.now();

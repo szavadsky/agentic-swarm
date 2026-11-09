@@ -339,17 +339,24 @@ describe("Engine: plan outline-count pre-check and pm-edits bounce (§8.4.2a, §
       { seq: 6, name: "pm-edits-1", attempt: 2, agent: "pm", role: "alt-workhorse", models: ["m"], status: "ok", startedAt: ts(), endedAt: ts() } as StepMetaArtifact,
       failedEdits
     );
-    // Legacy journal shape: no iteration field — exactly like the live dead run.
+    // The live launch-9 dead state: records committed, but the
+    // validation_failed/repaired journal tail UNCOMMITTED at crash time.
+    // Restart repair must commit it as recovery (never stash it), or the
+    // journal-keyed restart-bounce detector goes blind.
     const journalLines = [
       { type: "pm_edits_repaired", errors: ["Total items (3) exceeds maximum items limit of 2"], ts: ts() },
       { type: "pm_edits_validation_failed", errors: ["Total items (3) exceeds maximum items limit of 2"], ts: ts() },
+      { type: "pm_edits_repaired", errors: ["Total items (3) exceeds maximum items limit of 2"], ts: ts() },
+      { type: "pm_edits_validation_failed", errors: ["Total items (3) exceeds maximum items limit of 2"], ts: ts() },
     ];
+    tmpRepo.git(["add", "-A"], { cwd: taskWtPath });
+    tmpRepo.git(["commit", "-m", "seed live dead state (records only)"], { cwd: taskWtPath });
+    // Uncommitted at crash: journal tail + a stray outside-orchestration file.
     fs.writeFileSync(
       path.join(deployedTaskDir, "journal.ndjson"),
       journalLines.map((e) => JSON.stringify(e)).join("\n") + "\n"
     );
-    tmpRepo.git(["add", "-A"], { cwd: taskWtPath });
-    tmpRepo.git(["commit", "-m", "seed live dead state"], { cwd: taskWtPath });
+    fs.writeFileSync(path.join(taskWtPath, "agent-dropping.tmp"), "stray agent dirt\n", "utf8");
 
     // No edits file: the dead run never wrote one.
     expect(fs.existsSync(path.join(planDir, "edits-1.0.yaml"))).toBe(false);
@@ -388,5 +395,16 @@ describe("Engine: plan outline-count pre-check and pm-edits bounce (§8.4.2a, §
     expect(journal).toContain("pm_edits_restart_bounce");
     expect(journal).toContain("pm_edits_bounced_to_architect");
     expect(fs.existsSync(path.join(planDir, "edits-1.0.yaml"))).toBe(true);
+    // Restart repair committed the dirty journal as recovery (detector-visible)
+    // and stashed only the outside-orchestration dropping.
+    const logSubjects = tmpRepo.git(["log", "--format=%s"], { cwd: taskWtPath }).stdout.split("\n");
+    expect(logSubjects.some((s) => s.includes("factory: restart recovery"))).toBe(true);
+    const stashShow = tmpRepo.git(["stash", "show", "--include-untracked", "--name-only", "stash@{0}"], { cwd: taskWtPath });
+    expect(stashShow.stdout).toContain("agent-dropping.tmp");
+    expect(stashShow.stdout).not.toContain("journal.ndjson");
+    // Recovery commit itself contains the journal tail (detector evidence).
+    const journalAtRecovery = tmpRepo.git(["log", "--format=%H", "--grep=factory: restart recovery"], { cwd: taskWtPath }).stdout.trim().split("\n")[0]!;
+    const journalShown = tmpRepo.git(["show", `${journalAtRecovery}:.factory/${task}/journal.ndjson`], { cwd: taskWtPath });
+    expect(journalShown.stdout).toContain("pm_edits_validation_failed");
   });
 });
