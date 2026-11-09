@@ -2065,3 +2065,4 @@
 {"type":"step_started","task":"concerns-funnel","step":"architect-plan-4","attempt":1,"recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/082-architect-plan-4-a1","ts":"2026-11-09T07:27:52.792Z"}
 {"type":"step_timeout_armed","task":"concerns-funnel","step":"architect-plan-4","timeoutSec":7200,"ts":"2026-11-09T07:27:52.798Z"}
 {"type":"step_transcript_size_warning","task":"concerns-funnel","step":"architect-plan-4","attempt":1,"sizeBytes":12921569,"thresholdBytes":5242880,"traceRef":"/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/sessions/2026-11-08T00-34-47-765Z_01a1b894-4755-7787-a1ed-8df6c7a062a2.jsonl","ts":"2026-11-09T07:33:07.281Z"}
+{"type":"step_finished","task":"concerns-funnel","step":"architect-plan-4","attempt":1,"status":"ok","sessionId":"01a1b894-4755-7787-a1ed-8df6c7a062a2","usage":{"inputTokens":4615,"outputTokens":7413,"costUsd":0.00382},"ts":"2026-11-09T07:33:07.402Z"}
