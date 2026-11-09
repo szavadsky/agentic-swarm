@@ -1,0 +1,24 @@
+blockedItems: []
+failedItems: []
+iteration: 4
+mergedItems:
+  - schema-detail-normalize-v2
+  - prompts-dismiss-filter
+  - allowlist-agreement-test
+recommendations:
+  - Proceed to architect wave report / next wave; no tree or gate blockers.
+  - "No operator action required on TMPDIR: test gate now pass suggests
+    normalized TMPDIR handling is effective."
+status: complete
+summary: "Wave 1 (iteration 4): 3/3 items merged (schema-detail-normalize-v2,
+  prompts-dismiss-filter, allowlist-agreement-test; merge commits
+  e26ca24/149868d/40f135c present). Tree clean: zero untracked files (git
+  ls-files --others --exclude-standard empty), git diff --check exit 0, strict
+  conflict-marker check empty (git grep for '^<<<<<<< '/ '^>>>>>>> '/
+  '^=======$' all empty; generic grep hits only orchestration records/docs).
+  Sole modification is engine-managed
+  .factory/tasks/concerns-funnel/journal.ndjson (+2 lines, pending engine
+  commit). Gates vs baseline (Gate Diff table only): typecheck pass->pass green,
+  no regression; test fail->pass IMPROVED (baseline red was the 2 pre-existing
+  TMPDIR/head-guard failures)."
+wave: 1
