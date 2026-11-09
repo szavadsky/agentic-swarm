@@ -1,0 +1,5 @@
+status: approved
+summary: "Dismiss row + filter + render tests verified against diff: terse
+  triager-only criteria, mirrored human-stop filtering,
+  QA-excludes/reviewer-includes locked, gates green"
+suggestions: []
