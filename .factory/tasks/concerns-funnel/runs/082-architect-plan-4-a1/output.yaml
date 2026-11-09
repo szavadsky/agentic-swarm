@@ -1,0 +1,187 @@
+adrs:
+  - context: agents/criteria/dispositions.md documents
+      fix/optional/architect/human-* but not dismiss, while triagers are allowed
+      dismiss and review/plan-review step prompts explain it ad hoc. Adding the
+      row to the shared criteria file would leak it into non-triager prompts
+      (e.g. QA) unless filtered.
+    decision: Add one terse dismiss row + rule to dispositions.md (triager-only,
+      reason required, kept on disk) AND extend formatDispositionsSection to
+      filter dismiss rows/rules when the allowed set excludes dismiss, mirroring
+      the existing human-stop filtering. QA-excludes/reviewer-includes render
+      test locks it; prompts.test debloat budgets must pass.
+    id: adr-dismiss-criteria-row
+    title: Dismiss row in shared criteria with allowed-set filtering
+  - context: Spec line 100 says autonomous consults the human only for the portion
+      still blocked after everything unblocked is done; implementation halts
+      immediately at plan time on a blocking ADR. Repo ADR
+      adr-autonomous-immediate-halt.md and awareness item
+      awareness-plan-2-autonomous-halt-deviation record this as accepted.
+    decision: Keep immediate halt as the accepted deviation for closure;
+      drain-then-block scheduling stays future work. docs-finish-v5 marks it
+      explicitly in ARCHITECTURE §8.11 and agents/criteria/human-involvement.md.
+    id: adr-autonomous-immediate-halt
+    title: Autonomous immediate halt accepted (restated)
+  - context: ARCHITECTURE §5 claims epics inherit the parent task layer, but
+      runTaskChild loads only the child task dir pipeline.yaml, so root
+      humanInvolvement/concerns/reviewPolicy overrides do not reach epics. Repo
+      ADR adr-epic-config-root-only.md and
+      awareness-plan-3-epic-config-awareness record this; implementing
+      inheritance would change config semantics for all tasks.
+    decision: "Document-only: per-task selectability holds per task directory; epic
+      children do not inherit the parent task layer. Record in the §1 row 18
+      rewrite and corrected §5; no behavior change."
+    id: adr-epic-config-root-only
+    title: Epic config inheritance documented as deviation
+  - context: Only plan-review routes architect output through plan-reviewer;
+      architect concerns from consult/wave-report/closeup turns aggregate but
+      stay open until an architect turn hydrates them or wave fallback runs. The
+      simple flow has no review step and no waves, so its concerns are never
+      triaged.
+    decision: "Accept current coverage as the funnel semantic and document it as a
+      known limitation in §8.11: plan/revise output is plan-reviewer-triaged;
+      other architect output is covered by architect hydration + wave fallback;
+      simple-task concerns stay open. No new reviewer step this iteration."
+    id: adr-funnel-triage-coverage
+    title: Non-plan/simple triage coverage documented as limitation
+  - context: Routed rm-* remarkables always digest regardless of minDigestSeverity;
+      ConcernCounts/state/status count c-* files only; digest mailbox entries
+      persist with no archival rule.
+    decision: "Document as accepted semantics in §8.11: remarkables are
+      threshold-exempt digests (never blocking/halting, consistent with the
+      low-noise digest directive), counts scope is c-* only, digest has no
+      retention rule. Any gating/counting/retention change is future work."
+    id: adr-remarkable-counts-semantics
+    title: Remarkable digest exemption and counts scope accepted
+assumptions:
+  - assumption: "Baseline is GREEN: 445 pass / 2 skip / 0 fail per context pack;
+      concern detail is already lowercase in all schemas,
+      ConcernInput/mergeConcern, and test reads (verified by scout
+      DetailCasingVerify with read-vs-grep agreement plus architect's own
+      reads). Closeup-3 red claims about capital-D Detail are stale; no
+      schema-detail-normalize carryover is needed."
+    why: Three independent sources (context-pack test run, scout verification,
+      architect reads) agree; planning docs closure on a green tree.
+  - assumption: Gates run with TMPDIR=/tmp; the 2 head-guard failures under
+      .factory-runtime TMPDIR remain out of scope (td-tmpdir-split).
+    why: Pre-existing environmental failure, unchanged since baseline.
+  - assumption: Behavior is frozen except prompts.ts dismiss-row filtering
+      (mirroring human-stop) plus the dispositions.md row (prompt surface).
+      Legacy fingerprint migration (Q8) is retained as tested, harmless code;
+      allowlist duplication (Q9) is locked by a contract test, not refactored.
+    why: "Closure iteration: 18+ behavior/contract suites already cover the funnel;
+      bounding change avoids regressions."
+  - assumption: Open questions Q2/Q3/Q4/Q5/Q6/Q7/Q10 are resolved document-only via
+      the plan ADRs above; operator already notified on the two deviations via
+      awareness-plan-2-autonomous-halt-deviation and
+      awareness-plan-3-epic-config-awareness.
+    why: All are accepted-semantics documentation, not implementation gaps;
+      architect decides, operator informed.
+itemOutlines:
+  - deps: []
+    description: "Per adr-dismiss-criteria-row: add terse dismiss row + rule to
+      agents/criteria/dispositions.md; extend formatDispositionsSection
+      (prompts.ts:90-110) to filter dismiss rows/rules when allowed excludes
+      dismiss, mirroring human-stop; add QA-excludes/reviewer-includes render
+      test; keep prompts.test fragment matrix + 15/80 debloat budgets green.
+      Verify typecheck + TMPDIR=/tmp bun test."
+    kind: story
+    milestoneId: m1-dismiss-contract
+    prodBudgetHint: 15
+    slug: prompts-dismiss-filter
+    title: Dismiss criteria row + prompt filtering
+  - deps: []
+    description: "Test-only (no prod changes): extend
+      test/human-involvement-config.test.ts (or concern-contracts suite) with a
+      contract test asserting DEFAULT_RAISE_ALLOWLIST (concerns.ts:35-44) agrees
+      with the shipped concerns.raiseAllowlist in config/pipeline.default.yaml.
+      Answers context-pack Q9 without refactoring either side. Verify typecheck
+      + targeted suite."
+    kind: test-only
+    milestoneId: m2-docs-gates
+    prodBudgetHint: 0
+    slug: allowlist-agreement-test
+    title: Raise-allowlist agreement contract test
+  - deps:
+      - prompts-dismiss-filter
+    description: "Docs closure over landed behavior (source: context-pack §6 D1-D11
+      + plan ADRs). ARCHITECTURE: §1 row 18 implemented + deviations; new §8.11
+      funnel section (store, fingerprint/dedup, remarkable aggregation/triage,
+      triage contract, routing table, close-up propose-confirm incl dismiss,
+      epic condensing, ADR blocking table, presets, byte caps as code constants,
+      engine-owned concerns/ note, edge semantics per ADRs); §3 module entries;
+      §5 config sample + root-only fix; §6.2 concerns/ + engine-owned; §8.7
+      dismiss row; §10 outputs; §11 status; §13 suites; canonical ADR format vs
+      historical notes. README Concerns & human involvement section + §5 range
+      update. pipeline.default.yaml dismiss + fragment->agent mapping
+      commentary. human-involvement.md halt note. New test/docs-concerns.test.ts
+      with base-failing sentinels per Decision 022 guidance (each needle names
+      added content; verify 11-ish fail on base, pass on branch). Final gates
+      green with TMPDIR=/tmp."
+    kind: story
+    milestoneId: m2-docs-gates
+    prodBudgetHint: 150
+    slug: docs-finish-v5
+    title: Docs and suite consolidation
+iteration: 4
+milestones:
+  - directionalInterfaces:
+      - "item-machine/iteration (callers) -> formatDispositionsSection(criteria,
+        allowed) (callee): allowed excludes dismiss => dismiss rows/rules
+        filtered from criteria text (QA prompt); allowed includes dismiss =>
+        rows kept (reviewer prompt); mirrors existing human-stop filtering"
+      - "review/plan-review step prompts + generated review schema (consumers)
+        <- dispositions.md dismiss row (content contract): single terse row
+        stating triager-only, reason required, kept as dismissed"
+    id: m1-dismiss-contract
+    scenarios:
+      - Given dispositions.md When read Then a terse dismiss row (triager-only,
+        reason required, kept on disk) exists
+      - Given a QA prompt (allowed excludes dismiss) and a reviewer prompt
+        (allowed includes dismiss) When rendered Then the QA prompt excludes
+        dismiss rows/rules while the reviewer prompt includes them
+      - Given prompts.test When run Then the fragment matrix and
+        15-per-fragment/80-total debloat budgets pass
+      - Given the full suite When gates run with TMPDIR=/tmp Then typecheck and
+        bun test pass
+    title: Dismiss vocabulary contract
+  - directionalInterfaces:
+      - "docs-finish-v5 (caller) documents landed contracts (callees,
+        read-only): store layout, fingerprint/dedup, triage contract, router
+        table, close-up lifecycle, epic condensing, ADR blocking table, presets;
+        no behavior change"
+      - "test/docs-concerns.test.ts (caller) asserts doc sentinels (callee
+        content): every needle names content added by docs-finish-v5 and fails
+        on the base tree"
+    id: m2-docs-gates
+    scenarios:
+      - Given ARCHITECTURE §1 row 18 When read Then it records item 18
+        implemented with the epic-config, close-up-dismiss, saga-semantics,
+        immediate-halt, and triage-coverage deviations and no 'Deliberately not
+        hand-built'
+      - Given ARCHITECTURE §8.11 When read Then it documents store layout,
+        fingerprint/dedup, remarkable aggregation/triage, triage contract,
+        routing table, close-up propose-confirm incl dismiss, epic condensing,
+        ADR blocking table, presets, byte caps, and edge semantics
+      - Given ARCHITECTURE §3/§5/§6.2/§8.7/§10/§11/§13 When read Then modules,
+        config sample with root-only layering, concerns/ folder, dismiss row,
+        outputs, status counts, and funnel suites are all updated
+      - Given README, pipeline.default.yaml, and human-involvement.md When read
+        Then README has a Concerns section with per-task examples and status
+        output, commentary documents dismiss auto-append plus the
+        fragment->agent mapping, and the immediate-halt deviation is noted
+      - Given test/docs-concerns.test.ts When run on base vs branch Then every
+        test fails on base and passes on branch; given the allowlist agreement
+        test When run Then code and shipped allowlists agree
+      - Given the full suite When gates run with TMPDIR=/tmp Then typecheck and
+        bun test pass
+    title: Docs closure and gates
+techDebt:
+  - category: adjacent
+    description: Pre-existing head-guard failures when TMPDIR sits under
+      .factory-runtime. Baseline red; green with TMPDIR=/tmp. Out of scope.
+    id: td-tmpdir-split
+  - category: adjacent
+    description: Unapplied spike-saga-commit reviewer optional nits (qualify
+      epic-state precedence, prefix inline paths, scope removeWorktree claim,
+      fold contextPack key). Consumers apply mentally.
+    id: td-spike-nits
