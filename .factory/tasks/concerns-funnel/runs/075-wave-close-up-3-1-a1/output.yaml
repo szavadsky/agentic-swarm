@@ -1,0 +1,40 @@
+blockedItems: []
+debt:
+  - "schema-detail-normalize not yet merged: capital-D Detail drift
+    (developer-output.schema.json etc.) still open; item retrying in test-first
+    per consult retry-with-guidance after two yield-shape omissions (missing
+    target field), no code defect."
+  - "Reviewer optional nits on closeup-triager-cleanup (all disposition
+    optional): reuse pre-flight pending map instead of re-listing store in
+    step-runner.ts propagate scan (double I/O); clarify pre-flight comment
+    wording (accept-without-note vs confirm=reject); no-op dismiss confirm still
+    bumps updatedAt + commits (deep-equal short-circuit is future work)."
+  - docs-finish-v4 (wave 2) gated on closeup-triager-cleanup +
+    schema-detail-normalize; cannot start until schema item merges.
+failedItems: []
+iteration: 3
+mergedItems:
+  - closeup-triager-cleanup
+recommendations:
+  - Continue schema-detail-normalize with the consult guidance (yield target
+    with exact expectRed test names, test-file-only scope), then merge and
+    proceed to wave 2 docs-finish-v4.
+  - Keep TMPDIR=/tmp for gate runs per infra notes to avoid the pre-existing
+    head-guard TMPDIR failures.
+  - Optionally fold the three reviewer optional nits (pending-map reuse, comment
+    wording) into a later cleanup; none block this wave.
+status: complete
+summary: "Iteration 3 wave 1 closed with closeup-triager-cleanup merged (sha
+  0499173, review approved, no conflicts). Tree hygiene clean: git status shows
+  only the engine-managed journal.ndjson modification, no untracked junk, and no
+  merge-conflict markers in source (precise ^<<<<<<< / ^======= / ^>>>>>>> scan
+  outside .factory/node_modules found no matches; ===== hits are bun-test
+  divider lines inside .factory logs). Gate diff vs baseline: typecheck
+  pass->pass green (matches baseline), test fail->pass IMPROVED (was failing at
+  baseline on 2 head-guard TMPDIR tests) — zero regressions. Companion wave-1
+  item schema-detail-normalize did not merge this wave but is not
+  failed/blocked: it is retrying in test-first per architect consult
+  retry-with-guidance (both rejections were yield-shape omissions of the target
+  field, not code problems) and carries forward; wave-2 docs-finish-v4 remains
+  correctly gated on it."
+wave: 1
