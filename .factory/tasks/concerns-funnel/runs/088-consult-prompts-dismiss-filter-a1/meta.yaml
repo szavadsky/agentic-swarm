@@ -1,0 +1,17 @@
+seq: 88
+name: consult-prompts-dismiss-filter
+attempt: 1
+agent: architect
+role: architect
+models:
+  - opencode-go/muse-spark-1.3-contributor
+session: 01a1b894-4755-7787-a1ed-8df6c7a062a2
+timeoutSec: 7200
+status: ok
+startedAt: 2026-11-09T08:37:58.037Z
+endedAt: 2026-11-09T08:38:45.199Z
+usage:
+  inputTokens: 555210
+  outputTokens: 1501
+  costUsd: 0.058037
+traceRef: /home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/sessions/2026-11-08T00-34-47-765Z_01a1b894-4755-7787-a1ed-8df6c7a062a2.jsonl
