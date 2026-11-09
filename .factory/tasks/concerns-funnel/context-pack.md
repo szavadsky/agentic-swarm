@@ -1,248 +1,368 @@
 # Context Pack — concerns-funnel (Spec Item 18)
 
-## 0. Snapshot
+## 0. Snapshot (verified 2026-11-09)
 
-The intent asks to implement `docs/factory.v2.md` §18 in `plugins/software-factory` and update `docs/ARCHITECTURE.md` (§1 row), README and config commentary.
+| Fact | Evidence |
+|---|---|
+| Acceptance definition | `docs/factory.v2.md:89-103` (item 18, all bullets) |
+| Implementation status | `plugins/software-factory/docs/ARCHITECTURE.md:39` — row 18 marked **Implemented** with five accepted deviations (`adr-epic-config-root-only`, `adr-closeup-no-suggestions-triage`, `adr-epic-push-condensed`, `adr-autonomous-immediate-halt`, `adr-funnel-triage-coverage`) |
+| Full funnel contract | `plugins/software-factory/docs/ARCHITECTURE.md:330-363` (§8.11) |
+| Module map | `plugins/software-factory/docs/ARCHITECTURE.md:61-88` (`concerns.ts:76`, `triage.ts:77`, `review-policy.ts:78`) |
+| User docs | `plugins/software-factory/README.md:99-128` (§5 concerns & human involvement, per-task examples, status output) |
+| Docs are executable | `plugins/software-factory/test/docs-concerns.test.ts:87-346` asserts exact phrases/ADR ids/byte caps |
+| Git history | Branch already carries iterations 1–5 (`git log`: `architect-wave-report-5-2`, `plan-close-up-5`, `architect-closeup-5`); current step record `context-pack-6`. `src/core/concerns.ts` entered via develop items (e.g. `8d47957 factory(schema-detail-normalize-v2): develop a1 [ok]`). |
+| Test baseline (this pass) | `bun test` → **467 pass, 2 skip, 0 fail**, 2794 expects, 71 files, 106.56s. Targeted concern suites (concerns-funnel, reviewer-triage, status-concerns, docs-concerns) → 49 pass, 0 fail. |
+| Working tree | Only `.factory/tasks/concerns-funnel/journal.ndjson` modified (engine audit log); plugin sources/docs clean. |
 
-**The worktree already contains a complete item-18 implementation.** `docs/ARCHITECTURE.md:39` records item 18 as **Implemented** in §8.11 with five accepted deviations (`adr-epic-config-root-only`, `adr-closeup-no-suggestions-triage`, `adr-epic-push-condensed`, `adr-autonomous-immediate-halt`, `adr-funnel-triage-coverage`).
+**Verdict for the architect:** item 18 is not greenfield on this worktree. Scope iteration 6 as a residual-gap audit/hardening pass against the bullets in `docs/factory.v2.md:89-103`; avoid re-architecting the store. Any docs edit is constrained by the sentinel tests (§4).
 
-Verification performed in this session:
-
-| Check | Command | Result |
-|---|---|---|
-| Tests | `cd plugins/software-factory && bun test` | **467 pass, 2 skip, 0 fail**, 469 tests / 71 files, 97.7 s |
-| Types | `bun run typecheck` (`tsc --noEmit`) | clean, exit 0 |
-| Focused funnel suites | `bun test test/engine/concerns-funnel.test.ts test/engine/reviewer-triage.test.ts test/docs-concerns.test.ts` | 47 pass, 0 fail, 5.5 s |
-
-The 2 skips are the live-harness smoke suite gated by `FACTORY_LIVE_OMP=1` (`test/harness/smoke-live.test.ts:9-11`); no other skips exist in the repo.
-
-**Planning implication:** the architect should treat the acceptance bullets as a traceability audit plus a small set of residual gaps (§5 below), not as a build-from-scratch plan. Any milestone that re-implements store/triage/routing would duplicate tested code.
-
-### Acceptance map (spec `docs/factory.v2.md:89-103` → code → tests)
-
-| Spec bullet | Implementation | Tests |
-|---|---|---|
-| `:90` structured `concerns[]` {kind, summary, detail, location?, severity, affects?} | `src/core/artifacts.ts:301-321`; producer schemas `config/schemas/developer-output.schema.json:61-78`, `plan.schema.json:134-...`, `decisions.schema.json:48-...`, `fact-finder-output.schema.json`, `wave-closeup.schema.json:35-...`, `plan-closeup.schema.json:27-...`, generated review schema `src/core/records/review-schema.ts:67-100` | `test/contracts/concern-schemas.test.ts`, `test/contracts/concern-artifact-types.test.ts` |
-| `:91` aggregation under task folder, fingerprint ids, dedup, status, source record | `src/core/concerns.ts:50-168`, `171-249`, `391-408`; startup reconcile `src/core/engine.ts:381-394`; recovery commit `src/core/engine.ts:342-347` | `test/engine/concerns-funnel.test.ts`, `test/engine/hydration-fingerprint-caps.test.ts` |
-| `:92` reviewer triage with review vocabulary + `dismiss`; architect output → plan-reviewer | `src/core/review-policy.ts:4-43`, `src/core/triage.ts:35-50`, `252-349`, `src/core/flows/step-runner.ts:261-275`, `src/core/flows/iteration.ts:506-568` | `test/engine/reviewer-triage.test.ts`, `test/engine/plan-reviewer-triage.test.ts`, `test/review-policy.test.ts` |
-| `:93` routing blockers/architect/human-*/tech debt | `src/core/derive/task.ts:52-65`, `174-196`, `219-263`; `src/core/derive/item.ts:58-73`; `src/core/derive/wave.ts:47-57`; `src/core/plan/scheduler.ts:66-78`; `src/core/flows/iteration.ts:200-229`, `830-850`; `src/core/flows/consults.ts:319-421`; `src/core/triage.ts:93-136`; `src/core/flows/adrs.ts:46-71` | `test/engine/routing-blocker-derive.test.ts`, `routing-architect-consult.test.ts`, `routing-human-debt.test.ts`, `test/engine/human-router-severity.test.ts` |
-| `:94` close-ups list/re-triage; architect resolves/carries; status/state counts | `src/core/flows/iteration.ts:1227-1337`; `src/core/concerns.ts:266-353`; `src/core/derive/task.ts:369-415`; `src/cli/status.ts:106-124` | `test/engine/closeup-lifecycle-resolve.test.ts`, `test/engine/state-concern-counts.test.ts`, `test/cli/status-concerns.test.ts` |
-| `:95` configurable raise allowlist, dispositions, severity thresholds | `config/schemas/pipeline.schema.json:202-237`, `config/pipeline.default.yaml:359-437`, `src/core/concerns.ts:35-44`, `src/core/triage.ts:56-75`, `src/core/review-policy.ts:27-43` | `test/human-involvement-config.test.ts` |
-| `:96` remarkable decisions same aggregation/triage | `src/core/artifacts.ts:323-327`; `src/core/concerns.ts:55`, `91-99`, `152-159`; hydration `src/core/triage.ts:200-231` | `test/engine/concerns-funnel.test.ts:713-745`, `human-router-severity.test.ts` |
-| `:97` funnel with less detail per level, never more text than code | hydration caps `src/core/triage.ts:234-286` + `src/core/flows/step-runner.ts:429-449`; epic condensing `src/core/flows/epic-propagation.ts:52-58`, `141-185` | `test/engine/funnel-text-budget.test.ts`, `test/engine/epic-saga-propagate.test.ts` |
-| `:98` blocking vs remarkable ADRs; digest never waits | `src/core/flows/adrs.ts:14-37`, `46-71`; plan-time halt `src/core/flows/iteration.ts:443-478` | `test/engine/adr-blocking-digest.test.ts` |
-| `:99-102` `autonomous`/`principal`/`detailed` presets + prompt fragments, selectable per task | `config/pipeline.default.yaml:384-437`, `agents/criteria/human-involvement.md:1-28`, `src/core/prompts.ts:64-85`, `src/core/flows/step-runner.ts:421-427`, layering `src/core/config/loader.ts:92-102` | `test/human-involvement-config.test.ts:138-490` |
-| `:103` fire-test mode switching, low-noise mailbox | operational; no unit test performs two `runTask` launches with a mode change | `docs/FIRE_TEST.md:43`, `:51` |
+---
 
 ## 1. Module Map
 
-All paths relative to `plugins/software-factory/`.
+| Path | Responsibility |
+|---|---|
+| `docs/factory.v2.md:89-103` | Item 18 acceptance text: structured concerns, aggregation/fingerprint, reviewer triage+dismiss, routing, close-up lifecycle, funnel condensation, ADR blocking/remarkable, human-involvement presets. |
+| `plugins/software-factory/src/core/artifacts.ts` | Canonical types: `ConcernKind/Severity/Status`, `Concern`, `RemarkableDecision`, `ConcernConfirms`, `ConcernResolution`, `CloseupConcernResolution`, `ConcernSource`, `PendingConcernResolution`, `StoredConcernArtifact` (`:301-384`), `ReviewDisposition` (`:386-393`), `PipelineConfig` (`:108-144`), `PlanTechDebt/PlanAdr` (`:239-265`), `ConcernCounts`/`StateArtifact` (`:564-583`). |
+| `plugins/software-factory/src/core/concerns.ts` | Engine-owned store: fingerprint ids, merge/dedup, aggregation+commit, list/count, triage, pending resolutions, architect confirms, decision-level resolution, wave-closeup fallback, exact-id partition, reconcile from records. |
+| `plugins/software-factory/src/core/triage.ts` | Review triage partition, severity policy, single human router (`human-*` + `rm-*` + dismissed-escalated), debt predicate, terse hydration sets and UTF-8 byte caps, `renderConcernsYaml`. |
+| `plugins/software-factory/src/core/review-policy.ts` | Triager set (`reviewer`, `plan-reviewer`), builtin dispositions, per-agent allowed set + auto-appended `dismiss`. |
+| `plugins/software-factory/src/core/flows/step-runner.ts` | Producer ingest (`concerns`/`newConcerns`/`remarkable`/`suggestions`/`concernResolutions`/`concernConfirms`/`concernResolution`), allowlist gate, hydration injection, allowed-disposition resolution. |
+| `plugins/software-factory/src/core/flows/iteration.ts` | Architect plan + ADRs, plan-review triage, routed-blocker consults per wave, wave/plan close-ups, architect wave report and close-up. |
+| `plugins/software-factory/src/core/flows/consults.ts` | `runConcernConsult` for routed blockers; `decisions/concern-<cid>.yaml` idempotency guard. |
+| `plugins/software-factory/src/core/flows/epic-propagation.ts` | Epic→saga push: condensed copies, `[epic]` prefix, `q-epic-*` question forwarding. |
+| `plugins/software-factory/src/core/flows/adrs.ts` | Blocking vs remarkable ADR routing + canonical ADR markdown. |
+| `plugins/software-factory/src/core/derive/task.ts` | Routed-blocker collection, blocked fixpoint, derived debt, concern counts in `state.yaml`, state refresh. |
+| `plugins/software-factory/src/core/derive/item.ts` | Pending-item blocking via routed concerns (`withRoutedBlocking`). |
+| `plugins/software-factory/src/core/plan/scheduler.ts` | `blockedByConcern` union with blocked-by-failure + transitive `deps` cascade. |
+| `plugins/software-factory/src/core/steer.ts` | Mailbox writes (`q-{ref}-{hash}`), `questionBlocks`, answer flow. |
+| `plugins/software-factory/src/core/records/review-schema.ts` | Generates review JSON schema with the agent's allowed disposition enum. |
+| `plugins/software-factory/src/core/prompts.ts`, `prompt-vars.ts` | `formatHumanInvolvementCriteria`, `formatDispositionsSection`, prompt-var registry (`concernsYaml`, `humanInvolvementCriteria`). |
+| `plugins/software-factory/config/pipeline.default.yaml` | Review policy incl. `dismiss` commentary (`:359-379`), `humanInvolvement`/`concerns` defaults + commented presets + blocking table (`:381-437`), criteria mapping (`:460-463`). |
+| `plugins/software-factory/config/schemas/*.schema.json` | Producer/review/plan/decisions/close-up/state schemas (§2). |
+| `plugins/software-factory/agents/steps/*.md`, `agents/criteria/*.md` | Prompt fragments for triage/close-up/architect turns and the mode/blocking criteria. |
+| `plugins/software-factory/src/core/engine.ts` | Startup `reconcileConcerns` (`:385`), epic push after child iteration (`:266-296`), state refresh after every tick. |
+| `plugins/software-factory/src/cli/status.ts` | `Concerns: open|dismissed|routed|resolved`, blocking vs digest mailbox split (`:84-116`). |
 
-| Area | Files | Responsibility |
-|---|---|---|
-| Concern store | `src/core/concerns.ts` (408 lines) | Engine-owned store on the task branch: `c-*` / `rm-*` files, sha256 fingerprint identity, merge/dedup, legacy rename-merge, per-task mutex + one commit per mutation, triage application, close-up resolutions/confirmations, decision-level resolution, wave fallback, exact-id partition, startup reconcile. |
-| Triage policy | `src/core/triage.ts` (349 lines) | Exact-id partition, severity policy + defaults, single human router, debt predicate, terse hydration shapes, byte-capped YAML renderer, `applyReviewTriage` orchestration. |
-| Review policy | `src/core/review-policy.ts` (43 lines) | Triager set (`reviewer`, `plan-reviewer`) and per-agent allowed dispositions; `dismiss` auto-appended for triagers, filtered for everyone else. |
-| Step pipeline | `src/core/flows/step-runner.ts` (923 lines) | `ingestStepConcerns` after every ok step artifact (`:193-323`), allowlist gate, schema generation (`:407-416`), prompt-var hydration (`:418-449`). |
-| Iteration flow | `src/core/flows/iteration.ts` (1337 lines) | Plan-review triage never triggers revisions (`:506-568`), routed-blocker consults (`:179-229`, `:830-850`, `:927-931`), ADR persist + immediate halt (`:430-478`), wave close-up/architect report (`:1000-1100`), plan close-up + architect close-up (`:1227-1337`). |
-| Concern consult | `src/core/flows/consults.ts` (421 lines) | `runConcernConsult` (`:319-421`): one architect turn per routed blocker, canonical `decisions/concern-<cid>.yaml`, existence is the idempotency guard, carries `concernResolution`. |
-| Epic/saga funnel | `src/core/flows/epic-propagation.ts` (185 lines) | Child→parent push of open/routed concerns and open remarkables, `[epic]` prefix, 120-byte verbatim / 500-byte condensed payloads, per-record source `epic:<epic>/<record>`, `q-epic-*` blocked-question forwarding. |
-| ADRs | `src/core/flows/adrs.ts` (72 lines) | Mode→disposition table, canonical ADR markdown, blocking task-parking question vs digest-only remarkable question. |
-| Derived state | `src/core/derive/task.ts` (441), `derive/item.ts` (470), `derive/wave.ts` (121), `src/core/plan/scheduler.ts` (172) | Routed-blocker item blocking with transitive dependents, debt collection, concern counts materialized to `state.yaml`. |
-| CLI | `src/cli/status.ts` (128 lines) | Concern counts line + `Blocking Questions` vs `Digest Questions` split, debt list. |
-| Engine | `src/core/engine.ts` (795 lines) | Startup concern-store recovery/reconcile, epic child propagation + close-up in one commit, root steering mailbox loop. |
-| Mailbox | `src/core/steer.ts` (188 lines) | `steer/tousertoreview/{id}.yaml`, stable ids with answer preservation, `questionBlocks` semantics. |
-| Prompts/config | `src/core/prompts.ts` (598), `src/core/prompt-vars.ts` (171), `config/pipeline.default.yaml` (490), `config/schemas/pipeline.schema.json` | Mode-section filtering, disposition filtering, prompt-var matrix, shipped presets and closed config schema. |
-| Agent fragments | `agents/steps/*.md`, `agents/criteria/{dispositions,human-involvement}.md`, `agents/_shared/dispositions.md` | Terse (~20-45 line) step fragments; concern/ADR/triage rules live in the per-step `## Open Concerns` sections. |
-| Docs | `docs/ARCHITECTURE.md:39`, `:76-78`, `:193-205`, `:291-305`, `:330-364`, `:403`, `:414`, `:453`; `README.md:99-128` | §1 row, module map, task folder (`concerns/`), §8.7 dismiss row, §8.11 funnel contract, byte budgets, status output, test inventory. |
-
-Dependency rule: core modules do not import the harness (`docs/ARCHITECTURE.md:61-88`); concern modules depend only on `artifacts.ts`, git commit/exec, records io, mutex and `steer.ts` (`src/core/concerns.ts:1-9`, `src/core/triage.ts:1-13`). `triage.ts` calls `concerns.ts` and `steer.ts`; `concerns.ts` deliberately does not import `triage.ts` (cycle note `src/core/flows/step-runner.ts:242-245`).
+---
 
 ## 2. Key Interfaces & Signatures
 
-### Concern payload and stored record (`src/core/artifacts.ts`)
+### 2.1 Artifact types (`src/core/artifacts.ts`)
+
 ```ts
-// :303-321
-type ConcernKind = "tech-debt" | "assumption" | "blocker" | "risk" | "question";
-type ConcernSeverity = "low" | "medium" | "high";
-type ConcernStatus = "open" | "dismissed" | "routed" | "resolved";
-interface Concern { id?: string; kind: ConcernKind; summary: string; detail: string;
-  location?: { file: string; line?: number }; severity: ConcernSeverity; affects?: string[] }
+export type ConcernKind = "tech-debt" | "assumption" | "blocker" | "risk" | "question";
+export type ConcernSeverity = "low" | "medium" | "high";
+export type ConcernStatus = "open" | "dismissed" | "routed" | "resolved";
 
-// :323-327 RemarkableDecision { chosen: string; alternatives: string[]; why: string }
-// :330-334 ConcernConfirms { id: string; confirm: "accept" | "reject"; note?: string }
-// :337-341 ConcernResolution { id; action: "resolve" | "carry"; note? }
-// :347-351 CloseupConcernResolution { id; action: "resolve" | "carry" | "propagate" | "dismiss"; note? }
-// :353-364 ConcernSource { record; agent; epic?; step?; item?; iteration?; escalated?; lastSeen? }
-// :366-372 PendingConcernResolution { action; note?; by; at }
-// :375-384 StoredConcernArtifact extends Concern { id; status; disposition?; dismissReason?; source; pendingResolution?; createdAt; updatedAt }
-// :386-393 ReviewDisposition = "fix" | "optional" | "architect" | "human-awareness" | "human-async" | "human-stop" | "dismiss"
-```
-
-Producer surfaces carrying the funnel fields:
-- `ReviewArtifact` `src/core/artifacts.ts:406-412` (`suggestions`, `newConcerns`, `remarkable`)
-- `DeveloperOutputArtifact` `:419-427`, `FactFinderOutputArtifact` `:429-437` (`concerns`, `remarkable`)
-- `WaveCloseupArtifact` `:439-452` (`concerns`, `remarkable`, `concernResolutions`)
-- `PlanCloseupArtifact` `:454-466` (`concerns`, `remarkable`, `concernConfirms`, `concernResolutions`)
-- `DecisionArtifact` `:470-488` (`concerns`, `remarkable`, `concernConfirms`, `concernResolution`)
-- `ReviewSuggestion` `:395-404` (`id`, `disposition`, `summary`, `detail`, `location`)
-- `ConcernCounts` `:565-570`; `StateArtifact.concerns` `:572-583` (required field)
-
-### Pipeline configuration (`src/core/artifacts.ts:108-143`)
-```ts
-interface PipelineConfig {
-  humanInvolvement?: "autonomous" | "principal" | "detailed";
-  concerns?: { raiseAllowlist?: string[]; minDigestSeverity?: ConcernSeverity; minBlockingSeverity?: ConcernSeverity };
-  reviewPolicy?: { default?: string[]; allowedDispositions?: string[]; [agent: string]: string[] | undefined };
-  // ...
+export interface Concern {                 // :308-321
+  id?: string;                             // engine-assigned fingerprint
+  kind: ConcernKind; summary: string; detail: string;
+  location?: { file: string; line?: number };
+  severity: ConcernSeverity;
+  affects?: string[];                      // item/epic/plan refs
 }
+export interface RemarkableDecision { chosen: string; alternatives: string[]; why: string } // :323-327
+export interface ConcernConfirms { id: string; confirm: "accept" | "reject"; note?: string }  // :330-334
+export interface ConcernResolution { id: string; action: "resolve" | "carry"; note?: string } // :337-341
+export interface CloseupConcernResolution { id: string; action: "resolve" | "carry" | "propagate" | "dismiss"; note?: string } // :347-351
+export interface StoredConcernArtifact extends Concern {   // :375-384
+  id: string; status: ConcernStatus; disposition?: ReviewDisposition;
+  dismissReason?: string; source: ConcernSource; pendingResolution?: PendingConcernResolution;
+  createdAt: string; updatedAt: string;
+}
+export type ReviewDisposition = "fix" | "optional" | "architect" | "human-awareness" | "human-async" | "human-stop" | "dismiss"; // :386-393
 ```
-Schema: `config/schemas/pipeline.schema.json:202-237` (closed `concerns` object; `reviewPolicy` allows per-agent arrays). Defaults: `config/pipeline.default.yaml:373-408`. Array replacement / `null` deletion semantics: `src/core/config/merge.ts:1-8`.
 
-### Store API (`src/core/concerns.ts`)
+`ConcernSource` (`:353-364`) carries `record`, `agent`, `epic?`, `step?`, `item?`, `iteration?`, `escalated?`, `lastSeen?`. `ConcernCounts` = `{open,dismissed,routed,resolved}` and `StateArtifact.concerns` is required (`:564-583`).
+
+### 2.2 Pipeline config (`src/core/artifacts.ts:108-144`, schema `config/schemas/pipeline.schema.json:202-237`)
+
 ```ts
-concernFingerprint(c: ConcernInput): string                 // :60-62, sha256(kind, norm(summary), file, line), 10 hex, prefix "c-"
-aggregateConcerns(ctx, concerns, remarkables?, opts?): Promise<StoredConcernArtifact[]>   // :124-168
-listConcerns(taskDir) / listOpenConcerns(taskDir)           // :171-189
-countConcerns(taskDir): Promise<ConcernCounts>              // :196-217, c-* only
-listConcernIds(taskDir): Promise<string[]>                  // :220-230, includes rm-*
-applyConcernTriage(ctx): Promise<StoredConcernArtifact[]>   // :252-263
-applyCloseupResolutions(ctx)                                // :266-273, pending only
-applyConcernConfirms(ctx)                                   // :282-306, accept/reject pending proposals
-applyConcernResolution(ctx)                                 // :313-328, resolve | carry
-applyWaveCloseupFallback(ctx)                               // :337-353, triage-less open concerns
-partitionSuggestions(suggestions, concernIds)               // :356-364
-reconcileConcerns(ctx)                                      // :391-408, rebuild from committed ok records
+humanInvolvement?: "autonomous" | "principal" | "detailed";
+concerns?: { raiseAllowlist?: string[]; minDigestSeverity?: ConcernSeverity; minBlockingSeverity?: ConcernSeverity };
+reviewPolicy?: { default?: string[]; allowedDispositions?: string[]; [agent: string]: string[] | undefined };
 ```
+`humanInvolvement` default `autonomous` (`pipeline.schema.json:202-205`); `concerns` is closed (`additionalProperties:false`, `:223`); `reviewPolicy` allows per-agent arrays (`:233-236`).
 
-### Triage API (`src/core/triage.ts`)
+### 2.3 Concern store (`src/core/concerns.ts`)
+
 ```ts
-partitionReviewSuggestions(suggestions, concernIds, isTriager)  // :35-50
-resolveConcernSeverityPolicy(concerns?)                         // :67-75, defaults medium/high (:62-65)
-routeHumanDisposition(ctx, suggestion, concern?)                 // :93-136, digest-only for rm-*, human-awareness, dismissed escalated; blocking only >= minBlockingSeverity
-isDebtConcern(concern)                                           // :143-149
-listHydratedConcerns(taskDir, consumer)                          // :219-231
-hydrateStepConcerns(taskDir, {stepRole, consumer?, diffBytes?, taskDiffBytes?, inputBytes?}) // :234-247
-renderConcernsYaml(records, maxBytes = 8000)                     // :254-286
-applyReviewTriage(ctx)                                           // :293-349
+export function severityAtLeast(severity, min): boolean                                  // :24-26
+export const DEFAULT_RAISE_ALLOWLIST = [developer, fact-finder, architect, qa, reviewer, plan-reviewer, wave-close-up, plan-close-up] // :35-44
+export function concernFingerprint(c: ConcernInput): string                              // :60-62
+export async function aggregateConcerns(ctx: ConcernWriteContext & { source: ConcernSource }, concerns: ConcernInput[], remarkables?: RemarkableDecision[], opts?: { at?; commit?; dirty? }): Promise<StoredConcernArtifact[]> // :124-168
+export async function listConcerns(taskDir): Promise<StoredConcernArtifact[]>             // :171-184
+export async function listOpenConcerns(taskDir): Promise<StoredConcernArtifact[]>         // :187-189
+export async function countConcerns(taskDir): Promise<ConcernCounts>                     // :196-217
+export async function listConcernIds(taskDir): Promise<string[]>                         // :220-230
+export async function applyConcernTriage(ctx: ConcernStoreContext & { suggestions; isTriager }): Promise<StoredConcernArtifact[]> // :252-263
+export function applyCloseupResolutions(ctx & { resolutions: ConcernResolution[]; by }): Promise<...> // :266-273
+export function applyConcernConfirms(ctx & { confirms }): Promise<...>                    // :282-306
+export function applyConcernResolution(ctx & { resolution: {id; action: "resolve"|"carry"; note?}; by }): Promise<...> // :313-328
+export async function applyWaveCloseupFallback(ctx & { ids?: Iterable<string> }): Promise<...> // :337-353
+export function partitionSuggestions(suggestions, concernIds): { triage; findings }      // :356-364
+export async function reconcileConcerns(ctx): Promise<StoredConcernArtifact[]>             // :391-408
 ```
 
-### Review policy (`src/core/review-policy.ts`)
-`BUILTIN_REVIEW_DISPOSITIONS = [fix, optional, architect, human-awareness, human-async]` (`:4-10`), `isTriagerAgent` (`:18-20`), `resolveReviewAllowed` (`:27-43`, precedence per-agent > default > legacy `allowedDispositions` > builtin; `dismiss` added for triagers, removed for non-triagers).
+### 2.4 Triage/router (`src/core/triage.ts`)
 
-### ADR/epic/status
-- `blockingAdrDisposition(mode)` `src/core/flows/adrs.ts:14-18`; `renderAdrMarkdown` `:21-37`; `persistAdrs` `:46-71`.
-- `PropagateEpicConcernsOptions` `src/core/flows/epic-propagation.ts:26-33`; `propagateEpicConcerns` `:152-185`.
-- `runConcernConsult` `src/core/flows/consults.ts:319`.
-- `StepRunResult.triage?: ReviewTriageOutcome` `src/core/flows/step-runner.ts:105`.
-- `collectRoutedBlockers` `src/core/derive/task.ts:52-65`; `withRoutedBlocking` `src/core/derive/item.ts:65-73`; `blockedByConcern` `src/core/plan/scheduler.ts:68-78`; `refreshStateYaml` `src/core/derive/task.ts:431-441`.
-- `writeQuestion` `src/core/steer.ts:63`; `questionBlocks` `:117-124`.
-- `formatHumanInvolvementCriteria` `src/core/prompts.ts:68-85`; `formatDispositionsSection` `:91-111`; `generateReviewSchema` `src/core/records/review-schema.ts:5-104`; `resolveStepSchema` `src/core/flows/step-runner.ts:111-179`.
+```ts
+export function partitionReviewSuggestions(suggestions, concernIds, isTriager): TriagePartition // :35-50
+export function concernMailboxId(concernId: string): string                                  // :52-54
+export const DEFAULT_CONCERN_SEVERITY_POLICY = { minDigestSeverity: "medium", minBlockingSeverity: "high" } // :62-65
+export function resolveConcernSeverityPolicy(concerns?): ConcernSeverityPolicy              // :67-75
+export async function routeHumanDisposition(ctx: HumanRouteContext, suggestion, concern?): Promise<string|undefined> // :93-136
+export function isDebtConcern(c): boolean                                                    // :143-149
+export async function listHydratedConcerns(taskDir, consumer): Promise<Record<string,unknown>[]> // :219-231
+export async function hydrateStepConcerns(taskDir, request): Promise<string>                 // :234-247
+export function renderConcernsYaml(records, maxBytes = 8000): string                        // :254-286
+export async function applyReviewTriage(ctx: ReviewTriageContext): Promise<ReviewTriageOutcome> // :293-349
+```
+
+### 2.5 Policy, flows, derivations
+
+- `resolveReviewAllowed(pipeline, agent, isTriager): string[]` — triagers get `dismiss` auto-appended, non-triagers never (`review-policy.ts:27-43`).
+- `blockingAdrDisposition(mode)`, `renderAdrMarkdown(adr)`, `persistAdrs({taskWt, taskDir, adrFolder?, adrs, mode})` (`adrs.ts:14-72`).
+- `runConcernConsult(params): Promise<{decision?, sessionId?}>` (`consults.ts:319-324`).
+- `propagateEpicConcerns(opts)` (`epic-propagation.ts:152-185`).
+- `collectRoutedBlockers(taskDir, minBlockingSeverity="high"): Promise<Set<string>>` (`derive/task.ts:52-65`).
+- `withRoutedBlocking(state, blockedBy?)` (`derive/item.ts:65-73`); `blockedByConcern(items, concernBlocked)` (`plan/scheduler.ts:68-78`).
+- `writeQuestion(rootWt, taskDir, q)` / `questionBlocks(q, target)` (`steer.ts:63-110`, `:117-122`).
+- `formatHumanInvolvementCriteria(criteria, mode)` / `formatDispositionsSection(criteria, allowed)` (`prompts.ts:68-111`).
+
+---
 
 ## 3. Relevant Excerpts
 
-### Identity, dedup and merge (`src/core/concerns.ts:49-99`)
-- Normalization `norm = trim + collapse whitespace + lowercase` (`:49`); funnel budgets compare UTF-8 bytes (`:50-51`).
-- Concern id: `c-` + first 10 hex of `sha256(JSON.stringify([kind, norm(summary), file|null, line|null]))` (`:53-62`). Remarkable id: `rm-` + `sha256([norm(chosen), sorted(alternatives)])` (`:55`).
-- Merge rules: longest detail wins, highest severity wins, `affects` union/dedup/sort, status preserved, `escalated` sticky and set when an incoming severity exceeds the stored one (`:71-88`).
-- Legacy pre-union files with the same kind/summary/location are rename-merged on raise (`:101-121`, deletion `:149`).
-- Mutation is serialized by `KeyedMutex` keyed on `taskDir` and committed as one `factory: concerns <message>` commit (`:45-46`, `:232-249`).
+### 3.1 Stable identity, merge and dedup (`src/core/concerns.ts:49-99`)
 
-### Reviewer triage (exact id only) (`src/core/triage.ts:35-50`, `252-263`)
 ```ts
-if (!isTriager) return { triage: [], findings: [...suggestions], fixRequired: false };
-const ids = new Set(concernIds);
-const triage = suggestions.filter(s => ids.has(s.id));
-// findings = the rest; fixRequired = triage.some(s => s.disposition === "fix")
+const norm = (s) => s.trim().replace(/\s+/g, " ").toLowerCase();
+const hash = (prefix, parts) => `${prefix}-${sha256(JSON.stringify(parts)).slice(0,10)}`;
+const rmId = (d) => hash("rm", [norm(d.chosen), affectsOf(d.alternatives)]);
+function concernFingerprint(c) { return hash("c", [c.kind, norm(c.summary), ...locationOf(c.location)]); }
 ```
-`applyConcernTriage` refuses non-triagers, requires non-empty `detail` for `dismiss`, and writes `status: dismissed` + `dismissReason`, else `status: routed` + disposition (`src/core/concerns.ts:252-263`). The step-runner passes only ids that existed **before** the step, so a step cannot self-dismiss its own findings (`src/core/flows/step-runner.ts:233-240`).
+Merge rules (`mergeConcern`, `:71-89`): **longest detail wins** (`utf8Bytes`), **highest severity wins**, `affects` union deduped/sorted, status stays as-is, `source.lastSeen` advances, and a severity increase on an existing record sets `source.escalated = true` (`:76`). `legacyConcern` (`:101-121`) rename-merges pre-union fingerprint files. `aggregateConcerns` serializes per task dir (`KeyedMutex`), validates kind/summary/severity (`:127-132`), writes one `c-*.yaml` / `rm-*.yaml` per fingerprint, and commits per ingest (`:163-166`).
 
-### Human router (`src/core/triage.ts:93-136`)
-`human-awareness`, `rm-*` remarkables and dismissed-escalated concerns are digest-only; `human-async`/`human-stop` block only at or above `minBlockingSeverity` and downgrade to `human-awareness` below it; nothing below `minDigestSeverity` is surfaced (`rm-*` is threshold-exempt). Mailbox ids are `q-concern-<concernId>` or `q-escalated-<concernId>`, so a re-raise does not duplicate a question and `writeQuestion` keeps an existing answered file (`src/core/steer.ts:99-106`).
+### 3.2 Lifecycle transitions (`src/core/concerns.ts:251-353`)
 
-### Ingest order after a step (`src/core/flows/step-runner.ts:193-322`)
-1. Collect `concerns`+`newConcerns`, `remarkable`, `suggestions`, `concernResolutions`, `concernConfirms`, `concernResolution` (`:198-215`).
-2. Gate raise by `source.agent` against the allowlist; a skip is journaled and the step stays ok (`:217-231`).
-3. Capture pre-existing concern ids for exact-id triage (`:233-240`).
-4. Pre-flight architect dismiss-confirmations that need a pending reason, before mutating anything (`:242-259`).
-5. `aggregateConcerns` (`:260`) → `applyReviewTriage` (`:261-275`) → `applyCloseupResolutions` (`:276`) → decision-level `applyConcernResolution` only for `consult-concern-<id>`, `architect-closeup*`, `architect-wave-report*` (`:278-301`) → `applyConcernConfirms` + propagate-accepted (`:303-316`) → wave-close-up fallback (`:318-321`).
-6. Called only when `finalStatus === "ok"` (`:841-861`); a `TriageValidationError` flips the step to error, other ingest failures are journaled and do not change step status (`:853-860`).
-
-### Hydration caps — “never more text than the code it summarizes” (`src/core/triage.ts:234-247`)
 ```ts
-cap = role in {review, qa}      ? min(diffBytes ?? 0, 2000)
-    : role in {wave-close-up, plan-close-up} ? min(taskDiffBytes ?? 0, 2000)
-    : min(inputBytes ?? 0, 500);
-if (cap <= 0) return "";
+// review triage: dismiss → dismissed + dismissReason; everything else → routed
+export async function applyConcernTriage(...) {
+  const ops = ctx.suggestions.map((s) => [s.id, (record) => s.disposition === "dismiss"
+    ? { ...record, status: "dismissed", disposition: s.disposition, dismissReason: s.detail!.trim() }
+    : { ...record, status: "routed", disposition: s.disposition, dismissReason: undefined }]);
+}
+// close-ups only propose; the architect settles
+applyCloseupResolutions  // stores pendingResolution {action, note, by, at}; no status change
+applyConcernConfirms     // accept resolve→resolved; carry→routed/architect; dismiss→dismissed+reason; propagate→clear only
+applyConcernResolution   // resolve closes now; carry leaves pending carry
+applyWaveCloseupFallback // triage-less pre-existing open: tech-debt→optional, others→architect, blockers stay open, epic copies skipped
 ```
-`renderConcernsYaml` degrades in stages: full records → drop `affects` → summary limits 80/40/16/8/4/1 → shed trailing entries; default ceiling 8000 bytes (`:254-286`). Consumer sets: review/develop see open only; close-ups see open+routed; architect additionally sees escalated dismissed; every consumer sees open remarkables (`:219-231`). Prompt-var wiring: `step-runner.ts:429-449` (caller-supplied `concernsYaml` wins; close-up caps measure `git diff parent...HEAD`).
+Exact lines: `:252-263`, `:266-273`, `:282-306`, `:313-328`, `:337-353`; `partitionSuggestions` at `:356-364`. `reconcileConcerns` (`:391-408`) rebuilds the store from committed `ok` step records, ordered by `endedAt/seq/name`, merging idempotently and committing once if dirty.
 
-### Plan-review triage never requests revisions (`src/core/flows/iteration.ts:506-572`)
-`knownConcernIds = listConcernIds(taskDir)` is captured before each round (`:512-514`); after the plan-reviewer turn, `partitionSuggestions` removes triage ids and only `findings` with `fix` can trigger an architect revision (`:561-572`). The plan-reviewer prompt receives `dispositionsCriteria` built from its allowed set, which includes `dismiss` (`:537-544`).
+### 3.3 Human router (`src/core/triage.ts:93-136`)
 
-### Routed blocker → dependent items + architect consult (`src/core/derive/task.ts:52-65`, `src/core/flows/iteration.ts:200-229`)
-`collectRoutedBlockers` selects `kind === blocker && status === routed && severity >= minBlockingSeverity` and returns `affects` slugs. `blockedByConcern` blocks only pending affected items and cascades over declared deps to a fixpoint (`src/core/plan/scheduler.ts:68-78`). In the act phase, `consultRoutedBlockers` runs once per routed blocker whose `affects` intersects the wave’s blocked set; the decision artifact `decisions/concern-<cid>.yaml` makes it restart-idempotent (`src/core/flows/consults.ts:319-421`).
+```ts
+const isRemarkable = suggestion.id.startsWith("rm-");
+const dismissedEscalated = suggestion.disposition === "dismiss" && Boolean(concern?.source?.escalated);
+const digestOnly = isRemarkable || dismissedEscalated || suggestion.disposition === "human-awareness";
+const blocking = !digestOnly && severityAtLeast(severity, ctx.minBlockingSeverity);
+const disposition = digestOnly || !blocking ? "human-awareness" : suggestion.disposition;
+if (!isRemarkable && !severityAtLeast(severity, ctx.minDigestSeverity)) return undefined;
+const id = dismissedEscalated ? `q-escalated-${suggestion.id}` : `q-concern-${suggestion.id}`;
+const blocks = disposition === "human-stop" ? [item?, "task"] : disposition === "human-async" ? [item ?? "task"] : [];
+await writeQuestion(taskWt, taskDir, { id, ref: item ?? suggestion.id, disposition, question: detail||summary, blocks });
+```
+`question` = `detail` if present, else `summary`; `rm-*` is exempt from both thresholds; below `minDigestSeverity` nothing is written; below `minBlockingSeverity`, `human-async`/`human-stop` **downgrade to awareness** (losing the exit-10 halt).
 
-### Close-up propose/confirm (`src/core/concerns.ts:266-306`, `337-353`)
-Close-ups are non-triagers, so their `concernResolutions` are stored as `pendingResolution` only. The architect `concernConfirms` accepts (`resolve`→resolved, `carry`→routed/architect, `dismiss`→dismissed with pending note, `propagate`→clears local proposal) or rejects (clears proposal). `applyWaveCloseupFallback` only touches pre-existing open concerns with no pending resolution/disposition: tech-debt→`optional`, others→`architect`, blockers stay open, epic copies skipped (`:342-350`).
+### 3.4 Hydration / funnel budgets (`src/core/triage.ts:219-286`)
 
-### Epic → saga condensing (`src/core/flows/epic-propagation.ts:35-58`, `141-185`)
-Payloads ≤120 bytes stay verbatim; longer ones are truncated to `min(500, floor(bytes/2))` on UTF-8 boundaries; summary is prefixed `[epic]`; source becomes `epic:{epic}/{record}`; concerns are copied only when open/routed, remarkables only when open and only on unfiltered pushes; blocked child questions are forwarded with `blocks` remapped from `task` to the parent slug (`:97-128`). The push and the parent `child-closeup.yaml` share one lock and one commit (`src/core/engine.ts:266-290`).
+```ts
+const includeRouted = consumer === "closeup" || consumer === "architect";
+const includeEscalated = consumer === "architect";
+// terseConcern: id, kind, severity, summary, affects?, pendingResolution?, status?, disposition?, dismissReason?, escalated? — never detail (:151-165)
+const cap = role === "review" || role === "qa" ? Math.min(diffBytes ?? 0, 2000)
+  : role === "wave-close-up" || role === "plan-close-up" ? Math.min(taskDiffBytes ?? 0, 2000)
+  : Math.min(inputBytes ?? 0, 500);
+```
+`renderConcernsYaml` (`:254-286`) tries full → drop `affects` → summary truncation `80/40/16/8/4/1` → fewer entries, returning the first variant under the byte ceiling, else `""`. Step-runner wires the caps from the rendered prompt (`step-runner.ts:429-448`): review/qa by `diff`, close-ups by `git diff parent...HEAD`, everything else by the sum of its own prompt vars excluding `concernsYaml|humanInvolvementCriteria|debt|steering`.
 
-### ADRs (`src/core/flows/adrs.ts:14-37`, `46-71`)
-`autonomous` → blocking ADR uses `human-stop`; `principal`/`detailed` → `human-async`; remarkable ADRs always `human-awareness` with no `blocks`. Markdown is written only when `adrFolder` is configured; mailbox routing always runs. A blocking ADR parks a plan-time iteration before any wave (`src/core/flows/iteration.ts:461-471`).
+### 3.5 Producer ingest (`src/core/flows/step-runner.ts:193-323`)
 
-### Modes and prompt fragments (`src/core/prompts.ts:64-85`, `config/pipeline.default.yaml:384-437`)
-`formatHumanInvolvementCriteria` keeps only the active `## <mode>` section plus shared sections (the blocking table), dropping inactive mode headings. Shipped presets pair each mode with `minDigestSeverity`/`minBlockingSeverity`; those thresholds are separate keys, not derived from the mode.
+Order of operations after a step validates and its canonical artifact is written (`:831-861`):
+1. collect `concerns` + `newConcerns`, `remarkable`, `suggestions`, `concernResolutions`, `concernConfirms`, `concernResolution` (`:199-204`); wave-close-up always proceeds even with none (`:212`).
+2. allowlist gate keyed on `source.agent` (never the step fragment); dropped raises journal `concern_ingest_skipped` (`:217-231`).
+3. snapshot pre-existing ids **before** aggregation so new concerns can never self-triage (`:233-240`).
+4. architect `concernConfirms` pre-flight: accepting a `dismiss` proposal requires a non-empty pending note, else `TriageValidationError` fails the step before any mutation (`:246-259`).
+5. `aggregateConcerns` then `applyReviewTriage` with `isTriagerAgent(source.agent)` and the configured severity thresholds (`:260-275`).
+6. `applyCloseupResolutions` for close-up proposals (`:276`).
+7. decision-level `concernResolution` honored only for `consult-concern-<id>`, `architect-closeup*`, `architect-wave-report*`; otherwise journal `concern_resolution_ignored` (`:284-301`).
+8. architect confirms applied; accepted `propagate` proposals push the single confirmed copy to the parent (`:305-316`, `:325-341`).
+9. wave-close-up fallback over pre-existing ids (`:318-321`).
 
-### Counts and status (`src/core/derive/task.ts:369-395`, `src/cli/status.ts:106-124`)
-`countConcerns` counts `c-*` files only and is written into `state.yaml` on every refresh (`refreshStateYaml` is called after every step, `src/core/flows/item-machine.ts:748`). `factory status` prints `Concerns: open N | dismissed N | routed N | resolved N`, then splits open mailbox entries into blocking vs digest and lists debt.
+A `TriageValidationError` turns the step status to `error` with `Review triage failed: …` (`:853-857`); other ingest errors only journal `concern_ingest_error`.
+
+### 3.6 Iteration wiring (`src/core/flows/iteration.ts`)
+
+- Architect hydration deliberately excludes concerns; they arrive only as `concernsYaml` (`:170`), and `debt`/`steering` share the same hydration context object (`:411-420`).
+- Plan step persists ADRs through `persistAdrs` (`:441-451`).
+- Plan review: `knownConcernIds = await listConcernIds(taskDir)` before the round (`:514`), suggestions partition by exact id (`:564-568`); triage ids never request a revision or influence approval.
+- Wave loop: `collectRoutedBlockers(taskDir, minBlockingSeverity)` feeds `deriveWaveState` (`:817-824`); `consultRoutedBlockers` runs one architect consult per routed blocker affecting a pending item before work starts (`:830-850`).
+- Wave close-up `:1000-1024`; architect wave report `:1030-1072` (debt var at `:1050`).
+- Plan close-up + architect close-up `:1227-1307`; a `blocked` close-up writes `closeup-<N>` question with `blocks:["task"]` (`:1296-1305`).
+
+`consultRoutedBlockers` (`:200-229`) iterates stored concerns, filters `kind==="blocker" && status==="routed"` and `affects ∩ blocked`, then calls `runConcernConsult`; the decision file `decisions/concern-<cid>.yaml` is the idempotency guard (`consults.ts:346-348`, prompt vars `:353-362`, artifact `:385-404`).
+
+### 3.7 Epic/saga pressure (`src/core/flows/epic-propagation.ts`)
+
+```ts
+const VERBATIM_BYTES = 120; const CONDENSED_CAP_BYTES = 500;
+function condenseText(text) { const size = utf8Bytes(text);
+  return size <= 120 ? text : truncateUtf8(text, Math.min(500, Math.floor(size / 2))); }
+function concernCopy(c, epic) { return { ...c, summary: `[epic] ${c.summary}`, detail: condenseText(c.detail ?? c.summary) }; }
+```
+Copies only `open`/`routed` child concerns and `open` remarkables (`:157-164`); copies keep `affects` unchanged and record `source.epic` with `record: epic:<epic>/<record>` (`:168`); parent copies stay open, so only forwarded `q-epic-*` questions can block the parent. `forwardBlockedQuestions` (`:97-129`) remaps `blocks: ["task"] → [parentTaskSlug]` and other blocks to the epic slug. Engine calls it after each child iteration, inside one lock + one commit with `child-closeup.yaml` (`engine.ts:266-296`).
+
+### 3.8 ADRs (`src/core/flows/adrs.ts`)
+
+```ts
+blockingAdrDisposition(mode) => mode === "principal" || mode === "detailed" ? "human-async" : "human-stop"
+renderAdrMarkdown: "# title" / "## Context" / "## Decision" / "## Consequences" / "## Blocking"
+persistAdrs: blocking → writeQuestion({ref: adr.id, disposition: mode-based, blocks:["task"], draftDecision: decision});
+             remarkable → disposition "human-awareness", no blocks
+```
+Markdown is written only when `adrFolder` is configured; mailbox routing always runs (`:46-71`). `PlanAdr.blocking?: boolean` (`artifacts.ts:246-254`).
+
+### 3.9 Derivation: blockers, debt, counts
+
+```ts
+// derive/task.ts:52-65
+export async function collectRoutedBlockers(taskDir, minBlockingSeverity = "high") {
+  for (const concern of await listConcerns(taskDir))
+    if (concern.kind === "blocker" && concern.status === "routed" && severityAtLeast(...))
+      for (const slug of concern.affects ?? []) affected.add(slug);
+}
+```
+`deriveTaskState` maps routed names through `blockedByConcern(...)` → `withRoutedBlocking` for **pending** items only (`:174-196`); `scheduler.ts:68-78` unions with blocked-by-failure and cascades over declared `deps` to a fixpoint. Debt (`:219-263`): plan `techDebt` + `accept-with-debt` decisions + `isDebtConcern` (routed/resolved `tech-debt`, routed `optional`) with `[item] ` prefix + optional review findings. Counts come from `countConcerns` (`:369`) and are written into `state.yaml` (`:371-395`).
+
+### 3.10 Surfacing (`src/cli/status.ts:84-125`, `steer.ts:63-122`)
+
+```ts
+console.log(`Concerns: open ${n} | dismissed ${n} | routed ${n} | resolved ${n}`);
+console.log(`Blocking Questions:`); printQuestions(...isBlocking);
+console.log(`Digest Questions:`);  printQuestions(...!isBlocking);
+```
+`isBlocking` = `human-stop` OR non-empty `blocks` OR `questionBlocks(q, "task")`. `writeQuestion` derives id `q-${cleanRef}-${sha256(ref:question:disposition).slice(0,10)}` and **never clobbers an existing entry** (operator answers survive re-runs) (`steer.ts:63-110`). `questionBlocks` treats `human-awareness` as never blocking (`:117-122`).
+
+### 3.11 Prompt surfaces (`src/core/prompts.ts`, `agents/`)
+
+- `formatHumanInvolvementCriteria` keeps the active `## <mode>` section plus shared sections (blocking table) and drops inactive modes (`prompts.ts:68-84`).
+- `formatDispositionsSection` prepends the allowed list and filters `human-stop`/`dismiss` criteria rows when not allowed (`prompts.ts:91-111`).
+- Reviewer: `agents/steps/review.md:18-24` — triage pre-existing `c-*`/`rm-*` by exact id, `dismiss` needs `detail`, condense/dismiss stale, raise new concerns with evidence.
+- Plan reviewer: `agents/steps/plan-review.md:14-15,35-38` — triage ids never request a revision.
+- Close-ups: `agents/steps/wave-close-up.md:20-26`, `agents/steps/plan-close-up.md:23-29`, `agents/steps/architect-closeup.md:23-29`, `agents/steps/architect-wave-report.md:26-32`, `agents/steps/architect-consult-nonitem.md:24-30`, `agents/steps/architect-plan.md:40-46`.
+- Mode criteria: `agents/criteria/human-involvement.md:1-28` (blocking table + per-mode prose); dismissal criteria: `agents/criteria/dispositions.md:5-20`.
+
+### 3.12 Config (`config/pipeline.default.yaml`)
+
+- Review policy incl. `dismiss` explanation and auto-append (`:359-379`); default list omits `human-stop`.
+- `humanInvolvement: autonomous` (`:395`); `concerns` defaults allowlist + `minDigestSeverity: medium`, `minBlockingSeverity: high` (`:397-408`).
+- Commented presets for `autonomous`/`principal`/`detailed` (`:410-429`) and the ADR blocking table (`:431-437`); `principal` uses digest `low` / blocking `medium`, `detailed` both `low`.
+- `criteria.human-involvement` wired to `agents/criteria/human-involvement.md` (`:460-463`).
+
+### 3.13 Schemas carrying the contract
+
+| Schema | Concern fields |
+|---|---|
+| `config/schemas/developer-output.schema.json:61-85` | `concerns[]` (kind/summary/detail/severity/location/affects) + `remarkable[]` |
+| `config/schemas/review.schema.json:20-31,47-71` | full disposition enum incl. `dismiss`; `remarkable[]`; `newConcerns[]` |
+| `config/schemas/plan.schema.json:115-159` | `adrs[]` with `blocking`; `concerns[]`; `remarkable[]` |
+| `config/schemas/decisions.schema.json:48-93` | `concerns[]`, `remarkable[]`, `concernConfirms[]`, `concernResolution{resolve|carry}` |
+| `config/schemas/plan-closeup.schema.json:27-73` | `concerns[]`, `remarkable[]`, `concernConfirms[]`, `concernResolutions{resolve|carry|propagate|dismiss}` |
+| `config/schemas/wave-closeup.schema.json:35-70` | same minus confirms |
+| `config/schemas/state.schema.json:72-99` | required `concerns {open,dismissed,routed,resolved}` |
+| `src/core/records/review-schema.ts:5-51` | generates the disposition enum from the agent's allowed set |
+
+### 3.14 Step→schema binding (`src/core/flows/step-runner.ts:132-160`)
+
+`developer → developer-output`, `reviewer/qa → generated review`, `plan-close-up` **and** `architect-closeup → plan-closeup.schema.json`, `wave-close-up → wave-closeup`, `architect-consult-*`/`architect-wave-report → decisions`, `architect-plan → plan.schema.json`.
+
+---
 
 ## 4. Existing Tests & Conventions
 
-**Runner and helpers.** `bun test` (`bun:test`), 71 files. Engine behavior is exercised through `runAgentStep` / `runTask` against real temporary git repositories (`test/helpers/tmp-repo.ts:1-60`: `createTmpRepo`, deterministic git env) with `FakeHarness` scripted per step label (`src/harness/fake/fake-harness.ts:25-50`: `scriptOutcome(label, outcome)`, `scriptComplete(handler)`). Tests assert observable engine behavior — committed files, statuses, mailbox files, prompts, exit codes — not internal calls (ARCHITECTURE §13 `docs/ARCHITECTURE.md:451-454`).
-
-**Funnel suites** (all present and passing):
+- **Runner:** `bun test` (`package.json:10`); typecheck `bun run typecheck` (`tsc --noEmit`, `:11`). Behavior tests only; no linting tests (spec item 15 / ARCHITECTURE:452).
+- **Pattern:** `bun:test` + `test/helpers/tmp-repo.ts` (`createTmpRepo()` → temp git repo, deterministic identity env, worktree helpers, `cleanup()`), `FakeHarness` scripted by label, real `runAgentStep`/`runIteration` with a minimal `PipelineConfig`/`ProjectConfig`, assertions against disk (`concerns/*.yaml`, `steer/tousertoreview`, `state.yaml`), git (`ls-tree`, `status --porcelain`), and journal entries. Example setup: `test/engine/closeup-lifecycle-resolve.test.ts:1-60`.
+- **Suite map (all green):**
 
 | Suite | Focus |
 |---|---|
-| `test/engine/concerns-funnel.test.ts` | Schema write gate, fingerprint/dedup/merge, legacy migration, concurrency, producer wiring, reconcile, startup recovery, ingest failure keeps step ok. |
-| `test/engine/reviewer-triage.test.ts` | Terse hydration, no `detail` leak, dismiss reason, exact-id partition, debt predicate, `fixRequired`, `q-concern` dedupe, non-triager QA no-op, engine blocking. |
-| `test/engine/plan-reviewer-triage.test.ts` | Plan-concern hydration, dismiss/routed, architect-revise accumulation, triage ids never trigger revision, debt derivation. |
-| `test/engine/closeup-lifecycle-resolve.test.ts` | Accept resolve/carry/propagate, reject, dismiss note validation, consult unblock, cross-emission drop, wave fallback; architect close-up emits `concernConfirms` (`:156-162`, `:253-259`, `:367-373`). |
-| `test/engine/funnel-text-budget.test.ts` | UTF-8 byte budgets, git-diff caps, zero-diff caps, strict per-level condensation. |
-| `test/engine/epic-saga-propagate.test.ts` | Open/routed copy with `[epic]`, condensing, restart idempotency, `q-epic-*`, saga architect hydration, failed-child propagation. |
-| `test/engine/routing-blocker-derive.test.ts`, `routing-architect-consult.test.ts`, `routing-human-debt.test.ts` | Blocker→dependent blocking, one consult per blocker, debt routing. |
-| `test/engine/human-router-severity.test.ts` | Single router, severity downgrades, digest-only, escalation, allowlist, exit codes. |
-| `test/engine/adr-blocking-digest.test.ts` | ADR markdown, blocking halt, remarkable digest, mode table, no `adrFolder`. |
-| `test/engine/state-concern-counts.test.ts`, `test/cli/status-concerns.test.ts` | `state.yaml` counts, zero/corrupt handling, CLI output split. |
-| `test/human-involvement-config.test.ts` | Defaults, layer overrides + null deletion, schema closedness, shipped presets, criteria fragment selection at prompt time, triager prompt reach. |
-| `test/contracts/concern-*.test.ts`, `state-concern-schema.test.ts` | Artifact type/schema contracts, `schema-detail-normalize` (detail/severity optionality). |
-| `test/engine/hydration-fingerprint-caps.test.ts` | Caps, caller override, architect single cap, hydrated sets, remarkables, counts exclude remarkables, fingerprint identity/affects union, legacy rename. |
-| `test/docs-concerns.test.ts` | Base-failing docs sentinels (16 assertions) for §1 row 18, §8.11 store/triage/close-ups/ADRs/modes/counts/caps/deviations, §3 modules, §5 config, §6.2 folder, §8.7 dismiss row, §10 budgets, §11 status, §13 suites, README, config commentary. |
+| `test/engine/concerns-funnel.test.ts:37-1189` | schemas, fingerprint identity, aggregation/merge/escalation, dismiss reason, partitions, rm-* triage, concurrency, producer wiring (reviewer/consult/close-up), reconcile |
+| `test/engine/reviewer-triage.test.ts:39-530` | terse hydration, exact-id partition, dismiss/routing, debt predicate, fixRequired once, dedup mailbox, non-triager gate |
+| `test/engine/plan-reviewer-triage.test.ts:28-436` | plan-review hydration/triage, architect-revise concerns, triage ids never trigger revisions, debt derive |
+| `test/engine/closeup-lifecycle-resolve.test.ts:168-598` | confirm accept/reject, propagate, dismiss-note validation, consult unblock, wave fallback |
+| `test/engine/epic-saga-propagate.test.ts:139-656` | `[epic]` copies, 120/500 condensing, restart idempotency, `q-epic-*`, saga hydration, failed-child push |
+| `test/engine/funnel-text-budget.test.ts:1-482` | **finding-only spike**: UTF-8 bytes, 2000/500 caps, 120/500 epic caps, strictly-fewer-bytes contract helpers (local to the test) |
+| `test/engine/hydration-fingerprint-caps.test.ts:85-860` | per-consumer hydration sets and caps, affects union, counts exclude remarkables |
+| `test/engine/routing-blocker-derive.test.ts:160-397` | routed blocker collection, pending-only blocking, transitive deps, terminal/running immunity |
+| `test/engine/routing-architect-consult.test.ts:123` | routed blocker → one architect consult, idempotent decision file |
+| `test/engine/human-router-severity.test.ts:131-699` | single router, severity downgrade/suppression, dismissed-escalated digest, rm-* digest |
+| `test/engine/routing-human-debt.test.ts:34-284` | human-alert blocking semantics, exit 10, debt prefixes |
+| `test/engine/adr-blocking-digest.test.ts:69-390` | blocking vs remarkable ADR, mode table, no-adrFolder routing |
+| `test/engine/state-concern-counts.test.ts:33-159` | counts by status, zero/missing dir, corrupt skip, state.yaml materialization |
+| `test/cli/status-concerns.test.ts:39-130` | counts line + blocking/digest split |
+| `test/contracts/concern-artifact-types.test.ts`, `concern-schemas.test.ts`, `state-concern-schema.test.ts`, `schema-detail-normalize.test.ts` | type/schema contracts incl. `concernConfirms` in architect report/close-up schemas |
+| `test/human-involvement-config.test.ts:138-481` | defaults/layering/null deletion, schema closure, commented presets, active-mode prompt selection, triager fragment matrix |
+| `test/review-policy.test.ts:55-380` | builtin/per-agent/legacy resolution, dismiss append/gating, triager set, generated schema |
+| `test/docs-concerns.test.ts:84-346` | docs sentinels (§1 row, §8.11 phrases, §3 modules, §5 sample, §6.2 folder, §8.7 dismiss, §10 vars/budgets, §11 status, §13 suites, README, config commentary) |
 
-**Conventions worth keeping.** New behavior tests should go through the engine with `FakeHarness`; docs changes are guarded by `test/docs-concerns.test.ts` which asserts exact needles inside `##` sections and YAML comment banners; any assertion added must be base-failing (its needle must not exist on the base tree) or it proves nothing.
+- **Docs-sentinel constraint:** any ARCHITECTURE/README/config commentary edit must keep the exact phrases asserted in `test/docs-concerns.test.ts:87-346` (e.g. row 18 must contain `**Implemented**`, the five deviation names and five `adr-*` ids; §8.11 must contain `c-{fingerprint}.yaml`, `longest detail wins`, `routeHumanDisposition`, `q-concern-{id}`, `120`, `500`, `2000`, `8000`, etc.). Run that suite after any doc change.
+- **Allowlist agreement:** `DEFAULT_RAISE_ALLOWLIST` mirrors shipped config, asserted by `human-involvement-config.test.ts` and `funnel-text-budget`/`reviewer-triage` suites.
 
-## 5. Open Questions & Uncertainties
+---
 
-1. **Close-up confirmation prompt/engine mismatch (highest-value gap).** The engine expects the architect to settle close-up proposals with `concernConfirms` (`src/core/flows/step-runner.ts:303-316`, `src/core/concerns.ts:282-306`), but `agents/steps/architect-closeup.md:29` instructs `concernResolutions` (the proposal field) and nothing mentions confirms. `agents/steps/architect-wave-report.md:32` and `architect-resume.md:27` instruct neither, while `agents/steps/wave-close-up.md:26` emits proposals. A proposal the architect never confirms stays `pendingResolution` forever, and `applyWaveCloseupFallback` then skips it (`src/core/concerns.ts:347`). Decide whether to fix the fragments (cheap, in scope) or make ingest treat architect `concernResolutions` as confirms.
+## 5. Open Questions & Uncertainties (verified residual gaps)
 
-2. **Remarkable digest is triage-dependent.** `remarkable[]` becomes an open `rm-*` record (`src/core/concerns.ts:152-159`) and is hydrated to every consumer (`src/core/triage.ts:200-231`), but a mailbox digest is written only when a triager emits a suggestion whose id is an `rm-*` id with a human-* disposition (`src/core/triage.ts:98`, `:334-346`). Architect ADRs route automatically (`src/core/flows/adrs.ts:56-70`); worker remarkables do not. Spec `docs/factory.v2.md:98` says remarkable items are “reported (mailbox digest), never waiting”. Decide: auto-digest new remarkables above a threshold, or document reviewer-triage dependency explicitly.
+1. **Architect `concernConfirms` is schema-valid but prompt-silent.** The engine applies confirms only for `source.agent === "architect"` (`step-runner.ts:246-259,305-316`), and `decisions.schema.json:73-83` + `plan-closeup.schema.json:52-62` allow them, but every architect prompt tells the model only to “record concernResolutions” (`agents/steps/architect-closeup.md:29`, `architect-wave-report.md:32`, `plan-close-up.md:29`, `wave-close-up.md:26`). Consequence: pending close-up proposals may never be accepted/rejected in real runs. Engine tests drive confirms by constructing output directly (e.g. `closeup-lifecycle-resolve.test.ts:162-260`), not through prompt guidance. Decide whether to add a terse confirm instruction (and possibly a test that architect output includes it).
+2. **Close-up `dismiss` action is allowed by schema but absent from prompt enumerations.** `plan-closeup.schema.json:63-73` and `wave-closeup.schema.json:60-70` allow `dismiss`, yet the fragments list only `resolve/carry/propagate`. `applyConcernConfirms` requires a pending note for an accepted dismiss (`concerns.ts:295-301`) and the pre-flight fails otherwise (`step-runner.ts:246-259`). Either document/teach it or narrow the schema (`adr-closeup-no-suggestions-triage`).
+3. **“Each level passes up less detail” is prompt guidance + hydration caps, not an enforced invariant.** Merging keeps the *longest* detail (`concerns.ts:74`); terseness exists only in hydration (`triage.ts:151-165,234-247`) and epic push (`epic-propagation.ts:35-58`). `funnel-text-budget.test.ts:411-450` encodes a strictly-fewer-bytes contract but its helpers are local to the finding-only spike (“no production code is added here”, header `:1-21`); no production assertion checks reviewer→architect→close-up shrinkage. If the bullet must be enforced, add a code-level rule or a production test.
+4. **Remarkables reach the mailbox only when a triager emits a suggestion with the `rm-*` id** (`triage.ts:98-115`; reviewer prompt `review.md:21`). Storage and hydration of open remarkable records is automatic (`triage.ts:200-216`), but there is no engine-side digest for an open remarkable that no reviewer re-emits. Confirm this is the intended “same aggregation/triage as concerns” reading (`docs/factory.v2.md:96`).
+5. **`affects` refs beyond item slugs are inert for blocking.** `collectRoutedBlockers` returns all `affects` strings (`derive/task.ts:52-65`) but `blockedByConcern` matches only item slugs in the current plan (`plan/scheduler.ts:68-78`); epic/plan refs are stored and displayed but never block or consult. Decide whether to resolve epic/plan refs or document the limitation.
+6. **Plan `{{debt}}` is architect hydration, not derived debt.** `iteration.ts:417` and `:1050` pass `hydrationContext` (prior plans/closeups/steering/decisions), whereas `StateArtifact.debt` is derived in `derive/task.ts:219-263`. Concern-derived debt therefore reaches the architect only through routed `concernsYaml`, not the debt section. This is likely intentional cache economy but worth confirming before adding anything.
+7. **Counts intentionally exclude remarkables** (`concerns.ts:206-207` filters `c-*`; ARCHITECTURE:356). If item 18’s “counts” should include `rm-*`, this is a small change plus docs/sentinel updates.
+8. **Digest mailbox has no retention/archival rule** (documented ARCHITECTURE:356) — entries accumulate in `steer/tousertoreview`; only human answers/steering move them.
+9. **Epic config is root-only** (`ARCHITECTURE.md:120,361`): a per-task `pipeline.yaml` selecting `principal`/`detailed` does not reach epic children, so mode selection is not uniform across a saga. Accepted deviation `adr-epic-config-root-only`.
+10. **Simple tasks have no reviewer/wave**, so their concerns stay open (`ARCHITECTURE:360`, deviation `adr-funnel-triage-coverage`); close-up fallback only exists for story flows.
+11. **Autonomous mode halts immediately at plan time** for blocking ADRs rather than deferring until unblocked work is done (`ARCHITECTURE:359`, `adr-autonomous-immediate-halt`) — differs from the literal spec wording in `docs/factory.v2.md:100`.
+12. **Presets are commented examples, not selectable presets keyed by name.** “Selectable per task” currently means copying a block into `{task}/pipeline.yaml` (README:107-121, config:410-429); `humanInvolvement` itself is just a string. If the architect wants a named preset mechanism, that is new surface.
+13. **`aggregateConcerns` commits on every ingest** (`concerns.ts:163-166`) except epic pushes (`commit:false`). Any new producer wiring must account for this commit ordering: ingest commits in `taskWt` before the step record’s final commit (`step-runner.ts:843-898`).
+14. **10-hex-char ids** (`concerns.ts:53-54`) are stable but short; collision handling relies on the fingerprint file layout. No test covers collisions (negligible probability, but a design assumption).
 
-3. **Epic mailbox isolation.** `runChildTask` accepts `rootTaskDir` (`src/core/engine.ts:221`, passed at `:737`) but never reads it; `processSteeringMailbox` is called only from root `runTask` (`src/core/engine.ts:432-440`) and writes to the task dir it is given (`src/core/steer.ts:90-93`). Child task dirs are `{childWt}/{orch}/{parent}/{epic}` (`src/core/engine.ts:234`), so `human-*` concerns raised inside an epic land in the epic mailbox, while `docs/ARCHITECTURE.md:309` states the active run (root or epic) polls the root mailbox. Blocked child questions are forwarded as `q-epic-*` (`src/core/flows/epic-propagation.ts:97-129`), but parent answers are not copied back down. Decide: wire child→root mailbox, or record as a sixth accepted deviation.
+---
 
-4. **Reviewer “condense” is prompt-only.** `agents/steps/review.md:23` asks reviewers to condense or dismiss stale concerns, but `applyConcernTriage` persists only status/disposition/reason (`src/core/concerns.ts:252-263`); stored `detail` is never rewritten. Condensation is realized only by hydration suppression (`src/core/triage.ts:151-165`, `:254-286`) and epic-copy truncation (`src/core/flows/epic-propagation.ts:52-58`). Decide whether the store should persist a reviewer-condensed summary/detail, or whether the byte-capped prompt view is the contract.
+## 6. Quick Reference — Spec Bullet → Evidence
 
-5. **Epic children do not inherit task config** (accepted deviation `adr-epic-config-root-only`, `docs/ARCHITECTURE.md:361`). `runChildTask` loads `pipelineFor(childTaskDir)` (`src/core/engine.ts:247`); the root `humanInvolvement`/`concerns`/`reviewPolicy` overrides do not reach epic children. If per-task mode switching must apply inside epics, this needs a code change, not docs.
+| `docs/factory.v2.md` bullet | Implementation | Tests |
+|---|---|---|
+| structured `concerns[]` + remarkable decisions | `artifacts.ts:301-327`; schemas `developer-output:61-85`, `review:47-71`, `plan:135-159`, `decisions:48-72`, `plan-closeup:27-51`, `wave-closeup:35-59` | `concerns-funnel.test.ts:37-192`, `concern-schemas.test.ts` |
+| engine aggregation, fingerprint, dedup, status, source | `concerns.ts:49-168,171-230`; `engine.ts:385` | `concerns-funnel.test.ts:320-843`, `hydration-fingerprint-caps.test.ts:809+` |
+| reviewer triage + `dismiss` | `review-policy.ts:18-43`; `triage.ts:35-50,288-349`; `review-schema.ts:5-51` | `reviewer-triage.test.ts`, `plan-reviewer-triage.test.ts`, `review-policy.test.ts` |
+| routing blocker→item+consult / architect / human-* / debt | `triage.ts:83-149`; `concerns.ts:330-353`; `iteration.ts:200-229,830-850`; `derive/task.ts:52-65,174-196`; `scheduler.ts:68-78`; debt `derive/task.ts:245-250` | `routing-blocker-derive.test.ts`, `routing-architect-consult.test.ts`, `routing-human-debt.test.ts`, `human-router-severity.test.ts` |
+| close-ups list/re-triage/resolve-or-carry | `concerns.ts:265-353`; `iteration.ts:1000-1024,1227-1307` | `closeup-lifecycle-resolve.test.ts`, `plan-reviewer-triage.test.ts` |
+| configurable allowlist/dispositions/thresholds | `artifacts.ts:126-138`; `pipeline.schema.json:202-237`; `pipeline.default.yaml:359-437`; `review-policy.ts:27-43` | `human-involvement-config.test.ts`, `review-policy.test.ts` |
+| funnel worker→reviewer→epic→saga→human with less detail | `triage.ts:219-286`; `epic-propagation.ts:35-58,141-185`; `engine.ts:266-296` | `epic-saga-propagate.test.ts`, `funnel-text-budget.test.ts`, `hydration-fingerprint-caps.test.ts` |
+| blocking vs remarkable ADRs, digest never waits | `adrs.ts:14-72`; `plan.schema.json:127-130` | `adr-blocking-digest.test.ts` |
+| human-involvement presets `autonomous`/`principal`/`detailed` | `prompts.ts:61-111`; `criteria/human-involvement.md`; `pipeline.default.yaml:381-437`; README:99-128 | `human-involvement-config.test.ts`, `docs-concerns.test.ts` |
+| close-up/status/state counts | `derive/task.ts:369-415`; `state.schema.json:72-99`; `status.ts:84-116` | `state-concern-counts.test.ts`, `status-concerns.test.ts` |
+| ARCHITECTURE §1 row + README + config commentary | `docs/ARCHITECTURE.md:39,330-363`; `README.md:99-128`; `config/pipeline.default.yaml:359-437` | `docs-concerns.test.ts:84-346` (sentinels) |
 
-6. **Triage coverage gaps are accepted** (`adr-funnel-triage-coverage`, `docs/ARCHITECTURE.md:360`): only plan generation is plan-reviewer-triaged; architect concerns from consult/wave-report/close-up turns aggregate but stay open until an architect turn hydrates them or the wave fallback runs; simple-task concerns have no reviewer/waves and stay open. Decide whether the iteration should narrow this or leave the deviation.
+---
 
-7. **Counts exclude remarkable decisions** (`adr-remarkable-counts-semantics`): `countConcerns` iterates `c-*` only (`src/core/concerns.ts:196-217`) and `factory status` prints only those (`src/cli/status.ts:106-108`). Digest entries also have no retention/archival rule (`docs/ARCHITECTURE.md:356`). Confirm this is acceptable for “state.yaml shows counts”.
+## 7. Suggested First Checks for the Architect (read-only, cheap)
 
-8. **Mode presets and severity thresholds are only conventionally coupled.** `humanInvolvement` affects ADR disposition (`src/core/flows/adrs.ts:14-18`) and prompt criteria (`src/core/prompts.ts:64-85`); digests/blocking are governed by `concerns.minDigestSeverity`/`minBlockingSeverity`. The shipped presets copy both (`config/pipeline.default.yaml:410-429`), but switching only `humanInvolvement` leaves thresholds unchanged. Decide whether presets should be engine-derived.
-
-9. **Static review schema and extra review agents.** `config/schemas/review.schema.json:22-42` still lists `dismiss` unconditionally; no `src/` code references it (tests only). Runtime schemas are generated per agent (`src/core/flows/step-runner.ts:117-128`, `src/core/records/review-schema.ts:5-12`). An extra agent configured with `output: review` does not match the hardcoded reviewer/qa/plan-reviewer branch and falls through to `${agent}.schema.json` → permissive fallback (`src/core/flows/step-runner.ts:159-178`), which can admit `dismiss` for a non-triager. Confirm no non-triager path can emit `dismiss`, or add a generic `output`-based schema mapping.
-
-10. **Fire-test evidence is operational.** Spec `docs/factory.v2.md:103` requires switching modes via config between launches and a mailbox with only funnelled, confirmed, low-noise items. `docs/FIRE_TEST.md:43`, `:51` names this exact check, but no unit test performs two `runTask` launches with a mode change; evidence must come from the self-host launches.
-
-11. **Pre-existing, not item-18: architect hydration default differs.** `src/core/flows/iteration.ts:279` uses `limits.hydrationBytes ?? 65536` while `src/core/loops.ts:24` and `config/pipeline.default.yaml:333` default to `40000`. The configured value wins in normal runs; only a config missing `hydrationBytes` hits the inconsistency. Do not fold this into item 18 unless the iteration is explicitly closing adjacent holes.
+- `bun test test/engine/concerns-funnel.test.ts test/engine/reviewer-triage.test.ts test/cli/status-concerns.test.ts test/docs-concerns.test.ts` (49 tests, ~6.5s) before planning any change.
+- `grep -n "concernConfirms\|concernResolutions" plugins/software-factory/agents/steps/*.md` to see the prompt/schema asymmetry (open question 1/2).
+- `grep -n "affects" plugins/software-factory/src/core/derive/task.ts plugins/software-factory/src/core/plan/scheduler.ts` for the blocking-ref scope (open question 5).
+- If docs change: `bun test test/docs-concerns.test.ts` immediately (exact-phrase sentinels).

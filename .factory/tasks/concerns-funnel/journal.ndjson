@@ -2406,3 +2406,7 @@
 {"type":"step_finished","task":"concerns-funnel","step":"architect-closeup-5","attempt":1,"status":"ok","sessionId":"01a1b894-4755-7787-a1ed-8df6c7a062a2","usage":{"inputTokens":54441,"outputTokens":1068,"costUsd":0.007517},"ts":"2026-11-09T12:28:17.818Z"}
 {"type":"closeup_written","iteration":5,"status":"next-iteration","ts":"2026-11-09T12:28:17.818Z"}
 {"type":"iteration_started","iteration":6,"ts":"2026-11-09T12:28:22.233Z"}
+{"type":"step_started","task":"concerns-funnel","step":"context-pack-6","attempt":1,"recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/110-context-pack-6-a1","ts":"2026-11-09T12:28:22.334Z"}
+{"type":"step_timeout_armed","task":"concerns-funnel","step":"context-pack-6","timeoutSec":3600,"ts":"2026-11-09T12:28:22.339Z"}
+{"type":"step_transcript_size_warning","task":"concerns-funnel","step":"context-pack-6","attempt":1,"sizeBytes":18368718,"thresholdBytes":5242880,"traceRef":"/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/sessions/2026-11-09T12-28-22-636Z_01a1c047-f0ec-751e-8653-9ea1e5fec511","ts":"2026-11-09T12:38:35.201Z"}
+{"type":"step_tool_call_warning","task":"concerns-funnel","step":"context-pack-6","attempt":1,"toolCalls":212,"threshold":60,"traceRef":"/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/sessions/2026-11-09T12-28-22-636Z_01a1c047-f0ec-751e-8653-9ea1e5fec511","ts":"2026-11-09T12:38:35.202Z"}
