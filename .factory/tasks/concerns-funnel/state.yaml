@@ -334,9 +334,9 @@ debt:
     precedence, prefix inline paths, scope removeWorktree claim, fold
     contextPack key). Consumers apply mentally.
   - Capital-D Detail in 6 runtime-bound file schemas rejects lowercase detail
-    under additionalProperties:false (review.schema.json is reference-only but
-    normalized for consistency); mergeConcern reads existing?.Detail so
-    longest-wins never applies.
+    (review.schema.json reference-only, normalized for consistency);
+    mergeConcern reads existing?.Detail so longest-wins never applies and
+    typecheck fails; 3 epic-saga-propagate test reads use .Detail.
   - wave/plan-close-up listed as triagers though close-up schemas reject
     suggestions[], advertising an unreachable dismiss path; close-up re-triage
     has no dismiss vocabulary.
@@ -648,7 +648,7 @@ debt:
     inconsistent with documented branch-from-HEAD worktrees"
   - "[funnel-closeups-v3] Propagated parent copy retains child source.item,
     writes undeclared source.epic, and can clobber/lengthen parent records"
-budgetSpentUsd: 8.319182920000006
+budgetSpentUsd: 8.523221920000006
 spendByRole:
   alt-workhorse:
     costUsd: 1.9655029999999996
@@ -659,13 +659,13 @@ spendByRole:
     inputTokens: 11681593
     outputTokens: 3173378
   architect:
-    costUsd: 0.983777
-    inputTokens: 8921096
-    outputTokens: 178949
+    costUsd: 1.162561
+    inputTokens: 10667869
+    outputTokens: 190742
   alt-architect:
-    costUsd: 0.053687
-    inputTokens: 224673
-    outputTokens: 132371
+    costUsd: 0.078942
+    inputTokens: 320847
+    outputTokens: 201796
 spendByItem:
   concerns-contracts:
     costUsd: 0.251577
@@ -764,7 +764,7 @@ spendByItem:
     inputTokens: 895689
     outputTokens: 273259
   (orchestration):
-    costUsd: 1.8144310000000001
-    inputTokens: 11095168
-    outputTokens: 939944
-lastUpdated: 2026-11-09T05:31:47.859Z
+    costUsd: 2.01847
+    inputTokens: 12938115
+    outputTokens: 1021162
+lastUpdated: 2026-11-09T06:06:57.025Z
