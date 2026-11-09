@@ -12,6 +12,7 @@ import {
 } from "../src/core/prompts.js";
 import { loadPipelineConfig } from "../src/core/config/loader.js";
 import type { PipelineConfig } from "../src/core/artifacts.js";
+import { KNOWN_VARS } from "../src/core/prompt-vars.js";
 
 describe("prompts: PromptLibrary & preflightPrompts", () => {
   const builtinDir = path.resolve("agents");
@@ -292,6 +293,12 @@ tools:
     expect(lib.placeholders("steps/pm-edits")).toContain("storyKindsCriteria");
     expect(lib.placeholders("steps/pm-single-item")).toContain("storyKindsCriteria");
   });
+
+  it("plan-review accepts the engine-supplied limitViolations var", () => {
+    expect(KNOWN_VARS["steps/plan-review"]).toContain("limitViolations");
+    expect(KNOWN_VARS["plan-review"]).toContain("limitViolations");
+  });
+
   it("every agent definition includes the workspace containment instructions", () => {
     const lib = loadPromptLibrary({ builtinDir });
     const agents = [
@@ -302,7 +309,6 @@ tools:
       "plan-close-up",
       "plan-reviewer",
       "pm",
-      "qa",
       "reviewer",
       "triage",
       "wave-close-up",

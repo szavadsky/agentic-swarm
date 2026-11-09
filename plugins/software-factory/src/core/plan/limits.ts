@@ -226,6 +226,40 @@ export function validatePlan(
 }
 
 /**
+ * Deterministic outline-counts pre-check (§8.4.2a): milestone and item counts
+ * against pipeline limits only (no schema/slug/kind/dep checks). The engine runs
+ * this right after architect-plan/revise yields, BEFORE plan-review/PM, so an
+ * over-limit plan gets one resumed repair turn instead of failing downstream in
+ * validateEdits. Messages match validatePlan's count rules exactly.
+ */
+export function checkPlanCountLimits(
+  plan: PlanArtifact,
+  ctx: { limits: PipelineLimits; existingCount?: number }
+): string[] {
+  const errors: string[] = [];
+  if (!plan || typeof plan !== "object") return errors;
+
+  const maxMilestones = ctx.limits?.maxMilestones ?? 8;
+  const milestones = Array.isArray(plan.milestones) ? plan.milestones : [];
+  if (milestones.length > maxMilestones) {
+    errors.push(
+      `Plan exceeds maximum milestones limit of ${maxMilestones} (got ${milestones.length})`
+    );
+  }
+
+  const maxItems = ctx.limits?.maxItemsPerPlan ?? 50;
+  const outlines: PlanItemOutline[] = Array.isArray(plan.itemOutlines)
+    ? plan.itemOutlines
+    : [];
+  const total = outlines.length + (ctx.existingCount ?? 0);
+  if (total > maxItems) {
+    errors.push(`Plan exceeds maximum items limit of ${maxItems} (got ${total})`);
+  }
+
+  return errors;
+}
+
+/**
  * Advisory-only mechanical check on plan item size estimates (ShPost3 #6):
  * notes outlines without an explicit `prodBudgetHint` and hints above the
  * kind's size budget. A 359-line item blew a 300 budget no reviewer saw

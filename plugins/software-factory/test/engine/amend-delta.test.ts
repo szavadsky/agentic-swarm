@@ -595,7 +595,7 @@ describe("Engine: amend delta semantics, resumed repair, removal, tool-less PM (
     expect(runs.some((r) => r.endsWith("-a2"))).toBe(true);
   });
 
-  it("unfixable pm-edits fails the iteration after the resumed repair", async () => {
+  it("unfixable pm-edits bounces to architect once, then fails with bounce noted", async () => {
     const task = "pm-unfixable-task";
     setupTask(tmpRepo, task, orchFolder);
     const pipeline = makePipeline();
@@ -625,6 +625,17 @@ describe("Engine: amend delta semantics, resumed repair, removal, tool-less PM (
     } as const;
     harness.scriptOutcome(`${task}/runs/pm-edits-1#a1`, badEdits);
     harness.scriptOutcome(`${task}/runs/pm-edits-1#a2`, badEdits);
+    // Bounce: architect revises (plan itself is fine; the kind error persists),
+    // PM re-runs once against the revised plan and still fails.
+    harness.scriptOutcome(`${task}/runs/architect-pmfix-1#a1`, {
+      ok: true,
+      data: {
+        iteration: 1,
+        milestones: [{ id: "m1", title: "M1" }],
+        itemOutlines: [{ slug: "real-1", kind: "dev", title: "Real", milestoneId: "m1" }],
+      },
+    });
+    harness.scriptOutcome(`${task}/runs/pm-edits-1#a3`, badEdits);
 
     const res = await runTask(
       { harness, repo: repoObj, project, pipelineFor: async () => pipeline, prompts },
@@ -635,7 +646,13 @@ describe("Engine: amend delta semantics, resumed repair, removal, tool-less PM (
     const taskWtPath = path.join(worktreeRoot, `topic_${task}`);
     const deployedTaskDir = path.join(taskWtPath, orchFolder, task);
     const journal = fs.readFileSync(path.join(deployedTaskDir, "journal.ndjson"), "utf8");
+    expect(journal).toContain("pm_edits_bounced_to_architect");
     expect(journal).toContain("pm_edits_validation_failed");
+    // Failure notes the bounce already taken (exactly-once bound).
+    expect(journal).toContain('"bounced":true');
+    // Bounce ran exactly once: no second pmfix record.
+    const runs = fs.readdirSync(path.join(deployedTaskDir, "runs"));
+    expect(runs.filter((r) => r.includes("architect-pmfix-1"))).toHaveLength(1);
   });
 
   it("old-format amend record never applies an amendment without decision outlines", async () => {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { validatePlan, validateEdits } from "../src/core/plan/limits.js";
+import { validatePlan, validateEdits, checkPlanCountLimits } from "../src/core/plan/limits.js";
+import { buildPlanLimitsRepairFeedback, formatLimitViolationsVar } from "../src/core/flows/iteration.js";
 import type { PlanArtifact, PlanEditsArtifact, PipelineLimits } from "../src/core/artifacts.js";
 
 describe("plan/limits: validatePlan", () => {
@@ -212,6 +213,62 @@ describe("plan/limits: validatePlan", () => {
     });
 
     expect(errors.some((e) => e.includes("Epics are only allowed in root task plans"))).toBe(true);
+  });
+});
+
+describe("plan/limits: checkPlanCountLimits (§8.4.2a pre-check)", () => {
+  const limits: PipelineLimits = { maxMilestones: 8, maxItemsPerPlan: 50 };
+
+  it("passes a compliant plan", () => {
+    const plan: PlanArtifact = {
+      iteration: 1,
+      milestones: [{ id: "m1", title: "M1" }],
+      itemOutlines: [{ slug: "a", kind: "dev", title: "A", milestoneId: "m1" }],
+    };
+    expect(checkPlanCountLimits(plan, { limits })).toEqual([]);
+  });
+
+  it("flags milestone and item overages with validatePlan-identical messages", () => {
+    const plan: PlanArtifact = {
+      iteration: 5,
+      milestones: Array.from({ length: 9 }, (_, i) => ({ id: `m${i + 1}`, title: `M${i + 1}` })),
+      itemOutlines: Array.from({ length: 68 }, (_, i) => ({
+        slug: `item-${i + 1}`,
+        kind: "dev",
+        title: `Item ${i + 1}`,
+        milestoneId: "m1",
+      })),
+    };
+    const errors = checkPlanCountLimits(plan, { limits });
+    expect(errors.some((e) => e.includes("exceeds maximum milestones limit of 8 (got 9)"))).toBe(true);
+    expect(errors.some((e) => e.includes("exceeds maximum items limit of 50 (got 68)"))).toBe(true);
+    // Same wording as validatePlan so repair feedback names the live failure.
+    const full = validatePlan(plan, { limits, kinds: ["dev"], isRootTask: true, existingItems: [] });
+    for (const e of errors) {
+      expect(full).toContain(e);
+    }
+  });
+
+  it("adds existing history to the item total and tolerates empty plans", () => {
+    const plan: PlanArtifact = {
+      iteration: 2,
+      milestones: [{ id: "m1", title: "M1" }],
+      itemOutlines: [{ slug: "n1", kind: "dev", title: "N1", milestoneId: "m1" }],
+    };
+    expect(checkPlanCountLimits(plan, { limits: { maxItemsPerPlan: 2 }, existingCount: 2 }).length).toBe(1);
+    expect(checkPlanCountLimits(undefined as any, { limits })).toEqual([]);
+  });
+
+  it("repair feedback names counts and the remedy; violations var is none-when-clean", () => {
+    const violations = ["Plan exceeds maximum items limit of 50 (got 68)"];
+    const feedback = buildPlanLimitsRepairFeedback(violations);
+    expect(feedback).toContain("got 68");
+    expect(feedback).toContain("replanAfter");
+    expect(feedback).toContain("do not just renumber");
+    expect(formatLimitViolationsVar([])).toBe("none");
+    const dirty = formatLimitViolationsVar(violations);
+    expect(dirty).toContain("MUST emit a fix-disposition suggestion");
+    expect(dirty).toContain("got 68");
   });
 });
 

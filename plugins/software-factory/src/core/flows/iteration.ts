@@ -23,6 +23,7 @@ import { childBranch } from "../git/naming.js";
 import { ensureChildWorktree, commitAll, removeWorktree } from "../git/index.js";
 import { writeYamlAtomic, writeTextAtomic, readYaml, readText } from "../records/io.js";
 import { runAgentStep, findOkCommittedRecord, getNextStepAttempt } from "./step-runner.js";
+import { parseStepRecordDirName } from "../records/step-record.js";
 import { writeQuestion, processSteeringMailbox } from "../steer.js";
 import { runItemConsult, runNonItemConsult } from "./consults.js";
 import { isContextPackStale, isContextPackEnabled, runContextPackStep } from "./ingest.js";
@@ -34,7 +35,7 @@ import { refreshStateYaml, countCommittedCloseupIterations } from "../derive/tas
 import { appendJournal, readJournal } from "../journal.js";
 import { loadCriteriaBundle, formatDispositionsSection } from "../prompts.js";
 import { checkPlanReviewRounds, checkIterations, checkAmendments } from "../loops.js";
-import { validateEdits } from "../plan/limits.js";
+import { validateEdits, checkPlanCountLimits } from "../plan/limits.js";
 import { applyEdits } from "../plan/apply.js";
 import { getClock } from "../clock.js";
 import { buildGateDiffSection, runGates } from "../checks/gates.js";
@@ -56,6 +57,48 @@ async function findOkCommittedRevise(
     }
   }
   return false;
+}
+/**
+ * Outline-counts pre-check message → repair prompt (§8.4.2a). Names concrete
+ * counts and the remedy so the architect consolidates outlines, splits across
+ * milestones, or defers via replanAfter — never just renumbers slugs.
+ */
+export function buildPlanLimitsRepairFeedback(violations: string[]): string {
+  return `Your plan violates pipeline outline-count limits (deterministic check, not reviewer opinion):\n${violations.map((e) => `- ${e}`).join("\n")}\nConsolidate outlines, split milestones, or defer lower-priority outlines to a later iteration via replanAfter (do not just renumber slugs or drop scope silently). Yield the corrected full plan.`;
+}
+
+/**
+ * Formats validated limit violations for the plan-reviewer prompt var
+ * {{limitViolations}}: explicit FAIL directive when non-empty, "none" when clean.
+ */
+export function formatLimitViolationsVar(violations: string[]): string {
+  if (violations.length === 0) return "none";
+  return `Deterministic limit check FAILED — you MUST emit a fix-disposition suggestion for each:\n${violations.map((e) => `- ${e}`).join("\n")}`;
+}
+
+/**
+ * PM bounce marker (§8.4.4a): records that the once-per-iteration architect
+ * bounce for pm-edits validation failures has been taken. Bound: exactly 1
+ * per iteration; derived from the bounce record name `architect-pmfix-N`.
+ */
+export async function hasPmfixBounce(runsDir: string, iteration: number, taskWt: string): Promise<boolean> {
+  return (await findOkCommittedRecord(runsDir, `architect-pmfix-${iteration}`, taskWt)) !== null;
+}
+
+/**
+ * Next never-used attempt number for a step (max existing + 1, or 1 when no
+ * records exist). Used for deliberate fresh re-runs (plan-limits repair, PM
+ * bounce re-run) where getNextStepAttempt's reuse numbering would collide with
+ * the turn being repaired.
+ */
+export function nextFreshAttempt(runsDir: string, stepId: string): number {
+  if (!fs.existsSync(runsDir)) return 1;
+  let max = 0;
+  for (const e of fs.readdirSync(runsDir)) {
+    const parsed = parseStepRecordDirName(e);
+    if (parsed && parsed.name === stepId && parsed.attempt > max) max = parsed.attempt;
+  }
+  return max + 1;
 }
 
 export interface IterationParams {
@@ -758,9 +801,80 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
     if (planStepRes.sessionId) {
       architectSessionId = planStepRes.sessionId;
     }
+    // Early outline-count pre-check (§8.4.2a): BEFORE plan-review/PM. ONE resumed
+    // repair turn in the same architect session with concrete counts; if still
+    // invalid, review proceeds with the violation in {{limitViolations}}.
+    if (plan) {
+      const planViolations = checkPlanCountLimits(plan, { limits });
+      if (planViolations.length > 0 && planStepRes.sessionId) {
+        const planLimitsAttempt = nextFreshAttempt(runsDir, `architect-plan-${iteration}`);
+        const planRepairRes = await runAgentStep({
+          task,
+          attempt: planLimitsAttempt,
+          stepId: `architect-plan-${iteration}`,
+          stepFragment: "steps/architect-plan",
+          agent: "architect",
+          role: "architect",
+          sessionMode: "reuse",
+          existingSessionId: architectSessionId,
+          resumedRepair: true,
+          repairFeedback: buildPlanLimitsRepairFeedback(planViolations),
+          cwd: taskWt,
+          taskWt,
+          taskDir,
+          recordsDir: runsDir,
+          repo,
+          harness,
+          pipeline,
+          project,
+          prompts,
+          promptVars: {
+            task,
+            iteration: String(iteration),
+            intent: intentText,
+            context: contextYaml,
+            contextPack: contextPackText,
+            infra: infraYaml,
+            debt: hydrationContext,
+            steering: hydrationContext,
+            limits: JSON.stringify(limits, null, 2),
+            taskStatus: planStatusBlock,
+          },
+          turnsSemaphore,
+          budgetTracker,
+          iteration,
+          writeArtifact: async (output: unknown) => {
+            const rawPlan = output as any;
+            if (rawPlan && rawPlan.milestones && rawPlan.itemOutlines) {
+              plan = {
+                iteration,
+                milestones: rawPlan.milestones,
+                uncertainties: rawPlan.uncertainties,
+                itemOutlines: rawPlan.itemOutlines,
+                assumptions: rawPlan.assumptions,
+                epics: rawPlan.epics,
+                techDebt: rawPlan.techDebt,
+                adrs: rawPlan.adrs,
+              };
+              await writeYamlAtomic(planPath, plan);
+              await appendJournal(taskDir, {
+                type: "plan_limits_repair",
+                step: `architect-plan-${iteration}`,
+                before: planViolations,
+                after: checkPlanCountLimits(plan, { limits }),
+              });
+            }
+          },
+        });
+        if (planRepairRes.sessionId) {
+          architectSessionId = planRepairRes.sessionId;
+        }
+        // No early return: compliant revisions flow to review; residual
+        // violations ride along in {{limitViolations}} for an explicit verdict.
+      }
+    }
     await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
   }
-
   // Check if PM edits are already completed
   const editsPath = path.join(planDir, `edits-${iteration}.0.yaml`);
   let edits: PlanEditsArtifact | undefined;
@@ -786,11 +900,39 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
     }
   }
 
+  // Restart recovery (§8.4.4a): edits-N.yaml absent + pm-edits-N record ok +
+  // journal has pm_edits_validation_failed for N → the pre-bounce run died after
+  // downstream validation failed. Go straight to the architect bounce: do NOT
+  // re-run PM first, do not treat as done. The bounce stepId doubles as the
+  // once-per-iteration marker, so this path naturally runs at most once.
+  // Legacy journal events lack an iteration field — accept those too, since the
+  // ok pm-edits-N record + absent edits file already scope this to iteration N.
+  let restartBounceErrors: string[] | undefined;
+  if (!editsDone && !fs.existsSync(editsPath)) {
+    const pmOkRestart = await findOkCommittedRecord(runsDir, `pm-edits-${iteration}`, taskWt);
+    if (pmOkRestart && !(await hasPmfixBounce(runsDir, iteration, taskWt))) {
+      const journal = await readJournal(taskDir);
+      const failures = journal.filter(
+        (e) => e.type === "pm_edits_validation_failed" &&
+          ((e as any).iteration === undefined || (e as any).iteration === iteration)
+      );
+      const lastFailure = failures[failures.length - 1];
+      if (lastFailure && Array.isArray((lastFailure as any).errors)) {
+        restartBounceErrors = (lastFailure as any).errors as string[];
+        await appendJournal(taskDir, {
+          type: "pm_edits_restart_bounce",
+          iteration,
+          errors: restartBounceErrors,
+        });
+      }
+    }
+  }
   // 3. Plan review rounds (§8.4.3, Finding 12: restart safe)
-  if (!editsDone) {
+  // A pending restart bounce skips review: the plan already passed review in the
+  // dead run — the bounce revises it for limits and PM re-runs after.
+  if (!editsDone && !restartBounceErrors) {
     let reviewRound = 1;
     const reviewFingerprints: string[] = [];
-
     while (reviewRound <= maxPlanReviewRounds) {
     // Check if review round record already exists
     const revRecordName = `plan-review-${iteration}-${reviewRound}`;
@@ -815,7 +957,16 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
         plan: JSON.stringify(plan, null, 2),
         intent: intentText,
         context: contextYaml,
-        limits: JSON.stringify(limits, null, 2),
+        limits: plan ? (() => {
+          const v = checkPlanCountLimits(plan, { limits });
+          // Fragments are frozen (no agents/** edits): surface the violation in
+          // the rendered {{limits}} section so the reviewer actually sees it;
+          // {{limitViolations}} rides along for explicitness and future prompts.
+          return v.length > 0
+            ? `${JSON.stringify(limits, null, 2)}\n\n${formatLimitViolationsVar(v)}`
+            : JSON.stringify(limits, null, 2);
+        })() : JSON.stringify(limits, null, 2),
+        limitViolations: plan ? formatLimitViolationsVar(checkPlanCountLimits(plan, { limits })) : "none",
         dispositionsCriteria: formatDispositionsSection(
           loadCriteriaBundle(pipeline.criteria).dispositions,
           pipeline.reviewPolicy?.allowedDispositions ?? ["fix", "optional", "architect", "human-awareness", "human-async", "human-stop"]
@@ -901,8 +1052,17 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
       iteration,
       writeArtifact: async (output: unknown) => {
         if (output && typeof output === "object") {
+          const before = plan ? checkPlanCountLimits(plan, { limits }) : [];
           plan = { ...plan, ...(output as any), iteration };
           await writeYamlAtomic(planPath, plan);
+          const after = plan ? checkPlanCountLimits(plan, { limits }) : [];
+          if (before.length > 0 && after.length === 0) {
+            await appendJournal(taskDir, {
+              type: "plan_limits_repair",
+              step: reviseStepId,
+              before,
+            });
+          }
         }
       },
     });
@@ -925,7 +1085,128 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
 
   // 4. PM edits (§8.4.4, Finding 12 & 13)
   const { kindsDescription, validKindNames } = buildKindsPromptVar(pipeline, !isChildTask);
-  if (!editsDone) {
+  // Shared architect bounce (§8.4.4a): at most once per iteration (marker record
+  // `architect-pmfix-N`). Revises the plan for the validation errors, then
+  // re-runs PM once against the revised plan. Returns the post-bounce edits
+  // (undefined when the bounce or PM re-run failed) and validation errors.
+  const runPmfixBounce = async (opts: {
+    bounceErrors: string[];
+    offenderSummary: string;
+    pmStatusBlock: string;
+    existingList: { slug: string; status: string; wave?: string | number }[];
+  }): Promise<{ edits?: PlanEditsArtifact; validationErrors: string[] }> => {
+    const bounceAttempt = getNextStepAttempt(runsDir, `architect-pmfix-${iteration}`, pipeline.limits?.maxInterruptions ?? 3);
+    const bounceRes = await runAgentStep({
+      task,
+      attempt: bounceAttempt,
+      stepId: `architect-pmfix-${iteration}`,
+      stepFragment: "steps/architect-revise",
+      agent: "architect",
+      role: "architect",
+      sessionMode: "reuse",
+      existingSessionId: architectSessionId,
+      cwd: taskWt,
+      taskWt,
+      taskDir,
+      recordsDir: runsDir,
+      repo,
+      harness,
+      pipeline,
+      project,
+      prompts,
+      promptVars: {
+        plan: JSON.stringify(plan, null, 2),
+        planReview: `PM output rejected by deterministic validation after its resumed repair turn. Fix ONLY these errors by revising the plan (consolidate outlines, split milestones, or defer via replanAfter; do not just renumber):\n${opts.bounceErrors.map((e) => `- ${e}`).join("\n")}\n\n${opts.offenderSummary}`,
+        contextPack: contextPackText,
+        taskStatus: opts.pmStatusBlock,
+      },
+      turnsSemaphore,
+      budgetTracker,
+      iteration,
+      writeArtifact: async (output: unknown) => {
+        if (output && typeof output === "object") {
+          const before = plan ? checkPlanCountLimits(plan, { limits }) : [];
+          plan = { ...plan, ...(output as any), iteration };
+          await writeYamlAtomic(planPath, plan);
+          const after = plan ? checkPlanCountLimits(plan, { limits }) : [];
+          if (before.length > 0 && after.length === 0) {
+            await appendJournal(taskDir, {
+              type: "plan_limits_repair",
+              step: `architect-pmfix-${iteration}`,
+              before,
+            });
+          }
+        }
+      },
+    });
+    if (bounceRes.sessionId) {
+      architectSessionId = bounceRes.sessionId;
+    }
+    await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
+    await appendJournal(taskDir, {
+      type: "pm_edits_bounced_to_architect",
+      iteration,
+      errors: opts.bounceErrors,
+    });
+    if (!bounceRes.ok || !plan) {
+      return { validationErrors: opts.bounceErrors };
+    }
+    // Re-run PM ONCE against the revised plan in a fresh PM turn.
+    const pmStepId = `pm-edits-${iteration}`;
+    const pmRetryAttempt = nextFreshAttempt(runsDir, pmStepId);
+    const pmRetryRes = await runAgentStep({
+      task,
+      attempt: pmRetryAttempt,
+      stepId: pmStepId,
+      stepFragment: "steps/pm-edits",
+      agent: "pm",
+      role: "alt-workhorse",
+      sessionMode: "reuse",
+      forceFresh: true,
+      cwd: taskWt,
+      taskWt,
+      taskDir,
+      recordsDir: runsDir,
+      repo,
+      harness,
+      pipeline,
+      project,
+      prompts,
+      promptVars: {
+        plan: JSON.stringify(plan, null, 2),
+        taskStatus: opts.pmStatusBlock,
+        kinds: kindsDescription,
+        citations: contextYaml,
+        limits: JSON.stringify(limits, null, 2),
+        storyKindsCriteria: loadCriteriaBundle(pipeline.criteria).storyKinds ?? "",
+      },
+      turnsSemaphore,
+      budgetTracker,
+      iteration,
+    });
+    if (!pmRetryRes.ok || !pmRetryRes.output || !Array.isArray((pmRetryRes.output as any).items) || (pmRetryRes.output as any).items.length === 0) {
+      return { validationErrors: opts.bounceErrors };
+    }
+    const bouncedEdits: PlanEditsArtifact = { iteration, amendmentIndex: 0, items: (pmRetryRes.output as any).items };
+    const bounceErrors = validateEdits(bouncedEdits, {
+      plan,
+      limits,
+      kinds: validKindNames,
+      isRootTask: !isChildTask,
+      existing: opts.existingList,
+    });
+    if (bounceErrors.length === 0) {
+      await appendJournal(taskDir, {
+        type: "pm_edits_bounce_recovered",
+        iteration,
+      });
+    }
+    return { edits: bouncedEdits, validationErrors: bounceErrors };
+  };
+  // A pending restart bounce skips the normal PM turn: the pre-restart PM output
+  // already exists (record ok) but failed validation — re-running PM first would
+  // reproduce the failure. The bounce revises the plan, then re-runs PM below.
+  if (!editsDone && !restartBounceErrors) {
     const pmStepId = `pm-edits-${iteration}`;
     const pmAttempt = getNextStepAttempt(runsDir, pmStepId, pipeline.limits?.maxInterruptions ?? 3);
     const pmStatusBlock = await buildTaskStatusBlock({
@@ -1051,16 +1332,36 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
     }
 
     if (validationErrors.length > 0) {
-      await appendJournal(taskDir, {
-        type: "pm_edits_validation_failed",
-        errors: validationErrors,
-      });
-      return {
-        iteration,
-        status: "failed",
-        plan,
-        architectSessionId,
-      };
+      // Backstop (§8.4.4a): once per iteration, bounce to the architect instead of
+      // failing — the plan itself is over-limit and PM must not drop scope. If the
+      // bounce was already taken (or the record check shows it), fail with the
+      // bounce noted so the journal explains the full sequence.
+      if (!(await hasPmfixBounce(runsDir, iteration, taskWt))) {
+        const bounceOut = await runPmfixBounce({
+          bounceErrors: validationErrors,
+          offenderSummary: `Offending PM output summary: ${Math.min(rawEdits.items.length, 9999)} items starting with slugs [${rawEdits.items.slice(0, 5).map((i: any) => i.slug).join(", ")}${rawEdits.items.length > 5 ? ", …" : ""}]`,
+          pmStatusBlock,
+          existingList,
+        });
+        if (bounceOut.edits) {
+          edits = bounceOut.edits;
+        }
+        validationErrors = bounceOut.validationErrors;
+      }
+      if (validationErrors.length > 0) {
+        await appendJournal(taskDir, {
+          type: "pm_edits_validation_failed",
+          iteration,
+          errors: validationErrors,
+          bounced: await hasPmfixBounce(runsDir, iteration, taskWt),
+        });
+        return {
+          iteration,
+          status: "failed",
+          plan,
+          architectSessionId,
+        };
+      }
     }
 
     await writeYamlAtomic(editsPath, edits);
@@ -1076,6 +1377,49 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
     await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
   }
 
+  // Restart bounce execution (§8.4.4a): the dead run left an ok pm-edits record,
+  // no edits file, and a pm_edits_validation_failed journal. The bounce stepId
+  // doubles as the once-per-iteration marker, so this runs at most once and the
+  // normal PM turn above is skipped — PM re-runs inside the bounce instead.
+  if (!editsDone && restartBounceErrors) {
+    const restartStatusBlock = await buildTaskStatusBlock({
+      taskDir, taskWt, parentBranch, itemSlugs: [], iteration, amendmentCount: 0, pipeline, rootTaskDir: params.rootTaskDir,
+    });
+    const restartExisting = await buildExistingList(taskDir);
+    const bounceOut = await runPmfixBounce({
+      bounceErrors: restartBounceErrors,
+      offenderSummary: "(Pre-restart PM output is unavailable; it failed validation in the run before the restart. Revise the plan to fit limits — PM re-runs against the revised plan.)",
+      pmStatusBlock: restartStatusBlock,
+      existingList: restartExisting,
+    });
+    if (bounceOut.edits) {
+      edits = bounceOut.edits;
+    }
+    if (bounceOut.validationErrors.length === 0 && edits) {
+      await writeYamlAtomic(editsPath, edits);
+      const applied = applyEdits(edits, { taskDir, plan });
+      for (const f of applied.files) {
+        await fs.promises.mkdir(path.dirname(f.path), { recursive: true });
+        await writeTextAtomic(f.path, f.content);
+      }
+      await git(taskWt, ["add", "-A"], { allowFail: true });
+      await commitAll(repo, taskWt, `factory: apply plan edits iteration ${iteration}`);
+      await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
+    } else {
+      await appendJournal(taskDir, {
+        type: "pm_edits_validation_failed",
+        iteration,
+        errors: bounceOut.validationErrors,
+        bounced: true,
+      });
+      return {
+        iteration,
+        status: "failed",
+        plan,
+        architectSessionId,
+      };
+    }
+  }
   if (!edits) {
     return {
       iteration,

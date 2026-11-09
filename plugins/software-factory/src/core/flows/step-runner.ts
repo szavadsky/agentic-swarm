@@ -66,6 +66,8 @@ export interface StepRunOptions {
   /** Resumed validation-repair turn: send ONLY repairFeedback as the prompt on the resumed session (no fragment render, no done-ness reuse). */
   resumedRepair?: boolean;
   repairFeedback?: string;
+  /** Deliberate fresh re-run (e.g. post-bounce PM retry): skip done-ness reuse but render the full fragment prompt normally. */
+  forceFresh?: boolean;
   cwd: string;
   taskDir: string;
   recordsDir: string;
@@ -205,7 +207,7 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
   // get a sequenced stepId (`consult-<item>-<n>`) per call site instead, so
   // every consult fires a fresh architect turn and writes a new decision file.
   const isConsultStep = !item && stepId.startsWith("consult-");
-  if (!item && !opts.resumedRepair && !isConsultStep) {
+  if (!item && !opts.resumedRepair && !opts.forceFresh && !isConsultStep) {
     let existingOk = await findOkCommittedRecord(recordsDir, stepId, opts.taskWt);
     if (existingOk) {
       let artifactWritten = true;
