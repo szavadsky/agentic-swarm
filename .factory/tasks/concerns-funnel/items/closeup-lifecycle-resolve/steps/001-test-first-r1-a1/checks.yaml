@@ -1,0 +1,37 @@
+checks:
+  - id: test-first-scope
+    status: pass
+    message: test-first-scope passed (1 test files, 0 new prod stubs with 0 lines)
+    details:
+      testFiles:
+        - plugins/software-factory/test/engine/closeup-lifecycle-resolve.test.ts
+      newProdFiles: []
+      stubProdLines: 0
+  - id: target-red
+    status: pass
+    message: "target-red passed: all 8 expected tests failed with assertion failures"
+    details:
+      command: cd plugins/software-factory && bun test
+        test/engine/closeup-lifecycle-resolve.test.ts --reporter=junit
+        --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-1794190679192-mmfq4hvhm7.xml
+      junitCaseCount: 8
+      junitCaseIds:
+        - "Close-up lifecycle: architect confirmations.accept resolves a pending
+          resolve and derive exposes the resolved status"
+        - "Close-up lifecycle: architect confirmations.accept carries a pending
+          carry to the architect"
+        - "Close-up lifecycle: architect confirmations.accept propagates a
+          pending propagate to the parent concern store"
+        - "Close-up lifecycle: architect confirmations.reject clears the pending
+          resolution, preserving open status and disposition"
+        - "Close-up lifecycle: consult unblock.consult resolve unblocks the
+          affected item on the next derive"
+        - "Close-up lifecycle: consult unblock.ignores concernResolution from an
+          item consult and journals the drop"
+        - "Close-up lifecycle: wave fallback.falls back over triage-less open
+          concerns and lists tech-debt as derived debt"
+        - "Close-up lifecycle: wave fallback.leaves blocker concerns open for
+          explicit triage"
+      junitTruncated: false
+      collected: true
+      collectionErrors: []

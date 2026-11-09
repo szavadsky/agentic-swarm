@@ -1,0 +1,61 @@
+status: ok
+summary: Added a test-first behavior suite for the close-up propose/confirm
+  lifecycle in test/engine/closeup-lifecycle-resolve.test.ts. It specifies
+  architect confirmation handling for pending resolve/carry/propagate proposals,
+  reject semantics, concern-consult resolve applying at decision commit and
+  unblocking the affected item on the next derive, the cross-emission guard for
+  item-consult concernResolution with journaling, and the wave-close-up fallback
+  for triage-less open concerns (tech-debt to optional/debt,
+  assumption|risk|question to architect, blockers left open, never human-*). No
+  production code was modified. All 8 new tests fail as assertion failures on
+  the current codebase; the full suite otherwise passes (433 pass, 2 skip, only
+  the 8 new tests red).
+target:
+  selectors:
+    - test/engine/closeup-lifecycle-resolve.test.ts
+  expectRed:
+    - "Close-up lifecycle: architect confirmations.accept resolves a pending
+      resolve and derive exposes the resolved status"
+    - "Close-up lifecycle: architect confirmations.accept carries a pending
+      carry to the architect"
+    - "Close-up lifecycle: architect confirmations.accept propagates a pending
+      propagate to the parent concern store"
+    - "Close-up lifecycle: architect confirmations.reject clears the pending
+      resolution, preserving open status and disposition"
+    - "Close-up lifecycle: consult unblock.consult resolve unblocks the affected
+      item on the next derive"
+    - "Close-up lifecycle: consult unblock.ignores concernResolution from an
+      item consult and journals the drop"
+    - "Close-up lifecycle: wave fallback.falls back over triage-less open
+      concerns and lists tech-debt as derived debt"
+    - "Close-up lifecycle: wave fallback.leaves blocker concerns open for
+      explicit triage"
+evidence:
+  - "bun run typecheck (plugins/software-factory): PASS, no type errors in the
+    new test file."
+  - "TMPDIR=/tmp bun test test/engine/closeup-lifecycle-resolve.test.ts: 0 pass,
+    8 fail; every failure is an assertion mismatch on current production
+    behavior (examples: status stayed routed instead of resolved, carry stayed
+    open instead of routed, pendingResolution not cleared, concernResolution
+    absent from consult decision, no journal event, fallback left concerns
+    open)."
+  - "JUnit reporter run of the same selector: 8 testcases, 8 failures, ids match
+    the declared expectRed node ids."
+  - "TMPDIR=/tmp bun test (plugins/software-factory, full suite): 433 pass, 2
+    skip, 8 fail; the only failures are the eight new target tests, so the
+    fixture setup causes no collateral breakage."
+concerns:
+  - The propagate acceptance test models an epic child task as taskDir nested
+    directly under its parent task dir and expects a condensed [epic] copy in
+    the parent concern store; the later implementation must detect that layout
+    (parent has items/<epic>/assignment.yaml) when applying accept+propagate.
+  - The target selector is plugin-relative
+    (test/engine/closeup-lifecycle-resolve.test.ts), matching the project's
+    documented `cd plugins/software-factory && bun test` runner convention.
+  - Plugin dependencies were absent in this worktree; `bun install` was run in
+    plugins/software-factory (node_modules is gitignored, no production or
+    lockfile changes).
+notes: "Test-first only: the suite exercises behavior through runAgentStep,
+  runConcernConsult, deriveTaskState, and readJournal, so no new production API
+  names were frozen. The cross-emission guard contract expects a journal event
+  named `concern_resolution_ignored` carrying the source step."
