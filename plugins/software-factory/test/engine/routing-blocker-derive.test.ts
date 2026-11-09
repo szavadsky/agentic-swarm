@@ -109,7 +109,8 @@ function writeConcern(
   fs.mkdirSync(dir, { recursive: true });
   const record = {
     detail: concern.summary,
-    severity: "medium",
+    // Routed blocking defaults to high (concerns.minBlockingSeverity).
+    severity: "high",
     source: { record: "test-first", agent: "test" },
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
