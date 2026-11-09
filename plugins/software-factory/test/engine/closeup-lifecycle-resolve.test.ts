@@ -303,6 +303,103 @@ describe("Close-up lifecycle: architect confirmations", () => {
   });
 });
 
+describe("Close-up lifecycle: dismiss resolutions", () => {
+  it("accept dismisses with the trimmed pending note and clears the proposal", async () => {
+    await writeConcern(
+      taskDir,
+      storedConcern({
+        id: "c-dismiss-me",
+        status: "open",
+        pendingResolution: {
+          action: "dismiss",
+          note: "  Superseded by ADR-1  ",
+          by: "wave-close-up",
+          at: "2026-01-01T00:00:01.000Z",
+        },
+      })
+    );
+    tmpRepo.commit("seed pending dismiss");
+
+    const result = await architectCloseup("c-dismiss-me", "accept");
+    expect(result.ok).toBe(true);
+
+    const stored = await readConcern("c-dismiss-me");
+    expect(stored.status).toBe("dismissed");
+    expect(stored.disposition).toBe("dismiss");
+    expect(stored.dismissReason).toBe("Superseded by ADR-1");
+    expect(stored.pendingResolution).toBeUndefined();
+
+    const state = await deriveTaskState({ taskDir, task: TASK, pipeline });
+    expect(state.concerns.dismissed).toBe(1);
+    expect(state.concerns.open).toBe(0);
+  });
+
+  it("errors before any transition when an accepted dismiss proposal has no note", async () => {
+    await writeConcern(
+      taskDir,
+      storedConcern({
+        id: "c-dismiss-no-note",
+        status: "open",
+        pendingResolution: {
+          action: "dismiss",
+          by: "plan-close-up",
+          at: "2026-01-01T00:00:01.000Z",
+        },
+      })
+    );
+    await writeConcern(
+      taskDir,
+      storedConcern({
+        id: "c-resolve-together",
+        status: "routed",
+        disposition: "architect",
+        pendingResolution: {
+          action: "resolve",
+          by: "wave-close-up",
+          at: "2026-01-01T00:00:01.000Z",
+        },
+      })
+    );
+    tmpRepo.commit("seed pending dismiss without note");
+
+    const result = await runStep({
+      agent: "architect",
+      stepId: "architect-closeup-1",
+      stepFragment: "steps/architect-closeup",
+      data: {
+        iteration: 1,
+        status: "complete",
+        summary: "Plan complete",
+        concernConfirms: [
+          { id: "c-dismiss-no-note", confirm: "accept" },
+          { id: "c-resolve-together", confirm: "accept" },
+        ],
+      },
+      promptVars: { closeup: "audit", plan: "{}", intent: "lifecycle" },
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("error");
+    expect(result.meta.error).toMatch(/dismiss/i);
+    expect(result.meta.error).toMatch(/note/i);
+
+    const dismissPending = await readConcern("c-dismiss-no-note");
+    expect(dismissPending.status).toBe("open");
+    expect(dismissPending.disposition).toBeUndefined();
+    expect(dismissPending.dismissReason).toBeUndefined();
+    expect(dismissPending.pendingResolution?.action).toBe("dismiss");
+
+    const resolvePending = await readConcern("c-resolve-together");
+    expect(resolvePending.status).toBe("routed");
+    expect(resolvePending.disposition).toBe("architect");
+    expect(resolvePending.pendingResolution?.action).toBe("resolve");
+
+    const state = await deriveTaskState({ taskDir, task: TASK, pipeline });
+    expect(state.concerns.dismissed).toBe(0);
+    expect(state.concerns.resolved).toBe(0);
+  });
+});
+
 describe("Close-up lifecycle: consult unblock", () => {
   it("consult resolve unblocks the affected item on the next derive", async () => {
     const itemDir = path.join(taskDir, "items", "blocked-item");

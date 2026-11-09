@@ -1,0 +1,101 @@
+checks:
+  - id: test-first-scope
+    status: pass
+    message: test-first-scope passed (4 test files, 0 new prod stubs with 0 lines)
+    details:
+      testFiles:
+        - plugins/software-factory/test/contracts/concern-artifact-types.test.ts
+        - plugins/software-factory/test/contracts/concern-schemas.test.ts
+        - plugins/software-factory/test/engine/closeup-lifecycle-resolve.test.ts
+        - plugins/software-factory/test/review-policy.test.ts
+      newProdFiles: []
+      stubProdLines: 0
+  - id: target-red
+    status: pass
+    message: "target-red passed: all 6 expected tests failed with assertion failures"
+    details:
+      command: cd plugins/software-factory && bun test test/review-policy.test.ts
+        test/contracts/concern-schemas.test.ts
+        test/contracts/concern-artifact-types.test.ts
+        test/engine/closeup-lifecycle-resolve.test.ts --reporter=junit
+        --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-1794204819628-yvpsb8si1e.xml
+      junitCaseCount: 38
+      junitCaseIds:
+        - Review policy resolution (§8.7, §18).falls back to the canonical
+          builtin dispositions
+        - Review policy resolution (§8.7, §18).prefers a per-agent policy over
+          default and default over builtin
+        - Review policy resolution (§8.7, §18).reads legacy allowedDispositions
+          as the default alias
+        - Review policy resolution (§8.7, §18).appends dismiss for triagers
+          without duplicates
+        - Review policy resolution (§8.7, §18).never grants dismiss to
+          non-triagers, even when configured
+        - Review policy resolution (§8.7, §18).restricts the triager set to
+          reviewer and plan-reviewer
+        - Review policy resolution (§8.7, §18).composed triager resolution
+          excludes dismiss for close-ups
+        - Generated review schema gating (§8.7).offers dismiss only when the
+          resolved policy comes from a triager
+        - FakeHarness review-step dispositions (§8.7, §18).reviewer accepts a
+          dismiss suggestion whose id matches a concern
+        - FakeHarness review-step dispositions (§8.7, §18).plan-reviewer is a
+          triager and may dismiss architect concerns
+        - FakeHarness review-step dispositions (§8.7, §18).qa rejects dismiss
+          even when the legacy policy lists it
+        - Item-machine review prompt uses the canonical resolver (§8.7).renders
+          dismiss in the reviewer dispositions when the agent is a triager
+        - Concern producer schemas.inlines the concern definition into every
+          producer schema without external refs
+        - Concern producer schemas.inlines the remarkable decision definition
+          with chosen, alternatives, and why
+        - Concern producer schemas.adds newConcerns to review and QA schemas
+          outside the triage suggestions
+        - Concern producer schemas.adds concernResolutions with resolve, carry,
+          propagate, and dismiss to close-up schemas
+        - Concern producer schemas.leaves triage, infra, and plan-edit schemas
+          untouched
+        - Concern producer schemas.adds remarkable and lowercase detail to
+          reviewer, plan-reviewer, QA, and file review schemas
+        - Concern producer schemas.adds concernConfirms and concernResolution to
+          architect report decisions
+        - Concern producer schemas.adds concernConfirms to plan close-up outputs
+          while preserving concernResolutions
+        - Concern producer schemas.accepts structured concerns and remarkable
+          across every developer, fact-finder, and plan step
+        - Concern artifact types.exposes structured concerns and remarkable
+          decisions with strict vocabularies
+        - Concern artifact types.stores concern lifecycle metadata including
+          pending resolution and escalation
+        - Concern artifact types.adds dismiss to review dispositions without a
+          tech-debt value
+        - Concern artifact types.marks plan ADRs as blocking or remarkable
+        - Concern artifact types.adds human involvement modes, concern
+          thresholds, and canonical review policy to pipeline config
+        - Concern artifact types.types structured concerns and remarkable
+          decisions on every producer artifact
+        - Concern artifact types.types concern confirmations and decision
+          resolutions with strict vocabularies
+        - "Close-up lifecycle: architect confirmations.accept resolves a pending
+          resolve and derive exposes the resolved status"
+        - "Close-up lifecycle: architect confirmations.accept carries a pending
+          carry to the architect"
+        - "Close-up lifecycle: architect confirmations.accept propagates a
+          pending propagate to the parent concern store"
+        - "Close-up lifecycle: architect confirmations.reject clears the pending
+          resolution, preserving open status and disposition"
+        - "Close-up lifecycle: dismiss resolutions.accept dismisses with the
+          trimmed pending note and clears the proposal"
+        - "Close-up lifecycle: dismiss resolutions.errors before any transition
+          when an accepted dismiss proposal has no note"
+        - "Close-up lifecycle: consult unblock.consult resolve unblocks the
+          affected item on the next derive"
+        - "Close-up lifecycle: consult unblock.ignores concernResolution from an
+          item consult and journals the drop"
+        - "Close-up lifecycle: wave fallback.falls back over triage-less open
+          concerns and lists tech-debt as derived debt"
+        - "Close-up lifecycle: wave fallback.leaves blocker concerns open for
+          explicit triage"
+      junitTruncated: false
+      collected: true
+      collectionErrors: []
