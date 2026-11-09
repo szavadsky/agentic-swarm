@@ -1,118 +1,144 @@
 iteration: 3
 milestones:
-  - directionalInterfaces:
-      - "step-runner (caller) validates producer outputs against file schemas
-        (callee contract): lowercase detail accepted, unknown props incl.
-        capital-D Detail rejected with step error before any store write;
-        aggregateConcerns/mergeConcern read lowercase detail with longest-wins"
-      - "prompts/step-runner/item-machine (callers) consume resolveReviewAllowed
-        (callee) as the single allowed-set source: triagers =
-        reviewer/plan-reviewer only get dismiss; close-up agents excluded;
-        close-up re-triage honored solely via concernResolutions + architect
-        concernConfirms + wave fallback"
-      - "ingestStepConcerns (caller) -> applyConcernConfirms (callee): accept on
-        pending dismiss requires non-empty note else TriageValidationError (step
-        errors, no transition); accept+dismiss -> dismissed + dismissReason;
-        fallback never assigns dismiss and leaves kind=blocker open"
-    id: m1-contracts-consistency
+  - id: m1-contracts-consistency
+    title: Contracts consistency
     scenarios:
-      - Given the 7 producer file schemas When
+      - Given the 6 runtime file schemas (decisions, developer-output,
+        fact-finder-output, plan, plan-closeup incl architect-closeup,
+        wave-closeup) plus reference review schema When
         test/contracts/concern-schemas.test.ts runs Then lowercase detail
         validates and capital-D Detail is rejected
       - Given a stored concern with 200-byte detail re-emitted with 20-byte
         detail When aggregateConcerns merges Then the stored 200-byte detail
         survives
-      - Given wave-close-up/plan-close-up agents When resolveReviewAllowed runs
-        Then the allowed set excludes dismiss
-      - Given a close-up dismiss proposal with note plus architect accept When
-        ingest runs Then the concern becomes dismissed with dismissReason set;
-        given accept on a noteless dismiss proposal Then the step errors and the
-        concern keeps status and pending
+      - Given composed resolveReviewAllowed(p,a,isTriagerAgent(a)) for
+        wave-close-up/plan-close-up When resolved Then the allowed set excludes
+        dismiss and the triager set equals {reviewer,plan-reviewer}
+      - Given a pending dismiss proposal with note plus architect accept When
+        ingest runs Then the concern becomes dismissed with dismissReason equal
+        to the trimmed note, disposition dismiss, and pending cleared
+      - Given a pending dismiss proposal without note plus architect accept When
+        ingest runs Then the step errors with TriageValidationError and status
+        plus pending are preserved with no partial transitions
       - Given the full suite When gates run with TMPDIR=/tmp Then typecheck and
         bun test pass with no regressions
-    title: Contracts consistency
+    directionalInterfaces:
+      - "step-runner (caller) validates producer outputs against the 6 runtime
+        file schemas (callee contract: decisions, developer-output,
+        fact-finder-output, plan, plan-closeup shared by architect-closeup,
+        wave-closeup): lowercase detail accepted, capital-D Detail rejected with
+        step error before any store write; aggregateConcerns/mergeConcern read
+        lowercase detail with longest-wins"
+      - "prompts/step-runner/item-machine (callers) consume composed
+        resolveReviewAllowed(p,a,isTriagerAgent(a)) (callee): triager set
+        {reviewer,plan-reviewer} get dismiss; wave-close-up/plan-close-up return
+        false so dismiss excluded; close-up schemas carry no suggestions[] so
+        re-triage honored solely via concernResolutions + architect
+        concernConfirms + wave fallback"
+      - "ingestStepConcerns (caller) pre-flights then calls applyConcernConfirms
+        (callee, never throws TriageValidationError): every accept on pending
+        dismiss requires non-empty pending.note else TriageValidationError
+        before any mutate (all statuses+pendings preserved); accept+dismiss ->
+        dismissed + disposition dismiss + dismissReason=pending.note trimmed +
+        pending cleared; fallback never assigns dismiss, kind=blocker stays
+        open"
   - id: m2-docs-gates
+    title: Docs and gates
     scenarios:
       - Given ARCHITECTURE §1 row 18 When read Then it records item 18
-        implemented with explicit deviations and no 'Deliberately not
-        hand-built'
+        implemented with the epic-config, close-up-dismiss, saga-semantics, and
+        immediate-halt deviations and no 'Deliberately not hand-built'
       - Given ARCHITECTURE §8.11 When read Then it documents store layout,
-        fingerprint/dedup, triage contract, routing table, close-up
-        propose-confirm, epic condensing, ADR blocking table, presets, and the
-        epic-config, close-up-dismiss, saga-semantics, and immediate-halt
-        deviations
-      - Given dispositions.md and rendered prompts When checked Then a dismiss
-        row (reason required, kept) exists, the QA prompt excludes it while the
-        reviewer prompt includes it, and prompts.test debloat budgets pass
+        fingerprint/dedup, remarkable aggregation/triage, triage contract,
+        routing table, close-up propose-confirm incl dismiss, epic condensing,
+        ADR blocking table, presets, and the 4 deviations
+      - Given dispositions.md and rendered prompts When checked Then a terse
+        dismiss row (reason required, kept) exists, the QA prompt excludes it
+        while the reviewer prompt includes it, and prompts.test debloat budgets
+        pass
       - Given README, pipeline.default.yaml, and human-involvement.md When read
         Then README shows per-task principal (low/medium) and detailed (low/low)
         examples plus status counts/digest output, commentary documents the
-        fragment->agent mapping with medium/high defaults, and the
-        immediate-halt deviation is noted
+        fragment->agent mapping (developer covers
+        develop/poc/test-assumptions/test-first/simple-implement/fix-round;
+        fact-finder covers research; architect covers architect-*) with
+        medium/high defaults, and the immediate-halt deviation is noted
       - Given the full suite When gates run with TMPDIR=/tmp Then typecheck and
         bun test pass
-    title: Docs and gates
+    directionalInterfaces:
+      - "item-machine/iteration (callers) -> formatDispositionsSection(criteria,
+        allowed) (callee): when allowed excludes dismiss, dismiss rows/rules are
+        filtered from criteria text (QA prompt); when allowed includes dismiss,
+        rows are kept (reviewer prompt); mirrors existing human-stop filtering"
 itemOutlines:
-  - deps: []
-    description: "Normalize concern Detail->lowercase detail in 7 file schemas
-      (decisions, developer-output, fact-finder-output, plan, plan-closeup,
-      wave-closeup, review suggestions + newConcerns); note review.schema.json
-      is reference-only (resolveStepSchema generates runtime review schemas,
-      already lowercase), so runtime breakage applies to the other 6. One-line
-      TS fix in concerns.ts:72 (existing?.Detail -> existing?.detail) restoring
-      longest-wins merge. Tests: contract suites (lowercase passes, capital-D
-      rejected) + longest-wins behavior test (200-byte stored detail survives
-      20-byte re-emit). triage/infra/pm-edit untouched. Verify typecheck +
-      TMPDIR=/tmp bun test."
+  - slug: schema-detail-normalize
     kind: story
-    milestoneId: m1-contracts-consistency
-    prodBudgetHint: 20
-    slug: schema-detail-normalize
     title: Lowercase detail in producer schemas + merge fix
-  - deps: []
-    description: "Per adr-closeup-no-suggestions-triage: drop
-      wave-close-up/plan-close-up from isTriagerAgent (dismiss never advertised
-      for them); add dismiss to
-      CloseupConcernResolution/PendingConcernResolution unions and
-      wave/plan-closeup schema enums; applyConcernConfirms accept+dismiss ->
-      dismissed + dismissReason from note; ingestStepConcerns validates
-      accept-on-dismiss with empty note by throwing TriageValidationError (step
-      errors, no transition); fallback unchanged (never dismiss, blocker stays
-      open). Tests: review-policy triager-set exclusion + closeup-lifecycle
-      dismiss accept/error cases. Verify typecheck + targeted suites + full
-      gates."
-    kind: story
+    description: "Normalize concern Detail->lowercase detail in 6 runtime file
+      schemas (decisions, developer-output, fact-finder-output, plan,
+      plan-closeup shared by architect-closeup, wave-closeup) + reference-only
+      review.schema.json for consistency. One-line TS fix concerns.ts:72
+      (existing?.Detail -> existing?.detail). Fix 3 test reads
+      epic-saga-propagate.test.ts:307/313/319 to .detail. Tests: contract suites
+      (lowercase passes, capital-D rejected) + longest-wins behavior test
+      (200-byte stored survives 20-byte re-emit). triage/infra/pm-edit
+      untouched. Verify typecheck + TMPDIR=/tmp bun test."
     milestoneId: m1-contracts-consistency
-    prodBudgetHint: 60
-    slug: closeup-triager-cleanup
+    deps: []
+    prodBudgetHint: 25
+  - slug: closeup-triager-cleanup
+    kind: story
     title: Close-up triager cleanup + dismiss resolutions
-  - deps:
+    description: "Per adr-closeup-no-suggestions-triage: drop
+      wave-close-up/plan-close-up from isTriagerAgent; add dismiss to
+      CloseupConcernResolution/PendingConcernResolution (artifacts.ts) + local
+      ConcernResolution (concerns.ts:16) + wave/plan-closeup schema action
+      enums; ingestStepConcerns pre-flights accept-on-dismiss (non-empty
+      pending.note else TriageValidationError, no writes); applyConcernConfirms
+      accept+dismiss -> dismissed + disposition dismiss +
+      dismissReason=pending.note trimmed + pending cleared; fallback unchanged.
+      Tests: review-policy composed triager-set exclusion, closeup-lifecycle
+      dismiss accept/error cases, closeup dismiss enum contract case. Verify
+      typecheck + targeted suites + full gates."
+    milestoneId: m1-contracts-consistency
+    deps: []
+    prodBudgetHint: 70
+  - slug: docs-finish-v4
+    kind: story
+    title: Docs and suite consolidation
+    description: "Docs closure over final landed behavior (source: context-pack §6
+      Q1 deltas + Q2/Q3/Q7/Q9 deviations). ARCHITECTURE: §1 row18 implemented +
+      4 deviations; §3 add concerns/triage/review-policy/adrs/epic-propagation
+      modules; §5 config sample + fix line-117 inheritance claim to root-only;
+      §6.2 add concerns/, decisions/concern-<id>.yaml, adrFolder; §8.7 dismiss +
+      exact-id triage + thresholds + router; new §8.11 (store,
+      fingerprint/dedup, remarkable aggregation/triage, triage contract, routing
+      table, close-up propose-confirm incl dismiss, epic condensing, ADR table,
+      presets); §10 outputs + fix close-up review claim; §13 18 suites;
+      canonical ADR format vs historical notes. README Concerns section
+      (principal low/medium, detailed low/low, status output). dispositions.md
+      terse dismiss row. prompts.ts dismiss-row filter (mirror human-stop) +
+      QA-excludes/reviewer-includes test + prompts.test debloat budgets (terse
+      row; bump only if measured over). human-involvement.md + §8.11 halt note.
+      pipeline commentary mapping + medium/high. Final gates green."
+    milestoneId: m2-docs-gates
+    deps:
       - closeup-triager-cleanup
       - schema-detail-normalize
-    description: "Docs closure over final landed behavior. ARCHITECTURE: rewrite §1
-      row 18 (implemented + 4 deviations), add §8.11 funnel section, update
-      §3/§5/§6.2/§8.7/§10/§13 per gap list, state canonical ADR format vs
-      historical notes. README: Concerns & human involvement section (per-task
-      principal low/medium + detailed low/low example, status counts/digest
-      output). dispositions.md: dismiss row (reason required, kept). prompts.ts:
-      filter dismiss rows when allowed set excludes it (mirror human-stop
-      pattern) + QA-excludes/reviewer-includes render test + prompts.test
-      debloat budgets. human-involvement.md + §8.11: immediate-halt note.
-      pipeline commentary: fragment->agent mapping + medium/high defaults. Final
-      gates green."
-    kind: story
-    milestoneId: m2-docs-gates
-    prodBudgetHint: 110
-    slug: docs-finish-v4
-    title: Docs and suite consolidation
+    prodBudgetHint: 115
 assumptions:
-  - assumption: Gates run with TMPDIR=/tmp so the 2 pre-existing head-guard failures
-      do not mask regressions.
-    why: Baseline red only under .factory-runtime TMPDIR; suite green with
-      TMPDIR=/tmp. Out of scope.
+  - assumption: "Baseline is RED (not green): typecheck fails on concerns.ts:72
+      capital-D read, test/contracts/concern-schemas.test.ts fails asserting
+      lowercase detail against capital-D schemas, and
+      test/engine/epic-saga-propagate.test.ts:307/313/319 read .Detail
+      (undefined at runtime). Gates go green only after m1 lands. TMPDIR=/tmp is
+      still required for the 2 pre-existing head-guard failures."
+    why: Reviewer-verified red on 3 fronts; plan targets red-to-green closure in
+      this iteration.
   - assumption: "Store/triage/routing/funnel/propagation behavior is frozen except
       the three scoped fixes: concerns.ts:72 lowercase read, close-up
-      dismiss-via-resolutions, and prompts.ts dismiss-row filtering."
+      dismiss-via-resolutions with ingest pre-flight, and prompts.ts dismiss-row
+      filtering."
     why: 18 behavior/contract suites cover the implementation; bounding iteration 3
       to the reviewed gaps avoids regressions.
   - assumption: Autonomous immediate-halt deviation stands as accepted; operator
@@ -120,36 +146,38 @@ assumptions:
     why: Decided in iteration 2 planning; iteration 3 only documents it.
   - assumption: Epic config root-only deviation accepted as document-only; operator
       notified via open awareness item awareness-plan-3-epic-config-awareness.
-    disposition: human-awareness
     why: Operators setting mode once at root would otherwise be surprised; architect
       decides, operator informed.
+    disposition: human-awareness
 techDebt:
-  - category: adjacent
+  - id: td-tmpdir-split
     description: Pre-existing head-guard failures when TMPDIR sits under
       .factory-runtime. Baseline red; green with TMPDIR=/tmp. Out of scope.
-    id: td-tmpdir-split
-  - category: adjacent
+    category: adjacent
+  - id: td-spike-nits
     description: Unapplied spike-saga-commit reviewer optional nits (qualify
       epic-state precedence, prefix inline paths, scope removeWorktree claim,
       fold contextPack key). Consumers apply mentally.
-    id: td-spike-nits
-  - category: impacting
+    category: adjacent
+  - id: td-detail-casing
     description: Capital-D Detail in 6 runtime-bound file schemas rejects lowercase
-      detail under additionalProperties:false (review.schema.json is
-      reference-only but normalized for consistency); mergeConcern reads
-      existing?.Detail so longest-wins never applies.
-    id: td-detail-casing
-    resolution: "Fix in schema-detail-normalize: normalize schemas to lowercase
-      detail + one-line TS fix; contract and longest-wins tests verify."
-  - category: impacting
+      detail (review.schema.json reference-only, normalized for consistency);
+      mergeConcern reads existing?.Detail so longest-wins never applies and
+      typecheck fails; 3 epic-saga-propagate test reads use .Detail.
+    category: impacting
+    resolution: "Fix in schema-detail-normalize: normalize schemas + concerns.ts:72
+      + 3 test reads; contract and longest-wins tests verify."
+  - id: td-closeup-triager-dead
     description: wave/plan-close-up listed as triagers though close-up schemas
       reject suggestions[], advertising an unreachable dismiss path; close-up
       re-triage has no dismiss vocabulary.
-    id: td-closeup-triager-dead
-    resolution: "Fix in closeup-triager-cleanup: drop close-ups from isTriagerAgent
-      and add dismiss to concernResolutions with accept/validation semantics."
+    category: impacting
+    resolution: "Fix in closeup-triager-cleanup: drop close-ups from isTriagerAgent,
+      add dismiss to resolutions with ingest pre-flight and accept semantics."
 adrs:
-  - context: ARCHITECTURE §5 claims epics inherit the parent task layer, but
+  - id: adr-epic-config-root-only
+    title: Epic config inheritance documented as deviation
+    context: ARCHITECTURE §5 claims epics inherit the parent task layer, but
       runTaskChild loads only the child task dir pipeline.yaml, so
       humanInvolvement/concerns/reviewPolicy set at root do not apply inside
       epics. Implementing parent-layer inheritance would change config loading
@@ -159,27 +187,30 @@ adrs:
       do not inherit the parent task layer. Record in the §1 row 18 rewrite and
       §5; no behavior change. Operator notified via open awareness item
       awareness-plan-3-epic-config-awareness."
-    id: adr-epic-config-root-only
-    title: Epic config inheritance documented as deviation
-  - context: isTriagerAgent returns true for wave/plan-close-up and ingest would
+  - id: adr-closeup-no-suggestions-triage
+    title: Close-ups removed from triager set; dismiss via resolutions
+    context: isTriagerAgent returns true for wave/plan-close-up and ingest would
       triage their suggestions[], but both close-up schemas set
       additionalProperties:false without a suggestions field, so the path is
       unreachable; real re-triage flows through concernResolutions + architect
       concernConfirms + wave fallback. Removing close-ups from the triager set
       would leave close-up re-triage with no dismiss path (resolutions allow
       only resolve/carry/propagate).
-    decision: "Drop wave-close-up/plan-close-up from isTriagerAgent (dismiss no
-      longer advertised for them) AND add dismiss to the close-up path:
-      CloseupConcernResolution/PendingConcernResolution actions gain dismiss;
-      accept+dismiss transitions to dismissed with dismissReason from the
-      proposal note; accept on a noteless dismiss proposal throws
-      TriageValidationError (step errors, no transition), mirroring triage
-      dismiss-requires-detail. Wave fallback never assigns dismiss and leaves
-      kind=blocker open. Update review-policy and closeup-lifecycle tests;
-      correct §10/§8.7 wording."
-    id: adr-closeup-no-suggestions-triage
-    title: Close-ups removed from triager set; dismiss via resolutions
-  - context: Propagated epic copies preserve child affects slugs while parent
+    decision: "Drop wave-close-up/plan-close-up from isTriagerAgent AND add dismiss
+      to the close-up path: CloseupConcernResolution + PendingConcernResolution
+      (artifacts.ts) + local ConcernResolution (concerns.ts:16) +
+      wave/plan-closeup schema action enums gain dismiss. ingestStepConcerns
+      pre-flights: before any mutate, every accept confirm whose
+      pending.action==dismiss must have non-empty pending.note else it throws
+      TriageValidationError (step errors; all statuses+pendings preserved, no
+      partial transitions); applyConcernConfirms itself never throws
+      TriageValidationError (avoids concerns<->triage cycle and in-mutate
+      partial writes). accept+dismiss -> dismissed + disposition dismiss +
+      dismissReason=pending.note trimmed + pending cleared. Wave fallback never
+      assigns dismiss and leaves kind=blocker open."
+  - id: adr-saga-funnel-semantics
+    title: Propagated copies open-only; questions block
+    context: Propagated epic copies preserve child affects slugs while parent
       collectRoutedBlockers matches parent item slugs, so copies can never
       derived-block the parent; copies stay open by design and only forwarded
       q-epic questions block (module header + epic-saga-propagate tests assert
@@ -187,9 +218,9 @@ adrs:
     decision: "Document as the intended funnel semantic in §1 row 18 and §8.11: the
       saga architect resolves/steers propagated copies; epic-level blocking
       reaches the parent only via forwarded questions. No behavior change."
-    id: adr-saga-funnel-semantics
-    title: Propagated copies open-only; questions block
-  - context: Spec line 100 says autonomous blocks only for the portion still blocked
+  - id: adr-autonomous-immediate-halt
+    title: Autonomous immediate halt accepted (restated)
+    context: Spec line 100 says autonomous blocks only for the portion still blocked
       after everything unblocked is done, but iteration.ts halts immediately at
       plan time on a blocking ADR. Prior ADR
       docs/adr/adr-autonomous-immediate-halt.md records this as accepted with
@@ -198,5 +229,3 @@ adrs:
       stands; drain-then-block scheduling stays future work. docs-finish-v4
       marks it explicitly in ARCHITECTURE §8.11 and
       agents/criteria/human-involvement.md."
-    id: adr-autonomous-immediate-halt
-    title: Autonomous immediate halt accepted (restated)
