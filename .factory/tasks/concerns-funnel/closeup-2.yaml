@@ -1,0 +1,16 @@
+iteration: 2
+status: next-iteration
+summary: "Iteration 2 delivered m1 (unified step-role hydration, fingerprint
+  union+legacy migration, 19-fragment matrix) and m3 (single human router,
+  severity-aware derive, close-up propose/confirm lifecycle, consult unblock,
+  fallback) with behavior tests, all merged. Audit findings verified and hold:
+  m2 fails on the capital-D Detail drift — confirmed
+  developer-output.schema.json:68 still declares \"Detail\" with
+  additionalProperties:false, so lowercase detail is rejected and the contract
+  suite must be red with runtime validation broken for file-schema producers
+  (epic propagation itself is done). m4 untouched — confirmed ARCHITECTURE §1
+  row 18 still reads 'Deliberately not hand-built' with docs-finish-v3 still
+  running. Next iteration: normalize Detail->detail across the 7 schema files
+  (small fix) and complete docs-finish-v3 (ARCH §8.11/row 18, README, commentary
+  with fragment->agent mapping and immediate-halt deviation) with green
+  TMPDIR=/tmp gates."
