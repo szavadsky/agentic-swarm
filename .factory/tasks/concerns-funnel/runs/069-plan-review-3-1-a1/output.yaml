@@ -1,0 +1,122 @@
+status: changes_requested
+summary: "changes_requested: bounds OK (2 milestones, 3 items, acyclic); 7 fix
+  (TS Detail bug, interfaces, TMPDIR, dismiss paths, prompt filtering,
+  scenarios, missing ADRs) + 1 awareness + 2 optional"
+suggestions:
+  - id: ts-detail-merge-bug-frozen
+    disposition: fix
+    summary: mergeConcern reads capital-D Detail but plan freezes TS as
+      already-lowercase
+    detail: concerns.ts:72 uses existing?.Detail (capital D) while
+      StoredConcernArtifact.detail is lowercase (artifacts.ts:313); longest-wins
+      branch never taken. Plan M1 interface claims TS already lowercase and
+      schema item says No TS changes with frozen-APIs assumption - false. Expand
+      schema item to include one-line TS fix plus longest-wins behavior test and
+      correct interface wording.
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 72
+  - id: directional-interfaces-not-contracts
+    disposition: fix
+    summary: directionalInterfaces are change summaries, not caller/callee contracts
+    detail: Plan M1 interfaces name internals (resolveReviewAllowed/isTriagerAgent
+      exclusion) and M2 interface is a work list (docs-finish-v4 delivers...).
+      None defines caller/callee responsibilities, inputs/outputs, or error
+      handling. Revise to true contracts e.g. step-runner validates against file
+      schemas (accept lowercase detail, reject unknown props), ingest reads
+      lowercase detail, prompts advertise only resolved allowed set; or omit if
+      no new runtime interface.
+    location:
+      file: plugins/software-factory/config/schemas/plan.schema.json
+      line: 22
+  - id: m1-gates-tmpdir-unsatisfiable
+    disposition: fix
+    summary: M1 gate scenario omits TMPDIR qualifier required by assumption
+    detail: Plan M1 s3 requires typecheck and bun test pass under default env, but
+      Plan assumption plus adjacent debt state suite is red unless TMPDIR=/tmp.
+      Plan M2 s3 correctly qualifies TMPDIR=/tmp. M1 s3 unsatisfiable as written
+      and duplicates M2. Qualify M1 s3 with TMPDIR=/tmp or consolidate into
+      single gate scenario.
+    location:
+      file: docs/factory.v2.md
+      line: 89
+  - id: closeup-dismiss-path-eliminated
+    disposition: fix
+    summary: Dropping close-ups from triagers removes all dismiss paths,
+      undocumented deviation
+    detail: "Spec requires close-up reviewers re-triage open concerns implying
+      dismiss vocabulary. After removal no dismiss remains: concernResolutions
+      allow only resolve/carry/propagate, fallback routes or leaves open never
+      dismisses, confirms accept/reject only. Plan ADR frames as cleanup with no
+      ingest change, not deviation. Either add dismiss to close-up resolutions
+      plus test, or document explicit deviation with rationale and awareness."
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 264
+  - id: dismiss-row-leaks-to-nontriagers
+    disposition: fix
+    summary: Dismiss criteria row without prompts.ts filtering leaks to QA
+    detail: formatDispositionsSection only filters human-stop, not dismiss. QA
+      fragment includes dispositionsCriteria with allowed set excluding dismiss.
+      After docs item adds dismiss row, QA prompt shows dismiss row while header
+      says Use ONLY allowed set without dismiss. Plan scope omits prompts.ts
+      change. Include conditional dismiss filtering plus behavior test (QA
+      excludes, reviewer includes).
+    location:
+      file: plugins/software-factory/src/core/prompts.ts
+      line: 90
+  - id: scenarios-conjoined-unfalsifiable
+    disposition: fix
+    summary: Scenarios over-conjoined and vague, missing concrete assertions
+    detail: M1 s1 conflates schema validation plus store persistence without naming
+      7 files or contract suites. M1 s2 combines dismiss exclusion plus 3
+      re-triage paths, omits blocker-stays-open exclusion. M2 s2 combines 4
+      assertions (8.11 topics, dismiss row, README example, commentary
+      semantics) without values like medium/high. Split into atomic
+      Given/When/Then with file paths, test names, and severity values.
+    location:
+      file: plugins/software-factory/config/schemas/plan.schema.json
+      line: 18
+  - id: missing-adrs-saga-halt
+    disposition: fix
+    summary: Docs item lists 4 deviations but plan defines ADRs for only 2
+    detail: Plan docs item promises epic-config, close-up path, saga funnel
+      semantics, and autonomous halt. Plan ADRs cover only first two. Saga plus
+      halt have no context/decision in this plan (halt references prior
+      awareness without restating). Structural tradeoffs require ADRs. Add ADRs
+      or explicitly reference prior IDs with restatement.
+    location:
+      file: docs/factory.v2.md
+      line: 97
+  - id: epic-config-awareness
+    disposition: human-awareness
+    summary: Epic config root-only deviation needs operator awareness record
+    detail: Plan ADR documents that humanInvolvement/concerns/reviewPolicy at root
+      do not apply inside epics, deviating from ARCHITECTURE section 5
+      inheritance claim. Operators setting mode once at root will be surprised.
+      Document-only decision is reasonable for closure scope but needs
+      informational steer record like autonomous-halt awareness.
+    location:
+      file: plugins/software-factory/docs/ARCHITECTURE.md
+      line: 39
+  - id: static-review-schema-runtime-claim
+    disposition: optional
+    summary: Static review.schema.json is reference-only, wording overstates runtime
+      impact
+    detail: resolveStepSchema generates reviewer/QA/plan-reviewer schemas and never
+      loads static review.schema.json; generated schema already lowercase.
+      Normalizing static file is consistency-only. Clarify debt wording so
+      runtime-breakage claim applies to 6 runtime-bound files. No scope change.
+    location:
+      file: plugins/software-factory/src/core/flows/step-runner.ts
+      line: 111
+  - id: prompt-debloat-budget-missing
+    disposition: optional
+    summary: Criteria additions lack terse debloat budget check
+    detail: Intent requires terse prompts; prior docs items enforced
+      per-fragment/total budgets. Plan adds dismiss row plus human-involvement
+      note without growth assertion. Add debloat check to docs item (fragment
+      growth and total caps via prompts test).
+    location:
+      file: plugins/software-factory/agents/criteria/dispositions.md
+      line: 5
