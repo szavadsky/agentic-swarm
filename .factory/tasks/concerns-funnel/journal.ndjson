@@ -2381,3 +2381,5 @@
 {"type":"empty_wave_streak","wave":1,"iteration":5,"streak":1,"blocked":[],"ts":"2026-11-09T12:18:32.048Z"}
 {"type":"step_started","task":"concerns-funnel","step":"wave-close-up-5-1","attempt":1,"recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/104-wave-close-up-5-1-a1","ts":"2026-11-09T12:20:15.765Z"}
 {"type":"step_timeout_armed","task":"concerns-funnel","step":"wave-close-up-5-1","timeoutSec":2700,"ts":"2026-11-09T12:20:15.770Z"}
+{"type":"step_finished","task":"concerns-funnel","step":"wave-close-up-5-1","attempt":1,"status":"ok","sessionId":"01a1c040-844a-75b8-a291-6c27b0dfbc75","usage":{"inputTokens":29272,"outputTokens":10447,"costUsd":0.005418},"ts":"2026-11-09T12:21:55.773Z"}
+{"type":"scheduler_wait","wave":1,"iteration":5,"reason":"close-up gates + close-up turn","gapWallMs":203729,"gapActiveMs":203729,"merges":[],"ts":"2026-11-09T12:21:55.774Z"}
