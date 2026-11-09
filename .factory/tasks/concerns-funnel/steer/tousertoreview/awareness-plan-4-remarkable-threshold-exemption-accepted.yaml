@@ -1,0 +1,11 @@
+id: awareness-plan-4-remarkable-threshold-exemption-accepted
+ref: plan-4
+disposition: human-awareness
+question: Architect accepts via ADR that every routed rm-* digests regardless of
+  minDigestSeverity (triage.ts:108-115), counts cover c-* only
+  (concerns.ts:194-195), digest has no retention. Spec line 103 demands
+  low-noise confirmed mailbox; unconditional digest could be noisy. Operator
+  notified only via remarkable ADR digest entries, no blocking question. Flag
+  for operator awareness; architect decision stands for closure.
+status: open
+createdAt: 2026-11-09T08:02:50.324Z
