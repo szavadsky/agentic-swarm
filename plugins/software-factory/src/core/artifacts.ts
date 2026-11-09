@@ -340,10 +340,13 @@ export interface ConcernResolution {
   note?: string;
 }
 
-/** Close-up proposals may also propagate a concern to the parent epic or saga. */
+/**
+ * Close-up proposals may also propagate a concern to the parent epic or saga,
+ * or dismiss it with the proposal note as the required dismissal reason.
+ */
 export interface CloseupConcernResolution {
   id: string;
-  action: "resolve" | "carry" | "propagate";
+  action: "resolve" | "carry" | "propagate" | "dismiss";
   note?: string;
 }
 
@@ -361,7 +364,8 @@ export interface ConcernSource {
 }
 
 export interface PendingConcernResolution {
-  action: "resolve" | "carry" | "propagate";
+  action: "resolve" | "carry" | "propagate" | "dismiss";
+  /** Dismiss proposals require this note as the dismissal reason. */
   note?: string;
   by: string;
   at: string;

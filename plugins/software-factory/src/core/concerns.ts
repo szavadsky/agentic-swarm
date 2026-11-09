@@ -13,7 +13,7 @@ export type ConcernInput = Pick<Concern, "kind" | "summary" | "location" | "affe
 export interface ConcernStoreContext { taskDir: string; taskWt: string; repo: Repo; now?: () => Date }
 /** `repo` is only needed when the aggregation itself commits. */
 export type ConcernWriteContext = Omit<ConcernStoreContext, "repo"> & { repo?: Repo };
-export interface ConcernResolution { id: string; action: "resolve" | "carry" | "propagate"; note?: string }
+export interface ConcernResolution { id: string; action: "resolve" | "carry" | "propagate" | "dismiss"; note?: string }
 
 type Obj = Record<string, any>;
 type Patch = (record: Obj, at: string) => Obj;
@@ -273,8 +273,9 @@ export function applyCloseupResolutions(
 /**
  * Applies architect confirmations to pending close-up proposals. Accept applies
  * the pending action (resolve closes the concern, carry routes it to the
- * architect); propagate only clears the proposal because the parent copy is a
- * cross-store write. Reject clears the proposal and changes nothing else.
+ * architect, dismiss closes it with the pending note as its reason);
+ * propagate only clears the proposal because the parent copy is a cross-store
+ * write. Reject clears the proposal and changes nothing else.
  */
 export function applyConcernConfirms(
   ctx: ConcernStoreContext & { confirms: Array<Pick<ConcernConfirms, "id" | "confirm">> }
@@ -288,6 +289,14 @@ export function applyConcernConfirms(
     }
     if (pending.action === "carry") {
       return { ...record, status: "routed", disposition: "architect", pendingResolution: undefined };
+    }
+    if (pending.action === "dismiss") {
+      const reason = pending.note?.trim();
+      // Ingest pre-flights the note; a direct call without one leaves the
+      // proposal intact so the concern store never throws across the
+      // concerns/triage module cycle.
+      if (!reason) return record;
+      return { ...record, status: "dismissed", disposition: "dismiss", dismissReason: reason, pendingResolution: undefined };
     }
     return { ...record, pendingResolution: undefined };
   }]);
