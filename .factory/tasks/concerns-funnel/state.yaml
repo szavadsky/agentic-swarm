@@ -328,6 +328,16 @@ items:
     fixRounds: 1
     spendUsd: 0
 debt:
+  - Pre-existing head-guard failures when TMPDIR sits under .factory-runtime.
+    Baseline red; green with TMPDIR=/tmp. Out of scope.
+  - Unapplied spike-saga-commit reviewer optional nits (qualify epic-state
+    precedence, prefix inline paths, scope removeWorktree claim, fold
+    contextPack key). Consumers apply mentally.
+  - Capital-D Detail in 7 file schemas rejects lowercase detail under
+    additionalProperties:false, breaking runtime validation for file-schema
+    producers.
+  - wave/plan-close-up listed as triagers though close-up schemas reject
+    suggestions[], advertising an unreachable dismiss path.
   - "spike-saga-commit merge gate failure is environmental, not content:
     read-only spike with zero prod diff, research ok, review approved; baseline
     test gate is red (2 head-guard TMPDIR failures). Findings accepted as
@@ -636,7 +646,7 @@ debt:
     inconsistent with documented branch-from-HEAD worktrees"
   - "[funnel-closeups-v3] Propagated parent copy retains child source.item,
     writes undeclared source.epic, and can clobber/lengthen parent records"
-budgetSpentUsd: 8.213822920000005
+budgetSpentUsd: 8.298315920000006
 spendByRole:
   alt-workhorse:
     costUsd: 1.9655029999999996
@@ -647,9 +657,9 @@ spendByRole:
     inputTokens: 11681593
     outputTokens: 3173378
   architect:
-    costUsd: 0.888246
-    inputTokens: 8042475
-    outputTokens: 165092
+    costUsd: 0.972739
+    inputTokens: 8862919
+    outputTokens: 169138
   alt-architect:
     costUsd: 0.043858
     inputTokens: 181661
@@ -752,7 +762,7 @@ spendByItem:
     inputTokens: 895689
     outputTokens: 273259
   (orchestration):
-    costUsd: 1.7090710000000002
-    inputTokens: 10173535
-    outputTokens: 902128
-lastUpdated: 2026-11-09T05:11:08.542Z
+    costUsd: 1.7935640000000002
+    inputTokens: 10993979
+    outputTokens: 906174
+lastUpdated: 2026-11-09T05:12:34.847Z
