@@ -1,0 +1,23 @@
+status: ok
+summary: "Fix-round: reverted epic worktree retention to unconditional
+  removeWorktree in merge-path.ts; replaced runTask post-merge
+  worktree-persistence asserts with branch-content no-back-sync checks (child
+  worktree removed, epic branch kept, git show verifies unmutated child
+  concerns). Target 7/7 green; full suite 419 pass/2 skip/0 fail; typecheck
+  green."
+evidence:
+  - cd plugins/software-factory && bun run typecheck -> exit 0 (tsc --noEmit).
+  - TMPDIR=/tmp bun test test/engine/epic-saga-propagate.test.ts -> 7 pass, 0
+    fail, 90 expect() calls.
+  - TMPDIR=/tmp bun test test/engine/epic-child-task.test.ts
+    test/engine/epic-saga-propagate.test.ts test/git/worktrees.test.ts -> 17
+    pass, 0 fail.
+  - TMPDIR=/tmp bun test (full suite) -> 419 pass, 2 skip, 0 fail across 67
+    files (421 tests).
+  - "git diff scope: 2 files only (merge-path.ts unconditional removeWorktree;
+    epic-saga-propagate.test.ts branch-content asserts), verified via git diff
+    --stat."
+concerns: []
+notes: No-back-sync now proven by git show topic/saga-task--big-epic:<child
+  concern path> content (original summaries, dismissed status, no [epic] prefix)
+  plus child-worktree-removed and branch-kept assertions.

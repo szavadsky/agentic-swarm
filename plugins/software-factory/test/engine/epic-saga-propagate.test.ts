@@ -624,8 +624,20 @@ describe("Epic to saga propagation (adr-epic-push-condensed)", () => {
 
     expect(fs.existsSync(path.join(deployedParentDir, "items", EPIC, "child-closeup.yaml"))).toBe(true);
     expect(questionFiles(deployedParentDir)).toEqual([]);
-    expect(fs.existsSync(path.join(deployedChildDir, "concerns", "c-open-child.yaml"))).toBe(true);
-    expect(fs.existsSync(path.join(deployedChildDir, "concerns", "c-dismissed-child.yaml"))).toBe(true);
+    // Merge cleanup removes the epic child worktree but keeps its branch;
+    // no-back-sync is verified via branch content, not worktree persistence.
+    expect(fs.existsSync(deployedChildDir)).toBe(false);
+    const epicBranch = `topic/${TASK}--${EPIC}`;
+    const branchCheck = tmpRepo.git(["rev-parse", "--verify", `refs/heads/${epicBranch}`], { allowFail: true });
+    expect(branchCheck.code).toBe(0);
+    const openRel = path.posix.join(ORCH, TASK, EPIC, "concerns", "c-open-child.yaml");
+    const dismissedRel = path.posix.join(ORCH, TASK, EPIC, "concerns", "c-dismissed-child.yaml");
+    const openShow = tmpRepo.git(["show", `${epicBranch}:${openRel}`]);
+    expect(openShow.stdout).toContain("Open child risk");
+    expect(openShow.stdout).not.toContain("[epic]");
+    const dismissedShow = tmpRepo.git(["show", `${epicBranch}:${dismissedRel}`]);
+    expect(dismissedShow.stdout).toContain("Dismissed child risk");
+    expect(dismissedShow.stdout).toContain("dismissed");
 
     // The existing child-closeup commit covers the propagated copies too.
     const closeupRel = path.posix.join(ORCH, TASK, "items", EPIC, "child-closeup.yaml");

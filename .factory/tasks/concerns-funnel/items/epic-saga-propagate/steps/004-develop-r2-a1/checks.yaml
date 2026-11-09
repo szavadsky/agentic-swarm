@@ -1,0 +1,94 @@
+checks:
+  - id: gates
+    status: pass
+    message: "Gates passed (2 gates, improvements: Engine: HEAD guard resilience
+      (§7).detects when an agent commits and resets --soft to before.sha,
+      keeping changes staged, Engine: HEAD guard resilience (§7).detects when an
+      agent switches branch and restores original branch, keeping changes)"
+    details:
+      - id: typecheck
+        command: cd plugins/software-factory && bun run typecheck
+        status: pass
+        durationMs: 4821
+        details: $ tsc --noEmit
+      - id: test
+        command: cd plugins/software-factory && bun test
+        status: pass
+        durationMs: 94463
+        details: |-
+          bun test v1.4.3 (c6da4a4d3)
+          ================================================================
+          Task: status-test-task [ACTIVE]
+          Kind: unclassified | Iteration: 1 | Wave: 1
+          Worktree: (none - main checkout)
+          Config path: /home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/factory-test-repo-q6qDcg/.factory/pipeline.yaml
+          Budget spent: $0.0000
+          ----------------------------------------------------------------
+          Waves & Items:
+            Wave 1:
+          Concerns: open 0 | dismissed 0 | routed 0 | resolved 0
+          ----------------------------------------------------------------
+          Blocking Questions:
+            (none)
+          ----------------------------------------------------------------
+          Digest Questions:
+            (none)
+          ================================================================
+
+
+          test/cli/cli.test.ts:
+          [factory lock] Stale run lock for task "stale-lock-task" (PID 9999999 on host Slava-Yoga) taken over by PID 3893340
+          [factory lock] Stale run lock for task "competing-takeover-task" (PID 9999999 on host Slava-Yoga) taken over by PID 3893340
+          [factory lock] Stale run lock for task "journal-worktree-task" (PID 9999999 on host Slava-Yoga) taken over by PID 3893340
+
+           419 pass
+           2 skip
+           0 fail
+           2295 expect() calls
+          Ran 421 tests across 67 files. [94.31s]
+          [Improvements: Engine: HEAD guard resilience (§7).detects when an agent commits and resets --soft to before.sha, keeping changes staged, Engine: HEAD guard resilience (§7).detects when an agent switches branch and restores original branch, keeping changes]
+        improvements:
+          - "Engine: HEAD guard resilience (§7).detects when an agent commits
+            and resets --soft to before.sha, keeping changes staged"
+          - "Engine: HEAD guard resilience (§7).detects when an agent switches
+            branch and restores original branch, keeping changes"
+  - id: target-green
+    status: pass
+    message: "target-green passed: selected tests passed"
+    details:
+      command: cd plugins/software-factory && bun test
+        test/engine/epic-saga-propagate.test.ts --reporter=junit
+        --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-green-1794186845242-0p9x42jgwswd.xml
+      junitCaseCount: 7
+      junitCaseIds:
+        - Epic to saga propagation (adr-epic-push-condensed).copies open and
+          routed concerns with an [epic] summary while dismissed stays local
+        - Epic to saga propagation (adr-epic-push-condensed).condenses long
+          detail and why to the byte cap on a char boundary
+        - Epic to saga propagation (adr-epic-push-condensed).is
+          restart-idempotent and preserves parent triage
+        - Epic to saga propagation (adr-epic-push-condensed).forwards blocked
+          child questions as q-epic-* with mapped blocks
+        - Epic to saga propagation (adr-epic-push-condensed).hydrates propagated
+          copies into the saga architect concernsYaml
+        - Epic to saga propagation (adr-epic-push-condensed).runTask exits 0
+          when only open copies were propagated
+        - Epic to saga propagation (adr-epic-push-condensed).propagates after a
+          failed child iteration as well
+      junitTruncated: false
+      collected: true
+      collectionErrors: []
+  - id: size
+    status: pass
+    message: "size passed: 230/300 production lines changed"
+    details:
+      changedLines:
+        added: 215
+        deleted: 15
+        total: 230
+        files:
+          - plugins/software-factory/src/core/artifacts.ts
+          - plugins/software-factory/src/core/concerns.ts
+          - plugins/software-factory/src/core/engine.ts
+          - plugins/software-factory/src/core/flows/epic-propagation.ts
+      limit: 300

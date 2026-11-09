@@ -221,9 +221,8 @@ export async function mergeItem(params: MergeItemParams): Promise<MergeItemResul
       `factory: merge item ${item.slug}`
     );
 
-    // 4. Remove child worktree (branch is kept). Epic child worktrees stay so
-    // their concern store remains readable after the saga push.
-    if (item.kind !== "epic") await removeWorktree(repo, childWt);
+    // 4. Remove child worktree (branch is kept)
+    await removeWorktree(repo, childWt);
 
     // 5. Run after:item.merge hooks (§8.10)
     await runSeamHooks({
