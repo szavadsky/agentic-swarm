@@ -1,0 +1,81 @@
+status: ok
+summary: "Closed the concerns-funnel documentation story. Updated
+  plugins/software-factory/docs/ARCHITECTURE.md: spec row 18 now records
+  **Implemented** with all five deviations (epic-config root-only,
+  close-up-dismiss via resolutions, saga open-only, immediate halt,
+  triage-coverage) and no 'Deliberately not hand-built'; §3 lists the concerns
+  modules; §5 documents the root-only task layer and adds
+  humanInvolvement/concerns sample; §6.2 shows the engine-owned concerns/ store;
+  §8.7 gains the triager-only dismiss row; new §8.11 documents
+  store/fingerprint/dedup, remarkable aggregation and threshold exemption,
+  exact-id triage and routing table, close-up propose/confirm + wave fallback,
+  epic condensing, ADR canonical format/blocking table, c-only counts,
+  no-retention digest, code-constant byte caps (2000/500/8000/120), and all
+  accepted deviations; §10 documents concernsYaml/humanInvolvementCriteria and
+  budgets; §11 documents concern counts and Blocking/Digest question split; §13
+  lists the funnel regression suites. README gains §5 Concerns & human
+  involvement (principal/detailed per-task examples, factory status
+  counts/digest output, §8.11 pointer), documentation section updated to
+  §0–§14/§8.11, testing renumbered. pipeline.default.yaml commentary now
+  documents dismiss auto-append for triagers and source.agent fragment-to-agent
+  mapping. agents/criteria/human-involvement.md untouched. Diff: 93 insertions,
+  11 deletions across 3 files."
+target:
+  selectors:
+    - test/docs-concerns.test.ts
+  expectRed:
+    - "docs: concerns funnel finish (m2-docs-gates).§1 row 18 records item 18
+      implemented with five deviations"
+    - "docs: concerns funnel finish (m2-docs-gates).§8.11 documents store layout
+      fingerprint dedup remarkable aggregation and triage contract"
+    - "docs: concerns funnel finish (m2-docs-gates).§8.11 documents close-up
+      propose-confirm epic condensing ADR modes counts and byte caps"
+    - "docs: concerns funnel finish (m2-docs-gates).§8.11 records immediate-halt
+      triage-coverage epic-config close-up-dismiss and saga deviations"
+    - "docs: concerns funnel finish (m2-docs-gates).§3 module layout lists the
+      concerns funnel modules"
+    - "docs: concerns funnel finish (m2-docs-gates).§5 configuration sample
+      includes concern modes and corrects epic layering"
+    - "docs: concerns funnel finish (m2-docs-gates).§6.2 task folder shows the
+      engine-owned concern store"
+    - "docs: concerns funnel finish (m2-docs-gates).§8.7 adds the triager-only
+      dismiss row"
+    - "docs: concerns funnel finish (m2-docs-gates).§10 documents concern
+      fragment vars outputs and byte budgets"
+    - "docs: concerns funnel finish (m2-docs-gates).§11 status prints concern
+      counts and split blocking/digest questions"
+    - "docs: concerns funnel finish (m2-docs-gates).§13 lists the concerns
+      funnel regression suites"
+    - "docs: concerns funnel finish (m2-docs-gates).README documents concerns
+      and human involvement with per-task examples and status output"
+    - "docs: concerns funnel finish (m2-docs-gates).README documentation section
+      points at the concerns funnel"
+    - "docs: concerns funnel finish (m2-docs-gates).pipeline default commentary
+      documents dismiss auto-append and fragment-to-agent mapping"
+evidence:
+  - TMPDIR=/tmp bun test test/docs-concerns.test.ts -> 14 pass, 0 fail, 253
+    expect() calls (final state).
+  - "Base-tree sentinel check: extracted `git archive HEAD
+    plugins/software-factory` to /tmp/df-base and ran the same test there -> 0
+    pass, 14 fail, proving every sentinel is base-failing per Decision 022."
+  - TMPDIR=/tmp bun run typecheck -> tsc --noEmit clean, exit 0.
+  - TMPDIR=/tmp bun test -> 467 pass, 2 skip, 0 fail across 71 files (full
+    suite).
+  - TMPDIR=/tmp bun test test/config-layering.test.ts
+    test/human-involvement-config.test.ts test/docs-concerns.test.ts -> 28 pass,
+    0 fail.
+  - git diff --stat -> only README.md, config/pipeline.default.yaml,
+    docs/ARCHITECTURE.md changed (93 insertions, 11 deletions);
+    agents/criteria/human-involvement.md untouched.
+concerns:
+  - Full suite ran green (467 pass) and the only further edits were markdown
+    table/prose additions inside ARCHITECTURE.md; the target docs test plus the
+    config-layer and human-involvement suites were re-run green on the final
+    tree.
+notes: Kept the change within the ~150-line docs/yaml budget (93 insertions).
+  Documentation mirrors landed behavior from
+  src/core/{concerns,triage,review-policy,prompts}.ts,
+  flows/{step-runner,iteration,epic-propagation,adrs}.ts, cli/status.ts and the
+  named ADRs, including exact-id triage, dismiss reasons, c-* counts,
+  threshold-exempt rm-* digests, hydration constants, and open-only epic
+  propagation.

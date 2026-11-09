@@ -36,7 +36,7 @@ Source spec: `docs/factory.v2.md`. v1: `plugins/software-builder`. This file is 
 | 15 philosophy | `agents/_shared/philosophy.md` | Generic python-setup rules in every dev/review prompt. |
 | 16 config | `config/*` | §5; extra agents, checks, hooks at any seam. |
 | 17 bun launch, preflight, omp per iteration | `bin/factory.ts`, `src/cli`, `src/harness/omp` | **Deviation:** spec keeps one omp process per iteration to preserve IRC. Here each agent turn is its own harness process and a persistent role keeps its conversation as a resumable session on disk (same architect context, survives restarts, no live handles). §2, §11. |
-| 18 concerns + remarkable decisions funnel, blocking/non-blocking ADRs, human-involvement modes (added after v2 build) | — | **Deliberately not hand-built**: goal of the first self-hosted fire test `concerns-funnel` (`docs/FIRE_TEST.md` §Self-host), so the factory extends itself. Current state: review dispositions (§8.7) and steering mailbox (§8.8) only. |
+| 18 concerns + remarkable decisions funnel, blocking/non-blocking ADRs, human-involvement modes (added after v2 build) | `src/core/{concerns,triage,review-policy}.ts`, `flows/{step-runner,iteration,epic-propagation,adrs}.ts`, `cli/status.ts` | **Implemented** in the concerns funnel (§8.11), with five accepted deviations: epic-config root-only (`adr-epic-config-root-only`), close-up-dismiss via resolutions (`adr-closeup-no-suggestions-triage`), saga open-only (`adr-epic-push-condensed`), immediate halt (`adr-autonomous-immediate-halt`), triage-coverage (`adr-funnel-triage-coverage`); counts follow `adr-remarkable-counts-semantics`, dismiss criteria `adr-dismiss-criteria-row`. |
 | 19 workspaces via omp isolation, preflight, status/cleanup/gc, commit content from agents, wave-end merger + escalation, saga with independent epic launches, no-model omp tests; 20 architect cache coherence/compaction, schema-free architect output (added after v2 build) | — | **Deliberately not hand-built**: second self-hosted fire-test goal `omp-workspaces`. Current state: engine-managed worktrees (§7), item-level integrate step, in-process epics, schema-bound architect plan, no cache/compaction management; prior omp research in `docs/spikes/`. |
 | 26 feedback/approval per kind | `reviewPolicy`, `criteria`, §9 | Mechanical checks per kind + disposition criteria in prompts. |
 | Fire test / DoD | `docs/FIRE_TEST.md`, README, templates, schemas | §13. Out of scope (not in spec): pushing, parallel epics. |
@@ -71,8 +71,11 @@ plugins/software-factory/
     git/            naming, worktrees, repo mutex, commit, merge path, HEAD guard
     derive/         task/iteration/wave/item state from records + git
     plan/           plan limits, edits validate/apply, scheduler
-    flows/          ingest, item step machine, iteration, epic, consults, seams
+    flows/          ingest, item step machine, iteration, epic, consults, seams, adrs.ts, epic-propagation.ts
     checks/         gates (+ratchet), targets (junit), red-test, test-diff, size, scope, custom
+    concerns.ts     engine-owned concern store: fingerprint dedup, triage, resolutions, reconcile
+    triage.ts       severity policy, human routing, review triage, hydration byte caps
+    review-policy.ts  triager set + dismiss auto-append, allowed dispositions
     steer.ts        mailbox
     sessions.ts     persistent-agent handles: per-session FIFO turns, resume threading, rehydrate on sessionLost
     prompts.ts      template render
@@ -114,7 +117,7 @@ Rules: core never imports harness code; adapters hold no orchestration logic and
 | File | Required | Content |
 |---|---|---|
 | `<repo>/.factory/project.yaml` | yes (`factory init` from template, committed by init) | `orchestrationFolder` (default `.factory/tasks`), `adrFolder` (`docs/adr`), `worktreeRoot` (`../<repo>.factory-wt`), `scripts` {setup, compile, lint, test} (hints for infra), `paths.tests`, `paths.prod` globs, `skillDirs`. |
-| pipeline layers | no | `config/pipeline.default.yaml` → `.factory/pipeline.yaml` → `{task}/pipeline.yaml` (epics inherit parent task layer). Maps merge, arrays replace, `null` deletes. After the first run all config is read from the task worktree (committed); `factory status` prints its path. |
+| pipeline layers | no | `config/pipeline.default.yaml` → `.factory/pipeline.yaml` → `{task}/pipeline.yaml` (root task layer only; epic children do not inherit the parent task layer). Maps merge, arrays replace, `null` deletes. After the first run all config is read from the task worktree (committed); `factory status` prints its path. |
 
 ```yaml
 models:
@@ -168,8 +171,13 @@ limits: { maxParallelItems: 4, maxParallelTurns: 6, maxStepAttempts: 2, maxInter
 budget: { perTaskUsd: 100, perIterationUsd: 30, perItemUsd: 8 }   # enforced when harness reports usage
 diversity: warn
 harness: omp
+humanInvolvement: autonomous            # autonomous | principal | detailed
+concerns:
+  raiseAllowlist: [developer, fact-finder, architect, qa, reviewer, plan-reviewer, wave-close-up, plan-close-up]
+  minDigestSeverity: medium             # lowest severity worth a human digest
+  minBlockingSeverity: high             # lowest severity that can block an item
 reviewPolicy:
-  default: [fix, optional, architect, human-awareness, human-async]   # human-stop deliberately absent
+  default: [fix, optional, architect, human-awareness, human-async]   # human-stop absent; dismiss auto-appended for triagers
 criteria: { triage: …, dispositions: … }
 prompts: { overrides: {}, extraSkillDirs: [] }
 ```
@@ -189,6 +197,7 @@ Role resolution: alias chain (cycle → error), fallbacks expanded recursively (
   plan/plan-{N}.yaml  plan/plan-{N}.{k}.yaml (amendments)  plan/edits-{N}.{k}.yaml
   items/{item}/assignment.yaml                 # task branch, committed by the edits commit
   items/{item}/steps/…                         # item branch
+  concerns/                                   # engine-owned, task branch: c-*.yaml / rm-*.yaml
   waves/wave-{N}.{w}.yaml   closeup-{N}.yaml   decisions/{seq}-{kind}.yaml
   runs/…   state.yaml (materialized view)   journal.ndjson (audit only)
   {epic}/INTENT.md …                           # child task, written by the edits commit
@@ -290,6 +299,7 @@ Every review-type output: `{status, summary, suggestions: [{id, disposition, sum
 | `human-awareness` | architect decides now; `tousertoreview` item records the decision |
 | `human-async` | `tousertoreview`; item + dependents blocked; others continue; an answer re-runs the step that raised it with the answer in `input.md` |
 | `human-stop` | `tousertoreview`; exit 10. Offered only if in `reviewPolicy` |
+| `dismiss` | triager (reviewer/plan-reviewer) only; requires a reason (non-empty `detail`); concern becomes `dismissed` and is kept on disk with the reason; `dismiss` is auto-appended to the triager's allowed set |
 
 Schema enum + prompt section generated from the agent's allowed set and `criteria.dispositions`.
 
@@ -316,6 +326,41 @@ Pushing branches (operator's job), parallel epics.
 | `task.done` | task worktree | task fork point | consult (non-item) |
 
 Hook agent outputs use the review contract (read-only) except code-writing agents (`output: developer`): at item seams they work in the item worktree; at other seams the engine creates a synthetic item `hook-{name}-{recordSeq}` (own branch/worktree, gates, merge path) before the seam completes. Synthetic items never fire hooks; preflight rejects configs where they would be required to.
+
+### 8.11 Concerns funnel
+
+**Store (engine-owned).** Every task branch carries `concerns/{id}.yaml`, one file per fingerprint: concerns are `c-{fingerprint}.yaml`, remarkable decisions `rm-{fingerprint}.yaml`. ids are `sha256` prefixes of a stable identity: concerns hash `kind + normalized summary + location`, remarkables hash chosen + alternatives. Re-raising merges: longest detail wins, highest severity wins, affects union (deduped/sorted); legacy pre-union `c-*` files are rename-merged on the next raise. Status lifecycle `open | dismissed | routed | resolved`; files also keep the source step record, `lastSeen`, pending resolutions and dismiss reason. `reconcileConcerns` rebuilds the store from committed ok step records at startup, merging idempotently, so a crash or store loss heals from artifacts. Remarkable decisions use the same aggregation and appear as digest-only `rm-*` entries.
+
+**Triage contract.** Triage uses exact-id matching: review suggestions whose id matches a stored concern id are triage, not findings; all remaining suggestions are ordinary findings. Only `isTriagerAgent` (the step's reviewer and plan-reviewer) may triage, and dismiss requires a non-empty `detail` (the reason) or the step fails. Dismissed concerns become `dismissed`, keep the reason on disk and route nothing. `routeHumanDisposition` is the single human router: at or above `minBlockingSeverity` `human-async`/`human-stop` block (below it they downgrade to a `human-awareness` digest); `human-awareness`, dismissed escalated concerns and `rm-*` remarkables are digest-only (`q-concern-{id}` / `q-escalated-{id}`), and remarkables are threshold-exempt. Routing outcomes:
+
+| Outcome | Engine action |
+|---|---|
+| blocker affecting a dependent item | affected item + declared dependents blocked; architect consult before the wave |
+| `architect` | next architect turn |
+| `optional` / tech-debt | plan tech-debt list |
+| `human-*` | steer mailbox under the severity policy |
+| `dismiss` | `dismissed` with reason on disk; nothing routed |
+
+**Close-up propose/confirm.** Close-ups are non-triagers and their schemas have no suggestions: re-triage flows through `concernResolutions`. `applyCloseupResolutions` only stores `pendingResolution` (resolve/carry/propagate/dismiss); architect `applyConcernConfirms` accepts it (resolve closes, carry routes to the architect, dismiss closes with the pending note as reason, propagate clears the local proposal for the epic push) or rejects it. `applyWaveCloseupFallback` handles triage-less open concerns that predate the close-up: tech-debt becomes `optional` debt, assumptions/risks/questions route to the architect, blockers stay open; epic copies are skipped.
+
+**Epic condensing.** `propagateEpicConcerns` copies open/routed child concerns and open remarkables to the parent store: summaries are prefixed `[epic]`, payloads of at most `120` bytes stay verbatim, longer ones are condensed/halved under a `500`-byte cap; the parent copy records `epic:{epic}/{record}` as source and is committed with the child-closeup. Blocked child questions are forwarded as `q-epic-*` questions with blocks remapped from `task` to the parent task slug; propagation is open-only for concerns, and remarkables ride only on unfiltered pushes.
+
+**ADRs.** Engine ADRs are written as canonical ADR markdown (`# title`, `## Context`, `## Decision`, `## Consequences`, `## Blocking`); repo `docs/adr/*.md` one-paragraph notes predate the engine and are historical notes, not the canonical format. Blocking ADRs park the task; remarkable ADRs are digest-only `human-awareness` and never wait. The `humanInvolvement` mode (`autonomous` | `principal` | `detailed`) selects prompt criteria and the blocking table only:
+
+| Mode | Blocking ADR | Remarkable ADR |
+|---|---|---|
+| autonomous | `human-stop` | digest-only `human-awareness` |
+| principal | `human-async` | digest-only `human-awareness` |
+| detailed | `human-async` | digest-only `human-awareness` |
+
+**Counts, digest and budgets.** `countConcerns` reports status counts over `c-*` files only (remarkables are not counted); `factory status` prints them. Digest mailbox entries persist with no retention/archival rule. Hydration caps are code constants, not config: review/qa hydrate up to `2000` bytes of diff, close-ups `2000` bytes of task diff, planning/other steps `500` bytes of prompt input, and `renderConcernsYaml` defaults to an `8000`-byte ceiling; epic copies use `120`/`500`.
+
+**Accepted deviations.**
+- immediate halt: `adr-autonomous-immediate-halt` (awareness `awareness-plan-2-autonomous-halt-deviation`) — a blocking ADR parks the task at plan time, before unblocked work runs, instead of deferring the stop.
+- triage-coverage: `adr-funnel-triage-coverage` (awareness `awareness-plan-4-funnel-triage-coverage-awareness`) — only plan generation is plan-reviewer-triaged; architect concerns from consult/wave-report/close-up turns aggregate but stay open until an architect turn hydrates them, with hydration + wave close-up fallback as the safety net; simple-task concerns stay open because that flow has no reviewer or waves.
+- epic-config root-only: `adr-epic-config-root-only` — epic children do not inherit the parent task layer, so root `humanInvolvement`/`concerns`/`reviewPolicy` overrides do not reach child epics.
+- close-up-dismiss: `adr-closeup-no-suggestions-triage` — close-ups are not triagers; dismiss via resolutions + architect confirm as above.
+- saga open-only: `adr-epic-push-condensed` — only open/routed concerns and open remarkables propagate; forwarded `q-epic-*` questions are the only blocked-signal path.
 
 ## 9. Mechanical checks
 
@@ -355,6 +400,8 @@ Hook agent outputs use the review contract (read-only) except code-writing agent
 
 Composition (cache-friendly order): `_shared/philosophy.md` + `{agent}.md` (stable) → `steps/{step}.md` → assignment/citations → dynamic feedback last. `{{var}}` only; unknown placeholder = preflight error. Overrides per agent/step. QA/reviewer: developer report is a claim; evidence = engine checks + diff + own inspection. All agents except developer/triage-simple/integrate are read-only.
 
+Producer outputs may also carry structured `concerns[]` and `remarkable[]` (funnel inputs), reviewers may triage them through `suggestions[]`, and close-ups/architects emit `concernResolutions`, `concernConfirms` and `concernResolution`. Prompt fragments receive `concernsYaml` (terse hydrated concerns) and `humanInvolvementCriteria` (active mode + shared blocking table); reviewer/plan-reviewer triage works by exact id. Byte budgets per consumer: review/qa diff up to `2000` bytes, close-up task diff `2000`, planning/other prompt input `500`, renderer default ceiling `8000`; epic copies condense with `120`-byte verbatim and `500`-byte caps.
+
 ## 11. CLI
 
 ```
@@ -364,7 +411,7 @@ bun run factory status <task>                 # tree, items, waves, budgets, ope
 bun run factory steer <task> "text"           # → root task steer/fromuserpending
 bun run factory preflight <task>
 ```
-Preflight: first-run cleanliness (§7), configs + layers valid, roles resolve, templates render, schemas compile, harness binary present and generated harness config valid, run lock free.
+Preflight: first-run cleanliness (§7), configs + layers valid, roles resolve, templates render, schemas compile, harness binary present and generated harness config valid, run lock free. `factory status` additionally prints `Concerns: open N | dismissed N | routed N | resolved N` (counting `c-*` files only) and splits open mailbox entries into `Blocking Questions` and `Digest Questions`; answers go through `factory steer <task> "answer to <id>: …"`.
 
 ## 12. Extensibility, loop prevention, resilience, model splits, token economy
 
@@ -403,6 +450,7 @@ Cache-ordered prompts; assignments carry only their citations + milestone excerp
 
 ## 13. Testing & fire test
 - `bun test` (fake harness + temp git repos), behavior only: crash/restart at each commit point, interrupted not counted, fix loop → consult → escalate, alt-on-retry swap, dispositions incl. human-async blocking dependents and answer re-run, steering single-flight, edits validation, target-red rejects collection errors, red-test catches tests that pass without the prod change, merge path conflict → integrate, HEAD guard, branch naming, session resume threading + sessionLost rehydration.
+- The concerns funnel regression suites: store fingerprint/dedup + legacy migration, review and plan-review triage, close-up propose/confirm lifecycle, hydration byte caps, epic propagation condensing + `q-epic-*` forwarding, ADR blocking table per mode, severity routing and allowlist agreement between config and code defaults, counts/status digest, and docs sentinels (`docs-concerns.test.ts`).
 - Fire test (`docs/FIRE_TEST.md`): `/home/slava/aiexp/python-setup`, GOAL from spec, ≤ 5 launches; operator answers `tousertoreview` via `fromuserpending` (logged); after each launch trace analysis (records, journal, session transcripts) → harness fixes → next launch.
 
 ## 14. Open items
