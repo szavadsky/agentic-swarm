@@ -22,3 +22,9 @@ Conduct technical spike research to eliminate architecture unknowns, investigate
 
 ## Review Feedback
 {{feedback}}
+
+## Open Concerns
+{{concernsYaml}}
+
+- Review the concerns above before starting; they constrain this step but are not part of the assignment.
+- Raise concerns with evidence when you find cross-cutting issues; do not triage pre-existing concerns.

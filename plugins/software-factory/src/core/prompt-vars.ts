@@ -39,6 +39,8 @@ export const PROMPT_VAR_DESCRIPTIONS: Record<string, string> = {
   gateDiff: "Structured gate/tool diff table (baseline-vs-now per-gate status) for regression judgment",
   hydrationContext: "Deterministic architect brief: relevance-selected one-line entries (id, section, headline) with task-relative file paths for full detail",
   limitViolations: "Deterministic plan outline-count limit violations (milestone/item counts vs limits), empty when the plan is within limits",
+  humanInvolvementCriteria: "Active human-involvement mode rules plus shared ADR/concern blocking table (criteria.human-involvement)",
+  concernsYaml: "Open concerns hydrated for this step, formatted as YAML",
 };
 
 /**
@@ -57,35 +59,35 @@ export const KNOWN_VARS: Record<string, string[]> = {
 
 
   // Item development & verification steps
-  "steps/develop": ["assignment", "target", "citations", "feedback"],
-  develop: ["assignment", "target", "citations", "feedback"],
+  "steps/develop": ["assignment", "target", "citations", "feedback", "concernsYaml"],
+  develop: ["assignment", "target", "citations", "feedback", "concernsYaml"],
 
-  "steps/test-first": ["assignment", "citations", "feedback"],
-  "test-first": ["assignment", "citations", "feedback"],
-  "steps/qa": ["assignment", "checks", "testDiff", "diff", "dispositionsCriteria"],
-  qa: ["assignment", "checks", "testDiff", "diff", "dispositionsCriteria"],
+  "steps/test-first": ["assignment", "citations", "feedback", "concernsYaml"],
+  "test-first": ["assignment", "citations", "feedback", "concernsYaml"],
+  "steps/qa": ["assignment", "checks", "testDiff", "diff", "dispositionsCriteria", "humanInvolvementCriteria", "concernsYaml"],
+  qa: ["assignment", "checks", "testDiff", "diff", "dispositionsCriteria", "humanInvolvementCriteria", "concernsYaml"],
 
-  "steps/review": ["assignment", "checks", "diff", "dispositionsCriteria"],
-  review: ["assignment", "checks", "diff", "dispositionsCriteria"],
+  "steps/review": ["assignment", "checks", "diff", "dispositionsCriteria", "humanInvolvementCriteria", "concernsYaml"],
+  review: ["assignment", "checks", "diff", "dispositionsCriteria", "humanInvolvementCriteria", "concernsYaml"],
 
-  "steps/fix-round": ["assignment", "feedback", "checks", "diff"],
-  "fix-round": ["assignment", "feedback", "checks", "diff"],
+  "steps/fix-round": ["assignment", "feedback", "checks", "diff", "concernsYaml"],
+  "fix-round": ["assignment", "feedback", "checks", "diff", "concernsYaml"],
 
-  "steps/simple-implement": ["intent", "citations"],
-  "simple-implement": ["intent", "citations"],
+  "steps/simple-implement": ["intent", "citations", "concernsYaml"],
+  "simple-implement": ["intent", "citations", "concernsYaml"],
 
   "steps/integrate": ["item", "diff"],
   integrate: ["item", "diff"],
 
   // Spikes
-  "steps/research": ["assignment", "intent", "citations", "feedback"],
-  research: ["assignment", "intent", "citations", "feedback"],
+  "steps/research": ["assignment", "intent", "citations", "feedback", "concernsYaml"],
+  research: ["assignment", "intent", "citations", "feedback", "concernsYaml"],
 
-  "steps/poc": ["assignment", "context", "feedback"],
-  poc: ["assignment", "context", "feedback"],
+  "steps/poc": ["assignment", "context", "feedback", "concernsYaml"],
+  poc: ["assignment", "context", "feedback", "concernsYaml"],
 
-  "steps/test-assumptions": ["assignment", "context", "feedback"],
-  "test-assumptions": ["assignment", "context", "feedback"],
+  "steps/test-assumptions": ["assignment", "context", "feedback", "concernsYaml"],
+  "test-assumptions": ["assignment", "context", "feedback", "concernsYaml"],
 
   // Project manager steps
   "steps/pm-edits": ["plan", "taskStatus", "kinds", "citations", "limits", "storyKindsCriteria"],
@@ -109,6 +111,8 @@ export const KNOWN_VARS: Record<string, string[]> = {
     "limits",
     "contextPack",
     "taskStatus",
+    "humanInvolvementCriteria",
+    "concernsYaml",
   ],
   "architect-plan": [
     "task",
@@ -121,19 +125,21 @@ export const KNOWN_VARS: Record<string, string[]> = {
     "limits",
     "contextPack",
     "taskStatus",
+    "humanInvolvementCriteria",
+    "concernsYaml",
   ],
 
-  "steps/architect-revise": ["plan", "planReview", "contextPack", "taskStatus"],
-  "architect-revise": ["plan", "planReview", "contextPack", "taskStatus"],
+  "steps/architect-revise": ["plan", "planReview", "contextPack", "taskStatus", "humanInvolvementCriteria", "concernsYaml"],
+  "architect-revise": ["plan", "planReview", "contextPack", "taskStatus", "humanInvolvementCriteria", "concernsYaml"],
 
-  "steps/architect-resume": ["plan", "waveReport", "steering", "contextPack"],
-  "architect-resume": ["plan", "waveReport", "steering", "contextPack"],
+  "steps/architect-resume": ["plan", "waveReport", "steering", "contextPack", "humanInvolvementCriteria", "concernsYaml"],
+  "architect-resume": ["plan", "waveReport", "steering", "contextPack", "humanInvolvementCriteria", "concernsYaml"],
 
-  "steps/architect-wave-report": ["plan", "waveReport", "debt", "steering", "contextPack", "taskStatus"],
-  "architect-wave-report": ["plan", "waveReport", "debt", "steering", "contextPack", "taskStatus"],
+  "steps/architect-wave-report": ["plan", "waveReport", "debt", "steering", "contextPack", "taskStatus", "humanInvolvementCriteria", "concernsYaml"],
+  "architect-wave-report": ["plan", "waveReport", "debt", "steering", "contextPack", "taskStatus", "humanInvolvementCriteria", "concernsYaml"],
 
-  "steps/architect-closeup": ["closeup", "plan", "intent", "contextPack", "taskStatus"],
-  "architect-closeup": ["closeup", "plan", "intent", "contextPack", "taskStatus"],
+  "steps/architect-closeup": ["closeup", "plan", "intent", "contextPack", "taskStatus", "humanInvolvementCriteria", "concernsYaml"],
+  "architect-closeup": ["closeup", "plan", "intent", "contextPack", "taskStatus", "humanInvolvementCriteria", "concernsYaml"],
 
   "steps/architect-consult-item": [
     "item",
@@ -142,6 +148,8 @@ export const KNOWN_VARS: Record<string, string[]> = {
     "diff",
     "feedback",
     "contextPack",
+    "humanInvolvementCriteria",
+    "concernsYaml",
   ],
   "architect-consult-item": [
     "item",
@@ -150,20 +158,22 @@ export const KNOWN_VARS: Record<string, string[]> = {
     "diff",
     "feedback",
     "contextPack",
+    "humanInvolvementCriteria",
+    "concernsYaml",
   ],
 
-  "steps/architect-consult-nonitem": ["task", "context", "feedback", "debt", "contextPack"],
-  "architect-consult-nonitem": ["task", "context", "feedback", "debt", "contextPack"],
+  "steps/architect-consult-nonitem": ["task", "context", "feedback", "debt", "contextPack", "humanInvolvementCriteria", "concernsYaml"],
+  "architect-consult-nonitem": ["task", "context", "feedback", "debt", "contextPack", "humanInvolvementCriteria", "concernsYaml"],
 
   // Close-up and review checkpoints
-  "steps/wave-close-up": ["task", "waveReport", "infra", "gateDiff"],
-  "wave-close-up": ["task", "waveReport", "infra", "gateDiff"],
+  "steps/wave-close-up": ["task", "waveReport", "infra", "gateDiff", "humanInvolvementCriteria", "concernsYaml"],
+  "wave-close-up": ["task", "waveReport", "infra", "gateDiff", "humanInvolvementCriteria", "concernsYaml"],
 
-  "steps/plan-close-up": ["intent", "plan", "context"],
-  "plan-close-up": ["intent", "plan", "context"],
+  "steps/plan-close-up": ["intent", "plan", "context", "humanInvolvementCriteria", "concernsYaml"],
+  "plan-close-up": ["intent", "plan", "context", "humanInvolvementCriteria", "concernsYaml"],
 
-  "steps/plan-review": ["plan", "intent", "context", "limits", "dispositionsCriteria", "limitViolations"],
-  "plan-review": ["plan", "intent", "context", "limits", "dispositionsCriteria", "limitViolations"],
+  "steps/plan-review": ["plan", "intent", "context", "limits", "dispositionsCriteria", "limitViolations", "humanInvolvementCriteria", "concernsYaml"],
+  "plan-review": ["plan", "intent", "context", "limits", "dispositionsCriteria", "limitViolations", "humanInvolvementCriteria", "concernsYaml"],
 
   // System fragments
   "system/steer-classify": [],

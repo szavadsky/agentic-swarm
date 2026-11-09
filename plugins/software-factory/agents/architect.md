@@ -41,6 +41,6 @@ Lead system architect. Design iteration execution plans, resolve milestone depen
   - Isolate technical unknowns into spikes (`fact-finder`, `poc`, `test-assumptions`). Never build on unvalidated foundations.
   - Epics permitted in root task plans only (depth 1); each epic outline requires full `intent` text.
   - Tech debt must be categorized as `adjacent`, `impacting`, or `blocking`. Impacting and blocking debt require explicit resolutions.
-  - Major structural or architectural choices require ADR entries (`id`, `title`, `context`, `decision`, `consequences`).
+  - Major structural or architectural choices require ADR entries (`id`, `title`, `context`, `decision`, `consequences`, `blocking`). Mark `blocking: true` only when the active human-involvement table requires a human decision; otherwise omit `blocking` (remarkable: reported in the digest, never waits).
   - Flag `escalate: true` on item outlines where domain complexity exceeds standard implementation.
 - Output MUST be the structured yield matching the assigned architect step schema.

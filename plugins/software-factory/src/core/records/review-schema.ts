@@ -47,6 +47,57 @@ export function generateReviewSchema(
           additionalProperties: false,
         },
       },
+      remarkable: {
+        type: "array",
+        description: "Remarkable decisions or tradeoffs with the chosen option, alternatives, and why",
+        items: {
+          type: "object",
+          required: ["chosen", "alternatives", "why"],
+          additionalProperties: false,
+          properties: {
+            chosen: { type: "string" },
+            why: { type: "string" },
+            alternatives: {
+              type: "array",
+              items: { type: "string" },
+            },
+          },
+        },
+      },
+      newConcerns: {
+        type: "array",
+        description: "New concerns discovered during review",
+        items: {
+          type: "object",
+          required: ["kind", "summary"],
+          additionalProperties: false,
+          properties: {
+            kind: {
+              type: "string",
+              enum: ["tech-debt", "assumption", "blocker", "risk", "question"],
+            },
+            summary: { type: "string" },
+            detail: { type: "string" },
+            severity: {
+              type: "string",
+              enum: ["low", "medium", "high"],
+            },
+            location: {
+              type: "object",
+              required: ["file"],
+              properties: {
+                file: { type: "string" },
+                line: { type: "integer" },
+              },
+              additionalProperties: false,
+            },
+            affects: {
+              type: "array",
+              items: { type: "string" },
+            },
+          },
+        },
+      },
     },
     additionalProperties: false,
   };

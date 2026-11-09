@@ -11,7 +11,7 @@ import type {
   TriageArtifact,
 } from "./artifacts.js";
 import type { Harness } from "../harness/types.js";
-import { Semaphore } from "./mutex.js";
+import { KeyedMutex, Semaphore } from "./mutex.js";
 import { git } from "./git/exec.js";
 import { taskBranch, childBranch } from "./git/naming.js";
 import {
@@ -35,9 +35,11 @@ import {
   isContextPackEnabled,
 } from "./flows/ingest.js";
 import { runIteration } from "./flows/iteration.js";
+import { propagateEpicConcerns } from "./flows/epic-propagation.js";
 import { runSeamHooks } from "./flows/seams.js";
 import { readYaml, writeYamlAtomic, readText } from "./records/io.js";
 import { processSteeringMailbox } from "./steer.js";
+import { reconcileConcerns } from "./concerns.js";
 import { installShutdownHandlers } from "./shutdown.js";
  import { initFactoryRuntimeTmp } from "./runtime-tmp.js";
 import { assertDiskSpace, LowDiskSpaceStopError, type DiskSpaceProbe } from "./disk-space.js";
@@ -114,6 +116,9 @@ async function repairInterruptedRecords(taskDir: string): Promise<void> {
 }
 
 
+/** Serializes parent-side propagation + child-closeup commit per parent worktree. */
+const parentCloseupLocks = new KeyedMutex();
+
 /**
  * Runs an epic as a child task on the parent branch (§8.6, Finding 7).
  */
@@ -178,23 +183,34 @@ export async function runChildTask(
     log,
   });
 
-  // 4. Record the child's final close-up as the parent item status so derive
-  // and the merge path see it (§8.6, Finding 7)
+  // 4. Push open/routed child concerns and blocked questions to the parent,
+  // then record the child's final close-up as the parent item status so derive
+  // and the merge path see it (§8.6, Finding 7). One lock and one commit cover
+  // the copies plus the close-up; copies stay open, so only forwarded
+  // questions can block the parent.
   const parentItemDir = path.join(parent.taskDir, "items", epicSlug);
-  await fs.promises.mkdir(parentItemDir, { recursive: true });
-  const childStatus =
-    itRes.status === "done" ? "done" : itRes.status === "blocked" || itRes.status === "stopped" ? "blocked" : "failed";
-  await writeYamlAtomic(path.join(parentItemDir, "child-closeup.yaml"), {
-    epic: epicSlug,
-    status: childStatus,
-    iteration: itRes.iteration,
-    summary: `Epic child task finished: ${itRes.status}`,
+  await parentCloseupLocks.runExclusive(parent.path, async () => {
+    await propagateEpicConcerns({
+      childTaskDir,
+      parentTaskDir: parent.taskDir,
+      parentWt: parent.path,
+      epic: epicSlug,
+    });
+    await fs.promises.mkdir(parentItemDir, { recursive: true });
+    const childStatus =
+      itRes.status === "done" ? "done" : itRes.status === "blocked" || itRes.status === "stopped" ? "blocked" : "failed";
+    await writeYamlAtomic(path.join(parentItemDir, "child-closeup.yaml"), {
+      epic: epicSlug,
+      status: childStatus,
+      iteration: itRes.iteration,
+      summary: `Epic child task finished: ${itRes.status}`,
+    });
+    await git(parent.path, ["add", "-A"], { allowFail: true });
+    await commitAll(repo, parent.path, `factory: record epic ${epicSlug} child status ${childStatus}`);
+    // state.yaml lags journal by design: it is a materialized view refreshed
+    // here (after this decision write), never read for decisions.
+    await refreshStateYaml({ taskDir: parent.taskDir, task: path.basename(parent.taskDir), parentBranch: parent.branch, taskWt: parent.path, pipeline });
   });
-  await git(parent.path, ["add", "-A"], { allowFail: true });
-  await commitAll(repo, parent.path, `factory: record epic ${epicSlug} child status ${childStatus}`);
-  // state.yaml lags journal by design: it is a materialized view refreshed
-  // here (after this decision write), never read for decisions.
-  await refreshStateYaml({ taskDir: parent.taskDir, task: path.basename(parent.taskDir), parentBranch: parent.branch, taskWt: parent.path, pipeline });
 
     return {
       status: itRes.status === "done" ? "done" : itRes.status === "blocked" || itRes.status === "stopped" ? "blocked" : "failed",
@@ -263,6 +279,12 @@ export async function runTask(
   // 2. Start-up repair (§6.3.6): commit engine recovery evidence under the
   // orchestration folder as "factory: restart recovery"; stash only dirt
   // outside it. Finding 1 & 19.
+  // Concerns are engine-owned: commit them before stray-dirt repair stashes them.
+  if (fs.existsSync(path.join(taskDir, "concerns"))) {
+    await commitAll(repo, taskWt, "factory: concern store recovery", {
+      paths: [`${orchFolder}/${task}/concerns`],
+    });
+  }
   await repairWorktree(repo, taskWt, "task", {
     orchestrationFolder: orchFolder,
     operatorEditable: [
@@ -301,6 +323,19 @@ export async function runTask(
   }
 
   await repairInterruptedRecords(taskDir);
+
+  // Rebuild concerns lost in a crash from committed step records (§18).
+  try {
+    await reconcileConcerns({ taskDir, taskWt, repo });
+  } catch (err: any) {
+    try {
+      await appendJournal(taskDir, {
+        type: "concern_reconcile_error",
+        task,
+        error: err?.message || String(err),
+      });
+    } catch { /* Journal failure must not crash startup. */ }
+  }
 
   // 3. Load pipeline config and setup semaphores (§2)
   pipeline = await pipelineFor(taskDir);

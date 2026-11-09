@@ -1,6 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import type {
+  ConcernCounts,
+  ConcernSeverity,
   DecisionArtifact,
   PlanArtifact,
   PlanCloseupArtifact,
@@ -15,9 +17,13 @@ import type {
 } from "../artifacts.js";
 import { readYaml, writeYamlAtomic } from "../records/io.js";
 import { findOkCommittedRecord } from "../records/step-record.js";
-import { deriveItemState, type DerivedItemState } from "./item.js";
+import { deriveItemState, withRoutedBlocking, type DerivedItemState } from "./item.js";
 import { deriveWaveState, type DerivedWaveState } from "./wave.js";
 import { scanSpendFromDisk, type SpendTotals } from "../budget.js";
+import { countConcerns, listConcerns, severityAtLeast } from "../concerns.js";
+import { isDebtConcern } from "../triage.js";
+import { questionBlocks } from "../steer.js";
+import { blockedByConcern } from "../plan/scheduler.js";
 import { git } from "../git/exec.js";
 import { isAncestor } from "../git/commit.js";
 import { readJournal } from "../journal.js";
@@ -48,6 +54,7 @@ export interface DerivedTaskState {
   spendByRole: Record<string, SpendTotals>;
   spendByItem: Record<string, SpendTotals>;
   runningSteps: DerivedRunningStep[];
+  concerns: ConcernCounts;
   hasOpenSteerQuestions: boolean;
   openSteerQuestions: SteerItemArtifact[];
   deadSteerFiles: Array<{ file: string; errors: number }>;
@@ -84,6 +91,26 @@ export async function countCommittedCloseupIterations(opts: {
     if (closeupOk) count++;
   }
   return count;
+}
+
+/**
+ * Collects item slugs named by routed blocker concerns at or above
+ * `minBlockingSeverity` (adr-routing-derived-state, adr-severity-policy-active).
+ * Defaults to high; pure read, the concern store is authoritative.
+ */
+export async function collectRoutedBlockers(
+  taskDir: string,
+  minBlockingSeverity: ConcernSeverity = "high"
+): Promise<Set<string>> {
+  const affected = new Set<string>();
+  for (const concern of await listConcerns(taskDir)) {
+    if (concern.kind !== "blocker" || concern.status !== "routed") continue;
+    if (!severityAtLeast(concern.severity, minBlockingSeverity)) continue;
+    for (const slug of concern.affects ?? []) {
+      affected.add(slug);
+    }
+  }
+  return affected;
 }
 
 /**
@@ -192,23 +219,46 @@ export async function deriveTaskState(opts: {
 
   // 5. Items
   const items: DerivedItemState[] = [];
-  const itemMap: Record<string, DerivedItemState> = {};
   const itemsDir = path.join(taskDir, "items");
   if (fs.existsSync(itemsDir)) {
     const itemEntries = await fs.promises.readdir(itemsDir, { withFileTypes: true });
     for (const ent of itemEntries) {
       if (!ent.isDirectory()) continue;
-      const itState = await deriveItemState({
-        taskDir,
-        itemSlug: ent.name,
-        parentBranch,
-        taskWt,
-        pipeline,
-        project,
-      });
-      items.push(itState);
-      itemMap[ent.name] = itState;
+      items.push(
+        await deriveItemState({
+          taskDir,
+          itemSlug: ent.name,
+          parentBranch,
+          taskWt,
+          pipeline,
+          project,
+        })
+      );
     }
+  }
+
+  // 5b. Routed blockers (adr-routing-derived-state): a routed blocker concern
+  // blocks the pending items it affects and their declared dependents,
+  // transitively. The failure-union fixpoint has one owner
+  // (blockedByConcern); task only maps derive statuses onto scheduler
+  // inputs. Pending-only seeding matches §8.2 and keeps itemMap consistent
+  // with deriveWaveState/iteration.
+  const routedNames = await collectRoutedBlockers(
+    taskDir,
+    pipeline?.concerns?.minBlockingSeverity ?? "high"
+  );
+  const schedItems = items.map((it) => ({
+    slug: it.slug,
+    wave: String(it.wave),
+    deps: it.deps,
+    status: it.status as "pending" | "running" | "done" | "failed" | "blocked" | "abandoned",
+  }));
+  const routedBlocked = new Set<string>(blockedByConcern(schedItems, routedNames));
+  const itemMap: Record<string, DerivedItemState> = {};
+  for (let i = 0; i < items.length; i++) {
+    const blocked = withRoutedBlocking(items[i]!, routedBlocked);
+    items[i] = blocked;
+    itemMap[blocked.slug] = blocked;
   }
 
   // Sort items deterministically by wave then slug
@@ -219,6 +269,8 @@ export async function deriveTaskState(opts: {
   const maxWave = items.reduce((max, it) => Math.max(max, it.wave), 1);
   let currentWave: number | undefined;
 
+  // Items are already routed-blocked above, so wave calls intentionally omit
+  // blockedBy (seeds now carry status blocked, not pending).
   for (let w = 1; w <= maxWave; w++) {
     const waveState = deriveWaveState({ wave: w, items });
     waves.push(waveState);
@@ -255,6 +307,12 @@ export async function deriveTaskState(opts: {
         }
       }
     }
+  }
+  // From concerns: debt predicate (routed/resolved tech-debt, routed optional)
+  for (const concern of await listConcerns(taskDir)) {
+    if (!isDebtConcern(concern)) continue;
+    const item = concern.source?.item ?? concern.affects?.[0];
+    debtSet.add(item ? `[${item}] ${concern.summary}` : concern.summary);
   }
   // From review suggestions with disposition optional
   for (const it of items) {
@@ -332,14 +390,9 @@ export async function deriveTaskState(opts: {
   // 9. Overall task status determination (§6.3 Invariant 4)
   let status: "active" | "blocked" | "done" | "failed" = "active";
 
-  const hasTaskLevelOpenQuestion = openSteerQuestions.some((q) => {
-    if (q.status !== "open" || q.disposition === "human-awareness") return false;
-    if (Array.isArray(q.blocks)) return q.blocks.includes("task");
-    return (
-      (q.ref === "plan" || q.ref === task) &&
-      (q.disposition === "human-async" || q.disposition === "human-stop")
-    );
-  });
+  const hasTaskLevelOpenQuestion = openSteerQuestions.some((q) =>
+    questionBlocks(q, "task")
+  );
 
   if (hasTaskLevelOpenQuestion) {
     status = "blocked";
@@ -348,9 +401,7 @@ export async function deriveTaskState(opts: {
   } else if (lastCloseup?.status === "blocked") {
     // Finding 6: An answered blocked close-up starts iteration N+1
     const closeupQuestion = openSteerQuestions.find(
-      (q) =>
-        (q.ref === "plan" || q.id === `closeup-${iteration}`) &&
-        q.disposition !== "human-awareness"
+      (q) => questionBlocks(q, "task") || q.id === `closeup-${iteration}`
     );
     if (closeupQuestion && closeupQuestion.status === "open") {
       status = "blocked";
@@ -359,7 +410,11 @@ export async function deriveTaskState(opts: {
       status = "active";
     }
   } else if (items.length > 0 && items.every((it) => it.status === "blocked")) {
-    status = "blocked";
+    // human-async parks an item, not the task; only mixed/other blocks halt it.
+    const blockedByNonAsync = items.some(
+      (it) => it.status === "blocked" && it.openSteerQuestion?.disposition !== "human-async"
+    );
+    if (blockedByNonAsync) status = "blocked";
   } else if (items.length > 0 && items.some((it) => it.status === "failed")) {
     status = "failed";
   } else if (triage?.kind === "simple") {
@@ -435,6 +490,8 @@ export async function deriveTaskState(opts: {
     status = "active";
   }
 
+  const concerns = await countConcerns(taskDir);
+
   const toStateArtifact = (): StateArtifact => {
     const itemsRecord: Record<string, StateItemInfo> = {};
     for (const it of items) {
@@ -461,6 +518,7 @@ export async function deriveTaskState(opts: {
       iteration,
       currentWave,
       items: itemsRecord,
+      concerns,
       debt: Array.from(debtSet),
       budgetSpentUsd,
       spendByRole: Object.fromEntries(Object.entries(spendByRole).map(([k, v]) => [k, toBreakdown(v)])),
@@ -484,6 +542,7 @@ export async function deriveTaskState(opts: {
     spendByRole,
     spendByItem,
     runningSteps,
+    concerns,
     hasOpenSteerQuestions: openSteerQuestions.length > 0,
     openSteerQuestions,
     deadSteerFiles: await deriveDeadSteerFiles(taskDir),

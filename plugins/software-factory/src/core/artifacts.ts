@@ -130,8 +130,19 @@ export interface PipelineConfig {
   budget?: PipelineBudget;
   diversity?: "warn" | "error" | "off";
   harness?: string;
+  /** How aggressively the human is consulted (`autonomous` is least, `detailed` most). */
+  humanInvolvement?: "autonomous" | "principal" | "detailed";
+  concerns?: {
+    /** Agents allowed to raise concerns from their structured output. */
+    raiseAllowlist?: string[];
+    minDigestSeverity?: ConcernSeverity;
+    minBlockingSeverity?: ConcernSeverity;
+  };
   reviewPolicy?: {
+    /** Canonical default dispositions for agents without a specific entry. */
     default?: string[];
+    /** Legacy alias for `default`, kept for existing pipeline configs. */
+    allowedDispositions?: string[];
     [agent: string]: string[] | undefined;
   };
   criteria?: Record<string, string>;
@@ -261,6 +272,8 @@ export interface PlanAdr {
   context: string;
   decision: string;
   consequences?: string;
+  /** Needs a human decision per the active involvement mode. */
+  blocking?: boolean;
 }
 
 export interface PlanArtifact {
@@ -308,13 +321,99 @@ export interface AssignmentArtifact {
   escalate?: boolean;
 }
 
+export type ConcernKind = "tech-debt" | "assumption" | "blocker" | "risk" | "question";
+
+export type ConcernSeverity = "low" | "medium" | "high";
+
+export type ConcernStatus = "open" | "dismissed" | "routed" | "resolved";
+
+/** A structured "see something, say something" report from any agent output. */
+export interface Concern {
+  /** Stable fingerprint id; assigned by the engine when the concern is aggregated. */
+  id?: string;
+  kind: ConcernKind;
+  summary: string;
+  detail: string;
+  location?: {
+    file: string;
+    line?: number;
+  };
+  severity: ConcernSeverity;
+  /** Item, epic, or plan refs the concern affects. */
+  affects?: string[];
+}
+
+export interface RemarkableDecision {
+  chosen: string;
+  alternatives: string[];
+  why: string;
+}
+
+/** Architect confirmation for a close-up concern resolution. */
+export interface ConcernConfirms {
+  id: string;
+  confirm: "accept" | "reject";
+  note?: string;
+}
+
+/** Decision-level resolution: resolve now or carry to the next architect turn. */
+export interface ConcernResolution {
+  id: string;
+  action: "resolve" | "carry";
+  note?: string;
+}
+
+/**
+ * Close-up proposals may also propagate a concern to the parent epic or saga,
+ * or dismiss it with the proposal note as the required dismissal reason.
+ */
+export interface CloseupConcernResolution {
+  id: string;
+  action: "resolve" | "carry" | "propagate" | "dismiss";
+  note?: string;
+}
+
+export interface ConcernSource {
+  record: string;
+  agent: string;
+  /** Epic slug that pushed this copy into the parent task. */
+  epic?: string;
+  step?: string;
+  item?: string;
+  iteration?: number;
+  escalated?: boolean;
+  /** Timestamp of the most recent re-emit for merged concerns. */
+  lastSeen?: string;
+}
+
+export interface PendingConcernResolution {
+  action: "resolve" | "carry" | "propagate" | "dismiss";
+  /** Dismiss proposals require this note as the dismissal reason. */
+  note?: string;
+  by: string;
+  at: string;
+}
+
+/** A concern persisted under the task's `concerns/` folder. */
+export interface StoredConcernArtifact extends Concern {
+  id: string;
+  status: ConcernStatus;
+  disposition?: ReviewDisposition;
+  dismissReason?: string;
+  source: ConcernSource;
+  pendingResolution?: PendingConcernResolution;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type ReviewDisposition =
   | "fix"
   | "optional"
   | "architect"
   | "human-awareness"
   | "human-async"
-  | "human-stop";
+  | "human-stop"
+  | "dismiss";
 
 export interface ReviewSuggestion {
   id: string;
@@ -331,6 +430,8 @@ export interface ReviewArtifact {
   status: "approved" | "changes_requested";
   summary: string;
   suggestions: ReviewSuggestion[];
+  newConcerns?: Concern[];
+  remarkable?: RemarkableDecision[];
 }
 
 export type DeveloperTarget =
@@ -343,7 +444,8 @@ export interface DeveloperOutputArtifact {
   summary: string;
   target?: DeveloperTarget;
   evidence?: string[];
-  concerns?: string[];
+  concerns?: Concern[];
+  remarkable?: RemarkableDecision[];
   notes?: string;
 }
 
@@ -353,6 +455,8 @@ export interface FactFinderOutputArtifact {
   findings: string;
   sources?: string[];
   recommendations?: string[];
+  concerns?: Concern[];
+  remarkable?: RemarkableDecision[];
 }
 
 export interface WaveCloseupArtifact {
@@ -365,6 +469,9 @@ export interface WaveCloseupArtifact {
   debt?: string[];
   summary: string;
   recommendations?: string[];
+  concerns?: Concern[];
+  remarkable?: RemarkableDecision[];
+  concernResolutions?: CloseupConcernResolution[];
 }
 
 export interface PlanCloseupArtifact {
@@ -375,6 +482,10 @@ export interface PlanCloseupArtifact {
   completedMilestones?: string[];
   remainingMilestones?: string[];
   techDebt?: string[];
+  concerns?: Concern[];
+  remarkable?: RemarkableDecision[];
+  concernConfirms?: ConcernConfirms[];
+  concernResolutions?: CloseupConcernResolution[];
 }
 
 export type DecisionContext = "item" | "non-item" | "wave" | "plan-closeup";
@@ -394,6 +505,10 @@ export interface DecisionArtifact {
   question?: string;
   planDelta?: string;
   timestamp: string;
+  concerns?: Concern[];
+  remarkable?: RemarkableDecision[];
+  concernConfirms?: ConcernConfirms[];
+  concernResolution?: ConcernResolution;
 }
 
 export interface SteerItemArtifact {
@@ -480,6 +595,13 @@ export interface SpendBreakdown {
   inputTokens: number;
   outputTokens: number;
 }
+/** Concern-store totals surfaced on state.yaml (§18). */
+export interface ConcernCounts {
+  open: number;
+  dismissed: number;
+  routed: number;
+  resolved: number;
+}
 
 export interface StateArtifact {
   task: string;
@@ -488,6 +610,7 @@ export interface StateArtifact {
   iteration: number;
   currentWave?: number;
   items: Record<string, StateItemInfo>;
+  concerns: ConcernCounts;
   debt?: string[];
   budgetSpentUsd?: number;
   spendByRole?: Record<string, SpendBreakdown>;

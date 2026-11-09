@@ -25,3 +25,11 @@ Perform independent quality assurance on the item's implementation and test suit
 
 ## Code Diff
 {{diff}}
+
+## Human involvement
+{{humanInvolvementCriteria}}
+
+## Open Concerns
+{{concernsYaml}}
+
+- Raise concerns with evidence; condense stale detail instead of repeating it.

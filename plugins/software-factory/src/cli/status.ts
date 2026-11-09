@@ -3,6 +3,7 @@ import path from "node:path";
 import { loadProjectConfig } from "../core/config/loader.js";
 import { taskBranch, worktreePath } from "../core/git/naming.js";
 import { deriveTaskState } from "../core/derive/task.js";
+import { questionBlocks } from "../core/steer.js";
 
 export interface StatusOptions {
   repoRoot: string;
@@ -113,10 +114,16 @@ export async function runStatus(opts: StatusOptions): Promise<number> {
     console.log(`Items: None scheduled yet`);
   }
 
-  if (derived.openSteerQuestions && derived.openSteerQuestions.length > 0) {
-    console.log(`----------------------------------------------------------------`);
-    console.log(`Open Operator Questions (tousertoreview):`);
-    for (const q of derived.openSteerQuestions) {
+  const isBlocking = (q: (typeof derived.openSteerQuestions)[number]) =>
+    q.disposition === "human-stop" ||
+    (q.blocks?.length ?? 0) > 0 ||
+    questionBlocks(q, "task");
+  const printQuestions = (questions: typeof derived.openSteerQuestions): void => {
+    if (questions.length === 0) {
+      console.log(`  (none)`);
+      return;
+    }
+    for (const q of questions) {
       console.log(`  * [${q.id}] ref: ${q.ref} | disposition: ${q.disposition}`);
       console.log(`    Question: ${q.question}`);
       if (q.draftDecision) {
@@ -127,7 +134,19 @@ export async function runStatus(opts: StatusOptions): Promise<number> {
       }
       console.log(`    To answer: factory steer ${task} "answer to ${q.id}: <your answer>"`);
     }
-  }
+  };
+
+  console.log(
+    `Concerns: open ${derived.concerns.open} | dismissed ${derived.concerns.dismissed} | routed ${derived.concerns.routed} | resolved ${derived.concerns.resolved}`
+  );
+
+  console.log(`----------------------------------------------------------------`);
+  console.log(`Blocking Questions:`);
+  printQuestions(derived.openSteerQuestions.filter(isBlocking));
+
+  console.log(`----------------------------------------------------------------`);
+  console.log(`Digest Questions:`);
+  printQuestions(derived.openSteerQuestions.filter((q) => !isBlocking(q)));
 
   if (derived.deadSteerFiles && derived.deadSteerFiles.length > 0) {
     console.log(`----------------------------------------------------------------`);

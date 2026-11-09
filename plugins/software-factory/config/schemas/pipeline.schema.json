@@ -209,6 +209,29 @@
       "type": "string",
       "default": "omp"
     },
+    "humanInvolvement": {
+      "type": "string",
+      "enum": ["autonomous", "principal", "detailed"],
+      "default": "autonomous"
+    },
+    "concerns": {
+      "type": "object",
+      "properties": {
+        "raiseAllowlist": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "minDigestSeverity": {
+          "type": "string",
+          "enum": ["low", "medium", "high"]
+        },
+        "minBlockingSeverity": {
+          "type": "string",
+          "enum": ["low", "medium", "high"]
+        }
+      },
+      "additionalProperties": false
+    },
     "reviewPolicy": {
       "type": "object",
       "properties": {

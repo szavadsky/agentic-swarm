@@ -27,3 +27,11 @@ Determine the final iteration outcome following the completeness audit by the pl
 
 ## Task Status
 {{taskStatus}}
+
+## Human involvement
+{{humanInvolvementCriteria}}
+
+## Open Concerns
+{{concernsYaml}}
+
+- Raise concerns with evidence; record concernResolutions with resolve/carry/propagate and condense stale detail.

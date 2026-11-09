@@ -13,9 +13,13 @@ Conduct adversarial review of the architect's proposed plan, critiquing mileston
   - Risk isolation: are technical unknowns and third-party dependencies isolated into spikes?
   - Debt & ADRs: is technical debt properly categorized? Are major decisions documented in ADRs?
 - Reviewer boundary: reviewers critique; reviewers NEVER rewrite plans. Yield structured output matching `review.schema.json`, using only dispositions allowed by the section below.
+- Concern triage: ids in Open Concerns are pre-existing concerns/decisions, not plan findings. Re-emit their exact id in `suggestions`; `dismiss` (with `detail`) dismisses, every other allowed disposition routes it. Triage ids never request a plan revision.
 
 ## Dispositions Criteria
 {{dispositionsCriteria}}
+
+## Human involvement
+{{humanInvolvementCriteria}}
 
 ## Plan
 {{plan}}
@@ -28,3 +32,8 @@ Conduct adversarial review of the architect's proposed plan, critiquing mileston
 
 ## Limits
 {{limits}}
+
+## Open Concerns
+{{concernsYaml}}
+
+- Raise concerns with evidence; triage pre-existing ids as above and condense stale detail.

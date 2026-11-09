@@ -23,6 +23,53 @@
     "techDebt": {
       "type": "array",
       "items": { "type": "string" }
+    },
+    "concerns": {
+      "type": "array",
+      "description": "Structured concerns raised at plan close-up",
+      "items": {
+        "type": "object", "required": ["kind", "summary"], "additionalProperties": false,
+        "properties": {
+          "kind": { "type": "string", "enum": ["tech-debt", "assumption", "blocker", "risk", "question"] },
+          "summary": { "type": "string" }, "detail": { "type": "string" },
+          "severity": { "type": "string", "enum": ["low", "medium", "high"] },
+          "location": { "type": "object", "required": ["file"], "properties": { "file": { "type": "string" }, "line": { "type": "integer" } }, "additionalProperties": false },
+          "affects": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "remarkable": {
+      "type": "array",
+      "description": "Remarkable decisions or tradeoffs with the chosen option, alternatives, and why",
+      "items": {
+        "type": "object", "required": ["chosen", "alternatives", "why"], "additionalProperties": false,
+        "properties": {
+          "chosen": { "type": "string" }, "why": { "type": "string" },
+          "alternatives": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "concernConfirms": {
+      "type": "array",
+      "description": "Architect confirmations for close-up concern resolutions",
+      "items": {
+        "type": "object", "required": ["id", "confirm"], "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" }, "note": { "type": "string" },
+          "confirm": { "type": "string", "enum": ["accept", "reject"] }
+        }
+      }
+    },
+    "concernResolutions": {
+      "type": "array",
+      "description": "Close-up resolutions for open concerns",
+      "items": {
+        "type": "object", "required": ["id", "action"], "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" }, "note": { "type": "string" },
+          "action": { "type": "string", "enum": ["resolve", "carry", "propagate", "dismiss"] }
+        }
+      }
     }
   },
   "additionalProperties": false

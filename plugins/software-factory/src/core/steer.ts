@@ -116,6 +116,18 @@ export async function writeQuestion(
 }
 
 /**
+ * Returns true when an open mailbox question blocks `target` (an item slug or
+ * `"task"`) (§8.7). Explicit `blocks` wins; without it a question blocks its
+ * own ref. `human-awareness` is digest-only and never blocks.
+ */
+export function questionBlocks(q: SteerItemArtifact, target: string): boolean {
+  if (q.status !== "open" || q.disposition === "human-awareness") return false;
+  if (Array.isArray(q.blocks)) return q.blocks.includes(target);
+  if (q.ref === target || q.ref.endsWith(`/${target}`)) return true;
+  return target === "task" && q.ref === "plan";
+}
+
+/**
  * Classifies an incoming pending message via `harness.complete` using the
  * `steer-classify` system prompt and `steer-classification` schema (§8.8).
  */

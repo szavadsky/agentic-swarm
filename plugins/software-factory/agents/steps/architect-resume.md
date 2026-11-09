@@ -21,3 +21,11 @@ Resume oversight of an existing iteration following process restart or return fr
 
 ## Context Pack
 {{contextPack}}
+
+## Human involvement
+{{humanInvolvementCriteria}}
+
+## Open Concerns
+{{concernsYaml}}
+
+- Raise concerns with evidence; condense stale detail instead of repeating it.

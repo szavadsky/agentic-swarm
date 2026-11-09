@@ -20,3 +20,11 @@ Wave Report: {{waveReport}}
 
 ## Gate Diff (baseline vs now)
 {{gateDiff}}
+
+## Human involvement
+{{humanInvolvementCriteria}}
+
+## Open Concerns
+{{concernsYaml}}
+
+- Raise concerns with evidence; record concernResolutions with resolve/carry/propagate and condense stale detail.

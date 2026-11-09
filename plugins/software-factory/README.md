@@ -102,15 +102,44 @@ Runtime state is placed outside the main checkout in `{worktreeRoot}/.factory-ru
 
 ---
 
-## 5. Documentation & Architecture
+## 5. Concerns & human involvement
 
-- **Architecture Specification**: `docs/ARCHITECTURE.md` (§0–§14)
+Every agent output may raise structured `concerns[]` and `remarkable[]` decisions. The engine aggregates them into an engine-owned `concerns/` store on the task branch (`c-*.yaml`, `rm-*.yaml`), dedupes by fingerprint, and funnels them through review triage, close-ups and the steer mailbox; the full contract is in ARCHITECTURE §8.11.
+
+`humanInvolvement` selects the noise level (`autonomous`, `principal`, `detailed`). Set it per task in `{orchestrationFolder}/{task}/pipeline.yaml`; task layers are root-only, so epic children do not inherit them. Example overrides:
+
+```yaml
+# principal: block on stack/layer, external interfaces and config shapes
+humanInvolvement: principal
+concerns:
+  raiseAllowlist: [developer, fact-finder, architect, qa, reviewer, plan-reviewer, wave-close-up, plan-close-up]
+  minDigestSeverity: low
+  minBlockingSeverity: medium
+
+# detailed: also block external-interface and major internal-interface changes
+humanInvolvement: detailed
+concerns:
+  minDigestSeverity: low
+  minBlockingSeverity: low
+```
+
+`factory status <task>` prints concern counts and splits the mailbox into blocking and informational entries:
+
+```
+Concerns: open 2 | dismissed 1 | routed 1 | resolved 4
+Blocking Questions:
+  * [q-concern-c-1a2b3c4d5e] ref: item | disposition: human-async
+Digest Questions:
+  * [q-escalated-c-1a2b3c4d5e] ref: c-1a2b3c4d5e | disposition: human-awareness
+```
+
+## 6. Documentation & Architecture
+
+- **Architecture Specification**: `docs/ARCHITECTURE.md` (§0–§14; concerns funnel in §8.11)
 - **Harness Adapter**: `docs/OMP_ADAPTER.md` (CLI templates, overlay keys, NDJSON parsing, error classification, prompt-cache safety)
 - **End-to-End Validation**: `docs/FIRE_TEST.md` (Live verification on sample targets)
 
----
-
-## 6. Testing
+## 7. Testing
 
 Run unit tests:
 ```bash

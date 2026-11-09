@@ -8,11 +8,86 @@ import {
   loadCriteriaBundle,
   formatDispositionsSection,
   resolveAgentTools,
+  formatHumanInvolvementCriteria,
   ENGINE_STEP_FRAGMENTS,
 } from "../src/core/prompts.js";
-import { loadPipelineConfig } from "../src/core/config/loader.js";
-import type { PipelineConfig } from "../src/core/artifacts.js";
 import { KNOWN_VARS } from "../src/core/prompt-vars.js";
+import { loadPipelineConfig } from "../src/core/config/loader.js";
+import { isTriagerAgent, resolveReviewAllowed } from "../src/core/review-policy.js";
+import type { PipelineConfig } from "../src/core/artifacts.js";
+
+/** Samples every placeholder the fragment declares (render helper). */
+function sampleVars(fragment: string): Record<string, string> {
+  const vars: Record<string, string> = {};
+  for (const name of KNOWN_VARS[fragment] ?? []) vars[name] = `sample-${name}`;
+  return vars;
+}
+
+/**
+ * Fragment matrix (docs/adr/adr-prompt-fragment-matrix.md): every fragment that
+ * receives hydrated open concerns. Producers raise concerns; reviewers,
+ * architects, close-ups, and QA additionally triage them.
+ */
+const CONCERN_FRAGMENTS = [
+  "steps/develop",
+  "steps/test-first",
+  "steps/simple-implement",
+  "steps/fix-round",
+  "steps/poc",
+  "steps/test-assumptions",
+  "steps/research",
+  "steps/review",
+  "steps/qa",
+  "steps/plan-review",
+  "steps/wave-close-up",
+  "steps/plan-close-up",
+  "steps/architect-plan",
+  "steps/architect-revise",
+  "steps/architect-resume",
+  "steps/architect-wave-report",
+  "steps/architect-closeup",
+  "steps/architect-consult-item",
+  "steps/architect-consult-nonitem",
+] as const;
+
+/** Triage fragments that receive the active human-involvement criteria. */
+const HUMAN_INVOLVEMENT_FRAGMENTS = new Set<string>([
+  "steps/review",
+  "steps/qa",
+  "steps/plan-review",
+  "steps/wave-close-up",
+  "steps/plan-close-up",
+  "steps/architect-plan",
+  "steps/architect-revise",
+  "steps/architect-resume",
+  "steps/architect-wave-report",
+  "steps/architect-closeup",
+  "steps/architect-consult-item",
+  "steps/architect-consult-nonitem",
+]);
+
+/** Non-empty line counts before the concern/human-involvement sections landed. */
+const FRAGMENT_BASELINE_LINES: Record<string, number> = {
+  "steps/develop": 14,
+  "steps/test-first": 17,
+  "steps/simple-implement": 13,
+  "steps/fix-round": 16,
+  "steps/poc": 12,
+  "steps/test-assumptions": 13,
+  "steps/research": 14,
+  "steps/review": 24,
+  "steps/qa": 20,
+  "steps/plan-review": 27,
+  "steps/wave-close-up": 14,
+  "steps/plan-close-up": 16,
+  "steps/architect-plan": 31,
+  "steps/architect-revise": 15,
+  "steps/architect-resume": 14,
+  "steps/architect-wave-report": 18,
+  "steps/architect-closeup": 16,
+  "steps/architect-consult-item": 21,
+  "steps/architect-consult-nonitem": 17,
+};
 
 describe("prompts: PromptLibrary & preflightPrompts", () => {
   const builtinDir = path.resolve("agents");
@@ -37,6 +112,7 @@ describe("prompts: PromptLibrary & preflightPrompts", () => {
       target: "Unit tests",
       citations: "src/index.ts:1-10",
       feedback: "",
+      concernsYaml: "",
     });
 
     expect(rendered).toContain("Build feature X");
@@ -47,11 +123,11 @@ describe("prompts: PromptLibrary & preflightPrompts", () => {
   it("throws with descriptive error listing missing variables when render fails", () => {
     const lib = loadPromptLibrary({ builtinDir });
 
-    expect(() => {
+    const renderWithMissingVars = () =>
       lib.render("steps/develop", {
         assignment: "Only assignment provided",
       });
-    }).toThrow(/Missing required prompt variables for "steps\/develop": target, citations, feedback/);
+    expect(renderWithMissingVars).toThrow(/Missing required prompt variables for "steps\/develop": target, citations, feedback, concernsYaml/);
   });
 
   it("overrides directory shadows builtin directory", () => {
@@ -272,6 +348,8 @@ tools:
       waveReport: "w",
       infra: "i",
       gateDiff: "g",
+      humanInvolvementCriteria: "h",
+      concernsYaml: "",
     });
     expect(wave).toContain("wave-closeup.schema.json");
     expect(wave).not.toContain("suggestions");
@@ -280,6 +358,8 @@ tools:
       intent: "i",
       plan: "p",
       context: "c",
+      humanInvolvementCriteria: "h",
+      concernsYaml: "",
     });
     expect(plan).toContain("plan-closeup.schema.json");
     expect(plan).not.toContain("suggestions");
@@ -387,5 +467,232 @@ tools:
     expect(lib.placeholders("steps/pm-amend")).toContain("feedback");
     const amend = lib.render("steps/pm-amend", { plan: "p", taskStatus: "s", feedback: "f", waveReport: "w" });
     expect(amend).toContain("Delta ONLY");
+  });
+});
+
+/**
+ * adr-dismiss-criteria-row: dispositions.md carries one terse dismiss row and
+ * rule (triager-only, reason required, kept on disk). formatDispositionsSection
+ * filters dismiss rows/rules when the allowed set excludes it (QA), keeps them
+ * for triager reviewers, and still filters human-stop, mirroring existing rules.
+ */
+describe("prompts: dismiss disposition contract (adr-dismiss-criteria-row)", () => {
+  const builtinDir = path.resolve("agents");
+  const criteriaText = fs.readFileSync(
+    path.join(builtinDir, "criteria/dispositions.md"),
+    "utf8"
+  );
+  const dismissRow = criteriaText
+    .split("\n")
+    .find((line) => /^\|\s*`dismiss`\s*\|/.test(line));
+  const dismissRule = criteriaText
+    .split("\n")
+    .find((line) => /^-\s.*\bdismiss\b/i.test(line));
+
+  it("documents a terse triager-only dismiss row and rule kept on disk", () => {
+    expect(dismissRow).toBeDefined();
+    expect(dismissRow).toMatch(/triager/i);
+    expect(dismissRow).toMatch(/reason/i);
+    expect(dismissRow).toMatch(/kept/i);
+    expect(dismissRule).toBeDefined();
+  });
+
+  it("filters dismiss rows and rules unless the allowed set includes dismiss", () => {
+    const criteria = [
+      "| `fix` | defect | loop |",
+      "| `dismiss` | stale concern | kept on disk |",
+      "| `human-stop` | critical | halt |",
+      "- Use `dismiss` only with a reason.",
+    ].join("\n");
+
+    const qa = formatDispositionsSection(criteria, ["fix", "optional"]);
+    expect(qa).toContain("Allowed dispositions for this review: fix, optional.");
+    expect(qa).toContain("`fix`");
+    expect(qa).not.toMatch(/dismiss/i);
+    expect(qa).not.toContain("human-stop");
+
+    const reviewer = formatDispositionsSection(criteria, [
+      "fix",
+      "optional",
+      "dismiss",
+    ]);
+    expect(reviewer).toContain("| `dismiss` | stale concern | kept on disk |");
+    expect(reviewer).toContain("- Use `dismiss` only with a reason.");
+    expect(reviewer).not.toContain("human-stop");
+  });
+
+  it("renders dismiss criteria for triager reviewers but not QA", () => {
+    const { config } = loadPipelineConfig();
+    const lib = loadPromptLibrary({ builtinDir });
+    const criteria = loadCriteriaBundle(config.criteria).dispositions;
+    expect(criteria).toBeDefined();
+    expect(dismissRow).toBeDefined();
+    expect(dismissRule).toBeDefined();
+
+    const qaAllowed = resolveReviewAllowed(config, "qa", isTriagerAgent("qa"));
+    const reviewerAllowed = resolveReviewAllowed(
+      config,
+      "reviewer",
+      isTriagerAgent("reviewer")
+    );
+    expect(qaAllowed).not.toContain("dismiss");
+    expect(reviewerAllowed).toContain("dismiss");
+
+    const render = (fragment: string, allowed: string[]): string =>
+      lib.render(fragment, {
+        ...sampleVars(fragment),
+        dispositionsCriteria: formatDispositionsSection(criteria, allowed),
+        humanInvolvementCriteria: "",
+        concernsYaml: "",
+      });
+
+    expect(render("steps/qa", qaAllowed)).not.toMatch(/dismiss/i);
+
+    const reviewerPrompt = render("steps/review", reviewerAllowed);
+    expect(reviewerPrompt).toContain(dismissRow!);
+    expect(reviewerPrompt).toContain(dismissRule!);
+  });
+});
+
+describe("prompts: concern fragment matrix (adr-prompt-fragment-matrix)", () => {
+  const builtinDir = path.resolve("agents");
+
+  it("registers concernsYaml for every concern-producing and triaging fragment", () => {
+    for (const fragment of CONCERN_FRAGMENTS) {
+      for (const key of [fragment, fragment.replace(/^steps\//, "")]) {
+        expect({ key, vars: KNOWN_VARS[key] }).toEqual({
+          key,
+          vars: expect.arrayContaining(["concernsYaml"]),
+        });
+      }
+    }
+
+    // Producers raise concerns but never triage them: no involvement criteria.
+    for (const fragment of CONCERN_FRAGMENTS.filter(
+      (fragment) => !HUMAN_INVOLVEMENT_FRAGMENTS.has(fragment)
+    )) {
+      expect(KNOWN_VARS[fragment]).not.toContain("humanInvolvementCriteria");
+    }
+
+    // Triage and infra never participate in the concern funnel.
+    for (const key of ["steps/triage", "triage", "steps/infra", "infra"]) {
+      expect(KNOWN_VARS[key]).not.toContain("concernsYaml");
+      expect(KNOWN_VARS[key]).not.toContain("humanInvolvementCriteria");
+    }
+  });
+
+  it("renders Open Concerns and Raise concerns instructions on all 19 matrix fragments", () => {
+    const lib = loadPromptLibrary({ builtinDir });
+    const concernSentinel = "CONCERNS-SENTINEL-YAML";
+
+    for (const fragment of CONCERN_FRAGMENTS) {
+      expect({ fragment, placeholders: lib.placeholders(fragment) }).toEqual({
+        fragment,
+        placeholders: expect.arrayContaining(["concernsYaml"]),
+      });
+
+      const rendered = lib.render(fragment, {
+        ...sampleVars(fragment),
+        concernsYaml: concernSentinel,
+      });
+
+      expect({ fragment, openConcerns: rendered.includes("## Open Concerns") }).toEqual({
+        fragment,
+        openConcerns: true,
+      });
+      expect({ fragment, hydrated: rendered.includes(concernSentinel) }).toEqual({
+        fragment,
+        hydrated: true,
+      });
+      expect({ fragment, raise: /Raise concerns/.test(rendered) }).toEqual({
+        fragment,
+        raise: true,
+      });
+    }
+  });
+
+  it("renders Human involvement criteria and the condense rule on triage fragments", () => {
+    const lib = loadPromptLibrary({ builtinDir });
+    const criteriaSentinel = "HI-CRITERIA-SENTINEL";
+
+    for (const fragment of HUMAN_INVOLVEMENT_FRAGMENTS) {
+      expect({ fragment, placeholders: lib.placeholders(fragment) }).toEqual({
+        fragment,
+        placeholders: expect.arrayContaining(["humanInvolvementCriteria"]),
+      });
+
+      const rendered = lib.render(fragment, {
+        ...sampleVars(fragment),
+        humanInvolvementCriteria: criteriaSentinel,
+        concernsYaml: "",
+      });
+
+      expect({ fragment, section: rendered.includes("## Human involvement") }).toEqual({
+        fragment,
+        section: true,
+      });
+      expect({ fragment, criteria: rendered.includes(criteriaSentinel) }).toEqual({
+        fragment,
+        criteria: true,
+      });
+      expect({ fragment, condense: /condens/i.test(rendered) }).toEqual({
+        fragment,
+        condense: true,
+      });
+    }
+  });
+
+  it("keeps per-fragment additions <=15 non-empty lines and total additions <=140 (both prompt families)", () => {
+    let totalAdded = 0;
+
+    for (const fragment of CONCERN_FRAGMENTS) {
+      const basename = `${fragment.replace(/^steps\//, "")}.md`;
+      const text = fs.readFileSync(path.join(builtinDir, "steps", basename), "utf8");
+      const lines = text.split("\n").filter((line) => line.trim().length > 0).length;
+      const added = lines - FRAGMENT_BASELINE_LINES[fragment]!;
+
+      expect({ fragment, withinFragmentBudget: added <= 15 }).toEqual({
+        fragment,
+        withinFragmentBudget: true,
+      });
+      totalAdded += added;
+    }
+
+    // Merged tree carries both main's family (contextPack/taskStatus/
+    // feedback/gateDiff) and the funnel family (humanInvolvementCriteria/
+    // concernsYaml) in every matrix fragment; the budget covers their sum.
+    expect({ totalAdded, withinTotalBudget: totalAdded <= 140 }).toEqual({
+      totalAdded,
+      withinTotalBudget: true,
+    });
+  });
+
+  it("switches autonomous and detailed criteria inside a rendered matrix fragment", () => {
+    const { config } = loadPipelineConfig();
+    const bundle = loadCriteriaBundle(config.criteria);
+    const lib = loadPromptLibrary({ builtinDir });
+
+    const renderFor = (mode: "autonomous" | "detailed"): string => {
+      const vars = sampleVars("steps/review");
+      vars.humanInvolvementCriteria = formatHumanInvolvementCriteria(
+        bundle.humanInvolvement,
+        mode
+      );
+      return lib.render("steps/review", vars);
+    };
+
+    const autonomous = renderFor("autonomous");
+    const detailed = renderFor("detailed");
+
+    expect(autonomous).toContain("## Human involvement");
+    expect(autonomous).toContain("Block only explicit high-severity");
+    expect(autonomous).not.toContain(
+      "Block external-interface changes and major internal-interface"
+    );
+
+    expect(detailed).toContain(
+      "Block external-interface changes and major internal-interface"
+    );
+    expect(detailed).not.toContain("Block only explicit high-severity");
   });
 });

@@ -25,15 +25,23 @@ import { writeYamlAtomic, writeTextAtomic, readYaml, readText } from "../records
 import { runAgentStep, findOkCommittedRecord, getNextStepAttempt } from "./step-runner.js";
 import { parseStepRecordDirName } from "../records/step-record.js";
 import { writeQuestion, processSteeringMailbox } from "../steer.js";
-import { runItemConsult, runNonItemConsult } from "./consults.js";
+import { persistAdrs } from "./adrs.js";
+import { runItemConsult, runNonItemConsult, runConcernConsult } from "./consults.js";
 import { isContextPackStale, isContextPackEnabled, runContextPackStep } from "./ingest.js";
-import { mergeItem } from "./merge-path.js";
-import { tickItemMachine } from "./item-machine.js";
-import { deriveItemState, type DerivedItemState } from "../derive/item.js";
+import { mergeItem, MAX_MERGE_ATTEMPTS_PER_WAVE, readMergeAttempts } from "./merge-path.js";
+import { tickItemMachine, persistTerminalAbandon } from "./item-machine.js";
+import { deriveItemState, withRoutedBlocking, type DerivedItemState } from "../derive/item.js";
+import { blockedByConcern } from "../plan/scheduler.js";
 import { deriveWaveState, isIterationTerminal, nonTerminalWaveItems, type DerivedWaveState } from "../derive/wave.js";
-import { refreshStateYaml, countCommittedCloseupIterations } from "../derive/task.js";
+import { refreshStateYaml, countCommittedCloseupIterations, collectRoutedBlockers } from "../derive/task.js";
 import { appendJournal, readJournal } from "../journal.js";
 import { loadCriteriaBundle, formatDispositionsSection } from "../prompts.js";
+import { isTriagerAgent, resolveReviewAllowed } from "../review-policy.js";
+import {
+  listConcernIds,
+  listConcerns,
+  partitionSuggestions,
+} from "../concerns.js";
 import { checkPlanReviewRounds, checkIterations, checkAmendments } from "../loops.js";
 import { validateEdits, checkPlanCountLimits } from "../plan/limits.js";
 import { applyEdits } from "../plan/apply.js";
@@ -364,6 +372,33 @@ async function reconcileWaveOwnership(opts: {
 }
 
 /**
+ * Splits the wave's non-terminal items into tick-owned stragglers vs
+ * merge-owned ones (§8.4.5). A non-terminal item with a merge-attempt ledger
+ * entry for this wave already went through the wave-end merge: the merge
+ * loop owns its re-drive (bounded) or terminal failure — re-ticking it
+ * spins the tick cap forever (integrate-ok-but-unmerged never advances via
+ * ticks). Ledger unreadable = tick owns it (fail-open).
+ */
+export async function partitionTickStragglers(
+  taskDir: string,
+  wave: number,
+  waveState: DerivedWaveState
+): Promise<{ stragglers: string[]; mergeOwned: string[] }> {
+  const mergeOwned: string[] = [];
+  for (const it of waveState.items) {
+    if (isIterationTerminal(it.status)) continue;
+    try {
+      const attempts = await readMergeAttempts(taskDir, it.slug, String(wave));
+      if (attempts > 0) mergeOwned.push(it.slug);
+    } catch {
+      // Ledger unreadable: tick owns it (fail-open).
+    }
+  }
+  const stragglers = nonTerminalWaveItems(waveState).filter((s) => !mergeOwned.includes(s));
+  return { stragglers, mergeOwned };
+}
+
+/**
  * Close-up trust gate (§8.4.7): before mapping architect `complete` → `done`,
  * re-derives all current items and refuses `done` over non-terminal
  * unblocked items. Journals `closeup_complete_refused` with the offender
@@ -383,11 +418,39 @@ export async function enforceCloseupTrustGate(opts: {
 }): Promise<PlanCloseupArtifact> {
   const { taskDir, taskWt, parentBranch, pipeline, iteration, itemSlugs, closeup } = opts;
   if (closeup.status !== "complete") return closeup;
+  // Routed blockers seed pending items here too: the trust gate must see the
+  // same blocked set as the wave/iteration gates, or it refuses `complete`
+  // over routed-blocked items that are terminally parked, not stranded.
+  const trustBlockedBy = await collectRoutedBlockers(
+    taskDir,
+    pipeline.concerns?.minBlockingSeverity ?? "high"
+  );
   const trustStates = await Promise.all(
     itemSlugs.map((slug) =>
-      deriveItemState({ taskDir, itemSlug: slug, parentBranch, taskWt, pipeline, rootTaskDir: opts.rootTaskDir })
+      deriveItemState({
+        taskDir,
+        itemSlug: slug,
+        parentBranch,
+        taskWt,
+        pipeline,
+        rootTaskDir: opts.rootTaskDir,
+        blockedBy: trustBlockedBy,
+      })
     )
   );
+  // Failure-union fixpoint (mirrors deriveTaskState §5b): cascade routed
+  // seeds over declared deps so a dependent of a blocked item is not
+  // mistaken for stranded mid-flow work.
+  const trustSched = trustStates.map((it) => ({
+    slug: it.slug,
+    wave: String(it.wave),
+    deps: it.deps,
+    status: it.status as "pending" | "running" | "done" | "failed" | "blocked" | "abandoned",
+  }));
+  const trustBlocked = new Set(blockedByConcern(trustSched, trustBlockedBy));
+  for (let i = 0; i < trustStates.length; i++) {
+    trustStates[i] = withRoutedBlocking(trustStates[i]!, trustBlocked);
+  }
   const offenders = trustStates.filter((it) => !isIterationTerminal(it.status) && it.status !== "blocked");
   if (offenders.length === 0) return closeup;
   await appendJournal(taskDir, {
@@ -491,6 +554,58 @@ async function buildExistingList(taskDir: string): Promise<{ slug: string; statu
     list.push({ slug, status: "existing", ...(wave !== undefined ? { wave } : {}) });
   }
   return list;
+}
+
+/**
+ * Act-phase routing (§18, adr-routing-derived-state): consult the architect
+ * once per routed blocker concern that blocks a pending item in this wave.
+ * The per-concern decision artifact is the guard, so repeated or restarted
+ * act passes neither repeat the turn nor rewrite the decision.
+ */
+interface RoutedConsultContext {
+  task: string;
+  taskDir: string;
+  taskWt: string;
+  repo: any;
+  harness: Harness;
+  pipeline: PipelineConfig;
+  project: ProjectConfig;
+  prompts: any;
+  architectSessionId?: string;
+  turnsSemaphore?: Semaphore;
+  budgetTracker?: BudgetTracker;
+  iteration: number;
+}
+
+async function consultRoutedBlockers(
+  ctx: RoutedConsultContext,
+  blockedSlugs: Iterable<string>
+): Promise<string | undefined> {
+  const blocked = new Set(blockedSlugs);
+  if (blocked.size === 0) return ctx.architectSessionId;
+
+  let sessionId = ctx.architectSessionId;
+  for (const concern of await listConcerns(ctx.taskDir)) {
+    if (concern.kind !== "blocker" || concern.status !== "routed") continue;
+    if (!(concern.affects ?? []).some((slug) => blocked.has(slug))) continue;
+    const res = await runConcernConsult({
+      task: ctx.task,
+      concern,
+      taskDir: ctx.taskDir,
+      taskWt: ctx.taskWt,
+      repo: ctx.repo,
+      harness: ctx.harness,
+      pipeline: ctx.pipeline,
+      project: ctx.project,
+      prompts: ctx.prompts,
+      architectSessionId: sessionId,
+      turnsSemaphore: ctx.turnsSemaphore,
+      budgetTracker: ctx.budgetTracker,
+      iteration: ctx.iteration,
+    });
+    sessionId = res.sessionId ?? sessionId;
+  }
+  return sessionId;
 }
 
 /**
@@ -777,14 +892,16 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
         };
         await writeYamlAtomic(planPath, plan);
 
-        // Write ADRs if specified (§8.4.2)
-        if (plan.adrs && project.adrFolder) {
-          const adrDir = path.join(taskWt, project.adrFolder);
-          await fs.promises.mkdir(adrDir, { recursive: true });
-          for (const adr of plan.adrs) {
-            const adrFile = path.join(adrDir, `${adr.id}.md`);
-            await writeTextAtomic(adrFile, `# ${adr.title}\n\n${adr.context}\n`);
-          }
+        // Write full ADR records and route blocking/remarkable ones (§8.4.2, §18).
+        // Routing always runs; markdown only when adrFolder is configured.
+        if (plan.adrs) {
+          await persistAdrs({
+            taskWt,
+            taskDir,
+            adrFolder: project.adrFolder,
+            adrs: plan.adrs,
+            mode: pipeline.humanInvolvement,
+          });
         }
       },
     });
@@ -873,7 +990,18 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
         // violations ride along in {{limitViolations}} for an explicit verdict.
       }
     }
-    await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
+    const iterState = await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
+
+    // A blocking ADR routed at plan time parks the task: halt before waves so
+    // the derive loop reports blocked and exits 10 (§18 blocking table).
+    if (iterState.status === "blocked") {
+      return {
+        iteration,
+        status: "blocked",
+        plan,
+        architectSessionId,
+      };
+    }
   }
   // Check if PM edits are already completed
   const editsPath = path.join(planDir, `edits-${iteration}.0.yaml`);
@@ -899,7 +1027,6 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
       }
     }
   }
-
   // Restart recovery (§8.4.4a): edits-N.yaml absent + pm-edits-N record ok +
   // journal has pm_edits_validation_failed for N → the pre-bounce run died after
   // downstream validation failed. Go straight to the architect bounce: do NOT
@@ -934,6 +1061,9 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
     let reviewRound = 1;
     const reviewFingerprints: string[] = [];
     while (reviewRound <= maxPlanReviewRounds) {
+    // Triage ids are those that existed before this review round; capturing
+    // them here mirrors the step-runner exact-id partition.
+    const knownConcernIds = await listConcernIds(taskDir);
     // Check if review round record already exists
     const revRecordName = `plan-review-${iteration}-${reviewRound}`;
     const revAttempt = getNextStepAttempt(runsDir, revRecordName, pipeline.limits?.maxInterruptions ?? 3);
@@ -969,7 +1099,11 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
         limitViolations: plan ? formatLimitViolationsVar(checkPlanCountLimits(plan, { limits })) : "none",
         dispositionsCriteria: formatDispositionsSection(
           loadCriteriaBundle(pipeline.criteria).dispositions,
-          pipeline.reviewPolicy?.allowedDispositions ?? ["fix", "optional", "architect", "human-awareness", "human-async", "human-stop"]
+          resolveReviewAllowed(
+            pipeline,
+            "plan-reviewer",
+            isTriagerAgent("plan-reviewer")
+          )
         ),
       },
       turnsSemaphore,
@@ -988,7 +1122,13 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
     }
 
     const revOutput = revStepRes.output as ReviewArtifact | undefined;
-    const awarenessSuggestions = revOutput?.suggestions?.filter((s) => s.disposition === "human-awareness");
+    // Triage ids are exact-id concern/remarkable decisions, not plan findings;
+    // they never request a revision or influence approval.
+    const { findings } = partitionSuggestions(
+      revOutput?.suggestions ?? [],
+      knownConcernIds
+    );
+    const awarenessSuggestions = findings.filter((s) => s.disposition === "human-awareness");
     if (awarenessSuggestions && awarenessSuggestions.length > 0) {
       for (const q of awarenessSuggestions) {
         const cleanSuggestionId = (q.id || "s").replace(/[^a-z0-9_-]/gi, "-");
@@ -1002,7 +1142,7 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
         });
       }
     }
-    const fixSuggestions = revOutput?.suggestions?.filter((s) => s.disposition === "fix");
+    const fixSuggestions = findings.filter((s) => s.disposition === "fix");
     if (!fixSuggestions || fixSuggestions.length === 0) {
       break; // Plan approved!
     }
@@ -1053,14 +1193,26 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
       writeArtifact: async (output: unknown) => {
         if (output && typeof output === "object") {
           const before = plan ? checkPlanCountLimits(plan, { limits }) : [];
-          plan = { ...plan, ...(output as any), iteration };
-          await writeYamlAtomic(planPath, plan);
+          const merged = { ...plan, ...(output as any), iteration };
+          plan = merged;
+          await writeYamlAtomic(planPath, merged);
+          // Revise may add or flip ADRs: re-persist idempotently (§8.4.2, §18).
+          if (merged.adrs) {
+            await persistAdrs({
+              taskWt,
+              taskDir,
+              adrFolder: project.adrFolder,
+              adrs: merged.adrs,
+              mode: pipeline.humanInvolvement,
+            });
+          }
           const after = plan ? checkPlanCountLimits(plan, { limits }) : [];
           if (before.length > 0 && after.length === 0) {
             await appendJournal(taskDir, {
               type: "plan_limits_repair",
               step: reviseStepId,
               before,
+              after,
             });
           }
         }
@@ -1079,7 +1231,15 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
       };
     }
     reviewRound++;
-    await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
+    const reviseState = await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
+    if (reviseState.status === "blocked") {
+      return {
+        iteration,
+        status: "blocked",
+        plan,
+        architectSessionId,
+      };
+    }
     }
   }
 
@@ -1564,7 +1724,14 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
         deriveItemState({ taskDir, itemSlug: slug, parentBranch, taskWt, pipeline, rootTaskDir: params.rootTaskDir })
       )
     );
-    let waveState = deriveWaveState({ wave: w, items: itemStates });
+    let waveState = deriveWaveState({
+      wave: w,
+      items: itemStates,
+      blockedBy: await collectRoutedBlockers(
+        taskDir,
+        pipeline.concerns?.minBlockingSeverity ?? "high"
+      ),
+    });
 
     // A wave whose items are ALL `blocked` (open human questions) pauses
     // without close-up work: no merges, no wave-close-up, no report — the
@@ -1572,6 +1739,10 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
     // wave artifact, no report record), so the answer path re-runs this
     // same wave on restart. Journal wave_blocked distinctly so the pause
     // is visible (not a silent wave_started with no close-up).
+    // Routed-concern blocks do NOT pause: the act phase already consulted
+    // the architect per routed blocker (decision artifact committed), so a
+    // fully routed-blocked wave proceeds to close-up/report instead of
+    // parking forever on an operator move that will never come.
     // Blocked-then-answered (§8.8): poll once and re-derive before pausing —
     // answers that arrived since the last tick re-enter below instead of
     // pausing over stale state.
@@ -1592,14 +1763,32 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
           deriveItemState({ taskDir, itemSlug: slug, parentBranch, taskWt, pipeline, rootTaskDir: params.rootTaskDir })
         )
       );
-      waveState = deriveWaveState({ wave: w, items: itemStates });
+      waveState = deriveWaveState({
+        wave: w,
+        items: itemStates,
+        blockedBy: await collectRoutedBlockers(
+          taskDir,
+          pipeline.concerns?.minBlockingSeverity ?? "high"
+        ),
+      });
     }
-    if (waveState.items.length > 0 && waveState.blocked.length === waveState.items.length) {
+    // Pause only when a human operator actually owns the next move: at
+    // least one blocked item must hold an open steer question. Fully
+    // routed-blocked waves (no open questions) proceed to close-up/report —
+    // the architect consult already happened in the act phase.
+    const waveBlockedByHuman = waveState.blocked.some((b) => b.openSteerQuestion);
+    if (waveState.items.length > 0 && waveState.blocked.length === waveState.items.length && waveBlockedByHuman) {
       waveBlockedSkipped.add(w);
       await appendJournal(taskDir, { type: "wave_blocked", wave: w, iteration, items: waveState.blocked.map((b) => b.slug) });
       continue;
     }
-    if (waveState.isComplete || waveState.items.length === 0) {
+    // Fully-blocked waves still run close-up/report: routed-blocked items
+    // are terminally parked (not awaiting an operator), and the ceremony
+    // records their status. Only a wave with zero items, or an all-merged
+    // wave with no remaining work, is skipped.
+    const waveAllMerged =
+      waveState.items.length > 0 && waveState.items.every((it) => it.status === "merged");
+    if (waveState.items.length === 0 || waveAllMerged) {
       continue;
     }
     // HEADLINE reconciler (§8.4.5): the map lives per-wave and the check
@@ -1631,6 +1820,29 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
         ? rawPollSec
         : 60;
     let stopRequested = false;
+    // Act-phase routing (§18): each routed blocker concern blocking a pending
+    // item in this wave gets one architect consult before work starts.
+    const consultCtx: RoutedConsultContext = {
+      task,
+      taskDir,
+      taskWt,
+      repo,
+      harness,
+      pipeline,
+      project,
+      prompts,
+      architectSessionId,
+      turnsSemaphore,
+      budgetTracker,
+      iteration,
+    };
+    architectSessionId = await consultRoutedBlockers(
+      consultCtx,
+      waveState.blocked.map((it) => it.slug)
+    );
+    consultCtx.architectSessionId = architectSessionId;
+
+    await appendJournal(taskDir, { type: "wave_started", wave: w, iteration });
 
     const pollSteering = async () => {
       let res;
@@ -1721,7 +1933,14 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
             deriveItemState({ taskDir, itemSlug: slug, parentBranch, taskWt, pipeline, rootTaskDir: params.rootTaskDir })
           )
         );
-        waveState = deriveWaveState({ wave: w, items: itemStates });
+        waveState = deriveWaveState({
+          wave: w,
+          items: itemStates,
+          blockedBy: await collectRoutedBlockers(
+            taskDir,
+            pipeline.concerns?.minBlockingSeverity ?? "high"
+          ),
+        });
         if (waveState.canMerge || waveState.isComplete) break;
         // HEADLINE reconciler at the top of each wave-tick iteration:
         // ownerless past-wave stragglers are injected into this tick set.
@@ -1863,7 +2082,14 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
             deriveItemState({ taskDir, itemSlug: slug, parentBranch, taskWt, pipeline, rootTaskDir: params.rootTaskDir })
           )
         );
-        waveState = deriveWaveState({ wave: w, items: itemStates });
+        waveState = deriveWaveState({
+          wave: w,
+          items: itemStates,
+          blockedBy: await collectRoutedBlockers(
+            taskDir,
+            pipeline.concerns?.minBlockingSeverity ?? "high"
+          ),
+        });
         await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
       }
       if (stopRequested) {
@@ -1932,10 +2158,49 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
             deriveItemState({ taskDir, itemSlug: s, parentBranch, taskWt, pipeline, rootTaskDir: params.rootTaskDir })
           )
         );
-        waveState = deriveWaveState({ wave: w, items: itemStates });
+        waveState = deriveWaveState({
+          wave: w,
+          items: itemStates,
+          blockedBy: await collectRoutedBlockers(
+            taskDir,
+            pipeline.concerns?.minBlockingSeverity ?? "high"
+          ),
+        });
         await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
       }
 
+      // Refresh states after batch (routed blockers seed pending items only)
+      const gateBlockedBy = await collectRoutedBlockers(
+        taskDir,
+        pipeline.concerns?.minBlockingSeverity ?? "high"
+      );
+      itemStates = await Promise.all(
+        currentIterationItems.map((slug) =>
+          deriveItemState({
+            taskDir,
+            itemSlug: slug,
+            parentBranch,
+            taskWt,
+            pipeline,
+            rootTaskDir: params.rootTaskDir,
+            blockedBy: gateBlockedBy,
+          })
+        )
+      );
+      waveState = deriveWaveState({
+        wave: w,
+        items: itemStates,
+        blockedBy: await collectRoutedBlockers(
+          taskDir,
+          pipeline.concerns?.minBlockingSeverity ?? "high"
+        ),
+      });
+      architectSessionId = await consultRoutedBlockers(
+        consultCtx,
+        waveState.blocked.map((it) => it.slug)
+      );
+      consultCtx.architectSessionId = architectSessionId;
+      await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
     // Wave-complete gate (§8.4.5): the wave's tick work is done when every
     // wave item is wave-terminal (merged/failed/blocked/superseded/ready) —
     // `ready` merges right after the tick loop, so it must NOT hold the wave
@@ -2335,6 +2600,7 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
         infra: infraYaml,
         gateDiff: gateDiffSection,
       },
+      parentBranch,
       turnsSemaphore,
       budgetTracker,
       iteration,
@@ -2834,28 +3100,23 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
   // returning blocked. Also clear/re-resolve epic `child-closeup.yaml`
   // files whose blocking questions are now answered (delete stale
   // `blocked` closeup + journal `epic_closeup_cleared`).
+  const haltBlockedBy = await collectRoutedBlockers(
+    taskDir,
+    pipeline.concerns?.minBlockingSeverity ?? "high"
+  );
   const allCurrentStates = await Promise.all(
     currentIterationItems.map((slug) =>
-      deriveItemState({ taskDir, itemSlug: slug, parentBranch, taskWt, pipeline, rootTaskDir: params.rootTaskDir })
+      deriveItemState({
+        taskDir,
+        itemSlug: slug,
+        parentBranch,
+        taskWt,
+        pipeline,
+        rootTaskDir: params.rootTaskDir,
+        blockedBy: haltBlockedBy,
+      })
     )
   );
-  {
-    const bySlug = new Map(allCurrentStates.map((s) => [s.slug, s]));
-    for (const st of allCurrentStates) {
-      if (st.kind !== "epic") continue;
-      const closeupPath = path.join(taskDir, "items", st.slug, "child-closeup.yaml");
-      if (!fs.existsSync(closeupPath)) continue;
-      try {
-        const cc = await readYaml<{ status?: string }>(closeupPath);
-        if (cc?.status === "blocked" && st.status !== "blocked") {
-          await fs.promises.rm(closeupPath, { force: true });
-          await appendJournal(taskDir, { type: "epic_closeup_cleared", iteration, item: st.slug });
-        }
-      } catch {}
-    }
-    void bySlug;
-  }
-  const blockedItems = allCurrentStates.filter((it) => it.status === "blocked");
   // Previously-blocked now unblocked-non-terminal items re-enter their
   // wave: drive them (ready→merge, else tick) instead of returning
   // blocked/proceeding to close-up over them.
@@ -2928,7 +3189,15 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
       await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
       const reStates = await Promise.all(
         currentIterationItems.map((slug) =>
-          deriveItemState({ taskDir, itemSlug: slug, parentBranch, taskWt, pipeline, rootTaskDir: params.rootTaskDir })
+          deriveItemState({
+            taskDir,
+            itemSlug: slug,
+            parentBranch,
+            taskWt,
+            pipeline,
+            rootTaskDir: params.rootTaskDir,
+            blockedBy: haltBlockedBy,
+          })
         )
       );
       const stillBlocked = reStates.filter((it) => it.status === "blocked");
@@ -2953,12 +3222,21 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
       await appendJournal(taskDir, { type: "wave_reopened_drained", iteration });
     }
   }
-  if (blockedItems.length > 0) {
+  // Who owns the next move when items are blocked (§8.7, §18)? Halt
+  // when the operator does: any blocked item holding an OPEN blocking
+  // question (human-async or human-stop, routed or raw). An open question
+  // means someone must answer before the task can complete; exiting 0
+  // would strand it. Items blocked with no open question (pure routed
+  // seeds whose consult already ran) flow on to close-up instead.
+  const haltingBlockers = allCurrentStates.filter(
+    (it) => it.status === "blocked" && it.openSteerQuestion
+  );
+  if (haltingBlockers.length > 0) {
     await appendJournal(taskDir, {
       type: "iteration_blocked",
       iteration,
-      items: blockedItems.map((it) => it.slug),
-      questions: blockedItems.flatMap((it) =>
+      items: haltingBlockers.map((it) => it.slug),
+      questions: haltingBlockers.flatMap((it) =>
         it.openSteerQuestion
           ? [{ id: it.openSteerQuestion.id, ref: it.openSteerQuestion.ref, item: it.slug }]
           : []
@@ -2980,11 +3258,39 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
   // iteration and stranding them `running` forever. Bounded: at most 5
   // re-drive rounds, then fail loudly on a true stall.
   for (let redrive = 0; redrive < 6; redrive++) {
+    // Routed blockers seed pending items here too: without the seed set a
+    // routed-blocked item derives `pending` and the gate would tick it into
+    // an unscripted step instead of recognising it as `blocked`.
+    const gateBlockedBy = await collectRoutedBlockers(
+      taskDir,
+      pipeline.concerns?.minBlockingSeverity ?? "high"
+    );
     const currentStates = await Promise.all(
       currentIterationItems.map((slug) =>
-        deriveItemState({ taskDir, itemSlug: slug, parentBranch, taskWt, pipeline, rootTaskDir: params.rootTaskDir })
+        deriveItemState({
+          taskDir,
+          itemSlug: slug,
+          parentBranch,
+          taskWt,
+          pipeline,
+          rootTaskDir: params.rootTaskDir,
+          blockedBy: gateBlockedBy,
+        })
       )
     );
+    // Failure-union fixpoint (mirrors deriveTaskState §5b): cascade routed
+    // seeds over declared deps so a dependent of a blocked item reads
+    // `blocked` here instead of being ticked into an unscripted step.
+    const gateSched = currentStates.map((it) => ({
+      slug: it.slug,
+      wave: String(it.wave),
+      deps: it.deps,
+      status: it.status as "pending" | "running" | "done" | "failed" | "blocked" | "abandoned",
+    }));
+    const gateBlocked = new Set(blockedByConcern(gateSched, gateBlockedBy));
+    for (let i = 0; i < currentStates.length; i++) {
+      currentStates[i] = withRoutedBlocking(currentStates[i]!, gateBlocked);
+    }
     const nonTerminal = currentStates.filter((it) => !isIterationTerminal(it.status));
     if (nonTerminal.length === 0) break;
     // Answered-human-async items whose stored review still carries the
@@ -3106,6 +3412,7 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
       plan: JSON.stringify(plan, null, 2),
       context: contextYaml,
     },
+    parentBranch,
     turnsSemaphore,
     budgetTracker,
     iteration,

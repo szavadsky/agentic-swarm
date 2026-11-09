@@ -59,6 +59,7 @@ export interface CriteriaBundle {
   triage?: string;
   dispositions?: string;
   storyKinds?: string;
+  humanInvolvement?: string;
 }
 
 /**
@@ -78,6 +79,7 @@ export function loadCriteriaBundle(
     ["triage", "triage"],
     ["dispositions", "dispositions"],
     ["story-kinds", "storyKinds"],
+    ["human-involvement", "humanInvolvement"],
   ];
   for (const [key, field] of mapping) {
     const filePath = criteria[key];
@@ -93,8 +95,34 @@ export function loadCriteriaBundle(
 }
 
 /**
+ * Selects the active mode's `## <mode>` section from the human-involvement
+ * criteria file plus every shared section (notably the ADR blocking table).
+ * Inactive mode sections are dropped; empty input renders an empty string.
+ */
+const HUMAN_INVOLVEMENT_MODES = new Set(["autonomous", "principal", "detailed"]);
+
+export function formatHumanInvolvementCriteria(
+  criteria: string | undefined,
+  mode: PipelineConfig["humanInvolvement"] = "autonomous"
+): string {
+  if (!criteria || criteria.trim().length === 0) return "";
+  const active = mode ?? "autonomous";
+  const kept: string[] = [];
+  let keep = true;
+  for (const line of criteria.split("\n")) {
+    const heading = /^##\s+(.+?)\s*$/.exec(line)?.[1]?.toLowerCase();
+    if (heading !== undefined) {
+      keep = !HUMAN_INVOLVEMENT_MODES.has(heading) || heading === active;
+    }
+    if (keep) kept.push(line);
+  }
+  return kept.join("\n").trim();
+}
+
+/**
  * Formats the dispositions criteria section for review prompts (§8.7).
- * Drops `human-stop` rows unless the agent's allowed dispositions include it.
+ * Drops `human-stop` and `dismiss` rows/rules unless the agent's allowed
+ * dispositions include them (e.g. QA excludes both; triagers get `dismiss`).
  */
 export function formatDispositionsSection(
   dispositionsCriteria: string | undefined,
@@ -105,14 +133,14 @@ export function formatDispositionsSection(
     `Use ONLY these dispositions; any other disposition value fails validation.`,
   ];
   if (dispositionsCriteria && dispositionsCriteria.trim().length > 0) {
-    let criteriaText = dispositionsCriteria;
-    if (!allowedDispositions.includes("human-stop")) {
-      criteriaText = criteriaText
-        .split("\n")
-        .filter((line) => !line.includes("human-stop"))
-        .join("\n")
-        .trim();
-    }
+    const excluded = ["human-stop", "dismiss"].filter(
+      (d) => !allowedDispositions.includes(d)
+    );
+    const criteriaText = dispositionsCriteria
+      .split("\n")
+      .filter((line) => !excluded.some((d) => line.includes(d)))
+      .join("\n")
+      .trim();
     if (criteriaText.length > 0) lines.push(criteriaText);
   }
   return lines.join("\n");

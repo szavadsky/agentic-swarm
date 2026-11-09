@@ -21,7 +21,8 @@ import { runItemConsult } from "./consults.js";
 import { buildConsultFailureContext } from "./consult-context.js";
 import { runSeamHooks } from "./seams.js";
 import { appendJournal } from "../journal.js";
-import { writeQuestion } from "../steer.js";
+import { questionBlocks, writeQuestion } from "../steer.js";
+import { listConcernIds } from "../concerns.js";
 import { deriveItemState, type DerivedItemState } from "../derive/item.js";
 import { refreshStateYaml } from "../derive/task.js";
 import {
@@ -32,6 +33,7 @@ import {
   fingerprintSuggestions,
 } from "../loops.js";
 import { loadCriteriaBundle, formatDispositionsSection } from "../prompts.js";
+import { isTriagerAgent, resolveReviewAllowed } from "../review-policy.js";
 import { runCheck } from "../checks/runner.js";
 import { tailCap, type CheckContext } from "../checks/types.js";
 import type { BudgetTracker } from "../budget.js";
@@ -869,10 +871,11 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
   // Criteria bundle for review prompts (§8.7); allowed dispositions mirror the
   // schema binding in step-runner so prompt and validation agree.
   const criteriaBundle = loadCriteriaBundle(pipeline.criteria);
-  const reviewAllowed =
-    pipeline.reviewPolicy?.allowedDispositions ??
-    pipeline.reviewPolicy?.[currentStep.agent] ??
-    DEFAULT_REVIEW_ALLOWED;
+  const reviewAllowed = resolveReviewAllowed(
+    pipeline,
+    currentStep.agent,
+    isTriagerAgent(currentStep.agent)
+  );
 
   const promptVars: Record<string, string> = {
     assignment: assignmentYaml,
@@ -897,6 +900,10 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
   const relTaskDir = path.relative(taskWt, taskDir);
   const recordsDir = path.join(childWt, relTaskDir, "items", itemSlug, "steps");
   await fs.promises.mkdir(recordsDir, { recursive: true });
+
+  // Concern-id human dispositions are owned by the single triage router; the
+  // raw item-machine question path must not double-write them.
+  const concernIds = new Set(await listConcernIds(taskDir));
 
   // 5. Run seam hooks before:item.step.{id} (§8.10)
   await runSeamHooks({
@@ -948,45 +955,59 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
     beforeChecks,
     afterChecks,
     writeArtifact: async (output: unknown) => {
-      // Persist human-async + human-stop questions atomically with the
-      // review record (Finding 23): both dispositions block the item, so
-      // both get the same blocking question shape.
+      // Persist raw human-* questions atomically with the review record
+      // (Finding 23). Concern-id dispositions are routed once by triage
+      // (q-concern-*/q-escalated-*), so this raw path skips them entirely.
+      // Human-stop blocks the item AND the task (blocking table); human-async
+      // blocks the item; human-awareness is digest-only (blocks: []).
       if (output && typeof output === "object" && "suggestions" in (output as any)) {
         const rev = output as ReviewArtifact;
-        const blockingQuestions = rev.suggestions?.filter((s) => s.disposition === "human-async" || s.disposition === "human-stop");
-        if (blockingQuestions && blockingQuestions.length > 0) {
-          for (const q of blockingQuestions) {
-            const cleanSuggestionId = (q.id || "s").replace(/[^a-z0-9_-]/gi, "-");
-            const qId = `q-${itemSlug}-${cleanSuggestionId}`;
-            const targetWt = opts.rootTaskWt ?? taskWt;
-            const targetDir = opts.rootTaskDir ?? taskDir;
-            await writeQuestion(targetWt, targetDir, {
-              id: qId,
-              ref: itemSlug,
-              disposition: q.disposition,
-              question: q.detail || q.summary,
-              blocks: [itemSlug],
-            });
-          }
-        }
-        const awarenessQuestions = rev.suggestions?.filter((s) => s.disposition === "human-awareness");
-        if (awarenessQuestions && awarenessQuestions.length > 0) {
-          for (const q of awarenessQuestions) {
-            const cleanSuggestionId = (q.id || "s").replace(/[^a-z0-9_-]/gi, "-");
-            const qId = `awareness-${itemSlug}-${cleanSuggestionId}`;
-            const targetWt = opts.rootTaskWt ?? taskWt;
-            const targetDir = opts.rootTaskDir ?? taskDir;
-            await writeQuestion(targetWt, targetDir, {
-              id: qId,
-              ref: itemSlug,
-              disposition: "human-awareness",
-              question: q.detail || q.summary,
-              blocks: [],
-            });
-          }
+        const humanSuggestions = rev.suggestions?.filter(
+          (s) =>
+            (s.disposition === "human-stop" ||
+              s.disposition === "human-awareness" ||
+              s.disposition === "human-async") &&
+            !concernIds.has(s.id)
+        );
+        for (const q of humanSuggestions ?? []) {
+          const cleanSuggestionId = (q.id || "s").replace(/[^a-z0-9_-]/gi, "-");
+          const blocks =
+            q.disposition === "human-stop"
+              ? [itemSlug, "task"]
+              : q.disposition === "human-async"
+                ? [itemSlug]
+                : [];
+          const targetWt = opts.rootTaskWt ?? taskWt;
+          const targetDir = opts.rootTaskDir ?? taskDir;
+          await writeQuestion(targetWt, targetDir, {
+            id: `q-${itemSlug}-${cleanSuggestionId}`,
+            ref: itemSlug,
+            disposition: q.disposition,
+            question: q.detail || q.summary,
+            blocks,
+          });
         }
       }
     },
+  });
+
+  // Refresh state.yaml after every step (ToySmoke: budget/status visibility)
+  await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
+  // 7. Run seam hooks after:item.step.{id} (§8.10)
+  await runSeamHooks({
+    phase: "after",
+    seam: `item.step.${currentStep.id}`,
+    cwd: childWt,
+    baseRef: parentBranch,
+    kind: itemState.kind,
+    isEscalated: itemState.isEscalated,
+    pipeline,
+    project,
+    repo,
+    harness,
+    prompts,
+    taskDir,
+    item: itemSlug,
   });
 
   // Route `architect`-disposition suggestions to the consult path: when a
@@ -1023,19 +1044,42 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
       return { done: false, status: "running", stepRan: currentStep.id, consulted: true };
     }
   }
-  // Check if any human-async/human-stop suggestions blocked the item
-  const hasBlocking = (stepRes.output as any)?.suggestions?.some(
-    (s: any) => s.disposition === "human-async" || s.disposition === "human-stop"
+  // Concern-id human dispositions block only when the router wrote an open
+  // blocking question (severity downgrade/suppression keeps the item moving).
+  const routedQuestions: SteerItemArtifact[] = [];
+  for (const id of stepRes.triage?.mailboxIds ?? []) {
+    try {
+      routedQuestions.push(
+        await readYaml<SteerItemArtifact>(
+          path.join(taskDir, "steer", "tousertoreview", `${id}.yaml`)
+        )
+      );
+    } catch {
+      // A missing question file cannot block.
+    }
+  }
+  const routedBlocksItem = routedQuestions.some((q) => questionBlocks(q, itemSlug));
+  const suggestions = ((stepRes.output as any)?.suggestions ?? []) as Array<{
+    id: string;
+    disposition?: string;
+  }>;
+
+  // Human dispositions block the item; human-awareness is digest-only.
+  const hasHumanBlock = suggestions.some((s) =>
+    (s.disposition === "human-async" || s.disposition === "human-stop") &&
+    (concernIds.has(s.id) ? routedBlocksItem : true)
   );
-  if (hasBlocking) {
+  if (hasHumanBlock) {
     return { done: true, status: "blocked", stepRan: currentStep.id };
   }
 
 
   // Check if this was the last step and succeeded
   const isLastStep = targetStepIndex === steps.length - 1;
-  const hasIssues = (stepRes.output as any)?.suggestions?.some(
-    (s: any) => s.disposition === "fix" || s.disposition === "human-stop"
+  const hasIssues = suggestions.some(
+    (s) =>
+      s.disposition === "fix" ||
+      (s.disposition === "human-stop" && !concernIds.has(s.id))
   );
   const isTerminalSuccess = isLastStep && stepRes.ok && !hasIssues;
 

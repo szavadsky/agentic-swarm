@@ -24,3 +24,11 @@ Context: {{context}}
 
 ## Context Pack
 {{contextPack}}
+
+## Human involvement
+{{humanInvolvementCriteria}}
+
+## Open Concerns
+{{concernsYaml}}
+
+- Raise concerns with evidence; condense stale detail instead of repeating it.

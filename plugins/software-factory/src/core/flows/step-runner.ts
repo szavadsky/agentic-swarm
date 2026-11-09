@@ -9,12 +9,14 @@ import type {
 } from "../../harness/types.js";
 import type {
   AgentConfig,
+  CheckItemResult,
+  ConcernConfirms,
+  ConcernResolution,
   PipelineConfig,
   PipelineLimits,
   ProjectConfig,
   StepMetaArtifact,
   StepMetaStatus,
-  CheckItemResult,
 } from "../artifacts.js";
 import {
   startStepRecord,
@@ -29,6 +31,24 @@ import {
 import { readYaml, writeYamlAtomic } from "../records/io.js";
 import { validateAndRepair } from "../records/repair.js";
 import { resolveAgentTools, FILE_TOOL_IDS } from "../prompts.js";
+import { isTriagerAgent, resolveReviewAllowed } from "../review-policy.js";
+import {
+  aggregateConcerns,
+  applyCloseupResolutions,
+  applyConcernConfirms,
+  applyConcernResolution,
+  applyWaveCloseupFallback,
+  DEFAULT_RAISE_ALLOWLIST,
+  listConcerns,
+} from "../concerns.js";
+import { propagateEpicConcerns } from "./epic-propagation.js";
+import {
+  applyReviewTriage,
+  hydrateStepConcerns,
+  TriageValidationError,
+  type ReviewTriageOutcome,
+} from "../triage.js";
+import { KNOWN_VARS } from "../prompt-vars.js";
 import { resolveStepRole, resolveRole, type ResolvedRole } from "../config/roles.js";
 import { generateReviewSchema } from "../records/review-schema.js";
 import { captureHead, enforceHead } from "../git/guard.js";
@@ -36,6 +56,7 @@ import { commitAll } from "../git/commit.js";
 import { git } from "../git/exec.js";
 import { appendJournal } from "../journal.js";
 import { registerActiveStep, unregisterActiveStep, type ActiveStepRecord } from "../shutdown.js";
+import { loadCriteriaBundle, formatHumanInvolvementCriteria } from "../prompts.js";
 import { getClock, detectSuspend } from "../clock.js";
 import type { Semaphore } from "../mutex.js";
 import type { BudgetTracker } from "../budget.js";
@@ -77,6 +98,8 @@ export interface StepRunOptions {
   project: ProjectConfig;
   prompts: any;
   promptVars: Record<string, string>;
+  parentBranch?: string;
+  gitFn?: typeof git;
   turnsSemaphore?: Semaphore;
   customSchema?: JSONSchema;
   log?: (msg: string) => void;
@@ -101,6 +124,7 @@ export interface StepRunResult {
   usage?: Usage;
   branchChanged?: boolean;
   headMoved?: boolean;
+  triage?: ReviewTriageOutcome;
 }
 
 /**
@@ -175,6 +199,168 @@ export function resolveStepSchema(
     },
     additionalProperties: true,
   };
+}
+
+/**
+ * Infers the task worktree from `<taskWt>/<orchestrationFolder>/<task>`.
+ * Matches the folder boundary rather than the first `/.factory` substring so
+ * temp roots such as `.factory-runtime/tmp` are not mistaken for it.
+ */
+function inferTaskWorktree(taskDir: string, task: string, orchestrationFolder: string): string {
+  const tail = [...orchestrationFolder.split(/[\\/]/).filter(Boolean), task];
+  const parts = taskDir.split(/[\\/]/);
+  const matches = tail.every((seg, i) => parts[parts.length - tail.length + i] === seg);
+  return matches ? path.resolve(taskDir, ...tail.map(() => "..")) : taskDir;
+}
+
+/** Feeds a step's producer fields into the taskWt concern store (§18). */
+async function ingestStepConcerns(opts: {
+  task: string; taskDir: string; taskWt: string; repo: any; output: unknown; pipeline: PipelineConfig;
+  source: { record: string; agent: string; step: string; item?: string; iteration?: number };
+}): Promise<ReviewTriageOutcome | undefined> {
+  const data = (opts.output ?? {}) as Record<string, any>;
+  let concerns = ["concerns", "newConcerns"].flatMap((f) => (Array.isArray(data[f]) ? data[f] : []));
+  const remarkables = Array.isArray(data.remarkable) ? data.remarkable : [];
+  const suggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
+  const resolutions = Array.isArray(data.concernResolutions) ? data.concernResolutions : [];
+  const confirms: ConcernConfirms[] = Array.isArray(data.concernConfirms) ? data.concernConfirms : [];
+  const resolution = data.concernResolution as ConcernResolution | undefined;
+  if (
+    !concerns.length &&
+    !remarkables.length &&
+    !suggestions.length &&
+    !resolutions.length &&
+    !confirms.length &&
+    !resolution &&
+    opts.source.agent !== "wave-close-up"
+  ) {
+    return undefined;
+  }
+
+  // Gate key is source.agent, never the step fragment. Skipping keeps the step
+  // ok (schema validation already passed) and only journals the dropped input.
+  const allowlist: readonly string[] =
+    opts.pipeline.concerns?.raiseAllowlist ?? DEFAULT_RAISE_ALLOWLIST;
+  if (concerns.length > 0 && !allowlist.includes(opts.source.agent)) {
+    await appendJournal(opts.taskDir, {
+      type: "concern_ingest_skipped",
+      task: opts.task,
+      ...(opts.source.item ? { item: opts.source.item } : {}),
+      step: opts.source.step,
+      agent: opts.source.agent,
+      count: concerns.length,
+    });
+    concerns = [];
+  }
+
+  // Triage only ids that existed before this step, so new concerns cannot self-dismiss.
+  let existing: string[] = [];
+  try {
+    existing = (await fs.promises.readdir(path.join(opts.taskDir, "concerns")))
+      .filter((n) => n.endsWith(".yaml")).map((n) => n.slice(0, -5));
+  } catch (err: any) {
+    if (err?.code !== "ENOENT") throw err;
+  }
+  const ctx = { taskDir: opts.taskDir, taskWt: opts.taskWt, repo: opts.repo };
+  // Confirm pre-flight runs before any store mutation so a rejected dismiss
+  // proposal fails the step while preserving every status and pending
+  // resolution (no partial transitions). applyConcernConfirms itself never
+  // throws TriageValidationError, keeping the concerns/triage modules cycle-free.
+  if (confirms.length && opts.source.agent === "architect") {
+    const pendingById = new Map(
+      (await listConcerns(opts.taskDir)).map((concern) => [concern.id, concern.pendingResolution])
+    );
+    for (const confirm of confirms) {
+      if (confirm.confirm !== "accept") continue;
+      const pending = pendingById.get(confirm.id);
+      if (pending?.action === "dismiss" && !pending.note?.trim()) {
+        throw new TriageValidationError(
+          `Accepting dismiss for ${confirm.id} requires a non-empty pending note (the dismissal reason)`
+        );
+      }
+    }
+  }
+  if (concerns.length || remarkables.length) await aggregateConcerns({ ...ctx, source: opts.source }, concerns, remarkables);
+  const triage = suggestions.length > 0
+    ? await applyReviewTriage({
+        ...ctx,
+        suggestions,
+        concernIds: existing,
+        isTriager: isTriagerAgent(opts.source.agent),
+        ...(opts.pipeline.concerns?.minDigestSeverity
+          ? { minDigestSeverity: opts.pipeline.concerns.minDigestSeverity }
+          : {}),
+        ...(opts.pipeline.concerns?.minBlockingSeverity
+          ? { minBlockingSeverity: opts.pipeline.concerns.minBlockingSeverity }
+          : {}),
+        ...(opts.source.item ? { item: opts.source.item } : {}),
+      })
+    : undefined;
+  if (resolutions.length) await applyCloseupResolutions({ ...ctx, resolutions, by: opts.source.agent });
+
+  // A decision-level resolution only belongs to concern consults and architect
+  // closeup/report ingests. The honored consult step is exactly
+  // `consult-concern-<id>` for the resolved concern, so an item slug like
+  // `concern-foo` (step `consult-concern-foo`) can never collide with a real
+  // concern id. Other steps may share the output schema, so their
+  // cross-emitted field is deliberately dropped and journaled.
+  if (resolution) {
+    const honored =
+      opts.source.step === `consult-concern-${resolution.id}` ||
+      opts.source.step.startsWith("architect-closeup") ||
+      opts.source.step.startsWith("architect-wave-report");
+    if (honored) {
+      await applyConcernResolution({ ...ctx, resolution, by: opts.source.agent });
+    } else {
+      await appendJournal(opts.taskDir, {
+        type: "concern_resolution_ignored",
+        task: opts.task,
+        ...(opts.source.item ? { item: opts.source.item } : {}),
+        step: opts.source.step,
+        agent: opts.source.agent,
+        concern: resolution.id,
+      });
+    }
+  }
+
+  // Architect confirmations settle pending close-up proposals. Propagate alone
+  // needs the parent store, which the epic helper owns.
+  if (confirms.length && opts.source.agent === "architect") {
+    const pending = new Map(
+      (await listConcerns(opts.taskDir)).map((concern) => [concern.id, concern.pendingResolution?.action])
+    );
+    const propagateIds = confirms
+      .filter((confirm) => confirm.confirm === "accept" && pending.get(confirm.id) === "propagate")
+      .map((confirm) => confirm.id);
+    await applyConcernConfirms({ ...ctx, confirms });
+    if (propagateIds.length) {
+      await propagateConfirmedConcerns({ ...opts, concernIds: propagateIds });
+    }
+  }
+
+  // Wave close-up fallback owns only concerns that predate its own findings.
+  if (opts.source.agent === "wave-close-up") {
+    await applyWaveCloseupFallback({ ...ctx, ids: existing });
+  }
+  return triage;
+}
+
+/** Copies confirmed propagated proposals to the enclosing epic/saga task. */
+async function propagateConfirmedConcerns(opts: {
+  taskDir: string; taskWt: string; concernIds: string[];
+}): Promise<void> {
+  const parentTaskDir = path.dirname(opts.taskDir);
+  const epic = path.basename(opts.taskDir);
+  if (parentTaskDir === opts.taskDir) return;
+  // Only epic child task dirs sit under a parent task with a matching item.
+  if (!fs.existsSync(path.join(parentTaskDir, "items", epic, "assignment.yaml"))) return;
+  await propagateEpicConcerns({
+    childTaskDir: opts.taskDir,
+    parentTaskDir,
+    parentWt: opts.taskWt,
+    epic,
+    concernIds: opts.concernIds,
+  });
 }
 
 /**
@@ -297,12 +483,17 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
   const recordDir = path.join(recordsDir, dirName);
 
   // Identify worktree that contains recordDir
-  const taskWt = opts.taskWt;
+  const taskWt =
+    opts.taskWt ?? inferTaskWorktree(taskDir, task, project.orchestrationFolder ?? ".factory");
   const wtToCommit = recordDir.startsWith(cwd) ? cwd : taskWt;
 
   // 3. Resolve schema
   const pluginRoot = path.resolve(import.meta.dir ?? __dirname, "../../..");
-  const allowedDispositions = pipeline.reviewPolicy?.allowedDispositions;
+  const allowedDispositions = resolveReviewAllowed(
+    pipeline,
+    agent,
+    isTriagerAgent(agent)
+  );
   const outputSchema =
     opts.customSchema ??
     resolveStepSchema(pluginRoot, agent, stepId, allowedDispositions);
@@ -310,6 +501,36 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
   // 4. Render prompt and agent definition. Appends compact ## Output section (§6.4)
   // Resumed-repair: errors-only prompt on the live session — never re-render the full fragment.
   const fragment = stepFragment ?? `steps/${stepId}`;
+  const criteriaBundle = loadCriteriaBundle(pipeline.criteria);
+  const effectivePromptVars: Record<string, string> = {
+    humanInvolvementCriteria: formatHumanInvolvementCriteria(
+      criteriaBundle.humanInvolvement,
+      pipeline.humanInvolvement
+    ),
+    ...promptVars,
+  };
+  const knownVars = KNOWN_VARS[fragment] ?? KNOWN_VARS[fragment.replace(/^steps\//, "")] ?? [];
+  if (!Object.hasOwn(promptVars, "concernsYaml") && knownVars.includes("concernsYaml")) {
+    const stepRole = fragment.replace(/^steps\//, "");
+    if (stepRole === "review" || stepRole === "qa") {
+      effectivePromptVars.concernsYaml = await hydrateStepConcerns(taskDir, {
+        stepRole,
+        diffBytes: Buffer.byteLength(promptVars.diff ?? "", "utf8"),
+      });
+    } else if (stepRole.startsWith("wave-close-up") || stepRole.startsWith("plan-close-up")) {
+      const diff = await (opts.gitFn ?? git)(taskWt, ["diff", `${opts.parentBranch ?? `topic/${task}`}...HEAD`], { allowFail: true });
+      effectivePromptVars.concernsYaml = await hydrateStepConcerns(taskDir, {
+        stepRole,
+        taskDiffBytes: diff.code === 0 ? Buffer.byteLength(diff.stdout, "utf8") : 0,
+      });
+    } else {
+      const excluded = new Set(["concernsYaml", "humanInvolvementCriteria", "debt", "steering"]);
+      const inputBytes = knownVars
+        .filter((key) => !excluded.has(key))
+        .reduce((total, key) => total + Buffer.byteLength(promptVars[key] ?? "", "utf8"), 0);
+      effectivePromptVars.concernsYaml = await hydrateStepConcerns(taskDir, { stepRole, inputBytes });
+    }
+  }
   let promptText: string;
   let agentDef: { body: string; tools: string[]; description: string };
   try {
@@ -324,8 +545,8 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
       agentDef = prompts.agentDefinition(agent);
     } else {
       promptText = prompts.renderStepPrompt
-        ? prompts.renderStepPrompt(fragment, promptVars, outputSchema)
-        : prompts.render(fragment, promptVars);
+        ? prompts.renderStepPrompt(fragment, effectivePromptVars, outputSchema)
+        : prompts.render(fragment, effectivePromptVars);
       agentDef = prompts.agentDefinition(agent);
     }
   } catch (err: any) {
@@ -1130,6 +1351,27 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
       }
     } catch {}
   }
+  // Producer concerns feed the taskWt store after the canonical artifact write.
+  let triageOutcome: ReviewTriageOutcome | undefined;
+  if (finalStatus === "ok") {
+    try {
+      triageOutcome = await ingestStepConcerns({
+        task, taskDir, taskWt, repo, output: validatedData, pipeline,
+        source: {
+          record: dirName, agent, step: stepId,
+          ...(item ? { item } : {}),
+          ...(opts.iteration !== undefined ? { iteration: opts.iteration } : {}),
+        },
+      });
+    } catch (err: any) {
+      if (err instanceof TriageValidationError) {
+        finalStatus = "error";
+        validationError = `Review triage failed: ${err.message}`;
+      } else {
+        try { await appendJournal(taskDir, { type: "concern_ingest_error", task, item, step: stepId, error: err?.message || String(err) }); } catch { /* Journal failure must not change step status. */ }
+      }
+    }
+  }
 
   // 13. Invariant §6.3.2: Finish step record with final meta
   const finalMeta = await finishStepRecord({
@@ -1190,5 +1432,6 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
     usage: getCurrentTotalUsage(),
     branchChanged,
     headMoved,
+    ...(triageOutcome ? { triage: triageOutcome } : {}),
   };
 }

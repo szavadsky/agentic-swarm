@@ -12,7 +12,7 @@ Design the iteration execution plan (`plan-N.yaml`) decomposing task intent into
 - Assumptions: document assumptions with rationale (`why`) and optional disposition if human confirmation is desired.
 - Epics (root task only): define child epics for major subsystems (depth 1 only); each epic outline requires complete `intent` text.
 - Tech debt: categorize technical debt as `adjacent`, `impacting`, or `blocking`. Impacting and blocking debt MUST include explicit resolutions.
-- ADRs: record architectural decision records (`id`, `title`, `context`, `decision`, `consequences`) for non-trivial design choices.
+- ADRs: record architectural decision records (`id`, `title`, `context`, `decision`, `consequences`, `blocking`) for non-trivial design choices. Set `blocking: true` only when the active human-involvement table needs a human decision; remarkable ADRs (absent/`false`) go to the digest and never wait.
 - Escalation: flag `escalate: true` on item outlines where domain complexity exceeds standard implementation.
 - Advisory sizing hint: give each item outline an explicit `prodBudgetHint` (estimated prod lines changed) as a sizing reference for review against `storyMaxProdLines`/`simpleMaxProdLines` in `{{limits}}`.
 - Infrastructure & quality gates: review declared gates, baseline status, and notes in `{{infra}}`. If any gate mutates the worktree (`mutatesWorktree: true`) or has operator action notes (e.g. linter scanning orchestration folder), account for it in your plan (e.g. adding check flags, excluding folders, or addressing via tech debt/spikes).
@@ -46,3 +46,11 @@ Iteration: {{iteration}}
 
 ## Task Status
 {{taskStatus}}
+
+## Human involvement
+{{humanInvolvementCriteria}}
+
+## Open Concerns
+{{concernsYaml}}
+
+- Raise concerns with evidence; condense stale detail instead of repeating it.

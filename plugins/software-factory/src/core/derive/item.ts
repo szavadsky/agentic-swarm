@@ -1,4 +1,4 @@
-import fs from "node:fs";
+import fs, { type Dirent } from "node:fs";
 import path from "node:path";
 import type {
   AssignmentArtifact,
@@ -18,6 +18,8 @@ import { childBranch } from "../git/naming.js";
 import { isAncestor } from "../git/commit.js";
 import { fingerprintSuggestions, fingerprintCheckFailure } from "../loops.js";
 import { getDefaultFlowForKind } from "../flows/item-machine.js";
+import { questionBlocks } from "../steer.js";
+import { listConcerns } from "../concerns.js";
 
 export interface ItemStepRecordInfo {
   dirName: string;
@@ -74,6 +76,31 @@ export function steerQuestionBlocksSlug(
   if (Array.isArray(q.blocks)) return q.blocks.includes(slug);
   return refMatches && (q.disposition === "human-async" || q.disposition === "human-stop");
 }
+/**
+ * Applies routed concern blocking (adr-routing-derived-state): a pending item
+ * named by a routed blocker concern derives `blocked`. Pending-only matches
+ * the §8.2 blocked-by-failure precedent and avoids retro-blocking in-flight
+ * (running/ready) work, keeping deriveTaskState consistent with
+ * deriveWaveState/blockedByConcern which seed pending items only.
+ */
+export function withRoutedBlocking(
+  state: DerivedItemState,
+  blockedBy?: ReadonlySet<string>
+): DerivedItemState {
+  if (!blockedBy?.has(state.slug)) {
+    return state;
+  }
+  if (state.status === "blocked") {
+    return state;
+  }
+  // Only pending items are seeded: retro-blocking running/ready work would
+  // break the wave merge path. The wave-level fixpoint cascades dependents
+  // transitively, so running seeds still propagate through their deps.
+  if (state.status !== "pending") {
+    return state;
+  }
+  return { ...state, status: "blocked" };
+}
 
 /**
  * Derives state of a single item from assignment, step records, decisions, steering, and git (§6, §8).
@@ -88,6 +115,8 @@ export async function deriveItemState(opts: {
   project?: ProjectConfig;
   kindConfig?: FlowKindConfig;
   rootTaskDir?: string;
+  /** Slugs named by routed blocker concerns (adr-routing-derived-state). */
+  blockedBy?: Iterable<string>;
 }): Promise<DerivedItemState> {
   const { taskDir, itemSlug, parentBranch, taskWt, childWt, pipeline, project } = opts;
   const itemDir = path.join(taskDir, "items", itemSlug);
@@ -286,12 +315,7 @@ export async function deriveItemState(opts: {
         try {
           const qPath = path.join(steerDir, sent.name);
           const q = await readYaml<SteerItemArtifact>(qPath);
-          if (!q || q.status !== "open") continue;
-          const refMatches =
-            q.ref === itemSlug ||
-            q.ref === `${path.basename(taskDir)}/${itemSlug}` ||
-            (opts.rootTaskDir ? q.ref === `${path.basename(opts.rootTaskDir)}/${itemSlug}` : false);
-          if (steerQuestionBlocksSlug(q, itemSlug, refMatches)) {
+          if (q && questionBlocks(q, itemSlug)) {
             openSteerQuestion = q;
             break;
           }
@@ -303,6 +327,53 @@ export async function deriveItemState(opts: {
       }
       if (openSteerQuestion) break;
     }
+  }
+
+  // Routed-concern id set for the terminal-step gate below (live store:
+  // the step-runner ingest commits concerns before derive runs, so a
+  // concern created by the step under derivation is already visible).
+  let routedConcernIds = new Set<string>();
+  try {
+    routedConcernIds = new Set((await listConcerns(taskDir)).map((c) => c.id));
+  } catch {
+    routedConcernIds = new Set();
+  }
+
+  // Answered-question visibility for the terminal-step gate below: an
+  // answered blocking-capable question addressing this item forces a
+  // feedback re-run in the item-machine tick, so derive must hold the item
+  // `running` until that re-run lands (mirrors the tick's
+  // answeredAsyncFeedback scan; digest answers never re-run).
+  let answeredBlockingQuestion = false;
+  for (const steerDir of steerDirs) {
+    if (!fs.existsSync(steerDir)) continue;
+    let sentries: Dirent[];
+    try {
+      sentries = await fs.promises.readdir(steerDir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const sent of sentries) {
+      if (!sent.isFile() || !sent.name.endsWith(".yaml")) continue;
+      try {
+        const q = await readYaml<SteerItemArtifact>(path.join(steerDir, sent.name));
+        if (!q || q.status !== "answered" || !q.answer) continue;
+        if (q.disposition !== "human-async" && q.disposition !== "human-stop") continue;
+        const addresses =
+          q.blocks?.includes(itemSlug) ||
+          (!Array.isArray(q.blocks) &&
+            (q.ref === itemSlug ||
+              q.ref === `${path.basename(taskDir)}/${itemSlug}` ||
+              (opts.rootTaskDir ? q.ref === `${path.basename(opts.rootTaskDir)}/${itemSlug}` : false)));
+        if (addresses) {
+          answeredBlockingQuestion = true;
+          break;
+        }
+      } catch {
+        // Corrupt mailbox files are the open-scan's error; ignore here.
+      }
+    }
+    if (answeredBlockingQuestion) break;
   }
 
   // 4. Check if merged in git (Finding 15: requires own commits and ancestor of task HEAD)
@@ -442,15 +513,27 @@ export async function deriveItemState(opts: {
 
       if (lastFlowStepId && lastRecord.name === lastFlowStepId) {
         // Last step was completed! Check if any review requested changes.
-        // `fix` keeps the item mid-flow; `human-async`/`human-stop` do too
-        // until the operator answers (the question file persists the block
-        // even after answering, so status alone can't gate on it — the
-        // item-machine consumes the answer as feedback and re-runs).
+        // `fix` keeps the item mid-flow; `human-async`/`human-stop` do too,
+        // but ONLY when they actually block this item: a routed concern-id
+        // disposition blocks only if the router wrote an open blocking
+        // question for it (severity downgrade/suppression keeps the item
+        // moving), and a digest (`human-awareness`, empty blocks) never
+        // blocks. Raw (non-concern) human dispositions always block until
+        // the operator answers (the question file persists the block even
+        // after answering — the item-machine consumes the answer as
+        // feedback and re-runs).
         if (lastRecord.output && typeof lastRecord.output === "object" && "suggestions" in (lastRecord.output as any)) {
           const rev = lastRecord.output as ReviewArtifact;
-          const hasFix = rev.suggestions?.some(
-            (s) => s.disposition === "fix" || s.disposition === "human-async" || s.disposition === "human-stop"
-          );
+          const hasFix = (rev.suggestions ?? []).some((s) => {
+            if (s.disposition === "fix") return true;
+            if (s.disposition !== "human-async" && s.disposition !== "human-stop") return false;
+            // Concern-id dispositions route through triage: an open blocking
+            // question already forced `blocked` above, so reaching here
+            // means downgraded/suppressed (ready) — unless an answered
+            // blocking question still awaits its feedback re-run.
+            if (s.id && routedConcernIds.has(s.id)) return answeredBlockingQuestion;
+            return true;
+          });
           if (!hasFix) {
             status = "ready";
           } else {
@@ -477,29 +560,32 @@ export async function deriveItemState(opts: {
     .map((r) => recordFailingFingerprints.get(r.dirName))
     .filter((fp): fp is string => typeof fp === "string");
 
-  return {
-    slug: itemSlug,
-    kind,
-    title,
-    wave,
-    deps,
-    status,
-    assignment,
-    branch,
-    records,
-    currentStepId: records[records.length - 1]?.name,
-    currentAttempt,
-    currentFixRound,
-    isEscalated,
-    freshSeries: retryDecision && decisionIsFresh,
-    interruptionCount,
-    guidanceText,
-    openSteerQuestion,
-    mergedAt,
-    consultCount,
-    lastFailingCheckFingerprint,
-    failingCheckFingerprints,
-    suggestionFingerprints,
-    decisionFingerprints,
-  };
+  return withRoutedBlocking(
+    {
+      slug: itemSlug,
+      kind,
+      title,
+      wave,
+      deps,
+      status,
+      assignment,
+      branch,
+      records,
+      currentStepId: records[records.length - 1]?.name,
+      currentAttempt,
+      currentFixRound,
+      isEscalated,
+      freshSeries: retryDecision && decisionIsFresh,
+      interruptionCount,
+      guidanceText,
+      openSteerQuestion,
+      mergedAt,
+      consultCount,
+      lastFailingCheckFingerprint,
+      failingCheckFingerprints,
+      suggestionFingerprints,
+      decisionFingerprints,
+    },
+    opts.blockedBy ? new Set(opts.blockedBy) : undefined
+  );
 }

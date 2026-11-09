@@ -420,7 +420,10 @@ harness: omp
 #   - architect: consult path (direct disposition trigger not wired today)
 #   - human-awareness: informational tousertoreview item, no forced architect turn
 #   - human-async: item blocks awaiting operator response; other items continue
-#   - human-stop: blocks terminal success like fix (no immediate exit-10 path wired today)
+#   - human-stop: blocks terminal success; task-level open question breaks to close-up, budget stop exits 10 (deliberately absent from default)
+#   - dismiss: triager-only (reviewer/plan-reviewer); auto-appended to their
+#     allowed dispositions, requires a reason in `detail`, and keeps the
+#     concern on disk as `dismissed`.
 reviewPolicy:
   default:
     - fix
@@ -428,6 +431,64 @@ reviewPolicy:
     - architect
     - human-awareness
     - human-async
+
+# ==============================================================================
+# Human Involvement & Concerns (§18)
+# ==============================================================================
+# `humanInvolvement` selects how aggressively remarkable decisions and
+# blocking ADRs/concerns reach the human: autonomous (least), principal, or
+# detailed (most). The active mode selects its `## <mode>` section from
+# `agents/criteria/human-involvement.md` and the shared blocking table below.
+#
+# `concerns.raiseAllowlist` lists agents whose structured output may raise
+# concerns. Keys are the raising step's `source.agent`, never its prompt
+# fragment: developer covers develop/poc/test-assumptions/test-first/simple-implement/fix-round, fact-finder covers research, and architect covers architect-*.
+# `minDigestSeverity` is the lowest severity worth a human digest;
+# `minBlockingSeverity` is the lowest severity that can block an item. Arrays
+# replace wholesale across config layers; `null` deletes a concern key.
+humanInvolvement: autonomous
+
+concerns:
+  raiseAllowlist:
+    - developer
+    - fact-finder
+    - architect
+    - qa
+    - reviewer
+    - plan-reviewer
+    - wave-close-up
+    - plan-close-up
+  minDigestSeverity: medium
+  minBlockingSeverity: high
+
+# Presets — copy the desired mode block into `.factory/pipeline.yaml` (project)
+# or a task `pipeline.yaml` override:
+#
+# humanInvolvement: autonomous
+# concerns:
+#   raiseAllowlist: [developer, fact-finder, architect, qa, reviewer, plan-reviewer, wave-close-up, plan-close-up]
+#   minDigestSeverity: medium
+#   minBlockingSeverity: high
+#
+# humanInvolvement: principal
+# concerns:
+#   raiseAllowlist: [developer, fact-finder, architect, qa, reviewer, plan-reviewer, wave-close-up, plan-close-up]
+#   minDigestSeverity: low
+#   minBlockingSeverity: medium
+#
+# humanInvolvement: detailed
+# concerns:
+#   raiseAllowlist: [developer, fact-finder, architect, qa, reviewer, plan-reviewer, wave-close-up, plan-close-up]
+#   minDigestSeverity: low
+#   minBlockingSeverity: low
+#
+# ADR blocking table (which ADRs and concerns reach the human per mode):
+#
+# | Mode | Blocking (needs human decision) | Remarkable (digest only) |
+# | --- | --- | --- |
+# | autonomous | high-severity ADRs/concerns still blocking after unblocked work | everything else |
+# | principal | stack/layer, external interfaces, config shapes | internal choices |
+# | detailed | external-interface changes and major internal interfaces | minor internals |
 
 # ==============================================================================
 # Criteria (§5, §8.7)
@@ -452,6 +513,7 @@ criteria:
   triage: agents/criteria/triage.md
   dispositions: agents/criteria/dispositions.md
   story-kinds: agents/criteria/story-kinds.md
+  human-involvement: agents/criteria/human-involvement.md
 
 # ==============================================================================
 # Context Pack (§8.1, §12.5)
