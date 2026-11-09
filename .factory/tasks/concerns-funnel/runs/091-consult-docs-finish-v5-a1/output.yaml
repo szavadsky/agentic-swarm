@@ -1,0 +1,20 @@
+context: item
+decision: retry-with-guidance
+persist: false
+rationale: "Single remaining FIX is a docs-sample inconsistency, fully
+  diagnosed: README status sample shows 'dismissed 0' alongside a q-escalated
+  id, which is unreachable (q-escalated-* is emitted only when a dismissed
+  concern has source.escalated, triage.ts:103-104/117-118, so dismissed >= 1 is
+  required); the sample id also uses an rm-* suffix where the router emits
+  q-escalated-c-*. Two-line sample change, no test asserts the sample ids, no
+  design question. One guided round closes it."
+text: "Final round for docs-finish-v5: fix ONLY the README status sample (README
+  ~L123-127). Replace the unreachable q-escalated-rm-... id with a reachable
+  one: either q-escalated-c-<10-hex> (e.g. q-escalated-c-1a2b3c4d5e) AND change
+  the counts line to dismissed 1, or show a remarkable digest as
+  q-concern-rm-<10-hex> (remarkables route via concernMailboxId,
+  triage.ts:117-119) with consistent counts. Keep all fingerprint suffixes 10
+  lowercase hex chars. Do NOT touch code, tests, or any other docs; do NOT
+  invent new ids elsewhere. Verify: grep the README sample block for consistency
+  (dismissed count >= 1 iff a q-escalated id is shown), then TMPDIR=/tmp bun
+  test on test/docs-concerns.test.ts and typecheck."
