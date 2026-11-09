@@ -87,7 +87,7 @@ sequenceDiagram
     loop waves, maxParallelItems=4
         loop items in parallel
             ENG->>OMP: test-first → develop → qa → review (item worktree)
-            ENG->>ENG: checks per step; review fix → fix-round loop to fixLoopTo
+            ENG->>ENG: checks per step, review fix loops back as fix-round to fixLoopTo
             ENG->>OMP: consult (architect, sequenced id) on exhaustion/escalation
         end
         ENG->>GIT: parent-merge item branches → task branch
@@ -108,10 +108,10 @@ sequenceDiagram
     participant ENG
     participant OMP
     ENG->>OMP: context-pack (fact-finder/workhorse, session fresh)
-    OMP-->>ENG: context-pack.md (no byte cap; turn budget is the bound)
+    OMP-->>ENG: context-pack.md, no byte cap, turn budget is the bound
     ENG->>ENG: buildArchitectBrief — skeleton of one-line entries
     ENG->>OMP: brief-select judge (complete, simpler, system/brief-select)
-    OMP-->>ENG: {"include": [...ids]} (fail-open: full brief on error)
+    OMP-->>ENG: include list of ids, fail-open to full brief on error
     ENG->>OMP: architect-plan prompt = task/iteration/intent/context/infra/debt/steering/limits + contextPack + taskStatus + hydrationContext(brief) + limitViolations + criteria + concernsYaml + Output schema §
     Note over ENG,OMP: plan turn: sessionMode reuse + existingSessionId=architectSessionId (persistent thread). Limits-violation re-plan: resumedRepair on SAME session with errors-only prompt (iteration.ts:1304).
 ```
@@ -124,7 +124,7 @@ sequenceDiagram
     participant OMP
     participant OP
     ENG->>OMP: review / qa / plan-review (dispositionsCriteria filtered to reviewPolicy)
-    OMP-->>ENG: suggestions[] with disposition
+    OMP-->>ENG: suggestion list with disposition
     alt fix / optional
         ENG->>OMP: fix-round (develop, feedback=suggestion text)
     else architect
@@ -133,9 +133,9 @@ sequenceDiagram
     else human-async
         ENG->>OP: steer mailbox question (blocks item, others continue)
     else human-stop
-        ENG->>ENG: blocks item AND task; task-level open question breaks to close-up
+        ENG->>ENG: blocks item AND task, task-level open question breaks to close-up
     else human-awareness
-        ENG->>OP: digest-only tousertoreview item (blocks: [])
+        ENG->>OP: digest-only tousertoreview item, blocks nothing
     else dismiss (triager-only)
         ENG->>ENG: concern kept on disk as dismissed, logged with reason
     end
@@ -154,10 +154,11 @@ sequenceDiagram
     participant GIT
     ENG->>GIT: child branch topic/<task>--<epic>, child worktree (engine.ts:141-143)
     ENG->>ENG: child task run on PARENT branch, kind fixed (skips triage)
-    Note over ENG: child inherits infra; own iterations + waves + closeups
+    Note over ENG: child inherits infra, own iterations and waves and closeups
     ENG->>ENG: epic concerns → propagateEpicConcerns to parent (open/routed only)
-    ENG->>GIT: record epic child status on parent; merge child branch back
-    ENG->>ENG: saga/escalation pointers: q-epic-* questions; child failure → item failed
+    ENG->>GIT: record epic child status on parent then merge child branch back
+    ENG->>ENG: saga-escalation pointers are q-epic-star questions
+    ENG->>ENG: child failure fails the item
 ```
 (`engine.ts:123-225` `runTaskChild`; `iteration.ts:2444,3774`; epic child closeup
 `child-closeup.yaml`.)
