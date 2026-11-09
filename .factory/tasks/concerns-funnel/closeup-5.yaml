@@ -1,0 +1,12 @@
+iteration: 5
+status: next-iteration
+summary: "Iteration 5 delivered 0/2 milestones. Verified on exact bytes: m0 NOT
+  delivered -- developer-output.schema.json:68 still declares capital-D Detail,
+  and m1 NOT delivered -- architect-closeup.md final bullet still instructs
+  concernResolutions with no Confirms. Task Status confirms zero merges
+  (schema-detail-normalize-v3 still running after QA 2/2 failure per consult
+  026, closeup-confirm-instructions pending on its dep). Audit's remaining
+  findings hold: mixed-casing concerns.ts:74 guard, stale capital reads in
+  epic-saga/longest-wins tests, fragments/prompts.test/ARCHITECTURE+sentinels/3
+  ADR stubs all untouched. Iteration 6: retry m0 per persisted decision 026
+  guidance, then m1 sequenced after it; no plan redesign needed."

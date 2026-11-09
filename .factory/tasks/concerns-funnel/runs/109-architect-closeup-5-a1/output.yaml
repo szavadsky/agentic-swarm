@@ -1,0 +1,26 @@
+completedMilestones: []
+iteration: 5
+remainingMilestones:
+  - m0-detail-normalize
+  - m1-confirm-instructions
+status: next-iteration
+summary: "Iteration 5 delivered 0/2 milestones. Verified on exact bytes: m0 NOT
+  delivered -- developer-output.schema.json:68 still declares capital-D Detail,
+  and m1 NOT delivered -- architect-closeup.md final bullet still instructs
+  concernResolutions with no Confirms. Task Status confirms zero merges
+  (schema-detail-normalize-v3 still running after QA 2/2 failure per consult
+  026, closeup-confirm-instructions pending on its dep). Audit's remaining
+  findings hold: mixed-casing concerns.ts:74 guard, stale capital reads in
+  epic-saga/longest-wins tests, fragments/prompts.test/ARCHITECTURE+sentinels/3
+  ADR stubs all untouched. Iteration 6: retry m0 per persisted decision 026
+  guidance, then m1 sequenced after it; no plan redesign needed."
+techDebt:
+  - "td-detail-casing still open: 6 runtime schemas + review reference use
+    capital-D Detail; concerns.ts:74 mixed-casing guard; stale capital reads in
+    epic-saga and longest-wins tests"
+  - "m1 confirm instructions missing: architect-closeup/architect-wave-report
+    final bullets unchanged; prompts.test.ts lacks confirms coverage"
+  - "traceability gap: ARCHITECTURE §1 row 18 + §8.11 still five deviations; 3
+    ADR stubs lack Decision paragraphs; docs-concerns sentinels not co-updated"
+  - "td-tmpdir-split: pre-existing head-guard failures need TMPDIR=/tmp"
+  - "td-spike-nits: unapplied spike-saga-commit reviewer nits"
