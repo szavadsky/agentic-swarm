@@ -1,0 +1,11 @@
+seq: 108
+name: plan-close-up-5
+attempt: 1
+agent: plan-close-up
+role: alt-workhorse
+models:
+  - opencode-go/muse-spark-1.3-contributor
+  - opencode-go/deepseek-v4.1-flash
+timeoutSec: 2700
+status: started
+startedAt: 2026-11-09T12:26:03.596Z
