@@ -1,0 +1,38 @@
+slug: schema-detail-normalize-v3
+kind: dev
+title: Lowercase detail in producer schemas + merge fix
+assignment: "Normalize concern Detail (capital-D) to detail (lowercase-d) in 6
+  runtime file schemas under plugins/software-factory/config/schemas/
+  (decisions, developer-output, fact-finder-output, plan, plan-closeup shared by
+  architect-closeup, wave-closeup) + reference-only review.schema.json for
+  consistency. Fix plugins/software-factory/src/core/concerns.ts:74: change
+  guard capital-D property read (existing?.Detail) to lowercase-d
+  (existing?.detail), restoring longest-wins and StoredConcernArtifact
+  typecheck. MUST-FIX positive stored reads to lowercase-d:
+  plugins/software-factory/test/engine/epic-saga-propagate.test.ts:248/307/313/\
+  319 and
+  plugins/software-factory/test/contracts/schema-detail-normalize.test.ts:234/2\
+  63 longest-wins assertions; sweep
+  plugins/software-factory/test/engine/funnel-text-budget.test.ts + any other
+  :raw reads (grep missed verified matches — verify with direct reads, never
+  grep alone). MUST-PRESERVE all negative-casing fixtures capital-D:
+  schema-detail-normalize absence assertions + capital-D rejection payloads,
+  concern-schemas.test.ts capital-D rejection payloads,
+  concern-artifact-types.test.ts capital-D ts-expect-error fixture. Rule:
+  positive stored-read assertions flip; every rejection/absence/expect-error
+  fixture keeps capital-D. Longest-wins tests already exist — fix reads, do NOT
+  duplicate. Leave triage/infra/pm-edit untouched. Verify: tsc --noEmit clean,
+  then TMPDIR=/tmp bun test for contract + longest-wins + epic-saga suites, then
+  TMPDIR=/tmp full suite green."
+outlineRef: schema-detail-normalize-v3
+milestone: m0-detail-normalize
+wave: 1
+scenarioRefs:
+  - m0-detail-normalize:scenario-1
+  - m0-detail-normalize:scenario-2
+  - m0-detail-normalize:scenario-3
+  - m0-detail-normalize:scenario-4
+citations:
+  - docs/factory.v2.md:89-103
+  - plugins/software-factory/src/core/artifacts.ts:313-325
+  - plugins/software-factory/src/core/fingerprint.ts:20-50

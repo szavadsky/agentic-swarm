@@ -1,0 +1,89 @@
+iteration: 5
+amendmentIndex: 0
+items:
+  - slug: schema-detail-normalize-v3
+    kind: dev
+    title: Lowercase detail in producer schemas + merge fix
+    assignment: "Normalize concern Detail (capital-D) to detail (lowercase-d) in 6
+      runtime file schemas under plugins/software-factory/config/schemas/
+      (decisions, developer-output, fact-finder-output, plan, plan-closeup
+      shared by architect-closeup, wave-closeup) + reference-only
+      review.schema.json for consistency. Fix
+      plugins/software-factory/src/core/concerns.ts:74: change guard capital-D
+      property read (existing?.Detail) to lowercase-d (existing?.detail),
+      restoring longest-wins and StoredConcernArtifact typecheck. MUST-FIX
+      positive stored reads to lowercase-d:
+      plugins/software-factory/test/engine/epic-saga-propagate.test.ts:248/307/\
+      313/319 and
+      plugins/software-factory/test/contracts/schema-detail-normalize.test.ts:2\
+      34/263 longest-wins assertions; sweep
+      plugins/software-factory/test/engine/funnel-text-budget.test.ts + any
+      other :raw reads (grep missed verified matches — verify with direct reads,
+      never grep alone). MUST-PRESERVE all negative-casing fixtures capital-D:
+      schema-detail-normalize absence assertions + capital-D rejection payloads,
+      concern-schemas.test.ts capital-D rejection payloads,
+      concern-artifact-types.test.ts capital-D ts-expect-error fixture. Rule:
+      positive stored-read assertions flip; every rejection/absence/expect-error
+      fixture keeps capital-D. Longest-wins tests already exist — fix reads, do
+      NOT duplicate. Leave triage/infra/pm-edit untouched. Verify: tsc --noEmit
+      clean, then TMPDIR=/tmp bun test for contract + longest-wins + epic-saga
+      suites, then TMPDIR=/tmp full suite green."
+    outlineRef: schema-detail-normalize-v3
+    milestone: m0-detail-normalize
+    wave: 1
+    deps: []
+    scenarioRefs:
+      - m0-detail-normalize:scenario-1
+      - m0-detail-normalize:scenario-2
+      - m0-detail-normalize:scenario-3
+      - m0-detail-normalize:scenario-4
+    citations:
+      - docs/factory.v2.md:89-103
+      - plugins/software-factory/src/core/artifacts.ts:313-325
+      - plugins/software-factory/src/core/fingerprint.ts:20-50
+  - slug: closeup-confirm-instructions
+    kind: dev
+    title: Architect confirms instructions + traceability updates
+    assignment: "After m0 merged (baseline RED, m1 gates require m0): per
+      adr-confirm-field-instructions, net-zero single-line in-place replacement
+      of existing final bullet in
+      plugins/software-factory/agents/steps/architect-closeup.md
+      (concernConfirms accept/reject incl dismiss note rule; concernResolutions
+      gone) and in
+      plugins/software-factory/agents/steps/architect-wave-report.md
+      (concernConfirms scoped to wave-close-up proposals). Both bullets MUST
+      keep Raise-concerns-with-evidence clause and condense clause — only
+      Resolutions->Confirms + dismiss note rule changes — zero net added lines
+      per fragment; architect-resume.md and all other fragments untouched.
+      Extend plugins/software-factory/test/prompts.test.ts: assert
+      confirms-present in both rendered prompts and concernResolutions-absent
+      from architect-closeup; enforce net-zero via git diff --numstat equal
+      insertions/deletions for the two fragments. Complete (UPDATE never
+      rewrite: preserve title+context stub, append Decision paragraph from
+      matching plan ADR) docs/adr/adr-confirm-field-instructions.md,
+      docs/adr/adr-epic-mailbox-isolation.md (sixth deviation),
+      docs/adr/adr-remarkable-digest-triage.md (spec-consistent NOT deviation).
+      Update plugins/software-factory/docs/ARCHITECTURE.md §1 row 18 to six
+      deviations (epic-mailbox-isolation needles + adr-epic-mailbox-isolation
+      id) AND append matching bullet to §8.11 Accepted deviations list,
+      co-updating BOTH sentinels in
+      plugins/software-factory/test/docs-concerns.test.ts with same needles in
+      same diff. Do NOT touch README/config/criteria or other ARCHITECTURE
+      sections. Verify: prompts.test matrix + 15/80 budgets green, docs-concerns
+      green, typecheck + TMPDIR=/tmp full suite green."
+    outlineRef: closeup-confirm-instructions
+    milestone: m1-confirm-instructions
+    wave: 2
+    deps:
+      - schema-detail-normalize-v3
+    scenarioRefs:
+      - m1-confirm-instructions:scenario-1
+      - m1-confirm-instructions:scenario-2
+      - m1-confirm-instructions:scenario-3
+      - m1-confirm-instructions:scenario-4
+      - m1-confirm-instructions:scenario-5
+    citations:
+      - docs/factory.v2.md:89-103
+      - plugins/software-factory/docs/ARCHITECTURE.md:39
+      - plugins/software-factory/src/core/flows/iteration.ts:439-485
+      - plugins/software-factory/src/core/flows/item-machine.ts:628-647

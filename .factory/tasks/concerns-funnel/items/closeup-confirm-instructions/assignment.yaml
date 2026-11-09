@@ -1,0 +1,44 @@
+slug: closeup-confirm-instructions
+kind: dev
+title: Architect confirms instructions + traceability updates
+assignment: "After m0 merged (baseline RED, m1 gates require m0): per
+  adr-confirm-field-instructions, net-zero single-line in-place replacement of
+  existing final bullet in
+  plugins/software-factory/agents/steps/architect-closeup.md (concernConfirms
+  accept/reject incl dismiss note rule; concernResolutions gone) and in
+  plugins/software-factory/agents/steps/architect-wave-report.md
+  (concernConfirms scoped to wave-close-up proposals). Both bullets MUST keep
+  Raise-concerns-with-evidence clause and condense clause — only
+  Resolutions->Confirms + dismiss note rule changes — zero net added lines per
+  fragment; architect-resume.md and all other fragments untouched. Extend
+  plugins/software-factory/test/prompts.test.ts: assert confirms-present in both
+  rendered prompts and concernResolutions-absent from architect-closeup; enforce
+  net-zero via git diff --numstat equal insertions/deletions for the two
+  fragments. Complete (UPDATE never rewrite: preserve title+context stub, append
+  Decision paragraph from matching plan ADR)
+  docs/adr/adr-confirm-field-instructions.md,
+  docs/adr/adr-epic-mailbox-isolation.md (sixth deviation),
+  docs/adr/adr-remarkable-digest-triage.md (spec-consistent NOT deviation).
+  Update plugins/software-factory/docs/ARCHITECTURE.md §1 row 18 to six
+  deviations (epic-mailbox-isolation needles + adr-epic-mailbox-isolation id)
+  AND append matching bullet to §8.11 Accepted deviations list, co-updating BOTH
+  sentinels in plugins/software-factory/test/docs-concerns.test.ts with same
+  needles in same diff. Do NOT touch README/config/criteria or other
+  ARCHITECTURE sections. Verify: prompts.test matrix + 15/80 budgets green,
+  docs-concerns green, typecheck + TMPDIR=/tmp full suite green."
+outlineRef: closeup-confirm-instructions
+milestone: m1-confirm-instructions
+wave: 2
+deps:
+  - schema-detail-normalize-v3
+scenarioRefs:
+  - m1-confirm-instructions:scenario-1
+  - m1-confirm-instructions:scenario-2
+  - m1-confirm-instructions:scenario-3
+  - m1-confirm-instructions:scenario-4
+  - m1-confirm-instructions:scenario-5
+citations:
+  - docs/factory.v2.md:89-103
+  - plugins/software-factory/docs/ARCHITECTURE.md:39
+  - plugins/software-factory/src/core/flows/iteration.ts:439-485
+  - plugins/software-factory/src/core/flows/item-machine.ts:628-647
