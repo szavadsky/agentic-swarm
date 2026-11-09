@@ -1,0 +1,42 @@
+status: approved
+summary: "Iteration-6 plan approved: 2 milestones/2 items within bounds,
+  red-baseline casing analysis verified against code, net-zero fragment plus
+  traceability scope sound; 3 optional wording/verification nits only."
+suggestions:
+  - id: m1-sentinel-title-wording
+    disposition: optional
+    summary: Item says update 'two sentinel test titles from five to six' but only
+      the row-18 title contains 'five'
+    detail: docs-concerns.test.ts:87 title contains 'five deviations' but the :181
+      deviations title enumerates names with no count, so no five→six swap
+      exists there; developer must append sixth-deviation naming instead.
+      Self-correcting from milestone scenario ('updated row-18 and deviations
+      needles and titles'); clarify wording only if plan is revised.
+    location:
+      file: plugins/software-factory/test/docs-concerns.test.ts
+      line: 181
+  - id: adr-decision-unpinned
+    disposition: optional
+    summary: ADR Decision-paragraph completion has no automated sentinel; m1
+      scenario 4 verified by read only
+    detail: docs-concerns.test.ts never reads docs/adr (pluginRoot-scoped reads
+      cover ARCHITECTURE/README/config only), so the three Decision paragraphs
+      are pinned only by manual read — acceptable for final-iteration docs. Note
+      the m1 directional interface ADR clause ('stubs expose Decision
+      paragraphs') is therefore not enforced by its stated caller (sentinels);
+      optionally add a needle check or split the clause.
+    location:
+      file: docs/adr/adr-confirm-field-instructions.md
+      line: 1
+  - id: fragment-baseline-meaning
+    disposition: optional
+    summary: "'Line counts pinned to baseline' is ambiguous against
+      FRAGMENT_BASELINE_LINES pre-concern counts"
+    detail: prompts.test.ts pins architect-closeup:16 / architect-wave-report:18
+      pre-concern counts, while net-zero means pinning to current counts.
+      Milestone scenario ('line count is unchanged') plus '(automated net-zero
+      enforcement)' disambiguate toward current counts, and a wrong pin fails
+      fast inside the item; clarify to 'current-count baseline' only if revised.
+    location:
+      file: plugins/software-factory/test/prompts.test.ts
+      line: 68
