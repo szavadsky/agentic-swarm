@@ -1,0 +1,88 @@
+status: ok
+summary: "Authored test-first coverage for the lowercase concern-detail contract
+  in plugins/software-factory/test/contracts/schema-detail-normalize.test.ts.
+  Added the missing reference-review-schema suggestions casing assertions
+  (suggestions[].properties.detail lowercase, Detail absent,
+  additionalProperties:false; lowercase suggestion accepted, capital-D
+  rejected). Audit showed the runtime schemas, generated review schema, and
+  concerns.ts merge guard are already lowercase in this baseline, so the only
+  executable red gap is legacy capital-D (`Detail`) stored-record normalization:
+  two new tests assert (a) listConcerns surfaces a legacy capital-D record as
+  lowercase `detail` without the legacy key, and (b)
+  aggregateConcerns/mergeConcern keeps the longer legacy stored detail and
+  rewrites it as lowercase. Both fail now with pure assertion failures, and the
+  rest of the suite remains green."
+target:
+  selectors:
+    - test/contracts/schema-detail-normalize.test.ts
+  expectRed:
+    - legacy capital-D stored concerns normalize to lowercase detail.lists a
+      legacy capital-D detail as lowercase detail without the legacy key
+    - legacy capital-D stored concerns normalize to lowercase detail.keeps the
+      legacy capital-D stored detail when a shorter lowercase detail is
+      re-emitted
+evidence:
+  - "Raw-audited all 7 schema files:
+    decisions/developer-output/fact-finder-output/plan/plan-closeup/wave-closeup
+    concern items and review.schema.json suggestions (:33) + newConcerns (:65)
+    already declare lowercase detail; no capital-D key remains in any schema."
+  - "Raw-audited concerns.ts:74: guard reads existing?.detail (lowercase) and
+    compares UTF-8 bytes; positive stored reads in
+    epic-saga-propagate.test.ts:248/307/313/319,
+    schema-detail-normalize.test.ts:234/263 and funnel-text-budget.test.ts are
+    already lowercase."
+  - "Verified capital-D is preserved only in negative fixtures via awk line
+    listing: schema-detail-normalize absence/rejection payloads,
+    concern-schemas.test.ts:450/540/624/693 rejection payloads,
+    concern-artifact-types.test.ts:417 ts-expect-error fixture."
+  - Added suggestions-casing assertions to the reference-only review schema
+    test; bun test test/contracts/schema-detail-normalize.test.ts -> new
+    reference-review test passes (5 pass total alongside the 2 intended reds).
+  - "Red proof: bun test test/contracts/schema-detail-normalize.test.ts -> 5
+    pass, 2 fail; failures are expect(received).toBe(expected) assertion
+    failures (undefined != 200-byte legacy detail; 20-byte re-emit != 200-byte
+    legacy detail), no errors."
+  - "JUnit proof of runner wiring: bun test
+    test/contracts/schema-detail-normalize.test.ts --reporter=junit
+    --reporter-outfile=/tmp/junit-detail-red.xml -> 2 <failure>, 0 <error>;
+    parseJunit reports collected:true and both declared expectRed ids match with
+    status=fail."
+  - "typecheck: cd plugins/software-factory && bun run typecheck -> clean (tsc
+    --noEmit)."
+  - "Focused suites: TMPDIR=/tmp bun test
+    test/contracts/schema-detail-normalize.test.ts
+    test/engine/epic-saga-propagate.test.ts
+    test/engine/funnel-text-budget.test.ts -> 23 pass, 2 fail (only the declared
+    legacy tests)."
+  - "Contracts suite: TMPDIR=/tmp bun test test/contracts -> 22 pass, 2 fail
+    (only the declared legacy tests)."
+  - "Full suite: TMPDIR=/tmp bun test -> 467 pass, 2 skip, 2 fail across 471
+    tests; the only failures are the two declared red tests (baseline was 467
+    pass, 2 skip, 0 fail across 469)."
+  - "Scope: git status shows only
+    plugins/software-factory/test/contracts/schema-detail-normalize.test.ts
+    modified; no production files changed."
+concerns:
+  - "Assigned 'baseline is RED' premise does not match this worktree: all
+    runtime schemas, the reference review schema, generated review-schema.ts,
+    concerns.ts:74 and all positive stored reads are already lowercase, and
+    capital-D never existed in schema files in git history. Existing
+    lowercase/longest-wins behavior is fully green before this step."
+  - "Because the claimed production gap is absent, the only honest red-to-green
+    work remaining is legacy stored-record normalization: develop must normalize
+    a capital-D `Detail` key to lowercase `detail` in the concerns.ts read paths
+    (readExisting used by aggregateConcerns/mergeConcern, and listConcerns) and
+    drop the legacy key so StoredConcernArtifact typing and longest-wins hold
+    for legacy files. Producer-output capital-D remains rejected by schemas
+    (unchanged)."
+  - No duplicate longest-wins tests were added; the two new cases specifically
+    cover legacy capital-D read normalization and its interaction with
+    longest-wins.
+notes: "Develop-step guidance: implement a single normalizeStoredConcern helper
+  in src/core/concerns.ts that, when reading a stored concern, maps legacy
+  `Detail` to lowercase `detail` (only when lowercase detail is absent), removes
+  the legacy key, and is applied in readExisting for concern reads and in
+  listConcerns. Keep JSON schemas/step-runner write gate unchanged (capital-D
+  producer payloads stay rejected). Do not add migration of remarkables.
+  Expected develop verification: the two declared tests turn green with no other
+  test changes."

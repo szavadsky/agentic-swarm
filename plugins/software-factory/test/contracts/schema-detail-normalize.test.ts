@@ -4,8 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import { createAjv } from "../../src/core/config/ajv.js";
 import { resolveStepSchema, runAgentStep } from "../../src/core/flows/step-runner.js";
-import { aggregateConcerns } from "../../src/core/concerns.js";
-import { readYaml } from "../../src/core/records/io.js";
+import { aggregateConcerns, concernFingerprint, listConcerns } from "../../src/core/concerns.js";
+import { readYaml, writeYamlAtomic } from "../../src/core/records/io.js";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 import { FakeHarness } from "../../src/harness/fake/fake-harness.js";
 import { Repo } from "../../src/core/git/repo.js";
@@ -109,6 +109,22 @@ describe("lowercase concern detail in producer schemas", () => {
     ).toBe(true);
     expect(
       validate({ ...base, newConcerns: [{ kind: "risk", summary: "Capital", Detail: "wrong" }] })
+    ).toBe(false);
+
+    expect(schema.properties?.suggestions?.items?.properties?.detail).toEqual({ type: "string" });
+    expect(schema.properties?.suggestions?.items?.properties?.Detail).toBeUndefined();
+    expect(schema.properties?.suggestions?.items?.additionalProperties).toBe(false);
+    expect(
+      validate({
+        ...base,
+        suggestions: [{ id: "s-1", disposition: "fix", summary: "Lowercase", detail: "kept" }],
+      })
+    ).toBe(true);
+    expect(
+      validate({
+        ...base,
+        suggestions: [{ id: "s-2", disposition: "fix", summary: "Capital", Detail: "wrong" }],
+      })
     ).toBe(false);
   });
 });
@@ -265,5 +281,73 @@ describe("concern detail merge keeps the longest stored value", () => {
       path.join(taskDir, "concerns", `${merged[0]!.id}.yaml`)
     );
     expect(stored.detail).toBe(storedDetail);
+  });
+});
+
+/**
+ * Legacy stored concerns written before the lowercase-detail contract used a
+ * capital-D `Detail` key. Every read surface must surface those records as
+ * `StoredConcernArtifact` (lowercase `detail`, no legacy key) and must still
+ * let the longer stored text win when the concern is re-emitted.
+ */
+describe("legacy capital-D stored concerns normalize to lowercase detail", () => {
+  let taskDir: string;
+
+  beforeEach(() => {
+    taskDir = fs.mkdtempSync(path.join(os.tmpdir(), "factory-detail-legacy-"));
+  });
+
+  afterEach(() => fs.rmSync(taskDir, { recursive: true, force: true }));
+
+  const legacyRecord = (id: string, detail: string): Record<string, unknown> => ({
+    id,
+    kind: "risk",
+    summary: "Legacy stored concern",
+    Detail: detail,
+    severity: "high",
+    status: "open",
+    source: { record: "000-legacy-develop-a1", agent: "developer" },
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  });
+
+  it("lists a legacy capital-D detail as lowercase detail without the legacy key", async () => {
+    const longDetail = "L".repeat(200);
+    await writeYamlAtomic(
+      path.join(taskDir, "concerns", "c-legacy.yaml"),
+      legacyRecord("c-legacy", longDetail)
+    );
+
+    const listed = await listConcerns(taskDir);
+
+    expect(listed).toHaveLength(1);
+    expect(listed[0]!.detail).toBe(longDetail);
+    expect((listed[0] as unknown as Record<string, unknown>).Detail).toBeUndefined();
+  });
+
+  it("keeps the legacy capital-D stored detail when a shorter lowercase detail is re-emitted", async () => {
+    const input = { kind: "risk", summary: "Legacy stored concern" } as const;
+    const id = concernFingerprint(input);
+    const longDetail = "L".repeat(200);
+    const shortDetail = "s".repeat(20);
+    await writeYamlAtomic(
+      path.join(taskDir, "concerns", `${id}.yaml`),
+      legacyRecord(id, longDetail)
+    );
+
+    const merged = await aggregateConcerns(
+      { taskDir, taskWt: taskDir, source: { record: "002-develop-a1", agent: "developer" } },
+      [{ ...input, detail: shortDetail }],
+      [],
+      { commit: false }
+    );
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0]!.detail).toBe(longDetail);
+    const stored = await readYaml<Record<string, any>>(
+      path.join(taskDir, "concerns", `${id}.yaml`)
+    );
+    expect(stored.detail).toBe(longDetail);
+    expect(stored.Detail).toBeUndefined();
   });
 });

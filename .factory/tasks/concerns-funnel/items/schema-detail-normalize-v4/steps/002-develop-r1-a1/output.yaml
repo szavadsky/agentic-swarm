@@ -1,0 +1,50 @@
+status: ok
+summary: Normalized legacy capital-D concern reads to the lowercase detail
+  contract in src/core/concerns.ts via a shared normalizeStoredConcern helper
+  applied to every stored-read surface (readExisting, legacyConcern,
+  listConcerns, countConcerns). This restores StoredConcernArtifact typing on
+  listConcerns and longest-wins merge behavior for legacy records. Producer
+  schemas and review.schema.json already emitted lowercase detail in the
+  baseline, and the positive stored-read assertions were already lowercase, so
+  no schema/test edits were needed. Target suite is green, contracts + epic-saga
+  propagation pass, full suite passes 469/469 (2 skipped), and tsc --noEmit is
+  clean.
+target:
+  selectors:
+    - test/contracts/schema-detail-normalize.test.ts
+  expectRed:
+    - legacy capital-D stored concerns normalize to lowercase detail.lists a
+      legacy capital-D detail as lowercase detail without the legacy key
+    - legacy capital-D stored concerns normalize to lowercase detail.keeps the
+      legacy capital-D stored detail when a shorter lowercase detail is
+      re-emitted
+evidence:
+  - "RED baseline: TMPDIR=/tmp bun test
+    test/contracts/schema-detail-normalize.test.ts -> 5 pass / 2 fail, both
+    legacy normalization tests received undefined or the shorter detail"
+  - "GREEN target: TMPDIR=/tmp bun test
+    test/contracts/schema-detail-normalize.test.ts -> 7 pass, 0 fail, 65
+    expect() calls"
+  - "Contracts suite: TMPDIR=/tmp bun test test/contracts -> 24 pass, 0 fail
+    across 4 files"
+  - "Epic saga propagation: TMPDIR=/tmp bun test
+    test/engine/epic-saga-propagate.test.ts -> 7 pass, 0 fail"
+  - "Full suite: TMPDIR=/tmp bun test -> 469 pass, 2 skip, 0 fail, 2806 expect()
+    calls, 471 tests across 71 files (exit 0)"
+  - "Typecheck: bunx tsc --noEmit -> exit 0 (TSC_OK)"
+  - "Schema casing verified via grep: lowercase detail present in decisions,
+    developer-output, fact-finder-output, plan, plan-closeup, review
+    (suggestions + newConcerns), wave-closeup; no capital-D Detail in
+    config/schemas"
+  - Working diff limited to plugins/software-factory/src/core/concerns.ts
+    (+12/-4 lines)
+concerns:
+  - The assignment's schema edits (6 producer schemas + review.schema.json
+    suggestions[].Detail/newConcerns[].Detail) and lowercase positive
+    stored-read assertions were already present in the baseline; the only actual
+    red was legacy capital-D read normalization, which this change fixes
+  - normalizeStoredConcern prefers an existing lowercase detail over a legacy
+    capital-D Detail when both keys are present, treating lowercase as canonical
+notes: The helper drops the legacy Detail key from the returned object so
+  downstream writes never persist the legacy spelling, and mergeConcern's
+  byte-based longest-wins check now sees the legacy stored text.

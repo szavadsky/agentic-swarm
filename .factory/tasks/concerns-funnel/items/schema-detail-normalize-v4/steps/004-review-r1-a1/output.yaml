@@ -1,0 +1,5 @@
+status: approved
+summary: "Byte-verified approve: guard lowercase, legacy normalize correct on
+  all 4 read surfaces, schemas lowercase-only, tests purely additive, 7 pass +
+  tsc clean"
+suggestions: []
