@@ -1,0 +1,16 @@
+blockedItems: []
+debt: []
+failedItems: []
+iteration: 3
+mergedItems: []
+recommendations:
+  - Proceed to architect wave report / next wave; no operator action required.
+status: complete
+summary: "Iteration 3 Wave 2 close-up: tree clean (no untracked files; only
+  engine-managed .factory/tasks/concerns-funnel/journal.ndjson modified; no
+  conflict markers in plugins/ and docs/ — .factory grep hits are test-output
+  '====' separators, not conflicts). Gate Diff shows no regressions: typecheck
+  pass/pass green (matches baseline), test fail->pass IMPROVED. Wave Report
+  lists no merged items and no merge commits since wave-close-up-3-1, consistent
+  with empty wave."
+wave: 2
