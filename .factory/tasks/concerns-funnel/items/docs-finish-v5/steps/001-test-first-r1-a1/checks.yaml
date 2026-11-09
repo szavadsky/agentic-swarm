@@ -1,0 +1,52 @@
+checks:
+  - id: test-first-scope
+    status: pass
+    message: test-first-scope passed (1 test files, 0 new prod stubs with 0 lines)
+    details:
+      testFiles:
+        - plugins/software-factory/test/docs-concerns.test.ts
+      newProdFiles: []
+      stubProdLines: 0
+  - id: target-red
+    status: pass
+    message: "target-red passed: all 14 expected tests failed with assertion failures"
+    details:
+      command: cd plugins/software-factory && bun test test/docs-concerns.test.ts
+        --reporter=junit
+        --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-1794217070866-k76rbj818c.xml
+      junitCaseCount: 14
+      junitCaseIds:
+        - "docs: concerns funnel finish (m2-docs-gates).§1 row 18 records item
+          18 implemented with five deviations"
+        - "docs: concerns funnel finish (m2-docs-gates).§8.11 documents store
+          layout fingerprint dedup remarkable aggregation and triage contract"
+        - "docs: concerns funnel finish (m2-docs-gates).§8.11 documents close-up
+          propose-confirm epic condensing ADR modes counts and byte caps"
+        - "docs: concerns funnel finish (m2-docs-gates).§8.11 records
+          immediate-halt triage-coverage epic-config close-up-dismiss and saga
+          deviations"
+        - "docs: concerns funnel finish (m2-docs-gates).§3 module layout lists
+          the concerns funnel modules"
+        - "docs: concerns funnel finish (m2-docs-gates).§5 configuration sample
+          includes concern modes and corrects epic layering"
+        - "docs: concerns funnel finish (m2-docs-gates).§6.2 task folder shows
+          the engine-owned concern store"
+        - "docs: concerns funnel finish (m2-docs-gates).§8.7 adds the
+          triager-only dismiss row"
+        - "docs: concerns funnel finish (m2-docs-gates).§10 documents concern
+          fragment vars outputs and byte budgets"
+        - "docs: concerns funnel finish (m2-docs-gates).§11 status prints
+          concern counts and split blocking/digest questions"
+        - "docs: concerns funnel finish (m2-docs-gates).§13 lists the concerns
+          funnel regression suites"
+        - "docs: concerns funnel finish (m2-docs-gates).README documents
+          concerns and human involvement with per-task examples and status
+          output"
+        - "docs: concerns funnel finish (m2-docs-gates).README documentation
+          section points at the concerns funnel"
+        - "docs: concerns funnel finish (m2-docs-gates).pipeline default
+          commentary documents dismiss auto-append and fragment-to-agent
+          mapping"
+      junitTruncated: false
+      collected: true
+      collectionErrors: []
