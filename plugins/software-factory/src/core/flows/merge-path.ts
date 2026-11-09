@@ -18,7 +18,7 @@ import { runCheck } from "../checks/runner.js";
 import type { CheckContext } from "../checks/types.js";
 import type { DerivedItemState } from "../derive/item.js";
 import type { Semaphore } from "../mutex.js";
-import { readYaml } from "../records/io.js";
+import { readYaml, writeYamlAtomic } from "../records/io.js";
 
 export interface MergeItemParams {
   task: string;
@@ -32,8 +32,9 @@ export interface MergeItemParams {
   project: ProjectConfig;
   prompts: any;
   taskDir: string;
+  /** Wave number driving this merge; keys the persisted attempt ledger. */
+  wave?: number;
   turnsSemaphore?: Semaphore;
-  onFixLoopNeeded?: (item: DerivedItemState, reason: string) => Promise<void>;
 }
 
 export interface MergeItemResult {
@@ -41,6 +42,44 @@ export interface MergeItemResult {
   sha?: string;
   error?: string;
   conflictResolved?: boolean;
+  /** Merge attempt number for this item+wave (1-based). */
+  mergeAttempt?: number;
+}
+
+/**
+ * Merge-attempt ledger (§7): persisted per item per wave at
+ * `items/<slug>/merge-attempts.yaml` ({attempts: {<waveKey>: <count>}}).
+ * File-backed (not journal-scanned) so restarts resume without resetting
+ * the bound. Keyed by wave number passed by the caller.
+ */
+export const MAX_MERGE_ATTEMPTS_PER_WAVE = 2;
+
+export async function readMergeAttempts(taskDir: string, slug: string, waveKey: string): Promise<number> {
+  const p = path.join(taskDir, "items", slug, "merge-attempts.yaml");
+  if (!fs.existsSync(p)) return 0;
+  try {
+    const data = await readYaml<{ attempts?: Record<string, number> }>(p);
+    return data?.attempts?.[waveKey] ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
+export async function recordMergeAttempt(taskDir: string, slug: string, waveKey: string): Promise<number> {
+  const p = path.join(taskDir, "items", slug, "merge-attempts.yaml");
+  let attempts: Record<string, number> = {};
+  if (fs.existsSync(p)) {
+    try {
+      const data = await readYaml<{ attempts?: Record<string, number> }>(p);
+      attempts = { ...(data?.attempts ?? {}) };
+    } catch {
+      attempts = {};
+    }
+  }
+  const next = (attempts[waveKey] ?? 0) + 1;
+  attempts[waveKey] = next;
+  await writeYamlAtomic(p, { attempts });
+  return next;
 }
 
 /**
@@ -61,14 +100,30 @@ export async function mergeItem(params: MergeItemParams): Promise<MergeItemResul
     taskDir,
     turnsSemaphore,
   } = params;
+  const waveKey = String(params.wave ?? item.wave ?? 0);
 
   return await repo.mergeLocks.runExclusive(parentBranch, async () => {
+    // Bound enforcement (single point): past MAX_MERGE_ATTEMPTS_PER_WAVE the
+    // merge refuses without touching git — every caller (wave-end redrive,
+    // blocked-answer reentry, iteration redrive) funnels through here, so no
+    // path can spin past the bound. The caller journals the terminal state
+    // with the recorded evidence.
+    const priorAttempts = await readMergeAttempts(taskDir, item.slug, waveKey);
+    if (priorAttempts >= MAX_MERGE_ATTEMPTS_PER_WAVE) {
+      return {
+        ok: false,
+        mergeAttempt: priorAttempts,
+        error: `merge attempts exhausted for ${item.slug} (${priorAttempts}/${MAX_MERGE_ATTEMPTS_PER_WAVE}); refusing further merges with the recorded evidence`,
+      };
+    }
+    const mergeAttempt = await recordMergeAttempt(taskDir, item.slug, waveKey);
     await appendJournal(taskDir, {
       type: "item_merge_started",
       item: item.slug,
       branch: item.branch,
+      wave: params.wave ?? item.wave,
+      mergeAttempt,
     });
-
     const preMergeTree = await treeOf(childWt);
 
     // 1. In child worktree: merge parent into child (§7)
@@ -118,6 +173,7 @@ export async function mergeItem(params: MergeItemParams): Promise<MergeItemResul
         await git(childWt, ["merge", "--abort"], { allowFail: true });
         return {
           ok: false,
+          mergeAttempt,
           error: `Integrate step failed for item ${item.slug}`,
         };
       }
@@ -134,6 +190,7 @@ export async function mergeItem(params: MergeItemParams): Promise<MergeItemResul
           await git(childWt, ["merge", "--abort"], { allowFail: true });
           return {
             ok: false,
+            mergeAttempt,
             error: err.message ?? `Failed to conclude merge for item ${item.slug}`,
           };
         }
@@ -200,16 +257,26 @@ export async function mergeItem(params: MergeItemParams): Promise<MergeItemResul
       if (infra && infra.gates && infra.gates.length > 0) {
         const gatesOutcome = await runGates(checkCtx);
         if (!gatesOutcome.ok) {
-          const failing = gatesOutcome.results.filter((r) => r.status === "fail").map((r) => r.id);
+          const failing = gatesOutcome.results.filter((r) => r.status === "fail");
+          // Evidence for the consult: command + stderr tail per failing gate.
+          // An exit-127 here means "command not found", not an assertion
+          // failure — without the command name the error is unactionable.
+          const failingEvidence = failing.map((r) => {
+            const cmd = r.command ? ` Command: ${r.command}` : "";
+            const tail = r.details ? ` Details: ${r.details.slice(-500)}` : "";
+            return `${r.id} (exit via status=${r.status}).${cmd}${tail}`;
+          });
           await appendJournal(taskDir, {
             type: "item_merge_gates_failed",
             item: item.slug,
-            failingGates: failing,
+            failingGates: failing.map((r) => r.id),
             results: gatesOutcome.results.map((r) => ({ id: r.id, status: r.status })),
+            evidence: failingEvidence,
           });
           return {
             ok: false,
-            error: `Quality gates failed on merge path for ${item.slug}: ${failing.join(", ") || "unknown gate"}`,
+            mergeAttempt,
+            error: `Quality gates failed on merge path for ${item.slug}: ${failing.map((r) => r.id).join(", ") || "unknown gate"}. ${failingEvidence.join(" | ")}`,
           };
         }
       }
@@ -218,9 +285,26 @@ export async function mergeItem(params: MergeItemParams): Promise<MergeItemResul
       if (infra && infra.testRunner && checkCtx.target) {
         const targetRes = await runCheck("target-green", checkCtx);
         if (!targetRes.ok) {
+          const cmdEvidence =
+            targetRes.details && typeof targetRes.details === "object" && "command" in (targetRes.details as any)
+              ? ` Command: ${(targetRes.details as { command: string }).command}`
+              : "";
+          const outTail = targetRes.output ? ` Output tail: ${targetRes.output.slice(-500)}` : "";
+          await appendJournal(taskDir, {
+            type: "item_merge_failed",
+            item: item.slug,
+            check: "target-green",
+            command:
+              targetRes.details && typeof targetRes.details === "object" && "command" in (targetRes.details as any)
+                ? (targetRes.details as { command: string }).command
+                : undefined,
+            output: targetRes.output ? targetRes.output.slice(-2000) : undefined,
+            error: targetRes.summary,
+          });
           return {
             ok: false,
-            error: `target-green failed on merge path for ${item.slug}: ${targetRes.summary}`,
+            mergeAttempt,
+            error: `target-green failed on merge path for ${item.slug}: ${targetRes.summary}${cmdEvidence}${outTail}`,
           };
         }
       }
@@ -267,6 +351,7 @@ export async function mergeItem(params: MergeItemParams): Promise<MergeItemResul
       ok: true,
       sha: mergeCommitSha,
       conflictResolved,
+      mergeAttempt,
     };
   });
 }

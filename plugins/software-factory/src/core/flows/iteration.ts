@@ -496,6 +496,18 @@ export async function recoverStrandedItems(opts: {
   if (!fs.existsSync(prevCloseup)) return items;
   const itemsDir = path.join(taskDir, "items");
   if (!fs.existsSync(itemsDir)) return items;
+  // The wave loop iterates waves 1..maxWave derived from assignments. A
+  // stranded item recovered WITHOUT a live wave assignment never enters a
+  // live wave's tick set — it sits in currentIterationItems but no wave
+  // bucket picks it up, so it spins at the wave gate without ever ticking.
+  // Fix: stamp each re-queued item's wave into the current plan's open wave
+  // set before returning.
+  let openWaves: number[] | undefined;
+  try {
+    openWaves = await readOpenIterationWaves(taskDir, iteration);
+  } catch {
+    openWaves = undefined;
+  }
   const events = await readJournal(taskDir);
   const alreadyJournaled = new Set(
     events
@@ -519,6 +531,25 @@ export async function recoverStrandedItems(opts: {
       continue;
     }
     if (isIterationTerminal(st.status)) continue;
+    // Re-assign the wave when the item's wave is not in the current
+    // iteration's open wave set (stale/closed wave numbering) so the live
+    // wave loop actually ticks it. Committed via the assignment file the
+    // wave derivation reads; deps/wave ordering still enforced by the gate.
+    if (openWaves && openWaves.length > 0 && !openWaves.includes(st.wave)) {
+      try {
+        await reassignItemWave(taskDir, slug, openWaves[0]!);
+        st = await deriveItemState({
+          taskDir,
+          itemSlug: slug,
+          parentBranch,
+          taskWt: opts.taskWt,
+          pipeline,
+          rootTaskDir: opts.rootTaskDir,
+        });
+      } catch {
+        // Fall through with the original derivation; the reconciler owns it.
+      }
+    }
     items.push(slug);
     if (!alreadyJournaled.has(slug)) {
       await appendJournal(taskDir, {
@@ -528,10 +559,51 @@ export async function recoverStrandedItems(opts: {
         status: st.status,
         step: st.currentStepId,
         strandedFrom: iteration - 1,
+        ...(openWaves && openWaves.length > 0 ? { wave: st.wave } : {}),
       });
     }
   }
   return items;
+}
+
+/**
+ * Open wave set for the current iteration: wave numbers from the current
+ * plan edits (`plan/edits-<iteration>.0.yaml` + amendments). Recovered
+ * stranded items are stamped into this set so they enter a LIVE wave tick
+ * set — re-queueing a slug without a live wave leaves it owned by nobody
+ * (a closed wave's set) and it never ticks again.
+ */
+export async function readOpenIterationWaves(taskDir: string, iteration: number): Promise<number[]> {
+  const waves = new Set<number>();
+  const planDir = path.join(taskDir, "plan");
+  if (!fs.existsSync(planDir)) return [];
+  const files = await fs.promises.readdir(planDir);
+  for (const f of files) {
+    if (!new RegExp(`^edits-${iteration}\\.(\\d+)\\.yaml$`).exec(f)) continue;
+    try {
+      const edits = await readYaml<PlanEditsArtifact>(path.join(planDir, f));
+      for (const it of edits?.items ?? []) {
+        const wv = Number((it as { wave?: unknown }).wave);
+        if (Number.isFinite(wv) && wv > 0) waves.add(Math.floor(wv));
+      }
+    } catch {
+      // Corrupt edits files are validated elsewhere; ignore here.
+    }
+  }
+  return [...waves].sort((a, b) => a - b);
+}
+
+/**
+ * Re-assigns an item's wave in its committed assignment.yaml. Used by
+ * stranded recovery so a re-queued item lands in a live wave.
+ */
+export async function reassignItemWave(taskDir: string, slug: string, wave: number): Promise<void> {
+  const assignmentPath = path.join(taskDir, "items", slug, "assignment.yaml");
+  const assignment = await readYaml<AssignmentArtifact>(assignmentPath);
+  if (!assignment || typeof assignment !== "object") {
+    throw new Error(`Cannot reassign wave: missing assignment for ${slug}`);
+  }
+  await writeYamlAtomic(assignmentPath, { ...assignment, wave });
 }
 
 /**
@@ -2111,13 +2183,20 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
         !waveState.canMerge &&
         !waveState.isComplete
       ) {
-        const stragglers = [...waveState.running, ...waveState.runnable].map((it) => it.slug);
+        const allStragglers = [...waveState.running, ...waveState.runnable].map((it) => it.slug);
+        // Merge-owned items (a wave-end merge already ran for this wave) are
+        // NOT re-ticked: the merge loop owns their re-drive, and ticking an
+        // integrate-ok-but-unmerged item never advances it (tick-cap spin).
+        const { mergeOwned } = await partitionTickStragglers(taskDir, w, waveState);
+        const ownedSet = new Set(mergeOwned);
+        const stragglers = allStragglers.filter((s) => !ownedSet.has(s));
         await appendJournal(taskDir, {
           type: "wave_tick_cap_hit",
           wave: w,
           iteration,
           ticks: waveTicks,
           stragglers,
+          mergeOwned,
         });
         // Re-drive: re-derive and tick each straggler once more so a transient
         // stall gets another chance; the gate below still refuses close-up
@@ -2138,7 +2217,6 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
               project,
               prompts,
               budgetTracker,
-              turnsSemaphore,
               architectSessionId,
               rootTaskWt: params.rootTaskWt,
               rootTaskDir: params.rootTaskDir,
@@ -2208,7 +2286,12 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
     // the wave open: journal wave_not_complete and re-drive, bounded so a
     // permanently-stalled item fails loudly instead of spinning forever.
     {
-      const stragglers = nonTerminalWaveItems(waveState);
+      // Merge-stuck items (merge-attempt ledger shows a wave-end merge
+      // already ran for this wave) stay merge-owned: excluded from the tick
+      // straggler set so the tick cap never spins on them. They fall through
+      // to the wave-end merge below, which re-drives (bounded) or fails them
+      // terminally with the evidence.
+      const { stragglers, mergeOwned } = await partitionTickStragglers(taskDir, w, waveState);
       if (stragglers.length > 0) {
         waveRedrives.set(w, (waveRedrives.get(w) ?? 0) + 1);
         await appendJournal(taskDir, {
@@ -2216,6 +2299,7 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
           wave: w,
           iteration,
           stragglers,
+          mergeOwned,
           redrive: waveRedrives.get(w),
         });
         if ((waveRedrives.get(w) ?? 0) > 5) {
@@ -2224,13 +2308,12 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
             wave: w,
             iteration,
             stragglers,
+            mergeOwned,
           });
           throw new Error(
             `Wave ${w} stalled with non-terminal items after 5 re-drives: ${stragglers.join(", ")} (refusing close-up; fix the stall, then restart)`
           );
         }
-        w--;
-        continue;
       }
     }
     } finally {
@@ -2249,11 +2332,11 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
     const mergeResults: Array<{ slug: string; ok: boolean; sha?: string }> = [];
     if (waveState.ready.length > 0) {
       for (const readyItem of waveState.ready) {
-        const childBranchName = childBranch(parentBranch, readyItem.slug);
-        const childWtPath = path.join(
-          repo.worktreeRoot ?? path.dirname(taskWt),
-          childBranchName.replace(/\//g, "_")
-        );
+        // Idempotent: a ready item's worktree normally exists (it ticked
+        // there), but restarts/prunes can drop it — ensure before merging
+        // so the merge path never spawns git in a missing cwd.
+        const ensured = await ensureChildWorktree(repo, { branch: parentBranch, path: taskWt }, readyItem.slug);
+        const childWtPath = ensured.path;
 
         const mRes = await mergeItem({
           task,
@@ -2267,30 +2350,36 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
           project,
           prompts,
           taskDir,
+          wave: w,
           turnsSemaphore,
         });
         mergeResults.push({ slug: readyItem.slug, ok: mRes.ok, sha: mRes.sha });
 
         // On merge failure (integrate or post-merge gates), route to the item
         // fix loop via consult so the failure is acted on, not retried blindly (§7).
-        // Then re-queue the item into the fix loop: tick once via the item
-        // machine (or re-derive — if still `ready` with a NEW failure, tick
-        // again). A terminal consult decision (abandon/split → derive now
-        // `failed`/`superseded`) lets the wave gate absorb it; otherwise
-        // journal `merge_failed_requeued`. Never close the wave over a
-        // still-`ready` item without the gate noticing.
+        // Then RE-DRIVE the merge itself: a retry/fix decision means the item
+        // is still merge-owned — re-derive (consult may have failed it), and
+        // if still `ready`, merge again in this loop iteration. Bounded: at
+        // most MAX_MERGE_ATTEMPTS_PER_WAVE attempts per item per wave
+        // (persisted in merge-attempts.yaml, restarts resume the bound);
+        // exhaustion fails the item terminally with the evidence (abandon
+        // stranding it integrate-ok-but-unmerged forever. A terminal consult
+        // decision (abandon/split → derive now `failed`/`superseded`) lets
+        // the wave gate absorb it; otherwise journal `merge_failed_requeued`.
+        // Never close the wave over a still-`ready` item without the gate noticing.
         if (!mRes.ok) {
           await appendJournal(taskDir, {
             type: "item_merge_failed",
             item: readyItem.slug,
             error: mRes.error,
+            mergeAttempt: mRes.mergeAttempt,
           });
           const diffRes = await git(childWtPath, ["diff", parentBranch], { allowFail: true });
           const consultRes = await runItemConsult({
             task,
             item: readyItem.slug,
             assignmentYaml: JSON.stringify(readyItem.assignment ?? {}),
-            priorAttemptsText: `Merge path failed for ${readyItem.slug}`,
+            priorAttemptsText: `Merge path failed for ${readyItem.slug} (attempt ${mRes.mergeAttempt ?? 1}/${MAX_MERGE_ATTEMPTS_PER_WAVE})`,
             diffText: diffRes.stdout,
             feedbackText: mRes.error ?? "Merge path failed",
             afterRecord: readyItem.records[readyItem.records.length - 1]?.dirName,
@@ -2303,7 +2392,6 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
             prompts,
             architectSessionId,
             turnsSemaphore,
-            budgetTracker,
             iteration,
             rootTaskWt: params.rootTaskWt,
             rootTaskDir: params.rootTaskDir,
@@ -2327,6 +2415,73 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
               decision: consultRes.decision.decision,
               status: postConsult.status,
             });
+          } else if (postConsult.status === "ready") {
+            // Consult kept the item mergeable (retry-with-guidance, zero content
+            // changes): re-drive the merge now, bounded by the attempt ledger.
+            const attemptsSoFar = await readMergeAttempts(taskDir, readyItem.slug, String(w));
+            if (attemptsSoFar >= MAX_MERGE_ATTEMPTS_PER_WAVE) {
+              await appendJournal(taskDir, {
+                type: "merge_failed_terminal",
+                wave: w,
+                iteration,
+                item: readyItem.slug,
+                decision: consultRes.decision.decision,
+                status: postConsult.status,
+                reason: `merge attempts exhausted (${attemptsSoFar}/${MAX_MERGE_ATTEMPTS_PER_WAVE}); evidence: ${mRes.error ?? "unknown"}`,
+              });
+              await persistTerminalAbandon({
+                taskDir, task, parentBranch, taskWt, pipeline, repo,
+                itemSlug: readyItem.slug,
+                reason: "merge-attempts-exhausted",
+                rationale: `Merge path failed ${attemptsSoFar}/${MAX_MERGE_ATTEMPTS_PER_WAVE} attempts with evidence: ${mRes.error ?? "unknown"}; abandoning so the wave gate absorbs the item as failed instead of spinning`,
+                commitMessage: `factory(${readyItem.slug}): merge attempts exhausted, abandon`,
+              });
+            } else {
+              const redriveRes = await mergeItem({
+                task,
+                item: postConsult,
+                parentBranch,
+                taskWt,
+                childWt: childWtPath,
+                repo,
+                harness,
+                pipeline,
+                project,
+                prompts,
+                taskDir,
+                wave: w,
+                turnsSemaphore,
+              });
+              const redriveIdx = mergeResults.findIndex((m) => m.slug === readyItem.slug);
+              if (redriveIdx >= 0) {
+                mergeResults[redriveIdx] = { slug: readyItem.slug, ok: redriveRes.ok, sha: redriveRes.sha };
+              }
+              if (!redriveRes.ok) {
+                await appendJournal(taskDir, {
+                  type: "item_merge_failed",
+                  item: readyItem.slug,
+                  error: redriveRes.error,
+                  mergeAttempt: redriveRes.mergeAttempt,
+                });
+                const exhausted = (redriveRes.mergeAttempt ?? attemptsSoFar + 1) >= MAX_MERGE_ATTEMPTS_PER_WAVE;
+                await appendJournal(taskDir, {
+                  type: exhausted ? "merge_failed_terminal" : "merge_failed_requeued",
+                  wave: w,
+                  iteration,
+                  item: readyItem.slug,
+                  ...(exhausted ? { reason: `merge attempts exhausted (${redriveRes.mergeAttempt ?? attemptsSoFar + 1}/${MAX_MERGE_ATTEMPTS_PER_WAVE}); evidence: ${redriveRes.error ?? "unknown"}` } : {}),
+                });
+                if (exhausted) {
+                  await persistTerminalAbandon({
+                    taskDir, task, parentBranch, taskWt, pipeline, repo,
+                    itemSlug: readyItem.slug,
+                    reason: "merge-attempts-exhausted",
+                    rationale: `Merge redrive failed ${redriveRes.mergeAttempt ?? attemptsSoFar + 1}/${MAX_MERGE_ATTEMPTS_PER_WAVE} attempts with evidence: ${redriveRes.error ?? "unknown"}; abandoning so the wave gate absorbs the item as failed instead of spinning`,
+                    commitMessage: `factory(${readyItem.slug}): merge attempts exhausted, abandon`,
+                  });
+                }
+              }
+            }
           } else {
             try {
               const child = await ensureChildWorktree(repo, { branch: parentBranch, path: taskWt }, readyItem.slug);
@@ -2386,7 +2541,6 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
             wave: w,
             iteration,
             streak: 0,
-            blocked: waveState.blocked.map((b) => b.slug),
           });
         }
       } else {
@@ -3134,11 +3288,8 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
       for (const it of reenterable) {
         try {
           if (it.status === "ready") {
-            const childBranchName = childBranch(parentBranch, it.slug);
-            const childWtPath = path.join(
-              repo.worktreeRoot ?? path.dirname(taskWt),
-              childBranchName.replace(/\//g, "_")
-            );
+            const ensured = await ensureChildWorktree(repo, { branch: parentBranch, path: taskWt }, it.slug);
+            const childWtPath = ensured.path;
             const mRes = await mergeItem({
               task,
               item: it,
@@ -3151,10 +3302,11 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
               project,
               prompts,
               taskDir,
+              wave: it.wave,
               turnsSemaphore,
             });
             if (!mRes.ok) {
-              await appendJournal(taskDir, { type: "item_merge_failed", item: it.slug, error: mRes.error });
+              await appendJournal(taskDir, { type: "item_merge_failed", item: it.slug, error: mRes.error, mergeAttempt: mRes.mergeAttempt });
             }
           } else {
             const child = await ensureChildWorktree(repo, { branch: parentBranch, path: taskWt }, it.slug);
@@ -3259,7 +3411,6 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
   // re-drive rounds, then fail loudly on a true stall.
   for (let redrive = 0; redrive < 6; redrive++) {
     // Routed blockers seed pending items here too: without the seed set a
-    // routed-blocked item derives `pending` and the gate would tick it into
     // an unscripted step instead of recognising it as `blocked`.
     const gateBlockedBy = await collectRoutedBlockers(
       taskDir,
@@ -3326,11 +3477,8 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
       // of ticking the item machine (which would report `ready` again).
       if (it.status === "ready") {
         try {
-          const childBranchName = childBranch(parentBranch, it.slug);
-          const childWtPath = path.join(
-            repo.worktreeRoot ?? path.dirname(taskWt),
-            childBranchName.replace(/\//g, "_")
-          );
+          const ensured = await ensureChildWorktree(repo, { branch: parentBranch, path: taskWt }, it.slug);
+          const childWtPath = ensured.path;
           const mRes = await mergeItem({
             task,
             item: it,
@@ -3343,10 +3491,11 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
             project,
             prompts,
             taskDir,
+            wave: it.wave,
             turnsSemaphore,
           });
           if (!mRes.ok) {
-            await appendJournal(taskDir, { type: "item_merge_failed", item: it.slug, error: mRes.error });
+            await appendJournal(taskDir, { type: "item_merge_failed", item: it.slug, error: mRes.error, mergeAttempt: mRes.mergeAttempt });
           }
         } catch (err: any) {
           await appendJournal(taskDir, {

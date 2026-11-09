@@ -80,7 +80,7 @@ const DEFAULT_REVIEW_ALLOWED = ["fix", "optional", "architect", "human-awareness
  * state.yaml (lags journal by design), return failed. Callers MUST keep
  * their existing journal event too.
  */
-async function persistConsultsExhaustedAbandon(opts: {
+export async function persistTerminalAbandon(opts: {
   taskDir: string;
   task: string;
   parentBranch: string;
@@ -88,6 +88,9 @@ async function persistConsultsExhaustedAbandon(opts: {
   pipeline: PipelineConfig;
   itemSlug: string;
   repo: any;
+  reason: string;
+  rationale: string;
+  commitMessage: string;
 }): Promise<void> {
   const { taskDir, task, parentBranch, taskWt, pipeline, itemSlug, repo } = opts;
   const decisionsDir = path.join(taskDir, "decisions");
@@ -101,17 +104,34 @@ async function persistConsultsExhaustedAbandon(opts: {
   const decisionFileName = `${String(nextSeq).padStart(3, "0")}-item-${itemSlug}-abandon.yaml`;
   const decisionPath = path.join(decisionsDir, decisionFileName);
   await writeYamlAtomic(decisionPath, {
-    id: `decision-${itemSlug}-consults-exhausted-${Date.now()}`,
+    id: `decision-${itemSlug}-${Date.now()}`,
     context: "item",
     item: itemSlug,
     decision: "abandon",
-    reason: "consults-exhausted",
-    rationale: "Consult budget exhausted with no progress; abandoning item so the wave gate absorbs it as failed",
+    reason: opts.reason,
+    rationale: opts.rationale,
     timestamp: new Date().toISOString(),
   });
   await git(taskWt, ["add", "-A"], { allowFail: true });
-  await commitAll(repo, taskWt, `factory(${itemSlug}): consults exhausted, abandon`);
+  await commitAll(repo, taskWt, opts.commitMessage);
   await refreshStateYaml({ taskDir, task, parentBranch, taskWt, pipeline });
+}
+
+async function persistConsultsExhaustedAbandon(opts: {
+  taskDir: string;
+  task: string;
+  parentBranch: string;
+  taskWt: string;
+  pipeline: PipelineConfig;
+  itemSlug: string;
+  repo: any;
+}): Promise<void> {
+  await persistTerminalAbandon({
+    ...opts,
+    reason: "consults-exhausted",
+    rationale: "Consult budget exhausted with no progress; abandoning item so the wave gate absorbs it as failed",
+    commitMessage: `factory(${opts.itemSlug}): consults exhausted, abandon`,
+  });
 }
 
 

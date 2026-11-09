@@ -388,16 +388,18 @@ function targetCommandTimeoutFail(
   what: string,
   res: ProcessResult,
   timeout: number,
-  ctx: CheckContext
+  ctx: CheckContext,
+  cmd: string
 ): CheckResult | null {
   if (!res.timedOut) return null;
-  const summary = timedOutSummary(what, timeout);
+  const summary = `${timedOutSummary(what, timeout)}. Command: ${cmd}`;
   return {
     name,
     ok: false,
     summary,
     output: tailCap((res.stdout + "\n" + res.stderr).trim(), ctx.outputBytes),
     fingerprint: fingerprintText(summary),
+    details: targetDetail(cmd),
   };
 }
 
@@ -414,18 +416,33 @@ async function checkTargetRed(ctx: CheckContext): Promise<CheckResult> {
   }
   const timeout = gateTimeoutSec(ctx);
 
-  // Bootstrap story target by gate
+  // Bootstrap story target by gate. A gate target names an infra gate id:
+  // resolving it is NOT optional. Falling back to executing the bare id as
+  // a shell command produces an unactionable exit-127 ("command not found")
+  // that looks like an environment failure. Fail loudly with the known ids.
   if ("gate" in ctx.target && ctx.target.gate) {
     const gateId = ctx.target.gate;
     const gate = ctx.infra?.gates.find((g) => g.id === gateId);
-    const cmd = gate ? gate.command : gateId;
+    if (!gate) {
+      const known = ctx.infra?.gates.map((g) => g.id).join(", ") || "(no gates configured)";
+      const summary = `Unknown gate target: "${gateId}" (known gates: ${known}). Command: ${gateId}`;
+      return {
+        name: "target-red",
+        ok: false,
+        summary,
+        output: summary,
+        fingerprint: fingerprintText(summary),
+        details: targetDetail(gateId),
+      };
+    }
+    const cmd = gate.command;
     const res = await runProcess({ cmd, cwd: ctx.wt, timeoutSec: timeout, maxOutputBytes: ctx.outputBytes });
-    const timeoutFail = targetCommandTimeoutFail("target-red", `Gate ${gateId}`, res, timeout, ctx);
+    const timeoutFail = targetCommandTimeoutFail("target-red", `Gate ${gateId}`, res, timeout, ctx, cmd);
     if (timeoutFail) return timeoutFail;
     const ok = res.code !== 0;
     const summary = ok
       ? `Gate ${gateId} failed as expected (red)`
-      : `Gate ${gateId} passed but was expected red`;
+      : `Gate ${gateId} passed but was expected red (exit code ${res.code}). Command: ${cmd}`;
     const output = tailCap((res.stdout + "\n" + res.stderr).trim(), ctx.outputBytes);
     return {
       name: "target-red",
@@ -445,7 +462,7 @@ async function checkTargetRed(ctx: CheckContext): Promise<CheckResult> {
       timeoutSec: timeout,
       maxOutputBytes: ctx.outputBytes,
     });
-    const timeoutFail = targetCommandTimeoutFail("target-red", "Custom target command", res, timeout, ctx);
+    const timeoutFail = targetCommandTimeoutFail("target-red", "Custom target command", res, timeout, ctx, ctx.target.command);
     if (timeoutFail) return timeoutFail;
     const ok = res.code !== 0;
     const summary = ok
@@ -495,7 +512,7 @@ async function checkTargetRed(ctx: CheckContext): Promise<CheckResult> {
   try {
     const cmd = buildTargetCommand(ctx.infra, ctx.target, tmpJunit);
     const procRes = await runProcess({ cmd, cwd: ctx.wt, timeoutSec: timeout, maxOutputBytes: ctx.outputBytes });
-    const timeoutFail = targetCommandTimeoutFail("target-red", "Target test command", procRes, timeout, ctx);
+    const timeoutFail = targetCommandTimeoutFail("target-red", "Target test command", procRes, timeout, ctx, cmd);
     if (timeoutFail) return timeoutFail;
     const procOutput = (procRes.stdout + "\n" + procRes.stderr).trim();
 
@@ -611,17 +628,34 @@ async function checkTargetGreen(ctx: CheckContext): Promise<CheckResult> {
   }
   const timeout = gateTimeoutSec(ctx);
 
+  // A gate target names an infra gate id: resolving it is NOT optional.
+  // Falling back to executing the bare id as a shell command produces an
+  // unactionable exit-127 ("command not found") that looks like an
+  // environment failure — the merge-path 127 class. Fail loudly with the
+  // known gate ids instead.
   if ("gate" in ctx.target && ctx.target.gate) {
     const gateId = ctx.target.gate;
     const gate = ctx.infra?.gates.find((g) => g.id === gateId);
-    const cmd = gate ? gate.command : gateId;
+    if (!gate) {
+      const known = ctx.infra?.gates.map((g) => g.id).join(", ") || "(no gates configured)";
+      const summary = `Unknown gate target: "${gateId}" (known gates: ${known}). Command: ${gateId}`;
+      return {
+        name: "target-green",
+        ok: false,
+        summary,
+        output: summary,
+        fingerprint: fingerprintText(summary),
+        details: targetDetail(gateId),
+      };
+    }
+    const cmd = gate.command;
     const res = await runProcess({ cmd, cwd: ctx.wt, timeoutSec: timeout, maxOutputBytes: ctx.outputBytes });
-    const timeoutFail = targetCommandTimeoutFail("target-green", `Gate ${gateId}`, res, timeout, ctx);
+    const timeoutFail = targetCommandTimeoutFail("target-green", `Gate ${gateId}`, res, timeout, ctx, cmd);
     if (timeoutFail) return timeoutFail;
     const ok = res.code === 0;
     const summary = ok
       ? `Gate ${gateId} passed (green)`
-      : `Gate ${gateId} failed with exit code ${res.code}`;
+      : `Gate ${gateId} failed with exit code ${res.code}. Command: ${cmd}`;
     const output = tailCap((res.stdout + "\n" + res.stderr).trim(), ctx.outputBytes);
     return {
       name: "target-green",
@@ -640,12 +674,12 @@ async function checkTargetGreen(ctx: CheckContext): Promise<CheckResult> {
       timeoutSec: timeout,
       maxOutputBytes: ctx.outputBytes,
     });
-    const timeoutFail = targetCommandTimeoutFail("target-green", "Custom target command", res, timeout, ctx);
+    const timeoutFail = targetCommandTimeoutFail("target-green", "Custom target command", res, timeout, ctx, ctx.target.command);
     if (timeoutFail) return timeoutFail;
     const ok = res.code === 0;
     const summary = ok
       ? `Custom target command passed (green)`
-      : `Custom target command failed with exit code ${res.code}`;
+      : `Custom target command failed with exit code ${res.code}. Command: ${ctx.target.command}`;
     const output = tailCap((res.stdout + "\n" + res.stderr).trim(), ctx.outputBytes);
     return {
       name: "target-green",
@@ -676,7 +710,7 @@ async function checkTargetGreen(ctx: CheckContext): Promise<CheckResult> {
   try {
     const cmd = buildTargetCommand(ctx.infra, ctx.target, tmpJunit);
     const procRes = await runProcess({ cmd, cwd: ctx.wt, timeoutSec: timeout, maxOutputBytes: ctx.outputBytes });
-    const timeoutFail = targetCommandTimeoutFail("target-green", "Target test command", procRes, timeout, ctx);
+    const timeoutFail = targetCommandTimeoutFail("target-green", "Target test command", procRes, timeout, ctx, cmd);
     if (timeoutFail) return timeoutFail;
     const procOutput = (procRes.stdout + "\n" + procRes.stderr).trim();
 
@@ -776,13 +810,13 @@ async function checkRedTestBootstrap(
 ): Promise<CheckResult> {
   const timeout = gateTimeoutSec(ctx);
   const res = await runProcess({ cmd, cwd: ctx.wt, timeoutSec: timeout, maxOutputBytes: ctx.outputBytes });
-  const timeoutFail = targetCommandTimeoutFail("red-test", label, res, timeout, ctx);
+  const timeoutFail = targetCommandTimeoutFail("red-test", label, res, timeout, ctx, cmd);
   if (timeoutFail) return timeoutFail;
   // Bootstrap targets have no expectRed list: the command itself must be red.
   const ok = res.code !== 0;
   const summary = ok
     ? `${label} failed as expected (red)`
-    : `${label} passed but was expected red (bootstrap target)`;
+    : `${label} passed but was expected red (bootstrap target, exit code ${res.code}). Command: ${cmd}`;
   const output = tailCap((res.stdout + "\n" + res.stderr).trim(), ctx.outputBytes);
   return {
     name: "red-test",
@@ -790,16 +824,30 @@ async function checkRedTestBootstrap(
     summary,
     output,
     fingerprint: ok ? fingerprintText("red-test bootstrap ok") : fingerprintText(summary),
+    details: targetDetail(cmd),
   };
 }
 
 async function checkRedTest(ctx: CheckContext): Promise<CheckResult> {
   // Bootstrap targets ({gate} / {command, customTarget}): no expectRed list,
   // so run the command and expect a non-zero exit instead of the temp-worktree flow.
+  // A gate target names an infra gate id — never execute the bare id (exit 127 class).
   if (ctx.target && "gate" in ctx.target && ctx.target.gate) {
     const gateId = ctx.target.gate;
     const gate = ctx.infra?.gates.find((g) => g.id === gateId);
-    return checkRedTestBootstrap(ctx, "gate", gate ? gate.command : gateId, `Gate ${gateId}`);
+    if (!gate) {
+      const known = ctx.infra?.gates.map((g) => g.id).join(", ") || "(no gates configured)";
+      const summary = `Unknown gate target: "${gateId}" (known gates: ${known}). Command: ${gateId}`;
+      return {
+        name: "red-test",
+        ok: false,
+        summary,
+        output: summary,
+        fingerprint: fingerprintText(summary),
+        details: targetDetail(gateId),
+      };
+    }
+    return checkRedTestBootstrap(ctx, "gate", gate.command, `Gate ${gateId}`);
   }
   if (ctx.target && "customTarget" in ctx.target && ctx.target.customTarget) {
     return checkRedTestBootstrap(ctx, "custom", ctx.target.command, "Custom target command");
@@ -898,7 +946,7 @@ async function checkRedTest(ctx: CheckContext): Promise<CheckResult> {
     // Run target tests in temp worktree
     const cmd = buildTargetCommand(ctx.infra, ctx.target!, tmpJunit);
     const procRes = await runProcess({ cmd, cwd: tempWtDir, timeoutSec: timeout, maxOutputBytes: ctx.outputBytes });
-    const timeoutFail = targetCommandTimeoutFail("red-test", "red-test target command", procRes, timeout, ctx);
+    const timeoutFail = targetCommandTimeoutFail("red-test", "red-test target command", procRes, timeout, ctx, cmd);
     if (timeoutFail) return timeoutFail;
     const procOutput = (procRes.stdout + "\n" + procRes.stderr).trim();
 
@@ -1200,8 +1248,8 @@ async function checkCustom(
       : `Custom check ${name} failed as expected (exit code ${res.code})`;
   } else {
     summary = expectPass
-      ? `Custom check ${name} failed with exit code ${res.code}`
-      : `Custom check ${name} passed but expected failure`;
+      ? `Custom check ${name} failed with exit code ${res.code}. Command: ${cmd}`
+      : `Custom check ${name} passed but expected failure (exit code ${res.code}). Command: ${cmd}`;
   }
 
   const rawOutput = (res.stdout + (res.stderr ? "\n" + res.stderr : "")).trim();
