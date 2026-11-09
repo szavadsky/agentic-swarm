@@ -333,11 +333,13 @@ debt:
   - Unapplied spike-saga-commit reviewer optional nits (qualify epic-state
     precedence, prefix inline paths, scope removeWorktree claim, fold
     contextPack key). Consumers apply mentally.
-  - Capital-D Detail in 7 file schemas rejects lowercase detail under
-    additionalProperties:false, breaking runtime validation for file-schema
-    producers.
+  - Capital-D Detail in 6 runtime-bound file schemas rejects lowercase detail
+    under additionalProperties:false (review.schema.json is reference-only but
+    normalized for consistency); mergeConcern reads existing?.Detail so
+    longest-wins never applies.
   - wave/plan-close-up listed as triagers though close-up schemas reject
-    suggestions[], advertising an unreachable dismiss path.
+    suggestions[], advertising an unreachable dismiss path; close-up re-triage
+    has no dismiss vocabulary.
   - "spike-saga-commit merge gate failure is environmental, not content:
     read-only spike with zero prod diff, research ok, review approved; baseline
     test gate is red (2 head-guard TMPDIR failures). Findings accepted as
@@ -646,7 +648,7 @@ debt:
     inconsistent with documented branch-from-HEAD worktrees"
   - "[funnel-closeups-v3] Propagated parent copy retains child source.item,
     writes undeclared source.epic, and can clobber/lengthen parent records"
-budgetSpentUsd: 8.298315920000006
+budgetSpentUsd: 8.319182920000006
 spendByRole:
   alt-workhorse:
     costUsd: 1.9655029999999996
@@ -657,13 +659,13 @@ spendByRole:
     inputTokens: 11681593
     outputTokens: 3173378
   architect:
-    costUsd: 0.972739
-    inputTokens: 8862919
-    outputTokens: 169138
+    costUsd: 0.983777
+    inputTokens: 8921096
+    outputTokens: 178949
   alt-architect:
-    costUsd: 0.043858
-    inputTokens: 181661
-    outputTokens: 108412
+    costUsd: 0.053687
+    inputTokens: 224673
+    outputTokens: 132371
 spendByItem:
   concerns-contracts:
     costUsd: 0.251577
@@ -762,7 +764,7 @@ spendByItem:
     inputTokens: 895689
     outputTokens: 273259
   (orchestration):
-    costUsd: 1.7935640000000002
-    inputTokens: 10993979
-    outputTokens: 906174
-lastUpdated: 2026-11-09T05:12:34.847Z
+    costUsd: 1.8144310000000001
+    inputTokens: 11095168
+    outputTokens: 939944
+lastUpdated: 2026-11-09T05:31:47.859Z
