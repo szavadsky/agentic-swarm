@@ -1,0 +1,92 @@
+checks:
+  - id: red-test
+    status: pass
+    message: "red-test passed: all 7 tests fail when prod changes are restored to
+      test-first commit"
+    details:
+      command: cd plugins/software-factory && bun test
+        test/engine/epic-saga-propagate.test.ts --reporter=junit
+        --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-redtest-1794188001300-yn6fsb6ify.xml
+      junitCaseCount: 7
+      junitCaseIds:
+        - Epic to saga propagation (adr-epic-push-condensed).copies open and
+          routed concerns with an [epic] summary while dismissed stays local
+        - Epic to saga propagation (adr-epic-push-condensed).condenses long
+          detail and why to the byte cap on a char boundary
+        - Epic to saga propagation (adr-epic-push-condensed).is
+          restart-idempotent and preserves parent triage
+        - Epic to saga propagation (adr-epic-push-condensed).forwards blocked
+          child questions as q-epic-* with mapped blocks
+        - Epic to saga propagation (adr-epic-push-condensed).hydrates propagated
+          copies into the saga architect concernsYaml
+        - Epic to saga propagation (adr-epic-push-condensed).runTask exits 0
+          when only open copies were propagated
+        - Epic to saga propagation (adr-epic-push-condensed).propagates after a
+          failed child iteration as well
+      junitTruncated: false
+      collected: true
+      collectionErrors: []
+  - id: test-diff
+    status: pass
+    message: test-diff generated (1 test files, 1950 bytes)
+    details:
+      diff: >-
+        diff --git
+        a/plugins/software-factory/test/engine/epic-saga-propagate.test.ts
+        b/plugins/software-factory/test/engine/epic-saga-propagate.test.ts
+
+        index f79b665..ffe40fa 100644
+
+        --- a/plugins/software-factory/test/engine/epic-saga-propagate.test.ts
+
+        +++ b/plugins/software-factory/test/engine/epic-saga-propagate.test.ts
+
+        @@ -624,8 +624,20 @@ describe("Epic to saga propagation
+        (adr-epic-push-condensed)", () => {
+         
+             expect(fs.existsSync(path.join(deployedParentDir, "items", EPIC, "child-closeup.yaml"))).toBe(true);
+             expect(questionFiles(deployedParentDir)).toEqual([]);
+        -    expect(fs.existsSync(path.join(deployedChildDir, "concerns",
+        "c-open-child.yaml"))).toBe(true);
+
+        -    expect(fs.existsSync(path.join(deployedChildDir, "concerns",
+        "c-dismissed-child.yaml"))).toBe(true);
+
+        +    // Merge cleanup removes the epic child worktree but keeps its
+        branch;
+
+        +    // no-back-sync is verified via branch content, not worktree
+        persistence.
+
+        +    expect(fs.existsSync(deployedChildDir)).toBe(false);
+
+        +    const epicBranch = `topic/${TASK}--${EPIC}`;
+
+        +    const branchCheck = tmpRepo.git(["rev-parse", "--verify",
+        `refs/heads/${epicBranch}`], { allowFail: true });
+
+        +    expect(branchCheck.code).toBe(0);
+
+        +    const openRel = path.posix.join(ORCH, TASK, EPIC, "concerns",
+        "c-open-child.yaml");
+
+        +    const dismissedRel = path.posix.join(ORCH, TASK, EPIC, "concerns",
+        "c-dismissed-child.yaml");
+
+        +    const openShow = tmpRepo.git(["show", `${epicBranch}:${openRel}`]);
+
+        +    expect(openShow.stdout).toContain("Open child risk");
+
+        +    expect(openShow.stdout).not.toContain("[epic]");
+
+        +    const dismissedShow = tmpRepo.git(["show",
+        `${epicBranch}:${dismissedRel}`]);
+
+        +    expect(dismissedShow.stdout).toContain("Dismissed child risk");
+
+        +    expect(dismissedShow.stdout).toContain("dismissed");
+         
+             // The existing child-closeup commit covers the propagated copies too.
+             const closeupRel = path.posix.join(ORCH, TASK, "items", EPIC, "child-closeup.yaml");
+      files:
+        - plugins/software-factory/test/engine/epic-saga-propagate.test.ts
