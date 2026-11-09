@@ -518,11 +518,30 @@ export async function runTask(
     }
 
     if (taskState.status === "failed") {
+      // Loud failure diagnosis (never exit 1 in 12s with zero steps again):
+      // name the failed items plus every recoverability input derive checked,
+      // so a restart-short-circuit is distinguishable from true exhaustion.
+      const fd = taskState.failureDetails;
+      await appendJournal(taskDir, {
+        type: "task_failed_why",
+        task,
+        iteration: taskState.iteration,
+        failedItems: fd?.failedItems ?? taskState.items.filter((it) => it.status === "failed").map((it) => it.slug),
+        recoverableItems: fd?.recoverableItems ?? [],
+        hasOpenBlockers: fd?.hasOpenBlockers ?? false,
+        hasUnrequeuedStranded: fd?.hasUnrequeuedStranded ?? false,
+        mergeRetryAvailable: fd?.mergeRetryAvailable ?? [],
+        unrequeuedStranded: fd?.unrequeuedStranded ?? [],
+        itemStates: taskState.items.map((it) => ({ slug: it.slug, status: it.status })),
+      });
       await appendJournal(taskDir, { type: "task_failed", task });
       return {
         status: "failed",
         exitCode: 1,
-        summary: `Task ${task} failed`,
+        summary:
+          fd && fd.failedItems.length > 0
+            ? `Task ${task} failed: ${fd.failedItems.join(", ")} failed with nothing recoverable (iteration ${taskState.iteration})`
+            : `Task ${task} failed`,
       };
     }
 

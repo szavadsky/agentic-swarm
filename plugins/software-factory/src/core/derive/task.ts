@@ -28,6 +28,9 @@ import { git } from "../git/exec.js";
 import { isAncestor } from "../git/commit.js";
 import { readJournal } from "../journal.js";
 
+/** Mirrors MAX_MERGE_ATTEMPTS_PER_WAVE in flows/merge-path.ts (import would cycle: merge-path → step-runner → derive/task). */
+const TASK_MERGE_ATTEMPTS_BOUND = 2;
+
 export interface DerivedRunningStep {
   item?: string;
   step: string;
@@ -39,29 +42,46 @@ export interface DerivedRunningStep {
   elapsedMs: number;
 }
 
-export interface DerivedTaskState {
-  task: string;
-  kind?: string;
-  status: "active" | "blocked" | "done" | "failed";
-  iteration: number;
-  currentWave?: number;
-  plan?: PlanArtifact;
-  items: DerivedItemState[];
-  itemMap: Record<string, DerivedItemState>;
-  waves: DerivedWaveState[];
-  debt: string[];
-  budgetSpentUsd: number;
-  spendByRole: Record<string, SpendTotals>;
-  spendByItem: Record<string, SpendTotals>;
-  runningSteps: DerivedRunningStep[];
-  concerns: ConcernCounts;
-  hasOpenSteerQuestions: boolean;
-  openSteerQuestions: SteerItemArtifact[];
-  deadSteerFiles: Array<{ file: string; errors: number }>;
-  lastCloseup?: PlanCloseupArtifact;
+export interface TaskFailureDetails {
+  /** Slugs deriving `failed` (abandon decisions, epic child failure, merge-exhaustion). */
+  failedItems: string[];
+  /** Non-terminal slugs that can still move: pending/running/ready (+stranded requeue candidates). */
+  recoverableItems: string[];
+  /** True when any blocked item still has an open steering question outstanding. */
+  hasOpenBlockers: boolean;
+  /** True when an item carries an `item_stranded` journal event for this iteration but is absent from the live plan. */
+  hasUnrequeuedStranded: boolean;
+  /** Slugs stuck in `ready` with merge attempts left (merge redrive available). */
+  mergeRetryAvailable: string[];
+  /** Slugs whose journaled `item_stranded` event for this iteration never re-queued them into the live item list. */
+  unrequeuedStranded: string[];
+}
+
+ export interface DerivedTaskState {
+   task: string;
+   kind?: string;
+   status: "active" | "blocked" | "done" | "failed";
+   iteration: number;
+   currentWave?: number;
+   plan?: PlanArtifact;
+   items: DerivedItemState[];
+   itemMap: Record<string, DerivedItemState>;
+   waves: DerivedWaveState[];
+   debt: string[];
+   budgetSpentUsd: number;
+   spendByRole: Record<string, SpendTotals>;
+   spendByItem: Record<string, SpendTotals>;
+   runningSteps: DerivedRunningStep[];
+   concerns: ConcernCounts;
+   hasOpenSteerQuestions: boolean;
+   openSteerQuestions: SteerItemArtifact[];
+   deadSteerFiles: Array<{ file: string; errors: number }>;
+   lastCloseup?: PlanCloseupArtifact;
   toStateArtifact(): StateArtifact;
   /** Items re-queued this iteration after a prior iteration stranded them mid-flow. */
   strandedItems: string[];
+  /** Populated only when status === "failed": why derive concluded nothing recoverable remains. */
+  failureDetails?: TaskFailureDetails;
 }
 
 /**
@@ -389,7 +409,7 @@ export async function deriveTaskState(opts: {
   runningSteps.sort((a, b) => a.startedAt.localeCompare(b.startedAt));
   // 9. Overall task status determination (§6.3 Invariant 4)
   let status: "active" | "blocked" | "done" | "failed" = "active";
-
+  let failureDetails: TaskFailureDetails | undefined;
   const hasTaskLevelOpenQuestion = openSteerQuestions.some((q) =>
     questionBlocks(q, "task")
   );
@@ -416,7 +436,59 @@ export async function deriveTaskState(opts: {
     );
     if (blockedByNonAsync) status = "blocked";
   } else if (items.length > 0 && items.some((it) => it.status === "failed")) {
-    status = "failed";
+    // Task-level `failed` means NOTHING recoverable remains — not any-item-failed.
+    // Failed siblings must never kill the task at derive time while recovery,
+    // waves, or re-queues can still move (§8.4.1, §7 redrive).
+    const failedItems = items.filter((it) => it.status === "failed").map((it) => it.slug);
+    const liveSlugs = new Set(items.map((it) => it.slug));
+    const recoverableItems = items
+      .filter((it) => it.status === "pending" || it.status === "running" || it.status === "ready")
+      .map((it) => it.slug);
+    const hasOpenBlockers = items.some(
+      (it) => it.status === "blocked" && it.openSteerQuestion?.status === "open"
+    );
+    // Stranded-but-unrequeued: journaled `item_stranded` for this iteration for
+    // a slug absent from the live item list. On restart the engine re-queues
+    // these via recoverStrandedItems before the wave loop runs; deriving
+    // `failed` first would exit before that recovery ever fires.
+    const unrequeuedStranded = [...strandedSlugs].filter((s) => !liveSlugs.has(s));
+    // Merge redrive available: `ready` items with merge attempts left under
+    // MAX_MERGE_ATTEMPTS_PER_WAVE. The ledger lives at
+    // items/<slug>/merge-attempts.yaml keyed by wave; unreadable ledger reads
+    // as attempts available (fail-open, same as the iteration tick).
+    const mergeRetryAvailable: string[] = [];
+    for (const it of items) {
+      if (it.status !== "ready") continue;
+      try {
+        const ledgerPath = path.join(taskDir, "items", it.slug, "merge-attempts.yaml");
+        let attempts = 0;
+        if (fs.existsSync(ledgerPath)) {
+          const ledger = await readYaml<{ attempts?: Record<string, number> }>(ledgerPath);
+          attempts = ledger?.attempts?.[String(it.wave)] ?? 0;
+        }
+        if (attempts < TASK_MERGE_ATTEMPTS_BOUND) mergeRetryAvailable.push(it.slug);
+      } catch {
+        mergeRetryAvailable.push(it.slug);
+      }
+    }
+    const nothingRecoverable =
+      recoverableItems.length === 0 &&
+      !hasOpenBlockers &&
+      unrequeuedStranded.length === 0 &&
+      mergeRetryAvailable.length === 0;
+    if (nothingRecoverable) {
+      status = "failed";
+      failureDetails = {
+        failedItems,
+        recoverableItems,
+        hasOpenBlockers,
+        hasUnrequeuedStranded: unrequeuedStranded.length > 0,
+        mergeRetryAvailable,
+        unrequeuedStranded,
+      };
+    } else {
+      status = "active";
+    }
   } else if (triage?.kind === "simple") {
     // Finding 2 & 3: Simple task completion requires merged commit on parent
     const simpleAssignmentPath = path.join(taskDir, "items", "simple", "assignment.yaml");
@@ -425,7 +497,12 @@ export async function deriveTaskState(opts: {
       if (items.length > 0 && items.every((it) => it.status === "merged")) {
         status = "done";
       } else if (items.some((it) => it.status === "failed")) {
-        status = "failed";
+        // Same rule as the general branch: failed siblings must not kill the
+        // task while recoverable work remains.
+        const stillLive = items.some(
+          (it) => it.status === "pending" || it.status === "running" || it.status === "ready"
+        );
+        status = stillLive ? "active" : "failed";
       } else if (items.some((it) => it.status === "blocked")) {
         status = "blocked";
       } else {
@@ -548,6 +625,7 @@ export async function deriveTaskState(opts: {
     deadSteerFiles: await deriveDeadSteerFiles(taskDir),
     lastCloseup,
     strandedItems: [...strandedSlugs],
+    failureDetails,
     toStateArtifact,
   };
 }
