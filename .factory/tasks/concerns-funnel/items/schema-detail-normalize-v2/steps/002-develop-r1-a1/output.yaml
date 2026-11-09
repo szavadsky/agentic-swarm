@@ -1,0 +1,44 @@
+status: ok
+summary: Fixed concern detail retention in src/core/concerns.ts to compare UTF-8
+  byte length instead of string character length, so byte-budgeted funnel
+  details survive shorter re-emits. Producer schemas and tests were already
+  normalized to lowercase `detail` (with additionalProperties:false rejecting
+  capital-D `Detail`) in this worktree, including the generated review schema
+  and all test reads; existing contract tests already assert lowercase
+  acceptance and capital-D rejection, and the target test already covers the
+  200-byte-vs-20-byte longest-wins case. Only the byte-length production fix was
+  required.
+target:
+  selectors:
+    - test/contracts/schema-detail-normalize.test.ts
+  expectRed:
+    - keeps the stored detail with more UTF-8 bytes when the re-emit has more
+      characters
+evidence:
+  - "Red baseline: `TMPDIR=/tmp bun test
+    test/contracts/schema-detail-normalize.test.ts` failed before the fix at
+    line 263 — expected 70 CJK chars (210 UTF-8 bytes) but received 100 ASCII
+    chars (100 bytes) after re-emit."
+  - "Green target: `TMPDIR=/tmp bun test
+    test/contracts/schema-detail-normalize.test.ts` → 5 pass, 0 fail (53 expect
+    calls)."
+  - "Contract regression: `TMPDIR=/tmp bun test
+    test/contracts/schema-detail-normalize.test.ts
+    test/contracts/concern-schemas.test.ts` → 14 pass, 0 fail."
+  - "Typecheck: `bun run typecheck` (`tsc --noEmit`) exited 0 with no errors."
+  - "Full gate: `TMPDIR=/tmp bun test` → 450 pass, 2 skip, 0 fail; 452 tests
+    across 70 files."
+  - "Schema sweep: decisions, developer-output, fact-finder-output, plan,
+    plan-closeup, wave-closeup, and review schemas all define lowercase `detail`
+    with `additionalProperties: false` on concern items;
+    `src/core/records/review-schema.ts` uses lowercase `detail`; no production
+    `.Detail` reads remain."
+  - "Diff: only src/core/concerns.ts changed (+3/-1) — added a utf8Bytes helper
+    and switched longest-wins comparison to it."
+concerns:
+  - Producer schema/test normalization was already present in the worktree, so
+    no schema files needed edits; the remaining red scenario was the merge
+    byte-comparison.
+notes: Legacy rename-merge (concerns.ts line ~146) still lets an explicit
+  incoming detail override the merged longest detail; left unchanged to keep the
+  fix minimal and because existing legacy regression tests depend on that gate.

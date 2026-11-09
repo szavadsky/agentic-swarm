@@ -1,0 +1,48 @@
+status: ok
+summary: "Authored test/contracts/schema-detail-normalize.test.ts: all seven
+  producer/reference schemas accept lowercase detail and reject capital-D, the
+  step-runner write gate is covered, and the required ASCII 200-byte vs 20-byte
+  longest-wins case passes. The remaining red defines byte-based longest-wins:
+  the current merge compares JS string length, so a 210-byte stored CJK detail
+  loses to a 100-byte/100-char re-emit. Note: this worktree base already
+  contains the stored-detail normalization (all schemas lowercase with
+  additionalProperties:false; concerns.ts:72 already reads existing?.detail), so
+  the casing portion of the assignment is pre-existing."
+target:
+  selectors:
+    - test/contracts/schema-detail-normalize.test.ts
+  expectRed:
+    - keeps the stored detail with more UTF-8 bytes when the re-emit has more
+      characters
+evidence:
+  - "grep for '\"Detail\"' and '.Detail' across plugins/software-factory/src and
+    config: no production capital-D properties; all 7 schemas use lowercase
+    detail plus additionalProperties:false"
+  - TMPDIR=/tmp bun test test/contracts/schema-detail-normalize.test.ts ->
+    bun_exit=1, 4 pass / 1 fail; assertion at line 263 expects the stored
+    210-byte CJK detail but receives the 100-char ASCII re-emit
+  - bun test --reporter=junit --reporter-outfile=/tmp/junit-detail-final.xml ->
+    failing testcase 'keeps the stored detail with more UTF-8 bytes when the
+    re-emit has more characters' present with <failure>; declared expectRed id
+    matches runner normalization
+  - Temporary byte-length fix (Buffer.byteLength comparison) made the target
+    file and 62 related tests pass across schema-detail-normalize,
+    concerns-funnel, hydration-fingerprint-caps, epic-saga-propagate, and
+    funnel-text-budget; production was then restored byte-for-byte
+  - "Baseline full suite before adding the red case: 449 pass, 2 skip, 0 fail
+    (451 tests)"
+  - bun run typecheck (tsc --noEmit) passes
+  - "git status after restore: only untracked
+    test/contracts/schema-detail-normalize.test.ts; git diff empty, so
+    production is untouched"
+concerns:
+  - The assignment's schema casing and concerns.ts:72 fix are already present in
+    this worktree base; only byte-length longest-wins is missing. If the item is
+    intended strictly as the Detail->detail rename, it is now redundant.
+  - UTF-8 byte length was chosen because concern/funnel budgets are byte-based
+    (epic propagation condenses with Buffer.byteLength); JS string length can
+    discard a byte-heavier stored detail.
+notes: The new test file is the sole change (untracked before yield). The
+  required ASCII 200-byte vs 20-byte longest-wins test already passes; the red
+  test specifies the remaining merge defect and is fixable by a one-line
+  comparison change in mergeConcern.

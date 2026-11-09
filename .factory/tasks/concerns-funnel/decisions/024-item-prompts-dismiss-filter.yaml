@@ -1,0 +1,24 @@
+id: decision-prompts-dismiss-filter-1794213525197
+context: item
+item: prompts-dismiss-filter
+afterRecord: 003-develop-r1-a2
+decision: retry-with-guidance
+timestamp: 2026-11-09T08:38:45.197Z
+rationale: "Both develop attempts failed on yield shape, not code: 'Agent output
+  failed schema validation: /: must be object'. The diff shows the
+  implementation landed (dispositions.md +2, prompts.ts +10/-9, prompts.test.ts
+  +92/-6), so the work is likely done but the final yield was emitted as a bare
+  string/diff instead of the required DeveloperOutputArtifact object. Retry
+  needs zero code changes — only a correctly shaped yield."
+text: "Retry develop as a yield-only round: make NO code changes (diff already
+  implements the row + filter + test). Your entire job is to emit a valid
+  DeveloperOutputArtifact OBJECT via the yield tool: { status: 'ok', summary:
+  '<1-2 sentences on dismiss row + filter + QA/reviewer test + gates>',
+  evidence: ['typecheck command + result', 'TMPDIR=/tmp bun test result'] }. Do
+  NOT yield a bare string, a diff, or prose outside the object — that is exactly
+  what failed twice ('/: must be object'). Before yielding, re-run cd
+  plugins/software-factory && bun run typecheck and TMPDIR=/tmp bun test
+  test/prompts.test.ts (full suite if quick) and quote results in evidence. If
+  those fail, report status failed with the failure output instead of another
+  malformed ok."
+persist: true
