@@ -1,0 +1,38 @@
+concerns: []
+evidence:
+  - "bun run typecheck (plugins/software-factory): PASS, exit 0, no diagnostics
+    after guard + propagation edits."
+  - "TMPDIR=/tmp bun test test/engine/closeup-lifecycle-resolve.test.ts: 8 pass,
+    0 fail, 54 expect() calls (all assignment targets green)."
+  - "TMPDIR=/tmp bun test test/engine/closeup-lifecycle-resolve.test.ts
+    test/engine/epic-saga-propagate.test.ts test/engine/concerns-funnel.test.ts:
+    37 pass, 0 fail."
+  - "TMPDIR=/tmp bun test (full suite): 443 tests across 69 files, 441 pass, 2
+    skip, 0 fail, 2439 expect() calls."
+  - "Filtered-push verification script: seeded child with 2 concerns + 1 open
+    remarkable + 1 blocked question; propagateEpicConcerns with
+    concernIds=[c-keep] copied exactly 1 concern ('[epic] Keep me'), 0
+    remarkables, 0 questions; isolated unfiltered push copied 2 concerns + 1
+    remarkable + 1 question (no regression to end-of-child push)."
+  - "Guard-collision probe test (temp file, since removed): item slug
+    concern-foo with step consult-concern-foo cross-emitting a resolution left
+    the concern open and wrote exactly one concern_resolution_ignored journal
+    event: 1 pass."
+  - "git status --short: only
+    plugins/software-factory/src/core/flows/epic-propagation.ts and
+    plugins/software-factory/src/core/flows/step-runner.ts modified; git diff
+    --stat: +10/-5 lines, tightly scoped to reported concerns."
+notes: Optional guard-prefix-collision fixed via exact step match
+  (consult-concern-<resolution.id>) rather than fingerprint regex, so
+  hand-written and migrated concern ids keep working. Deferred optional
+  untested-carry-honored-paths coverage (carry-via-decision, honored
+  architect-closeup singular resolution) as additive test work beyond the
+  reported defect. The architect-disposition midflow-parent-worktree item is out
+  of fix-round scope.
+status: ok
+summary: "Fix-round: scoped filtered epic propagation to the confirmed concern
+  (remarkables/questions skipped when concernIds is set) per the interface
+  contract, and hardened the cross-emission guard to an exact
+  consult-concern-<id> match so item slugs like concern-foo cannot bypass it.
+  All 8 targets, related suites, typecheck, and the full suite (441 pass) are
+  green."

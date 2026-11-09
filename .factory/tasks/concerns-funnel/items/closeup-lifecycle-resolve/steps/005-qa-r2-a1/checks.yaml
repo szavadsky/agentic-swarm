@@ -1,0 +1,36 @@
+checks:
+  - id: red-test
+    status: pass
+    message: "red-test passed: all 8 tests fail when prod changes are restored to
+      test-first commit"
+    details:
+      command: cd plugins/software-factory && bun test
+        test/engine/closeup-lifecycle-resolve.test.ts --reporter=junit
+        --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-redtest-1794195134613-4uvztw5fy8e.xml
+      junitCaseCount: 8
+      junitCaseIds:
+        - "Close-up lifecycle: architect confirmations.accept resolves a pending
+          resolve and derive exposes the resolved status"
+        - "Close-up lifecycle: architect confirmations.accept carries a pending
+          carry to the architect"
+        - "Close-up lifecycle: architect confirmations.accept propagates a
+          pending propagate to the parent concern store"
+        - "Close-up lifecycle: architect confirmations.reject clears the pending
+          resolution, preserving open status and disposition"
+        - "Close-up lifecycle: consult unblock.consult resolve unblocks the
+          affected item on the next derive"
+        - "Close-up lifecycle: consult unblock.ignores concernResolution from an
+          item consult and journals the drop"
+        - "Close-up lifecycle: wave fallback.falls back over triage-less open
+          concerns and lists tech-debt as derived debt"
+        - "Close-up lifecycle: wave fallback.leaves blocker concerns open for
+          explicit triage"
+      junitTruncated: false
+      collected: true
+      collectionErrors: []
+  - id: test-diff
+    status: pass
+    message: test-diff generated (0 test files, 0 bytes)
+    details:
+      diff: ""
+      files: []

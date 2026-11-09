@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
-import type { Concern, ConcernCounts, ConcernSeverity, ConcernSource, RemarkableDecision, ReviewSuggestion, StoredConcernArtifact } from "./artifacts.js";
+import type { Concern, ConcernConfirms, ConcernCounts, ConcernSeverity, ConcernSource, RemarkableDecision, ReviewSuggestion, StoredConcernArtifact } from "./artifacts.js";
 import type { Repo } from "./git/repo.js";
 import { commitAll } from "./git/commit.js";
 import { git } from "./git/exec.js";
@@ -268,6 +268,77 @@ export function applyCloseupResolutions(
     ...record, pendingResolution: { action: r.action, ...(r.note !== undefined ? { note: r.note } : {}), by: ctx.by, at },
   })]);
   return mutate(ctx, ops, `factory: concerns resolved by ${ctx.by}`);
+}
+
+/**
+ * Applies architect confirmations to pending close-up proposals. Accept applies
+ * the pending action (resolve closes the concern, carry routes it to the
+ * architect); propagate only clears the proposal because the parent copy is a
+ * cross-store write. Reject clears the proposal and changes nothing else.
+ */
+export function applyConcernConfirms(
+  ctx: ConcernStoreContext & { confirms: Array<Pick<ConcernConfirms, "id" | "confirm">> }
+): Promise<StoredConcernArtifact[]> {
+  const ops = ctx.confirms.map((confirm): [string, Patch] => [confirm.id, (record) => {
+    const pending = record.pendingResolution as StoredConcernArtifact["pendingResolution"];
+    if (!pending) return record;
+    if (confirm.confirm === "reject") return { ...record, pendingResolution: undefined };
+    if (pending.action === "resolve") {
+      return { ...record, status: "resolved", disposition: undefined, pendingResolution: undefined };
+    }
+    if (pending.action === "carry") {
+      return { ...record, status: "routed", disposition: "architect", pendingResolution: undefined };
+    }
+    return { ...record, pendingResolution: undefined };
+  }]);
+  return mutate(ctx, ops, "factory: concerns confirmed");
+}
+
+/**
+ * Applies a decision-level resolution at commit. `resolve` closes the concern
+ * immediately so the next derive stops blocking affected items; `carry` leaves
+ * a pending carry for the next architect ingest.
+ */
+export function applyConcernResolution(
+  ctx: ConcernStoreContext & { resolution: { id: string; action: "resolve" | "carry"; note?: string }; by: string }
+): Promise<StoredConcernArtifact[]> {
+  const patch: Patch = (record, at) => ctx.resolution.action === "resolve"
+    ? { ...record, status: "resolved", disposition: undefined, pendingResolution: undefined }
+    : {
+        ...record,
+        pendingResolution: {
+          action: "carry",
+          ...(ctx.resolution.note !== undefined ? { note: ctx.resolution.note } : {}),
+          by: ctx.by,
+          at,
+        },
+      };
+  return mutate(ctx, [[ctx.resolution.id, patch]], `factory: concerns resolved by ${ctx.by}`);
+}
+
+/**
+ * Wave close-up fallback for triage-less open concerns. Tech debt becomes
+ * optional debt and assumptions/risks/questions route to the architect;
+ * blockers stay open for explicit triage. Only concerns that existed before
+ * the close-up step are eligible, so its own findings stay open. Never assigns
+ * a human-* disposition.
+ */
+export async function applyWaveCloseupFallback(
+  ctx: ConcernStoreContext & { ids?: Iterable<string> }
+): Promise<StoredConcernArtifact[]> {
+  const eligible = ctx.ids ? new Set(ctx.ids) : undefined;
+  const ops: Array<[string, Patch]> = [];
+  for (const concern of await listConcerns(ctx.taskDir)) {
+    if (eligible && !eligible.has(concern.id)) continue;
+    // Epic copies are pushed open for parent awareness by the child close-up;
+    // they are not triage-less local findings, so fallback leaves them alone.
+    if (concern.source?.epic) continue;
+    if (concern.status !== "open" || concern.pendingResolution || concern.disposition) continue;
+    if (concern.kind === "blocker") continue;
+    const disposition = concern.kind === "tech-debt" ? "optional" : "architect";
+    ops.push([concern.id, (record) => ({ ...record, status: "routed", disposition })]);
+  }
+  return mutate(ctx, ops, "factory: concerns wave close-up fallback");
 }
 
 /** Splits review suggestions into concern triage vs findings by exact id. */

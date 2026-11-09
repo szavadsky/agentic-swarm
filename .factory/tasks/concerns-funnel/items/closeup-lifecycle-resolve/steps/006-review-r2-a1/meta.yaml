@@ -1,0 +1,19 @@
+seq: 6
+name: review
+attempt: 1
+fixRound: 2
+agent: reviewer
+role: workhorse
+models:
+  - opencode-go/deepseek-v4.1-flash
+  - opencode-go/muse-spark-1.3-contributor
+timeoutSec: 3600
+status: ok
+startedAt: 2026-11-09T03:39:12.347Z
+session: 01a1be63-7a70-7718-8b39-802208c515c4
+endedAt: 2026-11-09T04:01:01.551Z
+usage:
+  inputTokens: 274651
+  outputTokens: 84355
+  costUsd: 0.156122
+traceRef: /home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/sessions/2026-11-09T03-39-12-880Z_01a1be63-7a70-7718-8b39-802208c515c4.jsonl

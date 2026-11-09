@@ -1,0 +1,76 @@
+status: approved
+summary: "Ingest/apply lifecycle matches assignment (pending proposes, architect
+  confirms, consult resolve at commit, guard+journal, wave fallback); typecheck
+  + target 8/8 + related 37/0 + full suite 441/2/0 green, test file
+  byte-identical to test-first (no weakening). No fix findings: 1 architect
+  (mid-flow propagate lands on stale child-worktree parent snapshot in prod epic
+  topology) + 3 optional coverage/prompt gaps."
+suggestions:
+  - id: midflow-parent-worktree
+    disposition: architect
+    summary: accept+propagate writes to the child worktree's stale parent snapshot,
+      not the live parent task
+    detail: "engine.runChildTask places epic children at
+      childWt/<orch>/<parent>/<epic> (engine.ts:234), so step-runner.ts:311
+      dirname(taskDir) resolves to the parent task dir inside the child
+      worktree, not parent.path. The copy is committed on the epic child branch;
+      the live parent receives the same concernFingerprint id only from
+      end-of-child propagation under parentCloseupLocks (engine.ts:272-278).
+      Because a done epic derives ready and its branch is merged,
+      mergeParentInto sees add/add on <orch>/<parent>/concerns/<id>.yaml
+      (timestamps/lastSeen differ), forcing an integrate step or failing the
+      epic merge. The target test (closeup-lifecycle-resolve.test.ts:222) nests
+      child under parent in one worktree, so it cannot catch this. Architect
+      must choose: plumb live parent path/worktree (and the parent lock) into
+      child step context, or defer confirmed propagate to end-of-child
+      propagation and adjust the test contract."
+    location:
+      file: plugins/software-factory/src/core/flows/step-runner.ts
+      line: 311
+  - id: filtered-push-regression-test
+    disposition: optional
+    summary: fix-round filtered-push behavior (skip remarkables/questions) has no
+      committed regression test
+    detail: "epic-propagation.ts:156-184 now skips remarkables and forwarded
+      questions when concernIds is set, but the only committed propagate test
+      filters parent concerns by the `c-` prefix
+      (closeup-lifecycle-resolve.test.ts:270) and asserts nothing about rm-*
+      copies or forwarded questions. The fix-round evidence cites a temporary
+      probe that was removed, so a regression reintroducing unfiltered pushes
+      would pass the suite. Extend the target test: seed a child remarkable +
+      blocked question with an unrelated concern, accept one propagate, and
+      assert only that concern copy appears, zero rm-* files and zero questions;
+      include the item-slug guard case (slug concern-foo cross-emitting a
+      resolution) as a committed regression."
+    location:
+      file: plugins/software-factory/test/engine/closeup-lifecycle-resolve.test.ts
+      line: 270
+  - id: untested-carry-honored-paths
+    disposition: optional
+    summary: carry-via-decision, architect-wave-report singular resolution, reject
+      disposition preservation, and propagate child status lack coverage
+    detail: applyConcernResolution's carry branch (concerns.ts:305-315) and the
+      honored architect-wave-report singular resolution path are untested;
+      reject seeds no disposition so 'preserves disposition' is unproven;
+      accept+resolve does not assert disposition cleared; propagate-accept
+      asserts only pendingResolution cleared, not the child's
+      status/disposition. These are the contracts most likely to drift silently
+      in the same lifecycle area; add focused cases while the fixture is fresh.
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 302
+  - id: confirm-prompt-guidance
+    disposition: optional
+    summary: architect close-up prompt never explains concernConfirms; prod
+      reachability of 'resolved' relies on model inference
+    detail: agents/steps/architect-closeup.md:29 instructs only 'record
+      concernResolutions'; plan-closeup.schema.json exposes concernConfirms
+      solely through the generated Output section, while Open Concerns now shows
+      pendingResolution. Nothing tells the architect that pending proposals
+      await accept/reject, and the item's 'resolved reachable' test drives
+      confirms through FakeHarness. Either add a prompt bullet describing the
+      confirm lifecycle (accept resolve/carry/propagate, reject clears) or
+      explicitly record that prompt-fragments owns this follow-up.
+    location:
+      file: plugins/software-factory/agents/steps/architect-closeup.md
+      line: 29

@@ -1,0 +1,61 @@
+status: changes_requested
+summary: 8/8 green, full suite 441 pass, red credible, no weakening; 1 fix
+  (unfiltered epic push), 1 architect (cross-wt parent), 2 optional
+suggestions:
+  - id: epic-filter-scope-gap
+    disposition: fix
+    summary: concernIds filter restricts only concerns, remarkables/questions still
+      push unfiltered
+    detail: "propagateEpicConcerns filters listConcerns by concernIds but
+      readOpenRemarkables (line 162) and forwardBlockedQuestions (line 182) run
+      unfiltered. Interface contract says 'Restricts the push to these child
+      concern ids'. Accepting one propagate mid-flow would forward all open
+      remarkables and blocked questions, potentially blocking parent
+      prematurely. Test masks via c- prefix filter on parent concerns dir. Fix:
+      skip remarkables/questions when concernIds is set, or thread the filter
+      through."
+    location:
+      file: plugins/software-factory/src/core/flows/epic-propagation.ts
+      line: 162
+  - id: midflow-parent-worktree
+    disposition: architect
+    summary: propagateConfirmedConcerns dirname(taskDir) strands copies on child
+      branch in prod topology
+    detail: "engine.ts runChildTask isolates epic children:
+      childTaskDir=childWt/.factory/<parent>/<epic> (line 234), live parent is
+      parent.taskDir on parent.path. propagateConfirmedConcerns derives
+      parentTaskDir=dirname(taskDir), which in prod is the child worktree's
+      stale parent snapshot, not the live parent. Mid-flow copies commit to the
+      child branch and never reach the parent; only end-of-child propagation
+      (engine.ts:273, cross-wt write under lock) delivers. Test nests child
+      under parent in the same wt, masking this. Needs architect decision: plumb
+      live parent path for cross-wt write vs defer confirmed propagate to
+      end-of-child."
+    location:
+      file: plugins/software-factory/src/core/flows/step-runner.ts
+      line: 308
+  - id: guard-prefix-collision
+    disposition: optional
+    summary: Guard prefix consult-concern- collides with item slugs starting with
+      concern-
+    detail: Item consults use stepId `consult-${item}` (consults.ts:110). An item
+      slug like concern-foo yields consult-concern-foo, which matches the
+      honored prefix and would bypass the cross-emission guard. Unlikely slug
+      shape but guard should match on stepFragment or exact concern-consult
+      pattern for robustness.
+    location:
+      file: plugins/software-factory/src/core/flows/step-runner.ts
+      line: 265
+  - id: untested-carry-honored-paths
+    disposition: optional
+    summary: Carry-via-decision and honored architect-closeup singular-resolution
+      paths lack coverage
+    detail: applyConcernResolution carry branch (pending carry, status unchanged)
+      and the honored architect-closeup/architect-wave-report
+      singular-resolution path have no tests; only consult-resolve honored and
+      item-consult ignored paths are covered. Propagate-accept child
+      status/disposition also unasserted (only pending cleared). Consider adding
+      cases to lock these contracts.
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 302

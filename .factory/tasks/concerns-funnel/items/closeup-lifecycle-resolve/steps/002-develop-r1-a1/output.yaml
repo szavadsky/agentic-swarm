@@ -1,0 +1,58 @@
+status: ok
+summary: "Implemented the close-up concern lifecycle in the ingest/apply layer:
+  architect concernConfirms settle pending proposals (accept resolve->resolved,
+  carry->routed+architect, propagate->condensed parent copy via the epic helper;
+  reject clears pending while preserving status/disposition), decision-level
+  concernResolution is applied at consult commit with a cross-emission guard
+  that ignores and journals item-consult emissions, concern consult decisions
+  pass concernResolution through to the canonical decision artifact, and wave
+  close-up now falls back over triage-less open concerns (tech-debt->optional
+  debt, assumption/risk/question->architect, blockers untouched, no human-*
+  dispositions). Added an optional concern-id filter to epic propagation so
+  confirmed propagate copies only the accepted concern. Added 158 production
+  lines across 4 files; all target cases, typecheck, and the full suite are
+  green."
+target:
+  selectors:
+    - test/engine/closeup-lifecycle-resolve.test.ts
+  expectRed:
+    - "Close-up lifecycle: architect confirmations.accept resolves a pending
+      resolve and derive exposes the resolved status"
+    - "Close-up lifecycle: architect confirmations.accept carries a pending
+      carry to the architect"
+    - "Close-up lifecycle: architect confirmations.accept propagates a pending
+      propagate to the parent concern store"
+    - "Close-up lifecycle: architect confirmations.reject clears the pending
+      resolution, preserving open status and disposition"
+    - "Close-up lifecycle: consult unblock.consult resolve unblocks the affected
+      item on the next derive"
+    - "Close-up lifecycle: consult unblock.ignores concernResolution from an
+      item consult and journals the drop"
+    - "Close-up lifecycle: wave fallback.falls back over triage-less open
+      concerns and lists tech-debt as derived debt"
+    - "Close-up lifecycle: wave fallback.leaves blocker concerns open for
+      explicit triage"
+evidence:
+  - bun run typecheck -> exit 0, no diagnostics
+  - TMPDIR=/tmp bun test test/engine/closeup-lifecycle-resolve.test.ts -> 8
+    pass, 0 fail, 54 expect() calls
+  - TMPDIR=/tmp bun test test/engine/closeup-lifecycle-resolve.test.ts
+    test/engine/epic-saga-propagate.test.ts test/engine/concerns-funnel.test.ts
+    -> 37 pass, 0 fail, 355 expect() calls
+  - "TMPDIR=/tmp bun test -> 443 tests across 69 files: 441 pass, 2 skip, 0
+    fail, 2439 expect() calls"
+  - git diff --stat -> 4 production files changed, +158/-3 lines, within the
+    ~240 prod-line budget
+  - git status --short -> only src/core/concerns.ts, src/core/flows/consults.ts,
+    src/core/flows/epic-propagation.ts, src/core/flows/step-runner.ts modified
+    (no test edits)
+notes: "Ordering: close-up concernResolutions still write pendingResolution
+  without touching status; architect confirmations run in ingestStepConcerns at
+  architect ingest, and consult concernResolution is applied in the same ingest
+  call immediately after writeArtifact, before the step/decision commit. Wave
+  fallback is restricted to concern ids present before the close-up step so its
+  own new findings stay open, and epic-propagated copies (source.epic) are
+  skipped to preserve adr-epic-push-condensed open copies. The epic helper
+  gained an optional concernIds filter used only for accepted propagate
+  confirmations."
+concerns: []
