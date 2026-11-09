@@ -1,0 +1,28 @@
+id: decision-docs-finish-v3-1794197936587
+context: item
+item: docs-finish-v3
+afterRecord: 004-qa-r1-a2
+decision: retry-with-guidance
+timestamp: 2026-11-09T04:18:56.587Z
+rationale: "Red-test gate correctly rejects: 9/11 docs tests pass on the base
+  tree, so they do not prove the item's change. Only the source.agent and
+  immediate-halt needle tests properly fail on base. Root cause is weak needles
+  matching pre-existing base content (e.g. row-18 title already contains
+  'concerns'; 'dismiss'/'concerns'/'digest' already appear in base docs), not
+  missing docs. Small, localized test-only fix: tighten needles to base-absent
+  sentinels."
+text: "Test-only round for docs-finish-v3 (no docs/content changes expected
+  beyond test alignment): 1) In test/docs-concerns.test.ts make ALL 11 tests
+  base-failing: replace generic needles with sentinels unique to this item's new
+  content. Row-18 test: assert row 18 contains the new shipped-description
+  sentinel AND does NOT contain 'Deliberately not hand-built'. §8.11 test:
+  assert the '8.11 Concerns' heading exists (absent on base).
+  §5/§6.2/§8.7/§10/§11/§13/README tests: assert exact new phrases added by this
+  item, never bare words ('concerns', 'dismiss', 'digest', 'counts') that
+  already occur on base. Keep the 2 already-red tests (source.agent, immediate
+  halt) as-is. 2) Verify red-then-green explicitly: run the test file against a
+  pristine base worktree (expect 11 fail), then on the branch (expect 11 pass).
+  3) Verify: bun run typecheck + TMPDIR=/tmp bun test on the test file, then
+  full suite green. Do not weaken assertions to pass red-test cosmetically —
+  each needle must name content this item adds."
+persist: true
