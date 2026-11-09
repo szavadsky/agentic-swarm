@@ -28,7 +28,7 @@ export interface PropagateEpicConcernsOptions {
   parentTaskDir: string;
   parentWt: string;
   epic: string;
-  /** Restricts the push to these child concern ids (architect-confirmed propagate). */
+  /** Restricts the push to these child concern ids; remarkables/questions are skipped when set. */
   concernIds?: Iterable<string>;
 }
 
@@ -159,7 +159,9 @@ export async function propagateEpicConcerns(
       (concern.status === "open" || concern.status === "routed") &&
       (!only || only.has(concern.id))
   );
-  const remarkables = await readOpenRemarkables(childTaskDir);
+  // A filtered push copies exactly one confirmed concern; unrelated remarkables
+  // and blocked questions must not ride along mid-flow.
+  const remarkables = only ? [] : await readOpenRemarkables(childTaskDir);
   const ctx: ConcernWriteContext = { taskDir: parentTaskDir, taskWt: parentWt };
 
   for (const [record, group] of byRecord(concerns, (c) => c.source?.record)) {
@@ -179,5 +181,5 @@ export async function propagateEpicConcerns(
     await aggregateConcerns({ ...ctx, source }, [], copies, { commit: false });
   }
 
-  await forwardBlockedQuestions(opts);
+  if (!only) await forwardBlockedQuestions(opts);
 }

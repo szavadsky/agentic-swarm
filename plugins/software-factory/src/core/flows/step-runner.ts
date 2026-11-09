@@ -258,11 +258,14 @@ async function ingestStepConcerns(opts: {
   if (resolutions.length) await applyCloseupResolutions({ ...ctx, resolutions, by: opts.source.agent });
 
   // A decision-level resolution only belongs to concern consults and architect
-  // closeup/report ingests. Other steps may share the output schema, so their
+  // closeup/report ingests. The honored consult step is exactly
+  // `consult-concern-<id>` for the resolved concern, so an item slug like
+  // `concern-foo` (step `consult-concern-foo`) can never collide with a real
+  // concern id. Other steps may share the output schema, so their
   // cross-emitted field is deliberately dropped and journaled.
   if (resolution) {
     const honored =
-      opts.source.step.startsWith("consult-concern-") ||
+      opts.source.step === `consult-concern-${resolution.id}` ||
       opts.source.step.startsWith("architect-closeup") ||
       opts.source.step.startsWith("architect-wave-report");
     if (honored) {
