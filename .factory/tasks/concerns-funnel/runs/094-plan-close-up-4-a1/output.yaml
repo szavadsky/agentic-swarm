@@ -1,0 +1,46 @@
+iteration: 4
+status: next-iteration
+summary: "Skeptical file-bytes audit: 1/3 milestones verified.
+  m1-dismiss-contract COMPLETE: dispositions.md:13 terse dismiss row
+  (triager-only, reason, kept on disk) + :20 rule; prompts.ts:91-111 filters
+  dismiss+human-stop by allowed set, wired at item-machine.ts:649 and
+  iteration.ts:537-540; review-policy.ts:39-42 triager auto-append;
+  review-schema.ts:31-33 enum from allowed; prompts.test.ts:415-490
+  QA-excludes/reviewer-includes + rendered-prompt tests, :493-601 fragment
+  matrix + 15/80 budgets present. m0-detail-normalize MISSING: all 6 runtime
+  schemas still declare capital-D \"Detail\" with additionalProperties:false
+  (decisions:55, developer-output:68, fact-finder-output:29, plan:142,
+  plan-closeup:34, wave-closeup:42; review.schema.json:33,65 too), so lowercase
+  is rejected and capital accepted — inverse of the contract; concerns.ts:74 raw
+  still reads existing?.Detail while StoredConcernArtifact.detail is lowercase
+  (artifacts.ts:313), so the longest-wins guard is dead and typecheck must fail;
+  stale .Detail reads remain in schema-detail-normalize.test.ts:234,263 and
+  epic-saga-propagate.test.ts:248,307,313,319. Contract tests exist
+  (schema-detail-normalize.test.ts:78-113,187-268; concern-schemas.test.ts) but
+  must fail against current bytes. m2-docs-gates CONTENT LANDED BUT
+  GATE-BLOCKED: ARCHITECTURE §1 row :39 (Implemented + 5 deviations, no
+  'Deliberately not hand-built'), §8.11 :330-363 (store/fingerprint/dedup,
+  longest-wins, triage contract, routing table, propose-confirm, epic
+  condensing, ADR table, presets, c-* counts, no-retention, code-constant caps,
+  all 5 deviations), §3 :74-78, §5 :120/:174-180 (root-only, no old inherit
+  phrase), §6.2 :200, §8.7 :302, §10 :393/:403, §11 :414, §13 :453, README
+  :99-132, pipeline.default.yaml :370-372/:389-391 verified;
+  docs-concerns.test.ts sentinels present; allowlist agreement via
+  human-involvement-config.test.ts:14 import + :144-146 assertion, code :35-44
+  matches yaml :398-406, no local duplicate; human-involvement.md carries no
+  deviation history. But m2 scenario 8 (full suite green) cannot pass while m0
+  is red, and docs claim longest-wins the code does not deliver."
+completedMilestones:
+  - m1-dismiss-contract
+remainingMilestones:
+  - m0-detail-normalize
+  - m2-docs-gates
+techDebt:
+  - "td-detail-casing still open: 6 runtime schemas + review.schema.json
+    capital-D Detail, concerns.ts:74 existing?.Detail guard, stale test .Detail
+    reads; blocks typecheck + contract/longest-wins/full-suite green"
+  - "docs-vs-code drift: ARCHITECTURE §8.11 claims longest-detail-wins while
+    merge guard is dead; resolves when m0 lands, then re-verify m2 gate
+    scenario"
+  - "td-tmpdir-split: gate runs need TMPDIR=/tmp workaround (not re-verified;
+    read-only audit, no bash)"
