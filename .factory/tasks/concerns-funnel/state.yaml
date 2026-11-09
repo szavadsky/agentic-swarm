@@ -1,7 +1,7 @@
 task: concerns-funnel
 kind: epic
 status: active
-iteration: 3
+iteration: 4
 currentWave: 1
 items:
   closeup-triager-cleanup:
@@ -352,18 +352,6 @@ items:
     fixRounds: 1
     spendUsd: 0
 debt:
-  - Pre-existing head-guard failures when TMPDIR sits under .factory-runtime.
-    Baseline red; green with TMPDIR=/tmp. Out of scope.
-  - Unapplied spike-saga-commit reviewer optional nits (qualify epic-state
-    precedence, prefix inline paths, scope removeWorktree claim, fold
-    contextPack key). Consumers apply mentally.
-  - Capital-D Detail in 6 runtime-bound file schemas rejects lowercase detail
-    (review.schema.json reference-only, normalized for consistency);
-    mergeConcern reads existing?.Detail so longest-wins never applies and
-    typecheck fails; 3 epic-saga-propagate test reads use .Detail.
-  - wave/plan-close-up listed as triagers though close-up schemas reject
-    suggestions[], advertising an unreachable dismiss path; close-up re-triage
-    has no dismiss vocabulary.
   - "spike-saga-commit merge gate failure is environmental, not content:
     read-only spike with zero prod diff, research ok, review approved; baseline
     test gate is red (2 head-guard TMPDIR failures). Findings accepted as
@@ -676,20 +664,20 @@ debt:
     inconsistent with documented branch-from-HEAD worktrees"
   - "[funnel-closeups-v3] Propagated parent copy retains child source.item,
     writes undeclared source.epic, and can clobber/lengthen parent records"
-budgetSpentUsd: 8.912464920000005
+budgetSpentUsd: 8.937879920000004
 spendByRole:
   alt-workhorse:
-    costUsd: 2.0193519999999996
-    inputTokens: 9962496
-    outputTokens: 2945234
+    costUsd: 2.0334369999999993
+    inputTokens: 10035135
+    outputTokens: 2968959
   workhorse:
     costUsd: 5.6153799200000005
     inputTokens: 12230084
     outputTokens: 3417323
   architect:
-    costUsd: 1.198791
-    inputTokens: 10994767
-    outputTokens: 198087
+    costUsd: 1.2101209999999998
+    inputTokens: 11028085
+    outputTokens: 205004
   alt-architect:
     costUsd: 0.078942
     inputTokens: 320847
@@ -796,11 +784,11 @@ spendByItem:
     inputTokens: 146385
     outputTokens: 43223
   (orchestration):
-    costUsd: 2.0694830000000004
-    inputTokens: 13330505
-    outputTokens: 1066807
+    costUsd: 2.0948980000000006
+    inputTokens: 13436462
+    outputTokens: 1097449
   closeup-triager-cleanup:
     costUsd: 0.113647
     inputTokens: 392214
     outputTokens: 101004
-lastUpdated: 2026-11-09T07:14:03.270Z
+lastUpdated: 2026-11-09T07:20:47.590Z
