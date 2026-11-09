@@ -1,0 +1,12 @@
+iteration: 6
+status: next-iteration
+summary: "Iteration 6 delivered 0/2 milestones. Verified on exact bytes: m0 NOT
+  delivered -- developer-output.schema.json still declares capital-D Detail,
+  concerns.ts merge guard still reads existing?.Detail, so lowercase contract
+  inverted and longest-wins/typecheck scenarios cannot pass; m1 NOT delivered --
+  architect-closeup.md final bullet still instructs concernResolutions with no
+  Confirms, ARCHITECTURE row 18 still lists five deviations. Task Status shows
+  v4 merged but bytes show no fix, and m1 item never ran; audit's remaining
+  findings hold (6 schemas, stale test reads, fragments/prompts.test, 3 ADR
+  stubs without Decision, sentinels at five). Baseline RED persists; iteration 7
+  must retry m0 then m1."
