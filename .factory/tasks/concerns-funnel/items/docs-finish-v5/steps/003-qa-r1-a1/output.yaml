@@ -1,0 +1,46 @@
+status: changes_requested
+summary: 14/14 target green, typecheck + full suite (467/2/0) green, red proven
+  on base and prod-restore; 1 docs-accuracy fix on dismiss routing, 2 optional
+  nits.
+suggestions:
+  - id: dismiss-routes-nothing-overbroad
+    disposition: fix
+    summary: S8.11 claims dismissed concerns route nothing, contradicting
+      dismissed-escalated digest
+    detail: "ARCHITECTURE S8.11 triage paragraph states dismissed concerns 'route
+      nothing' and the routing table repeats 'nothing routed', but the same
+      paragraph notes dismissed escalated concerns are digest-only
+      (q-escalated-{id}). Code confirms the exception: routeHumanDisposition in
+      src/core/triage.ts emits a digest-only q-escalated entry for dismissed
+      escalated concerns at/above minDigestSeverity (see
+      test/engine/human-router-severity.test.ts 'digests a dismissed escalated
+      concern as q-escalated'). Qualify both spots (triage paragraph ~L334 and
+      table row ~L342), e.g. 'route nothing except dismissed escalated concerns,
+      which emit a digest-only q-escalated entry'. Additive edit keeps all 14
+      sentinel needles intact."
+    location:
+      file: plugins/software-factory/docs/ARCHITECTURE.md
+      line: 334
+  - id: awareness-plan-4-unsourced
+    disposition: optional
+    summary: awareness-plan-4 cross-reference has no repo source
+    detail: S8.11 triage-coverage deviation cites
+      awareness-plan-4-funnel-triage-coverage-awareness, but a repo-wide grep
+      finds that ID only in ARCHITECTURE.md and the new test — unlike
+      awareness-plan-2/3, which are cited by docs/adr ADRs. The assignment
+      restricts sources to repo files. Verify the ID or drop the parenthetical
+      (dropping requires removing the matching test needle too).
+    location:
+      file: plugins/software-factory/docs/ARCHITECTURE.md
+      line: 360
+  - id: readme-principal-digest-mismatch
+    disposition: optional
+    summary: README principal example digest threshold differs from shipped preset
+    detail: "README principal override uses minDigestSeverity: medium while the
+      shipped principal preset in config/pipeline.default.yaml uses low
+      (detailed matches at low/low). Examples are illustrative and valid, so
+      either align with the preset or leave as-is; flagging only to avoid reader
+      confusion when comparing the two."
+    location:
+      file: plugins/software-factory/README.md
+      line: 110

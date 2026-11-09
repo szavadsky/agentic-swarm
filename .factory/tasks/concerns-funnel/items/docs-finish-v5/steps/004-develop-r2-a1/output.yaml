@@ -1,0 +1,31 @@
+concerns:
+  - "OPTIONAL awareness-plan-4 left as-is: the ID is genuine in orchestration
+    plan-4 records but has no docs/adr repo source (unlike plan-2/3); dropping
+    it would require deleting a test needle, which risks test-weakening, so per
+    fix-round rules (optional only if straightforward and safe) it was kept."
+evidence:
+  - bun test test/docs-concerns.test.ts (cwd plugins/software-factory) -> 14
+    pass, 0 fail, 253 expect() calls; all 14 sentinel needles intact after the
+    S8.11 dismiss-routing qualification
+  - bun run typecheck (cwd plugins/software-factory) -> tsc --noEmit clean, exit
+    0
+  - bun test (cwd plugins/software-factory, full suite) -> 467 pass, 2 skip, 0
+    fail across 71 files [93.63s]; no regressions
+  - bun test test/docs-concerns.test.ts test/config-layering.test.ts
+    test/human-involvement-config.test.ts -> 28 pass, 0 fail
+  - "git diff --stat -> 2 files, 3 insertions(+), 3 deletions(-):
+    docs/ARCHITECTURE.md (L334 triage paragraph + L342 routing row qualified
+    with dismissed-escalated digest-only exception) and README.md (principal
+    minDigestSeverity medium->low aligned with shipped preset);
+    agents/criteria/human-involvement.md untouched"
+notes: "FIX dismiss-routes-nothing-overbroad: both S8.11 spots now read 'route
+  nothing except dismissed escalated concerns, which emit a digest-only
+  q-escalated entry', resolving the contradiction with the dismissed-escalated
+  digest noted in the same paragraph. OPTIONAL readme-principal-digest-mismatch
+  applied (one-word change, no test asserts the old value)."
+status: ok
+summary: "Fix-round: qualified S8.11 dismiss routing in ARCHITECTURE.md (triage
+  paragraph L334 + routing table L342) with the dismissed-escalated digest-only
+  q-escalated exception, and aligned README principal minDigestSeverity to low
+  per shipped preset. Target 14/14 green, typecheck clean, full suite 467/2/0
+  green."

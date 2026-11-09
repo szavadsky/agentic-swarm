@@ -1,0 +1,33 @@
+status: approved
+summary: 14/14 docs sentinels green, typecheck clean, full suite 467/2/0 green
+  (independent runs); red genuine on base, no test weakening, prior README FIX
+  resolved
+suggestions:
+  - detail: "ARCHITECTURE.md:360 cites
+      awareness-plan-4-funnel-triage-coverage-awareness, but repo-wide grep
+      finds it only in ARCHITECTURE.md and test/docs-concerns.test.ts. Unlike
+      awareness-plan-2/3, which are cited by
+      docs/adr/adr-autonomous-immediate-halt.md and
+      docs/adr/adr-epic-config-root-only.md, no docs/adr source exists for
+      plan-4. Assignment restricts sources to repo files. Verify the ID or drop
+      the parenthetical (dropping requires removing the matching test needle
+      too). Non-blocking: behavioral triage-coverage description is otherwise
+      accurate."
+    disposition: optional
+    id: awareness-plan-4-unsourced
+    location:
+      file: plugins/software-factory/docs/ARCHITECTURE.md
+      line: 360
+    summary: awareness-plan-4 cross-reference has no repo source
+  - detail: README.md:101 states every agent output may raise concerns[] and
+      remarkable[]. Review/triage/infra/edit schemas do not all carry both
+      fields, and ingestion is gated by concerns.raiseAllowlist on source.agent
+      (step-runner.ts, DEFAULT_RAISE_ALLOWLIST in concerns.ts). Consider
+      'Producer/allowlisted agent outputs may carry...' Non-blocking polish; no
+      test asserts this sentence.
+    disposition: optional
+    id: readme-every-agent-output-overbroad
+    location:
+      file: plugins/software-factory/README.md
+      line: 101
+    summary: README every-agent-output claim broader than schema/allowlist

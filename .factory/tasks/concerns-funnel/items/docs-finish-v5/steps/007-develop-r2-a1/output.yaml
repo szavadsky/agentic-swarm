@@ -1,0 +1,17 @@
+status: ok
+summary: "Fixed README status sample: dismissed 0->1 and
+  q-escalated-rm-6f7g8h9i0j -> q-escalated-c-1a2b3c4d5e with matching ref,
+  making the sample reachable per routeHumanDisposition."
+evidence:
+  - "grep README sample: line 123 shows 'dismissed 1' and line 127 shows
+    '[q-escalated-c-1a2b3c4d5e]' with ref c-1a2b3c4d5e; dismissed>=1 consistent
+    with q-escalated presence, suffix 10 lowercase hex"
+  - TMPDIR=/tmp bun test test/docs-concerns.test.ts (cwd
+    plugins/software-factory) -> 14 pass, 0 fail, 253 expect() calls
+  - TMPDIR=/tmp bun run typecheck (cwd plugins/software-factory) -> tsc --noEmit
+    clean, exit 0
+  - git diff --stat -> only plugins/software-factory/README.md changed (2
+    insertions, 2 deletions); no code/tests/other docs touched
+notes: Optional suggestions left untouched per round instruction to fix ONLY the
+  README status sample.
+concerns: []

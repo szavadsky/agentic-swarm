@@ -1,0 +1,73 @@
+status: ok
+summary: Added test/docs-concerns.test.ts with 14 base-failing sentinel tests
+  covering all m2-docs-gates scenarios (S1 row 18 + five deviations, S8.11
+  store/triage/routing/close-up/epic/ADR/counts/caps/deviations,
+  S3/S5/S6.2/S8.7/S10/S11/S13, README concerns section + docs range, and
+  pipeline.default.yaml commentary). Typecheck passes; all 14 tests fail with
+  assertion failures on the pristine base tree; a /tmp simulation of the planned
+  docs/config edits makes the targeted suite 14/14 pass and the full suite 467
+  pass / 2 skip / 0 fail.
+target:
+  selectors:
+    - test/docs-concerns.test.ts
+  expectRed:
+    - "docs: concerns funnel finish (m2-docs-gates).§1 row 18 records item 18
+      implemented with five deviations"
+    - "docs: concerns funnel finish (m2-docs-gates).§8.11 documents store layout
+      fingerprint dedup remarkable aggregation and triage contract"
+    - "docs: concerns funnel finish (m2-docs-gates).§8.11 documents close-up
+      propose-confirm epic condensing ADR modes counts and byte caps"
+    - "docs: concerns funnel finish (m2-docs-gates).§8.11 records immediate-halt
+      triage-coverage epic-config close-up-dismiss and saga deviations"
+    - "docs: concerns funnel finish (m2-docs-gates).§3 module layout lists the
+      concerns funnel modules"
+    - "docs: concerns funnel finish (m2-docs-gates).§5 configuration sample
+      includes concern modes and corrects epic layering"
+    - "docs: concerns funnel finish (m2-docs-gates).§6.2 task folder shows the
+      engine-owned concern store"
+    - "docs: concerns funnel finish (m2-docs-gates).§8.7 adds the triager-only
+      dismiss row"
+    - "docs: concerns funnel finish (m2-docs-gates).§10 documents concern
+      fragment vars outputs and byte budgets"
+    - "docs: concerns funnel finish (m2-docs-gates).§11 status prints concern
+      counts and split blocking/digest questions"
+    - "docs: concerns funnel finish (m2-docs-gates).§13 lists the concerns
+      funnel regression suites"
+    - "docs: concerns funnel finish (m2-docs-gates).README documents concerns
+      and human involvement with per-task examples and status output"
+    - "docs: concerns funnel finish (m2-docs-gates).README documentation section
+      points at the concerns funnel"
+    - "docs: concerns funnel finish (m2-docs-gates).pipeline default commentary
+      documents dismiss auto-append and fragment-to-agent mapping"
+evidence:
+  - TMPDIR=/tmp bun run typecheck (cwd plugins/software-factory) → exit 0
+  - TMPDIR=/tmp bun test test/docs-concerns.test.ts --reporter=junit
+    --reporter-outfile=/tmp/junit-docs-final-red.xml → exit 1, 0 pass / 14 fail,
+    all <failure> assertion failures (no collection/import errors)
+  - "Pristine base check: git archive HEAD plugins/software-factory + the new
+    test file, bun install --frozen-lockfile, TMPDIR=/tmp bun test
+    test/docs-concerns.test.ts → 0 pass / 14 fail"
+  - "Simulated landed state in /tmp (planned ARCHITECTURE/README/config edits):
+    targeted suite → 14 pass / 0 fail; full TMPDIR=/tmp bun test → 467 pass, 2
+    skip, 0 fail"
+  - "Engine JUnit matcher probe using parseJunit + findMatchingCase: all 14
+    expectRed ids resolve to status fail in the red run"
+  - "git status: only plugins/software-factory/test/docs-concerns.test.ts added;
+    no production/docs files modified in test-first"
+concerns:
+  - Docs/README are outside paths.prod, so QA red-test (which restores only
+    paths.prod) would see docs-only tests pass at the item tip. Every test
+    therefore also asserts the config/pipeline.default.yaml commentary (prod) so
+    all 14 stay genuinely red under red-test; develop must land the config
+    commentary together with the docs.
+  - "Sentinel wording is the develop-step contract: exact headings/phrases such
+    as '### 8.11 Concerns funnel', '## 5. Concerns & human involvement', 'root
+    task layer only', 'auto-appended', and 'source.agent' must be added
+    verbatim."
+  - Full-suite green was verified against a /tmp simulation of the planned
+    docs/config edits because test-first scope forbids editing docs/prod files
+    now.
+notes: The 14 tests map to m2 scenarios s1-s8 and enumerate the exact required
+  doc/config content for the develop step. The section() helper is fence-aware
+  so YAML comments in code blocks do not truncate sections. No test asserts
+  lint/style.

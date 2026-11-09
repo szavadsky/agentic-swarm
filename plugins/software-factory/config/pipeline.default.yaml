@@ -367,6 +367,9 @@ harness: omp
 #   - human-awareness: architect decides; recorded for human review
 #   - human-async: item blocks awaiting operator response; other items continue
 #   - human-stop: halts pipeline and exits 10 (deliberately absent from default)
+#   - dismiss: triager-only (reviewer/plan-reviewer); auto-appended to their
+#     allowed dispositions, requires a reason in `detail`, and keeps the
+#     concern on disk as `dismissed`.
 reviewPolicy:
   default:
     - fix
@@ -384,7 +387,9 @@ reviewPolicy:
 # `agents/criteria/human-involvement.md` and the shared blocking table below.
 #
 # `concerns.raiseAllowlist` lists agents whose structured output may raise
-# concerns. `minDigestSeverity` is the lowest severity worth a human digest;
+# concerns. Keys are the raising step's `source.agent`, never its prompt
+# fragment: developer covers develop/poc/test-assumptions/test-first/simple-implement/fix-round, fact-finder covers research, and architect covers architect-*.
+# `minDigestSeverity` is the lowest severity worth a human digest;
 # `minBlockingSeverity` is the lowest severity that can block an item. Arrays
 # replace wholesale across config layers; `null` deletes a concern key.
 humanInvolvement: autonomous
