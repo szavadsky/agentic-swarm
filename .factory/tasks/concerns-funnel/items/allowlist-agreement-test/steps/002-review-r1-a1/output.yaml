@@ -1,0 +1,5 @@
+status: approved
+summary: "Test-only contract fix correct: duplicate removed, canonical import
+  used, assertion compares code vs shipped YAML; typecheck + 12 targeted tests
+  green."
+suggestions: []
