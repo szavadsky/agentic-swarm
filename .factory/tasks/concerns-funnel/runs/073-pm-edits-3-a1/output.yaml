@@ -1,0 +1,113 @@
+iteration: 3
+items:
+  - slug: schema-detail-normalize
+    kind: dev
+    title: Lowercase detail in producer schemas + merge fix
+    assignment: "Normalize concern Detail->detail to lowercase in 6 runtime file
+      schemas (decisions, developer-output, fact-finder-output, plan,
+      plan-closeup shared by architect-closeup, wave-closeup) + reference-only
+      review.schema.json for consistency. Fix concerns.ts:72 mergeConcern read
+      from existing?.Detail to existing?.detail (longest-wins). Fix 3 test reads
+      in test/engine/epic-saga-propagate.test.ts:307/313/319 from .Detail to
+      .detail. Contract: step-runner validates producer outputs against the 6
+      schemas — lowercase detail accepted, capital-D Detail rejected with step
+      error before any store write. Tests: contract suite lowercase passes /
+      capital-D rejected + longest-wins test (200-byte stored detail survives
+      20-byte re-emit). Do NOT touch triage/infra/pm-edit. Baseline is RED
+      (typecheck + concern-schemas + epic-saga reads); this item is part of
+      red-to-green. Verify: typecheck + TMPDIR=/tmp bun test."
+    outlineRef: schema-detail-normalize
+    milestone: m1-contracts-consistency
+    wave: 1
+    deps: []
+    scenarioRefs:
+      - m1-contracts-consistency:1
+      - m1-contracts-consistency:2
+    citations:
+      - docs/factory.v2.md:89-103
+      - plugins/software-factory/src/core/artifacts.ts:313-325
+  - slug: closeup-triager-cleanup
+    kind: dev
+    title: Close-up triager cleanup + dismiss resolutions
+    assignment: "Per adr-closeup-no-suggestions-triage: drop
+      wave-close-up/plan-close-up from isTriagerAgent so composed
+      resolveReviewAllowed(p,a,isTriagerAgent(a)) excludes dismiss for close-ups
+      and triager set equals {reviewer,plan-reviewer}. Add dismiss to
+      CloseupConcernResolution/PendingConcernResolution (artifacts.ts) + local
+      ConcernResolution (concerns.ts:16) + wave/plan-closeup schema action
+      enums. ingestStepConcerns MUST pre-flight before any mutate: every accept
+      confirm whose pending.action==dismiss requires non-empty pending.note else
+      throw TriageValidationError (step errors; all statuses+pendings preserved,
+      no partial transitions). applyConcernConfirms itself never throws
+      TriageValidationError (avoids concerns<->triage cycle). accept+dismiss ->
+      dismissed + disposition dismiss + dismissReason=pending.note trimmed +
+      pending cleared. Wave fallback never assigns dismiss; kind=blocker stays
+      open. Close-up schemas carry no suggestions[]; re-triage honored solely
+      via concernResolutions + architect concernConfirms + fallback. Tests:
+      review-policy composed triager-set exclusion, closeup-lifecycle dismiss
+      accept (with note) + error (without note, preserved state), closeup
+      dismiss enum contract case. Verify: typecheck + targeted suites +
+      TMPDIR=/tmp full gates."
+    outlineRef: closeup-triager-cleanup
+    milestone: m1-contracts-consistency
+    wave: 1
+    deps: []
+    scenarioRefs:
+      - m1-contracts-consistency:3
+      - m1-contracts-consistency:4
+      - m1-contracts-consistency:5
+      - m1-contracts-consistency:6
+    citations:
+      - docs/factory.v2.md:89-103
+      - plugins/software-factory/src/core/artifacts.ts:313-325
+      - plugins/software-factory/src/core/records/review-schema.ts:5-52
+      - plugins/software-factory/src/core/flows/item-machine.ts:628-647
+      - plugins/software-factory/src/core/flows/iteration.ts:439-485
+  - slug: docs-finish-v4
+    kind: dev
+    title: Docs and suite consolidation
+    assignment: "Docs closure over final landed behavior after m1 (depends on
+      schema-detail-normalize + closeup-triager-cleanup). ARCHITECTURE: §1 row18
+      mark item 18 implemented with 4 deviations (epic-config-root-only,
+      closeup-no-suggestions/dismiss-via-resolutions, saga-funnel
+      open-only/questions-block, autonomous-immediate-halt) and remove
+      'Deliberately not hand-built'; §3 add
+      concerns/triage/review-policy/adrs/epic-propagation modules; §5 config
+      sample + fix line-117 inheritance claim to root-only per
+      adr-epic-config-root-only; §6.2 add concerns/,
+      decisions/concern-<id>.yaml, adrFolder; §8.7 dismiss + exact-id triage +
+      thresholds + router; new §8.11 (store layout, fingerprint/dedup,
+      remarkable aggregation/triage, triage contract, routing table, close-up
+      propose-confirm incl dismiss with reason-required, epic condensing, ADR
+      blocking table, presets, 4 deviations); §10 outputs + fix close-up review
+      claim; §13 18 suites; canonical ADR format vs historical notes. README
+      Concerns section (per-task principal low/medium + detailed low/low
+      examples, status counts/digest output). dispositions.md: terse dismiss row
+      (reason required, kept). prompts.ts:
+      formatDispositionsSection(criteria,allowed) dismiss-row filter mirroring
+      human-stop (QA excludes when allowed excludes dismiss, reviewer includes)
+      + QA-excludes/reviewer-includes test + prompts.test debloat budgets (keep
+      terse; bump only if measured over). human-involvement.md + §8.11
+      immediate-halt deviation note. pipeline.default.yaml commentary:
+      fragment->agent mapping (developer covers
+      develop/poc/test-assumptions/test-first/simple-implement/fix-round;
+      fact-finder covers research; architect covers architect-*) with
+      medium/high defaults. Final verification: typecheck + TMPDIR=/tmp bun test
+      green."
+    outlineRef: docs-finish-v4
+    milestone: m2-docs-gates
+    wave: 2
+    deps:
+      - closeup-triager-cleanup
+      - schema-detail-normalize
+    scenarioRefs:
+      - m2-docs-gates:1
+      - m2-docs-gates:2
+      - m2-docs-gates:3
+      - m2-docs-gates:4
+      - m2-docs-gates:5
+    citations:
+      - docs/factory.v2.md:89-103
+      - plugins/software-factory/docs/ARCHITECTURE.md:39
+      - plugins/software-factory/src/core/flows/item-machine.ts:628-647
+      - plugins/software-factory/src/core/records/review-schema.ts:5-52
