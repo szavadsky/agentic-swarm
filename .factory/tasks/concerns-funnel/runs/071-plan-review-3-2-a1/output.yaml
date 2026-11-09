@@ -1,0 +1,143 @@
+status: changes_requested
+summary: "changes_requested: 7 fix block closure (false green-baseline, missing
+  test scope, dismiss contract gaps, imprecise scenarios, missing prompt
+  interface, vague docs gaps); bounds OK 2/8 milestones 3/50 items acyclic"
+suggestions:
+  - id: baseline-green-assumption-false
+    disposition: fix
+    summary: Green-baseline assumption false; Detail casing already breaks typecheck
+      and tests
+    detail: concerns.ts:72 reads existing?.Detail (capital) but
+      StoredConcernArtifact declares lowercase detail (artifacts.ts:313) —
+      strict tsc error. epic-saga-propagate.test.ts:307,313,319 read .Detail
+      (undefined at runtime; utf8Bytes throws) — type + runtime red.
+      concern-schemas.test.ts already asserts lowercase validates (e.g.
+      fully-populated concern) against capital-D schemas with
+      additionalProperties:false, so those contract tests fail. Assumption 1
+      claims green with TMPDIR=/tmp; actually red on 3 fronts. Revise assumption
+      to red baseline and extend schema-detail-normalize to fix the 3 test-file
+      .Detail reads plus schemas + concerns.ts:72.
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 72
+  - id: schema-count-seven-miscount
+    disposition: fix
+    summary: "'7 producer file schemas' miscounts distinct runtime files; scenario
+      unmappable"
+    detail: Capital-D Detail lives in 6 runtime files (decisions, developer-output,
+      fact-finder-output, plan, plan-closeup, wave-closeup) + 1 reference-only
+      review.schema.json. CONCERN_PRODUCERS has 7 entries but architect-closeup
+      reuses plan-closeup.schema.json (step-runner.ts:145), so 6 distinct files.
+      M1 scenario 'Given the 7 producer file schemas' does not map to test
+      producers. Revise to '6 runtime file schemas + reference review schema'
+      and name the producer list.
+    location:
+      file: plugins/software-factory/src/core/flows/step-runner.ts
+      line: 145
+  - id: closeup-dismiss-validation-placement
+    disposition: fix
+    summary: Dismiss-note validation placement ambiguous; risks import cycle and
+      partial transitions
+    detail: "Interface says ingest->applyConcernConfirms requires note else
+      TriageValidationError, but applyConcernConfirms takes only id|confirm
+      (concerns.ts:280) and triage.ts imports from concerns.ts. Throwing
+      TriageValidationError inside concerns.ts creates concerns<->triage cycle;
+      in-patch validation inside mutate (sequential writes, concerns.ts:230)
+      commits early confirms before later validation fails, violating 'no
+      transition / keeps pending'. Item text says validation in
+      ingestStepConcerns (which already imports the error) — correct — but
+      interface + ADR do not state pre-flight. Revise interface + ADR: ingest
+      pre-validates all accept-on-dismiss pendings have non-empty pending.note
+      before any mutate; callee never throws TriageValidationError."
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 279
+  - id: closeup-dismiss-contract-gaps
+    disposition: fix
+    summary: Dismiss contract omits local type, reason source, disposition, pending
+      clearing, enum test
+    detail: "Plan adds dismiss to CloseupConcernResolution/PendingConcernResolution
+      + wave/plan-closeup enums but omits concerns.ts:16 local ConcernResolution
+      used by applyCloseupResolutions. 'dismissReason from note' does not say
+      pending.note (proposal reason) vs confirm.note (architect note).
+      'dismissed + dismissReason' omits disposition=dismiss (review triage sets
+      it, concerns.ts:257) and pending cleared vs preserved. Contract test for
+      closeup resolutions (concern-schemas.test.ts closeup case) must also cover
+      dismiss. Revise item + ADR: update all 3 types, dismissReason=pending.note
+      trimmed, accept=>dismissed+disposition dismiss+pending cleared, validation
+      error=>status+pending preserved."
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 16
+  - id: triager-scenario-indirection
+    disposition: fix
+    summary: Triager-exclusion scenario omits isTriagerAgent indirection; passes
+      independent of fix
+    detail: resolveReviewAllowed(p,agent,isTriager) filters dismiss iff
+      isTriager=false (review-policy.ts:42). Calling with literal true still
+      returns dismiss after fix; the fix is isTriagerAgent returning false for
+      close-ups (review-policy.ts:16). Scenario must state composed call
+      resolveReviewAllowed(p,a,isTriagerAgent(a)) for
+      wave-close-up/plan-close-up and expected triager set
+      {reviewer,plan-reviewer}. Note close-up file schemas have no suggestions[]
+      (additionalProperties:false), so observable is ingest partitioning +
+      prompt text, not schema enum. Revise scenario accordingly.
+    location:
+      file: plugins/software-factory/src/core/review-policy.ts
+      line: 16
+  - id: prompts-filtering-missing-interface
+    disposition: fix
+    summary: prompts.ts dismiss filtering ships in docs milestone without a
+      directional interface
+    detail: "docs-finish-v4 modifies formatDispositionsSection to filter dismiss
+      rows (mirroring human-stop, prompts.ts:90) consumed by item-machine.ts:649
+      and iteration.ts:537, but m2 has no directionalInterfaces and m1 interface
+      2 covers only resolveReviewAllowed. Add interface: item-machine/iteration
+      (callers)->formatDispositionsSection (callee): allowed excludes
+      dismiss=>dismiss rows/rules filtered (QA), includes=>kept (reviewer). Or
+      move the code to m1."
+    location:
+      file: plugins/software-factory/src/core/prompts.ts
+      line: 90
+  - id: docs-gap-list-vague
+    disposition: fix
+    summary: Docs item cites undefined 'gap list' for §3/§5/§6.2/§8.7/§10/§13 updates
+    detail: docs-finish-v4 says 'update §3/§5/§6.2/§8.7/§10/§13 per gap list'
+      without naming gaps or source artifact/IDs. Combined with m2 scenario 2
+      nine-part §8.11 conjunction, implementer cannot prove completeness.
+      Enumerate required section deltas or cite the gap-list source.
+    location:
+      file: plugins/software-factory/docs/ARCHITECTURE.md
+      line: 39
+  - id: dismiss-scenario-semicolon-split
+    disposition: optional
+    summary: Split semicolon-joined dismiss scenario into two explicit Gherkins
+    detail: "M1 scenario 4 joins accept-with-note and accept-without-note with ';'.
+      Split: (a) Given pending dismiss with note + architect accept When ingest
+      runs Then dismissed with dismissReason==note and pending cleared; (b)
+      Given pending dismiss without note + architect accept When ingest runs
+      Then step errors and status+pending preserved. Makes each falsifiable."
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 279
+  - id: debloat-budget-risk
+    disposition: optional
+    summary: New dismiss row may breach prompts.test debloat budgets; anticipate tersing
+    detail: Adding a dismiss row to dispositions.md plus QA/reviewer render
+      divergence adds prompt bytes. M2 scenario 3 requires budgets pass but item
+      does not mention tersing or budget bump. Keep row terse ('reason required,
+      kept') and adjust budgets only if measured over.
+    location:
+      file: plugins/software-factory/agents/criteria/dispositions.md
+      line: 12
+  - id: remarkable-docs-coverage
+    disposition: optional
+    summary: §8.11 checklist omits remarkable-decisions aggregation
+    detail: M2 scenario 2 lists
+      store/fingerprint/triage/routing/close-up/condensing/ADR/presets/deviations
+      but not remarkable decisions aggregation/triage (spec line 96, same
+      pipeline as concerns). Add remarkable coverage to §8.11 checklist for spec
+      completeness.
+    location:
+      file: plugins/software-factory/docs/ARCHITECTURE.md
+      line: 39
