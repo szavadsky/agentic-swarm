@@ -1,0 +1,38 @@
+status: approved
+summary: "Byte-verified QA: schemas lowercase-only, guard lowercase, tests
+  purely additive, red genuine, 469 pass + tsc clean"
+suggestions:
+  - id: baseline-premise-false
+    disposition: human-awareness
+    summary: Assignment RED-baseline premise false at HEAD; scope salvaged as legacy
+      migration
+    detail: "Hex ground truth (64=d low, 44=D cap): all 7 schemas 0 cap-quoted keys
+      (review 2 low, 6 producers 1 low each); concerns.ts:82 guard 2e 64 low;
+      epic-saga 248/307/313/319 low reads; funnel 0 cap-dot. No
+      schema/guard/test flip was needed. Test-first invented legacy
+      Detail->detail normalization to get honest red. Operator should note
+      decision-026 closure rests on already-green baseline, not the claimed RED
+      gap."
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 64
+  - id: both-keys-precedence-untested
+    disposition: optional
+    summary: Both-keys precedence (lowercase wins) untested
+    detail: normalizeStoredConcern does rest.detail ?? Detail, preferring lowercase
+      when both keys present, but no test covers both-keys record. Add one case
+      if legacy files with both spellings are possible; otherwise document as
+      intentional.
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 65
+  - id: legacy-file-override-bypass
+    disposition: optional
+    summary: Pre-existing legacyFile override bypasses longest-wins
+    detail: aggregateConcerns line 154 'if (legacyFile && input.detail?.trim())
+      merged.detail = input.detail.trim()' overwrites mergeConcern longest-wins
+      result on fingerprint-migration path. Pre-existing, out of scope for
+      casing item, but contradicts longest-wins contract; consider follow-up.
+    location:
+      file: plugins/software-factory/src/core/concerns.ts
+      line: 154
