@@ -1,0 +1,58 @@
+status: changes_requested
+summary: "Verified the landed docs item independently: docs sentinel suite 14/14
+  passes, typecheck clean, and the related config/human-involvement suites pass
+  28/28; row 18, §3/§5/§6.2/§8.7/§8.11/§10/§11/§13 claims match
+  src/core/{concerns,triage,review-policy}.ts,
+  flows/{adrs,epic-propagation,step-runner}.ts, cli/status.ts, and
+  pipeline.default.yaml. One user-facing docs defect remains: the README status
+  example prints an impossible q-escalated-rm entry and contradicts its own
+  dismissed count. Two optional accuracy nits remain (unsourced awareness-plan-4
+  reference; overbroad 'every agent output' claim)."
+suggestions:
+  - id: readme-status-example-invalid
+    disposition: fix
+    summary: README status sample contains an unreachable q-escalated-rm id and
+      inconsistent dismissed count
+    detail: "README L123 says 'dismissed 0' while L127 displays a q-escalated entry,
+      which is only produced for a dismissed escalated concern and therefore
+      requires dismissed >= 1. The id is also wrong: routeHumanDisposition emits
+      q-escalated-${suggestion.id} only for dismissed escalated c-* concerns
+      (src/core/triage.ts:93-125; test/engine/human-router-severity.test.ts
+      'digests a dismissed escalated concern as q-escalated'), while remarkables
+      route as q-concern-rm-* (same test, 'turns routed remarkable decisions
+      into digest-only entries'). Additionally rm-6f7g8h9i0j is not a sha256 hex
+      fingerprint prefix. Use a reachable example such as
+      q-escalated-c-1a2b3c4d5e with dismissed 1, or q-concern-rm-... for a
+      remarkable digest; no test asserts these sample ids, so the correction is
+      safe."
+    location:
+      file: plugins/software-factory/README.md
+      line: 127
+  - id: readme-every-agent-output-overbroad
+    disposition: optional
+    summary: README claim that every agent output may raise concerns[]/remarkable[]
+      is broader than the schema/allowlist
+    detail: README L101 states every agent output may raise both arrays. In practice
+      review.schema.json has remarkable but no concerns; triage.schema.json,
+      infra.schema.json and plan-edits.schema.json have neither; and concerns
+      ingestion is gated by concerns.raiseAllowlist/source.agent
+      (src/core/flows/step-runner.ts:213-230; DEFAULT_RAISE_ALLOWLIST in
+      src/core/concerns.ts). Consider 'Producer/allowlisted agent outputs may
+      carry...' to avoid implying every agent schema accepts both fields.
+    location:
+      file: plugins/software-factory/README.md
+      line: 101
+  - id: awareness-plan-4-unsourced
+    disposition: optional
+    summary: awareness-plan-4 cross-reference is not present in any repo source
+    detail: ARCHITECTURE L360 cites
+      awareness-plan-4-funnel-triage-coverage-awareness, but repo-wide search
+      finds it only in ARCHITECTURE.md and test/docs-concerns.test.ts; unlike
+      awareness-plan-2/3, it is not cited by any docs/adr ADR. The assignment
+      restricts sources to repo files, so either add the reference to the repo
+      ADR or drop the parenthetical (which also requires removing the matching
+      test needle). It does not block the behavioral docs, which otherwise
+      describe the triage-coverage limitation accurately.
+    location:
+      file: plugins/software-factory/docs/ARCHITECTURE.md
+      line: 360
