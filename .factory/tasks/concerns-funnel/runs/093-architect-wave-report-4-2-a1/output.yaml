@@ -1,0 +1,11 @@
+context: wave
+decision: end-iteration
+rationale: All 4 iteration-4 items merged (schema-detail-normalize-v2,
+  prompts-dismiss-filter, allowlist-agreement-test, docs-finish-v5); waves 1-2
+  complete with zero blocked/failed. Tree clean, gates improved (typecheck
+  pass->pass, test fail->pass vs red baseline). No pending items remain; nothing
+  left to schedule in further waves.
+text: "End iteration 4 and transition to plan close-up: verify m0/m1/m2
+  scenarios (lowercase detail contracts, dismiss vocabulary, §1 row 18 + §8.11 +
+  README + commentary + docs-concerns sentinels) and close out
+  td-detail-casing."

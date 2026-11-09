@@ -1,0 +1,8 @@
+wave: 2
+iteration: 4
+status: complete
+mergedItems:
+  - docs-finish-v5
+failedItems: []
+blockedItems: []
+summary: "Wave 2 completed. Merged items: docs-finish-v5"
