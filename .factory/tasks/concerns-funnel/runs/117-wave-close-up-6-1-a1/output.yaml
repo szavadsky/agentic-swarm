@@ -1,0 +1,20 @@
+blockedItems: []
+failedItems: []
+iteration: 6
+mergedItems:
+  - schema-detail-normalize-v4
+recommendations:
+  - Proceed to architect wave report / next wave planning; no operator
+    intervention required.
+status: complete
+summary: "Wave 1 (iteration 6) complete: merged schema-detail-normalize-v4
+  cleanly. Tree hygiene verified: only engine-managed
+  .factory/tasks/concerns-funnel/journal.ndjson modified, no untracked junk, git
+  diff --check clean, and no real conflict markers (remaining
+  `<<<<<<<`/`>>>>>>>` hits are intentional literals in step docs, merge-marker
+  detection code in src/core/git/merge.ts, and its test assertions, plus
+  engine-managed .factory records out of scope). Gate diff shows no regressions:
+  typecheck pass->pass (green, matches baseline), test fail->pass (IMPROVED;
+  baseline failure was the pre-existing TMPDIR/head-guard issue documented in
+  infra notes). No failed or blocked items."
+wave: 1
