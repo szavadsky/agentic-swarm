@@ -1,0 +1,28 @@
+blockedItems: []
+debt:
+  - "schema-detail-normalize-v3 requires one guided develop retry per decision
+    026: delete out-of-scope remarkable why block, verify concerns.ts:74 guard,
+    normalize 6 runtime schemas + review.schema.json, fix MUST-FIX positive
+    reads, preserve negative fixtures."
+failedItems:
+  - schema-detail-normalize-v3
+iteration: 5
+mergedItems: []
+recommendations:
+  - Retry schema-detail-normalize-v3 with single develop round per decision 026
+    guidance (no test-first re-run).
+  - QA on retry must evaluate red-to-green via existing longest-wins and
+    contract suites, not the deleted remarkable test name; stale missing-test
+    gate result must not reject.
+  - After m0 merges, schedule wave 2 closeup-confirm-instructions (depends on
+    schema-detail-normalize-v3).
+status: has_failures
+summary: "Wave 1 iteration 5 completed with 0 merges. Tree hygiene clean: only
+  engine-managed journal.ndjson modified, no untracked junk, no conflict markers
+  (strict ^<<<<<<< / ^======= / ^>>>>>>> search clean; ===== hits are
+  test-output separators). Gates vs baseline: typecheck pass->pass green
+  (matches baseline), test fail->pass IMPROVED (counts as fixed per table); no
+  regressions. Wave item schema-detail-normalize-v3 failed QA 2/2 due to
+  out-of-scope test-first byte-test plus incomplete develop scope; consult 026
+  decided retry-with-guidance, iteration can continue."
+wave: 1

@@ -2379,3 +2379,5 @@
 {"type":"step_reused","task":"concerns-funnel","step":"consult-schema-detail-normalize-v3","recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/103-consult-schema-detail-normalize-v3-a1","ts":"2026-11-09T12:18:30.037Z"}
 {"type":"decision_made","context":"item","item":"schema-detail-normalize-v3","decision":"retry-with-guidance","decisionPath":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/decisions/026-item-schema-detail-normalize-v3.yaml","ts":"2026-11-09T12:18:30.038Z"}
 {"type":"empty_wave_streak","wave":1,"iteration":5,"streak":1,"blocked":[],"ts":"2026-11-09T12:18:32.048Z"}
+{"type":"step_started","task":"concerns-funnel","step":"wave-close-up-5-1","attempt":1,"recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/104-wave-close-up-5-1-a1","ts":"2026-11-09T12:20:15.765Z"}
+{"type":"step_timeout_armed","task":"concerns-funnel","step":"wave-close-up-5-1","timeoutSec":2700,"ts":"2026-11-09T12:20:15.770Z"}
