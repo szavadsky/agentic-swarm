@@ -2050,3 +2050,4 @@
 {"type":"step_started","task":"concerns-funnel","step":"plan-close-up-3","attempt":1,"recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/079-plan-close-up-3-a1","ts":"2026-11-09T07:14:03.415Z"}
 {"type":"step_timeout_armed","task":"concerns-funnel","step":"plan-close-up-3","timeoutSec":2700,"ts":"2026-11-09T07:14:03.420Z"}
 {"type":"step_tool_call_warning","task":"concerns-funnel","step":"plan-close-up-3","attempt":1,"toolCalls":79,"threshold":60,"traceRef":"/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/sessions/2026-11-09T07-14-03-813Z_01a1bf28-2da5-74f0-9c37-b6607d1ec6c9","ts":"2026-11-09T07:19:24.281Z"}
+{"type":"step_finished","task":"concerns-funnel","step":"plan-close-up-3","attempt":1,"status":"ok","sessionId":"01a1bf28-2da5-74f0-9c37-b6607d1ec6c9","usage":{"inputTokens":72639,"outputTokens":23725,"costUsd":0.014085},"ts":"2026-11-09T07:19:24.408Z"}
