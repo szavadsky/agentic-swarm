@@ -1,0 +1,30 @@
+iteration: 5
+remainingMilestones:
+  - m0-detail-normalize
+  - m1-confirm-instructions
+status: next-iteration
+summary: "Iteration 5 delivered neither milestone. m0: all 6 runtime schemas
+  still carry capital-D `Detail` (developer-output, plan-closeup, decisions,
+  fact-finder-output, plan, wave-closeup :raw) plus review.schema.json
+  newConcerns, so lowercase detail is rejected; concerns.ts mergeConcern guards
+  on existing?.Detail (mixed capital guard/lowercase read) breaking longest-wins
+  and typecheck against StoredConcernArtifact.detail; stale capital reads remain
+  in epic-saga-propagate.test.ts:248/307/313/319 and
+  schema-detail-normalize.test.ts:234/263. m1: architect-closeup.md still
+  instructs concernResolutions (no Confirms, no dismiss note rule),
+  architect-wave-report.md instructs neither; prompts.test.ts has no
+  confirms-present/Resolutions-absent assertions; ARCHITECTURE §1 row 18 still
+  says five deviations and §8.11 lists five bullets (epic-mailbox-isolation
+  missing); docs/adr/adr-confirm-field-instructions, adr-epic-mailbox-isolation,
+  adr-remarkable-digest-triage have no Decision paragraphs (grep Decision: no
+  matches); docs-concerns.test.ts sentinels still expect five deviations."
+techDebt:
+  - "td-detail-casing still open: 6 runtime schemas + review reference use
+    capital-D Detail; concerns.ts:74 mixed-casing guard; stale capital reads in
+    epic-saga and longest-wins tests"
+  - "m1 confirm instructions missing: architect-closeup/architect-wave-report
+    final bullets unchanged; prompts.test.ts lacks confirms coverage"
+  - "traceability gap: ARCHITECTURE §1 row 18 + §8.11 still five deviations; 3
+    ADR stubs lack Decision paragraphs; docs-concerns sentinels not co-updated"
+  - "td-tmpdir-split: pre-existing head-guard failures need TMPDIR=/tmp"
+  - "td-spike-nits: unapplied spike-saga-commit reviewer nits"
