@@ -1,0 +1,22 @@
+blockedItems: []
+debt: []
+failedItems: []
+iteration: 4
+mergedItems:
+  - docs-finish-v5
+recommendations:
+  - Proceed to architect wave report / next wave; no operator action required.
+  - "No tree cleanup needed: only journal.ndjson append is engine-managed and
+    will be baselined by the engine."
+status: complete
+summary: "Wave 2 (iteration 4) complete: merged docs-finish-v5
+  (README/ARCHITECTURE/pipeline.default.yaml docs + test/docs-concerns.test.ts).
+  Tree hygiene clean: 0 untracked files, no .tmp/.bak artifacts, git diff
+  --check clean, no conflict markers in docs/plugins (strict 7-char scan clean;
+  earlier ==== hits are test-log separators inside .factory records only). Sole
+  modified file is engine-managed .factory/tasks/concerns-funnel/journal.ndjson
+  (step_started/timeout append for this close-up). Gates vs baseline (judged
+  ONLY from Gate Diff table): typecheck pass->pass green (no regression), test
+  fail->pass IMPROVED (pre-existing head-guard TMPDIR failures resolved). No
+  failed or blocked items."
+wave: 2
