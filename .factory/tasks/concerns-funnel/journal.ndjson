@@ -2426,3 +2426,5 @@
 {"type":"step_timeout_armed","task":"concerns-funnel","step":"plan-review-6-2","timeoutSec":3600,"ts":"2026-11-09T12:49:18.466Z"}
 {"type":"step_transcript_size_warning","task":"concerns-funnel","step":"plan-review-6-2","attempt":1,"sizeBytes":5839219,"thresholdBytes":5242880,"traceRef":"/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/sessions/2026-11-09T12-49-18-881Z_01a1c05b-1c21-7067-bac2-9cdd0c7178ce","ts":"2026-11-09T13:02:35.585Z"}
 {"type":"step_finished","task":"concerns-funnel","step":"plan-review-6-2","attempt":1,"status":"ok","sessionId":"01a1c05b-1c21-7067-bac2-9cdd0c7178ce","usage":{"inputTokens":41367,"outputTokens":22934,"costUsd":0.009318},"ts":"2026-11-09T13:02:35.817Z"}
+{"type":"step_started","task":"concerns-funnel","step":"pm-edits-6","attempt":1,"recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/115-pm-edits-6-a1","ts":"2026-11-09T13:02:35.923Z"}
+{"type":"step_timeout_armed","task":"concerns-funnel","step":"pm-edits-6","timeoutSec":2700,"ts":"2026-11-09T13:02:35.928Z"}
