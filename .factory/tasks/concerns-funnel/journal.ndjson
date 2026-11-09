@@ -2386,3 +2386,6 @@
 {"type":"step_started","task":"concerns-funnel","step":"architect-wave-report-5-1","attempt":1,"recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/105-architect-wave-report-5-1-a1","ts":"2026-11-09T12:21:55.940Z"}
 {"type":"step_timeout_armed","task":"concerns-funnel","step":"architect-wave-report-5-1","timeoutSec":7200,"ts":"2026-11-09T12:21:55.945Z"}
 {"type":"step_transcript_size_warning","task":"concerns-funnel","step":"architect-wave-report-5-1","attempt":1,"sizeBytes":16859717,"thresholdBytes":5242880,"traceRef":"/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/sessions/2026-11-08T00-34-47-765Z_01a1b894-4755-7787-a1ed-8df6c7a062a2.jsonl","ts":"2026-11-09T12:22:19.174Z"}
+{"type":"step_finished","task":"concerns-funnel","step":"architect-wave-report-5-1","attempt":1,"status":"ok","sessionId":"01a1b894-4755-7787-a1ed-8df6c7a062a2","usage":{"inputTokens":132063,"outputTokens":1162,"costUsd":0.013921},"ts":"2026-11-09T12:22:19.250Z"}
+{"type":"wave_started","wave":2,"iteration":5,"ts":"2026-11-09T12:22:21.143Z"}
+{"type":"empty_wave_streak","wave":2,"iteration":5,"streak":2,"blocked":[],"ts":"2026-11-09T12:22:21.147Z"}
