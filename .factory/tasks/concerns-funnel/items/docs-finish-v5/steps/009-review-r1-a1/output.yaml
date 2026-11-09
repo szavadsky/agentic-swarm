@@ -1,0 +1,44 @@
+status: approved
+summary: "Docs-finish-v5 verified: 14/14 sentinels + typecheck green,
+  S1/S8.11/S3/S5/S6.2/S8.7/S10/S11/S13 + README + pipeline commentary match
+  landed code, prior README FIX resolved; 3 optional nits only."
+suggestions:
+  - detail: ARCHITECTURE L360 cites
+      awareness-plan-4-funnel-triage-coverage-awareness, but repo-wide search
+      finds it only in ARCHITECTURE.md and test/docs-concerns.test.ts; unlike
+      awareness-plan-2 (cited by docs/adr/adr-autonomous-immediate-halt.md), no
+      docs/adr source exists. Assignment restricts sources to repo files. Either
+      add the reference to the repo ADR or drop the parenthetical (requires
+      removing the matching test needle). Behavioral triage-coverage description
+      is otherwise accurate.
+    disposition: optional
+    id: awareness-plan-4-unsourced
+    location:
+      file: plugins/software-factory/docs/ARCHITECTURE.md
+      line: 360
+    summary: awareness-plan-4 cross-reference has no repo source
+  - detail: README L101 states every agent output may raise concerns[] and
+      remarkable[]. Review schema carries remarkable + newConcerns (not
+      concerns), and triage/infra/edit schemas carry neither; ingestion is gated
+      by concerns.raiseAllowlist on source.agent (step-runner.ts,
+      DEFAULT_RAISE_ALLOWLIST in concerns.ts). Consider 'Producer/allowlisted
+      agent outputs may carry...' No test asserts this sentence.
+    disposition: optional
+    id: readme-every-agent-output-overbroad
+    location:
+      file: plugins/software-factory/README.md
+      line: 101
+    summary: README every-agent-output claim broader than schema/allowlist
+  - detail: README L125 and L127 reuse the same c-1a2b3c4d5e suffix for both the
+      blocking q-concern-c-* entry and the digest q-escalated-c-* entry,
+      implying one concern in two states at once. Each id is individually
+      reachable and dismissed 1 is now consistent, so this is polish only;
+      consider distinct 10-hex suffixes (e.g. blocking c-1a2b3c4d5e, digest
+      q-escalated-c-9f8e7d6c5b) to show two concerns. No test asserts sample
+      ids.
+    disposition: optional
+    id: readme-sample-duplicate-fingerprint
+    location:
+      file: plugins/software-factory/README.md
+      line: 127
+    summary: README status sample reuses one fingerprint for blocking and digest entries
