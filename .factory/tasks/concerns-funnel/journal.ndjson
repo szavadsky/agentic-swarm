@@ -2169,3 +2169,5 @@
 {"type":"item_merged","item":"allowlist-agreement-test","sha":"40f135cb6ad0b03ca24c8913836ca04bef7683dd","conflictResolved":false,"ts":"2026-11-09T09:19:14.270Z"}
 {"type":"step_started","task":"concerns-funnel","step":"wave-close-up-4-1","attempt":1,"recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/089-wave-close-up-4-1-a1","ts":"2026-11-09T09:20:53.718Z"}
 {"type":"step_timeout_armed","task":"concerns-funnel","step":"wave-close-up-4-1","timeoutSec":2700,"ts":"2026-11-09T09:20:53.722Z"}
+{"type":"step_finished","task":"concerns-funnel","step":"wave-close-up-4-1","attempt":1,"status":"ok","sessionId":"01a1bf9c-4cf9-71c4-9c39-c4b51f9d843b","usage":{"inputTokens":19194,"outputTokens":9332,"costUsd":0.003994},"ts":"2026-11-09T09:22:11.685Z"}
+{"type":"scheduler_wait","wave":1,"iteration":4,"reason":"wave-end merge + close-up gates + close-up turn","gapWallMs":466216,"gapActiveMs":466216,"merges":["schema-detail-normalize-v2","prompts-dismiss-filter","allowlist-agreement-test"],"ts":"2026-11-09T09:22:11.685Z"}
