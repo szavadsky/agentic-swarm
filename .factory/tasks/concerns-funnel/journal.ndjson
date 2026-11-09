@@ -2031,3 +2031,5 @@
 {"type":"item_merged","item":"closeup-triager-cleanup","sha":"049917364282921df684ec15c8fcbced27400690","conflictResolved":false,"ts":"2026-11-09T07:04:17.906Z"}
 {"type":"step_started","task":"concerns-funnel","step":"wave-close-up-3-1","attempt":1,"recordDir":"/home/slava/aiexp/agentic-swarm.factory-wt/topic_concerns-funnel/.factory/tasks/concerns-funnel/runs/075-wave-close-up-3-1-a1","ts":"2026-11-09T07:06:11.029Z"}
 {"type":"step_timeout_armed","task":"concerns-funnel","step":"wave-close-up-3-1","timeoutSec":2700,"ts":"2026-11-09T07:06:11.033Z"}
+{"type":"step_finished","task":"concerns-funnel","step":"wave-close-up-3-1","attempt":1,"status":"ok","sessionId":"01a1bf20-f825-70a6-b2e6-c7fc94cec87e","usage":{"inputTokens":26513,"outputTokens":12909,"costUsd":0.00562},"ts":"2026-11-09T07:08:35.152Z"}
+{"type":"scheduler_wait","wave":1,"iteration":3,"reason":"wave-end merge + close-up gates + close-up turn","gapWallMs":382524,"gapActiveMs":382524,"merges":["closeup-triager-cleanup"],"ts":"2026-11-09T07:08:35.153Z"}
