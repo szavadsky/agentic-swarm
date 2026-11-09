@@ -125,11 +125,11 @@ items:
     spendUsd: 0
   docs-finish-v5:
     kind: dev
-    status: running
+    status: ready
     branch: topic/concerns-funnel--docs-finish-v5
     attempts: 1
-    fixRounds: 3
-    spendUsd: 0.332417
+    fixRounds: 1
+    spendUsd: 0.5658540000000001
     currentStep: review
   epic-saga-propagate:
     kind: dev
@@ -493,6 +493,10 @@ debt:
     concerns[]/remarkable[] is broader than the schema/allowlist"
   - "[docs-finish-v5] awareness-plan-4 cross-reference is not present in any
     repo source"
+  - "[docs-finish-v5] README every-agent-output claim broader than
+    schema/allowlist"
+  - "[docs-finish-v5] README status sample reuses one fingerprint for blocking
+    and digest entries"
   - "[epic-saga-propagate] Stale test comment/redundant cast around source.epic"
   - "[epic-saga-propagate] Stale test comment and redundant cast around
     source.epic"
@@ -720,20 +724,20 @@ debt:
     inconsistent with documented branch-from-HEAD worktrees"
   - "[funnel-closeups-v3] Propagated parent copy retains child source.item,
     writes undeclared source.epic, and can clobber/lengthen parent records"
-budgetSpentUsd: 9.702312920000004
+budgetSpentUsd: 10.006968920000006
 spendByRole:
   alt-workhorse:
-    costUsd: 2.195722999999999
-    inputTokens: 10700517
-    outputTokens: 3319743
+    costUsd: 2.4291599999999995
+    inputTokens: 11733316
+    outputTokens: 3476693
   workhorse:
     costUsd: 6.10828592
     inputTokens: 13309505
     outputTokens: 3736929
   architect:
-    costUsd: 1.29989
-    inputTokens: 11782862
-    outputTokens: 225572
+    costUsd: 1.371109
+    inputTokens: 12479472
+    outputTokens: 226404
   alt-architect:
     costUsd: 0.09841399999999997
     inputTokens: 393406
@@ -816,9 +820,9 @@ spendByItem:
     inputTokens: 26723
     outputTokens: 6210
   docs-finish-v5:
-    costUsd: 0.332417
-    inputTokens: 815868
-    outputTokens: 258989
+    costUsd: 0.5658540000000001
+    inputTokens: 1848667
+    outputTokens: 415939
   prompt-fragments:
     costUsd: 0.32775099999999996
     inputTokens: 1269182
@@ -860,7 +864,7 @@ spendByItem:
     inputTokens: 146385
     outputTokens: 43223
   (orchestration):
-    costUsd: 2.2645260000000005
-    inputTokens: 14421163
-    outputTokens: 1231327
-lastUpdated: 2026-11-09T10:16:05.423Z
+    costUsd: 2.3357450000000006
+    inputTokens: 15117773
+    outputTokens: 1232159
+lastUpdated: 2026-11-09T10:54:56.211Z
