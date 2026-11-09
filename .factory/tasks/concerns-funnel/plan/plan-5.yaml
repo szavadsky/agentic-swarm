@@ -4,65 +4,77 @@ milestones:
       - "step-runner (caller) validates producer outputs against the 6 runtime
         file schemas (callee contract: decisions, developer-output,
         fact-finder-output, plan, plan-closeup shared by architect-closeup,
-        wave-closeup): lowercase detail accepted, capital-D Detail rejected with
-        step error before any store write; aggregateConcerns/mergeConcern read
-        lowercase detail with longest-wins"
-      - contract/behavior tests (callers) read lowercase .detail on stored
-        concerns (callee shape StoredConcernArtifact.detail);
-        test/contracts/schema-detail-normalize.test.ts asserts capital-D absence
-        and stays untouched
+        wave-closeup): lowercase-d detail accepted, capital-D Detail rejected
+        with step error before any store write; aggregateConcerns/mergeConcern
+        read lowercase-d detail with longest-wins"
+      - contract/behavior tests (callers) read lowercase-d detail on stored
+        concerns (callee shape StoredConcernArtifact.detail); in
+        test/contracts/schema-detail-normalize.test.ts ONLY the capital-D
+        absence assertions (:86/:106) stay untouched, while the longest-wins
+        reads (:234/:263) are fixed to lowercase-d like every other stale read
     id: m0-detail-normalize
     scenarios:
       - Given the 6 runtime file schemas (decisions, developer-output,
         fact-finder-output, plan, plan-closeup incl architect-closeup,
         wave-closeup) plus reference review schema When the contract suites run
-        Then lowercase detail validates and capital-D Detail is rejected
+        Then lowercase-d detail validates and capital-D Detail is rejected
       - Given a stored concern with 200-byte detail re-emitted with 20-byte
         detail When aggregateConcerns merges Then the stored 200-byte detail
         survives
-      - Given every .Detail read in src and test When swept with :raw reads Then
-        none remain outside the intentional absence-assertions in
-        schema-detail-normalize.test.ts
+      - Given tsc --noEmit passes plus the contract, longest-wins, and epic-saga
+        suites pass When reviewed Then no stale capital-D reads remain in src or
+        test (typed reads fail typecheck, schema casing fails contracts)
       - Given the full suite When gates run with TMPDIR=/tmp Then typecheck and
         bun test pass with no regressions
     title: Detail casing normalization
   - directionalInterfaces:
       - "agents/steps/architect-closeup.md + architect-wave-report.md
-        (producers) -> architect agents (consumers): terse concernConfirms
-        accept/reject instruction text (note rule for dismiss);
-        concernResolutions instruction removed from architect-closeup"
-      - "prompts.test.ts (caller) <- fragment line budgets (callee): <=15 added
-        lines per fragment, <=80 total; test/docs-concerns.test.ts (guard) <-
-        ARCHITECTURE/README/config bytes (unchanged); docs/adr/ <- 2 new
-        one-paragraph deviation records"
+        (producers) -> architect agents (consumers): net-zero single-line
+        in-place replacement of the existing final bullet with a terse
+        concernConfirms accept/reject instruction (note rule for dismiss;
+        wave-report scoped to wave-close-up proposals); zero net added lines so
+        fragment budgets cannot regress"
+      - docs/adr/adr-{confirm-field-instructions,epic-mailbox-isolation,remarkable-digest-triage}.md
+        (callees, exist as title+context stubs) <- item (caller) appends the
+        Decision paragraph from the matching plan ADR, preserving existing stub
+        text (update, never rewrite); ARCHITECTURE §1 row 18 (callee) gains the
+        sixth-deviation needles (epic-mailbox-isolation +
+        adr-epic-mailbox-isolation id) and test/docs-concerns.test.ts row-18
+        sentinel (caller) gains the same needles in the same diff
     id: m1-confirm-instructions
     scenarios:
-      - Given agents/steps/architect-closeup.md When read Then it instructs
-        concernConfirms accept/reject with the dismiss note rule and no
-        concernResolutions instruction
-      - Given agents/steps/architect-wave-report.md When read Then it instructs
-        concernConfirms for wave-close-up proposals
+      - Given agents/steps/architect-closeup.md When read Then the final bullet
+        instructs concernConfirms accept/reject with the dismiss note rule and
+        no concernResolutions instruction, with zero net added lines
+      - Given agents/steps/architect-wave-report.md When read Then the final
+        bullet instructs concernConfirms for wave-close-up proposals, with zero
+        net added lines
       - Given the rendered architect-closeup and architect-wave-report prompts
         When checked Then the confirms instruction is present in both, and
         prompts.test fragment matrix plus 15/80 debloat budgets pass
-      - Given test/docs-concerns.test.ts When run Then all sentinels pass (no
-        ARCHITECTURE regression); given the full suite with TMPDIR=/tmp When
-        gates run Then typecheck and bun test pass
-    title: Close-up confirm instructions and deviation records
+      - Given ARCHITECTURE §1 row 18 When read Then it records six deviations
+        including epic-mailbox-isolation; given test/docs-concerns.test.ts When
+        run Then all sentinels pass including the updated row-18 needles; given
+        the full suite with TMPDIR=/tmp When gates run Then typecheck and bun
+        test pass
+    title: Close-up confirm instructions and traceability updates
 itemOutlines:
   - deps: []
-    description: "Normalize concern Detail->lowercase detail in the 6 runtime file
-      schemas (decisions, developer-output, fact-finder-output, plan,
-      plan-closeup shared by architect-closeup, wave-closeup) + reference-only
-      review.schema.json. One-line TS fix concerns.ts:74 (existing?.Detail ->
-      existing?.detail) restoring longest-wins. Fix ALL stale capital-D .Detail
-      reads in tests (known: epic-saga-propagate.test.ts:307/313/319; sweep
+    description: "Normalize concern Detail (capital-D) to detail (lowercase-d, all
+      lowercase letters) in the 6 runtime file schemas (decisions,
+      developer-output, fact-finder-output, plan, plan-closeup shared by
+      architect-closeup, wave-closeup) + reference-only review.schema.json. TS
+      fix at concerns.ts:74: change the guard's capital-D property read to the
+      lowercase-d property read (all-lowercase detail), restoring longest-wins.
+      Fix ALL stale capital-D reads to lowercase-d (MUST-FIX list:
+      epic-saga-propagate.test.ts:307/313/319 AND
+      schema-detail-normalize.test.ts:234/263 longest-wins assertions; sweep
       funnel-text-budget.test.ts + any others). CAUTION: grep missed verified
-      matches this turn, so verify the sweep with :raw reads, not grep alone;
-      test/contracts/schema-detail-normalize.test.ts:86/106 assert .Detail
-      absence intentionally -- DO NOT touch those. Ensure contract suite asserts
-      lowercase-validates + capital-D rejected; longest-wins behavior test
-      already exists or add it (200-byte stored survives 20-byte re-emit).
+      matches this turn, so verify the sweep with :raw reads, not grep alone. In
+      schema-detail-normalize.test.ts ONLY the capital-D absence assertions
+      (:86/:106) stay untouched; the longest-wins tests already exist at
+      :234/:263 -- fix their reads, do NOT add duplicate tests. Ensure contract
+      suite asserts lowercase-validates + capital-D rejected.
       triage/infra/pm-edit untouched. Verify typecheck + TMPDIR=/tmp bun test
       full suite green."
     kind: story
@@ -71,42 +83,50 @@ itemOutlines:
     slug: schema-detail-normalize-v3
     title: Lowercase detail in producer schemas + merge fix
   - deps: []
-    description: "Per adr-confirm-field-instructions: in
-      agents/steps/architect-closeup.md replace the concernResolutions
-      instruction with a terse concernConfirms accept/reject instruction incl
-      the note rule for dismiss; in agents/steps/architect-wave-report.md add a
-      terse concernConfirms instruction for wave-close-up proposals. <=3 added
-      lines per fragment; architect-resume.md and all other fragments untouched.
+    description: "Per adr-confirm-field-instructions: net-zero single-line in-place
+      replacement of the existing final bullet in
+      agents/steps/architect-closeup.md (concernConfirms accept/reject
+      instruction incl the note rule for dismiss; concernResolutions instruction
+      gone) and in agents/steps/architect-wave-report.md (concernConfirms
+      instruction for wave-close-up proposals). Zero net added lines per
+      fragment; architect-resume.md and all other fragments untouched.
       Add/extend a prompt-render test asserting the confirms instruction appears
-      in both rendered prompts and the wrong concernResolutions instruction is
-      gone from architect-closeup. Record the two accepted semantics as
-      one-paragraph repo files docs/adr/adr-epic-mailbox-isolation.md and
-      docs/adr/adr-remarkable-digest-triage.md matching existing style. Do NOT
-      touch ARCHITECTURE/README/config/criteria files. Verify: prompts.test
-      fragment matrix + 15/80 budgets green, test/docs-concerns.test.ts green
-      (sentinel guard), typecheck + TMPDIR=/tmp full suite green."
+      in both rendered prompts and concernResolutions is gone from
+      architect-closeup. Complete (UPDATE, never rewrite: preserve existing
+      title+context stub text, append the Decision paragraph from the matching
+      plan ADR) the 3 existing files docs/adr/adr-confirm-field-instructions.md
+      (fragment-fix record), docs/adr/adr-epic-mailbox-isolation.md (sixth
+      deviation), docs/adr/adr-remarkable-digest-triage.md (spec-consistent
+      acceptance, NOT a deviation). Update ARCHITECTURE §1 row 18 to list six
+      deviations (add epic-mailbox-isolation needles +
+      adr-epic-mailbox-isolation id) AND update the test/docs-concerns.test.ts
+      row-18 sentinel with the same needles in the same diff. Do NOT touch
+      README/config/criteria files or any other ARCHITECTURE section. Verify:
+      prompts.test fragment matrix + 15/80 budgets green,
+      test/docs-concerns.test.ts green, typecheck + TMPDIR=/tmp full suite
+      green."
     kind: story
     milestoneId: m1-confirm-instructions
-    prodBudgetHint: 10
+    prodBudgetHint: 15
     slug: closeup-confirm-instructions
-    title: Architect confirms instructions + deviation ADRs
+    title: Architect confirms instructions + traceability updates
 assumptions:
   - assumption: "Baseline is RED on detail casing, contradicting the context-pack
       467-pass/typecheck-clean claim: :raw reads verify capital-D Detail in
       runtime schemas (developer-output.schema.json:68,
-      plan-closeup.schema.json:34), concerns.ts:74 reads existing?.Detail (type
-      error against lowercase StoredConcernArtifact.detail, longest-wins dead),
-      and epic-saga-propagate.test.ts:307/313/319 read .Detail. Gates go green
-      only after m0 lands. TMPDIR=/tmp still required for the 2 pre-existing
-      head-guard failures."
-    why: Three consecutive audits hit the same rendering trap (lowercase shown,
-      capital-D on bytes). :raw reads plus closeup-4 are authoritative; plan
-      targets red-to-green via m0.
-  - assumption: Behavior is frozen except Detail->detail normalization and the two
-      architect-fragment instruction lines (+ tests + 2 repo ADR files). No
-      ARCHITECTURE/README/config/prompt-criteria edits;
-      test/docs-concerns.test.ts must stay green as the guard. Legacy
-      fingerprint migration stays as tested code.
+      plan-closeup.schema.json:34), concerns.ts:74 reads existing?.Detail
+      (capital-D; type error against lowercase StoredConcernArtifact.detail,
+      longest-wins dead), epic-saga-propagate.test.ts:307/313/319 read capital-D
+      .Detail, and schema-detail-normalize.test.ts:234/263 read
+      merged[0]!.Detail (capital-D). Gates go green only after m0 lands.
+      TMPDIR=/tmp still required for the 2 pre-existing head-guard failures."
+    why: Reviewer-verified on exact bytes this turn; :raw reads plus closeup-4 are
+      authoritative. Plan targets red-to-green via m0.
+  - assumption: Behavior is frozen except Detail->detail normalization, two net-zero
+      architect-fragment bullet replacements (+ prompt-render test), completion
+      of 3 existing docs/adr stubs, and the ARCHITECTURE §1 row 18 + sentinel
+      co-update. No README/config/prompt-criteria edits; no other ARCHITECTURE
+      sections touched.
     why: "Closure iteration: bounding change to verified gaps avoids regressions and
       sentinel/debloat violations."
   - assumption: "Q4/Q8/Q9 resolved accept-only with no code: byte-capped hydration
@@ -118,22 +138,24 @@ assumptions:
       enforce dismiss via generated enum + isTriager gate, tested)."
     why: All are accepted-semantics or non-default-setup edges; architect decides,
       no operator action needed.
-  - assumption: Epic mailbox isolation (Q3) accepted as the sixth deviation;
-      epic-local digests invisible at root is operator-visible behavior.
+  - assumption: Epic mailbox isolation accepted as the sixth deviation; epic-local
+      digests invisible at root is operator-visible behavior.
     disposition: human-awareness
     why: Operators polling the root mailbox would otherwise miss epic-local human-*
       entries; architect decides, operator informed, mirroring the four prior
       awareness items.
 techDebt:
   - category: impacting
-    description: Capital-D Detail in 6 runtime-bound file schemas rejects lowercase
-      detail (review.schema.json reference-only, normalized for consistency);
-      mergeConcern reads existing?.Detail so typecheck fails and longest-wins is
-      dead; epic-saga and possibly funnel tests read .Detail.
+    description: Capital-D Detail in 6 runtime-bound file schemas rejects
+      lowercase-d detail (review.schema.json reference-only, normalized for
+      consistency); mergeConcern reads existing?.Detail (capital-D) so typecheck
+      fails and longest-wins is dead; epic-saga (:307/:313/:319) and
+      schema-detail-normalize (:234/:263) tests read capital-D .Detail.
     id: td-detail-casing
     resolution: "Fix in schema-detail-normalize-v3: normalize schemas +
-      concerns.ts:74 + all stale test reads verified by :raw; contract and
-      longest-wins tests verify; full gates green."
+      concerns.ts:74 + all stale test reads verified by :raw (:86/:106
+      absence-assertions stay); contract and longest-wins tests verify; full
+      gates green."
   - category: adjacent
     description: Pre-existing head-guard failures when TMPDIR sits under
       .factory-runtime; every gate run needs the TMPDIR=/tmp workaround.
@@ -152,13 +174,18 @@ adrs:
       pendingResolution forever, and applyWaveCloseupFallback skips pending
       concerns (concerns.ts:347), so spec :94 resolve/carry silently stalls in
       production while engine tests pass.
-    decision: "Fix the fragments (cheap, in scope): architect-closeup.md instructs
-      concernConfirms accept/reject with the note rule for dismiss;
-      architect-wave-report.md instructs concernConfirms for wave-close-up
-      proposals. Terse additions (<=3 lines each) within the prompts.test 15/80
-      debloat budgets; a prompt-render test locks the instruction in both
-      rendered prompts. architect-resume.md untouched (session resume, not a
-      confirm turn). No engine/schema changes."
+    decision: "Fix the fragments with net-zero single-line in-place replacement:
+      rewrite the existing final bullet of architect-closeup.md to a terse
+      concernConfirms accept/reject instruction with the dismiss note rule, and
+      the existing final bullet of architect-wave-report.md to a concernConfirms
+      instruction scoped to wave-close-up proposals. Zero net added lines, so
+      the prompts.test 15/80 debloat budgets cannot regress regardless of
+      current headroom; a prompt-render test locks the instruction in both
+      rendered prompts and the absence of concernResolutions in
+      architect-closeup. architect-resume.md untouched (session resume, not a
+      confirm turn). No engine/schema changes. Complete the existing
+      docs/adr/adr-confirm-field-instructions.md stub with this Decision
+      paragraph."
     id: adr-confirm-field-instructions
     title: Architect fragments instruct concernConfirms
   - context: runChildTask accepts rootTaskDir but never reads it; only root runTask
@@ -170,8 +197,11 @@ adrs:
       behavior change with config-semantics blast radius.
     decision: "Accept as the sixth documented deviation for closure: the root
       mailbox is the operator surface; epic-local digest entries are not visible
-      at root; child-to-root routing/answer-sync is future work. Record in a
-      repo docs/adr file; operator notified via human-awareness."
+      at root; child-to-root routing/answer-sync is future work. Complete the
+      existing docs/adr/adr-epic-mailbox-isolation.md stub with this Decision
+      paragraph; ARCHITECTURE §1 row 18 lists it as the sixth deviation with the
+      docs-concerns row-18 sentinel co-updated in the same diff. Operator
+      notified via human-awareness."
     id: adr-epic-mailbox-isolation
     title: Epic mailbox isolation accepted as deviation
   - context: Worker remarkable[] becomes an open rm-* record hydrated to every
@@ -179,10 +209,12 @@ adrs:
       suggestion matching the rm-* id with a human-* disposition
       (triage.ts:98,334-346); architect ADRs route automatically instead. Spec
       :98 says remarkable items are reported in a digest, never waiting.
-    decision: "Accept triage-dependency as spec-consistent: spec :96 requires
-      remarkable decisions to get the same aggregation/triage as concerns, so
-      reviewer-triage is the funnel gate, not a bypass. No auto-digest above
-      threshold. Record in a repo docs/adr file. Untriaged remarkables (simple
-      tasks) never digest, consistent with adr-funnel-triage-coverage."
+    decision: "Accept triage-dependency as spec-consistent (NOT a deviation, so §1
+      row 18 is unchanged by this ADR): spec :96 requires remarkable decisions
+      to get the same aggregation/triage as concerns, so reviewer-triage is the
+      funnel gate, not a bypass. No auto-digest above threshold. Complete the
+      existing docs/adr/adr-remarkable-digest-triage.md stub with this Decision
+      paragraph. Untriaged remarkables (simple tasks) never digest, consistent
+      with adr-funnel-triage-coverage."
     id: adr-remarkable-digest-triage
     title: Worker-remarkable digest requires triager confirmation
