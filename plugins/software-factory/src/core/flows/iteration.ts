@@ -817,7 +817,10 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
     let waveState = deriveWaveState({
       wave: w,
       items: itemStates,
-      blockedBy: await collectRoutedBlockers(taskDir),
+      blockedBy: await collectRoutedBlockers(
+        taskDir,
+        pipeline.concerns?.minBlockingSeverity ?? "high"
+      ),
     });
 
     if (waveState.items.length === 0 || waveState.items.every((it) => it.status === "merged")) {
@@ -916,7 +919,10 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
       waveState = deriveWaveState({
         wave: w,
         items: itemStates,
-        blockedBy: await collectRoutedBlockers(taskDir),
+        blockedBy: await collectRoutedBlockers(
+          taskDir,
+          pipeline.concerns?.minBlockingSeverity ?? "high"
+        ),
       });
       architectSessionId = await consultRoutedBlockers(
         consultCtx,

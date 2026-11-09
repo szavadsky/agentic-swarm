@@ -1,8 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
 import yaml from "yaml";
-import type { ReviewSuggestion, StoredConcernArtifact } from "./artifacts.js";
-import { applyConcernTriage, listConcerns } from "./concerns.js";
+import type {
+  ConcernSeverity,
+  PipelineConfig,
+  ReviewSuggestion,
+  StoredConcernArtifact,
+} from "./artifacts.js";
+import { applyConcernTriage, listConcerns, severityAtLeast } from "./concerns.js";
 import type { Repo } from "./git/repo.js";
 import { readYaml } from "./records/io.js";
 import { writeQuestion } from "./steer.js";
@@ -21,6 +26,7 @@ export interface ReviewTriageOutcome extends TriagePartition {
 export interface ReviewTriageContext {
   taskDir: string; taskWt: string; repo: Repo; suggestions: ReviewSuggestion[];
   concernIds: Iterable<string>; isTriager: boolean; item?: string; now?: () => Date;
+  minDigestSeverity?: ConcernSeverity; minBlockingSeverity?: ConcernSeverity;
 }
 /** Contract violation that must fail the review step instead of being journaled. */
 export class TriageValidationError extends Error {}
@@ -45,6 +51,88 @@ export function partitionReviewSuggestions(
 
 export function concernMailboxId(concernId: string): string {
   return `q-concern-${concernId}`;
+}
+
+export interface ConcernSeverityPolicy {
+  minDigestSeverity: ConcernSeverity;
+  minBlockingSeverity: ConcernSeverity;
+}
+
+/** Code fallback matches the shipped config: medium digests, high blocks. */
+export const DEFAULT_CONCERN_SEVERITY_POLICY: ConcernSeverityPolicy = {
+  minDigestSeverity: "medium",
+  minBlockingSeverity: "high",
+};
+
+export function resolveConcernSeverityPolicy(
+  concerns?: PipelineConfig["concerns"]
+): ConcernSeverityPolicy {
+  return {
+    minDigestSeverity: concerns?.minDigestSeverity ?? DEFAULT_CONCERN_SEVERITY_POLICY.minDigestSeverity,
+    minBlockingSeverity:
+      concerns?.minBlockingSeverity ?? DEFAULT_CONCERN_SEVERITY_POLICY.minBlockingSeverity,
+  };
+}
+
+export interface HumanRouteContext extends ConcernSeverityPolicy {
+  taskDir: string;
+  taskWt: string;
+  item?: string;
+}
+
+/**
+ * Single human-disposition router for every triager (adr-human-router-single).
+ * `human-async` and `human-stop` block only at or above `minBlockingSeverity`;
+ * below it they downgrade to an `human-awareness` digest (so a downgraded stop
+ * loses its exit-10 halt). `human-awareness`, routed remarkable decisions
+ * (`rm-*`) and dismissed escalated concerns are digest-only with no blocks.
+ * Nothing is surfaced below `minDigestSeverity`; `rm-*` is exempt from both
+ * thresholds. Questions dedupe by id (an existing answered entry is kept).
+ * Returns the mailbox id written, if any.
+ */
+export async function routeHumanDisposition(
+  ctx: HumanRouteContext,
+  suggestion: ReviewSuggestion,
+  concern?: StoredConcernArtifact
+): Promise<string | undefined> {
+  const isRemarkable = suggestion.id.startsWith("rm-");
+  const isHuman =
+    suggestion.disposition === "human-awareness" ||
+    suggestion.disposition === "human-async" ||
+    suggestion.disposition === "human-stop";
+  const dismissedEscalated =
+    suggestion.disposition === "dismiss" && Boolean(concern?.source?.escalated);
+  if (!isHuman && !isRemarkable && !dismissedEscalated) return undefined;
+
+  const severity = concern?.severity ?? "medium";
+  const digestOnly = isRemarkable || dismissedEscalated || suggestion.disposition === "human-awareness";
+  const blocking =
+    !digestOnly && severityAtLeast(severity, ctx.minBlockingSeverity);
+  const disposition =
+    digestOnly || !blocking
+      ? "human-awareness"
+      : (suggestion.disposition as "human-async" | "human-stop");
+  if (!isRemarkable && !severityAtLeast(severity, ctx.minDigestSeverity)) return undefined;
+
+  const id = dismissedEscalated
+    ? `q-escalated-${suggestion.id}`
+    : concernMailboxId(suggestion.id);
+  const blocks =
+    disposition === "human-stop"
+      ? ctx.item
+        ? [ctx.item, "task"]
+        : ["task"]
+      : disposition === "human-async"
+        ? [ctx.item ?? "task"]
+        : [];
+  await writeQuestion(ctx.taskWt, ctx.taskDir, {
+    id,
+    ref: ctx.item ?? suggestion.id,
+    disposition,
+    question: suggestion.detail?.trim() || suggestion.summary,
+    blocks,
+  });
+  return id;
 }
 
 /**
@@ -235,18 +323,26 @@ export async function applyReviewTriage(
 
   const dismissed = partition.triage.filter((s) => s.disposition === "dismiss");
   const routed = partition.triage.filter((s) => s.disposition !== "dismiss");
+  const policy = resolveConcernSeverityPolicy({
+    minDigestSeverity: ctx.minDigestSeverity,
+    minBlockingSeverity: ctx.minBlockingSeverity,
+  });
+  const stored = new Map(
+    (await listConcerns(ctx.taskDir)).map((concern) => [concern.id, concern])
+  );
   const mailboxIds: string[] = [];
-  for (const s of routed) {
-    if (s.disposition !== "human-async") continue;
-    const id = concernMailboxId(s.id);
-    await writeQuestion(ctx.taskWt, ctx.taskDir, {
-      id,
-      ref: ctx.item ?? s.id,
-      disposition: "human-async",
-      question: s.detail?.trim() || s.summary,
-      ...(ctx.item ? { blocks: [ctx.item] } : {}),
-    });
-    mailboxIds.push(id);
+  for (const s of partition.triage) {
+    const id = await routeHumanDisposition(
+      {
+        taskDir: ctx.taskDir,
+        taskWt: ctx.taskWt,
+        ...(ctx.item ? { item: ctx.item } : {}),
+        ...policy,
+      },
+      s,
+      stored.get(s.id)
+    );
+    if (id) mailboxIds.push(id);
   }
 
   return { ...partition, routed, dismissed, mailboxIds };

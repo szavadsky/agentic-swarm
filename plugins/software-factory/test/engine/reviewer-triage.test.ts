@@ -409,7 +409,7 @@ describe("Reviewer triage (§8.7, §18)", () => {
 
   it("writes one deduped q-concern mailbox entry for human-async triage", async () => {
     const cid = "c-ffffffffff";
-    await writeConcern(storedConcern({ id: cid, kind: "question" }));
+    await writeConcern(storedConcern({ id: cid, kind: "question", severity: "high" }));
 
     const ctx = {
       taskDir,
@@ -632,7 +632,7 @@ describe("Reviewer triage (§8.7, §18)", () => {
         data: {
           status: "ok",
           summary: "Developed",
-          concerns: [{ kind: "risk", summary: concernSummary, detail: "long detail" }],
+          concerns: [{ kind: "risk", summary: concernSummary, detail: "long detail", severity: "high" }],
         },
       };
     });

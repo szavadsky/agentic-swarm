@@ -27,6 +27,7 @@ import { isTriagerAgent, resolveReviewAllowed } from "../review-policy.js";
 import {
   aggregateConcerns,
   applyCloseupResolutions,
+  DEFAULT_RAISE_ALLOWLIST,
 } from "../concerns.js";
 import {
   applyReviewTriage,
@@ -184,15 +185,31 @@ function inferTaskWorktree(taskDir: string, task: string, orchestrationFolder: s
 
 /** Feeds a step's producer fields into the taskWt concern store (§18). */
 async function ingestStepConcerns(opts: {
-  taskDir: string; taskWt: string; repo: any; output: unknown;
+  task: string; taskDir: string; taskWt: string; repo: any; output: unknown; pipeline: PipelineConfig;
   source: { record: string; agent: string; step: string; item?: string; iteration?: number };
 }): Promise<ReviewTriageOutcome | undefined> {
   const data = (opts.output ?? {}) as Record<string, any>;
-  const concerns = ["concerns", "newConcerns"].flatMap((f) => (Array.isArray(data[f]) ? data[f] : []));
+  let concerns = ["concerns", "newConcerns"].flatMap((f) => (Array.isArray(data[f]) ? data[f] : []));
   const remarkables = Array.isArray(data.remarkable) ? data.remarkable : [];
   const suggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
   const resolutions = Array.isArray(data.concernResolutions) ? data.concernResolutions : [];
   if (!concerns.length && !remarkables.length && !suggestions.length && !resolutions.length) return undefined;
+
+  // Gate key is source.agent, never the step fragment. Skipping keeps the step
+  // ok (schema validation already passed) and only journals the dropped input.
+  const allowlist: readonly string[] =
+    opts.pipeline.concerns?.raiseAllowlist ?? DEFAULT_RAISE_ALLOWLIST;
+  if (concerns.length > 0 && !allowlist.includes(opts.source.agent)) {
+    await appendJournal(opts.taskDir, {
+      type: "concern_ingest_skipped",
+      task: opts.task,
+      ...(opts.source.item ? { item: opts.source.item } : {}),
+      step: opts.source.step,
+      agent: opts.source.agent,
+      count: concerns.length,
+    });
+    concerns = [];
+  }
 
   // Triage only ids that existed before this step, so new concerns cannot self-dismiss.
   let existing: string[] = [];
@@ -210,6 +227,12 @@ async function ingestStepConcerns(opts: {
         suggestions,
         concernIds: existing,
         isTriager: isTriagerAgent(opts.source.agent),
+        ...(opts.pipeline.concerns?.minDigestSeverity
+          ? { minDigestSeverity: opts.pipeline.concerns.minDigestSeverity }
+          : {}),
+        ...(opts.pipeline.concerns?.minBlockingSeverity
+          ? { minBlockingSeverity: opts.pipeline.concerns.minBlockingSeverity }
+          : {}),
         ...(opts.source.item ? { item: opts.source.item } : {}),
       })
     : undefined;
@@ -720,7 +743,7 @@ export async function runAgentStep(opts: StepRunOptions): Promise<StepRunResult>
   if (finalStatus === "ok") {
     try {
       triageOutcome = await ingestStepConcerns({
-        taskDir, taskWt, repo, output: validatedData,
+        task, taskDir, taskWt, repo, output: validatedData, pipeline,
         source: {
           record: dirName, agent, step: stepId,
           ...(item ? { item } : {}),
