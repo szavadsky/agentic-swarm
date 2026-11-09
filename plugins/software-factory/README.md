@@ -120,11 +120,11 @@ concerns:
 `factory status <task>` prints concern counts and splits the mailbox into blocking and informational entries:
 
 ```
-Concerns: open 2 | dismissed 0 | routed 1 | resolved 4
+Concerns: open 2 | dismissed 1 | routed 1 | resolved 4
 Blocking Questions:
   * [q-concern-c-1a2b3c4d5e] ref: item | disposition: human-async
 Digest Questions:
-  * [q-escalated-rm-6f7g8h9i0j] ref: c-1a2b3c4d5e | disposition: human-awareness
+  * [q-escalated-c-1a2b3c4d5e] ref: c-1a2b3c4d5e | disposition: human-awareness
 ```
 
 ## 6. Documentation & Architecture
