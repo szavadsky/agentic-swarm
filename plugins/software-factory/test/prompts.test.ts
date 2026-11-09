@@ -12,7 +12,15 @@ import {
 } from "../src/core/prompts.js";
 import { KNOWN_VARS } from "../src/core/prompt-vars.js";
 import { loadPipelineConfig } from "../src/core/config/loader.js";
+import { isTriagerAgent, resolveReviewAllowed } from "../src/core/review-policy.js";
 import type { PipelineConfig } from "../src/core/artifacts.js";
+
+/** Samples every placeholder the fragment declares (render helper). */
+function sampleVars(fragment: string): Record<string, string> {
+  const vars: Record<string, string> = {};
+  for (const name of KNOWN_VARS[fragment] ?? []) vars[name] = `sample-${name}`;
+  return vars;
+}
 
 /**
  * Fragment matrix (docs/adr/adr-prompt-fragment-matrix.md): every fragment that
@@ -398,14 +406,92 @@ tools:
   });
 });
 
+/**
+ * adr-dismiss-criteria-row: dispositions.md carries one terse dismiss row and
+ * rule (triager-only, reason required, kept on disk). formatDispositionsSection
+ * filters dismiss rows/rules when the allowed set excludes it (QA), keeps them
+ * for triager reviewers, and still filters human-stop, mirroring existing rules.
+ */
+describe("prompts: dismiss disposition contract (adr-dismiss-criteria-row)", () => {
+  const builtinDir = path.resolve("agents");
+  const criteriaText = fs.readFileSync(
+    path.join(builtinDir, "criteria/dispositions.md"),
+    "utf8"
+  );
+  const dismissRow = criteriaText
+    .split("\n")
+    .find((line) => /^\|\s*`dismiss`\s*\|/.test(line));
+  const dismissRule = criteriaText
+    .split("\n")
+    .find((line) => /^-\s.*\bdismiss\b/i.test(line));
+
+  it("documents a terse triager-only dismiss row and rule kept on disk", () => {
+    expect(dismissRow).toBeDefined();
+    expect(dismissRow).toMatch(/triager/i);
+    expect(dismissRow).toMatch(/reason/i);
+    expect(dismissRow).toMatch(/kept/i);
+    expect(dismissRule).toBeDefined();
+  });
+
+  it("filters dismiss rows and rules unless the allowed set includes dismiss", () => {
+    const criteria = [
+      "| `fix` | defect | loop |",
+      "| `dismiss` | stale concern | kept on disk |",
+      "| `human-stop` | critical | halt |",
+      "- Use `dismiss` only with a reason.",
+    ].join("\n");
+
+    const qa = formatDispositionsSection(criteria, ["fix", "optional"]);
+    expect(qa).toContain("Allowed dispositions for this review: fix, optional.");
+    expect(qa).toContain("`fix`");
+    expect(qa).not.toMatch(/dismiss/i);
+    expect(qa).not.toContain("human-stop");
+
+    const reviewer = formatDispositionsSection(criteria, [
+      "fix",
+      "optional",
+      "dismiss",
+    ]);
+    expect(reviewer).toContain("| `dismiss` | stale concern | kept on disk |");
+    expect(reviewer).toContain("- Use `dismiss` only with a reason.");
+    expect(reviewer).not.toContain("human-stop");
+  });
+
+  it("renders dismiss criteria for triager reviewers but not QA", () => {
+    const { config } = loadPipelineConfig();
+    const lib = loadPromptLibrary({ builtinDir });
+    const criteria = loadCriteriaBundle(config.criteria).dispositions;
+    expect(criteria).toBeDefined();
+    expect(dismissRow).toBeDefined();
+    expect(dismissRule).toBeDefined();
+
+    const qaAllowed = resolveReviewAllowed(config, "qa", isTriagerAgent("qa"));
+    const reviewerAllowed = resolveReviewAllowed(
+      config,
+      "reviewer",
+      isTriagerAgent("reviewer")
+    );
+    expect(qaAllowed).not.toContain("dismiss");
+    expect(reviewerAllowed).toContain("dismiss");
+
+    const render = (fragment: string, allowed: string[]): string =>
+      lib.render(fragment, {
+        ...sampleVars(fragment),
+        dispositionsCriteria: formatDispositionsSection(criteria, allowed),
+        humanInvolvementCriteria: "",
+        concernsYaml: "",
+      });
+
+    expect(render("steps/qa", qaAllowed)).not.toMatch(/dismiss/i);
+
+    const reviewerPrompt = render("steps/review", reviewerAllowed);
+    expect(reviewerPrompt).toContain(dismissRow!);
+    expect(reviewerPrompt).toContain(dismissRule!);
+  });
+});
+
 describe("prompts: concern fragment matrix (adr-prompt-fragment-matrix)", () => {
   const builtinDir = path.resolve("agents");
-
-  function sampleVars(fragment: string): Record<string, string> {
-    const vars: Record<string, string> = {};
-    for (const name of KNOWN_VARS[fragment] ?? []) vars[name] = `sample-${name}`;
-    return vars;
-  }
 
   it("registers concernsYaml for every concern-producing and triaging fragment", () => {
     for (const fragment of CONCERN_FRAGMENTS) {

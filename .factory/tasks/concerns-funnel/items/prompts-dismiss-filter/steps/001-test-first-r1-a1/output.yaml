@@ -1,0 +1,62 @@
+status: ok
+summary: "Authored test-first contract for adr-dismiss-criteria-row in
+  plugins/software-factory/test/prompts.test.ts only (production untouched).
+  Added a new describe with 3 tests: (1) dispositions.md must carry a terse
+  dismiss table row (triager-only, reason, kept) plus a dismiss rule bullet; (2)
+  formatDispositionsSection must filter dismiss rows/rules when the allowed set
+  excludes dismiss (QA case) and keep them when it includes dismiss (reviewer
+  case), while still filtering human-stop; (3) end-to-end render test derives
+  allowed sets via resolveReviewAllowed/isTriagerAgent from the real pipeline
+  config and asserts steps/qa excludes dismiss entirely while steps/review
+  retains the exact dismiss criteria row and rule. Moved the existing sampleVars
+  render helper to module scope for reuse instead of duplicating it. All 3 new
+  tests fail on current production with AssertionError (not collection/import
+  errors); existing 22 prompts tests including the fragment matrix and
+  15-per-fragment/80-total budgets remain green."
+target:
+  selectors:
+    - test/prompts.test.ts
+  expectRed:
+    - "prompts: dismiss disposition contract
+      (adr-dismiss-criteria-row).documents a terse triager-only dismiss row and
+      rule kept on disk"
+    - "prompts: dismiss disposition contract (adr-dismiss-criteria-row).filters
+      dismiss rows and rules unless the allowed set includes dismiss"
+    - "prompts: dismiss disposition contract (adr-dismiss-criteria-row).renders
+      dismiss criteria for triager reviewers but not QA"
+evidence:
+  - "Baseline: `cd plugins/software-factory && TMPDIR=/tmp bun test
+    test/prompts.test.ts` -> 22 pass, 0 fail (test infra verified before writing
+    tests)."
+  - "Red: same command after edits -> 22 pass, 3 fail; all 3 failures are bun
+    AssertionError (`toBeDefined()` on missing dismiss row,
+    `not.toMatch(/dismiss/i)` on unfiltered criteria, `toBeDefined()` on missing
+    row in render test) - no syntax/import/collection errors."
+  - "JUnit probe: `bun test test/prompts.test.ts --reporter=junit
+    --reporter-outfile=/tmp/prompts-junit2.xml` confirms each new testcase is
+    `<failure type=\"AssertionError\">` and yields the exact ids declared in
+    expectRed (classname + '.' + name)."
+  - "Fragment matrix/budgets: the 5 existing matrix/debloat tests in
+    test/prompts.test.ts pass unchanged (part of the 22 green)."
+  - "Full suite: `cd plugins/software-factory && TMPDIR=/tmp bun test` -> 445
+    pass, 2 skip, 3 fail; the only failures are the three new dismiss tests, so
+    no collateral regressions."
+  - "Typecheck: `cd plugins/software-factory && bun run typecheck` -> exit 0
+    (TYPECHECK_OK)."
+  - "Scope: `git status --short` shows only `M test/prompts.test.ts`; no
+    production files changed and no stub files added."
+concerns:
+  - The render test uses the real agents/criteria/dispositions.md content, so
+    the implementation step must add both a `| \`dismiss\` |` table row
+    containing triager/reason/kept wording and a rule bullet mentioning dismiss;
+    filtering must drop any criteria line containing dismiss when it is not
+    allowed (mirroring the human-stop filter) while preserving human-stop
+    behavior.
+  - The QA render assertion requires no /dismiss/i text anywhere in the QA
+    prompt; this holds because agents/steps/qa.md does not mention dismiss
+    today. Future ad-hoc dismiss guidance added to qa.md would intentionally
+    break this contract.
+notes: Test ids are declared in bun's JUnit native form (describe classname +
+  '.' + test name) because the infra testRunner is `cd plugins/software-factory
+  && bun test` with junitArg `--reporter=junit --reporter-outfile={path}` and
+  empty selectorArgs.
