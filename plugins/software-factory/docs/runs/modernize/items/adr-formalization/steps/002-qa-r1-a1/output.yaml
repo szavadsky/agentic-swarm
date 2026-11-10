@@ -1,0 +1,15 @@
+status: approved
+summary: "Docs-only no-behavior item verified: 12 ADRs structured, rumdl clean,
+  zero src/tests diff."
+suggestions:
+  - id: adr012-full-paths
+    disposition: optional
+    summary: ADR-012 examples could include conformance/ path prefix
+    detail: "ADR-012 cites no_try_import_checker.py:80 and beartype_checker.py:21;
+      both verified accurate at HEAD under
+      src/python_setup_lint/checkers/conformance/. Filenames alone are grep-able
+      and correct, so this is polish only: prefixing with conformance/ would
+      save readers one lookup step."
+    location:
+      file: docs/adr/ADR-012.md
+      line: 11

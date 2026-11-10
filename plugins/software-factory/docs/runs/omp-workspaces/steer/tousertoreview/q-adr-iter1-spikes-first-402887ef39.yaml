@@ -1,0 +1,12 @@
+id: q-adr-iter1-spikes-first-402887ef39
+ref: adr-iter1-spikes-first
+disposition: human-awareness
+question: Remarkable architectural decision adr-iter1-spikes-first (Iteration 1
+  runs spikes + measurement only; epics deferred to iteration 2) recorded for
+  awareness.
+draftDecision: Iteration 1 schedules four fact-finder spikes (M1) plus two
+  spike-independent foundation items (M2). No child epics are defined; the
+  iteration-2 architect turn defines epics with spike-informed intents against
+  replanAfter milestones M3-M8.
+status: open
+createdAt: 2026-11-09T23:33:06.252Z

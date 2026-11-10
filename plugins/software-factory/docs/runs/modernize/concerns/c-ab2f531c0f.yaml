@@ -1,0 +1,23 @@
+id: c-ab2f531c0f
+kind: question
+summary: Removing test_runner_private_imports.py broadens the never-linting definition
+detail: The prune precedent 644774e kept this guard after trimming it. Removing
+  it now assumes public-API lint guards are also out of scope; this needs an
+  explicit policy call rather than a mechanical deletion.
+location:
+  file: tests/runner/test_runner_private_imports.py
+  line: 16
+affects:
+  - policy
+  - test-debloat-audit
+severity: low
+status: routed
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: test-debloat-audit
+  lastSeen: 2026-11-10T00:53:21.467Z
+createdAt: 2026-11-10T00:53:21.467Z
+updatedAt: 2026-11-10T02:32:36.259Z
+disposition: optional

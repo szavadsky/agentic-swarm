@@ -1,0 +1,27 @@
+id: c-1882d3f0f7
+kind: assumption
+summary: Production call sites pass constant rule symbols, collapsing the
+  cache-key rule component
+detail: 'Confirmed at HEAD: suppression_justification_checker.py:152,372,383
+  pass rule="unjustified-suppression" and bare_except_comment_checker.py:103,116
+  pass rule="bare-except-comment". _semantic.py:48-58 includes rule in the
+  SHA-256 key, so it is constant per checker; the key also truncates to 64 bits
+  at _semantic.py:59. Impact is in-process only today (no tracked cache), but
+  the tracked-cache design must not assume distinct rule values.'
+location:
+  file: src/python_setup_lint/checkers/conformance/suppression_justification_checker.py
+  line: 152
+affects:
+  - cache-design-spike
+  - decision-cache-impl
+severity: medium
+status: routed
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: final-gate-validation
+  lastSeen: 2026-11-10T00:27:58.391Z
+createdAt: 2026-11-10T00:27:58.391Z
+updatedAt: 2026-11-10T02:23:05.623Z
+disposition: optional

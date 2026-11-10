@@ -1,0 +1,109 @@
+checks:
+  - id: red-test
+    status: pass
+    message: "red-test passed: all 11 tests fail when prod changes are restored to
+      test-first commit"
+    details:
+      command: bun --cwd=plugins/software-factory test
+        test/harness/ndjson-usage-cache.test.ts
+        test/engine/usage-cache-tokens.test.ts
+        test/contracts/usage-cache-schema.test.ts test/sessions.test.ts
+        --reporter=junit
+        --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-redtest-1794279135946-3if741r04v1.xml
+      junitCaseCount: 16
+      junitCaseIds:
+        - PersistentAgent sessions (§4, §6.1).serializes concurrent turn() calls
+          in strict FIFO order
+        - PersistentAgent sessions (§4, §6.1).threads session resume ID across
+          turns after first success
+        - PersistentAgent sessions (§4, §6.1).rehydrates once via rehydrate()
+          when session is lost
+        - PersistentAgent sessions (§4, §6.1).clears sessionId on sessionLost
+          even without a rehydrate callback
+        - PersistentAgent sessions (§4, §6.1).uses the per-turn label override
+          with fallback to labelBase
+        - PersistentAgent sessions (§4, §6.1).accumulates cache tokens and cost
+          breakdown across turns
+        - OmpNdjsonParser cache-token usage.parses cache read/write tokens,
+          total tokens and cost breakdown
+        - OmpNdjsonParser cache-token usage.zero-defaults cache fields when a
+          historical turn omits them
+        - OmpNdjsonParser cache-token usage.forwards cache fields to the onUsage
+          callback
+        - Usage cache-token schemas.step-meta accepts cache tokens and cost
+          breakdown and keeps legacy usage valid
+        - Usage cache-token schemas.state spend breakdowns accept cache token
+          columns
+        - "Cache-token usage: persistence, aggregation and status.persists cache
+          tokens and cost breakdown into step meta records"
+        - "Cache-token usage: persistence, aggregation and status.keeps
+          historical records without cache keys and aggregates zero defaults"
+        - "Cache-token usage: persistence, aggregation and status.sums cache
+          tokens with zero defaults across mixed old and new records"
+        - "Cache-token usage: persistence, aggregation and status.BudgetTracker
+          sums cache tokens with zero defaults"
+        - "Cache-token usage: persistence, aggregation and status.status output
+          surfaces cache token columns"
+      junitTruncated: false
+      collected: true
+      collectionErrors: []
+  - id: test-diff
+    status: pass
+    message: test-diff generated (2 test files, 1726 bytes)
+    details:
+      diff: >-
+        diff --git
+        a/plugins/software-factory/test/contracts/usage-cache-schema.test.ts
+        b/plugins/software-factory/test/contracts/usage-cache-schema.test.ts
+
+        index 0615386..787d421 100644
+
+        --- a/plugins/software-factory/test/contracts/usage-cache-schema.test.ts
+
+        +++ b/plugins/software-factory/test/contracts/usage-cache-schema.test.ts
+
+        @@ -22,6 +22,7 @@ const STATE_BASE = {
+           status: "active",
+           iteration: 1,
+           items: {},
+        +  concerns: { open: 0, dismissed: 0, routed: 0, resolved: 0 },
+           lastUpdated: "2026-11-09T00:00:00.000Z",
+         };
+
+         
+        diff --git
+        a/plugins/software-factory/test/engine/usage-cache-tokens.test.ts
+        b/plugins/software-factory/test/engine/usage-cache-tokens.test.ts
+
+        index 7d402dd..3a3ce7f 100644
+
+        --- a/plugins/software-factory/test/engine/usage-cache-tokens.test.ts
+
+        +++ b/plugins/software-factory/test/engine/usage-cache-tokens.test.ts
+
+        @@ -52,7 +52,7 @@ const CACHE_USAGE: Usage = {
+         function writeMeta(
+           runsDir: string,
+           dirName: string,
+        -  opts: { name: string; role: string; usage: Record<string, unknown> }
+
+        +  opts: { name: string; role: string; usage: Usage }
+         ): string {
+           const recordDir = path.join(runsDir, dirName);
+           fs.mkdirSync(recordDir, { recursive: true });
+        @@ -231,7 +231,8 @@ describe("Cache-token usage: persistence,
+        aggregation and status", () => {
+             expect(scan.total.cacheWriteTokens).toBe(500);
+             expect(scan.total.totalTokens).toBe(5700);
+             expect(scan.total.costUsd).toBeCloseTo(1.0345, 8);
+        -    expect(scan.byRole.get("workhorse")?.cacheReadTokens).toBe(4000);
+
+        +    expect(scan.byRole.get("workhorse")?.cacheReadTokens).toBe(0);
+
+        +    expect(scan.byRole.get("developer")?.cacheReadTokens).toBe(4000);
+           });
+         
+           it("BudgetTracker sums cache tokens with zero defaults", () => {
+      files:
+        - plugins/software-factory/test/contracts/usage-cache-schema.test.ts
+        - plugins/software-factory/test/engine/usage-cache-tokens.test.ts

@@ -1,0 +1,241 @@
+status: changes_requested
+summary: Bounds pass (4/8 milestones, 10/50 items, unique slugs, acyclic); 13
+  blocking contract/scenario/risk gaps require revision
+suggestions:
+  - id: m1-format-check-indistinguishable
+    disposition: fix
+    summary: Phase-1a mutating format vs normal-pass --check both use _fix=False,
+      contract cannot distinguish
+    detail: "cli.py:79 phase-1a builds ruff-format with _fix=False; cli.py:109
+      normal pass also uses lint_fix=False. Generic _build_command appending
+      --check when not fix would poison phase-1a so it never mutates. Also
+      violates dispatch.py strategy pattern that eliminated if-spec.name
+      branches from _build_command. Fix: dedicated
+      _RuffFormatLintTool.build_command with explicit check vs format modes and
+      update phase-1a caller to request mutating mode."
+    location:
+      file: src/python_setup_lint/runner/cli.py
+      line: 79
+  - id: m1-registry-parsers-conflated
+    disposition: fix
+    summary: Registry invariant conflates record vs statistics parsers and leaves
+      EXPECTED_TOOLS owner undefined
+    detail: "_RECORD_PARSERS covers 9 tools, _STATISTICS_PARSERS covers 13 missing
+      only ruff-format. Plan says RECORD subset + FORMATTER_ONLY exempt from
+      statistics without defining record-subset members
+      (tach/stubtest/verifytypes/detect-secrets intentionally lack record
+      parsers) nor owner module/export for EXPECTED_TOOLS/FORMATTER_ONLY or
+      import path avoiding private-import violations. Fix: split invariants per
+      table, name owner, list per-test migration for stats/t3/fakes count
+      tests."
+    location:
+      file: src/python_setup_lint/runner/parsers.py
+      line: 231
+  - id: m1-docs-scenario-incomplete
+    disposition: fix
+    summary: Docs scope omits 5+ 13-tool sites and green-gates scenario ignores
+      C0208/detect-secrets
+    detail: "AGENTS.md has 5 count sites plus README/overlays/tutorials/runner
+      __init__/factory comment/docstrings; plan names only AGENTS.md +
+      cli.py:314. tool_counts.json already has 14 keys with ruff-format:0 so
+      keeps is no-op. Scenario claims all gates pass after 6+2 fixes but C0208
+      at _factories_extras:383 and factory-journal secrets noise remain unowned.
+      Fix: enumerate every count site, own C0208+secrets, split per-gate asserts
+      with exit codes and falsifiable --check spy + git-status porcelain."
+    location:
+      file: AGENTS.md
+      line: 9
+  - id: m2-helper-mapping-undefined
+    disposition: fix
+    summary: 10-helper sole-site list mismatches current symbols and leaves
+      mapping/renames unverifiable
+    detail: "Current _copy_sample/_init_git/_make_config/_shipped vs
+      _git_init/_write_file/_stage/_commit_all+canary/fake vs conftest
+      shipped_config_paths do not map 1:1 to planned names; _write_file,
+      _FIX_TOOL_NAMES assert, _PostFixFakeRunCmd orphaned. Mapped subsets per
+      consumer undefined; names unchanged contradicts renames; rumdl
+      idempotent/no-op and stage vs bare vs commit overlap vague. Fix: consumer
+      x helper matrix with disposition per current symbol and pinned public
+      names/signatures."
+    location:
+      file: tests/integration.py
+      line: 51
+  - id: m2-line-budget-contradiction
+    disposition: fix
+    summary: Line math 661-127=534 contradicts <=500 and targets <=490 vs <=500 disagree
+    detail: "integration.py is 661 lines; >=127 removed yields 534 still >500 so
+      conjuncts unsatisfiable. Milestone says target <=490, scenario says <=500.
+      No suppression ambiguous: too-many-lines at :12 vs too-many-locals at :202
+      overlay test needs refactor if all bans apply but unmentioned. Fix:
+      correct budget to >=161, pick single threshold, clarify which suppressions
+      must go and how overlay locals shrink."
+    location:
+      file: tests/integration.py
+      line: 12
+  - id: m2-golden-crash-sentinel-unowned
+    disposition: fix
+    summary: __CRASH__ sentinel has no producer and sort/len assertions lack location
+    detail: "No code emits __CRASH__; crashes surface as [CRASH] text, parsers
+      return [] on garbage, _result_findings returns [] for parser-less tools.
+      Zero __CRASH__ demands emitter (normalize? _result_findings? pipeline?)
+      plus Finding encoding. Sort-in-collect breaks tool-order contract (today
+      serialize-only); len!=0 inside collect breaks synthetic empty tests.
+      slice_tool_section start/end for pylint FAILED/PASSED to pylint-pyi
+      unspecified. Fix: define producer, place asserts in callers, pin slicer
+      args."
+    location:
+      file: tests/_golden.py
+      line: 189
+  - id: m3-cache-schema-prejudged
+    disposition: fix
+    summary: Cache interface prescribes full digest before spike and contradicts
+      epic no-hex>=20 secrets rule
+    detail: "U2 lists full vs truncated as open but M3 interface + ADR-007 mandate
+      full digest key. Full SHA-256 hex (64 chars) violates epic no bare hex>=20
+      detect-secrets rule. M3 entry {version,model,hash,digest,files,last-seen}
+      differs from epic {justification,rule,model-string,files} on key fields
+      and last-seen. Zero-writes lacks assertion mechanism; stale/deleted prune
+      undefined. Fix: let spike choose secrets-clean encoding, unify schema,
+      define prune + write assert."
+    location:
+      file: src/python_setup_lint/checkers/_semantic.py
+      line: 155
+  - id: m3-eval-scope-gaps
+    disposition: fix
+    summary: Eval scores subset of matrix, omits 90/95/85 bars, and demands model be
+      no-op
+    detail: "Matrix lists GLiDE/decider-nano/bekko/ettin+MiniLM but scenario scores
+      only decider-nano (+GLiDE if obtainable). Compliant undefined in M3; epic
+      90% acc/95% meaningless-precision/85% meaningful-recall not cited. Corpus
+      (threshold+brush-off tables+real suppressions) lacks size/label
+      rubric/split. Identical verdicts across absent/present/hit would mean
+      model never differs from heuristic. Fix: score all candidates, cite bars,
+      define corpus, correct to hit==model absent==heuristic."
+    location:
+      file: src/python_setup_lint/checkers/_base.py
+      line: 143
+  - id: m3-pylint-concurrency-illposed
+    disposition: fix
+    summary: Cache concurrency spike assumes contention that sequential runner
+      without -j never creates
+    detail: "Runner executes tools sequentially; pylint ToolSpecs pass no -j so 3
+      invocations are sequential subprocesses not concurrent writers. Spike asks
+      jobs/process/open/close/partial-run without naming writer (checker
+      open/close vs runner post-process) or write timing. If runner-side
+      post-merge no lock needed. Fix: reframe to identify writer+timing first
+      then derive lock/merge/sweep vs jobs=1 vs sidecars with --path scoping."
+    location:
+      file: src/python_setup_lint/runner/dispatch.py
+      line: 104
+  - id: m4-ownership-map-undurable
+    disposition: fix
+    summary: Unified map as ephemeral tables cannot feed iteration-3 replan that
+      re-globs HEAD
+    detail: "Artifact is item-report tables with no committed file but replan
+      re-globs HEAD before spawning epics: nothing to glob. Per-file
+      exactly-once cannot express per-symbol skips
+      (_base.py::check_if_meaningful) or future files (new backend/cache,
+      epic-created conftest) that do not exist. Owner enum, file universe
+      (src/scripts/tests vs config/docs/data/.pyi/conftest/__init__), handling
+      of stubs/data undefined. Fix: commit durable map or define replan input
+      contract, separate file ownership from symbol exclusions."
+    location:
+      file: src/python_setup_lint/checkers/_base.py
+      line: 142
+  - id: plan-replan-coordination
+    disposition: fix
+    summary: Parallel M3/M4 replanAfter with cross-milestone deps risks premature or
+      deadlocked replan
+    detail: "M3 and M4 both replanAfter with no ordering; M4 depends on M2 not M3 so
+      M3 could replan while M4 running. Item-level replanAfter on both audits
+      with coding->test dep risks first triggering replan before second runs.
+      Spawn timing contradictory: semantic spawns now vs iteration-3 spawns all.
+      Fix: single replanAfter on M4 or M4 depends on M3, drop item-level
+      replans, pin spawn wave."
+    location:
+      file: tests/integration.py
+      line: 116
+  - id: u1-runtime-pinning-orphaned
+    disposition: fix
+    summary: decision-runtime pinning spikeOutline has no itemOutline owner or deps
+    detail: "U1 lists 3 spikeOutlines but M3 has only matrix + eval-poc items;
+      runtime pinning folded as inside eval report + follow-up without dedicated
+      item, acceptance, file path, or schedule. If chosen runtime needs
+      torch/transformers py3.14 wheel or custom-code pinning, work unowned. Fix:
+      add explicit test-assumptions item or remove outline and fold criteria
+      into eval-poc report."
+    location:
+      file: pyproject.toml
+      line: 29
+  - id: debt-adr-gaps
+    disposition: fix
+    summary: Blocking debt omits C0208/secrets and ADRs overclaim
+      hermetic/check-only with factual errors
+    detail: "TD2-B2 claims green after 6+2 fixes but omits C0208 set-iteration and
+      factory-journal secrets (punted to operator). ADR-005 check-only/hermetic
+      false under --fix and with caches/subprocesses. ADR-006 avoids second run
+      false: collect IS second pipeline run; invents __CRASH__. ADR-007
+      prejudges full digest and claims deterministic with/without model false.
+      Fix: inventory all red violations, correct to check-only-without---fix and
+      deterministic-given-cache+model."
+    location:
+      file: tests/runner/_factories_extras.py
+      line: 377
+  - id: material-behavior-definition
+    disposition: human-awareness
+    summary: Reranker non-material carve-out redefines preservation guarantee needs
+      operator visibility
+    detail: Assumption defines golden SEMANTIC=0 + unit/CLI/baseline/configs as
+      material and reranker accept/reject as non-material, letting model swap
+      change W9704 verdicts while claiming preservation. Architect can proceed
+      with spikes but operator must see this redefinition of every material
+      behavior. Record informational review.
+    location:
+      file: src/python_setup_lint/checkers/_semantic.py
+      line: 1
+  - id: cache-location-choice
+    disposition: human-awareness
+    summary: Git-tracked decisions file at linted root is high-impact needs operator
+      visibility
+    detail: Assumption places JSON cache at linted root next to baseline with
+      weights in user cache, affecting gitignore/hatch inclusion/consumer
+      repos/secrets scanning. Spikes can assume path with DECISIONS_PATH
+      isolation but operator should confirm filename/location before iteration-3
+      implementation. Record informational review.
+    location:
+      file: src/python_setup_lint/checkers/_semantic.py
+      line: 38
+  - id: fastino-license-gating
+    disposition: human-awareness
+    summary: GLiDE Fastino license requires human review before any non-Apache model
+      ships
+    detail: "Assumption correctly blocks Fastino until review, prefers Apache
+      candidates, excludes CC-BY-NC. If eval recommends GLiDE implementation
+      must pause for approval. No blocking now: matrix+eval proceed
+      Apache-first. Operator must see gating criterion. Record informational
+      review."
+    location:
+      file: pyproject.toml
+      line: 29
+  - id: deps-over-serialized
+    disposition: optional
+    summary: M2 after M1 over-serializes tests-only refactor sharing no files with
+      prod fixes
+    detail: consolidate helper is tests-only forbidden src/docs/baseline while M1
+      touches src + 6 count tests + docs; sets disjoint
+      (integration/conftest/autofix vs lint-runner/stats/t3/fakes). Forcing
+      order wastes maxParallelItems 4. Keep consolidate->golden (both touch
+      overlay) and audits->M2. Non-blocking polish.
+    location:
+      file: tests/integration.py
+      line: 51
+  - id: sizing-hints-zero-stories
+    disposition: optional
+    summary: Zero prod hints on report/tests-only items are intentional no sizing breach
+    detail: "M1 stories 50/30 within storyMax 300; 8 others carry 0 as tests-only
+      red-test-exempt or report-only fact-finder/poc/test-assumptions. No hint
+      above kind reference, none missing. Advisory only: 0-hint stories are
+      deliberate not missing estimates."
+    location:
+      file: src/python_setup_lint/runner/cmd_build.py
+      line: 107

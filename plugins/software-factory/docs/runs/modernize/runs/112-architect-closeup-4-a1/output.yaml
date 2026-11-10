@@ -1,0 +1,47 @@
+iteration: 4
+status: next-iteration
+summary: "Iteration 4 partially delivered: M1/M2 VERIFIED (secrets filter,
+  factories splits <=500, threshold deduped + SEMANTIC=0 guards, baseline
+  2x<=500, portability grep-zero, prune 4/6 deleted + smoke kept, dispatch split
+  449+102 with live registry). M3 PARTIAL: shim retained with debt note,
+  _source_stream.py missing (3x .stream() copies remain), legacy cleanup missing
+  (_legacy_scan, trivial _legacy_*, astroid 3.x branch, unscoped register). M4
+  PARTIAL: veto backend infra landed (_decision_backend, _semantic rewrite,
+  [semantic]=[], .pyi fix) but normalize diverges from ADR-014, NoBackend
+  absent, decisions/_decision_cache + --refresh-decisions + tach edge missing,
+  slow+with_real_api skeleton + cache round-trip/hypothesis missing, ADR-014/016
+  incomplete. M5 FAILS: baseline [] + golden unchanged but docs exact-strings
+  fail everywhere
+  (semantic-justification/custom-checks/troubleshooting/AGENTS/CHANGELOG/README\
+  /ty.toml/ADR-013..018 stubs). Gates unverifiable read-only. Intent model swap
+  + git cache remain open by design (ADR-016 infra-only); 2 items still running
+  (stream-helper, cache-impl), 3 pending (legacy, semantic-tests, docs)."
+completedMilestones:
+  - M1
+  - M2
+remainingMilestones:
+  - M3
+  - M4
+  - M5
+techDebt:
+  - "M3 stream helper missing: no _source_stream.py, 3 .stream() copies +
+    coverage local helper remain"
+  - "M3 legacy cleanup missing: _legacy_scan, trivial _legacy_*, astroid 3.x
+    branch, unscoped register, no joiner import"
+  - "M3 shim retained: peek_fallback_tools in baseline/__init__/trivial-wrapper
+    with debt note, not deleted"
+  - M4 NoBackend absent; normalize_suppressed_codes diverges from ADR-014
+    join/sort/match
+  - "M4 cache missing: no decisions/_decision_cache, no --refresh-decisions
+    threading, no tach decisions module (blocked-verdict attestation
+    unverifiable)"
+  - "M4 tests missing: slow+with_real_api e2e skeleton, cache
+    round-trip/hypothesis, suppressions present vs no-suppressions contract"
+  - "M5 docs checklist fails everywhere:
+    semantic-justification/custom-checks/troubleshooting/AGENTS/CHANGELOG/READM\
+    E/ty.toml/ADR-013..018"
+  - "Intent open: no CPU decision model wired (FakeBackend only), no
+    .python-setup-decisions.json tracked cache"
+  - "Unverifiable report-only: M1 scope/gate tables, M3 pyi verdict, M4
+    cache/corpus spikes, M5 gate table + golden hash (read-only, no
+    orchestration)"

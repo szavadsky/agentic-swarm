@@ -1,0 +1,273 @@
+status: changes_requested
+summary: Bounds OK (3/8 milestones, 5/50 items, unique slugs, acyclic) but M1
+  golden contract is unimplementable (nullable crash/R0801, missing
+  package/rumdl, overwrite-rc clash, msg-loss) and M2/M3 have sizing, dependency
+  and ownership gaps blocking iteration 2.
+suggestions:
+  - detail: "M1 interface pins Finding as
+      {tool:str,file:str,line:int,col:int,rule:str} but runner emits None for
+      file/line/col on crashes (__CRASH__), R0801 similar-lines spans and R0401
+      cycles. _violation_sort_key explicitly handles None. Dropping those
+      records loses crash detection; coercing to ''/-1 changes diff semantics.
+      Specify nullable schema (file/line/col: str|None etc), POSIX
+      relativization incl. R0801-embedded spans, multiset list-equality
+      preserving duplicates, and custom diff ignoring msg (cannot reuse
+      _compare_violation_lists which includes msg)."
+    disposition: fix
+    id: golden-schema-nullable
+    location:
+      file: src/python_setup_lint/runner/baseline.py
+      line: 133
+    summary: Golden schema forbids None but baseline uses None for crash/R0801/R0401
+  - detail: Existing gate builds RunnerConfig(cwd=project,
+      package_name='minimal_sample') plus a project-local rumdl.toml stripping
+      the tests/data exclusion. M1 interface shows RunnerConfig(cwd,
+      config_paths=shipped_config_paths()) with no package_name and no rumdl
+      override. Without package_name, mypy.stubtest and pyright verify types
+      print SKIPPED and emit zero records; with shipped rumdl exclude, sample
+      AGENTS.md MD findings vanish. Golden would pin a different tool set than
+      the gate. Include package_name and rumdl-override (or explicit
+      shipped_config_paths+make_config contract) in M1 interfaces.
+    disposition: fix
+    id: golden-missing-package-rumdl
+    location:
+      file: tests/integration.py
+      line: 100
+    summary: M1 capture omits package_name and rumdl override, changing tool coverage
+  - detail: _handle_baseline with overwrite_baseline=True always prints 'Baseline
+      saved' and returns 0, masking violations. test_setup_new_and_lint asserts
+      rc!=0 on the same run. Item says both 'Capture with
+      run_lint(...,overwrite_baseline=True)' and 'Prefer extending the pipeline
+      run already in test_setup_new_and_lint over adding a second full run' —
+      unsatisfiable together. Specify either a second full run for capture, or
+      direct _capture_baseline(results) without the baseline arg, preserving the
+      rc!=0 assertion.
+    disposition: fix
+    id: golden-overwrite-rc-conflict
+    location:
+      file: src/python_setup_lint/runner/_cli_helpers.py
+      line: 64
+    summary: overwrite_baseline forces rc=0, clashes with rc!=0 single-run reuse
+  - detail: Today brush-off is 'pre-existing in output' and carry-from is absence of
+      '_carry_from_external+unjustified-suppression' on same line — both need
+      msg/file context. Golden drops msg per ADR-001, leaving only
+      {tool,file,line,col,rule}. Multiple unjustified-suppression rows become
+      indistinguishable. Scenario 'checked against planted rule list ...
+      pre-existing yields unjustified-suppression, carry-from yields none' is
+      unfalsifiable without pinning which file:line corresponds to each fixture
+      or retaining msg for those rows. Define file:line pins or a msg-preserving
+      side assertion.
+    disposition: fix
+    id: golden-brushoff-msg-loss
+    location:
+      file: tests/integration.py
+      line: 139
+    summary: Brush-off/carry assertions unexpressible after msg dropped
+  - detail: "Byte-identical regen needs pinned serialization: json.dump
+      indent/sort_keys/ensure_ascii/trailing newline, POSIX relativization, None
+      encoding, sort key (tool,file,line,col,rule) with None ordering matching
+      _violation_sort_key, and multiset equality preserving duplicate tuples
+      collapsed by msg removal. Also clarify fresh git copy per run vs same tmp
+      dir (detect-secrets bootstrap vs --baseline hook mode differs on second
+      run in same dir). Without this, 'run twice, byte-identical' and 'lists
+      every added/removed' are not falsifiable."
+    disposition: fix
+    id: golden-dump-determinism
+    location:
+      file: src/python_setup_lint/runner/baseline.py
+      line: 182
+    summary: Golden JSON dump/sort/diff/normalization underspecified
+  - detail: integration._init_git does git init + config test@test + git add . (no
+      commit); runner._autofix_helpers._git_init does git init -q + config
+      test@example.com with no add. Autofix conflict tests rely on
+      staged-vs-unstaged states via _stage/_commit_all; switching them to
+      add-all changes conflict semantics and risks false passes/failures. M2
+      interface 'git_init(project:Path)->None' hides email/add/commit choices.
+      Specify exact contract (init+config+add? commit?) and migration for each
+      caller, with conflict-test preservation proof, not just 'golden unchanged,
+      test counts same'.
+    disposition: fix
+    id: git-init-contract
+    location:
+      file: tests/runner/_autofix_helpers.py
+      line: 24
+    summary: Merged git_init changes add/email semantics, risks autofix tests
+  - detail: Item says extract _make_config (package_name + rumdl.toml copy stripping
+      tests/data) into tests/_project_helpers.py, but M2 directionalInterfaces
+      list only copy_sample_project/git_init/shipped_config_paths. _make_config
+      holds gate-critical behavior (package_name enables stubtest/verifytypes;
+      rumdl override enables MD022/MD009/MD012/MD071). Missing contract means
+      implementer may drop override. Add _make_config/project-config builder
+      signature, ownership, and rumdl handling.
+    disposition: fix
+    id: make-config-missing
+    location:
+      file: tests/integration.py
+      line: 83
+    summary: M2 interfaces omit _make_config despite requiring extraction
+  - detail: integration.py is 627 lines. Removable helpers total ~67 lines
+      (_copy_sample/_init_git/_read_violation_rules/_shipped_config_paths/_make_config)
+      plus ~20 lines substring loop if replaced by golden = ~90 lines -> ~537
+      lines, still >500. Even with collect/assert helpers extracted, call sites
+      remain. Scenario 'has <=500 lines and no suppression, test names
+      unchanged' is unachievable by helper extraction alone; needs test-method
+      moves/splits which change node IDs or require new modules. Re-scope (split
+      file, move non-gate tests, or adjust limit with ADR) with line budget
+      evidence.
+    disposition: fix
+    id: integration-500-unachievable
+    location:
+      file: tests/integration.py
+      line: 12
+    summary: M2 500-line target unachievable by helper extraction alone
+  - detail: "test-debloat-audit must judge 'duplicate-of golden' and
+      coding-rules-audit must propose ownership including new
+      tests/_project_helpers.py, but neither audit lists deps on
+      golden-findings-snapshot or consolidate-integration-helpers. Engine may
+      run M3 in parallel with M1/M2, producing stale recommendations. Add deps:
+      both audits after golden; test audit after consolidate (or after
+      golden+assumptions for new counts). Without this, 'disjoint ownership
+      excludes semantic files' cannot be validated."
+    disposition: fix
+    id: audit-missing-deps
+    location:
+      file: tests/integration.py
+      line: 111
+    summary: M3 audits lack deps on golden/consolidate, risk stale analysis
+  - detail: U3 (pylint R0801 ordering, detect-secrets git ls-files, pyright/mypy
+      churn, absolute leakage) is run-twice-and-normalize work with possible
+      src/parser fixes, but planned 'Inside golden-findings-snapshot' story that
+      also declares 'No src/ changes'. If unstable field needs parser/baseline
+      fix, story cannot do it; if it excludes duplicate-code (a planted rule in
+      violations.txt), it contradicts 'every planted rule appears'. Isolate into
+      a spike (or allow src changes) and forbid excluding planted rules without
+      ADR.
+    disposition: fix
+    id: u3-inside-story
+    location:
+      file: src/python_setup_lint/runner/_record_parsers.py
+      line: 29
+    summary: U3 determinism risk embedded in story with No-src-changes ban
+  - detail: TD-1/semantic req5 requires extracting real suppressed codes at
+      suppression_justification/bare-except call sites and regenerating
+      tests/data/golden/... in the same change if heuristic outcomes shift
+      (rule-echo now compares against real code, not 'unjustified-suppression').
+      But epic Out-of-scope forbids tests/integration.py, tests/conftest.py and
+      tests/data/** (owned by root/later epics). No cross-epic golden-update
+      protocol or ownership exception defined; parallel start races M1 creation.
+      Define owner/exception (epic PR touches golden with root review, or root
+      performs regen) and ordering after M1.
+    disposition: fix
+    id: semantic-golden-ownership
+    location:
+      file: src/python_setup_lint/checkers/conformance/suppression_justification_checker.py
+      line: 152
+    summary: Semantic epic must regen golden it is forbidden to own
+  - detail: "M3 interfaces define row shapes
+      {module,section,evidence,category,LoC,owner,fix} but no artifact: item
+      report only, or committed file (design/test-audit)? No path, no consumer
+      for iteration-2 replan, no caller/callee. Also scenario allows blocking
+      debt but techDebt uses only adjacent|impacting and no blocking handling
+      defined. Specify report location/format and how replan consumes disjoint
+      ownership, and define blocking vs impacting."
+    disposition: fix
+    id: audit-report-location
+    location:
+      file: CodingRules.md
+      line: 90
+    summary: Fact-finder report artifact and blocking handling undefined
+  - detail: "Item says 'Delete violations.txt if nothing else references it' but M1
+      scenario 'Plant­ed-rule coverage preserved: checked against the planted
+      rule list' needs that list as oracle. After deletion, oracle vanishes
+      (golden cannot self-validate planted coverage). Either retain
+      violations.txt as human-readable oracle, or define new oracle (e.g.,
+      derived rule set checked into golden test) and update scenario. Deleting
+      without replacement makes coverage check circular."
+    disposition: fix
+    id: violations-delete-vs-list
+    location:
+      file: tests/data/minimal_sample_project/violations.txt
+      line: 1
+    summary: Deleting violations.txt removes planted-rule oracle
+  - detail: Epic owns check_if_meaningful inside _base.py (not whole file),
+      _OPTIONAL_IMPORT_PATTERNS inside no_try_import_checker.py, and
+      TestSuppressionRerankerPipeline inside
+      test_suppression_justification_checker.py, plus new backend/cache modules.
+      M3 says 'Exclude files owned by semantic-decision-model' and 'every
+      src/scripts module listed' / 'each test module' — file-level exclusion
+      contradicts partial ownership and full coverage. Clarify symbol-level
+      exclusions (exact functions/classes/constants) so audits still cover
+      remainder of _base.py, no_try_import, and suppression tests.
+    disposition: fix
+    id: audit-partial-ownership
+    location:
+      file: src/python_setup_lint/checkers/_base.py
+      line: 143
+    summary: File-level exclusion clashes with partial semantic ownership
+  - detail: M2 creates tests/assumptions/__init__.py + 3 contract modules; semantic
+      epic (starting now in parallel) will add runtime-assumption modules under
+      same dir. Concurrent creation of __init__.py/dir risks merge conflicts,
+      and epic cache tests may want new _project_helpers (git_init) before M2
+      lands. Add ordering (epic assumption modules after M2 dir creation) or
+      declare epic must not touch __init__.py. Also third-party item adds tests
+      but only consolidate mentions AGENTS.md count updates — if consolidate
+      runs before assumptions, counts go stale.
+    disposition: fix
+    id: assumptions-parallel-race
+    location:
+      file: pyproject.toml
+      line: 48
+    summary: Parallel creation of tests/assumptions risks conflicts/stale counts
+  - detail: Plan defines reranker accept/reject as non-material to make 'preserve +
+      replace' testable, keeping only heuristic gate outcomes as material. True
+      for dev/CI without the extra (heuristic fallback), but consumers with
+      sentence-transformers installed today get reranker decisions that will
+      change. Spikes will measure accuracy and choose smallest meeting bar, but
+      operator should be aware W9704 may tighten for extra users. No blocking
+      change; informational record warranted.
+    disposition: human-awareness
+    id: material-boundary-impact
+    location:
+      file: src/python_setup_lint/checkers/_semantic.py
+      line: 126
+    summary: Non-material reranker boundary changes extra-user outcomes
+  - detail: Moving from ~/.cache/python-setup/semantic/results.json (gitignored,
+      per-machine, unbounded, truncated-SHA key incl. context) to committed
+      .python-setup-decisions.json (sorted, readable, lock+merge, mark-and-sweep
+      scoped to linted files) makes W9704 reproducible without the extra but
+      adds a committed file to every consumer repo, reviewable diffs, small
+      line-local merge conflicts, and install/setup doc updates. File must avoid
+      high-entropy keys tripping detect-secrets. Architect can decide now;
+      operator should be aware of consumer-repo impact.
+    disposition: human-awareness
+    id: git-cache-consumer-impact
+    location:
+      file: src/python_setup_lint/checkers/_semantic.py
+      line: 38
+    summary: Git-stored cache adds committed file to consumer repos
+  - detail: Three modules each defining class TestImportedPackageBehavior yields
+      identical class names in pytest IDs differentiated only by file path
+      (test_astroid_contracts::TestImportedPackageBehavior::test_...).
+      CodingRules names the category, but distinct class names per file (e.g.,
+      TestAstroidBehavior) or a single parametrized module would improve triage
+      for 'Broken assumption diagnosed at source'. Non-blocking.
+    disposition: optional
+    id: assumption-class-names
+    location:
+      file: CodingRules.md
+      line: 260
+    summary: Identical TestImportedPackageBehavior names across 3 files confuse triage
+  - detail: Runner loops tools sequentially and pylint strategies pass no --jobs
+      (single-process per invocation; three pylint invocations run in series).
+      U2 lock+merge+mark-and-sweep may be over-engineering if spike confirms no
+      parallel writers (pre-commit/lint are single-pipeline). ADR-003 already
+      commits to lock-protected merge before test-assumptions spike pins
+      jobs/close()/partial-run semantics, contradicting 'spikes before design
+      commitments'. Mark ADR-003 cache-write portion provisional pending spike;
+      keep lock only if spike finds true concurrency.
+    disposition: optional
+    id: cache-lock-premature
+    location:
+      file: src/python_setup_lint/runner/cli.py
+      line: 113
+    summary: ADR-003 lock+merge committed before pylint-jobs spike

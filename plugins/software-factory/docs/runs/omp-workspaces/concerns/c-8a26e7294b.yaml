@@ -1,0 +1,24 @@
+id: c-8a26e7294b
+kind: risk
+summary: "Gate environment lacks dependency install: child/item worktrees
+  without infra.setup fail typecheck and tests with `Cannot find package 'yaml'`
+  / missing `@types/bun`."
+detail: Before `bun install --frozen-lockfile` in plugins/software-factory, `bun
+  run typecheck` failed with TS2688 (no @types/bun) and test files failed to
+  resolve `yaml`; after install, typecheck exits 0 and previously failing test
+  files pass. This is the same environmental merge failure that sank the wave-2
+  recovery, so the gate runner must run dependency setup before typecheck/test
+  or docs-only items will keep failing gates.
+location:
+  file: plugins/software-factory/package.json
+severity: medium
+status: routed
+source:
+  record: 002-develop-r1-a2
+  agent: developer
+  step: develop
+  item: spike-findings-recovery-v2
+  lastSeen: 2026-11-10T05:15:50.729Z
+createdAt: 2026-11-10T05:15:50.729Z
+updatedAt: 2026-11-10T05:48:03.252Z
+disposition: human-awareness

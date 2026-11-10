@@ -1,0 +1,29 @@
+context: item
+decision: retry-with-guidance
+persist: true
+rationale: "Exit 127 is unknown-gate, not code defect: item target is gate
+  'tests' (plural) but infra gates are format/lint/test/test-integration
+  (singular 'test'). No failing test named; worktree gates green (pytest 1356
+  passed, lint 14/14, integration 9 passed) and QA drift fixed (code_context
+  reverted to src_line.split). Prior retry kept stale target so same 127
+  recurred. Massive reversions in Current Diff (_tool_specs delete,
+  dispatch/factories/conftest/tests/runner reverts, ADR deletes) are stale-base
+  artifact (branch predates I4 M2 merges), not item content; merge must keep
+  HEAD for non-owned files."
+target:
+  gate: test
+text: "Merge-verify with corrected target gate 'test' (not 'tests'), zero prod
+  content changes. Keep owned files only: NEW _source_stream.py/.pyi,
+  bare_except/suppression (+.pyi), stub/checker.py, stub/coverage.py/.pyi,
+  tests/checkers/test_source_stream.py,
+  tests/assumptions/test_astroid_contracts.py,
+  tests/checkers/test_stub_coverage.py, TestCodeContextDerivation in
+  test_suppression_justification_checker.py (historical first-# split
+  preserved). For all non-owned paths (runner/_tool_specs.*, runner/dispatch.*,
+  tests/checkers/_factories*, tests/runner/_factories*, tests/conftest.py,
+  tests/runner/test_*.py restores, docs/adr/ADR-019..024, .factory/**) take HEAD
+  verbatim; verify git diff vs HEAD shows no deletions outside owned set. Then
+  verify: (1) no conflict markers, (2) uv run pytest -q green, (3) uv run lint
+  green, (4) uv run pytest tests/integration.py -q 9 passed. If gate still 127,
+  capture full merge-verify command + stderr (which binary/gate lookup failed)
+  in evidence."

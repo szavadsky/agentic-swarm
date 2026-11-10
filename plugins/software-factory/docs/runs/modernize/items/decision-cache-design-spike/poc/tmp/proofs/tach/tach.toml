@@ -1,0 +1,15 @@
+interfaces = []
+exclude = ["**/__pycache__"]
+source_roots = ["src"]
+
+[[modules]]
+path = "python_setup_lint.decisions"
+depends_on = []
+
+[[modules]]
+path = "python_setup_lint.checkers"
+depends_on = ["python_setup_lint.decisions"]
+
+[[modules]]
+path = "python_setup_lint.runner"
+depends_on = ["python_setup_lint.decisions"]

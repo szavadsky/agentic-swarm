@@ -1,0 +1,62 @@
+context: item
+decision: split
+outlines:
+  - deps:
+      - golden-determinism-probe
+    description: "Create tests/_golden.py as SOLE golden owner (no pipeline run in
+      this item): UPDATE_ENV=PYTHON_SETUP_LINT_UPDATE_GOLDEN,
+      SEMANTIC_ENV=PYTHON_SETUP_LINT_SEMANTIC; Finding TypedDict
+      {tool,file|None,line|None,col|None,rule}; finding_key(f) None-safe
+      mirroring _violation_sort_key; normalize_record (drop msg, relativize vs
+      project, strip ./, backslash->/, as_posix, assert non-absolute); serialize
+      (json.dump indent=2 sort_keys=True + trailing newline);
+      assert_matches_golden (Counter multiset diff, sorted added/removed;
+      UPDATE=1: pytest.fail('refusing to rewrite golden under CI...') if
+      CI/GITHUB_ACTIONS else warn+rewrite golden+counts together);
+      read_oracle_rules, slice_tool_section, assert_oracle_coverage,
+      assert_tool_coverage. Add tests/test_golden.py (synthetic Finding lists
+      ONLY, no run_lint, no pipeline): finding_key None vs str/int ordering,
+      POSIX normalization, multiset diff exact added/removed, CI-guard fail,
+      coverage asserts, serialization byte-format. Acceptance: `uv run pytest
+      tests/test_golden.py -q` passes; module <=500 lines, formatted. Consumes
+      probe normalization spec; no src/ changes; no golden files yet."
+    kind: story
+    milestoneId: M1
+    slug: golden-helpers-unit
+    title: Golden helpers module with synthetic unit tests
+  - deps:
+      - golden-determinism-probe
+      - golden-helpers-unit
+    description: "Using tests/_golden.py from golden-helpers-unit and the probe
+      report verdict. (1) Commit
+      tests/data/golden/minimal_sample_project_findings.json +
+      ..._tool_counts.json via the helper serialization, outside sample dir,
+      never copied/linted; violations.txt RETAINED. (2) Edit
+      tests/integration.py test_setup_new_and_lint only: keep first run (no
+      baseline, rc!=0) AND retain tool-section/SKIPPED/[CRASH]/W9705 assertions;
+      add dedicated second capture (caller owns tmp, copy, git-init,
+      _make_config, monkeypatched PYTHON_SETUP_LINT_SEMANTIC=0) calling
+      collect_findings; replace substring loop with golden equality +
+      oracle/tool coverage; brush-off/carry as tool-qualified lookups (pylint,
+      mod.py:49 present / :56 absent); drift injection on in-memory copies only.
+      Run captures on temp copies only, never bare `uv run lint` on the repo.
+      Bounded src allowance ONLY if probe proved test-side insufficient:
+      baseline.py relativize/sort + parsers.py|_record_parsers.py ordering, <=40
+      added lines, determinism-only, reviewed diff in report. Acceptance: `uv
+      run pytest tests/integration.py -v`, `uv run pytest tests/test_golden.py
+      -q` pass; regen twice byte-identical; golden+counts byte-stable."
+    kind: dev
+    milestoneId: M1
+    slug: golden-snapshot-wiring
+    title: Commit golden files and wire integration capture
+rationale: "3/3 test-first attempts exhausted with empty diff and no failure
+  log: item couples deterministic unit-testable helpers (None-safe key, POSIX
+  normalize, Counter diff, CI guard) with a heavy 2x14-tool pipeline capture +
+  golden commit + integration rewiring. Test-first cannot progress on the
+  combined scope. Split isolates the pure-logic module with fast synthetic tests
+  from the heavy integration wiring, each independently verifiable; preserves
+  probe dep and bounded-src discipline."
+text: Schedule golden-helpers-unit first (fast, no pipeline);
+  golden-snapshot-wiring consumes it plus the probe spec. Wiring acceptance is
+  baseline-relative (6 pre-existing 13-vs-14 failures persist; no new failures).
+  Do not touch .factory records.

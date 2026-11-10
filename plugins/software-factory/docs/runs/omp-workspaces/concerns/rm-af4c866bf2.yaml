@@ -1,0 +1,21 @@
+id: rm-af4c866bf2
+chosen: Characterize transport via mock omp binary snapshotting argv + file
+  bytes, with only the real-binary --config --version acceptance check behind
+  describe.skipIf.
+alternatives:
+  - Live-model harness turns (paid, flaky)
+  - In-process spawn mocking (bypasses real argv assembly)
+  - Pure-function tests only (cannot pin timestamped prompt filename)
+why: Captures exact harness-to-omp bytes/argv without provider contact (no paid
+  turns) or requiring omp on clean checkout, while still validating overlay
+  acceptance with the real binary when present using preflight's own non-paid
+  validation.
+status: open
+source:
+  record: 002-review-r1-a1
+  agent: reviewer
+  step: review
+  item: transport-byte-stability
+  lastSeen: 2026-11-10T02:46:53.244Z
+createdAt: 2026-11-10T02:46:53.244Z
+updatedAt: 2026-11-10T02:46:53.244Z

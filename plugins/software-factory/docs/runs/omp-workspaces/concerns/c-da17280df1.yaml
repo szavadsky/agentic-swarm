@@ -1,0 +1,24 @@
+id: c-da17280df1
+kind: tech-debt
+summary: runMergeSetup duplicates runner setup logic; timeout/ordering paths untested
+detail: src/core/flows/merge-path.ts:149-172 runMergeSetup duplicates runner.ts
+  setup semantics (stop-on-first-failure, timeout, command+output evidence)
+  without shared helper; no test for sequential stop-on-first-failure ordering
+  or timeout path (tests cover before-gates visibility, before-target,
+  empty/missing no-op, failure evidence with exit 7 + markers). Timeout handling
+  exists in code (:158-164) but is unpinned by tests.
+location:
+  file: plugins/software-factory/src/core/flows/merge-path.ts
+  line: 149
+affects:
+  - m1-omp-de-risk
+severity: low
+status: open
+source:
+  record: 024-plan-close-up-1-a1
+  agent: plan-close-up
+  step: plan-close-up-1
+  iteration: 1
+  lastSeen: 2026-11-10T06:32:04.799Z
+createdAt: 2026-11-10T06:32:04.799Z
+updatedAt: 2026-11-10T06:32:04.799Z

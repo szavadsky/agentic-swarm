@@ -1,0 +1,33 @@
+slug: final-gate-validation
+kind: fact-finder
+title: Final gate table and docs reconciliation check
+assignment: "Root-owned final validation (fact-finder, read-only; findings.md +
+  structured findings; review checks validity; zero repo writes). Record final
+  gate table: format exit 0; lint per-tool results on scoped clean checkout for
+  detect-secrets MemoryError (cite mechanism + HEAD); pytest -q green
+  (pass/skip/deselect counts); integration 9-collected-0-failed with pre-commit
+  env pinned (9 passed with it, 7 passed + 2 skipped without via
+  ensure_precommit_or_skip); golden byte-identical or regen-with-reviewed-diff
+  per hatch report; lint.baseline []; docs reconciliation with must-contain
+  strings (semantic-justification.md: DecisionBackend,
+  .python-setup-decisions.json, ADR-009, prompt-v1; custom-checks.md:
+  DecisionBackend; troubleshooting.md: DECISION_MODEL + RERANKER deprecated;
+  AGENTS.md pipeline: DecisionBackend; CHANGELOG: [semantic] + no-go; AGENTS.md
+  counts to 9-collected contract + ruff-format scope row; CHANGELOG version;
+  README pin; ADR staleness notes per kickoff assignment). Red-cell routing: red
+  cells route back via new root items (root-owned files) or epic follow-up items
+  (epic-owned files), never baseline edits. Covers M3 close-out, TD3-A1/TD3-I2."
+outlineRef: final-gate-validation
+milestone: M3
+wave: 5
+deps:
+  - golden-regen-hatch
+scenarioRefs:
+  - "M3: Iteration closes with evidence"
+citations:
+  - docs/semantic-justification.md:5-14
+  - docs/semantic-justification.md:34-45
+  - AGENTS.md:79-85
+  - AGENTS.md:87-93
+  - lint.baseline:1-1
+  - .gitignore:243-244

@@ -1,0 +1,24 @@
+id: c-3ae71408be
+kind: tech-debt
+summary: peek_fallback_tools debt comment names a completed owner
+detail: baseline.py:18-22 says the shim is debt owned by dispatch-split, but the
+  dispatch split is complete (dispatch.py is 449 lines, no C0302 disable). The
+  comment risks leaving an orphaned export chain; the audit assigns it to
+  runner.
+location:
+  file: src/python_setup_lint/runner/baseline.py
+  line: 18
+affects:
+  - coding-rules-audit
+  - runner
+severity: low
+status: routed
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: coding-rules-audit
+  lastSeen: 2026-11-09T23:33:30.977Z
+createdAt: 2026-11-09T23:33:30.977Z
+updatedAt: 2026-11-10T01:22:03.274Z
+disposition: optional

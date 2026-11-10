@@ -1,0 +1,37 @@
+slug: decision-cache-impl
+kind: dev
+title: Implement tracked decision cache and refresh
+assignment: "Owns NEW python_setup_lint/decisions/_decision_cache.py/.pyi +
+  refresh threading (runner/cli.py --refresh-decisions branch + help text,
+  runner/types.py RunnerConfig.refresh_decisions: bool = False field,
+  runner/_cli_complexity.py _parse_config_args/_build_runner_config threading;
+  --path scoping reuses existing --path plumbing) + tach.toml (sole owner: add
+  decisions module depends_on=[] + checkers/runner depends_on=[decisions]) ONLY,
+  applied onto final runner shape after dispatch split; FORBIDDEN
+  _base/_semantic/_decision_backend, dispatch*/__init__/baseline/parsers,
+  tests/data, baseline. If spike verdict is blocked: merge a no-op attestation
+  citing the blocker (zero prod writes) instead of implementing. Else implement
+  ADR-017 contract as validated by spike (array sorted by (rule, justification,
+  model), indent2 sort_keys; entry + {version, prompt hash, last-seen};
+  secrets-clean encoding; read-only lint hash-asserted zero writes; explicit
+  refresh lockfile + merge + atomic replace in target dir with DECISIONS_PATH
+  test-only isolation; prune auto missing/stale; --path scoping; jobs==1
+  required else loud fail; CI-fail). Must pass all tools incl detect-secrets and
+  tach check. Existing gate contracts unchanged. Verify: tmp round-trip;
+  zero-writes hash; refresh merges + prunes + sorts deterministically
+  (double-run byte-identical); CI-fail + isolation + jobs-guard tests; no new
+  failures vs M1 table; golden hash-equal or shift-reported."
+outlineRef: decision-cache-impl
+milestone: M4
+wave: 4
+deps:
+  - decision-cache-design-spike
+  - runner-compat-shim-removal
+  - runner-dispatch-split
+scenarioRefs:
+  - "M4: Cache read-only plus explicit refresh"
+citations:
+  - src/python_setup_lint/checkers/_semantic.py:37-52
+  - src/python_setup_lint/checkers/_semantic.py:125-189
+  - docs/semantic-justification.md:34-45
+  - .gitignore:243-244

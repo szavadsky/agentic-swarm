@@ -1,0 +1,38 @@
+status: ok
+summary: "Fixed the gate regressions: `ruff format` wanted to wrap the long
+  assertion message introduced in tests/_golden.py's new
+  assert_golden_byte_identical helper (the same failure cascaded into `uv run
+  lint`, which runs ruff format). Reformatted tests/_golden.py only (3
+  insertions, 1 deletion; zero prod lines). Re-verified target suites green (40
+  passed) and format/scoped-lint gates exit 0."
+target:
+  command: uv run pytest tests/test_golden.py tests/integration.py -q
+  customTarget: true
+evidence:
+  - "Format gate: `uv run ruff format --check --config config/ruff.toml src
+    tests` -> '181 files already formatted', exit 0 (was: tests/_golden.py would
+    be reformatted)."
+  - "Target suite: `uv run pytest tests/test_golden.py tests/integration.py -q`
+    -> 40 passed in 83.38s, exit 0."
+  - 'Scoped lint on modified file: `uv run lint --path tests/_golden.py --tools
+    "ruff check,ruff format,pylint tests"` -> ruff check PASSED, ruff format
+    PASSED (1 file already formatted), pylint tests PASSED (10.00/10), exit 0.'
+  - Ruff check on all changed test files (`tests/_golden.py tests/test_golden.py
+    tests/_project_helpers.py tests/integration.py`) -> All checks passed.
+  - Pylint on all changed test files with config/.pylintrc-tests -> 0 messages,
+    score 10.0.
+  - "`git diff --stat` -> only tests/_golden.py changed (3 insertions, 1
+    deletion), confirming 0 production lines modified; git status shows no other
+    worktree changes."
+concerns:
+  - "Full-tree `uv run lint` still reports failures unrelated to this test-only
+    diff and present on the branch base: pylint/pylint-pyi R0914 too-many-locals
+    in src/python_setup_lint/runner/cli.py and ruff SIM102 in
+    src/python_setup_lint/checkers/stub/coverage.py; detect-secrets flags
+    tracked .factory journal records. None are touched by this story."
+  - Verification of the full lint pipeline after the fix was running as a
+    background job; the scoped lint run over the changed file plus the repo-wide
+    format gate cover the regression surface.
+notes: "Only the formatter-induced line wrap changed: the counts-mismatch assert
+  message in assert_golden_byte_identical is now parenthesized across lines. No
+  test logic, selectors, or golden artifacts were altered."

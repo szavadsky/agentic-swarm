@@ -1,0 +1,17 @@
+seq: 6
+name: plan-review-1-1
+attempt: 1
+agent: plan-reviewer
+role: alt-architect
+models:
+  - opencode-go/muse-spark-1.3-contributor
+timeoutSec: 3600
+status: ok
+startedAt: 2026-11-09T23:33:06.487Z
+session: 01a1c2a8-86b8-71b5-988e-29da982c8d5c
+endedAt: 2026-11-09T23:40:10.650Z
+usage:
+  inputTokens: 28896
+  outputTokens: 15650
+  costUsd: 0.006364
+traceRef: /home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/sessions/2026-11-09T23-33-06-872Z_01a1c2a8-86b8-71b5-988e-29da982c8d5c.jsonl

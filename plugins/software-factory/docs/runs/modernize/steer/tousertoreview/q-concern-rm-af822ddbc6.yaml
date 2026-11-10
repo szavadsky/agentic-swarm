@@ -1,0 +1,8 @@
+id: q-concern-rm-af822ddbc6
+ref: final-gate-validation
+disposition: human-awareness
+question: Verified absent at HEAD via glob (never-test-linting-prune wins over
+  import retarget). Consistent with audit prune precedent; no bearing on gate
+  rows. Retain as digest.
+status: open
+createdAt: 2026-11-10T03:32:47.850Z

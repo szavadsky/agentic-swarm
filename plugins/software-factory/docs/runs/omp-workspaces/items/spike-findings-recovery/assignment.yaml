@@ -1,0 +1,64 @@
+slug: spike-findings-recovery
+kind: no-behavior
+title: Recover wave-1 spike findings onto parent branch
+assignment: >-
+  Salvage approved wave-1 spike research stranded on environmentally-failed item
+  branches onto the parent branch. All research steps + reviews are approved;
+  only wave-end merges failed (missing node_modules). Docs only, zero prod
+  lines.
+
+
+  Read-only sources (NEVER checkout/switch branches, NEVER write to .factory/**
+  engine-owned paths; use `git show <branch>:<path>` only):
+
+  - topic/omp-workspaces--spike-omp-isolation ::
+  items/spike-omp-isolation/steps/002-research-r1-a2/output.yaml (+003 review)
+
+  - topic/omp-workspaces--spike-mock-provider ::
+  items/spike-mock-provider/steps/001-research-r1-a1/output.yaml (+002 review)
+
+  - topic/omp-workspaces--spike-cache-key ::
+  items/spike-cache-key/steps/001-research-r1-a1/output.yaml (+002 review)
+
+  - topic/omp-workspaces--spike-repo-rules ::
+  items/spike-repo-rules/steps/001-research-r1-a1/output.yaml (+002 review)
+
+  - parent-branch decisions/001 + 002 rulings (read on parent branch).
+
+
+  Steps:
+
+  1. git-show each research output.yaml + its review output; extract the
+  embedded spike-draft markdown.
+
+  2. Apply each review's optional polish notes ONLY where they correct evidence
+  (e.g. probe-26/18 softening, spec-path fix); do not invent new probes.
+
+  3. Write the four drafts to:
+  plugins/software-factory/docs/spikes/omp-3-isolation.md,
+  omp-4-mock-provider.md, omp-5-cache-keys.md, omp-6-repo-rules.md.
+
+  4. Write items/spike-findings-recovery/RECOVERY.md mapping each M1 scenario
+  (isolation probe matrix, mock-provider seam, cache-keying, repo-rules
+  injection) to branch evidence + followUps for iteration-2 planning
+  (M3/M4/M6/M7/M8).
+
+  5. Verify on parent branch only: all five files exist, each spike doc retains
+  probe-evidence/logs + recommendations sections, RECOVERY.md covers all four M1
+  scenarios.
+
+
+  Acceptance: 4 spike docs + RECOVERY.md present with probe evidence; no prod
+  code changed; no branch checkouts; no .factory/** writes.
+
+
+  Constraints: no-behavior kind; no deps; wave-2 parallel (self-contained,
+  self-heals node_modules via own develop-step gates).
+outlineRef: spike-findings-recovery
+milestone: m1-omp-de-risk
+wave: 2
+citations:
+  - topic/omp-workspaces--spike-omp-isolation:items/spike-omp-isolation/steps/002-research-r1-a2/output.yaml
+  - topic/omp-workspaces--spike-mock-provider:items/spike-mock-provider/steps/001-research-r1-a1/output.yaml
+  - topic/omp-workspaces--spike-cache-key:items/spike-cache-key/steps/001-research-r1-a1/output.yaml
+  - topic/omp-workspaces--spike-repo-rules:items/spike-repo-rules/steps/001-research-r1-a1/output.yaml

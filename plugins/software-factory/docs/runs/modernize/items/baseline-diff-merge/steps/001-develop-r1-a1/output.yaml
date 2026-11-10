@@ -1,0 +1,59 @@
+status: ok
+summary: "Merged the three overlapping baseline-diff test modules (249+308+486
+  lines) into exactly two modules under 500 lines:
+  tests/runner/test_baseline_diff.py (495 lines, _compare_sorted/_diff_baseline
+  semantics) and tests/runner/test_baseline_diff_parsers.py (488 lines,
+  parsers/capture/schema-load); deleted tests/runner/test_baseline_diff_edge.py.
+  Overlapping cases were folded into explicitly named survivors:
+  TestCompareSortedEdgeCases -> TestCompareSorted param cases (all original IDs
+  preserved), three pylint flat-record round-trips -> TestFlatRecordRoundTrip,
+  duplicate rumdl capture -> rumdl_timing_normalised_in_output, and
+  capture-persistence/schema-load cases moved with provenance comments.
+  Exit-code(-11 crash)/baseline-reload pinning limbs preserved; both modules
+  carry no_external_api markers (previously missing on the edge module). Net
+  removal is 3 duplicate cases (78 -> 75 collected), no coverage loss."
+target:
+  gate: uv run pytest tests/runner/test_baseline_diff.py
+    tests/runner/test_baseline_diff_parsers.py -q -m 'slow or not slow'
+evidence:
+  - uv run pytest tests/runner/test_baseline_diff.py
+    tests/runner/test_baseline_diff_parsers.py -q -m 'slow or not slow' -> 75
+    passed (incl. both slow perf cases)
+  - uv run pytest -q -> 1375 passed, 4 skipped, 18 deselected, 0 failed
+  - uv run pytest tests/integration.py -q -> 9 passed
+  - uv run lint (pipefail, exit capture) -> all 14 tools PASSED, PIPELINE_EXIT=0
+  - uv run pytest tests/runner/test_baseline_diff.py
+    tests/runner/test_baseline_diff_parsers.py tests/test_golden.py -q -> 104
+    passed, 2 deselected; golden fixtures unchanged (git status shows only the 3
+    scoped test files)
+  - wc -l -> test_baseline_diff.py 495, test_baseline_diff_parsers.py 488, both
+    <=500; test_baseline_diff_edge.py deleted
+  - AST inventory HEAD vs worktree shows every original class/test preserved
+    except 3 duplicate cases folded into named survivors; merged compare case
+    IDs verified via --collect-only (all 13 params kept)
+  - "uv run ruff check + uv run mypy on both touched modules -> All checks
+    passed / Success: no issues found"
+  - git diff --check -> exit 0; only tests/runner/test_baseline_diff.py,
+    test_baseline_diff_parsers.py, and deleted test_baseline_diff_edge.py
+    changed
+concerns:
+  - Removed 3 duplicate cases (MixedSchema legacy pylint round-trip,
+    MixedShapeLegacy round-trip, duplicate rumdl_text_captured_as_records
+    param); each removal is mapped to its survivor in inline
+    comments/docstrings, and the surviving flat-record test was strengthened
+    with the two-record baseline-shrink assertion from the legacy case.
+  - No CLI or autofix-pinning limbs existed in these three modules, so none were
+    dropped; the exit-code (-11 crash) and baseline-reload limbs were preserved.
+    Autofix pinning remains in the untouched test_autofix_* modules and is not
+    blocking debt for this item.
+  - Shim-removal (peek_fallback_tools/_compare_sorted) is intentionally deferred
+    per assignment; the merged shape is ready for the follow-up serialized
+    shim-removal item.
+  - Pre-existing private parser imports still carry the type-ignore suppressions
+    reported by LSP; out of scope for this tests-only merge and unchanged by it.
+notes: "Survivor map is documented inline: edge TestCompareSortedEdgeCases ->
+  TestCompareSorted param cases; TestMixedSchemaLoad legacy +
+  TestMixedShapeLegacyOutput -> TestFlatRecordRoundTrip;
+  rumdl_text_captured_as_records -> rumdl_timing_normalised_in_output; edge
+  TestCaptureBaselineOnDisk + TestMixedSchemaLoad moved into the parsers module.
+  Perf test names were normalized to the given/then convention."

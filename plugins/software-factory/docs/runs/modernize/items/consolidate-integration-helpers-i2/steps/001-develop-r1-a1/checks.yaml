@@ -1,0 +1,164 @@
+checks:
+  - id: gates
+    status: pass
+    message: Gates passed (4 gates)
+    details:
+      - id: format
+        command: uv run ruff format --check --config config/ruff.toml src tests
+        status: pass
+        durationMs: 160
+        details: 180 files already formatted
+      - id: lint
+        command: uv run lint --tools 'tach check,ruff check,rumdl check,mypy,yamllint,ty
+          check,mypy.stubtest,pyright check,pyright verify
+          types,pylint,pylint-pyi,pylint tests,detect-secrets'
+        status: fail
+        durationMs: 236568
+        details: |-
+          ===================================
+          Configuration
+          [WARN] Warning: No first-party imports were found. You may need to use 'tach mod' to update your Python source roots. Docs: https://docs.gauge.sh/usage/configuration#source-roots
+          ✅ All modules validated!
+
+          ============================================================
+          [ruff check] FAILED (exit=1) [0.0s]
+          ============================================================
+          src/python_setup_lint/checkers/stub/coverage.py:196:5: SIM102 Use a single `if` statement instead of nested `if` statements
+          Found 1 error.
+          No fixes available (1 hidden fix can be enabled with the `--unsafe-fixes` option).
+
+          ============================================================
+          [rumdl check] PASSED [0.0s]
+          ============================================================
+
+          Success: No issues found in 20 files (15ms)
+
+          ============================================================
+          [mypy] PASSED [5.2s]
+          ============================================================
+          Success: no issues found in 56 source files
+
+          ============================================================
+          [yamllint] PASSED [0.1s]
+          ============================================================
+
+          =================================================
+          ... [truncated 1993 bytes] ...
+
+          ============================================================
+          [pylint-pyi] FAILED (exit=8) [9.8s]
+          ============================================================
+          ************* Module python_setup_lint.runner.cli
+          src/python_setup_lint/runner/cli.py:50:0: R0914: Too many local variables (23/20) (too-many-locals)
+
+          --------------------------------------------------------------------
+          Your code has been rated at 10.00/10 (previous run: 10.00/10, +0.00)
+
+
+          ============================================================
+          [pylint tests] FAILED (exit=16) [16.0s]
+          ============================================================
+          {
+              "messages": [
+                  {
+                      "type": "convention",
+                      "symbol": "use-sequence-for-iteration",
+                      "message": "Use a sequence type when iterating over values",
+                      "messageId": "C0208",
+                      "confidence": "HIGH",
+                      "module": "tests.runner._factories_extras",
+                      "obj": "<lambda>",
+                      "line": 383,
+                      "column": 82,
+                      "endLine": 383,
+                      "endColumn": 123,
+                      "path": "tests/runner/_factories_extras.py",
+                      "absolutePath": "/home/slava/aiexp/python-setup.factory-wt/topic_modernize--consolidate-integration-helpers-i2/tests/runner/_factories_extras.py"
+                  }
+              ],
+              "statistics": {
+                  "messageTypeCount": {
+                      "fatal": 0,
+                      "error": 0,
+                      "warning": 0,
+                      "refactor": 0,
+                      "convention": 1,
+                      "info": 0
+                  },
+                  "modulesLinted": 74,
+                  "score": 9.998410174880764
+              }
+          }
+
+          ============================================================
+          [detect-secrets] FAILED (exit=123) [52.4s]
+          ============================================================
+          ERROR: Potential secrets about to be committed to git repo!
+
+          Secret Type: Hex High Entropy String
+          Location:    .factory/tasks/modernize/journal.ndjson:81
+
+          Secret Type: Hex High Entropy String
+          Location:    .factory/tasks/modernize/journal.ndjson:83
+
+          Secret Type: Hex High Entropy String
+          Location:    .factory/tasks/modernize/journal.ndjson:204
+
+          Secret Type: Hex High Entropy String
+          Location:    .factory/tasks/modernize/journal.ndjson:328
+
+          Secret Type: Secret Keyword
+          Location:    .factory/tasks/modernize/runs/051-architect-revise-2-1-a1/output.yaml:230
+
+          Possible mitigations:
+            - For information about putting your secrets in a safer place, please ask in
+              #security
+            - Mark false positives with an inline `pragma: allowlist secret` comment
+
+          If a secret has already been committed, visit
+          https://help.github.com/articles/removing-sensitive-data-from-a-repository
+
+          [pylint] Using rcfile: /home/slava/aiexp/python-setup.factory-wt/topic_modernize--consolidate-integration-helpers-i2/config/.pylintrc
+      - id: test
+        command: uv run pytest -q
+        status: pass
+        durationMs: 80666
+        details: |-
+          [Tach] 1362 tests in 58 files unaffected by changes (~36.4s could be saved). Skip with: pytest --tach
+          [Tach] To disable: pytest -p no:tach (https://docs.gauge.sh/usage/commands#using-the-pytest-plugin-directly)
+          ........................................................................ [  5%]
+          ........................................................................ [ 10%]
+          ......................................................................ss [ 16%]
+          ss...................................................................... [ 21%]
+          ........................................................................ [ 26%]
+          ........................................................................ [ 32%]
+          ........................................................................ [ 37%]
+          ........................................................................ [ 42%]
+          ........................................................................ [ 48%]
+          ........................................................................ [ 53%]
+          ........................................................................ [ 58%]
+          ...................................................................FF... [ 64%]
+          ........................................................................ [ 69%]
+          ......................................................................F. [ 75%]
+          ..
+          ... [truncated 17232 bytes] ...
+          6 failed, 1334 passed, 4 skipped, 18 deselected, 4 warnings in 33.42s
+        failingTests:
+          - tests.runner.test_lint_runner.TestToolSpec.test_tool_spec_given_known_tools_then_present
+          - tests.runner.test_lint_runner.TestToolSpec.test_tool_spec_given_tools_then_autofix_and_no_duplicates
+          - tests.runner.test_lint_runner_stats.test_statistics_parsers_given_all_tools_then_covered
+          - tests.runner.test_t3_coverage.TestParserCompleteness.test_parser_completeness_given_all_tools_then_have_parser
+          - tests.runner.test_testing_fakes.test_run_lint_with_fake_dispatch_invariants[all_13_tools_dispatched]
+          - tests.runner.test_testing_fakes.test_run_lint_with_fake_dispatch_invariants[package_name_none_skips_stubtest_verifytypes]
+      - id: test-integration
+        command: uv run pytest tests/integration.py -q
+        status: pass
+        durationMs: 73005
+        details: |-
+          [Tach] 9 tests in 4 files unaffected by changes (~1m 31s could be saved). Skip with: pytest --tach
+          [Tach] To disable: pytest -p no:tach (https://docs.gauge.sh/usage/commands#using-the-pytest-plugin-directly)
+          .........                                                                [100%]
+          9 passed in 71.48s (0:01:11)
+  - id: tests-only
+    status: pass
+    message: tests-only passed (9 test files changed)

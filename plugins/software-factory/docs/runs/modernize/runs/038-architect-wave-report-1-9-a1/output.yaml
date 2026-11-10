@@ -1,0 +1,85 @@
+context: wave
+decision: amend
+outlines:
+  - deps:
+      - golden-snapshot-wiring
+      - third-party-assumption-tests
+      - consolidate-integration-helpers
+      - docs-counts-sync
+    description: "Read-only audit of src/** and scripts/** vs CodingRules/AGENTS.
+      Semantic exclusions are symbol/file-level (mark skipped, audit rest
+      normally): checkers/_semantic.py+.pyi, new
+      _decision_backend/_decision_cache modules (+.pyi),
+      _base.py::check_if_meaningful (+stub section),
+      no_try_import_checker::_OPTIONAL_IMPORT_PATTERNS. Inventory: .pyi
+      fidelity/private symbols, @beartype + structural suppressions, trivial
+      wrappers/duplicated logic, redundant fallbacks (astroid 3.x), legacy stubs
+      (_FALLBACK_TOOLS, peek_fallback_tools, _compare_sorted re-export),
+      over-long comments, 500-line/R0912/R0915 proximity, structlog/error rules,
+      rumdl tests/data-exclude hack (TD-11). Output: rows {module, section,
+      evidence file:line, category, est. LoC delta, owner, fix} + UNIFIED
+      disjoint-ownership map (this audit is single owner; test-debloat-audit
+      consumes it via inter-dep). Reads final state
+      (post-golden/assumptions/consolidate-v3/docs-counts-sync) + beartype
+      report. Zero repo writes."
+    kind: fact-finder
+    milestoneId: M3
+    replanAfter: true
+    slug: coding-rules-audit
+    title: Inventory CodingRules violations
+  - deps:
+      - golden-snapshot-wiring
+      - third-party-assumption-tests
+      - consolidate-integration-helpers
+      - docs-counts-sync
+      - coding-rules-audit
+    description: "Read-only audit of tests/**. Semantic exclusions (mark skipped):
+      tests/checkers/test_semantic_check.py, test_semantic_threshold.py,
+      TestSuppressionRerankerPipeline class, tests/checkers/conftest.py
+      (epic-created), tests/assumptions runtime/decision/cache modules
+      (epic-created). Per module: behaviors protected; duplicates (incl.
+      golden-covered); CodingRules-Tests violations (first-party mocking,
+      naming, markers, in-file fixtures, _factories.py list[Any] tables, far
+      cases); repo-self-lint tests for removal (test_self_lint_clean.py,
+      AST/source-scanning guards, config re-checks); slow/benchmark; task-ID
+      names. Output: rows {module, behaviors, duplicate-of, recommendation
+      keep|merge|rewrite|remove, surviving coverage, reason, owner} +
+      per-subsystem LoC estimates + per-limb pinning inventory (CLI/exit,
+      baseline/autofix, configs/scopes: surviving test or blocking-debt flag).
+      Owner column aligned to coding-rules-audit v3 unified map (read via
+      inter-dep). Reads final state post-consolidate-v3. Zero repo writes."
+    kind: fact-finder
+    milestoneId: M3
+    replanAfter: true
+    slug: test-debloat-audit
+    title: Inventory redundant and lint-testing tests
+planDelta: "Wave 9 attempted coding-rules-audit-v2 (wave 9) before its
+  consolidate dependency merges (consolidate-v3 is wave 11) — a forward-dep
+  scheduling fault, plus the v2 audits lack the docs-counts-sync dep (cli.py
+  help + AGENTS.md change final HEAD). Replace all four stale pending audit
+  items with v3 outlines sequenced after wave 12: coding audit deps
+  wiring+assumptions+consolidate+docs-sync (single owner of unified map); test
+  audit deps wiring+assumptions+consolidate+docs-sync+coding-audit. Remove
+  pending originals (wave 4/5, dep on superseded snapshot, never ready) and v2
+  copies (waves 9/10, forward dep). Blocked consolidate-v2 (status blocked, not
+  pending, cannot remove) is superseded by v3 — engine should ignore it. No
+  merged history touched."
+rationale: "Wave 9 merged 0 with coding-rules-audit-v2 blocked-by-failure; tree
+  clean, all 4 gates baseline-identical, zero regressions. Root cause is
+  structural, not content: v2 audits (waves 9/10) are scheduled before
+  consolidate-v3 (wave 11) they depend on, and predate the docs-counts-sync
+  (wave 12) dep needed for final-HEAD reads. Re-versioning both audits with
+  corrected deps unblocks M3; originals (waves 4/5) are dead on the superseded
+  snapshot dep."
+removeItemSlugs:
+  - coding-rules-audit
+  - coding-rules-audit-v2
+  - test-debloat-audit
+  - test-debloat-audit-v2
+text: "Next: run wave 11 consolidate-v3 (tests-only, golden+counts
+  byte-identical), then wave 12 docs-counts-sync, then new audit v3 items in
+  order (coding first, test reads its unified map). Engine: ignore blocked
+  consolidate-v2 (superseded by v3); do not run removed originals/v2 audits.
+  Temp copies only, never bare uv run lint; do not touch .factory records.
+  Baseline SIM102/W9704/R0914/C0208 + 6 tool-count failures stay scoped to M3
+  audits/iter2; ruff-format --check remains operator action."

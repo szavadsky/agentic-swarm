@@ -1,0 +1,10 @@
+context: wave
+decision: continue
+rationale: Wave 4 merged 1/1 (never-test-linting-prune) with clean hygiene and
+  zero regressions; lint/test fail->pass IMPROVED, format/integration sustained
+  green, all gates pass. No failed/blocked items. Running decision-cache-impl
+  and checkers-stream-helper remain in flight under prior consult guidance;
+  pending legacy/tests/docs chain intact. Producer follow-up noted in
+  human-awareness is post-merge tracking, not a wave-4 amendment.
+text: Proceed to next scheduled wave. No plan change; cache producer gap to be
+  assessed after decision-cache-impl merges.

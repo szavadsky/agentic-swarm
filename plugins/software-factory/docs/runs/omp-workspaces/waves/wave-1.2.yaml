@@ -1,0 +1,12 @@
+wave: 2
+iteration: 1
+status: has_failures
+mergedItems:
+  - usage-cache-tokens
+  - transport-byte-stability
+  - merge-setup-fix
+failedItems:
+  - spike-findings-recovery
+blockedItems: []
+summary: "Wave 2 completed. Merged items: usage-cache-tokens,
+  transport-byte-stability, merge-setup-fix"

@@ -1,0 +1,27 @@
+blockedItems: []
+debt:
+  - "Pre-existing infra debt (not introduced by this wave): documented `uv run
+    lint` still mutates worktree via `ruff format` ToolSpec without
+    --check/--config; declared gates keep format/lint split as workaround (see
+    Infra Operator Action Notes)."
+failedItems: []
+iteration: 1
+mergedItems:
+  - runner-compat-shim-removal
+  - decision-backend-impl
+  - checkers-factories-split
+recommendations:
+  - Proceed to architect review / next wave — no hygiene or gate blockers.
+  - Consider operator fix for `ruff format` ToolSpec (--check + --config) so
+    AGENTS.md `uv run lint` becomes check-only and gates can be reunified.
+status: complete
+summary: "Wave 2 complete: all 3 items merged (runner-compat-shim-removal,
+  decision-backend-impl, checkers-factories-split). Tree hygiene clean in repo
+  scope: no untracked junk, no whitespace errors (git diff --check clean), zero
+  true conflict markers (no <<<<<<< / >>>>>>>; sole ======= match is an RST
+  underline in tests/assumptions/test_pylint_cache_semantics.py:15). Only
+  modified file is engine-owned .factory/tasks/modernize/journal.ndjson, out of
+  repo scope. Gate Diff vs baseline: format pass->pass green, test-integration
+  pass->pass green, lint fail->pass IMPROVED, test fail->pass IMPROVED; zero
+  regressions. All gates now pass."
+wave: 2

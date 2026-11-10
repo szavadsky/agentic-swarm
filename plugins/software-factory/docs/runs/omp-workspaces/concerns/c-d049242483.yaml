@@ -1,0 +1,21 @@
+id: c-d049242483
+kind: risk
+summary: Repo rules hydration is entirely absent
+detail: No AGENTS.md/rules handling exists in `src/`; prompt vars have no
+  repo-rules entry. Whether omp already injects context files for the factory's
+  root processes is unverified, so double-injection is a risk.
+location:
+  file: plugins/software-factory/src/core/prompt-vars.ts
+  line: 9
+affects:
+  - "19.9"
+severity: medium
+status: routed
+source:
+  record: 004-context-pack-a1
+  agent: fact-finder
+  step: context-pack
+  lastSeen: 2026-11-09T23:21:29.949Z
+createdAt: 2026-11-09T23:21:29.949Z
+updatedAt: 2026-11-10T01:01:32.465Z
+disposition: architect

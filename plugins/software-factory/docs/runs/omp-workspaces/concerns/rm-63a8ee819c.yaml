@@ -1,0 +1,18 @@
+id: rm-63a8ee819c
+chosen: Wrote RECOVERY.md at the assigned
+  `items/spike-findings-recovery/RECOVERY.md` item-local path.
+alternatives:
+  - Write a repo-root `items/` copy (not the assigned task-workspace path)
+  - Write under engine-owned `.factory` records (explicitly forbidden)
+why: Step 4 mandates that path (shorthand for the task's `items/` workspace); no
+  engine-owned record (`runs/`, `plan/`, `state.yaml`, `journal.ndjson`,
+  `decisions/`) was modified.
+status: open
+source:
+  record: 001-develop-r1-a1
+  agent: developer
+  step: develop
+  item: spike-findings-recovery
+  lastSeen: 2026-11-10T02:23:11.570Z
+createdAt: 2026-11-10T02:23:11.570Z
+updatedAt: 2026-11-10T02:23:11.570Z

@@ -1,0 +1,26 @@
+iteration: 5
+items:
+  - assignment: "Rename legacy scan and remove dead compat with W9704 byte-identical
+      under SEMANTIC 0. Owns
+      src/python_setup_lint/checkers/conformance/suppression_justification_chec\
+      ker.py _legacy_scan rename plus trivial _legacy_* plus astroid 3.x branch
+      plus unscoped register ONLY plus pyi rows plus
+      tests/checkers/test_suppression_justification_checker.py legacy block
+      ONLY. FORBIDDEN _base, _semantic, _decision_backend plus _source_stream.py
+      which is owned by checkers-stream-helper running in wave 2 and do NOT
+      touch plus tests/data, baseline, docs. Preserves W9704 byte-identical.
+      Supersedes stranded checkers-legacy-dead-cleanup I4 base to be removed by
+      engine. Declare target {'command':'uv run pytest -q','customTarget':true},
+      NEVER {'gate':'tests'}. Verify: grep zero _legacy_* and 3.x branch, pytest
+      plus integration with no new failures, lint 14 of 14, golden hash-equal.
+      Report: rename map, deletion proof, gate counts."
+    citations:
+      - src/python_setup_lint/checkers/conformance/suppression_justification_checker.py
+      - tests/checkers/test_suppression_justification_checker.py
+    deps: []
+    kind: no-behavior
+    milestone: M2
+    outlineRef: checkers-legacy-dead-cleanup-v2
+    slug: checkers-legacy-dead-cleanup-v2
+    title: Rename legacy scan and remove dead compat (v2 rewired)
+    wave: 13

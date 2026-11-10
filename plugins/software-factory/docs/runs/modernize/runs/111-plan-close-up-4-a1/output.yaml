@@ -1,0 +1,79 @@
+iteration: 4
+status: next-iteration
+summary: "M1 verified in-repo only for secrets filter (.secrets.baseline:42-44
+  ^\\.factory/ should_exclude_file, :135 version 1.5.0);
+  scope-table/gate-baseline are report-only non-gating and unverifiable under
+  read-only audit. M2 VERIFIED: checkers factories split (_factories.py 75 lines
+  + 8 domain modules, _factories_stub.py 474, all <=500, grep zero
+  too-many-lines, importers migrated in
+  test_beartype/test_no_try_import/test_stub_*); runner extras split
+  (_factories_extras.py 412 + _small 112); threshold deduped
+  (test_semantic_threshold.py 164 lines, _HEURISTIC_CASES 115 rows) + SEMANTIC=0
+  guards on all 5 suppression + 4 bare-except classes, pipeline block removed
+  for M4; baseline merged to 2x<=500 (test_baseline_diff.py 484 + parsers 485,
+  edge deleted, survivor comments); portability grep-zero (/home/slava,
+  too-many-lines); prune deleted 4/6 self-lint files, smoke kept
+  (test_real_pipeline_smoke.py), 2 retained narrowed. M3 PARTIAL: dispatch split
+  DONE (dispatch.py 449 + _tool_specs.py 102, EXPECTED_TOOL_NAMES:51 from TOOLS,
+  FORMATTER_ONLY:52, RECORDLESS:59, LINT_TOOLS:414 live, register:425, __init__
+  re-exports) but shim NOT removed (baseline.py:26 peek_fallback_tools +
+  __init__.py:17/22/62 + trivial_wrapper_checker.py:33-36 retained with debt
+  comment, grep non-zero), stream helper MISSING (no checkers/_source_stream.py,
+  3x .stream() copies remain suppression:50/:141 bare_except:80, coverage.py:131
+  local helper not migrated), legacy cleanup MISSING (_legacy_scan
+  suppression:61/63+.pyi:21, trivial _legacy_* retained, astroid 3.x body[0]
+  branch :253-271 present, no normalize_suppressed_codes import, register:391
+  unscoped). Pyi spike report-only unverifiable. M4 PARTIAL: backend infra DONE
+  (_decision_backend.py 59 lines: DECISION_THRESHOLD:10=0.5 PROMPT_VERSION:11
+  prompt-v1 DecisionBackend:17 FakeBackend:23 get_backend:50 with
+  PYTEST_CURRENT_TEST guard:39 + once-per-process warnings:51-58; _semantic.py
+  65 lines backend kwarg:35 threshold:63 memo:60-64 no sentence-transformers;
+  _base.py normalize:149 backend kwarg:166 SEMANTIC guard:248 veto:252;
+  [semantic]=[] pyproject:30 uv.lock grep-zero; .gitignore:243-244 retained;
+  _base.pyi doc fixed) BUT normalize implements reason-extractor not ADR-014
+  join/sort/match, NoBackend absent (grep zero), cache MISSING (no
+  python_setup_lint/decisions/, no refresh_decisions in
+  types/cli/_cli_complexity, tach.toml:15-21 only 2 modules), tests missing
+  required exactly-one slow+with_real_api e2e SKELETON (grep zero), cache
+  round-trip/hypothesis absent, ADRs incomplete. M5 FAILS: golden unchanged
+  (tests/data/golden 1d ago, lint.baseline []) but docs exact-strings checklist
+  fails everywhere (semantic-justification.md still
+  sentence-transformers/reranker :3/14/26 no
+  DecisionBackend/veto/FakeBackend/prompt-v1/decisions.json; custom-checks.md:97
+  still reranker-first no DecisionBackend; troubleshooting.md:97-99 still
+  download-failure no MODEL/RERANKER/deprecated; AGENTS.md:79-85 still
+  cross-encoder reranker + stale counts :10-11, Tool Scope missing ruff format;
+  CHANGELOG top v1.2.9 no [semantic]/no-go/1.2.10/decisions.json; README:72
+  v1.2.5 no v1.2.10; ty.toml:8 still sentence_transformers; ADR-013..016 3-line
+  stubs no Context/Decision/Consequences, ADR-017/018 absent). Gates
+  (pytest/lint/integration counts) unverifiable read-only (no bash). Intent
+  model swap + git cache remain open by design (ADR-016 infra-only)."
+completedMilestones:
+  - M1
+  - M2
+remainingMilestones:
+  - M3
+  - M4
+  - M5
+techDebt:
+  - "M3 stream helper missing: no _source_stream.py, 3 .stream() copies +
+    coverage local helper remain"
+  - "M3 legacy cleanup missing: _legacy_scan, trivial _legacy_*, astroid 3.x
+    branch, unscoped register, no joiner import"
+  - "M3 shim retained: peek_fallback_tools in baseline/__init__/trivial-wrapper
+    with debt note, not deleted"
+  - M4 NoBackend absent; normalize_suppressed_codes diverges from ADR-014
+    join/sort/match
+  - "M4 cache missing: no decisions/_decision_cache, no --refresh-decisions
+    threading, no tach decisions module (blocked-verdict attestation
+    unverifiable)"
+  - "M4 tests missing: slow+with_real_api e2e skeleton, cache
+    round-trip/hypothesis, suppressions present vs no-suppressions contract"
+  - "M5 docs checklist fails everywhere:
+    semantic-justification/custom-checks/troubleshooting/AGENTS/CHANGELOG/READM\
+    E/ty.toml/ADR-013..018"
+  - "Intent open: no CPU decision model wired (FakeBackend only), no
+    .python-setup-decisions.json tracked cache"
+  - "Unverifiable report-only: M1 scope/gate tables, M3 pyi verdict, M4
+    cache/corpus spikes, M5 gate table + golden hash (read-only, no
+    orchestration)"

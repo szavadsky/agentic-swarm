@@ -1,0 +1,26 @@
+id: c-9284d9c7f4
+kind: assumption
+summary: Spec line 113's 'omp does not put AGENTS.md in subagent context' is
+  true for omp task subagents, not root role sessions
+detail: The factory's architect/developer/qa/reviewer are root omp processes
+  launched with `--system-prompt`; probes show they already receive repo
+  AGENTS.md/CLAUDE.md/rules from cwd. Only omp `task` subagents (scouts) drop
+  AGENTS.md; they keep RULES.md and contextFiles.extra. Implementing a second
+  factory-side copy for root roles would double-inject (measured 2 copies).
+location:
+  file: docs/factory.v2.md
+  line: 113
+affects:
+  - M1 scenario 4
+  - M8 hydration
+severity: medium
+status: routed
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: spike-repo-rules
+  lastSeen: 2026-11-09T23:58:38.970Z
+createdAt: 2026-11-09T23:58:38.970Z
+updatedAt: 2026-11-10T01:53:41.429Z
+disposition: architect

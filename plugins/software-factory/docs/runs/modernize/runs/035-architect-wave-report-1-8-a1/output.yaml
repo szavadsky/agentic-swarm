@@ -1,0 +1,79 @@
+context: wave
+decision: amend
+outlines:
+  - deps:
+      - golden-snapshot-wiring
+      - third-party-assumption-tests
+    description: "Extract into tests/_project_helpers.py: copy_sample_project,
+      git_init_and_stage (init+config user test/test@test + `git add .`,
+      integration/detect-secrets semantics), git_init_bare (init -q + config
+      Test/test@example.com, no add, autofix semantics — identities NOT
+      unified), stage_file, commit_all, shipped_config_paths, make_runner_config
+      (package_name + rumdl override, preserving _make_config side-effect
+      contract incl. idempotent overwrite and no-op when shipped rumdl missing),
+      build_pylint_overlay_config(project, disable_rule)->Path,
+      ensure_precommit_or_skip()->None, install_twice_assert_idempotent(project,
+      monkeypatch)->None. Delete duplicate defs in conftest.py and
+      _autofix_helpers.py (import instead); integration.py imports only what it
+      uses; test_self_lint_clean.py and autofix tests switch imports.
+      Per-consumer map: integration->{copy, git_init_and_stage,
+      make_runner_config, build_overlay, ensure_precommit, install_twice};
+      conftest->{shipped_config_paths} only; _autofix->{git_init_bare,
+      stage_file, commit_all} only. Line budget (must remove >=127, target
+      <=490): helpers ~58 + oracle reader ~8 + overlay rewrite ~21 + setup
+      scaffolding (fake _run_uv/install-twice) ~20 + precommit scaffolding
+      (probe + validate/config blocks) ~25 + M1 loop/lookup net ~5 +
+      section-slice ~3 + import/docstring trim ~4. integration.py keeps
+      path/class/function names; golden+counts byte-identical; MUST NOT touch
+      AGENTS.md, docs/**, or src/** (test-only enforcement) — AGENTS.md counts +
+      cli.py help sync moved to docs-counts-sync follow-up, leave stale by
+      design. Acceptance: integration, `pytest -q` pass; golden+counts
+      byte-identical; no new lint violations in touched files (pre-existing
+      SIM102/R0914/C0208 persist)."
+    kind: story
+    milestoneId: M2
+    slug: consolidate-integration-helpers
+    title: Single-source helpers; integration.py under 500 lines
+  - deps:
+      - golden-snapshot-wiring
+      - third-party-assumption-tests
+      - consolidate-integration-helpers
+    description: "Follow-up to consolidate (test-only, cannot touch docs/prod).
+      Update AGENTS.md test/tool counts from stale base (1290 pass / 13 tools)
+      to runtime actuals (verify: `uv run pytest --collect-only -q` count incl.
+      new assumption/golden tests + len(TOOLS)==14), count lines only (epic owns
+      AGENTS.md pipeline section, never touch); and
+      src/python_setup_lint/runner/cli.py:314 help text ('all 13 tools' → 'all
+      14 tools'). Prod scope strictly bounded to that one help string (no
+      behavior change). No test changes; golden+counts byte-identical.
+      Acceptance: counts match runtime; `uv run pytest tests/integration.py -v`
+      passes; no new lint violations in touched lines."
+    kind: dev
+    milestoneId: M2
+    slug: docs-counts-sync
+    title: Sync AGENTS.md counts and cli help to 14-tool world
+planDelta: Replace outline consolidate-integration-helpers (drop AGENTS.md
+  counts ownership; forbid AGENTS.md/docs/src edits for test-only enforcement;
+  acceptance baseline-relative) and add docs-counts-sync (dev, M2, deps
+  wiring+assumptions+consolidate; AGENTS.md counts to runtime actuals +
+  cli.py:314 help 13→14; bounded, no behavior change; golden byte-identical).
+  Remove stale pending original consolidate-integration-helpers (wave3, dep on
+  superseded snapshot, never ready). Blocked wave8 v2 is logically superseded by
+  the forthcoming v3 from the replaced outline — engine should cancel/ignore the
+  blocked v2. Audit v2 items unchanged; their consolidate dep is satisfied by
+  the v3 merge. No merged history touched.
+rationale: "Wave 8 merged 0: consolidate-v2 blocked on kind/test-only vs
+  AGENTS.md+cli.py conflict (per steer; all test work done, docs/prod edits
+  correctly reverted). Tree clean, all 4 gates baseline-identical, zero
+  regressions. M2 critical path blocked with audits chained behind consolidate.
+  Unblock by narrowing consolidate to tests-only and moving the docs/prod sync
+  to a bounded dev follow-up; remove the dead wave3 original."
+removeItemSlugs:
+  - consolidate-integration-helpers
+text: "Next: schedule new consolidate (v3) first (tests-only, golden+counts
+  byte-identical), then docs-counts-sync, then coding-rules-audit-v2 and
+  test-debloat-audit-v2. Engine: cancel/ignore blocked consolidate-v2
+  (superseded by v3); do not run removed wave3 original. Temp copies only, never
+  bare uv run lint; do not touch .factory records. Baseline
+  SIM102/W9704/R0914/C0208 + 6 tool-count failures stay scoped to M3
+  audits/iter2; ruff-format --check remains operator action."

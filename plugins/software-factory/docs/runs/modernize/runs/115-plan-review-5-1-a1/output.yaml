@@ -1,0 +1,18 @@
+status: changes_requested
+summary: "Blocked: orphaned loader deps, M1 future-pins unpassable,
+  producer/checker ownership gap, subprocess call-counts unobservable, last-seen
+  vs byte-identical clash, jobs/hash/tach underspecified, human gates missing."
+suggestions:
+  - detail: "No item depends on backend-loading-assumptions:
+      cache-impl->cache-contracts only; backend-wiring deps
+      eval/runtime/cache/pin/doubles, no loader. Violates M1 S1 'M3/M4 consume
+      via deps'. Also duplicates test_decision_backend.py:117-135 honors/ignores
+      + warn-once. Fix: add backend-wiring dep on loader-contracts; narrow
+      loader-contracts to delta vs existing or fold PROMPT-shape into
+      runtime-pinning; define prod model_id shape (not Fake-only)."
+    disposition: fix
+    id: loader-contracts-orphaned-duplicate
+    location:
+      file: src/python_setup_lint/checkers/_decision_backend.py
+      line: 37
+    summary: Loader assumptions orphaned with no consumer and duplicate existing pins

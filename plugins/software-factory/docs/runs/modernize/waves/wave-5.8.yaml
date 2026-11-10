@@ -1,0 +1,8 @@
+wave: 8
+iteration: 5
+status: has_failures
+mergedItems: []
+failedItems:
+  - consolidate-integration-helpers-v2
+blockedItems: []
+summary: "Wave 8 completed. Merged items: "

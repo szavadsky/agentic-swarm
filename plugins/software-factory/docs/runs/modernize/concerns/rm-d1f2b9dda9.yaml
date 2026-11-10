@@ -1,0 +1,23 @@
+id: rm-d1f2b9dda9
+chosen: Normal lint stays strictly read-only; the explicit refresh writer uses
+  flock + merge + atomic os.replace and enforces effective jobs==1
+alternatives:
+  - Runner-side post-process merge (not needed while lint writes nothing)
+  - Per-writer sidecar files plus a merge (only required if pylint -j is
+    introduced)
+  - Lock-free writer relying on jobs==1 alone (no crash/contention protection
+    for the explicit refresh path)
+why: Reconciles the writer-first verdict (sequential pylint, jobs==1, no write
+  surface during lint) with ADR-010's mandate for crash-safe explicit refresh.
+  Contention fails without writing, atomic failure preserves the old cache, and
+  CI/jobs guards fire before any write.
+status: routed
+source:
+  record: 001-develop-r1-a1
+  agent: developer
+  step: develop
+  item: cache-design-spike
+  lastSeen: 2026-11-09T23:18:39.934Z
+createdAt: 2026-11-09T23:18:39.934Z
+updatedAt: 2026-11-10T02:58:56.108Z
+disposition: optional

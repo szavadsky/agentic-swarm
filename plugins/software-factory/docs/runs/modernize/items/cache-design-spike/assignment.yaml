@@ -1,0 +1,35 @@
+slug: cache-design-spike
+kind: poc
+title: Tracked cache schema and determinism prototype
+assignment: "GOAL: Tracked cache schema and determinism prototype on temp copies
+  per ADR-007 (U2). Prototype on temp copies only; no committed files. Consumes
+  writer-first verdict from pylint-cache-assumptions. STEPS: Design unified
+  tracked schema: JSON array sorted by rule,justification,model with indent 2
+  sort_keys True; entry with justification, rule, model as id rev short12
+  prompt-vN, decision, files sorted POSIX plus spike-decided version, prompt
+  hash, last-seen; key (justification,rule,model) with spike-chosen
+  secrets-clean encoding (no bare hex 20 or more, detect-secrets clean,
+  collision-safe). Refresh via explicit command and flag only (lockfile plus
+  merge plus atomic, CI-guarded, DECISIONS_PATH isolation). Prune: drop
+  empty-files plus stale-model plus age policy if defined. Prove
+  deterministic-given-cache plus model: heuristic-rejected identically False
+  without model contact, accepted plus hit equals persisted verdict, accepted
+  plus miss plus absent equals heuristic True, normal lint zero writes by hash
+  and mtime assert. VERIFY: Temp-copy proof shows zero normal-lint writes, prune
+  drops stale and deleted entries, schema passes detect-secrets. CONSTRAINTS:
+  poc kind confined to item poc folder and temp only."
+outlineRef: cache-design-spike
+milestone: M3
+wave: 3
+deps:
+  - model-candidate-matrix
+  - pylint-cache-assumptions
+scenarioRefs:
+  - M3-2
+citations:
+  - src/python_setup_lint/checkers/_semantic.py:37-52
+  - src/python_setup_lint/checkers/_semantic.py:125-189
+  - docs/semantic-justification.md:34-45
+  - .gitignore:243-244
+  - src/python_setup_lint/checkers/_base.py:142-158
+escalate: true

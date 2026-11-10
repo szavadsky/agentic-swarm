@@ -1,0 +1,17 @@
+id: c-89f3cb5a77
+kind: risk
+summary: decision-cache-impl failed and was abandoned; needs replan
+detail: Item abandoned after consults exhausted per engine record; no code
+  merged for it in wave 4. Requires rescoping before retry.
+affects:
+  - decision-cache-impl
+severity: medium
+status: resolved
+source:
+  record: 138-wave-close-up-5-4-a1
+  agent: wave-close-up
+  step: wave-close-up-5-4
+  iteration: 5
+  lastSeen: 2026-11-09T21:50:23.652Z
+createdAt: 2026-11-09T21:50:23.652Z
+updatedAt: 2026-11-09T22:07:17.438Z

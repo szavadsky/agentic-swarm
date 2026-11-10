@@ -1,0 +1,11 @@
+wave: 2
+iteration: 2
+status: complete
+mergedItems:
+  - baseline-violations-fix
+  - golden-contract-hardening
+  - model-eval-poc
+failedItems: []
+blockedItems: []
+summary: "Wave 2 completed. Merged items: baseline-violations-fix,
+  golden-contract-hardening, model-eval-poc"

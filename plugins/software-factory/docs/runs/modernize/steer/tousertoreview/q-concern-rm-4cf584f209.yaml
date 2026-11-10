@@ -1,0 +1,8 @@
+id: q-concern-rm-4cf584f209
+ref: final-gate-validation
+disposition: human-awareness
+question: Runtime derivation (nested collect-only + dispatch.TOOLS) avoids
+  hardcoded 1360/9/14 drift; correct test-first tradeoff. Unrelated to gate
+  inventory; retain as digest.
+status: open
+createdAt: 2026-11-10T03:32:47.852Z

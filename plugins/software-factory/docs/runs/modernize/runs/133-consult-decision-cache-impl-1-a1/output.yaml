@@ -1,0 +1,17 @@
+context: item
+decision: escalate
+rationale: "Same green-phase ImportError persists across 2 QA rejections despite
+  prior exact-spelling guidance: tests/decisions/test_decision_cache.py:18
+  imports refresh_blockers but red-test worktree prod _decision_cache.py lacks
+  that name, failing collection even with prod restored (6 collected + 1
+  collection error). Item worktree prod/test drift was not closed by weaker
+  model; mechanical export-consistency fix needs stronger execution, not another
+  identical retry round."
+text: "Fix export consistency then prove red/green: ensure
+  src/python_setup_lint/decisions/_decision_cache.py defines and exports
+  refresh_blockers with exact spelling, _decision_cache.pyi declares identical
+  signature, grep both trees, python -c import check, stubtest clean, clear
+  __pycache__, pytest tests/decisions/test_decision_cache.py
+  tests/runner/test_refresh_decisions.py passes with prod / fails red with prod
+  aside / passes restored. Zero scope creep outside owned decisions + CLI
+  threading + tach files."

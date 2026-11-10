@@ -1,0 +1,7 @@
+id: q-concern-rm-057ed6485e
+ref: golden-regen-hatch
+disposition: human-awareness
+question: "Gate accounting: lint/test IMPROVED per Gate Diff with no
+  regressions. Consistent with observed green gates and empty diff."
+status: open
+createdAt: 2026-11-10T02:32:36.424Z

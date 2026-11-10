@@ -1,0 +1,29 @@
+id: c-13b776c9b3
+kind: risk
+summary: Factory records drop cacheRead/cacheWrite/totalTokens/cttl, so spec
+  20's cost-measured defaults cannot be computed from records
+detail: OmpNdjsonParser sums only u.input/u.output/u.cost.total
+  (ndjson.ts:86-99; result at 173-177); Usage (types.ts:7-11) and StepUsage
+  (artifacts.ts:545-549) have no cache fields. A turn's multiple requests are
+  aggregated into one input/output/cost total; the architect's cache-read tokens
+  and cold-resume cost are not attributable. The `-p "/compact"` probe also
+  produced no usage record.
+location:
+  file: plugins/software-factory/src/harness/omp/ndjson.ts
+  line: 86
+affects:
+  - 20a
+  - 20b
+  - 20c
+  - 20d
+severity: high
+status: routed
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: spike-cache-key
+  lastSeen: 2026-11-10T00:16:23.859Z
+createdAt: 2026-11-10T00:16:23.859Z
+updatedAt: 2026-11-10T01:53:41.429Z
+disposition: architect

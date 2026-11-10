@@ -1,0 +1,34 @@
+slug: checkers-legacy-dead-cleanup
+kind: no-behavior
+title: Rename legacy scan and remove dead compat
+assignment: "Owns conformance/*.py (suppression, trivial_wrapper, bare_except,
+  mixins) + stub fidelity rows ONLY; FORBIDDEN _base.py/.pyi incl stale doc
+  (zero diff; backend-impl fixes _base.pyi), no_try_import register
+  line/patterns, tests/data. Depends on decision-backend-impl for the joiner
+  import contract: from python_setup_lint.checkers._base import
+  normalize_suppressed_codes (pinned by backend-impl; this item does not
+  implement join logic). Rename _legacy_scan -> _scan_suppressions
+  (suppression_justification_checker.py:61,63 + .pyi:21, verify at HEAD) with
+  all call sites; remove trivial_wrapper dead _legacy_* unconditionally + peek
+  line iff runner confirms deletion (else keep); delete astroid 3.x
+  body[0].value branch (suppression_justification_checker.py:247-271, verify;
+  floor astroid>=4.0.4); register() scope = conformance/*.py only,
+  missing-beartype justification per ADR-012 (no @beartype added); mixin misc
+  via shared typed base attempt with retain-and-report fallback; call
+  joined-code emission via the imported helper (bare-except keeps single
+  symbol). Fix .pyi fidelity rows. On shift: shift report + CHANGELOG snippet
+  (root regenerates). Verify: grep zero _legacy_scan/_legacy_* (except retained
+  peek if runner kept); no new failures vs M1 table; 51 heuristic outcomes
+  pinned or shift-reported."
+outlineRef: checkers-legacy-dead-cleanup
+milestone: M3
+wave: 3
+deps:
+  - checkers-stream-helper
+  - decision-backend-impl
+  - runner-compat-shim-removal
+scenarioRefs:
+  - "M3: Checkers helper plus legacy without drift"
+citations:
+  - CodingRules.md:90-107
+  - src/python_setup_lint/checkers/conformance/suppression_justification_checker.py:152-158

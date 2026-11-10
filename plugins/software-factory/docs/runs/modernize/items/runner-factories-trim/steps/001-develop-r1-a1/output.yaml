@@ -1,0 +1,58 @@
+status: ok
+summary: "Split the 511-line tests/runner/_factories_extras.py below the pylint
+  max-module-lines limit by moving its self-contained 'Small parametrize tables'
+  group into a new tests/runner/_factories_extras_small.py (byte-identical
+  96-line block), then updated the three consuming test modules to import from
+  the split module. Removed both duplicate `disable=too-many-lines` pragmas (and
+  the stale '502 lines' claim) since neither file now needs one. Final sizes:
+  _factories_extras.py 412 lines, _factories_extras_small.py 112 lines. Scope is
+  tests-only: 1 modified factory, 1 new factory, 3 importers; no src or golden
+  files touched. Full unit suite and the 14-tool lint gate are green."
+target:
+  gate: uv run lint
+evidence:
+  - "Scope check: `git status --short` shows only
+    tests/runner/_factories_extras.py (M),
+    tests/runner/_factories_extras_small.py (new), and the 3 importers
+    test_lint_runner.py, test_lint_runner_integration.py,
+    test_lint_runner_stats.py (M); no src/ or tests/data/golden changes."
+  - "Pack enumeration at HEAD: `tests/runner/_factories_extras*.py` matched
+    exactly 1 module (511 lines); after split it matches 2 modules, 412 and 112
+    lines, both <= 500 with 0 `disable=too-many-lines` pragmas (was 2 at
+    :1,:6)."
+  - "Split fidelity: `diff <(git show HEAD:tests/runner/_factories_extras.py |
+    sed -n '416,511p') <(sed -n '17,112p'
+    tests/runner/_factories_extras_small.py)` =>
+    MOVED_BLOCK_IDENTICAL_96_LINES."
+  - "Behavioral parity: targeted run `uv run pytest
+    tests/runner/test_extra_tools.py tests/runner/test_extra_tools_downstream.py
+    tests/runner/test_lint_runner.py
+    tests/runner/test_lint_runner_integration.py
+    tests/runner/test_lint_runner_stats.py tests/runner/test_testing_fakes.py
+    tests/runner/test_runner_format_contract.py -q` => 264 passed, 2 deselected
+    (identical to pre-change baseline)."
+  - "Full suite: `uv run pytest -q` => 1377 passed, 13 deselected, 4
+    pre-existing warnings, 0 failures."
+  - "Golden hash-equal: `uv run pytest tests/test_golden.py -q` => 31 passed;
+    `git diff --stat -- tests/data/golden` produced no output (golden files
+    untouched)."
+  - "Format-clean: `uv run ruff format --check --config config/ruff.toml` on the
+    5 touched files => '5 files already formatted' (exit 0). `uv run ruff check
+    --config config/ruff.toml` on the same files => 'All checks passed!' (exit
+    0)."
+  - "Pylint tests rcfile: `uv run pylint --rcfile=config/.pylintrc-tests` on the
+    5 touched files => 0 messages, score 10.00 (initial wrong-import-position in
+    the new module fixed by ordering first-party import before the TYPE_CHECKING
+    block)."
+  - "Full quality gate: `uv run lint` => all 14 tools PASSED (tach, ruff format,
+    ruff check, rumdl, mypy, yamllint, ty, mypy.stubtest, pyright check, pyright
+    verify types, pylint, pylint-pyi, pylint tests, detect-secrets),
+    LINT_EXIT=0."
+notes: "Pack verification: the `tests/runner/_factories_extras*.py` glob
+  contains 1 module at HEAD and 2 after the group split; both are under the
+  configured max-module-lines=500. The moved block was copied verbatim, so all
+  parametrize IDs and data values are unchanged. Consumers in
+  test_lint_runner.py and test_lint_runner_integration.py only had their import
+  module renamed; test_lint_runner_stats.py now splits count-table imports from
+  remaining extras imports."
+concerns: []

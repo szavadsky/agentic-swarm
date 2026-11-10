@@ -1,0 +1,18 @@
+id: c-4743ca3658
+kind: assumption
+summary: Index entries for the 13 conflicted paths remain unmerged because git
+  write commands are forbidden in this step
+detail: Working-tree contents are final, marker-free, formatted, and fully
+  verified; staging/committing the resolution is left to the engine as
+  specified.
+severity: low
+status: routed
+source:
+  record: 004-integrate-r1-a1
+  agent: developer
+  step: integrate
+  item: consolidate-integration-helpers-v2
+  lastSeen: 2026-11-09T22:46:16.556Z
+createdAt: 2026-11-09T22:46:16.556Z
+updatedAt: 2026-11-09T22:53:17.406Z
+disposition: architect

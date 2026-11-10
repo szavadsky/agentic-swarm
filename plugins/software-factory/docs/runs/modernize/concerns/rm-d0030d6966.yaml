@@ -1,0 +1,18 @@
+id: rm-d0030d6966
+chosen: Keep tests for shipped python_setup_lint.testing and treat it as product
+  coverage
+alternatives:
+  - Remove it as test-infra self-test
+  - Move testing.py out of the shipped package
+why: src/python_setup_lint/testing.py exposes FakeRunCmd, make_lint_result,
+  test_checked_main and precommit validators to consumers; deleting
+  test_testing_fakes.py would drop shipped-API coverage.
+status: open
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: test-debloat-audit
+  lastSeen: 2026-11-10T00:53:21.467Z
+createdAt: 2026-11-10T00:53:21.467Z
+updatedAt: 2026-11-10T00:53:21.467Z

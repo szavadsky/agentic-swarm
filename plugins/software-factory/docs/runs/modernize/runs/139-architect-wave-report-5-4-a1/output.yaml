@@ -1,0 +1,199 @@
+context: wave
+decision: amend
+outlines:
+  - deps:
+      - cache-contract-assumptions
+    description: "Owns NEW python_setup_lint/decisions/_decision_cache.py + .pyi
+      (__init__, lookup(), resolve_cache_path(), refresh/merge/prune,
+      jobs_from_rcfile, refresh_blockers) + BOTH tach.toml (sole owner, exact
+      3-module TOML, byte-consistent stanzas) + NEW
+      tests/decisions/test_decision_cache.py ONLY. FORBIDDEN
+      _base/_semantic/_decision_backend bodies, CLI threading, checker
+      observation, tests/data, baseline, docs, .gitignore/hatch/.secrets.
+      Implements ADR-019 storage: sorted (rule,justification,model) indent=2
+      sort_keys, entry {justification, rule, model '<id> rev <short12>
+      prompt-vN', score [0,1]+decision, files POSIX} + {version, prompt hash
+      hexdigest[:12], last-seen change-only}, secrets-clean (verbatim SHA
+      structlog-warns + risk-accepted), DECISIONS_PATH test-only under
+      PYTEST_CURRENT_TEST else config.cwd + traversal guard, lockfile O_EXCL
+      retry 5s + merge + atomic replace in target dir, scanned-scope-only
+      missing prune + stale-model whole-entry drop + file-removal/drop-empty,
+      jobs_from_rcfile>1 fails naming file, CI/GITHUB_ACTIONS fail.
+      Export-consistency protocol (I4 ImportError fix): refresh_blockers exact
+      spelling in .py+.pyi, grep both trees, python -c import, stubtest clean,
+      clear __pycache__, prove red/green locally (prod aside fails red, restored
+      passes). Declare target {\"command\":\"uv run pytest
+      -q\",\"customTarget\":true} NEVER {\"gate\":\"tests\"}. Verify: tmp
+      round-trip double-run byte-identical, prune granularity, CI/jobs guards,
+      tach+detect-secrets clean, no new failures, golden hash-equal."
+    escalate: true
+    kind: story
+    milestoneId: M3
+    slug: decision-cache-storage-v2
+    title: Tracked decision cache storage and refresh core (split 1/2)
+  - deps:
+      - decision-cache-storage-v2
+      - source-simplifications
+    description: "Owns runner CLI threading (cli.py --refresh-decisions branch+help,
+      types.py RunnerConfig.refresh_decisions:bool=False, _cli_complexity
+      threading, --path scope reuse) + _semantic.py read-branch +
+      semantic_score()->float|None (+.pyi, clamped [0,1]) + memo
+      (score,decision) tuple onto M2 dict shape + checker observation
+      (suppression+bare-except OBSERVE=1 appends {file via node.root().file,
+      justification, rule, model, score via semantic_score memo reuse, single
+      backend call, no heuristic duplication} to OBSERVE_PATH tmp *.jsonl; unset
+      emits nothing) + NEW tests/runner/test_refresh_decisions.py ONLY. Consumes
+      storage-v2 lookup/refresh (no storage edits). FORBIDDEN
+      _base/_decision_backend bodies, decisions/ internals,
+      dispatch*/baseline/parsers except threading files, tests/data, baseline,
+      docs, tach.toml. Implements hit/miss/absent (rejected->False no read;
+      file-missing->None->True; hit->persisted decision backend-uncalled;
+      miss->one decide, memo only), read-only SHA-256 file-bytes hash
+      (missing=sentinel) unchanged on ordinary run_lint, sidecar merged then
+      deleted. Declare target custom command, never gate tests. Verify:
+      end-to-end checker->sidecar->cache (cited lines, never prune-only),
+      hit/miss table incl backend-uncalled proof, CI-fail + isolation + jobs
+      integration, no new failures, golden hash-equal or shift-reported."
+    escalate: true
+    kind: story
+    milestoneId: M3
+    slug: decision-cache-refresh-wiring-v2
+    title: Cache read branch and refresh wiring (split 2/2)
+  - deps:
+      - decision-cache-refresh-wiring-v2
+    description: "Tests-only, no model needed. Owns NEW
+      tests/test_semantic_on_veto.py (or tests/checkers/test_semantic_on_veto.py
+      — item reports placement; verify no conftest cycle) ONLY. FORBIDDEN src,
+      docs, tests/data/golden writes (hatch sole writer), baseline, child
+      dotted-path imports. Red-test-exempt. COUNTS layer (direct calls,
+      backend=_RecordingBackend kwarg): 1.0 preserves heuristic accepts, 0.0
+      vetoes them, brush-off count 0, one call per unique pair (memo-tuple hit).
+      VERDICTS layer (walks default None->heuristic + subprocess sample run via
+      tmp cache-hit asserting W9704 flips with no model load + no
+      PYTEST_CURRENT_TEST leakage assert). Exactly one slow+with_real_api e2e
+      SKELETON (skipped 'no model wired' until M4 go; on go,
+      model-backend-wiring-v2 wires it). Modules <=500, no suppressions, never
+      test linting. Verify: default suite passes (fake only, no network);
+      skeleton skips; SEMANTIC=0 golden hash-equal."
+    kind: story
+    milestoneId: M4
+    slug: semantic-on-golden-pin-v2
+    title: Pin semantic-on veto path with fake backend (v2 rewired)
+  - deps:
+      - model-eval-poc
+      - decision-runtime-pinning
+      - decision-cache-refresh-wiring-v2
+      - semantic-on-golden-pin-v2
+      - semantic-test-doubles-dedup
+      - backend-loading-assumptions
+    description: "Branches on U1 verdict + recorded human approvals via
+      needs_human->steer workflow (reads Task Status steer answers at execution;
+      absent/negative -> default NO-GO, no pause). GO (compliant model +
+      allowlist + CPU bench + runtime-pinning family tag + steer approvals for
+      license/Fastino + second-rater, answer IDs cited): owns
+      _decision_backend.py/.pyi per-family loader ONLY (transformers ~60 |
+      vendored-glide importlib pinned + GLIDE_MAX_BATCH=1 ~100 | other <=120;
+      model_id per PROD_MODEL_ID_RE; failure->None->heuristic exactly-one
+      warning) + pyproject [semantic] + uv.lock (single networked `uv lock`,
+      then `uv sync --frozen` offline verify) + no_try_import patterns +
+      test_decision_backend.py allowlist pins + test_no_try_import_checker.py +
+      slow e2e skeleton wiring ONLY; FORBIDDEN _semantic/_base zero diff,
+      decisions/, dispatch/CLI, tests/data, baseline, docs.
+      NO-GO/BLOCKED/MISSING-APPROVAL: zero prod writes, no-op attestation citing
+      verdict + blocker + approvals gap + I6 plan. Verify GO: slow e2e passes,
+      default suite no network, SEMANTIC=0 golden hash-equal, lint 14/14; NO-GO:
+      attestation + zero-diff proof."
+    escalate: true
+    kind: story
+    milestoneId: M4
+    slug: model-backend-wiring-v2
+    title: Wire production decision backend (or no-go attestation) (v2 rewired)
+  - deps:
+      - checker-harness-dedup
+      - semantic-test-doubles-dedup
+      - runner-test-helpers-dedup
+      - source-simplifications
+      - decision-cache-refresh-wiring-v2
+      - semantic-on-golden-pin-v2
+      - model-backend-wiring-v2
+      - pyi-scope-fix
+    description: "Docs-only, sole writer in I5. Owns docs/semantic-justification.md
+      (full rewrite, grep-zero 'reranker' case-insensitive) + custom-checks.md +
+      troubleshooting.md (incl deprecated RERANKER_MODEL note + counts + pyi
+      branch strings) + tutorials.md + AGENTS.md + README.md + CHANGELOG.md +
+      config/ty.toml (GO names runtime; NO-GO empty-placeholder; grep-zero
+      sentence_transformers) + ADR-013/015 verify + ADR-014/016 rewrite +
+      ADR-009/002/011 staleness notes + README index 013-016 + 019-024 + NEW
+      ADR-019..024 ONLY. FORBIDDEN src, tests, tests/data, baseline, tach.toml.
+      Red-test-exempt. Counts from rerun actuals; exact-strings per M5 checklist
+      with grep proof per row. Verify: docs-only diff; rumdl clean; no new
+      failures; golden hash-equal."
+    kind: story
+    milestoneId: M5
+    slug: docs-adr-reconciliation-v2
+    title: Reconcile docs, ADRs, and version pins (v2 rewired)
+  - deps:
+      - source-simplifications
+      - decision-cache-refresh-wiring-v2
+      - semantic-on-golden-pin-v2
+      - model-backend-wiring-v2
+      - pyi-scope-fix
+    description: "Sole tests/data/golden writer; FORBIDDEN all other paths. ONLY on
+      reviewed shift report (justification-class + added/removed keys +
+      CHANGELOG snippet + file:line) from behavior items: run
+      PYTHON_SETUP_LINT_UPDATE_GOLDEN=1 locally (never under CI), double-run
+      byte-identical, key-by-key diff review matching shift reports, commit
+      golden + tool counts together. If all declare no-shift: no-op attestation
+      with hash equality. NEVER blind-regen. Verify: regen report with diff
+      review or no-op attestation; integration + test_golden pass."
+    kind: story
+    milestoneId: M5
+    slug: golden-regen-hatch-v2
+    title: Conditional golden regen on shift reports (v2 rewired)
+  - deps:
+      - checker-harness-dedup
+      - semantic-test-doubles-dedup
+      - runner-test-helpers-dedup
+      - source-simplifications
+      - decision-cache-refresh-wiring-v2
+      - semantic-on-golden-pin-v2
+      - model-backend-wiring-v2
+      - pyi-scope-fix
+      - docs-adr-reconciliation-v2
+      - golden-regen-hatch-v2
+    description: "Report-only, zero writes. Record final gate table at HEAD: format
+      exit 0; lint 14/14 per-tool; pytest -q counts; integration
+      9-collected-0-failed; golden hash or regen diff; baseline []; docs
+      exact-strings with INDEPENDENT rerun; :bash proof via git ls-files.
+      Absolute green required (M5 only); red cells fail with routing to I6
+      follow-ups, never baseline edits. Feeds close-up."
+    kind: fact-finder
+    milestoneId: M5
+    slug: final-gate-validation-v2
+    title: Final gate table and docs check (v2 rewired)
+planDelta: Split failed M3 decision-cache-impl (abandoned after consult
+  exhaustion on refresh_blockers export drift) into storage-v2 (decisions/ +
+  tach + tests/decisions, deps cache-contracts) then refresh-wiring-v2 (CLI +
+  _semantic read + observer + tests/runner, deps storage-v2 +
+  source-simplifications). Rewire 5 downstream outlines to v2 chain
+  (semantic-pin, backend-wiring, docs, hatch, gate-table) with scope unchanged.
+  Gates green, tree clean; iteration continues.
+rationale: "Wave 4: 0 merges, 1 failure (decision-cache-impl abandoned after
+  consult exhaustion on green-phase ImportError: test imports refresh_blockers,
+  prod lacked name). Gates all green, tree clean, zero regressions (lint/test
+  fail->pass vs stale red baseline). M3 is blocking (TD5-B2; 5 downstream deps).
+  Single 260-line item repeatedly drifted prod/test; split isolates
+  export-consistency (storage) from wiring (CLI/read/observer) with explicit
+  red/green proof and valid custom-command target (avoids exit-127 'tests'
+  unknown-gate seen on stream-helper). Downstream rewired to v2 chain; scope
+  unchanged."
+removeItemSlugs:
+  - semantic-on-golden-pin
+  - model-backend-wiring
+  - docs-adr-reconciliation
+  - golden-regen-hatch
+  - final-gate-validation
+text: Schedule storage-v2 next (deps cache-contracts only, parallel with
+  source-simplifications); wiring-v2 after both. Enforce export protocol +
+  __pycache__ clear + custom-command target on both. Downstream v2 supersede
+  originals; do not schedule removed slugs.

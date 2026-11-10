@@ -1,0 +1,19 @@
+id: decision-consolidate-integration-helpers-v2-1794264471159
+context: item
+item: consolidate-integration-helpers-v2
+afterRecord: 003-review-r1-a1
+decision: abandon
+timestamp: 2026-11-09T22:47:51.159Z
+rationale: "Merge blocked on unmerged modify/delete conflict in
+  tests/runner/test_self_lint_clean.py (deleted at HEAD by 644774e prune,
+  present on branch) plus 13 unmerged paths (c-4743ca3658). Tip-vs-HEAD reverts
+  I2-I4 merges: state iteration 1,
+  reranker/_base/pyproject/factories/ADRs/golden reverted. Scope already at
+  HEAD: closeup-2 verifies 11 helpers single-sourced + integration.py 498 lines
+  + golden byte-identical via merged consolidate-integration-helpers-i2
+  (wave-2.1); tests/_project_helpers.py exists. Attempt 2/2 exhausted; rebase
+  would be no-op/revert."
+text: No v2 replan. Treat consolidate-integration-helpers-v3 identically at next
+  wave gate (same I1 scope, stale base, superseded by i2); schedule neither.
+  Cover any docs-counts drift via docs-adr-reconciliation-v2 only.
+reason: superseded

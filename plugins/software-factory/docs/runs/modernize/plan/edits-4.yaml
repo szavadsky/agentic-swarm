@@ -1,0 +1,475 @@
+iteration: 4
+amendmentIndex: 0
+items:
+  - assignment: "Tests-only (tests/runner/test_baseline_diff.py +
+      test_baseline_diff_edge.py + test_baseline_diff_parsers.py ONLY,
+      249+308+486 per pack, verify at HEAD). Red-test-exempt. Merge overlapping
+      _compare_sorted/_diff_baseline/_capture_baseline coverage into <=2 modules
+      <=500; each merged case names survivor; preserve CLI/exit/baseline/autofix
+      pinning limbs or flag blocking debt; touched files toward naming/markers.
+      Shim-removal serializes after this item (applies onto merged shape).
+      Verify: tests only; no new failures vs M1 table; golden hash-equal."
+    citations:
+      - CodingRules.md:139-159
+      - CodingRules.md:230-306
+    kind: test-only
+    milestone: M2
+    outlineRef: baseline-diff-merge
+    scenarioRefs:
+      - "M2: Baseline merged with survivors"
+    slug: baseline-diff-merge
+    title: Merge baseline-diff test overlap
+    wave: 1
+  - assignment: "Tests-only (test_semantic_check.py + test_semantic_threshold.py
+      ONLY; FORBIDDEN suppression/bare-except files, src, docs, tests/data).
+      Red-test-exempt. Recount lists at HEAD (30/33 + 50 + 35 per pack, verify
+      actual overlaps) then merge into one deduped parametrized table (outcomes
+      pinned, no behavior change); leave reranker-specific classes untouched;
+      modules <=500 with no suppressions; fix stale 504-vs-506 header. M4
+      preserves this deduped table (handoff via deps; M4 rewrites reranker
+      classes only, must not discard dedup). Verify: tests only; parametrized
+      IDs + outcomes identical in report; no new failures vs M1 table; golden
+      hash-equal."
+    citations:
+      - tests/checkers/test_semantic_check.py:1-7
+      - tests/checkers/test_semantic_check.py:159-257
+      - tests/checkers/test_semantic_threshold.py:19-25
+      - CodingRules.md:139-159
+      - CodingRules.md:230-306
+    kind: test-only
+    milestone: M2
+    outlineRef: semantic-threshold-consolidation
+    scenarioRefs:
+      - "M2: Threshold deduped plus guards pinned"
+    slug: semantic-threshold-consolidation
+    title: Consolidate semantic heuristic tables
+    wave: 1
+  - assignment: "Prototype on tmp copies only; zero committed files. Validate the
+      ADR-017 pinned contract (do not invent alternative): project-root =
+      config.cwd with traversal guard; schema + array sort (rule, justification,
+      model) + non-hex encoding (no bare hex>=20, detect-secrets clean,
+      collision-safe); prune auto missing/stale; lint --refresh-decisions
+      [--path ...]; CI-fail; DECISIONS_PATH test-only; files union POSIX; --path
+      scoping; jobs==1 required; decisions-module placement (ADR-018);
+      memory/time notes (2048 RLIMIT_AS, 3 pylint loads, ONNX vs torch). Consume
+      test_pylint_cache_semantics.py writer-first verdict. Completeness gate:
+      report {verdict: feasible|blocked}; feasible carries every field above + 4
+      tmp proofs (heuristic-rejected False without backend;
+      accepted+hit==persisted; accepted+miss+absent==heuristic True; normal-lint
+      zero writes by hash); blocked carries {blocker, evidence, I5 plan} and
+      impls merge no-op attestations citing it. Feeds backend/cache impls."
+    citations:
+      - src/python_setup_lint/checkers/_semantic.py:37-52
+      - src/python_setup_lint/checkers/_semantic.py:125-189
+      - docs/semantic-justification.md:5-14
+      - docs/semantic-justification.md:34-45
+      - .gitignore:243-244
+    escalate: true
+    kind: poc
+    milestone: M4
+    outlineRef: decision-cache-design-spike
+    scenarioRefs:
+      - "M4: Veto backend without model"
+      - "M4: Cache read-only plus explicit refresh"
+    slug: decision-cache-design-spike
+    title: Prototype tracked-cache schema and refresh
+    wave: 1
+  - assignment: "Tests-only, first writer of 2 files wholly
+      (test_suppression_justification_checker.py +
+      test_bare_except_comment_checker.py). Red-test-exempt. Recount heuristic
+      tests at HEAD (40 W9704 + 11 W9738 per pack, verify) then add
+      monkeypatched SEMANTIC=0 guards to all heuristic tests; leave
+      TestSuppressionRerankerPipeline block untouched for M4 second writer
+      (serialized via dep on this item, not parallel). Outcomes pinned. Verify:
+      tests only; guarded tests pass; no new failures vs M1 table; golden
+      hash-equal."
+    citations:
+      - src/python_setup_lint/checkers/_base.py:142-158
+      - src/python_setup_lint/checkers/conformance/suppression_justification_checker.py:152-158
+      - CodingRules.md:230-306
+    kind: test-only
+    milestone: M2
+    outlineRef: checkers-semantic-guards
+    scenarioRefs:
+      - "M2: Threshold deduped plus guards pinned"
+    slug: checkers-semantic-guards
+    title: Guard heuristic checker tests with SEMANTIC=0
+    wave: 1
+  - assignment: "Owns runner/baseline.py/.pyi + runner/parsers.py re-export lines +
+      shim-asserting lines in the merged baseline-diff tests ONLY (applied onto
+      merged shape from baseline-diff-merge); FORBIDDEN dispatch*/__init__
+      (dispatch-split), types.py/cli-threading (cache-impl), tests/data,
+      baseline edits. Enumerate shim symbols + asserting tests via grep at HEAD
+      (peek_fallback_tools, _FALLBACK_TOOLS, _compare_sorted; incl
+      test_baseline_diff_edge.py:229-236, verify). Delete shims + stale parsers
+      re-exports and update asserting tests; leave __init__ re-export +
+      trivial_wrapper exemptions to dispatch/checkers items. Keep only with
+      in-repo consumer grep evidence + debt note. Verify: grep zero shim symbols
+      (or evidenced with file:line consumers); no new failures vs M1 table;
+      golden hash-equal or shift-reported."
+    citations:
+      - CodingRules.md:90-107
+    deps:
+      - baseline-diff-merge
+    kind: no-behavior
+    milestone: M3
+    outlineRef: runner-compat-shim-removal
+    scenarioRefs:
+      - "M3: Runner split without drift"
+    slug: runner-compat-shim-removal
+    title: Remove runner compat shims
+    wave: 2
+  - assignment: "Sole writer: NEW checkers/_decision_backend.py/.pyi + _base.py/.pyi
+      (veto + injection + normalize_suppressed_codes + on-any-element +
+      stale-doc fix) + _semantic.py/.pyi (rewrite, no sentence-transformers) +
+      no_try_import _OPTIONAL_IMPORT_PATTERNS + register line + pyproject
+      [semantic] block + uv.lock (packaging exception); FORBIDDEN
+      decisions/_decision_cache (cache-impl), _source_stream, ty.toml (docs
+      item), tach.toml (cache-impl), tests/data, .gitignore (legacy .cache lines
+      retained intentionally), hatch (no entry), baseline. If spike verdict is
+      blocked: merge a no-op attestation citing the blocker (zero prod writes)
+      instead of implementing. Else implement ADR-014 pinned values (threshold
+      0.5, prompt-v1, backend=None kwarg on both fns, None mapping,
+      joiner/sort/match, Fake 1.0 + 'fake-backend rev test prompt-v1', structlog
+      once-per-process warnings, empty [semantic] extra + uv.lock no edge,
+      PYTHON_SETUP_LINT_RERANKER_MODEL deprecated,
+      PYTHON_SETUP_LINT_DECISION_MODEL parses but loader None + exactly-one
+      warning) + ADR-010 (PYTEST_CURRENT_TEST-guarded dotted path with loader
+      test pinning both; tach-clean, @beartype, structlog, each <=500). Verify:
+      brush-off never reaches backend; one call per unique pair; SEMANTIC=0
+      equals golden; extra empty; uv.lock grep zero sentence-transformers for
+      extra; loader None + exactly-one warning proven; no new failures vs M1
+      table; golden hash-equal or shift-reported."
+    citations:
+      - src/python_setup_lint/checkers/_semantic.py:1-12
+      - src/python_setup_lint/checkers/_semantic.py:93-122
+      - src/python_setup_lint/checkers/_semantic.py:125-189
+      - src/python_setup_lint/checkers/_base.py:142-158
+      - pyproject.toml:28-31
+      - AGENTS.md:79-85
+    deps:
+      - decision-cache-design-spike
+      - semantic-threshold-consolidation
+    escalate: true
+    kind: dev
+    milestone: M4
+    outlineRef: decision-backend-impl
+    scenarioRefs:
+      - "M4: Veto backend without model"
+    slug: decision-backend-impl
+    title: Implement veto DecisionBackend with FakeBackend
+    wave: 2
+  - assignment: "Owns NEW checkers/_source_stream.py/.pyi + stream read/decode call
+      sites in conformance/stub checkers ONLY; FORBIDDEN _base.py/.pyi (zero
+      diff, semantic-owned), no_try_import register line/patterns (semantic),
+      tests/data, baseline. API (all in _source_stream, @beartype,
+      decode-if-bytes UTF-8 preserving current semantics — item reports exact
+      bytes/str handling verified by tests; tach-clean; <=500 + .pyi):
+      read_module_source(node)->str; is_under_source_root(path,
+      source_roots)->bool (pure; coverage.py migrates its local checker-bound
+      helper to this, passing checker._coverage.patterns.source_roots; _base
+      keeps its existing helper untouched — coexistence documented, future
+      consolidation is backend follow-up);
+      split_trailing_comment(line)->tuple[code, comment|None] adopted by
+      suppression/bare-except trailing paths where mechanical (preceding-comment
+      paths keep local logic unless identical — item reports which). Enumerate
+      sites via grep \\.stream\\(\\) at HEAD (report full list; expect
+      suppression/bare-except/stub families, verify) and replace all (grep zero
+      copies outside helper). Verify: grep zero local copies; git diff --
+      _base.py _base.pyi empty; no new failures vs M1 table; golden hash-equal
+      or shift-reported."
+    citations:
+      - CodingRules.md:90-107
+      - src/python_setup_lint/checkers/conformance/suppression_justification_checker.py:152-158
+    kind: no-behavior
+    milestone: M3
+    outlineRef: checkers-stream-helper
+    scenarioRefs:
+      - "M3: Checkers helper plus legacy without drift"
+    slug: checkers-stream-helper
+    title: Single-source stream read/decode helper
+    wave: 2
+  - assignment: "Tests-only (tests/checkers/_factories*.py + importer modules ONLY;
+      FORBIDDEN src, baseline, docs, tests/data). Red-test-exempt. Recount
+      importers at HEAD via grep (from tests.checkers._factories import|from
+      ._factories import; reviewer names 8 families: beartype, no_try_import,
+      stub, stub_callable, stub_class, stub_coverage, stub_docstring,
+      stub_normalizer — item reports actual paths, 8 vs 9 resolved by recount).
+      Split _factories.py 1393 (disable :15) by checker domain into modules each
+      <=500, no too-many-lines, ParameterSet typing, cases next to tests where
+      mechanical; migrate all importers; delete unused helpers with survivor
+      notes; touched files toward test naming + no_external_api/with_real_api
+      markers. Verify: tests only; no new failures vs M1 table (exits/counts
+      cited); golden hash-equal; format-clean; grep zero too-many-lines in
+      split."
+    citations:
+      - CodingRules.md:139-159
+      - CodingRules.md:230-306
+      - CodingRules.md:90-107
+    kind: test-only
+    milestone: M2
+    outlineRef: checkers-factories-split
+    scenarioRefs:
+      - "M2: Factories split without behavior change"
+    slug: checkers-factories-split
+    title: Split checkers factories by domain
+    wave: 2
+  - assignment: "Owns runner/dispatch*.py + runner/__init__.py (sole __init__
+      writer) + registry tests ONLY (enumerated:
+      tests/runner/test_lint_runner.py incl its stale :7 disable removal,
+      test_lint_runner_stats.py, test_t3_coverage.py, test_testing_fakes.py;
+      recount at HEAD); FORBIDDEN baseline.py/parsers.py (shim item),
+      types.py/_cli_complexity.py/cli.py (cache-impl threading), tests/data,
+      baseline edits, docs. Canonical lists: TOOLS = frozen built-in ToolSpec
+      list (dispatch.py:46, verify); LINT_TOOLS = live mutable registry (:507)
+      mirroring TOOLS plus extras via register_lint_tool — PRESERVED with
+      mutation semantics intact (consumers
+      _select_tools/_config.py:127/cli.py/extra_tools unaffected);
+      EXPECTED_TOOL_NAMES keeps deriving from TOOLS (:144). Split dispatch.py
+      542 (disable :1) into modules each <=500 (registry/strategies/parser-sets)
+      with single-sourced re-exports through runner/__init__.py (same public
+      names: TOOLS, LINT_TOOLS, EXPECTED_TOOL_NAMES, FORMATTER_ONLY,
+      RECORDLESS_TOOLS, STATISTICS/RECORD sets, STRATEGIES, TOOLS_BY_NAME,
+      GenericLintTool, LintTool, register_lint_tool); FORMATTER_ONLY/RECORDLESS
+      explicit; no threshold raises. After shim merges: remove __init__ peek
+      lines (doc :17, import :22, __all__ :62 — verify at HEAD) iff shim
+      deleted, else keep with evidence. Migrate registry/fakes tests to
+      EXPECTED/STATISTICS sets. Verify: no too-many-lines in split; registry
+      tests pass; format exit 0; scoped lint zero new; no new failures vs M1
+      table; golden hash-equal or shift report {justification-class, keys,
+      CHANGELOG snippet, file:line}."
+    citations:
+      - CodingRules.md:90-107
+      - CodingRules.md:139-159
+    deps:
+      - runner-compat-shim-removal
+    escalate: true
+    kind: no-behavior
+    milestone: M3
+    outlineRef: runner-dispatch-split
+    scenarioRefs:
+      - "M3: Runner split without drift"
+    slug: runner-dispatch-split
+    title: Split dispatch registry below limits
+    wave: 3
+  - assignment: "Owns conformance/*.py (suppression, trivial_wrapper, bare_except,
+      mixins) + stub fidelity rows ONLY; FORBIDDEN _base.py/.pyi incl stale doc
+      (zero diff; backend-impl fixes _base.pyi), no_try_import register
+      line/patterns, tests/data. Depends on decision-backend-impl for the joiner
+      import contract: from python_setup_lint.checkers._base import
+      normalize_suppressed_codes (pinned by backend-impl; this item does not
+      implement join logic). Rename _legacy_scan -> _scan_suppressions
+      (suppression_justification_checker.py:61,63 + .pyi:21, verify at HEAD)
+      with all call sites; remove trivial_wrapper dead _legacy_* unconditionally
+      + peek line iff runner confirms deletion (else keep); delete astroid 3.x
+      body[0].value branch (suppression_justification_checker.py:247-271,
+      verify; floor astroid>=4.0.4); register() scope = conformance/*.py only,
+      missing-beartype justification per ADR-012 (no @beartype added); mixin
+      misc via shared typed base attempt with retain-and-report fallback; call
+      joined-code emission via the imported helper (bare-except keeps single
+      symbol). Fix .pyi fidelity rows. On shift: shift report + CHANGELOG
+      snippet (root regenerates). Verify: grep zero _legacy_scan/_legacy_*
+      (except retained peek if runner kept); no new failures vs M1 table; 51
+      heuristic outcomes pinned or shift-reported."
+    citations:
+      - CodingRules.md:90-107
+      - src/python_setup_lint/checkers/conformance/suppression_justification_checker.py:152-158
+    deps:
+      - checkers-stream-helper
+      - decision-backend-impl
+      - runner-compat-shim-removal
+    kind: no-behavior
+    milestone: M3
+    outlineRef: checkers-legacy-dead-cleanup
+    scenarioRefs:
+      - "M3: Checkers helper plus legacy without drift"
+    slug: checkers-legacy-dead-cleanup
+    title: Rename legacy scan and remove dead compat
+    wave: 3
+  - assignment: "Tests-only (tests/runner/_factories_extras*.py + its importers
+      ONLY, enumerated via grep at HEAD and reported; ~16 modules per pack,
+      verify actual). Red-test-exempt. Trim 511 (disables :1,:6, claims 502) to
+      each <=500, collapse duplicate disables to <=1, split by group if needed;
+      touched files toward naming/marker conventions. Verify: tests only; no new
+      failures vs M1 table; golden hash-equal; format-clean."
+    citations:
+      - CodingRules.md:139-159
+      - CodingRules.md:230-306
+      - CodingRules.md:90-107
+    kind: test-only
+    milestone: M2
+    outlineRef: runner-factories-trim
+    scenarioRefs:
+      - "M2: Factories split without behavior change"
+    slug: runner-factories-trim
+    title: Trim runner factories extras below limit
+    wave: 3
+  - assignment: "Tests-only, owns ONLY 4 files
+      (tests/runner/test_lint_runner_integration.py, tests/conftest.py,
+      tests/runner/test_setup.py, tests/runner/test_setup_install.py); FORBIDDEN
+      test_lint_runner.py (dispatch-split owns incl its :7 disable),
+      test_autofix_conflict_integration.py + test_t9_7_compose_pyright_live.py +
+      4 self-lint files (prune owns). Red-test-exempt. Remove stale
+      too-many-lines disables (recount lines at HEAD; 479/418 per pack, verify
+      under-500); replace /home/slava paths (conftest.py:86,
+      test_setup.py:252,277, test_setup_install.py:265-350, verify) with
+      tmp/env/portable fixtures; fix stale count comments in touched files only.
+      Verify: tests only; no new failures vs M1 table; golden hash-equal; grep
+      zero hardcoded checkout in touched files."
+    citations:
+      - CodingRules.md:139-159
+      - CodingRules.md:230-306
+    kind: test-only
+    milestone: M2
+    outlineRef: stale-disables-portability-cleanup
+    scenarioRefs:
+      - "M2: Portability cleaned in owned files"
+    slug: stale-disables-portability-cleanup
+    title: Remove stale disables and hardcoded paths
+    wave: 3
+  - assignment: "Owns NEW python_setup_lint/decisions/_decision_cache.py/.pyi +
+      refresh threading (runner/cli.py --refresh-decisions branch + help text,
+      runner/types.py RunnerConfig.refresh_decisions: bool = False field,
+      runner/_cli_complexity.py _parse_config_args/_build_runner_config
+      threading; --path scoping reuses existing --path plumbing) + tach.toml
+      (sole owner: add decisions module depends_on=[] + checkers/runner
+      depends_on=[decisions]) ONLY, applied onto final runner shape after
+      dispatch split; FORBIDDEN _base/_semantic/_decision_backend,
+      dispatch*/__init__/baseline/parsers, tests/data, baseline. If spike
+      verdict is blocked: merge a no-op attestation citing the blocker (zero
+      prod writes) instead of implementing. Else implement ADR-017 contract as
+      validated by spike (array sorted by (rule, justification, model), indent2
+      sort_keys; entry + {version, prompt hash, last-seen}; secrets-clean
+      encoding; read-only lint hash-asserted zero writes; explicit refresh
+      lockfile + merge + atomic replace in target dir with DECISIONS_PATH
+      test-only isolation; prune auto missing/stale; --path scoping; jobs==1
+      required else loud fail; CI-fail). Must pass all tools incl detect-secrets
+      and tach check. Existing gate contracts unchanged. Verify: tmp round-trip;
+      zero-writes hash; refresh merges + prunes + sorts deterministically
+      (double-run byte-identical); CI-fail + isolation + jobs-guard tests; no
+      new failures vs M1 table; golden hash-equal or shift-reported."
+    citations:
+      - src/python_setup_lint/checkers/_semantic.py:37-52
+      - src/python_setup_lint/checkers/_semantic.py:125-189
+      - docs/semantic-justification.md:34-45
+      - .gitignore:243-244
+    deps:
+      - decision-cache-design-spike
+      - runner-compat-shim-removal
+      - runner-dispatch-split
+    kind: dev
+    milestone: M4
+    outlineRef: decision-cache-impl
+    scenarioRefs:
+      - "M4: Cache read-only plus explicit refresh"
+    slug: decision-cache-impl
+    title: Implement tracked decision cache and refresh
+    wave: 4
+  - assignment: "Tests-only, owns ONLY 6 files wholly
+      (tests/runner/test_self_lint_clean.py, test_config_consistency.py,
+      test_pyright_noise_filter.py, test_runner_private_imports.py,
+      test_t9_7_compose_pyright_live.py, test_autofix_conflict_integration.py);
+      FORBIDDEN all other test files. Red-test-exempt. Remove gate-duplicating
+      tests per never-test-linting boundary (subprocess re-lint, AST
+      re-implementation, config re-checks); hardcoded paths inside owned files
+      handled here (file deleted or path fixed); each removal names survivor
+      (golden/assumption/unit); default full-pipeline pin =
+      tests/runner/test_real_pipeline_smoke.py kept; a named default-collected
+      survivor is allowed only if the report proves smoke itself violates
+      never-test-linting. Keep golden/integration contracts. Verify: tests only;
+      removal-to-survivor map in report; pytest (minus removed) + integration
+      show no new failures vs M1 table; golden hash-equal."
+    citations:
+      - AGENTS.md:87-93
+      - CodingRules.md:230-306
+      - lint.baseline:1
+    kind: test-only
+    milestone: M2
+    outlineRef: never-test-linting-prune
+    scenarioRefs:
+      - "M2: Gate-duplicating tests pruned with pin retained"
+    slug: never-test-linting-prune
+    title: Prune gate-duplicating tests with survivors
+    wave: 4
+  - assignment: "Second writer (after M2 handoffs): threshold 2 files (preserve M2
+      deduped table; rewrite reranker classes only) + suppression-file pipeline
+      block (after guards) + tests/assumptions runtime/decision/cache modules
+      (append-only; deliberate cache-semantics rewrite, not loosened; never
+      touch root __init__ + astroid/beartype/pylint contracts) +
+      semantic-justification.md + custom-checks bullet + troubleshooting section
+      + docs/adr/ADR-014.md + ADR-016.md ONLY; FORBIDDEN AGENTS.md/CHANGELOG.md
+      (snippet in report; docs writes file), tests/data, src. Merge tables
+      pinned (preserved); FakeBackend kwarg + env; cache tmp + hypothesis format
+      incl sort-key determinism; delete vacuous + ImportError-propagation; 4
+      pair tests (test_semantic_check.py:432,453,473,493, verify): deleted iff
+      the class imports/calls sentence-transformers or
+      _load_reranker/_reset_cache (reranker-coupled), else marked slow; full
+      PYTHON_SETUP_LINT_DECISION_MODEL name in tests/docs. Modules <=500, no
+      suppressions, never test linting; exactly one slow+with_real_api e2e
+      SKELETON required (skipped until model). Docs state veto + cache + no-go;
+      ADRs carry Context/Decision/Consequences + pinned values. Verify: no new
+      failures vs M1 table; golden hash-equal or shift-reported; rumdl clean."
+    citations:
+      - tests/checkers/test_semantic_check.py:1-7
+      - tests/checkers/test_semantic_check.py:263-424
+      - tests/checkers/test_semantic_threshold.py:19-25
+      - docs/semantic-justification.md:5-14
+      - docs/semantic-justification.md:56-62
+      - pyproject.toml:49
+    deps:
+      - checkers-semantic-guards
+      - decision-backend-impl
+      - decision-cache-impl
+      - semantic-threshold-consolidation
+    kind: test-only
+    milestone: M4
+    outlineRef: semantic-tests-rewrite
+    scenarioRefs:
+      - "M4: Veto backend without model"
+      - "M4: Cache read-only plus explicit refresh"
+    slug: semantic-tests-rewrite
+    title: Rewrite semantic tests and docs (no AGENTS)
+    wave: 5
+  - assignment: "Sole AGENTS.md + CHANGELOG.md + README.md + config/ty.toml +
+      docs/adr/ADR-013.md + ADR-015.md writer in I4 (after all M2
+      counts-affecting items + M3 registry/behavior items + M4
+      backend/cache/tests); FORBIDDEN
+      semantic-justification/custom-checks/troubleshooting/ADR-014/016
+      (semantic-tests), tach.toml (cache-impl), tests/data, src except ty.toml
+      comment. AGENTS counts from rerun actuals (verify --collect-only +
+      TOOLS==14 + 9-collected contract) + Tool Scope ruff-format row + pipeline
+      subsection (DecisionBackend, no reranker) + testing strategy; CHANGELOG
+      user-visible (extra contents, new/deprecated vars incl full
+      PYTHON_SETUP_LINT_DECISION_MODEL name, cache file, no-go note + version
+      1.2.10); README v1.2.10 pin; ty.toml remove sentence_transformers; ADRs
+      full Context/Decision/Consequences. Verify: docs-only diff; exact-strings
+      grep per M5 checklist (incl ADR-013..016 Context/Decision/Consequences);
+      rumdl clean; no new failures vs M1 table."
+    citations:
+      - AGENTS.md:79-85
+      - AGENTS.md:87-93
+      - AGENTS.md:121-139
+      - pyproject.toml:28-31
+    deps:
+      - baseline-diff-merge
+      - checkers-factories-split
+      - checkers-legacy-dead-cleanup
+      - checkers-semantic-guards
+      - checkers-stream-helper
+      - decision-backend-impl
+      - decision-cache-impl
+      - never-test-linting-prune
+      - runner-compat-shim-removal
+      - runner-dispatch-split
+      - runner-factories-trim
+      - semantic-tests-rewrite
+      - semantic-threshold-consolidation
+      - stale-disables-portability-cleanup
+    kind: no-behavior
+    milestone: M5
+    outlineRef: docs-reconciliation
+    scenarioRefs:
+      - "M5: Iteration closes with evidence"
+    slug: docs-reconciliation
+    title: Reconcile docs counts and versions
+    wave: 6

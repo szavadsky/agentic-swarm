@@ -1,0 +1,24 @@
+id: c-6d3ab1a60d
+kind: risk
+summary: 19.1 'omp isolation by default' may reduce to omp-managed worktrees +
+  --cwd if task isolation proves unsuitable for root processes
+detail: Prior research shows isolated:true targets subagents, hardcodes
+  branches, and discards failure commits; factory agents are root processes that
+  never spawn subagents. If the M1 spike finds no first-class root-process
+  isolation, the compliant fallback is omp worktree lifecycle (add/list/clear) +
+  --cwd with engine merges — still an omp backend by default but thinner than
+  the spec's 'configurable isolation backend' language suggests. Affects M3
+  scope.
+affects:
+  - "19.1"
+severity: high
+status: routed
+source:
+  record: 005-architect-plan-1-a1
+  agent: architect
+  step: architect-plan-1
+  iteration: 1
+  lastSeen: 2026-11-09T23:33:06.263Z
+createdAt: 2026-11-09T23:33:06.263Z
+updatedAt: 2026-11-10T01:40:18.908Z
+disposition: architect

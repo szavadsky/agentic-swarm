@@ -1,0 +1,26 @@
+blockedItems: []
+debt:
+  - Baseline-red lint gate carried forward (ruff SIM102 coverage.py:196,
+    pylint/pylint-pyi W9704 generic_key_dict_checker.py:40 + testing.py:34,
+    pylint R0914 cli.py:50, pylint-tests C0208 _factories_extras.py:383) — still
+    failing, not a wave regression.
+  - Baseline-red test gate carried forward (6 failures assuming 13 tools vs 14
+    with ruff format) — still failing, not a wave regression.
+  - "Operator action outstanding: `uv run lint` ruff-format ToolSpec mutates
+    worktree (no --check/--config); gates use split format+lint workaround."
+failedItems: []
+iteration: 1
+mergedItems: []
+recommendations:
+  - "No wave follow-up required: no regressions, tree clean."
+  - Consider scheduling baseline-debt items to fix the 6 unit-test tool-count
+    assumptions and 5 lint violations so future waves gate on green.
+  - "Operator: add --check (+ --config) to ruff-format ToolSpec or drop it from
+    TOOLS."
+status: complete
+summary: "Wave 5 close-up: no merged items listed; tree clean (no untracked
+  junk, no conflict markers in src/tests/config). Gate diff shows zero
+  regressions: format pass/pass and test-integration pass/pass green; lint
+  fail/fail and test fail/fail still failing exactly as at baseline. Wave
+  complete."
+wave: 5

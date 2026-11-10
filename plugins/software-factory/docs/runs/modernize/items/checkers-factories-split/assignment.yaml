@@ -1,0 +1,24 @@
+slug: checkers-factories-split
+kind: test-only
+title: Split checkers factories by domain
+assignment: "Tests-only (tests/checkers/_factories*.py + importer modules ONLY;
+  FORBIDDEN src, baseline, docs, tests/data). Red-test-exempt. Recount importers
+  at HEAD via grep (from tests.checkers._factories import|from ._factories
+  import; reviewer names 8 families: beartype, no_try_import, stub,
+  stub_callable, stub_class, stub_coverage, stub_docstring, stub_normalizer —
+  item reports actual paths, 8 vs 9 resolved by recount). Split _factories.py
+  1393 (disable :15) by checker domain into modules each <=500, no
+  too-many-lines, ParameterSet typing, cases next to tests where mechanical;
+  migrate all importers; delete unused helpers with survivor notes; touched
+  files toward test naming + no_external_api/with_real_api markers. Verify:
+  tests only; no new failures vs M1 table (exits/counts cited); golden
+  hash-equal; format-clean; grep zero too-many-lines in split."
+outlineRef: checkers-factories-split
+milestone: M2
+wave: 2
+scenarioRefs:
+  - "M2: Factories split without behavior change"
+citations:
+  - CodingRules.md:139-159
+  - CodingRules.md:230-306
+  - CodingRules.md:90-107

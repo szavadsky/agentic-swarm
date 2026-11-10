@@ -1,0 +1,19 @@
+{
+  "model": "glide",
+  "repo": "fastino/GLiDE-0.4B",
+  "revision": "6bda7ab91aeb36dcad6d27828a8871e548c7fc71",
+  "params": 394781696,
+  "weights_bytes": 790103664,
+  "device": "cpu",
+  "dtype": "float32",
+  "torch_threads": 10,
+  "python": "3.14.4 (main, Aug 20 2026, 10:41:58) [GCC 15.2.0]",
+  "torch": "2.14.0+cpu",
+  "transformers": "5.17.0",
+  "prompt": "rubric",
+  "n": 6,
+  "load_seconds": 33.91783796297386,
+  "total_seconds": 6.646049423958175,
+  "peak_rss_mb": 2845.5859375,
+  "errors": 0
+}

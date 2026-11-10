@@ -1,0 +1,744 @@
+# Step: Plan Review
+
+## Goal
+Conduct adversarial review of the architect's proposed plan, critiquing milestone scoping, interface contracts, Gherkin scenarios, risk coverage, and dependency structure.
+
+## Rules
+- SKEPTICAL REVIEW: scrutinize the plan against project intent and real codebase constraints.
+- Scrutiny checklist (numeric bounds come from the `{
+  "maxParallelItems": 4,
+  "maxParallelTurns": 6,
+  "stubMaxProdLines": 40,
+  "maxStepAttempts": 2,
+  "maxInterruptions": 3,
+  "maxFixRounds": 3,
+  "maxConsultsPerItem": 2,
+  "maxSplitDepth": 1,
+  "maxPlanReviewRounds": 2,
+  "maxAmendmentsPerIteration": 3,
+  "maxIterations": 6,
+  "maxInfraRetries": 3,
+  "maxInfraRetriesExpensive": 1,
+  "gateRetries": 1,
+  "gateTimeoutSec": 900,
+  "storyMaxProdLines": 300,
+  "simpleMaxProdLines": 20,
+  "maxMilestones": 8,
+  "maxItemsPerPlan": 50,
+  "checkOutputBytes": 4000,
+  "maxEmptyWaves": 3,
+  "minFreeDiskMb": 2048
+}` section; do not invent numbers):
+  - Plan bounds: milestone/item counts within limits, acyclic dependencies, unique slugs.
+  - Size estimates (advisory only, never blocking): outlines may carry a `prodBudgetHint` (estimated prod lines); note missing hints and hints above the kind's sizing reference (`storyMaxProdLines`/`simpleMaxProdLines` in `{
+  "maxParallelItems": 4,
+  "maxParallelTurns": 6,
+  "stubMaxProdLines": 40,
+  "maxStepAttempts": 2,
+  "maxInterruptions": 3,
+  "maxFixRounds": 3,
+  "maxConsultsPerItem": 2,
+  "maxSplitDepth": 1,
+  "maxPlanReviewRounds": 2,
+  "maxAmendmentsPerIteration": 3,
+  "maxIterations": 6,
+  "maxInfraRetries": 3,
+  "maxInfraRetriesExpensive": 1,
+  "gateRetries": 1,
+  "gateTimeoutSec": 900,
+  "storyMaxProdLines": 300,
+  "simpleMaxProdLines": 20,
+  "maxMilestones": 8,
+  "maxItemsPerPlan": 50,
+  "checkOutputBytes": 4000,
+  "maxEmptyWaves": 3,
+  "minFreeDiskMb": 2048
+}`) as advisory observations. A plan is never failed, looped, or consulted on sizing hints alone.
+  - Scenario completeness: are scenarios falsifiable, concrete, and comprehensive?
+  - Contract clarity: do directional interfaces establish clear caller/callee contracts?
+  - Risk isolation: are technical unknowns and third-party dependencies isolated into spikes?
+  - Debt & ADRs: is technical debt properly categorized? Are major decisions documented in ADRs?
+- Reviewer boundary: reviewers critique; reviewers NEVER rewrite plans. Yield structured output matching `review.schema.json`, using only dispositions allowed by the section below.
+
+## Dispositions Criteria
+Allowed dispositions for this review: fix, optional, architect, human-awareness, human-async.
+Use ONLY these dispositions; any other disposition value fails validation.
+# Review Suggestion Dispositions
+
+Criteria for assigning disposition to review findings:
+
+| Disposition | When to Assign | Engine Action |
+|---|---|---|
+| `fix` | Concrete defect, failing gate, broken contract, missing test, or deviation from assignment. | Returns item to `fixLoopTo` step (bounded by `maxFixRounds`); developer must address. Non-item: triggers consult. |
+| `optional` | Non-blocking polish, code style improvement, minor refactor opportunity, or deferred debt. | Passed to developer if another fix round occurs; otherwise recorded as tech debt for future iterations. |
+| `architect` | Architectural contradiction, interface redesign, boundary breach, or uncertainty exceeding item scope. | Triggers immediate architect consult; architect's decision is binding and final. |
+| `human-awareness` | High-impact technical tradeoff or notable choice operator should be aware of, but architect can decide now. | Architect decides immediately; creates informational record in `steer/tousertoreview/{id}.yaml`. |
+| `human-async` | Missing business requirement, external credential needed, conflicting user intent requiring operator decision. | Creates blocking entry in `steer/tousertoreview/{id}.yaml`; item and dependents pause; unrelated items proceed. |
+
+## Rules
+- Defect requiring code change MUST be `fix`.
+- Do NOT use `architect` for routine bugs; reserve for structural/design conflicts.
+- Do NOT use `human-async` when repo context or architecture docs provide the answer.
+
+## Plan
+{
+  "iteration": 4,
+  "milestones": [
+    {
+      "directionalInterfaces": [
+        "Scope table: {path, owner in {runner,checkers,semantic,root}, single-writer item slug} at pinned HEAD; universe src+scripts+tests minus tests/data; root group (tests/data, config, docs except assigned rows, repo-root except packaging exception); exclusions (_semantic+.pyi, _base::check_if_meaningful incl :238, _OPTIONAL_IMPORT_PATTERNS + register line, semantic test modules + pipeline block); planned paths (_decision_backend/_decision_cache, conftest reservation); artifact = item report, informational, non-gating.",
+        "Gate baseline table: {format exit, lint per-tool, pytest counts, integration 9-collected with pre-commit env, golden hash, baseline []} + `uv run lint` check-only verification (git status clean) confirming split-gate reunification or retaining split.",
+        "Secrets verification: full git-ls-files scan exit 0 on clean checkout + planted control secret exit 1 (reviewer-replicated), cited with pinned HEAD; journals committed."
+      ],
+      "id": "M1",
+      "scenarios": [
+        "Scenario: Scope snapshot without gating\n  Given HEAD plus I2 audits plus closeup-3 verified scope\n  When scope-table-snapshot runs\n  Then every universe file lists owner + single-writer item, exclusions reference existing symbols, reservations name planned paths only, and M2-M5 proceed without depending on it",
+        "Scenario: Secrets mechanism verified\n  Given merged ^\\.factory/ filter\n  When verification scans clean checkout plus planted secret\n  Then clean exits 0, planted exits 1, cited with HEAD",
+        "Scenario: Gates green baseline recorded\n  Given clean HEAD\n  When gate capture runs format + lint + pytest + integration\n  Then table records exits/counts/hashes, baseline [], golden hash, and lint check-only verdict"
+      ],
+      "title": "K kickoff and green-gate preconditions (non-blocking)"
+    },
+    {
+      "directionalInterfaces": [
+        "Checkers factories split: tests/checkers/_factories*.py each <=500, no too-many-lines, ParameterSet typing, 9 importers migrated, behavior identical; touched files toward naming/marker conventions.",
+        "Runner factories trim: tests/runner/_factories_extras*.py each <=500, duplicate disables collapsed to <=1, behavior identical.",
+        "Threshold consolidation: one deduped parametrized table (30/33 + 50 + 35 merged, outcomes pinned), modules <=500, no suppressions.",
+        "SEMANTIC guards: 40 W9704 + 11 W9738 tests (except pipeline block) pass with monkeypatched SEMANTIC=0, outcomes pinned.",
+        "Baseline merge: baseline-diff coverage in <=2 modules <=500, overlapping cases merged, each names survivor; pinning limbs preserved or flagged.",
+        "Portability: stale disables removed, /home/slava paths replaced via tmp/env, stale comments fixed.",
+        "Never-test-linting prune: each removed group names survivor (golden/assumption/unit); default suite keeps full-pipeline pin; golden/integration contracts kept."
+      ],
+      "id": "M2",
+      "scenarios": [
+        "Scenario: Factories split without behavior change\n  Given over-limit factories\n  When splits merge\n  Then each module <=500 with no disable, importers pass, pytest + integration green, golden byte-identical",
+        "Scenario: Threshold deduped plus guards pinned\n  Given overlapping tables plus unguarded heuristic tests\n  When consolidation plus guards merge\n  Then one table pins exact outcomes, 51 tests pass with SEMANTIC=0, golden byte-identical",
+        "Scenario: Baseline merged plus portability plus prune with survivors\n  Given overlapping baseline tests plus stale/portability debt plus self-lint groups\n  When merges complete\n  Then modules <=500, hardcoded paths gone, each removal names survivor, default pipeline pin retained, gates green, golden byte-identical"
+      ],
+      "title": "Test infrastructure debloat first"
+    },
+    {
+      "directionalInterfaces": [
+        "Dispatch split: runner/dispatch*.py each <=500, zero too-many-lines, EXPECTED_TOOL_NAMES derives from TOOLS via single-sourced re-exports in runner/__init__.py (dispatch-split sole __init__ writer), FORMATTER_ONLY/RECORDLESS explicit, registry tests pass.",
+        "Shim removal: baseline _FALLBACK_TOOLS/peek/_compare_sorted plus parsers re-exports deleted (or kept with in-repo consumer evidence + debt note), asserting tests updated, does not touch __init__.",
+        "Stream helper: NEW checkers/_source_stream.py (@beartype, <=500, tach-clean), all listed blocks replaced (grep zero copies outside helper), zero _base.py diff, coverage + comment-extraction deduped.",
+        "Legacy cleanup: _legacy_scan renamed with call sites, trivial_wrapper dead _legacy_* removed plus peek line matching runner close-up, astroid 3.x branch deleted, register() per ADR-012 (no @beartype), mixin misc removed or retained-with-justification, joined sorted codes emitted, skips no_try_import register line, shift report if outcomes shift.",
+        "Pyi spike verdict: {reproduction, golden counts, latent budget (205 symbols + duplicate-code), recommendation fix-with-regen vs document-orphan-only, I5 plan} — report only, no I4 code or golden change."
+      ],
+      "id": "M3",
+      "scenarios": [
+        "Scenario: Runner split without drift\n  Given dispatch 542 plus shims\n  When splits merge\n  Then modules <=500 with no disables, registry single-sourced, shims deleted or evidenced, gates green, golden byte-identical or shift-reported",
+        "Scenario: Checkers helper plus legacy without drift\n  Given duplicated stream blocks plus legacy names plus dead code\n  When helper plus cleanup merge\n  Then zero copies outside helper, zero _base diff, joined codes emitted, 51 outcomes pinned or shift-reported, gates green",
+        "Scenario: Pyi scope decided without code change\n  Given companion-stub blind spot\n  When spike completes\n  Then verdict recommends fix (with I5 budget + regen plan) or orphan-only (with docs note), no I4 golden change"
+      ],
+      "title": "Production rule enforcement and code debloat"
+    },
+    {
+      "directionalInterfaces": [
+        "Backend (ADR-014 veto): DecisionBackend Protocol decide(justification,rule,context)->float [0,1]; DECISION_THRESHOLD + PROMPT_VERSION='prompt-v1'; final = heuristic AND (prob>=threshold) when available else heuristic; check_if_meaningful signature + SEMANTIC='0' preserved; semantic_check bool|None; kwarg (public .pyi) + test-only DECISION_BACKEND dotted path honored ONLY under PYTEST_CURRENT_TEST (loader pins both); FakeBackend/NoBackend/get_backend; DECISION_MODEL parses but loader None + one warning; [semantic] without sentence-transformers (uv.lock no edge); RERANKER deprecated warn+ignore; joined-rule keys + any-element match; tach-clean, @beartype, structlog, each <=500; .gitignore untouched, no hatch entry.",
+        "Cache (per spike): .python-setup-decisions.json at linted root (sorted array, indent=2, sort_keys, no bare hex>=20, secrets-clean); entry {justification normalized, rule joined, model '<id> rev <short12> prompt-vN', decision, files POSIX} + {version, prompt hash, last-seen}; key (justification,rule,model); read-only lint (hash-asserted zero writes); explicit CI-guarded refresh (lockfile + merge + atomic replace in target dir, DECISIONS_PATH isolation); prune missing/stale (+age if defined); --path + jobs>1 per verdict.",
+        "Tests (no AGENTS): merged table pinned; FakeBackend kwarg + env; cache round-trip/cleanup/concurrency on tmp + hypothesis format; vacuous + ImportError-propagation deleted; 4 pair tests slow (or deleted); pipeline block serialized after guards; cache-semantics assumptions rewritten deliberately; modules <=500, no suppressions, never test linting; one slow+with_real_api e2e SKELETON (skipped) allowed; CHANGELOG snippet in report only.",
+        "Corpus spike: double-rated real brush-off sample (>=100 post-dedup, both strata, rubric + per-source/stratum split, protocol + agreement disclosed) repairing 215/0, or explicit I5 blocker; report only."
+      ],
+      "id": "M4",
+      "scenarios": [
+        "Scenario: Veto backend without model\n  Given ADR-009 no-go\n  When backend merges\n  Then brush-off never reaches backend, one call per unique pair, cache-hit without model emits persisted verdict with no load, no retry storm, SEMANTIC=0 equals golden, gates green",
+        "Scenario: Cache read-only plus explicit refresh\n  Given tracked schema\n  When cache merges\n  Then normal lint shows zero writes by hash, refresh on tmp merges + prunes + atomic-replaces with CI guard, secrets scan clean, gates green",
+        "Scenario: Corpus evaluable or blocked\n  Given 215/0 defect plus single-adjudicator limits\n  When corpus spike completes\n  Then report cites double-rated sample with agreement + rubric + stratum split usable for I5 90/95/85 bars, or names explicit blocker with I5 plan"
+      ],
+      "title": "Semantic backend plus tracked cache infrastructure (no model)"
+    },
+    {
+      "directionalInterfaces": [
+        "Regen protocol: UPDATE_GOLDEN=1 locally only (fail under CI/GITHUB_ACTIONS); byte-identical double run; key-by-key diff review against shift reports; golden + tool counts together; no blind regen; no-op attestation if all no-shift; ONLY regen-hatch writes tests/data/golden.",
+        "Docs checklist must-contain: semantic-justification.md (DecisionBackend, .python-setup-decisions.json, ADR-009, prompt-v1, veto); custom-checks.md (DecisionBackend); troubleshooting.md (DECISION_MODEL + RERANKER deprecated); AGENTS.md pipeline (DecisionBackend, no reranker) + counts (rerun actuals + 9-collected contract + ruff-format scope row); CHANGELOG (extra contents, new/deprecated vars, cache file, no-go note + version 1.2.10); README pin; ty.toml no sentence_transformers.",
+        "Final gate table: {format exit, lint per-tool on scoped/clean checkout for MemoryError (mechanism + HEAD), pytest counts, integration 9-collected-0-failed with env pinned, golden hash or regen diff, baseline [], docs checklist}; red cells route to new root/follow-up items, never baseline edits."
+      ],
+      "id": "M5",
+      "scenarios": [
+        "Scenario: Golden integrity preserved\n  Given shift/no-shift declarations from all behavior items\n  When regen-hatch runs\n  Then golden byte-identical if all no-shift, else regenerated locally with double-run plus key-by-key review matching shift reports, committed together",
+        "Scenario: Iteration closes with evidence\n  Given all merges\n  When final validation completes\n  Then gate table records all cells plus docs must-contain per assignment; red cells route to follow-ups, never baseline edits"
+      ],
+      "title": "Behavior-preservation close-out and gate evidence"
+    }
+  ],
+  "uncertainties": [
+    {
+      "description": "Which decision model (if any) is license-clean, CPU-feasible on py3.14, and meets 90/95/85 on the heuristic-accepted stratum is unknown; 215/0 corpus defect makes precision unevaluable and all repo labels single-author; GLiDE needs human review; CC-BY-NC excluded; gliner2 py3.14 unverified.",
+      "id": "U1",
+      "spikeOutlines": [
+        "brush-off-corpus-spike (fact-finder, report-only): double-rated real brush-off sample + rubric + agreement + stratum split repairing 215/0 for I5 bake-off; no model choice in I4"
+      ]
+    },
+    {
+      "description": "Tracked-cache project-root resolution, non-hex key encoding, prune policy, refresh command shape, --path scoping, jobs>1 concurrency, and secrets-safe fields are unknown; writer-first verdict must be consumed.",
+      "id": "U2",
+      "spikeOutlines": [
+        "decision-cache-design-spike (poc on tmp, no committed files): schema + root resolution + encoding + prune + refresh/CI/isolation + deterministic-given-cache+model proof with hash-asserted zero normal-lint writes"
+      ]
+    },
+    {
+      "description": "Whether pylint-pyi companion-stub skip is fixed (with 205-symbol cleanup + golden regen) or documented as orphan-only scope is unknown; fixing changes golden and exposes large latent cleanup.",
+      "id": "U3",
+      "spikeOutlines": [
+        "pylint-pyi-scope-spike (fact-finder, report-only): reproduce companion vs orphan, count golden impact, budget latent cleanup, recommend fix-with-regen vs orphan-only for I5"
+      ]
+    }
+  ],
+  "itemOutlines": [
+    {
+      "deps": [],
+      "description": "Report-only, zero repo writes. At pinned HEAD: git ls-files filtered to src+scripts+tests minus tests/data; recount universe total + per-owner counts from I2 map (67/83/15/4/15) within ±5; record commands + HEAD SHA + revision map-<short> consistently. Confirm exclusions existence (file:line only): _semantic+.pyi, _base::check_if_meaningful incl :238, _OPTIONAL_IMPORT_PATTERNS + register line, semantic test modules + pipeline block. Confirm reservations absent at HEAD (or corrected). List root group once. Emit file-level single-writer table for I4 items + drift list {path,auditRef,headEvidence,confirmed|corrected|disputed} (disputed allowed). Capture gate baseline (format, lint per-tool, pytest counts, integration 9-collected with env, golden hash, baseline []) + `uv run lint` check-only verification (git status clean) to confirm split-gate reunification or retain split. Informational, non-gating: no M2-M5 item depends on it.",
+      "kind": "fact-finder",
+      "milestoneId": "M1",
+      "prodBudgetHint": 0,
+      "slug": "scope-table-snapshot",
+      "title": "Snapshot scope table and gate baseline (non-gating)"
+    },
+    {
+      "deps": [],
+      "description": "Report-only, zero writes. Verify merged .secrets.baseline:41-46 ^\\.factory/ should_exclude_file list-pattern form against installed detect-secrets (cite version + signature). On clean checkout: full git-ls-files scan exits 0; planted control secret still exits 1 (reviewer-replicated). Cite mechanism + pinned HEAD, not counts. Journals stay committed; residual-risk caveat (write-time redaction + periodic unfiltered audits). No baseline edits. Feeds M5 gate table.",
+      "kind": "fact-finder",
+      "milestoneId": "M1",
+      "prodBudgetHint": 0,
+      "slug": "secrets-scan-verification",
+      "title": "Verify secrets exclusion mechanism"
+    },
+    {
+      "deps": [],
+      "description": "Tests-only (tests/checkers/_factories*.py + 9 importer modules ONLY; FORBIDDEN src, baseline, docs, tests/data). Red-test-exempt. Split _factories.py 1393 (disable :15) by checker domain into modules each <=500, no too-many-lines, ParameterSet typing, cases next to tests where mechanical; migrate 9 importers; delete unused helpers with survivor notes; touched files toward test_<method>_given_<condition>_then_<expected> + no_external_api/with_real_api markers. Verify: tests only; pytest + integration no new failures; golden byte-identical; format-clean; grep zero too-many-lines in split.",
+      "kind": "story",
+      "milestoneId": "M2",
+      "prodBudgetHint": 0,
+      "slug": "checkers-factories-split",
+      "title": "Split checkers factories by domain"
+    },
+    {
+      "deps": [],
+      "description": "Tests-only (tests/runner/_factories_extras*.py + importers ONLY). Red-test-exempt. Trim 511 (disables :1,:6, claims 502) to each <=500, collapse duplicate disables to <=1, split by group if needed; touched files toward naming/marker conventions. Verify: tests only; pytest + integration no new failures; golden byte-identical; format-clean.",
+      "kind": "story",
+      "milestoneId": "M2",
+      "prodBudgetHint": 0,
+      "slug": "runner-factories-trim",
+      "title": "Trim runner factories extras below limit"
+    },
+    {
+      "deps": [],
+      "description": "Tests-only (test_semantic_check.py + test_semantic_threshold.py ONLY; FORBIDDEN suppression/bare-except files, src, docs, tests/data). Red-test-exempt. Merge 30/33 + 50 + 35 heuristic lists into one deduped parametrized table (outcomes pinned, no behavior change); leave reranker-specific classes untouched (M4 rewrites); modules <=500 with no suppressions; fix stale 504-vs-506 header. Verify: tests only; parametrized IDs + outcomes identical in report; pytest + integration no new failures; golden byte-identical.",
+      "kind": "story",
+      "milestoneId": "M2",
+      "prodBudgetHint": 0,
+      "slug": "semantic-threshold-consolidation",
+      "title": "Consolidate semantic heuristic tables"
+    },
+    {
+      "deps": [],
+      "description": "Tests-only (test_suppression_justification_checker.py + test_bare_except_comment_checker.py ONLY, EXCEPT TestSuppressionRerankerPipeline block which is semantic-owned — do not touch block). Red-test-exempt. Add monkeypatched SEMANTIC=0 guards to 40 W9704 + 11 W9738 heuristic tests; outcomes pinned. Verify: tests only; 51 pass with guards; golden byte-identical.",
+      "kind": "story",
+      "milestoneId": "M2",
+      "prodBudgetHint": 0,
+      "slug": "checkers-semantic-guards",
+      "title": "Guard heuristic checker tests with SEMANTIC=0"
+    },
+    {
+      "deps": [],
+      "description": "Tests-only (test_baseline_diff*.py ONLY). Red-test-exempt. Merge 249+308+486 overlapping _compare_sorted/_diff_baseline/_capture_baseline coverage into <=2 modules <=500; each merged case names survivor; preserve CLI/exit/baseline/autofix pinning limbs or flag blocking debt; touched files toward naming/markers. Verify: tests only; pytest + integration no new failures; golden byte-identical.",
+      "kind": "story",
+      "milestoneId": "M2",
+      "prodBudgetHint": 0,
+      "slug": "baseline-diff-merge",
+      "title": "Merge baseline-diff test overlap"
+    },
+    {
+      "deps": [],
+      "description": "Tests-only (test_lint_runner.py:7, test_lint_runner_integration.py:1, conftest.py:86, test_setup*.py, test_autofix_conflict_integration.py:181, t9_7 live :31 ONLY; FORBIDDEN factories/baseline/self-lint files owned by parallel items). Red-test-exempt. Remove stale too-many-lines disables (479/418 under limit); replace /home/slava paths with tmp/env/portable fixtures; fix stale count comments in touched files only. Verify: tests only; pytest + integration no new failures; golden byte-identical; grep zero hardcoded checkout in touched files.",
+      "kind": "story",
+      "milestoneId": "M2",
+      "prodBudgetHint": 0,
+      "slug": "stale-disables-portability-cleanup",
+      "title": "Remove stale disables and hardcoded paths"
+    },
+    {
+      "deps": [],
+      "description": "Tests-only (self-lint, config-consistency, noise-filter, private-imports, hardcoded-checkout live, autofix-conflict slow/home-write, downstream home-write ONLY; FORBIDDEN factories/baseline/golden/helpers). Red-test-exempt. Remove gate-duplicating tests per never-test-linting boundary (subprocess re-lint, AST re-implementation, config re-checks); each removal names survivor (golden/assumption/unit); keep default full-pipeline pin (smoke kept or default-collected survivor named); keep golden/integration contracts. Verify: tests only; removal→survivor map in report; pytest (minus removed) + integration pass; golden byte-identical.",
+      "kind": "story",
+      "milestoneId": "M2",
+      "prodBudgetHint": 0,
+      "slug": "never-test-linting-prune",
+      "title": "Prune gate-duplicating tests with survivors"
+    },
+    {
+      "deps": [],
+      "description": "Report-only, zero writes, temp copies only. Reproduce: temp .pyi with companion .py (even broken -> skipped) vs orphan .pyi (linted, pyi-underscore fires); count golden 42/43 on .py; budget latent cleanup (205 private symbols in 29 stubs + duplicate-code findings). Recommend fix-with-regen (temp-tree/copy or pylint mode + cleanup budget + regen plan for I5) vs document-orphan-only (scope note + stubtest governance). No prod change, no golden change in I4. Feeds I5 plan.",
+      "kind": "fact-finder",
+      "milestoneId": "M3",
+      "prodBudgetHint": 0,
+      "slug": "pylint-pyi-scope-spike",
+      "title": "Decide pylint-pyi companion-stub scope"
+    },
+    {
+      "deps": [],
+      "description": "Owns runner/dispatch*.py + runner/__init__.py (sole __init__ writer) + registry tests ONLY; FORBIDDEN baseline/parsers (shim item), tests/data, baseline edits, docs. Split dispatch.py 542 (disable :1) into modules each <=500 (registry/strategies/parser-sets) with single-sourced re-exports; EXPECTED_TOOL_NAMES derives from TOOLS; FORMATTER_ONLY/RECORDLESS explicit; no threshold raises; migrate registry/fakes tests to EXPECTED/STATISTICS sets. Verify: no too-many-lines in split; registry tests pass; format exit 0; scoped lint zero new; pytest + integration no new failures; golden byte-identical or shift report {justification-class, keys, CHANGELOG snippet, file:line}.",
+      "escalate": true,
+      "kind": "story",
+      "milestoneId": "M3",
+      "prodBudgetHint": 150,
+      "slug": "runner-dispatch-split",
+      "title": "Split dispatch registry below limits"
+    },
+    {
+      "deps": [],
+      "description": "Owns runner/baseline.py/.pyi + parsers re-exports + asserting tests ONLY; FORBIDDEN dispatch*/__init__ (dispatch-split), tests/data, baseline edits. Delete _FALLBACK_TOOLS/peek_fallback_tools/_compare_sorted shim + stale re-exports + TOOLS legacy alias (or keep with in-repo consumer grep evidence + debt note); update asserting tests; leave trivial_wrapper exemptions to checkers item. Verify: grep zero shim symbols (or evidenced); gates green; golden byte-identical or shift-reported.",
+      "kind": "story",
+      "milestoneId": "M3",
+      "prodBudgetHint": 30,
+      "slug": "runner-compat-shim-removal",
+      "title": "Remove runner compat shims"
+    },
+    {
+      "deps": [],
+      "description": "Owns NEW checkers/_source_stream.py + stream read/decode call sites in conformance/stub checkers ONLY; FORBIDDEN _base.py/.pyi (zero diff, semantic-owned), no_try_import register line/patterns (semantic), tests/data, baseline. Create @beartype helper (<=500, tach-clean); replace all listed blocks (grep zero copies outside helper); dedupe coverage.py _is_under_source_root to _base helper + share trailing/preceding comment extraction where mechanical. Verify: grep zero local copies; `git diff -- _base.py` empty; gates green; golden byte-identical or shift-reported.",
+      "kind": "story",
+      "milestoneId": "M3",
+      "prodBudgetHint": 100,
+      "slug": "checkers-stream-helper",
+      "title": "Single-source stream read/decode helper"
+    },
+    {
+      "deps": [
+        "checkers-stream-helper",
+        "runner-compat-shim-removal"
+      ],
+      "description": "Owns conformance/*.py (suppression, trivial_wrapper, bare_except, mixins) + stub fidelity rows ONLY; FORBIDDEN _base (zero diff), no_try_import register line/patterns, tests/data. Rename _legacy_scan (only scan path) with call sites; remove trivial_wrapper dead _legacy_* unconditionally + peek line iff runner confirms deletion (else keep); delete astroid 3.x body[0].value branch (floor 4.0.4); register() missing-beartype justification per ADR-012 (no @beartype added); mixin misc via shared typed base attempt with retain-and-report fallback; emit joined sorted codes at W9704/W9738 call sites (bare-except single); fix .pyi fidelity rows. On shift: shift report + CHANGELOG snippet (root regenerates). Verify: grep zero _legacy_scan/_legacy_* (except retained peek if runner kept); gates green; 51 outcomes pinned or shift-reported.",
+      "kind": "story",
+      "milestoneId": "M3",
+      "prodBudgetHint": 40,
+      "slug": "checkers-legacy-dead-cleanup",
+      "title": "Rename legacy scan and remove dead compat"
+    },
+    {
+      "deps": [],
+      "description": "Prototype on tmp copies only; zero committed files. Consume test_pylint_cache_semantics.py writer-first verdict (writer+timing+--path+jobs=1, crash-safe, no lock/sidecar; jobs>1 voids claim). Decide: project-root resolution (cwd vs node.root().file walk-up vs explicit param + signature impact), per-entry files/model schema, non-hex key encoding (no bare hex>=20, detect-secrets clean, collision-safe), prune (missing/stale/moved-file/model-change/--path/auto-vs---prune), atomic replace in target dir, refresh shape (lint --refresh-decisions vs setup subcommand vs env-permitted sidecar + parser reuse + CI guard + DECISIONS_PATH isolation), memory/time notes for I5 model (2048 RLIMIT_AS, 3 pylint loads, ONNX vs torch). Prove on tmp: heuristic-rejected False without backend; accepted+hit == persisted; accepted+miss+absent == heuristic True; normal lint zero writes by hash. Feeds backend/cache impls (must not invent).",
+      "escalate": true,
+      "kind": "poc",
+      "milestoneId": "M4",
+      "prodBudgetHint": 0,
+      "slug": "decision-cache-design-spike",
+      "title": "Prototype tracked-cache schema and refresh"
+    },
+    {
+      "deps": [],
+      "description": "Report-only, zero writes. Repair 215/0 defect for I5 bake-off: collect N real repo suppressions + threshold 30+50 + brush-off/meaningful tables, DEDUPED by normalized justification (target >=100 post-dedup), stratified heuristic-rejected vs heuristic-accepted; rubric (specific technical justification vs placeholder/deferral/brush-off); double-rated with adjudication protocol + edge-case rubric disclosed + inter-rater agreement reported (single-author bias repaired; terse borderlines re-rated). Per-source + per-stratum split. Recommend smallest-evaluable corpus + threshold sweep for I5 90/95/85 bars on accepted stratum, or explicit blocker (collection/license/CPU). No model choice in I4.",
+      "escalate": true,
+      "kind": "fact-finder",
+      "milestoneId": "M4",
+      "prodBudgetHint": 0,
+      "slug": "brush-off-corpus-spike",
+      "title": "Build double-rated brush-off sample"
+    },
+    {
+      "deps": [
+        "decision-cache-design-spike",
+        "semantic-threshold-consolidation"
+      ],
+      "description": "Sole writer: NEW _decision_backend.py/.pyi + _base.py/.pyi (veto + injection + on-any-element) + _semantic.py/.pyi (rewrite, no sentence-transformers) + no_try_import _OPTIONAL_IMPORT_PATTERNS + register line + pyproject [semantic] block + uv.lock (packaging exception); FORBIDDEN _decision_cache (cache-impl), _source_stream, ty.toml (docs item), tests/data, .gitignore (untouched), hatch (no entry), baseline. Implement ADR-014 veto + ADR-010 contracts (Protocol decide->float, threshold, prompt-v1, kwarg + PYTEST_CURRENT_TEST-guarded dotted path with loader test pinning both, FakeBackend/NoBackend/get_backend, DECISION_MODEL parses but loader None + one warning, RERANKER deprecated warn+ignore, joined-rule keys + any-element match, tach-clean, @beartype, structlog, each <=500). Verify: brush-off never reaches backend; one call per unique pair; SEMANTIC=0 equals golden; extra has no sentence-transformers; uv.lock no edge; loader None + one warning proven; gates green; golden byte-identical or shift-reported.",
+      "escalate": true,
+      "kind": "story",
+      "milestoneId": "M4",
+      "prodBudgetHint": 150,
+      "slug": "decision-backend-impl",
+      "title": "Implement veto DecisionBackend with FakeBackend"
+    },
+    {
+      "deps": [
+        "decision-cache-design-spike",
+        "runner-dispatch-split",
+        "runner-compat-shim-removal"
+      ],
+      "description": "Owns NEW _decision_cache.py/.pyi + refresh command (runner cli flag OR setup subcommand per spike verdict, applied onto final runner shape) ONLY; FORBIDDEN _base/_semantic/_decision_backend, tests/data, baseline. Implement spike verdict: sorted array indent2 sort_keys, entry {justification normalized, rule joined, model '<id> rev <short12> prompt-vN', decision, files POSIX} + {version, prompt hash, last-seen}, secrets-clean encoding, read-only lint (hash-asserted zero writes), explicit CI-guarded refresh (lockfile + merge + atomic replace in target dir, DECISIONS_PATH isolation), prune missing/stale (+age if defined), --path scoping + jobs>1 sidecars/lock per verdict. Must pass all tools incl detect-secrets. Does not change existing gate contracts. Verify: round-trip on tmp; normal lint zero writes by hash; refresh merges + prunes; gates green; golden byte-identical or shift-reported.",
+      "kind": "story",
+      "milestoneId": "M4",
+      "prodBudgetHint": 120,
+      "slug": "decision-cache-impl",
+      "title": "Implement tracked decision cache and refresh"
+    },
+    {
+      "deps": [
+        "checkers-semantic-guards",
+        "decision-backend-impl",
+        "decision-cache-impl"
+      ],
+      "description": "Owns test_semantic_check.py + test_semantic_threshold.py + pipeline block + tests/assumptions runtime/decision/cache modules (append-only; never touch root __init__ + 3 contracts except deliberate cache-semantics rewrite) + semantic-justification.md + custom-checks bullet + troubleshooting section ONLY; FORBIDDEN AGENTS.md (docs item), CHANGELOG.md (emit snippet in report, docs writes file), tests/data, src. Merge tables pinned; FakeBackend kwarg + env; cache round-trip/cleanup/concurrency on tmp + hypothesis format; delete vacuous + ImportError-propagation; 4 pair tests slow (or deleted with reranker); rewrite cache-semantics assumptions deliberately (not loosened); modules <=500, no suppressions, never test linting; one slow+with_real_api e2e SKELETON (skipped) allowed. Docs state veto backend + tracked cache + no-go. Verify: pytest + integration no new failures; golden byte-identical or shift-reported; rumdl clean.",
+      "kind": "story",
+      "milestoneId": "M4",
+      "prodBudgetHint": 0,
+      "slug": "semantic-tests-rewrite",
+      "title": "Rewrite semantic tests and docs (no AGENTS)"
+    },
+    {
+      "deps": [
+        "decision-backend-impl",
+        "decision-cache-impl"
+      ],
+      "description": "Sole AGENTS.md + CHANGELOG.md + README.md + config/ty.toml writer in I4; FORBIDDEN semantic-justification/custom-checks/troubleshooting (semantic-tests), tests/data, src (except ty.toml comment). Update AGENTS counts to rerun actuals (verify --collect-only + TOOLS==14) + Tool Scope ruff-format row + pipeline subsection (DecisionBackend, no reranker) + testing strategy; CHANGELOG user-visible (extra contents, new/deprecated vars, cache file, no-go note + version 1.2.10); README pin; ty.toml no sentence_transformers. Verify: docs only; must-contain strings per M5 checklist; rumdl clean; pytest + integration no new failures.",
+      "kind": "story",
+      "milestoneId": "M5",
+      "prodBudgetHint": 0,
+      "slug": "docs-reconciliation",
+      "title": "Reconcile docs counts and versions"
+    },
+    {
+      "deps": [
+        "checkers-legacy-dead-cleanup",
+        "checkers-stream-helper",
+        "decision-backend-impl",
+        "decision-cache-impl",
+        "runner-compat-shim-removal",
+        "runner-dispatch-split"
+      ],
+      "description": "Sole tests/data/golden writer; FORBIDDEN all other paths. ONLY on reviewed shift report (justification-class + added/removed keys + CHANGELOG snippet + file:line) from behavior items: run UPDATE_GOLDEN=1 locally (never CI), double-run byte-identical, key-by-key diff review matching shift reports, commit golden + tool counts together. If all declare no-shift: no-op attestation (golden byte-identical). NEVER blind-regen. Verify: regen report with diff review or no-op attestation; integration + test_golden pass.",
+      "kind": "story",
+      "milestoneId": "M5",
+      "prodBudgetHint": 0,
+      "slug": "golden-regen-hatch",
+      "title": "Conditional golden regen on shift reports"
+    },
+    {
+      "deps": [
+        "docs-reconciliation",
+        "golden-regen-hatch"
+      ],
+      "description": "Report-only, zero writes. Record final gate table: format exit 0; lint per-tool on scoped/clean checkout for MemoryError (mechanism + HEAD); pytest counts; integration 9-collected-0-failed with pre-commit env pinned; golden hash or regen diff; baseline []; docs must-contain per M5 checklist. Red-cell routing to new root/follow-up items, never baseline edits. Feeds close-up.",
+      "kind": "fact-finder",
+      "milestoneId": "M5",
+      "prodBudgetHint": 0,
+      "slug": "final-gate-validation",
+      "title": "Final gate table and docs check"
+    }
+  ],
+  "assumptions": [
+    {
+      "assumption": "Material behavior = golden (SEMANTIC=0) + checker unit tests + CLI/exit codes + baseline/autofix semantics + shipped configs/scopes. Heuristic rejections material; model accept/reject never material (dormant path). Tightening intentional when a model ships.",
+      "disposition": "confirm with human",
+      "why": "Preserves I1/I2 operator-approved boundary; golden stays the mechanical contract."
+    },
+    {
+      "assumption": "Dev/CI do not install [semantic]; gates run heuristic + cache hits. Real-model tests are slow + with_real_api, never in default suite.",
+      "why": "Matches current venv; keeps gates offline, fast, deterministic."
+    },
+    {
+      "assumption": "'Never test linting' bans pytest asserting this repo passes its own gates (subprocess re-lint, AST re-implementation, config re-checks). Golden/integration contracts retained.",
+      "disposition": "confirm with human",
+      "why": "Operator-approved in I1; removes gate-duplicating tests without deleting fit-for-purpose contract."
+    },
+    {
+      "assumption": "detect-secrets MemoryError on huge tracked artifacts is environmental; validate on clean/scoped checkout; never weaken baseline or exclude product paths.",
+      "why": "Context-pack measurement; baseline stays [] by design."
+    },
+    {
+      "assumption": "Operator secrets answers stand: journals committed; ^\\.factory/ filter merged; harness filter-seeding outside task; acceptance cites mechanism + HEAD.",
+      "why": "Steering directive 1794158471467."
+    },
+    {
+      "assumption": "Integration contract is 9 collected, 0 failed with pre-commit env pinned (9 passed with it, 7 passed + 2 skipped without). AGENTS.md reconciled to this contract.",
+      "why": "tests/integration.py skip logic; unconditional 9/9 fails on minimal envs while stale 7 under-reports."
+    },
+    {
+      "assumption": "Iteration 4 ships semantic infra only (backend/cache/FakeBackend/docs/corpus spike); model swap NOT complete at close-up and must not be claimed. I5 triggers: double-rated sample repairing 215/0, human Fastino decision if GLiDE recommended, CPU latency/RSS benchmark.",
+      "disposition": "confirm with human",
+      "why": "ADR-009 no-go gating extended by ADR-016; operator must approve infra-only close-up."
+    },
+    {
+      "assumption": "No child epics in iteration 4; all work as root items with file-level single-writer + dep serialization (ADR-013). Item cap counts root items only (22).",
+      "why": "I3 epic gate caused 3 empty waves + zero M2 delivery; direct increments avoid bottleneck."
+    }
+  ],
+  "techDebt": [
+    {
+      "category": "blocking",
+      "description": "No compliant model proven (215/0 unevaluable, single-author labels, Fastino review open, no CPU bench).",
+      "id": "TD4-B1",
+      "resolution": "ADR-009 extended by ADR-016: no model in I4; brush-off-corpus-spike produces double-rated sample + rubric + agreement for I5 bake-off; backend/cache built against FakeBackend so a compliant model plugs via get_backend()."
+    },
+    {
+      "category": "blocking",
+      "description": "I3 M1 gate not closed per engine (map running, kickoff pending) caused 3 empty waves.",
+      "id": "TD4-B2",
+      "resolution": "ADR-013 abandons epic gate for I4; scope-table-snapshot informational non-gating; closeup-3 verified repo scope carries forward; M2-M5 proceed via file ownership + deps."
+    },
+    {
+      "category": "impacting",
+      "description": "Pylint-pyi blind spot (42/43 findings on .py, 205 latent private symbols, companion stubs unenforced).",
+      "id": "TD4-I1",
+      "resolution": "pylint-pyi-scope-spike reproduces + recommends fix-with-regen vs orphan-only with budget; fix + golden regen deferred to I5; I4 golden unchanged on this axis."
+    },
+    {
+      "category": "impacting",
+      "description": "Cache refresh/root/prune/secrets unresolved (Q4-7); writer-first verdict must be consumed, not invented.",
+      "id": "TD4-I2",
+      "resolution": "decision-cache-design-spike prototypes schema/root/encoding/prune/refresh/secrets/zero-write proof on tmp; backend/cache impls consume verdict via deps and rewrite assumption file deliberately."
+    },
+    {
+      "category": "adjacent",
+      "description": "Docs/version drift (AGENTS stale counts/scope/pipeline, CHANGELOG 1.2.9 vs 1.2.10, README v1.2.5 pin, ty.toml sentence_transformers).",
+      "id": "TD4-A1",
+      "resolution": "docs-reconciliation sole AGENTS/CHANGELOG/version/pin writer in I4 (after backend/cache); semantic-tests owns non-AGENTS semantic docs and emits CHANGELOG snippet in report."
+    },
+    {
+      "category": "adjacent",
+      "description": "Over-limit modules/shims/duplicates/hardcoded paths (dispatch 542, _factories 1393, _factories_extras 511 + dup disables, test_semantic 506, baseline shims, stream blocks, mixin misc, trivial-wrapper disables, /home/slava paths).",
+      "id": "TD4-A2",
+      "resolution": "Split across M2-M3 items per evidence; each removal/merge names survivor; default pipeline pin retained; register() per ADR-012, mixin per attempt-with-fallback."
+    }
+  ],
+  "adrs": [
+    {
+      "consequences": "No epic close-ups/handoff in I4; M5 regen consumes item shift declarations directly. 15 dep-free wave-1 items avoid empty waves. I5 may reintroduce epics or continue root increments based on I4 evidence.",
+      "context": "I3 planned 3 epics behind ownership-map-revalidation + kickoff gate; map stalled (retry + 3 empty waves, Blocked none), kickoff pending, M2 zero delivery per closeup-3 audit. Map + kickoff reports live in orchestration records with high QA surface on report-only items, creating a single-item bottleneck.",
+      "decision": "Iteration 4 ships no child epics; all work as root items with file-level single-writer table + dep serialization in itemOutlines (dispatch/baseline/parsers/__init__, checkers stream/legacy, _base/_semantic/_decision_*/packaging, factories/threshold/guards/baseline/portability/never-test, AGENTS/CHANGELOG, golden). Scope-table-snapshot is informational, non-gating. M2-M5 proceed without map-revision gate.",
+      "id": "ADR-013",
+      "title": "Root-serialized delivery replaces epic decomposition for iteration 4"
+    },
+    {
+      "consequences": "Brush-off rejections guaranteed regardless of model; model only tightens acceptance; SEMANTIC=0 deterministic contract preserved; backend/cache tests assert veto (brush-off uncalled, one call per unique pair, hit without load, no retry storm).",
+      "context": "ADR-010 says heuristic-first hard gate but current code is semantic-first with heuristic fallback (_base.py:150-158 vs _semantic.py:1-12). Open Q1 asks whether gate means must-pass-before-model or fallback-only, float vs bool, None mapping.",
+      "decision": "Veto: final = heuristic(text) AND (backend.decide(...)>=threshold) when backend available; heuristic False never reaches backend or cache-write; backend None/unavailable -> heuristic stands; backend returns float [0,1], caller thresholds with DECISION_THRESHOLD + PROMPT_VERSION='prompt-v1'; cache key (justification,rule,model), context is model-input only.",
+      "id": "ADR-014",
+      "title": "Heuristic-first veto semantics for DecisionBackend"
+    },
+    {
+      "consequences": "'Coding rules enforced' not overstated in I4; golden stable on this axis; I5 plan consumes spike verdict with explicit budget.",
+      "context": "_PylintPyiLintTool passes .pyi paths but pylint skips companion stubs (even broken) and lints orphan only; golden 42/43 pyi findings on .py; probe finds 205 latent private stub symbols; fixing changes golden + exposes large cleanup, conflicting with preservation unless staged.",
+      "decision": "I4 runs pylint-pyi-scope-spike only (reproduce companion vs orphan, count golden impact, budget latent cleanup, recommend fix-with-regen vs document-orphan-only). No prod change, no golden change on this axis in I4. Fix + regen (if recommended) scheduled in I5.",
+      "id": "ADR-015",
+      "title": "Pylint-pyi scope decided by spike, fix deferred to iteration 5"
+    },
+    {
+      "consequences": "Intent swap clause remains open after I4; infra makes I5 wiring bounded (get_backend + DECISION_MODEL, no pipeline refactor); gates stay offline/fast/deterministic.",
+      "context": "ADR-009 deferred model on 215/0 structural no-go + single-adjudicator limits + Fastino review + no CPU bench. At HEAD no DecisionBackend/cache/FakeBackend exists, [semantic] still sentence-transformers, tests still reranker-coupled. Double-rated corpus + license + CPU bench still open.",
+      "decision": "I4 lands model-independent infra only (veto backend + tracked cache + FakeBackend/NoBackend + packaging swap to no-model + tests/docs + corpus spike). No model wiring, no real-model default test; exactly one slow+with_real_api e2e SKELETON (skipped) allowed. Model bake-off + wiring gated on I4 corpus spike + human Fastino decision + CPU bench in I5. Close-up must not claim swap complete.",
+      "id": "ADR-016",
+      "title": "Iteration-4 semantic scope remains infrastructure-only"
+    }
+  ]
+}
+
+## Task Intent
+# modernize
+
+Modernize the project while preserving every material lint/check behavior.
+- Enforce the project's coding rules (CodingRules.md, AGENTS.md) across the code base.
+- Debloat code and tests; keep test intent, never test linting, test infra/assumptions first.
+- Remove redundant tests.
+- Replace the embedding/rerank based justification/comment check
+  (`src/python_setup_lint/checkers/_semantic.py`) with a CPU-friendly small decision model,
+  e.g. https://huggingface.co/fastino/GLiDE-0.4B or smaller
+  (https://huggingface.co/spaces/multimodalart/jev-decision-index); keep a git-stored cache with cleanup.
+
+
+## Context
+citations:
+  - file: src/python_setup_lint/checkers/_semantic.py
+    lines: 1-12
+    anchors:
+      - Cross-encoder reranking
+      - sentence-transformers
+    summary: "Module purpose: single-stage NLP justification pipeline built on a
+      cross-encoder reranker, lazily loaded with heuristic fallback on failure."
+  - file: src/python_setup_lint/checkers/_semantic.py
+    lines: 37-52
+    anchors:
+      - _CACHE_DIR
+      - _RERANKER_INSTANCE
+      - _RESULT_CACHE_FILE
+      - _RERANKER_MODEL
+    summary: Current model/result cache lives under ~/.cache/python-setup/semantic;
+      model is chosen by PYTHON_SETUP_LINT_RERANKER_MODEL defaulting to
+      jina-reranker-v2-base-multilingual.
+  - file: src/python_setup_lint/checkers/_semantic.py
+    lines: 93-122
+    anchors:
+      - _load_reranker
+      - CrossEncoder
+    summary: Lazy singleton loader imports sentence_transformers and constructs
+      CrossEncoder, disabling the reranker on import/model-load failure.
+  - file: src/python_setup_lint/checkers/_semantic.py
+    lines: 125-189
+    anchors:
+      - semantic_check_if_meaningful
+      - cache_key
+      - reranker.predict
+    summary: "Scoring entry point: SHA-256 cache key over
+      text/rule/context/comment/model, pair prediction, accept when score >=
+      0.5, persist each new result."
+  - file: src/python_setup_lint/checkers/_base.py
+    lines: 142-158
+    anchors:
+      - check_if_meaningful
+      - PYTHON_SETUP_LINT_SEMANTIC
+      - _semantic_check
+    summary: Semantic pipeline is gated by PYTHON_SETUP_LINT_SEMANTIC (default on);
+      None falls back to the heuristic checker.
+  - file: src/python_setup_lint/checkers/conformance/suppression_justification_checker.py
+    lines: 152-158
+    anchors:
+      - check_if_meaningful
+      - add_message
+    summary: Trailing-reason path calls check_if_meaningful and emits
+      unjustified-suppression when it rejects the comment.
+  - file: pyproject.toml
+    lines: 28-31
+    anchors:
+      - semantic
+      - sentence-transformers>=3.0.0
+    summary: The optional semantic extra currently ships sentence-transformers only;
+      model replacement affects packaging.
+  - file: pyproject.toml
+    lines: 49-49
+    anchors:
+      - addopts
+    summary: Default pytest selection excludes slow tests, which matters for
+      model-download/cache test strategy.
+  - file: docs/semantic-justification.md
+    lines: 5-14
+    anchors:
+      - Overview
+      - Cross-encoder reranker
+      - Heuristic fallback
+    summary: Documented architecture is reranker-first with heuristic fallback and a
+      0.5 acceptance threshold.
+  - file: docs/semantic-justification.md
+    lines: 34-45
+    anchors:
+      - Model Cache
+      - Result Cache
+      - _RESULT_CACHE
+      - results.json
+    summary: Docs specify model downloads and results.json in
+      ~/.cache/python-setup/semantic, plus the in-memory cache keyed by SHA-256.
+  - file: docs/semantic-justification.md
+    lines: 56-62
+    anchors:
+      - Test Strategy
+      - Research Status
+    summary: Test strategy distinguishes slow network tests from cache-hit tests,
+      and research status explicitly allows model/threshold/pipeline changes.
+  - file: .gitignore
+    lines: 243-244
+    anchors:
+      - NLP semantic model cache
+      - .cache/python-setup/semantic/
+    summary: Current semantic cache is explicitly gitignored, so 'git-stored cache'
+      is a new design decision requiring a new location and cleanup policy.
+  - file: tests/checkers/test_semantic_check.py
+    lines: 1-7
+    anchors:
+      - too-many-lines
+      - semantic_check_if_meaningful
+    summary: A 506-line semantic test module disables too-many-lines, already over
+      the CodingRules 500-line C0302 limit; prime debloat target.
+  - file: tests/checkers/test_semantic_check.py
+    lines: 159-257
+    anchors:
+      - TestBrushOffPatterns
+      - TestMeaningfulPatterns
+    summary: Heuristic brush-off/meaningful pattern tests overlap with the separate
+      threshold test, indicating redundant coverage.
+  - file: tests/checkers/test_semantic_check.py
+    lines: 263-424
+    anchors:
+      - TestSemanticCheck
+      - TestRerankerPairs
+    summary: Reranker-specific tests encode the current cross-encoder contract and
+      will need rewriting or retirement with the model swap.
+  - file: tests/checkers/test_semantic_threshold.py
+    lines: 19-25
+    anchors:
+      - TestSemanticThreshold
+    summary: Threshold test exercises check_if_meaningful with the semantic pipeline
+      disabled, duplicating heuristic coverage in test_semantic_check.
+  - file: AGENTS.md
+    lines: 79-85
+    anchors:
+      - Semantic justification pipeline
+      - PYTHON_SETUP_LINT_RERANKER_MODEL
+    summary: Agent context documents the cross-encoder pipeline and env var that the
+      modernization must update.
+  - file: AGENTS.md
+    lines: 87-93
+    anchors:
+      - Testing Strategy
+    summary: Defines the unit/integration/lint gates, including the fit-for-purpose
+      integration test over all 13 tools.
+  - file: AGENTS.md
+    lines: 121-139
+    anchors:
+      - Pre-commit hooks
+    summary: Full lint pipeline runs on commit and fails on NEW violations versus
+      the baseline; repo-wide refactors are gated by this.
+  - file: CodingRules.md
+    lines: 90-107
+    anchors:
+      - Simplification
+    summary: Simplification rules (remove redundant wrappers, duplicated logic,
+      over-engineering, redundant checks/fallbacks) are the debloat mandate.
+  - file: CodingRules.md
+    lines: 139-159
+    anchors:
+      - Complexity Rules (R0912 / R0915 / C0302) — enforced, not noise
+    summary: "Complexity thresholds are enforced: <=16 branches, <=65 statements,
+      <=500 lines/module; over-limit modules must be split, not baselined."
+  - file: CodingRules.md
+    lines: 230-306
+    anchors:
+      - Tests
+      - Test Code Quality
+      - Isolation
+    summary: Test rules define metrics, mocking at boundaries, categories, naming,
+      isolation, fixture scope, and conftest scope used to judge test debloat.
+  - file: lint.baseline
+    lines: 1-1
+    anchors:
+      - "[]"
+    summary: The lint baseline is empty, so the repo currently tolerates zero
+      pre-existing violations; any regression fails the self-lint gate.
+
+
+## Limits
+{
+  "maxParallelItems": 4,
+  "maxParallelTurns": 6,
+  "stubMaxProdLines": 40,
+  "maxStepAttempts": 2,
+  "maxInterruptions": 3,
+  "maxFixRounds": 3,
+  "maxConsultsPerItem": 2,
+  "maxSplitDepth": 1,
+  "maxPlanReviewRounds": 2,
+  "maxAmendmentsPerIteration": 3,
+  "maxIterations": 6,
+  "maxInfraRetries": 3,
+  "maxInfraRetriesExpensive": 1,
+  "gateRetries": 1,
+  "gateTimeoutSec": 900,
+  "storyMaxProdLines": 300,
+  "simpleMaxProdLines": 20,
+  "maxMilestones": 8,
+  "maxItemsPerPlan": 50,
+  "checkOutputBytes": 4000,
+  "maxEmptyWaves": 3,
+  "minFreeDiskMb": 2048
+}
+
+## Output
+
+Yield a structured JSON object matching this schema:
+- status (string, required, enum: ["approved","changes_requested"])
+- summary (string, required)
+- suggestions (array of object, required)
+  - id (string, required)
+  - disposition (string, required, enum: ["fix","optional","architect","human-awareness","human-async"])
+  - summary (string, required)
+  - detail (string, optional)
+  - location (object, optional)
+    - file (string, required)
+    - line (integer, optional)

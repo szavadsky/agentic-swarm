@@ -1,0 +1,7 @@
+id: q-concern-rm-6e63c3be9e
+ref: test-debloat-audit
+disposition: human-awareness
+question: Conftest re-export removal; audit's conftest row (keep, canonical
+  registry snapshot at :132) verified and unaffected. No conflict.
+status: open
+createdAt: 2026-11-10T02:58:56.271Z

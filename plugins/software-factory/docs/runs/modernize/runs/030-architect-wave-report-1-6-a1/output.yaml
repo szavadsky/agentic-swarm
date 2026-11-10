@@ -1,0 +1,16 @@
+context: wave
+decision: continue
+rationale: "Wave 6 merged golden-helpers-unit (tests/_golden.py + synthetic
+  tests); tree clean, all 4 gates baseline-identical with zero regressions. M1
+  critical path unblocked: golden-snapshot-wiring deps (probe + helpers-unit)
+  both merged. No plan change; stale wave 3-5 originals remain skipped in favor
+  of v2 chain. Merged history untouched."
+text: "Next: run wave 7 golden-snapshot-wiring (commit golden+counts via helper
+  serialization, wire test_setup_new_and_lint second capture; temp copies only,
+  never bare uv run lint; bounded src allowance ONLY if probe proved test-side
+  insufficient). Acceptance baseline-relative (6 pre-existing 13-vs-14 failures
+  persist; no new failures; regen twice byte-identical; golden+counts
+  byte-stable). Then v2 chain (consolidate-v2, audits-v2); skip stale wave 3-5
+  originals (same outlineRef merges once). Do not touch .factory records.
+  Baseline SIM102/W9704/R0914/C0208 + tool-count tests stay scoped to M3
+  audits/iter2; ruff-format --check remains operator action."

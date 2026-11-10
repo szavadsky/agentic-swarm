@@ -1,0 +1,27 @@
+id: c-490224ade0
+kind: risk
+summary: Native standby warming and idle compaction are unavailable in
+  one-process-per-turn -p sessions
+detail: OMP's idle maintenance is enabled only by the interactive TUI; SDK, RPC
+  and print sessions do not enable it (docs/sdk.md:278). A `-p` process exits
+  after the turn, so providers.cacheWarming=idle cannot replay a request during
+  factory standby and compaction.idle* never fires. `streaming` warming still
+  applies during long tool executions inside a turn. The practical standby
+  mechanism is providers.cacheRetention=long (1h), not native idle warming.
+location:
+  file: plugins/software-factory/docs/ARCHITECTURE.md
+  line: 38
+affects:
+  - 20b
+  - 20d
+severity: medium
+status: routed
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: spike-cache-key
+  lastSeen: 2026-11-10T00:16:23.859Z
+createdAt: 2026-11-10T00:16:23.859Z
+updatedAt: 2026-11-10T01:53:41.429Z
+disposition: architect

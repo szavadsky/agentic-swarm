@@ -1,0 +1,25 @@
+id: c-f972360209
+kind: tech-debt
+summary: Merge redrive ignores retry-with-guidance (no execution path);
+  guidance-only recovery cannot fix environmental gate failures
+detail: Wave-1 merge consults returned retry-with-guidance with persist:true
+  instructing `bun install` in each childWt, but redriveMergeAfterConsult
+  re-runs mergeItem directly when the item stays `ready` and never ticks the
+  item machine — so the guidance had no execution path and all four redrives
+  re-failed identically (2/2 → abandon). Merge-path retries need either an
+  engine-executed remediation step or a fix-loop re-entry; architect text
+  guidance alone cannot repair environmental merge failures.
+affects:
+  - redrive
+  - wave-merge
+severity: medium
+status: routed
+source:
+  record: 015-architect-wave-report-1-1-a1
+  agent: architect
+  step: architect-wave-report-1-1
+  iteration: 1
+  lastSeen: 2026-11-10T01:58:22.916Z
+createdAt: 2026-11-10T01:58:22.916Z
+updatedAt: 2026-11-10T04:54:39.246Z
+disposition: optional

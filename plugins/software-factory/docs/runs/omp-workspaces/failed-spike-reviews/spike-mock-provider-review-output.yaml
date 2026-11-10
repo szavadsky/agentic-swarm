@@ -1,0 +1,34 @@
+status: approved
+summary: Spike proves -e registerProvider mock seam on real omp with zero paid
+  calls; M1 scenario-2 answered, no prod edits.
+suggestions:
+  - detail: Existing live test is test/harness/smoke-live.test.ts; M8 proposal
+      test/e2e/mock-provider/* introduces a new top-level dir. Prefer
+      test/harness/mock-provider/* to match repo idiom, or justify the e2e split
+      in the spike doc.
+    disposition: optional
+    id: test-path-consistency
+    location:
+      file: .factory/tasks/omp-workspaces/items/spike-mock-provider/steps/001-research-r1-a1/output.yaml
+      line: 70
+    summary: Proposed test/e2e/mock-provider diverges from test/harness layout
+  - detail: Findings describe event sequence, usage fields, and yield envelope
+      accurately (verified against ndjson.ts:64-142) but give no raw lines. One
+      short session-to-agent_end excerpt would let M8 build parser fixtures
+      without re-running probes.
+    disposition: optional
+    id: ndjson-raw-excerpt
+    location:
+      file: .factory/tasks/omp-workspaces/items/spike-mock-provider/steps/001-research-r1-a1/output.yaml
+      line: 46
+    summary: Add one raw NDJSON transcript excerpt to spike draft
+  - detail: Scenario types include error {status?,message} but findings honestly
+      disclose 'Error turns optional, not probed'. M8 runner should verify omp
+      -p exit code and NDJSON error mapping for HTTP 500 before adopting
+      match/onExhausted failure semantics.
+    disposition: optional
+    id: error-turn-unprobed
+    location:
+      file: .factory/tasks/omp-workspaces/items/spike-mock-provider/steps/001-research-r1-a1/output.yaml
+      line: 66
+    summary: Error-turn scenario variant unprobed; verify before M8 relies on it

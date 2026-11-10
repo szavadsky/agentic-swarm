@@ -1,0 +1,28 @@
+id: c-6f47dfe905
+kind: tech-debt
+summary: ADR-011 names a test class that no longer exists and carries stale line
+  references
+detail: docs/adr/ADR-011.md:48-49 assigns the semantic block to
+  TestSuppressionRerankerPipeline, but grep finds no such class at HEAD; the
+  semantic-owned block is TestAnyElementCodeEcho at
+  tests/checkers/test_suppression_justification_checker.py:366-392. The same
+  ADR/map stale-line pattern affects _base.py:238 (now :244-246) and :143-238
+  (now :160-252).
+location:
+  file: docs/adr/ADR-011.md
+  line: 48
+affects:
+  - adr-formalization
+  - epic-checkers-modernize
+  - epic-semantic-infrastructure
+severity: medium
+status: routed
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: epic-kickoff-gate
+  lastSeen: 2026-11-10T00:08:48.409Z
+createdAt: 2026-11-10T00:08:48.409Z
+updatedAt: 2026-11-10T01:56:20.258Z
+disposition: optional

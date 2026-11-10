@@ -1,0 +1,81 @@
+status: ok
+summary: "Addressed all three review FIX items in the existing verdict file
+  tests/assumptions/test_pylint_cache_semantics.py (file already existed at
+  HEAD; no new file, no src writes, no other repo diffs): (1) added an
+  rcfile-jobs watchdog that scans every shipped config/.pylintrc* (all sections,
+  mirroring pylint 4.0.6's flattening of rcfile options), verifies the runner
+  resolves all three pylint invocations to those jobs-free rcfiles, and includes
+  a negative control proving a consumer 'jobs=2' is detected; qualified the
+  docstring so the single-writer/no-lock verdict explicitly holds only while
+  effective jobs==1 and names --config pylint=PATH / cwd rcfile overrides as the
+  bypass; (2) reworded the sweep bullet from 'the tracked schema's files field'
+  to a future/proposed per-entry files field, stating today's schema is
+  dict[int, bool]; (3) corrected 'pylint 4.0.6 (pinned)' to the current floor
+  pylint>=4.0.6 and stated the tests are the upgrade watchdog. Also took the
+  straightforward optional items: pinned the empty-primary no-write path, added
+  an AST watchdog that runner code imports no concurrent/multiprocessing
+  dispatch and _run_tool_pipeline blocks on _run_cmd in one _select_lint_tools
+  loop, pinned ProcessPoolExecutor in pylint check_parallel, qualified the
+  ~/.cache/pylint stats path as a Linux example, and made the writer
+  single-caller scan match attribute-qualified calls. File is 485 lines (under
+  the 500-line pylint cap); 21 tests in the file pass offline with the
+  no_external_api marker."
+target:
+  command: uv run pytest tests/assumptions/test_pylint_cache_semantics.py -q
+  customTarget: true
+evidence:
+  - uv run pytest tests/assumptions/test_pylint_cache_semantics.py -q => 21
+    passed (was 15; +6 watchdog/path tests)
+  - uv run pytest tests/assumptions/ -q => 29 passed
+  - uv run pytest -q => 1378 passed, 4 skipped, 18 deselected, 4 warnings
+    (serial, final run)
+  - uv run pytest tests/integration.py -q => 9 passed in 63.01s
+  - uv run lint --tools 'ruff check,pylint tests,mypy,pyright check' => all
+    PASSED; pylint tests 76 modules score 10.0, mypy 56 source files clean,
+    pyright 110 files 0 errors/0 warnings
+  - uv run ruff check --config config/ruff.toml
+    tests/assumptions/test_pylint_cache_semantics.py => All checks passed; ruff
+    format --check => already formatted
+  - uv run detect-secrets scan tests/assumptions/test_pylint_cache_semantics.py
+    => results {}, exit 0
+  - git diff --check => clean; git status --porcelain=v1 => only ' M
+    tests/assumptions/test_pylint_cache_semantics.py' (no
+    src/config/.secrets.baseline changes)
+  - "Negative controls for new watchdogs: rcfile parser detects [MAIN] jobs=2 as
+    ('MAIN', 2); attribute-qualified _save_result_cache calls (module- and
+    self-prefixed) are matched; synthetic 'from concurrent.futures import
+    ThreadPoolExecutor' is flagged by the runner concurrency-import predicate"
+  - "FIX jobs-rcfile-bypass-unpinned: shipped config/.pylintrc, .pylintrc-pyi,
+    .pylintrc-tests scanned in every section for jobs and all resolve to no
+    override (default 1); docstring now states the verdict holds only when
+    effective jobs==1 and that consumer rcfile/--config override with jobs>1 or
+    jobs=0 voids it"
+  - "FIX tracked-schema-files-field-phantom: docstring now says a future tracked
+    schema needs per-entry file refs and today's schema is only dict[int, bool]"
+  - "FIX pylint-pin-misstatement: docstring now cites the pylint>=4.0.6 floor in
+    pyproject.toml and identifies these tests as the upgrade watchdog for jobs
+    defaults and check_parallel dispatch"
+  - "OPTIONAL items: empty-primary short-circuit returns False and writes
+    nothing; runner serial dispatch AST watchdog; ProcessPoolExecutor pinned via
+    inspect.getsource(pylint_parallel.check_parallel); ~/.cache/pylint qualified
+    as Linux example; attribute-aware writer call scan"
+concerns:
+  - The watchdog covers shipped rcfiles and runner defaults only; a consumer
+    rcfile or --config pylint=PATH override with jobs>1 (or jobs=0 auto-detect)
+    still voids the single-writer verdict, as now stated in the docstring. The
+    epic must treat effective jobs==1 as a precondition, not an invariant of
+    consumer projects.
+  - The verdict remains intentionally pinned to pylint 4.0.6 behavior; upgrading
+    pylint can fail the jobs-default, check_parallel/ProcessPoolExecutor, or
+    writer-scan tests by design, requiring re-derivation rather than loosening
+    assertions.
+  - The runner seriality watchdog is a structural AST pin (no
+    concurrent/multiprocessing imports; one _select_lint_tools loop containing
+    _run_cmd), so a future refactor that preserves those shapes but adds
+    concurrency elsewhere would still need review.
+notes: File verified at HEAD and updated in place at
+  tests/assumptions/test_pylint_cache_semantics.py; the readable verdict remains
+  the module docstring's WRITER-FIRST VERDICT section. Exactly one repo file
+  changed, no src writes. All targeted gates and the full unit/integration
+  suites are green; the previously observed detect-secrets MemoryError was
+  environmental, and a direct scan of the changed file returns zero findings.

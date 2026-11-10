@@ -1,0 +1,25 @@
+slug: never-test-linting-prune
+kind: test-only
+title: Prune gate-duplicating tests with survivors
+assignment: "Tests-only, owns ONLY 6 files wholly
+  (tests/runner/test_self_lint_clean.py, test_config_consistency.py,
+  test_pyright_noise_filter.py, test_runner_private_imports.py,
+  test_t9_7_compose_pyright_live.py, test_autofix_conflict_integration.py);
+  FORBIDDEN all other test files. Red-test-exempt. Remove gate-duplicating tests
+  per never-test-linting boundary (subprocess re-lint, AST re-implementation,
+  config re-checks); hardcoded paths inside owned files handled here (file
+  deleted or path fixed); each removal names survivor (golden/assumption/unit);
+  default full-pipeline pin = tests/runner/test_real_pipeline_smoke.py kept; a
+  named default-collected survivor is allowed only if the report proves smoke
+  itself violates never-test-linting. Keep golden/integration contracts. Verify:
+  tests only; removal-to-survivor map in report; pytest (minus removed) +
+  integration show no new failures vs M1 table; golden hash-equal."
+outlineRef: never-test-linting-prune
+milestone: M2
+wave: 4
+scenarioRefs:
+  - "M2: Gate-duplicating tests pruned with pin retained"
+citations:
+  - AGENTS.md:87-93
+  - CodingRules.md:230-306
+  - lint.baseline:1

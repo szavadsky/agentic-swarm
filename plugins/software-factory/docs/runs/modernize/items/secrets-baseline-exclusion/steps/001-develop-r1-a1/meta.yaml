@@ -1,0 +1,19 @@
+seq: 1
+name: develop
+attempt: 1
+fixRound: 1
+agent: developer
+role: workhorse
+models:
+  - opencode-go/deepseek-v4.1-flash
+  - opencode-go/muse-spark-1.3-contributor
+timeoutSec: 5400
+status: ok
+startedAt: 2026-11-08T19:54:41.085Z
+session: 01a1bcba-ffd5-748d-9134-999550b9b306
+endedAt: 2026-11-08T20:05:24.653Z
+usage:
+  inputTokens: 50483
+  outputTokens: 18592
+  costUsd: 0.022506
+traceRef: /home/slava/aiexp/python-setup.factory-wt/.factory-runtime/sessions/2026-11-08T19-55-34-229Z_01a1bcba-ffd5-748d-9134-999550b9b306.jsonl

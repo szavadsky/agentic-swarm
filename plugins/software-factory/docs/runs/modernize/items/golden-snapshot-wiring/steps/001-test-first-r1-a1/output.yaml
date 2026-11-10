@@ -1,0 +1,92 @@
+status: ok
+summary: "Authored the test-first wiring for the golden findings snapshot. Added
+  `collect_findings()` to tests/_golden.py: it runs the finding-producing tools
+  of the runner pipeline (record-parser tools only, so `ruff format` cannot
+  rewrite the pristine copy before line numbers are assigned), parses
+  pylint/pylint-pyi/pylint-tests json2 payloads plus the runner's text record
+  parsers, and normalizes every record via `normalize_record`. Rewired
+  `tests/integration.py::TestMinimalSampleProject::test_setup_new_and_lint`: the
+  first `run_lint` run still asserts rc != 0, all tool sections, no `[CRASH]`,
+  no unexpected `SKIPPED` and W9705; a dedicated second capture on a fresh copy
+  (copy_sample, git-init, `_make_config` with package_name+rumdl override,
+  `PYTHON_SETUP_LINT_SEMANTIC=0`) is compared to the committed golden as a
+  multiset, then oracle-rule coverage, per-tool minimum coverage and full
+  registered-tool key coverage are asserted. Brush-off/carry are tool-qualified
+  lookups on `pylint` + `src/minimal_sample/mod.py` (line 49
+  unjustified-suppression present, line 56 absent). Drift injection uses
+  in-memory list copies only and asserts the exact added/removed keys.
+  `violations.txt` remains the oracle via `read_oracle_rules()`. Golden
+  artifacts were generated and validated (158 findings covering all oracle
+  rules; tool counts include all 14 registered tools), regeneration twice was
+  byte-identical, then the generated files were removed so the declared test is
+  genuinely red for the develop step (the snapshot artifact does not exist
+  yet)."
+target:
+  selectors:
+    - tests/integration.py::TestMinimalSampleProject::test_setup_new_and_lint
+  expectRed:
+    - tests/integration.py::TestMinimalSampleProject::test_setup_new_and_lint
+evidence:
+  - "`uv run pytest tests/test_golden.py -q` -> 26 passed (golden helper unit
+    suite remains green)."
+  - Temporary generation with `env -u CI -u GITHUB_ACTIONS
+    PYTHON_SETUP_LINT_UPDATE_GOLDEN=1 uv run pytest
+    tests/integration.py::TestMinimalSampleProject::test_setup_new_and_lint -q`
+    -> 1 passed; produced 158 findings covering every rule in violations.txt
+    (oracle missing set empty).
+  - "Generated counts artifact contained all 14 registered tools: detect-secrets
+    0, mypy 2, mypy.stubtest 0, pylint 57, pylint tests 29, pylint-pyi 43,
+    pyright check 0, pyright verify types 0, ruff check 25, ruff format 0, rumdl
+    check 1, tach check 0, ty check 1, yamllint 0."
+  - Normal (no-update) run against the generated snapshot -> 1 passed, including
+    oracle/tool coverage, brush-off line 49 present / carry line 56 absent, and
+    drift-injection assertions.
+  - "Regeneration determinism: ran UPDATE_GOLDEN=1 twice; sha256 of both
+    artifacts identical before/after (findings
+    c2b8dc3a9ed42832e6906379d0e1a2f8e3823816b33145d786b08efb23799f96, counts
+    1d239741f47669aa7d49ea786d57eea6435ebb8662cd3505fbafb8f33d048363)."
+  - "Red verification: after removing tests/data/golden, the declared test fails
+    after a full capture with `golden file not found: ...; run with
+    PYTHON_SETUP_LINT_UPDATE_GOLDEN=1 to create it` (clean pytest.fail, not
+    import/compile error)."
+  - "`uv run ruff check --config config/ruff.toml tests/_golden.py
+    tests/integration.py` -> All checks passed; `uv run ruff format --check ...`
+    -> 2 files already formatted; `uv run mypy --config-file config/mypy.ini
+    tests/_golden.py tests/integration.py` -> Success, no issues."
+  - "`uv run pylint --rcfile config/.pylintrc-tests --output-format=text
+    tests/_golden.py tests/integration.py` -> 10.00/10 after adding the
+    documented W9740 and W9704 justifications; final re-run after the last
+    two-line drift-message edit was aborted by the step time budget."
+  - "Full unit suite excluding the declared target: 1334 passed, 4 skipped; the
+    6 failures (tool-count/parser-completeness tests expecting 13 tools while
+    TOOLS has 14, `ruff format` lacking a statistics parser) were reproduced on
+    the unmodified baseline via a temporary `git stash`/`git stash pop`, so they
+    are pre-existing and unrelated."
+concerns:
+  - "Golden data files are intentionally NOT committed in this test-first step:
+    the develop step must generate them with `env -u CI -u GITHUB_ACTIONS
+    PYTHON_SETUP_LINT_UPDATE_GOLDEN=1 uv run pytest
+    tests/integration.py::TestMinimalSampleProject::test_setup_new_and_lint`,
+    then verify a second regen is byte-identical. The helper refuses
+    regeneration while CI/GITHUB_ACTIONS is set (unit-tested behavior)."
+  - "`collect_findings` deliberately excludes `ruff format` (and statistics-only
+    tools) because `ruff format` mutates the copy even without `--fix`, shifting
+    pylint line numbers (brush-off 49 -> 50). The capture therefore pins
+    findings against the committed source lines (49/56), while the first
+    `run_lint` run still exercises all 14 tool sections."
+  - Pylint custom checkers emit json2 while `_RECORD_PARSERS` expects text; the
+    test-local json2 adapter in tests/_golden.py exists solely so the golden
+    covers pylint/pylint-tests findings. Production baseline parsing of pylint
+    json2 remains a pre-existing gap (not changed here per determinism-only src
+    allowance).
+  - "No bounded production changes (runner/baseline.py, runner/parsers.py) were
+    needed: the probe-style captures proved test-side normalization suffices (no
+    absolute/`..` paths in findings, stable multiset across fresh copies)."
+notes: "Final modified files: tests/_golden.py (collect_findings +
+  _try_json2_findings + _result_findings, TYPE_CHECKING imports, _JSON2_TOOLS,
+  __all__ export) and tests/integration.py (golden imports, GOLDEN_FINDINGS
+  constant, removed superseded _read_violation_rules, rewired
+  test_setup_new_and_lint). tests/data/golden is currently absent by design
+  (red); tests/data/minimal_sample_project including violations.txt is
+  untouched. Probe scripts and generated golden artifacts were deleted from the
+  worktree."

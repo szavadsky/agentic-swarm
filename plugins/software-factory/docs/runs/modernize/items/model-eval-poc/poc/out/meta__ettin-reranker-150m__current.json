@@ -1,0 +1,22 @@
+{
+  "model": "ettin-reranker-150m",
+  "repo": "cross-encoder/ettin-reranker-150m-v1",
+  "revision": "025501c4e0f9bbeb4c5b198318e0089ff061cc14",
+  "params": 149014272,
+  "weights_bytes": 598439036,
+  "device": "cpu",
+  "dtype": "float32",
+  "torch_threads": 10,
+  "python": "3.14.4 (main, Aug 20 2026, 10:41:58) [GCC 15.2.0]",
+  "torch": "2.15.0+cpu",
+  "transformers": "5.22.2",
+  "sentence_transformers": "6.2.0",
+  "prompt": "current",
+  "n": 336,
+  "load_seconds": 0.6794025599956512,
+  "total_seconds": 175.06913636799436,
+  "peak_rss_mb": 990.9609375,
+  "errors": 0,
+  "excluded_reason": null,
+  "note": "trained reranker; raw relevance logit converted with sigmoid"
+}

@@ -1,0 +1,15 @@
+id: awareness-model-eval-poc-single-adjudicator-structural-no-go
+ref: model-eval-poc
+disposition: human-awareness
+question: "Verified: contracted accepted stratum is 215 meaningful / 0
+  meaningless (the sole repo_suppression negative c188 is heuristic-rejected),
+  so 95% precision is unevaluable by construction and heuristic baseline is 100%
+  by definition (test-table labels assert heuristic behavior). All 183 repo
+  labels are single-author (repo_labels.json) with terse borderlines ('planted
+  violation', 'usage docs in .pyi') all True; the 39 hard negatives making
+  augmented precision non-vacuous are author-written sensitivity data. Report
+  discloses this (§6 + §3). Architect can decide whether a double-rated real
+  brush-off sample is needed before any future go/no-go; no further PoC action
+  required for the no-go itself."
+status: open
+createdAt: 2026-11-08T14:32:46.234Z

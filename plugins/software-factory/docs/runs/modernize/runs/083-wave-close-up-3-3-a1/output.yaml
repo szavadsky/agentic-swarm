@@ -1,0 +1,25 @@
+blockedItems: []
+debt:
+  - "Carryover operator action from infra notes: documented `uv run lint` ruff
+    format ToolSpec runs plain `ruff format` without --check/--config and
+    mutates the worktree; declared gates still work around it via split
+    format/lint gates."
+failedItems: []
+iteration: 1
+mergedItems: []
+recommendations:
+  - "Operator: add --check (+ --config config/ruff.toml) to the ruff format
+    ToolSpec or drop it from TOOLS so `uv run lint` is check-only."
+  - Proceed to architect wave report / iteration close-out; no wave hygiene or
+    gate blockers.
+status: complete
+summary: "Wave 3 close-up: no merged items listed in wave report. Tree hygiene
+  clean: no untracked non-ignored files, no tracked junk suffixes, no merge
+  conflict markers in repo files (one `===` divider in
+  tests/assumptions/test_pylint_cache_semantics.py docstring verified as false
+  positive); only modified file is engine journal
+  .factory/tasks/modernize/journal.ndjson. Gate diff vs baseline: format
+  pass=pass green, test-integration pass=pass green, lint fail->pass IMPROVED,
+  test fail->pass IMPROVED. No regressions. Iteration defaulted to 1 (not
+  specified in prompt)."
+wave: 3

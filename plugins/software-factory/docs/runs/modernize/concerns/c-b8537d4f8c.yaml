@@ -1,0 +1,26 @@
+id: c-b8537d4f8c
+kind: tech-debt
+summary: "Stale doc references: _project_helpers docstring still names 'the
+  self-lint guards' (now pruned) and AGENTS.md test counts are outdated."
+detail: tests/_project_helpers.py:1-6 mentions self-lint guards that no longer
+  exist. AGENTS.md:10-11 claims '1290 pass, 4 skip, 15 deselected' and '7 pass'
+  for integration, while the merged tree yields 1357 passed / 0 skip / 7
+  deselected and 9 integration tests. Both pre-date this merge (inherited from
+  the parent tip) and are outside the item's declared scope, so they were left
+  untouched.
+location:
+  file: tests/_project_helpers.py
+  line: 4
+affects:
+  - AGENTS.md
+severity: low
+status: routed
+source:
+  record: 005-integrate-r1-a1
+  agent: developer
+  step: integrate
+  item: consolidate-integration-helpers-v3
+  lastSeen: 2026-11-09T23:49:50.606Z
+createdAt: 2026-11-09T23:49:50.606Z
+updatedAt: 2026-11-10T01:22:03.274Z
+disposition: optional

@@ -1,0 +1,25 @@
+status: approved
+summary: 8 assumption tests pin astroid/pylint/beartype contracts at locked
+  versions; all pass, scope clean (tests-only, AGENTS.md untouched).
+suggestions:
+  - id: lifecycle-global-state-fixture
+    disposition: optional
+    summary: Module-global _LIFECYCLE_EVENTS could use fixture-scoped clearing
+    detail: Test clears the global at start and passes in isolation (verified
+      single-test run), so no ordering defect. CodingRules Isolation prefers
+      explicit fixture control for shared mutable state; an autouse/clearing
+      fixture (or per-instance event collection from the two checker instances)
+      would make the control structural rather than positional. Non-blocking.
+    location:
+      file: tests/assumptions/test_pylint_contracts.py
+      line: 24
+  - id: confidence-none-narrowing
+    disposition: optional
+    summary: Assert confidence is not None before reading .name
+    detail: message.confidence is Confidence|None; direct mypy flags .name access
+      (tests/ excluded from the mypy gate via config/mypy.ini, so no gate
+      failure). An explicit `assert message.confidence is not None` pins the
+      observed non-None contract and documents why .name is safe. Non-blocking.
+    location:
+      file: tests/assumptions/test_pylint_contracts.py
+      line: 144

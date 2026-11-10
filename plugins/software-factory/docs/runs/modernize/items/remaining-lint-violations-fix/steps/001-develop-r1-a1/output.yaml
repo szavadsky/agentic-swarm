@@ -1,0 +1,70 @@
+status: ok
+summary: "Hardened the two W9704 Any-justification sites named by the assignment
+  with comment-only edits (no logic/config/test/golden changes): options-Any in
+  generic_key_dict_checker.py/.pyi and list[Any] return in testing.py/.pyi. The
+  recorded M1 baseline (infra.yaml) listed W9704 at
+  generic_key_dict_checker.py:40 and testing.py:34; in this worktree the
+  heuristic W9704 path already accepts the old trailing comments (optional
+  sentence-transformers extra is not installed), so reproduction confirmed the
+  sites are green locally while the new code-specific wording targets the
+  semantic-reranker path. All declared check-only lint tools pass with zero
+  pylint/pylint-pyi/pylint-tests messages, format is clean,
+  unit/integration/golden suites pass, and lint.baseline stays []."
+target:
+  command: uv run pytest -q
+  customTarget: true
+evidence:
+  - "Reproduction/current state: `uv run lint --tools 'pylint,pylint-pyi,pylint
+    tests'` reports PASSED with `\"messages\": []` for all three pylint passes
+    (zero W9704); the historic red sites are recorded in
+    .factory/tasks/modernize/infra.yaml (generic_key_dict_checker.py:40 and
+    testing.py:34). Local env lacks optional sentence-transformers, so W9704
+    exercises the heuristic fallback; new comments are more code-specific for
+    the reranker path."
+  - "Format gate: `uv run ruff format --check --config config/ruff.toml src
+    tests` -> '181 files already formatted' (exit 0); touched-file check after
+    edits also clean."
+  - "Lint gate (declared 13 check-only tools minus out-of-scope detect-secrets):
+    `uv run lint --tools 'tach check,ruff check,rumdl check,mypy,yamllint,ty
+    check,mypy.stubtest,pyright check,pyright verify
+    types,pylint,pylint-pyi,pylint tests'` -> all PASSED; pylint, pylint-pyi,
+    pylint tests each emitted zero messages."
+  - "Unit tests: `uv run pytest -q` -> 1357 passed, 4 skipped, 18 deselected, 0
+    failed."
+  - "Integration tests: `uv run pytest tests/integration.py -v` -> 9 passed
+    (install/lint/update/parity scenarios)."
+  - "Golden + real pipeline: `uv run pytest tests/test_golden.py
+    tests/runner/test_real_pipeline_smoke.py -q` -> 32 passed; `git status
+    --short` shows no tests/data or golden changes."
+  - "Checker-focused tests: `uv run pytest tests/checkers/test_semantic_check.py
+    tests/checkers/test_suppression_justification_checker.py -q` -> 118 passed,
+    4 skipped, 5 deselected."
+  - "Secrets scan in product scope: `git ls-files -z -- src tests config | xargs
+    -0 uv run detect-secrets-hook --baseline .secrets.baseline` -> exit 0.
+    Full-tree scan reports only .factory orchestration records (out of scope)
+    and exceeds the runner's 120s/tool cap."
+  - "Diff scope: 4 files, 4 insertions/4 deletions, comment text only;
+    `lint.baseline` remains `[]`; `git diff --check` exit 0."
+concerns:
+  - "The assignment's red state is not reproducible in this worktree's
+    verification environment: sentence-transformers (the optional `semantic`
+    extra) is absent, so W9704 uses the heuristic fallback which accepted the
+    pre-existing comments. The strengthened wording therefore cannot be
+    machine-validated against the cross-encoder (score >= 0.5) without a heavy
+    optional install/model download."
+  - Matching .pyi mirror sites (generic_key_dict_checker.pyi:13, testing.pyi:42)
+    were also strengthened because pylint-pyi applies the same W9704 Any check
+    to stubs and they carried the identical weak justification; this is
+    trivially behavior-preserving (comments only) and within the 'additional
+    src/** violations' allowance.
+  - Full detect-secrets gate cannot complete under the runner's 120s cap because
+    tracked .factory orchestration records are ~1.8GB; prior step also recorded
+    only .factory findings there. Secrets triage remains human-async/out of
+    scope per assignment.
+notes: "Per-file disposition: generic_key_dict_checker.py:38 options-Any
+  trailing justification strengthened; generic_key_dict_checker.pyi:13 mirrored;
+  testing.py:32 list[Any] return justification strengthened; testing.pyi:42
+  mirrored. testing.py:38 `# type: ignore[return-value]` was reviewed and left
+  unchanged (its existing reason is already technical and format-clean). No
+  tests were added because the item is kind=no-behavior/red-test-exempt;
+  behavior is unchanged by comment-only edits."

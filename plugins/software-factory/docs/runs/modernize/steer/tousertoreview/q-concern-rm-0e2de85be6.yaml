@@ -1,0 +1,7 @@
+id: q-concern-rm-0e2de85be6
+ref: test-debloat-audit
+disposition: human-awareness
+question: Cache key-format decision; outside audit scope (semantic/cache files
+  SKIPPED). Retained as digest.
+status: open
+createdAt: 2026-11-10T02:58:56.262Z

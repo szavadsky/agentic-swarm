@@ -1,0 +1,210 @@
+kind: saga
+rationale: "The intent is a system-wide modernization spanning at least three
+  independent, multi-wave workstreams: (1) repo-wide enforcement of
+  CodingRules.md/AGENTS.md across ~28.6k lines of Python and stubs, (2)
+  debloating code and removing redundant tests while preserving test intent, and
+  (3) an architecture migration replacing the sentence-transformers
+  cross-encoder reranker with a CPU-friendly small decision model plus a
+  git-stored, cleaned-up cache. Each workstream crosses module boundaries,
+  changes public/config surface (optional dependency, env vars, `_semantic.pyi`,
+  docs), and carries design tradeoffs (model selection, threshold semantics,
+  cache location/format/eviction, coverage retention). This exceeds a single
+  coherent story and requires decomposition into progressive epics, likely with
+  an initial model-evaluation spike."
+size: ~28.6k LOC across 184 .py/.pyi files (src ~11.4k, tests ~17.2k), 54 test
+  modules and 739 test functions; semantic subsystem is 189 LOC plus a 506-line
+  test module and 135-line threshold test; repo-wide 13-tool lint pipeline
+risks:
+  - Replacing the cross-encoder changes justification scoring behavior and the
+    0.5 accept threshold; existing persisted result caches and test expectations
+    may silently diverge.
+  - A GLiDE-0.4B-class decision model likely adds a new runtime dependency
+    (transformers/torch or ONNX) and CPU latency/memory/install-size costs; the
+    current optional extra only installs sentence-transformers.
+  - The requested 'git-stored cache' conflicts with the current home-directory,
+    .gitignored cache design; it raises repo-size, determinism, merge-conflict,
+    privacy, concurrent-write, and eviction/cleanup concerns.
+  - Repo-wide debloating and test removal can drop regression coverage; the
+    baseline is empty and the pre-commit/self-lint + integration gates are the
+    only safety net.
+  - Public surface changes must keep `_semantic.pyi`, `__all__`,
+    `PYTHON_SETUP_LINT_SEMANTIC`, `PYTHON_SETUP_LINT_RERANKER_MODEL`, docs, and
+    AGENTS.md references consistent.
+  - Python >=3.14 syntax (for example unparenthesized except tuples) and
+    .pyi/stubtest fidelity constrain mechanical refactors and tool autofixes.
+  - Enforcing coding rules across the whole repo will produce a large diff; lint
+    behavior must remain materially unchanged while lint.baseline stays
+    effectively clean.
+citations:
+  - file: src/python_setup_lint/checkers/_semantic.py
+    lines: 1-12
+    anchors:
+      - Cross-encoder reranking
+      - sentence-transformers
+    summary: "Module purpose: single-stage NLP justification pipeline built on a
+      cross-encoder reranker, lazily loaded with heuristic fallback on failure."
+  - file: src/python_setup_lint/checkers/_semantic.py
+    lines: 37-52
+    anchors:
+      - _CACHE_DIR
+      - _RERANKER_INSTANCE
+      - _RESULT_CACHE_FILE
+      - _RERANKER_MODEL
+    summary: Current model/result cache lives under ~/.cache/python-setup/semantic;
+      model is chosen by PYTHON_SETUP_LINT_RERANKER_MODEL defaulting to
+      jina-reranker-v2-base-multilingual.
+  - file: src/python_setup_lint/checkers/_semantic.py
+    lines: 93-122
+    anchors:
+      - _load_reranker
+      - CrossEncoder
+    summary: Lazy singleton loader imports sentence_transformers and constructs
+      CrossEncoder, disabling the reranker on import/model-load failure.
+  - file: src/python_setup_lint/checkers/_semantic.py
+    lines: 125-189
+    anchors:
+      - semantic_check_if_meaningful
+      - cache_key
+      - reranker.predict
+    summary: "Scoring entry point: SHA-256 cache key over
+      text/rule/context/comment/model, pair prediction, accept when score >=
+      0.5, persist each new result."
+  - file: src/python_setup_lint/checkers/_base.py
+    lines: 142-158
+    anchors:
+      - check_if_meaningful
+      - PYTHON_SETUP_LINT_SEMANTIC
+      - _semantic_check
+    summary: Semantic pipeline is gated by PYTHON_SETUP_LINT_SEMANTIC (default on);
+      None falls back to the heuristic checker.
+  - file: src/python_setup_lint/checkers/conformance/suppression_justification_checker.py
+    lines: 32-40
+    anchors:
+      - SuppressionJustificationChecker
+      - W9704
+      - unjustified-suppression
+    summary: W9704 consumes the meaningfulness decision for suppression comments;
+      the checker is the primary behavioral consumer of _semantic.
+  - file: src/python_setup_lint/checkers/conformance/suppression_justification_checker.py
+    lines: 152-158
+    anchors:
+      - check_if_meaningful
+      - add_message
+    summary: Trailing-reason path calls check_if_meaningful and emits
+      unjustified-suppression when it rejects the comment.
+  - file: pyproject.toml
+    lines: 28-31
+    anchors:
+      - semantic
+      - sentence-transformers>=3.0.0
+    summary: The optional semantic extra currently ships sentence-transformers only;
+      model replacement affects packaging.
+  - file: pyproject.toml
+    lines: 49-49
+    anchors:
+      - addopts
+    summary: Default pytest selection excludes slow tests, which matters for
+      model-download/cache test strategy.
+  - file: docs/semantic-justification.md
+    lines: 5-14
+    anchors:
+      - Overview
+      - Cross-encoder reranker
+      - Heuristic fallback
+    summary: Documented architecture is reranker-first with heuristic fallback and a
+      0.5 acceptance threshold.
+  - file: docs/semantic-justification.md
+    lines: 34-45
+    anchors:
+      - Model Cache
+      - Result Cache
+      - _RESULT_CACHE
+      - results.json
+    summary: Docs specify model downloads and results.json in
+      ~/.cache/python-setup/semantic, plus the in-memory cache keyed by SHA-256.
+  - file: docs/semantic-justification.md
+    lines: 56-62
+    anchors:
+      - Test Strategy
+      - Research Status
+    summary: Test strategy distinguishes slow network tests from cache-hit tests,
+      and research status explicitly allows model/threshold/pipeline changes.
+  - file: .gitignore
+    lines: 243-244
+    anchors:
+      - NLP semantic model cache
+      - .cache/python-setup/semantic/
+    summary: Current semantic cache is explicitly gitignored, so 'git-stored cache'
+      is a new design decision requiring a new location and cleanup policy.
+  - file: tests/checkers/test_semantic_check.py
+    lines: 1-7
+    anchors:
+      - too-many-lines
+      - semantic_check_if_meaningful
+    summary: A 506-line semantic test module disables too-many-lines, already over
+      the CodingRules 500-line C0302 limit; prime debloat target.
+  - file: tests/checkers/test_semantic_check.py
+    lines: 159-257
+    anchors:
+      - TestBrushOffPatterns
+      - TestMeaningfulPatterns
+    summary: Heuristic brush-off/meaningful pattern tests overlap with the separate
+      threshold test, indicating redundant coverage.
+  - file: tests/checkers/test_semantic_check.py
+    lines: 263-424
+    anchors:
+      - TestSemanticCheck
+      - TestRerankerPairs
+    summary: Reranker-specific tests encode the current cross-encoder contract and
+      will need rewriting or retirement with the model swap.
+  - file: tests/checkers/test_semantic_threshold.py
+    lines: 19-25
+    anchors:
+      - TestSemanticThreshold
+    summary: Threshold test exercises check_if_meaningful with the semantic pipeline
+      disabled, duplicating heuristic coverage in test_semantic_check.
+  - file: AGENTS.md
+    lines: 79-85
+    anchors:
+      - Semantic justification pipeline
+      - PYTHON_SETUP_LINT_RERANKER_MODEL
+    summary: Agent context documents the cross-encoder pipeline and env var that the
+      modernization must update.
+  - file: AGENTS.md
+    lines: 87-93
+    anchors:
+      - Testing Strategy
+    summary: Defines the unit/integration/lint gates, including the fit-for-purpose
+      integration test over all 13 tools.
+  - file: AGENTS.md
+    lines: 121-139
+    anchors:
+      - Pre-commit hooks
+    summary: Full lint pipeline runs on commit and fails on NEW violations versus
+      the baseline; repo-wide refactors are gated by this.
+  - file: CodingRules.md
+    lines: 90-107
+    anchors:
+      - Simplification
+    summary: Simplification rules (remove redundant wrappers, duplicated logic,
+      over-engineering, redundant checks/fallbacks) are the debloat mandate.
+  - file: CodingRules.md
+    lines: 139-159
+    anchors:
+      - Complexity Rules (R0912 / R0915 / C0302) — enforced, not noise
+    summary: "Complexity thresholds are enforced: <=16 branches, <=65 statements,
+      <=500 lines/module; over-limit modules must be split, not baselined."
+  - file: CodingRules.md
+    lines: 230-306
+    anchors:
+      - Tests
+      - Test Code Quality
+      - Isolation
+    summary: Test rules define metrics, mocking at boundaries, categories, naming,
+      isolation, fixture scope, and conftest scope used to judge test debloat.
+  - file: lint.baseline
+    lines: 1-1
+    anchors:
+      - "[]"
+    summary: The lint baseline is empty, so the repo currently tolerates zero
+      pre-existing violations; any regression fails the self-lint gate.

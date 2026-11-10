@@ -1,0 +1,242 @@
+iteration: 3
+items:
+  - assignment: "Validate ADR-008 durability at HEAD (fact-finder, read-only on
+      repository; output findings.md + structured findings; review checks
+      validity; zero repo writes, zero git writes). Re-glob ownership universe
+      via git ls-files filtered to src/** + scripts/** + tests/** EXCLUDING
+      tests/data/**; recount 5-owner map and confirm 67/83/15/4/15 within ±5 per
+      owner with total equal to recount. Confirm symbol-exclusion column
+      references existing symbols: checkers/_semantic.py+.pyi,
+      _base.py::check_if_meaningful including :238 rule-echo line, no_try_import
+      _OPTIONAL_IMPORT_PATTERNS + that file's register line, semantic test
+      modules + TestSuppressionRerankerPipeline class block. Confirm
+      planned-path reservations name only planned paths (incl.
+      tests/checkers/conftest.py as reservation, not owned file). Confirm
+      root-owned group (tests/data, config, docs, repo-root files, epics
+      read-only except packaging exception) and TD3-A1 docs rows in drift scope.
+      Pin exact stream read/decode block list + helper signature for checkers
+      epic (audit-estimated ~15). Output validated map with revision map-<HEAD
+      short SHA> + drift list in {path, auditRef, headEvidence, disposition:
+      confirmed|corrected|disputed} as item-report tables consumed by all three
+      epics. Covers U1/TD3-B2; feeds epic-kickoff-gate and ADR-011 spawn."
+    citations:
+      - src/python_setup_lint/checkers/_semantic.py:1-12
+      - src/python_setup_lint/checkers/_base.py:142-158
+      - tests/checkers/test_semantic_check.py:1-7
+      - tests/checkers/test_semantic_threshold.py:19-25
+      - AGENTS.md:79-85
+      - CodingRules.md:139-159
+    deps: []
+    kind: fact-finder
+    milestone: M1
+    outlineRef: ownership-map-revalidation
+    scenarioRefs:
+      - "M1: Ownership map validated"
+    slug: ownership-map-revalidation
+    title: Re-validate unified ownership map at HEAD
+    wave: 1
+  - assignment: "Land operator-approved .factory/ exclusion (no-behavior:
+      config-only change with no prod behavior change; tests materially
+      identical; QA verifies test-diff contains no semantic assertion weakens;
+      peer review; engine commits, agent zero git writes). First pre-validate
+      filters_used schema against installed detect-secrets version
+      (should_exclude_file signature; list-pattern vs scalar form) and use
+      version-correct form. Then insert ^\\.factory/ entry into
+      .secrets.baseline filters_used (after ~line 40), keeping journals
+      committed. No other baseline edits. Verify on clean checkout: full
+      git-ls-files detect-secrets scan exits 0 while planted control secret
+      still exits 1 (reviewer-replicated procedure). Keep residual-risk caveat
+      in report (write-time redaction + periodic unfiltered audits). M1
+      acceptance cites mechanism + pinned HEAD, not finding counts. Covers
+      TD3-I2."
+    citations:
+      - lint.baseline:1-1
+      - AGENTS.md:121-139
+    deps: []
+    kind: no-behavior
+    milestone: M1
+    outlineRef: secrets-baseline-exclusion
+    scenarioRefs:
+      - "M1: Secrets gate green by mechanism"
+    slug: secrets-baseline-exclusion
+    title: Add .factory/ exclusion to .secrets.baseline
+    wave: 1
+  - assignment: "Close iteration-2 M3 gap (test-assumptions: permanent tests in
+      paths.tests asserting assumptions; review checks validity; offline, no src
+      writes). If tests/assumptions/test_pylint_cache_semantics.py already
+      merged at HEAD, verify verdict exists and is readable and report location;
+      else land EXACTLY ONE new file at that path (no_external_api,
+      test_<api>_given_<condition>_then_<expected>, offline, no src writes).
+      Writer-first verdict must pin writer identity + timing + --path scoping
+      (crash-safe lock vs runner post-merge vs jobs=1/sidecars-if--j). Verdict
+      is consumed by epic-semantic-infrastructure cache concurrency (epic must
+      not invent semantics). Covers U3/TD3-I1 and ADR-010 writer-first input."
+    citations:
+      - src/python_setup_lint/checkers/_semantic.py:37-52
+      - docs/semantic-justification.md:34-45
+      - docs/semantic-justification.md:56-62
+      - pyproject.toml:49-49
+      - CodingRules.md:230-306
+    deps: []
+    kind: test-assumptions
+    milestone: M1
+    outlineRef: pylint-cache-semantics-closure
+    scenarioRefs:
+      - "M1: Epic kickoff gated on validated artifacts"
+    slug: pylint-cache-semantics-closure
+    title: Land or verify pylint writer/timing verdict
+    wave: 1
+  - assignment: "Root-owned ADR lifecycle, docs only (no-behavior: tests materially
+      identical; QA verifies test-diff contains no semantic assertion weakens;
+      peer review; engine commits, agent zero git writes). Overwrite
+      docs/adr/ADR-009/010/011 problem-statement stubs with full
+      Context/Decision/Consequences matching plan (009 no-go-gated infra-first,
+      010 spike contracts + PYTEST_CURRENT_TEST-only dotted path with loader
+      test, 011 validated-map decomposition with AGENTS split + single-writer
+      table + shift handoff); create docs/adr/ADR-012.md for register()
+      missing-beartype exemption (PyLinter circular import, no @beartype, mixin
+      misc attempt-with-fallback); add staleness notes to ADR-001/005/006; add
+      locations cross-reference (docs/adr/README.md pointer to design/ per
+      CodingRules). Verify 12 ADR files each carry Context/Decision/Consequences
+      or explicit staleness note; rumdl clean; no other docs touched
+      (AGENTS.md/CHANGELOG/README rows per kickoff docs assignment). Covers
+      TD3-A1 root-owned rows."
+    citations:
+      - docs/semantic-justification.md:5-14
+      - AGENTS.md:79-85
+      - pyproject.toml:28-31
+    deps: []
+    kind: no-behavior
+    milestone: M1
+    outlineRef: adr-formalization
+    scenarioRefs:
+      - "M1: Epic kickoff gated on validated artifacts"
+    slug: adr-formalization
+    title: Formalize ADRs 009-012 and reconcile stale ADRs
+    wave: 1
+  - assignment: "Root-owned coordination checkpoint (fact-finder, read-only;
+      findings.md + structured findings; review checks validity; zero repo
+      writes, zero git writes). Consume validated-map report (revision map-<HEAD
+      short SHA> + drift list), pylint verdict readability, and merged
+      .secrets.baseline exclusion. Record post-kickoff HEAD; per-epic ownership
+      tables referencing revision; universe file count with 5-owner counts;
+      drift-list row count with corrected file:line per row; AGENTS.md
+      assignments by exact rows with engine wave order (runner-owned if assigned
+      = ## Quick Commands :9-11 + ## Tool Scope adding ruff format row in
+      earlier wave than semantic item; semantic-owned = ### Semantic
+      justification pipeline only; checkers never touches AGENTS.md) plus
+      read-only merge-base rule (semantic base must contain runner merge when
+      runner assigned, else waits); shared-file single-writer table
+      (checkers/_base.py=semantic only, _source_stream.py=checkers new file,
+      no_try_import register line+patterns=semantic, test_suppression class
+      block=semantic rest=checkers, trivial_wrapper peek line preconditioned on
+      runner close-up); docs-row assignments from drift list per decision rule
+      (defaults: runner counts/scope/version/pin, semantic pipeline, root ADR
+      via adr-formalization). Resolve disputes by amended assignment before epic
+      waves scale; gate report shows zero unresolved disputes (each resolved
+      dispute cites amended assignment ref). Covers ADR-011 spawn gate,
+      TD3-A1/TD3-B2."
+    citations:
+      - AGENTS.md:79-85
+      - AGENTS.md:87-93
+      - src/python_setup_lint/checkers/_base.py:142-158
+      - CodingRules.md:90-107
+    deps:
+      - ownership-map-revalidation
+      - pylint-cache-semantics-closure
+      - secrets-baseline-exclusion
+    kind: fact-finder
+    milestone: M1
+    outlineRef: epic-kickoff-gate
+    scenarioRefs:
+      - "M1: Epic kickoff gated on validated artifacts"
+    slug: epic-kickoff-gate
+    title: Epic kickoff and ownership-dispute gate
+    wave: 2
+  - assignment: "Root-owned fan-in (fact-finder, read-only; findings.md + structured
+      findings; review checks validity; zero repo writes). M2 replanAfter:true
+      is enforceable gate: engine schedules only in post-replan wave after M2
+      epic close-ups exist. Read three epic close-up reports; extract each
+      epic's shift-report section (or explicit no-shift declaration) with
+      {justification-class description, added/removed finding keys, CHANGELOG
+      snippet, evidence file:line}; consolidate into one handoff record with
+      exactly 3 epic sections. If any close-up missing, stay pending (fails
+      open, never fabricates). Output feeds golden-regen-hatch exclusively.
+      Verify handoff has exactly 3 sections, each either shift report or
+      explicit no-shift declaration. Covers ADR-011 shift-handoff contract and
+      M2->M3 gate."
+    citations:
+      - lint.baseline:1-1
+      - AGENTS.md:87-93
+      - CodingRules.md:90-107
+    deps:
+      - epic-kickoff-gate
+    kind: fact-finder
+    milestone: M3
+    outlineRef: epic-shift-report-collection
+    scenarioRefs:
+      - "M3: Golden integrity preserved"
+    slug: epic-shift-report-collection
+    title: Consolidate epic shift reports into handoff record
+    wave: 3
+  - assignment: "Root-owned conditional golden regen (test-only: edits strictly
+      confined to paths.tests; prod untouched; peer review; engine commits,
+      agent zero git writes). Execute ONLY on reviewed shift report in handoff
+      record (e.g. joined-rule encoding heuristic shift): run
+      PYTHON_SETUP_LINT_UPDATE_GOLDEN=1 locally only (pytest.fail under
+      CI/GITHUB_ACTIONS), verify byte-identical double run, review added/removed
+      diff key-by-key against shift report justification-class description,
+      commit golden + tool counts together. If all three handoff sections
+      declare no-shift, no-op verification (prove golden byte-identical). NEVER
+      blind-regen. Output regen report with key-by-key diff review (or no-op
+      attestation) consumed by final-gate-validation. Preserves golden
+      158-findings SEMANTIC=0 contract; lint.baseline stays []."
+    citations:
+      - lint.baseline:1-1
+      - AGENTS.md:87-93
+      - AGENTS.md:121-139
+      - pyproject.toml:49-49
+    deps:
+      - epic-shift-report-collection
+    kind: test-only
+    milestone: M3
+    outlineRef: golden-regen-hatch
+    scenarioRefs:
+      - "M3: Golden integrity preserved"
+    slug: golden-regen-hatch
+    title: Conditional golden regen on reviewed shift report
+    wave: 4
+  - assignment: "Root-owned final validation (fact-finder, read-only; findings.md +
+      structured findings; review checks validity; zero repo writes). Record
+      final gate table: format exit 0; lint per-tool results on scoped clean
+      checkout for detect-secrets MemoryError (cite mechanism + HEAD); pytest -q
+      green (pass/skip/deselect counts); integration 9-collected-0-failed with
+      pre-commit env pinned (9 passed with it, 7 passed + 2 skipped without via
+      ensure_precommit_or_skip); golden byte-identical or
+      regen-with-reviewed-diff per hatch report; lint.baseline []; docs
+      reconciliation with must-contain strings (semantic-justification.md:
+      DecisionBackend, .python-setup-decisions.json, ADR-009, prompt-v1;
+      custom-checks.md: DecisionBackend; troubleshooting.md: DECISION_MODEL +
+      RERANKER deprecated; AGENTS.md pipeline: DecisionBackend; CHANGELOG:
+      [semantic] + no-go; AGENTS.md counts to 9-collected contract + ruff-format
+      scope row; CHANGELOG version; README pin; ADR staleness notes per kickoff
+      assignment). Red-cell routing: red cells route back via new root items
+      (root-owned files) or epic follow-up items (epic-owned files), never
+      baseline edits. Covers M3 close-out, TD3-A1/TD3-I2."
+    citations:
+      - docs/semantic-justification.md:5-14
+      - docs/semantic-justification.md:34-45
+      - AGENTS.md:79-85
+      - AGENTS.md:87-93
+      - lint.baseline:1-1
+      - .gitignore:243-244
+    deps:
+      - golden-regen-hatch
+    kind: fact-finder
+    milestone: M3
+    outlineRef: final-gate-validation
+    scenarioRefs:
+      - "M3: Iteration closes with evidence"
+    slug: final-gate-validation
+    title: Final gate table and docs reconciliation check
+    wave: 5

@@ -1,0 +1,52 @@
+status: ok
+summary: "Formalized the ADR lifecycle docs-only: rewrote ADR-009/010/011 as
+  full Context/Decision/Consequences records matching plan-3, created ADR-012
+  for the register() missing-beartype/PyLinter circular-import exemption with
+  mixin type-ignore attempt-with-fallback, added explicit
+  stale/superseded/current status notes to ADR-001 through ADR-008 (substantive
+  staleness notes for the requested 001/005/006), and created docs/adr/README.md
+  with a 12-record index plus the design/ locations cross-reference per
+  CodingRules. No source, test, AGENTS.md, CHANGELOG, or root README changes.
+  Verification: pytest suite green (1357 passed, 4 skipped, 18 deselected);
+  rumdl green via the actual lint pipeline; all 12 ADR files carry full sections
+  or an explicit status note."
+target:
+  command: uv run pytest -q
+  customTarget: true
+evidence:
+  - "`uv run pytest -q` -> 1357 passed, 4 skipped, 18 deselected, 4 warnings in
+    46.68s (exit 0); no test files changed."
+  - "`uv run lint --tools \"rumdl check\"` -> [rumdl check] PASSED, exit 0, 'No
+    issues found in 25 files' (project config, 22ms)."
+  - "`uv run rumdl check --config config/rumdl.toml docs/adr` -> 'Success: No
+    issues found in 13 files' (exit 0)."
+  - "Structural check over all 12 ADR files: ADR-009/010/011/012 each contain
+    `## Context`, `## Decision`, `## Consequences`; ADR-001..008 each contain an
+    explicit `## Status` note (stale, superseded, or current/not-stale). `ls
+    docs/adr/ADR-*.md | wc -l` = 12."
+  - Readback of docs/adr/README.md index confirms 12 ADR rows and a design/
+    section pointing to design/0001-compose-config-temp-dir.md and
+    design/0002-ty-src-only-exception.md; relative link targets and single
+    trailing newlines verified for all docs/adr files.
+  - "`git status --short` -> only docs/adr/ADR-001..011 modified plus untracked
+    docs/adr/ADR-012.md and docs/adr/README.md; no src/, tests/, AGENTS.md,
+    CHANGELOG.md, or root README changes."
+concerns:
+  - Full `uv run lint` and the isolated detect-secrets tool exceeded the shell
+    window on tracked .factory artifacts (known TD3-I2 environmental gate issue,
+    handled by the separate secrets-baseline-exclusion item); ADR markdown
+    contains no secrets or bare hex strings >= 20, and the new untracked
+    ADR-012/README files are not in `git ls-files` until the engine commits.
+  - Added minimal status notes to ADR-002/003/004/007/008 in addition to the
+    explicitly requested ADR-001/005/006 staleness notes, because the
+    assignment's verify clause requires all 12 ADR files to carry either
+    Context/Decision/Consequences or an explicit status/staleness note; all
+    edits stay within the root-owned docs/adr lifecycle.
+  - ADR-012 retains the plan's iteration-2 file:line examples
+    (no_try_import_checker.py:80, beartype_checker.py:21); current HEAD
+    consolidates some checker code into checkers/_base.py, but the decision and
+    standardized justification are unchanged.
+notes: "Docs-only no-behavior change: zero test diffs, so no assertion weakening
+  is possible. Plan source used: .factory/tasks/modernize/plan/plan-3.yaml adrs
+  entries for ADR-009..012 and itemOutlines adr-formalization. Engine owns all
+  git writes; working tree left uncommitted."

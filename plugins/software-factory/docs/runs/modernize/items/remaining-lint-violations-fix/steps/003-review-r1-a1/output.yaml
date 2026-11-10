@@ -1,0 +1,24 @@
+status: approved
+summary: "comment-only W9704 tail fix approved: 4 files, pylint/format/tests
+  green, baseline untouched"
+suggestions:
+  - id: semantic-reranker-unvalidated
+    disposition: optional
+    summary: Reranker score>=0.5 not machine-validated (semantic extra absent);
+      heuristic + pylint green only
+    detail: "Verified: git show 09ece08 -- src/ is 4 comment-only line swaps;
+      lint.baseline stays []; ruff format --check on 4 touched files clean;
+      check_if_meaningful True for both new comments (heuristic fallback,
+      sentence_transformers absent); scoped pylint
+      --enable=unjustified-suppression zero messages; engine checks show
+      pylint/pylint-pyi/pylint-tests zero messages. testing.py wording is
+      genuinely more code-specific (release_messages/MessageTest/.msg_id/.args);
+      generic_key gain is smaller (adds heterogeneous rationale for
+      csv/metavar/default/help value kinds). Reranker acceptance unprovable
+      without heavy optional install — accept as disclosed debt, optionally
+      validate in semantic-enabled env. No security/consistency defects;
+      .py/.pyi mirrors match; testing.py:38 type-ignore reason already specific
+      so unchanged is correct."
+    location:
+      file: src/python_setup_lint/testing.py
+      line: 32

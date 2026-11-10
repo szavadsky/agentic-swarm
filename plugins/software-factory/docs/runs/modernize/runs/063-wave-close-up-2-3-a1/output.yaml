@@ -1,0 +1,25 @@
+blockedItems: []
+debt:
+  - lint gate still fails matching red baseline (pre-existing violations, not a
+    wave regression)
+  - documented `uv run lint` still mutates worktree via ruff format ToolSpec
+    without --check/--config (infra operator action outstanding)
+failedItems: []
+iteration: 2
+mergedItems:
+  - decision-runtime-pinning
+  - coding-rules-audit-i2
+  - remaining-lint-violations-fix
+recommendations:
+  - Resolve or intentionally baseline the residual lint failures so the lint
+    gate can go green
+  - Fix ruff format ToolSpec to use --check plus config/ruff.toml (or drop it
+    from TOOLS) so `uv run lint` is check-only
+status: complete
+summary: "Wave 3 complete: all 3 items merged (decision-runtime-pinning,
+  coding-rules-audit-i2, remaining-lint-violations-fix). Tree hygiene clean: no
+  untracked junk, no conflict markers in src/tests/config/docs, only
+  engine-managed journal.ndjson modified. Gates vs baseline: format pass/pass
+  green, test-integration pass/pass green, test fail->pass IMPROVED, lint
+  fail/fail still failing (matches baseline, not a regression). No regressions."
+wave: 3

@@ -1,0 +1,266 @@
+status: ok
+summary: "Final gate validated at HEAD 2004b1dd (worktree clean): format exit 0,
+  all 14 lint tools green (13 PASSED + detect-secrets exit 0 at HEAD via the
+  baseline ^\\.factory/ filter), pytest -q 1357 passed / 7 deselected / 0
+  skipped, integration 9 collected / 9 passed / 0 failed with pre-commit 4.6.0
+  (7+2 skip mechanism when absent), golden byte-identical (158 findings; hashes
+  c2b8dc3a…/1d239741…; no regen), lint.baseline []. Docs reconciliation is RED
+  at HEAD on all 9 must-contain cells
+  (semantic-justification/custom-checks/troubleshooting/AGENTS
+  pipeline/CHANGELOG [semantic]+no-go/AGENTS counts+ruff-format row/CHANGELOG
+  version/README pin/ADR staleness), so those route back to owning items, never
+  baseline edits. Fix-round corrections applied: golden holds 18 W9704-symbol
+  findings (rule=unjustified-suppression; 6 pylint + 6 pylint tests + 6
+  pylint-pyi), not 0; the detect-secrets MemoryError frame is
+  IniFileParser.__init__ at config.py:97 (not _parse_file)."
+findings: |-
+  # Final gate validation — M3 close-out
+
+  HEAD `2004b1dd02fb5ec7810a1eee8c3b3dda5f55edcd`; worktree `git status --porcelain` empty; `lint.baseline` = `[]` (2 bytes, sha256 4f53cda1…).
+
+  ## Fix-round corrections (review feedback)
+
+  1. **W9704 count is 18, not 0.** The golden has **no** literal `"rule": "W9704"` (0 matches). W9704's symbol is `unjustified-suppression` (`src/python_setup_lint/checkers/conformance/suppression_justification_checker.py:34-36`). Exact multiset in `tests/data/golden/minimal_sample_project_findings.json`: `pylint` 6, `pylint tests` 6, `pylint-pyi` 6 = 18. JSON lines: 83,118,125,132,139,146 (pylint); 426,461,468,475,482,489 (pylint tests); 664,699,706,713,720,727 (pylint-pyi). Source lines in `src/minimal_sample/mod.py`: 9,41,49,63,63,63 per tool. Total golden findings 158 (matches `minimal_sample_project_tool_counts.json`). The earlier '0 W9704' claim was a field-name error (looked for rule literal `W9704` instead of symbol `unjustified-suppression`); the byte-identical GREEN verdict is unchanged.
+  2. **MemoryError frame is `IniFileParser.__init__`, not `_parse_file`.** `.venv/lib/python3.14/site-packages/detect_secrets/transformers/config.py:90-97` defines `__init__`; line 97 is `content = file.read()` (the raiser). It is reached through `_parse_file` (`config.py:43-49`) from `EagerConfigFileTransformer.parse_file` (`config.py:29-40`).
+
+  ## Gate table (green)
+
+  | Cell | Evidence | Result |
+  |---|---|---|
+  | Format | `uv run ruff format --check --config config/ruff.toml src tests` → exit 0, '191 files already formatted'; runner `[ruff format] PASSED [0.0s]`. Scope/config: `src/python_setup_lint/runner/_tool_specs.py:11-18`, `config/ruff.toml:1-3`. (Bare `ruff format --check .` is not the contract: pyproject has no `[tool.ruff]`, so it defaults to 88 cols and would reformat 147 files.) | GREEN |
+  | Lint 14 tools | `uv run lint --tools '<13 tools>'` exit 0, all PASSED: tach check 0.3s, ruff format 0.0s, ruff check 0.1s, rumdl check 0.1s, mypy 5.6s, mypy.stubtest 6.8s, pyright check 3.9s, pyright verify types 0.9s, pylint 8.7s, pylint-pyi 8.7s, pylint tests 14.4s, ty check 0.2s, yamllint 0.2s. detect-secrets run separately against HEAD baseline: exit 0, 2.28s. Mechanism: `_DetectSecretsLintTool.build_command` runs `git ls-files -z | xargs -0 detect-secrets scan --baseline .secrets.baseline` (`src/python_setup_lint/runner/dispatch.py:181-189`); HEAD baseline carries `detect_secrets.filters.regex.should_exclude_file` pattern `^\\.factory/` (`.secrets.baseline:41-46`), so the 9 tracked `*.safetensors` (1,844,653,898 B total; largest 789,581,344 B) are skipped. Without that filter the bootstrap path (`dispatch.py:190-198`) feeds unknown extensions to the eager transformer (`determine_file_type` → `FileType.OTHER`, `detect_secrets/util/filetype.py:20-58`; eager selection `audit/common.py:113-118`) and `file.read()` at `config.py:97` exceeds the runner's 2048 MB `RLIMIT_AS` (`src/python_setup_lint/runner/types.py:22`, `output.py:171-181`) → MemoryError. | GREEN |
+  | Unit pytest | `uv run pytest -q` → **1357 passed, 7 deselected, 0 skipped**, 4 warnings, 24.37s. (`addopts = -m 'not slow'`, `pyproject.toml:48`; 7 deselected are the slow set.) | GREEN |
+  | Integration | `--collect-only -q` → **9 tests collected**. `uv run pytest tests/integration.py -q` → **9 passed, 0 failed**, 63.96s, with pre-commit 4.6.0 available in `.venv/bin`. Without the binary, `ensure_precommit_or_skip` (`tests/_project_helpers.py:185-191`) skips the two pre-commit-dependent tests (`tests/integration.py:205,257`) → 7 passed + 2 skipped. This split is environment-dependent because `tests/conftest.py:29-34` forcibly prepends `.venv/bin` to PATH, so the venv here always exposes pre-commit. | GREEN |
+  | Golden byte-identity | 158 findings; sha256 `minimal_sample_project_findings.json` = c2b8dc3a9ed42832e6906379d0e1a2f8e3823816b33145d786b08efb23799f96, `minimal_sample_project_tool_counts.json` = 1d239741f47669aa7d49ea786d57eea6435ebb8662cd3505fbafb8f33d048363. `assert_golden_byte_identical` (`tests/_golden.py:392`) executed by `tests/integration.py:122` passed. Last golden change: commit `1a811af`. No regen, no reviewed diff needed. `golden-regen-hatch` report is not present at HEAD (only `docs/adr/ADR-011.md:68` names the item), so consume the result as 'no authorized regen + hash equality'; behavior-shift declarations belong to the downstream hatch consumer. | GREEN (byte-identical) |
+  | lint.baseline | `[]`, 2 bytes, sha256 4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945. No baseline edits. | GREEN |
+
+  ## Docs reconciliation (all RED at HEAD)
+
+  Must-contain probe results (grep -cF, exact strings):
+
+  | File | Expected string(s) | Found | Result / evidence |
+  |---|---|---|---|
+  | `docs/semantic-justification.md` | `DecisionBackend`, `.python-setup-decisions.json`, `ADR-009`, `prompt-v1` | 0 / 0 / 0 / 0 | RED. File still describes sentence-transformers/reranker pipeline and `~/.cache/python-setup/semantic/results.json` (lines 3, 9-14, 18, 26, 36, 43, 51-54). |
+  | `docs/custom-checks.md` | `DecisionBackend` | 0 | RED. Line 97 still documents reranker-first `check_if_meaningful` and `PYTHON_SETUP_LINT_RERANKER_MODEL`. |
+  | `docs/troubleshooting.md` | `DECISION_MODEL` + `RERANKER` deprecated | 0 / 0 | RED. Lines 97-109 still document sentence-transformer download/model cache; line 150 says 'Expected: 7 pass, ~39s'. |
+  | `AGENTS.md` semantic pipeline | `DecisionBackend` | 0 | RED. Lines 82 and 85 still say 'cross-encoder reranker' / `PYTHON_SETUP_LINT_RERANKER_MODEL`. |
+  | `CHANGELOG.md` | `[semantic]`, `no-go` | 0 / 0 | RED. Top entry is `## v1.2.9 (2026-07-05)`; no modernization entry. |
+  | `AGENTS.md` counts | 9-collected contract | absent | RED. Line 11 says 'Integration tests (7 pass, ~30s)' vs observed 9 collected/9 passed. Adjacent line 10 is also stale: '1290 pass, 4 skip, 15 deselected' vs observed 1357 passed, 0 skipped, 7 deselected. |
+  | `AGENTS.md` Tool Scope | `ruff format` row | absent | RED. Table lines 18-32 lists `ruff check` (line 21) but no `ruff format` row; expected scope `src/`, `tests/` per `_tool_specs.py:11-18`. |
+  | `CHANGELOG.md` version | matches `pyproject.toml` | mismatch | RED. `pyproject.toml:3` = `1.2.10`; CHANGELOG top = `v1.2.9` (`CHANGELOG.md:3`). |
+  | `README.md` pin | current release pin | mismatch | RED. `README.md:72` pins `@v1.2.5` while version is `1.2.10`; `README.md:29` still advertises sentence-transformer-powered `[semantic]`. |
+  | ADR staleness notes | stale/current annotations | missing | RED. `docs/adr/ADR-016.md:3` claims 'At HEAD no DecisionBackend/cache/FakeBackend exists, [semantic] still sentence-transformers' — false: `_decision_backend.py:17,23` defines DecisionBackend/FakeBackend and `pyproject.toml:29-30` has empty `semantic = []`. `docs/adr/ADR-009.md:31` claims 'tracked-cache infrastructure' delivered — no `.python-setup-decisions.json` implementation exists in `src/`, `tests/`, `pyproject.toml` or `.gitignore`; `_semantic.py:15-21` is an in-process memo only. `docs/adr/ADR-011.md:60-62` (no hatch entry) is consistent; `docs/adr/ADR-020.md:3` remains accurate (PROMPT_VERSION only test-imported at `tests/checkers/test_decision_backend.py:24,88`; production backend loader is PYTEST-gated at `_decision_backend.py:37-46`). |
+
+  ## Red-cell routing
+
+  - `docs/semantic-justification.md`, `docs/custom-checks.md`, `docs/troubleshooting.md`, `AGENTS.md` semantic subsection → semantic-owned docs follow-up item(s).
+  - `AGENTS.md` Quick Commands counts and Tool Scope `ruff format` row → runner-owned AGENTS item (root-owned file).
+  - `CHANGELOG.md` ([semantic], no-go, version) and `README.md` pin/description → root-owned release/docs item(s).
+  - ADR-009 / ADR-016 staleness notes → ADR owner follow-up (adr-formalization scope).
+  - Never edit `lint.baseline`; all red cells are documentation/ownership items, not baseline entries.
+
+  ## Process note
+
+  `detect-secrets scan --baseline <file>` rewrites the baseline path in place (adds `generated_at`, reorders keys); the runner's follow-up python normalizes it back to sorted JSON, and that normalization reproduces HEAD bytes exactly (sha256 412cab2d…, no trailing-newline change). A probe against the live worktree therefore left `.secrets.baseline` transiently modified; it was restored to HEAD bytes and the worktree verified clean. Gate runs should use a temp baseline copy or a clean checkout.
+contextPack: >-
+  # Final gate (M3 close-out, TD3-A1/TD3-I2) — HEAD 2004b1dd, worktree clean
+
+
+  GREEN: format exit 0 (scoped rc, 191 files); lint 14/14 (13 PASSED;
+  detect-secrets exit 0 at HEAD via baseline `^\.factory/` filter; eager config
+  transformer at detect_secrets/transformers/config.py:97 + 2048MB RLIMIT_AS
+  would MemoryError without the filter); pytest -q 1357 passed / 7 deselected /
+  0 skipped; integration 9 collected / 9 passed / 0 failed (7+2 skip split when
+  pre-commit absent, tests/_project_helpers.py:185-191); golden byte-identical
+  158 findings, hashes c2b8dc3a… / 1d239741…, last change 1a811af, no regen;
+  lint.baseline `[]`.
+
+
+  RED (docs, route out): semantic-justification.md lacks
+  DecisionBackend/.python-setup-decisions.json/ADR-009/prompt-v1;
+  custom-checks.md lacks DecisionBackend; troubleshooting.md lacks
+  DECISION_MODEL/RERANKER deprecation; AGENTS.md pipeline lacks DecisionBackend;
+  CHANGELOG lacks [semantic]/no-go and v1.2.10 entry (pyproject=1.2.10 vs
+  changelog 1.2.9); AGENTS.md integration row says 7 pass vs 9 and unit row
+  1290/4/15 vs 1357/0/7, Tool Scope lacks ruff-format row; README pins v1.2.5 vs
+  1.2.10; ADR-016:3 and ADR-009:31 are stale (DecisionBackend/FakeBackend exist;
+  no tracked cache implementation).
+
+
+  CORRECTIONS: W9704-symbol findings in golden = 18 (6 pylint + 6 pylint tests +
+  6 pylint-pyi; rule=unjustified-suppression; checker lines 34-36), not 0.
+  MemoryError frame = IniFileParser.__init__ (config.py:97), not _parse_file.
+
+
+  Routing: semantic-owned docs, runner-owned AGENTS rows, root-owned
+  CHANGELOG/README, ADR owner; never baseline edits.
+sources:
+  - tests/data/golden/minimal_sample_project_findings.json:83,118,125,132,139,146,426,461,468,475,482,489,664,699,706,713,720,727
+  - src/python_setup_lint/checkers/conformance/suppression_justification_checker.py:31-41
+  - .venv/lib/python3.14/site-packages/detect_secrets/transformers/config.py:29-49,86-97
+  - .venv/lib/python3.14/site-packages/detect_secrets/util/filetype.py:20-58
+  - .venv/lib/python3.14/site-packages/detect_secrets/audit/common.py:113-118
+  - src/python_setup_lint/runner/dispatch.py:168-198
+  - src/python_setup_lint/runner/types.py:22
+  - src/python_setup_lint/runner/output.py:171-181
+  - .secrets.baseline:41-46
+  - src/python_setup_lint/runner/_tool_specs.py:11-18
+  - config/ruff.toml:1-3
+  - tests/integration.py:54,117-122,205,257,331-357
+  - tests/_golden.py:392
+  - tests/_project_helpers.py:185-191
+  - tests/conftest.py:29-34
+  - docs/adr/ADR-009.md:31
+  - docs/adr/ADR-011.md:60-68
+  - docs/adr/ADR-016.md:3
+  - docs/adr/ADR-020.md:3
+  - docs/semantic-justification.md:3,9-14,18,26,36,43,51-54
+  - docs/custom-checks.md:97
+  - docs/troubleshooting.md:97-109,150
+  - AGENTS.md:10-11,18-32,79-85
+  - CHANGELOG.md:3
+  - README.md:29,72
+  - pyproject.toml:3,29-30
+recommendations:
+  - Route the nine red docs cells to their owning items (semantic-owned docs,
+    runner-owned AGENTS rows, root-owned CHANGELOG/README, ADR owner); do not
+    patch docs inside this read-only gate and never add baseline entries.
+  - When closing M3, consume the golden result as 'no authorized regen + hash
+    equality' (158 findings, c2b8dc3a…/1d239741…); track the missing
+    golden-regen-hatch report artifact as a downstream deliverable rather than
+    regenerating.
+  - Make the detect-secrets step write to a temp baseline and atomically replace
+    only when bytes differ, so an interrupted lint cannot leave
+    `.secrets.baseline` dirty; alternatively move the tracked model cache out of
+    `git ls-files` or add a config-level exclude independent of the baseline
+    file.
+  - Refresh AGENTS.md counts from a real run (unit 1357/0/7; integration 9 pass)
+    and add the `ruff format | src/, tests/` Tool Scope row together with the
+    semantic-pipeline DecisionBackend rewrite.
+  - Add explicit staleness/current annotations to ADR-009 and ADR-016
+    (DecisionBackend/FakeBackend exist; `[semantic]` is empty; tracked cache is
+    not implemented) and align ADR-020 wording with the PYTEST-gated loader.
+  - Bump CHANGELOG to the pyproject version (1.2.10) with `[semantic]` and the
+    ADR-009 no-go deferral recorded, and update the README pin/semantic
+    description to match.
+concerns:
+  - kind: blocker
+    summary: Docs reconciliation is entirely red at HEAD (9 must-contain cells)
+    detail: "All required strings are absent: semantic-justification.md
+      (DecisionBackend, .python-setup-decisions.json, ADR-009, prompt-v1 all 0),
+      custom-checks.md DecisionBackend 0, troubleshooting.md
+      DECISION_MODEL/RERANKER 0, AGENTS.md pipeline DecisionBackend 0, CHANGELOG
+      [semantic]/no-go 0 and no v1.2.10 entry, AGENTS.md 7-pass row and missing
+      ruff-format row, README v1.2.5 pin, ADR-016/ADR-009 stale claims.
+      Code/test gates are green, so M3 close-out cannot claim docs
+      reconciliation without routing these back."
+    severity: high
+    location:
+      file: docs/semantic-justification.md
+      line: 3
+    affects:
+      - M3 close-out
+      - semantic docs owner
+      - runner docs owner
+      - release owner
+      - ADR owner
+  - kind: risk
+    summary: detect-secrets relies on the baseline `^\.factory/` filter for 1.84GB
+      of tracked safetensors
+    detail: 9 tracked safetensors total 1,844,653,898 B (largest 789,581,344 B).
+      HEAD scan exits 0 only because .secrets.baseline:41-46 excludes them; the
+      bootstrap path (dispatch.py:190-198) would eagerly parse unknown
+      extensions via IniFileParser.__init__
+      (detect_secrets/transformers/config.py:97) and hit the 2048MB RLIMIT_AS
+      (runner/types.py:22, output.py:171-181) with MemoryError. This is residual
+      infra fragility, not a gate failure.
+    severity: medium
+    location:
+      file: .secrets.baseline
+      line: 44
+    affects:
+      - lint gate
+      - CI
+      - consumer repos
+  - kind: risk
+    summary: detect-secrets scan --baseline rewrites the tracked baseline in place
+      during lint
+    detail: dispatch.py:181-189 runs `detect-secrets scan --baseline
+      .secrets.baseline`; the tool updates that file (adds generated_at,
+      reorders keys) and the follow-up python normalizes it back. Normalization
+      reproduces HEAD bytes exactly (sha256 412cab2d…), but an interrupted run
+      leaves `.secrets.baseline` dirty. A live-worktree probe showed the
+      transient modification; it was restored to HEAD bytes and git status is
+      clean.
+    severity: low
+    location:
+      file: src/python_setup_lint/runner/dispatch.py
+      line: 181
+    affects:
+      - read-only lint contract
+      - pre-commit staging
+  - kind: tech-debt
+    summary: ADR-016 and ADR-009 contain HEAD-contradicted claims without staleness
+      notes
+    detail: ADR-016:3 says no DecisionBackend/cache/FakeBackend exists and
+      [semantic] is sentence-transformers; DecisionBackend/FakeBackend are
+      defined at _decision_backend.py:17,23 and the extra is empty at
+      pyproject.toml:29-30. ADR-009:31 claims tracked-cache infrastructure
+      delivered; no .python-setup-decisions.json implementation exists and
+      _semantic.py:15-21 is an in-process memo only.
+    severity: medium
+    location:
+      file: docs/adr/ADR-016.md
+      line: 3
+    affects:
+      - ADR reconciliation
+      - downstream semantic work
+  - kind: assumption
+    summary: The 7-passed+2-skipped integration split is environment-dependent
+    detail: tests/conftest.py:29-34 forcibly prepends .venv/bin to PATH, so this
+      worktree always exposes pre-commit and the skip path cannot be observed
+      here; the split materializes only where pre-commit is not installed.
+      Mechanism is pinned by tests/_project_helpers.py:185-191 and call sites
+      tests/integration.py:205,257.
+    severity: low
+    location:
+      file: tests/conftest.py
+      line: 29
+    affects:
+      - AGENTS.md counts
+      - CI environments
+  - kind: tech-debt
+    summary: AGENTS.md unit-test counts are stale in addition to the integration row
+    detail: AGENTS.md:10 says 1290 pass / 4 skip / 15 deselected; the observed run
+      is 1357 passed / 0 skipped / 7 deselected. The assignment only names the
+      9-collected contract, but both Quick Commands rows will mislead after the
+      docs pass.
+    severity: low
+    location:
+      file: AGENTS.md
+      line: 10
+    affects:
+      - docs reconciliation
+remarkable:
+  - chosen: Retain the byte-identical golden verdict; no regeneration
+    why: 158 findings, hashes c2b8dc3a…/1d239741…, integration
+      assert_golden_byte_identical passed, last change 1a811af, and the hatch
+      report is absent at HEAD — there is no evidence of an authorized behavior
+      shift requiring a regen.
+    alternatives:
+      - Regenerate golden with a reviewed diff
+      - Treat the missing hatch report as a blocker
+  - chosen: Validate lint as a 13-tool pass plus a HEAD-baseline detect-secrets run
+    why: The live full lint transiently rewrites the tracked .secrets.baseline and
+      the repository carries 1.84GB of tracked model artifacts; the scoped run
+      proves every tool green while avoiding both hazards.
+    alternatives:
+      - Run full `uv run lint` in the dirty worktree
+      - Run lint in a separate clean checkout
+  - chosen: Route docs red cells back instead of editing them in the gate
+    why: The gate is read-only and the red cells are owned by semantic, runner,
+      release and ADR items; baseline edits are explicitly forbidden and cannot
+      substitute for the missing strings.
+    alternatives:
+      - Patch docs in the gate item
+      - Add baseline entries for missing docs

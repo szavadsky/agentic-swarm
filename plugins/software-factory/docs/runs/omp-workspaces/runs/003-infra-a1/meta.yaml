@@ -1,0 +1,18 @@
+seq: 3
+name: infra
+attempt: 1
+agent: infra
+role: workhorse
+models:
+  - opencode-go/deepseek-v4.1-flash
+  - opencode-go/muse-spark-1.3-contributor
+timeoutSec: 2700
+status: ok
+startedAt: 2026-11-09T23:00:17.906Z
+session: 01a1c28a-7cfe-724b-8228-647f71f50505
+endedAt: 2026-11-09T23:10:13.289Z
+usage:
+  inputTokens: 36282
+  outputTokens: 13551
+  costUsd: 0.014979
+traceRef: /home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/sessions/2026-11-09T23-00-18-302Z_01a1c28a-7cfe-724b-8228-647f71f50505.jsonl

@@ -1,0 +1,30 @@
+checks:
+  - id: red-test
+    status: pass
+    message: "red-test passed: all 3 tests fail when prod changes are restored to
+      test-first commit"
+    details:
+      command: bun --cwd=plugins/software-factory test
+        test/checks/target-green-ratchet.test.ts --reporter=junit
+        --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-redtest-1794288345811-yw4swy4hgv.xml
+      junitCaseCount: 5
+      junitCaseIds:
+        - target-green baseline ratchet for gate targets.gate target that only
+          fails baseline-listed tests passes via ratchet
+        - target-green baseline ratchet for gate targets.gate target with a new
+          failing test outside baseline fails naming the new test
+        - target-green baseline ratchet for gate targets.fully green gate target
+          passes without invoking ratchet
+        - target-green baseline ratchet for gate targets.failing gate target
+          without a baseline still fails with exit-code evidence
+        - target-green baseline ratchet for gate targets.old-format baseline
+          re-derives failing tests at the baseline commit before ratcheting
+      junitTruncated: false
+      collected: true
+      collectionErrors: []
+  - id: test-diff
+    status: pass
+    message: test-diff generated (0 test files, 0 bytes)
+    details:
+      diff: ""
+      files: []

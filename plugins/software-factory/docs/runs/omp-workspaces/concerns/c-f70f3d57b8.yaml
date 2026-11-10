@@ -1,0 +1,19 @@
+id: c-f70f3d57b8
+kind: risk
+summary: Isolation patch artifacts land outside worktree base and records
+detail: Patch captures went to .factory-runtime/tmp/omp-eval-agent-<id>/*.patch,
+  not OMP_WORKTREE_DIR. gc must cover this dir; locks must cover concurrent
+  agent ids.
+affects:
+  - "19.3"
+severity: medium
+status: routed
+source:
+  record: 002-research-r1-a2
+  agent: fact-finder
+  step: research
+  item: spike-omp-isolation
+  lastSeen: 2026-11-10T01:26:13.601Z
+createdAt: 2026-11-10T01:26:13.601Z
+updatedAt: 2026-11-10T01:53:41.429Z
+disposition: architect

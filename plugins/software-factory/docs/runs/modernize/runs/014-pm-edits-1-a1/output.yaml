@@ -1,0 +1,246 @@
+iteration: 1
+items:
+  - slug: golden-determinism-probe
+    kind: fact-finder
+    title: Probe capture determinism on temp copies
+    assignment: "Resolve U3 before the snapshot story. Read-only on repo (no
+      committed files); output is the item findings report consumed by
+      golden-findings-snapshot. Steps: (1) Read tests/integration.py
+      _copy_sample/_init_git/_make_config (rumdl override side-effect),
+      src/python_setup_lint/runner/baseline.py
+      _violation_sort_key/_relativize_file/_capture_one, and
+      tests/data/minimal_sample_project layout. (2) On TWO fresh temp copies
+      (copy_sample + git-init + _make_config semantics, monkeypatched
+      PYTHON_SETUP_LINT_SEMANTIC=0) run run_lint capture twice with
+      baseline=<tmp>/capture.json overwrite; diff raw captures field-by-field
+      (tool,file,line,col,rule,msg + ordering, absolute paths, timestamps). (3)
+      Report: unstable fields list (ordering, absolutes, churn e.g.
+      duplicate-code/detect-secrets/pyright/mypy), verdict (test-side
+      normalization SUFFICIENT vs bounded src fix NEEDED with exact file/scope),
+      and the normalization spec the snapshot implements (drop msg, relativize
+      vs project, strip ./, backslash->/, as_posix, assert non-absolute,
+      None-safe sort). Guards: temp copies ONLY — never bare `uv run lint` on
+      the repo (ruff-format write hazard); never write tests/data or src. Kind
+      corrected from plan test-assumptions to fact-finder per contract
+      (report-only, no permanent tests)."
+    outlineRef: golden-determinism-probe
+    milestone: M1
+    wave: 1
+    scenarioRefs:
+      - "M1: Golden snapshot pins current behavior"
+      - "M1: Deterministic regeneration"
+    citations:
+      - tests/integration.py:36-102
+      - src/python_setup_lint/runner/baseline.py:48-59
+      - src/python_setup_lint/runner/baseline.py:116-197
+      - src/python_setup_lint/checkers/_base.py:142-158
+      - pyproject.toml:49
+  - slug: third-party-assumption-tests
+    kind: test-assumptions
+    title: Pin astroid/pylint/beartype contracts
+    assignment: "Create tests/assumptions/__init__.py + 3 modules
+      (test_astroid_contracts.py, test_pylint_contracts.py,
+      test_beartype_contracts.py) with distinct classes
+      TestAstroidContracts/TestPylintContracts/TestBeartypeContracts, pytestmark
+      no_external_api, tests named test_<api>_given_<condition>_then_<expected>
+      asserting OBSERVED behavior at pinned versions. astroid:
+      Module.stream().read() bytes|str-tolerant (product decodes-if-bytes);
+      doc_node Const/JoinedStr when docstring present else None for
+      module/class/function; nodes_of_class(tuple) returns union in document
+      order; Const/JoinedStr expose int
+      fromlineno/end_lineno/col_offset/end_col_offset (assert on sample
+      literal). pylint (third-party side): PyLinter.register_checker lifecycle
+      incl open()/close() order (record observed);
+      CheckerTestCase/UnittestLinter capture into release_messages (assert
+      observed MessageTest shape); MessageDefinitionTuple leading fields
+      (msgid,symbol,description) + record full arity. beartype: decorate fn with
+      TYPE_CHECKING-only forward-ref, assert OBSERVED outcome (call-time vs
+      import-time vs checker-only), record in item report for M3. No src/
+      changes. Must NOT touch AGENTS.md (consolidate is sole counts owner).
+      Acceptance: `uv run pytest tests/assumptions -q` all pass, one test per
+      contract."
+    outlineRef: third-party-assumption-tests
+    milestone: M2
+    wave: 1
+    scenarioRefs:
+      - "M2: Third-party contracts pinned"
+      - "M2: Assumption failures diagnose at the source"
+    citations:
+      - pyproject.toml:10-16
+      - pyproject.toml:48-55
+      - src/python_setup_lint/checkers/_base.py:142-158
+      - src/python_setup_lint/checkers/conformance/suppression_justification_checker.py:152-158
+      - CodingRules.md:230-306
+  - slug: golden-findings-snapshot
+    kind: dev
+    title: Golden snapshot of normalized lint findings
+    assignment: "Implement M1 behavior-preservation contract per probe report (read
+      probe findings first; implement its normalization spec). Dev kind to allow
+      conditional bounded src fix; prod scope strictly bounded (see below), else
+      tests-only. (1) Create tests/_golden.py SOLE owner:
+      UPDATE_ENV=PYTHON_SETUP_LINT_UPDATE_GOLDEN,
+      SEMANTIC_ENV=PYTHON_SETUP_LINT_SEMANTIC; Finding TypedDict
+      {tool,file|None,line|None,col|None,rule}; finding_key(f) None-safe
+      (tool,file or '',line if int else -1,col if int else -1,rule) mirroring
+      _violation_sort_key; collect_findings(config,capture_path)->list[Finding]
+      (run_lint baseline=capture_path/overwrite, read JSON, normalize: drop msg,
+      relativize vs project, strip ./, backslash->/, as_posix, assert
+      non-absolute, sort by key, assert len!=0); assert_matches_golden (Counter
+      multiset diff, sorted added/removed; UPDATE=1: pytest.fail('refusing to
+      rewrite golden under CI...') if CI/GITHUB_ACTIONS else warn+rewrite
+      golden+counts together); read_oracle_rules, slice_tool_section,
+      assert_oracle_coverage, assert_tool_coverage. (2) Commit
+      tests/data/golden/minimal_sample_project_findings.json (sorted Finding
+      array) + ..._tool_counts.json ({tool:min_count}),
+      json.dump(indent=2,sort_keys=True)+trailing newline, outside sample dir,
+      never copied/linted; violations.txt RETAINED as oracle. (3) Edit
+      tests/integration.py test_setup_new_and_lint: keep first run (no baseline,
+      rc!=0) AND retain tool-section/SKIPPED/[CRASH]/W9705 assertions; add
+      dedicated second capture (caller owns tmp, copy, git-init, _make_config,
+      SEMANTIC=0); replace substring loop with golden equality + oracle/tool
+      coverage; brush-off/carry as tool-qualified lookups (pylint,mod.py:49
+      present/:56 absent); drift injection on in-memory copies only. Bounded src
+      allowance ONLY if probe proves test-side insufficient: runner/baseline.py
+      (relativize/POSIX/sort) and runner/parsers.py|_record_parsers.py
+      (ordering), <=40 added lines, determinism-only (no finding added/removed),
+      reviewed diff in report; excluding any field dropping an oracle rule
+      forbidden without ADR. Acceptance: integration, `pytest -q`, `lint` pass,
+      empty lint.baseline, regen twice byte-identical."
+    outlineRef: golden-findings-snapshot
+    milestone: M1
+    wave: 2
+    deps:
+      - golden-determinism-probe
+    scenarioRefs:
+      - "M1: Golden snapshot pins current behavior"
+      - "M1: Behavior drift is reported precisely"
+      - "M1: Deterministic regeneration"
+      - "M1: Planted-rule and per-tool coverage preserved"
+      - "M1: Crash/skip coverage retained outside golden"
+    citations:
+      - tests/integration.py:108-166
+      - src/python_setup_lint/runner/baseline.py:48-75
+      - src/python_setup_lint/runner/baseline.py:116-197
+      - src/python_setup_lint/checkers/_base.py:142-158
+      - tests/data/minimal_sample_project/violations.txt
+      - lint.baseline:1-1
+  - slug: consolidate-integration-helpers
+    kind: test-only
+    title: Single-source helpers; integration.py under 500 lines
+    assignment: "Test-only (src/ untouched; AGENTS.md counts lines allowed as docs
+      metadata). Depends on golden-findings-snapshot (golden+counts must stay
+      byte-identical) and third-party-assumption-tests (counts include new
+      tests). (1) Create tests/_project_helpers.py SOLE definition site:
+      copy_sample_project, git_init_and_stage (init+config test/test@test + `git
+      add .`), git_init_bare (init -q + Test/test@example.com, no add —
+      identities NOT unified), stage_file, commit_all, shipped_config_paths,
+      make_runner_config (package_name + rumdl override, idempotent overwrite,
+      no-op if shipped rumdl missing, OSError propagates),
+      build_pylint_overlay_config(project,disable_rule)->Path,
+      ensure_precommit_or_skip()->None,
+      install_twice_assert_idempotent(project,monkeypatch)->None. (2) Delete
+      duplicate defs in tests/conftest.py and tests/runner/_autofix_helpers.py
+      (import instead); per-consumer imports ONLY:
+      integration->{copy,git_init_and_stage,make_runner_config,build_overlay,en\
+      sure_precommit,install_twice}; conftest->{shipped_config_paths};
+      _autofix->{git_init_bare,stage_file,commit_all}; test_self_lint_clean +
+      autofix tests switch imports. (3) Trim tests/integration.py per budget
+      (remove >=127, target <=490, hard <=500, no suppression): helpers ~58 +
+      oracle ~8 + overlay ~21 + setup scaffolding ~20 + precommit ~25 + M1
+      loop/net ~5 + slice ~3 + import/docstring ~4; keep path/class/function
+      names. (4) Sole AGENTS.md counts owner: update counts incl new assumption
+      tests. Acceptance: integration, `pytest -q`, `lint` pass; golden+counts
+      byte-identical."
+    outlineRef: consolidate-integration-helpers
+    milestone: M2
+    wave: 3
+    deps:
+      - golden-findings-snapshot
+      - third-party-assumption-tests
+    scenarioRefs:
+      - "M2: Shared helpers exist once"
+      - "M2: Integration gate module within limits"
+    citations:
+      - tests/integration.py:1-102
+      - tests/conftest.py:1-89
+      - tests/runner/_autofix_helpers.py
+      - AGENTS.md:87-93
+      - CodingRules.md:139-159
+      - lint.baseline:1-1
+  - slug: coding-rules-audit
+    kind: fact-finder
+    title: Inventory CodingRules violations
+    assignment: "Read-only audit of src/** and scripts/** vs CodingRules/AGENTS at
+      final state (post-golden/assumptions/consolidate; read beartype discovery
+      report from third-party item). No repo writes; output is structured
+      item-report tables (durable in orchestration records, no committed file).
+      Semantic exclusions marked SKIPPED (audit rest normally):
+      checkers/_semantic.py+.pyi, new _decision_backend/_decision_cache modules
+      (+.pyi), _base.py::check_if_meaningful (+stub section),
+      no_try_import_checker::_OPTIONAL_IMPORT_PATTERNS. Inventory: .pyi
+      fidelity/private symbols, @beartype + structural suppressions, trivial
+      wrappers/duplicated logic, redundant fallbacks (astroid 3.x), legacy stubs
+      (_FALLBACK_TOOLS, peek_fallback_tools, _compare_sorted re-export),
+      over-long comments, 500-line/R0912/R0915 proximity, structlog/error rules,
+      rumdl tests/data-exclude hack (TD-11). Output rows
+      {module,section,evidence file:line,category,est LoC delta,owner,fix} +
+      UNIFIED disjoint-ownership map (this audit is SINGLE owner;
+      test-debloat-audit consumes via inter-dep). Deps: read golden + helper
+      final state; beartype report informs owner/fix."
+    outlineRef: coding-rules-audit
+    milestone: M3
+    wave: 4
+    deps:
+      - golden-findings-snapshot
+      - third-party-assumption-tests
+      - consolidate-integration-helpers
+    scenarioRefs:
+      - "M3: Coding-rules debt inventoried"
+      - "M3: Ownership map is complete and disjoint"
+    citations:
+      - CodingRules.md:90-107
+      - CodingRules.md:139-159
+      - src/python_setup_lint/checkers/_semantic.py:1-12
+      - src/python_setup_lint/checkers/_semantic.py:37-52
+      - src/python_setup_lint/checkers/_base.py:142-158
+      - src/python_setup_lint/runner/baseline.py:22-42
+      - lint.baseline:1-1
+  - slug: test-debloat-audit
+    kind: fact-finder
+    title: Inventory redundant and lint-testing tests
+    assignment: "Read-only audit of tests/** (no repo writes; structured item-report
+      tables). Depends on coding-rules-audit: read its UNIFIED ownership map via
+      inter-dep and align owner column (do not redefine owners). Semantic
+      exclusions marked SKIPPED: tests/checkers/test_semantic_check.py,
+      test_semantic_threshold.py, TestSuppressionRerankerPipeline,
+      tests/checkers/conftest.py (epic-created), tests/assumptions
+      runtime/decision/cache modules (epic-created). Per module: behaviors
+      protected; duplicates (incl golden-covered); CodingRules-Tests violations
+      (first-party mocking, naming incl task-ID
+      test_t5_*/test_t9_7_*/test_t11_*/test_t1b_*/test_t3_*, markers, in-file
+      fixtures, _factories.py list[Any] tables, far cases); repo-self-lint for
+      removal (test_self_lint_clean.py, AST/source-scanning guards, config
+      re-checks per broadened never-linting definition); slow/benchmark. Output
+      rows {module,behaviors,duplicate-of,recommendation
+      keep|merge|rewrite|remove,surviving coverage,reason,owner} + per-subsystem
+      LoC estimates + per-limb pinning inventory (CLI/exit: test_cli_*;
+      baseline/autofix: test_baseline_*/test_autofix_*; configs/scopes:
+      overlay+config tests — surviving test or blocking-debt flag)."
+    outlineRef: test-debloat-audit
+    milestone: M3
+    wave: 5
+    deps:
+      - golden-findings-snapshot
+      - third-party-assumption-tests
+      - consolidate-integration-helpers
+      - coding-rules-audit
+    scenarioRefs:
+      - "M3: Test redundancy inventoried"
+      - "M3: Ownership map is complete and disjoint"
+    citations:
+      - AGENTS.md:87-93
+      - CodingRules.md:230-306
+      - tests/checkers/test_semantic_check.py:1-7
+      - tests/checkers/test_semantic_check.py:159-257
+      - tests/checkers/test_semantic_threshold.py:19-25
+      - pyproject.toml:49-55

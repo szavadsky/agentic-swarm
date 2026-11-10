@@ -1,0 +1,20 @@
+blockedItems: []
+failedItems: []
+iteration: 1
+mergedItems:
+  - spike-findings-recovery-v2
+  - target-green-ratchet-fix
+recommendations:
+  - Proceed to next wave / architect wave report; no hygiene or gate blockers.
+  - Optionally address pre-existing environment-sensitive disk-space test
+    failure (test/disk-space.test.ts:57) in a dedicated item; it is baseline-red
+    and not a wave regression.
+status: complete
+summary: "Wave 3 complete: 2/2 items merged (spike-findings-recovery-v2,
+  target-green-ratchet-fix). Tree hygiene clean: no untracked junk or tracked
+  changes outside engine-managed .factory/ (only
+  .factory/tasks/omp-workspaces/journal.ndjson +2 lines pending engine commit),
+  no conflict markers. Gates match baseline with no regressions: typecheck
+  pass/pass green, test fail/fail still failing (baseline-red disk-space test,
+  not a regression per Gate Diff table)."
+wave: 3

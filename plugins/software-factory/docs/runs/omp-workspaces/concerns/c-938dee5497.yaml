@@ -1,0 +1,25 @@
+id: c-938dee5497
+kind: question
+summary: Legacy `.cursorrules` is documented but not loaded in omp 18.18.5;
+  which source is authoritative?
+detail: omp docs `context-files.md` mentions legacy `.cursorrules` rules, while
+  `rulebook-matching-pipeline.md` lists only `.cursor/rules/*.{mdc,md}`. Probe
+  with plain, heading-rich, and co-located `.cursorrules` produced no injection
+  or rulebook listing. Treat `.cursorrules` as unsupported for 18.18.5; revisit
+  if omp changes.
+location:
+  file: plugins/software-factory/docs/OMP_ADAPTER.md
+  line: 163
+affects:
+  - M1 scenario 4
+severity: low
+status: routed
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: spike-repo-rules
+  lastSeen: 2026-11-09T23:58:38.970Z
+createdAt: 2026-11-09T23:58:38.970Z
+updatedAt: 2026-11-10T01:53:41.429Z
+disposition: architect

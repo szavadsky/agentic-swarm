@@ -1,0 +1,46 @@
+id: decision-test-debloat-audit-i2-1794158623946
+context: item
+item: test-debloat-audit-i2
+afterRecord: 004-review-r2-a1
+decision: retry-with-guidance
+timestamp: 2026-11-08T17:23:43.946Z
+rationale: "All 10 fix requests verified as factual regressions from r1 to r2
+  (spot-checked: cli.py:292-367 has force-fix/format/cwd/config-status beyond
+  MAIN_ARGPARSE_CASES; _SHIPPED_CONFIG_FILES has 11 labels; smoke test is the
+  sole default full-pipeline pin). Root cause is methodological: r2 counted defs
+  not collected tests, invented owner tokens, and dropped r1
+  clusters/limbs/reservations. The unified-map inter-dep file exists in-repo, so
+  alignment is mechanical. One guided rewrite of the report (zero repo writes)
+  unblocks merge; no split/escalate needed."
+text: "Retry granted. Rewrite the report (report-only, zero repo writes) fixing
+  all 10 in this order: (1) Owners: restore the unified-map 5-owner scheme
+  exactly (runner/checkers/setup-testing/semantic/root, counts 67/83/15/4/15)
+  from coding-rules-audit-i2 output.yaml:82-88; delete the 10 invented tokens;
+  test_suppression file stays checkers-file with
+  TestSuppressionRerankerPipeline:357-390 as the semantic symbol skip. (2) N|S
+  counts: re-derive EVERY row from per-file `pytest --collect-only` truth
+  (default|slow), never def counts; fix the ~25 listed files (e.g.
+  semantic-check 82|3, threshold 80, lint-runner 58, stats 87). (3) Pinning:
+  restore all ~15 blocking-debt limbs from r1 (cli --force-fix+env, --format,
+  --cwd, --config-status; 11-label vs 7-label config gap; mypy/rumdl/ty
+  _config_flag_for branches; dispatch scopes
+  ty-src/pylint-pyi-src/pylint-tests-tests/tach-whole-repo; pyright tests/** and
+  rumdl tests/data exclusions) — grep-verify each has zero pins. (4) Self-lint
+  removals: list all six groups (noise-filter, TestModuleSizeGates,
+  private-imports AST scan, autofix-conflict slow, downstream-integration
+  home-write, t9_7 hardcoded checkout) with surviving gates. (5) Reservations:
+  restore epic verbatim (tests/checkers/conftest.py, tests/assumptions
+  runtime/decision/cache, _decision_backend/_decision_cache); delete invented
+  runner/runtime paths; tests/conftest.py is root-owned. (6) Symbols: restore
+  _base.py:143-238 check_if_meaningful (+pyi) and no_try_import
+  _OPTIONAL_IMPORT_PATTERNS exclusions. (7) Duplicates: restore duplicate-of for
+  _make_tc x13, _walk_and_release x10, _msg_ids x8, t3-vs-stats
+  parser-completeness exact dup, autofix fake-vs-git, setup 6x install,
+  _UvCallRecorder x2 — or explicitly justify each drop. (8) Keep
+  test_real_pipeline_smoke.py (sole default full-pipeline pin; integration.py is
+  explicit-only) or name a default-collected survivor. (9) Slow budget:
+  recompute from truth (baseline-edge 16|2 both in TestPerfBenchmark,
+  suppression 40|2) — 18->13 not 14. (10) Runtime: restore integration 65-107s
+  with conditions (WSL2/py3.14.4/warm-cache ±30%). Verify: owners match unified
+  map exactly; every N|S matches --collect-only; every limb/gap above named."
+persist: true

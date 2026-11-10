@@ -1,0 +1,11 @@
+id: q-adr-cache-fields-additive-87bb471f5e
+ref: adr-cache-fields-additive
+disposition: human-awareness
+question: Remarkable architectural decision adr-cache-fields-additive
+  (Cache-token usage fields are additive and optional end to end) recorded for
+  awareness.
+draftDecision: All new Usage/StepUsage/record/budget fields are optional with
+  zero-default aggregation; the parser tolerates absent keys; schemas gain
+  optional properties only.
+status: open
+createdAt: 2026-11-09T23:33:06.257Z

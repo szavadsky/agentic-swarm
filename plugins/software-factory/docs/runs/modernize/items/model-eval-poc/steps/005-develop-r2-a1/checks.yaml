@@ -1,0 +1,4 @@
+checks:
+  - id: poc-scope
+    status: pass
+    message: "poc-scope satisfied: all changes confined to poc/"

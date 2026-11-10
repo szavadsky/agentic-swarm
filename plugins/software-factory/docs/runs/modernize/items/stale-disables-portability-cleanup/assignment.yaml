@@ -1,0 +1,23 @@
+slug: stale-disables-portability-cleanup
+kind: test-only
+title: Remove stale disables and hardcoded paths
+assignment: "Tests-only, owns ONLY 4 files
+  (tests/runner/test_lint_runner_integration.py, tests/conftest.py,
+  tests/runner/test_setup.py, tests/runner/test_setup_install.py); FORBIDDEN
+  test_lint_runner.py (dispatch-split owns incl its :7 disable),
+  test_autofix_conflict_integration.py + test_t9_7_compose_pyright_live.py + 4
+  self-lint files (prune owns). Red-test-exempt. Remove stale too-many-lines
+  disables (recount lines at HEAD; 479/418 per pack, verify under-500); replace
+  /home/slava paths (conftest.py:86, test_setup.py:252,277,
+  test_setup_install.py:265-350, verify) with tmp/env/portable fixtures; fix
+  stale count comments in touched files only. Verify: tests only; no new
+  failures vs M1 table; golden hash-equal; grep zero hardcoded checkout in
+  touched files."
+outlineRef: stale-disables-portability-cleanup
+milestone: M2
+wave: 3
+scenarioRefs:
+  - "M2: Portability cleaned in owned files"
+citations:
+  - CodingRules.md:139-159
+  - CodingRules.md:230-306

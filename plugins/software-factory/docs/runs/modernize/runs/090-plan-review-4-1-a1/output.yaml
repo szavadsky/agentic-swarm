@@ -1,0 +1,221 @@
+status: changes_requested
+summary: 5 milestones/22 items within bounds, acyclic, unique slugs; 12 fix
+  (parallel collisions, orphaned contracts, missing deps, unfalsifiable
+  scenarios), 3 architect (backend/cache values, boundary), 2 awareness
+  (infra-only, boundaries).
+suggestions:
+  - id: m2-parallel-file-collision
+    disposition: fix
+    summary: M2 stale-disables and never-test-prune claim same files in parallel
+    detail: "stale-disables owns test_autofix_conflict_integration.py:181 + t9_7 :31
+      hardcoded paths while prune owns autofix-conflict slow/home-write +
+      hardcoded-checkout live (same files). Both dep-free parallel violates
+      ADR-013 file-level single-writer. Evidence: :181 install dev_path
+      /home/slava, t9_7:31 skipif /home/slava. Fix: serialize via dep or split
+      by file (one owns autofix, other owns t9_7)."
+    location:
+      file: tests/runner/test_autofix_conflict_integration.py
+      line: 181
+  - id: ownership-enumeration-gaps
+    disposition: fix
+    summary: Unenumerated sets block single-writer proof; factories 9 vs 8 miscount
+    detail: "checkers-factories claims 9 importers but grep finds 8 (beartype,
+      no_try_import, stub, stub_callable, stub_class, stub_coverage,
+      stub_docstring, stub_normalizer); runner +importers and dispatch +registry
+      tests unnamed risk M2/M3 parallel overlap (both dep-free); threshold
+      30/33+50+35, baseline 249+308+486, 4 pair, vacuous, 3 contracts,
+      runtime/decision/cache modules unverified. Fix: enumerate every path +
+      recount at HEAD."
+    location:
+      file: tests/checkers/_factories.py
+      line: 15
+  - id: shim-init-orphan
+    disposition: fix
+    summary: peek_fallback_tools removal orphaned between shim item and dispatch item
+    detail: "baseline.py:27 defines peek, __init__.py:22 re-exports. Shim-removal
+      deletes baseline symbols but FORBIDDEN __init__; dispatch-split sole
+      __init__ writer omits peek removal. Both dep-free parallel -> ImportError
+      or incomplete. Fix: explicitly assign __init__ peek lines to
+      dispatch-split with dep on shim-removal (or vice versa)."
+    location:
+      file: src/python_setup_lint/runner/__init__.py
+      line: 22
+  - id: parsers-baseline-overlap
+    disposition: fix
+    summary: Shim parser re-exports collide with M2 baseline tests on same files
+    detail: "Shim owns parsers re-exports + asserting tests;
+      test_baseline_diff_parsers.py:13 imports _parse_* from parsers (deletion
+      target); baseline-merge owns test_baseline_diff*.py. M2 vs M3 both
+      dep-free parallel same files. Fix: dep-serialize (shim after
+      baseline-merge) + enumerate asserting tests excluding/including with dep."
+    location:
+      file: tests/runner/test_baseline_diff_parsers.py
+      line: 13
+  - id: docs-final-missing-deps
+    disposition: fix
+    summary: Docs + final gate omit deps on M2, will record stale counts
+    detail: "docs-reconciliation deps only backend/cache but AGENTS counts need M2
+      prune/factories/baseline (--collect-only, TOOLS==14, 9-collected);
+      final-gate deps only docs+regen but gate table needs all M2
+      pytest/integration/golden effects. Both can run before M2. Fix: add deps
+      docs<-[M2 test items], final<-[M2 + M3 behavior + M4 tests]."
+    location:
+      file: tests/integration.py
+      line: 60
+  - id: regen-env-var
+    disposition: fix
+    summary: Regen cites UPDATE_GOLDEN but code uses PYTHON_SETUP_LINT_UPDATE_GOLDEN
+    detail: "tests/_golden.py:53 UPDATE_ENV full name, refused under CI; M5
+      interface + hatch say UPDATE_GOLDEN=1. Wrong var -> regen never triggers,
+      shifts unhandled. Fix: replace all with full var + cite _golden.py:53 +
+      CI/GITHUB_ACTIONS guard."
+    location:
+      file: tests/_golden.py
+      line: 53
+  - id: scope-scenario-unfalsifiable
+    disposition: fix
+    summary: M1 scope Given cites off-limits orchestration; red-HEAD criteria undefined
+    detail: "Given HEAD plus I2 audits plus closeup-3 references orchestration
+      records (containment forbids). Gate-baseline Then records
+      exits/counts/hashes but unclear pass when HEAD red (record red vs fail?).
+      Later gates-green meaningless if baseline red. Fix: Given clean HEAD only
+      (git status clean + SHA); Then define red (record + follow-ups, still
+      non-gating) vs green."
+    location:
+      file: lint.baseline
+      line: 1
+  - id: scenario-falsifiability-gaps
+    disposition: fix
+    summary: Bundled/disjunctive scenarios omit pins, criteria, and exact strings
+    detail: "M2 bundles baseline+portability+prune in 1 scenario + default pin
+      unnamed; M3 deleted-or-evidenced / identical-or-shift, M4
+      evaluable-or-blocked lack when-criteria; corpus scenario omits N>=100,
+      both strata, per-source, protocol (in item); M5 docs must-contain lists
+      topics not strings. Fix: split M2 x3, name pin, pin disjunctions (grep
+      zero vs evidence+debt; hash equal vs class+keys+snippet+file:line), align
+      corpus, enumerate exact strings."
+    location:
+      file: tests/runner/test_baseline_diff.py
+      line: 12
+  - id: legacy-stream-unverifiable
+    disposition: fix
+    summary: M3 legacy + stream omit rename target, API, blocks, locations, joiner
+    detail: "_legacy_scan rename target undefined (:61,63 + .pyi:21); astroid 3.x
+      body[0].value branch uncited; register() scope conformance-only vs all 20+
+      ambiguous vs ADR-012; _source_stream signature + enumerated sites missing
+      (all listed blocks unlisted; verified 3 stream() sites but
+      coverage/comment scope unclear); joined sorted codes joiner/sort/match
+      undefined yet M4 consumes. Fix: name method, cite branch, scope register,
+      define API + sites, define joiner."
+    location:
+      file: src/python_setup_lint/checkers/conformance/suppression_justification_checker.py
+      line: 61
+  - id: backend-contradictions
+    disposition: fix
+    summary: Backend preserves signature + bool|None yet adds kwarg + veto always-bool
+    detail: "Interface preserves check_if_meaningful signature + SEMANTIC=0
+      (_base.py:142,151) yet adds kwarg public .pyi (which fn?
+      _base/_semantic/_backend?); preserves semantic_check bool|None yet ADR-014
+      veto final=heuristic AND prob>=threshold always bool, None obsolete
+      (loader None->heuristic). Unsatisfiable both. Fix: clarify backward-compat
+      optional kwarg (e.g. backend=None) + None mapping (never return None vs
+      preserve fallback signal)."
+    location:
+      file: src/python_setup_lint/checkers/_base.py
+      line: 142
+  - id: adr-docs-ownership
+    disposition: fix
+    summary: ADR-013..016 placeholders have no owning item
+    detail: "docs/adr/ADR-013..016 are 3-line stubs; plan ADRs define delivery,
+      veto, pyi scope, infra-only but no item owns docs/adr/*. Docs item owns
+      AGENTS/CHANGELOG/README/ty.toml; semantic-tests owns semantic docs. Veto
+      (014) + infra-only (016) persistent. Fix: assign ADR-014+016 (at least) to
+      docs/semantic-tests with must-contain."
+    location:
+      file: docs/adr/ADR-013.md
+      line: 1
+  - id: secrets-scan-ambiguity
+    disposition: fix
+    summary: Secrets full scan vs filtered + clean vs scoped undefined
+    detail: ".secrets.baseline:42 excludes ^\\.factory/ so full git-ls-files exit 0
+      is filtered not full; M1 clean checkout vs M5 scoped/clean for MemoryError
+      undefined (fresh clone? which paths/tools? all 14 or detect-secrets
+      only?). Fix: rephrase filtered scan (cite filter+version+signature),
+      define clean (fresh clone, HEAD SHA) + scoped + planted control exact
+      secret/location/replication."
+    location:
+      file: .secrets.baseline
+      line: 42
+  - id: backend-threshold-joiner-decisions
+    disposition: architect
+    summary: Backend missing values need architect decision
+    detail: DECISION_THRESHOLD value unstated; joined-rule joiner/sort/match
+      undefined; FakeBackend score + model string for Fake (model <id> rev
+      short12 prompt-vN ill-fits Fake) undefined; DECISION_MODEL/RERANKER
+      warning channel + dedup (structlog vs warnings, once per process/call,
+      text) undefined; [semantic] empty vs removed + uv.lock regen undefined
+      (pyproject:28 still sentence-transformers). Exceeds item scope; items will
+      invent incompatibly. Architect must pin all.
+    location:
+      file: pyproject.toml
+      line: 28
+  - id: cache-refresh-decisions
+    disposition: architect
+    summary: Cache refresh disjunction + guards need architect contract
+    detail: Interface cli-flag OR setup-subcommand per verdict is disjunction not
+      contract; lockfile+merge+atomic is implementation not caller/callee;
+      DECISIONS_PATH scope (test-only under PYTEST_CURRENT_TEST vs prod?
+      traversal guard?) undefined; files POSIX cardinality/merge, prune +age
+      conditional, --path/jobs>1 per verdict unfalsifiable; spike poc
+      report-only with no completeness gate. Architect must define invocation,
+      CI direction (fail vs require), isolation, files/jobs.
+    location:
+      file: tests/assumptions/test_pylint_cache_semantics.py
+      line: 11
+  - id: file-level-boundary-breach
+    disposition: architect
+    summary: Block-level split + double-merge breach ADR-013 file-level
+    detail: Guards owns suppression file EXCEPT pipeline block :357, semantic-tests
+      owns block in same file (block-level not file-level) serial but
+      conflict-prone; threshold files touched by M2 merge then M4
+      merge-tables-pinned (double-touch, second may discard first). Violates
+      file-level single-writer + wastes work. Architect must re-scope to file
+      handoff (M4 owns whole file after M2 or move block) + clarify M2 dedup
+      survives.
+    location:
+      file: tests/checkers/test_suppression_justification_checker.py
+      line: 357
+  - id: infra-only-closeup
+    disposition: human-awareness
+    summary: I4 infra-only leaves intent model swap open
+    detail: Intent replaces cross-encoder (_semantic.py:1 reranker,
+      sentence-transformers) with CPU decision model + git cache; ADR-016 ships
+      backend/cache/Fake/docs/corpus only, no wiring, close-up must not claim
+      swap, I5 gated on corpus + human Fastino + CPU bench. High-impact cut
+      architect can decide per ADR-009 no-go (215/0, single-author, no bench).
+      Inform operator swap open.
+    location:
+      file: src/python_setup_lint/checkers/_semantic.py
+      line: 1
+  - id: material-never-test-boundaries
+    disposition: human-awareness
+    summary: Material + never-test-linting re-confirm I1 operator boundaries
+    detail: Material = golden SEMANTIC=0 + unit + CLI/exit + baseline/autofix +
+      configs (heuristic material, model never); never-test-linting bans pytest
+      asserting own gates while retaining golden/integration. Both
+      confirm-with-human, I1-approved. Architect decides preserve; golden stays
+      mechanical contract. Informational only.
+    location:
+      file: tests/_golden.py
+      line: 1
+  - id: polish-typos-categorization
+    disposition: optional
+    summary: Polish typos, wording, license site, categorization, skeleton, gitignore
+    detail: M1 title K kickoff typo; assumption item-cap wording (22 within 50 not
+      cap=22); U1 CC-BY-NC buried should be assumption/ADR allowlist; TD4-I2
+      cache blocks M4 should be blocking not impacting (or justify); skeleton
+      allowed should be required/skipped or forbidden; .gitignore old cache
+      stale but untouched intentional debt. Non-blocking.
+    location:
+      file: config/ty.toml
+      line: 8

@@ -1,0 +1,80 @@
+status: ok
+summary: "Replaced the oversized 962-line 3-module split (rejected by the size
+  gate) with a minimal, behavior-preserving single extraction: the 14-entry
+  built-in ToolSpec registry (TOOLS + TOOLS_BY_NAME) now lives in new
+  src/python_setup_lint/runner/_tool_specs.py (+.pyi), and dispatch.py
+  imports/re-exports it. dispatch.py drops 542 → 449 lines so the module-level
+  '# pylint: disable=too-many-lines' at :1 is deleted with no threshold change;
+  _tool_specs.py is 102 lines. All public names (TOOLS, LINT_TOOLS,
+  EXPECTED_TOOL_NAMES, FORMATTER_ONLY, RECORDLESS_TOOLS, parser sets,
+  STRATEGIES, TOOLS_BY_NAME, GenericLintTool, LintTool, register_lint_tool)
+  remain single-sourced through dispatch.py and runner/__init__.py with
+  identical objects and mutation semantics (LINT_TOOLS is still an independent
+  mutable copy of TOOLS; EXPECTED_TOOL_NAMES still derives from TOOLS). Stub
+  files updated with explicit 'as' re-exports. The stale too-many-lines disable
+  in tests/runner/test_lint_runner.py stays removed (file is 480 lines) and its
+  count assertion derives from EXPECTED_TOOL_NAMES. Production diff vs story
+  base: 120 added + 102 deleted = 222 lines (<300)."
+target:
+  command: uv run pytest tests/runner/test_lint_runner.py
+    tests/runner/test_lint_runner_stats.py tests/runner/test_t3_coverage.py
+    tests/runner/test_testing_fakes.py -q
+  customTarget: true
+evidence:
+  - "Size gate: git diff --numstat 5c50e02 -- src/ plus untracked files = 120
+    added / 102 deleted / 222 total prod lines, under the 300-line no-behavior
+    budget (previous attempt was 962)."
+  - "Target command re-run after final edit: 197 passed in 1.47s
+    (tests/runner/test_lint_runner.py, test_lint_runner_stats.py,
+    test_t3_coverage.py, test_testing_fakes.py)."
+  - "Full unit suite: uv run pytest -q -> 1377 passed, 13 deselected, 0 failed
+    in 26.52s (no new failures vs M1 table)."
+  - "Fit-for-purpose integration: uv run pytest tests/integration.py -q -> 9
+    passed in 54.30s."
+  - "Full lint gate: uv run lint -> all 14 tools PASSED (ruff format, ruff
+    check, rumdl, mypy, yamllint, ty check, mypy.stubtest, pyright check,
+    pyright verify types, pylint, pylint-pyi, pylint tests, detect-secrets),
+    wall 62.76s; zero new violations vs lint.baseline (lint.baseline has no
+    dispatch.py entries and was not edited)."
+  - "pylint-pyi targeted re-run after removing the impl module docstring: uv run
+    lint --tools pylint-pyi -> PASSED (W9700 docstring-in-impl resolved)."
+  - "Golden tests: uv run pytest tests/test_golden.py -q -> 31 passed."
+  - "Line limits verified: dispatch.py 449, _tool_specs.py 102, dispatch.pyi
+    125, _tool_specs.pyi 13 — all <=500; grep 'too-many-lines' dispatch.py
+    returns none (disable removed, no threshold raised)."
+  - "Registry identity/semantics: runtime check asserts dispatch.TOOLS is
+    _tool_specs.TOOLS, dispatch.TOOLS_BY_NAME is _tool_specs.TOOLS_BY_NAME,
+    runner.TOOLS is _tool_specs.TOOLS, len(TOOLS)==len(LINT_TOOLS)==14,
+    LINT_TOOLS is not TOOLS, set(STRATEGIES)==EXPECTED_TOOL_NAMES,
+    FORMATTER_ONLY=={'ruff format'},
+    RECORDLESS_TOOLS==EXPECTED_TOOL_NAMES-RECORD_PARSER_TOOLS;
+    register_lint_tool append/update behavior exercised by passing
+    test_lint_runner_stats mutation tests."
+  - Single-source invariants preserved in dispatch.py:51 EXPECTED_TOOL_NAMES =
+    frozenset(t.name for t in TOOLS) and :414 LINT_TOOLS = list(TOOLS); TOOLS
+    literal now at _tool_specs.py:9, re-exported as dispatch.TOOLS.
+  - "Shim conditional evidence: src/python_setup_lint/runner/parsers.py still
+    exists (275 lines, re-export layer over _record_parsers/_record_types), so
+    the runner/__init__.py peek lines were intentionally kept (doc :17, 'from
+    .baseline import peek_fallback_tools' :22, __all__ entry :62)."
+  - "Test migration verified: stale '# pylint: disable=too-many-lines' absent
+    from tests/runner/test_lint_runner.py (480 lines) and its tool-count
+    assertion uses EXPECTED_TOOL_NAMES; remaining '14' mentions in tests/runner
+    are docstrings/oracle comments only, no hardcoded count assertions."
+concerns:
+  - The enforced 300-line no-behavior budget makes the assignment's 3-way
+    (registry/strategies/parser-sets) split impossible; only the registry slice
+    was extracted, which satisfies the binding 'dispatch.py <=500, no
+    too-many-lines disable' requirement. A fuller 3-way split needs a budget
+    exception.
+  - The long ty ToolSpec justification comment (with its inline pylint disable)
+    moved verbatim into _tool_specs.py; lint passes, but future renames will
+    need to carry it along.
+  - Pre-existing pyright/ty LSP hints about optional dict.get access in
+    dispatch.py (lines ~262/294) are unchanged and remain baseline-clean.
+notes: "Net effect vs story base: _strategies.py/.pyi from the rejected attempt
+  are deleted; new _tool_specs.py/.pyi carry only the ToolSpec registry.
+  Sequencing/imports: dispatch.py imports from ._tool_specs before .cmd_build
+  (ruff-isort order); the stub re-exports TOOLS/TOOLS_BY_NAME with explicit 'as'
+  aliases, which the custom stub checker treats as declarations (ImportFrom
+  names are indexed) and stubtest/pyright verify."

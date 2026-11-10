@@ -1,0 +1,20 @@
+id: rm-b806236551
+chosen: Diagnose first and make no production changes on retry
+alternatives:
+  - Audit and rewrite merge-path empty-setup parity paths (would risk breaking
+    passing merge-setup tests for a non-reproducible failure)
+  - Increase the test timeout in stranded-wave.test.ts (out of scope for this
+    assignment; raised as a concern instead)
+why: Review feedback directed isolating the failing file before touching code;
+  the isolated pass (4/4) plus a clean full-suite re-run (only accepted baseline
+  disk-space failure) proves the failure was load contention in the harness, not
+  merge-path behavior.
+status: open
+source:
+  record: 004-develop-r1-a1
+  agent: developer
+  step: develop
+  item: merge-setup-fix
+  lastSeen: 2026-11-10T03:47:10.380Z
+createdAt: 2026-11-10T03:47:10.380Z
+updatedAt: 2026-11-10T03:47:10.380Z

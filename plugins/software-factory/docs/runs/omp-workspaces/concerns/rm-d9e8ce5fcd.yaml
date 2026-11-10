@@ -1,0 +1,18 @@
+id: rm-d9e8ce5fcd
+chosen: Use `.omp/RULES.md` / `contextFiles.extra` (or task `context`) for rules
+  that must reach scouts
+alternatives:
+  - Put all rules in AGENTS.md and accept scout blindness
+  - Inject repo rules into every task tool `context` field
+why: omp task subagents drop every context file named AGENTS.md but keep
+  RULES.md and extra context files. Hard rules that scouts must follow cannot
+  live only in AGENTS.md.
+status: open
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: spike-repo-rules
+  lastSeen: 2026-11-09T23:58:38.970Z
+createdAt: 2026-11-09T23:58:38.970Z
+updatedAt: 2026-11-09T23:58:38.970Z

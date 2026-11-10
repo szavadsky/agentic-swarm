@@ -1,0 +1,103 @@
+context: wave
+decision: amend
+outlines:
+  - deps:
+      - golden-snapshot-wiring
+      - third-party-assumption-tests
+    description: "Extract into tests/_project_helpers.py: copy_sample_project,
+      git_init_and_stage (init+config user test/test@test + `git add .`,
+      integration/detect-secrets semantics), git_init_bare (init -q + config
+      Test/test@example.com, no add, autofix semantics — identities NOT
+      unified), stage_file, commit_all, shipped_config_paths, make_runner_config
+      (package_name + rumdl override, preserving _make_config side-effect
+      contract incl. idempotent overwrite and no-op when shipped rumdl missing),
+      build_pylint_overlay_config(project, disable_rule)->Path,
+      ensure_precommit_or_skip()->None, install_twice_assert_idempotent(project,
+      monkeypatch)->None. Delete duplicate defs in conftest.py and
+      _autofix_helpers.py (import instead); integration.py imports only what it
+      uses; test_self_lint_clean.py and autofix tests switch imports.
+      Per-consumer map: integration->{copy, git_init_and_stage,
+      make_runner_config, build_overlay, ensure_precommit, install_twice};
+      conftest->{shipped_config_paths} only; _autofix->{git_init_bare,
+      stage_file, commit_all} only. Line budget (must remove >=127, target
+      <=490): helpers ~58 + oracle reader ~8 + overlay rewrite ~21 + setup
+      scaffolding (fake _run_uv/install-twice) ~20 + precommit scaffolding
+      (probe + validate/config blocks) ~25 + M1 loop/lookup net ~5 +
+      section-slice ~3 + import/docstring trim ~4. integration.py keeps
+      path/class/function names; golden+counts byte-identical; sole AGENTS.md
+      counts owner (update counts incl. new assumption tests). Acceptance:
+      integration, `pytest -q`, `lint` pass."
+    kind: story
+    milestoneId: M2
+    slug: consolidate-integration-helpers
+    title: Single-source helpers; integration.py under 500 lines
+  - deps:
+      - golden-snapshot-wiring
+      - third-party-assumption-tests
+      - consolidate-integration-helpers
+    description: "Read-only audit of src/** and scripts/** vs CodingRules/AGENTS.
+      Semantic exclusions are symbol/file-level (mark skipped, audit rest
+      normally): checkers/_semantic.py+.pyi, new
+      _decision_backend/_decision_cache modules (+.pyi),
+      _base.py::check_if_meaningful (+stub section),
+      no_try_import_checker::_OPTIONAL_IMPORT_PATTERNS. Inventory: .pyi
+      fidelity/private symbols, @beartype + structural suppressions, trivial
+      wrappers/duplicated logic, redundant fallbacks (astroid 3.x), legacy stubs
+      (_FALLBACK_TOOLS, peek_fallback_tools, _compare_sorted re-export),
+      over-long comments, 500-line/R0912/R0915 proximity, structlog/error rules,
+      rumdl tests/data-exclude hack (TD-11). Output: rows {module, section,
+      evidence file:line, category, est. LoC delta, owner, fix} + UNIFIED
+      disjoint-ownership map (this audit is single owner; test-debloat-audit
+      consumes it via inter-dep). Reads final state
+      (post-golden/assumptions/consolidate) + beartype report."
+    kind: fact-finder
+    milestoneId: M3
+    replanAfter: true
+    slug: coding-rules-audit
+    title: Inventory CodingRules violations
+  - deps:
+      - golden-snapshot-wiring
+      - third-party-assumption-tests
+      - consolidate-integration-helpers
+      - coding-rules-audit
+    description: "Read-only audit of tests/**. Semantic exclusions (mark skipped):
+      tests/checkers/test_semantic_check.py, test_semantic_threshold.py,
+      TestSuppressionRerankerPipeline class, tests/checkers/conftest.py
+      (epic-created), tests/assumptions runtime/decision/cache modules
+      (epic-created). Per module: behaviors protected; duplicates (incl.
+      golden-covered); CodingRules-Tests violations (first-party mocking,
+      naming, markers, in-file fixtures, _factories.py list[Any] tables, far
+      cases); repo-self-lint tests for removal (test_self_lint_clean.py,
+      AST/source-scanning guards, config re-checks); slow/benchmark; task-ID
+      names. Output: rows {module, behaviors, duplicate-of, recommendation
+      keep|merge|rewrite|remove, surviving coverage, reason, owner} +
+      per-subsystem LoC estimates + per-limb pinning inventory (CLI/exit,
+      baseline/autofix, configs/scopes: surviving test or blocking-debt flag).
+      Owner column aligned to coding-rules-audit's unified map (read via
+      inter-dep)."
+    kind: fact-finder
+    milestoneId: M3
+    replanAfter: true
+    slug: test-debloat-audit
+    title: Inventory redundant and lint-testing tests
+planDelta: Wave 3 merged nothing because consolidate-integration-helpers,
+  coding-rules-audit, and test-debloat-audit still depend on superseded
+  golden-findings-snapshot (amendment 1 added golden-helpers-unit +
+  golden-snapshot-wiring outlines but the prose dep-rewire was not applied).
+  Replace those three pending outlines with identical content except dep
+  golden-findings-snapshot -> golden-snapshot-wiring. Do not touch merged items
+  (probe, assumption-tests) or the already-added split outlines. U3 prose
+  reference update optional.
+rationale: "Wave 3 empty (no merged/failed/blocked), tree clean, all gates
+  baseline-identical with zero regressions. Root cause of empty wave: downstream
+  M2/M3 items still list dep on superseded golden-findings-snapshot, so
+  consolidate can never become ready and audits chain behind it. Previous
+  amend's outlines landed (helpers-unit + wiring in plan) but dep rewiring via
+  planDelta prose did not. Replacement outlines fix the three dep edges; merged
+  history untouched."
+text: "Next wave: schedule golden-helpers-unit first (fast, synthetic-only, deps
+  satisfied via merged probe), then golden-snapshot-wiring, then
+  consolidate-integration-helpers. Wiring acceptance stays baseline-relative (6
+  pre-existing 13-vs-14 failures persist; no new failures; regen twice
+  byte-identical). Temp copies only, never bare uv run lint. Do not touch
+  .factory records."

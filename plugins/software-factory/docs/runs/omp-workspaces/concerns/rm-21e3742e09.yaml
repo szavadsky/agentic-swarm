@@ -1,0 +1,21 @@
+id: rm-21e3742e09
+chosen: Pin all cache/compaction/memory keys in the generated omp overlay rather
+  than relying on omp defaults or host config
+alternatives:
+  - Read host config and adapt at runtime
+  - Use PI_CACHE_RETENTION env overrides
+  - Document host settings as an installation prerequisite
+why: The factory overlay currently pins none of them, and this host's global
+  config overrides omp defaults (short vs auto, streaming vs idle,
+  experimentalContextManagement true vs false). Overlay precedence beats
+  project/global, so explicit keys make cache behavior reproducible and
+  auditable.
+status: open
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: spike-cache-key
+  lastSeen: 2026-11-10T00:16:23.859Z
+createdAt: 2026-11-10T00:16:23.859Z
+updatedAt: 2026-11-10T00:16:23.859Z

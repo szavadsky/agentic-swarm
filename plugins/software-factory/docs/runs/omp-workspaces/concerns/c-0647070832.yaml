@@ -1,0 +1,29 @@
+id: c-0647070832
+kind: tech-debt
+summary: Child/merge worktrees still need infra.setup (bun install) before the
+  bun test runner can collect tests; this worktree had no node_modules until
+  installed manually
+detail: Running `bun test` in a fresh worktree failed with `Cannot find package
+  'yaml'` from test/records-and-fingerprint.test.ts and src/core/prompts.ts
+  until `bun install` was run. This is the pre-existing open concern
+  c-552344216d (missing infra.setup in merge-child worktrees), not introduced by
+  this step; node_modules is gitignored and not part of the change.
+affects:
+  - target-red
+  - wave-merge
+severity: high
+status: dismissed
+source:
+  record: 001-test-first-r1-a1
+  agent: developer
+  step: test-first
+  item: usage-cache-tokens
+  lastSeen: 2026-11-10T02:05:24.168Z
+createdAt: 2026-11-10T02:05:24.168Z
+updatedAt: 2026-11-10T02:46:53.285Z
+disposition: dismiss
+dismissReason: "Self-declared duplicate: the concern's own detail text states
+  'This is the pre-existing open concern c-552344216d (missing infra.setup in
+  merge-child worktrees), not introduced by this step'. Same root cause (bun
+  install absent in fresh worktree), same affects. Keep c-552344216d as
+  canonical."

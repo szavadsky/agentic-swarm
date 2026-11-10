@@ -1,0 +1,20 @@
+id: rm-bc510f4b77
+chosen: Run the lint gate with PYTHON_SETUP_LINT_NO_AUTOFIX=1 and rely on direct
+  AST/pylint probes for the audit
+alternatives:
+  - Run bare `uv run lint` and revert autofixes (risk of partial writes)
+  - Skip lint entirely and cite only prior audit results (weaker final-state
+    evidence)
+why: Preserves the read-only repository invariant while still proving 14/14
+  tools pass and that the debt is suppressed; bare `uv run lint` would autofix
+  tracked files and invalidate the audit state.
+status: routed
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: coding-rules-audit
+  lastSeen: 2026-11-09T23:33:30.977Z
+createdAt: 2026-11-09T23:33:30.977Z
+updatedAt: 2026-11-10T02:58:56.108Z
+disposition: optional

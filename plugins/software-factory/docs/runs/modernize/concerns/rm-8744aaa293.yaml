@@ -1,0 +1,20 @@
+id: rm-8744aaa293
+chosen: Group the 203 private stub declarations into three per-owner rows plus
+  the W9707 enforcement row, rather than 203 individual rows
+alternatives:
+  - One row per declaration (precise but noisy and duplicates the same fix)
+  - Report only aggregate counts without per-owner evidence (loses the map
+    contract)
+why: The fix is one mechanical stub-surface cleanup per owner, and per-owner
+  totals make the inter-dep ownership map actionable; individual rows would
+  obscure that PYI-4 is a prerequisite and that 127 imports block deletion.
+status: routed
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: coding-rules-audit
+  lastSeen: 2026-11-09T23:33:30.977Z
+createdAt: 2026-11-09T23:33:30.977Z
+updatedAt: 2026-11-10T02:58:56.108Z
+disposition: optional

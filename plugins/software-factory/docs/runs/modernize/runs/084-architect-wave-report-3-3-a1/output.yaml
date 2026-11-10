@@ -1,0 +1,11 @@
+context: wave
+decision: continue
+rationale: "Task status (ground truth) shows 3/4 wave-1 items merged
+  (secrets-baseline-exclusion, pylint-cache-semantics-closure,
+  adr-formalization), 1 running, 0 failed/blocked. Wave hygiene clean, gate diff
+  zero regressions (format/integration sustained, lint+test fail->pass
+  IMPROVED). Empty mergedItems and iteration=1 are wave-report metadata gaps,
+  not progress signals. Ruff-format mutation debt is stale: check-only
+  _RuffFormatLintTool verified at HEAD and in context pack 2.4."
+text: Continue. ownership-map-revalidation remains M1 critical path gating
+  epic-kickoff-gate; no amendment warranted.

@@ -1,0 +1,73 @@
+status: ok
+summary: "Target file tests/assumptions/test_pylint_cache_semantics.py was
+  absent at HEAD, so landed EXACTLY ONE new permanent assumption/verdict file
+  there (no src writes, no other repo diffs). It pins the writer-first verdict
+  consumed by cache-design-spike/epic-semantic-infrastructure: (1) writer
+  identity = the checker call path
+  (python_setup_lint.checkers._semantic.semantic_check_if_meaningful ->
+  _save_result_cache) inside each pylint subprocess; runner performs no
+  post-process merge and checker open/close hooks do not write; (2) timing =
+  immediate whole-file rewrite per newly computed verdict/cache miss, while hits
+  and heuristic fallback (reranker unavailable) write nothing; (3) --path
+  scoping = runner --path narrows lint file targets only; the cache is a single
+  ~/.cache/python-setup/semantic/results.json and the key is SHA-256 over (text,
+  rule, code_context, comment, model) with no path component, so scoped/full
+  runs share entries across the sequential pylint, pylint-pyi, pylint tests
+  invocations; sweep scope must come from per-entry file references, not --path;
+  (4) concurrency decision = sequential runner + no -j/--jobs in any pylint spec
+  + pylint default jobs=1 => single writer, so no lockfile, no runner merge, no
+  sidecars today; if -j is introduced pylint dispatches separate process workers
+  and the verdict flips to per-writer sidecars + merge (or crash-safe lock +
+  atomic replace); (5) crash safety = non-atomic write, but truncated/corrupt
+  JSON loads as empty and is recomputed. 15 tests pass offline with the
+  no_external_api marker and test_<api>_given_<condition>_then_<expected>
+  names."
+target:
+  command: uv run pytest tests/assumptions/test_pylint_cache_semantics.py -q
+  customTarget: true
+evidence:
+  - git status --porcelain=v1 => only '??
+    tests/assumptions/test_pylint_cache_semantics.py'; git diff --stat empty; no
+    src, tests/runner, or .secrets.baseline changes
+  - uv run pytest tests/assumptions/test_pylint_cache_semantics.py -q => 15
+    passed
+  - uv run pytest tests/assumptions/ -q => 23 passed
+  - uv run pytest -q (serial) => 1372 passed, 4 skipped, 18 deselected, 4
+    warnings
+  - uv run ruff check --config config/ruff.toml
+    tests/assumptions/test_pylint_cache_semantics.py => All checks passed
+  - uv run ruff format --config config/ruff.toml --check
+    tests/assumptions/test_pylint_cache_semantics.py => 1 file already formatted
+  - uv run pylint --rcfile config/.pylintrc-tests
+    tests/assumptions/test_pylint_cache_semantics.py => exit 0, zero messages,
+    score 10.0
+  - uv run detect-secrets scan tests/assumptions/test_pylint_cache_semantics.py
+    => results {}, 0 findings; .secrets.baseline not rewritten/touched
+  - "Negative controls prove failure detection: no-op _save_result_cache =>
+    writer/timing test fails (FileNotFoundError); patched PyLinter default
+    jobs=2 => jobs=1 test fails (AssertionError); cache path redirected under
+    cwd => single-home-location test fails (AssertionError)"
+  - "Offline verification: fake reranker is injected, sentence-transformers is
+    absent, no subprocesses are spawned (pylint check_parallel is
+    monkeypatched), and all cache I/O is redirected to pytest tmp_path"
+concerns:
+  - The verdict is pinned to the current HEAD writer implementation; if the
+    writer moves (e.g., runner post-merge, checker close hook) or -j is
+    introduced, watchdog tests fail intentionally and the verdict must be
+    re-derived rather than loosening assertions (stated in the module
+    docstring).
+  - One earlier full-suite run executed concurrently with separate
+    pylint/detect-secrets commands showed a transient unrelated failure in
+    tests/runner/test_t5_compose_ruff.py (ruff.toml/shared_ruff.toml diff); two
+    serial full-suite reruns and three isolated runs of that file all passed.
+  - One source-scan test reads src AST/text to pin the single _save_result_cache
+    call site and the absence of runner-side cache writes; this is deliberate
+    contract brittleness, not behavioral redundancy.
+notes: "File landed at tests/assumptions/test_pylint_cache_semantics.py; the
+  verdict is readable in its module docstring (WRITER-FIRST VERDICT section).
+  Downstream consumers should read that docstring; no separate report file was
+  created because the item contract allows exactly one new file and no src/docs
+  writes. Recommended cache-design-spike input: no lock / no runner post-merge /
+  no sidecars at jobs=1; keep the sequential single-writer assumption, and
+  revisit with per-worker sidecars + merge (or lock + atomic replace) only if
+  pylint -j is enabled."

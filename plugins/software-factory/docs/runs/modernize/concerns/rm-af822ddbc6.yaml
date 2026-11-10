@@ -1,0 +1,24 @@
+id: rm-af822ddbc6
+chosen: Accept the modify/delete resolution for
+  tests/runner/test_pyright_noise_filter.py and
+  tests/runner/test_self_lint_clean.py (deletion wins).
+alternatives:
+  - Restore both files from the item side with imports retargeted to
+    tests._project_helpers
+  - Restore only test_pyright_noise_filter.py, whose modification was the
+    one-line import change
+why: The deletion is deliberate on the parent side (commit 644774e,
+  'never-test-linting-prune'), the item side only retargeted an import in one of
+  them, and neither file is referenced by any remaining code or config.
+  Resurrecting them would re-introduce tests the parent branch explicitly
+  pruned.
+status: routed
+source:
+  record: 005-integrate-r1-a1
+  agent: developer
+  step: integrate
+  item: consolidate-integration-helpers-v3
+  lastSeen: 2026-11-09T23:49:50.606Z
+createdAt: 2026-11-09T23:49:50.606Z
+updatedAt: 2026-11-10T03:32:47.723Z
+disposition: optional

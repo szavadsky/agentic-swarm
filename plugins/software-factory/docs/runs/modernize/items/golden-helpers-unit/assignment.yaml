@@ -1,0 +1,34 @@
+slug: golden-helpers-unit
+kind: test-only
+title: Golden helpers module with synthetic unit tests
+assignment: "Create tests/_golden.py as SOLE golden owner (no pipeline run in
+  this item). Implement: UPDATE_ENV='PYTHON_SETUP_LINT_UPDATE_GOLDEN',
+  SEMANTIC_ENV='PYTHON_SETUP_LINT_SEMANTIC'; Finding TypedDict {tool:str,
+  file:str|None, line:int|None, col:int|None, rule:str}; finding_key(f)
+  None-safe (tool, file or '', line if int else -1, col if int else -1, rule)
+  mirroring _violation_sort_key; normalize_record (drop msg, relativize vs
+  project, strip './', backslash->'/', as_posix, assert non-absolute); serialize
+  via json.dump(indent=2, sort_keys=True)+trailing newline;
+  assert_matches_golden (Counter multiset diff, sorted added/removed; UPDATE=1:
+  pytest.fail('refusing to rewrite golden under CI...') if CI/GITHUB_ACTIONS
+  else warn+rewrite golden+counts together); read_oracle_rules,
+  slice_tool_section, assert_oracle_coverage, assert_tool_coverage. Consume
+  golden-determinism-probe report normalization spec. Add tests/test_golden.py
+  with synthetic Finding lists ONLY (no run_lint, no pipeline): finding_key None
+  vs str/int ordering, POSIX normalization, multiset diff exact added/removed,
+  CI-guard fail, coverage asserts, serialization byte-format. Constraints: no
+  src/ changes, no golden files yet, module <=500 lines, formatted. Acceptance:
+  `uv run pytest tests/test_golden.py -q` passes."
+outlineRef: golden-helpers-unit
+milestone: M1
+wave: 6
+deps:
+  - golden-determinism-probe
+scenarioRefs:
+  - "M1: Golden snapshot pins current behavior"
+  - "M1: Behavior drift is reported precisely"
+  - "M1: Deterministic regeneration"
+citations:
+  - tests/_golden.py
+  - tests/test_golden.py
+  - ADR-001

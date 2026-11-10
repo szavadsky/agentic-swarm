@@ -1,0 +1,23 @@
+id: c-97e30bc22b
+kind: risk
+summary: Benchmark test has zero assertions and cannot gate regressions
+detail: tests/runner/test_bench_runner_overhead.py contains no assert statement;
+  it computes PASS/FAIL only into a tmp_path artifact and prints. It is marked
+  slow but provides no enforcement.
+location:
+  file: tests/runner/test_bench_runner_overhead.py
+  line: 118
+affects:
+  - benchmark-policy
+  - test-debloat-audit
+severity: low
+status: routed
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: test-debloat-audit
+  lastSeen: 2026-11-10T00:53:21.467Z
+createdAt: 2026-11-10T00:53:21.467Z
+updatedAt: 2026-11-10T02:32:36.259Z
+disposition: optional

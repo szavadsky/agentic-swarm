@@ -1,0 +1,89 @@
+iteration: 1
+amendmentIndex: 3
+items:
+  - assignment: "Single-source test project helpers per replaced outline (test-only
+      enforcement). Create tests/_project_helpers.py as sole definition site for
+      10 helpers: copy_sample_project, git_init_and_stage (git init + config
+      user test/test@test + `git add .`, integration/detect-secrets semantics),
+      git_init_bare (init -q + config Test/test@example.com, no add, autofix
+      semantics — identities NOT unified), stage_file, commit_all,
+      shipped_config_paths, make_runner_config (package_name + rumdl override,
+      preserving _make_config side-effect contract: writes/overwrites
+      <project>/rumdl.toml derived from config/rumdl.toml with '\"tests/data\",
+      ' removed, idempotent same-bytes, no-op when shipped rumdl.toml missing,
+      OSError propagates), build_pylint_overlay_config(project,
+      disable_rule)->Path, ensure_precommit_or_skip()->None,
+      install_twice_assert_idempotent(project, monkeypatch)->None. Delete
+      duplicate defs in tests/conftest.py and tests/_autofix_helpers.py and
+      import instead. Update tests/integration.py to import only its mapped
+      subset {copy_sample_project, git_init_and_stage, make_runner_config,
+      build_pylint_overlay_config, ensure_precommit_or_skip,
+      install_twice_assert_idempotent}; conftest.py imports only
+      {shipped_config_paths}; _autofix_helpers.py imports only {git_init_bare,
+      stage_file, commit_all}. Switch test_self_lint_clean.py and autofix tests
+      to new imports. Move overlay/setup/precommit scaffolding per line budget
+      to remove >=127 lines, target <=490, hard gate <=500 with no suppression:
+      helpers ~58 + oracle reader ~8 + overlay rewrite ~21 + setup scaffolding
+      ~20 + precommit scaffolding ~25 + M1 loop/lookup net ~5 + section-slice ~3
+      + import/docstring trim ~4. Keep tests/integration.py path/class/function
+      names unchanged; golden+counts byte-identical. FORBIDDEN: MUST NOT touch
+      AGENTS.md, docs/**, or src/** — engine enforces test-only. Leave AGENTS.md
+      counts (1290 pass/13 tools) and cli.py help stale by design;
+      docs-counts-sync follow-up owns them. Reads merged state from
+      golden-snapshot-wiring + third-party-assumption-tests. Runs captures only
+      via integration on temp copies, never bare `uv run lint` on repo
+      (ruff-format write hazard). Acceptance: `uv run pytest
+      tests/integration.py -v` and `uv run pytest -q` pass; tests/integration.py
+      <=500 lines no suppression; golden+counts byte-identical (diff
+      before/after); each helper defined exactly once; no new lint violations in
+      touched files (pre-existing SIM102/R0914/C0208 persist,
+      baseline-relative)."
+    citations:
+      - tests/integration.py
+      - tests/conftest.py
+      - tests/_autofix_helpers.py
+      - tests/_project_helpers.py
+      - tests/_golden.py
+      - tests/data/golden/minimal_sample_project_findings.json
+    deps:
+      - golden-snapshot-wiring
+      - third-party-assumption-tests
+    kind: test-only
+    milestone: M2
+    outlineRef: consolidate-integration-helpers
+    scenarioRefs:
+      - Shared helpers exist once
+      - Integration gate module within limits
+    slug: consolidate-integration-helpers-v3
+    title: Single-source helpers; integration.py under 500 lines
+    wave: 11
+  - assignment: "Follow-up to consolidate v3 (dev, bounded docs+one-string prod
+      fix). Update AGENTS.md test/tool counts from stale base (1290 pass / 13
+      tools) to runtime actuals: verify via `uv run pytest --collect-only -q`
+      count including new assumption/golden tests and len(TOOLS)==14 via
+      dispatch registry; edit COUNT LINES ONLY, never touch pipeline section
+      (semantic epic owns it). Edit src/python_setup_lint/runner/cli.py:314 help
+      text 'all 13 tools' -> 'all 14 tools'; prod scope strictly bounded to that
+      one help string, no behavior change, no other src/ edits. No test file
+      changes. Depends on consolidate-integration-helpers-v3 merge so counts
+      reflect final post-consolidate tree. Golden+counts must remain
+      byte-identical (diff before/after). Acceptance: AGENTS.md counts match
+      runtime collect-only + TOOLS length; cli help shows 14; `uv run pytest
+      tests/integration.py -v` passes; no new lint violations in touched lines."
+    citations:
+      - AGENTS.md
+      - src/python_setup_lint/runner/cli.py
+      - src/python_setup_lint/runner/dispatch.py
+      - tests/integration.py
+    deps:
+      - golden-snapshot-wiring
+      - third-party-assumption-tests
+      - consolidate-integration-helpers-v3
+    kind: dev
+    milestone: M2
+    outlineRef: docs-counts-sync
+    scenarioRefs:
+      - Integration gate module within limits
+    slug: docs-counts-sync
+    title: Sync AGENTS.md counts and cli help to 14-tool world
+    wave: 12

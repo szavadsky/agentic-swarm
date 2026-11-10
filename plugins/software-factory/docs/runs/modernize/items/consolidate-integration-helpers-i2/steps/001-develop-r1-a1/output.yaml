@@ -1,0 +1,66 @@
+status: ok
+summary: Consolidated test-project helpers into a new tests/_project_helpers.py,
+  removed the conftest helper, rewired imports in
+  integration/self-lint/pyright/autofix tests, and shrank tests/integration.py
+  from 661 to 497 lines (164 removed). Integration pipeline and golden/autofix
+  tests pass; touched files are ruff-format and ruff-check clean.
+target:
+  command: uv run pytest tests/integration.py tests/test_golden.py -q
+  customTarget: false
+evidence:
+  - "wc -l tests/integration.py -> 497 (target: <=500; 661 -> 497, 164 lines
+    removed)."
+  - "uv run pytest tests/integration.py -v -> 9 passed in 93.90s (all
+    TestMinimalSampleProject cases: setup_new_and_lint, config_overlay,
+    resetup_idempotent, dry_run_hooks, install_then_lint_clean_project,
+    pre_commit_dry_run, baseline_relative_paths, individual_tool_parity,
+    rumdl_disabled_rules_guard)."
+  - uv run pytest tests/test_golden.py tests/runner/test_autofix_conflict.py
+    tests/runner/test_autofix_conflict_apply.py
+    tests/runner/test_autofix_conflict_integration.py -q -> 71 passed, 1
+    deselected; tests/data/golden untouched (golden diff empty).
+  - uv run ruff format --check --config config/ruff.toml on all 9 touched files
+    -> 9 files already formatted.
+  - uv run ruff check --config config/ruff.toml on all 9 touched files -> All
+    checks passed.
+  - git status --short -> only tests/conftest.py, tests/integration.py,
+    tests/runner/_autofix_helpers.py, three test_autofix_conflict*.py files,
+    test_pyright_noise_filter.py, test_self_lint_clean.py modified plus new
+    tests/_project_helpers.py; src/, docs, AGENTS.md, lint.baseline untouched.
+  - "Pinned helpers present in tests/_project_helpers.py: copy_sample_project,
+    git_init_and_stage, shipped_config_paths, make_runner_config, git_init_bare,
+    write_project_file, stage_file, commit_all, build_pylint_overlay_config,
+    ensure_precommit_or_skip, install_twice_assert_idempotent;
+    _autofix_helpers.py retains only _make_canned_fix_results,
+    _PostFixFakeRunCmd, _CANARY_LABEL, _FIX_TOOL_NAMES and its assert."
+  - "Removed '# pylint: disable=too-many-lines' and the stale '# pylint:
+    disable=too-many-locals' from integration.py; helper module imports only
+    stdlib plus python_setup_lint.runner/_config/setup (cycle guard respected)."
+concerns:
+  - "uv run pytest -q (full suite) reports 6 pre-existing failures in untouched
+    files (tests/runner/test_lint_runner.py, test_lint_runner_stats.py,
+    test_t3_coverage.py, test_testing_fakes.py):
+    src/python_setup_lint/runner/dispatch.py already registers a 14th 'ruff
+    format' tool while those tests still expect 13 and lack its statistics
+    parser/coverage entry. Out of this assignment's scope (src forbidden)."
+  - "uv run lint is unsafe in this branch: the pre-existing 'ruff format'
+    ToolSpec in dispatch.py has no --config wiring, so the runner invokes plain
+    `ruff format` and rewrites tracked files at the default 88-column width.
+    Once detected, I restored all 102 collateral files from HEAD via `git show
+    HEAD:<path>` and re-applied project-config formatting to the 9 intended
+    files; final git status shows tests-only changes."
+  - Full lint also fails detect-secrets on tracked .factory/tasks/modernize
+    orchestration files (pre-existing environmental artifact), and its pylint
+    tail showed score 9.98 (7 warnings/4 conventions) rather than 10.0; the
+    W9704/pylint-tests full gate was therefore not independently confirmed after
+    restore due to the time budget.
+  - Added one non-pinned helper, make_clean_consumer_project, to share the
+    duplicated clean-consumer scaffold between two tests and meet the 500-line
+    budget; the 11 pinned helpers keep their exact pinned names/signatures.
+notes: tests/integration.py consumes only helpers from tests._project_helpers
+  (copy_sample_project, git_init_and_stage, make_runner_config,
+  build_pylint_overlay_config, ensure_precommit_or_skip,
+  install_twice_assert_idempotent, make_clean_consumer_project). Test
+  class/function names unchanged. tests/conftest.py no longer defines or
+  re-exports shipped_config_paths; test_pyright_noise_filter.py and
+  test_self_lint_clean.py import it from tests._project_helpers.

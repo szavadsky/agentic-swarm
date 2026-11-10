@@ -1,0 +1,20 @@
+id: rm-d63aed4fdb
+chosen: Declare expectRed ids as bare Bun test names rather than file-qualified
+  `file::test` node ids.
+alternatives:
+  - File-qualified `test/...::test` ids (would not match Bun's describe-based
+    JUnit ids unless the describe name is also embedded).
+  - Full `<describe>.<test>` ids (brittle to describe renames).
+why: "Bun's JUnit reporter emits ids as `<innermost describe>.<test name>` with
+  no file path in the id; the engine's normalizer matches a bare id by suffix
+  (`id.endsWith('.' + expectId)`). Verified against parseJunit output: all 11
+  ids match exactly one failing case."
+status: open
+source:
+  record: 001-test-first-r1-a1
+  agent: developer
+  step: test-first
+  item: usage-cache-tokens
+  lastSeen: 2026-11-10T02:05:24.168Z
+createdAt: 2026-11-10T02:05:24.168Z
+updatedAt: 2026-11-10T02:05:24.168Z

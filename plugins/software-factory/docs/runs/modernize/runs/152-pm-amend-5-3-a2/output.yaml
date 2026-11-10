@@ -1,0 +1,34 @@
+iteration: 5
+items:
+  - assignment: 'Owns NEW checkers/_source_stream.py/.pyi + stream sites ONLY (12
+      paths: 8 prod NEW _source_stream.py/.pyi, bare_except_comment_checker.py,
+      suppression_justification_checker.py/.pyi, stub/checker.py,
+      stub/coverage.py/.pyi; 4 tests NEW test_source_stream.py, astroid call,
+      stub_coverage call, TestCodeContextDerivation block). FORBIDDEN
+      _base.py/.pyi zero diff, no_try_import register/patterns, tests/data,
+      baseline, docs, tach.toml, decisions/, CLI, .factory/**. API @beartype
+      tach-clean <=500: read_module_source(node)->str (node.root().stream(),
+      decode-if-bytes UTF-8, str passthrough),
+      is_under_source_root(path,roots)->bool pure,
+      split_trailing_comment(line)->(code,comment|None) historical raw
+      unstripped; coexistence with _base helper documented. Cherry-pick owned-12
+      from abandoned topic/modernize--checkers-stream-helper, adapting
+      visit_module _legacy_scan call to legacy-v2 renamed shape (grep HEAD) +
+      union TestCodeContextDerivation with HEAD TestAnyElementCodeEcho (drop
+      reranker) + keep HEAD _factories_stub_coverage import. Preserves first-#
+      code_context. Verify: grep single-owner, _base empty diff, diff
+      owned-only, owned 4-file pytest + pytest -q + lint 14/14 + integration 9
+      passed, golden hash-equal (expect no-shift SEMANTIC=0). Declare target
+      {"command":"uv run pytest -q","customTarget":true} NEVER
+      {"gate":"tests"}.'
+    citations:
+      - src/python_setup_lint/checkers/_source_stream.py
+    deps:
+      - checkers-legacy-dead-cleanup-v2
+      - semantic-test-doubles-dedup
+    kind: no-behavior
+    milestone: M2
+    outlineRef: checkers-stream-helper-v2
+    slug: checkers-stream-helper-v2
+    title: Single-source stream read/decode helper (v2 fresh HEAD)
+    wave: 9

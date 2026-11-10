@@ -1,0 +1,30 @@
+id: c-e97dd18239
+kind: risk
+summary: omp isolation backend values and runtime applicability are undocumented locally
+detail: '`isolation.backend` is an enum defaulting to `rcopy` with description
+  "subagent isolation and worktree cloning"; allowed values, failure retention,
+  and behavior for root `omp --cwd` processes are unverified. `omp --config`
+  cannot be validated via `config get`, and there is no isolation CLI flag.'
+location:
+  file: plugins/software-factory/docs/spikes/omp-1-topology.md
+  line: 189
+affects:
+  - "19.1"
+  - "19.2"
+  - "19.5"
+severity: high
+status: dismissed
+source:
+  record: 004-context-pack-a1
+  agent: fact-finder
+  step: context-pack
+  lastSeen: 2026-11-09T23:21:29.949Z
+createdAt: 2026-11-09T23:21:29.949Z
+updatedAt: 2026-11-10T01:40:18.908Z
+disposition: dismiss
+dismissReason: Spike probes 2-5 enumerate the exact 9-value enum (auto, apfs,
+  btrfs, zfs, reflink, overlayfs, projfs, block-clone, rcopy), fresh-profile
+  default auto, host profile rcopy, and FICLONE-fallback behavior on ext4/WSL2;
+  independently re-verified via config-set oracle on omp 18.18.5. The unknown is
+  retired in findings; landing the omp-3 doc and config surface is tracked via
+  spike followUps, not this risk.

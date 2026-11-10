@@ -1,0 +1,19 @@
+id: c-050eb083e4
+kind: risk
+summary: omp worktree list is blind to explicit-path engine worktrees
+detail: worktree list --json returned [] and clear --dry-run reported nothing
+  despite multiple live explicit-path worktrees (probe 26). status/gc must use
+  git worktree list + records.
+affects:
+  - "19.3"
+severity: medium
+status: routed
+source:
+  record: 002-research-r1-a2
+  agent: fact-finder
+  step: research
+  item: spike-omp-isolation
+  lastSeen: 2026-11-10T01:26:13.601Z
+createdAt: 2026-11-10T01:26:13.601Z
+updatedAt: 2026-11-10T01:53:41.429Z
+disposition: architect

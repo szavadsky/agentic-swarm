@@ -1,0 +1,24 @@
+id: c-5e0d0157c2
+kind: assumption
+summary: test_testing_fakes.py must not be removed as test-infra-only coverage
+detail: src/python_setup_lint/testing.py is shipped product API (FakeRunCmd,
+  make_lint_result, test_checked_main, precommit validators), not test-only
+  infrastructure. The debloat plan should keep test_testing_fakes.py; removing
+  it would drop shipped-API coverage.
+location:
+  file: src/python_setup_lint/testing.py
+  line: 45
+affects:
+  - setup-testing
+  - test-debloat-audit
+severity: low
+status: routed
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: test-debloat-audit
+  lastSeen: 2026-11-10T00:53:21.467Z
+createdAt: 2026-11-10T00:53:21.467Z
+updatedAt: 2026-11-10T02:23:05.623Z
+disposition: optional

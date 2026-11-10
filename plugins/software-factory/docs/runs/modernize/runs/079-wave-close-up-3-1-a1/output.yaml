@@ -1,0 +1,26 @@
+blockedItems: []
+debt:
+  - "Operator action still open: `ruff format` ToolSpec in
+    src/python_setup_lint/runner/dispatch.py runs plain `ruff format` without
+    --check/--config and mutates worktrees; declared gates work around it by
+    splitting format/lint"
+failedItems: []
+iteration: 1
+mergedItems:
+  - secrets-baseline-exclusion
+  - pylint-cache-semantics-closure
+  - adr-formalization
+recommendations:
+  - Add --check (+ --config config/ruff.toml) to the `ruff format` ToolSpec or
+    drop it from TOOLS so `uv run lint` is check-only as documented
+  - Keep declared split gates (format + 13-tool lint) until the ToolSpec fix
+    lands
+status: complete
+summary: "Wave 1 complete: all 3 items merged (secrets-baseline-exclusion,
+  pylint-cache-semantics-closure, adr-formalization). Tree hygiene clean: no
+  untracked junk, no stray temp/build artifacts, no conflict markers in
+  src/tests/config/docs/design; only engine-managed orchestration journal churn
+  observed (ignored). Gate Diff shows zero regressions: format pass->pass,
+  test-integration pass->pass, lint fail->pass (IMPROVED), test fail->pass
+  (IMPROVED). All 4 gates now green."
+wave: 1

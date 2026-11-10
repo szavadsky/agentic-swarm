@@ -1,0 +1,375 @@
+status: changes_requested
+summary: "changes_requested: bounds pass (3/8 milestones, 5/50 items, acyclic)
+  but 28 fix block: golden rc/oracle/config/crash/POSIX/diff, 500-line math, git
+  semantics, ownership/disjoint, cache/injection/threshold; 3 awareness, 3
+  optional"
+suggestions:
+  - id: golden-reuse-breaks-rc
+    disposition: fix
+    summary: Reusing existing run with overwrite_baseline breaks rc assertion
+    detail: "test_setup_new_and_lint asserts rc!=0. run_lint with
+      baseline+overwrite_baseline=True forces rc=0 via _handle_baseline. Item
+      requires both 'prefer extending existing run' and baseline capture with
+      overwrite=True, but run_lint returns only int (no results). Fix: allow
+      second run, or change assertion to len(records)!=0, or allow src change to
+      expose results."
+    location:
+      file: tests/integration.py
+      line: 128
+  - id: violations-oracle-deleted
+    disposition: fix
+    summary: Deleting violations.txt removes planted-rule oracle
+    detail: "M1 scenario 'checked against planted rule list' needs oracle. Only
+      _read_violation_rules uses violations.txt, so after replacement 'if
+      nothing else references it' is true and file deleted, making coverage
+      check golden-vs-itself (circular). Fix: retain violations.txt as oracle or
+      define new checked-in expected-rule set and update scenario."
+    location:
+      file: tests/data/minimal_sample_project/violations.txt
+      line: 1
+  - id: golden-interface-missing-config
+    disposition: fix
+    summary: M1 interface omits package_name and rumdl override
+    detail: "Current _make_config sets package_name='minimal_sample' and rewrites
+      rumdl.toml to remove tests/data exclusion. Interface specifies
+      RunnerConfig(cwd, config_paths=shipped_config_paths()) with no
+      package_name and no override. Omitting package_name changes SKIPPED
+      behavior; omitting override changes rumdl findings. Fix: pin interface to
+      use _make_config or include both steps."
+    location:
+      file: tests/integration.py
+      line: 83
+  - id: golden-crash-null-schema
+    disposition: fix
+    summary: Golden schema cannot represent crash/None records
+    detail: "_capture_one emits {file:None,line:None,col:None,rule:'__CRASH__'} for
+      exit<0. Interface defines Finding
+      {tool:str,file:str,line:int,col:int,rule:str} non-nullable. No
+      representation for crashes; comparison would error or silently drop
+      crashes (test asserts no [CRASH]). Fix: define crash handling (sentinels,
+      nullable, or separate no-crash assertion)."
+    location:
+      file: src/python_setup_lint/runner/baseline.py
+      line: 133
+  - id: golden-posix-normalization-gap
+    disposition: fix
+    summary: POSIX guarantee contradicts baseline relativize
+    detail: "Scenario requires project-relative POSIX paths. _relativize_file uses
+      str(p.relative_to(cwd)) which yields backslashes on Windows. Interface
+      says 'use _capture_baseline schema with msg removed' (no POSIX
+      conversion). Fix: specify test-side as_posix() normalization or allow src
+      helper."
+    location:
+      file: src/python_setup_lint/runner/baseline.py
+      line: 161
+  - id: golden-diff-msg-collapse
+    disposition: fix
+    summary: Msg-less diff logic, Finding type and duplicates undefined
+    detail: "Baseline equality includes msg via _violation_tuple; two-pointer diff
+      relies on it. Golden drops msg so cannot reuse directly; same 5-tuple with
+      different msg collapses, multiset-vs-set unspecified. Finding type/module
+      and collect_findings/assert_matches_golden ownership undefined; 'it
+      rewrites' ambiguous. Fix: define Finding, module, and golden diff (e.g.,
+      Counter on 5-tuple, sorted) with added/removed formatting."
+    location:
+      file: src/python_setup_lint/runner/baseline.py
+      line: 62
+  - id: u3-inside-story-no-src
+    disposition: fix
+    summary: U3 determinism work inside no-src story
+    detail: "U3 lists R0801 ordering, detect-secrets ls-files, pyright/mypy churn,
+      absolute leakage. Outline says 'Inside golden-findings-snapshot: normalize
+      or exclude unstable field' while story declares 'No src/ changes'.
+      Parser/baseline fixes impossible; excluding duplicate-code (planted rule)
+      contradicts 'every planted rule appears'. Fix: isolate into spike (or
+      allow src) and forbid excluding planted rules without ADR."
+    location:
+      file: src/python_setup_lint/runner/baseline.py
+      line: 48
+  - id: m2-500-math-impossible
+    disposition: fix
+    summary: Helper extraction alone cannot reach <=500 lines
+    detail: "File is 627 lines. Helpers total ~61 lines; 627-61=~566, minus M1 loop
+      removal ~15 = ~551, still >500. Item only authorizes extracting helpers,
+      keeping test names. Fix: authorize moving additional blocks (overlay/setup
+      scaffolding) with explicit line budget or split strategy."
+    location:
+      file: tests/integration.py
+      line: 12
+  - id: m2-git-init-semantics-diverge
+    disposition: fix
+    summary: Single git_init underspecifies add vs no-add
+    detail: "integration._init_git does init+config+add . (needed for
+      detect-secrets); autofix._git_init does init+config only. Interface
+      collapses to git_init(project)->None without specifying add/commit. Unify
+      to no-add breaks golden; unify to add-all may break staged-file tests.
+      Fix: define semantics (init+config+add) plus separate stage/commit helpers
+      and list call-site updates."
+    location:
+      file: tests/integration.py
+      line: 44
+  - id: m2-interface-omits-make-config
+    disposition: fix
+    summary: M2 interface omits _make_config and import migration
+    detail: "Item says extract
+      _copy_sample,_init_git,_shipped_config_paths,_make_config plus leftovers.
+      Interface lists only 3 (omits make_config/rumdl override). Unclear whether
+      conftest keeps re-export wrapper (violating 'defined exactly once') or all
+      consumers (e.g., test_self_lint_clean imports from conftest) switch to
+      tests._project_helpers. Fix: list full set, define re-export vs direct
+      import, clear tach for _SHIPPED_CONFIG_FILES import."
+    location:
+      file: tests/conftest.py
+      line: 170
+  - id: m2-broken-assumption-unfalsifiable
+    disposition: fix
+    summary: Future-upgrade scenario not falsifiable today
+    detail: "Scenario 'Given dependency upgrade... Then failing test is assumption
+      test' is hypothetical future, cannot verify now, no simulation procedure.
+      Fix: rewrite as present-tense checks (explicit contract list, each has one
+      TestImportedPackageBehavior; checker tests do not assert third-party
+      internals)."
+    location:
+      file: pyproject.toml
+      line: 52
+  - id: beartype-assumption-needs-proof
+    disposition: fix
+    summary: Beartype forward-ref failure asserted without evidence
+    detail: "Item claims TYPE_CHECKING-only annotation 'fails at call time' as
+      rationale for missing-beartype suppressions on register(). Comments cite
+      unresolvable forward ref/circular import but no test proves call-time vs
+      import-time vs checker-only. If false, pins wrong contract. Fix: treat as
+      verify-during-item (assert observed, record discrepancy) and add dep so M3
+      audits receive report."
+    location:
+      file: src/python_setup_lint/checkers/conformance/no_try_import_checker.py
+      line: 80
+  - id: m3-symbol-file-ownership-clash
+    disposition: fix
+    summary: File-level exclusion contradicts symbol-level epic ownership
+    detail: "Epic owns check_if_meaningful in _base.py, _OPTIONAL_IMPORT_PATTERNS in
+      no_try_import_checker.py, one class in
+      test_suppression_justification_checker.py — not whole files. M3 says
+      'exclude files owned by epic' while requiring 'every module listed'.
+      Excluding whole files misses TD-5 slated for checkers epic. Fix: define
+      symbol-level exclusions, keep file coverage."
+    location:
+      file: src/python_setup_lint/checkers/_base.py
+      line: 143
+  - id: m3-audit-artifact-missing
+    disposition: fix
+    summary: Audit report artifact and consumption undefined
+    detail: "Interfaces give row schemas but no artifact path/format. 'Given both
+      audit reports When iteration 2 replanned' has no concrete inputs. Both
+      audits propose ownership/LoC, overlapping. Fix: define artifact
+      (path/format), single owner for disjoint-ownership proposal, and replan
+      consumption."
+    location:
+      file: src/python_setup_lint/checkers/_base.py
+      line: 1
+  - id: m3-missing-deps-on-m1m2
+    disposition: fix
+    summary: Audits lack deps on safety-net writes, risk races
+    detail: "Both audits have no deps. Engine may run them parallel with golden
+      (rewrites integration.py, adds golden/), assumption-tests (adds
+      tests/assumptions/), consolidate (rewrites integration.py, adds helpers).
+      Reads see intermediate state; assumption discrepancies missed. Fix: add
+      deps to golden, assumption-tests, consolidate (still within
+      maxParallelTurns 6)."
+    location:
+      file: tests/integration.py
+      line: 36
+  - id: material-pinning-gap
+    disposition: fix
+    summary: Non-findings material behaviors lack pinning
+    detail: "Assumption defines material as findings + CLI flags/exit codes +
+      baseline/autofix + configs/scopes. Golden pins only findings (SEMANTIC=0,
+      overwrite). No snapshot pins other three limbs; M3 may remove runner tests
+      that pin them. Fix: name surviving pinning tests per limb or add snapshots
+      (help/exit-code table, baseline/autofix fixtures)."
+    location:
+      file: src/python_setup_lint/runner/cli.py
+      line: 170
+  - id: never-linting-definition-clash
+    disposition: fix
+    summary: Never-test-linting definition contradicts removal lists
+    detail: "Definition: must not assert lint-clean or re-run tools. TD-9/audit list
+      AST-scanning guards (no subprocess) and config-consistency checks as
+      lint-testing to remove. By definition they are not lint-testing. Fix:
+      narrow lists to true re-lint tests or broaden definition with rationale."
+    location:
+      file: tests/runner/test_runner_private_imports.py
+      line: 69
+  - id: epic-disjoint-false
+    disposition: fix
+    summary: Semantic epic not file-disjoint, ADR-004 premise false
+    detail: "ADR-004 spawns epic now 'since files disjoint'. Overlaps: AGENTS.md (M2
+      counts vs epic pipeline section); _base.py/.pyi; no_try_import_checker.py;
+      test_suppression_justification_checker.py; tests/assumptions/ (__init__+3
+      vs runtime modules); tests/data/golden/ (M1 creates, req5 regenerates).
+      Fix: sequence AGENTS.md/golden edits, define symbol-level protocol or
+      transfer whole files."
+    location:
+      file: AGENTS.md
+      line: 85
+  - id: epic-golden-out-of-scope-clash
+    disposition: fix
+    summary: Epic out-of-scope contradicts req5 golden regen
+    detail: "Scope says out of scope: tests/integration.py, conftest, tests/data/**.
+      Req5 says regenerate tests/data/golden/... in same change if heuristic
+      changes. Cannot both hold. Fix: allow golden regen as explicit minimal
+      exception with ADR+diff review or make it a root follow-up item."
+    location:
+      file: tests/data/minimal_sample_project/violations.txt
+      line: 1
+  - id: epic-multicode-contract-vague
+    disposition: fix
+    summary: Real suppressed codes passing undefined for multi-disable
+    detail: "Req5 says pass actual code(s) from disable/noqa/ignore instead of own
+      symbol. check_if_meaningful takes rule:str|None single. Multi-disable
+      joining (comma? first? per-code calls?) and rule-echo for lists undefined;
+      bare-except scope ambiguous. Fix: define extraction + joining/calling
+      convention and echo semantics."
+    location:
+      file: src/python_setup_lint/checkers/conformance/suppression_justification_checker.py
+      line: 152
+  - id: epic-backend-injection-impossible
+    disposition: fix
+    summary: Fake injection forbidden-patch contradiction
+    detail: "Req6 requires fake Protocol without patching globals/imports or
+      importing privates with ignore. check_if_meaningful has no backend param;
+      instantiation site undefined. Without hook (param/factory/registry/env),
+      fake cannot inject without patching. Fix: define injection point
+      satisfying both constraints."
+    location:
+      file: src/python_setup_lint/checkers/_base.py
+      line: 143
+  - id: epic-cache-contract-vague
+    disposition: fix
+    summary: Cache location/format/key/lock underspecified
+    detail: "Location 'e.g.' not definitive; JSONL vs JSON, sort key, normalization,
+      revision format, files relative/POSIX undefined; model@revision hex trips
+      detect-secrets; key (justification,rule) vs context inconsistent with
+      decide(justification,rule,context); lock mechanism and test isolation hook
+      undefined. Fix: pin filename, format, sort key, normalization, key tuple,
+      deleted-files semantics, isolation."
+    location:
+      file: src/python_setup_lint/checkers/_semantic.py
+      line: 44
+  - id: epic-cache-design-before-spike
+    disposition: fix
+    summary: Lock/merge/sweep prescribed before feasibility spike
+    detail: "Req4 mandates lock+merge+atomic and mark-and-sweep scoped to linted
+      files. U2 (jobs, open/close timing, partial/staged, 3 invocations)
+      unconfirmed. Per-worker close() views with jobs>1 would violate
+      partial-run guarantee without coordination, contradicting 'spikes before
+      design'. Fix: make conditional on spike (prototype or constrain jobs=1
+      with test)."
+    location:
+      file: src/python_setup_lint/checkers/_base.py
+      line: 116
+  - id: epic-threshold-accuracy-undefined
+    disposition: fix
+    summary: Accuracy bar/threshold/probability undefined
+    detail: "Spike chooses smallest model/prompt/threshold meeting 'accuracy bar' on
+      real justifications + tables. No bar (precision/recall %), threshold
+      location, probability range/semantics, prompt-versioning for invalidation.
+      Fix: define bar, threshold storage, and version string."
+    location:
+      file: src/python_setup_lint/checkers/_semantic.py
+      line: 125
+  - id: epic-req5-race-with-m1
+    disposition: fix
+    summary: Req5 golden regen races M1 creation, no dep
+    detail: "Epic may regenerate golden while M1 creates it; no edge between epic
+      and M1. Concurrent race on uncommitted file. Fix: order epic req5 after M1
+      commit or make regen a root item."
+    location:
+      file: tests/integration.py
+      line: 111
+  - id: m1-brushoff-golden-mapping-missing
+    disposition: fix
+    summary: Brush-off/carry golden expression lacks mapping
+    detail: "Item says assertions 'stay, expressed as golden records'. Golden has
+      only {tool,file,line,col,rule} (no msg). No mapping names which sample
+      file/line holds pre-existing (expect record) vs carry-from (expect
+      absence). Absence only provable via full equality. Fix: name exact
+      files/lines and assert via golden lookup."
+    location:
+      file: tests/integration.py
+      line: 138
+  - id: m1-update-golden-ci-safety
+    disposition: fix
+    summary: UPDATE_GOLDEN rewrite risks vacuous pass in CI
+    detail: "When env=1 test rewrites instead of asserting. No guard against leakage
+      into CI causing silent update + pass on dirty tree. Fix: require explicit
+      opt-in with warning/skip, forbid in CI, and define determinism check."
+    location:
+      file: tests/integration.py
+      line: 111
+  - id: changelog-scope-clash
+    disposition: fix
+    summary: CHANGELOG scope contradicts golden-diff recording
+    detail: "Req5 says record golden diff in CHANGELOG; Req7 says only user-visible
+      (extra contents, new/deprecated vars, cache file). Golden diff is
+      internal; user-visible is behavior change description. Fix: record
+      behavior change, not raw diff, or expand allowed list."
+    location:
+      file: CHANGELOG.md
+      line: 1
+  - id: material-definition-needs-awareness
+    disposition: human-awareness
+    summary: Material-behavior tightening needs operator awareness
+    detail: Assumption defines 4 limbs; reranker decisions not material, heuristic
+      rejections material. Model 'only tightens acceptance' may add W9704 under
+      default SEMANTIC=1 vs today heuristic-only. Architect decides now;
+      operator should know tightening is intentional, not regression.
+    location:
+      file: src/python_setup_lint/checkers/_semantic.py
+      line: 1
+  - id: cache-file-needs-awareness
+    disposition: human-awareness
+    summary: Committed decisions file impacts consumers
+    detail: Committed file in every linted repo (incl. consumers) with reviewable
+      diffs and possible branch conflicts. Weights 0.03-0.8GB in model cache
+      with own licenses. Install docs must mention file. Architect decides now;
+      operator should be aware of footprint and license review.
+    location:
+      file: .gitignore
+      line: 243
+  - id: never-linting-policy-needs-awareness
+    disposition: human-awareness
+    summary: Never-test-linting policy deletes guard tests
+    detail: Policy 'pytest never asserts lint-clean; lint gate does' removes
+      self-lint guard running all 13 tools on repo. Trades pytest redundancy for
+      gate reliance. Architect decides now; operator should know pytest -q alone
+      will no longer catch self-lint regressions.
+    location:
+      file: tests/runner/test_self_lint_clean.py
+      line: 1
+  - id: update-golden-env-naming
+    disposition: optional
+    summary: UPDATE_GOLDEN env naming inconsistent
+    detail: PYTHON_SETUP_UPDATE_GOLDEN lacks LINT infix vs PYTHON_SETUP_LINT_* vars.
+      Consider PYTHON_SETUP_LINT_UPDATE_GOLDEN. Non-blocking.
+    location:
+      file: tests/integration.py
+      line: 111
+  - id: assumptions-class-name-collision
+    disposition: optional
+    summary: Same TestImportedPackageBehavior in 3 modules confuses reports
+    detail: Identical class name in 3 assumption modules needs module qualification
+      on failure. Consider distinct names per module. Non-blocking.
+    location:
+      file: tests/__init__.py
+      line: 1
+  - id: rumdl-exclude-debt-unlisted
+    disposition: optional
+    summary: Rumdl tests/data exclusion hack not inventoried
+    detail: Shipped rumdl.toml excludes tests/data, forcing per-run rewrite to lint
+      sample AGENTS.md. Affects golden determinism but absent from TD/audits.
+      Consider adding to audit or runner epic. Non-blocking if override
+      retained.
+    location:
+      file: config/rumdl.toml
+      line: 3

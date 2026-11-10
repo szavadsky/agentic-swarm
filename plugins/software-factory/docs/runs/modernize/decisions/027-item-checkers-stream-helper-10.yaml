@@ -1,0 +1,26 @@
+id: decision-checkers-stream-helper-1794261602060
+context: item
+item: checkers-stream-helper
+afterRecord: 006-integrate-r1-a1
+decision: escalate
+timestamp: 2026-11-09T22:00:02.060Z
+rationale: Same exit-127 unknown-gate on 'tests' persists across 9 overrides
+  including narrow custom target 4s ago with zero new execution on same
+  integrate record. Owned _source_stream work is green in-worktree with QA
+  first-# drift fixed. Branch base is stale (Current Diff reverts I4 M2
+  _tool_specs split, factories splits, conftest/runner, ADR-019..024, state to
+  I4). Weaker execution keeps echoing invalid engine input Target 'tests' and
+  cannot rebase. Needs stronger execution from fresh HEAD with valid target.
+text: "Fresh HEAD base; re-apply owned-only 12 paths: NEW
+  _source_stream.py/.pyi, bare_except, suppression+.pyi with '_, comment' plus
+  src_line.split('#',1)[0].strip() preserved, stub checker/coverage+.pyi, NEW
+  test_source_stream.py, astroid call, stub_coverage call,
+  TestCodeContextDerivation union with HEAD TestAnyElementCodeEcho, reranker
+  dropped. Touch nothing else (_base empty diff, baseline/tests/data untouched,
+  no runner/factories/conftest/docs/ADR/.factory). Declare output target exactly
+  {command:uv run pytest -q,customTarget:true} NEVER gate tests. Verify: no
+  markers, owned 4-file pytest, pytest -q, lint 14/14, integration 9 passed,
+  grep .stream()/decode single-owner."
+target:
+  command: uv run pytest -q
+  customTarget: true

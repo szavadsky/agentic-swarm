@@ -1,0 +1,23 @@
+id: c-a6bc23b516
+kind: risk
+summary: Real-pipeline smoke test runs 14 real tools in the default suite (not slow)
+detail: tests/runner/test_real_pipeline_smoke.py is with_real_api but lacks
+  @pytest.mark.slow, so `uv run pytest -q` (addopts -m 'not slow') spawns 14
+  real tools. It is a strict subset of integration.py's golden run.
+location:
+  file: tests/runner/test_real_pipeline_smoke.py
+  line: 16
+affects:
+  - test-debloat-audit
+  - test-harness
+severity: low
+status: routed
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: test-debloat-audit
+  lastSeen: 2026-11-10T00:53:21.467Z
+createdAt: 2026-11-10T00:53:21.467Z
+updatedAt: 2026-11-10T02:32:36.259Z
+disposition: optional

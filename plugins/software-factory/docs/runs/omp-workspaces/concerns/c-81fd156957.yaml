@@ -1,0 +1,27 @@
+id: c-81fd156957
+kind: tech-debt
+summary: Preflight overlay validation still a no-op and hardcodes omp fallback
+  path (M4 must replace)
+detail: "Directly inspected: src/cli/preflight.ts:365-394 still resolves
+  ompBinary via OMP_PATH ?? Bun.which(omp) ?? /home/slava/.bun/bin/omp and
+  validates only via --version and --config <overlay> --version. Spikes prove
+  this is a no-op (omp-3:38 probe 17/18/27: bogus keys BADKEY_OK rc=0, invalid
+  backend accepted, missing overlay silently ignored rc=0; omp-4 P17; omp-6
+  §1.5). Hardcoded fallback persists. Expected M4 scope per decisions 001/002
+  and RECOVERY follow-ups, but preflight currently proves binary existence, not
+  overlay/config compatibility."
+location:
+  file: plugins/software-factory/src/cli/preflight.ts
+  line: 369
+affects:
+  - m4-lifecycle
+severity: medium
+status: open
+source:
+  record: 024-plan-close-up-1-a1
+  agent: plan-close-up
+  step: plan-close-up-1
+  iteration: 1
+  lastSeen: 2026-11-10T06:32:04.799Z
+createdAt: 2026-11-10T06:32:04.799Z
+updatedAt: 2026-11-10T06:32:04.799Z

@@ -1,0 +1,8 @@
+id: q-concern-rm-963829d74d
+ref: test-debloat-audit
+disposition: human-awareness
+question: Consistent with audit §6 prune precedent (644774e deleted
+  self-lint/config-consistency guards). Audit correctly treats these as
+  already-absent at HEAD. No action.
+status: open
+createdAt: 2026-11-10T02:58:56.257Z

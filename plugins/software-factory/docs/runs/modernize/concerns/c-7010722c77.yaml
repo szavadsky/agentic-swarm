@@ -1,0 +1,25 @@
+id: c-7010722c77
+kind: tech-debt
+summary: Shipped rcfile parity is unguarded after test_config_consistency.py deletion
+detail: 644774e deleted the only test enforcing DESIGN/STUB-CHECKER consistency
+  across config/.pylintrc, config/.pylintrc-tests and config/.pylintrc-pyi. No
+  surviving parity test exists; the semantic jobs watchdog that touches rcfiles
+  is SKIPPED. Removing further config re-checks would deepen this debt.
+location:
+  file: tests/runner/test_config_consistency.py
+  line: 1
+affects:
+  - config-parity
+  - test-debloat-audit
+  - test-debloat-impl
+severity: medium
+status: routed
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: test-debloat-audit
+  lastSeen: 2026-11-10T00:53:21.467Z
+createdAt: 2026-11-10T00:53:21.467Z
+updatedAt: 2026-11-10T02:23:05.623Z
+disposition: optional

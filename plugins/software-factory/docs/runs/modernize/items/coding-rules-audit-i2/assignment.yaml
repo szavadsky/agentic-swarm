@@ -1,0 +1,37 @@
+slug: coding-rules-audit-i2
+kind: fact-finder
+title: Inventory CodingRules violations and ownership
+assignment: "GOAL: Inventory CodingRules violations and own unified disjoint
+  file-ownership map on final HEAD containing M1 plus M2 merges (U3). Read-only;
+  zero repo writes. STEPS: Audit src plus scripts vs CodingRules and AGENTS on
+  final HEAD. Output in item report as engine-durable replan input: rows with
+  module, section, evidence file:line, category, est LoC delta, owner, fix plus
+  UNIFIED disjoint file-ownership map over ownership universe (src plus scripts
+  plus tests minus tests/data; owner enum
+  runner,checkers,setup-testing,semantic,root; stub follows .py; tests/data plus
+  config plus docs as root-owned group) plus symbol-exclusion column (_base.py
+  check_if_meaningful, _OPTIONAL_IMPORT_PATTERNS, _semantic.py plus pyi) plus
+  planned-path reservations for new backend and cache modules. Single owner of
+  map; test audit aligns via inter-dep. Read final HEAD plus beartype report
+  plus secrets-spike verdict. VERIFY: Every universe file appears exactly once
+  with exactly one owner, root-owned group listed once, exclusions reference
+  existing symbols, reservations name only planned paths. Per ADR-008 no
+  committed map; escape hatch only if engine drops reports."
+outlineRef: coding-rules-audit
+milestone: M4
+wave: 3
+deps:
+  - runner-format-contract
+  - baseline-violations-fix
+  - consolidate-integration-helpers-i2
+  - golden-contract-hardening
+scenarioRefs:
+  - M4-1
+  - M4-3
+citations:
+  - CodingRules.md:90-107
+  - CodingRules.md:139-159
+  - CodingRules.md:230-306
+  - AGENTS.md:87-93
+  - AGENTS.md:121-139
+  - lint.baseline:1-1

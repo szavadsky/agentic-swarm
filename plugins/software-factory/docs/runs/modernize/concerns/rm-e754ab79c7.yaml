@@ -1,0 +1,19 @@
+id: rm-e754ab79c7
+chosen: Reconstruct the validated map at HEAD 1039df9 rather than yield inconclusive
+alternatives:
+  - Yield inconclusive and block all epic waves
+  - Consume the stale 5e466ac audit map unchanged
+  - Spawn epics with no validated ownership map
+why: The dependency was abandoned after retries, but the assignment still
+  requires a revision, counts, drift list, ownership tables, and zero unresolved
+  disputes. Reconstruction with explicit amendment A0 unblocks the spawn gate
+  while preserving the evidence trail.
+status: open
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: epic-kickoff-gate
+  lastSeen: 2026-11-10T00:08:48.409Z
+createdAt: 2026-11-10T00:08:48.409Z
+updatedAt: 2026-11-10T00:08:48.409Z

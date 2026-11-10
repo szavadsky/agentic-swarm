@@ -1,0 +1,30 @@
+slug: docs-counts-sync
+kind: dev
+title: Sync AGENTS.md counts and cli help to 14-tool world
+assignment: "Follow-up to consolidate v3 (dev, bounded docs+one-string prod
+  fix). Update AGENTS.md test/tool counts from stale base (1290 pass / 13 tools)
+  to runtime actuals: verify via `uv run pytest --collect-only -q` count
+  including new assumption/golden tests and len(TOOLS)==14 via dispatch
+  registry; edit COUNT LINES ONLY, never touch pipeline section (semantic epic
+  owns it). Edit src/python_setup_lint/runner/cli.py:314 help text 'all 13
+  tools' -> 'all 14 tools'; prod scope strictly bounded to that one help string,
+  no behavior change, no other src/ edits. No test file changes. Depends on
+  consolidate-integration-helpers-v3 merge so counts reflect final
+  post-consolidate tree. Golden+counts must remain byte-identical (diff
+  before/after). Acceptance: AGENTS.md counts match runtime collect-only + TOOLS
+  length; cli help shows 14; `uv run pytest tests/integration.py -v` passes; no
+  new lint violations in touched lines."
+outlineRef: docs-counts-sync
+milestone: M2
+wave: 12
+deps:
+  - golden-snapshot-wiring
+  - third-party-assumption-tests
+  - consolidate-integration-helpers-v3
+scenarioRefs:
+  - Integration gate module within limits
+citations:
+  - AGENTS.md
+  - src/python_setup_lint/runner/cli.py
+  - src/python_setup_lint/runner/dispatch.py
+  - tests/integration.py

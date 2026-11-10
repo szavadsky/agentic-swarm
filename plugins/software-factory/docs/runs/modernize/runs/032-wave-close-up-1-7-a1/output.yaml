@@ -1,0 +1,27 @@
+blockedItems: []
+debt:
+  - "Pre-existing baseline red: lint fails (ruff SIM102 coverage.py:196,
+    pylint/pylint-pyi W9704, R0914 cli.py:50, pylint tests C0208
+    _factories_extras.py:383) — unchanged, not introduced by this wave."
+  - "Pre-existing baseline red: test fails with 6 failures assuming 13 tools
+    while TOOLS now has 14 (ruff format added) — unchanged, not introduced by
+    this wave."
+  - "Infra: documented `uv run lint` mutates worktree via `ruff format` ToolSpec
+    without --check/--config (operator action pending)."
+failedItems: []
+iteration: 1
+mergedItems:
+  - golden-snapshot-wiring
+recommendations:
+  - Proceed to next wave / architect review; no wave-induced regressions to
+    address.
+  - Consider scheduling baseline-red cleanup (lint violations + 13-vs-14
+    tool-count test assumptions) and the `ruff format` ToolSpec --check fix as
+    separate debt items.
+status: complete
+summary: "Wave 7 complete: merged golden-snapshot-wiring. Tree hygiene clean: no
+  untracked artifacts, no conflict markers; only engine-managed
+  .factory/tasks/modernize/journal.ndjson shows modified. Gates match baseline
+  with zero regressions per Gate Diff table: format pass/pass, test-integration
+  pass/pass, lint fail/fail (pre-existing), test fail/fail (pre-existing)."
+wave: 7

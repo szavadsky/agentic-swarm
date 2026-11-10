@@ -1,0 +1,24 @@
+blockedItems: []
+debt: []
+failedItems: []
+iteration: 4
+mergedItems:
+  - runner-dispatch-split
+  - runner-factories-trim
+  - stale-disables-portability-cleanup
+recommendations:
+  - Consider retiring the split format/lint infra gates now that `ruff format`
+    is check-only on normal passes
+    (src/python_setup_lint/runner/dispatch.py:312-336) with mutation isolated to
+    the fix-phase format pass (src/python_setup_lint/runner/cli.py:72-78);
+    verify `uv run lint` is mutation-free, then consolidate gates and update the
+    infra operator note.
+status: complete
+summary: "Wave 3 (iteration 4) complete: merged runner-dispatch-split,
+  runner-factories-trim, stale-disables-portability-cleanup. Tree hygiene clean:
+  no untracked files, git diff --check clean, no conflict markers or stray
+  tmp/bak/orig/rej artifacts in src/tests/config/docs. Gate Diff (baseline vs
+  now) shows zero regressions and all gates now pass: format pass->pass green,
+  test-integration pass->pass green, lint fail->pass IMPROVED, test fail->pass
+  IMPROVED."
+wave: 3

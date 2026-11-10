@@ -1,0 +1,187 @@
+status: changes_requested
+summary: "4 milestones/11 items within bounds, acyclic, unique slugs; 14 defects
+  block: wrong paths, incomplete enumeration, parallel-edit conflicts, missing
+  deps, unfalsifiable scenarios, undefined contracts"
+suggestions:
+  - id: sim102-path-wrong
+    disposition: fix
+    summary: SIM102 citation points at non-existent coverage.py:196
+    detail: baseline-violations-fix says coverage.py:196 SIM102 nested-if;
+      src/python_setup_lint/checkers/coverage.py does not exist, real file is
+      stub/coverage.py where :196-198 is TypeAlias branch not nested-if. Correct
+      path, re-verify SIM102 still fires, cite exact lines.
+    location:
+      file: src/python_setup_lint/checkers/stub/coverage.py
+      line: 196
+  - id: thirteen-enumeration-incomplete
+    disposition: fix
+    summary: 13-site enumeration misses hits and overclaims no-13-remains
+    detail: Plan lists AGENTS+README:58+overlays+tutorials+init+cli:314 but misses
+      README:17, troubleshooting:155, CHANGELOG:104, _factories.py:34/46/50,
+      _factories_extras.py:1, test_extra_tools.py:237,
+      test_self_lint_clean.py:3, test_bench_runner_overhead.py:5/224,
+      test_real_pipeline_smoke.py:24, test_testing_fakes comments.
+      No-hardcoded-13 is unfalsifiable (MD013, 130, v0.13 legitimate). Scope to
+      tool-count assertions with grep allowlist.
+    location:
+      file: README.md
+      line: 17
+  - id: cli-concurrent-edit-conflict
+    disposition: fix
+    summary: Two M1 items edit cli.py in parallel with deps []
+    detail: runner-format-contract rewrites phase-1a to call build_format_command;
+      baseline-violations-fix extracts _run_tool_pipeline locals at :50. Same
+      file, no dep, parallel race. Serialize via dep or split file ownership.
+    location:
+      file: src/python_setup_lint/runner/cli.py
+      line: 50
+  - id: audit-missing-m1-dep
+    disposition: fix
+    summary: M4 audits depend only on M2, read pre-M1 HEAD
+    detail: coding-rules-audit deps consolidate+golden; M1 edits
+      dispatch/_config/cli/docs that audits must inventory. ADR-008 requires
+      final HEAD. Add deps on runner-format-contract+baseline-violations-fix or
+      define final-HEAD gate.
+    location:
+      file: src/python_setup_lint/runner/dispatch.py
+      line: 38
+  - id: shipped-config-consumers-incomplete
+    disposition: fix
+    summary: Helper matrix omits 2 shipped_config_paths importers
+    detail: conftest.shipped_config_paths imported by
+      test_pyright_noise_filter.py:15 and test_self_lint_clean.py:15. Plan maps
+      conftest->{shipped} only, says delete duplicate in conftest. Define
+      re-export vs import rewrite for all 3 consumers and avoid
+      conftest<->helpers cycle.
+    location:
+      file: tests/conftest.py
+      line: 170
+  - id: too-many-locals-config-mismatch
+    disposition: fix
+    summary: :202 too-many-locals removal via overlay builder is wrong
+    detail: .pylintrc-tests:39 disables too-many-locals globally for tests, so
+      integration.py:202 suppression is stale/redundant, not removed by
+      extracting overlay builder. Correct scenario to delete stale disable
+      directly and verify W9704 unjustified-suppression clean.
+    location:
+      file: config/.pylintrc-tests
+      line: 39
+  - id: ruff-config-spy-brittle
+    disposition: fix
+    summary: Spy asserts literal config/ruff.toml but compose returns temp
+    detail: M1 scenario requires --config config/ruff.toml; _compose_ruff_config
+      returns temp composed path when overrides active, and
+      _apply_config_overrides rewrites ruff check path. Assert --check present +
+      --config present with resolved path, not literal.
+    location:
+      file: src/python_setup_lint/runner/cmd_build.py
+      line: 172
+  - id: secrets-triage-not-actionable
+    disposition: fix
+    summary: Secrets triage delegates blocking debt to operator request
+    detail: TD2-B2 blocking but resolution is record-evidence + file operator
+      exclusion request with M1 green OR-excluded. Mixes unknown into dev story,
+      violates uncertainty containment and concrete-resolution rule. Isolate to
+      spike or human-async; M1 green must not depend on out-of-band operator
+      action.
+    location:
+      file: src/python_setup_lint/runner/dispatch.py
+      line: 125
+  - id: decision-backend-mapping-undefined
+    disposition: fix
+    summary: DecisionBackend decide() mapping and veto mode undefined
+    detail: "Interface decide(justification,rule,context)->float vs current
+      check_if_meaningful(text,*,rule,code_context,comment)->bool: which maps to
+      which? Veto-vs-replace semantics, threshold application, smallest metric
+      (params/disk/RSS) all undefined. Pin mapping, mode, metric before eval."
+    location:
+      file: src/python_setup_lint/checkers/_base.py
+      line: 142
+  - id: golden-regen-contradiction
+    disposition: fix
+    summary: Regen-twice-byte-identical contradicts no-blind-regen
+    detail: M2 scenario requires regen twice byte-identical but item forbids blind
+      regen and asserts golden+counts byte-identical to committed.
+      UPDATE_GOLDEN=1 rewrites committed files. Specify temp-copy regen
+      procedure with hash comparison, never committed-file mutation.
+    location:
+      file: tests/_golden.py
+      line: 372
+  - id: gates-green-unfalsifiable
+    disposition: fix
+    summary: M1 gates-green scenario has brittle counts and OR escape
+    detail: 173 files formatted, 6 fixed unnamed, secrets clean OR
+      operator-excluded, pytest 6 fixed. File count drifts, 6 tests unnamed, OR
+      branch makes pass vacuous. Name 6 tests, derive file set via git ls-files
+      or drop count, remove OR.
+    location:
+      file: lint.baseline
+      line: 1
+  - id: eval-stratification-missing
+    disposition: fix
+    summary: Eval corpus double-counts and lacks heuristic stratum
+    detail: Corpus threshold 30+50 plus brush-off/meaningful tables overlaps same
+      strings; heuristic-easy rejects inflate 90/95/85 bars. Require dedup and
+      per-stratum report with bars on heuristic-accepted subset where model
+      actually decides.
+    location:
+      file: tests/checkers/test_semantic_threshold.py
+      line: 19
+  - id: universe-ownership-contradiction
+    disposition: fix
+    summary: File universe both includes and excludes tests/data
+    detail: M4 says universe src+scripts+tests incl factories/conftest, then
+      config/docs/tests/data root-owned unless listed. tests/data files (golden,
+      minimal_sample) cannot be both. Clarify tests/data ownership and src
+      config dir, keep exactly-once invariant.
+    location:
+      file: tests/data/golden/minimal_sample_project_tool_counts.json
+      line: 1
+  - id: epic-head-dependency-typo
+    disposition: fix
+    summary: Epic AGENTS scope cites wrong HEAD dependency
+    detail: Semantic epic says AGENTS pipeline section only on HEAD containing M2
+      merge, never count lines. Counts fixed in M1, M2 tests-only. Correct to M1
+      HEAD and define pipeline-section-only edit boundary vs counts lines
+      :9/43/63/92/93.
+    location:
+      file: AGENTS.md
+      line: 79
+  - id: report-fed-replan-durability
+    disposition: architect
+    summary: Replan relies on undurable item-report tables with zero writes
+    detail: "ADR-008/M4 make iteration-3 depend on fact-finder item reports as
+      durable records plus HEAD re-glob, with fact-finders write nothing and no
+      committed map. If reports not durable/accessible, replan input lost.
+      Decide: committed artifact vs engine guarantee vs kind change."
+    location:
+      file: docs/troubleshooting.md
+      line: 155
+  - id: fastino-license-review
+    disposition: human-awareness
+    summary: GLiDE Fastino license needs operator review before use
+    detail: Plan correctly proceeds Apache-first, flags Fastino/unclear, pauses
+      implementation if GLiDE recommended. Operator should be aware eval may
+      recommend non-MIT-compatible model; no blocking decision needed until eval
+      verdict.
+    location:
+      file: src/python_setup_lint/checkers/_semantic.py
+      line: 49
+  - id: material-tightening-visibility
+    disposition: human-awareness
+    summary: Model may add new W9704 vs heuristic-only by design
+    detail: Assumption allows tightening (accepted+miss+absent True, hit False) as
+      intentional, not regression. Operator should be aware SEMANTIC=1 golden
+      will shift; shift report+CHANGELOG+root regen protocol must be visible
+      before iteration-3.
+    location:
+      file: src/python_setup_lint/checkers/_base.py
+      line: 151
+  - id: nested-copy-parent-missing
+    disposition: optional
+    summary: New copy helper should mkdir parents for nested tmp_path
+    detail: pristine=_copy_sample(tmp_path/golden) nests project under non-existent
+      dir; copytree requires parent. Pin copy_sample_project to mkdir parents.
+    location:
+      file: tests/integration.py
+      line: 169

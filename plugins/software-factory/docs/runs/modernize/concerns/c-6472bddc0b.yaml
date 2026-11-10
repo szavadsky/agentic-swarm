@@ -1,0 +1,26 @@
+id: c-6472bddc0b
+kind: risk
+summary: Tracked key excludes code_context, unlike the current in-process semantic memo
+detail: The assignment pins the key to (justification, rule, model), but
+  `_semantic.py:48-58` hashes (primary, rule, code_context, model_id). Cached
+  verdicts are therefore context-independent. If the real decision model uses
+  the code context, schema v2 should add a context_hash to the key; otherwise
+  the read path must document the reduced key deliberately.
+location:
+  file: src/python_setup_lint/checkers/_semantic.py
+  line: 48
+affects:
+  - cache-design-spike
+  - decision-cache-impl
+  - model-eval-poc
+severity: medium
+status: routed
+source:
+  record: 001-develop-r1-a1
+  agent: developer
+  step: develop
+  item: cache-design-spike
+  lastSeen: 2026-11-09T23:18:39.934Z
+createdAt: 2026-11-09T23:18:39.934Z
+updatedAt: 2026-11-10T01:14:34.111Z
+disposition: optional

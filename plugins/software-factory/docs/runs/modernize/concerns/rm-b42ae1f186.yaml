@@ -1,0 +1,18 @@
+id: rm-b42ae1f186
+chosen: Use integration.py + 158-finding golden as canonical end-to-end coverage
+  and remove the real smoke test
+alternatives:
+  - Keep smoke as a fast real check
+  - Mark smoke slow and keep it
+why: The smoke test asserts only tool-name presence on a synthetic project, a
+  strict subset of the golden run, and unnecessarily spawns 14 real tools in the
+  default suite.
+status: open
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: test-debloat-audit
+  lastSeen: 2026-11-10T00:53:21.467Z
+createdAt: 2026-11-10T00:53:21.467Z
+updatedAt: 2026-11-10T00:53:21.467Z

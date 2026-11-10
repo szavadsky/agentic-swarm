@@ -1,0 +1,363 @@
+status: inconclusive
+summary: Verified 0 of 3 required epic close-up reports exist
+  (epic-runner-modernize, epic-checkers-modernize,
+  epic-semantic-infrastructure). Iteration 3's M2 epics were never spawned ('M2
+  epic work (runner/checkers/semantic) entirely outstanding', M2 zero delivery);
+  iterations 4-5 abandoned epic decomposition (ADR-013, ADR-023), and the I5
+  plan explicitly declares no child epics and no replanAfter gates. The legacy
+  item was resumed as a stranded iteration-3 record, but its precondition never
+  held. Per the assignment and ADR-011, the handoff record is not producible and
+  the item must stay pending/blocked; no epic sections are fabricated. The I5
+  replacement path is item-level shift declarations consumed by
+  golden-regen-hatch-v2.
+findings: >
+  # Epic shift-report fan-in — fail-open verification
+
+
+  ## Verdict
+
+
+  **0 of 3 required epic close-up reports exist. The handoff record is NOT
+  producible.**
+
+
+  Per the assignment (`epic-shift-report-collection/assignment.yaml:10-12`) and
+  ADR-011 (`docs/adr/ADR-011.md:64-69`), the item must stay pending/blocked when
+  any close-up is missing, and must never fabricate sections. The legacy item
+  was resumed into iteration 5 as a stranded iteration-3 artifact, but the three
+  epics it depends on were never spawned and iteration 5 explicitly ships no
+  epics and no replanAfter gates.
+
+
+  ```
+
+  handoff.required_sections              = 3
+
+  handoff.sections_produced              = 0
+
+  handoff.sections_with_shift_report     = 0
+
+  handoff.sections_with_no_shift_decl    = 0
+
+  handoff.verification                   = FAIL (0 != 3)
+
+  fail_open                              = true
+
+  ```
+
+
+  ## 1. Contract requirements
+
+
+  - `docs/adr/ADR-011.md:62-69` — each epic emits a shift-report section or
+  explicit no-shift declaration in its close-up report; M2 `replanAfter: true`
+  schedules no M3 item until the replan after the M2 epic close-ups;
+  `epic-shift-report-collection` stays pending unless all three close-ups exist
+  and consolidates the handoff record consumed by `golden-regen-hatch`.
+
+  - `.factory/tasks/modernize/plan/plan-3.yaml:92` — M2 carries `replanAfter:
+  true`.
+
+  - `.factory/tasks/modernize/plan/plan-3.yaml:261-277` — item outline: exactly
+  3 epic sections; fail-open (never fabricates).
+
+  - The three epics named by plan-3: `epic-runner-modernize`
+  (`plan-3.yaml:444`), `epic-checkers-modernize` (`plan-3.yaml:530`),
+  `epic-semantic-infrastructure` (`plan-3.yaml:637`).
+
+  - Required per-epic shift payload: `{justification-class description,
+  added/removed finding keys, CHANGELOG snippet, evidence file:line}` —
+  `plan-3.yaml:419-422` (runner), `:504-507` (checkers), `:567-570` (semantic).
+
+
+  ## 2. Existence matrix
+
+
+  | # | Required epic | Expected source | Found | Extractable shift fields |
+
+  |---|---|---|---|---|
+
+  | 1 | epic-runner-modernize | epic close-up report with shift section |
+  **MISSING** | none |
+
+  | 2 | epic-checkers-modernize | epic close-up report with shift section |
+  **MISSING** | none |
+
+  | 3 | epic-semantic-infrastructure | epic close-up report with shift section |
+  **MISSING** | none |
+
+
+  Evidence of absence:
+
+
+  - Only two `epic-*` item directories exist under
+  `.factory/tasks/modernize/items/`: `epic-kickoff-gate` and
+  `epic-shift-report-collection`. No `epic-runner-modernize`,
+  `epic-checkers-modernize`, or `epic-semantic-infrastructure` directory exists.
+
+  - No run output declares an epic item (`grep -rl '^item: epic-'
+  .factory/tasks/modernize/runs/*/output.yaml` returns nothing). Close-up run
+  names are only `wave-close-up-*`, `plan-close-up-*`, and
+  `architect-closeup-*`.
+
+  - No file under `.factory/tasks/modernize/items/*/steps/*/output.yaml` or
+  `findings.md` contains a shift-report block with `justification-class` /
+  `added/removed` / `finding keys`; the only hits are unrelated test assertions
+  (e.g.
+  `items/golden-snapshot-wiring/steps/001-test-first-r1-a1/output.yaml:17`).
+
+  - Iteration-3 close-up is explicit:
+  `runs/086-plan-close-up-3-a1/output.yaml:53-54` — "M2 epic work
+  (runner/checkers/semantic) entirely outstanding; M3 golden/docs/gate close-out
+  blocked on it"; `runs/087-architect-closeup-3-a1/output.yaml:38-39` repeats
+  it; `closeup-3.yaml:7-8` records "M2 ZERO DELIVERY". Iteration 1 also recorded
+  the semantic epic as unstarted (`closeup-1.yaml:8`).
+
+  - Iteration 4 abandoned epics: `docs/adr/ADR-013.md:1-3` ("I3 planned 3 epics
+  ... kickoff pending, M2 zero delivery ... abandoned epics for root items").
+
+  - Iteration 5 ships no epics: `docs/adr/ADR-023.md:1-3`;
+  `plan-5.3.yaml:1013-1017` — "No child epics in I5; all work as 18 root items";
+  `plan-5.3.yaml:1271-1284` — "I5 ships no child epics ... No replanAfter gates
+  ... no epic close-up/handoff bottleneck; M5 hatch consumes item shift
+  declarations directly".
+
+  - The current plan's 28 item outlines contain no `epic-*` slug; the current
+  hatch replacement depends only on behavior items (`plan-5.3.yaml:882-898`).
+
+  - Plan-level M2 close-ups are not epic close-ups: `closeup-4.yaml:3-6` records
+  M1/M2 verified via root items after epic abandonment.
+
+
+  ## 3. Handoff verification
+
+
+  - Required: exactly 3 epic sections, each either a shift report or an explicit
+  no-shift declaration (`assignment.yaml:10-13`; `plan-3.yaml:269-273`).
+
+  - Produced: **0 sections**. Verification fails (0 != 3).
+
+  - No justification-class description, added/removed finding keys, CHANGELOG
+  snippet, or evidence `file:line` could be extracted from any epic close-up.
+  Authoring them at root would violate "never fabricates" (`assignment.yaml:11`)
+  and ADR-011 (`docs/adr/ADR-011.md:67-68`).
+
+  - `CHANGELOG.md:1-18` contains no epic shift/regen entry; there is no epic
+  close-up from which to quote one.
+
+  - Tracked repository contains only the contract references, not a handoff
+  record: `grep -rn -i 'shift report|no-shift'` over the repo (excluding
+  `.factory`/`.git`) hits only `docs/adr/ADR-011.md:16,64-69`.
+
+
+  ## 4. Why the item is running despite the gate
+
+
+  - The item is a stranded iteration-3 artifact: `state.yaml:257-263` records
+  `status: blocked`, `attempts: 1`, `fixRounds: 1`; it was re-queued as a
+  stranded item
+  (`items/secrets-triage-spike/steps/004-review-r1-a1/input.md:6665`).
+
+  - Its stated M2 `replanAfter` gate exists only in plan-3 (`plan-3.yaml:92`);
+  iteration 5 declares the opposite: "No replanAfter gates"
+  (`plan-5.3.yaml:1277`). The item was therefore not unlocked by the gate — its
+  precondition was already unsatisfiable.
+
+  - Milestone metadata is stale: the item says `milestone: M3`
+  (`assignment.yaml:16`), which is plan-3's M3; iteration 5's M3 is "Git-stored
+  decision cache with cleanup" (`plan-5.3.yaml:115-116`).
+
+  - The dependency `epic-kickoff-gate` is itself blocked (`state.yaml:166-172`)
+  and carries open blocker `concerns/c-81b8a319de.yaml:1-18` (abandoned
+  validated-map dependency; this item is listed as affected at `:16`).
+
+  - Step metadata marks this as fix round 1, but `Review Feedback` is empty and
+  no prior `findings.md` exists in item history (commit `1449ca8^` has no such
+  file), so there is no earlier shift-report evidence to resume from.
+
+
+  ## 5. Downstream impact
+
+
+  - Legacy `golden-regen-hatch` depends on this item
+  (`items/golden-regen-hatch/assignment.yaml:18-20`) and is blocked
+  (`state.yaml:316-322`). It must not run: there is no reviewed shift report in
+  a handoff record. A 0-section handoff is **not** "all three sections declare
+  no-shift"; the no-op attestation path requires three explicit declarations
+  (`items/golden-regen-hatch/assignment.yaml:4-12`; `plan-3.yaml:271-273`).
+
+  - The iteration-5 replacement `golden-regen-hatch-v2` consumes behavior-item
+  shift declarations directly and does not depend on this item
+  (`plan-5.3.yaml:882-898`; `plan-5.3.yaml:1282-1283`).
+
+  - Existing item-level shift evidence is real but is **not** a substitute for
+  the three epic close-ups:
+    - `items/decision-backend-impl/steps/003-develop-r1-a1/output.yaml:92-96` — 3 added W9704 findings (unjustified suppression at `tests/data/minimal_sample_project/src/minimal_sample/mod.py:42` for pylint, pylint-pyi, pylint tests), shift reported, golden not regenerated.
+    - `items/runner-dispatch-split/steps/001-develop-r1-a1/output.yaml:46-48` — golden hash-equal, no shift.
+    - `items/runner-compat-shim-removal/steps/001-develop-r1-a1/output.yaml:27-29` — golden byte-identical, no shift.
+
+  ## 6. Verification method (falsification attempts)
+
+
+  - `find .factory/tasks/modernize/items -maxdepth 1 -type d -name 'epic-*'` →
+  only `epic-kickoff-gate`, `epic-shift-report-collection`.
+
+  - `grep -rl '^item: epic-' .factory/tasks/modernize/runs/*/output.yaml` → no
+  matches.
+
+  - `grep -rn -i 'justification-class|added/removed|finding keys'` across all
+  item step outputs/findings → no shift-report sections.
+
+  - `grep -rn -i 'shift'` across wave/plan/architect close-up outputs → no
+  matches.
+
+  - Parsed `plan-5.yaml`, `plan-5.1.yaml`, `plan-5.2.yaml`, `plan-5.3.yaml` item
+  outlines → zero `epic-*` slugs in every iteration-5 plan revision.
+
+  - Read ADR-011, ADR-013, ADR-023 and iterations 1/3/4 close-ups to confirm the
+  epics never spawned and were explicitly abandoned.
+
+
+  ## 7. Open concerns reviewed
+
+
+  - `c-3e935debcb` (POSIX-only `fcntl.flock` PoC lock) and `c-5463b26c4b`
+  (constant rule symbol collapsing the cache rule component) target
+  `cache-design-spike` / `decision-cache-impl`; they do not affect this fan-in
+  and do not change the verdict.
+contextPack: >-
+  Goal: consolidate 3 epic shift reports into one handoff for
+  golden-regen-hatch.
+
+  Result: 0/3 close-ups exist -> handoff NOT produced; fail-open triggered; item
+  must stay blocked/pending.
+
+  Required artifacts: epic-runner-modernize, epic-checkers-modernize,
+  epic-semantic-infrastructure close-ups, each with {justification-class,
+  added/removed finding keys, CHANGELOG snippet, file:line} or explicit
+  no-shift.
+
+  Key evidence: ADR-011:62-69 (contract); plan-3:92 (M2 replanAfter gate),
+  plan-3:444/530/637 (epic slugs); closeup-3.yaml:7-8 (M2 zero delivery);
+  086-plan-close-up-3-a1/output.yaml:53-54 +
+  087-architect-closeup-3-a1/output.yaml:38-39 (epics entirely outstanding);
+  ADR-013:1-3 + ADR-023:1-3 + plan-5.3:1013-1017,1271-1284 (epics abandoned; no
+  replanAfter gates; hatch consumes item declarations); state.yaml:257-263 (item
+  blocked), :316-322 (legacy hatch blocked).
+
+  Do not consume this findings file as a handoff record. Current replacement:
+  plan-5.3 golden-regen-hatch-v2 deps on behavior items (plan-5.3:882-898).
+sources:
+  - docs/adr/ADR-011.md:5,16,62-69
+  - docs/adr/ADR-013.md:1-3
+  - docs/adr/ADR-023.md:1-3
+  - docs/adr/README.md:30
+  - .factory/tasks/modernize/plan/plan-3.yaml:92,109,261-277,419-422,444,504-507,530,567-570,637
+  - .factory/tasks/modernize/plan/plan-5.3.yaml:1013-1017,1262-1284,882-898,115-116
+  - .factory/tasks/modernize/closeup-1.yaml:8
+  - .factory/tasks/modernize/closeup-3.yaml:1-18
+  - .factory/tasks/modernize/closeup-4.yaml:1-19
+  - .factory/tasks/modernize/runs/086-plan-close-up-3-a1/output.yaml:53-54
+  - .factory/tasks/modernize/runs/087-architect-closeup-3-a1/output.yaml:38-39
+  - .factory/tasks/modernize/items/epic-shift-report-collection/assignment.yaml:1-25
+  - .factory/tasks/modernize/items/golden-regen-hatch/assignment.yaml:17-23
+  - .factory/tasks/modernize/state.yaml:166-172,257-263,316-322
+  - .factory/tasks/modernize/concerns/c-81b8a319de.yaml:1-18
+  - .factory/tasks/modernize/items/decision-backend-impl/steps/003-develop-r1-a1/output.yaml:92-96
+  - .factory/tasks/modernize/items/runner-dispatch-split/steps/001-develop-r1-a1/output.yaml:46-48
+  - .factory/tasks/modernize/items/runner-compat-shim-removal/steps/001-develop-r1-a1/output.yaml:27-29
+  - CHANGELOG.md:1-18
+recommendations:
+  - "Keep epic-shift-report-collection blocked/pending and do not produce a
+    handoff record: 0/3 epic close-ups exist, so any 3-section handoff would be
+    fabricated."
+  - "Do not execute legacy golden-regen-hatch. Route golden handling through the
+    iteration-5 path: golden-regen-hatch-v2 consumes behavior-item shift
+    declarations directly (plan-5.3:882-898) and does not depend on this item."
+  - In the next replan, retire or supersede the stranded
+    epic-shift-report-collection and legacy golden-regen-hatch items under
+    ADR-023/ADR-013; otherwise they remain a permanent blocked bottleneck (the
+    exact failure ADR-013 removed).
+  - Update ADR-011 status/README to mark the epic decomposition and
+    shift-handoff section superseded by ADR-013/ADR-023, so future runs do not
+    re-queue the unsatisfiable item (docs/adr/ADR-011.md:5;
+    docs/adr/README.md:30).
+  - If the 3-epic handoff is still required, re-plan and spawn the
+    runner/checkers/semantic epics and have each emit its close-up; do not
+    reconstruct epic sections from I4/I5 root-item reports.
+concerns:
+  - kind: blocker
+    summary: "Legacy epic handoff item is unsatisfiable in I5: 0/3 epic close-ups
+      exist and the M2 replanAfter gate is absent"
+    detail: "The three iteration-3 epics were never spawned (closeup-3: M2 zero
+      delivery; 086/087 close-ups: 'M2 epic work ... entirely outstanding'), and
+      iterations 4-5 abandoned epic decomposition (ADR-013:1-3; ADR-023:1-3;
+      plan-5.3:1013-1017). The item was resumed as a stranded record with state
+      'blocked' (state.yaml:257-263) even though plan-5.3 declares 'No
+      replanAfter gates' (:1277). Retries cannot produce the required artifacts;
+      only a replan can retire or re-scope it."
+    severity: high
+    location:
+      file: .factory/tasks/modernize/items/epic-shift-report-collection/assignment.yaml
+      line: 4
+    affects:
+      - epic-shift-report-collection
+      - golden-regen-hatch
+      - final-gate-validation
+  - kind: risk
+    summary: Legacy golden-regen-hatch could misread a missing handoff as all-no-shift
+    detail: The legacy hatch is allowed a no-op only 'If all three handoff sections
+      declare no-shift' (items/golden-regen-hatch/assignment.yaml:4-12). With
+      zero sections neither shift nor no-shift is established. Running it on
+      this findings file as a handoff would violate the reviewed-shift
+      precondition; the I5 plan replaces it with golden-regen-hatch-v2 consuming
+      behavior-item declarations (plan-5.3:882-898).
+    severity: medium
+    location:
+      file: .factory/tasks/modernize/items/golden-regen-hatch/assignment.yaml
+      line: 4
+    affects:
+      - golden-regen-hatch
+      - golden-regen-hatch-v2
+      - final-gate-validation
+  - kind: tech-debt
+    summary: ADR-011 shift-handoff contract remains 'Accepted' after epic
+      decomposition was abandoned
+    detail: ADR-011 status is still 'Accepted' (docs/adr/ADR-011.md:5) and the ADR
+      index lists it as Accepted (docs/adr/README.md:30), while ADR-013:1-3 and
+      ADR-023:1-3 supersede epic decomposition and state there is no epic
+      close-up/handoff bottleneck. The stale accepted contract is why this
+      stranded item keeps being re-queued.
+    severity: medium
+    location:
+      file: docs/adr/ADR-011.md
+      line: 5
+    affects:
+      - epic-shift-report-collection
+      - docs-adr-reconciliation
+      - docs-adr-reconciliation-v2
+remarkable:
+  - chosen: "Honor fail-open: report 0/3 close-ups and keep the item blocked/pending
+      rather than synthesizing a handoff"
+    why: ADR-011:64-69 and assignment.yaml:10-12 require all three epic close-ups
+      and forbid fabrication. Item-level shift declarations exist but are
+      single-owner item reports, not epic close-ups, so relabeling them would
+      poison the golden-regen-hatch precondition.
+    alternatives:
+      - Reconstruct three pseudo-close-ups from I4/I5 item-level shift
+        declarations
+      - Treat plan-level closeup-3/closeup-4 as the three epic close-ups
+      - Emit three root-authored no-shift declarations in place of missing epic
+        close-ups
+  - chosen: Recommend the iteration-5 ADR-023 item-level path
+      (golden-regen-hatch-v2) rather than reviving epics to satisfy the legacy
+      contract
+    why: The I5 plan explicitly ships no child epics and the v2 hatch depends only
+      on behavior items (plan-5.3:1013-1017, 1271-1284, 882-898). Reviving epics
+      would reintroduce the empty-wave/bottleneck failure ADR-013 and ADR-023
+      removed.
+    alternatives:
+      - Reintroduce runner/checkers/semantic epics in I6 solely to produce
+        close-ups
+      - Keep the legacy item pending indefinitely and let it block legacy
+        golden-regen-hatch

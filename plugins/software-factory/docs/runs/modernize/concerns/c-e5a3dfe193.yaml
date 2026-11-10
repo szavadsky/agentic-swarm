@@ -1,0 +1,25 @@
+id: c-e5a3dfe193
+kind: risk
+summary: Checkers owner count exceeds the ADR-011 ±5 drift budget by 3
+detail: Amended counts are 65/91/15/7/16 (sum 194); checkers +8 vs the 83
+  baseline, outside the +5 budget. The delta is fully enumerated (8 new
+  tests/checkers/_factories_*.py) and resolved by amendment A1, but any
+  validator applying 67/83/15/4/15 literally will fail this gate.
+location:
+  file: .factory/tasks/modernize/items/coding-rules-audit-i2/steps/001-research-r1-a1/output.yaml
+  line: 82
+affects:
+  - epic-checkers-modernize
+  - epic-runner-modernize
+  - epic-semantic-infrastructure
+severity: medium
+status: routed
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: epic-kickoff-gate
+  lastSeen: 2026-11-10T00:08:48.409Z
+createdAt: 2026-11-10T00:08:48.409Z
+updatedAt: 2026-11-10T01:56:20.258Z
+disposition: optional

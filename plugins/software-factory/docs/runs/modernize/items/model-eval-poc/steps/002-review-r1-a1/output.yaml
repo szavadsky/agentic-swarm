@@ -1,0 +1,123 @@
+status: changes_requested
+summary: "PoC blocked/incomplete: solid harness+340-item corpus, but only n<=8
+  smoke scores; no threshold sweep, modes, metrics, or recommendation; plus
+  query-contract, label, and corpus-scope defects."
+suggestions:
+  - id: incomplete-full-matrix-eval
+    disposition: fix
+    summary: Full-matrix scoring, metrics, and recommendation missing (only n<=8
+      smoke scores)
+    detail: "out/ holds 5 smoke-only runs (decider n=8, glide n=3,
+      bekko/ettin/minilm n=4); eval/ has no metrics.py and poc has no report.md.
+      Missing per contract: ALL candidates x prompts at 0.5/0.6/0.7 in veto AND
+      replace modes (or explicit exclusion),
+      accuracy/meaningless-precision/meaningful-recall on heuristic-accepted
+      stratum (overall also), CPU p50/p95+RSS, per-source/per-stratum breakdown,
+      smallest-compliant (params,bytes,RSS,p50) recommendation or no-go.
+      Developer output.yaml status=blocked confirms. Resume by scoring all 340
+      items, then implement metrics + feasibility report."
+    location:
+      file: .factory/tasks/modernize/items/model-eval-poc/poc/out/meta__glide__canonical.json
+      line: 14
+  - id: reranker-query-contract-deviation
+    disposition: fix
+    summary: Reranker query uses '(unknown)/(none)' placeholders where production
+      uses self-pair
+    detail: "Production _semantic.py:168-176 builds query from present fields only
+      and falls back to self-pair (primary,primary) when rule and context are
+      both absent. PoC render_query always emits 'rule: (unknown) | context:
+      (none)' for the 114 synthetic rows with rule=None+context=None, and
+      appends '| context: (none)' to rule-only rows (39 hard negatives).
+      Ettin/MiniLM scores then measure justification-vs-placeholder relevance,
+      incomparable to production and to the threshold sweep. Align with
+      production query construction or record an explicit, ablated deviation."
+    location:
+      file: .factory/tasks/modernize/items/model-eval-poc/poc/eval/adapters/common.py
+      line: 35
+  - id: repo-label-contradiction-c149-c165
+    disposition: fix
+    summary: Contradictory labels on identical preceding-line misattributions (c149
+      true vs c165 false)
+    detail: "c149 ('Extract the value type name', True) and c165 ('Count function
+      parameters (excluding self/cls)', False) are the same phenomenon: a
+      preceding-line descriptive comment misattributed to a trailing ty:ignore
+      on a multi-suppression line whose true same-line reason was already paired
+      with the first suppression (verified generic_key_dict_checker.py:93,
+      trivial_wrapper_checker.py:223). With only 3 repo rows labeled
+      meaningless, this single flip corrupts the accepted-stratum meaningless
+      denominator (41 items). Reconcile the pair and fix multi-suppression
+      double-counting (one line yields two items); join codes per contract or
+      exclude the spurious second row."
+    location:
+      file: .factory/tasks/modernize/items/model-eval-poc/poc/data/corpus.jsonl
+      line: 149
+  - id: hard-negatives-outside-contract
+    disposition: fix
+    summary: 39 synthetic hard negatives (95% of accepted meaningless class) added
+      outside contracted corpus
+    detail: "_HARD_NEGATIVES defines 40 items (39 post-dedup; 'not my code' collides
+      with the brushoff table) that become 39/41 heuristic-accepted meaningless
+      items, so the 95% meaningless-precision bar is decided by author-written
+      synthetic data, not the contracted sources (threshold +
+      brush-off/meaningful tables + repo suppressions). Disclosure in concerns
+      is not enough: report compliance on the contracted corpus AND with
+      augmentation as sensitivity analysis, or obtain architect approval to
+      redefine the corpus. Also standardize synthetic rule (hard negatives use
+      W9704, table rows use None)."
+    location:
+      file: .factory/tasks/modernize/items/model-eval-poc/poc/eval/corpus.py
+      line: 146
+  - id: decision-state-placeholders
+    disposition: optional
+    summary: Decision prompts inject '(unknown)'/'(none)' literals for None rule/context
+    detail: render_state substitutes placeholder strings for 114 rows with
+      rule=None/context=None. Contract allows context None and requires
+      recording the rule symbol where codes are unavailable; fabricated literals
+      may shift GLiDE/decider/bekko probabilities versus omitting absent fields.
+      Prefer omitting absent fields (or a fixed documented template) and ablate
+      placeholder-vs-omitted in the report.
+    location:
+      file: .factory/tasks/modernize/items/model-eval-poc/poc/eval/adapters/common.py
+      line: 27
+  - id: html-404-junk-in-cache
+    disposition: optional
+    summary: 11 HuggingFace 404 HTML pages committed under cache/code (~580KB)
+    detail: All __main__ fetch artifacts (e.g. fastino decision_config.json,
+      glide/*.py, bekko/decider twins) are 404 HTML from a wrong URL pattern;
+      the real content lives in the __resolve__main__ twins. Delete the 11 HTML
+      files to avoid provenance confusion between two same-named configs.
+    location:
+      file: .factory/tasks/modernize/items/model-eval-poc/poc/cache/code/fastino__GLiDE-0.4B__main__decision_config.json
+      line: 1
+  - id: dedup-losses-undisclosed
+    disposition: optional
+    summary: Per-source breakdown must disclose dedup collapse (meaningful_table 33->3)
+    detail: First-wins dedup by normalized justification shrinks meaningful_table
+      33->3 (30 overlap threshold_meaningful), brushoff 35->32,
+      threshold_meaningless 50->49. The coming per-source breakdown must report
+      raw vs post-dedup counts per source so near-empty sources are not misread.
+    location:
+      file: .factory/tasks/modernize/items/model-eval-poc/poc/eval/corpus.py
+      line: 317
+  - id: hardcoded-model-stats
+    disposition: optional
+    summary: params/weights_bytes hardcoded in adapters without provenance
+    detail: Lexicographic smallest-compliant comparison depends on these figures,
+      but they are hand-written constants (e.g. ettin weights as a 4-term sum)
+      with no deriving script. Verify against safetensors headers in code or
+      cite the measurement command in the report.
+    location:
+      file: .factory/tasks/modernize/items/model-eval-poc/poc/eval/adapters/cross_encoder.py
+      line: 26
+  - id: single-adjudicator-labels
+    disposition: human-awareness
+    summary: Compliance rests on single-author repo labels (184/187 meaningful)
+    detail: All real-repo ground truth was adjudicated by one author with no
+      inter-rater check; borderline terse justifications ('planted violation',
+      'usage docs in .pyi', 'optional semantic extra', 'test helper for
+      readability') are all True. The 85% meaningful-recall / 95%
+      meaningless-precision bars inherit this subjectivity. Final report must
+      disclose the adjudication protocol and edge-case rubric; architect can
+      decide if sampled second-rating is needed.
+    location:
+      file: .factory/tasks/modernize/items/model-eval-poc/poc/data/repo_labels.json

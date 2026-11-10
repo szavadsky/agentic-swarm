@@ -1,0 +1,27 @@
+id: c-0ec5bec736
+kind: risk
+summary: detect-secrets scan --baseline rewrites the tracked baseline in place
+  during lint
+detail: dispatch.py:181-189 runs `detect-secrets scan --baseline
+  .secrets.baseline`; the tool updates that file (adds generated_at, reorders
+  keys) and the follow-up python normalizes it back. Normalization reproduces
+  HEAD bytes exactly (sha256 412cab2d…), but an interrupted run leaves
+  `.secrets.baseline` dirty. A live-worktree probe showed the transient
+  modification; it was restored to HEAD bytes and git status is clean.
+location:
+  file: src/python_setup_lint/runner/dispatch.py
+  line: 181
+affects:
+  - pre-commit staging
+  - read-only lint contract
+severity: low
+status: routed
+source:
+  record: 003-research-r2-a1
+  agent: fact-finder
+  step: research
+  item: final-gate-validation
+  lastSeen: 2026-11-10T03:19:38.948Z
+createdAt: 2026-11-10T03:19:38.948Z
+updatedAt: 2026-11-10T03:32:47.723Z
+disposition: optional

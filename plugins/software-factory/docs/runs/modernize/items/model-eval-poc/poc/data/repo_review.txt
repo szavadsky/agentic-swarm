@@ -1,0 +1,187 @@
+001	RULE=consider-using-with	REASON='intentional: need delete=False + manual cleanup in finally'	CTX='tmp_path = tempfile.NamedTemporaryFile('	FILE=src/python_setup_lint/_setup_precommit.py:73
+002	RULE=SIM115	REASON=''	CTX='tmp_path = tempfile.NamedTemporaryFile('	FILE=src/python_setup_lint/_setup_precommit.py:73
+003	RULE=S603	REASON='ruff_path comes from shutil.which("ruff"), a trusted project tool'	CTX='proc = subprocess.run('	FILE=src/python_setup_lint/_setup_precommit.py:100
+004	RULE=W9740	REASON='ruff not installed — fall back to default rev; no action needed'	CTX='except FileNotFoundError:'	FILE=src/python_setup_lint/_setup_precommit.py:116
+005	RULE=return-value	REASON='pyright: main is dict[Unknown, Unknown] from pyproject.toml parsing, not dict[str, object]'	CTX='return main'	FILE=src/python_setup_lint/_setup_pyproject.py:44
+006	RULE=arg-type	REASON='dict[str, object]; setdefault overloads conflict'	CTX='pylint = tool.setdefault("pylint", {})'	FILE=src/python_setup_lint/_setup_pyproject.py:61
+007	RULE=W9740	REASON='best-effort state file parse fallback; logging would noise unavoidable parse/IO degrade'	CTX='except json.JSONDecodeError, KeyError:'	FILE=src/python_setup_lint/_setup_update.py:27
+008	RULE=missing-beartype,docstring-in-impl	REASON='CLI entry point, signature fixed by setup API; @beartype cannot resolve Path forward ref'	CTX='def update('	FILE=src/python_setup_lint/_setup_update.py:85
+009	RULE=trivial-wrapper	REASON='typed factory: provides message-ID-keyed dict with MessageDef values, not a raw dict'	CTX='def _msgs(**definitions: MessageDef) -> dict[str, MessageDefinitionTuple]:'	FILE=src/python_setup_lint/checkers/_base.py:33
+010	RULE=W9740	REASON='best-effort path relative-to fallback; logging would noise unavoidable path-mismatch degrade'	CTX='except ValueError:'	FILE=src/python_setup_lint/checkers/_base.py:60
+011	RULE=W9740	REASON='best-effort file path extraction fallback; logging would noise unavoidable attribute/type degrade'	CTX='except AttributeError, TypeError:'	FILE=src/python_setup_lint/checkers/_base.py:71
+012	RULE=reportCallIssue	REASON='mixin: super().__init__ called with linter arg; BaseChecker.__init__ accepts it via MRO'	CTX='def __init__(self, linter: PyLinter) -> None:'	FILE=src/python_setup_lint/checkers/_base.py:111
+013	RULE=too-many-positional-arguments	REASON='mixin: BaseChecker.__init__ accepts linter arg via MRO'	CTX='super().__init__(linter)'	FILE=src/python_setup_lint/checkers/_base.py:112
+014	RULE=missing-beartype	REASON='mixin: self.linter resolved at runtime via MRO; @beartype cannot resolve forward ref'	CTX=''	FILE=src/python_setup_lint/checkers/_base.py:115
+015	RULE=reportAttributeAccessIssue	REASON='mixin: self.linter exists when mixed with BaseChecker'	CTX='def open(self) -> None:'	FILE=src/python_setup_lint/checkers/_base.py:116
+016	RULE=reportAttributeAccessIssue	REASON='mixin: linter attr from BaseChecker'	CTX='config = self.linter.config'	FILE=src/python_setup_lint/checkers/_base.py:117
+017	RULE=missing-beartype	REASON='mixin: _source_roots resolved at runtime via MRO; @beartype cannot resolve forward ref'	CTX='def _skip_if_outside_source_roots(self, node: nodes.NodeNG) -> bool:'	FILE=src/python_setup_lint/checkers/_base.py:121
+018	RULE=missing-beartype	REASON='mixin: _check_function defined in subclass; @beartype cannot resolve forward ref'	CTX=''	FILE=src/python_setup_lint/checkers/_base.py:132
+019	RULE=reportAttributeAccessIssue	REASON='mixin: _check_function defined in subclass'	CTX='def visit_functiondef(self, node: nodes.FunctionDef) -> None:'	FILE=src/python_setup_lint/checkers/_base.py:133
+020	RULE=missing-beartype	REASON='circular import — AsyncFunctionDef not available at runtime'	CTX='def visit_asyncfunctiondef('	FILE=src/python_setup_lint/checkers/_base.py:136
+021	RULE=import-not-found	REASON='optional semantic extra'	CTX='from sentence_transformers import CrossEncoder'	FILE=src/python_setup_lint/checkers/_semantic.py:35
+022	RULE=W9740	REASON="expected on first run, cache file doesn't exist yet"	CTX='except FileNotFoundError:'	FILE=src/python_setup_lint/checkers/_semantic.py:64
+023	RULE=global-statement	REASON='module-level cache reset requires global'	CTX='global _RESULT_CACHE, _RERANKER_UNAVAILABLE'	FILE=src/python_setup_lint/checkers/_semantic.py:86
+024	RULE=global-statement	REASON='lazy-load singleton requires global'	CTX='global _RERANKER_INSTANCE, _RERANKER_UNAVAILABLE'	FILE=src/python_setup_lint/checkers/_semantic.py:99
+025	RULE=global-statement	REASON='lazy-init result cache requires global'	CTX='global _RESULT_CACHE'	FILE=src/python_setup_lint/checkers/_semantic.py:136
+026	RULE=docstring-in-impl	REASON='brief one-liner, not usage docs'	CTX='def visit_await(self, node: nodes.Await) -> None:'	FILE=src/python_setup_lint/checkers/conformance/asyncio_timeout_checker.py:43
+027	RULE=missing-beartype,docstring-in-impl	REASON='pylint entry point, signature fixed by pylint API; one-liner, not usage docs'	CTX='def register(linter: PyLinter) -> None:'	FILE=src/python_setup_lint/checkers/conformance/asyncio_timeout_checker.py:99
+028	RULE=W9728	REASON='private helper; return semantics evident from type + name; semantic helper: wraps any() with a specific predicate for bare-raise detection'	CTX='def _has_bare_raise(node: nodes.ExceptHandler) -> bool:'	FILE=src/python_setup_lint/checkers/conformance/bare_except_comment_checker.py:65
+029	RULE=union-attr	REASON='ModuleNode has stream() at runtime'	CTX='stream = node.root().stream()'	FILE=src/python_setup_lint/checkers/conformance/bare_except_comment_checker.py:80
+030	RULE=W9740	REASON='best-effort stream access fallback; logging would noise unavoidable attribute/IO degrade'	CTX='except AttributeError, OSError:'	FILE=src/python_setup_lint/checkers/conformance/bare_except_comment_checker.py:81
+031	RULE=W9740	REASON='best-effort stream read fallback; logging would noise unavoidable IO degrade'	CTX='except OSError:'	FILE=src/python_setup_lint/checkers/conformance/bare_except_comment_checker.py:88
+032	RULE=missing-beartype	REASON='pylint entry point, signature fixed by pylint API; @beartype cannot resolve PyLinter forward ref'	CTX='def register(linter: PyLinter) -> None:'	FILE=src/python_setup_lint/checkers/conformance/bare_except_comment_checker.py:127
+033	RULE=misc	REASON='SourceRootMixin.options conflicts with BaseChecker.options; both define the same pylint options tuple'	CTX='class BeartypeCoverageChecker(FunctionVisitMixin, BaseChecker):'	FILE=src/python_setup_lint/checkers/conformance/beartype_checker.py:21
+034	RULE=arg-type	REASON='value_node is NodeNG | Proxy; _extract_type_name accepts NodeNG'	CTX='value_type = self._extract_type_name(value_node)'	FILE=src/python_setup_lint/checkers/conformance/generic_key_dict_checker.py:93
+035	RULE=invalid-argument-type	REASON='Extract the value type name'	CTX='value_type = self._extract_type_name(value_node)'	FILE=src/python_setup_lint/checkers/conformance/generic_key_dict_checker.py:93
+036	RULE=missing-beartype	REASON='PyLinter is a pylint internal type not available at runtime for beartype'	CTX='def register(linter: PyLinter) -> None:'	FILE=src/python_setup_lint/checkers/conformance/no_try_import_checker.py:80
+037	RULE=union-attr	REASON='guaranteed by _is_not_isinstance_guard'	CTX='call = node.test.operand'	FILE=src/python_setup_lint/checkers/conformance/redundant_type_guard_checker.py:38
+038	RULE=arg-type	REASON="astroid's args/annotations are list | None; at runtime always list"	CTX='for arg, ann in zip(func.args.args, func.args.annotations, strict=True):'	FILE=src/python_setup_lint/checkers/conformance/redundant_type_guard_checker.py:133
+039	RULE=union-attr	REASON='node is ModuleNode from astroid, stream() exists at runtime'	CTX='stream = node.stream()'	FILE=src/python_setup_lint/checkers/conformance/suppression_justification_checker.py:50
+040	RULE=arg-type	REASON='node is object; add_message expects NodeNG | None'	CTX='node=node,'	FILE=src/python_setup_lint/checkers/conformance/suppression_justification_checker.py:89
+041	RULE=missing-beartype	REASON='nodes.AnnAssign is TYPE_CHECKING-only; @beartype cannot resolve forward ref'	CTX='def visit_annassign(self, node: nodes.AnnAssign) -> None:'	FILE=src/python_setup_lint/checkers/conformance/suppression_justification_checker.py:93
+042	RULE=union-attr	REASON='parent.stream() returns a stream object with .read()'	CTX='stream = parent.stream()'	FILE=src/python_setup_lint/checkers/conformance/suppression_justification_checker.py:141
+043	RULE=W9740	REASON='best-effort source line extraction; silently skip if unavailable'	CTX='except AttributeError, OSError, IndexError:'	FILE=src/python_setup_lint/checkers/conformance/suppression_justification_checker.py:146
+044	RULE=arg-type	REASON='annotation is NodeNG; add_message expects NodeNG | None'	CTX='node=annotation,'	FILE=src/python_setup_lint/checkers/conformance/suppression_justification_checker.py:160
+045	RULE=union-attr	REASON='ast_node may not be a Module (e.g. FunctionDef/ClassDef); fallback guard for non-doc_node astroid versions'	CTX='body = ast_node.body'	FILE=src/python_setup_lint/checkers/conformance/suppression_justification_checker.py:262
+046	RULE=W9740	REASON='best-effort body attr fallback; logging would noise unavoidable attribute degrade'	CTX='except AttributeError:'	FILE=src/python_setup_lint/checkers/conformance/suppression_justification_checker.py:263
+047	RULE=union-attr	REASON='node is ModuleNode at runtime; nodes_of_class is available'	CTX='for const_node in node.nodes_of_class(cls):'	FILE=src/python_setup_lint/checkers/conformance/suppression_justification_checker.py:288
+048	RULE=union-attr	REASON='node is FunctionDef/AsyncFunctionDef/ClassDef at runtime; nodes_of_class available'	CTX='for sub in node.nodes_of_class((nodes.FunctionDef, nodes.AsyncFunctionDef, nodes.ClassDef)):'	FILE=src/python_setup_lint/checkers/conformance/suppression_justification_checker.py:295
+049	RULE=W9740	REASON='node may not have nodes_of_class (e.g. non-Module node); fall back to empty spans  # best-effort fallback; logging would noise unavoidable attribute degrade'	CTX='except AttributeError:'	FILE=src/python_setup_lint/checkers/conformance/suppression_justification_checker.py:297
+050	RULE=arg-type	REASON="astroid's Arguments.args is list[AssignName] | None; at runtime it's always a list"	CTX='num_params = len(func_args.args)'	FILE=src/python_setup_lint/checkers/conformance/trivial_wrapper_checker.py:223
+051	RULE=invalid-argument-type	REASON='Count function parameters (excluding self/cls)'	CTX='num_params = len(func_args.args)'	FILE=src/python_setup_lint/checkers/conformance/trivial_wrapper_checker.py:223
+052	RULE=arg-type	REASON='Self@StubChecker is StubChecker at runtime'	CTX='if _is_trivial_test_data(node) and not _is_under_source_root(self, py_path):'	FILE=src/python_setup_lint/checkers/stub/checker.py:218
+053	RULE=invalid-argument-type	REASON='── trivial test data modules (outside source root) exempt ────────'	CTX='if _is_trivial_test_data(node) and not _is_under_source_root(self, py_path):'	FILE=src/python_setup_lint/checkers/stub/checker.py:218
+054	RULE=assignment	REASON='dict value type is wider at runtime'	CTX='impl_ann[t.name] = (None, child)'	FILE=src/python_setup_lint/checkers/stub/checker.py:367
+055	RULE=attr-defined	REASON='private symbol removed from .pyi per M3(b); runtime import still works'	CTX='from python_setup_lint.checkers.stub.fidelity import ('	FILE=src/python_setup_lint/checkers/stub/checker.pyi:16
+056	RULE=missing-beartype	REASON="StubChecker is TYPE_CHECKING-only; beartype can't resolve at runtime"	CTX=''	FILE=src/python_setup_lint/checkers/stub/coverage.py:230
+057	RULE=arg-type	REASON='bases is list[SuccessfulInferenceResult]; _normalize_bases accepts Sequence[NodeNG]'	CTX='stub_bases = _normalize_bases(ctx.stub_class.bases)'	FILE=src/python_setup_lint/checkers/stub/fidelity/annotation.py:58
+058	RULE=W9740	REASON='best-effort type inference fallback; logging would noise unavoidable inference degrade'	CTX='except astroid.InferenceError:'	FILE=src/python_setup_lint/checkers/stub/normalizer.py:54
+059	RULE=W9740	REASON='malformed annotation string — fall through to repr'	CTX='except Exception:'	FILE=src/python_setup_lint/checkers/stub/normalizer.py:92
+060	RULE=S603	REASON='argv is constructed internally; cwd is lint scope'	CTX='proc = subprocess.run('	FILE=src/python_setup_lint/runner/_autofix.py:25
+061	RULE=W9740	REASON='best-effort git subprocess fallback; logging would noise unavoidable tool-not-found/timeout degrade'	CTX='except FileNotFoundError, subprocess.TimeoutExpired:'	FILE=src/python_setup_lint/runner/_autofix.py:33
+062	RULE=W9740	REASON='best-effort ruff subprocess fallback; logging would noise unavoidable tool-not-found degrade'	CTX='except FileNotFoundError:'	FILE=src/python_setup_lint/runner/_autofix.py:47
+063	RULE=W9740	REASON='best-effort snapshot read fallback; logging would noise unavoidable file-not-found/dir degrade'	CTX='except FileNotFoundError, IsADirectoryError:'	FILE=src/python_setup_lint/runner/_autofix.py:90
+064	RULE=arg-type	REASON='dict value is object; int() expects str | Buffer | SupportsInt'	CTX='return int(s.get("errorCount", 0)) + int(s.get("warningCount", 0))'	FILE=src/python_setup_lint/runner/_baseline_helpers.py:81
+065	RULE=W9740	REASON='best-effort pyproject parse fallback; logging would noise unavoidable parse/IO degrade'	CTX='except OSError, tomllib.TOMLDecodeError:'	FILE=src/python_setup_lint/runner/_config.py:55
+066	RULE=index	REASON='nested dict access; mypy cannot infer the deep key'	CTX='packages: list[str] = data["tool"]["hatch"]["build"]["targets"]["wheel"]["packages"]'	FILE=src/python_setup_lint/runner/_config.py:58
+067	RULE=W9740	REASON='best-effort config key lookup fallback; logging would noise unavoidable key-missing degrade'	CTX='except KeyError, TypeError:'	FILE=src/python_setup_lint/runner/_config.py:59
+068	RULE=W9740	REASON='best-effort version lookup fallback; logging would noise unavoidable package-not-found degrade'	CTX='except importlib.metadata.PackageNotFoundError:'	FILE=src/python_setup_lint/runner/_config.py:121
+069	RULE=W9740	REASON='best-effort int parse fallback; logging would noise unavoidable parse degrade'	CTX='except TypeError, ValueError:'	FILE=src/python_setup_lint/runner/_record_parsers.py:11
+070	RULE=W9740	REASON='best-effort JSON parse fallback; logging would noise unavoidable parse degrade'	CTX='except json.JSONDecodeError:'	FILE=src/python_setup_lint/runner/_record_parsers.py:273
+071	RULE=W9740	REASON='path outside cwd — return original; fallback behavior'	CTX='except ValueError:'	FILE=src/python_setup_lint/runner/baseline.py:177
+072	RULE=W9740	REASON='best-effort baseline write fallback; logging would noise unavoidable IO degrade'	CTX='except OSError as exc:'	FILE=src/python_setup_lint/runner/baseline.py:227
+073	RULE=too-many-locals	REASON='_diff_baseline needs several locals for the two-pointer diff, crash/add/remove separation; 20 would be cramped'	CTX='def _diff_baseline('	FILE=src/python_setup_lint/runner/baseline.py:232
+074	RULE=W9740	REASON='best-effort baseline read fallback; logging would noise unavoidable parse/IO degrade'	CTX='except (json.JSONDecodeError, OSError) as exc:'	FILE=src/python_setup_lint/runner/baseline.py:259
+075	RULE=W9740	REASON='best-effort stat fallback; logging would noise unavoidable IO degrade'	CTX='except OSError:'	FILE=src/python_setup_lint/runner/cmd_build.py:157
+076	RULE=W9740	REASON='best-effort config read fallback'	CTX='except OSError:'	FILE=src/python_setup_lint/runner/cmd_build.py:226
+077	RULE=W9740	REASON='read-only cwd or permission error; fall back to shared config'	CTX='except OSError:'	FILE=src/python_setup_lint/runner/cmd_build.py:238
+078	RULE=too-many-lines	REASON='542 lines — 14-tool registry + 7 strategy subclasses; splitting would scatter the single-source registry'	CTX=''	FILE=src/python_setup_lint/runner/dispatch.py:1
+079	RULE=return-value	REASON='raw is list[object]; validated as list[str] above'	CTX='return list(raw)'	FILE=src/python_setup_lint/runner/extra_tools.py:161
+080	RULE=return-value	REASON='config_flag_raw is list[object]; validated as list[str] above'	CTX='return list(config_flag_raw)'	FILE=src/python_setup_lint/runner/extra_tools.py:174
+081	RULE=import-outside-toplevel	REASON='only imported when memory limit is active'	CTX='import resource'	FILE=src/python_setup_lint/runner/output.py:178
+082	RULE=W9001,W9740	REASON='non-POSIX or rlimit unavailable; rely on timeout alone'	CTX='except ImportError, OSError:'	FILE=src/python_setup_lint/runner/output.py:181
+083	RULE=S603	REASON='cmd is constructed internally from ToolSpec; cwd is lint scope'	CTX='proc = subprocess.run('	FILE=src/python_setup_lint/runner/output.py:186
+084	RULE=W9740	REASON='best-effort subprocess fallback; logging would noise unavoidable tool-not-found degrade'	CTX='except FileNotFoundError:'	FILE=src/python_setup_lint/runner/output.py:204
+085	RULE=W9740	REASON='timeout: tool exceeded limit; return timeout result so runner continues'	CTX='except subprocess.TimeoutExpired:'	FILE=src/python_setup_lint/runner/output.py:213
+086	RULE=assignment	REASON='json.loads returns Any, narrowed by isinstance below'	CTX='raw: Any = json.loads(stdout)'	FILE=src/python_setup_lint/runner/parsers.py:101
+087	RULE=docstring-in-impl	REASON='usage docs in .pyi'	CTX='def all_ok(self) -> bool:'	FILE=src/python_setup_lint/setup.py:76
+088	RULE=W9740	REASON='best-effort checker discovery fallback; logging would noise unavoidable import failures'	CTX='except ImportError as e:'	FILE=src/python_setup_lint/setup.py:108
+089	RULE=S603	REASON='uv is a trusted project tool; subprocess.run is the standard interface for running external commands'	CTX='proc = subprocess.run('	FILE=src/python_setup_lint/setup.py:122
+090	RULE=W9740	REASON='best-effort uv subprocess fallback; logging would noise unavoidable tool-not-found degrade'	CTX='except FileNotFoundError:'	FILE=src/python_setup_lint/setup.py:131
+091	RULE=W9740	REASON='best-effort uv subprocess fallback; logging would noise unavoidable timeout degrade'	CTX='except subprocess.TimeoutExpired:'	FILE=src/python_setup_lint/setup.py:133
+092	RULE=W9740	REASON='symlink read failed — fall through to content comparison; best-effort'	CTX='except OSError:'	FILE=src/python_setup_lint/setup.py:248
+093	RULE=W9740	REASON='file read failed — fall through to create symlink; best-effort'	CTX='except OSError:'	FILE=src/python_setup_lint/setup.py:255
+094	RULE=W9740	REASON='symlink failed — fall back to copy; best-effort'	CTX='except OSError:'	FILE=src/python_setup_lint/setup.py:267
+095	RULE=arg-type	REASON='.pyi stub SetupState vs .py SetupState'	CTX='_step_precommit(state, project_dir)'	FILE=src/python_setup_lint/setup.py:334
+096	RULE=return-value	REASON='release_messages() returns list[MessageTest]; callers access .msg_id/.args'	CTX='return tc.linter.release_messages()'	FILE=src/python_setup_lint/testing.py:38
+097	RULE=generic-key-dict	REASON='tool labels are identifiers, a legitimate string-key category'	CTX='results: dict[str, LintResult] | list[LintResult]'	FILE=src/python_setup_lint/testing.py:73
+098	RULE=ARG002	REASON='fake matches _run_cmd signature; unused in fake'	CTX='cwd: Path = Path(),'	FILE=src/python_setup_lint/testing.py:80
+099	RULE=S603	REASON='pre-commit is a trusted project tool; subprocess.run is the standard interface for running external commands'	CTX='result = subprocess.run('	FILE=src/python_setup_lint/testing.py:143
+100	RULE=S607	REASON='pre-commit is a trusted project tool; full path not needed for well-known tool'	CTX='["pre-commit", "validate-config", str(config_path)],'	FILE=src/python_setup_lint/testing.py:145
+101	RULE=attr-defined	REASON='private symbol absent from cli.pyi; runtime import works'	CTX='from python_setup_lint.runner.cli import ('	FILE=tests/_golden.py:210
+102	RULE=unresolved-import	REASON='private symbol absent from cli.pyi stub; runtime import works'	CTX='_run_tool_pipeline,'	FILE=tests/_golden.py:211
+103	RULE=W9740	REASON='non-JSON tool output is the expected path; text record parser handles it'	CTX='except json.JSONDecodeError:'	FILE=tests/_golden.py:236
+104	RULE=too-many-lines	REASON="data tables are free LOC per file docstring; parametrize rows don't count against per-file LOC gate"	CTX=''	FILE=tests/checkers/_factories.py:15
+105	RULE=W9728	REASON='test helper: type-specific alias for _make_tc_factory, avoids repeated imports'	CTX='def make_tc(checker_class: type[BaseChecker]) -> CheckerTestCase:'	FILE=tests/checkers/_factories.py:42
+106	RULE=unjustified-suppression	REASON='test data; Any needed for heterogeneous pytest params'	CTX='_DETECT_CASES: list[Any] = ['	FILE=tests/checkers/test_asyncio_timeout_checker.py:16
+107	RULE=no-any-return	REASON='test fixture builds typed list from Any checker introspection'	CTX='return tc.linter.release_messages()'	FILE=tests/checkers/test_bare_except_comment_checker.py:28
+108	RULE=W9704	REASON='list[Any] is a test factory return type; Any needed for heterogeneous test cases'	CTX='_DETECT_CASES: list[Any] = ['	FILE=tests/checkers/test_generic_key_dict_checker.py:18
+109	RULE=trivial-wrapper	REASON='test helper; readability over DRY'	CTX='def _make_tc() -> Any:'	FILE=tests/checkers/test_redundant_type_guard_checker.py:16
+110	RULE=too-many-lines	REASON='504 lines — test module for semantic NLP pipeline; splitting would lose shared fixture context'	CTX=''	FILE=tests/checkers/test_semantic_check.py:1
+111	RULE=index	REASON='__builtins__ is a Module'	CTX='original_import = __builtins__["__import__"]'	FILE=tests/checkers/test_semantic_check.py:35
+112	RULE=attr-defined	REASON='private symbols removed from .pyi per M3(b); runtime import still works'	CTX='from python_setup_lint.checkers._semantic import ('	FILE=tests/checkers/test_semantic_check.py:91
+113	RULE=W9704	REASON='code_context string contains suppression pattern as test data, not a real suppression'	CTX='code_context="def foo():'	FILE=tests/checkers/test_semantic_check.py:281
+114	RULE=attr-defined	REASON='private import for white-box testing'	CTX='from python_setup_lint.checkers._semantic import ('	FILE=tests/checkers/test_semantic_check.py:325
+115	RULE=attr-defined	REASON='private symbols removed from .pyi per M3(b); runtime import still works; private import for white-box testing'	CTX='from python_setup_lint.checkers._semantic import ('	FILE=tests/checkers/test_semantic_check.py:434
+116	RULE=W9728	REASON='test helper: counts messages by msg_id'	CTX='def _msg_count(msgs: list[Any], msg_id: str) -> int:'	FILE=tests/checkers/test_structlog_checker.py:38
+117	RULE=misc	REASON='fixture uses yield; Generator return type not needed for pytest'	CTX='def _restore_structlog_wrapper() -> None:'	FILE=tests/checkers/test_stub_checker.py:23
+118	RULE=wrong-import-position	REASON='conditional import after module-level check'	CTX='from python_setup_lint.checkers.stub.checker import ('	FILE=tests/checkers/test_stub_checker.py:37
+119	RULE=attr-defined	REASON='private symbols removed from .pyi per M3(b); runtime import still works; pylint: disable=wrong-import-position  # conditional import after module-level check'	CTX='from python_setup_lint.checkers.stub.fidelity import ('	FILE=tests/checkers/test_stub_checker.py:40
+120	RULE=too-many-positional-arguments	REASON='parametrize table has 9 columns; test functions inherently have many args'	CTX='def test_emit_import_contract_violations('	FILE=tests/checkers/test_stub_checker.py:358
+121	RULE=W9728	REASON='test helper: shorter alias for _extract_param_descriptors'	CTX='def _extract(func_node: astroid.FunctionDef, *, strip_self: bool = False) -> Any:'	FILE=tests/checkers/test_stub_checker_callable.py:52
+122	RULE=arg-type	REASON='checker=None is valid; test creates checker-less test case'	CTX='checker=None,'	FILE=tests/checkers/test_stub_checker_callable.py:251
+123	RULE=arg-type	REASON='test fixture; None is valid sentinel for ClassComparisonCtx'	CTX='checker=None,'	FILE=tests/checkers/test_stub_checker_class.py:80
+124	RULE=too-many-positional-arguments	REASON='parametrize table has 5 columns; test functions inherently have many args'	CTX='def test_stub_symbol_missing('	FILE=tests/checkers/test_stub_checker_class.py:107
+125	RULE=W9728	REASON='test helper: typed alias for astroid.parse with default module_name'	CTX='def _parse(code: str, module_name: str = "") -> astroid.Module:'	FILE=tests/checkers/test_stub_coverage.py:53
+126	RULE=W9728	REASON='test helper: counts docstring-in-impl messages'	CTX='def _doc_msg_count(msgs: list[Any]) -> int:'	FILE=tests/checkers/test_stub_docstring_checker.py:42
+127	RULE=W9728	REASON='test helper: counts generic-return-requires-returns messages'	CTX='def _returns_msg_count(msgs: list[Any]) -> int:'	FILE=tests/checkers/test_stub_docstring_checker.py:97
+128	RULE=W9728	REASON='test helper: extracts msg_ids with clear semantic name'	CTX='def _msg_ids(msgs: list[Any]) -> list[str]:'	FILE=tests/checkers/test_stub_fidelity_invariants.py:77
+129	RULE=W9728	REASON='test helper: filters and extracts args by msg_id'	CTX='def _args_of(msgs: list[Any], msg_id: str) -> list[tuple[Any, ...]]:'	FILE=tests/checkers/test_stub_fidelity_invariants.py:82
+130	RULE=unjustified-suppression	REASON='comment contains suppression pattern as documentation; test verifies mixed-match detection'	CTX=''	FILE=tests/checkers/test_suppression_justification_checker.py:122
+131	RULE=unjustified-suppression	REASON='test data contains suppression pattern to verify mixed-match detection'	CTX='code = \'x = "'	FILE=tests/checkers/test_suppression_justification_checker.py:124
+132	RULE=unjustified-suppression	REASON="docstring contains suppression pattern; test verifies it's not flagged"	CTX='"""Checker must NOT flag'	FILE=tests/checkers/test_suppression_justification_checker.py:133
+133	RULE=unjustified-suppression	REASON='comment contains suppression pattern as documentation; test verifies justified suppression after string literal'	CTX=''	FILE=tests/checkers/test_suppression_justification_checker.py:210
+134	RULE=unjustified-suppression	REASON='test data verifies justified suppression after string literal'	CTX='code = \'x = "'	FILE=tests/checkers/test_suppression_justification_checker.py:211
+135	RULE=trivial-wrapper	REASON='fixture binding write_baseline to tmp_path; readability over DRY'	CTX='def _write(entries: list[dict[str, object]], name: str = "baseline.json") -> Path:'	FILE=tests/conftest.py:96
+136	RULE=trivial-wrapper	REASON='fixture returning a constant path; readability over DRY'	CTX='def sample_project() -> Path:'	FILE=tests/conftest.py:161
+137	RULE=F401	REASON='planted: Any used in annotations; ClassVar used below'	CTX='from typing import Any, ClassVar'	FILE=tests/data/minimal_sample_project/src/minimal_sample/mod.py:12
+138	RULE=F401,E402	REASON='import after usage for grouping'	CTX='from collections.abc import Mapping'	FILE=tests/data/minimal_sample_project/src/minimal_sample/mod.py:28
+139	RULE=type-ignore	REASON='simplified stand-in for test purposes'	CTX='MessageDef = dict[str, str]'	FILE=tests/data/minimal_sample_project/src/minimal_sample/mod.py:30
+140	RULE=F401	REASON='planted violation'	CTX='import nonexistent_module'	FILE=tests/data/minimal_sample_project/src/minimal_sample/mod.py:81
+141	RULE=F401,E402	REASON='should trigger missing-module-stub-for-import'	CTX='from .no_stub_module import NO_STUB_CONSTANT'	FILE=tests/data/minimal_sample_project/src/minimal_sample/mod.py:161
+142	RULE=F401,E402	REASON='should trigger missing-import-declaration'	CTX='from .import_target import UNDECLARED_SYMBOL'	FILE=tests/data/minimal_sample_project/src/minimal_sample/mod.py:167
+143	RULE=F403,E402	REASON='should trigger star-import-unresolvable'	CTX='from .star_module import *'	FILE=tests/data/minimal_sample_project/src/minimal_sample/mod.py:173
+144	RULE=generic-key-dict	REASON='dict[str, LintResult] is a test helper; string keys are fixture labels'	CTX=') -> dict[str, LintResult]:'	FILE=tests/runner/_autofix_helpers.py:23
+145	RULE=silent-except	REASON='test helper; FileNotFoundError is expected during cleanup'	CTX='except FileNotFoundError:'	FILE=tests/runner/_autofix_helpers.py:57
+146	RULE=generic-key-dict	REASON='test helper; string keys are tool labels'	CTX='canned: dict[str, LintResult],'	FILE=tests/runner/_autofix_helpers.py:75
+147	RULE=generic-key-dict	REASON='dict[str, LintResult] is a test helper; string keys are tool labels'	CTX=') -> dict[str, LintResult]:'	FILE=tests/runner/_factories.py:81
+148	RULE=W9704	REASON='dict[str, Any] is a test helper; values are RunnerConfig kwargs of mixed types'	CTX='defaults: dict[str, Any] = {'	FILE=tests/runner/_factories.py:126
+149	RULE=W9728	REASON="public API alias: provides a self-documenting name for test consumers; inlining would force callers to understand find_tool_entry's semantics"	CTX='def baseline_entry_for_tool(entries: list[dict[str, Any]], tool: str) -> dict[str, Any]:'	FILE=tests/runner/_factories_baseline.py:26
+150	RULE=too-many-lines	REASON='502 lines — factory data for 14 tools; splitting would lose context'	CTX=''	FILE=tests/runner/_factories_extras.py:1
+151	RULE=too-many-lines	REASON='test factory module; parametrized cases need space'	CTX=''	FILE=tests/runner/_factories_extras.py:6
+152	RULE=W9704	REASON='string literal contains noqa pattern text, not a real suppression'	CTX='\'parse_regex = "^[^:]+:\\\\\\\\d+:.*'	FILE=tests/runner/_factories_extras.py:37
+153	RULE=trivial-wrapper	REASON='test helper inner functions; readability over DRY'	CTX=''	FILE=tests/runner/test_autofix_conflict.py:36
+154	RULE=trivial-wrapper	REASON='thin sorted wrapper; readability alias for sort key'	CTX='def _sorted(records: list[Record]) -> list[Record]:'	FILE=tests/runner/test_baseline_diff.py:21
+155	RULE=silent-except	REASON='test helper; exception expected'	CTX='except json.JSONDecodeError:'	FILE=tests/runner/test_baseline_diff_edge.py:220
+156	RULE=too-many-locals	REASON='benchmark test needs many local vars for per-tool measurements'	CTX=''	FILE=tests/runner/test_bench_runner_overhead.py:1
+157	RULE=W9728	REASON='pytest fixture wrapper: provides a self-documenting fixture name for test parameterization; inlining would lose the fixture identity'	CTX='def parsed(request: pytest.FixtureRequest) -> configparser.ConfigParser:'	FILE=tests/runner/test_config_consistency.py:32
+158	RULE=trivial-wrapper	REASON='test function delegates to _expect_error'	CTX='def test_validate_r4_reason_matches(tmp_path: Path, body: str, reason_want: str, want_kind: str) -> '	FILE=tests/runner/test_extra_tools.py:106
+159	RULE=too-many-positional-arguments	REASON='parametrized test with 8 args; pylint default is 5'	CTX=''	FILE=tests/runner/test_extra_tools_downstream.py:1
+160	RULE=too-many-lines	REASON='test file with many parametrised classes; splitting would hurt readability'	CTX=''	FILE=tests/runner/test_lint_runner.py:7
+161	RULE=no-untyped-def	REASON='test function; signature varies by parametrize'	CTX='def test_expand_globs(self, paths: list[str], check) -> None:'	FILE=tests/runner/test_lint_runner.py:243
+162	RULE=too-many-lines	REASON='integration test suite; splitting would lose shared fixture context'	CTX=''	FILE=tests/runner/test_lint_runner_integration.py:1
+163	RULE=too-many-positional-arguments	REASON='parametrized test with 6 args; pylint default is 5'	CTX=''	FILE=tests/runner/test_lint_runner_integration.py:7
+164	RULE=too-many-positional-arguments	REASON='parametrized tests with 6 args; pylint default is 5'	CTX=''	FILE=tests/runner/test_lint_runner_stats.py:1
+165	RULE=trivial-wrapper	REASON='hypothesis test wrapper; delegation pattern required by framework'	CTX='def test_ruff_records_given_any_text_then_never_raises(self, text: str) -> None:'	FILE=tests/runner/test_parsers_hypothesis.py:92
+166	RULE=assignment	REASON='dynamic import hides type; runtime reference for restoration'	CTX='self._orig = _m._run_uv'	FILE=tests/runner/test_setup.py:53
+167	RULE=index	REASON='_read_pyproject_toml returns dict[str, object] | None; dict key access on object is valid at runtime'	CTX='assert d and d["project"]["name"] == "test-project"'	FILE=tests/runner/test_setup.py:192
+168	RULE=arg-type	REASON='d is dict[str, object] | None at runtime; _set_pylint_load_plugins expects dict[str, object]'	CTX='_set_pylint_load_plugins(d, ["a.b"])'	FILE=tests/runner/test_setup.py:213
+169	RULE=arg-type	REASON='d is dict[str, object] | None at runtime; _write_pyproject_toml expects dict[str, object]'	CTX='_write_pyproject_toml(empty_project, d)'	FILE=tests/runner/test_setup.py:214
+170	RULE=arg-type	REASON='_read_pyproject_toml returns dict[str, object] | None; _get_pylint_load_plugins expects dict[str, object]'	CTX='assert _get_pylint_load_plugins(_read_pyproject_toml(empty_project)) == ["a.b"]'	FILE=tests/runner/test_setup.py:215
+171	RULE=attr-defined	REASON='dynamic import hides type; subprocess.run accessed via module reference'	CTX='orig = _m.subprocess.run'	FILE=tests/runner/test_setup.py:306
+172	RULE=attr-defined	REASON='dynamic import hides type; assigning callable to subprocess.run'	CTX='_m.subprocess.run = fake_run'	FILE=tests/runner/test_setup.py:311
+173	RULE=attr-defined	REASON='dynamic import hides type; restoring original reference'	CTX='_m.subprocess.run = orig'	FILE=tests/runner/test_setup.py:316
+174	RULE=arg-type	REASON='cp is dict[str, str] at runtime; _set_pylint_load_plugins expects dict[str, object]'	CTX='_set_pylint_load_plugins(cp, ["a.b"])'	FILE=tests/runner/test_setup.py:362
+175	RULE=arg-type	REASON='cp is dict[str, str] at runtime; _get_pylint_load_plugins expects dict[str, object]'	CTX='assert _get_pylint_load_plugins(cp) == []'	FILE=tests/runner/test_setup.py:363
+176	RULE=arg-type	REASON='d has nested object values; _set_pylint_load_plugins expects dict[str, object]'	CTX='_set_pylint_load_plugins(d, new)'	FILE=tests/runner/test_setup.py:370
+177	RULE=arg-type	REASON='d has nested object values; _get_pylint_load_plugins expects dict[str, object]'	CTX='assert _get_pylint_load_plugins(d) == expected'	FILE=tests/runner/test_setup.py:371
+178	RULE=arg-type	REASON='_read_pyproject_toml returns dict|None; caller guards with assert'	CTX='and "existing.plugin" in _get_pylint_load_plugins(_read_pyproject_toml(d))'	FILE=tests/runner/test_setup_install.py:231
+179	RULE=operator	REASON='parametrized callable; type varies by fixture'	CTX='check_fn(empty_project)'	FILE=tests/runner/test_setup_install.py:266
+180	RULE=arg-type	REASON='_read_pyproject_toml returns dict|None; fixture ensures valid project'	CTX='deps_before = _get_dev_deps(_read_pyproject_toml(configured_project))'	FILE=tests/runner/test_setup_install.py:273
+181	RULE=attr-defined	REASON='object-typed variable from release_messages()'	CTX='assert first.get("project", {}).get("name") == "x"'	FILE=tests/runner/test_t5_compose_ruff.py:232
+182	RULE=index	REASON='config_paths is dict[str, Path]; index access is valid at runtime'	CTX='shared_before = config.config_paths["ruff check"]'	FILE=tests/runner/test_t5_compose_ruff.py:303
+183	RULE=operator	REASON="config_paths is dict[str, Path]; 'in' check is valid at runtime"	CTX='assert "pyright check" not in config.config_paths'	FILE=tests/runner/test_t9_7_compose_pyright.py:253
+184	RULE=silent-except	REASON='test helper; exception expected during cleanup'	CTX='except json.JSONDecodeError:'	FILE=tests/runner/test_t9_7_compose_pyright_live.py:70
+185	RULE=call-overload	REASON='test helper; check=False is valid at runtime'	CTX='return original_run(*args, **kwargs, check=False)'	FILE=tests/runner/test_testing_fakes.py:188
+186	RULE=trivial-wrapper	REASON='test helper for readability'	CTX='def _read_precommit(project_dir: Path) -> str:'	FILE=tests/test_setup_precommit.py:36
+187	RULE=redefined-outer-name	REASON='fixture parameter shadows module-level state fixture'	CTX='class TestRuffVersionResolution:'	FILE=tests/test_setup_precommit.py:59

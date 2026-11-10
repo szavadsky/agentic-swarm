@@ -1,0 +1,139 @@
+checks:
+  - id: gates
+    status: pass
+    message: Gates passed (2 gates)
+    details:
+      - id: typecheck
+        command: bun --cwd=plugins/software-factory run typecheck
+        status: pass
+        durationMs: 5611
+        details: $ tsc --noEmit
+      - id: test
+        command: bun --cwd=plugins/software-factory test
+        status: pass
+        durationMs: 456241
+        details: >-
+          bun test v1.4.4 (38afee6c8)
+
+          Disk space check passed (threshold 2048 MB):
+            worktreeRoot (/tmp/factory-test-repo-ym1rCG.factory-wt): 4470 MB free
+            .factory-runtime/tmp (/tmp/factory-test-repo-ym1rCG.factory-wt/.factory-runtime/tmp): 4470 MB free
+            repoRoot (/tmp/factory-test-repo-ym1rCG): 4470 MB free
+            tmpdir (/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp): 86958 MB free
+            /tmp (/tmp): 4470 MB free
+          ================================================================
+
+          Task: status-test-task [ACTIVE]
+
+          Kind: unclassified | Iteration: 1 | Wave: 1
+
+          Worktree: (none - main checkout)
+
+          Config path: /tmp/factory-test-repo-whXJy0/.factory/pipeline.yaml
+
+          Budget spent: $0.0000
+            tokens: input=0 output=0 cacheRead=0 cacheWrite=0 total=0
+          ----------------------------------------------------------------
+
+          Waves & Items:
+            Wave 1:
+          Concerns: open 0 | dismissed 0 | routed 0 | resolved 0
+
+          ----------------------------------------------------------------
+
+          Blocking Questions:
+            (none)
+          ----------------------------------------------------------------
+
+          Digest Questions:
+            (none)
+          ================================================================
+
+
+
+          test/config-worktree-layering.test.ts:
+
+          [factory preflight] Preflight failed with 1 error(s):
+            - Pipeline config loading failed: Invalid pipeline configuration:
+          /limits/maxIterations: must be integer ({"type":"integer"})
+
+
+          test/disk-space.test.ts:
+
+          52 |       probe,
+
+          53 |     });
+
+          54 | 
+
+          55 |     expect(res.ok).toBe(false);
+
+          56 |     expect(res.minFreeDiskMb).toBe(2048);
+
+          57 |     expect(res.failingPaths.length).toBe(1);
+                                                   ^
+          error: expect(received).toBe(expected)
+
+
+          Expected: 1
+
+          Received: 2
+
+                at <anonymous> (/home/slava/aiexp/agentic-swarm.factory-wt/topic_omp-workspaces--target-green-ratchet-fix/plugins/software-factory/test/disk-space.test.ts:57:37)
+          (fail) Disk-space guards (§limits.minFreeDiskMb) > checkDiskSpace
+          verifies worktreeRoot, .factory-runtime/tmp, repoRoot, and tmpdir
+          [33.02ms]
+
+
+          test/cli/cli.test.ts:
+
+          [factory lock] Stale run lock for task "stale-lock-task" (PID 9999999
+          on host Slava-Yoga) taken over by PID 1976227
+
+          [factory lock] Stale run lock for task "competing-takeover-task" (PID
+          9999999 on host Slava-Yoga) taken over by PID 1976227
+
+          [factory lock] Stale run lock for task "journal-worktree-task" (PID
+          9999999 on host Slava-Yoga) taken over by PID 1976227
+
+           689 pass
+           2 skip
+           1 fail
+           3891 expect() calls
+          Ran 692 tests across 107 files. [229.56s]
+        failingTests:
+          - Disk-space guards (§limits.minFreeDiskMb).checkDiskSpace verifies
+            worktreeRoot, .factory-runtime/tmp, repoRoot, and tmpdir
+  - id: target-green
+    status: pass
+    message: "target-green passed: selected tests passed"
+    details:
+      command: bun --cwd=plugins/software-factory test
+        test/checks/target-green-ratchet.test.ts --reporter=junit
+        --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-green-1794288342212-zjfmbx221j.xml
+      junitCaseCount: 5
+      junitCaseIds:
+        - target-green baseline ratchet for gate targets.gate target that only
+          fails baseline-listed tests passes via ratchet
+        - target-green baseline ratchet for gate targets.gate target with a new
+          failing test outside baseline fails naming the new test
+        - target-green baseline ratchet for gate targets.fully green gate target
+          passes without invoking ratchet
+        - target-green baseline ratchet for gate targets.failing gate target
+          without a baseline still fails with exit-code evidence
+        - target-green baseline ratchet for gate targets.old-format baseline
+          re-derives failing tests at the baseline commit before ratcheting
+      junitTruncated: false
+      collected: true
+      collectionErrors: []
+  - id: size
+    status: pass
+    message: "size passed: 88/300 production lines changed"
+    details:
+      changedLines:
+        added: 78
+        deleted: 10
+        total: 88
+        files:
+          - plugins/software-factory/src/core/checks/runner.ts
+      limit: 300

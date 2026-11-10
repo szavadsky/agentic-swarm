@@ -1,0 +1,17 @@
+id: rm-6344b013f9
+chosen: Additive optional cache fields; no record migration
+alternatives:
+  - "Required cache fields with backfill migration (rejected: rewrites history,
+    risks invalidating committed records)"
+  - "Sidecar cache-usage log (rejected: splits usage truth across two stores)"
+why: Preserves validity of all historical records and keeps M2 shippable without
+  migration; missing data degrades to zero/unknown.
+status: open
+source:
+  record: 005-architect-plan-1-a1
+  agent: architect
+  step: architect-plan-1
+  iteration: 1
+  lastSeen: 2026-11-09T23:33:06.263Z
+createdAt: 2026-11-09T23:33:06.263Z
+updatedAt: 2026-11-09T23:33:06.263Z

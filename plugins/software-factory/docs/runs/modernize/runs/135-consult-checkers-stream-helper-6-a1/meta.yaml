@@ -1,0 +1,17 @@
+seq: 135
+name: consult-checkers-stream-helper-6
+attempt: 1
+agent: architect
+role: architect
+models:
+  - opencode-go/muse-spark-1.3-contributor
+session: 01a1b8a3-f9ce-7511-963e-37a3531a2d3a
+timeoutSec: 7200
+status: ok
+startedAt: 2026-11-09T21:42:19.017Z
+endedAt: 2026-11-09T21:43:36.366Z
+usage:
+  inputTokens: 441883
+  outputTokens: 5284
+  costUsd: 0.045266
+traceRef: /home/slava/aiexp/python-setup.factory-wt/.factory-runtime/sessions/2026-11-08T00-51-56-494Z_01a1b8a3-f9ce-7511-963e-37a3531a2d3a.jsonl

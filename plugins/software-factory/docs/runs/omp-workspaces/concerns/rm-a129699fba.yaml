@@ -1,0 +1,20 @@
+id: rm-a129699fba
+chosen: merge-path runs infra.setup in childWt before any gate/target snapshot,
+  with gate-shaped failure evidence
+alternatives:
+  - Run infra.setup after gate snapshots (count setup artifacts as mutations)
+  - Require every item branch to commit node_modules
+why: Mirrors temp-worktree runner.ts semantics; setup-created untracked files
+  (node_modules) become snapshot baseline rather than gate mutations (asserted
+  by zero worktree_mutation_detected events); failure fails merge with id
+  infra.setup + command + exit + output tail, same evidence shape as gate
+  failures.
+status: open
+source:
+  record: 024-plan-close-up-1-a1
+  agent: plan-close-up
+  step: plan-close-up-1
+  iteration: 1
+  lastSeen: 2026-11-10T06:32:04.799Z
+createdAt: 2026-11-10T06:32:04.799Z
+updatedAt: 2026-11-10T06:32:04.799Z

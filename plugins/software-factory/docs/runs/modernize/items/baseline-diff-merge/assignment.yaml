@@ -1,0 +1,19 @@
+slug: baseline-diff-merge
+kind: test-only
+title: Merge baseline-diff test overlap
+assignment: "Tests-only (tests/runner/test_baseline_diff.py +
+  test_baseline_diff_edge.py + test_baseline_diff_parsers.py ONLY, 249+308+486
+  per pack, verify at HEAD). Red-test-exempt. Merge overlapping
+  _compare_sorted/_diff_baseline/_capture_baseline coverage into <=2 modules
+  <=500; each merged case names survivor; preserve CLI/exit/baseline/autofix
+  pinning limbs or flag blocking debt; touched files toward naming/markers.
+  Shim-removal serializes after this item (applies onto merged shape). Verify:
+  tests only; no new failures vs M1 table; golden hash-equal."
+outlineRef: baseline-diff-merge
+milestone: M2
+wave: 1
+scenarioRefs:
+  - "M2: Baseline merged with survivors"
+citations:
+  - CodingRules.md:139-159
+  - CodingRules.md:230-306

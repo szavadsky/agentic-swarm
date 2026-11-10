@@ -1,0 +1,25 @@
+id: c-02f2086657
+kind: risk
+summary: Preflight's omp overlay validation is a no-op (--config ... --version)
+detail: "src/cli/preflight.ts:383-385 runs omp --config <overlay> --version.
+  --version is an early-exit and ignores the overlay: with a missing overlay it
+  still prints omp/18.18.5 and exits 0, while a real omp --config <missing> -p
+  ... exits 1 with Config overlay not found. This confirms existing concern
+  c-477404c672."
+location:
+  file: plugins/software-factory/src/cli/preflight.ts
+  line: 383
+affects:
+  - "19.1"
+  - "19.2"
+severity: high
+status: routed
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: spike-mock-provider
+  lastSeen: 2026-11-10T00:00:31.798Z
+createdAt: 2026-11-10T00:00:31.798Z
+updatedAt: 2026-11-10T01:40:18.908Z
+disposition: architect

@@ -1,0 +1,10 @@
+id: awareness-plan-2-cache-location-choice
+ref: plan-2
+disposition: human-awareness
+question: Assumption places JSON cache at linted root next to baseline with
+  weights in user cache, affecting gitignore/hatch inclusion/consumer
+  repos/secrets scanning. Spikes can assume path with DECISIONS_PATH isolation
+  but operator should confirm filename/location before iteration-3
+  implementation. Record informational review.
+status: open
+createdAt: 2026-11-08T10:25:18.500Z

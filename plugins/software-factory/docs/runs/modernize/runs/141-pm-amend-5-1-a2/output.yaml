@@ -1,0 +1,102 @@
+iteration: 5
+items:
+  - assignment: "M3 split 1/2 — storage + refresh core. Replaces failed
+      decision-cache-impl storage half. Consumes plan cache format contracts
+      (sorted (rule,justification,model) indent=2/sort_keys, double-write
+      byte-identical, last-seen change-only, schema-never-hex>=20); assumption
+      item not yet scheduled as an active item so implement to plan and do not
+      loosen when it lands. OWNS ONLY: NEW
+      python_setup_lint/decisions/_decision_cache.py + .pyi (__init__.py,
+      lookup(), resolve_cache_path(), refresh/merge/prune, jobs_from_rcfile,
+      refresh_blockers) + BOTH tach.toml (root tach.toml + config/tach.toml,
+      sole owner: each gains [[modules]] decisions depends_on=[] +
+      checkers/runner depends_on=[python_setup_lint.decisions], exact 3-module
+      TOML, byte-consistent stanzas) + NEW
+      tests/decisions/test_decision_cache.py. FORBIDDEN:
+      _base/_semantic/_decision_backend bodies, CLI threading
+      (cli.py/types.py/_cli_complexity), checker observation lines, tests/data,
+      baseline, docs, .gitignore/hatch/.secrets. IMPLEMENT ADR-019 storage:
+      array sorted (rule,justification,model) indent=2 sort_keys; entry
+      {justification normalized, rule joined codes, model '<id> rev <short12>
+      prompt-vN', score float [0,1]+decision bool, files sorted unique POSIX} +
+      {version, prompt hash hexdigest[:12], last-seen ISO date updated ONLY on
+      score/decision/files change}; key (justification,rule,model);
+      secrets-clean schema (schema fields hex-free; verbatim SHA in
+      justification structlog-warns + risk-accepted); DECISIONS_PATH test-only
+      (ONLY under PYTEST_CURRENT_TEST, else config.cwd + traversal guard);
+      lockfile O_CREAT|O_EXCL retry 5s + merge + atomic replace in target dir;
+      prune = scanned-scope-only missing removal + stale-model whole-entry drop
+      + file-removal/drop-empty; jobs_from_rcfile() over resolved
+      pylint/pylint-pyi/pylint-tests rcfiles, any >1 fails loudly naming file;
+      FAIL under CI/GITHUB_ACTIONS. EXPORT-CONSISTENCY PROTOCOL:
+      refresh_blockers exact spelling in .py+.pyi, grep both trees, python -c
+      import, stubtest clean, clear __pycache__, prove red/green locally (prod
+      aside fails red, restored passes). DECLARE TARGET {\"command\":\"uv run
+      pytest -q\",\"customTarget\":true} NEVER {\"gate\":\"tests\"}. VERIFY: tmp
+      round-trip double-run byte-identical + last-seen stable; prune
+      granularity; CI/jobs/isolation guards; tach + detect-secrets clean; no new
+      failures vs HEAD recount; golden hash-equal. Downstream v2 rewiring
+      deferred to next amendment to respect item cap."
+    citations:
+      - python_setup_lint/decisions/_decision_cache.py
+      - tach.toml
+      - config/tach.toml
+      - tests/decisions/test_decision_cache.py
+    deps: []
+    escalate: true
+    kind: dev
+    milestone: M3
+    outlineRef: decision-cache-storage-v2
+    scenarioRefs:
+      - M3-cache-roundtrip-cleanup
+      - M3-readonly-vs-refresh
+    slug: decision-cache-storage-v2
+    title: Tracked decision cache storage and refresh core (split 1/2)
+    wave: 13
+  - assignment: 'M3 split 2/2 — read branch + refresh wiring. Consumes
+      decision-cache-storage-v2 lookup()/refresh() (no storage edits) + M2 memo
+      dict shape (source-simplifications outline not yet scheduled as an active
+      item; apply memo tuple onto HEAD shape per plan, preserve behavior). OWNS
+      ONLY: runner CLI threading (cli.py --refresh-decisions branch+help,
+      types.py RunnerConfig.refresh_decisions:bool=False, _cli_complexity.py
+      parse/build threading, refresh scope reuses --path plumbing) +
+      _semantic.py read-branch + semantic_score()->float|None (+.pyi, clamped
+      [0,1]) + memo value (score,decision) tuple + checker observation lines
+      (suppression + bare-except refresh-only emit ONLY: OBSERVE=1 appends {file
+      via node.root().file, justification, rule, model, score via semantic_score
+      memo reuse — single backend call, no heuristic duplication} to
+      OBSERVE_PATH tmp *.jsonl; env unset emits nothing) + NEW
+      tests/runner/test_refresh_decisions.py. FORBIDDEN: _base/_decision_backend
+      bodies, decisions/ internals, dispatch*/baseline/parsers except threading
+      files, tests/data, baseline, docs, tach.toml. IMPLEMENT: hit/miss/absent
+      table — heuristic-rejected->False no read/backend;
+      accepted+file-missing->None->heuristic True; accepted+entry-hit->persisted
+      decision backend-uncalled (call-count 0 proof);
+      accepted+key-miss->backend.decide once (clamp in semantic_score), memo
+      only, persist via refresh; read-only = SHA-256 file-bytes hash
+      (missing=sentinel) unchanged across ordinary run_lint; sidecar merged then
+      deleted; DECISIONS_PATH isolation + traversal guard + CI-fail + jobs>1
+      integration via storage-v2. DECLARE TARGET {"command":"uv run pytest
+      -q","customTarget":true} NEVER {"gate":"tests"}. VERIFY: end-to-end
+      checker->sidecar->cache on tmp (cite producer lines, never prune-only);
+      hit/miss/absent incl backend-uncalled proof; CI-fail + isolation + jobs +
+      --path scope; no new failures; golden hash-equal or shift-reported with
+      class+keys+CHANGELOG+file:line.'
+    citations:
+      - python_setup_lint/decisions/_decision_cache.py
+      - src/python_setup_lint/checkers/_semantic.py
+      - src/python_setup_lint/runner/cli.py
+      - src/python_setup_lint/runner/types.py
+      - tests/runner/test_refresh_decisions.py
+    deps:
+      - decision-cache-storage-v2
+    escalate: true
+    kind: dev
+    milestone: M3
+    outlineRef: decision-cache-refresh-wiring-v2
+    scenarioRefs:
+      - M3-cache-roundtrip-cleanup
+      - M3-readonly-vs-refresh
+    slug: decision-cache-refresh-wiring-v2
+    title: Cache read branch and refresh wiring (split 2/2)
+    wave: 14

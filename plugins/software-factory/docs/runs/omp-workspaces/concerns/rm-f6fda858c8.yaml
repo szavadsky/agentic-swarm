@@ -1,0 +1,18 @@
+id: rm-f6fda858c8
+chosen: Additive optional cache-token fields end to end with zero-default aggregation
+alternatives:
+  - Required cache fields with migration of historical records
+  - Separate cache-only sidecar records
+why: Usage/StepUsage/record/budget/derive/status all tolerate absent keys
+  (verified by legacy/mixed tests + schema tests), so historical
+  meta.yaml/state.yaml remain valid and M7 measured-defaults work can start
+  accumulating data immediately without a migration.
+status: open
+source:
+  record: 024-plan-close-up-1-a1
+  agent: plan-close-up
+  step: plan-close-up-1
+  iteration: 1
+  lastSeen: 2026-11-10T06:32:04.799Z
+createdAt: 2026-11-10T06:32:04.799Z
+updatedAt: 2026-11-10T06:32:04.799Z

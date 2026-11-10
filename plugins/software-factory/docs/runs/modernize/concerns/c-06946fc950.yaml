@@ -1,0 +1,24 @@
+id: c-06946fc950
+kind: tech-debt
+summary: Production-dead _baseline_helpers module is pinned only by tests
+detail: runner/_baseline_helpers.py (82 lines) and its 31-line stub are unused
+  by src; tests/runner/test_baseline_diff.py:13 imports _compare_sorted.
+  Deleting it requires test-debloat coordination, otherwise the tests keep dead
+  code alive.
+location:
+  file: src/python_setup_lint/runner/_baseline_helpers.py
+  line: 1
+affects:
+  - coding-rules-audit
+  - test-debloat-audit
+severity: medium
+status: routed
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: coding-rules-audit
+  lastSeen: 2026-11-09T23:33:30.977Z
+createdAt: 2026-11-09T23:33:30.977Z
+updatedAt: 2026-11-10T01:22:03.274Z
+disposition: optional

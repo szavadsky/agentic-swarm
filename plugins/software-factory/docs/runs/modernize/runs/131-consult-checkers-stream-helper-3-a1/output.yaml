@@ -1,0 +1,27 @@
+context: item
+decision: retry-with-guidance
+persist: true
+rationale: "Exit 127 on gate 'tests' is unknown-gate (infra gates are
+  format/lint/test/test-integration), not a test failure. Owned work is correct
+  and QA drift is fixed (first-# code_context preserved). Current Diff proves
+  stale-base merge: it reverts I4 M2 merges (_tool_specs split, factories
+  splits, conftest/runner, ADR-019..024) and .factory/state to iteration 4.
+  Merge must be rebased to HEAD with owned-only diff."
+target:
+  gate: test
+text: "Rebase to HEAD, then keep ONLY: src/checkers/_source_stream.py/.pyi
+  (NEW), conformance/bare_except_comment_checker.py,
+  conformance/suppression_justification_checker.py/.pyi (keep '_, comment' +
+  src_line.split('#',1)[0].strip()), stub/checker.py, stub/coverage.py/.pyi,
+  tests/checkers/test_source_stream.py (NEW),
+  tests/assumptions/test_astroid_contracts.py (read_module_source call only),
+  tests/checkers/test_stub_coverage.py (is_under_source_root call only, keep
+  HEAD _factories_stub_coverage import),
+  tests/checkers/test_suppression_justification_checker.py
+  (TestCodeContextDerivation block only). Revert ALL else to HEAD exactly:
+  runner/_tool_specs.*+dispatch.* (keep split), tests/checkers/_factories* (keep
+  split), tests/conftest.py+tests/runner/* (keep HEAD, no /home/slava, no
+  restored deleted tests), docs/adr/ADR-019..024 (keep), .factory/**+state/waves
+  (engine-managed, untouched), lint.baseline+tests/data untouched, _base.py/.pyi
+  empty diff. Verify: diff --stat owned-only, grep .stream() single-owner +
+  decode single-owner, pytest -q green, lint green, integration 9 passed."

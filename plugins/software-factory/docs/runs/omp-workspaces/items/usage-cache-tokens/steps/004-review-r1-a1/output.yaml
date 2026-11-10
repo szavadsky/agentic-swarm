@@ -1,0 +1,15 @@
+status: approved
+summary: "Cache-token plumbing approved: optional types/schemas, zero-default
+  aggregation, NDJSON tolerance, status columns verified green"
+suggestions:
+  - id: dry-has-usage-predicate
+    disposition: optional
+    summary: Duplicate 6-term has-usage guard in step-runner and shutdown
+    detail: Same predicate
+      (inputTokens||outputTokens||cacheReadTokens||cacheWriteTokens||totalTokens||costUsd)
+      in step-runner.ts:849 and shutdown.ts:122. Extract hasUsage(u) helper in
+      src/core/usage.ts alongside addUsage to prevent future drift when fields
+      evolve.
+    location:
+      file: plugins/software-factory/src/core/flows/step-runner.ts
+      line: 849

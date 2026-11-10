@@ -1,0 +1,17 @@
+id: rm-d5301c7af1
+chosen: Real-binary scripted-provider e2e; FakeHarness retained
+alternatives:
+  - "Extend FakeHarness to simulate omp worktrees (rejected: does not exercise
+    the real harness)"
+  - "Mock-binary e2e (rejected: spec explicitly requires the real omp harness)"
+why: Only the real binary satisfies 19.8; FakeHarness keeps the fast
+  deterministic engine suite intact.
+status: open
+source:
+  record: 005-architect-plan-1-a1
+  agent: architect
+  step: architect-plan-1
+  iteration: 1
+  lastSeen: 2026-11-09T23:33:06.263Z
+createdAt: 2026-11-09T23:33:06.263Z
+updatedAt: 2026-11-09T23:33:06.263Z

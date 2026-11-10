@@ -1,0 +1,262 @@
+checks:
+  - id: red-test
+    status: pass
+    message: "red-test passed: all 17 tests fail when prod changes are restored to
+      test-first commit"
+    details:
+      command: uv run pytest tests/runner/test_runner_format_contract.py
+        tests/runner/test_lint_runner.py::TestToolSpec
+        tests/runner/test_lint_runner_stats.py::test_statistics_parsers_given_all_tools_then_covered
+        tests/runner/test_t3_coverage.py::TestParserCompleteness
+        tests/runner/test_testing_fakes.py::test_run_lint_with_fake_dispatch_invariants
+        --junitxml=/home/slava/aiexp/python-setup.factory-wt/.factory-runtime/tmp/junit-redtest-1794140569012-9oh2cks47ed.xml
+      junitCaseCount: 24
+      junitCaseIds:
+        - tests.runner.test_runner_format_contract.TestRuffFormatStrategy.test_ruff_format_build_command_given_normal_pass_then_check_mode
+        - tests.runner.test_runner_format_contract.TestRuffFormatStrategy.test_ruff_format_build_format_command_given_fix_pass_then_mutating_mode
+        - tests.runner.test_runner_format_contract.TestRuffFormatConfig.test_default_config_paths_given_ruff_format_then_ruff_toml
+        - tests.runner.test_runner_format_contract.TestRuffFormatConfig.test_config_flag_for_ruff_format_then_config_flag
+        - tests.runner.test_runner_format_contract.TestRegistryConstants.test_expected_tool_names_given_exported_then_matches_builtins
+        - tests.runner.test_runner_format_contract.TestRegistryConstants.test_formatter_only_and_statistics_parser_tools_partition_all_tools
+        - tests.runner.test_runner_format_contract.TestRegistryConstants.test_record_parser_and_recordless_tools_partition_all_tools
+        - tests.runner.test_runner_format_contract.TestRegistryConstants.test_registry_constants_then_match_parser_tables
+        - tests.runner.test_runner_format_contract.TestRegistryConstants.test_registry_constants_given_runner_then_alias_dispatch_objects
+        - tests.runner.test_runner_format_contract.TestPipelineModes.test_run_lint_without_fix_runs_ruff_format_check_only
+        - tests.runner.test_runner_format_contract.TestPipelineModes.test_run_lint_with_fix_formats_first_then_checks
+        - tests.runner.test_runner_format_contract.TestGoldenToolCounts.test_tool_counts_file_given_registry_then_14_keys_and_ruff_format_zero
+        - tests.runner.test_lint_runner.TestToolSpec.test_tool_spec_given_known_tools_then_present
+        - tests.runner.test_lint_runner.TestToolSpec.test_tool_spec_given_tools_then_autofix_and_no_duplicates
+        - tests.runner.test_lint_runner.TestToolSpec.test_tool_spec_given_yamllint_then_default_paths_is_dot
+        - tests.runner.test_lint_runner.TestToolSpec.test_rumdl_default_paths_is_dot
+        - tests.runner.test_lint_runner_stats.test_statistics_parsers_given_all_tools_then_covered
+        - tests.runner.test_t3_coverage.TestParserCompleteness.test_parser_completeness_given_all_tools_then_have_parser
+        - tests.runner.test_t3_coverage.TestParserCompleteness.test_parser_completeness_given_all_parsers_then_correspond_to_tools
+        - tests.runner.test_t3_coverage.TestParserCompleteness.test_parser_completeness_given_statistics_flags_then_align_with_parsers
+        - tests.runner.test_testing_fakes.test_run_lint_with_fake_dispatch_invariants[all_14_tools_dispatched]
+        - tests.runner.test_testing_fakes.test_run_lint_with_fake_dispatch_invariants[fix_flag_propagates_to_supports_fix_labels]
+        - tests.runner.test_testing_fakes.test_run_lint_with_fake_dispatch_invariants[exclude_flag_propagates_to_supports_exclude_labels]
+        - tests.runner.test_testing_fakes.test_run_lint_with_fake_dispatch_invariants[package_name_none_skips_stubtest_verifytypes]
+      junitTruncated: false
+      collected: true
+      collectionErrors: []
+  - id: test-diff
+    status: pass
+    message: test-diff generated (4 test files, 4653 bytes)
+    details:
+      diff: >-
+        diff --git a/tests/runner/_factories.py b/tests/runner/_factories.py
+
+        index c4277b8..5fa26c8 100644
+
+        --- a/tests/runner/_factories.py
+
+        +++ b/tests/runner/_factories.py
+
+        @@ -37,6 +37,29 @@ InstallFakeFn = Callable[..., Any]
+         ALL_TOOL_NAMES: frozenset[str] = frozenset(t.name for t in TOOLS)
+
+         
+
+         
+        +# Hardcoded 14-name oracle shared by test_lint_runner.py and
+
+        +# test_runner_format_contract.py — the literal lives in exactly one
+
+        +# place so drift-catching assertions don't trip pylint R0801.
+
+        +EXPECTED_BUILTIN_TOOL_NAMES: frozenset[str] = frozenset(
+
+        +    {
+
+        +        "tach check",
+
+        +        "ruff format",
+
+        +        "ruff check",
+
+        +        "rumdl check",
+
+        +        "mypy",
+
+        +        "yamllint",
+
+        +        "ty check",
+
+        +        "mypy.stubtest",
+
+        +        "pyright check",
+
+        +        "pyright verify types",
+
+        +        "pylint",
+
+        +        "pylint-pyi",
+
+        +        "pylint tests",
+
+        +        "detect-secrets",
+
+        +    }
+
+        +)
+
+        +
+
+        +
+         def runner_registry_constant(name: str) -> frozenset[str]:
+             """Return public tool-registry constant *name*, asserting the runner re-exports it.
+
+         
+        diff --git a/tests/runner/test_lint_runner.py
+        b/tests/runner/test_lint_runner.py
+
+        index be8620d..2c085d5 100644
+
+        --- a/tests/runner/test_lint_runner.py
+
+        +++ b/tests/runner/test_lint_runner.py
+
+        @@ -29,7 +29,7 @@ from python_setup_lint.runner.cmd_build import (
+         )
+         from python_setup_lint.runner.output import _print_result
+         from python_setup_lint.testing import fake_run_cmd_factory, make_lint_result
+        -from tests.runner._factories import canned_results_all_tools
+
+        +from tests.runner._factories import EXPECTED_BUILTIN_TOOL_NAMES,
+        canned_results_all_tools
+         from tests.runner._factories_extras import (
+             EXPAND_GLOBS_CASES,
+             FIND_PY_FILES_BOUNDARY_CASES,
+        @@ -50,22 +50,7 @@ class TestToolSpec:
+             """The static 14-tool table invariant."""
+         
+             def test_tool_spec_given_known_tools_then_present(self) -> None:
+        -        assert {t.name for t in TOOLS} == {
+
+        -            "tach check",
+
+        -            "ruff format",
+
+        -            "ruff check",
+
+        -            "rumdl check",
+
+        -            "mypy",
+
+        -            "yamllint",
+
+        -            "ty check",
+
+        -            "mypy.stubtest",
+
+        -            "pyright check",
+
+        -            "pyright verify types",
+
+        -            "pylint",
+
+        -            "pylint-pyi",
+
+        -            "pylint tests",
+
+        -            "detect-secrets",
+
+        -        }
+
+        +        assert frozenset(t.name for t in TOOLS) ==
+        EXPECTED_BUILTIN_TOOL_NAMES
+         
+             def test_tool_spec_given_tools_then_autofix_and_no_duplicates(self) -> None:
+                 assert {t.name for t in TOOLS if t.supports_fix} == {
+        diff --git a/tests/runner/test_lint_runner_stats.py
+        b/tests/runner/test_lint_runner_stats.py
+
+        index 4ce4bd4..ff92bb2 100644
+
+        --- a/tests/runner/test_lint_runner_stats.py
+
+        +++ b/tests/runner/test_lint_runner_stats.py
+
+        @@ -221,7 +221,7 @@ class TestT8FailFastConfig:
+         
+         
+         class TestLintToolRegistry:
+        -    """STRATEGIES/LINT_TOOLS mirror the 13 built-ins AND strategies are
+        LintTool instances."""
+
+        +    """STRATEGIES/LINT_TOOLS mirror the 14 built-ins AND strategies are
+        LintTool instances."""
+         
+             @pytest.mark.parametrize(
+                 "registry",
+        diff --git a/tests/runner/test_runner_format_contract.py
+        b/tests/runner/test_runner_format_contract.py
+
+        index 767cc7b..aa783aa 100644
+
+        --- a/tests/runner/test_runner_format_contract.py
+
+        +++ b/tests/runner/test_runner_format_contract.py
+
+        @@ -21,31 +21,14 @@ from python_setup_lint.runner import STRATEGIES,
+        TOOLS, RunnerConfig, run_lint
+         from python_setup_lint.runner._config import _default_config_paths
+         from python_setup_lint.runner.cmd_build import _config_flag_for
+         from python_setup_lint.testing import FakeRunCmd, fake_run_cmd_factory
+        -from tests.runner._factories import canned_results_all_tools,
+        runner_registry_constant
+
+        +from tests.runner._factories import EXPECTED_BUILTIN_TOOL_NAMES,
+        canned_results_all_tools, runner_registry_constant
+         
+         pytestmark = pytest.mark.no_external_api
+         
+         _CONFIG = RunnerConfig(cwd=Path.cwd())
+         _GOLDEN_COUNTS = Path(__file__).resolve().parent.parent / "data" / "golden" / "minimal_sample_project_tool_counts.json"
+
+         
+        -_EXPECTED_TOOL_NAMES = frozenset(
+
+        -    {
+
+        -        "tach check",
+
+        -        "ruff format",
+
+        -        "ruff check",
+
+        -        "rumdl check",
+
+        -        "mypy",
+
+        -        "yamllint",
+
+        -        "ty check",
+
+        -        "mypy.stubtest",
+
+        -        "pyright check",
+
+        -        "pyright verify types",
+
+        -        "pylint",
+
+        -        "pylint-pyi",
+
+        -        "pylint tests",
+
+        -        "detect-secrets",
+
+        -    }
+
+        -)
+
+        +_EXPECTED_TOOL_NAMES = EXPECTED_BUILTIN_TOOL_NAMES
+         _FORMATTER_ONLY = frozenset({"ruff format"})
+         _RECORDLESS_TOOLS = frozenset({"tach check", "mypy.stubtest", "pyright verify types", "detect-secrets", "ruff format"})
+         _REGISTRY_CONSTANT_NAMES = (
+      files:
+        - tests/runner/_factories.py
+        - tests/runner/test_lint_runner.py
+        - tests/runner/test_lint_runner_stats.py
+        - tests/runner/test_runner_format_contract.py

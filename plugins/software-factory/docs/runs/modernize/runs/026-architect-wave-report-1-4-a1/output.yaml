@@ -1,0 +1,18 @@
+context: wave
+decision: continue
+rationale: Wave 4 empty (0 merged/failed/blocked), tree clean, all 4 gates
+  baseline-identical with zero regressions. Empty waves 3-4 are explained by
+  stale runtime items (wave3-5 originals still snapshotting dep on superseded
+  golden-findings-snapshot); plan already carries the fix (split outlines
+  golden-helpers-unit + golden-snapshot-wiring, downstream deps rewired to
+  wiring). Helpers-unit deps are satisfied (probe merged), so M1 critical path
+  is runnable with no plan change; v2 items with correct deps follow wiring.
+  Preserving amendment budget; no merged history touched.
+text: "Next: schedule golden-helpers-unit (fast, synthetic-only, no pipeline)
+  then golden-snapshot-wiring; engine should skip/cancel stale wave3-5 originals
+  snapshotting the superseded dep (v2 items with wiring deps are the live
+  copies; same outlineRef merges once). Wiring acceptance stays
+  baseline-relative (6 pre-existing 13-vs-14 failures persist; no new failures;
+  regen twice byte-identical). Temp copies only, never bare uv run lint; do not
+  touch .factory records. Baseline SIM102/W9704/R0914/C0208 + tool-count tests
+  stay scoped to M3 audits/iter2."

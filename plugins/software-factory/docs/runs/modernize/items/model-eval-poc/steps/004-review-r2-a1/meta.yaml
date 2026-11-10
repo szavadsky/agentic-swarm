@@ -1,0 +1,19 @@
+seq: 4
+name: review
+attempt: 1
+fixRound: 2
+agent: reviewer
+role: alt-workhorse
+models:
+  - opencode-go/muse-spark-1.3-contributor
+  - opencode-go/deepseek-v4.1-flash
+timeoutSec: 900
+status: ok
+startedAt: 2026-11-08T14:21:57.279Z
+session: 01a1bb89-9279-7654-af7b-61f2f7b902fd
+endedAt: 2026-11-08T14:32:46.263Z
+usage:
+  inputTokens: 408541
+  outputTokens: 31598
+  costUsd: 0.070988
+traceRef: /home/slava/aiexp/python-setup.factory-wt/.factory-runtime/sessions/2026-11-08T14-21-57-753Z_01a1bb89-9279-7654-af7b-61f2f7b902fd.jsonl

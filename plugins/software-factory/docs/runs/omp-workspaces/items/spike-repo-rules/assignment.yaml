@@ -1,0 +1,26 @@
+slug: spike-repo-rules
+kind: fact-finder
+title: "Spike: repo-rules sources + omp injection audit"
+assignment: "Fact-finder spike, no prod code. 1) Enumerate rule/context sources
+  (AGENTS.md/CLAUDE.md/.cursorrules/.omp/rules, root plus subdirs) and
+  precedence via omp docs plus config inspection. 2) With a sentinel fixture
+  repo (unique temp dir), probe root omp processes with and without
+  --system-prompt and with/without contextFiles.extra and --no-context-files;
+  record whether the sentinel is injected (double-injection risk). 3) Map
+  per-role hydration seams (architect/developer/qa/reviewer prompt rendering)
+  and define the M8 verification plan (probe agents quote sentinel). Outputs:
+  items/{item}/findings.md with source/precedence table and probe matrix, full
+  draft for plugins/software-factory/docs/spikes/omp-6-repo-rules.md, draft
+  decision YAML {status, decision, evidence, followUps} stating sources,
+  precedence, double-inject verdict. Constraints: read-only on repo prod paths;
+  cwd=plugins/software-factory; throwaway profile/repos; hydration
+  implementation deferred to M8. Acceptance: answers M1 repo-rules scenario."
+outlineRef: spike-repo-rules
+milestone: m1-omp-de-risk
+wave: 1
+scenarioRefs:
+  - m1-omp-de-risk:scenario-4
+citations:
+  - docs/factory.v2.md:104-113
+  - plugins/software-factory/docs/OMP_ADAPTER.md:163-168
+  - plugins/software-factory/docs/ARCHITECTURE.md:40

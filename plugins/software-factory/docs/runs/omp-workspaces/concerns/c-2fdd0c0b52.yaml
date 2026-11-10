@@ -1,0 +1,27 @@
+id: c-2fdd0c0b52
+kind: risk
+summary: Resume passes @role without verifying the recorded
+  model/thinking/tools/system prompt, so config/fallback changes silently cause
+  cold resumes
+detail: harness.ts:318-326 forces a single `@role` candidate on resume. The role
+  is re-resolved against the current overlay each turn; a pipeline role-map
+  change, or a fallback model used on a fresh turn, switches the model on resume
+  and pays a full cold read (measured cacheRead=0, cost 8.9x warm).
+  Tools/system-prompt/thinking changes similarly invalidate but are not recorded
+  in step meta.
+location:
+  file: plugins/software-factory/src/harness/omp/harness.ts
+  line: 318
+affects:
+  - 20a
+severity: medium
+status: routed
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: spike-cache-key
+  lastSeen: 2026-11-10T00:16:23.859Z
+createdAt: 2026-11-10T00:16:23.859Z
+updatedAt: 2026-11-10T01:53:41.429Z
+disposition: architect

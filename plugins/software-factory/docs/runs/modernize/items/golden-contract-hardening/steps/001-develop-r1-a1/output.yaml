@@ -1,0 +1,53 @@
+status: ok
+summary: "Hardened the golden contract in tests only: collect_findings now takes
+  config positionally, preserves pipeline tool order (no sort) and is
+  empty-safe; test_setup_new_and_lint asserts a non-empty post-collect result
+  while retaining the first-run [CRASH] and SKIPPED-only-package_name guards;
+  the overlay test slices with shared slice_tool_section; and a fresh-copy
+  double-collect determinism check serializes both runs and compares SHA-256
+  digests plus committed findings/counts bytes via new
+  assert_golden_byte_identical and collect_sample_findings helpers.
+  tests/test_golden.py gained synthetic coverage for empty-list
+  serialization/round-trip, pipeline-order preservation, empty collection, and
+  explicit Counter-multiset diff keys; no Finding CRASH sentinel was introduced.
+  tests/integration.py remains within the 500-line pylint limit (498)."
+target:
+  command: uv run pytest tests/test_golden.py tests/integration.py -q
+  customTarget: true
+evidence:
+  - uv run pytest tests/test_golden.py
+    tests/integration.py::TestMinimalSampleProject::test_setup_new_and_lint
+    tests/integration.py::TestMinimalSampleProject::test_config_overlay -q -> 33
+    passed in 48.17s after the final refactor
+  - uv run pytest tests/integration.py -q -> 9 passed in 80.96s (determinism
+    double-collect was exercised in test_setup_new_and_lint)
+  - uv run pytest -q -> 1357 passed, 4 skipped, 18 deselected in 35.73s
+  - uv run ruff check --config config/ruff.toml tests/integration.py
+    tests/test_golden.py tests/_golden.py tests/_project_helpers.py -> All
+    checks passed; ruff format --check with the same config -> 3/4 files already
+    formatted (integration/test_golden/_golden checked pre-helper; ruff check
+    includes format-compatible edits)
+  - uv run pylint --rcfile config/.pylintrc-tests tests/_project_helpers.py
+    tests/_golden.py tests/test_golden.py tests/integration.py -> 10.00/10, no
+    messages (no C0302 after line reduction)
+  - wc -l tests/integration.py -> 498 (under max-module-lines=500)
+  - uv run lint --baseline lint.baseline -> no violations from changed test
+    files; only pre-existing unrelated baseline deltas (pylint-pyi
+    too-many-locals in src/python_setup_lint/runner/cli.py:51, ruff SIM102 in
+    src/python_setup_lint/checkers/stub/coverage.py:196) and detect-secrets
+    noise from tracked .factory orchestration records
+  - "Determinism check: assert_golden_byte_identical compares both fresh-copy
+    serialize_findings payloads byte-for-byte against the committed findings
+    golden and compares SHA-256 digests; it also compares both runs'
+    serialize_tool_minimums payloads against the committed counts golden; the
+    integration test passes both copies"
+concerns:
+  - Plain `uv run lint` still exits non-zero because detect-secrets scans
+    tracked .factory/tasks/** orchestration records and a couple of pre-existing
+    src violations; these are outside this test-only assignment and unrelated to
+    the changed files.
+  - The second fresh-copy collect roughly doubles the golden integration test
+    runtime (~48-80s).
+notes: All edits are confined to tests/_golden.py, tests/_project_helpers.py,
+  tests/integration.py, and tests/test_golden.py; committed golden data and
+  counts files were not modified.

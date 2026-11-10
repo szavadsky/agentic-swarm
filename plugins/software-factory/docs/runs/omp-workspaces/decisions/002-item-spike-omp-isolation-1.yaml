@@ -1,0 +1,33 @@
+id: decision-spike-omp-isolation-1794274838050
+context: item
+item: spike-omp-isolation
+afterRecord: 002-research-r1-a2
+decision: accept-with-debt
+timestamp: 2026-11-10T01:40:38.050Z
+rationale: "Spike met its acceptance (M1 scenario-1): backend values, retention
+  matrix, root-process mapping, task.isolation semantics, preflight probe
+  definition, and resolvability probes all delivered (probes 17/24/27, findings
+  F4/F6, draft omp-3-isolation.md + decision YAML). No fix requested; both
+  [ARCHITECT] notes are iteration-2 plan scope (M3/M4 already replanAfter).
+  Accept so findings merge at wave end for iteration-2 epic planning."
+text: "Rulings (iteration-2 planning; no spike rework): (1) PREFLIGHT: no-op
+  confirmed and accepted as evidence — bogus overlay keys pass (BADKEY_OK rc=0)
+  and missing overlay is silently ignored by --version (rc=0). M4 schedules a
+  dev item replacing preflight.ts:364-394 with static key/enum/catalog
+  validation plus exactly one real isolated round-trip turn per findings F6
+  (cheapest validating probe; --version/config-get never validate). (2)
+  ISOLATION MAPPING RATIFIED: factory root default = omp worktree add -b
+  <topic-branch> <path> <base> -C <repo> then omp --cwd <path> -p; isolation:
+  engine preserved as fallback with unchanged semantics (idempotent
+  create/reuse, stale pruning). Draft workspaces.omp/taskIsolation config
+  surface accepted as M3 starting point; M3 must keep topic/* branch naming and
+  engine merge ownership (parent-into-child, gates, child-into-parent)
+  regardless of backend."
+debt: "spike-omp-isolation follow-ups deferred to iteration 2: (1) M4 dev item
+  replacing the preflight omp --config --version no-op (preflight.ts:364-394)
+  with key/enum/catalog validation plus one real isolated round-trip turn per
+  findings F6 (probes 17/27: bogus keys pass rc=0, missing overlay silently
+  ignored rc=0); (2) M3 workspace-backend dev implementing ratified root mapping
+  omp worktree add -b <topic-branch> <path> <base> -C <repo> then omp --cwd
+  <path> -p with isolation: engine fallback and draft
+  workspaces.omp/taskIsolation config surface."

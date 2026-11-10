@@ -1,0 +1,750 @@
+{
+ "intentional: need delete=false + manual cleanup in finally": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "": {
+  "label": false,
+  "note": "placeholder: empty justification"
+ },
+ "ruff_path comes from shutil.which(\"ruff\"), a trusted project tool": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "ruff not installed — fall back to default rev; no action needed": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "pyright: main is dict[unknown, unknown] from pyproject.toml parsing, not dict[str, object]": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "dict[str, object]; setdefault overloads conflict": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "best-effort state file parse fallback; logging would noise unavoidable parse/io degrade": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "cli entry point, signature fixed by setup api; @beartype cannot resolve path forward ref": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "typed factory: provides message-id-keyed dict with messagedef values, not a raw dict": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "best-effort path relative-to fallback; logging would noise unavoidable path-mismatch degrade": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "best-effort file path extraction fallback; logging would noise unavoidable attribute/type degrade": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "mixin: super().__init__ called with linter arg; basechecker.__init__ accepts it via mro": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "mixin: basechecker.__init__ accepts linter arg via mro": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "mixin: self.linter resolved at runtime via mro; @beartype cannot resolve forward ref": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "mixin: self.linter exists when mixed with basechecker": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "mixin: linter attr from basechecker": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "mixin: _source_roots resolved at runtime via mro; @beartype cannot resolve forward ref": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "mixin: _check_function defined in subclass; @beartype cannot resolve forward ref": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "mixin: _check_function defined in subclass": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "circular import — asyncfunctiondef not available at runtime": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "optional semantic extra": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "expected on first run, cache file doesn't exist yet": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "module-level cache reset requires global": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "lazy-load singleton requires global": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "lazy-init result cache requires global": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "brief one-liner, not usage docs": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "pylint entry point, signature fixed by pylint api; one-liner, not usage docs": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "private helper; return semantics evident from type + name; semantic helper: wraps any() with a specific predicate for bare-raise detection": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "modulenode has stream() at runtime": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "best-effort stream access fallback; logging would noise unavoidable attribute/io degrade": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "best-effort stream read fallback; logging would noise unavoidable io degrade": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "pylint entry point, signature fixed by pylint api; @beartype cannot resolve pylinter forward ref": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "sourcerootmixin.options conflicts with basechecker.options; both define the same pylint options tuple": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "value_node is nodeng | proxy; _extract_type_name accepts nodeng": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "extract the value type name": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "pylinter is a pylint internal type not available at runtime for beartype": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "guaranteed by _is_not_isinstance_guard": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "astroid's args/annotations are list | none; at runtime always list": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "node is modulenode from astroid, stream() exists at runtime": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "node is object; add_message expects nodeng | none": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "nodes.annassign is type_checking-only; @beartype cannot resolve forward ref": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "parent.stream() returns a stream object with .read()": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "best-effort source line extraction; silently skip if unavailable": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "annotation is nodeng; add_message expects nodeng | none": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "ast_node may not be a module (e.g. functiondef/classdef); fallback guard for non-doc_node astroid versions": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "best-effort body attr fallback; logging would noise unavoidable attribute degrade": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "node is modulenode at runtime; nodes_of_class is available": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "node is functiondef/asyncfunctiondef/classdef at runtime; nodes_of_class available": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "node may not have nodes_of_class (e.g. non-module node); fall back to empty spans # best-effort fallback; logging would noise unavoidable attribute degrade": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "astroid's arguments.args is list[assignname] | none; at runtime it's always a list": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "count function parameters (excluding self/cls)": {
+  "label": false,
+  "note": "not a justification: descriptive code comment, not a reason for suppression"
+ },
+ "self@stubchecker is stubchecker at runtime": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "── trivial test data modules (outside source root) exempt ────────": {
+  "label": false,
+  "note": "not a justification: section header, not a reason for suppression"
+ },
+ "dict value type is wider at runtime": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "private symbol removed from .pyi per m3(b); runtime import still works": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "stubchecker is type_checking-only; beartype can't resolve at runtime": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "bases is list[successfulinferenceresult]; _normalize_bases accepts sequence[nodeng]": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "best-effort type inference fallback; logging would noise unavoidable inference degrade": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "malformed annotation string — fall through to repr": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "argv is constructed internally; cwd is lint scope": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "best-effort git subprocess fallback; logging would noise unavoidable tool-not-found/timeout degrade": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "best-effort ruff subprocess fallback; logging would noise unavoidable tool-not-found degrade": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "best-effort snapshot read fallback; logging would noise unavoidable file-not-found/dir degrade": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "dict value is object; int() expects str | buffer | supportsint": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "best-effort pyproject parse fallback; logging would noise unavoidable parse/io degrade": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "nested dict access; mypy cannot infer the deep key": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "best-effort config key lookup fallback; logging would noise unavoidable key-missing degrade": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "best-effort version lookup fallback; logging would noise unavoidable package-not-found degrade": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "best-effort int parse fallback; logging would noise unavoidable parse degrade": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "best-effort json parse fallback; logging would noise unavoidable parse degrade": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "path outside cwd — return original; fallback behavior": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "best-effort baseline write fallback; logging would noise unavoidable io degrade": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "_diff_baseline needs several locals for the two-pointer diff, crash/add/remove separation; 20 would be cramped": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "best-effort baseline read fallback; logging would noise unavoidable parse/io degrade": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "best-effort stat fallback; logging would noise unavoidable io degrade": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "best-effort config read fallback": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "read-only cwd or permission error; fall back to shared config": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "542 lines — 14-tool registry + 7 strategy subclasses; splitting would scatter the single-source registry": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "raw is list[object]; validated as list[str] above": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "config_flag_raw is list[object]; validated as list[str] above": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "only imported when memory limit is active": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "non-posix or rlimit unavailable; rely on timeout alone": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "cmd is constructed internally from toolspec; cwd is lint scope": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "best-effort subprocess fallback; logging would noise unavoidable tool-not-found degrade": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "timeout: tool exceeded limit; return timeout result so runner continues": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "json.loads returns any, narrowed by isinstance below": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "usage docs in .pyi": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "best-effort checker discovery fallback; logging would noise unavoidable import failures": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "uv is a trusted project tool; subprocess.run is the standard interface for running external commands": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "best-effort uv subprocess fallback; logging would noise unavoidable tool-not-found degrade": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "best-effort uv subprocess fallback; logging would noise unavoidable timeout degrade": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "symlink read failed — fall through to content comparison; best-effort": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "file read failed — fall through to create symlink; best-effort": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "symlink failed — fall back to copy; best-effort": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "pyi stub setupstate vs .py setupstate": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "release_messages() returns list[messagetest]; callers access .msg_id/.args": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "tool labels are identifiers, a legitimate string-key category": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "fake matches _run_cmd signature; unused in fake": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "pre-commit is a trusted project tool; subprocess.run is the standard interface for running external commands": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "pre-commit is a trusted project tool; full path not needed for well-known tool": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "private symbol absent from cli.pyi; runtime import works": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "private symbol absent from cli.pyi stub; runtime import works": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "non-json tool output is the expected path; text record parser handles it": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "data tables are free loc per file docstring; parametrize rows don't count against per-file loc gate": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "test helper: type-specific alias for _make_tc_factory, avoids repeated imports": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "test data; any needed for heterogeneous pytest params": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "test fixture builds typed list from any checker introspection": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "list[any] is a test factory return type; any needed for heterogeneous test cases": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "test helper; readability over dry": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "504 lines — test module for semantic nlp pipeline; splitting would lose shared fixture context": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "__builtins__ is a module": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "private symbols removed from .pyi per m3(b); runtime import still works": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "code_context string contains suppression pattern as test data, not a real suppression": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "private import for white-box testing": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "private symbols removed from .pyi per m3(b); runtime import still works; private import for white-box testing": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "test helper: counts messages by msg_id": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "fixture uses yield; generator return type not needed for pytest": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "conditional import after module-level check": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "private symbols removed from .pyi per m3(b); runtime import still works; pylint: disable=wrong-import-position # conditional import after module-level check": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "parametrize table has 9 columns; test functions inherently have many args": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "test helper: shorter alias for _extract_param_descriptors": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "checker=none is valid; test creates checker-less test case": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "test fixture; none is valid sentinel for classcomparisonctx": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "parametrize table has 5 columns; test functions inherently have many args": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "test helper: typed alias for astroid.parse with default module_name": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "test helper: counts docstring-in-impl messages": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "test helper: counts generic-return-requires-returns messages": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "test helper: extracts msg_ids with clear semantic name": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "test helper: filters and extracts args by msg_id": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "comment contains suppression pattern as documentation; test verifies mixed-match detection": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "test data contains suppression pattern to verify mixed-match detection": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "docstring contains suppression pattern; test verifies it's not flagged": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "comment contains suppression pattern as documentation; test verifies justified suppression after string literal": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "test data verifies justified suppression after string literal": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "fixture binding write_baseline to tmp_path; readability over dry": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "fixture returning a constant path; readability over dry": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "planted: any used in annotations; classvar used below": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "import after usage for grouping": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "simplified stand-in for test purposes": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "planted violation": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "should trigger missing-module-stub-for-import": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "should trigger missing-import-declaration": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "should trigger star-import-unresolvable": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "dict[str, lintresult] is a test helper; string keys are fixture labels": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "test helper; filenotfounderror is expected during cleanup": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "test helper; string keys are tool labels": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "dict[str, lintresult] is a test helper; string keys are tool labels": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "dict[str, any] is a test helper; values are runnerconfig kwargs of mixed types": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "public api alias: provides a self-documenting name for test consumers; inlining would force callers to understand find_tool_entry's semantics": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "502 lines — factory data for 14 tools; splitting would lose context": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "test factory module; parametrized cases need space": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "string literal contains noqa pattern text, not a real suppression": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "test helper inner functions; readability over dry": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "thin sorted wrapper; readability alias for sort key": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "test helper; exception expected": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "benchmark test needs many local vars for per-tool measurements": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "pytest fixture wrapper: provides a self-documenting fixture name for test parameterization; inlining would lose the fixture identity": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "test function delegates to _expect_error": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "parametrized test with 8 args; pylint default is 5": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "test file with many parametrised classes; splitting would hurt readability": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "test function; signature varies by parametrize": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "integration test suite; splitting would lose shared fixture context": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "parametrized test with 6 args; pylint default is 5": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "parametrized tests with 6 args; pylint default is 5": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "hypothesis test wrapper; delegation pattern required by framework": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "dynamic import hides type; runtime reference for restoration": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "_read_pyproject_toml returns dict[str, object] | none; dict key access on object is valid at runtime": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "d is dict[str, object] | none at runtime; _set_pylint_load_plugins expects dict[str, object]": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "d is dict[str, object] | none at runtime; _write_pyproject_toml expects dict[str, object]": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "_read_pyproject_toml returns dict[str, object] | none; _get_pylint_load_plugins expects dict[str, object]": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "dynamic import hides type; subprocess.run accessed via module reference": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "dynamic import hides type; assigning callable to subprocess.run": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "dynamic import hides type; restoring original reference": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "cp is dict[str, str] at runtime; _set_pylint_load_plugins expects dict[str, object]": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "cp is dict[str, str] at runtime; _get_pylint_load_plugins expects dict[str, object]": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "d has nested object values; _set_pylint_load_plugins expects dict[str, object]": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "d has nested object values; _get_pylint_load_plugins expects dict[str, object]": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "_read_pyproject_toml returns dict|none; caller guards with assert": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "parametrized callable; type varies by fixture": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "_read_pyproject_toml returns dict|none; fixture ensures valid project": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "object-typed variable from release_messages()": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "config_paths is dict[str, path]; index access is valid at runtime": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "config_paths is dict[str, path]; 'in' check is valid at runtime": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "test helper; exception expected during cleanup": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "test helper; check=false is valid at runtime": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "test helper for readability": {
+  "label": true,
+  "note": "specific technical reason"
+ },
+ "fixture parameter shadows module-level state fixture": {
+  "label": true,
+  "note": "specific technical reason"
+ }
+}

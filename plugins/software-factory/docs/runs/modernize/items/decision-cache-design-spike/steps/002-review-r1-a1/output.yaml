@@ -1,0 +1,88 @@
+status: approved
+summary: PoC feasible, isolated to poc/, 26/26 proofs + 21/21 writer tests
+  reproduce; optionals only
+suggestions:
+  - id: scoped-merge-unvalidated-files
+    disposition: optional
+    summary: Scoped merge retains unvalidated file paths, breaking strict-load
+      round-trip
+    detail: merge_refresh unions observation.file without source_relpath validation;
+      probed scoped merge retaining ('../evil.py',) which _validate_entry then
+      rejects (absolute/.. check). Full-scope path prunes via is_file so
+      unprobed case vanished, but scoped retain path persists it. Impl should
+      validate/normalize observed files via source_relpath before union.
+    location:
+      file: .factory/tasks/modernize/items/decision-cache-design-spike/poc/decision_cache.py
+      line: 636
+  - id: pass-files-drops-dirs
+    disposition: optional
+    summary: _pass_files hardcodes src/tests partition, drops other dirs
+    detail: "Probed: docs/d.py and scripts/s.py fall out of all three passes
+      (src/*.py, *.pyi, tests/*.py). Production runner lints broader scopes;
+      impl must derive per-pass file sets from runner-resolved targets, not
+      src/tests prefixes."
+    location:
+      file: .factory/tasks/modernize/items/decision-cache-design-spike/poc/refresh_cli.py
+      line: 218
+  - id: singular-path-vs-plural-docs
+    disposition: optional
+    summary: CLI implements singular --path but docs claim [--path ...]
+    detail: parser.add_argument('--path') with no nargs/append/action; contract text
+      and verdict say [--path ...]. Either implement repeatable --path or
+      correct prose to singular before impls copy the shape.
+    location:
+      file: .factory/tasks/modernize/items/decision-cache-design-spike/poc/refresh_cli.py
+      line: 344
+  - id: merge-dump-conflict-inconsistency
+    disposition: optional
+    summary: Merge last-wins conflicts while dump raises on them
+    detail: "Probed: merge_refresh overwrites True with later False observation
+      (last sorted file wins, documented) but dump_entries raises
+      CacheCorruptError on conflicting decisions for same key. Pick one conflict
+      semantic for impl (prefer documented last-wins with stable order, or
+      fail-loud in both)."
+    location:
+      file: .factory/tasks/modernize/items/decision-cache-design-spike/poc/decision_cache.py
+      line: 640
+  - id: non-posix-lock-silent-noop
+    disposition: optional
+    summary: Non-POSIX lock path silently provides no mutual exclusion
+    detail: refresh_lock yields unconditionally when fcntl is None, so concurrent
+      refresh on Windows would interleave read-modify-write. Impl needs msvcrt
+      fallback or loud failure, plus lock-file ignore rule already noted in
+      README.
+    location:
+      file: .factory/tasks/modernize/items/decision-cache-design-spike/poc/decision_cache.py
+      line: 575
+  - id: three-pass-partial-refresh
+    disposition: optional
+    summary: Three sequential lock+merge+write passes leave partial-refresh window
+    detail: run_refresh loops pylint/pylint-pyi/pylint-tests each doing full
+      refresh(); crash between passes leaves 1-2 passes merged. Each write is
+      atomic but the refresh as a whole is not. Impl should collect all three
+      passes then single merge+write, or document crash-recovery as re-run
+      refresh.
+    location:
+      file: .factory/tasks/modernize/items/decision-cache-design-spike/poc/refresh_cli.py
+      line: 265
+  - id: stored-key-schema-extension
+    disposition: optional
+    summary: Stored key field plus sort tie-break extends pinned schema
+    detail: Contract pins entries
+      {justification,rule,model,decision,files}+{version,prompt_hash,last_seen}
+      sorted by (rule,justification,model); PoC adds derived key field and
+      (…,key) tie-break. Harmless and deterministic but impls should confirm the
+      extension is intended vs recomputing key at read time.
+    location:
+      file: .factory/tasks/modernize/items/decision-cache-design-spike/poc/decision_cache.py
+      line: 523
+  - id: committed-regenerable-tmp
+    disposition: optional
+    summary: Committed 476K regenerable poc/tmp plus timing-churned proofs.json
+    detail: poc/tmp (encoding_lab/memory_time/proofs fixtures) regenerates on every
+      run_proofs.py invocation; proofs.json embeds per-check seconds + head hash
+      so my re-run dirtied the tree. Consider gitignoring poc/tmp, __pycache__,
+      .ruff_cache and dropping seconds/head from committed proofs.json.
+    location:
+      file: .factory/tasks/modernize/items/decision-cache-design-spike/poc/run_proofs.py
+      line: 70

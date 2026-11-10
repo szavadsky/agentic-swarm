@@ -1,0 +1,18 @@
+id: rm-057ed6485e
+chosen: Count lint and test as IMPROVED per Gate Diff table (baseline=fail,
+  now=pass) with no regressions
+alternatives:
+  - Treat lint/test now=pass as unrelated noise and keep baseline red
+  - Infer fixes from raw output text comparison
+why: Gate Diff is the authoritative signal; raw text differs run to run by
+  timing/ordering/truncation and must not be compared
+status: routed
+source:
+  record: 149-wave-close-up-5-6-a1
+  agent: wave-close-up
+  step: wave-close-up-5-6
+  iteration: 5
+  lastSeen: 2026-11-09T22:19:17.543Z
+createdAt: 2026-11-09T22:19:17.543Z
+updatedAt: 2026-11-10T02:32:36.259Z
+disposition: optional

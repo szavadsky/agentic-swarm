@@ -1,0 +1,11 @@
+wave: 1
+iteration: 1
+status: has_failures
+mergedItems: []
+failedItems:
+  - spike-omp-isolation
+  - spike-mock-provider
+  - spike-cache-key
+  - spike-repo-rules
+blockedItems: []
+summary: "Wave 1 completed. Merged items: "

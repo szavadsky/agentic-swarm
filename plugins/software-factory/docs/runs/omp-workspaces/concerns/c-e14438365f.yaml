@@ -1,0 +1,24 @@
+id: c-e14438365f
+kind: risk
+summary: Isolation patch dir is TMPDIR-dependent, outside gc scope
+detail: Patch captures reported under
+  .factory-runtime/tmp/omp-eval-agent-<id>/*.patch, but the eval temp base
+  follows TMPDIR, so the path varies by host/env. gc/status must resolve the
+  actual tmp base plus concurrent agent ids instead of hard-coding one dir;
+  locks must cover concurrent agent ids.
+location:
+  file: .factory/tasks/omp-workspaces/items/spike-omp-isolation/steps/002-research-r1-a2/output.yaml
+  line: 479
+affects:
+  - "19.3"
+severity: medium
+status: routed
+source:
+  record: 003-review-r1-a1
+  agent: reviewer
+  step: review
+  item: spike-omp-isolation
+  lastSeen: 2026-11-10T01:40:18.815Z
+createdAt: 2026-11-10T01:40:18.815Z
+updatedAt: 2026-11-10T01:53:41.429Z
+disposition: architect

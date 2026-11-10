@@ -1,0 +1,9 @@
+id: awareness-plan-5-orphan-enforcement-gap
+ref: plan-5
+disposition: human-awareness
+question: ORPHAN (stubtest-only, pyi-underscore orphan-only) leaves ~205 latent
+  symbols + 42/43 findings unenforced; FIX needs temp-tree+cleanup+regen.
+  Architect may choose with spike evidence; operator should note gap
+  (stubtest≠style).
+status: open
+createdAt: 2026-11-09T09:40:54.986Z

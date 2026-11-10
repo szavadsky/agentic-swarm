@@ -1,0 +1,2314 @@
+checks:
+  - id: red-test
+    status: fail
+    message: "red-test failed: test
+      tests/integration.py::TestMinimalSampleProject::test_setup_new_and_lint
+      passes even without production code changes. Command: uv run pytest
+      tests/integration.py::TestMinimalSampleProject::test_setup_new_and_lint
+      --junitxml=/home/slava/aiexp/python-setup.factory-wt/.factory-runtime/tmp\
+      /junit-redtest-1794117087768-jjh37ht0tu8.xml"
+    details:
+      command: uv run pytest
+        tests/integration.py::TestMinimalSampleProject::test_setup_new_and_lint
+        --junitxml=/home/slava/aiexp/python-setup.factory-wt/.factory-runtime/tmp/junit-redtest-1794117087768-jjh37ht0tu8.xml
+      junitCaseCount: 1
+      junitCaseIds:
+        - tests.integration.TestMinimalSampleProject.test_setup_new_and_lint
+      junitTruncated: false
+      collected: true
+      collectionErrors: []
+    output: |-
+      ============================= test session starts ==============================
+      platform linux -- Python 3.14.4, pytest-9.1.0, pluggy-1.6.0
+      rootdir: /home/slava/aiexp/python-setup.factory-wt/.factory-runtime/tmp/red-test-wt-CSNw2e
+      configfile: pyproject.toml
+      plugins: tach-0.35.0, hypothesis-6.155.7, typeguard-4.5.2
+      collected 1 item
+      [Tach] 1 test in 4 files unaffected by changes. Skip with: pytest --tach
+      [Tach] To disable: pytest -p no:tach (https://docs.gauge.sh/usage/commands#using-the-pytest-plugin-directly)
+
+      tests/integration.py .                                                   [100%]
+
+      - generated xml file: /home/slava/aiexp/python-setup.factory-wt/.factory-runtime/tmp/junit-redtest-1794117087768-jjh37ht0tu8.xml -
+      ============================== 1 passed in 40.86s ==============================
+  - id: test-diff
+    status: pass
+    message: test-diff generated (2 test files, 23722 bytes)
+    details:
+      diff: >-
+        diff --git a/tests/data/golden/minimal_sample_project_findings.json
+        b/tests/data/golden/minimal_sample_project_findings.json
+
+        new file mode 100644
+
+        index 0000000..4a5aeab
+
+        --- /dev/null
+
+        +++ b/tests/data/golden/minimal_sample_project_findings.json
+
+        @@ -0,0 +1,1108 @@
+
+        +[
+
+        +  {
+
+        +    "col": null,
+
+        +    "file": "src/minimal_sample/dup_target.py",
+
+        +    "line": 4,
+
+        +    "rule": "no-untyped-def",
+
+        +    "tool": "mypy"
+
+        +  },
+
+        +  {
+
+        +    "col": null,
+
+        +    "file": "src/minimal_sample/mod.pyi",
+
+        +    "line": 12,
+
+        +    "rule": "valid-type",
+
+        +    "tool": "mypy"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/dup_target.py",
+
+        +    "line": 1,
+
+        +    "rule": "missing-module-stub",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/dup_target.py",
+
+        +    "line": 4,
+
+        +    "rule": "missing-return-annotation",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/import_target.py",
+
+        +    "line": 1,
+
+        +    "rule": "docstring-in-impl",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 1,
+
+        +    "rule": "docstring-in-impl",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 1,
+
+        +    "rule": "missing-import-declaration",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 1,
+
+        +    "rule": "missing-module-stub-for-import",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 1,
+
+        +    "rule": "signature-mismatch",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 1,
+
+        +    "rule": "star-import-unresolvable",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 1,
+
+        +    "rule": "symbol-kind-mismatch",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 9,
+
+        +    "rule": "unjustified-suppression",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 14,
+
+        +    "rule": "import-error",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 13,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 21,
+
+        +    "rule": "unnamed-tuple-dict-value",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 11,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 22,
+
+        +    "rule": "unnamed-tuple-dict-value",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 15,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 32,
+
+        +    "rule": "generic-key-dict",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 41,
+
+        +    "rule": "unjustified-suppression",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 49,
+
+        +    "rule": "unjustified-suppression",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 37,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 63,
+
+        +    "rule": "unjustified-suppression",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 45,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 63,
+
+        +    "rule": "unjustified-suppression",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 64,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 63,
+
+        +    "rule": "unjustified-suppression",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 71,
+
+        +    "rule": "missing-beartype",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 79,
+
+        +    "rule": "missing-beartype",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 4,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 82,
+
+        +    "rule": "no-try-import",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 4,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 82,
+
+        +    "rule": "silent-except",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 90,
+
+        +    "rule": "missing-beartype",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 15,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 92,
+
+        +    "rule": "asyncio-timeout",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 100,
+
+        +    "rule": "missing-beartype",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 100,
+
+        +    "rule": "trivial-wrapper",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 9,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 107,
+
+        +    "rule": "use-structlog",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 114,
+
+        +    "rule": "missing-beartype",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 4,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 115,
+
+        +    "rule": "use-structured-logging",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 122,
+
+        +    "rule": "docstring-in-impl",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 122,
+
+        +    "rule": "missing-beartype",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 139,
+
+        +    "rule": "generic-return-requires-returns",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 144,
+
+        +    "rule": "docstring-in-impl",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 144,
+
+        +    "rule": "missing-beartype",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 4,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 155,
+
+        +    "rule": "unnecessary-pass",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 161,
+
+        +    "rule": "wrong-import-position",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 167,
+
+        +    "rule": "wrong-import-position",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 173,
+
+        +    "rule": "unused-wildcard-import",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 173,
+
+        +    "rule": "wildcard-import",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 173,
+
+        +    "rule": "wrong-import-position",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 179,
+
+        +    "rule": "annotation-mismatch",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 185,
+
+        +    "rule": "impl-missing-annotation",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 191,
+
+        +    "rule": "annotation-unverifiable",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 198,
+
+        +    "rule": "missing-beartype",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 206,
+
+        +    "rule": "missing-beartype",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 215,
+
+        +    "rule": "missing-return-annotation",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 231,
+
+        +    "rule": "missing-return-annotation",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 8,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 255,
+
+        +    "rule": "missing-error-chain",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 8,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 255,
+
+        +    "rule": "raise-missing-from",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 4,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 263,
+
+        +    "rule": "redundant-type-guard",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 4,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 275,
+
+        +    "rule": "bare-except-comment",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 4,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 275,
+
+        +    "rule": "silent-except",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/no_stub_module.py",
+
+        +    "line": 1,
+
+        +    "rule": "missing-module-stub",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/star_module.py",
+
+        +    "line": 1,
+
+        +    "rule": "docstring-in-impl",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "tests/test_tempfile.py",
+
+        +    "line": 1,
+
+        +    "rule": "duplicate-code",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 8,
+
+        +    "file": "tests/test_tempfile.py",
+
+        +    "line": 10,
+
+        +    "rule": "tempfile-mkdtemp-in-test",
+
+        +    "tool": "pylint"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/dup_target.py",
+
+        +    "line": 4,
+
+        +    "rule": "missing-return-annotation",
+
+        +    "tool": "pylint tests"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 9,
+
+        +    "rule": "unjustified-suppression",
+
+        +    "tool": "pylint tests"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 14,
+
+        +    "rule": "import-error",
+
+        +    "tool": "pylint tests"
+
+        +  },
+
+        +  {
+
+        +    "col": 13,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 21,
+
+        +    "rule": "unnamed-tuple-dict-value",
+
+        +    "tool": "pylint tests"
+
+        +  },
+
+        +  {
+
+        +    "col": 11,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 22,
+
+        +    "rule": "unnamed-tuple-dict-value",
+
+        +    "tool": "pylint tests"
+
+        +  },
+
+        +  {
+
+        +    "col": 15,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 32,
+
+        +    "rule": "generic-key-dict",
+
+        +    "tool": "pylint tests"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 41,
+
+        +    "rule": "unjustified-suppression",
+
+        +    "tool": "pylint tests"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 49,
+
+        +    "rule": "unjustified-suppression",
+
+        +    "tool": "pylint tests"
+
+        +  },
+
+        +  {
+
+        +    "col": 37,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 63,
+
+        +    "rule": "unjustified-suppression",
+
+        +    "tool": "pylint tests"
+
+        +  },
+
+        +  {
+
+        +    "col": 45,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 63,
+
+        +    "rule": "unjustified-suppression",
+
+        +    "tool": "pylint tests"
+
+        +  },
+
+        +  {
+
+        +    "col": 64,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 63,
+
+        +    "rule": "unjustified-suppression",
+
+        +    "tool": "pylint tests"
+
+        +  },
+
+        +  {
+
+        +    "col": 4,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 82,
+
+        +    "rule": "no-try-import",
+
+        +    "tool": "pylint tests"
+
+        +  },
+
+        +  {
+
+        +    "col": 4,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 82,
+
+        +    "rule": "silent-except",
+
+        +    "tool": "pylint tests"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 100,
+
+        +    "rule": "trivial-wrapper",
+
+        +    "tool": "pylint tests"
+
+        +  },
+
+        +  {
+
+        +    "col": 4,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 155,
+
+        +    "rule": "unnecessary-pass",
+
+        +    "tool": "pylint tests"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 161,
+
+        +    "rule": "wrong-import-position",
+
+        +    "tool": "pylint tests"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 167,
+
+        +    "rule": "wrong-import-position",
+
+        +    "tool": "pylint tests"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 173,
+
+        +    "rule": "unused-wildcard-import",
+
+        +    "tool": "pylint tests"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 173,
+
+        +    "rule": "wildcard-import",
+
+        +    "tool": "pylint tests"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 173,
+
+        +    "rule": "wrong-import-position",
+
+        +    "tool": "pylint tests"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 215,
+
+        +    "rule": "missing-return-annotation",
+
+        +    "tool": "pylint tests"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 231,
+
+        +    "rule": "missing-return-annotation",
+
+        +    "tool": "pylint tests"
+
+        +  },
+
+        +  {
+
+        +    "col": 8,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 255,
+
+        +    "rule": "missing-error-chain",
+
+        +    "tool": "pylint tests"
+
+        +  },
+
+        +  {
+
+        +    "col": 8,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 255,
+
+        +    "rule": "raise-missing-from",
+
+        +    "tool": "pylint tests"
+
+        +  },
+
+        +  {
+
+        +    "col": 4,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 263,
+
+        +    "rule": "redundant-type-guard",
+
+        +    "tool": "pylint tests"
+
+        +  },
+
+        +  {
+
+        +    "col": 4,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 275,
+
+        +    "rule": "bare-except-comment",
+
+        +    "tool": "pylint tests"
+
+        +  },
+
+        +  {
+
+        +    "col": 4,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 275,
+
+        +    "rule": "silent-except",
+
+        +    "tool": "pylint tests"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "tests/test_tempfile.py",
+
+        +    "line": 1,
+
+        +    "rule": "duplicate-code",
+
+        +    "tool": "pylint tests"
+
+        +  },
+
+        +  {
+
+        +    "col": 8,
+
+        +    "file": "tests/test_tempfile.py",
+
+        +    "line": 10,
+
+        +    "rule": "tempfile-mkdtemp-in-test",
+
+        +    "tool": "pylint tests"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/import_target.py",
+
+        +    "line": 1,
+
+        +    "rule": "docstring-in-impl",
+
+        +    "tool": "pylint-pyi"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 1,
+
+        +    "rule": "docstring-in-impl",
+
+        +    "tool": "pylint-pyi"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 1,
+
+        +    "rule": "missing-import-declaration",
+
+        +    "tool": "pylint-pyi"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 1,
+
+        +    "rule": "signature-mismatch",
+
+        +    "tool": "pylint-pyi"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 1,
+
+        +    "rule": "star-import-unresolvable",
+
+        +    "tool": "pylint-pyi"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 1,
+
+        +    "rule": "symbol-kind-mismatch",
+
+        +    "tool": "pylint-pyi"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 9,
+
+        +    "rule": "unjustified-suppression",
+
+        +    "tool": "pylint-pyi"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 14,
+
+        +    "rule": "import-error",
+
+        +    "tool": "pylint-pyi"
+
+        +  },
+
+        +  {
+
+        +    "col": 13,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 21,
+
+        +    "rule": "unnamed-tuple-dict-value",
+
+        +    "tool": "pylint-pyi"
+
+        +  },
+
+        +  {
+
+        +    "col": 11,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 22,
+
+        +    "rule": "unnamed-tuple-dict-value",
+
+        +    "tool": "pylint-pyi"
+
+        +  },
+
+        +  {
+
+        +    "col": 15,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 32,
+
+        +    "rule": "generic-key-dict",
+
+        +    "tool": "pylint-pyi"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 41,
+
+        +    "rule": "unjustified-suppression",
+
+        +    "tool": "pylint-pyi"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 49,
+
+        +    "rule": "unjustified-suppression",
+
+        +    "tool": "pylint-pyi"
+
+        +  },
+
+        +  {
+
+        +    "col": 37,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 63,
+
+        +    "rule": "unjustified-suppression",
+
+        +    "tool": "pylint-pyi"
+
+        +  },
+
+        +  {
+
+        +    "col": 45,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 63,
+
+        +    "rule": "unjustified-suppression",
+
+        +    "tool": "pylint-pyi"
+
+        +  },
+
+        +  {
+
+        +    "col": 64,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 63,
+
+        +    "rule": "unjustified-suppression",
+
+        +    "tool": "pylint-pyi"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 71,
+
+        +    "rule": "missing-beartype",
+
+        +    "tool": "pylint-pyi"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 79,
+
+        +    "rule": "missing-beartype",
+
+        +    "tool": "pylint-pyi"
+
+        +  },
+
+        +  {
+
+        +    "col": 4,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 82,
+
+        +    "rule": "no-try-import",
+
+        +    "tool": "pylint-pyi"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 90,
+
+        +    "rule": "missing-beartype",
+
+        +    "tool": "pylint-pyi"
+
+        +  },
+
+        +  {
+
+        +    "col": 15,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 92,
+
+        +    "rule": "asyncio-timeout",
+
+        +    "tool": "pylint-pyi"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 100,
+
+        +    "rule": "missing-beartype",
+
+        +    "tool": "pylint-pyi"
+
+        +  },
+
+        +  {
+
+        +    "col": 9,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 107,
+
+        +    "rule": "use-structlog",
+
+        +    "tool": "pylint-pyi"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 114,
+
+        +    "rule": "missing-beartype",
+
+        +    "tool": "pylint-pyi"
+
+        +  },
+
+        +  {
+
+        +    "col": 4,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 115,
+
+        +    "rule": "use-structured-logging",
+
+        +    "tool": "pylint-pyi"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 122,
+
+        +    "rule": "docstring-in-impl",
+
+        +    "tool": "pylint-pyi"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 122,
+
+        +    "rule": "missing-beartype",
+
+        +    "tool": "pylint-pyi"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 139,
+
+        +    "rule": "generic-return-requires-returns",
+
+        +    "tool": "pylint-pyi"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 144,
+
+        +    "rule": "docstring-in-impl",
+
+        +    "tool": "pylint-pyi"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 144,
+
+        +    "rule": "missing-beartype",
+
+        +    "tool": "pylint-pyi"
+
+        +  },
+
+        +  {
+
+        +    "col": 4,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 155,
+
+        +    "rule": "unnecessary-pass",
+
+        +    "tool": "pylint-pyi"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 161,
+
+        +    "rule": "wrong-import-position",
+
+        +    "tool": "pylint-pyi"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 167,
+
+        +    "rule": "wrong-import-position",
+
+        +    "tool": "pylint-pyi"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 173,
+
+        +    "rule": "unused-wildcard-import",
+
+        +    "tool": "pylint-pyi"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 173,
+
+        +    "rule": "wildcard-import",
+
+        +    "tool": "pylint-pyi"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 173,
+
+        +    "rule": "wrong-import-position",
+
+        +    "tool": "pylint-pyi"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 179,
+
+        +    "rule": "annotation-mismatch",
+
+        +    "tool": "pylint-pyi"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 191,
+
+        +    "rule": "annotation-unverifiable",
+
+        +    "tool": "pylint-pyi"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 198,
+
+        +    "rule": "missing-beartype",
+
+        +    "tool": "pylint-pyi"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 206,
+
+        +    "rule": "missing-beartype",
+
+        +    "tool": "pylint-pyi"
+
+        +  },
+
+        +  {
+
+        +    "col": 8,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 255,
+
+        +    "rule": "raise-missing-from",
+
+        +    "tool": "pylint-pyi"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/standalone.pyi",
+
+        +    "line": 3,
+
+        +    "rule": "pyi-underscore-symbol",
+
+        +    "tool": "pylint-pyi"
+
+        +  },
+
+        +  {
+
+        +    "col": 0,
+
+        +    "file": "src/minimal_sample/star_module.py",
+
+        +    "line": 1,
+
+        +    "rule": "docstring-in-impl",
+
+        +    "tool": "pylint-pyi"
+
+        +  },
+
+        +  {
+
+        +    "col": 5,
+
+        +    "file": "src/minimal_sample/dup_target.py",
+
+        +    "line": 4,
+
+        +    "rule": "ANN202",
+
+        +    "tool": "ruff check"
+
+        +  },
+
+        +  {
+
+        +    "col": 12,
+
+        +    "file": "src/minimal_sample/dup_target.py",
+
+        +    "line": 17,
+
+        +    "rule": "RET504",
+
+        +    "tool": "ruff check"
+
+        +  },
+
+        +  {
+
+        +    "col": 1,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 7,
+
+        +    "rule": "I001",
+
+        +    "tool": "ruff check"
+
+        +  },
+
+        +  {
+
+        +    "col": 38,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 28,
+
+        +    "rule": "RUF100",
+
+        +    "tool": "ruff check"
+
+        +  },
+
+        +  {
+
+        +    "col": 39,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 49,
+
+        +    "rule": "RUF100",
+
+        +    "tool": "ruff check"
+
+        +  },
+
+        +  {
+
+        +    "col": 38,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 56,
+
+        +    "rule": "RUF100",
+
+        +    "tool": "ruff check"
+
+        +  },
+
+        +  {
+
+        +    "col": 38,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 63,
+
+        +    "rule": "ANN401",
+
+        +    "tool": "ruff check"
+
+        +  },
+
+        +  {
+
+        +    "col": 65,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 63,
+
+        +    "rule": "ANN401",
+
+        +    "tool": "ruff check"
+
+        +  },
+
+        +  {
+
+        +    "col": 5,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 80,
+
+        +    "rule": "SIM105",
+
+        +    "tool": "ruff check"
+
+        +  },
+
+        +  {
+
+        +    "col": 5,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 155,
+
+        +    "rule": "PIE790",
+
+        +    "tool": "ruff check"
+
+        +  },
+
+        +  {
+
+        +    "col": 1,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 161,
+
+        +    "rule": "I001",
+
+        +    "tool": "ruff check"
+
+        +  },
+
+        +  {
+
+        +    "col": 47,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 161,
+
+        +    "rule": "RUF100",
+
+        +    "tool": "ruff check"
+
+        +  },
+
+        +  {
+
+        +    "col": 47,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 167,
+
+        +    "rule": "RUF100",
+
+        +    "tool": "ruff check"
+
+        +  },
+
+        +  {
+
+        +    "col": 29,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 173,
+
+        +    "rule": "RUF100",
+
+        +    "tool": "ruff check"
+
+        +  },
+
+        +  {
+
+        +    "col": 23,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 198,
+
+        +    "rule": "ARG001",
+
+        +    "tool": "ruff check"
+
+        +  },
+
+        +  {
+
+        +    "col": 5,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 206,
+
+        +    "rule": "N802",
+
+        +    "tool": "ruff check"
+
+        +  },
+
+        +  {
+
+        +    "col": 5,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 215,
+
+        +    "rule": "ANN202",
+
+        +    "tool": "ruff check"
+
+        +  },
+
+        +  {
+
+        +    "col": 12,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 228,
+
+        +    "rule": "RET504",
+
+        +    "tool": "ruff check"
+
+        +  },
+
+        +  {
+
+        +    "col": 5,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 231,
+
+        +    "rule": "ANN202",
+
+        +    "tool": "ruff check"
+
+        +  },
+
+        +  {
+
+        +    "col": 12,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 244,
+
+        +    "rule": "RET504",
+
+        +    "tool": "ruff check"
+
+        +  },
+
+        +  {
+
+        +    "col": 9,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 255,
+
+        +    "rule": "B904",
+
+        +    "tool": "ruff check"
+
+        +  },
+
+        +  {
+
+        +    "col": 5,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 273,
+
+        +    "rule": "SIM105",
+
+        +    "tool": "ruff check"
+
+        +  },
+
+        +  {
+
+        +    "col": 5,
+
+        +    "file": "src/minimal_sample/mod.py",
+
+        +    "line": 275,
+
+        +    "rule": "S110",
+
+        +    "tool": "ruff check"
+
+        +  },
+
+        +  {
+
+        +    "col": 19,
+
+        +    "file": "src/minimal_sample/mod.pyi",
+
+        +    "line": 12,
+
+        +    "rule": "PYI020",
+
+        +    "tool": "ruff check"
+
+        +  },
+
+        +  {
+
+        +    "col": 19,
+
+        +    "file": "src/minimal_sample/mod.pyi",
+
+        +    "line": 12,
+
+        +    "rule": "UP037",
+
+        +    "tool": "ruff check"
+
+        +  },
+
+        +  {
+
+        +    "col": 1,
+
+        +    "file": "AGENTS.md",
+
+        +    "line": 3,
+
+        +    "rule": "MD072",
+
+        +    "tool": "rumdl check"
+
+        +  },
+
+        +  {
+
+        +    "col": 25,
+
+        +    "file": "src/minimal_sample/mod.pyi",
+
+        +    "line": 12,
+
+        +    "rule": "invalid-type-form",
+
+        +    "tool": "ty check"
+
+        +  }
+
+        +]
+
+        diff --git a/tests/data/golden/minimal_sample_project_tool_counts.json
+        b/tests/data/golden/minimal_sample_project_tool_counts.json
+
+        new file mode 100644
+
+        index 0000000..d463352
+
+        --- /dev/null
+
+        +++ b/tests/data/golden/minimal_sample_project_tool_counts.json
+
+        @@ -0,0 +1,16 @@
+
+        +{
+
+        +  "detect-secrets": 0,
+
+        +  "mypy": 2,
+
+        +  "mypy.stubtest": 0,
+
+        +  "pylint": 57,
+
+        +  "pylint tests": 29,
+
+        +  "pylint-pyi": 43,
+
+        +  "pyright check": 0,
+
+        +  "pyright verify types": 0,
+
+        +  "ruff check": 25,
+
+        +  "ruff format": 0,
+
+        +  "rumdl check": 1,
+
+        +  "tach check": 0,
+
+        +  "ty check": 1,
+
+        +  "yamllint": 0
+
+        +}
+      files:
+        - tests/data/golden/minimal_sample_project_findings.json
+        - tests/data/golden/minimal_sample_project_tool_counts.json

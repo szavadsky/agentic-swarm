@@ -1,0 +1,34 @@
+slug: test-debloat-audit-v2
+kind: fact-finder
+title: Inventory redundant and lint-testing tests
+assignment: "Replaces pending test-debloat-audit blocked on superseded (rewired
+  to golden-snapshot-wiring; identical scope). Read-only audit of tests/** — no
+  committed files, output is structured item-report tables. Semantic exclusions
+  (mark skipped): test_semantic_check.py, test_semantic_threshold.py,
+  TestSuppressionRerankerPipeline, tests/checkers/conftest.py (epic-created),
+  tests/assumptions runtime/decision/cache modules (epic-created). Per module:
+  behaviors protected; duplicates (incl. golden-covered); CodingRules-Tests
+  violations (first-party mocking, naming, markers, in-file fixtures,
+  _factories.py list[Any] tables, far cases); repo-self-lint for removal
+  (test_self_lint_clean.py, AST/source-scanning guards, config re-checks);
+  slow/benchmark; task-ID names. Output rows {module, behaviors, duplicate-of,
+  recommendation keep|merge|rewrite|remove, surviving coverage, reason, owner} +
+  per-subsystem LoC estimates + per-limb pinning inventory (CLI/exit,
+  baseline/autofix, configs/scopes: surviving test or blocking-debt flag). Owner
+  column aligned to coding-rules-audit-v2 unified map (read via dep)."
+outlineRef: test-debloat-audit
+milestone: M3
+wave: 10
+deps:
+  - golden-snapshot-wiring
+  - third-party-assumption-tests
+  - consolidate-integration-helpers-v2
+  - coding-rules-audit-v2
+scenarioRefs:
+  - "M3: Test redundancy inventoried"
+  - "M3: Ownership map is complete and disjoint"
+citations:
+  - tests/
+  - ADR-004
+  - TD-8
+  - TD-9

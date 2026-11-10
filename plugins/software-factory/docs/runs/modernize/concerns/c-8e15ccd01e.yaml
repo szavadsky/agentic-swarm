@@ -1,0 +1,27 @@
+id: c-8e15ccd01e
+kind: risk
+summary: Semantic docs still describe the removed cross-encoder while the
+  decision cache does not exist
+detail: AGENTS.md:82-85 and docs/semantic-justification.md:3-26,51-53 document
+  sentence-transformers/cross-encoder/reranker, but the tree contains
+  _decision_backend.py and no _decision_cache.py. Docs must not claim a
+  git-stored cache before the semantic cache item lands; this is root-owned
+  documentation updated with the semantic epic.
+location:
+  file: docs/semantic-justification.md
+  line: 3
+affects:
+  - coding-rules-audit
+  - decision-cache-impl
+  - semantic-docs
+severity: medium
+status: routed
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: coding-rules-audit
+  lastSeen: 2026-11-09T23:33:30.977Z
+createdAt: 2026-11-09T23:33:30.977Z
+updatedAt: 2026-11-10T01:22:03.274Z
+disposition: optional

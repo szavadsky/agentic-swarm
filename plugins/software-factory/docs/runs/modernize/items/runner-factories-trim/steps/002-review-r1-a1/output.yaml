@@ -1,0 +1,5 @@
+status: approved
+summary: Pure group-split of _factories_extras.py (511→412 + new 112-line _small
+  module, 0 disables); all moved symbols rewired, affected tests + format green,
+  scope tests-only.
+suggestions: []

@@ -1,0 +1,22 @@
+blockedItems: []
+debt:
+  - "Infra: documented `uv run lint` still mutates worktrees via `ruff format`
+    ToolSpec (plain `ruff format` without --check/--config); declared gates work
+    around via split format + 13-tool lint. Operator action pending: add --check
+    (+ --config) or drop ToolSpec."
+failedItems: []
+iteration: 4
+mergedItems:
+  - never-test-linting-prune
+recommendations:
+  - Proceed to next wave/iteration planning; no blocks or regressions.
+  - "Operator: resolve `ruff format` ToolSpec mutation so AGENTS.md `uv run
+    lint` becomes check-only and gate split can be retired."
+status: complete
+summary: "Wave 4 (modernize) complete: merged 1 item (never-test-linting-prune).
+  Tree hygiene clean: no untracked files, no modifications under
+  src/tests/config/docs, no conflict markers in code (sole delta is
+  engine-managed journal). Gates vs baseline per engine table: format pass/pass
+  green, test-integration pass/pass green, lint fail->pass IMPROVED, test
+  fail->pass IMPROVED; zero regressions."
+wave: 4

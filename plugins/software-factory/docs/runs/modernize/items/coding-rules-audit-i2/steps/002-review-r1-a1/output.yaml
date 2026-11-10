@@ -1,0 +1,77 @@
+status: approved
+summary: "Spike answers core uncertainty: 184-file map verified exactly
+  disjoint/exhaustive, 41 rows grounded, exclusions/reservations check out; only
+  count-reconciliation nits remain."
+suggestions:
+  - id: beartype-count-reconciliation
+    disposition: optional
+    summary: "Reconcile beartype taxonomy: true total is 26 sites, A22 undercounts by 2"
+    detail: "grep finds 26 missing-beartype suppression sites in src (28 hits minus
+      2 message-def lines in beartype_checker.py:26,53); audit accounts 24
+      (14+6+3+1). Missing: _base.py:121 (mentioned in A22 fix text but not its
+      count of 14) and suppression_justification_checker.py:93 visit_annassign
+      (nodes.AnnAssign; nodes is runtime-imported at line 6 so get_type_hints
+      resolves — belongs in A22). Corrected: 16+6+3+1=26. Fix strategy and
+      owners unchanged (all checkers-owned, add @beartype)."
+    location:
+      file: .factory/tasks/modernize/items/coding-rules-audit-i2/steps/001-research-r1-a1/output.yaml
+      line: 60
+  - id: a33-w9740-recount
+    disposition: optional
+    summary: "A33 counts drift: measured 45 W9740 in src+scripts, row says 43, title
+      says 42"
+    detail: "py-only grep: runner 22 (audit 21), checkers 15 incl _semantic.py:64
+      (audit 13 + 1 excluded = 14), setup files 8 (matches: setup.py 6 +
+      _setup_precommit 1 + _setup_update 1), total 45. Policy decision
+      (root-owned; log-or-narrow) is unaffected; correct numbers before replan
+      so per-owner LoC estimates track."
+    location:
+      file: .factory/tasks/modernize/items/coding-rules-audit-i2/steps/001-research-r1-a1/output.yaml
+      line: 60
+  - id: a20-a21-comment-recount
+    disposition: optional
+    summary: A20/A21 overcount and mix two stale-comment species (20, not 23)
+    detail: "Measured 'TYPE_CHECKING-only import' comments: 5 runner (A20 claims 7)
+      + 15 checkers/setup incl testing.py:12 (A21 claims 16) = 20. cli.py:29 and
+      fidelity M3(b) comments cited in A20/A21 are the A19 species ('private
+      symbol removed from .pyi'), not TYPE_CHECKING comments — reclassify to
+      avoid double-counting the same lines in two rows."
+    location:
+      file: .factory/tasks/modernize/items/coding-rules-audit-i2/steps/001-research-r1-a1/output.yaml
+      line: 60
+  - id: report-number-hygiene
+    disposition: optional
+    summary: "Minor number hygiene: 41 rows not 40; 17 runner stubs not 18; 11
+      runtime PyLinter importers not 10"
+    detail: Rows run A1-A41 (41 rows) but summary/contextPack say '40'; runner/*.pyi
+      is 17 files (A8 says 18); runtime 'from pylint.lint import PyLinter'
+      importers are exactly the 11 A22 registers (A23 says '10 other checkers').
+      None affects owners or fixes; reconcile so replan arithmetic closes.
+    location:
+      file: .factory/tasks/modernize/items/coding-rules-audit-i2/steps/001-research-r1-a1/output.yaml
+      line: 1
+  - id: a4-handled-error-surfaced
+    disposition: optional
+    summary: "A4 overstates: only :76-77 is silent; :85-86 failure is surfaced via
+      errors list"
+    detail: "create_root_symlinks.py:85-86 appends to errors, printed to stderr with
+      exit 1 at :90-93 — handled-and-reported, not silent. Only the :76-77
+      'except OSError: pass' is truly silent. Narrow A4 fix to
+      commenting/logging the :76 path; no change to setup-testing ownership."
+    location:
+      file: scripts/create_root_symlinks.py
+      line: 76
+  - id: a7-stub-deletion-completeness-risk
+    disposition: optional
+    summary: A7 deletion should re-verify stubtest/pyright-verifytypes completeness
+      after removing 4 stubs
+    detail: "Prescription (delete 4 pure-init .pyi) follows CodingRules 37 and
+      matches the checker's own _is_init_exempt logic (imports + __all__ are
+      non-logic), so the finding stands. Execution risk for runner/checkers
+      owners: pyright verify types currently completenessScore=1 and stubtest
+      passes; deleting runner/__init__.pyi and fidelity/__init__.pyi shrinks the
+      verified surface — re-run both tools post-deletion rather than assuming
+      green."
+    location:
+      file: src/python_setup_lint/runner/__init__.pyi
+      line: 1

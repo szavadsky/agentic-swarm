@@ -1,0 +1,13 @@
+context: wave
+decision: continue
+rationale: "Wave 2 shows zero regressions (format/integration pass->pass, lint
+  and test fail->pass IMPROVED), clean tree (no untracked junk, no markers,
+  diff-check clean), and no failed/blocked items. Stale ruff-format debt note is
+  superseded: _RuffFormatLintTool with check-only normal pass and fix-only
+  build_format_command is verified at HEAD (dispatch.py:405-444), and closeup-2
+  confirms the M1 14-tool contract merged. Empty mergedItems is a reporting gap,
+  not a progress signal."
+text: "Continue to next scheduled wave. No plan amendment: wave-report
+  ruff-format recommendation is already resolved at HEAD; gate reunification is
+  infra refresh, not an iteration-3 item. ownership-map-revalidation remains the
+  M1 critical path gating epic-kickoff-gate."

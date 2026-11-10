@@ -1,0 +1,20 @@
+id: awareness-plan-1-human-material-definition
+ref: plan-1
+disposition: human-awareness
+question: Assumption defines material as findings {tool,file,line,col,rule}
+  SEMANTIC=0 + checker units + CLI/exit + baseline/autofix + configs/scopes;
+  model accept/reject non-material, heuristic rejections material. Makes
+  preserve testable but narrows intent. Architect can proceed for iter1; record
+  for operator review.
+status: answered
+createdAt: 2026-11-08T01:06:40.587Z
+answer: >
+  Operator acknowledges all plan-1 awareness items: (1) material definition and
+  its SEMANTIC=0 findings scope: OK; tightened acceptance by the model is
+  intentional, not a regression. (2) git-stored cache file at the linted repo
+  root: OK as required by INTENT; document it in install docs, keep it
+  detect-secrets clean, and note model weight licenses. (3) never-test-linting
+  broadening and removing the pytest self-lint guard: OK, it matches the
+  project's coding rules; the lint gate is the guard. No further action needed
+  on these.
+answeredAt: 2026-11-08T11:48:08.291Z

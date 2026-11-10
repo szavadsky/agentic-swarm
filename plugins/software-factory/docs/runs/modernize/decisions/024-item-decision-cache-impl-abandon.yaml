@@ -1,0 +1,8 @@
+id: decision-decision-cache-impl-1794260715520
+context: item
+item: decision-cache-impl
+decision: abandon
+reason: consults-exhausted
+rationale: Consult budget exhausted with no progress; abandoning item so the
+  wave gate absorbs it as failed
+timestamp: 2026-11-09T21:45:15.520Z

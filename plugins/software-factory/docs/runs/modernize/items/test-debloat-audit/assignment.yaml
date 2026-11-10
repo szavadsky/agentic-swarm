@@ -1,0 +1,39 @@
+slug: test-debloat-audit
+kind: fact-finder
+title: Inventory redundant and lint-testing tests
+assignment: "Read-only audit of tests/** (no repo writes; structured item-report
+  tables). Depends on coding-rules-audit: read its UNIFIED ownership map via
+  inter-dep and align owner column (do not redefine owners). Semantic exclusions
+  marked SKIPPED: tests/checkers/test_semantic_check.py,
+  test_semantic_threshold.py, TestSuppressionRerankerPipeline,
+  tests/checkers/conftest.py (epic-created), tests/assumptions
+  runtime/decision/cache modules (epic-created). Per module: behaviors
+  protected; duplicates (incl golden-covered); CodingRules-Tests violations
+  (first-party mocking, naming incl task-ID
+  test_t5_*/test_t9_7_*/test_t11_*/test_t1b_*/test_t3_*, markers, in-file
+  fixtures, _factories.py list[Any] tables, far cases); repo-self-lint for
+  removal (test_self_lint_clean.py, AST/source-scanning guards, config re-checks
+  per broadened never-linting definition); slow/benchmark. Output rows
+  {module,behaviors,duplicate-of,recommendation
+  keep|merge|rewrite|remove,surviving coverage,reason,owner} + per-subsystem LoC
+  estimates + per-limb pinning inventory (CLI/exit: test_cli_*;
+  baseline/autofix: test_baseline_*/test_autofix_*; configs/scopes:
+  overlay+config tests — surviving test or blocking-debt flag)."
+outlineRef: test-debloat-audit
+milestone: M3
+wave: 5
+deps:
+  - golden-findings-snapshot
+  - third-party-assumption-tests
+  - consolidate-integration-helpers
+  - coding-rules-audit
+scenarioRefs:
+  - "M3: Test redundancy inventoried"
+  - "M3: Ownership map is complete and disjoint"
+citations:
+  - AGENTS.md:87-93
+  - CodingRules.md:230-306
+  - tests/checkers/test_semantic_check.py:1-7
+  - tests/checkers/test_semantic_check.py:159-257
+  - tests/checkers/test_semantic_threshold.py:19-25
+  - pyproject.toml:49-55

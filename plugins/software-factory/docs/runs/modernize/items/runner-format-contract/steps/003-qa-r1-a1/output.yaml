@@ -1,0 +1,82 @@
+status: changes_requested
+summary: "Contract behavior green (24/24, check-vs-mutate, registry,
+  no-mutation) but story introduces 4 lint regressions: I001x2, R0801, W9700x2,
+  C0302; lint gate red."
+suggestions:
+  - id: ruff-i001-import-sort
+    disposition: fix
+    summary: Fix new ruff I001 in runner __init__.py/.pyi import sort
+    detail: "Independent repro with shipped config fails: `uv run ruff check
+      --config config/ruff.toml src/python_setup_lint/runner/__init__.py
+      src/python_setup_lint/runner/__init__.pyi` -> I001x2. Fix is swap
+      RECORD_PARSER_TOOLS before RECORDLESS_TOOLS (ruff --diff confirms). Engine
+      lint gate also reports these 2 plus pre-existing SIM102. Pre-existing
+      SIM102/coverage.py out of scope; I001 is story-introduced and violates
+      VERIFY zero-violations."
+    location:
+      file: src/python_setup_lint/runner/__init__.py
+      line: 20
+  - id: pylint-r0801-duplicate-tool-list
+    disposition: fix
+    summary: Dedupe 14-name literal duplicated between test files (R0801)
+    detail: "Independent repro: `uv run lint --tools 'pylint tests'` FAILED with
+      R0801 Similar lines in 2 files test_lint_runner:[53:70] vs
+      test_runner_format_contract:[32:47] (14 tool-name lines). Story-new file
+      duplicates the literal. Fix by sharing one literal/helper or narrow
+      justified disable; do not weaken assertions."
+    location:
+      file: tests/runner/test_runner_format_contract.py
+      line: 32
+  - id: pylint-w9700-docstring-in-impl
+    disposition: fix
+    summary: Move usage docstrings from dispatch.py impl to .pyi (W9700x2)
+    detail: "Independent repro: `uv run lint --tools 'pylint'` flags W9700 at
+      dispatch.py:177 LintTool.build_format_command and :405 _RuffFormatLintTool
+      (usage docstrings belong in .pyi per CodingRules). Both are story-new. Fix
+      by moving docs to dispatch.pyi / removing impl docstrings."
+    location:
+      file: src/python_setup_lint/runner/dispatch.py
+      line: 177
+  - id: pylint-c0302-dispatch-too-long
+    disposition: fix
+    summary: Resolve new C0302 dispatch.py 542/500 (story pushed over limit)
+    detail: Parent dispatch was 473 lines; story adds ~69 to 542, now flagged by
+      pylint C0302 via `uv run lint --tools 'pylint'`. VERIFY requires zero
+      violations. Fix via split or justified disable with precedent (cf.
+      _factories_extras too-many-lines disable). Pre-existing cli.py R0914
+      remains out of scope.
+    location:
+      file: src/python_setup_lint/runner/dispatch.py
+      line: 1
+  - id: lint-gate-evidence-omits-ruff-format
+    disposition: optional
+    summary: Engine lint gate command omitted ruff format; overall pass misleading
+    detail: checks.yaml lint sub-gate status=fail but overall gates=status pass;
+      lint command lists 13 tools and omits 'ruff format'. Independently `uv run
+      lint --tools 'ruff format'` PASSED and git status clean, so behavior OK,
+      but gate evidence does not prove full 14-tool lint-clean. No code change;
+      record for engine/operator.
+    location:
+      file: src/python_setup_lint/runner/cli.py
+      line: 73
+  - id: parsers-pyi-13-is-parser-count
+    disposition: optional
+    summary: parsers.pyi 13s are statistics-parser counts, correctly allowlisted
+    detail: Grep finds 13-built-in-names in parsers.pyi:20,37. These refer to
+      _BUILTIN_PARSE_STRATEGY_TO_PARSER / STATISTICS_PARSER_TOOLS (legitimately
+      13 with FORMATTER_ONLY exempt), not tool count. No change per assignment
+      allowlist for non-tool-count 13s.
+    location:
+      file: src/python_setup_lint/runner/parsers.pyi
+      line: 20
+  - id: agents-test-counts-stale
+    disposition: optional
+    summary: AGENTS.md test counts stale (1290/7 vs 1352/9), defer to docs-counts-sync
+    detail: Tool-count migration to 14 verified (AGENTS 9,43,63,92,93; README;
+      overlays; tutorials; troubleshooting; cli help; CHANGELOG:104 correctly
+      stays historical 13). Lines 10-11 test counts (1290 pass, 7 integration)
+      mismatch runtime (1352 passed, 9 integration) but owned by
+      docs-counts-sync follow-up, not this story.
+    location:
+      file: AGENTS.md
+      line: 10

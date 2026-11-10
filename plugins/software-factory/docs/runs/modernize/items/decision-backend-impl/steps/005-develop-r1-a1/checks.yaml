@@ -1,0 +1,285 @@
+checks:
+  - id: gates
+    status: pass
+    message: "Gates passed (4 gates, improvements:
+      tests.runner.test_lint_runner.TestToolSpec.test_tool_spec_given_known_too\
+      ls_then_present,
+      tests.runner.test_lint_runner.TestToolSpec.test_tool_spec_given_tools_the\
+      n_autofix_and_no_duplicates,
+      tests.runner.test_lint_runner_stats.test_statistics_parsers_given_all_too\
+      ls_then_covered,
+      tests.runner.test_t3_coverage.TestParserCompleteness.test_parser_complete\
+      ness_given_all_tools_then_have_parser,
+      tests.runner.test_testing_fakes.test_run_lint_with_fake_dispatch_invarian\
+      ts[package_name_none_skips_stubtest_verifytypes])"
+    details:
+      - id: format
+        command: uv run ruff format --check --config config/ruff.toml src tests
+        status: pass
+        durationMs: 237
+        details: 184 files already formatted
+      - id: lint
+        command: uv run lint --tools 'tach check,ruff check,rumdl check,mypy,yamllint,ty
+          check,mypy.stubtest,pyright check,pyright verify
+          types,pylint,pylint-pyi,pylint tests,detect-secrets'
+        status: pass
+        durationMs: 58819
+        details: |-
+          ============================================================
+          [tach check] PASSED [0.2s]
+          ============================================================
+          Configuration
+          [WARN] Warning: No first-party imports were found. You may need to use 'tach mod' to update your Python source roots. Docs: https://docs.gauge.sh/usage/configuration#source-roots
+          ✅ All modules validated!
+
+          ============================================================
+          [ruff check] PASSED [0.0s]
+          ============================================================
+          All checks passed!
+
+          ============================================================
+          [rumdl check] PASSED [0.0s]
+          ============================================================
+
+          Success: No issues found in 29 files (14ms)
+
+          ============================================================
+          [mypy] PASSED [4.7s]
+          ============================================================
+          Success: no issues found in 57 source files
+
+          ============================================================
+          [yamllint] PASSED [0.1s]
+          ============================================================
+
+          ============================================================
+          [ty check] PASSED [0.2s]
+          ============================================================
+          All checks passed!
+
+          ============================================================
+          [mypy.stubtest] PASSED [6.8s]
+          ============================================================
+
+          ============================================================
+          [pyright check] PASSED [3.9s]
+          ============================================================
+          {
+              "version": "1.1.410",
+              "time": "1794197329050",
+              "generalDiagnostics": [],
+              "summary": {
+                  "filesAnalyzed": 112,
+                  "errorCount": 0,
+                  "warningCount": 0,
+                  "informationCount": 0,
+                  "timeInSec": 3.45
+              }
+          }
+
+
+          ============================================================
+          [pyright verify types] PASSED [1.0s]
+          ============================================================
+            pyright verify types: completenessScore=1
+
+          ============================================================
+          [pylint] PASSED [8.9s]
+          ============================================================
+          {
+              "messages": [],
+              "statistics": {
+                  "messageTypeCount": {
+                      "fatal": 0,
+                      "error": 0,
+                      "warning": 0,
+                      "refactor": 0,
+                      "convention": 0,
+                      "info": 0
+                  },
+                  "modulesLinted": 59,
+                  "score": 10.0
+              }
+          }
+
+          ============================================================
+          [pylint-pyi] PASSED [8.8s]
+          ============================================================
+
+          --------------------------------------------------------------------
+          Your code has been rated at 10.00/10 (previous run: 10.00/10, +0.00)
+
+
+          ============================================================
+          [pylint tests] PASSED [16.3s]
+          ============================================================
+          {
+              "messages": [],
+              "statistics": {
+                  "messageTypeCount": {
+                      "fatal": 0,
+                      "error": 0,
+                      "warning": 0,
+                      "refactor": 0,
+                      "convention": 0,
+                      "info": 0
+                  },
+                  "modulesLinted": 76,
+                  "score": 10.0
+              }
+          }
+
+          ============================================================
+          [detect-secrets] PASSED [7.4s]
+          ============================================================
+
+          [pylint] Using rcfile: /home/slava/aiexp/python-setup.factory-wt/topic_modernize--decision-backend-impl/config/.pylintrc
+      - id: test
+        command: uv run pytest -q
+        status: pass
+        durationMs: 33193
+        details: |-
+          [Tach] 1391 tests in 60 files unaffected by changes (~29.8s could be saved). Skip with: pytest --tach
+          [Tach] To disable: pytest -p no:tach (https://docs.gauge.sh/usage/commands#using-the-pytest-plugin-directly)
+          ........................................................................ [  5%]
+          ........................................................................ [ 10%]
+          ........................................................................ [ 15%]
+          ........................................................................ [ 20%]
+          ........................................................................ [ 26%]
+          ........................................................................ [ 31%]
+          ........................................................................ [ 36%]
+          ........................................................................ [ 41%]
+          ........................................................................ [ 47%]
+          ........................................................................ [ 52%]
+          ........................................................................ [ 57%]
+          ........................................................................ [ 62%]
+          ........................................................................ [ 67%]
+          ........................................................................ [ 73%]
+          ........................................................................ [ 78%]
+          ........................................................................ [ 83%]
+          ........................................................................ [ 88%]
+          ........................................................................ [ 94%]
+          ........................................................................ [ 99%]
+          ..........                                                               [100%]
+          =============================== warnings summary ===============================
+          tests/checkers/test_stub_checker.py::test_is_classvar_given_expression_then_expected_bool[classvar_skipped]
+          tests/checkers/test_stub_checker.py::test_is_classvar_given_expression_then_expected_bool[non_classvar]
+            /home/slava/aiexp/python-setup.factory-wt/topic_modernize--decision-backend-impl/tests/checkers/test_stub_checker.py:410: DeprecationWarning: importing 'NodeNG' from 'astroid' is deprecated and will be removed in v5, import it from 'astroid.nodes' instead
+              assert isinstance(node, astroid.NodeNG)
+
+          tests/checkers/test_stub_fidelity_invariants.py::TestClassVarSkipInvariants::test_is_classvar_given_classvar_annotation_then_true
+            /home/slava/aiexp/python-setup.factory-wt/topic_modernize--decision-backend-impl/tests/checkers/test_stub_fidelity_invariants.py:258: DeprecationWarning: importing 'NodeNG' from 'astroid' is deprecated and will be removed in v5, import it from 'astroid.nodes' instead
+              assert isinstance(node, astroid.NodeNG)
+
+          tests/checkers/test_stub_fidelity_invariants.py::TestClassVarSkipInvariants::test_is_classvar_given_regular_annotation_then_false
+            /home/slava/aiexp/python-setup.factory-wt/topic_modernize--decision-backend-impl/tests/checkers/test_stub_fidelity_invariants.py:263: DeprecationWarning: importing 'NodeNG' from 'astroid' is deprecated and will be removed in v5, import it from 'astroid.nodes' instead
+              assert isinstance(node, astroid.NodeNG)
+
+          -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+          1378 passed, 13 deselected, 4 warnings in 30.82s
+          [Improvements: tests.runner.test_lint_runner.TestToolSpec.test_tool_spec_given_known_tools_then_present, tests.runner.test_lint_runner.TestToolSpec.test_tool_spec_given_tools_then_autofix_and_no_duplicates, tests.runner.test_lint_runner_stats.test_statistics_parsers_given_all_tools_then_covered, tests.runner.test_t3_coverage.TestParserCompleteness.test_parser_completeness_given_all_tools_then_have_parser, tests.runner.test_testing_fakes.test_run_lint_with_fake_dispatch_invariants[package_name_none_skips_stubtest_verifytypes]]
+        improvements:
+          - tests.runner.test_lint_runner.TestToolSpec.test_tool_spec_given_known_tools_then_present
+          - tests.runner.test_lint_runner.TestToolSpec.test_tool_spec_given_tools_then_autofix_and_no_duplicates
+          - tests.runner.test_lint_runner_stats.test_statistics_parsers_given_all_tools_then_covered
+          - tests.runner.test_t3_coverage.TestParserCompleteness.test_parser_completeness_given_all_tools_then_have_parser
+          - tests.runner.test_testing_fakes.test_run_lint_with_fake_dispatch_invariants[package_name_none_skips_stubtest_verifytypes]
+      - id: test-integration
+        command: uv run pytest tests/integration.py -q
+        status: pass
+        durationMs: 67532
+        details: |-
+          [Tach] 9 tests in 4 files unaffected by changes (~1m 4s could be saved). Skip with: pytest --tach
+          [Tach] To disable: pytest -p no:tach (https://docs.gauge.sh/usage/commands#using-the-pytest-plugin-directly)
+          .........                                                                [100%]
+          9 passed in 66.39s (0:01:06)
+  - id: target-green
+    status: pass
+    message: "target-green passed: selected tests passed"
+    details:
+      command: uv run pytest tests/checkers/test_decision_backend.py
+        tests/checkers/test_semantic_check.py
+        tests/checkers/test_no_try_import_checker.py
+        tests/checkers/test_suppression_justification_checker.py
+        tests/assumptions/test_pylint_cache_semantics.py
+        --junitxml=/home/slava/aiexp/python-setup.factory-wt/.factory-runtime/tmp/junit-green-1794197472389-1d02mb0ahp7.xml
+      junitCaseCount: 121
+      junitCaseIds:
+        - tests.checkers.test_decision_backend.test_decision_threshold_is_pinned_at_half
+        - tests.checkers.test_decision_backend.test_prompt_version_is_pinned
+        - tests.checkers.test_decision_backend.test_fake_backend_defaults_to_one_and_pinned_model_id
+        - tests.checkers.test_decision_backend.test_fake_backend_returns_configured_score
+        - tests.checkers.test_decision_backend.test_fake_backend_satisfies_protocol
+        - tests.checkers.test_decision_backend.test_get_backend_is_none_without_configuration
+        - tests.checkers.test_decision_backend.test_get_backend_honors_dotted_path_under_pytest
+        - tests.checkers.test_decision_backend.test_get_backend_ignores_dotted_path_in_production
+        - tests.checkers.test_decision_backend.test_decision_model_parses_but_yields_none_with_exactly_one_warning
+        - tests.checkers.test_decision_backend.test_reranker_model_env_is_deprecated_with_exactly_one_warning
+        - tests.checkers.test_decision_backend.test_check_if_meaningful_has_backend_keyword_defaulting_to_none
+        - tests.checkers.test_decision_backend.test_registered_backend_rejects_a_meaningful_heuristic
+        - tests.checkers.test_decision_backend.test_brush_off_is_vetoed_before_the_backend
+        - tests.checkers.test_decision_backend.test_brush_off_does_not_reach_the_semantic_adapter
+        - tests.checkers.test_decision_backend.test_meaningful_heuristic_is_confirmed_by_backend
+        - tests.checkers.test_decision_backend.test_backend_below_threshold_rejects_a_meaningful_heuristic
+        - tests.checkers.test_decision_backend.test_loader_none_falls_back_to_the_heuristic
+        - tests.checkers.test_decision_backend.test_semantic_disabled_never_calls_the_backend
+        - tests.checkers.test_decision_backend.test_bare_directive_stays_meaningful_when_semantic_disabled
+        - "tests.checkers.test_decision_backend.test_normalize_suppressed_codes\
+          _drops_reason_that_echoes_codes[type: ignore[assignment]  #
+          assignment]"
+        - "tests.checkers.test_decision_backend.test_normalize_suppressed_codes\
+          _drops_reason_that_echoes_codes[type: ignore[assignment,arg-type]  #
+          arg-type, assignment]"
+        - "tests.checkers.test_decision_backend.test_normalize_suppressed_codes\
+          _drops_reason_that_echoes_codes[noqa: E501, W9704  # W9704,E501]"
+        - "tests.checkers.test_decision_backend.test_normalize_suppressed_codes\
+          _keeps_a_real_reason[type: ignore[assignment]  # carried from library
+          httpx for type compatibility]"
+        - tests.checkers.test_decision_backend.test_normalize_suppressed_codes_keeps_a_real_reason[carried
+          from library httpx for type compatibility]
+        - tests.checkers.test_decision_backend.test_normalize_suppressed_codes_leaves_bare_text_unchanged[W9704,E501-W9704,E501]
+        - tests.checkers.test_decision_backend.test_normalize_suppressed_codes_leaves_bare_text_unchanged[assignment-assignment]
+        - tests.checkers.test_decision_backend.test_check_if_meaningful_rejects_code_echo_justification
+        - tests.checkers.test_decision_backend.test_semantic_extra_is_empty
+        - tests.checkers.test_decision_backend.test_uv_lock_has_no_sentence_transformers_edge
+        - tests.checkers.test_semantic_check.test_signature_exposes_backend_keyword_defaulting_to_none
+        - tests.checkers.test_semantic_check.test_empty_primary_returns_false_without_calling_backend
+        - tests.checkers.test_semantic_check.test_loader_none_maps_to_none
+        - tests.checkers.test_semantic_check.test_backend_score_maps_at_pinned_threshold[0.0-False]
+        - tests.checkers.test_semantic_check.test_backend_score_maps_at_pinned_threshold[0.499-False]
+        - tests.checkers.test_semantic_check.test_backend_score_maps_at_pinned_threshold[0.5-True]
+        - tests.checkers.test_semantic_check.test_backend_score_maps_at_pinned_threshold[1.0-True]
+        - tests.checkers.test_semantic_check.test_one_backend_call_per_unique_pair
+        - tests.checkers.test_semantic_check.test_distinct_pairs_call_backend_again
+        - tests.checkers.test_semantic_check.test_memo_key_includes_backend_model_id
+        - tests.checkers.test_semantic_check.test_module_does_not_reference_sentence_transformers
+        - tests.checkers.test_semantic_check.test_check_writes_no_disk_cache
+        - tests.checkers.test_no_try_import_checker.test_sentence_transformers_is_no_longer_an_optional_import_pattern
+        - tests.checkers.test_no_try_import_checker.test_try_import_of_sentence_transformers_is_flagged
+        - tests.checkers.test_no_try_import_checker.test_checker_given_try_except_import_pattern_then_flags_violation[import_in_try_except_importerror]
+        - tests.checkers.test_no_try_import_checker.test_checker_given_try_except_import_pattern_then_flags_violation[import_in_try_except_modulenotfound]
+        - tests.checkers.test_no_try_import_checker.test_checker_given_try_except_import_pattern_then_flags_violation[from_import_in_try_except_importerror]
+        - tests.checkers.test_no_try_import_checker.test_checker_given_try_except_import_pattern_then_flags_violation[import_in_try_bare_except]
+        - tests.checkers.test_no_try_import_checker.test_checker_given_try_except_import_pattern_then_flags_violation[import_in_try_tuple_import_errors]
+        - tests.checkers.test_no_try_import_checker.test_checker_given_try_except_import_pattern_then_flags_violation[two_imports_separate_try_blocks]
+        - tests.checkers.test_no_try_import_checker.test_checker_given_try_except_import_pattern_then_flags_violation[two_imports_separate_handlers_one_try]
+      junitTruncated: true
+      collected: true
+      collectionErrors: []
+  - id: size
+    status: pass
+    message: "size passed: 299/300 production lines changed"
+    details:
+      changedLines:
+        added: 133
+        deleted: 166
+        total: 299
+        files:
+          - src/python_setup_lint/checkers/_base.py
+          - src/python_setup_lint/checkers/_base.pyi
+          - src/python_setup_lint/checkers/_decision_backend.py
+          - src/python_setup_lint/checkers/_decision_backend.pyi
+          - src/python_setup_lint/checkers/_semantic.py
+          - src/python_setup_lint/checkers/_semantic.pyi
+          - src/python_setup_lint/checkers/conformance/no_try_import_checker.py
+      limit: 300

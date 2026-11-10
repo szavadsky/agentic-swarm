@@ -1,0 +1,18 @@
+id: rm-9efb47e04e
+chosen: Specify zero-default aggregation and optional schema properties, with no
+  migration of historical records.
+alternatives:
+  - Migration/backfill of old records (explicitly out of scope).
+  - Required schema fields (would invalidate historical records).
+why: "Matches the assignment contract: absent cache keys in old meta.yaml/NDJSON
+  must read as 0 and remain schema-valid, while new records persist
+  cacheReadTokens/cacheWriteTokens/totalTokens and a cost breakdown."
+status: open
+source:
+  record: 001-test-first-r1-a1
+  agent: developer
+  step: test-first
+  item: usage-cache-tokens
+  lastSeen: 2026-11-10T02:05:24.168Z
+createdAt: 2026-11-10T02:05:24.168Z
+updatedAt: 2026-11-10T02:05:24.168Z

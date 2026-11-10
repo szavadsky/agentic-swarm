@@ -1,0 +1,19 @@
+id: rm-717ccdc143
+chosen: Tree now carries check-only ruff format ToolSpec
+  (_RuffFormatLintTool.build_command appends --check, _build adds --config) with
+  phase-1a-only mutation
+alternatives:
+  - Keep split format/lint gates permanently
+  - Drop ruff format from TOOLS
+why: Matches operator action request in infra notes; allows future gate
+  simplification while keeping current split gates green
+status: routed
+source:
+  record: 129-wave-close-up-5-3-a1
+  agent: wave-close-up
+  step: wave-close-up-5-3
+  iteration: 5
+  lastSeen: 2026-11-09T21:35:07.950Z
+createdAt: 2026-11-09T21:35:07.950Z
+updatedAt: 2026-11-10T02:32:36.259Z
+disposition: optional

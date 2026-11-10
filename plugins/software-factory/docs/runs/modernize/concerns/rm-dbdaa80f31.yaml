@@ -1,0 +1,18 @@
+id: rm-dbdaa80f31
+chosen: Retain the byte-identical golden verdict; no regeneration
+alternatives:
+  - Regenerate golden with a reviewed diff
+  - Treat the missing hatch report as a blocker
+why: 158 findings, hashes c2b8dc3a…/1d239741…, integration
+  assert_golden_byte_identical passed, last change 1a811af, and the hatch report
+  is absent at HEAD — there is no evidence of an authorized behavior shift
+  requiring a regen.
+status: open
+source:
+  record: 003-research-r2-a1
+  agent: fact-finder
+  step: research
+  item: final-gate-validation
+  lastSeen: 2026-11-10T03:19:38.948Z
+createdAt: 2026-11-10T03:19:38.948Z
+updatedAt: 2026-11-10T03:19:38.948Z

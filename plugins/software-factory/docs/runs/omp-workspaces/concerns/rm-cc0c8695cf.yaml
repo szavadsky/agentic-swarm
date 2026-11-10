@@ -1,0 +1,23 @@
+id: rm-cc0c8695cf
+chosen: Extension -e + pi.registerProvider + local OpenAI-compatible SSE mock server
+alternatives:
+  - models.yml custom provider in a temp agent dir (works; second choice, but
+    profile/agent-dir coupling and path-resolution caveats)
+  - "--config overlay with a providers: block (ruled out: ignored by the model
+    catalog)"
+  - Built-in Ollama/LM Studio local endpoint (needs a local model runtime; not
+    scripted)
+  - FakeHarness or mock omp binary (does not exercise real omp)
+why: Process-scoped, explicit per test, parallel-safe, catalog-visible via omp
+  models -e, and proven end-to-end through both omp -p and
+  OmpHarness.run/complete with zero paid calls. It avoids mutating a shared
+  profile/config file.
+status: open
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: spike-mock-provider
+  lastSeen: 2026-11-10T00:00:31.798Z
+createdAt: 2026-11-10T00:00:31.798Z
+updatedAt: 2026-11-10T00:00:31.798Z

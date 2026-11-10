@@ -1,0 +1,81 @@
+status: approved
+summary: "Audit verified: 42 rows, 194-file disjoint map, SKIPPED honored,
+  read-only kept; 8 concerns optional, 1 minor cross-ref polish"
+suggestions:
+  - detail: Verified src-unused, only tests/runner/test_baseline_diff.py imports
+      _compare_sorted; duplicates baseline._compare_violation_lists; delete
+      needs test-debloat coordination; route to runner/test-debloat impl.
+    disposition: optional
+    id: c-06946fc950
+    location:
+      file: src/python_setup_lint/runner/_baseline_helpers.py
+      line: 1
+    summary: Dead _baseline_helpers pinned only by tests
+  - detail: baseline.py shim returns frozenset plus stub/package/allowlist chain
+      verified; dispatch 449 lines with no C0302 so split complete; route to
+      runner cleanup.
+    disposition: optional
+    id: c-3ae71408be
+    location:
+      file: src/python_setup_lint/runner/baseline.py
+      line: 20
+    summary: peek_fallback_tools shim names completed owner
+  - detail: AGENTS cross-encoder/reranker plus semantic-justification.md vs
+      _decision_backend present and _decision_cache absent verified;
+      root+semantic docs update after cache lands; do not claim git cache early.
+    disposition: optional
+    id: c-8e15ccd01e
+    location:
+      file: docs/semantic-justification.md
+      line: 3
+    summary: Semantic docs describe removed cross-encoder, cache absent
+  - detail: 127 cross-module private imports block pure deletion; PYI-1..3 gross
+      -165 LoC is prioritization not budget; methodology note, no audit rework.
+    disposition: optional
+    id: c-dfa834a16b
+    location:
+      file: src/python_setup_lint/checkers/_base.pyi
+      line: 18
+    summary: LoC deltas gross; renames offset stub deletion
+  - detail: Uses node.file while pylint maps .pyi to .py; zero W9707 on
+      extra_tools.pyi despite 19 privates verified; fix PYI-4 enforcement plus
+      real-.pyi regression test before bulk stub cleanup.
+    disposition: optional
+    id: c-ff4279a5ad
+    location:
+      file: src/python_setup_lint/checkers/conformance/pyi_underscore_checker.py
+      line: 40
+    summary: W9707 blind; 203 private stubs unguarded
+  - detail: Parent-tip never-test-linting prune wins over item-side import retarget;
+      drops pytest -m slow noise/self-lint guards; test-consolidation scope, not
+      coding-rules-audit rework.
+    disposition: optional
+    id: c-3e5007b429
+    location:
+      file: tests/runner/test_pyright_noise_filter.py
+      line: 1
+    summary: Accepted deletion of two slow self-lint guard tests
+  - detail: Helper consolidation superset already on parent via i2/golden-hardening;
+      T4 moves and integration rewiring redundant in merged tree;
+      integration-helpers merge record, not audit scope.
+    disposition: optional
+    id: c-698cedaf11
+    location:
+      file: tests/_project_helpers.py
+      line: 1
+    summary: Merge byte-identical to parent tip, no item deltas
+  - detail: Docstring names pruned self-lint guards; AGENTS 1290/4/15 and 7-pass vs
+      measured 1357/0/7 and 9-collected; overlaps audit DOC-1; root docs update
+      after final merge.
+    disposition: optional
+    id: c-b8537d4f8c
+    location:
+      file: tests/_project_helpers.py
+      line: 4
+    summary: Stale helpers docstring plus AGENTS counts
+  - detail: PYI-1 fix says '(see IMP-1)' but no IMP-1 row exists; 127-import data
+      lives in handoff notes section 12; retarget ref to section 12 or add IMP-1
+      row if fix round occurs; no information loss.
+    disposition: optional
+    id: pyi1-dangling-imp1-ref
+    summary: PYI-1 cites missing IMP-1 row

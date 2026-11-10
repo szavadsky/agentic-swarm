@@ -1,0 +1,22 @@
+id: decision-ownership-map-revalidation-1794173664936
+context: item
+item: ownership-map-revalidation
+afterRecord: 004-review-r2-a1
+decision: retry-with-guidance
+timestamp: 2026-11-08T21:34:24.936Z
+rationale: Two factual accuracy defects block an otherwise complete revalidation
+  report; both are mechanical recount/wording fixes with zero repo writes. No
+  split/escalate needed.
+text: "Fix exactly two report defects in the fact-finder output (zero repo
+  writes, zero git writes): (1) Section 0 revision-leg delta: replace '7 first
+  leg / 4 second leg' with verified `git diff --name-only` truth — first leg 4
+  files, second leg 4 files, all .factory only with zero files under
+  src/scripts/tests, 7 unique end-to-end (state all three numbers with the
+  overlap explained). (2) Factory tracked count: recount `git ls-files .factory
+  | wc -l` AT the pinned HEAD 5a6f200 (not working tree) and replace stale 615
+  with the verified count (reviewer says 621 — confirm by recount, cite command
+  + HEAD + count); if the count moved because HEAD advanced, re-pin to current
+  HEAD short SHA and update the map-<SHA> revision ID consistently everywhere.
+  Re-verify: ownership counts 67/83/15/4/15 ±5 still hold after recount; drift
+  list unchanged; no other sections touched."
+persist: false

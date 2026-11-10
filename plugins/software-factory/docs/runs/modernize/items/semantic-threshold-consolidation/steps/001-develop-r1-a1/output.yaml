@@ -1,0 +1,54 @@
+status: ok
+summary: "Consolidated the semantic heuristic comment packs into one deduped
+  parametrized table in tests/checkers/test_semantic_threshold.py (115 unique
+  (comment, expected) rows; 33 meaningful + 50 meaningless + 35 brush-off at
+  HEAD, with 30 meaningful and 3 brush-off/meaningless overlaps). Each row pins
+  its expected heuristic outcome and parameter IDs remain the comment text.
+  Removed the moved TestBrushOffPatterns/TestMeaningfulPatterns classes and the
+  stale '# pylint: disable=too-many-lines  # 504 lines' header from
+  tests/checkers/test_semantic_check.py (now 401 lines, no module suppression),
+  leaving all reranker-specific classes untouched. The deduped table lives in
+  test_semantic_threshold.py so M4's reranker-class rewrite in
+  test_semantic_check.py cannot discard it."
+target:
+  command: uv run pytest tests/checkers/test_semantic_check.py
+    tests/checkers/test_semantic_threshold.py -q
+  customTarget: true
+evidence:
+  - "AST recount at HEAD: brush-off 35, meaningful 33, threshold meaningful 30,
+    meaningless 50; cross-pack overlaps exactly 30 meaningful + 3
+    (wip/tbd/temp), no intra-pack duplicates; union = 115 unique comments."
+  - "AST equivalence check: new _HEURISTIC_CASES has 115 unique rows whose
+    comment set equals the HEAD union; every pinned boolean matches the source
+    pack's expected outcome (True for meaningful packs, False for
+    meaningless/brush-off)."
+  - "pytest --collect-only on the threshold module: 115 collected test IDs, all
+    unique; IDs equal the comment text exactly (only pytest's pre-existing
+    \\u2014 display escaping for the em dash)."
+  - uv run pytest tests/checkers/test_semantic_check.py
+    tests/checkers/test_semantic_threshold.py -q -> 125 passed, 4 skipped, 3
+    deselected (158 -> 125 items as the 33 deduped duplicates collapsed, per
+    assignment).
+  - uv run pytest -q -> 1345 passed, 4 skipped, 18 deselected, exit 0 (re-run
+    after lint, still green).
+  - uv run lint -> exit 0; pylint tests PASSED (76 modules, score 10.00/10), all
+    14 tools PASSED.
+  - uv run pytest tests/integration.py -q -> 9 passed in 84.24s, including
+    assert_matches_golden and assert_golden_byte_identical (golden snapshot
+    hash-equal).
+  - "Module hygiene: test_semantic_check.py 401 lines,
+    test_semantic_threshold.py 164 lines; no pylint: disable header in either;
+    git diff touches only the two permitted test files."
+  - Reranker-specific classes (TestImportErrorFallback, TestDefaultUserFallback,
+    TestRerankerImportFallback, TestSemanticCheck, TestRerankerPairs) were left
+    byte-identical; only the two heuristic classes and stale header were
+    removed.
+concerns:
+  - Dedup intentionally reduces the two modules' selected test count from 158 to
+    125; this is the assignment's requested deduplication, not lost coverage
+    (all 115 unique comments remain, outcomes pinned).
+  - M4 must preserve the deduped table in test_semantic_threshold.py when
+    rewriting reranker classes in test_semantic_check.py.
+notes: Table grouped readably by meaningful / placeholder / boilerplate /
+  short-empty / brush-off sections; no runtime dedup logic, the literal table
+  itself is deduped.

@@ -1,0 +1,124 @@
+status: ok
+summary: "Implemented the veto DecisionBackend pipeline. New
+  checkers/_decision_backend.py(+.pyi) provides DECISION_THRESHOLD=0.5,
+  PROMPT_VERSION='prompt-v1', runtime-checkable DecisionBackend Protocol,
+  FakeBackend (default 1.0, 'fake-backend rev test prompt-v1'), a hermetic
+  get_backend() that returns None in production, honors
+  PYTHON_SETUP_LINT_DECISION_BACKEND only under PYTEST_CURRENT_TEST, emits
+  structlog 'decision_model_unavailable' (model+reason) once per process for
+  PYTHON_SETUP_LINT_DECISION_MODEL, and a once-per-process deprecation warning
+  for PYTHON_SETUP_LINT_RERANKER_MODEL. _base.py(+.pyi) adds
+  normalize_suppressed_codes (directive strip, code-token echo rejection, bare
+  text unchanged), a backend=None keyword on check_if_meaningful, and
+  heuristic-first veto semantics (brush-off never reaches the adapter/backend;
+  None backend leaves the heuristic verdict). _semantic.py(+.pyi) is rewritten
+  as a thin backend adapter: backend=None keyword, None mapping, 0.5 threshold,
+  in-process memo keyed by (justification, rule, model_id), zero disk writes, no
+  sentence-transformers reference. no_try_import _OPTIONAL_IMPORT_PATTERNS is
+  now empty, pyproject [semantic] is an empty placeholder, and uv.lock was
+  regenerated with zero sentence-transformers edge (80 packages remain)."
+target:
+  selectors:
+    - tests/checkers/test_decision_backend.py
+    - tests/checkers/test_semantic_check.py
+    - tests/checkers/test_no_try_import_checker.py
+    - tests/checkers/test_suppression_justification_checker.py
+    - tests/assumptions/test_pylint_cache_semantics.py
+  expectRed:
+    - tests/checkers/test_decision_backend.py::test_fake_backend_defaults_to_one_and_pinned_model_id
+    - tests/checkers/test_decision_backend.py::test_fake_backend_returns_configured_score
+    - tests/checkers/test_decision_backend.py::test_fake_backend_satisfies_protocol
+    - tests/checkers/test_decision_backend.py::test_get_backend_is_none_without_configuration
+    - tests/checkers/test_decision_backend.py::test_get_backend_honors_dotted_path_under_pytest
+    - tests/checkers/test_decision_backend.py::test_get_backend_ignores_dotted_path_in_production
+    - tests/checkers/test_decision_backend.py::test_decision_model_parses_but_yields_none_with_exactly_one_warning
+    - tests/checkers/test_decision_backend.py::test_reranker_model_env_is_deprecated_with_exactly_one_warning
+    - tests/checkers/test_decision_backend.py::test_check_if_meaningful_has_backend_keyword_defaulting_to_none
+    - tests/checkers/test_decision_backend.py::test_registered_backend_rejects_a_meaningful_heuristic
+    - tests/checkers/test_decision_backend.py::test_brush_off_is_vetoed_before_the_backend
+    - tests/checkers/test_decision_backend.py::test_brush_off_does_not_reach_the_semantic_adapter
+    - tests/checkers/test_decision_backend.py::test_meaningful_heuristic_is_confirmed_by_backend
+    - tests/checkers/test_decision_backend.py::test_backend_below_threshold_rejects_a_meaningful_heuristic
+    - tests/checkers/test_decision_backend.py::test_semantic_disabled_never_calls_the_backend
+    - tests/checkers/test_decision_backend.py::test_check_if_meaningful_rejects_code_echo_justification
+    - tests/checkers/test_decision_backend.py::test_semantic_extra_is_empty
+    - tests/checkers/test_decision_backend.py::test_uv_lock_has_no_sentence_transformers_edge
+    - tests/checkers/test_semantic_check.py::test_signature_exposes_backend_keyword_defaulting_to_none
+    - tests/checkers/test_semantic_check.py::test_empty_primary_returns_false_without_calling_backend
+    - tests/checkers/test_semantic_check.py::test_one_backend_call_per_unique_pair
+    - tests/checkers/test_semantic_check.py::test_distinct_pairs_call_backend_again
+    - tests/checkers/test_semantic_check.py::test_memo_key_includes_backend_model_id
+    - tests/checkers/test_semantic_check.py::test_module_does_not_reference_sentence_transformers
+    - tests/checkers/test_semantic_check.py::test_check_writes_no_disk_cache
+    - tests/checkers/test_no_try_import_checker.py::test_sentence_transformers_is_no_longer_an_optional_import_pattern
+    - tests/checkers/test_no_try_import_checker.py::test_try_import_of_sentence_transformers_is_flagged
+    - tests/checkers/test_suppression_justification_checker.py::TestAnyElementCodeEcho::test_code_echo_on_any_element_is_rejected
+    - tests/assumptions/test_pylint_cache_semantics.py::TestSemanticInProcessMemo::test_given_new_verdicts_then_backend_calls_once_each_and_writes_nothing
+    - tests/assumptions/test_pylint_cache_semantics.py::TestSemanticInProcessMemo::test_given_repeated_pair_then_serves_memory_without_backend_or_write
+    - tests/assumptions/test_pylint_cache_semantics.py::TestSemanticInProcessMemo::test_given_empty_primary_then_returns_false_without_backend_or_write
+    - tests/assumptions/test_pylint_cache_semantics.py::TestSemanticPathScoping::test_semantic_check_if_meaningful_given_identical_inputs_then_signature_is_path_free
+    - tests/assumptions/test_pylint_cache_semantics.py::TestSemanticPathScoping::test_checker_sources_given_source_tree_then_no_result_cache_writer
+evidence:
+  - "Target files: `uv run pytest tests/checkers/test_decision_backend.py
+    tests/checkers/test_semantic_check.py
+    tests/checkers/test_no_try_import_checker.py
+    tests/checkers/test_suppression_justification_checker.py
+    tests/assumptions/test_pylint_cache_semantics.py -q` -> 120 passed (was 48
+    failed / 72 passed at test-first)."
+  - Exact declared expectRed selectors (33 node IDs) -> `33 passed in 0.61s`.
+  - "Full unit suite: `uv run pytest -q` -> 1377 passed, 13 deselected, 0 failed
+    (test-first baseline was 48 failed / 1329 passed); no regressions."
+  - "Project gate: `uv run lint` -> all 14 tools PASSED (tach, ruff format, ruff
+    check, rumdl, mypy, yamllint, ty, mypy.stubtest, pyright check, pyright
+    verify types, pylint, pylint-pyi, pylint tests, detect-secrets), exit 0."
+  - "Behavior proof: brush-off with backend=recording -> False and backend.calls
+    == [] (never reaches adapter/backend); registered rejecting backend ->
+    False; one backend call per unique pair and distinct/other-model pairs call
+    again; backend None -> semantic returns None and check_if_meaningful returns
+    heuristic True."
+  - "Loader proof: no env -> None; dotted path honored only with
+    PYTEST_CURRENT_TEST and ignored in production;
+    PYTHON_SETUP_LINT_DECISION_MODEL yields None with exactly one warning across
+    two calls; PYTHON_SETUP_LINT_RERANKER_MODEL emits exactly one warning
+    containing 'deprecated'."
+  - "Packaging proof: `pyproject.toml` [project.optional-dependencies].semantic
+    == []; `uv lock --check` resolved 80 packages; `grep -c
+    sentence-transformers uv.lock` -> 0 matches (root entry has no semantic
+    extra edge)."
+  - "No-disk proof: test_check_writes_no_disk_cache and assumptions tests
+    confirm no cache dir/file is created;
+    test_checker_sources_given_source_tree_then_no_result_cache_writer finds no
+    result-cache writer in any checker .py."
+  - "Golden: `uv run pytest tests/integration.py -q` -> 8 passed, 1 failed
+    solely from 3 intended added findings ('pylint', 'pylint-pyi', 'pylint
+    tests' -> src/minimal_sample/mod.py:42 unjustified-suppression). Shift
+    reported; tests/data is forbidden for this story so the golden was not
+    regenerated."
+concerns:
+  - "Golden shift-reported (not regenerated): the code-echo fix adds 3 W9704
+    findings at tests/data/minimal_sample_project/src/minimal_sample/mod.py:42
+    for pylint, pylint-pyi, and pylint tests. Line 42's '# noqa:
+    unused-argument' was previously treated as justified by the preceding '#
+    pylint: disable=some-rule' directive (itself flagged at line 41);
+    normalize_suppressed_codes now correctly rejects a directive as a reason.
+    tests/data is FORBIDDEN by the assignment, so the golden snapshot remains at
+    the old state."
+  - uv.lock regeneration pruned 79 transitive packages (sentence-transformers,
+    torch/nvidia, transformers/huggingface-hub, httpx stack, scikit-learn/scipy,
+    etc.) because the empty [semantic] extra had no other consumers; 80 packages
+    remain and uv lock --check is consistent.
+  - "Two justified inline suppressions were added: ruff ARG002 on
+    FakeBackend.decide (deterministic fake ignores inputs) and pylint
+    trivial-wrapper on the two private test-reset helpers."
+  - "Module-size budget: all touched modules <= 500 lines (_decision_backend.py
+    100, _base.py 280, _semantic.py 48); net production line delta is +27
+    excluding uv.lock."
+notes: Implementation follows ADR-014 pinned values and ADR-010's test-only
+  dotted-path guard. No forbidden paths were touched (no
+  decisions/_decision_cache, _source_stream, ty.toml, tach.toml, tests/data,
+  .gitignore, hatch entry, or baseline). The new companion stub
+  src/python_setup_lint/checkers/_decision_backend.pyi is untracked/new and must
+  be included in the commit. The semantic adapter calls
+  _decision_backend.get_backend() through the module object so monkeypatched
+  loaders are honored, and check_if_meaningful imports the adapter lazily for
+  the same reason.

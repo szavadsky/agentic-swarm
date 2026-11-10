@@ -1,0 +1,190 @@
+iteration: 1
+amendmentIndex: 2
+items:
+  - assignment: "Create tests/_golden.py as SOLE golden owner (no pipeline run in
+      this item). Implement: UPDATE_ENV='PYTHON_SETUP_LINT_UPDATE_GOLDEN',
+      SEMANTIC_ENV='PYTHON_SETUP_LINT_SEMANTIC'; Finding TypedDict {tool:str,
+      file:str|None, line:int|None, col:int|None, rule:str}; finding_key(f)
+      None-safe (tool, file or '', line if int else -1, col if int else -1,
+      rule) mirroring _violation_sort_key; normalize_record (drop msg,
+      relativize vs project, strip './', backslash->'/', as_posix, assert
+      non-absolute); serialize via json.dump(indent=2, sort_keys=True)+trailing
+      newline; assert_matches_golden (Counter multiset diff, sorted
+      added/removed; UPDATE=1: pytest.fail('refusing to rewrite golden under
+      CI...') if CI/GITHUB_ACTIONS else warn+rewrite golden+counts together);
+      read_oracle_rules, slice_tool_section, assert_oracle_coverage,
+      assert_tool_coverage. Consume golden-determinism-probe report
+      normalization spec. Add tests/test_golden.py with synthetic Finding lists
+      ONLY (no run_lint, no pipeline): finding_key None vs str/int ordering,
+      POSIX normalization, multiset diff exact added/removed, CI-guard fail,
+      coverage asserts, serialization byte-format. Constraints: no src/ changes,
+      no golden files yet, module <=500 lines, formatted. Acceptance: `uv run
+      pytest tests/test_golden.py -q` passes."
+    citations:
+      - tests/_golden.py
+      - tests/test_golden.py
+      - ADR-001
+    deps:
+      - golden-determinism-probe
+    kind: test-only
+    milestone: M1
+    outlineRef: golden-helpers-unit
+    scenarioRefs:
+      - "M1: Golden snapshot pins current behavior"
+      - "M1: Behavior drift is reported precisely"
+      - "M1: Deterministic regeneration"
+    slug: golden-helpers-unit
+    title: Golden helpers module with synthetic unit tests
+    wave: 6
+  - assignment: "Using tests/_golden.py from golden-helpers-unit and probe verdict.
+      (1) Commit tests/data/golden/minimal_sample_project_findings.json +
+      ..._tool_counts.json via helper serialization, outside sample dir, never
+      copied/linted; violations.txt RETAINED as oracle. (2) Edit
+      tests/integration.py test_setup_new_and_lint only: keep first run (no
+      baseline, rc!=0) AND retain tool-section/SKIPPED/[CRASH]/W9705 assertions;
+      add dedicated second capture (caller owns tmp, copy_sample, git-init,
+      _make_config with package_name+rumdl override, monkeypatched
+      PYTHON_SETUP_LINT_SEMANTIC=0) calling collect_findings; replace substring
+      loop with golden equality + oracle/tool coverage; brush-off/carry as
+      tool-qualified lookups (tool='pylint', file='src/minimal_sample/mod.py',
+      line 49 present / 56 absent); drift injection on in-memory list copies
+      only. Run captures on temp copies only — never bare `uv run lint` on repo
+      (ruff-format write hazard). Bounded src allowance ONLY if probe proved
+      test-side insufficient: runner/baseline.py relativize/sort +
+      runner/parsers.py|_record_parsers.py ordering, <=40 added lines,
+      determinism-only (no finding added/removed), reviewed diff in report.
+      Acceptance: `uv run pytest tests/integration.py -v` and `uv run pytest
+      tests/test_golden.py -q` pass; PYTHON_SETUP_LINT_UPDATE_GOLDEN=1 regen
+      twice byte-identical; golden+counts byte-stable."
+    citations:
+      - tests/_golden.py
+      - tests/integration.py
+      - tests/data/golden/minimal_sample_project_findings.json
+      - ADR-001
+      - TD-3
+    deps:
+      - golden-determinism-probe
+      - golden-helpers-unit
+    kind: dev
+    milestone: M1
+    outlineRef: golden-snapshot-wiring
+    scenarioRefs:
+      - "M1: Golden snapshot pins current behavior"
+      - "M1: Behavior drift is reported precisely"
+      - "M1: Deterministic regeneration"
+      - "M1: Planted-rule and per-tool coverage preserved"
+      - "M1: Crash/skip coverage retained outside golden"
+    slug: golden-snapshot-wiring
+    title: Commit golden files and wire integration capture
+    wave: 7
+  - assignment: "Replaces pending consolidate-integration-helpers blocked on
+      superseded golden-findings-snapshot (rewired to golden-snapshot-wiring;
+      identical scope). Extract into tests/_project_helpers.py:
+      copy_sample_project, git_init_and_stage (init+config test/test@test + `git
+      add .`), git_init_bare (init -q + Test/test@example.com, no add —
+      identities NOT unified), stage_file, commit_all, shipped_config_paths,
+      make_runner_config (package_name+rumdl override, preserving _make_config
+      side-effect: idempotent overwrite, no-op when shipped rumdl missing),
+      build_pylint_overlay_config(project, disable_rule)->Path,
+      ensure_precommit_or_skip, install_twice_assert_idempotent. Delete
+      duplicate defs in conftest.py and _autofix_helpers.py (import instead);
+      integration.py imports only mapped subset; test_self_lint_clean.py and
+      autofix tests switch imports. Per-consumer map: integration->{copy,
+      git_init_and_stage, make_runner_config, build_overlay, ensure_precommit,
+      install_twice}; conftest->{shipped_config_paths};
+      _autofix->{git_init_bare, stage_file, commit_all}. Line budget (remove
+      >=127, target <=490): helpers ~58 + oracle ~8 + overlay ~21 + setup ~20 +
+      precommit ~25 + M1 net ~5 + slice ~3 + trim ~4. Keep path/class/function
+      names; golden+counts byte-identical; sole AGENTS.md counts owner (update
+      incl. new assumption tests). Acceptance: integration, `pytest -q`, `lint`
+      pass."
+    citations:
+      - tests/_project_helpers.py
+      - tests/integration.py
+      - tests/conftest.py
+      - ADR-004
+      - TD-3
+    deps:
+      - golden-snapshot-wiring
+      - third-party-assumption-tests
+    kind: test-only
+    milestone: M2
+    outlineRef: consolidate-integration-helpers
+    scenarioRefs:
+      - "M2: Shared helpers exist once"
+      - "M2: Integration gate module within limits"
+    slug: consolidate-integration-helpers-v2
+    title: Single-source helpers; integration.py under 500 lines
+    wave: 8
+  - assignment: "Replaces pending coding-rules-audit blocked on superseded (rewired
+      to golden-snapshot-wiring; identical scope). Read-only audit of src/** and
+      scripts/** vs CodingRules/AGENTS — no committed files, output is
+      structured item-report tables. Semantic exclusions (mark skipped, audit
+      rest): checkers/_semantic.py+.pyi, new _decision_backend/_decision_cache
+      modules (+.pyi), _base.py::check_if_meaningful (+stub),
+      no_try_import_checker::_OPTIONAL_IMPORT_PATTERNS. Inventory: .pyi
+      fidelity/private symbols, @beartype+structural suppressions, trivial
+      wrappers/duplicated logic, redundant fallbacks (astroid 3.x), legacy stubs
+      (_FALLBACK_TOOLS, peek_fallback_tools, _compare_sorted), over-long
+      comments, 500-line/R0912/R0915 proximity, structlog/error rules, rumdl
+      tests/data-exclude hack (TD-11). Output rows {module, section, evidence
+      file:line, category, est. LoC delta, owner, fix} + UNIFIED
+      disjoint-ownership map (single owner; test-debloat-audit-v2 consumes via
+      dep). Read final state post-wiring/assumptions/consolidate-v2 + beartype
+      discovery report from third-party-assumption-tests."
+    citations:
+      - CodingRules.md
+      - AGENTS.md
+      - TD-5
+      - TD-6
+      - TD-7
+      - TD-11
+    deps:
+      - golden-snapshot-wiring
+      - third-party-assumption-tests
+      - consolidate-integration-helpers-v2
+    kind: fact-finder
+    milestone: M3
+    outlineRef: coding-rules-audit
+    scenarioRefs:
+      - "M3: Coding-rules debt inventoried"
+      - "M3: Ownership map is complete and disjoint"
+    slug: coding-rules-audit-v2
+    title: Inventory CodingRules violations
+    wave: 9
+  - assignment: "Replaces pending test-debloat-audit blocked on superseded (rewired
+      to golden-snapshot-wiring; identical scope). Read-only audit of tests/** —
+      no committed files, output is structured item-report tables. Semantic
+      exclusions (mark skipped): test_semantic_check.py,
+      test_semantic_threshold.py, TestSuppressionRerankerPipeline,
+      tests/checkers/conftest.py (epic-created), tests/assumptions
+      runtime/decision/cache modules (epic-created). Per module: behaviors
+      protected; duplicates (incl. golden-covered); CodingRules-Tests violations
+      (first-party mocking, naming, markers, in-file fixtures, _factories.py
+      list[Any] tables, far cases); repo-self-lint for removal
+      (test_self_lint_clean.py, AST/source-scanning guards, config re-checks);
+      slow/benchmark; task-ID names. Output rows {module, behaviors,
+      duplicate-of, recommendation keep|merge|rewrite|remove, surviving
+      coverage, reason, owner} + per-subsystem LoC estimates + per-limb pinning
+      inventory (CLI/exit, baseline/autofix, configs/scopes: surviving test or
+      blocking-debt flag). Owner column aligned to coding-rules-audit-v2 unified
+      map (read via dep)."
+    citations:
+      - tests/
+      - ADR-004
+      - TD-8
+      - TD-9
+    deps:
+      - golden-snapshot-wiring
+      - third-party-assumption-tests
+      - consolidate-integration-helpers-v2
+      - coding-rules-audit-v2
+    kind: fact-finder
+    milestone: M3
+    outlineRef: test-debloat-audit
+    scenarioRefs:
+      - "M3: Test redundancy inventoried"
+      - "M3: Ownership map is complete and disjoint"
+    slug: test-debloat-audit-v2
+    title: Inventory redundant and lint-testing tests
+    wave: 10

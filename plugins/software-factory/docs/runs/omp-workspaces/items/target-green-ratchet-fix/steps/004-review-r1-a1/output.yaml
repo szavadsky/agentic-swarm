@@ -1,0 +1,4 @@
+status: approved
+summary: Gate-target ratchet mirrors runGates per-test logic with JUnit
+  re-derivation parity; spec 5/5 green, typecheck clean, no defects
+suggestions: []

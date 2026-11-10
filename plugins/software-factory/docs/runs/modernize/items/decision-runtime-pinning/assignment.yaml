@@ -1,0 +1,24 @@
+slug: decision-runtime-pinning
+kind: test-assumptions
+title: Pin chosen runtime wheels and API contracts
+assignment: "GOAL: Pin chosen runtime wheels and API contracts conditional on
+  eval recommendation. Conditional: no-go from model-eval-poc means report-only
+  skip with no file. STEPS: For chosen runtime only verify py3.14 CPU wheels for
+  linux,mac,win, import and device and offline contract (CPU fallback, no
+  network on hit), and custom-code pinning (vendored revision, never unpinned
+  trust_remote_code). Add tests/assumptions/test_decision_runtime_contracts.py
+  with no_external_api marker and test_<api>_given_<condition>_then_<expected>
+  names. No src changes. VERIFY: New assumption tests pass offline or explicit
+  blocker recorded for iteration-3 epic; wheels and APIs pinned."
+outlineRef: decision-runtime-pinning
+milestone: M3
+wave: 3
+deps:
+  - model-eval-poc
+scenarioRefs:
+  - M3-1
+citations:
+  - src/python_setup_lint/checkers/_semantic.py:93-122
+  - src/python_setup_lint/checkers/_semantic.py:37-52
+  - pyproject.toml:28-31
+  - docs/semantic-justification.md:5-14

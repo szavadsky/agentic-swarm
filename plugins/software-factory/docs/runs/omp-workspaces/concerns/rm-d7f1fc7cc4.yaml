@@ -1,0 +1,21 @@
+id: rm-d7f1fc7cc4
+chosen: Four spikes + two foundation items in iteration 1; epics deferred to
+  iteration 2
+alternatives:
+  - "Define all five epics now alongside spikes (rejected: epics would build on
+    unknowns or block on missing records)"
+  - "Spikes only with no foundation items (rejected: cache-token plumbing is
+    spike-independent and M7 decisions need data early)"
+why: Every major subsystem depends on spike decisions, and concurrently launched
+  epic children could not see spike findings merged after their branch point;
+  spikes-first is the only sequencing honoring
+  never-build-on-unvalidated-foundations while keeping iteration 1 to two waves.
+status: open
+source:
+  record: 005-architect-plan-1-a1
+  agent: architect
+  step: architect-plan-1
+  iteration: 1
+  lastSeen: 2026-11-09T23:33:06.263Z
+createdAt: 2026-11-09T23:33:06.263Z
+updatedAt: 2026-11-09T23:33:06.263Z

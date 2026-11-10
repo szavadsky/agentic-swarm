@@ -1,0 +1,9 @@
+id: awareness-plan-3-dotted-path-injection-risk
+ref: plan-3
+disposition: human-awareness
+question: PYTHON_SETUP_LINT_DECISION_BACKEND dotted path has no test-only
+  enforcement (pytest guard/allowlist); if honored in production lint, env
+  control equals code execution. Architect can decide guard now; operator should
+  be aware. Document in ADR-010 with loader test.
+status: open
+createdAt: 2026-11-08T19:44:54.230Z

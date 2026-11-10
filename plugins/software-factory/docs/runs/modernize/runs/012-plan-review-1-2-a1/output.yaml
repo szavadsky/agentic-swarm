@@ -1,0 +1,201 @@
+status: changes_requested
+summary: "changes_requested: 12 fix block (env mismatch, None-sort crash, crash
+  gap, missing M2 owner, config side-effect, U3 unisolated, vague contracts,
+  overconstrained scenario, audit artifact race, serialization gap, cross-epic
+  edges, weak oracle) + 3 human-awareness"
+suggestions:
+  - id: golden-env-var-mismatch
+    disposition: fix
+    summary: "M1 regen env var disagrees: UPDATE_GOLDEN vs
+      PYTHON_SETUP_LINT_UPDATE_GOLDEN"
+    detail: M1 directionalInterfaces says UPDATE_GOLDEN=1 warns+rewrites;
+      golden-findings-snapshot item and semantic req5 say
+      PYTHON_SETUP_LINT_UPDATE_GOLDEN=1. SEMANTIC=0 shorthand vs real
+      PYTHON_SETUP_LINT_SEMANTIC also ambiguous. Unify to single fully-qualified
+      name in interface, item, epic, and assert_matches_golden contract; specify
+      CI/GITHUB_ACTIONS fail message/mechanism.
+    location:
+      file: tests/integration.py
+      line: 111
+  - id: golden-sort-none-unsafe
+    disposition: fix
+    summary: Sort/Counter on nullable Finding will TypeError without None-safe key
+    detail: Finding has file/line/col nullable for __CRASH__. Interface says sort by
+      5-tuple and sorted added/removed, but naive sorted() on None vs str/int
+      raises. Baseline already solves via _violation_sort_key mapping None
+      file->('',) line/col->(-1,) (baseline.py:55-57). Specify None-safe key
+      (reuse/mirror) for collect_findings sort and assert_matches_golden diff
+      output.
+    location:
+      file: src/python_setup_lint/runner/baseline.py
+      line: 48
+  - id: crash-coverage-false
+    disposition: fix
+    summary: Golden cannot pin crashes/skips as claimed; positive-exit failures silent
+    detail: _capture_one emits __CRASH__ only for exit_code<0 (baseline.py:133);
+      _print_result marks [CRASH] only for exit<0 (output.py:249). Tool
+      traceback/config error exiting 1/2 yields zero records, no crash. Tools
+      with zero sample findings can be skipped without golden diff. M1 says
+      replace substring loop; M2 says moved blocks to unspecified owner.
+      Explicitly retain tool-section/SKIPPED/[CRASH]/W9705 assertions and define
+      how skips surface.
+    location:
+      file: src/python_setup_lint/runner/baseline.py
+      line: 133
+  - id: m2-moved-blocks-no-owner
+    disposition: fix
+    summary: M2 line budget moves overlay/assertion blocks to nowhere
+    detail: consolidate-integration-helpers budgets <=500 via moved overlay
+      scaffolding ~30-40 (test_config_overlay pylintrc rewrite) + moved
+      assertion blocks ~25-30, but directionalInterfaces define only 7 helpers
+      in tests/_project_helpers.py. No destination module, function signatures,
+      or caller contract. Define owning module + signatures or keep blocks in
+      integration.py and re-budget.
+    location:
+      file: tests/integration.py
+      line: 168
+  - id: m1-config-side-effect-contract
+    disposition: fix
+    summary: make_runner_config/_make_config side effect and collect_findings
+      signature underspecified
+    detail: M1 scenario cites make_runner_config semantics but M1 uses _make_config
+      (M2 extracts). _make_config writes project/rumdl.toml via brittle
+      content.replace('"tests/data", ','') (integration.py:90-97),
+      idempotency/overwrite/failure unspecified. collect_findings(project,tmp)
+      omits who builds config, who git-inits/copies, how SEMANTIC=0 set
+      (monkeypatch?), tmp creation, len!=0 owner;
+      assert_matches_golden(findings,golden) omits Path-vs-list and rewrite side
+      effect owner.
+    location:
+      file: tests/integration.py
+      line: 83
+  - id: u3-needs-spike-or-src-allowance
+    disposition: fix
+    summary: U3 determinism risk inside story that forbids the src fix it may need
+    detail: U3 lists duplicate-code ordering, detect-secrets over ls-files,
+      pyright/mypy churn, absolute leakage. SpikeOutline is inside
+      golden-findings-snapshot with test-side normalization only, No src/
+      changes, src fixes deferred as blocking debt. If capture-twice diff fails,
+      story cannot pass while deferring, blocking M2/M3 via deps. Add pre-story
+      spike or allow bounded src parser/baseline fixes in-story.
+    location:
+      file: src/python_setup_lint/runner/baseline.py
+      line: 161
+  - id: third-party-contracts-vague
+    disposition: fix
+    summary: Assumption contracts over-pin, miscategorize, and leave beartype unknown
+    detail: "Module.stream()->bytes too strict: product tolerates bytes|str
+      (suppression_justification_checker.py:59 raw.decode if bytes).
+      register(linter) is first-party; true third-party contract is
+      PyLinter.register_checker/BaseChecker lifecycle. MessageDefinitionTuple
+      shape, CheckerTestCase/UnittestLinter capture, nodes_of_class tuple,
+      Const/JoinedStr attrs lack expected values. Beartype TYPE_CHECKING
+      behavior VERIFIED during item = unknown, belongs in spike. Also
+      tests/__init__.py already exists; should be
+      tests/assumptions/__init__.py."
+    location:
+      file: src/python_setup_lint/checkers/conformance/suppression_justification_checker.py
+      line: 50
+  - id: m2-helpers-scenario-overconstrained
+    disposition: fix
+    summary: Shared-helpers scenario requires impossible imports and races AGENTS.md
+      counts
+    detail: Scenario requires each of 7 helpers imported by integration.py,
+      conftest.py and _autofix_helpers.py, but conftest only needs
+      shipped_config_paths (conftest.py:170), _autofix_helpers needs only git
+      helpers (own _git_init/_stage/_commit_all with different identity/-q).
+      Correct impl fails scenario. Also consolidate updates AGENTS.md counts
+      while third-party-assumption-tests runs parallel (no dep) adding tests;
+      counts race. Scope imports per-consumer and add dep or single AGENTS.md
+      owner.
+    location:
+      file: tests/conftest.py
+      line: 170
+  - id: m3-audit-artifact-ownership
+    disposition: fix
+    summary: Audits emit no durable artifact, race semantic epic, exclusions
+      inconsistent
+    detail: Row schemas as item-report tables (no committed file) rot when semantic
+      epic concurrently creates backend/cache modules and rewrites
+      test_semantic_check.py (506 lines + suppression),
+      test_semantic_threshold.py, tests/checkers/conftest.py (absent per glob),
+      pyproject/docs. Unified map owned solely by coding-rules-audit but both
+      audits parallel with no inter-dep. Interface excludes only
+      TestSuppressionRerankerPipeline + runtime modules, omitting epic-owned
+      semantic test files; item says exclude semantic test modules. Iteration-2
+      disjoint-ownership scenario not falsifiable in iter1.
+    location:
+      file: tests/checkers/test_semantic_check.py
+      line: 1
+  - id: golden-serialization-determinism
+    disposition: fix
+    summary: Golden JSON format, POSIX steps, drift injection, and tool-qualified
+      lookups missing
+    detail: Interface says sorted JSON array but omits indent/sort_keys/newline
+      (baseline writer uses indent=2 sort_keys=True), POSIX steps (strip ./,
+      Windows \, already-relative), and no-absolutes/timestamps/msgs assertion.
+      Drift scenario lacks injection method. Brush-off mod.py:49 HAS vs carry
+      mod.py:56 NONE lookups omit tool (pylint vs pylint-pyi vs pylint tests may
+      duplicate same line), so equality+lookup ambiguous.
+    location:
+      file: tests/data/minimal_sample_project/src/minimal_sample/mod.py
+      line: 49
+  - id: cross-epic-ordering-unenforced
+    disposition: fix
+    summary: Semantic-vs-root file sharing relies on prose ordering, not edges
+    detail: ADR-004 orders epic AGENTS.md pipeline-section rebase after root M2
+      counts edit and epic req5 golden regen after M1, but no machine-checkable
+      deps enforce it; concurrent edits to AGENTS.md, _base.py/_semantic.py
+      symbols, tests/assumptions, golden dir risk conflicts/stale audits. Epic
+      out-of-scope bans tests/integration.py/conftest.py edits but allows golden
+      regen exception. Add explicit ordered edges or serialize; clarify ADR-003
+      self-reference (lock/merge/sweep chosen in ADR).
+    location:
+      file: AGENTS.md
+      line: 79
+  - id: oracle-coverage-weak
+    disposition: fix
+    summary: violations.txt oracle pins only subset; other tools unguarded on regen
+    detail: violations.txt holds pylint custom + MD072 + duplicate-code only, not
+      ruff/mypy/pyright/ty/yamllint/tach/detect-secrets.
+      Every-oracle-rule-in-golden does not prevent silent drop of other tools on
+      blind regen. Root M1 regen warns only (no diff-review requirement unlike
+      epic req5). Add per-tool minimum-count or explicit tool coverage and
+      require reviewed diff for regen.
+    location:
+      file: tests/data/minimal_sample_project/violations.txt
+      line: 1
+  - id: human-material-definition
+    disposition: human-awareness
+    summary: Material-behavior boundary (golden + surviving tests, reranker
+      excluded) needs operator visibility
+    detail: Assumption defines material as findings {tool,file,line,col,rule}
+      SEMANTIC=0 + checker units + CLI/exit + baseline/autofix + configs/scopes;
+      model accept/reject non-material, heuristic rejections material. Makes
+      preserve testable but narrows intent. Architect can proceed for iter1;
+      record for operator review.
+    location:
+      file: src/python_setup_lint/checkers/_base.py
+      line: 142
+  - id: human-cache-location
+    disposition: human-awareness
+    summary: Committed .python-setup-decisions.json next to baseline impacts consumers
+    detail: Assumption + ADR-003 place git-stored cache at linted root for
+      python-setup and consumers; weights stay in user cache. Adds one committed
+      file per consumer, reviewable diffs, possible line-local merges, must pass
+      detect-secrets. Architect can proceed; operator should be aware before
+      epic implements.
+    location:
+      file: src/python_setup_lint/checkers/_semantic.py
+      line: 37
+  - id: human-never-lint-broadening
+    disposition: human-awareness
+    summary: Broadened never-test-linting removes self-lint/AST/config tests
+    detail: Assumption expands never-test-linting to ban subprocess re-lint,
+      AST/source re-implementation, and config-consistency re-checks (e.g.
+      test_self_lint_clean.py slow gate, guards, config re-checks). M3 lists for
+      removal, iter2 removes. Rationale (rot with rule churn) reasonable but
+      deletes coverage; operator visibility warranted.
+    location:
+      file: tests/runner/test_self_lint_clean.py
+      line: 20

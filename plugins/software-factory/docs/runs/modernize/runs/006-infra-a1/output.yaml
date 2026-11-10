@@ -1,0 +1,71 @@
+setup:
+  - uv sync
+gates:
+  - id: format
+    command: uv run ruff format --check --config config/ruff.toml src tests
+  - id: lint
+    command: uv run lint --tools 'tach check,ruff check,rumdl check,mypy,yamllint,ty
+      check,mypy.stubtest,pyright check,pyright verify
+      types,pylint,pylint-pyi,pylint tests,detect-secrets'
+  - id: test
+    command: uv run pytest -q
+  - id: test-integration
+    command: uv run pytest tests/integration.py -q
+testRunner:
+  command: uv run pytest
+  selectorArgs:
+    - -k
+  junitArg: --junitxml={path}
+notes:
+  - "CRITICAL — the documented gate `uv run lint` is NOT check-only: its `ruff
+    format` ToolSpec (src/python_setup_lint/runner/dispatch.py, built by
+    cmd_build._build_command) runs plain `ruff format` with neither `--check`
+    nor `--config`, so every invocation silently rewrites 105 files using ruff's
+    default line-length instead of config/ruff.toml. Verified live (worktree
+    went dirty with 106 modified files, then reverted; final state clean).
+    Declared gates therefore split it: `format` = `ruff format --check --config
+    config/ruff.toml src tests` (passes, 173 files formatted) and `lint` = the
+    runner with the 13 check-only tools (mutation-free, verified clean
+    afterwards). Operator action: add `--check` (+ `--config`) to the `ruff
+    format` ToolSpec, or drop it from TOOLS, so AGENTS.md/CONTRIBUTING's `uv run
+    lint` stops mutating worktrees."
+  - "Baseline is red on clean checkout (recorded as-is). `uv run pytest -q`: 6
+    failed, 1300 passed, 4 skipped, 18 deselected (~36s) — all 6 failures assume
+    13 tools while TOOLS now has 14 (`ruff format` added):
+    test_lint_runner.py::TestToolSpec::test_tool_spec_given_known_tools_then_pr\
+    esent, ::test_tool_spec_given_tools_then_autofix_and_no_duplicates,
+    test_lint_runner_stats.py::test_statistics_parsers_given_all_tools_then_cov\
+    ered,
+    test_t3_coverage.py::TestParserCompleteness::test_parser_completeness_given\
+    _all_tools_then_have_parser,
+    test_testing_fakes.py::test_run_lint_with_fake_dispatch_invariants[all_13_t\
+    ools_dispatched], ::[package_name_none_skips_stubtest_verifytypes]."
+  - "Lint gate is red on clean checkout (exit 16, ~65s): ruff check SIM102 at
+    src/python_setup_lint/checkers/stub/coverage.py:196; pylint + pylint-pyi
+    W9704 unjustified-suppression at
+    src/python_setup_lint/checkers/conformance/generic_key_dict_checker.py:40
+    and src/python_setup_lint/testing.py:34; pylint R0914 too-many-locals at
+    src/python_setup_lint/runner/cli.py:50; pylint tests C0208
+    use-sequence-for-iteration at tests/runner/_factories_extras.py:383. All
+    other tools pass (tach, rumdl, mypy, yamllint, ty, mypy.stubtest, pyright
+    check, pyright verify types, detect-secrets)."
+  - "Integration gate passes: 9 passed in ~43s (tests/integration.py, not marked
+    slow)."
+  - 'Orchestration-folder noise: none — .factory is already excluded by project
+    configs (rumdl exclude ".factory/**", yamllint ignore "**/.factory/**", tach
+    exclude "**/.factory"); namespaced --tools list is required because `lint
+    --exclude` is only forwarded to tools declaring supports_exclude
+    (yamllint/mypy would still scan it). Note the `lint --tools` list must be
+    updated if tool names change (unknown names fail loudly with
+    ExtraToolsConfigError).'
+  - lint.baseline is `[]` (empty), so `--baseline lint.baseline` behaves
+    identically to plain mode; the pre-commit hook runs `lint --fix --baseline
+    lint.baseline` (autofix is courtesy, opt out via
+    PYTHON_SETUP_LINT_NO_AUTOFIX=1). Never declare `uv run lint --fix` as a
+    gate.
+  - "Setup verified from scratch: `uv sync` bootstraps Python 3.14.4 venv with
+    all dev deps (uv.lock committed). `.pyrightconfig-composed.json` and `.venv`
+    are gitignored build artifacts, so gate runs leave tracked files untouched.
+    Test runner selector/junit verified: `uv run pytest -q -k <name>
+    --junitxml=<file>` writes valid JUnit XML (tests=1) and exits 1 on the
+    currently-failing test."

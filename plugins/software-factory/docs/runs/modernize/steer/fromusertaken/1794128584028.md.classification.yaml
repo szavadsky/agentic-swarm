@@ -1,0 +1,8 @@
+refs:
+  - awareness-consolidate-integration-helpers-v2-agents-counts-stale-followup
+  - consolidate-integration-helpers-v2
+kind: answer
+urgency: next-architect-call
+summary: Approves follow-up docs/prod story (small dev kind, depends on v3 line)
+  to sync AGENTS.md counts and cli.py:314 help text, foldable into pending
+  docs-counts-sync story; pre-existing baseline reds stay out of story budgets.

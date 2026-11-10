@@ -1,0 +1,24 @@
+id: c-dfdb0b2ad3
+kind: risk
+summary: Fixture data test file is collected and leaks a temp directory
+detail: tests/data/minimal_sample_project/tests/test_tempfile.py::test_create_temp_dir
+  is collected in the default suite (verified with pytest --collect-only) and
+  calls tempfile.mkdtemp without cleanup. tests/data should be excluded from
+  collection.
+location:
+  file: tests/data/minimal_sample_project/tests/test_tempfile.py
+  line: 10
+affects:
+  - test-debloat-audit
+  - test-harness
+severity: medium
+status: routed
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: test-debloat-audit
+  lastSeen: 2026-11-10T00:53:21.467Z
+createdAt: 2026-11-10T00:53:21.467Z
+updatedAt: 2026-11-10T02:32:36.259Z
+disposition: optional

@@ -1,0 +1,43 @@
+blockedItems: []
+debt:
+  - "detect-secrets now scans engine-generated orchestration records: Hex High
+    Entropy String hits at .factory/tasks/modernize/journal.ndjson:81,83 trip
+    exit 123. Either the engine must scope detect-secrets to the repo tree or
+    allowlist journal hashes."
+  - "Pre-existing baseline-red items unchanged: 6 unit tests assume 13 tools
+    while TOOLS has 14 (ruff format); ruff check SIM102 at
+    src/python_setup_lint/checkers/stub/coverage.py:196; pylint/pylint-pyi R0914
+    at src/python_setup_lint/runner/cli.py:50; pylint tests C0208 at
+    tests/runner/_factories_extras.py:383."
+  - "Infra-flagged operator action still open: `uv run lint`'s ruff format
+    ToolSpec rewrites files without --check/--config; gates continue to use the
+    split format+lint declarations."
+failedItems: []
+iteration: 1
+mergedItems:
+  - golden-determinism-probe
+  - third-party-assumption-tests
+recommendations:
+  - Exclude .factory/ orchestration records from the detect-secrets scan (or add
+    inline allowlist pragmas to journal writes) so engine journaling stops
+    flipping a green tool red.
+  - Update the 6 stale tool-count tests to expect 14 tools and clear the
+    remaining baseline lint violations (SIM102, R0914, C0208) in a follow-up
+    item so the tree can reach fully green gates.
+  - "No action needed on wave items: both merged cleanly with passing new tests
+    and no regressions attributable to them."
+status: complete
+summary: "Wave 1 close-up: both items (golden-determinism-probe,
+  third-party-assumption-tests) merged; tree is clean (only engine-managed
+  .factory journal modified, no untracked junk, no conflict markers, git diff
+  --check clean). Gate comparison vs baseline: format PASS (177 files, +4 new,
+  all formatted); test-integration PASS (9/9); test FAIL identical to baseline
+  (same 6 pre-existing 13-vs-14-tools failures; passed rose 1300->1308 from new
+  item tests); lint FAIL as at baseline with strictly fewer repo-code violations
+  (both W9704 unjustified-suppressions now carry inline justifications and no
+  longer fire; remaining SIM102/R0914/C0208 unchanged). One intra-gate flip to
+  note, not caused by wave items: detect-secrets went PASS->FAIL (exit 123)
+  flagging high-entropy strings in the engine's own .factory journal (lines
+  81,83), which is orchestration noise outside item control. No
+  green-at-baseline gate regressed at gate level; iteration can continue."
+wave: 1

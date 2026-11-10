@@ -1,0 +1,11 @@
+id: q-concern-c-8a26e7294b
+ref: spike-findings-recovery-v2
+disposition: human-awareness
+question: "Confirmed by attempt-1 checks (TS2688 no @types/bun, Cannot find
+  package 'yaml') vs attempt-2 green after bun install. Not item-fixable: this
+  is a docs-only item and its gates already pass via baseline ratchet (684 pass,
+  1 fail = known baseline disk-space test). Architect should decide on adding
+  dependency setup to the gate runner so future docs-only items don't fail
+  environmentally."
+status: open
+createdAt: 2026-11-10T05:48:03.327Z

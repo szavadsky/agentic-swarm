@@ -1,0 +1,10 @@
+id: awareness-plan-4-material-never-test-boundaries
+ref: plan-4
+disposition: human-awareness
+question: Material = golden SEMANTIC=0 + unit + CLI/exit + baseline/autofix +
+  configs (heuristic material, model never); never-test-linting bans pytest
+  asserting own gates while retaining golden/integration. Both
+  confirm-with-human, I1-approved. Architect decides preserve; golden stays
+  mechanical contract. Informational only.
+status: open
+createdAt: 2026-11-08T23:58:11.971Z

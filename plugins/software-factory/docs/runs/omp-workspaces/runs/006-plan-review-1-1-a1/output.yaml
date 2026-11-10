@@ -1,0 +1,97 @@
+status: approved
+summary: "Approved: 8 milestones/6 items within bounds, M1+M2 executable, M3-M8
+  properly deferred via replanAfter, risks spiked."
+suggestions:
+  - id: c-19cad43406
+    disposition: optional
+    summary: Route prompt-path cache risk to spike+characterization track
+    detail: "Covered: spike-cache-key byte-diff+live probes, td-prompt-path
+      characterize-now/stabilize-in-M7, transport-byte-stability pinning;
+      harness.ts:311-316 timestamp path confirmed. Keep open until M7 decides
+      content-vs-path; no plan change."
+    location:
+      file: .factory/tasks/omp-workspaces/plan/plan-1.yaml
+      line: 351
+  - id: c-317a4e9b8b
+    disposition: optional
+    summary: Route usage-parser cache-token risk to M2 plumbing
+    detail: "Covered: usage-cache-tokens dev (180 lines) + td-usage-cache impacting
+      + adr-cache-fields-additive optional zero-defaults; fixture
+      turn-yield.ndjson shows cacheRead/cacheWrite/totalTokens+cost dropped by
+      ndjson.ts:84-98. Scheduled iteration-1; close on merge."
+    location:
+      file: .factory/tasks/omp-workspaces/plan/plan-1.yaml
+      line: 345
+  - id: c-399b793dc6
+    disposition: optional
+    summary: Route saga-launch blocker to deferred M6 epic intent
+    detail: "Covered as deferred blocker: u-saga-orchestration notes
+      launcher/INTENT/lock design after M1+M3 with iteration-2 poc proposal; M6
+      replanAfter defines independent launches+routing+funnel. No saga work
+      iteration-1 per adr-iter1-spikes-first; keep open for iteration-2
+      saga-launches epic."
+    location:
+      file: .factory/tasks/omp-workspaces/plan/plan-1.yaml
+      line: 218
+  - id: isolation-config-shape
+    disposition: optional
+    summary: Align isolation config surface string vs object across M1/M3
+    detail: "M1 draft 'isolation: omp|engine' vs M3
+      'PipelineConfig.isolation:{backend:omp|engine,...}' diverge on string vs
+      object; spec 19 says isolation: omp|engine. Iteration-2 ratification
+      should define string shorthand + object with spike-decided options. No
+      iteration-1 impact (M3 replanAfter, zero items)."
+    location:
+      file: .factory/tasks/omp-workspaces/plan/plan-1.yaml
+      line: 68
+  - id: spendtotals-contract
+    disposition: optional
+    summary: Clarify SpendTotals/derive extension for cache aggregates
+    detail: M2 contract lists Usage/StepUsage but sums flow via
+      SpendTotals/byRole/byItem (budget.ts) and DerivedTaskState spend fields;
+      cost breakdown units and total vs costUsd unstated vs fixture
+      cost:{input,output,cacheRead,cacheWrite,total}. Item description already
+      says aggregate in budget/derive+surface in status so dev can infer;
+      explicit SpendTotals shape avoids drift. Advisory only.
+    location:
+      file: .factory/tasks/omp-workspaces/plan/plan-1.yaml
+      line: 47
+  - id: resume-append-audit
+    disposition: optional
+    summary: Make 20c resume-append audit explicit in cache-key spike
+    detail: Spec 20c requires audit that resumed turns append without history
+      reconstruction plus byte-stable prefixes/overlay. spike-cache-key covers
+      byte-diff/live probes/knob audit but doesn't name resume-append check;
+      transport-byte-stability covers prefix/overlay bytes only. Fact-finder
+      should include resume-append in probe matrix; scope broad enough to
+      absorb.
+    location:
+      file: .factory/tasks/omp-workspaces/plan/plan-1.yaml
+      line: 257
+  - id: milestone-cap
+    disposition: optional
+    summary: Note milestone cap reached; iteration-2 must reuse M3-M8
+    detail: 8 milestones == maxMilestones 8; 6 items << maxItemsPerPlan 50, slugs
+      unique, acyclic, all prodBudgetHints present (180<300). Progressive plan
+      correctly reuses M3-M8 via replanAfter, but iteration-2 must map 5
+      proposed epics onto existing milestones without adding. Advisory only.
+    location:
+      file: .factory/tasks/omp-workspaces/plan/plan-1.yaml
+      line: 2
+remarkable:
+  - chosen: Iteration-1 spikes+measurement only, epics deferred to iteration-2 via
+      replanAfter
+    why: All major subsystems hinge on unvalidated omp mechanics; epic child
+      worktrees branch at launch and cannot see later-merged spike findings, so
+      launching epics now would bake guesses.
+    alternatives:
+      - Launch epics in parallel with spikes
+      - Guess backend/provider/cache contracts into dev stories
+  - chosen: Additive optional cache-token fields with zero-default aggregation, no
+      migration
+    why: Captures cacheRead/cacheWrite/totalTokens+cost breakdown for 20-cost
+      decisions without invalidating historical records; fixture confirms NDJSON
+      shape so M2 is spike-independent.
+    alternatives:
+      - Required fields with backfill migration
+      - Defer measurement until M7 policy

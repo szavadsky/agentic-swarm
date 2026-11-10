@@ -1,0 +1,17 @@
+seq: 104
+name: consult-decision-cache-impl
+attempt: 1
+agent: architect
+role: architect
+models:
+  - opencode-go/muse-spark-1.3-contributor
+session: 01a1b8a3-f9ce-7511-963e-37a3531a2d3a
+timeoutSec: 7200
+status: ok
+startedAt: 2026-11-09T08:01:02.108Z
+endedAt: 2026-11-09T08:02:45.126Z
+usage:
+  inputTokens: 555525
+  outputTokens: 8034
+  costUsd: 0.057159
+traceRef: /home/slava/aiexp/python-setup.factory-wt/.factory-runtime/sessions/2026-11-08T00-51-56-494Z_01a1b8a3-f9ce-7511-963e-37a3531a2d3a.jsonl

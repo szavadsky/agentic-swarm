@@ -1,0 +1,18 @@
+context: wave
+decision: continue
+rationale: "Wave 1 merged 3/3 reported items with all 4 gates now green (lint
+  and test both fail->pass improved, format/integration sustained) and clean
+  tree hygiene. Verified at HEAD: .secrets.baseline carries the ^\\.factory/
+  should_exclude_file filter, tests/assumptions/test_pylint_cache_semantics.py
+  exists (writer-first verdict available to the semantic epic), and
+  docs/adr/ADR-012.md is created. ownership-map-revalidation is still running
+  (its retry guidance was just issued); epic-kickoff-gate correctly waits on it
+  plus the three merges. No finding invalidates remaining items; no amendment
+  required."
+text: "Continue. ownership-map-revalidation retry proceeds under the persisted
+  consult guidance (4+4 per-leg counts, recount at pinned HEAD, consistent
+  revision ID). Epic-kickoff-gate unblocks on its merge. Stale wave-report debt
+  note about the ruff-format ToolSpec is superseded: _RuffFormatLintTool with
+  check mode merged in iteration 2 (verified at HEAD); the remaining
+  recommendation (reunify split gates) is an infra refresh, not an iteration-3
+  item."

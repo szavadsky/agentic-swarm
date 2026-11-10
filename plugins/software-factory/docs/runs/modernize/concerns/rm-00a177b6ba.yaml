@@ -1,0 +1,23 @@
+id: rm-00a177b6ba
+chosen: Derive keys from the unredacted normalized justification while redacting
+  bare hex runs in the stored display text
+alternatives:
+  - Derive keys from redacted text (two hash-only-different justifications
+    collide)
+  - Reject hex-bearing justifications (loses legitimate commit references)
+  - Store the raw justification and rely only on CI scanning (violates ADR-010)
+why: "This is both secrets-clean and collision-safe: commit hashes in
+  justifications are redacted to `<hex:N>`, but two justifications differing
+  only by a hash still get distinct keys. Trade-off: the key is not recomputable
+  from the stored fields, so schema validation checks the encoding rather than
+  re-deriving it."
+status: routed
+source:
+  record: 001-develop-r1-a1
+  agent: developer
+  step: develop
+  item: cache-design-spike
+  lastSeen: 2026-11-09T23:18:39.934Z
+createdAt: 2026-11-09T23:18:39.934Z
+updatedAt: 2026-11-10T02:58:56.108Z
+disposition: optional

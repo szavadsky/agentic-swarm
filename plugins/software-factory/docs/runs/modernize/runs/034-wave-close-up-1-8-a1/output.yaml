@@ -1,0 +1,25 @@
+blockedItems: []
+debt:
+  - "Baseline-red lint gate (unchanged, not a regression): ruff SIM102
+    coverage.py:196, pylint/pylint-pyi W9704 generic_key_dict_checker.py:40 +
+    testing.py:34, pylint R0914 cli.py:50, pylint-tests C0208
+    _factories_extras.py:383"
+  - "Baseline-red unit-test gate (unchanged, not a regression): 6 failures
+    assuming 13 tools while TOOLS now has 14 (ruff format added)"
+  - "Operator action carried: documented `uv run lint` mutates worktree via
+    ruff-format ToolSpec (plain `ruff format` without --check/--config);
+    declared gates split format/lint as workaround"
+failedItems: []
+iteration: 1
+mergedItems: []
+recommendations:
+  - Fix baseline-red lint violations or regenerate baseline if intentional
+  - Update 6 failing unit tests for 14-tool registry (ruff format)
+  - Fix ruff-format ToolSpec to use --check + --config or drop it from TOOLS so
+    `uv run lint` is check-only
+status: complete
+summary: "Wave 8 close-up: 0 items merged, tree clean (src/tests/config
+  untouched, no untracked junk, no conflict markers in repo code). Gates match
+  baseline with zero regressions: format pass/pass, lint fail/fail
+  (baseline-red), test fail/fail (baseline-red), test-integration pass/pass."
+wave: 8

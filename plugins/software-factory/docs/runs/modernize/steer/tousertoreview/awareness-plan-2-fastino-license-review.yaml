@@ -1,0 +1,9 @@
+id: awareness-plan-2-fastino-license-review
+ref: plan-2
+disposition: human-awareness
+question: Plan correctly proceeds Apache-first, flags Fastino/unclear, pauses
+  implementation if GLiDE recommended. Operator should be aware eval may
+  recommend non-MIT-compatible model; no blocking decision needed until eval
+  verdict.
+status: open
+createdAt: 2026-11-08T10:44:23.579Z

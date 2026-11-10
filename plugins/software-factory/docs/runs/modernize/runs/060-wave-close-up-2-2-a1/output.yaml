@@ -1,0 +1,31 @@
+blockedItems: []
+debt:
+  - lint gate still failing matching red baseline (ruff SIM102, pylint
+    W9704/R0914, pylint-tests C0208) — not a regression but unresolved baseline
+    debt
+  - "CRITICAL operator debt: `uv run lint` ruff-format ToolSpec still
+    mutation-risk per infra notes (runs plain `ruff format` without
+    --check/--config); declared gates split format/lint as workaround"
+failedItems: []
+iteration: 1
+mergedItems:
+  - baseline-violations-fix
+  - golden-contract-hardening
+  - model-eval-poc
+recommendations:
+  - Proceed to next wave/iteration — no regressions, tree clean, test gate
+    improved to pass
+  - Schedule baseline-debt cleanup for lint violations that keep lint red since
+    baseline
+  - "Operator: fix ruff-format ToolSpec to add --check (+ --config) or drop it
+    from TOOLS so `uv run lint` is check-only"
+status: complete
+summary: "Wave 2 complete: all 3 items merged (baseline-violations-fix,
+  golden-contract-hardening, model-eval-poc). Tree hygiene clean: 0 untracked
+  non-orchestration files, 0 modified tracked non-orchestration files, no
+  conflict markers; only engine-managed .factory/tasks/modernize/journal.ndjson
+  shows modified. Gate diff vs baseline: format pass->pass green,
+  test-integration pass->pass green, test fail->pass IMPROVED, lint fail->fail
+  still failing (matches baseline, not a regression). No green-to-red
+  regressions."
+wave: 2

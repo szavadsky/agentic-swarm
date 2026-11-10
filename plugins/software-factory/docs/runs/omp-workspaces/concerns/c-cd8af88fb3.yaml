@@ -1,0 +1,19 @@
+id: c-cd8af88fb3
+kind: risk
+summary: omp apply:true merge shape conflicts with engine audit trail
+detail: apply:true lands a single-parent commit on the parent and deletes the
+  branch (68e5586, one parent); no --no-ff, no gates, agent-id/AI message.
+affects:
+  - "19.4"
+  - "19.5"
+severity: medium
+status: routed
+source:
+  record: 002-research-r1-a2
+  agent: fact-finder
+  step: research
+  item: spike-omp-isolation
+  lastSeen: 2026-11-10T01:26:13.601Z
+createdAt: 2026-11-10T01:26:13.601Z
+updatedAt: 2026-11-10T01:53:41.429Z
+disposition: architect

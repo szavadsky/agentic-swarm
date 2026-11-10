@@ -1,0 +1,20 @@
+id: decision-model-eval-poc-1794148393249
+context: item
+item: model-eval-poc
+afterRecord: 004-review-r2-a1
+decision: retry-with-guidance
+timestamp: 2026-11-08T14:33:13.249Z
+rationale: "Single display bug blocks approval: report.py:250 renders Recall
+  column from precision instead of meaningful_recall. Metrics, best-cell
+  selection (lines 240-244), compliance table 4.4, and verdict are already
+  correct, so a one-line render fix plus report.md regeneration unblocks merge;
+  no split/escalate needed."
+text: "Fix exactly one line in the poc folder (production paths untouched):
+  report.py:250 change pct(precision and precision) to
+  pct(accepted['meaningful_recall']). Regenerate report.md section 4.3 (lines
+  209-215) from metrics.json. Verify displayed values: decider-nano rubric
+  0.5/veto Recall 27.9% (not 3.1%), bekko rubric 37.7% (not 11.8%), ettin/minilm
+  100% (not n/a). Confirm best-cell selection and compliance table 4.4 unchanged
+  and verdict unaffected. Do not touch metrics computation, corpus, or selection
+  logic."
+persist: false

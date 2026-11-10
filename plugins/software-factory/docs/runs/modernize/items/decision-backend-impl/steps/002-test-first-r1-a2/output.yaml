@@ -1,0 +1,103 @@
+status: ok
+summary: Fixed the test-first-scope failure without touching any test file. The
+  rejected attempt had introduced 84 new production-stub lines (51 in
+  checkers/_decision_backend.py + 33 in checkers/_decision_backend.pyi),
+  exceeding the 40-line stub budget. I replaced the stub with a 29-line runtime
+  interface stub exporting exactly what the tests import
+  (DECISION_THRESHOLD=0.5, PROMPT_VERSION='prompt-v1', DecisionBackend protocol,
+  FakeBackend with pinned model_id, get_backend, and the _reset_backend_state
+  test helper) and removed the redundant .pyi; the complete .pyi belongs to the
+  implementation step's prod budget, not the test-first stub budget. Cumulative
+  story diff under src/ is now exactly 29 added lines (0 deletions), no
+  pre-story production code was modified, and all 120 tests across the five
+  touched test files still collect. 33 declared red tests (18 in
+  test_decision_backend.py, 7 in test_semantic_check.py, 2 in
+  test_no_try_import_checker.py, 1 in test_suppression_justification_checker.py,
+  5 in test_pylint_cache_semantics.py) all fail red with
+  NotImplementedError/TypeError/AssertionError, proving the required behavior
+  does not yet exist; no failure is an import or collection error.
+target:
+  selectors:
+    - tests/checkers/test_decision_backend.py
+    - tests/checkers/test_semantic_check.py
+    - tests/checkers/test_no_try_import_checker.py
+    - tests/checkers/test_suppression_justification_checker.py
+    - tests/assumptions/test_pylint_cache_semantics.py
+  expectRed:
+    - tests/checkers/test_decision_backend.py::test_fake_backend_defaults_to_one_and_pinned_model_id
+    - tests/checkers/test_decision_backend.py::test_fake_backend_returns_configured_score
+    - tests/checkers/test_decision_backend.py::test_fake_backend_satisfies_protocol
+    - tests/checkers/test_decision_backend.py::test_get_backend_is_none_without_configuration
+    - tests/checkers/test_decision_backend.py::test_get_backend_honors_dotted_path_under_pytest
+    - tests/checkers/test_decision_backend.py::test_get_backend_ignores_dotted_path_in_production
+    - tests/checkers/test_decision_backend.py::test_decision_model_parses_but_yields_none_with_exactly_one_warning
+    - tests/checkers/test_decision_backend.py::test_reranker_model_env_is_deprecated_with_exactly_one_warning
+    - tests/checkers/test_decision_backend.py::test_check_if_meaningful_has_backend_keyword_defaulting_to_none
+    - tests/checkers/test_decision_backend.py::test_registered_backend_rejects_a_meaningful_heuristic
+    - tests/checkers/test_decision_backend.py::test_brush_off_is_vetoed_before_the_backend
+    - tests/checkers/test_decision_backend.py::test_brush_off_does_not_reach_the_semantic_adapter
+    - tests/checkers/test_decision_backend.py::test_meaningful_heuristic_is_confirmed_by_backend
+    - tests/checkers/test_decision_backend.py::test_backend_below_threshold_rejects_a_meaningful_heuristic
+    - tests/checkers/test_decision_backend.py::test_semantic_disabled_never_calls_the_backend
+    - tests/checkers/test_decision_backend.py::test_check_if_meaningful_rejects_code_echo_justification
+    - tests/checkers/test_decision_backend.py::test_semantic_extra_is_empty
+    - tests/checkers/test_decision_backend.py::test_uv_lock_has_no_sentence_transformers_edge
+    - tests/checkers/test_semantic_check.py::test_signature_exposes_backend_keyword_defaulting_to_none
+    - tests/checkers/test_semantic_check.py::test_empty_primary_returns_false_without_calling_backend
+    - tests/checkers/test_semantic_check.py::test_one_backend_call_per_unique_pair
+    - tests/checkers/test_semantic_check.py::test_distinct_pairs_call_backend_again
+    - tests/checkers/test_semantic_check.py::test_memo_key_includes_backend_model_id
+    - tests/checkers/test_semantic_check.py::test_module_does_not_reference_sentence_transformers
+    - tests/checkers/test_semantic_check.py::test_check_writes_no_disk_cache
+    - tests/checkers/test_no_try_import_checker.py::test_sentence_transformers_is_no_longer_an_optional_import_pattern
+    - tests/checkers/test_no_try_import_checker.py::test_try_import_of_sentence_transformers_is_flagged
+    - tests/checkers/test_suppression_justification_checker.py::TestAnyElementCodeEcho::test_code_echo_on_any_element_is_rejected
+    - tests/assumptions/test_pylint_cache_semantics.py::TestSemanticInProcessMemo::test_given_new_verdicts_then_backend_calls_once_each_and_writes_nothing
+    - tests/assumptions/test_pylint_cache_semantics.py::TestSemanticInProcessMemo::test_given_repeated_pair_then_serves_memory_without_backend_or_write
+    - tests/assumptions/test_pylint_cache_semantics.py::TestSemanticInProcessMemo::test_given_empty_primary_then_returns_false_without_backend_or_write
+    - tests/assumptions/test_pylint_cache_semantics.py::TestSemanticPathScoping::test_semantic_check_if_meaningful_given_identical_inputs_then_signature_is_path_free
+    - tests/assumptions/test_pylint_cache_semantics.py::TestSemanticPathScoping::test_checker_sources_given_source_tree_then_no_result_cache_writer
+evidence:
+  - "Scope fix: `wc -l src/python_setup_lint/checkers/_decision_backend.py` ->
+    29 lines; `git diff fc2770d --numstat -- src` -> `29 0
+    src/python_setup_lint/checkers/_decision_backend.py` (29 added prod stub
+    lines vs the 40-line stub budget; the 33-line .pyi from the rejected attempt
+    was removed)."
+  - "No pre-story production code touched: `git diff fc2770d --numstat -- src`
+    lists only the new _decision_backend.py; `git status --porcelain` in the
+    step shows only `M src/.../_decision_backend.py` and `D
+    src/.../_decision_backend.pyi` (both introduced by the rejected attempt)."
+  - "Test infra proven: `uv run pytest --collect-only -q <5 touched test files>`
+    -> 120 tests collected, 0 errors, confirming no import/collection breakage
+    from the stub reshape."
+  - "Red proof (decision backend, 18 ids): `uv run pytest -q --tb=no <18
+    declared test_decision_backend.py node ids>` -> `18 failed` with
+    NotImplementedError (FakeBackend/get_backend stubs), missing `backend=`
+    kwarg TypeError, and behavioral AssertionErrors."
+  - "Red proof (cross-file, 15 ids): `uv run pytest -q --tb=no <7
+    test_semantic_check + 2 no_try_import + 1 suppression + 5
+    pylint_cache_semantics node ids>` -> `15 failed` with TypeError missing
+    `backend`, AssertionErrors for
+    memoization/normalization/sentence-transformers packaging pins, and
+    missing-stub behavior."
+  - "Full touched-files run: `uv run pytest <5 files> -q --tb=no` -> 48 failed /
+    72 passed, all failures genuine behavioral reds (no
+    ImportError/CollectionError anywhere)."
+  - Pinned-value tests still pass on current prod code as expected
+    (DECISION_THRESHOLD == 0.5, PROMPT_VERSION == 'prompt-v1'); they are
+    intentionally not declared red.
+concerns:
+  - checkers/_decision_backend.pyi was intentionally removed from this
+    test-first step; the implementation step must restore the complete companion
+    stub (the repo's stub checker emits E97A0 missing-module-stub if self-lint
+    runs before then). The .pyi was omitted here only to stay inside the 40-line
+    test-first stub budget.
+  - Parametrized red cases (normalize_suppressed_codes variants, threshold
+    boundary 0.5-True, Any-element variants) were verified red but left out of
+    expectRed to avoid brittle parametrized-id normalization; their
+    non-parametrized behavioral equivalents are declared.
+notes: "The stub is a minimal runtime interface stub: it exports only names the
+  declared tests import and raises NotImplementedError/basic assertions so
+  target-red reflects absent functionality rather than import failure. Test
+  files were not modified in this attempt; only the production-stub surface was
+  shrunk from 84 to 29 lines."

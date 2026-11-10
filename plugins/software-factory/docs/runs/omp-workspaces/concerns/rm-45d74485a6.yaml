@@ -1,0 +1,26 @@
+id: rm-45d74485a6
+chosen: Reuse ctx.baseline plus the exported
+  isTestRunnerGate/rederiveBaselineFailingTests helpers from gates.ts, mirroring
+  runGates exactly; only wrap the gate command with the JUnit arg when a
+  baseline entry makes ratcheting possible.
+alternatives:
+  - Read gates-baseline.yaml directly inside checkTargetGreen (would diverge
+    from runGates callers that already load the artifact and would change
+    no-baseline behavior)
+  - Extract a shared ratchet-evaluation helper used by both runGates and
+    target-green (larger refactor with higher regression risk for this fix)
+  - Let any red non-JUnit gate whose baseline status is fail pass without
+    per-test evidence (not actionable and not covered by the assignment tests)
+why: Keeps the gate-target ratchet behaviorally identical to the gates check
+  (including old-format baseline re-derivation), avoids duplicating baseline
+  loading/parsing, and preserves the exact previous command when no baseline
+  exists.
+status: open
+source:
+  record: 002-develop-r1-a1
+  agent: developer
+  step: develop
+  item: target-green-ratchet-fix
+  lastSeen: 2026-11-10T05:25:43.562Z
+createdAt: 2026-11-10T05:25:43.562Z
+updatedAt: 2026-11-10T05:25:43.562Z

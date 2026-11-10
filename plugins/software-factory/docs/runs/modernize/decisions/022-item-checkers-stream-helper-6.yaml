@@ -1,0 +1,22 @@
+id: decision-checkers-stream-helper-1794260616360
+context: item
+item: checkers-stream-helper
+afterRecord: 006-integrate-r1-a1
+decision: escalate
+timestamp: 2026-11-09T21:43:36.360Z
+rationale: "Same exit-127 unknown-gate persists across 5 overrides: record
+  declares gate 'tests' plural, infra gates are
+  format/lint/test/test-integration. Owned code is green in-worktree and QA
+  drift fixed (first-# code_context + regression test). Weaker execution
+  repeatedly echoed invalid engine input Target 'tests'; tip-vs-tip reversions
+  are stale-base artifact, not item content. Needs stronger execution from fresh
+  HEAD base with valid target declaration."
+text: 'Fresh HEAD base; re-apply owned-only: NEW _source_stream.py/.pyi,
+  bare_except+suppression (+.pyi, first-# src_line.split preserved), stub
+  checker/coverage, test_source_stream.py, astroid call, stub_coverage call,
+  TestCodeContextDerivation (union with HEAD TestAnyElementCodeEcho, drop
+  obsolete reranker). Touch nothing else (_base, baseline, tests/data, runner,
+  factories, conftest, docs). Declare output target {"command":"uv run pytest
+  -q","customTarget":true} NEVER {"gate":"tests"}. Verify: no markers, pytest
+  suppression file, pytest -q, lint 14/14, integration 9 passed, grep .stream()
+  single-owner.'

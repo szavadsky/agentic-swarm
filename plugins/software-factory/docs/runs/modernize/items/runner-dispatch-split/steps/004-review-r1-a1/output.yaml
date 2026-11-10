@@ -1,0 +1,35 @@
+status: approved
+summary: "minimal registry split verified: 449/102 lines, identity intact, gates green"
+suggestions:
+  - detail: dispatch.py:44-46 keeps '# Tool definitions' header though literal moved
+      to _tool_specs.py:9; header now describes re-export comment below. Rename
+      to re-export/registry header to avoid implying definitions live here.
+      _tool_specs.py:7 correctly retains the header.
+    disposition: optional
+    id: stale-tool-definitions-header
+    location:
+      file: src/python_setup_lint/runner/dispatch.py
+      line: 44
+    summary: Stale section header implies TOOLS defined in dispatch.py
+  - detail: Comment moved verbatim from dispatch.py; 'line 105' pointed at
+      pylint-pyi entry in old 542-line file. Entry is now _tool_specs.py:80-87
+      (~line 81). Line-anchored refs rot on every move; drop number or name the
+      symbol only.
+    disposition: optional
+    id: stale-line-105-reference
+    location:
+      file: src/python_setup_lint/runner/_tool_specs.py
+      line: 59
+    summary: ty comment cites stale 'line 105' for pylint-pyi
+  - detail: Single-slice extraction (TOOLS table only) satisfies binding
+      <=500/no-disable within 300-line budget (222 used), but leaves dispatch.py
+      at 449/500 with strategies+invariants+live registry co-located. Assignment
+      parenthetical contemplated registry/strategies/parser-sets decomposition;
+      fuller split deferred for budget reasons. Revisit if dispatch grows past
+      ~470.
+    disposition: optional
+    id: dispatch-near-limit-headroom
+    location:
+      file: src/python_setup_lint/runner/dispatch.py
+      line: 1
+    summary: dispatch.py at 449/500 leaves 51 lines headroom

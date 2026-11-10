@@ -1,0 +1,2 @@
+Your previous output failed deterministic validation with these errors (fix ONLY these; yield NEW items only, never re-emit existing ones, never invent outlineRefs):
+- Total items (69) exceeds maximum items limit of 50

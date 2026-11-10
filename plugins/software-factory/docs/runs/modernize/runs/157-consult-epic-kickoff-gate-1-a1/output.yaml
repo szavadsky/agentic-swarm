@@ -1,0 +1,9 @@
+context: item
+decision: abandon
+reason: superseded
+rationale: "I3 epics never spawned (closeup-3: M2 zero delivery,
+  epic-kickoff-gate pending); ADR-013 records root-serialized delivery replaced
+  epic decomposition for I4; ADR-023 extends it to I5. A live spawn gate has
+  nothing to spawn, handoff needs I6 replan. Report-only, zero repo writes."
+text: "No replan needed: ADR-023 governs I5 delivery; I6 replans M2/M3 without
+  epics."

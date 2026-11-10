@@ -1,0 +1,32 @@
+id: decision-golden-snapshot-wiring-1794117253013
+context: item
+item: golden-snapshot-wiring
+afterRecord: 004-qa-r1-a2
+decision: accept-with-debt
+timestamp: 2026-11-08T05:54:13.013Z
+rationale: "QA rejected twice on red-test alone: test_setup_new_and_lint passes
+  'without production code changes'. That is the CORRECT outcome here, not a
+  defect — the probe verdict was test-side sufficient, so the item intentionally
+  makes zero src/ changes (diff: tests/_golden.py +111, integration.py +61/-27,
+  two new golden JSONs, violations.txt retained). No developer retry can satisfy
+  fail-then-pass without fabricating a gratuitous src change, which the plan
+  forbids. The item's sensitivity is proven instead by in-memory drift injection
+  and golden equality. Split/escalate/abandon all wrong: scope is correct,
+  implementation passed every other gate, and M1 is the iteration's critical
+  path."
+text: Merge golden-snapshot-wiring as-is. Do not add src changes to satisfy
+  red-test. Downstream items (consolidate-v2, audits-v2) proceed against the
+  committed golden; consolidate must keep golden+counts byte-identical. Future
+  tests-only contract items should be flagged red-test-exempt at assignment.
+debt: "RED-TEST WAIVED (gate inapplicable by design): golden-snapshot-wiring is
+  a tests-only M1 contract item — probe verdict was test-side normalization
+  sufficient, so the bounded src allowance was correctly NOT used and the diff
+  touches only tests/_golden.py (+collect_findings), tests/integration.py
+  wiring, and the two committed golden JSON files. Red-test (test must fail
+  without src changes) cannot hold when zero src changes are the correct
+  outcome. Compensating verification already in the item: drift injection on
+  in-memory list copies proves assert_matches_golden detects add/drop drift;
+  PYTHON_SETUP_LINT_UPDATE_GOLDEN=1 regen-twice byte-identical proves
+  determinism; oracle + per-tool coverage + tool-qualified brush-off/carry
+  lookups prove sensitivity. QA rejected 2/2 solely on red-test; all other
+  checks passed. No src follow-up required."

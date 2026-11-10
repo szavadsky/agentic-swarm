@@ -1,0 +1,11 @@
+context: wave
+decision: continue
+rationale: "Wave 12 empty (0 merged, 0 failed/blocked) with clean tree and zero
+  gate regressions (format/integration pass, lint/test fail identically to
+  baseline). M2 critical path intact: consolidate-v3 is ready (deps merged),
+  docs-counts-sync and audit v3s sequenced behind it. No plan change needed."
+text: "Next: run consolidate-v3 retry per consult guidance (revert lint.baseline
+  to [], tests/**-only diff, golden+counts byte-identical, integration +
+  test_golden pass), then docs-counts-sync, then audit v3s in order. Ignore
+  blocked v2 (superseded by v3); do not run removed originals. Temp copies only,
+  never bare uv run lint."

@@ -1,0 +1,32 @@
+setup:
+  - cd plugins/software-factory && bun install
+gates:
+  - id: typecheck
+    command: bun --cwd=plugins/software-factory run typecheck
+  - id: test
+    command: bun --cwd=plugins/software-factory test
+testRunner:
+  command: bun --cwd=plugins/software-factory test
+  selectorArgs: []
+  junitArg: --reporter=junit --reporter-outfile={path}
+notes:
+  - "Baseline red (recorded as-is, reproducible in isolation): full `bun test`
+    yields 663 pass / 2 skip / 1 fail; the failure is test/disk-space.test.ts:57
+    'checkDiskSpace verifies worktreeRoot, .factory-runtime/tmp, repoRoot, and
+    tmpdir' (expected failingPaths.length 1, received 2) — environment-sensitive
+    duplicate low-space paths, not investigated per clean-checkout rule."
+  - No lint/format gate is configured (no eslint/biome/prettier configs in the
+    repo). If one is added, exclude the orchestration folder `.factory/**` so
+    harness artifacts cannot turn it red.
+  - "Tests must run with cwd=plugins/software-factory: several tests resolve
+    repo-relative fixtures (e.g. `agents/criteria/dispositions.md`) from cwd, so
+    running `bun test` from the repo root fails. The runner uses `bun
+    --cwd=plugins/software-factory`; selectors must be plugin-relative test file
+    paths (e.g. `test/git/worktrees.test.ts`). Verified selector dry-run: `bun
+    --cwd=plugins/software-factory test test/git/worktrees.test.ts
+    --reporter=junit --reporter-outfile=<tmp>` ran 8 tests and wrote JUnit XML
+    with per-file paths."
+  - Live omp harness smoke test is opt-in via FACTORY_LIVE_OMP=1 and skipped by
+    default; the full suite requires no omp binary or network.
+  - Repository root has no package.json/Makefile/CI workflows; all
+    Bun/TypeScript tooling and lockfile live in plugins/software-factory.

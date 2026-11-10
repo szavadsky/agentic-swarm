@@ -1,0 +1,41 @@
+[
+  {
+    "decision": true,
+    "files": [
+      "src/a.py"
+    ],
+    "justification": "a specific technical reason",
+    "key": "dk1.krhts6fg.xkldl7nf.47rj3zrw.wkddixu3.o2g4o4qx.gqwfmec6.teqa",
+    "last_seen": "2026-11-08",
+    "model": "fake-backend rev test prompt-v1",
+    "prompt_hash": "dk1.w7pwqwps.wha4vd4h.qu36v2gp.j3wnj7ry.yelfnocc.phnvns3m.jnhq",
+    "rule": "W9704",
+    "version": 1
+  },
+  {
+    "decision": true,
+    "files": [
+      "src/b.py"
+    ],
+    "justification": "b specific technical reason",
+    "key": "dk1.avv5lkvs.si7ncdgm.4piv3qse.olyg2e4r.4uksmiwa.chpi3vp3.wlza",
+    "last_seen": "2026-11-08",
+    "model": "fake-backend rev test prompt-v1",
+    "prompt_hash": "dk1.w7pwqwps.wha4vd4h.qu36v2gp.j3wnj7ry.yelfnocc.phnvns3m.jnhq",
+    "rule": "W9704",
+    "version": 1
+  },
+  {
+    "decision": true,
+    "files": [
+      "src/gone.py"
+    ],
+    "justification": "gone specific technical reason",
+    "key": "dk1.tpafdl2i.liuuy4kj.gvyzgcek.g7wwhmd2.3bnlmgif.3wwrtxrj.hcuq",
+    "last_seen": "2026-11-08",
+    "model": "fake-backend rev test prompt-v1",
+    "prompt_hash": "dk1.w7pwqwps.wha4vd4h.qu36v2gp.j3wnj7ry.yelfnocc.phnvns3m.jnhq",
+    "rule": "W9704",
+    "version": 1
+  }
+]

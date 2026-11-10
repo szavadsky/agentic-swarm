@@ -1,0 +1,38 @@
+slug: consolidate-integration-helpers-v2
+kind: test-only
+title: Single-source helpers; integration.py under 500 lines
+assignment: "Replaces pending consolidate-integration-helpers blocked on
+  superseded golden-findings-snapshot (rewired to golden-snapshot-wiring;
+  identical scope). Extract into tests/_project_helpers.py: copy_sample_project,
+  git_init_and_stage (init+config test/test@test + `git add .`), git_init_bare
+  (init -q + Test/test@example.com, no add — identities NOT unified),
+  stage_file, commit_all, shipped_config_paths, make_runner_config
+  (package_name+rumdl override, preserving _make_config side-effect: idempotent
+  overwrite, no-op when shipped rumdl missing),
+  build_pylint_overlay_config(project, disable_rule)->Path,
+  ensure_precommit_or_skip, install_twice_assert_idempotent. Delete duplicate
+  defs in conftest.py and _autofix_helpers.py (import instead); integration.py
+  imports only mapped subset; test_self_lint_clean.py and autofix tests switch
+  imports. Per-consumer map: integration->{copy, git_init_and_stage,
+  make_runner_config, build_overlay, ensure_precommit, install_twice};
+  conftest->{shipped_config_paths}; _autofix->{git_init_bare, stage_file,
+  commit_all}. Line budget (remove >=127, target <=490): helpers ~58 + oracle ~8
+  + overlay ~21 + setup ~20 + precommit ~25 + M1 net ~5 + slice ~3 + trim ~4.
+  Keep path/class/function names; golden+counts byte-identical; sole AGENTS.md
+  counts owner (update incl. new assumption tests). Acceptance: integration,
+  `pytest -q`, `lint` pass."
+outlineRef: consolidate-integration-helpers
+milestone: M2
+wave: 8
+deps:
+  - golden-snapshot-wiring
+  - third-party-assumption-tests
+scenarioRefs:
+  - "M2: Shared helpers exist once"
+  - "M2: Integration gate module within limits"
+citations:
+  - tests/_project_helpers.py
+  - tests/integration.py
+  - tests/conftest.py
+  - ADR-004
+  - TD-3

@@ -1,0 +1,28 @@
+id: c-fd163ed069
+kind: blocker
+summary: Docs reconciliation is red on every must-contain group at HEAD ba7c267
+detail: "All required strings are absent: semantic-justification.md
+  (DecisionBackend/.python-setup-decisions.json/ADR-009/prompt-v1),
+  custom-checks.md (DecisionBackend), troubleshooting.md
+  (DECISION_MODEL/RERANKER), AGENTS.md pipeline (DecisionBackend), CHANGELOG
+  ([semantic]/no-go/v1.2.10), README (v1.2.10), and the ADR index/staleness
+  notes. The docs still describe the retired reranker pipeline and ~/.cache
+  model download. Close-out cannot be green until these are routed and fixed per
+  ADR-011 ownership."
+location:
+  file: docs/semantic-justification.md
+  line: 9
+affects:
+  - docs-counts-sync
+  - final-gate-validation
+severity: high
+status: routed
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: final-gate-validation
+  lastSeen: 2026-11-10T00:27:58.391Z
+createdAt: 2026-11-10T00:27:58.391Z
+updatedAt: 2026-11-10T02:23:05.623Z
+disposition: architect

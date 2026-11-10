@@ -1,0 +1,12 @@
+wave: 2
+iteration: 4
+status: has_failures
+mergedItems:
+  - runner-compat-shim-removal
+  - decision-backend-impl
+  - checkers-factories-split
+failedItems:
+  - checkers-stream-helper
+blockedItems: []
+summary: "Wave 2 completed. Merged items: runner-compat-shim-removal,
+  decision-backend-impl, checkers-factories-split"

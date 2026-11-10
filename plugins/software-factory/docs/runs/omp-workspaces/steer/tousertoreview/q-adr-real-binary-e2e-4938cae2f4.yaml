@@ -1,0 +1,11 @@
+id: q-adr-real-binary-e2e-4938cae2f4
+ref: adr-real-binary-e2e
+disposition: human-awareness
+question: Remarkable architectural decision adr-real-binary-e2e (No-model e2e
+  drives the real omp binary with a scripted provider; FakeHarness retained for
+  engine tests) recorded for awareness.
+draftDecision: M8 builds a scripted provider behind the M1-chosen seam plus a
+  scenario runner over the real omp binary (opt-in env flag, skips cleanly
+  without omp); FakeHarness remains the default for fast engine behavior tests.
+status: open
+createdAt: 2026-11-09T23:33:06.259Z

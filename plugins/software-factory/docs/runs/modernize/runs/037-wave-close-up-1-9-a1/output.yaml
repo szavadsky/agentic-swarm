@@ -1,0 +1,30 @@
+blockedItems:
+  - coding-rules-audit-v2
+debt:
+  - "Baseline-red persists (not a regression): lint fails on SIM102 at
+    checkers/stub/coverage.py:196, W9704 at generic_key_dict_checker.py:40 and
+    testing.py:34, R0914 at runner/cli.py:50, C0208 at
+    tests/runner/_factories_extras.py:383; test fails on 6 tests assuming 13
+    tools vs 14 with ruff format"
+  - "Documented `uv run lint` mutation risk: ruff format ToolSpec runs plain
+    `ruff format` without --check/--config (infra operator action to add
+    --check/--config or drop it)"
+iteration: 1
+mergedItems: []
+recommendations:
+  - Architect to triage coding-rules-audit-v2 blocked-by-failure
+    (retry/descope/replan) — Wave 9 produced zero merges
+  - Keep lint/test baseline-red awareness in next plan; consider scheduling
+    baseline cleanup as separate debt item rather than gating Wave 9
+  - Preserve split-gate workaround (format check-only + lint 13 tools) until
+    ruff format ToolSpec is fixed
+status: has_failures
+summary: "Wave 9 close-up: 0 merged, 1 blocked-by-failure
+  (coding-rules-audit-v2). Tree hygiene clean: no untracked junk, no conflict
+  markers (<<<<<<<|=======|>>>>>>>); sole modified file is engine-managed
+  .factory/tasks/modernize/journal.ndjson. Gates match baseline with zero
+  regressions per Gate Diff table: format pass/pass, test-integration pass/pass,
+  lint fail/fail (expected baseline red), test fail/fail (expected baseline
+  red); no fail->pass fixes. Iteration can continue via architect handling of
+  blocked item."
+wave: 9

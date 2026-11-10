@@ -1,0 +1,33 @@
+slug: ownership-map-revalidation
+kind: fact-finder
+title: Re-validate unified ownership map at HEAD
+assignment: "Validate ADR-008 durability at HEAD (fact-finder, read-only on
+  repository; output findings.md + structured findings; review checks validity;
+  zero repo writes, zero git writes). Re-glob ownership universe via git
+  ls-files filtered to src/** + scripts/** + tests/** EXCLUDING tests/data/**;
+  recount 5-owner map and confirm 67/83/15/4/15 within ±5 per owner with total
+  equal to recount. Confirm symbol-exclusion column references existing symbols:
+  checkers/_semantic.py+.pyi, _base.py::check_if_meaningful including :238
+  rule-echo line, no_try_import _OPTIONAL_IMPORT_PATTERNS + that file's register
+  line, semantic test modules + TestSuppressionRerankerPipeline class block.
+  Confirm planned-path reservations name only planned paths (incl.
+  tests/checkers/conftest.py as reservation, not owned file). Confirm root-owned
+  group (tests/data, config, docs, repo-root files, epics read-only except
+  packaging exception) and TD3-A1 docs rows in drift scope. Pin exact stream
+  read/decode block list + helper signature for checkers epic (audit-estimated
+  ~15). Output validated map with revision map-<HEAD short SHA> + drift list in
+  {path, auditRef, headEvidence, disposition: confirmed|corrected|disputed} as
+  item-report tables consumed by all three epics. Covers U1/TD3-B2; feeds
+  epic-kickoff-gate and ADR-011 spawn."
+outlineRef: ownership-map-revalidation
+milestone: M1
+wave: 1
+scenarioRefs:
+  - "M1: Ownership map validated"
+citations:
+  - src/python_setup_lint/checkers/_semantic.py:1-12
+  - src/python_setup_lint/checkers/_base.py:142-158
+  - tests/checkers/test_semantic_check.py:1-7
+  - tests/checkers/test_semantic_threshold.py:19-25
+  - AGENTS.md:79-85
+  - CodingRules.md:139-159

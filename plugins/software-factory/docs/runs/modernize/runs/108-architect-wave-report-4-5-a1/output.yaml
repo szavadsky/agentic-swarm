@@ -1,0 +1,12 @@
+context: wave
+decision: continue
+rationale: "Wave 5 complete: 0 merged, 0 blocked/failed, tree clean with no
+  conflict markers, gates format pass/pass, integration pass/pass, lint/test
+  fail->pass IMPROVED, zero regressions. Empty merge set is dep-gating, not
+  stall: checkers-stream-helper (wave2) and decision-cache-impl (wave4) still
+  running gate checkers-legacy-dead-cleanup and semantic-tests-rewrite.
+  Cache-design spike already consumed (backend merged). Producer prune-only gap
+  remains tracked M4 follow-up while parent still running; no amendment
+  warranted."
+text: Proceed to next scheduled wave; allow running stream-helper and cache-impl
+  to merge to unblock legacy/tests/docs chain.

@@ -1,0 +1,25 @@
+id: c-7ca231f0aa
+kind: risk
+summary: stranded-wave test has a 5s timeout that flakes under full-suite parallel load
+detail: test/engine/stranded-wave.test.ts:255 second-consult test timed out at
+  5057ms in the full-suite gate run but passes in 7.2s file-time when isolated.
+  Under 102-file parallel load the per-test 5s budget is too tight; gate
+  failures from this test are likely load artifacts rather than regressions.
+  Consider raising the per-test timeout or reducing suite concurrency.
+location:
+  file: plugins/software-factory/test/engine/stranded-wave.test.ts
+  line: 255
+affects:
+  - gates
+  - wave-merge
+severity: medium
+status: routed
+source:
+  record: 004-develop-r1-a1
+  agent: developer
+  step: develop
+  item: merge-setup-fix
+  lastSeen: 2026-11-10T03:47:10.380Z
+createdAt: 2026-11-10T03:47:10.380Z
+updatedAt: 2026-11-10T04:54:39.246Z
+disposition: architect

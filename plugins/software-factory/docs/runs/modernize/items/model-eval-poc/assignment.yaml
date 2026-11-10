@@ -1,0 +1,42 @@
+slug: model-eval-poc
+kind: poc
+title: CPU accuracy/latency evaluation over all candidates
+assignment: "GOAL: CPU accuracy and latency evaluation over all matrix
+  candidates to recommend smallest compliant model or no-go (U1). No committed
+  code; report only; temp venv and copy permitted, network inside spike only.
+  CONTRACT: decide(justification,rule,context) to float P meaningful in 0-1;
+  mapping justification equals primary equals (comment or text).strip, rule
+  equals joined suppressed codes (current rule symbol where codes unavailable,
+  recorded), context equals code_context None allowed; decision equals prob at
+  or above threshold. Modes: veto final equals heuristic(text) AND prob at or
+  above threshold (model only flips True to False; heuristic-False never reaches
+  model); replace final equals prob at or above threshold, heuristic deleted.
+  Smallest equals lexicographic params, weights bytes, CPU RSS, p50 latency.
+  Corpus: threshold 30 plus 50 plus brush-off and meaningful tables plus N real
+  repo suppressions, DEDUPED by normalized justification target at least 100
+  post-dedup, stratified heuristic-rejected easy vs heuristic-accepted
+  model-decides; rubric specific technical justification vs placeholder,
+  deferral, brush-off; per-source plus per-stratum breakdown. STEPS: Score ALL
+  matrix candidates (GLiDE, decider-nano, bekko-17m, ettin-150m, MiniLM) at
+  0.5,0.6,0.7 in BOTH modes or record explicit exclusion: accuracy,
+  meaningless-precision, meaningful-recall, CPU p50,p95 plus RSS. Compliance
+  bars at least 90 percent acc, 95 percent meaningless-precision, 85 percent
+  meaningful-recall apply to heuristic-accepted stratum (overall also reported).
+  Recommend smallest compliant model plus prompt plus threshold plus mode, or
+  no-go with evidence. CONSTRAINTS: poc kind confined to item poc folder and
+  temp only, production paths untouched."
+outlineRef: model-eval-poc
+milestone: M3
+wave: 2
+deps:
+  - model-candidate-matrix
+scenarioRefs:
+  - M3-1
+citations:
+  - src/python_setup_lint/checkers/_semantic.py:125-189
+  - src/python_setup_lint/checkers/_base.py:142-158
+  - tests/checkers/test_semantic_check.py:159-257
+  - tests/checkers/test_semantic_check.py:263-424
+  - tests/checkers/test_semantic_threshold.py:19-25
+  - docs/semantic-justification.md:56-62
+escalate: true

@@ -1,0 +1,7 @@
+id: q-concern-rm-5bf2ade0ce
+ref: golden-regen-hatch
+disposition: human-awareness
+question: Planning note on prune plus stream-helper-v2 deps. No code effect on
+  golden integrity; retain.
+status: open
+createdAt: 2026-11-10T02:32:36.426Z

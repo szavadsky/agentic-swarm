@@ -1,0 +1,26 @@
+id: decision-checkers-stream-helper-1794201869393
+context: item
+item: checkers-stream-helper
+afterRecord: 005-review-r2-a1
+decision: retry-with-guidance
+timestamp: 2026-11-09T05:24:29.393Z
+rationale: "QA r2 + review r2 both approved; integrate resolution is correct
+  (union of TestCodeContextDerivation + TestAnyElementCodeEcho, parent-side
+  deletion of obsolete slow TestSuppressionRerankerPipeline after
+  sentence-transformers removal). Integrate evidence shows full green: 1391
+  passed, lint 14/14 exit 0, integration 9 passed, no markers. Merge-path 'Gate
+  tests exit 127' names no failing test (127 = command-not-found, not assertion
+  failure) and contradicts in-worktree green, so it is
+  environmental/merge-harness, not a code defect."
+text: "Retry merge verification with zero content changes. Keep resolved
+  tests/checkers/test_suppression_justification_checker.py as-is (both new
+  classes verbatim, slow reranker block dropped). Verify: (1) marker scan over
+  tracked non-.factory files is empty; (2) uv run pytest
+  tests/checkers/test_suppression_justification_checker.py -q -> 47 passed; (3)
+  uv run pytest -q; (4) uv run lint (14/14); (5) uv run pytest
+  tests/integration.py -q -> 9 passed. If exit 127 recurs, capture full command
+  + stderr (which binary not found) in evidence instead of editing code.
+  Optional review nit (why-comment at
+  suppression_justification_checker.py:140/358) may be added only if another
+  round occurs."
+persist: false

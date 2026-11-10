@@ -1,0 +1,20 @@
+id: awareness-plan-1-human-never-lint-broadening
+ref: plan-1
+disposition: human-awareness
+question: Assumption expands never-test-linting to ban subprocess re-lint,
+  AST/source re-implementation, and config-consistency re-checks (e.g.
+  test_self_lint_clean.py slow gate, guards, config re-checks). M3 lists for
+  removal, iter2 removes. Rationale (rot with rule churn) reasonable but deletes
+  coverage; operator visibility warranted.
+status: answered
+createdAt: 2026-11-08T01:06:40.590Z
+answer: >
+  Operator acknowledges all plan-1 awareness items: (1) material definition and
+  its SEMANTIC=0 findings scope: OK; tightened acceptance by the model is
+  intentional, not a regression. (2) git-stored cache file at the linted repo
+  root: OK as required by INTENT; document it in install docs, keep it
+  detect-secrets clean, and note model weight licenses. (3) never-test-linting
+  broadening and removing the pytest self-lint guard: OK, it matches the
+  project's coding rules; the lint gate is the guard. No further action needed
+  on these.
+answeredAt: 2026-11-08T11:48:08.289Z

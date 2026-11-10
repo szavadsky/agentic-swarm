@@ -1,0 +1,86 @@
+status: changes_requested
+summary: No repo writes, guards hold; probe spec incomplete — 4 determinism gaps
+  block snapshot
+suggestions:
+  - detail: "_RECORD_PARSERS covers 9/14 tools; _capture_one returns [] for tach
+      check, ruff format, mypy.stubtest, pyright verify types, detect-secrets on
+      any non-negative exit code, so raw-capture diff cannot distinguish pass
+      from uncaptured-fail. Capture.json also stores only
+      (tool,file,line,col,rule,msg) — no exit codes, elapsed, or timestamps — so
+      assignment's timestamp diff is vacuous unless exit codes captured
+      separately. Findings must table per-tool exit codes on both temp copies,
+      explicitly scope snapshot to 9 parsed tools (or declare bounded src fix:
+      add parsers in _record_parsers.py + parsers.py registry), and note
+      ruff-format/detect-secrets mutate the temp copy yet contribute zero
+      records."
+    disposition: fix
+    id: unparsed-tool-blindness
+    location:
+      file: src/python_setup_lint/runner/parsers.py
+      line: 231
+    summary: Scope snapshot to 9 parsed tools; verify exit codes for 5 unparsed tools
+  - detail: _parse_pylint_records encodes file spans into rule
+      R0801:{file}:{line}-{col}<->{...} and cycle into R0401:{cycle}; dropping
+      msg leaves paths in rule unnormalized (absolutes, ./, backslashes).
+      Findings must verify spans are relative on both temp copies (pylint
+      invoked with relative _find_py_files list) and extend spec to normalize
+      rule field identically (relativize vs project, strip ./, backslash->/,
+      as_posix) or split location out of rule.
+    disposition: fix
+    id: r0801-rule-embedded-paths
+    location:
+      file: src/python_setup_lint/runner/_record_parsers.py
+      line: 55
+    summary: Normalize R0801/R0401 rule-embedded paths, not just msg
+  - detail: _violation_sort_key orders by (tool,file,line,col,rule) excluding msg
+      while _violation_tuple equality includes msg; _compare_violation_lists
+      two-pointer merge assumes sort consistent with equality, and
+      same-key-different-msg duplicates keep input order. A msg-dropping
+      snapshot cannot use ordered-list comparison on that sort. Findings must
+      grep both captures for duplicate (tool,file,line,col,rule) keys with
+      differing msgs and specify multiset comparison or a total-order key over
+      all compared fields.
+    disposition: fix
+    id: sort-msg-mismatch
+    location:
+      file: src/python_setup_lint/runner/baseline.py
+      line: 48
+    summary: Prove no same-key-different-msg duplicates or specify multiset compare
+  - detail: "ToolSpec ruff format runs mutating `ruff format` (no --check) early in
+      the pipeline, so sequential captures on the same temp copy are not
+      independent: first run reformats, shifting line numbers for later tools
+      (pylint/mypy/R0801). Findings must state one-run-per-fresh-copy with
+      file-hash before/after, or disable ruff format for the determinism
+      measurement; otherwise cross-run diff conflates format mutation with
+      nondeterminism."
+    disposition: fix
+    id: ruff-format-mutation-control
+    location:
+      file: src/python_setup_lint/runner/dispatch.py
+      line: 40
+    summary: Control for ruff-format write hazard on temp copies
+  - detail: _make_config string-replaces '"tests/data", ' in shipped rumdl.toml —
+      silent no-op if config reformats (multiline, no trailing space), causing
+      rumdl to exclude the sample AGENTS.md and the snapshot to silently lose MD
+      violations. Snapshot story should assert the replacement fired (e.g.
+      assert tests/data not in local content) rather than trusting blind
+      replace.
+    disposition: optional
+    id: rumdl-override-assertion
+    location:
+      file: tests/integration.py
+      line: 95
+    summary: Assert rumdl override fired instead of blind string replace
+  - detail: _relativize_file uses Path.relative_to(cwd) without resolve() and
+      returns the original absolute on ValueError (outside cwd). Symlinked tmp
+      dirs (pytest tmp_path, macOS /tmp) or pyright external diagnostics
+      (site-packages/typeshed) leak absolutes that test-side assert-non-absolute
+      would fail on. Extend spec with cwd.resolve(), as_posix, and an explicit
+      outside-cwd policy (filter vs keep) plus evidence of zero absolutes on
+      both copies.
+    disposition: optional
+    id: relativize-symlink-outside-cwd
+    location:
+      file: src/python_setup_lint/runner/baseline.py
+      line: 161
+    summary: Resolve symlinks and define outside-cwd relativize policy

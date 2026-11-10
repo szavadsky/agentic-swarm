@@ -1,0 +1,17 @@
+id: decision-nonitem-1794264572518
+context: non-item
+decision: accept-with-debt
+timestamp: 2026-11-09T22:49:32.518Z
+rationale: "Waves 6-8: 0 merges, 0 regressions, 4/4 gates green, tree clean.
+  Stall is orchestration, not code: stale I4 bases (tip-vs-HEAD reverts I2-I4
+  merges), exit-127 unknown-gate 'tests' (infra gates are
+  format/lint/test/test-integration), and 50-item cap overflow (69 total; prunes
+  discarded at 52/51). Failed cache/stream already replanned as
+  storage-v2/refresh-v2 and stream-v2; blocked docs/semantic superseded by
+  docs-v2/doubles+pin-v2. Further waves in I5 cannot fit cap or rebase stale
+  branches."
+debt: "I6 backlog: M1 contracts+spikes, M2 harness/runner/source/legacy-v2
+  (+ruff verify-only), M3 stream-v2 then storage-v2/refresh-v2, M4
+  pin-v2/wiring-v2 (default NO-GO without U1 verdict + Fastino + second-rater
+  approvals), M5 pyi/docs-v2/hatch-v2/gate-v2; merge-path target discipline +
+  fresh-HEAD owned-only diffs."

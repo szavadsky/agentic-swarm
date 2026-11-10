@@ -1,0 +1,89 @@
+status: ok
+summary: Authored test-first coverage for the veto DecisionBackend work. Added
+  interface-only stubs src/python_setup_lint/checkers/_decision_backend.py/.pyi
+  (no behavior; FakeBackend/get_backend raise NotImplementedError, model
+  id/constants pinned) so tests collect/import. Added
+  tests/checkers/test_decision_backend.py (constants, FakeBackend 1.0 +
+  'fake-backend rev test prompt-v1', loader with PYTEST_CURRENT_TEST guard
+  honored vs production-ignored, decision-model/reranker once-per-process
+  structlog warnings, backend=None kwarg on check_if_meaningful, heuristic-first
+  veto before the semantic adapter/backend, registered-backend end-to-end
+  rejection, code-echo normalization, empty [semantic] extra, uv.lock edge
+  absence). Rewrote tests/checkers/test_semantic_check.py to the backend-adapter
+  contract (backend=None keyword, 0.5 threshold mapping, None loader mapping,
+  one call per unique pair/model, no sentence-transformers reference, no disk
+  cache). Added no_try_import tests removing sentence_transformers from optional
+  patterns, code-echo/on-Any-element checker tests, and rewrote the semantic
+  portions of tests/assumptions/test_pylint_cache_semantics.py to the read-only
+  in-process memo contract while keeping the pylint jobs/serial-invocation
+  watchdogs. Existing production code was left untouched; only new interface
+  stubs were added.
+target:
+  selectors:
+    - tests/checkers/test_decision_backend.py
+    - tests/checkers/test_semantic_check.py
+    - tests/checkers/test_no_try_import_checker.py
+    - tests/checkers/test_suppression_justification_checker.py
+    - tests/assumptions/test_pylint_cache_semantics.py
+  expectRed:
+    - tests/checkers/test_decision_backend.py::test_fake_backend_defaults_to_one_and_pinned_model_id
+    - tests/checkers/test_decision_backend.py::test_get_backend_honors_dotted_path_under_pytest
+    - tests/checkers/test_decision_backend.py::test_get_backend_ignores_dotted_path_in_production
+    - tests/checkers/test_decision_backend.py::test_decision_model_parses_but_yields_none_with_exactly_one_warning
+    - tests/checkers/test_decision_backend.py::test_reranker_model_env_is_deprecated_with_exactly_one_warning
+    - tests/checkers/test_decision_backend.py::test_check_if_meaningful_has_backend_keyword_defaulting_to_none
+    - tests/checkers/test_decision_backend.py::test_registered_backend_rejects_a_meaningful_heuristic
+    - tests/checkers/test_decision_backend.py::test_brush_off_is_vetoed_before_the_backend
+    - tests/checkers/test_decision_backend.py::test_brush_off_does_not_reach_the_semantic_adapter
+    - tests/checkers/test_decision_backend.py::test_semantic_disabled_never_calls_the_backend
+    - tests/checkers/test_decision_backend.py::test_check_if_meaningful_rejects_code_echo_justification
+    - tests/checkers/test_decision_backend.py::test_semantic_extra_is_empty
+    - tests/checkers/test_decision_backend.py::test_uv_lock_has_no_sentence_transformers_edge
+    - tests/checkers/test_semantic_check.py::test_signature_exposes_backend_keyword_defaulting_to_none
+    - tests/checkers/test_semantic_check.py::test_one_backend_call_per_unique_pair
+    - tests/checkers/test_semantic_check.py::test_module_does_not_reference_sentence_transformers
+    - tests/checkers/test_semantic_check.py::test_check_writes_no_disk_cache
+    - tests/checkers/test_no_try_import_checker.py::test_sentence_transformers_is_no_longer_an_optional_import_pattern
+    - tests/checkers/test_no_try_import_checker.py::test_try_import_of_sentence_transformers_is_flagged
+    - tests/checkers/test_suppression_justification_checker.py::TestAnyElementCodeEcho::test_code_echo_on_any_element_is_rejected
+    - tests/assumptions/test_pylint_cache_semantics.py::TestSemanticInProcessMemo::test_given_new_verdicts_then_backend_calls_once_each_and_writes_nothing
+evidence:
+  - "uv run pytest -q --tb=no: 48 failed, 1329 passed, 13 deselected. Every
+    failure is in the newly authored/rewritten behavior tests; no unrelated
+    regressions."
+  - "uv run pytest with the 21 declared expectRed node ids: 21 failed in 0.73s
+    (all target-red confirmed)."
+  - "uv run pytest tests/integration.py -q: 9 passed, proving the SEMANTIC=0
+    golden snapshot (multiset + byte-identical replay) is unchanged by this
+    test-only delta."
+  - "Runner failure detection proven:
+    test_brush_off_does_not_reach_the_semantic_adapter fails with the intended
+    AssertionError (semantic adapter reached on a brush-off)."
+  - "uv run ruff check --config config/ruff.toml on all changed/new files: All
+    checks passed."
+  - "uv run ruff format --config config/ruff.toml --check on all changed/new
+    files: 7 files already formatted."
+  - "uv run pylint --rcfile config/.pylintrc-tests on all changed tests:
+    10.00/10."
+  - "uv run pylint --rcfile config/.pylintrc-pyi
+    src/python_setup_lint/checkers/_decision_backend.pyi: 10.00/10."
+  - "uv run mypy src/python_setup_lint/checkers/_decision_backend.py: Success,
+    no issues; uv run pyright on the same stub: 0 errors."
+  - wc -l confirms all touched/new modules are <= 500 lines (stub 51/33, backend
+    test 320, semantic test 133, assumptions 355).
+concerns:
+  - Tests intentionally call the not-yet-existing backend= keyword and private
+    _reset_* helpers, so mypy on the test files still reports expected
+    call-arg/attr-defined errors until the develop step updates
+    _base.pyi/_semantic.pyi (tests are excluded from pyright).
+  - "Tests define the _base.normalize_suppressed_codes contract: strip a
+    suppression directive and its code list; reject a trailing reason that
+    merely echoes those codes order-insensitively; leave bare/plain text
+    unchanged."
+  - The obsolete reranker/disk-cache tests were replaced rather than left
+    failing; the pylint jobs and serial-invocation watchdog tests in
+    tests/assumptions/test_pylint_cache_semantics.py were preserved.
+notes: The assignment provided the ADR-014 pinned values directly, so no
+  blocked/no-op attestation path was used. _decision_backend.py/.pyi are
+  interface stubs only (public functions raise NotImplementedError; FakeBackend
+  exposes the pinned model id). No existing production file was modified.

@@ -1,0 +1,45 @@
+status: ok
+summary: "Test-only cleanup of the 4 owned files: removed the stale `pylint:
+  disable=too-many-lines` from tests/runner/test_lint_runner_integration.py (414
+  lines < 500 threshold) and dropped its now-invalid rationale sentence; added a
+  session-scoped `python_setup_checkout` fixture in tests/conftest.py returning
+  the repo root and replaced all 8 hardcoded `/home/slava/aiexp/python-setup`
+  dev-path literals across conftest.py, test_setup.py (2) and
+  test_setup_install.py (5) with `str(python_setup_checkout)`. Re-applied ruff
+  formatting with the shipped line-length=130 config. Full suite and lint gate
+  green; golden snapshots byte-identical."
+target:
+  command: uv run pytest -q
+  customTarget: false
+evidence:
+  - "Baseline (pre-change): `uv run pytest -q` -> 1377 passed, 13 deselected, 0
+    failed"
+  - "After changes: `uv run pytest -q` -> 1377 passed, 13 deselected, 0 failed
+    (no new failures vs baseline/M1)"
+  - "Owned files: `uv run pytest tests/runner/test_setup.py
+    tests/runner/test_setup_install.py
+    tests/runner/test_lint_runner_integration.py -q` -> 112 passed, 2
+    deselected"
+  - "Golden: `uv run pytest tests/test_golden.py -q` -> 31 passed; sha256 of
+    tests/data/golden/* unchanged (c2b8dc3a... findings, 1d239741...
+    tool_counts)"
+  - "Lint gate: `uv run lint` -> EXIT=0, all tools PASSED including [ruff
+    format], [pylint tests], [detect-secrets]"
+  - "`grep -rn '/home/slava' tests/conftest.py tests/runner/test_setup.py
+    tests/runner/test_setup_install.py
+    tests/runner/test_lint_runner_integration.py` -> no matches (exit 1)"
+  - "`wc -l tests/runner/test_lint_runner_integration.py` -> 414 (<500
+    max-module-lines); `grep too-many-lines` on owned files -> no matches"
+  - "`git status --short` -> only the 4 owned files modified"
+concerns:
+  - The `@pytest.mark.slow` downstream integration test remains deselected by
+    default (repo addopts `-m 'not slow'`); it now uses the portable fixture but
+    writes its scratch project under `Path.home()/.tmp`, which is out of the
+    assigned `/home/slava` scope.
+  - Stale too-many-lines disables in tests/runner/test_lint_runner.py and
+    tests/runner/_factories_extras.py were intentionally left untouched (owned
+    by other work streams).
+notes: No production code touched. Fixture is session-scoped to match its
+  consumer (`configured_project`) and derives the checkout path from
+  `Path(__file__).resolve().parents[1]`, so it works in any clone/worktree
+  without environment assumptions.

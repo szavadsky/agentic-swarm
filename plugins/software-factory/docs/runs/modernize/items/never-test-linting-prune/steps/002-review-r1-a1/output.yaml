@@ -1,0 +1,18 @@
+status: approved
+summary: "Tests-only prune verified: 4 files deleted, 2 trimmed, pin kept, all
+  survivors pass, no src/config/golden changes."
+suggestions:
+  - id: stale-live-file-docstring
+    detail: Module docstring lines 20-22 still reference the deleted
+      test_t9_7_compose_pyright_live.py ('downstream-integration (live) — see
+      ...live.py', 'the live smoke records...'). Grep confirms this is the only
+      live-code reference to any deleted module; no runtime or lint impact
+      (ruff/pylint clean). The file is FORBIDDEN to this item (owns only 6
+      files), so correctly left untouched and disclosed in developer concerns.
+      Owner of test_t9_7_compose_pyright.py should delete or reword those two
+      bullet lines.
+    disposition: optional
+    location:
+      file: tests/runner/test_t9_7_compose_pyright.py
+      line: 20
+    summary: Stale docstring references deleted live test file; owner cleanup deferred

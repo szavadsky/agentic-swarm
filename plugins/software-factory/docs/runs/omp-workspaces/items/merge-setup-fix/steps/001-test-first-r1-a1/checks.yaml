@@ -1,0 +1,31 @@
+checks:
+  - id: test-first-scope
+    status: pass
+    message: test-first-scope passed (1 test files, 0 new prod stubs with 0 lines)
+    details:
+      testFiles:
+        - plugins/software-factory/test/engine/merge-setup.test.ts
+      newProdFiles: []
+      stubProdLines: 0
+  - id: target-red
+    status: pass
+    message: "target-red passed: all 3 expected tests failed with assertion failures"
+    details:
+      command: bun --cwd=plugins/software-factory test test/engine/merge-setup.test.ts
+        --reporter=junit
+        --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-1794276734716-3kdgmfp2jbu.xml
+      junitCaseCount: 5
+      junitCaseIds:
+        - merge-path infra.setup.runs setup in the child worktree before gates,
+          and setup-created untracked files are not gate mutations
+        - merge-path infra.setup.runs setup before target-green checks in the
+          child worktree
+        - merge-path infra.setup.treats an empty setup list as a no-op and
+          merges as before
+        - merge-path infra.setup.treats a missing setup key as a no-op and
+          merges as before
+        - merge-path infra.setup.fails the merge with gate-shaped evidence
+          containing the setup command and output
+      junitTruncated: false
+      collected: true
+      collectionErrors: []

@@ -1,0 +1,85 @@
+status: approved
+summary: "Single display bug fixed and verified: 4.3 Recall now matches
+  metrics.json (decider rubric 27.9%, bekko rubric 37.7%, ettin/minilm 100%),
+  verdict and 4.4 unchanged, production untouched."
+suggestions:
+  - id: ettin-model-stats-include-unused-heads
+    disposition: optional
+    summary: Ettin params/bytes overcounted by unused Dense/LayerNorm heads (~592K
+      params)
+    detail: model_stats.py rglob sums all 4 safetensors (149,606,401 params /
+      598,439,036 bytes) but CrossEncoder loads only model.safetensors (134 keys
+      = 149,014,272 params per ettin_full.log 'Loading weights 134/134'). The
+      2_Dense + 3_LayerNorm + 4_Dense heads are never loaded. Ordering vs
+      decider-nano (149,015,041) unaffected, no verdict impact, but 'measured
+      directly' provenance claim is inaccurate.
+    location:
+      file: .factory/tasks/modernize/items/model-eval-poc/poc/eval/model_stats.py
+      line: 25
+  - id: glide-exclusion-smallest-rationale-invalid
+    disposition: optional
+    summary: GLiDE exclusion rationale 'cannot be smallest' is logically invalid
+      when 0 compliant
+    detail: metrics.py exclusion text (and report.md §6) argues GLiDE/395M 'cannot
+      be the smallest compliant option' because largest. Holds only if a smaller
+      compliant exists; with 0 augmented-compliant among scored, a compliant
+      GLiDE would be smallest by default (singleton). Contracted no-go is
+      structural (215/0, precision vacuous, is_compliant requires non-None), so
+      GLiDE gap affects only augmented sensitivity. Reword to cite structural
+      no-go + compute-budget sensitivity gap.
+    location:
+      file: .factory/tasks/modernize/items/model-eval-poc/poc/eval/metrics.py
+      line: 373
+  - id: latency-contention-not-annotated-in-table
+    disposition: optional
+    summary: Table 2 presents contended p50/p95 as point estimates; annotate as
+      upper bounds
+    detail: "Report §6 discloses bekko/ettin/minilm overlapped GLiDE run, but Table
+      2 shows bare '439 ms / 1103 ms' (ettin) and '224 ms / 1341 ms' (minilm).
+      Verified inflation vs isolated smoke: ettin p50 439ms vs ~90ms smoke,
+      minilm p50 224ms vs ~15ms smoke (5-15x). p50 is 4th lexicographic
+      tiebreaker so no verdict impact (0 compliant), but table misleads without
+      upper-bound qualifier."
+    location:
+      file: .factory/tasks/modernize/items/model-eval-poc/poc/eval/report.py
+      line: 99
+  - id: glide-table-status-mislabels-eligible
+    disposition: optional
+    summary: Table 2 labels GLiDE 'eligible' with '0 MB' while §6 excludes it (6/336)
+    detail: "Status derives from MODEL_SPECS eligible flag (True) even though all
+      three GLiDE prompts are incomplete (6/336) and §6 explicitly excludes
+      GLiDE. Table shows '0 MB / n/a ms / eligible' (0 comes from rss_mb None
+      fallback; smoke meta has 2845 MB), contradicting exclusion list below.
+      Change Table 2 status for incomplete runs to 'excluded (incomplete:
+      6/336)' and RSS to n/a so table and §6 agree."
+    location:
+      file: .factory/tasks/modernize/items/model-eval-poc/poc/eval/report.py
+      line: 95
+  - id: license-audit-inconsistent
+    disposition: optional
+    summary: Bekko excluded for 'no declared license' but decider/ettin licenses
+      unaudited
+    detail: Cache contains licenses/ dir only for glide (Ettin-encoder-400m MIT);
+      bekko, decider-nano, ettin, minilm snapshots all lack license files, yet
+      only bekko is marked ineligible for license. Either document license
+      provenance for all five (model cards / HF metadata) or drop license as
+      eligibility criterion. Moot for verdict (decider/ettin fail accuracy
+      regardless), but selective exclusion is inconsistent.
+    location:
+      file: .factory/tasks/modernize/items/model-eval-poc/poc/eval/metrics.py
+      line: 52
+  - id: single-adjudicator-structural-no-go
+    disposition: human-awareness
+    summary: No-go reflects corpus structure (0 contracted accepted negatives) +
+      single-rater labels
+    detail: "Verified: contracted accepted stratum is 215 meaningful / 0 meaningless
+      (sole repo_suppression negative c188 is heuristic-rejected), so 95%
+      precision is unevaluable by construction and heuristic baseline is 100% by
+      definition (test-table labels assert heuristic behavior). All 183 repo
+      labels are single-author with terse borderlines all True; 39 hard
+      negatives making augmented precision non-vacuous are author-written
+      sensitivity data. Report discloses this (§6 + §3). Architect can decide
+      whether double-rated real brush-off sample is needed before any future
+      go/no-go."
+    location:
+      file: .factory/tasks/modernize/items/model-eval-poc/poc/data/repo_labels.json

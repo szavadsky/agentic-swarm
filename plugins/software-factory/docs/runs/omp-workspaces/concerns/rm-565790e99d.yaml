@@ -1,0 +1,18 @@
+id: rm-565790e99d
+chosen: On-demand whole-tree derivation; no registry
+alternatives:
+  - "Persistent workspace registry file (rejected: drift risk, extra repair/gc
+    surface)"
+  - "Extend single-task status incrementally (rejected: cannot answer
+    saga/epic/agent-level queries)"
+why: Spec mandates derived-from-records+git idempotent tracking; on-demand
+  cannot drift and needs no repair paths.
+status: open
+source:
+  record: 005-architect-plan-1-a1
+  agent: architect
+  step: architect-plan-1
+  iteration: 1
+  lastSeen: 2026-11-09T23:33:06.263Z
+createdAt: 2026-11-09T23:33:06.263Z
+updatedAt: 2026-11-09T23:33:06.263Z

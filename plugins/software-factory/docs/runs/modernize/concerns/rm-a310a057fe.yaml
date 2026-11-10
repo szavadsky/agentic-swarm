@@ -1,0 +1,21 @@
+id: rm-a310a057fe
+chosen: "Honor fail-open: report 0/3 close-ups and keep the item blocked/pending
+  rather than synthesizing a handoff"
+alternatives:
+  - Reconstruct three pseudo-close-ups from I4/I5 item-level shift declarations
+  - Treat plan-level closeup-3/closeup-4 as the three epic close-ups
+  - Emit three root-authored no-shift declarations in place of missing epic
+    close-ups
+why: ADR-011:64-69 and assignment.yaml:10-12 require all three epic close-ups
+  and forbid fabrication. Item-level shift declarations exist but are
+  single-owner item reports, not epic close-ups, so relabeling them would poison
+  the golden-regen-hatch precondition.
+status: open
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: epic-shift-report-collection
+  lastSeen: 2026-11-10T00:14:51.554Z
+createdAt: 2026-11-10T00:14:51.554Z
+updatedAt: 2026-11-10T00:14:51.554Z

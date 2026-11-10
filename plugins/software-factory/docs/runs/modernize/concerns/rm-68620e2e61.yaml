@@ -1,0 +1,20 @@
+id: rm-68620e2e61
+chosen: Retarget the semantic-owned test block to TestAnyElementCodeEcho:366-392
+alternatives:
+  - Declare an unresolved ownership dispute over the absent class
+  - Give the whole test file to checkers
+  - Give the whole test file to semantic
+why: The ADR/map-named TestSuppressionRerankerPipeline is absent at HEAD, while
+  TestAnyElementCodeEcho directly tests the semantic-owned rule-echo behavior.
+  Retargeting preserves the single-writer partition without leaving a dangling
+  symbol.
+status: routed
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: epic-kickoff-gate
+  lastSeen: 2026-11-10T00:08:48.409Z
+createdAt: 2026-11-10T00:08:48.409Z
+updatedAt: 2026-11-10T03:32:47.723Z
+disposition: optional

@@ -1,0 +1,26 @@
+id: c-5463b26c4b
+kind: assumption
+summary: Production call site passes a constant rule symbol, collapsing the
+  cache rule component
+detail: '`suppression_justification_checker.py:152-158` calls
+  `check_if_meaningful(..., rule="unjustified-suppression")`, so the tracked
+  `rule` field would be constant. The PoC uses the suppressed code (E501, W9704,
+  type-ignore). The permanent implementation must either thread the suppressed
+  symbol through or explicitly document checker-symbol semantics.'
+location:
+  file: src/python_setup_lint/checkers/conformance/suppression_justification_checker.py
+  line: 152
+affects:
+  - cache-design-spike
+  - decision-cache-impl
+severity: medium
+status: routed
+source:
+  record: 001-develop-r1-a1
+  agent: developer
+  step: develop
+  item: cache-design-spike
+  lastSeen: 2026-11-09T23:18:39.934Z
+createdAt: 2026-11-09T23:18:39.934Z
+updatedAt: 2026-11-10T01:14:34.111Z
+disposition: optional

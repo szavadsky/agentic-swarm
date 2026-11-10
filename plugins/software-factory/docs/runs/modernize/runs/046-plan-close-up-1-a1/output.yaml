@@ -1,0 +1,56 @@
+completedMilestones:
+  - M1
+iteration: 1
+remainingMilestones:
+  - M2
+  - M3
+status: next-iteration
+summary: "Skeptical code inspection: M1 golden safety net functionally delivered
+  (golden+counts+oracle+tool coverage+drift+regen helpers verified in
+  tests/_golden.py, tests/test_golden.py,
+  tests/integration.py::test_setup_new_and_lint, 158 findings, zero __CRASH__,
+  all oracle rules present, 49 present/56 absent). M2 split: third-party
+  assumption contracts fully pinned (8 tests, correct names/classes/markers),
+  but helper consolidation missing (no tests/_project_helpers.py, duplicates
+  remain, integration.py 661 lines with too-many-lines vs <=500 target). M3 debt
+  inventories unverifiable/no committed evidence (by design no file; reports
+  hidden by containment). Semantic epic not started; task-intent model swap,
+  cache, debloat, rule enforcement untouched."
+techDebt:
+  - "M1 interface drift: collect_findings(project,*,config) via private
+    _run_tool_pipeline+_RECORD_PARSERS vs planned
+    collect_findings(config,capture_path) via run_lint
+    baseline=capture_path/overwrite; no sort-by-finding_key and no assert len!=0
+    in collect (sort only in serialize; len!=0 holds in data ~158 but never
+    asserted)"
+  - M1 missing explicit zero-__CRASH__ assertion on golden findings (verified
+    zero by grep, but only [CRASH]-in-output asserted); slice_tool_section
+    implemented+unit-tested but unused in integration (overlay test retains
+    manual find-slicing)
+  - "M2 helpers missing: tests/_project_helpers.py absent;
+    _copy_sample/_init_git/_shipped_config_paths/_make_config still in
+    integration.py, shipped_config_paths in conftest.py,
+    _git_init/_stage/_commit_all in tests/runner/_autofix_helpers.py;
+    per-consumer import map not implemented"
+  - "M2 line budget failed: tests/integration.py 661 lines with
+    pylint:disable=too-many-lines (+too-many-locals) vs <=500 target and >=127
+    removal (grew from 627 baseline); overlay/setup/precommit scaffolding not
+    extracted"
+  - M2 AGENTS.md counts stale (1290 pass/7 integration) vs new golden+assumption
+    tests and 9 integration tests; consolidate as sole counts owner not executed
+  - "M3 unverifiable under containment: no committed ownership map or audit row
+    tables in repo (by design orchestration-only); no evidence of unified
+    disjoint map, LoC deltas, or iteration-2 epic decomposition"
+  - "Semantic epic not started: _semantic.py still CrossEncoder/jina-reranker,
+    semantic extra still sentence-transformers, no DecisionBackend/cache
+    modules, no .python-setup-decisions.json, no docs/CHANGELOG updates; TD-1
+    rule-echo, TD-2 patching/vacuous asserts, TD-4 506-line table duplication
+    remain"
+  - "Task-intent gaps: coding-rules enforcement untouched (dispatch.py long
+    rationale+unjustified-suppression, baseline
+    _FALLBACK_TOOLS/peek/_compare_sorted, beartype/type:ignore repeats remain);
+    test debloat untouched (test_self_lint_clean.py still re-lints repo, task-ID
+    names, _factories.py ~1400 lines remain)"
+  - "Gate execution not verified: read-only audit (no bash) could not run pytest
+    -q / integration -v / lint; pass/fail inferred from code inspection only,
+    including byte-identical regen and trailing-newline on committed golden"

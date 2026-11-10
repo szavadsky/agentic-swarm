@@ -1,0 +1,40 @@
+blockedItems:
+  - docs-reconciliation
+concerns:
+  - detail: Wave report lists no merged items and marks docs-reconciliation as
+      blocked-by-failure. No gate regression explains the block (all gates green
+      or improved), so the cause is item-level (dependency failure or retry
+      exhaustion), not tree or gate state.
+    affects:
+      - docs-reconciliation
+    kind: blocker
+    severity: medium
+    summary: docs-reconciliation blocked-by-failure with zero merges in Wave 6
+debt:
+  - docs-reconciliation not merged in Wave 6; carry to next wave
+  - "Operator action outstanding: `uv run lint` ruff format ToolSpec still
+    mutates worktree (gates work around it via split format/lint declarations)"
+iteration: 5
+mergedItems: []
+recommendations:
+  - Carry docs-reconciliation to Wave 7 with explicit unblock/dependency check
+    before re-dispatch
+  - "Operator: add --check (+ --config config/ruff.toml) to the ruff format
+    ToolSpec or drop it from TOOLS so documented `uv run lint` is check-only"
+  - Keep split gate declarations (format check-only + lint 13 check-only tools)
+    until the ToolSpec mutation is fixed
+remarkable:
+  - alternatives:
+      - Treat lint/test now=pass as unrelated noise and keep baseline red
+      - Infer fixes from raw output text comparison
+    chosen: Count lint and test as IMPROVED per Gate Diff table (baseline=fail,
+      now=pass) with no regressions
+    why: Gate Diff is the authoritative signal; raw text differs run to run by
+      timing/ordering/truncation and must not be compared
+status: has_failures
+summary: "Wave 6: 0 items merged; docs-reconciliation blocked-by-failure. Tree
+  clean: no untracked junk (git ls-files others empty), no conflict markers in
+  src/tests/config/docs/design, only engine journal modified. Gates vs baseline
+  (no regressions): format pass/pass green, test-integration pass/pass green,
+  lint fail->pass IMPROVED, test fail->pass IMPROVED."
+wave: 6

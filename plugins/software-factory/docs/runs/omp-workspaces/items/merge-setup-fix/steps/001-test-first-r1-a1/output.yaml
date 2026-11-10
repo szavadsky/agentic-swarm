@@ -1,0 +1,70 @@
+status: ok
+summary: "Authored the target-red behavior tests for merge-path infra.setup in
+  plugins/software-factory/test/engine/merge-setup.test.ts (5 tests): (a) setup
+  writes a marker plus a node_modules-class untracked tree before gates, the
+  gate observes it, and no worktree-mutation is reported; (b) setup runs before
+  target-green; (c) empty setup is a no-op; (d) missing setup is a no-op; (e)
+  failing setup aborts the merge with gate-failure-shaped evidence carrying
+  command + stdout/stderr and prevents gates from running. Per this step's
+  test-first scope, production code is untouched; the mergeItem implementation
+  belongs to the follow-up develop step. Red is proven with the repo's real
+  target-red check: all 3 declared expectRed ids fail as assertion failures
+  while existing merge/gates suites remain green."
+target:
+  selectors:
+    - test/engine/merge-setup.test.ts
+  expectRed:
+    - merge-path infra.setup.runs setup in the child worktree before gates, and
+      setup-created untracked files are not gate mutations
+    - merge-path infra.setup.runs setup before target-green checks in the child
+      worktree
+    - merge-path infra.setup.fails the merge with gate-shaped evidence
+      containing the setup command and output
+evidence:
+  - "Added test/engine/merge-setup.test.ts: 5 tmp-repo, no-network behavior
+    tests covering setup-before-gates marker visibility and mutation-free
+    snapshot, setup-before-target-green, empty-setup parity, missing-setup
+    parity, and failing-setup evidence (command + stdout/stderr markers +
+    gate-shaped journal event)."
+  - "Red: `cd plugins/software-factory && bun test
+    test/engine/merge-setup.test.ts` → 2 pass, 3 fail; all 3 are expect()
+    assertion failures (JUnit reports tests=5 failures=3), not import/collection
+    errors."
+  - "Real target-red verification: runCheck('target-red') with the declared
+    selectors/expectRed against the worktree → {ok:true, summary:'target-red
+    passed: all 3 expected tests failed with assertion failures'}."
+  - "Parity: `bun test test/engine/merge-gate-evidence.test.ts
+    test/git/merge.test.ts test/engine/merge-conflict.test.ts
+    test/engine/merge-redrive-stranded.test.ts test/checks` → 72 pass, 0 fail."
+  - "Typecheck: `cd plugins/software-factory && bun run typecheck` (tsc
+    --noEmit) → exit 0."
+  - "Scope: `git status --porcelain -- plugins/software-factory/src
+    plugins/software-factory/test` → only `??
+    plugins/software-factory/test/engine/merge-setup.test.ts`; `git diff --stat
+    -- plugins/software-factory/src` is empty, so no prod file was modified."
+remarkable:
+  - chosen: Deliver a test-only diff and defer the merge-path.ts implementation to
+      the follow-up develop step.
+    why: The story.dev flow runs test-first-scope (rejects any modified prod file)
+      and target-red (declared tests must currently fail) in this step; shipping
+      the implementation here would fail both mechanical checks.
+    alternatives:
+      - Implement mergeItem setup execution in this step as the story assignment
+        text lists — rejected because target-red would see green and
+        test-first-scope rejects modified src/** files.
+      - Introduce a prod interface stub — unnecessary because the tests exercise
+        the existing mergeItem export.
+notes: "Implementation guidance for the develop step: in mergeItem, after the
+  verify-checks phase begins and infra.yaml is loaded, run infra.setup commands
+  sequentially in childWt before runGates and before target-green (mirroring
+  checks/runner.ts runInfraSetup: gate-timeout/second semantics,
+  throw-equivalent on first non-zero exit or timeout). Because setup precedes
+  runGates' per-attempt snapshotWorktree, setup-created untracked files
+  (node_modules) will not be flagged as gate mutations. On failure, journal type
+  item_merge_gates_failed with failingGates ['infra.setup'], results
+  [{id:'infra.setup', status:'fail'}], and evidence shaped like gate failures
+  ('infra.setup (exit via status=fail). Command: <cmd> Details: <stdout+stderr
+  tail>'), then return ok:false with the same command+output in error.
+  Empty/missing setup must remain a no-op (`infra?.setup ?? []`). Environment
+  note: `bun install --frozen-lockfile` was run to restore node_modules for the
+  test runner; no manifest or lockfile changes (node_modules is gitignored)."

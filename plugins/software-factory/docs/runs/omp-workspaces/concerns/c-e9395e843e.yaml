@@ -1,0 +1,30 @@
+id: c-e9395e843e
+kind: risk
+summary: mnemopi.autoRecall injects prior-session text into the first turn,
+  changing the effective system prompt and defeating fresh-session cache reuse
+detail: The overlay disables polyphonicRecall/enhancedRecall/proactiveLinking
+  but leaves mnemopi.autoRecall and autoRetain at true. Probes show
+  custom/system-prompt-digest changes when memory recall text is injected
+  (a94d3680ec1c75cf with no memories vs a89aabcb237da3c7/634c40b6e2f931de with
+  recalled content), even though the agent body is unchanged. Recalled memories
+  are first-turn-only, so resumed turns are safe, but fresh sessions in a reused
+  worktree are non-deterministic and can leak prior task prompts across tasks
+  sharing a cwd.
+location:
+  file: plugins/software-factory/src/harness/omp/overlay.ts
+  line: 77
+affects:
+  - "19.7"
+  - 20b
+  - 20c
+severity: high
+status: routed
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: spike-cache-key
+  lastSeen: 2026-11-10T00:16:23.859Z
+createdAt: 2026-11-10T00:16:23.859Z
+updatedAt: 2026-11-10T01:53:41.429Z
+disposition: architect

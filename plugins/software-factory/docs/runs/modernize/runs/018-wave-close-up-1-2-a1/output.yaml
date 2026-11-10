@@ -1,0 +1,45 @@
+blockedItems: []
+debt:
+  - "Pre-existing red baseline (unchanged, not wave-caused): 6 unit-test
+    failures assuming 13 tools while TOOLS now has 14 (ruff format added); lint
+    violations SIM102 at src/python_setup_lint/checkers/stub/coverage.py:196,
+    W9704 unjustified-suppression x2, R0914 at runner/cli.py:50, C0208 at
+    tests/runner/_factories_extras.py:383."
+  - "Documented `uv run lint` mutation hazard still open: the `ruff format`
+    ToolSpec runs plain `ruff format` without --check/--config (operator action
+    from infra notes)."
+  - detect-secrets scans `git ls-files` (all tracked files) so engine-managed
+    .factory journal content can flip it red independent of repo code; no
+    exclusion mechanism is currently in place.
+failedItems:
+  - gate:lint/detect-secrets (regressed pass->fail vs baseline; hits are Hex
+    High Entropy strings at .factory/tasks/modernize/journal.ndjson:81,83 —
+    engine-managed orchestration records, not repo code)
+iteration: 1
+mergedItems: []
+recommendations:
+  - "Engine/operator: exclude .factory/** from the detect-secrets scan (or
+    refresh .secrets.baseline / allowlist journal session digests) so
+    orchestration noise cannot flip the lint gate."
+  - "Operator: add --check (+ --config) to the `ruff format` ToolSpec or drop it
+    from TOOLS so `uv run lint` stops mutating worktrees (carried from infra
+    notes)."
+  - Update the 6 baseline-red unit tests and 5 baseline-red lint violations to
+    the 14-tool world (or record them as accepted debt) so future waves have a
+    green baseline to regress against.
+status: has_failures
+summary: "Wave 2 close-up (iteration 1): wave report lists no merged items
+  (empty merged set — consult/report-only wave), and the tree is clean: only
+  engine-managed .factory/tasks/modernize/journal.ndjson is modified, zero
+  untracked files, zero merge-conflict markers in repo code. Gate audit vs
+  baseline: format PASS (177 files formatted, was 173 — count grew, still
+  green); test-integration PASS (9/9); test FAIL with exactly the 6 pre-existing
+  baseline failures and 1308 passed (baseline 1300, +8, no new failures); lint
+  FAIL with the same baseline tool failures (ruff check SIM102 coverage.py:196,
+  pylint W9704, pylint-pyi R0914 cli.py:50, pylint tests C0208
+  _factories_extras.py:383 — identical exit codes) BUT detect-secrets regressed
+  pass->fail (exit 123) on Hex High Entropy hits inside the engine-managed
+  .factory journal. That single green->red flip is orchestration noise, not a
+  repo-code regression from wave work, but per gate-baseline rules it is
+  recorded in failedItems; iteration can continue."
+wave: 2

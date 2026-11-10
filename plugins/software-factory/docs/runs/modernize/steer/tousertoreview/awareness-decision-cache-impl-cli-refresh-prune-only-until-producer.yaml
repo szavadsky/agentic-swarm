@@ -1,0 +1,10 @@
+id: awareness-decision-cache-impl-cli-refresh-prune-only-until-producer
+ref: decision-cache-impl
+disposition: human-awareness
+question: run_decision_refresh calls refresh(observed=()) because the
+  checker-side observation producer is forbidden in this item
+  (_semantic/_decision_backend). Module-level merge path is fully tested;
+  end-to-end population of new entries awaits the follow-up producer item. No
+  action for this item; recorded so M4 acceptance tracks the dependency.
+status: open
+createdAt: 2026-11-09T07:50:13.816Z

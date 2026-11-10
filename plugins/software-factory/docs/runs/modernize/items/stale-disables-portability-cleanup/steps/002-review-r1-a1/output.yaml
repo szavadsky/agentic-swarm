@@ -1,0 +1,14 @@
+status: approved
+summary: "4 owned test files cleaned: stale too-many-lines removed (414<500), 8
+  hardcoded /home/slava literals replaced by portable fixture, owned tests
+  green"
+suggestions:
+  - id: downstream-scratch-outside-tmp
+    disposition: optional
+    summary: Slow downstream test still uses fixed Path.home()/.tmp scratch dir
+    detail: Portable via Path.home() so assignment satisfied, but fixed shared path
+      breaks test isolation (CodingRules Isolation); consider tmp_path_factory
+      when test is next touched. Out of scope, non-blocking.
+    location:
+      file: tests/runner/test_setup_install.py
+      line: 320

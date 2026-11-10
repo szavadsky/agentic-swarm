@@ -1,0 +1,101 @@
+status: changes_requested
+summary: "Gate greens reproduced; docs-red valid; 1 findings defect: golden
+  W9704 claimed 0, actual 18"
+suggestions:
+  - id: c-1882d3f0f7
+    disposition: optional
+    summary: Constant rule symbols collapse cache-key rule component
+    detail: "Verified at HEAD: 3 call sites pass rule=unjustified-suppression and 2
+      pass rule=bare-except-comment; _semantic.py includes rule then truncates
+      SHA-256 to 64 bits. In-process only today. Downstream cache-design debt,
+      not this read-only gate."
+    location:
+      file: src/python_setup_lint/checkers/conformance/suppression_justification_checker.py
+      line: 152
+  - id: c-5a67b09b19
+    disposition: optional
+    summary: Tracked 1.72GiB safetensors; detect-secrets relies on prefix filter
+    detail: "Verified: 9 safetensors 1844653898B, largest 789581344B; RLIMIT_AS
+      2048MB; MemoryError reproduced via ./.factory bypass at config.py:97; HEAD
+      git-ls-files scan exit 0 via ^\\.factory/ filter from ancestor 882fac0.
+      GREEN stands; residual infra fragility, no baseline edit."
+    location:
+      file: .secrets.baseline
+      line: 42
+  - id: c-a816c72150
+    disposition: optional
+    summary: Golden-regen-hatch report absent from HEAD
+    detail: "Verified absent (only ADR-011:68 names item; side-branch 10fa9d0 not
+      ancestor). Byte-identity independently proven: 158 findings, hashes
+      c2b8dc3a/1d239741 match, multiset+byte-replay pass, unchanged since
+      1a811af. No regen needed; track hatch artifact downstream."
+    location:
+      file: docs/adr/ADR-011.md
+      line: 68
+  - id: c-b18093e36e
+    disposition: optional
+    summary: No production lock; PoC fcntl concern deferred
+    detail: "Verified: no fcntl/flock in src/; _semantic.py is in-process memo only,
+      tracked cache unimplemented. POSIX-only question belongs to
+      cache-design-spike/decision-cache-impl, not documented as delivered."
+    location:
+      file: src/python_setup_lint/checkers/_semantic.py
+      line: 15
+  - id: c-fd163ed069
+    disposition: architect
+    summary: Docs red on all must-contain groups; needs new-item routing
+    detail: "Verified RED: 0 hits for
+      DecisionBackend/.python-setup-decisions.json/ADR-009/prompt-v1/DECISION_M\
+      ODEL/RERANKER; stale reranker/7-pass/v1.2.5/v1.2.9 texts present; ADR
+      index stops at 012. Research routing matches ADR-011 single-writer map
+      with no baseline edits. Scheduling the new root/epic follow-up items
+      exceeds read-only research scope."
+    location:
+      file: docs/semantic-justification.md
+      line: 9
+  - id: c-b0cfd8817b
+    disposition: optional
+    summary: Legacy hatch fail-open; this gate is no-regen byte-identity only
+    detail: "Valid scope guard: legacy 0/3 handoff must not be read as all-no-shift;
+      consume as no-authorized-regen plus hash equality. V2 consumes
+      behavior-item declarations downstream."
+    location:
+      file: tests/data/golden/minimal_sample_project_findings.json
+  - id: c-4fe00e3cba
+    disposition: optional
+    summary: UNIFIED ownership map unavailable; ADR-011 labels provisional
+    detail: "Valid: map lives in orchestration records research must not inspect;
+      ADR-011 five-owner labels used with explicit confirm-downstream caveat.
+      Downstream test-debloat must confirm each row."
+  - id: c-5e0d0157c2
+    disposition: optional
+    summary: Keep test_testing_fakes.py; testing.py is shipped API
+    detail: "Verified: testing.py ships
+      FakeRunCmd/make_lint_result/test_checked_main/precommit validators.
+      Debloat must not remove as test-infra-only."
+    location:
+      file: src/python_setup_lint/testing.py
+      line: 45
+  - id: c-7010722c77
+    disposition: optional
+    summary: Rcfile parity unguarded after consistency-test deletion
+    detail: "Verified: 644774e deleted sole DESIGN/STUB-CHECKER parity test; no
+      surviving guard; watchdog SKIPPED. Downstream config-parity/debloat debt."
+    location:
+      file: tests/runner/test_config_consistency.py
+      line: 1
+  - id: golden-w9704-count-error
+    disposition: fix
+    summary: Findings claim 0 W9704 but golden holds 18 unjustified-suppression
+    detail: "Factually wrong in summary/findings/contextPack: golden has 18
+      rule=unjustified-suppression (6 each pylint/pylint-tests/pylint-pyi at
+      lines
+      83,118,125,132,139,146,426,461,468,475,482,489,664,699,706,713,720,727);
+      W9704 symbol maps to unjustified-suppression at
+      suppression_justification_checker.py:34-36. Byte-identical GREEN verdict
+      still holds, but evidence misleads semantic/docs follow-ups. Fix-round:
+      correct 0 to 18 with no repo writes; also fix traceback frame _parse_file
+      to __init__ (line 97 correct)."
+    location:
+      file: tests/data/golden/minimal_sample_project_findings.json
+      line: 83

@@ -1,0 +1,36 @@
+status: approved
+summary: "tests-only golden hardening meets assignment: tool-order collect,
+  caller asserts, slicer, synthetic coverage, double-collect byte-identical"
+suggestions:
+  - detail: assert_golden_byte_identical takes *runs without a non-empty guard;
+      lines 403-404 are bare hash asserts with no message. With zero runs the
+      set-len assert fails opaquely; with >=1 runs they are unreachable when the
+      byte-equality assert passes (equal bytes imply equal hashes). Add `assert
+      runs` plus diagnostic messages.
+    disposition: optional
+    id: byte-identical-runs-guard
+    location:
+      file: tests/_golden.py
+      line: 392
+    summary: Add runs guard and messages to byte-identical hash asserts
+  - detail: Findings get both byte-equality and SHA-256 comparisons while counts get
+      only byte-equality. Hashing counts payloads the same way would make the
+      determinism proof symmetric and match the assignment wording more
+      literally.
+    disposition: optional
+    id: counts-hash-symmetry
+    location:
+      file: tests/_golden.py
+      line: 406
+    summary: Consider SHA-256 comparison for counts payloads too
+  - detail: Synthetic ordering/empty tests patch _apply_config_overrides,
+      _select_tools, _RECORD_PARSERS and _run_tool_pipeline. Correct today
+      (local imports resolve post-patch), but coupled to private runner paths. A
+      one-line fragility note or an explicit assertion that selection was
+      filtered to the stubbed parsers would aid future refactors.
+    disposition: optional
+    id: stub-private-coupling-note
+    location:
+      file: tests/test_golden.py
+      line: 201
+    summary: Note fragility of stubbed private pipeline symbols

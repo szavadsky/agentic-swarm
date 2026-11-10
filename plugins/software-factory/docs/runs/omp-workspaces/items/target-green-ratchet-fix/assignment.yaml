@@ -1,0 +1,21 @@
+slug: target-green-ratchet-fix
+kind: dev
+title: Apply baseline ratchet to target-green gate targets
+assignment: "Dev fix, tests-first, small prod diff (~60 lines hint) in
+  plugins/software-factory/src/core/checks/runner.ts checkTargetGreen
+  gate-target branch (lines 644-676): apply the same baseline ratchet runGates
+  uses. When the gate command fails, load gates-baseline.yaml, derive the
+  failing-test set (with JUnit re-derivation parity where runGates does it), and
+  PASS when failures are a subset of baseline; otherwise FAIL with actionable
+  evidence (new failing tests + command + output, same evidence shape as gate
+  failures). No behavior change when baseline is absent/empty or target is fully
+  green. Behavior tests-first with tmp-repo fixtures
+  (cwd=plugins/software-factory, no network): (1) gate target failing ONLY on
+  baseline-listed tests passes via ratchet; (2) gate target with one NEW failing
+  test outside baseline still fails naming the new test; (3) fully green gate
+  target passes without invoking ratchet. Record selector targets (new spec
+  selector) — NEVER a gate target — so this item itself merges cleanly on the
+  red baseline (td-baseline-disk). Verify the new spec file is green."
+outlineRef: target-green-ratchet-fix
+milestone: m1-omp-de-risk
+wave: 3

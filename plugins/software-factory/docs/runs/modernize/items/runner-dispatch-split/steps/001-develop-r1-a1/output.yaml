@@ -1,0 +1,80 @@
+status: ok
+summary: "Split runner/dispatch.py (542 lines, too-many-lines disable) into
+  dispatch.py (196-line registry:
+  TOOLS/TOOLS_BY_NAME/sets/LINT_TOOLS/STRATEGIES/register_lint_tool/_strategy_f\
+  or) and new _strategies.py (375 lines: LintTool, GenericLintTool, 7 private
+  strategy subclasses, _STRATEGY_CLASSES); both under the 500-line pylint limit
+  with no disables. Added _strategies.pyi (public surface + private declarations
+  needed by the stub import contract, matching the existing _ast_helpers.pyi
+  precedent), slimmed dispatch.pyi to re-export LintTool/GenericLintTool from
+  ._strategies, and kept runner/__init__.py unchanged so every public name stays
+  single-sourced through dispatch (identical object identity). Removed
+  dispatch.py:1 and test_lint_runner.py:7 stale too-many-lines disables;
+  migrated test_lint_runner.py's hardcoded '== 14' registry assertion to
+  EXPECTED_TOOL_NAMES (fakes/stats/t3 tests already consume EXPECTED/STATISTICS
+  sets). peek_fallback_tools re-export kept because the baseline compat shim
+  still exists at HEAD (baseline.py:20,26). All targets green: owned tests 197
+  passed, full suite 1377 passed/13 deselected, integration incl. byte-identical
+  golden 9 passed, full lint exit 0."
+target:
+  command: uv run pytest tests/runner/test_lint_runner.py
+    tests/runner/test_lint_runner_stats.py tests/runner/test_t3_coverage.py
+    tests/runner/test_testing_fakes.py -q
+  customTarget: true
+evidence:
+  - "Split sizing: wc -l -> dispatch.py 196, _strategies.py 375, both <500; grep
+    -c too-many-lines = 0 in both production files and in
+    tests/runner/test_lint_runner.py (480 lines)."
+  - "AST top-level diff vs git HEAD dispatch.py: no missing definitions and no
+    duplicates; dispatch keeps
+    TOOLS/TOOLS_BY_NAME/EXPECTED_TOOL_NAMES/FORMATTER_ONLY/STATISTICS_PARSER_TO\
+    OLS/RECORD_PARSER_TOOLS/RECORDLESS_TOOLS/STRATEGIES/LINT_TOOLS/_strategy_fo\
+    r/register_lint_tool; _strategies owns LintTool/GenericLintTool/7
+    subclasses/_STRATEGY_CLASSES."
+  - Public-surface script asserted all 12 assigned names exist via
+    python_setup_lint.runner and are the same objects as in dispatch (TOOLS,
+    LINT_TOOLS, EXPECTED_TOOL_NAMES, FORMATTER_ONLY, RECORDLESS_TOOLS,
+    STATISTICS/RECORD sets, STRATEGIES, TOOLS_BY_NAME, GenericLintTool,
+    LintTool, register_lint_tool); LINT_TOOLS is the same mutable list, extras
+    append (14->15) and same-name re-registration replaces in place,
+    TOOLS_BY_NAME stays at 14 frozen built-ins -> PUBLIC_SURFACE_OK 14 15.
+  - "Owned target tests: uv run pytest tests/runner/test_lint_runner.py
+    tests/runner/test_lint_runner_stats.py tests/runner/test_t3_coverage.py
+    tests/runner/test_testing_fakes.py -q -> 197 passed."
+  - "Full unit suite: uv run pytest -q -> 1377 passed, 13 deselected, 4 warnings
+    in 35.89s (no new failures)."
+  - "Golden/integration: uv run pytest tests/integration.py -v -> 9 passed,
+    including assert_matches_golden and assert_golden_byte_identical, so golden
+    is hash-equal (no shift report needed)."
+  - "Full project lint gate: uv run lint redirect-captured -> LINT_EXIT=0 with
+    empty lint.baseline (all 14 tools incl. pylint, pylint-pyi, mypy.stubtest,
+    ty check, pyright, tach, detect-secrets passed; no new violations)."
+  - "Format gate: uv run ruff format --config config/ruff.toml --check on
+    dispatch.py, _strategies.py, both stubs, and test_lint_runner.py -> all
+    already formatted; ruff check --config config/ruff.toml -> All checks
+    passed."
+  - "Stub fidelity/import contract: pylint --rcfile=config/.pylintrc on runner
+    package (21 modules) -> 10.00/10, no E97A1/W9700; mypy --config-file
+    config/mypy.ini . -> Success, no issues in 58 files; mypy.stubtest
+    python_setup_lint.runner._strategies/...dispatch -> exit 0."
+  - "Shim retention evidence: baseline.py still defines/re-exports
+    peek_fallback_tools (lines 20 and 26), so the conditional removal of
+    runner/__init__.py doc :17/import :22/__all__ :62 was correctly skipped;
+    runner/__init__.py and __init__.pyi are untouched."
+  - "Scope: git status shows only owned files changed (dispatch.py,
+    dispatch.pyi, test_lint_runner.py modified; _strategies.py, _strategies.pyi
+    new); baseline.py/parsers.py/types.py/_cli_complexity.py/cli.py/tests
+    data/docs untouched."
+concerns:
+  - _strategies.pyi declares the seven private strategy subclasses and
+    _STRATEGY_CLASSES because dispatch.py imports them for its runtime re-export
+    surface and the custom stub checker (E97A1) requires imported symbols to be
+    declared; this mirrors the existing checkers/stub/fidelity/_ast_helpers.pyi
+    precedent, and pylint skips companion stubs so W9707 does not fire.
+  - The ruff format invocation must pass --config config/ruff.toml (project
+    config is not auto-discovered at repo root); running bare ruff format
+    reformats at the 88-column default and creates churn.
+notes: dispatch.pyi now re-exports LintTool/GenericLintTool with redundant 'as'
+  aliases from ._strategies (mypy-safe re-export) and its docstring describes
+  the registry-only surface. No test outside the four enumerated files was
+  modified.

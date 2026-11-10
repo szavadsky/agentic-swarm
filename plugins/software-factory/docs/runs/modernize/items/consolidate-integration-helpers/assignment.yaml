@@ -1,0 +1,42 @@
+slug: consolidate-integration-helpers
+kind: test-only
+title: Single-source helpers; integration.py under 500 lines
+assignment: "Test-only (src/ untouched; AGENTS.md counts lines allowed as docs
+  metadata). Depends on golden-findings-snapshot (golden+counts must stay
+  byte-identical) and third-party-assumption-tests (counts include new tests).
+  (1) Create tests/_project_helpers.py SOLE definition site:
+  copy_sample_project, git_init_and_stage (init+config test/test@test + `git add
+  .`), git_init_bare (init -q + Test/test@example.com, no add — identities NOT
+  unified), stage_file, commit_all, shipped_config_paths, make_runner_config
+  (package_name + rumdl override, idempotent overwrite, no-op if shipped rumdl
+  missing, OSError propagates),
+  build_pylint_overlay_config(project,disable_rule)->Path,
+  ensure_precommit_or_skip()->None,
+  install_twice_assert_idempotent(project,monkeypatch)->None. (2) Delete
+  duplicate defs in tests/conftest.py and tests/runner/_autofix_helpers.py
+  (import instead); per-consumer imports ONLY:
+  integration->{copy,git_init_and_stage,make_runner_config,build_overlay,ensure\
+  _precommit,install_twice}; conftest->{shipped_config_paths};
+  _autofix->{git_init_bare,stage_file,commit_all}; test_self_lint_clean +
+  autofix tests switch imports. (3) Trim tests/integration.py per budget (remove
+  >=127, target <=490, hard <=500, no suppression): helpers ~58 + oracle ~8 +
+  overlay ~21 + setup scaffolding ~20 + precommit ~25 + M1 loop/net ~5 + slice
+  ~3 + import/docstring ~4; keep path/class/function names. (4) Sole AGENTS.md
+  counts owner: update counts incl new assumption tests. Acceptance:
+  integration, `pytest -q`, `lint` pass; golden+counts byte-identical."
+outlineRef: consolidate-integration-helpers
+milestone: M2
+wave: 3
+deps:
+  - golden-findings-snapshot
+  - third-party-assumption-tests
+scenarioRefs:
+  - "M2: Shared helpers exist once"
+  - "M2: Integration gate module within limits"
+citations:
+  - tests/integration.py:1-102
+  - tests/conftest.py:1-89
+  - tests/runner/_autofix_helpers.py
+  - AGENTS.md:87-93
+  - CodingRules.md:139-159
+  - lint.baseline:1-1

@@ -1,0 +1,29 @@
+slug: checkers-stream-helper
+kind: no-behavior
+title: Single-source stream read/decode helper
+assignment: "Owns NEW checkers/_source_stream.py/.pyi + stream read/decode call
+  sites in conformance/stub checkers ONLY; FORBIDDEN _base.py/.pyi (zero diff,
+  semantic-owned), no_try_import register line/patterns (semantic), tests/data,
+  baseline. API (all in _source_stream, @beartype, decode-if-bytes UTF-8
+  preserving current semantics — item reports exact bytes/str handling verified
+  by tests; tach-clean; <=500 + .pyi): read_module_source(node)->str;
+  is_under_source_root(path, source_roots)->bool (pure; coverage.py migrates its
+  local checker-bound helper to this, passing
+  checker._coverage.patterns.source_roots; _base keeps its existing helper
+  untouched — coexistence documented, future consolidation is backend
+  follow-up); split_trailing_comment(line)->tuple[code, comment|None] adopted by
+  suppression/bare-except trailing paths where mechanical (preceding-comment
+  paths keep local logic unless identical — item reports which). Enumerate sites
+  via grep \\.stream\\(\\) at HEAD (report full list; expect
+  suppression/bare-except/stub families, verify) and replace all (grep zero
+  copies outside helper). Verify: grep zero local copies; git diff -- _base.py
+  _base.pyi empty; no new failures vs M1 table; golden hash-equal or
+  shift-reported."
+outlineRef: checkers-stream-helper
+milestone: M3
+wave: 2
+scenarioRefs:
+  - "M3: Checkers helper plus legacy without drift"
+citations:
+  - CodingRules.md:90-107
+  - src/python_setup_lint/checkers/conformance/suppression_justification_checker.py:152-158

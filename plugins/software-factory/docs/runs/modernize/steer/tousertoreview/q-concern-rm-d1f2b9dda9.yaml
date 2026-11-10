@@ -1,0 +1,6 @@
+id: q-concern-rm-d1f2b9dda9
+ref: test-debloat-audit
+disposition: human-awareness
+question: Cache concurrency decision; outside audit scope. Retained as digest.
+status: open
+createdAt: 2026-11-10T02:58:56.264Z

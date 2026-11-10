@@ -1,0 +1,82 @@
+status: approved
+summary: "Spike verified: all 7 candidates have explicit verdicts,
+  licenses/SHAs/wheels/pins spot-checked against HF API + PyPI + repo all match,
+  Apache-first + Fastino/bekko flags explicit, no repo writes. Approve with
+  polish nits + license awareness records."
+suggestions:
+  - id: pin-block-malformed-line
+    disposition: optional
+    summary: Pinned-revision block joins ettin-encoder and MiniLM pins on one line
+    detail: "Line 129 contains `jhu-clsp/ettin-encoder-150m@45d08642... # MIT,
+      excluded<TAB>sentence-transformers/all-MiniLM-L6-v2@1110a243...` — a
+      missing newline fuses two pins and drops MiniLM's own comment. Both SHAs
+      verified correct against the HF API and contextPack repeats the MiniLM pin
+      cleanly, so the cache spike can recover; still, re-emit as one
+      `repo@sha  # comment` per line so copy-paste/machine-parse cannot
+      mis-split."
+    location:
+      file: .factory/tasks/modernize/items/model-candidate-matrix/steps/001-research-r1-a1/output.yaml
+      line: 129
+  - id: glide-runtime-stack-triton
+    disposition: optional
+    summary: GLiDE runtime-stack column omits triton / flash-linear-attention /
+      server pins
+    detail: Verified requirements.txt also pins triton==3.8.0,
+      flash-linear-attention==0.5.2 (marked optional with slower PyTorch
+      fallback), and fastapi/uvicorn/anyio (server); the matrix runtime column
+      lists only torch+transformers+glide+safetensors+numpy+jinja2+pillow. Have
+      eval-poc record the minimal CPU-inference subset explicitly (is triton
+      import-time or kernel-optional?). Does not change the FLAG verdict.
+    location:
+      file: .factory/tasks/modernize/items/model-candidate-matrix/steps/001-research-r1-a1/output.yaml
+      line: 43
+  - id: torch-requires-python-nit
+    disposition: optional
+    summary: torch requires_python stated as >=3.11, PyPI says >=3.10
+    detail: Verified torch 2.12.1 requires_python is >=3.10. The cp314 wheel matrix
+      itself is exactly right (manylinux_2_28 x86_64/aarch64, macosx_14_0_arm64,
+      win_amd64 incl. free-threaded variants; no Intel mac, no win_arm64), so
+      conclusions are unaffected — correct on next touch.
+    location:
+      file: .factory/tasks/modernize/items/model-candidate-matrix/steps/001-research-r1-a1/output.yaml
+  - id: glide-device-citation
+    disposition: optional
+    summary: GLIDE_DEVICE default is uncited; verified code shows device='cuda'
+      parameter default
+    detail: Matrix says GLIDE_DEVICE defaults to cuda, but the verified code is
+      `Glide.from_pretrained(path, device='cuda', ..., revision=None)`
+      (model.py:223-232) with unconditional
+      `torch.backends.cuda.enable_cudnn_sdp(False)` at :233. If a GLIDE_DEVICE
+      env var exists (e.g. server.py), cite file:line; otherwise rephrase to the
+      parameter default. CPU-unvalidated conclusion stands either way.
+    location:
+      file: .factory/tasks/modernize/items/model-candidate-matrix/steps/001-research-r1-a1/output.yaml
+      line: 43
+  - id: fastino-license-human-review
+    disposition: human-awareness
+    summary: "Operator awareness: Fastino Community License gates any GLiDE default
+      adoption"
+    detail: "Verified LICENSE §§2-6 verbatim: >$10M-revenue written agreement for
+      Production commercial use, 'Built with Fastino GLiDE' attribution on ANY
+      commercial use, derivative copyleft (§§2-4 carry-forward);
+      evaluation/testing/benchmarking expressly permitted (§6b), so eval-poc
+      ceiling use is allowed and Hub access is ungated (gated:false). Operator
+      decision needed only at adoption time, not for eval-poc. Also record:
+      GLiDE 394.8M/789.6MB exceeds the 278.4M/~557MB incumbent, failing the
+      intent's 'or smaller' premise."
+    location:
+      file: .factory/tasks/modernize/items/model-candidate-matrix/steps/001-research-r1-a1/output.yaml
+      line: 43
+  - id: bekko-unlicensed-human-review
+    disposition: human-awareness
+    summary: "Operator awareness: bekko-17m has no license and must stay excluded
+      until clarified"
+    detail: Verified card text verbatim ('remains to be finalized. This card does
+      not assign a license.') and HF API license:null; verified 1,702-line
+      trust_remote_code module and requirements pin torch>=2.10,<2.11 (downgrade
+      vs lock 2.12.1). Report correctly excludes from default; record ensures no
+      silent promotion on size appeal (16.8M/67.2MB) without written licence
+      clarification.
+    location:
+      file: .factory/tasks/modernize/items/model-candidate-matrix/steps/001-research-r1-a1/output.yaml
+      line: 45

@@ -1,0 +1,39 @@
+status: ok
+summary: Implemented merge-path infra.setup support and verified the new
+  behavior tests plus adjacent suites. mergeItem now reads infra.yaml, runs
+  setup commands in the child worktree immediately before gate/target snapshots
+  (after the parent-into-child merge and tree-diff check, before
+  snapshotWorktree/runGates/target-green), treats empty/missing setup as a
+  no-op, and aborts with gate-failure-shaped journal evidence and error text (id
+  infra.setup, command, exit status, captured stdout/stderr) when setup fails.
+  Target test/engine/merge-setup.test.ts passes 5/5; related merge/gates suites
+  pass 18/18; tsc --noEmit exits 0. Prod diff is 83 lines, within the 300-line
+  budget. The full bun test gate was still running in the background when
+  yielding; targeted and adjacent suites showed no new failures.
+target:
+  selectors:
+    - test/engine/merge-setup.test.ts
+  expectRed:
+    - merge-path infra.setup.runs setup in the child worktree before gates, and
+      setup-created untracked files are not gate mutations
+    - merge-path infra.setup.runs setup before target-green checks in the child
+      worktree
+    - merge-path infra.setup.fails the merge with gate-shaped evidence
+      containing the setup command and output
+evidence:
+  - "bun test test/engine/merge-setup.test.ts -> 5 pass, 0 fail, 27 expect()
+    calls (covers all three target cases: setup-before-gates with no
+    worktree_mutation_detected events, setup-before-target-green, and
+    failing-setup evidence with command + stdout/stderr + gate never ran)"
+  - bun test test/engine/merge-conflict.test.ts
+    test/engine/merge-gate-evidence.test.ts
+    test/engine/merge-redrive-stranded.test.ts
+    test/engine/checks-gates-fixloop.test.ts -> 18 pass, 0 fail
+  - bun run typecheck (tsc --noEmit) -> exit code 0, no diagnostics
+  - git diff a7e05af --numstat -- src/core/flows/merge-path.ts -> 78 insertions,
+    5 deletions (83 prod lines, under storyMaxProdLines 300)
+  - "Implementation mirrors runInfraSetup semantics (runner.ts:797-810): iterate
+    setup commands in order in childWt, stop at first failure, include
+    command/exit code/output tail"
+  - Full bun test gate launched (background) and still running at yield time; no
+    new failures observed in targeted and adjacent merge/gates suites

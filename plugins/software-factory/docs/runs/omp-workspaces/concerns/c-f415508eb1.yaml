@@ -1,0 +1,25 @@
+id: c-f415508eb1
+kind: risk
+summary: Gate runs that inherit the factory-runtime TMPDIR produce unrelated
+  test failures
+detail: "When TMPDIR points under .factory-runtime/tmp, disk-space.test.ts
+  counts the tmpdir itself as a second low-space path (fails: expected 1 failing
+  path, got 2) and several engine tests fail with git 'could not create
+  temporary file' or 5s timeouts under contention. With TMPDIR=/tmp the same
+  full suite is fully green (669 pass / 2 skip / 0 fail). This is
+  pre-existing/environmental and not caused by this test-only diff, but it
+  affects gate greenness for any item run in this environment."
+affects:
+  - gates
+  - wave-merge
+severity: medium
+status: routed
+source:
+  record: 001-develop-r1-a1
+  agent: developer
+  step: develop
+  item: transport-byte-stability
+  lastSeen: 2026-11-10T02:28:29.083Z
+createdAt: 2026-11-10T02:28:29.083Z
+updatedAt: 2026-11-10T04:54:39.246Z
+disposition: architect

@@ -1,0 +1,18 @@
+context: wave
+decision: continue
+rationale: Wave 5 empty (0 merged/failed/blocked), tree clean, all 4 gates
+  baseline-identical with zero regressions. Empty waves 3-5 are the stale
+  runtime originals snapshotting dep on superseded golden-findings-snapshot
+  (never ready); plan already carries the live chain (golden-helpers-unit deps
+  satisfied via merged probe, then wiring, then v2 items with wiring deps). No
+  plan change needed; wave 6 is runnable. Preserving amendment budget; merged
+  history untouched.
+text: "Next: run wave 6 golden-helpers-unit (fast, synthetic-only, no pipeline;
+  deps satisfied), then wave 7 golden-snapshot-wiring, then v2 chain
+  (consolidate-v2, audits-v2). Engine should skip stale pending wave 3-5
+  originals (blocked on superseded snapshot forever; v2 items are the live
+  copies, same outlineRef merges once). Wiring acceptance stays
+  baseline-relative (6 pre-existing 13-vs-14 failures persist; no new failures;
+  regen twice byte-identical). Temp copies only, never bare uv run lint; do not
+  touch .factory records. Baseline SIM102/W9704/R0914/C0208 + tool-count tests
+  stay scoped to M3 audits/iter2; ruff-format --check remains operator action."

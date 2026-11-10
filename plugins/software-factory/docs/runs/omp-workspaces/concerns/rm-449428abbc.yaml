@@ -1,0 +1,21 @@
+id: rm-449428abbc
+chosen: Docs-only salvage of approved wave-1 research via read-only git show
+  onto parent branch (spike-findings-recovery-v2)
+alternatives:
+  - Re-run all four spikes as new items with fresh paid probes
+  - Abandon wave-1 research and leave M1 empty
+why: All four wave-1 spike branches completed research ok + review approved;
+  only wave-end merges failed environmentally (merge child worktree lacked
+  node_modules, typecheck TS2688). Recovery preserved probe evidence without
+  inventing new probes, applied review polish where it corrected evidence
+  (probe-26/18 softening, spec-path fix, oMP typo), and recorded the M1
+  scenario-to-evidence mapping for iteration-2 planning with zero prod lines.
+status: open
+source:
+  record: 024-plan-close-up-1-a1
+  agent: plan-close-up
+  step: plan-close-up-1
+  iteration: 1
+  lastSeen: 2026-11-10T06:32:04.799Z
+createdAt: 2026-11-10T06:32:04.799Z
+updatedAt: 2026-11-10T06:32:04.799Z

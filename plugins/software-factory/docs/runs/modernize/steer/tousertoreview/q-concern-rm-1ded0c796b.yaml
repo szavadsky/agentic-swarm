@@ -1,0 +1,8 @@
+id: q-concern-rm-1ded0c796b
+ref: golden-regen-hatch
+disposition: human-awareness
+question: Process note on gate accounting (lint/test fail-to-pass,
+  format/integration green). No code impact; hatch gates verified green
+  independently.
+status: open
+createdAt: 2026-11-10T02:32:36.420Z

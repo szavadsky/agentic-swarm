@@ -1,0 +1,33 @@
+id: c-3596b08453
+kind: risk
+summary: Factory overlay pins no cache/compaction/memory knobs; effective
+  behavior is inherited from host global/project config
+detail: overlay.ts:51-85 generates only
+  modelRoles/retry/eval/title/checkpoint/advisor/bash/mnemopi-linking/update. On
+  this host `omp config list --scope global` sets
+  providers.cacheRetention=short, providers.cacheWarming=streaming,
+  compaction.experimentalContextManagement=true,
+  compaction.handoffSaveToDisk=true and modelThresholds overrides — differing
+  from omp docs defaults. A factory run on another host inherits different cache
+  TTL/warming/compaction behavior with no record. Overlay precedence would fix
+  it (docs/settings.md:113-123), but the keys are absent.
+location:
+  file: plugins/software-factory/src/harness/omp/overlay.ts
+  line: 51
+affects:
+  - "19.2"
+  - 20a
+  - 20b
+  - 20c
+  - 20d
+severity: high
+status: routed
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: spike-cache-key
+  lastSeen: 2026-11-10T00:16:23.859Z
+createdAt: 2026-11-10T00:16:23.859Z
+updatedAt: 2026-11-10T01:53:41.429Z
+disposition: architect

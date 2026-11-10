@@ -1,0 +1,31 @@
+id: c-438cc243ff
+kind: tech-debt
+summary: "Cache-key spike has disclosed provenance gaps: dead-fragment audit,
+  YAML-only long/none probes, overstated docstring"
+detail: "Disclosed in doc and state.yaml debt, accepted by review: (1) long/none
+  retention probes saved only YAML results, no NDJSON/transcript archived
+  (omp-5-cache-keys.md:308); (2) transport audit ran against
+  steps/architect-resume flagged dead in IMPLEMENTATION.md (omp-5:21, mechanism
+  identical per harness.ts:286-350,368-389 so byte-diffs remain valid but M2
+  baseline should re-run against live fragment); (3) harness.ts:280 docstring
+  overstates resume guarantee (unfixed); (4) spec-path fixed to
+  docs/factory.v2.md:114-120 (verified omp-5:296, no
+  plugins/software-factory/docs/factory string remains). None invalidate the
+  content-keyed verdict (§0-§4) but M7 must re-baseline against a live fragment
+  and treat long/none numbers as YAML-only."
+location:
+  file: plugins/software-factory/docs/spikes/omp-5-cache-keys.md
+  line: 308
+affects:
+  - m1-omp-de-risk
+  - m7-cache-policy
+severity: low
+status: open
+source:
+  record: 024-plan-close-up-1-a1
+  agent: plan-close-up
+  step: plan-close-up-1
+  iteration: 1
+  lastSeen: 2026-11-10T06:32:04.799Z
+createdAt: 2026-11-10T06:32:04.799Z
+updatedAt: 2026-11-10T06:32:04.799Z

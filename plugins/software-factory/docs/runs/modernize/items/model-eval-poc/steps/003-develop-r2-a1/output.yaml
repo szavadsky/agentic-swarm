@@ -1,0 +1,92 @@
+status: ok
+summary: "Resolved all four FIX suggestions and the three cheap OPTIONAL ones
+  inside the PoC. Rebuilt the corpus one-item-per-suppression-line with joined
+  codes (kills the c149/c165 double-count contradiction), aligned reranker
+  queries to production `_semantic.py:168-176` (present fields only; self-pair
+  when rule+context absent), standardized synthetic rules to None, and separated
+  the contracted corpus from the 39-item hard-negative augmentation (reported as
+  sensitivity only). Implemented eval/metrics.py (all thresholds 0.5/0.6/0.7 x
+  veto/replace x contracted/augmented x accepted/rejected/overall + per-source,
+  p50/p95/RSS, lexicographic smallest-compliant) and eval/report.py (report.md).
+  Full n=336 runs completed cleanly (0 errors) for decider-nano (3 prompts),
+  bekko-17m (3 prompts), ettin-reranker current, and MiniLM current; GLiDE-0.4B
+  full canonical was explicitly excluded after its 600s CPU run timed out (smoke
+  6 rows only; it is the largest candidate and cannot be the smallest
+  compliant). Result: 0 compliant candidates on both contracted and augmented
+  corpora; formal recommendation is no-go, because the contracted
+  heuristic-accepted stratum has 215 meaningful / 0 meaningless items so the 95%
+  meaningless-precision bar is vacuous and no model can be certified."
+target:
+  command: cd .factory/tasks/modernize/items/model-eval-poc/poc && python3
+    eval/corpus.py && python3 eval/metrics.py && python3 eval/report.py
+  customTarget: true
+evidence:
+  - "Corpus rebuild (`python3 eval/corpus.py`): 336 post-dedup items = 297
+    contracted + 39 hard-negative augmentation; repo suppressions now 183
+    one-per-line rows, no duplicate file+line, 26 multi-code lines joined (e.g.
+    `arg-type,invalid-argument-type`); 0 conflicting normalized labels; 0
+    heuristic-accepted negatives on the contracted corpus."
+  - "Label fix verified: generic_key_dict_checker.py:93 and
+    trivial_wrapper_checker.py:223 are now one item each with the true same-line
+    reason and joined rule; the previous c149-true/c165-false contradiction and
+    the empty-justification second-suppression rows are gone."
+  - "Reranker query contract verified against production: `render_query` emits
+    only present fields (`rule: ... | context: ...`) and falls back to self-pair
+    (justification, justification) when both are absent; checked c001 (no
+    rule/context), c121 (rule+context), c301 (hard negative)."
+  - "Full CPU score runs, all n=336 with 0 errors: decider-nano
+    canonical/rubric/compact; bekko-17m canonical/rubric/compact;
+    ettin-reranker-150m current; MiniLM-L6-v2 current. GLiDE canonical smoke is
+    6 rows; its full run was killed at the 600s budget and is recorded as an
+    explicit compute-budget exclusion."
+  - "Metrics (`python3 eval/metrics.py`): every model x prompt x {0.5,0.6,0.7} x
+    {veto,replace} x {contracted,augmented} x
+    {heuristic_accepted,heuristic_rejected,overall} plus per-source; 0
+    contracted-compliant, 0 augmented-compliant, smallest_compliant = null;
+    heuristic baseline is 100% accuracy/recall on contracted and 88.4% overall
+    accuracy on augmented."
+  - "Report (`python3 eval/report.py`): report.md regenerated (309 lines) with
+    verdict, measured model stats, raw-vs-post-dedup per source
+    (meaningful_table 33->3 disclosed), per-stratum/per-source tables, full
+    compliance matrix, explicit exclusions, and risks."
+  - "Params/weights provenance measured from safetensors headers
+    (`eval/model_stats.py`): GLiDE 395,042,816 params / 790,103,664 bytes;
+    decider 149,015,041 / 298,044,578; bekko 16,798,211 / 67,198,244; ettin
+    149,606,401 / 598,439,036; MiniLM 22,713,728 / 90,868,376."
+  - "Optional hygiene: deleted all 11 HuggingFace 404 HTML artifacts (572KB)
+    from poc/cache/code; decision states omit absent rule/context fields instead
+    of `(unknown)`/`(none)`; `.git` status shows no changes outside poc/
+    (production src/ and tests/ untouched)."
+concerns:
+  - "GLiDE-0.4B has no full-corpus scores: the canonical run hit the 600s cap
+    (~0.8-1.1 s/item, 0.4B params); only the 6-item smoke is available.
+    Explicitly excluded from compliance, with timing evidence in report.md. It
+    is the largest candidate (395M params), so it could not be the smallest
+    compliant option anyway."
+  - Ettin `query_first`/`rubric_query` and MiniLM `query_first`/`rubric_query`
+    were deliberately stopped to protect the step budget; the production
+    `current` prompt is fully scored for both, and the missing ablations are
+    explicitly listed as exclusions in report.md.
+  - The contracted heuristic-accepted stratum has zero negative examples, so the
+    95% meaningless-precision bar cannot be evaluated; the 39 synthetic hard
+    negatives are author-written, single-adjudicator sensitivity data, not a
+    substitute for real repo brush-offs. The formal no-go therefore reflects
+    corpus structure, not only model quality.
+  - bekko/ettin/MiniLM latency samples overlapped the GLiDE run on the same CPU,
+    so their p50/p95 (and GLiDE's) are upper bounds under contention; decider
+    runs were measured alone. Accuracy/compliance are unaffected.
+  - Repo labels are single-adjudicator; the threshold/table labels assert the
+    heuristic's own behaviour, so heuristic accuracy is 100% on the contracted
+    corpus by construction.
+  - Reranker scores are sigmoid(relevance logit), not calibrated decision
+    probabilities, so the threshold sweep is a ranking sweep rather than a
+    calibrated operating point.
+notes: "The recommended next move is not to adopt a model: on the contracted
+  corpus the heuristic already achieves 100% accuracy/recall on the accepted
+  stratum, and the precision bar is unevaluable because the stratum has no
+  negatives. To make a future go/no-go meaningful, add an independently
+  double-rated sample of real repo suppressions that are heuristic-accepted but
+  meaningless. If a full GLiDE row is required, rerun `eval/adapters/glide.py
+  --prompts canonical` with a >600s CPU budget; the report and metrics
+  regenerate from `out/scores__glide__canonical.jsonl` and
+  `out/meta__glide__canonical.json` without code changes."

@@ -1,0 +1,27 @@
+slug: spike-mock-provider
+kind: fact-finder
+title: "Spike: scripted mock provider seam for real omp"
+assignment: "Fact-finder spike, no prod code. Probe installed omp
+  extension/provider registration with throwaway --profile and temp dirs
+  (parallel-safe). 1) Probe extension API and model catalog listing via
+  -e/--config overlays; enumerate any custom-provider/local-endpoint seam. 2)
+  Capture streaming NDJSON contract for a scripted turn (events, usage, yield
+  envelope). 3) Propose canned scenario format {turns: [{yield|toolCalls|text}]}
+  sufficient for M8 runner. 4) Prove one minimal real-omp turn against a
+  scripted provider with zero paid-model calls, or rule the seam out with
+  command/output evidence. Outputs: items/{item}/findings.md with probe log,
+  full draft for plugins/software-factory/docs/spikes/omp-4-mock-provider.md,
+  draft decision YAML {status, decision, evidence, followUps} naming the chosen
+  seam plus scenario format (or ruled-out alternatives). Constraints: read-only
+  on repo prod paths; cwd=plugins/software-factory; throwaway profile/repos
+  only; poc/runner implementation deferred to M8, proposal only. Acceptance:
+  answers M1 mock-provider scenario."
+outlineRef: spike-mock-provider
+milestone: m1-omp-de-risk
+wave: 1
+scenarioRefs:
+  - m1-omp-de-risk:scenario-2
+citations:
+  - docs/factory.v2.md:104-113
+  - plugins/software-factory/docs/ARCHITECTURE.md:40
+  - plugins/software-factory/src/cli/preflight.ts:365-393

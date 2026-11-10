@@ -1,0 +1,36 @@
+slug: coding-rules-audit-v2
+kind: fact-finder
+title: Inventory CodingRules violations
+assignment: "Replaces pending coding-rules-audit blocked on superseded (rewired
+  to golden-snapshot-wiring; identical scope). Read-only audit of src/** and
+  scripts/** vs CodingRules/AGENTS — no committed files, output is structured
+  item-report tables. Semantic exclusions (mark skipped, audit rest):
+  checkers/_semantic.py+.pyi, new _decision_backend/_decision_cache modules
+  (+.pyi), _base.py::check_if_meaningful (+stub),
+  no_try_import_checker::_OPTIONAL_IMPORT_PATTERNS. Inventory: .pyi
+  fidelity/private symbols, @beartype+structural suppressions, trivial
+  wrappers/duplicated logic, redundant fallbacks (astroid 3.x), legacy stubs
+  (_FALLBACK_TOOLS, peek_fallback_tools, _compare_sorted), over-long comments,
+  500-line/R0912/R0915 proximity, structlog/error rules, rumdl
+  tests/data-exclude hack (TD-11). Output rows {module, section, evidence
+  file:line, category, est. LoC delta, owner, fix} + UNIFIED disjoint-ownership
+  map (single owner; test-debloat-audit-v2 consumes via dep). Read final state
+  post-wiring/assumptions/consolidate-v2 + beartype discovery report from
+  third-party-assumption-tests."
+outlineRef: coding-rules-audit
+milestone: M3
+wave: 9
+deps:
+  - golden-snapshot-wiring
+  - third-party-assumption-tests
+  - consolidate-integration-helpers-v2
+scenarioRefs:
+  - "M3: Coding-rules debt inventoried"
+  - "M3: Ownership map is complete and disjoint"
+citations:
+  - CodingRules.md
+  - AGENTS.md
+  - TD-5
+  - TD-6
+  - TD-7
+  - TD-11

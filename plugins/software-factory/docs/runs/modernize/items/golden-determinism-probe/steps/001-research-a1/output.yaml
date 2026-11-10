@@ -1,0 +1,482 @@
+status: ok
+summary: 'U3 resolved: `_capture_baseline` output for the minimal sample project
+  is byte-for-byte deterministic. Ten 74-record captures (core: 2 fresh temp
+  copies x 2 runs; extended: PYTHONHASHSEED 0/1/42, a differently named project
+  dir, shipped-vs-local rumdl config, semantic env on/off) all produced the
+  identical file sha256
+  `0c135564f3c5dae655151eebbb8a67e4a8e1abcef02d4ec3771eb320f9848465` (16,717
+  bytes). No capture field (tool/file/line/col/rule/msg), ordering, absolute
+  path, or timestamp varied. Verdict for determinism: test-side normalization is
+  SUFFICIENT; no src fix is needed. Two material caveats for the snapshot story:
+  (1) the snapshot must pin `path="."`, `PYTHON_SETUP_LINT_SEMANTIC=0`, and the
+  exact copy/git/config helper semantics; without path="." the capture is 73
+  records and loses a `pylint tests` R0801 record. (2) `_capture_baseline`
+  covers only 7 of 14 tools: `pylint`/`pylint tests` emit json2 (57/29 messages)
+  but are parsed by a text parser, so only 1/1 accidental R0801 records survive;
+  10 of 29 planted rules in violations.txt are absent from the capture, and
+  tach/stubtest/pyright-verify-types/detect-secrets have no record parser at
+  all. If the golden contract is meant to cover those tools, a bounded coverage
+  fix is needed; for determinism alone it is not.'
+findings: >-
+  # U3 — Captured-findings determinism probe: results
+
+
+  ## Verdict
+
+
+  - **Determinism verdict: test-side normalization SUFFICIENT.** Raw
+  `_capture_baseline` output was byte-identical across every repeat, cross-copy,
+  hash-seed, directory-name, rumdl-config, and semantic-env variation tested. No
+  bounded src fix is required to make the capture deterministic.
+
+  - **Coverage caveat (separate from determinism):** `_capture_baseline` does
+  not capture most pylint diagnostics and 5 tools entirely. If the golden
+  finding is supposed to pin *every material lint behavior* (ADR-001),
+  capture-alone is insufficient; see “Coverage gap” below for the exact scope of
+  an optional bounded fix.
+
+
+  ## Probe scenario (as requested)
+
+
+  Replicated `tests/integration.py` exactly:
+
+
+  1. `_copy_sample`: `shutil.copytree(Path("tests/data/minimal_sample_project"),
+  tmp_path/"project")` (`tests/integration.py:36-41`).
+
+  2. `_init_git`: `git init`, set `user.email`/`user.name`, `git add .`
+  (`tests/integration.py:44-59`).
+
+  3. `_make_config`: all shipped `config/*` resolved via
+  `_SHIPPED_CONFIG_FILES`, `package_name="minimal_sample"`, plus the
+  project-local `rumdl.toml` override produced by
+  `content.replace('"tests/data", ', "")` (`tests/integration.py:83-102`). The
+  override is written **after** `git add`, so it is untracked.
+
+  4. `run_lint(config=config, path=".", baseline=<tmp>/capture.json,
+  overwrite_baseline=True)` (`src/python_setup_lint/runner/cli.py:169-236`).
+
+  5. `PYTHON_SETUP_LINT_SEMANTIC=0` set in the parent process; subprocesses
+  inherit it. `fix=False`, `statistics=False`.
+
+
+  Environment: Python 3.14.4; ruff 0.15.17, pylint 4.0.6, mypy 2.1.0, pyright
+  1.1.410, ty 0.0.49, rumdl 0.2.16, yamllint 1.38.0, tach 0.35.0, detect-secrets
+  1.5.0 (lockfile-matched dev environment; `PYTHONPATH` pinned to this
+  worktree's `src`, verified `python_setup_lint.__file__` resolves to this
+  worktree). Probe output: `/tmp/psl_golden_probe_ograe7nt/report.json`. Repo
+  `git status --porcelain` remained clean.
+
+
+  ## Determinism evidence
+
+
+  Core probe (two fresh copies, two runs each):
+
+
+  | run | project | records | sha256 (first 16) |
+
+  |---|---|---|---|
+
+  | A1 | `/tmp/.../copy_A/project` | 74 | `0c135564f3c5dae6` |
+
+  | A2 | same copy (2nd run, `.secrets.baseline` now exists) | 74 |
+  `0c135564f3c5dae6` |
+
+  | B1 | `/tmp/.../copy_B/project` | 74 | `0c135564f3c5dae6` |
+
+  | B2 | same copy (2nd run) | 74 | `0c135564f3c5dae6` |
+
+
+  Extended probes, all also
+  `0c135564f3c5dae655151eebbb8a67e4a8e1abcef02d4ec3771eb320f9848465`:
+
+
+  - `PYTHONHASHSEED=0`, `1`, `42` on copy A (3 captures).
+
+  - Fresh copy C whose project dir is `project-with-different-name` (1 capture).
+
+  - Shipped `config/rumdl.toml` instead of the project-local override (1
+  capture) — the override is behaviorally inert for capture on this sample.
+
+  - `PYTHON_SETUP_LINT_SEMANTIC` unset/default (1 capture) — identical because
+  `sentence_transformers` is not installed, so `_semantic.py:160-162` returns
+  None and falls back to the same heuristic.
+
+
+  Total: 10 identical 74-record captures. All files are 16,717 bytes, sorted by
+  `(tool,file,line,col,rule)` (`_capture_baseline`,
+  `src/python_setup_lint/runner/baseline.py:182-198`; sort key
+  `src/python_setup_lint/runner/baseline.py:48-59`).
+
+
+  `path=None` instead of `path="."` yields **73** records (`sha256
+  ccc650a38f3e32b0...`): the missing record is the `pylint tests` R0801 record,
+  because `_PylintTestsLintTool` expands `path` to all `.py` files when given
+  `.` (so it can compare tests against src), while without `path` it scans only
+  `tests/` (`src/python_setup_lint/runner/dispatch.py:336-370`). Pin `path="."`.
+
+
+  ## Field-by-field diff
+
+
+  Exact list equality held for A1-vs-A2 (same-copy rerun), B1-vs-B2, A1-vs-B1,
+  A2-vs-B2. Per-field result:
+
+
+  | field | observed diff | notes |
+
+  |---|---|---|
+
+  | `tool` | none | fixed tool names from `TOOLS`
+  (`src/python_setup_lint/runner/dispatch.py:38-129`) |
+
+  | `file` | none | 0 absolute, 0 leading `./`, 0 backslashes, 0 project-path
+  mentions across all captures |
+
+  | `line` | none | 2 records have `None` (both R0801 project-wide records) |
+
+  | `col` | none | 4 records have `None` (2 R0801 + 2 mypy) |
+
+  | `rule` | none | includes R0801 span string; stable |
+
+  | `msg` | none | stable on this sample; see drop-msg policy below |
+
+  | ordering | none | every capture equals `sorted(records,
+  key=_violation_sort_key)` |
+
+  | absolute paths | none | `_relativize_file` strips cwd on absolute inputs
+  (`baseline.py:161-179`) |
+
+  | timestamps | none | capture has no timestamp fields |
+
+
+  Other measured properties: 0 duplicate sort keys (`max_rows_per_sort_key=1`),
+  0 rows differing only by `msg`, 74 total records. Per-tool counts:
+  `pylint-pyi` 43, `ruff check` 25, `mypy` 2, `pylint` 1, `pylint tests` 1,
+  `rumdl check` 1, `ty check` 1.
+
+
+  Unit-probed normalization behavior (synthetic inputs):
+
+
+  - A pyright diagnostic with `"file": "/tmp/proj/src/a.py"` becomes
+  `file="src/a.py"`, `line=3`, `col=4` via `_capture_one(..., cwd=/tmp/proj)` —
+  confirms absolute pyright paths are relativized.
+
+  - `_relativize_file("/other/place.py", /tmp/proj)` returns `/other/place.py`
+  unchanged (file outside cwd stays absolute; `baseline.py:172-179`).
+
+  - None-safe sort works with the existing tuple keys: `(None,None,None)` <
+  `(a.py,None,None)` < `(a.py,1,None)` < `(a.py,1,2)`.
+
+  - A pylint json2 payload with non-R0801 messages yields only the accidental
+  R0801 record; see coverage gap.
+
+
+  ## Volatile fields exist only *before* capture (do not snapshot raw logs)
+
+
+  Raw tool output/logs are NOT snapshot-ready; `_capture_baseline` strips the
+  volatile material:
+
+
+  - pyright JSON: `"time"` (epoch ms) differed every run (e.g. `1794100577581`,
+  `1794100587537`, `1794100597520`, `1794100607789`); `timeInSec` also varied.
+  The pyright record parser reads only `generalDiagnostics`
+  (`_record_parsers.py:235-265`).
+
+  - pyright/pylint JSON `absolutePath` values embedded the per-copy temp path;
+  pylint JSON also contains `endLine`/`endColumn`/`confidence`
+  (`src/python_setup_lint/runner/dispatch.py:242-260` shows detect-secrets
+  strips `generated_at`; pyright/pylint parsers drop the rest).
+
+  - Logs contained 86-87 occurrences of the temp project path and per-tool
+  `[Xs]` timings per run; `pylint` also echoes the absolute rcfile path.
+
+  - `detect-secrets` contributes **zero** capture records (no `_RECORD_PARSERS`
+  entry) and its generated `.secrets.baseline` was byte-identical across copies
+  (no absolute paths; `generated_at` removed).
+
+  - `mypy` contributes 2 errors; its `note:` lines are intentionally dropped.
+  `mypy.stubtest` is not parsed.
+
+
+  ## Capture coverage gap (material for the golden contract)
+
+
+  `_RECORD_PARSERS` has only 9 tools
+  (`src/python_setup_lint/runner/parsers.py:231-241`). Of the 14 `TOOLS` entries
+  (`dispatch.py:38-129`), 7 contribute records; 7 contribute none:
+
+
+  - `tach check`, `ruff format`, `mypy.stubtest`, `pyright verify types`,
+  `detect-secrets`: **no record parser**.
+
+  - `yamllint`: parser exists but sample has no YAML files.
+
+  - `pyright check`: parser exists, sample produces `generalDiagnostics: []`.
+
+
+  `mypy.stubtest` and `pyright verify types` both exited 1 in the probe with
+  real diagnostics (`stubtest`: 2 error/note lines from the planted
+  `valid-type`; `verify types`: `completenessScore=0`), yet contribute 0 capture
+  records.
+
+
+  **pylint json2 mismatch:** `config/.pylintrc:42` and
+  `config/.pylintrc-tests:56` set `output-format=json2`, but
+  `_parse_pylint_records` expects text `path:line:col: CODE: msg (symbol)` lines
+  (`src/python_setup_lint/runner/_record_parsers.py:29-86`). The parser only
+  fires on the JSON `"message": "Similar lines in 2 files\n==..."` string,
+  yielding the accidental R0801 record. Raw numbers: `pylint` 57 JSON messages
+  vs 1 captured; `pylint tests` 29 vs 1; `pylint-pyi` is text and 43 vs 43
+  captured.
+
+
+  Consequence against `tests/data/minimal_sample_project/violations.txt` (29
+  planted rules): 18 match exactly, `duplicate-code` is present only as
+  `R0801:<spans>`, so 19 behaviors are represented; **10 planted rules are
+  entirely absent from the capture**: `tempfile-mkdtemp-in-test`,
+  `silent-except`, `trivial-wrapper`, `missing-return-annotation`,
+  `missing-error-chain`, `redundant-type-guard`, `bare-except-comment`,
+  `impl-missing-annotation`, `missing-module-stub`,
+  `missing-module-stub-for-import`. ADR-001's goals (duplicate findings, moved
+  lines, new false positives) are therefore achievable only for the captured
+  subset.
+
+
+  If the snapshot story chooses to close this gap as a *test-side* measure, a
+  test-local json2 record extractor can reuse the `json.loads`/`messages` shape
+  already handled by `_parse_pylint_json2`
+  (`src/python_setup_lint/runner/parsers.py:98-113`) without changing production
+  behavior. If it chooses a *src fix*, the bounded scope is
+  `src/python_setup_lint/runner/_record_parsers.py` (add a json2 record parser,
+  special-casing R0801 to preserve current span rule text) plus registration in
+  `src/python_setup_lint/runner/parsers.py:231-241`; note this would expand
+  `_capture_baseline` output and therefore require regenerating `lint.baseline`
+  (currently `[]`) and the golden file — an intentional behavior change, not a
+  determinism fix.
+
+
+  ## Latent determinism risks not triggered by this sample
+
+
+  1. `_relativize_file` compares `Path(path).relative_to(cwd)` without resolving
+  either side (`baseline.py:172-179`). On platforms where the temp root is a
+  symlink (e.g. macOS `/tmp` -> `/private/tmp`), or with drive-letter/case
+  differences, an absolute path can survive. Snapshot normalization must
+  `resolve()` both file and project root and assert non-absolute.
+
+  2. Files genuinely outside cwd remain absolute by design; normalization should
+  fail loudly rather than embed them.
+
+  3. Windows path separators: `str(p.relative_to(cwd))` emits backslashes;
+  snapshot must convert to POSIX and strip `./`.
+
+  4. Duplicate sort keys: `_violation_sort_key` excludes `msg`
+  (`baseline.py:48-59`), so records sharing `(tool,file,line,col,rule)` but
+  differing in `msg` rely on stable parser output order. Zero such rows today;
+  dropping `msg` and/or including it in the canonical sort key removes the
+  latent risk.
+
+  5. `msg` may acquire tool-version wording or set-iteration order not seen
+  here; dropping `msg` from the golden is a defensible policy (it was stable in
+  this probe, so this is a robustness choice, not a determinism necessity).
+
+  6. `PYTHON_SETUP_LINT_SEMANTIC` defaults to `1`
+  (`src/python_setup_lint/checkers/_base.py:142-158`). Today
+  `sentence_transformers` is absent so every decision uses the heuristic, but
+  the planned model swap (ADR-002) will change this. The snapshot must force
+  `PYTHON_SETUP_LINT_SEMANTIC=0`.
+
+  7. Tool versions affect rules/messages (pyright/mypy/ruff/rumdl).
+  Generate/verify the golden in the lockfile environment.
+
+  8. `_capture_one` only emits a record for negative exit codes (`__CRASH__`,
+  `baseline.py:133-143`); a tool that exits positive with empty stdout
+  (including exit 127 “Tool not found”) silently yields no records. Not
+  triggered here, but the snapshot will not see that class of regression.
+
+  9. `run_lint(..., overwrite_baseline=True)` returns 0 even when tools failed
+  (`_handle_baseline`, `src/python_setup_lint/runner/_cli_helpers.py:54-64`). Do
+  not assert the return code as lint success.
+
+
+  ## Normalization spec the snapshot should implement
+
+
+  Operation order (applied to every record from the temp `capture.json`):
+
+
+  ```python
+
+  def normalize(records, project_root):
+      out = []
+      for r in records:
+          raw = r.get("file")
+          if raw is None:
+              file = None
+          else:
+              file = str(raw).replace("\\", "/")          # backslash -> /
+              while file.startswith("./"):                  # strip ./
+                  file = file[2:]
+              p = Path(file)
+              if p.is_absolute():                            # relativize vs temp project
+                  file = p.resolve().relative_to(project_root.resolve()).as_posix()
+              assert file and not Path(file).is_absolute()   # fail loudly if outside project
+          rule = str(r.get("rule") or "").replace("\\", "/")
+          out.append({
+              "tool": r.get("tool") or "",
+              "file": file,                              # keep None for project-wide findings
+              "line": r.get("line"),                       # keep None; 0 is a valid value
+              "col": r.get("col"),
+              "rule": rule,
+          })
+      out.sort(key=lambda r: (
+          r["tool"], r["file"] or "",
+          -1 if r["line"] is None else r["line"],
+          -1 if r["col"] is None else r["col"],
+          r["rule"],
+      ))
+      return out
+  ```
+
+
+  Rules:
+
+
+  - Drop `msg`; compare only `(tool,file,line,col,rule)` lists (keep
+  multiplicity; no dedupe).
+
+  - Keep `None` for `file`/`line`/`col`; do **not** use `value or -1` (0 is
+  valid, and `_violation_tuple` already has that 0->-1 quirk at
+  `baseline.py:62-75` — do not copy it).
+
+  - Relativize against the **temp copy project root** (`config.cwd`), not the
+  repo root.
+
+  - Assert no absolute `file`, no project-root substring in `file`/`rule`, no
+  backslashes, no `./` prefix.
+
+  - Serialize canonically with `json.dumps(records, indent=2, sort_keys=True)`;
+  compare sorted lists or `Counter`. With this exact normalization on the probe
+  capture: 74 records, canonical sha256
+  `298b82140840c0925596c0fc6fb3f7bad5e4c4ea9bdb27e1c7c41c98b97763b2` (auxiliary
+  check; raw capture sha256 is the stronger artifact
+  `0c135564f3c5dae655151eebbb8a67e4a8e1abcef02d4ec3771eb320f9848465`).
+
+
+  ## Scenario pinning checklist
+
+
+  - Run the helpers from the repo root: `_copy_sample` and `_make_config` use
+  repo-relative `tests/data/minimal_sample_project` and `config/`
+  (`tests/integration.py:36-41,72-102`).
+
+  - `_init_git` **before** `_make_config`; `git add .` must precede generation
+  of `project/rumdl.toml` and `.secrets.baseline` (matches current
+  untracked-file state; `tests/integration.py:44-59,83-102`).
+
+  - Pass `package_name="minimal_sample"`, `path="."`, `fix=False`,
+  `statistics=False`, `baseline=<absolute tmp path outside project>`,
+  `overwrite_baseline=True`.
+
+  - Force `PYTHON_SETUP_LINT_SEMANTIC=0`; use the `isolated_runner_registries`
+  fixture (`tests/conftest.py:127-157`) so extras/strategies do not leak between
+  tests.
+
+  - Run twice on two fresh copies; assert normalized equality first, then
+  compare to the committed golden. Runtime in this probe was ~10 s per full run
+  (~20 s for the two-run core). `pyproject.toml:49` keeps such a test in the
+  default `not slow` selection unless explicitly marked.
+
+  - Do not snapshot stdout/logs without heavy filtering: pyright epoch `time`,
+  `timeInSec`, absolute paths, and `[Xs]` timings churn every run.
+contextPack: 'Determinism contract for the golden-findings snapshot: run
+  `run_lint(config=<minimal sample RunnerConfig>, path=".",
+  baseline=<tmp>/capture.json, overwrite_baseline=True)` with
+  `PYTHON_SETUP_LINT_SEMANTIC=0` on two fresh copies of
+  `tests/data/minimal_sample_project` (copy -> git init/config/add ->
+  `_make_config`, in that order). Current capture: 74 records, raw sha256
+  0c135564f3c5dae655151eebbb8a67e4a8e1abcef02d4ec3771eb320f9848465, 16,717
+  bytes; identical across 10 runs/variants. Normalize by dropping `msg`, keeping
+  None line/col, relativizing absolute `file` to the temp project root with
+  resolve()/as_posix, backslash->`/`, stripping `./`, asserting non-absolute,
+  then None-safe sort on (tool,file,line,col,rule). Using `path=None` is wrong
+  (73 records; loses pylint-tests R0801). Raw logs are volatile (pyright
+  `time`/`timeInSec`, absolute paths, per-tool timings) and must not be the
+  golden. Coverage warning: pylint/pylint-tests emit json2 (57/29 messages) but
+  `_parse_pylint_records` only captures accidental R0801 (1/1); 10/29 planted
+  rules are absent from capture, and
+  tach/ruff-format/stubtest/pyright-verify-types/detect-secrets have no record
+  parsers. If full behavior pinning is required, add a test-local json2 parser
+  or extend `_record_parsers.py` + `parsers.py:231-241` (and regenerate
+  `lint.baseline`/golden).'
+sources:
+  - tests/integration.py:36-41
+  - tests/integration.py:44-59
+  - tests/integration.py:83-102
+  - tests/integration.py:111-166
+  - src/python_setup_lint/runner/baseline.py:48-59
+  - src/python_setup_lint/runner/baseline.py:62-75
+  - src/python_setup_lint/runner/baseline.py:116-158
+  - src/python_setup_lint/runner/baseline.py:161-179
+  - src/python_setup_lint/runner/baseline.py:182-198
+  - src/python_setup_lint/runner/baseline.py:201-229
+  - src/python_setup_lint/runner/cli.py:169-236
+  - src/python_setup_lint/runner/_cli_helpers.py:29-65
+  - src/python_setup_lint/runner/parsers.py:98-113
+  - src/python_setup_lint/runner/parsers.py:231-241
+  - src/python_setup_lint/runner/parsers.py:243-257
+  - src/python_setup_lint/runner/_record_parsers.py:29-86
+  - src/python_setup_lint/runner/_record_parsers.py:115-138
+  - src/python_setup_lint/runner/_record_parsers.py:235-265
+  - src/python_setup_lint/runner/_record_types.py:6-19
+  - src/python_setup_lint/runner/dispatch.py:38-129
+  - src/python_setup_lint/runner/dispatch.py:242-260
+  - src/python_setup_lint/runner/dispatch.py:336-370
+  - src/python_setup_lint/runner/cmd_build.py:221-238
+  - src/python_setup_lint/runner/_cli_complexity.py:22-38
+  - src/python_setup_lint/checkers/_base.py:142-158
+  - src/python_setup_lint/checkers/_semantic.py:126-162
+  - src/python_setup_lint/checkers/_semantic.py:38-84
+  - config/.pylintrc:42
+  - config/.pylintrc-tests:56
+  - tests/data/minimal_sample_project/violations.txt
+  - tests/data/minimal_sample_project/AGENTS.md:1-15
+  - tests/conftest.py:127-157
+  - docs/adr/ADR-001.md
+  - docs/adr/ADR-002.md
+  - pyproject.toml:49
+  - /tmp/psl_golden_probe_ograe7nt/report.json
+recommendations:
+  - "Implement the normalization exactly as specified: drop `msg`, keep None
+    values, resolve+relativize absolute `file` paths against the temp project
+    root with `as_posix()`, backslash->`/`, strip `./`, assert non-absolute, and
+    sort with a None-safe key; compare sorted lists or Counters."
+  - 'Pin the scenario: `path="."`, `fix=False`, `statistics=False`,
+    `overwrite_baseline=True`, `PYTHON_SETUP_LINT_SEMANTIC=0`,
+    `package_name="minimal_sample"`, temp capture path outside the project, and
+    helper order copy -> git init/add -> `_make_config`. Use
+    `isolated_runner_registries`.'
+  - Make the snapshot run capture twice on two fresh temp copies and assert
+    normalized equality before comparing to the committed golden; store the
+    golden as canonical JSON (`indent=2`, `sort_keys=True`).
+  - "Do not assert `run_lint` return code as lint success when
+    `overwrite_baseline=True`: `_handle_baseline` forces 0 on successful
+    capture, and positive tool failures with empty stdout are invisible to
+    capture."
+  - "Do not use raw lint stdout/logs as the golden: pyright `time`/`timeInSec`,
+    absolute `absolutePath` values, rcfile paths, and per-tool `[Xs]` timings
+    vary every run."
+  - "Decide the coverage contract explicitly: if the golden must pin
+    pylint/pylint-tests and the 5 parser-less tools, add a test-local json2
+    record extractor (reusing the `messages` shape from `parsers.py:98-113`) or
+    make a deliberate src change in `_record_parsers.py` + `parsers.py:231-241`,
+    accepting the `lint.baseline`/golden regeneration that follows. Do not
+    silently claim full behavior preservation from the 74-record capture."
+  - Record the environment/tool versions alongside the golden or ensure CI
+    regenerates/verifies with the uv lockfile; rule/message text is
+    tool-version-sensitive.

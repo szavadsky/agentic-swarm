@@ -1,0 +1,21 @@
+id: rm-e65fbf627b
+chosen: "Content fingerprints for cold-resume detection: system-prompt bytes,
+  ordered tools, resolved model, thinking level, retention, TTL and compaction
+  marker"
+alternatives:
+  - Hash the system-prompt path and prompt path
+  - Invalidate on every new prompt filename
+  - Rely on omp's UI cache marker / cacheRead alone
+why: The probes show path changes with identical bytes are full hits, while
+  one-byte content changes, tools changes, thinking changes, model switches, TTL
+  expiry and compaction are misses. Path-based invalidation would false-positive
+  on every turn because the factory creates a new prompt file path per turn.
+status: open
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: spike-cache-key
+  lastSeen: 2026-11-10T00:16:23.859Z
+createdAt: 2026-11-10T00:16:23.859Z
+updatedAt: 2026-11-10T00:16:23.859Z

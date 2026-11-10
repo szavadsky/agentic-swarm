@@ -1,0 +1,19 @@
+blockedItems: []
+debt:
+  - "Baseline lint failures persist (fail/fail, not a wave regression): ruff
+    SIM102, pylint/pylint-pyi W9704 and R0914, pylint-tests C0208 per infra
+    baseline notes."
+failedItems: []
+iteration: 2
+mergedItems:
+  - test-debloat-audit-i2
+recommendations:
+  - Proceed to next wave/iteration planning; no wave-level blockers.
+  - Consider scheduling baseline lint-debt cleanup separately from feature waves.
+status: complete
+summary: "Wave 4 complete: merged test-debloat-audit-i2. Tree hygiene clean: no
+  untracked junk or build artifacts; no conflict markers in
+  src/tests/config/docs/design or other tracked source. Gate diff shows zero
+  regressions: format pass/pass, test-integration pass/pass, lint fail/fail
+  (matches red baseline), test fail->pass (IMPROVED)."
+wave: 4

@@ -1,0 +1,11 @@
+wave: 3
+iteration: 4
+status: complete
+mergedItems:
+  - runner-dispatch-split
+  - runner-factories-trim
+  - stale-disables-portability-cleanup
+failedItems: []
+blockedItems: []
+summary: "Wave 3 completed. Merged items: runner-dispatch-split,
+  runner-factories-trim, stale-disables-portability-cleanup"

@@ -1,0 +1,13 @@
+id: decision-nonitem-1794178741560
+context: non-item
+decision: fix-item
+timestamp: 2026-11-08T22:59:01.560Z
+rationale: "Single-item bottleneck: 3/4 schedulable M1 items merged (secrets,
+  pylint-closure, adr-formalization); ownership-map-revalidation is the only
+  running/schedulable item while epic-kickoff-gate and all M3 items are
+  dep-blocked, so stalled validation yields empty waves with Blocked:(none).
+  Original scope bundles kickoff-blocking core (counts, exclusions,
+  reservations, revision) with non-blocking consumer inputs (exact stream-block
+  re-pin, docs-row full validation), maximizing QA surface on a report-only
+  item. Narrowing to the mergeable core unblocks kickoff; deferred inputs are
+  re-pinned by consumers without loss."

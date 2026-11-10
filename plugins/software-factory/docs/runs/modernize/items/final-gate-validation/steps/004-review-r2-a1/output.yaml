@@ -1,0 +1,96 @@
+status: approved
+summary: R2 fix verified (18 W9704, __init__ frame); green gates + 9-red docs
+  matrix accurate; zero repo writes; blocker needs architect routing
+suggestions:
+  - detail: "Verified RED at HEAD: DecisionBackend 0 hits in
+      semantic-justification/custom-checks/AGENTS pipeline;
+      DECISION_MODEL/RERANKER 0 in troubleshooting; [semantic]/no-go 0 in
+      CHANGELOG; stale reranker/7-pass/v1.2.5/v1.2.9 texts present; ADR-016:3
+      and ADR-009:31 false. R2 routing matches ADR-011 single-writer map with no
+      baseline edits. Scheduling new root/epic follow-up items exceeds read-only
+      research scope."
+    disposition: architect
+    id: c-000a3a71f2
+    location:
+      file: docs/semantic-justification.md
+      line: 3
+    summary: Docs red on all must-contain cells; needs new-item routing
+  - detail: Verified mechanism at dispatch.py:181-189 (scan --baseline rewrites,
+      python normalizes back); R2 reports transient dirty state restored to HEAD
+      bytes with clean status. Read-only lint hardening belongs downstream
+      (temp-copy/atomic-replace), not this gate.
+    disposition: optional
+    id: c-0ec5bec736
+    location:
+      file: src/python_setup_lint/runner/dispatch.py
+      line: 181
+    summary: Transient baseline rewrite; normalized back, tree clean
+  - detail: "Verified: 9 safetensors 1844653898B, RLIMIT_AS 2048MB, ^\\.factory/
+      filter at .secrets.baseline:41-46, HEAD scan exit 0; bootstrap path would
+      MemoryError at config.py:97 without filter. GREEN stands; residual infra
+      fragility tracked downstream."
+    disposition: optional
+    id: c-4ed4051afc
+    location:
+      file: .secrets.baseline
+      line: 44
+    summary: 1.84GB safetensors rely on prefix filter; HEAD green
+  - detail: "Verified: AGENTS.md:10 says 1290/4/15 vs R2 observed 1357/0/7; :11 says
+      7-pass vs 9-collected. Overlaps blocker routing; runner-owned AGENTS
+      counts fix downstream."
+    disposition: optional
+    id: c-88df8a41a4
+    location:
+      file: AGENTS.md
+      line: 10
+    summary: AGENTS unit counts stale alongside integration row
+  - detail: "Verified: DecisionBackend/FakeBackend exist at
+      _decision_backend.py:17,23 with semantic=[] at pyproject.toml:29-30,
+      contradicting ADR-016:3; no .python-setup-decisions.json impl,
+      _semantic.py:15-21 memo-only, contradicting ADR-009:31. ADR-owner
+      staleness notes downstream."
+    disposition: optional
+    id: c-a5b3f16f80
+    location:
+      file: docs/adr/ADR-016.md
+      line: 3
+    summary: ADR-009/016 stale claims contradict HEAD
+  - detail: "Verified: conftest.py:29-34 prepends .venv/bin so pre-commit always
+      present here; skip path via ensure_precommit_or_skip at
+      _project_helpers.py:185-191 and integration.py:205,257. Correct 9-passed
+      vs 7+2 env caveat for AGENTS counts."
+    disposition: optional
+    id: c-f9635058d1
+    location:
+      file: tests/conftest.py
+      line: 29
+    summary: 7+2 integration split env-dependent via conftest PATH
+  - detail: Verified absent at HEAD via glob (never-test-linting-prune wins over
+      import retarget). Consistent with audit prune precedent; no bearing on
+      gate rows. Retain as digest.
+    disposition: optional
+    id: rm-af822ddbc6
+    summary: Deletion-wins for pruned self-lint guards verified
+  - detail: Runtime derivation (nested collect-only + dispatch.TOOLS) avoids
+      hardcoded 1360/9/14 drift; correct test-first tradeoff. Unrelated to gate
+      inventory; retain as digest.
+    disposition: optional
+    id: rm-4cf584f209
+    summary: Runtime-derived docs counts; no hardcoded drift
+  - detail: "Verified: TestAnyElementCodeEcho at
+      test_suppression_justification_checker.py:367, old
+      TestSuppressionRerankerPipeline absent. Correct single-writer retarget; no
+      gate interaction."
+    disposition: optional
+    id: rm-68620e2e61
+    location:
+      file: tests/checkers/test_suppression_justification_checker.py
+      line: 367
+    summary: Semantic block retarget to TestAnyElementCodeEcho verified
+  - detail: Reclassification of realized _decision_backend.py/.pyi +
+      test_decision_backend.py to semantic with amended 65/91/15/7/16 sum-194
+      keeps one writer per path. Ownership evidence; orthogonal to gate verdict.
+      Retain as digest.
+    disposition: optional
+    id: rm-960f2c7947
+    summary: Semantic reclassification 65/91/15/7/16 keeps single-writer

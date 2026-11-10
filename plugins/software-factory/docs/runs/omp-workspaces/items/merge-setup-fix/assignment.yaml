@@ -1,0 +1,53 @@
+slug: merge-setup-fix
+kind: dev
+title: Run infra.setup in merge child worktree before gates
+assignment: >-
+  Fix wave-end merge to run infra.setup in the child worktree BEFORE
+  verify-checks. Context: wave 1 merged 0/4 — mergeItem failed with typecheck
+  TS2688 because childWt lacks node_modules; mergeItem currently skips
+  infra.setup (blocker c-552344216d). This fix takes effect on engine restart,
+  not mid-run.
+
+
+  Scope: plugins/software-factory/src/core/flows/merge-path.ts :: mergeItem only
+  (+ new behavior tests). Mirror runInfraSetup semantics from the temp-worktree
+  paths (gates.ts:332-335, runner.ts:796-810).
+
+
+  Steps (tests-first, cwd=plugins/software-factory, tmp-repo fixtures, no
+  network):
+
+  1. Add failing behavior tests first covering: (a) infra.setup writes a marker
+  file -> gates/snapshot observe it (setup runs before snapshotWorktree so
+  setup-created untracked files like node_modules are NOT flagged as gate
+  mutations); (b) empty/missing setup is a no-op and merge behaves exactly as
+  today; (c) failing setup fails the merge with actionable evidence containing
+  the setup command + output in the same evidence shape as gate failures.
+
+  2. Implement: in mergeItem, execute infra.setup commands in childWt before the
+  verify-checks phase (strictly before snapshotWorktree and before gates
+  snapshot/run). No-op when setup is empty. On setup failure, abort merge with
+  gate-failure-shaped evidence.
+
+  3. Verify: run the new tests + existing merge-path/gates tests from
+  plugins/software-factory; pass with no NEW failures beyond the accepted
+  baseline red (test/disk-space.test.ts env-sensitive). Keep prod diff small
+  (~80 lines hint).
+
+
+  Acceptance: (1) marker-file test proves setup ran before gates; (2)
+  empty-setup parity; (3) failing-setup evidence includes command+output; (4)
+  node_modules-class untracked files created by setup are not reported as gate
+  mutations.
+
+
+  Constraints: dev kind, tests-first; no deps; wave-2 parallel with M2 items
+  (self-heals node_modules via own develop-step gates); out of scope: preflight
+  hardening, workspace backends, saga.
+outlineRef: merge-setup-fix
+milestone: m1-omp-de-risk
+wave: 2
+citations:
+  - "plugins/software-factory/src/core/flows/merge-path.ts :: mergeItem"
+  - gates.ts:332-335 runInfraSetup temp-worktree path
+  - runner.ts:796-810 runInfraSetup temp-worktree path

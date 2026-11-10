@@ -1,0 +1,7 @@
+id: q-concern-rm-9b3f69811e
+ref: test-debloat-audit
+disposition: human-awareness
+question: Integration-helper merge decision; does not affect audit inventory or
+  pinning limbs. Retained as digest.
+status: open
+createdAt: 2026-11-10T02:58:56.258Z

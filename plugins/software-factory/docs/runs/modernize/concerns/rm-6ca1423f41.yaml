@@ -1,0 +1,23 @@
+id: rm-6ca1423f41
+chosen: Treat detect-secrets as GREEN at HEAD via the already-committed
+  `^\\.factory/` baseline filter, without editing any baseline and without
+  changing the 2048 MB tool cap.
+alternatives:
+  - Stop tracking the .factory model artifacts (removes 1.72 GiB but changes the
+    checkout)
+  - Add a ToolSpec path/exclude for detect-secrets (currently ignored at
+    dispatch.py:179)
+  - Raise the per-tool memory limit above 2048 MB (weakens the OOM guard)
+why: The exact git-ls-files scan exits 0 in 8s and lint reports PASSED; the
+  filter was committed by ancestor 882fac0. The MemoryError is reproducible only
+  when a path alias bypasses the prefix regex under RLIMIT_AS 2 GB, which proves
+  the mechanism without requiring a fix at HEAD.
+status: open
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: final-gate-validation
+  lastSeen: 2026-11-10T00:27:58.391Z
+createdAt: 2026-11-10T00:27:58.391Z
+updatedAt: 2026-11-10T00:27:58.391Z

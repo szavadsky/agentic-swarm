@@ -1,0 +1,7 @@
+id: q-concern-rm-5f84f18bbd
+ref: test-debloat-audit
+disposition: human-awareness
+question: Merge-conflict resolution from integration-helpers scope; tests/
+  content verified unchanged vs audit base. Retained as digest.
+status: open
+createdAt: 2026-11-10T02:58:56.269Z

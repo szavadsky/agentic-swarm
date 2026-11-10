@@ -1,0 +1,26 @@
+id: c-23536c9e7c
+kind: risk
+summary: Isolation retention + probe-18 coercion are single-host/softened
+  evidence, not portable guarantees
+detail: omp-3-isolation.md:20 explicitly scopes abort/SIGKILL retention to
+  single-host omp 18.18.5/ext4/WSL2 until re-probed elsewhere. Probe 18 softened
+  (invalid backend overlay accepted but coercion unproven because config get
+  ignores --config overlays, :67-68). M3/M4 must not treat retention/preflight
+  behavior as portable without re-probe.
+location:
+  file: plugins/software-factory/docs/spikes/omp-3-isolation.md
+  line: 20
+affects:
+  - m1-omp-de-risk
+  - m3-workspace-backend
+  - m4-lifecycle
+severity: medium
+status: open
+source:
+  record: 024-plan-close-up-1-a1
+  agent: plan-close-up
+  step: plan-close-up-1
+  iteration: 1
+  lastSeen: 2026-11-10T06:32:04.799Z
+createdAt: 2026-11-10T06:32:04.799Z
+updatedAt: 2026-11-10T06:32:04.799Z

@@ -1,0 +1,21 @@
+context: item
+decision: retry-with-guidance
+persist: true
+rationale: "Exit 127 on gate 'tests' is unknown-gate, not a test failure: infra
+  gates are format/lint/test/test-integration. Owned code is green in-worktree
+  and QA drift is fixed (first-# code_context + regression test). Record keeps
+  echoing invalid engine input Target 'tests'; Current Diff also carries
+  non-owned deletions outside item ownership that must not merge."
+target:
+  command: uv run pytest -q
+  customTarget: true
+text: 'Zero owned-content changes. (1) Declare output target exactly
+  {"command":"uv run pytest -q","customTarget":true} — NEVER {"gate":"tests"}.
+  (2) Diff must contain ONLY: NEW _source_stream.py/.pyi,
+  bare_except+suppression (+.pyi, first-# split preserved), stub
+  checker/coverage, test_source_stream.py, astroid call, stub_coverage call,
+  TestCodeContextDerivation. All non-owned paths must match HEAD exactly
+  (_base.py/.pyi empty diff, baseline/tests/data untouched, no
+  runner/factories/conftest/docs reversions). (3) Verify: no markers, pytest
+  suppression file, pytest -q, lint 14/14, integration 9 passed, grep .stream()
+  single-owner.'

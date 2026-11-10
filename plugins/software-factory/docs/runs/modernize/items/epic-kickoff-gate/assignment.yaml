@@ -1,0 +1,37 @@
+slug: epic-kickoff-gate
+kind: fact-finder
+title: Epic kickoff and ownership-dispute gate
+assignment: "Root-owned coordination checkpoint (fact-finder, read-only;
+  findings.md + structured findings; review checks validity; zero repo writes,
+  zero git writes). Consume validated-map report (revision map-<HEAD short SHA>
+  + drift list), pylint verdict readability, and merged .secrets.baseline
+  exclusion. Record post-kickoff HEAD; per-epic ownership tables referencing
+  revision; universe file count with 5-owner counts; drift-list row count with
+  corrected file:line per row; AGENTS.md assignments by exact rows with engine
+  wave order (runner-owned if assigned = ## Quick Commands :9-11 + ## Tool Scope
+  adding ruff format row in earlier wave than semantic item; semantic-owned =
+  ### Semantic justification pipeline only; checkers never touches AGENTS.md)
+  plus read-only merge-base rule (semantic base must contain runner merge when
+  runner assigned, else waits); shared-file single-writer table
+  (checkers/_base.py=semantic only, _source_stream.py=checkers new file,
+  no_try_import register line+patterns=semantic, test_suppression class
+  block=semantic rest=checkers, trivial_wrapper peek line preconditioned on
+  runner close-up); docs-row assignments from drift list per decision rule
+  (defaults: runner counts/scope/version/pin, semantic pipeline, root ADR via
+  adr-formalization). Resolve disputes by amended assignment before epic waves
+  scale; gate report shows zero unresolved disputes (each resolved dispute cites
+  amended assignment ref). Covers ADR-011 spawn gate, TD3-A1/TD3-B2."
+outlineRef: epic-kickoff-gate
+milestone: M1
+wave: 2
+deps:
+  - ownership-map-revalidation
+  - pylint-cache-semantics-closure
+  - secrets-baseline-exclusion
+scenarioRefs:
+  - "M1: Epic kickoff gated on validated artifacts"
+citations:
+  - AGENTS.md:79-85
+  - AGENTS.md:87-93
+  - src/python_setup_lint/checkers/_base.py:142-158
+  - CodingRules.md:90-107

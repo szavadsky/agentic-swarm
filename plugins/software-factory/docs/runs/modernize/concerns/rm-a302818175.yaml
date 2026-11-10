@@ -1,0 +1,21 @@
+id: rm-a302818175
+chosen: Recommend the iteration-5 ADR-023 item-level path
+  (golden-regen-hatch-v2) rather than reviving epics to satisfy the legacy
+  contract
+alternatives:
+  - Reintroduce runner/checkers/semantic epics in I6 solely to produce close-ups
+  - Keep the legacy item pending indefinitely and let it block legacy
+    golden-regen-hatch
+why: The I5 plan explicitly ships no child epics and the v2 hatch depends only
+  on behavior items (plan-5.3:1013-1017, 1271-1284, 882-898). Reviving epics
+  would reintroduce the empty-wave/bottleneck failure ADR-013 and ADR-023
+  removed.
+status: open
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: epic-shift-report-collection
+  lastSeen: 2026-11-10T00:14:51.554Z
+createdAt: 2026-11-10T00:14:51.554Z
+updatedAt: 2026-11-10T00:14:51.554Z

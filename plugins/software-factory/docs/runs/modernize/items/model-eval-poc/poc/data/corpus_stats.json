@@ -1,0 +1,37 @@
+{
+  "raw_counts": {
+    "brushoff_table": 35,
+    "hard_negative": 40,
+    "meaningful_table": 33,
+    "repo_suppression": 370,
+    "threshold_meaningful": 30,
+    "threshold_meaningless": 50
+  },
+  "post_dedup_counts": {
+    "brushoff_table": 32,
+    "hard_negative": 39,
+    "meaningful_table": 3,
+    "repo_suppression": 183,
+    "threshold_meaningful": 30,
+    "threshold_meaningless": 49
+  },
+  "dedup_dropped": {
+    "brushoff_table": 3,
+    "hard_negative": 1,
+    "meaningful_table": 30,
+    "repo_suppression": 187,
+    "threshold_meaningless": 1
+  },
+  "total_raw": 558,
+  "total_post_dedup": 336,
+  "strata": {
+    "heuristic_accepted": 254,
+    "heuristic_rejected": 82
+  },
+  "labels": {
+    "True": 215,
+    "False": 121
+  },
+  "contracted_total": 297,
+  "augmented_total": 336
+}

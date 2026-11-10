@@ -1,0 +1,18 @@
+slug: runner-factories-trim
+kind: test-only
+title: Trim runner factories extras below limit
+assignment: "Tests-only (tests/runner/_factories_extras*.py + its importers
+  ONLY, enumerated via grep at HEAD and reported; ~16 modules per pack, verify
+  actual). Red-test-exempt. Trim 511 (disables :1,:6, claims 502) to each <=500,
+  collapse duplicate disables to <=1, split by group if needed; touched files
+  toward naming/marker conventions. Verify: tests only; no new failures vs M1
+  table; golden hash-equal; format-clean."
+outlineRef: runner-factories-trim
+milestone: M2
+wave: 3
+scenarioRefs:
+  - "M2: Factories split without behavior change"
+citations:
+  - CodingRules.md:139-159
+  - CodingRules.md:230-306
+  - CodingRules.md:90-107

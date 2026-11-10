@@ -1,0 +1,78 @@
+status: ok
+summary: "Split the 1393-line tests/checkers/_factories.py by checker domain
+  into 9 modules: 8 domain modules (_factories_beartype 43,
+  _factories_no_try_import 95, _factories_stub 474, _factories_stub_callable
+  163, _factories_stub_class 165, _factories_stub_coverage 257,
+  _factories_stub_docstring 178, _factories_stub_normalizer 63) plus a 75-line
+  shared _factories.py holding only _run_pylint. All 49 parametrize tables are
+  now typed list[ParameterSet] (TYPE_CHECKING import) instead of list[Any] with
+  comments; all 8 importer modules migrated; deleted the unused import_usage
+  passthrough and the trivial make_tc wrapper (inlined to _make_tc_factory),
+  with survivor notes in the shared module docstring. No too-many-lines disables
+  remain anywhere under tests/checkers, every split module is <=474 lines, test
+  node IDs are hash-identical to HEAD, and all
+  checkers/full-suite/integration/lint gates are green."
+target:
+  command: uv run pytest tests/checkers -q
+  customTarget: true
+evidence:
+  - "Recounted importers at HEAD: exactly 8 test modules imported
+    tests.checkers._factories (beartype, no_try_import, stub, stub_callable,
+    stub_class, stub_coverage, stub_docstring, stub_normalizer); item report '8
+    families' confirmed, split resolves to 9 modules = 8 domains + shared
+    subprocess helper."
+  - "Module sizes: wc -l tests/checkers/_factories*.py => 43, 63, 75, 95, 163,
+    165, 178, 257, 474; all <= 500. grep -rn too-many-lines tests/checkers/ =>
+    zero matches."
+  - "Typing: 49 case tables now annotated list[ParameterSet] (grep -c per
+    domain: 3/2/12/8/5/10/5/4); stale 'list[Any] is a test factory return type'
+    comments removed from tables."
+  - "Behavior preservation: executed HEAD _factories.py side-by-side with all 8
+    new modules and asserted value equality for 49 tables (lambdas compared by
+    id/type); output: 'OK: 49 tables value-equal across 8 domain modules'."
+  - "Golden collection hash: HEAD snapshot (git archive HEAD in temp dir) vs
+    working tree, pytest --collect-only sorted node IDs excluding Tach banner =>
+    both sha256
+    572e41b98ca868cdf331f3a793d9ea36f0d788cafff2cea55470ea53938331de; 640
+    collected node IDs, identical."
+  - "tests/checkers baseline vs final: baseline run 637/642 collected, 633
+    passed, 4 skipped, 5 deselected; final run identical 633 passed, 4 skipped,
+    5 deselected (exit 0)."
+  - "Full suite: uv run pytest -q => 1342 passed, 4 skipped, 18 deselected, exit
+    0."
+  - "Integration golden: uv run pytest tests/integration.py -q => 9 passed, exit
+    0 (covers assert_matches_golden/assert_golden_byte_identical)."
+  - "Format: uv run ruff format --config config/ruff.toml --check on all 17
+    touched files => '17 files already formatted'; final lint pipeline [ruff
+    format] PASSED."
+  - "Full lint gate: uv run lint => 14/14 tools PASSED (tach, ruff format, ruff
+    check, rumdl, mypy, yamllint, ty, mypy.stubtest, pyright check, pyright
+    verify types, pylint, pylint-pyi, pylint tests, detect-secrets),
+    LINT_EXIT:0."
+  - "Scope audit: git status shows only tests/checkers/_factories*.py + 8
+    importer test modules; zero changes under src/, lint.baseline, docs/,
+    tests/data/."
+  - Importer diffs are import-path/docstring only; no test functions renamed,
+    preserving collection IDs and markers; all 8 touched test modules retain
+    pytestmark = pytest.mark.no_external_api.
+concerns:
+  - _factories_stub.py is 474/500 lines, leaving only 26 lines of C0302 headroom
+    for future stub rows; further growth should extract the import-contract
+    tables into a sibling module.
+  - The two end-to-end subprocess tests in test_stub_checker_callable.py /
+    test_stub_checker_class.py inherit the module-level no_external_api marker
+    even though they spawn pylint; marker reclassification was left out of scope
+    to preserve existing test-selection semantics.
+  - Shared _run_pylint stays in the canonical _factories.py (rather than a 9th
+    domain file) because both callable and class suites use it; this is the
+    9-vs-8 discrepancy the reviewer flagged.
+notes: "Domain mapping: beartype-> _factories_beartype; no_try_import->
+  _factories_no_try_import; stub core rows/walkers/import-contract builders->
+  _factories_stub; callable extraction+comparison+integration rows->
+  _factories_stub_callable; class fidelity rows+walk_stub_checker_with_pair->
+  _factories_stub_class; coverage rows+make_coverage_checker+layout builders->
+  _factories_stub_coverage; docstring rows+walk_both_release_for_pyi->
+  _factories_stub_docstring; normalizer rows-> _factories_stub_normalizer.
+  Deleted helpers: import_usage (no callers; construct ImportUsage directly) and
+  make_tc (trivial wrapper; inlined as
+  _make_tc_factory(_stub_checker_class()))."

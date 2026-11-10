@@ -1,0 +1,18 @@
+id: rm-963829d74d
+chosen: Deleted `tests/runner/test_self_lint_clean.py` (modify/delete conflict)
+alternatives:
+  - Keep the item's version with the updated `_project_helpers` import
+why: The parent tip intentionally removed it in the never-test-linting-prune
+  item; its own docstring (13 tools) was already stale. Preserving the parent's
+  deletion honors that policy decision; the item's only change to it was an
+  import path.
+status: routed
+source:
+  record: 004-integrate-r1-a1
+  agent: developer
+  step: integrate
+  item: consolidate-integration-helpers-v2
+  lastSeen: 2026-11-09T22:46:16.556Z
+createdAt: 2026-11-09T22:46:16.556Z
+updatedAt: 2026-11-10T02:58:56.108Z
+disposition: optional

@@ -1,0 +1,66 @@
+context: wave
+decision: amend
+outlines:
+  - description: "Docs-only salvage retry. Copy the 4 approved spike docs
+      (plugins/software-factory/docs/spikes/omp-3-isolation.md,
+      omp-4-mock-provider.md, omp-5-cache-keys.md, omp-6-repo-rules.md) plus
+      items/spike-findings-recovery/RECOVERY.md from branch
+      topic/omp-workspaces--spike-findings-recovery onto this item's branch via
+      read-only `git show <branch>:<path>` (NEVER checkout/switch branches). Fix
+      the `oMP` capitalization typo in omp-6-repo-rules.md. Verify all 5 files
+      present with probe-evidence sections. CRITICAL: do NOT record a gate
+      target (target {gate:test} requires full-suite exit 0 and is unmergeable
+      on the red baseline); omit target or use a single passing selector target.
+      Zero prod lines; no-behavior kind."
+    kind: no-behavior
+    milestoneId: m1-omp-de-risk
+    prodBudgetHint: 0
+    slug: spike-findings-recovery-v2
+    title: Recover wave-1 spike findings onto parent branch (v2)
+  - description: "Fix checkTargetGreen gate-target branch
+      (plugins/software-factory/src/core/checks/runner.ts:644-676) to apply the
+      same baseline ratchet runGates uses: when the gate command fails, compare
+      failing tests against gates-baseline.yaml and pass when failures are a
+      subset of baseline (plus JUnit re-derivation parity where applicable).
+      Behavior tests-first with tmp-repo fixtures: (1) gate target failing ONLY
+      on baseline-listed tests passes; (2) gate target with a NEW failing test
+      still fails with actionable evidence; (3) gate target fully green still
+      passes. Keep prod diff small (~60 lines hint). Record selector targets
+      (not gate targets) so this item itself merges cleanly."
+    kind: dev
+    milestoneId: m1-omp-de-risk
+    prodBudgetHint: 60
+    slug: target-green-ratchet-fix
+    title: Apply baseline ratchet to target-green gate targets
+planDelta: "Wave 2 merged 3/4 (M2 measurement items + merge-setup-fix); the only
+  gap is M1 spike evidence still stranded on the failed recovery branch plus the
+  newly discovered target-green ratchet gap (c-2bec98be29). Schedule the two new
+  outlines together in wave 3 (both independent, no deps):
+  spike-findings-recovery-v2 first-priority (unblocks iteration-2 epic planning
+  with M1 evidence on parent), target-green-ratchet-fix in parallel. No
+  removals: no pending items exist; failed items are terminal and stay as
+  evidence."
+rationale: "Wave 2: 3/4 merged (usage-cache-tokens, transport-byte-stability,
+  merge-setup-fix) with gates at baseline and no regressions; M2 milestone
+  complete and the wave-1 merge blocker fixed. The single failure
+  (spike-findings-recovery) is work-complete on its branch — abandoned only
+  because its recorded target {gate:test} is unsatisfiable on a red baseline
+  (target-green gate path has no ratchet, c-2bec98be29). Ending the iteration
+  now would strand M1 evidence off-parent, crippling iteration-2 epic planning;
+  continuing has no scheduled waves left. Amend (1/3 used) with a cheap v2
+  recovery plus the small ratchet fix the wave exposed."
+remarkable:
+  - alternatives:
+      - end-iteration and defer recovery to iteration 2 (leaves M1 unevidenced
+        on parent; next planning turn would re-derive or re-read branches)
+      - continue with no new work (no pending waves; identical to end-iteration
+        but without closing the known gap)
+    chosen: amend with recovery-v2 + target-green ratchet fix in wave 3
+    why: Minimal delta that lands M1 evidence on the parent branch for iteration-2
+      planning and closes the engine gap that caused the wave-2 failure, while
+      M2 stays merged and green.
+text: "Wave-3 execution notes: (1) recovery-v2 MUST NOT record a gate target —
+  omit target or use one passing selector; its merge verify then skips the
+  unratcheted gate path. (2) ratchet-fix is a normal tests-first dev item; its
+  own merge uses selector targets and is unaffected by the bug it fixes. (3)
+  Both items are independent; run in parallel."

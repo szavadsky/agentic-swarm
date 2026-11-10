@@ -1,0 +1,424 @@
+iteration: 2
+items:
+  - assignment: "GOAL: Retain 14 tools with explicit check-vs-format modes per
+      ADR-005 and single-sourced registry. SCOPE FILES:
+      src/python_setup_lint/runner/dispatch.py,
+      src/python_setup_lint/runner/_config.py,
+      src/python_setup_lint/runner/__init__.py,
+      src/python_setup_lint/runner/cli.py, AGENTS.md, README.md,
+      docs/overlays.md, docs/tutorials.md, docs/troubleshooting.md,
+      tests/runner/_factories.py, tests/runner/_factories_extras.py,
+      tests/runner/test_lint_runner.py, tests/runner/test_extra_tools.py,
+      tests/test_self_lint_clean.py, tests/runner/test_bench_runner_overhead.py,
+      tests/runner/test_real_pipeline_smoke.py,
+      tests/runner/test_testing_fakes.py, tests/data/tool_counts.json (verify
+      only). STEPS: (1) Add _RuffFormatLintTool(LintTool) in dispatch.py:
+      build_command(config,path,exclude) returns check mode
+      [ruff,format,--check,--config,<resolved ruff.toml>,...paths] by default;
+      build_format_command returns mutating mode without --check; register in
+      _strategy_for; map ruff format to ruff.toml in _config.py plus
+      _config_flag_for; cli.py phase-1a calls build_format_command (fix-only),
+      normal pass calls build_command; no if-spec.name in _build_command. (2)
+      Registry owned by dispatch.py re-exported via runner/__init__.py:
+      EXPECTED_TOOL_NAMES (14), FORMATTER_ONLY with ruff format,
+      STATISTICS_PARSER_TOOLS (13), RECORD_PARSER_TOOLS (9), RECORDLESS_TOOLS
+      with tach check,mypy.stubtest,pyright verify types,detect-secrets,ruff
+      format documented intentional; migrate 6 named tests (test_lint_runner
+      set+count 13 to 14, _factories_extras len+id, stats plus t3 to STATISTICS
+      set with FORMATTER_ONLY exemption, fakes invariants to EXPECTED set);
+      tests import from python_setup_lint.runner. (3) Docs migration to 14 with
+      per-hit report via grep 13-tools pattern: AGENTS.md lines 9,43,63,92,93
+      plus counts table 10-11, README 17,58, overlays 3, tutorials 26,
+      troubleshooting 155, runner __init__ 3, cli 314, _factories 46,
+      _factories_extras 1,377-378, test_lint_runner 50,76, test_extra_tools 237,
+      test_self_lint_clean 3, test_bench 5,224, test_real_pipeline 24,
+      test_testing_fakes 137,165 plus any further grep hit; CHANGELOG 104 stays
+      13 historical; allowlist MD013,130,v0.13 and non-tool-count 13s; assert
+      tool_counts.json already 14 keys incl ruff format 0 (verify not rewrite).
+      VERIFY: format gate exit 0, lint gate zero violations in src and tests,
+      pytest -q exit 0, integration exit 0, git status --porcelain empty after
+      uv run lint without --fix, spy shows normal-pass ruff-format cmd contains
+      --check and --config with resolved existing path (composed temp accepted,
+      no literal match) and mutating cmd runs only under --fix without --check,
+      golden byte-identical, lint.baseline stays []. CONSTRAINTS: dev kind,
+      test-first for behavior; prod budget about 60 lines."
+    citations:
+      - AGENTS.md:87-93
+      - AGENTS.md:121-139
+      - lint.baseline:1-1
+    deps: []
+    kind: dev
+    milestone: M1
+    outlineRef: runner-format-contract
+    scenarioRefs:
+      - M1-1
+      - M1-2
+      - M1-3
+    slug: runner-format-contract
+    title: Ruff format strategy and 14-tool registry fix
+    wave: 1
+  - assignment: "GOAL: Single-source test project helpers and bring integration.py
+      to 500 lines or less. SCOPE: tests only. FORBIDDEN: lint.baseline,
+      AGENTS.md, docs, src. Red-test-exempt. STEPS: Create
+      tests/_project_helpers.py as sole site with 11 pinned helpers:
+      copy_sample_project(dest_parent: Path) to Path with mkdir parents plus
+      copytree tests/data/minimal_sample_project to dest_parent/project (ex
+      _copy_sample), git_init_and_stage(project) to None with test/test@test
+      plus add dot (ex _init_git), shipped_config_paths to dict (ex
+      _shipped_config_paths), make_runner_config(project) to RunnerConfig with
+      minimal_sample plus rumdl override idempotent no-op if shipped rumdl
+      missing (ex _make_config), git_init_bare(cwd) to None with
+      Test/test@example.com -q no add (ex _git_init),
+      write_project_file(cwd,rel,content) to Path (ex _write_file),
+      stage_file(cwd,rel) to None (ex _stage), commit_all(cwd,msg init) to None
+      (ex _commit_all), build_pylint_overlay_config(project,disable_rule) to
+      Path extracting overlay 217-240, ensure_precommit_or_skip to None,
+      install_twice_assert_idempotent(project,monkeypatch) to None. STAY in
+      _autofix_helpers.py untouched: _make_canned_fix_results,
+      _PostFixFakeRunCmd, _CANARY_LABEL, _FIX_TOOL_NAMES plus assert. Delete
+      shipped_config_paths def entirely from tests/conftest.py with no
+      re-export; rewrite test_pyright_noise_filter.py:15 and
+      test_self_lint_clean.py:15 to from tests._project_helpers import ...;
+      integration.py consumes make_runner_config plus mapped subset only. Cycle
+      guard: _project_helpers imports stdlib plus
+      python_setup_lint.runner/setup/testing only, never tests.conftest or
+      tests.integration. Keep test class and function names unchanged; helper
+      renames per matrix only. Budget: remove at least 161 lines (661 to 500 or
+      less): helpers 57 plus overlay 28 plus setup/idempotent 32 plus precommit
+      30 plus loop/lookup 5 plus slicer 3 plus import/trim 8 equals 163. Remove
+      :12 too-many-lines via extraction; delete :202 stale too-many-locals
+      disable directly (globally disabled in config/.pylintrc-tests:39; verify
+      pylint tests plus W9704 clean). VERIFY: diff stat shows tests only, golden
+      diff empty, pytest tests/integration.py -v passes, test_golden passes,
+      touched files format-clean."
+    citations:
+      - CodingRules.md:230-306
+      - CodingRules.md:139-159
+      - AGENTS.md:87-93
+      - pyproject.toml:49-49
+    deps: []
+    kind: test-only
+    milestone: M2
+    outlineRef: consolidate-integration-helpers
+    scenarioRefs:
+      - M2-1
+      - M2-2
+    slug: consolidate-integration-helpers-i2
+    title: Single-source helpers; integration.py under 500 lines
+    wave: 1
+  - assignment: "GOAL: Evidence matrix for decision-model candidates to feed
+      eval-poc, cache spike, and runtime pinning (U1). No repo edits; report
+      only. STEPS: Build table for GLiDE-0.4B, tasksource-decider-nano,
+      bekko-17m, ettin-150m plus MiniLM baseline with columns: license, params
+      and weights bytes, runtime stack, py3.14 CPU wheels for linux/mac/win,
+      custom-code and vendoring burden, pinnable revision, offline behavior.
+      Exclude CC-BY-NC; flag Fastino plus bekko-unclear-license for human review
+      per assumption. Record model-id and rev format for cache spike. Output
+      structured findings consumable by eval-poc without re-research. VERIFY:
+      Every candidate has explicit include or exclude with reason; Fastino
+      gating and Apache-first posture explicit; no file writes."
+    citations:
+      - src/python_setup_lint/checkers/_semantic.py:1-12
+      - src/python_setup_lint/checkers/_semantic.py:37-52
+      - src/python_setup_lint/checkers/_semantic.py:93-122
+      - pyproject.toml:28-31
+      - docs/semantic-justification.md:5-14
+      - AGENTS.md:79-85
+    deps: []
+    kind: fact-finder
+    milestone: M3
+    outlineRef: model-candidate-matrix
+    scenarioRefs:
+      - M3-1
+    slug: model-candidate-matrix
+    title: Decision-model candidate matrix
+    wave: 1
+  - assignment: "GOAL: Pin pylint cache writer, timing, and path scoping before lock
+      design (U2 writer-first). Runner is sequential, pylint specs pass no -j:
+      no contention today. STEPS: Identify FIRST via code plus invocation tests:
+      writer (checker open and close during pylint subprocess vs runner
+      post-process merge) plus write timing (per-visit vs end-of-run) plus
+      --path scoping across pylint, pylint-pyi, pylint-tests sequential
+      invocations. Then derive: lockfile plus merge plus atomic needed for
+      crash-safety vs unnecessary runner-side post-merge vs jobs equals 1 with
+      sidecars only if -j introduced. Add
+      tests/assumptions/test_pylint_cache_semantics.py with no_external_api
+      marker and test_<api>_given_<condition>_then_<expected> names. No src
+      changes. VERIFY: New assumption tests pass offline, verdict explicitly
+      feeds cache-design-spike with crash-safe vs no-lock vs sidecars decision
+      and --path-scoped sweep scope."
+    citations:
+      - src/python_setup_lint/checkers/_base.py:142-158
+      - src/python_setup_lint/checkers/conformance/suppression_justification_checker.py:152-158
+      - src/python_setup_lint/checkers/_semantic.py:125-189
+      - CodingRules.md:230-306
+    deps: []
+    kind: test-assumptions
+    milestone: M3
+    outlineRef: pylint-cache-assumptions
+    scenarioRefs:
+      - M3-3
+    slug: pylint-cache-assumptions
+    title: Pin pylint writer, timing, and path scoping
+    wave: 1
+  - assignment: "GOAL: Behavior-preserving fixes serialized after
+      runner-format-contract onto its phase-1a call-site shape; baseline stays
+      []. SCOPE: shared cli.py ownership requires applying onto runner merge.
+      STEPS: (1) src/python_setup_lint/checkers/stub/coverage.py:196-198 SIM102:
+      elif TypeAlias plus nested if AssignName to single combined condition. (2)
+      cli.py:50 _run_tool_pipeline 23 to 20 or fewer locals by extracting phase
+      and select helpers with no pipeline semantics change. (3)
+      tests/runner/_factories_extras.py:383 C0208 set-iteration to sequence
+      type. Secrets explicitly OUT of scope (owned by secrets-triage-spike).
+      VERIFY: lint gate reports zero violations in src and tests, pytest plus
+      integration show no new failures, golden byte-identical, baseline [].
+      CONSTRAINTS: no-behavior kind; test diff must show no semantic assertion
+      weakens or shifts."
+    citations:
+      - CodingRules.md:90-107
+      - CodingRules.md:139-159
+      - AGENTS.md:121-139
+      - lint.baseline:1-1
+    deps:
+      - runner-format-contract
+    kind: no-behavior
+    milestone: M1
+    outlineRef: baseline-violations-fix
+    scenarioRefs:
+      - M1-1
+    slug: baseline-violations-fix
+    title: Fix SIM102, too-many-locals, C0208
+    wave: 2
+  - assignment: "GOAL: Triage detect-secrets flags on clean checkout to define M1
+      lint-green for that tool (U4, TD2-B3). No repo edits; report only. STEPS:
+      On clean checkout run declared lint gate and detect-secrets scan; capture
+      every flagged file plus sha256 plus baseline entry. Verdict: environmental
+      (only tracked factory runtime journals) vs real secret. If environmental:
+      specify exact exclusion mechanism (engine config vs gate command flag)
+      plus evidence hashes, and record operator and engine exclusion request as
+      human-async; M1 dev acceptance does not wait on it. If real: specify
+      redact and rotate follow-up. VERIFY: Report lists all flagged files with
+      hashes, verdict with evidence, and exact next action; zero file writes.
+      Feeds M1 acceptance."
+    citations:
+      - .gitignore:243-244
+      - lint.baseline:1-1
+      - AGENTS.md:121-139
+    deps: []
+    kind: fact-finder
+    milestone: M1
+    outlineRef: secrets-triage-spike
+    scenarioRefs:
+      - M1-1
+    slug: secrets-triage-spike
+    title: Triage detect-secrets factory-journal flags
+    wave: 2
+  - assignment: "GOAL: Harden golden contract via caller asserts and shared slicer
+      per ADR-006; committed files never mutated by proofs. SCOPE: tests only.
+      STEPS: Keep collect_findings(project,config) in tool order with no sort
+      (synthetic-empty safe); sorting stays in serialize_write plus _diff_keys;
+      add caller asserts in test_setup_new_and_lint (len findings not zero
+      post-collect; first-run CRASH absent plus SKIPPED only package_name
+      retained); keep Counter-multiset diff plus UPDATE guard failing under CI
+      and GITHUB_ACTIONS plus oracle and tool coverage (read_oracle_rules,
+      assert_oracle_coverage, assert_tool_coverage); use
+      slice_tool_section(output,[pylint],[pylint-pyi]) in overlay test; extend
+      tests/test_golden.py synthetic coverage for ordering, POSIX, diff keys,
+      CI-guard, coverage, byte-format, empty-list safe; no Finding CRASH
+      sentinel. Determinism via temp-copy double-collect: collect plus serialize
+      on two fresh temp copies, sha256 hashes equal each other and equal
+      committed golden hash. UPDATE_GOLDEN equals 1 never touches committed
+      files except reviewed regen. VERIFY: integration plus test_golden pass;
+      golden plus counts byte-identical."
+    citations:
+      - CodingRules.md:230-306
+      - AGENTS.md:87-93
+      - pyproject.toml:49-49
+      - lint.baseline:1-1
+    deps:
+      - consolidate-integration-helpers-i2
+    kind: test-only
+    milestone: M2
+    outlineRef: golden-contract-hardening
+    scenarioRefs:
+      - M2-3
+    slug: golden-contract-hardening
+    title: Harden golden via caller asserts and shared slicer
+    wave: 2
+  - assignment: "GOAL: CPU accuracy and latency evaluation over all matrix
+      candidates to recommend smallest compliant model or no-go (U1). No
+      committed code; report only; temp venv and copy permitted, network inside
+      spike only. CONTRACT: decide(justification,rule,context) to float P
+      meaningful in 0-1; mapping justification equals primary equals (comment or
+      text).strip, rule equals joined suppressed codes (current rule symbol
+      where codes unavailable, recorded), context equals code_context None
+      allowed; decision equals prob at or above threshold. Modes: veto final
+      equals heuristic(text) AND prob at or above threshold (model only flips
+      True to False; heuristic-False never reaches model); replace final equals
+      prob at or above threshold, heuristic deleted. Smallest equals
+      lexicographic params, weights bytes, CPU RSS, p50 latency. Corpus:
+      threshold 30 plus 50 plus brush-off and meaningful tables plus N real repo
+      suppressions, DEDUPED by normalized justification target at least 100
+      post-dedup, stratified heuristic-rejected easy vs heuristic-accepted
+      model-decides; rubric specific technical justification vs placeholder,
+      deferral, brush-off; per-source plus per-stratum breakdown. STEPS: Score
+      ALL matrix candidates (GLiDE, decider-nano, bekko-17m, ettin-150m, MiniLM)
+      at 0.5,0.6,0.7 in BOTH modes or record explicit exclusion: accuracy,
+      meaningless-precision, meaningful-recall, CPU p50,p95 plus RSS. Compliance
+      bars at least 90 percent acc, 95 percent meaningless-precision, 85 percent
+      meaningful-recall apply to heuristic-accepted stratum (overall also
+      reported). Recommend smallest compliant model plus prompt plus threshold
+      plus mode, or no-go with evidence. CONSTRAINTS: poc kind confined to item
+      poc folder and temp only, production paths untouched."
+    citations:
+      - src/python_setup_lint/checkers/_semantic.py:125-189
+      - src/python_setup_lint/checkers/_base.py:142-158
+      - tests/checkers/test_semantic_check.py:159-257
+      - tests/checkers/test_semantic_check.py:263-424
+      - tests/checkers/test_semantic_threshold.py:19-25
+      - docs/semantic-justification.md:56-62
+    deps:
+      - model-candidate-matrix
+    escalate: true
+    kind: poc
+    milestone: M3
+    outlineRef: model-eval-poc
+    scenarioRefs:
+      - M3-1
+    slug: model-eval-poc
+    title: CPU accuracy/latency evaluation over all candidates
+    wave: 2
+  - assignment: "GOAL: Tracked cache schema and determinism prototype on temp copies
+      per ADR-007 (U2). Prototype on temp copies only; no committed files.
+      Consumes writer-first verdict from pylint-cache-assumptions. STEPS: Design
+      unified tracked schema: JSON array sorted by rule,justification,model with
+      indent 2 sort_keys True; entry with justification, rule, model as id rev
+      short12 prompt-vN, decision, files sorted POSIX plus spike-decided
+      version, prompt hash, last-seen; key (justification,rule,model) with
+      spike-chosen secrets-clean encoding (no bare hex 20 or more,
+      detect-secrets clean, collision-safe). Refresh via explicit command and
+      flag only (lockfile plus merge plus atomic, CI-guarded, DECISIONS_PATH
+      isolation). Prune: drop empty-files plus stale-model plus age policy if
+      defined. Prove deterministic-given-cache plus model: heuristic-rejected
+      identically False without model contact, accepted plus hit equals
+      persisted verdict, accepted plus miss plus absent equals heuristic True,
+      normal lint zero writes by hash and mtime assert. VERIFY: Temp-copy proof
+      shows zero normal-lint writes, prune drops stale and deleted entries,
+      schema passes detect-secrets. CONSTRAINTS: poc kind confined to item poc
+      folder and temp only."
+    citations:
+      - src/python_setup_lint/checkers/_semantic.py:37-52
+      - src/python_setup_lint/checkers/_semantic.py:125-189
+      - docs/semantic-justification.md:34-45
+      - .gitignore:243-244
+      - src/python_setup_lint/checkers/_base.py:142-158
+    deps:
+      - model-candidate-matrix
+      - pylint-cache-assumptions
+    escalate: true
+    kind: poc
+    milestone: M3
+    outlineRef: cache-design-spike
+    scenarioRefs:
+      - M3-2
+    slug: cache-design-spike
+    title: Tracked cache schema and determinism prototype
+    wave: 3
+  - assignment: "GOAL: Pin chosen runtime wheels and API contracts conditional on
+      eval recommendation. Conditional: no-go from model-eval-poc means
+      report-only skip with no file. STEPS: For chosen runtime only verify
+      py3.14 CPU wheels for linux,mac,win, import and device and offline
+      contract (CPU fallback, no network on hit), and custom-code pinning
+      (vendored revision, never unpinned trust_remote_code). Add
+      tests/assumptions/test_decision_runtime_contracts.py with no_external_api
+      marker and test_<api>_given_<condition>_then_<expected> names. No src
+      changes. VERIFY: New assumption tests pass offline or explicit blocker
+      recorded for iteration-3 epic; wheels and APIs pinned."
+    citations:
+      - src/python_setup_lint/checkers/_semantic.py:93-122
+      - src/python_setup_lint/checkers/_semantic.py:37-52
+      - pyproject.toml:28-31
+      - docs/semantic-justification.md:5-14
+    deps:
+      - model-eval-poc
+    kind: test-assumptions
+    milestone: M3
+    outlineRef: decision-runtime-pinning
+    scenarioRefs:
+      - M3-1
+    slug: decision-runtime-pinning
+    title: Pin chosen runtime wheels and API contracts
+    wave: 3
+  - assignment: "GOAL: Inventory CodingRules violations and own unified disjoint
+      file-ownership map on final HEAD containing M1 plus M2 merges (U3).
+      Read-only; zero repo writes. STEPS: Audit src plus scripts vs CodingRules
+      and AGENTS on final HEAD. Output in item report as engine-durable replan
+      input: rows with module, section, evidence file:line, category, est LoC
+      delta, owner, fix plus UNIFIED disjoint file-ownership map over ownership
+      universe (src plus scripts plus tests minus tests/data; owner enum
+      runner,checkers,setup-testing,semantic,root; stub follows .py; tests/data
+      plus config plus docs as root-owned group) plus symbol-exclusion column
+      (_base.py check_if_meaningful, _OPTIONAL_IMPORT_PATTERNS, _semantic.py
+      plus pyi) plus planned-path reservations for new backend and cache
+      modules. Single owner of map; test audit aligns via inter-dep. Read final
+      HEAD plus beartype report plus secrets-spike verdict. VERIFY: Every
+      universe file appears exactly once with exactly one owner, root-owned
+      group listed once, exclusions reference existing symbols, reservations
+      name only planned paths. Per ADR-008 no committed map; escape hatch only
+      if engine drops reports."
+    citations:
+      - CodingRules.md:90-107
+      - CodingRules.md:139-159
+      - CodingRules.md:230-306
+      - AGENTS.md:87-93
+      - AGENTS.md:121-139
+      - lint.baseline:1-1
+    deps:
+      - runner-format-contract
+      - baseline-violations-fix
+      - consolidate-integration-helpers-i2
+      - golden-contract-hardening
+    kind: fact-finder
+    milestone: M4
+    outlineRef: coding-rules-audit
+    scenarioRefs:
+      - M4-1
+      - M4-3
+    slug: coding-rules-audit-i2
+    title: Inventory CodingRules violations and ownership
+    wave: 3
+  - assignment: "GOAL: Inventory redundant tests and pinning limbs aligned to
+      unified map (U3). Read-only; zero repo writes. STEPS: Audit tests minus
+      tests/data root-owned. Output in item report: rows with module, behaviors,
+      duplicate-of, keep or merge or rewrite or remove, surviving coverage,
+      reason, owner plus LoC and runtime estimates plus per-limb pinning
+      inventory for CLI and exit, baseline and autofix, configs and scopes
+      (surviving test or blocking-debt flag) plus symbol exclusions
+      (test_semantic_check.py, test_semantic_threshold.py,
+      TestSuppressionRerankerPipeline) plus planned-path reservations for epic
+      conftest and runtime modules. Align owner column to coding-rules-audit
+      unified map via inter-dep; file ownership separate from symbol skips.
+      Iteration-3 replan consumes both reports plus HEAD re-glob validation.
+      VERIFY: Each module has disposition with surviving coverage,
+      repo-self-lint tests listed for removal, each material limb names pinning
+      test or blocking debt, owners match unified map."
+    citations:
+      - CodingRules.md:230-306
+      - CodingRules.md:139-159
+      - AGENTS.md:87-93
+      - pyproject.toml:49-49
+      - tests/checkers/test_semantic_check.py:1-7
+      - tests/checkers/test_semantic_threshold.py:19-25
+    deps:
+      - coding-rules-audit-i2
+      - consolidate-integration-helpers-i2
+      - golden-contract-hardening
+    kind: fact-finder
+    milestone: M4
+    outlineRef: test-debloat-audit
+    scenarioRefs:
+      - M4-2
+      - M4-3
+    slug: test-debloat-audit-i2
+    title: Inventory redundant tests and pinning limbs
+    wave: 4

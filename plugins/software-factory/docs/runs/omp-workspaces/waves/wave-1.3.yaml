@@ -1,0 +1,10 @@
+wave: 3
+iteration: 1
+status: complete
+mergedItems:
+  - spike-findings-recovery-v2
+  - target-green-ratchet-fix
+failedItems: []
+blockedItems: []
+summary: "Wave 3 completed. Merged items: spike-findings-recovery-v2,
+  target-green-ratchet-fix"

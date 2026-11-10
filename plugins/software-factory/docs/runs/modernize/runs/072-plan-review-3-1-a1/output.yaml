@@ -1,0 +1,148 @@
+status: changes_requested
+summary: "changes_requested: 7 fix (epic deps/handoff, integration 9/9 vs skips,
+  typed-register infeasible, rule-echo owner gap, kickoff tautology, M2 vague
+  scenarios, AGENTS split) + 1 human-awareness (model deferral) + 4 optional"
+suggestions:
+  - id: missing-epic-deps
+    disposition: fix
+    summary: M3 items lack epic completion deps and shift-report handoff contract
+    detail: golden-regen-hatch (M3) deps only [epic-kickoff-gate] but runs ONLY on
+      reviewed epic shift report; final-gate-validation deps only
+      [golden-regen-hatch] but Given all epic merges. Epics not in item graph;
+      milestone ordering alone does not define shift-report artifact
+      (location/format/reviewer) or red-cell routing. Add M2/epic fan-in deps
+      and define shift-report interface (where emitted, key-by-key diff review
+      record).
+    location:
+      file: tests/_golden.py
+      line: 9
+  - id: integration-count-mismatch
+    disposition: fix
+    summary: M3 asserts integration 9/9 but 2 tests skip without pre-commit;
+      AGENTS.md says 7 pass
+    detail: integration.py has 9 test methods but test_dry_run_hooks and
+      test_pre_commit_dry_run call ensure_precommit_or_skip; AGENTS.md:11
+      records 7 pass. Unconditional 9/9 fails where pre-commit missing. Fix gate
+      contract to 9 collected zero failures (9 passed, or 7 passed + 2 skipped)
+      with env pinned, and reconcile AGENTS.md count row in docs checklist.
+    location:
+      file: tests/integration.py
+      line: 197
+  - id: typed-register-infeasible
+    disposition: fix
+    summary: Checkers typed register() contradicts PyLinter circular-import constraint
+    detail: "All register(linter: PyLinter) omit @beartype with missing-beartype
+      disables citing circular import / forward-ref unresolvable (e.g.
+      no_try_import_checker.py:80, beartype_checker, structlog_checker). Adding
+      @beartype breaks import; dropping disable retriggers custom checker.
+      Requirement remove suppressions via typed register() unimplementable as
+      stated. Specify beartype-safe pattern (exempt register in checker,
+      Any/object annotation, or retain justified disables via ADR) or spike it."
+    location:
+      file: src/python_setup_lint/checkers/conformance/no_try_import_checker.py
+      line: 80
+  - id: rule-echo-owner-gap
+    disposition: fix
+    summary: Joined-rule rule-echo on-any-element has no owner; lives in excluded
+      check_if_meaningful
+    detail: _base.py:238 implements rule-echo as exact match primary==rule. Checkers
+      epic requires joined sorted rule strings with rule-echo rejects on any
+      element but forbids editing check_if_meaningful (semantic-owned). Semantic
+      epic allows heuristic-first gate + backend injection ONLY in that symbol,
+      not rule-echo logic change. No epic can implement. Assign rule-echo change
+      to semantic epic scope or drop joined-rule requirement and keep
+      single-code encoding.
+    location:
+      file: src/python_setup_lint/checkers/_base.py
+      line: 238
+  - id: kickoff-scenario-tautology
+    disposition: fix
+    summary: M1 kickoff scenario unfalsifiable via resolve-by-amendment escape hatch
+    detail: "Then all three epics have dispute-free ownership and proceed; any
+      dispute is resolved by amended assignment always passes. Missing concrete
+      assertions: validated map revision consumed, drift-list rows with
+      corrected evidence, epic ownership tables reference map, gate report with
+      zero unresolved disputes. Rewrite Then with artifact + count assertions."
+    location:
+      file: docs/adr/ADR-011.md
+      line: 1
+  - id: m2-scenarios-vague
+    disposition: fix
+    summary: M2 scenarios use vague predicates and or-shift-reported disjunctions
+    detail: "Runner: which suppression IDs/files, which gates/counts, who reviews
+      shift where. Checkers: which duplicated blocks eliminated (stream helper
+      coverage), semantic symbols zero-diff list, which corpora pinned (40 W9704
+      + 11 W9738) vs shift. Semantic: which contracts/tests prove
+      DecisionBackend/cache/refresh (FakeBackend tests, round-trip, read-only
+      hash assert), which docs sections state no-go, how no-model asserted
+      ([semantic] lacks sentence-transformers). Make each Then file/test/gate
+      falsifiable."
+    location:
+      file: src/python_setup_lint/runner/dispatch.py
+      line: 1
+  - id: agents-split-ambiguous
+    disposition: fix
+    summary: AGENTS.md section split lacks boundaries, order, and prerequisite
+      definitions
+    detail: ADR-011 M1-merge prerequisite and semantic ONLY on post-M1 HEAD
+      undefined (M1 merged? kickoff gate passed? which HEAD?). Runner owns
+      count/scope rows if assigned at re-glob, semantic owns pipeline section;
+      no heading/line boundaries (Quick Commands:9-11? Tool Scope:18-32?
+      pipeline section?) or merge order to avoid conflicts. Define sections by
+      headings plus order (e.g. runner first, semantic rebases) or assign whole
+      file to root.
+    location:
+      file: AGENTS.md
+      line: 9
+  - id: model-deferral-awareness
+    disposition: human-awareness
+    summary: ADR-009 defers headline model swap; iteration-3 ships infra only
+    detail: Intent requires replacing reranker with CPU-friendly decision model
+      (GLiDE-0.4B or smaller) + git cache. ADR-009 defers model to follow-up on
+      corpus repair + Fastino license verdict; iteration-3 delivers
+      DecisionBackend/cache/FakeBackend, no model. Justified by 215/0 eval no-go
+      but operator must approve close-up will not claim swap complete. Record
+      follow-up triggers (double-rated sample, license decision, CPU benchmark).
+    location:
+      file: docs/semantic-justification.md
+      line: 60
+  - id: u2-pseudo-spike
+    disposition: optional
+    summary: U2 spikeOutline lists deferred follow-up, not executable spike
+    detail: U2 spikeOutlines contains outside-iteration-3 follow-up, not an
+      itemOutline. Since ADR-009 resolves U2 by deferral, clear spikeOutlines or
+      cite ADR-009; reserve spikeOutlines for in-iteration spikes (U1/U3
+      pattern).
+    location:
+      file: docs/adr/ADR-009.md
+      line: 1
+  - id: docs-debt-owner-vague
+    disposition: optional
+    summary: TD3-A1 punts docs owner to re-glob without decision rule
+    detail: Assigned at re-glob (runner epic or root) leaves AGENTS.md counts/scope,
+      CHANGELOG v1.2.9 vs pyproject 1.2.10, README v1.2.5 pin, ADR staleness
+      without plan-time owner; kickoff gate duties do not list docs assignment.
+      Add rule (gate assigns from drift list) or fix owner to root.
+    location:
+      file: CHANGELOG.md
+      line: 3
+  - id: secrets-filter-syntax-risk
+    disposition: optional
+    summary: .secrets.baseline regex filter list-pattern form not pre-validated
+    detail: "Proposes {path: detect_secrets.filters.regex.should_exclude_file,
+      pattern: [^\\.factory/]}; regex.py exists but should_exclude_file
+      signature/list handling uncited. Item verify (clean 0, planted control 1)
+      mitigates, but syntax failure blocks M1 gate. Pre-validate schema or cite
+      detect-secrets version docs."
+    location:
+      file: .secrets.baseline
+      line: 2
+  - id: epic-sizing-unbudgeted
+    disposition: optional
+    summary: Epic sub-item expansion unbudgeted against maxItemsPerPlan 50
+    detail: 6 items + 3 epics with no per-epic item estimate; 15+ items per epic
+      would breach 50. Provide per-epic budgets or clarify epics run outside
+      this iteration cap.
+    location:
+      file: docs/adr/ADR-011.md
+      line: 1

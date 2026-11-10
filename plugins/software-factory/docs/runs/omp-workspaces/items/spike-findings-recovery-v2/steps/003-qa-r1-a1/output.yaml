@@ -1,0 +1,17 @@
+status: approved
+summary: "Docs-only salvage verified: 5/5 files present, probe+recommendations
+  in all 4 spikes, 4x M1 evidence+FollowUps mapping, oMP typo fixed, zero prod
+  lines, custom file-presence target passes, no test changes."
+suggestions:
+  - detail: "Line 92 (copied from source) names the deliverable as
+      items/spike-findings-recovery/RECOVERY.md, but this item's actual path is
+      items/spike-findings-recovery-v2/RECOVERY.md (correctly stated in the
+      placement note at line 5). Consider a one-phrase clarification, e.g.
+      append '(here: items/spike-findings-recovery-v2/RECOVERY.md)', or leave as
+      faithful source quote; non-blocking."
+    disposition: optional
+    id: recovery-stale-deliverable-path
+    location:
+      file: items/spike-findings-recovery-v2/RECOVERY.md
+      line: 92
+    summary: RECOVERY.md line 92 names non-v2 deliverable path

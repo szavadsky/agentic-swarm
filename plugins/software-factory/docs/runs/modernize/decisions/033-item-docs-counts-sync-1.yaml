@@ -1,0 +1,15 @@
+id: decision-docs-counts-sync-1794281887078
+context: item
+item: docs-counts-sync
+afterRecord: 004-qa-r1-a2
+decision: abandon
+timestamp: 2026-11-10T03:38:07.078Z
+rationale: "Red-test inapplicable by design: the bounded prod change (cli.py
+  'all 13 tools' -> 'all 14 tools') is already at HEAD (cli.py:348 verified), so
+  no red is possible; QA rejected 2/2 on red-test alone, fix rounds exhausted.
+  Dep consolidate-integration-helpers-v3 abandoned as superseded by merged i2,
+  leaving deps unmet. Remaining AGENTS.md counts (1290/15/7 stale vs 1357/7/9 at
+  HEAD) are owned by docs-adr-reconciliation-v2, sole docs writer."
+text: No replan. Counts drift covered by docs-adr-reconciliation-v2
+  exact-strings checklist (AGENTS Quick Commands recount at HEAD).
+reason: superseded

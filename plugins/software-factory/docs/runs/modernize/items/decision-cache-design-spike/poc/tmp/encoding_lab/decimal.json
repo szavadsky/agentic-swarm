@@ -1,0 +1,12 @@
+{
+  "decision": true,
+  "files": [
+    "src/app.py"
+  ],
+  "justification": "retry loop must not swallow keyboard interrupt",
+  "last_seen": "2026-11-08",
+  "model": "fake-backend rev test prompt-v1",
+  "prompt_hash": "88893737397278910049857236387336479879413594793538904991125363394996377615884",
+  "rule": "W9704",
+  "version": 1
+}

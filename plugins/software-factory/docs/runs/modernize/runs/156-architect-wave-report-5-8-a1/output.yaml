@@ -1,0 +1,19 @@
+context: wave
+decision: end-iteration
+rationale: "Wave 8: 0 merged (empty), 0 failed/blocked, tree clean (only engine
+  journal modified), gates green with zero regressions (lint/test IMPROVED).
+  Waves 1-8 total 0 merges; 3 consecutive no-progress waves. Stall is
+  orchestration, not code: stale I4 bases (tip-vs-HEAD reverts I2-I4 merges),
+  exit-127 unknown-gate 'tests', 50-item cap overflow (69 total; prunes
+  discarded at 52/51). Failed cache/stream already replanned as
+  storage-v2/refresh-v2 and stream-v2; blocked docs/semantic superseded by
+  docs-v2/doubles+pin-v2. Non-item 030 accepted debt. Further I5 waves cannot
+  fit cap or rebase stale branches."
+text: "Proceed to plan close-up as infra-only per ADR-009/ADR-020: must not
+  claim model swap complete. Record I6 backlog from debt: M1 contracts+spikes,
+  M2 harness/runner/source/legacy-v2 (ruff verify-only, already at HEAD
+  dispatch.py:312-336), M3 stream-v2 then storage-v2/refresh-v2, M4
+  pin-v2/wiring-v2 (default NO-GO without U1 verdict + Fastino + second-rater
+  approvals), M5 pyi/docs-v2/hatch-v2/gate-v2. I6 starts from fresh HEAD with
+  custom-command targets only, never gate tests; drop consolidate-v2/v3 and 13
+  stranded I4 pendings."

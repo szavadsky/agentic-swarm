@@ -1,0 +1,22 @@
+slug: secrets-triage-spike
+kind: fact-finder
+title: Triage detect-secrets factory-journal flags
+assignment: "GOAL: Triage detect-secrets flags on clean checkout to define M1
+  lint-green for that tool (U4, TD2-B3). No repo edits; report only. STEPS: On
+  clean checkout run declared lint gate and detect-secrets scan; capture every
+  flagged file plus sha256 plus baseline entry. Verdict: environmental (only
+  tracked factory runtime journals) vs real secret. If environmental: specify
+  exact exclusion mechanism (engine config vs gate command flag) plus evidence
+  hashes, and record operator and engine exclusion request as human-async; M1
+  dev acceptance does not wait on it. If real: specify redact and rotate
+  follow-up. VERIFY: Report lists all flagged files with hashes, verdict with
+  evidence, and exact next action; zero file writes. Feeds M1 acceptance."
+outlineRef: secrets-triage-spike
+milestone: M1
+wave: 2
+scenarioRefs:
+  - M1-1
+citations:
+  - .gitignore:243-244
+  - lint.baseline:1-1
+  - AGENTS.md:121-139

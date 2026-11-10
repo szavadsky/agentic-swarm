@@ -1,0 +1,16 @@
+id: rm-119c40e036
+chosen: Delete the zero-assert benchmark instead of fixing its threshold
+alternatives:
+  - Add an assert and keep it slow
+  - Convert to a documented script outside pytest
+why: It cannot fail, duplicates startup-overhead checks, and is slow-only; no
+  lint/check behavior is lost.
+status: open
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: test-debloat-audit
+  lastSeen: 2026-11-10T00:53:21.467Z
+createdAt: 2026-11-10T00:53:21.467Z
+updatedAt: 2026-11-10T00:53:21.467Z

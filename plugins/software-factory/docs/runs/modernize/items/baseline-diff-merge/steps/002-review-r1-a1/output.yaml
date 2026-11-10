@@ -1,0 +1,53 @@
+status: changes_requested
+summary: "tests-only merge meets budgets/gates but violates survivor-naming:
+  unnamed deletion + wrong provenance"
+suggestions:
+  - id: missing-survivor-fallback-tracking
+    disposition: fix
+    summary: TestFallbackTracking deleted with no named survivor; docstring
+      miscounts merged cases
+    detail: Base edge.py:241
+      TestFallbackTracking::test_fallback_tracking_given_flat_records_then_no_violations_for_unchanged
+      deleted with zero HEAD references (grep-confirmed).
+      TestFlatRecordRoundTrip docstring claims 'three overlapping' but names
+      only two (legacy + mixed_shape), omitting fallback_tracking. Worse,
+      survivor body is verbatim legacy 2-record shrink case (renamed, not
+      deleted); truly deleted stable 1-record duplicates are mixed_shape +
+      fallback_tracking. Assignment requires each merged case names survivor.
+      Amend docstring to map all three originals to survivor and clarify legacy
+      is the renamed survivor.
+    location:
+      file: tests/runner/test_baseline_diff.py
+      line: 456
+  - id: wrong-provenance-compare-sorted
+    disposition: fix
+    summary: Provenance comment misattributes TestCompareSortedEdgeCases source module
+    detail: Line 29 cites deleted
+      test_baseline_diff_edge.py::TestCompareSortedEdgeCases, but at base
+      ba01298 that class lived in test_baseline_diff_parsers.py:363
+      (grep-verified); edge.py never contained it. Misdirects serialized
+      shim-removal follow-up. Fix comment to cite parsers.py source.
+    location:
+      file: tests/runner/test_baseline_diff.py
+      line: 29
+  - id: duplicate-capture-one-header
+    disposition: optional
+    summary: Duplicate _capture_one section header from merge
+    detail: Identical '# ── _capture_one edge cases ──' headers at lines 296 and 299
+      with blank lines between; delete one.
+    location:
+      file: tests/runner/test_baseline_diff_parsers.py
+      line: 296
+  - id: perf-rename-mapping
+    disposition: optional
+    summary: Perf benchmark renames lack old-to-new mapping comment
+    detail: test_50k_line_baseline_compares_under_200ms ->
+      test_compare_sorted_given_50k_line_baseline_then_under_200ms and
+      test_diff_baseline_50k_end_to_end_under_1s ->
+      test_diff_baseline_given_50k_line_baseline_then_end_to_end_under_1s comply
+      with given/then convention but TestPerfBenchmark (moved from edge module)
+      has no provenance comment unlike other moved classes, breaking
+      greppability. Add predecessor note.
+    location:
+      file: tests/runner/test_baseline_diff.py
+      line: 170

@@ -1,0 +1,28 @@
+slug: spike-cache-key
+kind: fact-finder
+title: "Spike: prompt-cache keying + compaction/warming audit"
+assignment: "Fact-finder spike, no prod code. 1) Render the same agent prompt
+  twice via current transport and diff bytes/argv (system-prompt content,
+  overlay bytes, prompt path/argv). 2) Run bounded live resume probes with
+  cache-miss markers: same vs changed prompt path, model switch, TTL expiry;
+  record cacheRead/cacheWrite/totalTokens and cost deltas. 3) Audit which
+  compaction.* and providers.cache* knobs affect one-process-per-turn factory
+  sessions and what cold-resume detection signals exist. 4) Recommend
+  cold-resume detection plus compaction-vs-fresh-brief mechanism and
+  standby-warming viability for M7. Outputs: items/{item}/findings.md with
+  byte-diff tables and probe log, full draft for
+  plugins/software-factory/docs/spikes/omp-5-cache-keys.md, draft decision YAML
+  {status, decision, evidence, followUps} stating content-vs-path keying and
+  applicable knobs. Constraints: read-only on repo prod paths;
+  cwd=plugins/software-factory; throwaway profile/repos, unique temp dirs; no
+  transport stabilization (M2 characterizes, M7 implements). Acceptance: answers
+  M1 cache-key scenario."
+outlineRef: spike-cache-key
+milestone: m1-omp-de-risk
+wave: 1
+scenarioRefs:
+  - m1-omp-de-risk:scenario-3
+citations:
+  - docs/factory.v2.md:114-120
+  - plugins/software-factory/docs/OMP_ADAPTER.md:163-168
+  - plugins/software-factory/docs/ARCHITECTURE.md:40

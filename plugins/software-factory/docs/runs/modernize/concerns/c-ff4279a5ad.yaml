@@ -1,0 +1,25 @@
+id: c-ff4279a5ad
+kind: tech-debt
+summary: W9707 .pyi enforcement is blind, so 203 private stub declarations are unguarded
+detail: PyiUnderscoreChecker sets _is_pyi from node.file; pylint maps a .pyi
+  path to the .py module file, so no W9707 fires even though extra_tools.pyi
+  alone has 19 private symbols. Fix PYI-4 before bulk stub cleanup or the
+  cleanup has no regression guard.
+location:
+  file: src/python_setup_lint/checkers/conformance/pyi_underscore_checker.py
+  line: 40
+affects:
+  - coding-rules-audit
+  - pylint-pyi
+  - stub-cleanup
+severity: high
+status: routed
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: coding-rules-audit
+  lastSeen: 2026-11-09T23:33:30.977Z
+createdAt: 2026-11-09T23:33:30.977Z
+updatedAt: 2026-11-10T01:22:03.274Z
+disposition: optional

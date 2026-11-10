@@ -1,0 +1,22 @@
+slug: transport-byte-stability
+kind: test-only
+title: Transport byte-stability characterization tests
+assignment: "Test-only item, no prod code; edits confined to test paths. Add
+  test/harness/transport-stability.test.ts rendering the same agent prompt twice
+  and asserting byte-equality of system-prompt content and generated overlay
+  bytes, while pinning currently unstable argv parts (timestamped/randomized
+  prompt filename) as documented behavior with explicit assertions plus
+  comments. Tests must assume cwd=plugins/software-factory and resolve fixtures
+  repo-relatively; must pass on clean checkout and skip cleanly only if omp
+  binary is absent (no paid turns). Do not stabilize transport; stabilization
+  decision deferred to M7 after spike-cache-key. Acceptance: M2 scenario 3
+  (byte-equality where stable, instability pinned where not)."
+outlineRef: transport-byte-stability
+milestone: m2-measure-stabilize
+wave: 2
+scenarioRefs:
+  - m2-measure-stabilize:scenario-3
+citations:
+  - docs/factory.v2.md:114-120
+  - plugins/software-factory/docs/OMP_ADAPTER.md:163-168
+  - plugins/software-factory/src/cli/preflight.ts:365-393

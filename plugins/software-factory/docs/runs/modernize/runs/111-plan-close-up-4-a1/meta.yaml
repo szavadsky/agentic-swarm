@@ -1,0 +1,18 @@
+seq: 111
+name: plan-close-up-4
+attempt: 1
+agent: plan-close-up
+role: alt-workhorse
+models:
+  - opencode-go/muse-spark-1.3-contributor
+  - opencode-go/deepseek-v4.1-flash
+timeoutSec: 2700
+status: ok
+startedAt: 2026-11-09T08:29:44.763Z
+session: 01a1bf6d-7957-71f3-8028-dfa2e072b2ab
+endedAt: 2026-11-09T08:38:23.068Z
+usage:
+  inputTokens: 76365
+  outputTokens: 22239
+  costUsd: 0.014428
+traceRef: /home/slava/aiexp/python-setup.factory-wt/.factory-runtime/sessions/2026-11-09T08-29-45-175Z_01a1bf6d-7957-71f3-8028-dfa2e072b2ab.jsonl

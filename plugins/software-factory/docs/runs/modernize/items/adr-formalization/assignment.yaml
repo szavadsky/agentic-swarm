@@ -1,0 +1,26 @@
+slug: adr-formalization
+kind: no-behavior
+title: Formalize ADRs 009-012 and reconcile stale ADRs
+assignment: "Root-owned ADR lifecycle, docs only (no-behavior: tests materially
+  identical; QA verifies test-diff contains no semantic assertion weakens; peer
+  review; engine commits, agent zero git writes). Overwrite
+  docs/adr/ADR-009/010/011 problem-statement stubs with full
+  Context/Decision/Consequences matching plan (009 no-go-gated infra-first, 010
+  spike contracts + PYTEST_CURRENT_TEST-only dotted path with loader test, 011
+  validated-map decomposition with AGENTS split + single-writer table + shift
+  handoff); create docs/adr/ADR-012.md for register() missing-beartype exemption
+  (PyLinter circular import, no @beartype, mixin misc attempt-with-fallback);
+  add staleness notes to ADR-001/005/006; add locations cross-reference
+  (docs/adr/README.md pointer to design/ per CodingRules). Verify 12 ADR files
+  each carry Context/Decision/Consequences or explicit staleness note; rumdl
+  clean; no other docs touched (AGENTS.md/CHANGELOG/README rows per kickoff docs
+  assignment). Covers TD3-A1 root-owned rows."
+outlineRef: adr-formalization
+milestone: M1
+wave: 1
+scenarioRefs:
+  - "M1: Epic kickoff gated on validated artifacts"
+citations:
+  - docs/semantic-justification.md:5-14
+  - AGENTS.md:79-85
+  - pyproject.toml:28-31

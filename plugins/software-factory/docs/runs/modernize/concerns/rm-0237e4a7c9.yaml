@@ -1,0 +1,20 @@
+id: rm-0237e4a7c9
+chosen: Merged `_project_helpers.py` as the union of both sides and kept its
+  symlink-unlink guards
+alternatives:
+  - Keep only the parent version (drops item's consolidation/guard work)
+  - Keep only the item version (drops
+    collect_sample_findings/make_clean_consumer_project/write_project_file)
+why: The item's consolidation intent is a single owner for shared fixtures; the
+  parent independently added consumer-project/golden helpers. The symlink guards
+  prevent `install`-created symlinks from writing through to shipped configs.
+status: routed
+source:
+  record: 004-integrate-r1-a1
+  agent: developer
+  step: integrate
+  item: consolidate-integration-helpers-v2
+  lastSeen: 2026-11-09T22:46:16.556Z
+createdAt: 2026-11-09T22:46:16.556Z
+updatedAt: 2026-11-10T02:58:56.108Z
+disposition: optional

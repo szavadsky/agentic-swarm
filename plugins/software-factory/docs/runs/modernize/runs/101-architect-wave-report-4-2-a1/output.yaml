@@ -1,0 +1,11 @@
+context: wave
+decision: continue
+rationale: Wave 2 merged 3/3 reported items (shim-removal, backend-impl,
+  factories-split) with clean hygiene and zero regressions; lint/test fail->pass
+  IMPROVED, format/integration sustained green, all gates now pass. Backend
+  merge confirms cache-spike feasible path consumed without plan change.
+  checkers-stream-helper still running per Task Status gates only
+  checkers-legacy-dead-cleanup; runner-dispatch-split (shim dep met),
+  runner-factories-trim, and stale-disables are unblocked for wave 3.
+text: Proceed to next scheduled wave. Keep checkers-legacy-dead-cleanup pending
+  until checkers-stream-helper merges; no amendment needed.

@@ -1,0 +1,10 @@
+id: awareness-plan-2-material-behavior-definition
+ref: plan-2
+disposition: human-awareness
+question: Assumption defines golden SEMANTIC=0 + unit/CLI/baseline/configs as
+  material and reranker accept/reject as non-material, letting model swap change
+  W9704 verdicts while claiming preservation. Architect can proceed with spikes
+  but operator must see this redefinition of every material behavior. Record
+  informational review.
+status: open
+createdAt: 2026-11-08T10:25:18.499Z

@@ -1,0 +1,11 @@
+context: wave
+decision: continue
+rationale: Wave 3 complete with 0 merged / 0 failed / 0 blocked, clean tree and
+  zero regressions (format pass->pass, lint/test fail->pass IMPROVED,
+  integration pass->pass). No spike findings to integrate; TD5-B1/B2/I1/I2
+  unchanged. Two stranded running items (checkers-stream-helper,
+  decision-cache-impl) remain under retry guidance; pending wave 3+ items
+  unscheduled. Check-only _RuffFormatLintTool is infra hygiene only, no plan
+  impact.
+text: Proceed to next scheduled wave; let running stranded items finish
+  merge-verify under existing guidance before assessing I5 M3/M4 deps.

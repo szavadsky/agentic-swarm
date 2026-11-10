@@ -1,0 +1,39 @@
+{
+  "decision_variants": {
+    "canonical": {
+      "state": "Suppression comment: {justification}\nLint rule: {rule}\nCode context: {context}",
+      "instructions": "Does the suppression comment give a specific technical justification for suppressing the lint rule, rather than a placeholder, deferral, or brush-off?",
+      "true": "specific technical justification",
+      "false": "placeholder, deferral, brush-off, or restatement of the rule"
+    },
+    "rubric": {
+      "state": "Suppression comment: {justification}\nLint rule: {rule}\nCode context: {context}",
+      "instructions": "Classify the suppression comment. Answer true only if it states a specific technical reason for the suppression: a mechanism, runtime behavior, type-system limitation, compatibility constraint, or deliberate design decision. Answer false for placeholders such as TODO, deferrals such as 'fix later', brush-offs such as 'pre-existing', or comments that merely restate the lint rule.",
+      "true": "a specific technical reason (mechanism, runtime behavior, type-system limitation, compatibility constraint, or deliberate design decision)",
+      "false": "a placeholder, a deferral, a brush-off, or a restatement of the lint rule"
+    },
+    "compact": {
+      "state": "Comment: {justification}\nRule: {rule}\nContext: {context}",
+      "instructions": "Is the comment a specific technical justification for the suppression?",
+      "true": "yes, specific technical justification",
+      "false": "no, placeholder, deferral, brush-off, or rule restatement"
+    }
+  },
+  "reranker_variants": {
+    "current": {
+      "order": "justification_first",
+      "query": "production",
+      "prefix": ""
+    },
+    "query_first": {
+      "order": "query_first",
+      "query": "production",
+      "prefix": ""
+    },
+    "rubric_query": {
+      "order": "query_first",
+      "query": "production",
+      "prefix": "Does the comment give a specific technical justification for suppressing this lint rule, rather than a placeholder, deferral, or brush-off? "
+    }
+  }
+}

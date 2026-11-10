@@ -1,0 +1,15 @@
+context: wave
+decision: continue
+rationale: "Wave 7 merged golden-snapshot-wiring (M1 golden contract complete:
+  helpers + committed golden/counts + wired integration capture). Tree clean, no
+  untracked/conflict markers, all 4 gates baseline-identical with zero
+  regressions. M1 deps now satisfied for consolidate-v2; M2/M3 chain runnable.
+  No plan change; stale wave 3-5 originals remain superseded by v2 chain (same
+  outlineRef merges once)."
+text: "Next: run wave 8 consolidate-integration-helpers-v2 (deps wiring +
+  assumption-tests merged; keep golden+counts byte-identical; sole AGENTS.md
+  counts owner), then coding-rules-audit-v2, then test-debloat-audit-v2. Engine
+  should skip stale pending wave 3-5 originals blocked on superseded snapshot.
+  Baseline SIM102/W9704/R0914/C0208 + 6 tool-count failures stay scoped to M3
+  audits/iter2; ruff-format --check remains operator action. Do not touch
+  .factory records."

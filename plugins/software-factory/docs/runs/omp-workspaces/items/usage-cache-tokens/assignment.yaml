@@ -1,0 +1,28 @@
+slug: usage-cache-tokens
+kind: dev
+title: Cache-token usage plumbing end to end
+assignment: "Dev item, tests-first, prod budget ~180 lines. Extend
+  Usage/StepUsage types with optional
+  cacheReadTokens/cacheWriteTokens/totalTokens plus cost breakdown {costUsd?,
+  cost?: {input?, output?, cacheRead?, cacheWrite?}}; parse them in the NDJSON
+  usage parser tolerating absent keys; persist in step meta records; aggregate
+  with zero-defaults in budget/derive helpers; surface cache columns in status
+  output. All new fields optional; historical records without cache keys remain
+  valid (missing->0, no migration); schemas gain optional properties only.
+  Behavior tests (write failing first): fixture NDJSON turn carrying
+  usage.cacheRead/cacheWrite and cost sub-fields parses and persists; old-record
+  backward compat; budget sums include cache with zero-defaults; status shows
+  cache columns. Constraints: cwd=plugins/software-factory, fixtures
+  repo-relative; baseline red disk-space test accepted as-is, ratchet on no NEW
+  failures. Acceptance: M2 scenarios 1-2 (parse/persist/aggregate + backward
+  compat)."
+outlineRef: usage-cache-tokens
+milestone: m2-measure-stabilize
+wave: 2
+scenarioRefs:
+  - m2-measure-stabilize:scenario-1
+  - m2-measure-stabilize:scenario-2
+citations:
+  - docs/factory.v2.md:114-120
+  - plugins/software-factory/docs/OMP_ADAPTER.md:163-168
+  - plugins/software-factory/src/cli/status.ts:24-70

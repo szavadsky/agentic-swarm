@@ -1,0 +1,18 @@
+seq: 16
+name: pm-amend-1-1
+attempt: 1
+agent: pm
+role: alt-workhorse
+models:
+  - opencode-go/muse-spark-1.3-contributor
+  - opencode-go/deepseek-v4.1-flash
+timeoutSec: 2700
+status: ok
+startedAt: 2026-11-10T01:58:23.225Z
+session: 01a1c32d-8867-7723-95d2-878ad3ce217f
+endedAt: 2026-11-10T01:58:56.724Z
+usage:
+  inputTokens: 23942
+  outputTokens: 4443
+  costUsd: 0.003283
+traceRef: /home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/sessions/2026-11-10T01-58-23-591Z_01a1c32d-8867-7723-95d2-878ad3ce217f.jsonl

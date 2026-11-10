@@ -1,0 +1,273 @@
+{
+  "contract": {
+    "ci_fail": {
+      "evidence": "contract_ci_fail",
+      "exit_code": 2,
+      "variables": [
+        "CI",
+        "GITHUB_ACTIONS"
+      ],
+      "writes_nothing": true
+    },
+    "decisions_path": {
+      "evidence": "contract_decisions_path_test_only",
+      "honored_only_under": "PYTEST_CURRENT_TEST",
+      "production": "ignored; root is config.cwd",
+      "variable": "PYTHON_SETUP_LINT_DECISIONS_PATH"
+    },
+    "encoding": {
+      "bare_hex": "no contiguous run >= 20; groups cap at 8",
+      "collision_safe": "full 256-bit digest; 25000-key probe had zero collisions",
+      "detect_secrets": "clean against .secrets.baseline; full-hex negative control flagged",
+      "evidence": [
+        "contract_encoding_collision",
+        "contract_detect_secrets"
+      ],
+      "scheme": "dk1 + dot-separated lowercase base32 groups of 8 over the full SHA-256 digest"
+    },
+    "files": {
+      "cardinality": "one entry per (justification, rule, model) key",
+      "evidence": "contract_files_union_posix",
+      "format": "sorted unique POSIX relative paths",
+      "merge": "union on refresh"
+    },
+    "jobs": {
+      "evidence": "contract_jobs_guard",
+      "guard": "explicit --jobs and every resolved rcfile; jobs=0 auto-detect and jobs>1 fail loudly",
+      "head_rcfiles": "no explicit jobs override",
+      "required": 1
+    },
+    "memory_time": {
+      "ml_runtime": {
+        "onnxruntime": "absent",
+        "sentence_transformers": "absent",
+        "torch": "absent",
+        "transformers": "absent"
+      },
+      "model_eval_over_2048mb": {
+        "glide": 2845.5859375
+      },
+      "note": "torch/onnxruntime are absent from this dev environment. The sibling model-eval PoC (torch 2.10 CPU + sentence-transformers) measured peak RSS 556-2846 MB: minilm 556 MB, bekko-17m 624 MB, ettin-150m 991 MB, decider-nano 1464 MB, GLiDE 2846 MB. GLiDE exceeds the runner's 2048 MB RLIMIT_AS; decider-nano is close. The model-eval research also notes bekko's upstream ONNX browser model is ~29 MB versus 67 MB safetensors, so an ONNX path is plausible; however ONNX Runtime is expected to avoid torch's import/framework overhead and lower peak RSS only as an unverified hypothesis. I5 must benchmark the chosen model under RLIMIT_AS=2048 in the pylint subprocess and prefer ONNX only if it fits without raising the runner cap.",
+      "rlimit_as_mb": 2048,
+      "three_load_note": "The runner invokes pylint, pylint-pyi and pylint tests as three sequential subprocesses. A model backend is loaded lazily per process, so up to three model loads per lint run unless every suppression is a cache hit. Cache hits avoid model load entirely; refresh should populate the tracked cache before normal lint in CI.",
+      "three_pylint_loads": [
+        {
+          "command": [
+            "/home/slava/aiexp/python-setup.factory-wt/topic_modernize--decision-cache-design-spike/.venv/bin/python3",
+            "-m",
+            "pylint",
+            "--rcfile=/home/slava/aiexp/python-setup.factory-wt/topic_modernize--decision-cache-design-spike/config/.pylintrc",
+            "src/app.py"
+          ],
+          "elapsed_seconds": 1.328,
+          "exit_code": 0,
+          "memory_error": false,
+          "name": "pylint",
+          "peak_rss_mb": 80.08,
+          "rcfile": "/home/slava/aiexp/python-setup.factory-wt/topic_modernize--decision-cache-design-spike/config/.pylintrc",
+          "stderr_tail": [
+            "\tPage size (bytes): 4096",
+            "\tExit status: 0"
+          ],
+          "stdout_tail": [
+            "    }",
+            "}"
+          ],
+          "target": "src/app.py",
+          "time_reported_seconds": 1.32,
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/home/slava/aiexp/python-setup.factory-wt/topic_modernize--decision-cache-design-spike/.venv/bin/python3",
+            "-m",
+            "pylint",
+            "--rcfile=/home/slava/aiexp/python-setup.factory-wt/topic_modernize--decision-cache-design-spike/config/.pylintrc-pyi",
+            "src/app.pyi"
+          ],
+          "elapsed_seconds": 1.17,
+          "exit_code": 0,
+          "memory_error": false,
+          "name": "pylint-pyi",
+          "peak_rss_mb": 79.67,
+          "rcfile": "/home/slava/aiexp/python-setup.factory-wt/topic_modernize--decision-cache-design-spike/config/.pylintrc-pyi",
+          "stderr_tail": [
+            "\tPage size (bytes): 4096",
+            "\tExit status: 0"
+          ],
+          "stdout_tail": [
+            "--------------------------------------------------------------------",
+            "Your code has been rated at 10.00/10 (previous run: 10.00/10, +0.00)"
+          ],
+          "target": "src/app.pyi",
+          "time_reported_seconds": 1.16,
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/home/slava/aiexp/python-setup.factory-wt/topic_modernize--decision-cache-design-spike/.venv/bin/python3",
+            "-m",
+            "pylint",
+            "--rcfile=/home/slava/aiexp/python-setup.factory-wt/topic_modernize--decision-cache-design-spike/config/.pylintrc-tests",
+            "tests/test_app.py"
+          ],
+          "elapsed_seconds": 0.617,
+          "exit_code": 0,
+          "memory_error": false,
+          "name": "pylint tests",
+          "peak_rss_mb": 62.09,
+          "rcfile": "/home/slava/aiexp/python-setup.factory-wt/topic_modernize--decision-cache-design-spike/config/.pylintrc-tests",
+          "stderr_tail": [
+            "\tPage size (bytes): 4096",
+            "\tExit status: 0"
+          ],
+          "stdout_tail": [
+            "    }",
+            "}"
+          ],
+          "target": "tests/test_app.py",
+          "time_reported_seconds": 0.61,
+          "timed_out": false
+        }
+      ]
+    },
+    "path_scoping": {
+      "behavior": "scoped sweep and prune; entries for unscanned files retained; missing unscanned files retained",
+      "evidence": [
+        "contract_path_scoping",
+        "contract_scoped_stale_mixed"
+      ],
+      "stale_mixed_entry": "retained while it has an unscanned share; full refresh prunes it"
+    },
+    "placement": {
+      "decisions_depends_on": [],
+      "edges": [
+        "checkers -> decisions",
+        "runner -> decisions"
+      ],
+      "evidence": "contract_tach_placement",
+      "module": "python_setup_lint/decisions/_decision_cache.py (+ .pyi)",
+      "tach": "legal placement exit 0; decisions -> checkers negative control exit 1"
+    },
+    "project_root": {
+      "evidence": [
+        "contract_root_guard",
+        "contract_checker_root_hint"
+      ],
+      "guard": "resolved cache path must stay within cwd; symlink, parent and absolute escapes rejected",
+      "value": "config.cwd"
+    },
+    "prune": {
+      "automatic_on_refresh": true,
+      "evidence": "contract_prune",
+      "missing_files": true,
+      "no_prune_flag": true,
+      "stale_model": true,
+      "stale_prompt_hash": true
+    },
+    "refresh": {
+      "atomic_replace": true,
+      "evidence": [
+        "contract_determinism",
+        "contract_atomic_failure",
+        "contract_refresh_mode_env"
+      ],
+      "invocation": "lint --refresh-decisions [--path ...]",
+      "lock": "fcntl.flock on .python-setup-decisions.lock",
+      "merge": "load + union files + prune + atomic replace",
+      "writer": "checker call path in refresh mode only"
+    },
+    "schema": {
+      "entry_fields": [
+        "decision",
+        "files",
+        "justification",
+        "key",
+        "last_seen",
+        "model",
+        "prompt_hash",
+        "rule",
+        "version"
+      ],
+      "evidence": "contract_schema_sort",
+      "indent": 2,
+      "sort_key": [
+        "rule",
+        "justification",
+        "model"
+      ],
+      "sort_keys": true,
+      "top_level": "JSON array",
+      "trailing_newline": true
+    }
+  },
+  "evidence_files": {
+    "memory_time": "out/memory_time.json",
+    "proofs": "out/proofs.json",
+    "report": "README.md"
+  },
+  "recommendations": [
+    "Implement the cache in the new decisions module with the ADR-018 tach edges; keep _decision_backend.py in checkers.",
+    "Thread RunnerConfig.refresh_decisions and the --refresh-decisions flag; fail before writes under CI/GITHUB_ACTIONS and when effective pylint jobs != 1.",
+    "Use the checker call path as the refresh writer, gated by an internal refresh env flag; normal lint must only read the tracked cache.",
+    "Serialize with dotted base32, full SHA-256, sort_keys/indent=2, and a runtime no-bare-hex guard; redact long hex runs in justifications and fail loudly on hex file paths.",
+    "Rewrite tests/assumptions/test_pylint_cache_semantics.py deliberately for the tracked schema; add tmp round-trip, zero-write hash, double-run determinism, prune, scoping, CI/jobs/isolation and secrets tests.",
+    "Add .python-setup-decisions.lock to ignore rules or document it; provide a non-POSIX lock fallback.",
+    "In I5, benchmark the chosen model under RLIMIT_AS=2048 in the pylint subprocess (ONNX vs torch) before shipping a backend; GLiDE's 2846 MB torch peak exceeds the runner cap."
+  ],
+  "required_proofs": {
+    "proof_1_heuristic_rejected_without_backend": {
+      "backend_calls": 0,
+      "cache_entries": 0,
+      "decision": false,
+      "no_backend_decision": false,
+      "ok": true,
+      "seconds": 0.0252,
+      "source": "heuristic-reject"
+    },
+    "proof_2_accepted_hit_equals_persisted": {
+      "backend_called": false,
+      "hit_decision": false,
+      "ok": true,
+      "persisted": false,
+      "seconds": 0.0198,
+      "source": "cache-hit"
+    },
+    "proof_3_accepted_miss_absent_heuristic_true": {
+      "cache_absent": true,
+      "decision": true,
+      "ok": true,
+      "seconds": 0.0011,
+      "source": "heuristic-accept"
+    },
+    "proof_4_normal_lint_zero_writes_by_hash": {
+      "absent_cache_still_absent": true,
+      "backend_calls": 1,
+      "files_before": [
+        ".python-setup-decisions.json",
+        ".python-setup-decisions.lock",
+        "src"
+      ],
+      "mtime_ns": 1794185910136955476,
+      "ok": true,
+      "seconds": 0.0183,
+      "sha256": "dd5f82803c0cbcd3e93413f24bc7a75e96691e13f27d2deafbed7f5db06a0fcd"
+    }
+  },
+  "verdict": "feasible",
+  "writer_verdict": {
+    "consumed": "path-free key -> per-entry files; jobs==1 single writer; non-atomic write -> refresh-only atomic replace",
+    "markers": [
+      "Writer identity",
+      "Timing",
+      "scoping",
+      "Sweep implication",
+      "Concurrency",
+      "Crash safety"
+    ],
+    "ok": true,
+    "path": "tests/assumptions/test_pylint_cache_semantics.py",
+    "seconds": 0.0001,
+    "sha256": "795da78900ffba8e5cfa2456d3e261d738660d6c52ec3f8ada2423eab5b0d0cd"
+  }
+}

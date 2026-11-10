@@ -1,0 +1,2 @@
+Your previous output failed deterministic validation with these errors (fix ONLY these; do not re-render the full plan, do not invent new items):
+- Unknown item kind "simple" for item "secrets-baseline-exclusion"

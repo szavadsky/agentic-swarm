@@ -1,0 +1,7 @@
+id: q-concern-rm-bc510f4b77
+ref: test-debloat-audit
+disposition: human-awareness
+question: Lint-gate execution decision; audit was read-only and verified via
+  collect-only plus direct reads. No interaction.
+status: open
+createdAt: 2026-11-10T02:58:56.268Z

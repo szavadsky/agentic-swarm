@@ -1,0 +1,22 @@
+id: rm-4b7a20ef15
+chosen: Fresh brief for an already-cold long-history architect resume; compact
+  only while warm
+alternatives:
+  - Compact immediately before every cold resume
+  - Always resume uncached and never compact
+  - Persistent RPC holder that compacts in place
+why: Compaction after expiry re-reads the full history in the summarizer and
+  then writes the compacted prefix, costing more than a direct cold resume for a
+  single turn. A fresh session hydrated from records is bounded, deterministic,
+  and still reuses the system-prompt prefix (measured 4,224 cached tokens across
+  sessions). Warm compaction at a wave boundary avoids the double full-history
+  payment.
+status: open
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: spike-cache-key
+  lastSeen: 2026-11-10T00:16:23.859Z
+createdAt: 2026-11-10T00:16:23.859Z
+updatedAt: 2026-11-10T00:16:23.859Z

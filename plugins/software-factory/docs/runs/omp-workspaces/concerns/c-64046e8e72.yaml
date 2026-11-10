@@ -1,0 +1,24 @@
+id: c-64046e8e72
+kind: risk
+summary: "Cwd-scoped sources: `.omp/rules` and `.claude/CLAUDE.md` are
+  launch-directory-only"
+detail: "Probe: starting omp in `repo/sub` loaded root+sub `AGENTS.md` and root
+  `.omp/RULES.md`, but not root `.omp/rules` or root `.claude/CLAUDE.md`.
+  Factory roles currently launch from worktree roots; changing role cwd to a
+  package subdir would silently drop those sources."
+location:
+  file: plugins/software-factory/src/harness/omp/harness.ts
+  line: 367
+affects:
+  - "19"
+severity: low
+status: routed
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: spike-repo-rules
+  lastSeen: 2026-11-09T23:58:38.970Z
+createdAt: 2026-11-09T23:58:38.970Z
+updatedAt: 2026-11-10T01:01:32.465Z
+disposition: optional

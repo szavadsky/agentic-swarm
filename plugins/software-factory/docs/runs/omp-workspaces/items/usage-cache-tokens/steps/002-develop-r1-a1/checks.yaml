@@ -1,0 +1,175 @@
+checks:
+  - id: gates
+    status: pass
+    message: Gates passed (2 gates)
+    details:
+      - id: typecheck
+        command: bun --cwd=plugins/software-factory run typecheck
+        status: pass
+        durationMs: 5515
+        details: $ tsc --noEmit
+      - id: test
+        command: bun --cwd=plugins/software-factory test
+        status: pass
+        durationMs: 442924
+        details: >-
+          bun test v1.4.4 (38afee6c8)
+
+          Disk space check passed (threshold 2048 MB):
+            worktreeRoot (/tmp/factory-test-repo-j21vE7.factory-wt): 4473 MB free
+            .factory-runtime/tmp (/tmp/factory-test-repo-j21vE7.factory-wt/.factory-runtime/tmp): 4473 MB free
+            repoRoot (/tmp/factory-test-repo-j21vE7): 4473 MB free
+            tmpdir (/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp): 79645 MB free
+            /tmp (/tmp): 4473 MB free
+          ================================================================
+
+          Task: status-test-task [ACTIVE]
+
+          Kind: unclassified | Iteration: 1 | Wave: 1
+
+          Worktree: (none - main checkout)
+
+          Config path: /tmp/factory-test-repo-NfG3KA/.factory/pipeline.yaml
+
+          Budget spent: $0.0000
+            tokens: input=0 output=0 cacheRead=0 cacheWrite=0 total=0
+          ----------------------------------------------------------------
+
+          Waves & Items:
+            Wave 1:
+          Concerns: open 0 | dismissed 0 | routed 0 | resolved 0
+
+          ----------------------------------------------------------------
+
+          Blocking Questions:
+            (none)
+          ----------------------------------------------------------------
+
+          Digest Questions:
+            (none)
+          ================================================================
+
+
+
+          test/config-worktree-layering.test.ts:
+
+          [factory preflight] Preflight failed with 1 error(s):
+            - Pipeline config loading failed: Invalid pipeline configuration:
+          /limits/maxIterations: must be integer ({"type":"integer"})
+
+
+          test/disk-space.test.ts:
+
+          52 |       probe,
+
+          53 |     });
+
+          54 | 
+
+          55 |     expect(res.ok).toBe(false);
+
+          56 |     expect(res.minFreeDiskMb).toBe(2048);
+
+          57 |     expect(res.failingPaths.length).toBe(1);
+                                                   ^
+          error: expect(received).toBe(expected)
+
+
+          Expected: 1
+
+          Received: 2
+
+                at <anonymous> (/home/slava/aiexp/agentic-swarm.factory-wt/topic_omp-workspaces--usage-cache-tokens/plugins/software-factory/test/disk-space.test.ts:57:37)
+          (fail) Disk-space guards (§limits.minFreeDiskMb) > checkDiskSpace
+          verifies worktreeRoot, .factory-runtime/tmp, repoRoot, and tmpdir
+          [25.82ms]
+
+
+          test/cli/cli.test.ts:
+
+          [factory lock] Stale run lock for task "stale-lock-task" (PID 9999999
+          on host Slava-Yoga) taken over by PID 92026
+
+          [factory lock] Stale run lock for task "competing-takeover-task" (PID
+          9999999 on host Slava-Yoga) taken over by PID 92026
+
+          [factory lock] Stale run lock for task "journal-worktree-task" (PID
+          9999999 on host Slava-Yoga) taken over by PID 92026
+
+           674 pass
+           2 skip
+           1 fail
+           3821 expect() calls
+          Ran 677 tests across 104 files. [219.07s]
+        failingTests:
+          - Disk-space guards (§limits.minFreeDiskMb).checkDiskSpace verifies
+            worktreeRoot, .factory-runtime/tmp, repoRoot, and tmpdir
+  - id: target-green
+    status: pass
+    message: "target-green passed: selected tests passed"
+    details:
+      command: bun --cwd=plugins/software-factory test
+        test/harness/ndjson-usage-cache.test.ts
+        test/engine/usage-cache-tokens.test.ts
+        test/contracts/usage-cache-schema.test.ts test/sessions.test.ts
+        --reporter=junit
+        --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-green-1794279133245-wj4le3xm9ll.xml
+      junitCaseCount: 16
+      junitCaseIds:
+        - PersistentAgent sessions (§4, §6.1).serializes concurrent turn() calls
+          in strict FIFO order
+        - PersistentAgent sessions (§4, §6.1).threads session resume ID across
+          turns after first success
+        - PersistentAgent sessions (§4, §6.1).rehydrates once via rehydrate()
+          when session is lost
+        - PersistentAgent sessions (§4, §6.1).clears sessionId on sessionLost
+          even without a rehydrate callback
+        - PersistentAgent sessions (§4, §6.1).uses the per-turn label override
+          with fallback to labelBase
+        - PersistentAgent sessions (§4, §6.1).accumulates cache tokens and cost
+          breakdown across turns
+        - OmpNdjsonParser cache-token usage.parses cache read/write tokens,
+          total tokens and cost breakdown
+        - OmpNdjsonParser cache-token usage.zero-defaults cache fields when a
+          historical turn omits them
+        - OmpNdjsonParser cache-token usage.forwards cache fields to the onUsage
+          callback
+        - Usage cache-token schemas.step-meta accepts cache tokens and cost
+          breakdown and keeps legacy usage valid
+        - Usage cache-token schemas.state spend breakdowns accept cache token
+          columns
+        - "Cache-token usage: persistence, aggregation and status.persists cache
+          tokens and cost breakdown into step meta records"
+        - "Cache-token usage: persistence, aggregation and status.keeps
+          historical records without cache keys and aggregates zero defaults"
+        - "Cache-token usage: persistence, aggregation and status.sums cache
+          tokens with zero defaults across mixed old and new records"
+        - "Cache-token usage: persistence, aggregation and status.BudgetTracker
+          sums cache tokens with zero defaults"
+        - "Cache-token usage: persistence, aggregation and status.status output
+          surfaces cache token columns"
+      junitTruncated: false
+      collected: true
+      collectionErrors: []
+  - id: size
+    status: pass
+    message: "size passed: 242/300 production lines changed"
+    details:
+      changedLines:
+        added: 174
+        deleted: 68
+        total: 242
+        files:
+          - plugins/software-factory/config/schemas/state.schema.json
+          - plugins/software-factory/config/schemas/step-meta.schema.json
+          - plugins/software-factory/src/cli/status.ts
+          - plugins/software-factory/src/core/artifacts.ts
+          - plugins/software-factory/src/core/budget.ts
+          - plugins/software-factory/src/core/derive/task.ts
+          - plugins/software-factory/src/core/flows/step-runner.ts
+          - plugins/software-factory/src/core/sessions.ts
+          - plugins/software-factory/src/core/shutdown.ts
+          - plugins/software-factory/src/harness/omp/ndjson.ts
+          - plugins/software-factory/src/harness/types.ts
+          - plugins/software-factory/src/core/usage.ts
+      limit: 300

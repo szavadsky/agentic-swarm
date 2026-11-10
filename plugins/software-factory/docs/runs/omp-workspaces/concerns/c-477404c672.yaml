@@ -1,0 +1,23 @@
+id: c-477404c672
+kind: risk
+summary: Preflight's omp overlay validation is a no-op
+detail: "`execFileSync(ompBinary, [\"--config\", tempOverlay, \"--version\"])`
+  returns exit 0 with bogus keys/enum values (verified by probe), so item 19.2's
+  \"config overlay keys / isolation backend usable\" check does not exist
+  today."
+location:
+  file: plugins/software-factory/src/cli/preflight.ts
+  line: 364
+affects:
+  - "19.1"
+  - "19.2"
+severity: high
+status: routed
+source:
+  record: 004-context-pack-a1
+  agent: fact-finder
+  step: context-pack
+  lastSeen: 2026-11-09T23:21:29.949Z
+createdAt: 2026-11-09T23:21:29.949Z
+updatedAt: 2026-11-10T01:01:32.465Z
+disposition: architect

@@ -1,0 +1,20 @@
+id: rm-8363899156
+chosen: Pin the prompt filename instability with explicit shape and difference
+  assertions plus comments, instead of stabilizing transport.
+alternatives:
+  - "Stabilize prompt paths in production code: out of scope for this test-only
+    item."
+  - "Only compare normalized argv: would hide the unstable element instead of
+    pinning it."
+why: Assignment defers stabilization to M7 after spike-cache-key; a
+  failing-explicit assertion documents the currently unstable behavior and will
+  point at the decision when transport is stabilized.
+status: open
+source:
+  record: 001-develop-r1-a1
+  agent: developer
+  step: develop
+  item: transport-byte-stability
+  lastSeen: 2026-11-10T02:28:29.083Z
+createdAt: 2026-11-10T02:28:29.083Z
+updatedAt: 2026-11-10T02:28:29.083Z

@@ -1,0 +1,23 @@
+slug: semantic-threshold-consolidation
+kind: test-only
+title: Consolidate semantic heuristic tables
+assignment: "Tests-only (test_semantic_check.py + test_semantic_threshold.py
+  ONLY; FORBIDDEN suppression/bare-except files, src, docs, tests/data).
+  Red-test-exempt. Recount lists at HEAD (30/33 + 50 + 35 per pack, verify
+  actual overlaps) then merge into one deduped parametrized table (outcomes
+  pinned, no behavior change); leave reranker-specific classes untouched;
+  modules <=500 with no suppressions; fix stale 504-vs-506 header. M4 preserves
+  this deduped table (handoff via deps; M4 rewrites reranker classes only, must
+  not discard dedup). Verify: tests only; parametrized IDs + outcomes identical
+  in report; no new failures vs M1 table; golden hash-equal."
+outlineRef: semantic-threshold-consolidation
+milestone: M2
+wave: 1
+scenarioRefs:
+  - "M2: Threshold deduped plus guards pinned"
+citations:
+  - tests/checkers/test_semantic_check.py:1-7
+  - tests/checkers/test_semantic_check.py:159-257
+  - tests/checkers/test_semantic_threshold.py:19-25
+  - CodingRules.md:139-159
+  - CodingRules.md:230-306

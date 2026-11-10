@@ -1,0 +1,26 @@
+id: c-5baa85c563
+kind: assumption
+summary: Target-green ratchet applies only to JUnit-capable test-runner gates;
+  non-JUnit stays strict
+detail: "src/core/checks/runner.ts:666-735 implements baseline ratchet only when
+  ratchetEligible (baseline entry + isTestRunnerGate + junitArg). Non-JUnit gate
+  targets stay strict-fail on red baseline (fail-closed), unlike runGates
+  coarse-pass. Verified in code and test/checks/target-green-ratchet.test.ts (5
+  tests: ratchet pass, new-failure fail, green pass, no-baseline fail,
+  old-baseline re-derive). Documented behavior; iteration-2 planning must not
+  assume all gate targets ratchet."
+location:
+  file: plugins/software-factory/src/core/checks/runner.ts
+  line: 670
+affects:
+  - m1-omp-de-risk
+severity: low
+status: open
+source:
+  record: 024-plan-close-up-1-a1
+  agent: plan-close-up
+  step: plan-close-up-1
+  iteration: 1
+  lastSeen: 2026-11-10T06:32:04.799Z
+createdAt: 2026-11-10T06:32:04.799Z
+updatedAt: 2026-11-10T06:32:04.799Z

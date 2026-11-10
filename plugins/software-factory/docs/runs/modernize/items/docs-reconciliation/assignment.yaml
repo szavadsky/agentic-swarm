@@ -1,0 +1,42 @@
+slug: docs-reconciliation
+kind: no-behavior
+title: Reconcile docs counts and versions
+assignment: "Sole AGENTS.md + CHANGELOG.md + README.md + config/ty.toml +
+  docs/adr/ADR-013.md + ADR-015.md writer in I4 (after all M2 counts-affecting
+  items + M3 registry/behavior items + M4 backend/cache/tests); FORBIDDEN
+  semantic-justification/custom-checks/troubleshooting/ADR-014/016
+  (semantic-tests), tach.toml (cache-impl), tests/data, src except ty.toml
+  comment. AGENTS counts from rerun actuals (verify --collect-only + TOOLS==14 +
+  9-collected contract) + Tool Scope ruff-format row + pipeline subsection
+  (DecisionBackend, no reranker) + testing strategy; CHANGELOG user-visible
+  (extra contents, new/deprecated vars incl full
+  PYTHON_SETUP_LINT_DECISION_MODEL name, cache file, no-go note + version
+  1.2.10); README v1.2.10 pin; ty.toml remove sentence_transformers; ADRs full
+  Context/Decision/Consequences. Verify: docs-only diff; exact-strings grep per
+  M5 checklist (incl ADR-013..016 Context/Decision/Consequences); rumdl clean;
+  no new failures vs M1 table."
+outlineRef: docs-reconciliation
+milestone: M5
+wave: 6
+deps:
+  - baseline-diff-merge
+  - checkers-factories-split
+  - checkers-legacy-dead-cleanup
+  - checkers-semantic-guards
+  - checkers-stream-helper
+  - decision-backend-impl
+  - decision-cache-impl
+  - never-test-linting-prune
+  - runner-compat-shim-removal
+  - runner-dispatch-split
+  - runner-factories-trim
+  - semantic-tests-rewrite
+  - semantic-threshold-consolidation
+  - stale-disables-portability-cleanup
+scenarioRefs:
+  - "M5: Iteration closes with evidence"
+citations:
+  - AGENTS.md:79-85
+  - AGENTS.md:87-93
+  - AGENTS.md:121-139
+  - pyproject.toml:28-31

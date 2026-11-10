@@ -1,0 +1,62 @@
+status: ok
+summary: Implemented the runGates baseline ratchet in checkTargetGreen's
+  gate-target branch (plugins/software-factory/src/core/checks/runner.ts). When
+  a test-runner gate with a JUnit arg fails and ctx.baseline has an entry for
+  that gate, the target runs with JUnit output, re-derives old-format baseline
+  failing tests via rederiveBaselineFailingTests (same parity as runGates), and
+  PASSES when every failing case/collection error is baseline-known. Otherwise
+  it FAILS naming the new failing test ids, exit code, command, and raw output.
+  No baseline, empty baseline, green gates, and non-JUnit gates keep the
+  previous behavior. Target spec and all project gates are green.
+target:
+  selectors:
+    - test/checks/target-green-ratchet.test.ts
+  expectRed:
+    - target-green baseline ratchet for gate targets.gate target that only fails
+      baseline-listed tests passes via ratchet
+    - target-green baseline ratchet for gate targets.gate target with a new
+      failing test outside baseline fails naming the new test
+    - target-green baseline ratchet for gate targets.old-format baseline
+      re-derives failing tests at the baseline commit before ratcheting
+evidence:
+  - "bun test test/checks/target-green-ratchet.test.ts — 5 pass, 0 fail, 20
+    expect calls: baseline-only failure passes via ratchet; new failure outside
+    baseline fails naming test_mod.test_two; fully green gate passes with 'Gate
+    test passed (green)' and no ratchet mention; no/empty baseline still fails
+    with exit-code evidence; old-format baseline re-derives test_mod.test_one at
+    the baseline commit and persists it before ratcheting."
+  - bun run typecheck — exit 0.
+  - bun test test/checks — 55 pass, 0 fail across 6 files.
+  - bun test test/engine/merge-gate-evidence.test.ts — 5 pass, 0 fail.
+  - TMPDIR=/tmp bun test (full plugin suite, 692 tests / 107 files) — 690 pass,
+    2 skip, 0 fail, exit code 0.
+  - "Environment note: with the harness default
+    TMPDIR=<repo>/.factory-runtime/tmp, test/disk-space.test.ts's probe
+    classifies both the child tmp path and os.tmpdir() as '.factory-runtime/tmp'
+    (2 failing paths vs expected 1); it passes 7/7 with TMPDIR=/tmp, proving the
+    failure is a pre-existing harness-environment artifact unrelated to this
+    change."
+  - git diff --stat — only src/core/checks/runner.ts changed (+78/-10); target
+    spec was already committed by the test-first step.
+remarkable:
+  - chosen: Reuse ctx.baseline plus the exported
+      isTestRunnerGate/rederiveBaselineFailingTests helpers from gates.ts,
+      mirroring runGates exactly; only wrap the gate command with the JUnit arg
+      when a baseline entry makes ratcheting possible.
+    why: Keeps the gate-target ratchet behaviorally identical to the gates check
+      (including old-format baseline re-derivation), avoids duplicating baseline
+      loading/parsing, and preserves the exact previous command when no baseline
+      exists.
+    alternatives:
+      - Read gates-baseline.yaml directly inside checkTargetGreen (would diverge
+        from runGates callers that already load the artifact and would change
+        no-baseline behavior)
+      - Extract a shared ratchet-evaluation helper used by both runGates and
+        target-green (larger refactor with higher regression risk for this fix)
+      - Let any red non-JUnit gate whose baseline status is fail pass without
+        per-test evidence (not actionable and not covered by the assignment
+        tests)
+notes: The ratchet branch uses parsed JUnit case ids only for evidence;
+  summaries deliberately use gate.command (not the temp JUnit-wrapped command)
+  so fingerprints stay deterministic. Passing details include the parsed JUnit
+  case ids for checks.yaml diagnosability.

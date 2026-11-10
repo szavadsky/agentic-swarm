@@ -1,0 +1,26 @@
+id: c-a816c72150
+kind: risk
+summary: golden-regen-hatch report is absent from HEAD
+detail: No branch, commit, or report for golden-regen-hatch exists (`git branch
+  -a`, `git log --all --grep`); only ADR-011:68 names the item. Golden
+  byte-identity is independently proven by test_setup_new_and_lint (multiset +
+  byte-identical replay), so no regen is needed, but the dependency artifact
+  required by the assignment is not present and must be supplied or explicitly
+  attested before close-out.
+location:
+  file: docs/adr/ADR-011.md
+  line: 68
+affects:
+  - final-gate-validation
+  - golden-regen-hatch
+severity: medium
+status: routed
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: final-gate-validation
+  lastSeen: 2026-11-10T00:27:58.391Z
+createdAt: 2026-11-10T00:27:58.391Z
+updatedAt: 2026-11-10T02:23:05.623Z
+disposition: optional

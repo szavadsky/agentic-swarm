@@ -1,0 +1,11 @@
+iteration: 1
+status: next-iteration
+summary: "Iteration 1 partially delivered: M1 golden safety net confirmed
+  functional (golden+counts committed, oracle/tool coverage, drift/regen
+  helpers, 8 assumption tests pinned). M2 helper consolidation unmerged (no
+  tests/_project_helpers.py; integration.py 661 lines with suppression vs <=500)
+  and M3 audits lack committed evidence; these plus the audit-flagged M1
+  interface drift fixes carry to iteration 2. Semantic epic not started by
+  design (spawns on narrowed protocol once M2/M3 land). Task intent (rule
+  enforcement, debloat, model swap) remains future scope. No operator blocker:
+  remaining work is planned, sequenced, and resourced for next iteration."

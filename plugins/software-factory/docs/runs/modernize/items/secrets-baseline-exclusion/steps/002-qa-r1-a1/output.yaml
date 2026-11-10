@@ -1,0 +1,29 @@
+status: approved
+summary: "approved: no-behavior exclusion verified, zero test diff, full scan
+  exit 0, controls replicate"
+suggestions:
+  - detail: Developer's notes pin HEAD b4f45b2 for M1 citation, but that commit's
+      .secrets.baseline lacks the should_exclude_file entry (verified via git
+      show) and it is not an ancestor of HEAD (sibling of landed 882fac0 under
+      parent 3f2f546). M1 acceptance (mechanism + pinned HEAD) should cite
+      landed commit 882fac0 or final HEAD whose baseline contains the filter. No
+      code change needed; correct the citation in the M1 report.
+    disposition: optional
+    id: m1-head-citation-nit
+    summary: M1 report cites session HEAD lacking filter; cite landed commit instead
+  - detail: "Pattern ^\\.factory/ matches bare repo-relative paths (git ls-files
+      form used by the gate: dispatch.py builds `git ls-files -z | xargs -0
+      detect-secrets-hook --baseline ...`), verified: full tracked-file scan
+      exit 0 in 7.3s, bare .factory control exit 0. Explicit ./-prefixed args
+      (./.factory/file) do NOT match and still exit 1. No action required:
+      assignment mandates this exact operator-approved form and the gate's
+      invocation form is bare. Only if invocation forms diversify
+      (pre-commit/manual ./ args), consider a prefix-tolerant form in a future
+      item."
+    disposition: optional
+    id: pattern-prefix-sensitivity-note
+    location:
+      file: .secrets.baseline
+      line: 44
+    summary: Pattern matches bare gate paths only; ./ prefix bypasses (gate form
+      verified, no action)

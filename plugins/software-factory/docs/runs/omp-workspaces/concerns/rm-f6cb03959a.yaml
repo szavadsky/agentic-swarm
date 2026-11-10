@@ -1,0 +1,18 @@
+id: rm-f6cb03959a
+chosen: Iteration-1 spikes+measurement only, epics deferred to iteration-2 via
+  replanAfter
+alternatives:
+  - Launch epics in parallel with spikes
+  - Guess backend/provider/cache contracts into dev stories
+why: All major subsystems hinge on unvalidated omp mechanics; epic child
+  worktrees branch at launch and cannot see later-merged spike findings, so
+  launching epics now would bake guesses.
+status: open
+source:
+  record: 006-plan-review-1-1-a1
+  agent: plan-reviewer
+  step: plan-review-1-1
+  iteration: 1
+  lastSeen: 2026-11-09T23:40:10.522Z
+createdAt: 2026-11-09T23:40:10.522Z
+updatedAt: 2026-11-09T23:40:10.522Z

@@ -1,0 +1,87 @@
+context: wave
+decision: amend
+rationale: "Wave 5: 0 merged, 1 blocked (semantic-tests-rewrite), 0 regressions,
+  4/4 gates green, tree clean. Waves 1-5 total 0 merges: stall is
+  harness/merge-path (exit-127 unknown-gate 'tests', refresh_blockers export
+  drift, stale-base reversions) plus 52-item overflow, not code defects. Failed
+  cache-impl already replanned as storage-v2+refresh-wiring-v2 in plan-5.1;
+  running stream-helper under fresh-HEAD escalation 027; blocked semantic
+  rewrite superseded by doubles-dedup+pin-v2. 13 stranded I4 pendings superseded
+  by I5/ADR-023; 2 gaps remain (ruff check-only debt, orphaned legacy cleanup).
+  Prune to fit 50 and fill gaps; no spike findings to integrate (no merges)."
+text: "PM: next wave runs I5 dep-free M1/M2 plus 2 new outlines only; never
+  schedule removed slugs. Target discipline: never {gate:tests}; use {command:uv
+  run pytest -q,customTarget:true} or narrow file command. Stream-helper stays
+  running per 027 owned-12-only fresh HEAD. Cache v2 chain
+  (storage-v2-refresh-wiring-v2-pin-v2-wiring-v2-docs-v2-hatch-v2-gate-v2)
+  unchanged. Ready consolidate v2/v3 duplicates: run one (prefer v3), cancel
+  other via scheduling, not removal."
+outlines:
+  - slug: ruff-format-check-only-fix
+    kind: story
+    title: Make ruff format ToolSpec check-only
+    description: "Owns runner/_tool_specs.py ruff-format entry + runner/dispatch.py
+      _RuffFormatLintTool.build_command/_build ONLY +
+      tests/runner/test_lint_runner*.py command-shape test ONLY. FORBIDDEN docs,
+      baseline, tests/data, other tools. Makes `uv run lint` check-only:
+      build_command appends --check, _build adds --config (phase-1a-only per
+      rm-717ccdc143); proves zero file mutation via before/after hash; reports
+      AGENTS snippet for docs-v2 without editing docs. Declare target custom
+      command, never gate tests. Verify: format/lint/test/integration green,
+      lint mutates zero files, golden hash-equal."
+    milestoneId: M2
+    deps: []
+    prodBudgetHint: 20
+  - slug: checkers-legacy-dead-cleanup-v2
+    kind: story
+    title: Rename legacy scan and remove dead compat (v2 rewired)
+    description: "Owns conformance/suppression_justification_checker.py _legacy_scan
+      rename + trivial _legacy_* + astroid 3.x branch + unscoped register ONLY
+      (+ .pyi rows + tests/checkers/test_suppression_justification_checker.py
+      legacy block ONLY). FORBIDDEN _base/_semantic/_decision_backend,
+      _source_stream.py (stream-helper running), tests/data, baseline, docs.
+      Preserves W9704 byte-identical (SEMANTIC=0). Supersedes stranded
+      checkers-legacy-dead-cleanup (I4 base). Declare target custom command,
+      never gate tests. Verify: grep zero _legacy_* and 3.x branch, pytest plus
+      integration no new failures, lint 14/14, golden hash-equal."
+    milestoneId: M2
+    deps: []
+    prodBudgetHint: 40
+removeItemSlugs:
+  - cache-design-spike
+  - checkers-legacy-dead-cleanup
+  - coding-rules-audit
+  - coding-rules-audit-v2
+  - docs-counts-sync
+  - docs-reconciliation
+  - epic-kickoff-gate
+  - epic-shift-report-collection
+  - final-gate-validation
+  - golden-regen-hatch
+  - semantic-tests-rewrite
+  - test-debloat-audit
+  - test-debloat-audit-v2
+planDelta: "Remove 13 stranded I4 pendings superseded by I5 plan-5.1/ADR-023:
+  cache-design-spike by cache-contracts+storage-v2; coding-rules-audit/v2 by
+  harness-dedup+source-simplifications (pack 4.4 already measured);
+  docs-counts-sync+docs-reconciliation by docs-v2;
+  epic-kickoff-gate+epic-shift-report-collection dropped per ADR-023 no-epics;
+  final-gate-validation by gate-v2; golden-regen-hatch by hatch-v2;
+  semantic-tests-rewrite (blocked) by doubles-dedup+pin-v2;
+  test-debloat-audit/v2 by runner-helpers-dedup; legacy old by legacy-v2. Add
+  ruff-format-check-only-fix (operator backlog debt) and legacy-v2 (orphaned M3
+  gap). Net -11 (52 to 41) within 50. Next wave: dep-free M1/M2 plus 2 new
+  only."
+concernResolution:
+  action: resolve
+  id: c-89f3cb5a77
+  note: "Replan complete: storage-v2 plus refresh-wiring-v2 in plan-5.1 with
+    export-consistency protocol; execution pending."
+remarkable:
+  - alternatives:
+      - Continue with 52 items and obsolete audits/epics/docs
+      - End-iteration with 0 merges despite green gates
+    chosen: Prune 13 superseded I4 pendings and add 2 gap outlines (ruff check-only,
+      legacy-v2)
+    why: Fits 50-item cap, unblocks wave gate without losing M3 legacy scope, keeps
+      v2 cache/model/pyi/docs chain intact while gates stay green

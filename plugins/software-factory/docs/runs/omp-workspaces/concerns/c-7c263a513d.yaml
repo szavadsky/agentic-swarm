@@ -1,0 +1,22 @@
+id: c-7c263a513d
+kind: tech-debt
+summary: spike-omp-isolation polish notes deferred to iteration-2 M3/M4 planning
+detail: "Spike accepted with its five optional polish notes as iteration-2 debt:
+  soften probe 26 (in-base explicit paths ARE listed when OMP_WORKTREE_DIR
+  aligned), soften probe 18 (coercion unproven via config get), add exact
+  preflight round-trip command, archive retention-overturn transcripts,
+  reconcile mock-provider negative with sibling spikes."
+affects:
+  - "19.1"
+  - "19.2"
+severity: medium
+status: routed
+source:
+  record: 010-consult-spike-omp-isolation-2-a1
+  agent: architect
+  step: consult-spike-omp-isolation-2
+  iteration: 1
+  lastSeen: 2026-11-10T01:42:25.466Z
+createdAt: 2026-11-10T01:42:25.466Z
+updatedAt: 2026-11-10T01:53:41.429Z
+disposition: optional

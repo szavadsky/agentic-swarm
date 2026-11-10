@@ -1,0 +1,27 @@
+context: item
+decision: retry-with-guidance
+persist: true
+rationale: "Both develop attempts rejected solely on scope creep, not on the
+  assumption tests themselves: diff leaked into M1-owned files (src
+  stub/coverage.py SIM102 fix, src runner/cli.py locals, 6 tests/runner 13->14
+  migrations) plus a .secrets.baseline side-effect write. The item's contract is
+  one new file, tests/assumptions/test_pylint_cache_semantics.py, zero src
+  changes. Reverting the out-of-scope files unblocks merge; no split/escalate
+  needed."
+text: "Retry granted. Fix in this order: (1) Revert to HEAD exactly:
+  .secrets.baseline, src/python_setup_lint/checkers/stub/coverage.py,
+  src/python_setup_lint/runner/cli.py (`git diff --` on each must be empty).
+  NEVER run bare `uv run lint` or any detect-secrets scan that rewrites
+  .secrets.baseline (run only `uv run pytest
+  tests/assumptions/test_pylint_cache_semantics.py -q`). (2) Revert all
+  tests/runner/** edits (factories, extra_tools, lint_runner, stats, t3, fakes)
+  — owned by runner-format-contract, parallel race. (3) Diff must contain
+  exactly ONE file: tests/assumptions/test_pylint_cache_semantics.py
+  (writer-first: writer + timing + --path scoping verdict, no_external_api
+  marker, test_<api>_given_<condition>_then_<expected> names, offline, no src
+  imports beyond reading). (4) Verify: `git diff --stat` shows only that file;
+  new tests pass; touched file ruff/format clean. Pre-existing SIM102/R0914/6
+  tool-count failures persist by design — do not fix, do not baseline. Record
+  the writer/timing verdict (crash-safe lock vs runner post-merge vs
+  jobs=1/sidecars-if--j) plus --path sweep scope in the report for
+  cache-design-spike."

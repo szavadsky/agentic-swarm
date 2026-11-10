@@ -1,0 +1,25 @@
+id: c-317a4e9b8b
+kind: risk
+summary: Usage parser discards cache-read/write tokens needed for item 20 defaults
+detail: "`ndjson.ts:84-98` sums only input/output/cost; `StepUsage` has no cache
+  fields; `budget.ts` aggregates only the three. omp NDJSON carries
+  `cacheRead`/`cacheWrite` (fixtures and spike doc), so measurement is blocked
+  until the types/parser/records are extended."
+location:
+  file: plugins/software-factory/src/harness/omp/ndjson.ts
+  line: 84
+affects:
+  - 20-cost
+  - 20a
+  - 20b
+  - 20d
+severity: high
+status: routed
+source:
+  record: 004-context-pack-a1
+  agent: fact-finder
+  step: context-pack
+  lastSeen: 2026-11-09T23:21:29.949Z
+createdAt: 2026-11-09T23:21:29.949Z
+updatedAt: 2026-11-09T23:40:10.572Z
+disposition: optional

@@ -1,0 +1,18 @@
+seq: 113
+name: context-pack-5
+attempt: 1
+agent: fact-finder
+role: workhorse
+models:
+  - opencode-go/deepseek-v4.1-flash
+  - opencode-go/muse-spark-1.3-contributor
+timeoutSec: 3600
+status: ok
+startedAt: 2026-11-09T08:38:52.928Z
+session: 01a1bf75-d676-742e-ab41-c27e015c6303
+endedAt: 2026-11-09T08:53:47.404Z
+usage:
+  inputTokens: 588178
+  outputTokens: 72757
+  costUsd: 0.169971
+traceRef: /home/slava/aiexp/python-setup.factory-wt/.factory-runtime/sessions/2026-11-09T08-38-53-302Z_01a1bf75-d676-742e-ab41-c27e015c6303.jsonl

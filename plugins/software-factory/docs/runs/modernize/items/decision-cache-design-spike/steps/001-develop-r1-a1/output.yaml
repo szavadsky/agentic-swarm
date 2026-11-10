@@ -1,0 +1,95 @@
+status: ok
+summary: "PoC complete; verdict=feasible. Prototyped the ADR-017 tracked
+  decision cache and ADR-018 placement entirely in the item's poc folder on tmp
+  copies, with zero production changes. Validated: project root=config.cwd with
+  symlink/parent/absolute/mismatched-root-hint guards; test-only
+  PYTHON_SETUP_LINT_DECISIONS_PATH honored only under PYTEST_CURRENT_TEST;
+  tracked JSON array sorted by (rule, justification, model) with
+  indent=2/sort_keys/trailing newline; dotted-base32 full-SHA-256 key encoding
+  (no bare hex>=20, detect-secrets clean with a full-hex negative control, 25k
+  collision-free probe); union-merged sorted POSIX files; automatic
+  missing/stale-model/stale-prompt prune; --path scoping that retains unscanned
+  entries; lock+merge+atomic replace refresh CLI with CI-fail and jobs==1
+  guards; ADR-018 decisions-module placement accepted by tach while the reverse
+  edge is rejected. All four required proofs pass: heuristic-rejected=False
+  without backend, accepted+hit==persisted, accepted+miss+absent==heuristic
+  True, and normal-lint zero writes by SHA/mtime/file-set. Consumed the
+  writer-first verdict (21 assumption tests pass) and measured 3 real pylint
+  loads under RLIMIT_AS=2048 MB. Machine-readable contract is
+  poc/out/verdict.json; full report is poc/README.md."
+target:
+  command: uv run python
+    .factory/tasks/modernize/items/decision-cache-design-spike/poc/run_proofs.py
+  customTarget: true
+evidence:
+  - "ADR-017/018 PoC verdict=feasible: 26/26 checks pass, 0 failures
+    (poc/out/proofs.json, poc/out/verdict.json)."
+  - "Required proof 1 heuristic-rejected False without backend: decision=False,
+    no-backend decision=False, backend_calls=0, cache_entries=0."
+  - "Required proof 2 accepted+hit==persisted: persisted=False,
+    hit_decision=False, backend_called=False, source=cache-hit."
+  - "Required proof 3 accepted+miss+absent==heuristic True: decision=True,
+    source=heuristic-accept, cache_absent=True."
+  - "Required proof 4 normal-lint zero writes: seeded cache SHA-256, mtime and
+    directory file set unchanged through a hit plus a backend-computed miss;
+    absent cache stayed absent."
+  - "Schema/encoding: sorted (rule, justification, model), indent=2, sort_keys,
+    trailing newline; dotted-base32 full SHA-256 with 25,000-key collision
+    probe; repo .secrets.baseline scan 0 findings, full-hex negative control
+    flagged; no bare hex run >=20."
+  - "Refresh contract: lock + merge + atomic replace; held-lock contention fails
+    without writes; double refresh byte-identical; CI and GITHUB_ACTIONS exit 2
+    with no writes; jobs=0, jobs>1 and rcfile jobs=2 fail noisily;
+    DECISIONS_PATH honored only under PYTEST_CURRENT_TEST; --path scoping
+    retains unscanned and missing unscanned entries."
+  - "ADR-018 placement: tach check legal tree exit 0 (decisions depends_on=[],
+    checkers/runner -> decisions); decisions->checkers negative control exit 1."
+  - "Writer-first verdict consumed: uv run pytest
+    tests/assumptions/test_pylint_cache_semantics.py -q -> 21 passed."
+  - "Regression evidence: uv run pytest -q -> 1378 passed, 4 skipped, 18
+    deselected in 32.45s; targeted semantic tests 158 passed, 4 skipped, 3
+    deselected."
+  - "Memory/time: 3 real pylint loads under RLIMIT_AS=2048 MB -> exit 0, peak
+    RSS 80.08/79.67/62.09 MB, total 3.115 s; torch/onnxruntime absent, sibling
+    model-eval torch peaks 556-2846 MB with GLiDE over the 2048 MB cap; ONNX
+    benchmark deferred to I5."
+  - "Zero production changes: git status/diff show only the untracked poc/
+    folder; src/tests/config/docs/scripts/pyproject clean; ruff on the 7 PoC
+    modules: all checks passed."
+concerns:
+  - The .python-setup-decisions.lock artifact persists after refresh and fcntl
+    locking is POSIX-only; production needs an ignore rule and a non-POSIX
+    fallback.
+  - "last_seen is a UTC date: same-day double runs are byte-identical,
+    cross-midnight runs differ. The refresh clock should be injectable in
+    tests."
+  - Long hex runs in justifications are redacted to <hex:N>; the key is derived
+    from unredacted text so uniqueness is preserved, but stored/displayed
+    justification text differs. A file path containing 20+ hex chars fails
+    refresh loudly.
+  - The cache key is (justification, rule, model); code_context is model input
+    only, so two files can share one verdict and the last sorted observation
+    wins for conflicting decisions.
+  - The PoC jobs guard reads cwd/config rcfiles; production must feed it the
+    three runner-resolved rcfiles, including pyproject overrides and extra-tool
+    args.
+  - ONNX-vs-torch memory was not measured because torch/onnxruntime are absent;
+    model-eval torch peaks range 556-2846 MB and GLiDE exceeds the 2048 MB
+    runner cap. I5 must benchmark the chosen backend inside the pylint
+    subprocess.
+  - Refresh rewrites even when all verdicts are cache hits, and an unsupported
+    schema version fails loudly; a version-migration/prune-old policy is needed
+    before a version bump.
+  - Normal lint is read-only but can still call the backend on cache misses, so
+    up to three lazy model loads may occur per lint run; refresh should
+    prepopulate the cache in CI.
+notes: "Artifacts: poc/README.md (full feasibility report and tradeoffs),
+  poc/out/verdict.json (machine-readable contract), poc/out/proofs.json,
+  poc/out/memory_time.json, poc/out/encoding_lab.json; tmp fixtures under
+  poc/tmp. Reproduce with: uv run python
+  .factory/tasks/modernize/items/decision-cache-design-spike/poc/run_proofs.py
+  && uv run python
+  .factory/tasks/modernize/items/decision-cache-design-spike/poc/measure_memory\
+  _time.py && uv run python
+  .factory/tasks/modernize/items/decision-cache-design-spike/poc/make_verdict.p\
+  y. No production files were modified."

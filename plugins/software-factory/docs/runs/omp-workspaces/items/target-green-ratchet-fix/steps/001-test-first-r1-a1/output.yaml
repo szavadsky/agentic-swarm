@@ -1,0 +1,44 @@
+status: ok
+summary: "Added a behavior-first spec
+  (plugins/software-factory/test/checks/target-green-ratchet.test.ts) covering
+  baseline-ratchet semantics for target-green gate targets using tmp git repos
+  and a fake JUnit test runner. On current production code the ratchet tests are
+  red with assertion failures: unchanged baseline failures still fail the check,
+  and new failing tests are not named. Guard tests prove the fully-green path
+  and absent/empty-baseline path keep current behavior. No production files were
+  touched."
+target:
+  selectors:
+    - test/checks/target-green-ratchet.test.ts
+  expectRed:
+    - target-green baseline ratchet for gate targets.gate target that only fails
+      baseline-listed tests passes via ratchet
+    - target-green baseline ratchet for gate targets.gate target with a new
+      failing test outside baseline fails naming the new test
+    - target-green baseline ratchet for gate targets.old-format baseline
+      re-derives failing tests at the baseline commit before ratcheting
+evidence:
+  - Created only
+    plugins/software-factory/test/checks/target-green-ratchet.test.ts; git
+    status shows a single untracked test file and no production changes.
+  - bun test test/checks/target-green-ratchet.test.ts
+    (cwd=plugins/software-factory) -> 2 pass, 3 fail; all three failures are
+    assertion failures on missing ratchet behavior, not import/compile errors.
+  - bun test test/checks (cwd=plugins/software-factory) -> 52 pass, 3 fail; the
+    only failures are the three new expected-red ratchet cases, and all
+    pre-existing checks tests remain green.
+  - bun run typecheck (cwd=plugins/software-factory) -> exit 0.
+  - "JUnit reporter verification: parseJunit over the reporter output yields
+    fail ids exactly matching the declared expectRed ids (baseline-only failure,
+    new failure naming, and old-format baseline re-derivation); the green and
+    no-baseline guard tests yield pass."
+  - "Fixture coverage: tmp-repo fake runner emits JUnit testcase ids
+    test_mod.test_one/test_mod.test_two; tests 1 and 2 exercise baseline
+    subset/new-failure ratcheting, test 3 exercises fully-green with a baseline
+    present, test 4 exercises absent and empty baseline, test 5 exercises
+    re-derivation at the committed baseline before ratcheting."
+notes: Selectors are declared relative to the effective test cwd
+  plugins/software-factory. expectRed uses the exact JUnit ids emitted by bun's
+  junit reporter (classname.testcase) so engine node-id normalization matches.
+  The extra old-format re-derivation test is intentionally declared red to lock
+  in JUnit re-derivation parity with runGates.

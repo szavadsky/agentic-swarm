@@ -1,0 +1,17 @@
+id: decision-spike-repo-rules-1794275099370
+context: item
+item: spike-repo-rules
+afterRecord: 002-review-r1-a1
+decision: retry-with-guidance
+timestamp: 2026-11-10T01:44:59.370Z
+rationale: "Same environmental TS2688 as sibling spikes: merge child worktree
+  lacks node_modules, mergeItem runs gates without infra.setup. Review approved
+  the spike (M1 scenario-4 answered). Fix is mechanical bun install in childWt,
+  not research rework."
+text: "RETRY (environmental failure, not spike failure): before the redrive
+  merge, run `cd <childWt>/plugins/software-factory && bun install` where
+  childWt = worktreeRoot/topic_omp-workspaces--spike-repo-rules. Then re-drive
+  the merge unchanged. Do NOT re-run probes, do NOT modify findings, do NOT
+  touch prod code. If typecheck still fails after bun install, yield failed with
+  full gate output."
+persist: true

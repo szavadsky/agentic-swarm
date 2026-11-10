@@ -1,0 +1,19 @@
+context: wave
+decision: continue
+rationale: "Wave 1 merged both items cleanly: tree clean, format PASS (+4 new
+  files formatted), integration 9/9 PASS, pytest 1300->1308 passed with only the
+  same 6 pre-existing 13-vs-14 failures, lint strictly improved (both W9704
+  justified). The detect-secrets PASS->FAIL is engine-owned .factory journal
+  noise outside item control and must not be touched (engine-managed records).
+  Pre-existing SIM102/R0914/C0208 and stale tool-count tests remain scoped to M3
+  audits + iteration-2 epics per plan; fixing them now would preempt
+  evidence-based scoping. Probe + assumption reports flow to dependents via
+  existing deps; no plan change needed."
+text: "Next wave: run golden-findings-snapshot consuming the probe's
+  normalization spec and verdict; invoke the bounded src allowance (baseline
+  relativize/sort, parser ordering, <=40 lines, determinism-only) ONLY if the
+  probe proved test-side insufficient, else test-side only. Acceptance is
+  baseline-relative (6 pre-existing failures persist; no new failures). Do not
+  touch .factory orchestration records. consolidate-integration-helpers stays
+  sequenced after golden; it remains sole AGENTS.md counts owner (counts now
+  include +8 assumption/probe tests)."

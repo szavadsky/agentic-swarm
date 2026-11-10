@@ -1,0 +1,23 @@
+slug: secrets-baseline-exclusion
+kind: no-behavior
+title: Add .factory/ exclusion to .secrets.baseline
+assignment: "Land operator-approved .factory/ exclusion (no-behavior:
+  config-only change with no prod behavior change; tests materially identical;
+  QA verifies test-diff contains no semantic assertion weakens; peer review;
+  engine commits, agent zero git writes). First pre-validate filters_used schema
+  against installed detect-secrets version (should_exclude_file signature;
+  list-pattern vs scalar form) and use version-correct form. Then insert
+  ^\\.factory/ entry into .secrets.baseline filters_used (after ~line 40),
+  keeping journals committed. No other baseline edits. Verify on clean checkout:
+  full git-ls-files detect-secrets scan exits 0 while planted control secret
+  still exits 1 (reviewer-replicated procedure). Keep residual-risk caveat in
+  report (write-time redaction + periodic unfiltered audits). M1 acceptance
+  cites mechanism + pinned HEAD, not finding counts. Covers TD3-I2."
+outlineRef: secrets-baseline-exclusion
+milestone: M1
+wave: 1
+scenarioRefs:
+  - "M1: Secrets gate green by mechanism"
+citations:
+  - lint.baseline:1-1
+  - AGENTS.md:121-139

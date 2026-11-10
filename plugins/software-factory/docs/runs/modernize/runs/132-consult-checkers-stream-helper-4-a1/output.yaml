@@ -1,0 +1,25 @@
+context: item
+decision: retry-with-guidance
+persist: true
+rationale: "Exit 127 is an invalid target name declared in developer output
+  (gate 'tests' plural; infra gates are format/lint/test/test-integration), not
+  a code defect. Proof: checkers-factories-split had the same engine input
+  Target 'tests' but merged by declaring a valid custom-command target. Three
+  prior merge-verify overrides did not change the developer record's declared
+  target, so 127 recurred. Owned content is correct and QA drift is fixed;
+  tip-vs-tip 'reversions' are a stale-base artifact that git 3-way merge
+  resolves by keeping HEAD's M2 versions for untouched files."
+target:
+  gate: test
+text: 'Fix the declared target in your step output; zero file changes needed.
+  (1) Set output target to {"gate": "test"} (singular) exactly — NEVER "tests".
+  Alternative proven pattern: {"command": "uv run pytest -q", "customTarget":
+  true}. (2) Keep owned content as-is: NEW _source_stream.py/.pyi, bare_except +
+  suppression (+.pyi, first-# code_context preserved), stub/checker.py,
+  stub/coverage.py/.pyi, test_source_stream.py, astroid contract call,
+  stub_coverage call, TestCodeContextDerivation block; keep integrate resolution
+  (union with TestAnyElementCodeEcho, reranker block dropped). Do NOT manually
+  revert non-owned files. (3) Verify: no conflict markers; uv run pytest
+  tests/checkers/test_suppression_justification_checker.py -q; uv run pytest -q;
+  uv run lint; uv run pytest tests/integration.py -q (9 passed). If 127 recurs,
+  capture full command + stderr.'

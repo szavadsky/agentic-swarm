@@ -1,0 +1,11 @@
+id: awareness-plan-3-model-deferral-awareness
+ref: plan-3
+disposition: human-awareness
+question: Intent requires replacing reranker with CPU-friendly decision model
+  (GLiDE-0.4B or smaller) + git cache. ADR-009 defers model to follow-up on
+  corpus repair + Fastino license verdict; iteration-3 delivers
+  DecisionBackend/cache/FakeBackend, no model. Justified by 215/0 eval no-go but
+  operator must approve close-up will not claim swap complete. Record follow-up
+  triggers (double-rated sample, license decision, CPU benchmark).
+status: open
+createdAt: 2026-11-08T19:21:19.299Z

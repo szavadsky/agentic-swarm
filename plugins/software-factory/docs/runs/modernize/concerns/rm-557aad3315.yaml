@@ -1,0 +1,17 @@
+id: rm-557aad3315
+chosen: Consolidate checker unittest helpers into a tests/checkers harness
+  instead of changing the shipped testing.py surface
+alternatives:
+  - Extend python_setup_lint.testing with more helpers
+  - Leave 13/10/8 aliases in place
+why: Keeps the shipped public API stable and localizes test-only aliases;
+  shipped helpers can still be imported directly.
+status: open
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: test-debloat-audit
+  lastSeen: 2026-11-10T00:53:21.467Z
+createdAt: 2026-11-10T00:53:21.467Z
+updatedAt: 2026-11-10T00:53:21.467Z

@@ -1,0 +1,18 @@
+id: rm-5357235190
+chosen: Use the integration test's two fresh-copy collections as the double-run proof
+alternatives:
+  - Invoke write_golden_files twice into the working tree and compare file hashes
+  - Compare only the committed artifacts' hashes without re-collecting findings
+why: tests/integration.py::test_setup_new_and_lint already compares two
+  independent collect_findings runs byte-for-byte against both the golden and
+  its tool counts (SHA-256 based), so the double-run requirement is exercised
+  without touching the regen path or working tree.
+status: open
+source:
+  record: 001-develop-r1-a1
+  agent: developer
+  step: develop
+  item: golden-regen-hatch
+  lastSeen: 2026-11-10T00:36:23.179Z
+createdAt: 2026-11-10T00:36:23.179Z
+updatedAt: 2026-11-10T00:36:23.179Z

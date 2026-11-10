@@ -1,0 +1,19 @@
+{
+  "model": "decider-nano",
+  "repo": "tasksource/tasksource-decider-nano",
+  "revision": "2c7c01ffe5aba74dd15968cf38b0fdc83d1f3810",
+  "params": 149015041,
+  "weights_bytes": 298044578,
+  "device": "cpu",
+  "dtype": "float32",
+  "torch_threads": 10,
+  "python": "3.14.4 (main, Aug 20 2026, 10:41:58) [GCC 15.2.0]",
+  "torch": "2.15.0+cpu",
+  "transformers": "5.22.2",
+  "prompt": "rubric",
+  "n": 336,
+  "load_seconds": 12.912264187005349,
+  "total_seconds": 107.2845953690121,
+  "peak_rss_mb": 1464.35546875,
+  "errors": 0
+}

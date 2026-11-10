@@ -1,0 +1,54 @@
+iteration: 3
+status: next-iteration
+summary: 'M1 repo work VERIFIED: .secrets.baseline:41-46 has should_exclude_file
+  ^\.factory/ in list-pattern form;
+  tests/assumptions/test_pylint_cache_semantics.py (485 lines, 19 tests)
+  contains the writer-first verdict (writer+timing+--path+jobs=1, crash-safe, no
+  lock/sidecar); docs/adr/ has 12 files with ADR-009/010/011/012 full
+  Context/Decision/Consequences, 001/005/006 staleness notes, README locations
+  cross-ref to design/. Map-revalidation and kickoff-gate reports are
+  orchestration records outside repo containment and were not traced. M2 ZERO
+  DELIVERY: runner dispatch.py:1 still too-many-lines (542 lines, unsplit),
+  EXPECTED_TOOL_NAMES still derived (dispatch.py:144) but baseline.py:23-42 +
+  .pyi retain _FALLBACK_TOOLS/peek_fallback_tools/_compare_sorted shims,
+  tests/runner/_factories_extras.py:1,6 duplicate too-many-lines (511 lines,
+  unsplit), hardcoded /home/slava paths in 4 runner test files,
+  test_self_lint_clean/test_pyright_noise_filter/test_config_consistency/test_runner_private_imports
+  retained; checkers has no _source_stream.py, _legacy_scan retained
+  (suppression_justification_checker.py:61,63), trivial_wrapper_checker.py:33-36
+  retains _legacy_* + peek_fallback_tools exemptions, register() justifications
+  unstandardized, 4 mixin type-ignore[misc] retained with no shared base,
+  tests/checkers/_factories.py still 1393 lines single file, W9704 call sites
+  still rule="unjustified-suppression" single code (no joined sorted codes),
+  SEMANTIC=0 guards only in 2 semantic-owned files; semantic has zero
+  DecisionBackend/DECISION_THRESHOLD/PROMPT_VERSION/FakeBackend/get_backend/_decision_backend/_decision_cache/.python-setup-decisions.json
+  in src, _semantic.py:1-52 still cross-encoder reranker with ~/.cache + jina
+  model, _base.py:238 still exact-match rule-echo, pyproject:29-31 [semantic]
+  still sentence-transformers, _OPTIONAL_IMPORT_PATTERNS still
+  {sentence_transformers}. M3 FAILS: lint.baseline [] holds and golden files
+  exist, but docs must-contain checklist fails everywhere (AGENTS.md:9-11 stale
+  1290/7 counts, no ruff-format scope row, :79-85 still reranker pipeline;
+  semantic-justification.md still reranker-first + ~/.cache results.json;
+  custom-checks.md:97 still reranker; troubleshooting.md still download-failure
+  section, no DECISION_MODEL/RERANKER-deprecated; CHANGELOG top v1.2.9 vs
+  pyproject 1.2.10; README:72 still v1.2.5 pin). No
+  shift-report/regen-hatch/gate-table evidence in repo. Gates
+  (pytest/lint/integration/detect-secrets exit codes) unverifiable under
+  read-only no-bash audit; verdict is static inspection only.'
+completedMilestones:
+  - M1
+remainingMilestones:
+  - M2
+  - M3
+techDebt:
+  - "TD3-B1 still open: no DecisionBackend/cache infra built; corpus 215/0
+    defect + Fastino license + CPU benchmark untouched"
+  - "TD3-A1 partially open: ADR reconciliation done, but AGENTS.md counts/scope
+    rows, CHANGELOG version, README pin all still stale"
+  - "TD3-A2 fully open: dispatch.py 542 + _factories_extras.py 511 +
+    _factories.py 1393 over-limit with disables, baseline shims retained, stream
+    blocks unconsolidated, mixin misc unattempted"
+  - TD3-I2 mechanism landed but green-scan exit 0 + planted-secret exit 1
+    unverified without execution
+  - M2 epic work (runner/checkers/semantic) entirely outstanding; M3
+    golden/docs/gate close-out blocked on it

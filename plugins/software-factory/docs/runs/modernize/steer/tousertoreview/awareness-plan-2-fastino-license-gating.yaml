@@ -1,0 +1,9 @@
+id: awareness-plan-2-fastino-license-gating
+ref: plan-2
+disposition: human-awareness
+question: "Assumption correctly blocks Fastino until review, prefers Apache
+  candidates, excludes CC-BY-NC. If eval recommends GLiDE implementation must
+  pause for approval. No blocking now: matrix+eval proceed Apache-first.
+  Operator must see gating criterion. Record informational review."
+status: open
+createdAt: 2026-11-08T10:25:18.502Z

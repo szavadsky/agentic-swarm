@@ -1,0 +1,32 @@
+blockedItems: []
+concerns: []
+debt: []
+failedItems: []
+iteration: 1
+mergedItems: []
+recommendations:
+  - Operator may consider consolidating the split format+lint gates now that
+    src/python_setup_lint/runner/dispatch.py _RuffFormatLintTool is check-only
+    on normal passes (--check + --config) with mutation isolated to
+    build_format_command; the infra-notes CRITICAL about plain `ruff format`
+    mutating 105 files no longer matches current tree.
+remarkable:
+  - alternatives:
+      - Keep split format/lint gates permanently
+      - Drop ruff format from TOOLS
+    chosen: Tree now carries check-only ruff format ToolSpec
+      (_RuffFormatLintTool.build_command appends --check, _build adds --config)
+      with phase-1a-only mutation
+    why: Matches operator action request in infra notes; allows future gate
+      simplification while keeping current split gates green
+status: complete
+summary: "Wave 3 close-up: no merged items listed in wave report; tree hygiene
+  clean for repo code (git status excluding orchestration empty, untracked
+  excluding .factory empty, strict conflict-marker sweep ^<{7}/^={7}$/^>{7} over
+  src/tests/config/docs/pyproject.toml found none; loose match on ==== at
+  tests/assumptions/test_pylint_cache_semantics.py:15 is a doc underline false
+  positive; sole modification is engine-owned
+  .factory/tasks/modernize/journal.ndjson). Gate diff shows no regressions:
+  format pass->pass green, lint fail->pass IMPROVED, test fail->pass IMPROVED,
+  test-integration pass->pass green."
+wave: 3

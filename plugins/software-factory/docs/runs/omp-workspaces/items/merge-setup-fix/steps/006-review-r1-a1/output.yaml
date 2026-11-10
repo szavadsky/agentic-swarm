@@ -1,0 +1,26 @@
+status: approved
+summary: "merge-setup-fix correct: setup before gates snapshot, parity and
+  gate-shaped evidence hold; blocker resolved"
+suggestions:
+  - id: c-552344216d
+    disposition: dismiss
+    summary: Merge setup blocker resolved by this diff
+    detail: "Fixed: mergeItem runs infra.setup in childWt strictly before runGates
+      (snapshot inside gates.ts:477) and target-green, empty/missing no-op,
+      failure journals item_merge_gates_failed with infra.setup id + command +
+      output. Proven by 5/5 merge-setup tests (personally re-ran). Effective on
+      engine restart per assignment."
+    location:
+      file: plugins/software-factory/src/core/flows/merge-path.ts
+      line: 371
+  - id: setup-helper-duplication
+    disposition: optional
+    summary: runMergeSetup duplicates runner.ts setup logic
+    detail: runMergeSetup reimplements sequential stop-on-first-failure + timeout
+      from runner.ts:797-810 with richer evidence (includes output tail,
+      required by acceptance). Consider exporting a shared helper in a
+      follow-up; duplication is justified now by the merge-path.ts-only scope
+      constraint.
+    location:
+      file: plugins/software-factory/src/core/flows/merge-path.ts
+      line: 149

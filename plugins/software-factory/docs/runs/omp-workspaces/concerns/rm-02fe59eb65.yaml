@@ -1,0 +1,17 @@
+id: rm-02fe59eb65
+chosen: Deterministic architect brief skeleton + cheap `@simpler` relevance
+  judge (`brief.ts`)
+alternatives:
+  - inject full history
+  - raw omp session compaction only
+  - no brief (fresh full-context prompt)
+why: Keeps hydration small and restart-friendly while failing open to the full
+  skeleton; a natural base for compaction/handoff on resume.
+status: open
+source:
+  record: 004-context-pack-a1
+  agent: fact-finder
+  step: context-pack
+  lastSeen: 2026-11-09T23:21:29.949Z
+createdAt: 2026-11-09T23:21:29.949Z
+updatedAt: 2026-11-09T23:21:29.949Z

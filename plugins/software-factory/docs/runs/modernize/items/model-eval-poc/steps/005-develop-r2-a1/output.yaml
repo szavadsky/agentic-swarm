@@ -1,0 +1,56 @@
+status: ok
+summary: "Fixed the single reported defect: eval/report.py:250 rendered the
+  Recall column as pct(precision and precision) instead of
+  pct(meaningful_recall). One-line change (git diff --numstat: 1/1), then
+  regenerated report.md via `python3 eval/report.py` (309 lines). Only section
+  4.3 changed; verdict and compliance table 4.4 are byte-identical to HEAD.
+  Verified all 8 scored rows against out/metrics.json with best-cell selection
+  independently reproduced: decider-nano rubric 0.5/veto Recall now 27.9% (was
+  3.1%), bekko rubric 37.7% (was 11.8%), ettin/minilm 100.0% (was n/a). Metrics
+  computation, corpus, and selection logic untouched; production paths
+  untouched."
+target:
+  command: cd .factory/tasks/modernize/items/model-eval-poc/poc && python3
+    eval/report.py
+  customTarget: true
+evidence:
+  - "One-line fix confirmed: `git diff --numstat -- eval/report.py` = 1
+    insertion / 1 deletion; the only change is line 250 from
+    pct(accepted['meaningless_precision'] and accepted['meaningless_precision'])
+    to pct(accepted['meaningful_recall'])."
+  - "Regeneration: `cd .factory/tasks/modernize/items/model-eval-poc/poc &&
+    python3 eval/report.py` exited 0 and wrote report.md (309 lines)."
+  - "Section-scope proof: line-by-line diff of HEAD report.md vs regenerated
+    report.md yields exactly 8 changed lines, all table rows inside '### 4.3
+    Prompt ablation' (lines 209-216); `## 1. Verdict` and `### 4.4 Compliance
+    table` sections compare byte-identical to HEAD."
+  - "Value proof against metrics.json: all 8 scored 4.3 rows (decider
+    canonical/rubric/compact, bekko canonical/rubric/compact, ettin current,
+    minilm current) re-derived from out/metrics.json (independent best-cell
+    replication, all selected 0.5/veto) and matched cell-for-cell; incomplete
+    GLiDE and missing prompt ablations remain n/a."
+  - "Review-target values present in report.md 4.3: decider-nano rubric 0.5/veto
+    Recall 27.9% (was 3.1%), bekko rubric 37.7% (was 11.8%), ettin-reranker
+    current 100.0% (was n/a), MiniLM current 100.0% (was n/a)."
+  - "Best-cell selection unchanged: report.py lines 238-247 (selection key using
+    accuracy/meaningless_precision/meaningful_recall) are untouched; `git diff`
+    shows no edits to metrics.py, corpus.py, adapters, or data files."
+  - Compliance table 4.4 still reads correct values independently of 4.3 (e.g.
+    decider rubric 0.5/veto augmented 25.6% / 3.1% / 27.9%, compliant no) and
+    all candidates remain non-compliant; the no-go verdict is unaffected.
+  - "`python3 -m py_compile eval/report.py` passes."
+  - "Confinement: `git status --porcelain` shows only poc/eval/report.py and
+    poc/report.md modified under the poc folder; no changes outside
+    `.factory/tasks/modernize/items/model-eval-poc/poc/` (production src/ and
+    tests/ untouched)."
+concerns:
+  - "Pre-existing (not introduced by this fix) ty hint at eval/report.py:148:
+    local `key` is unused; left untouched per delta-scope rules."
+  - 4.3 now agrees with 4.4 and metrics.json for recall; precision columns still
+    show n/a for ettin/minilm as before (their scores are uncalibrated reranker
+    logits with no negatives in the accepted stratum), which is unchanged
+    intentional behavior.
+notes: Only the report rendering changed. The regenerated 4.3 'Recall' column
+  now matches the 'Contracted accepted recall' column and the compliance table
+  values for every scored row; no artifacts were recomputed and no model scores
+  were re-run.

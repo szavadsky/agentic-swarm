@@ -1,0 +1,19 @@
+seq: 3
+name: research
+attempt: 1
+fixRound: 2
+agent: fact-finder
+role: workhorse
+models:
+  - opencode-go/deepseek-v4.1-flash
+  - opencode-go/muse-spark-1.3-contributor
+timeoutSec: 3600
+status: ok
+startedAt: 2026-11-10T03:08:45.641Z
+session: 01a1c36d-f617-7640-8382-a66611ba3c58
+endedAt: 2026-11-10T03:19:39.179Z
+usage:
+  inputTokens: 85333
+  outputTokens: 44042
+  costUsd: 0.043576
+traceRef: /home/slava/aiexp/python-setup.factory-wt/.factory-runtime/sessions/2026-11-10T03-08-45-975Z_01a1c36d-f617-7640-8382-a66611ba3c58

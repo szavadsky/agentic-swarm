@@ -1,0 +1,16 @@
+id: decision-spike-mock-provider-1794275052306
+context: item
+item: spike-mock-provider
+decision: abandon
+reason: merge-attempts-exhausted
+rationale: >-
+  Merge redrive failed 2/2 attempts with evidence: Quality gates failed on merge
+  path for spike-mock-provider: typecheck. typecheck (exit via status=fail).
+  Command: bun --cwd=plugins/software-factory run typecheck Details: error
+  TS2688: Cannot find type definition file for 'bun'.
+    The file is in the program because:
+      Entry point of type library 'bun' specified in compilerOptions
+
+  $ tsc --noEmit; abandoning so the wave gate absorbs the item as failed instead
+  of spinning
+timestamp: 2026-11-10T01:44:12.306Z

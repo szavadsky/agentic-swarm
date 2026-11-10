@@ -1,0 +1,26 @@
+slug: pylint-cache-assumptions
+kind: test-assumptions
+title: Pin pylint writer, timing, and path scoping
+assignment: "GOAL: Pin pylint cache writer, timing, and path scoping before lock
+  design (U2 writer-first). Runner is sequential, pylint specs pass no -j: no
+  contention today. STEPS: Identify FIRST via code plus invocation tests: writer
+  (checker open and close during pylint subprocess vs runner post-process merge)
+  plus write timing (per-visit vs end-of-run) plus --path scoping across pylint,
+  pylint-pyi, pylint-tests sequential invocations. Then derive: lockfile plus
+  merge plus atomic needed for crash-safety vs unnecessary runner-side
+  post-merge vs jobs equals 1 with sidecars only if -j introduced. Add
+  tests/assumptions/test_pylint_cache_semantics.py with no_external_api marker
+  and test_<api>_given_<condition>_then_<expected> names. No src changes.
+  VERIFY: New assumption tests pass offline, verdict explicitly feeds
+  cache-design-spike with crash-safe vs no-lock vs sidecars decision and
+  --path-scoped sweep scope."
+outlineRef: pylint-cache-assumptions
+milestone: M3
+wave: 1
+scenarioRefs:
+  - M3-3
+citations:
+  - src/python_setup_lint/checkers/_base.py:142-158
+  - src/python_setup_lint/checkers/conformance/suppression_justification_checker.py:152-158
+  - src/python_setup_lint/checkers/_semantic.py:125-189
+  - CodingRules.md:230-306

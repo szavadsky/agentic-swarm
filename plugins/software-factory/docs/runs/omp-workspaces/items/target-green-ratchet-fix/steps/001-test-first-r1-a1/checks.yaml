@@ -1,0 +1,31 @@
+checks:
+  - id: test-first-scope
+    status: pass
+    message: test-first-scope passed (1 test files, 0 new prod stubs with 0 lines)
+    details:
+      testFiles:
+        - plugins/software-factory/test/checks/target-green-ratchet.test.ts
+      newProdFiles: []
+      stubProdLines: 0
+  - id: target-red
+    status: pass
+    message: "target-red passed: all 3 expected tests failed with assertion failures"
+    details:
+      command: bun --cwd=plugins/software-factory test
+        test/checks/target-green-ratchet.test.ts --reporter=junit
+        --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-1794286990286-f6ggb0piia4.xml
+      junitCaseCount: 5
+      junitCaseIds:
+        - target-green baseline ratchet for gate targets.gate target that only
+          fails baseline-listed tests passes via ratchet
+        - target-green baseline ratchet for gate targets.gate target with a new
+          failing test outside baseline fails naming the new test
+        - target-green baseline ratchet for gate targets.fully green gate target
+          passes without invoking ratchet
+        - target-green baseline ratchet for gate targets.failing gate target
+          without a baseline still fails with exit-code evidence
+        - target-green baseline ratchet for gate targets.old-format baseline
+          re-derives failing tests at the baseline commit before ratcheting
+      junitTruncated: false
+      collected: true
+      collectionErrors: []

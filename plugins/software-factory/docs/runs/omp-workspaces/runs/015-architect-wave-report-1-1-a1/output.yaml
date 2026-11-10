@@ -1,0 +1,95 @@
+concerns:
+  - affects:
+      - wave-merge
+      - redrive
+    detail: Wave-1 merge consults returned retry-with-guidance with persist:true
+      instructing `bun install` in each childWt, but redriveMergeAfterConsult
+      re-runs mergeItem directly when the item stays `ready` and never ticks the
+      item machine — so the guidance had no execution path and all four redrives
+      re-failed identically (2/2 → abandon). Merge-path retries need either an
+      engine-executed remediation step or a fix-loop re-entry; architect text
+      guidance alone cannot repair environmental merge failures.
+    kind: tech-debt
+    severity: medium
+    summary: Merge redrive ignores retry-with-guidance (no execution path);
+      guidance-only recovery cannot fix environmental gate failures
+context: wave
+decision: amend
+outlines:
+  - description: "In mergeItem
+      (plugins/software-factory/src/core/flows/merge-path.ts), execute
+      infra.setup commands in childWt BEFORE the verify-checks phase (before
+      gates snapshot/run), using the same runInfraSetup semantics as the
+      temp-worktree paths (gates.ts:332-335, runner.ts:796-810). Requirements:
+      no-op when setup is empty; setup runs before snapshotWorktree so
+      setup-created untracked files (node_modules) are not flagged as gate
+      mutations; failure of setup fails the merge with the setup command +
+      output as evidence (same evidence shape as gate failures). Behavior tests
+      (tests-first, tmp-repo, no network): (1) merge where infra.setup writes a
+      marker file asserts gates observe it; (2) empty setup behaves exactly as
+      today; (3) failing setup fails merge with actionable evidence. Note: fix
+      takes effect on engine restart, not mid-run."
+    kind: dev
+    milestoneId: m1-omp-de-risk
+    prodBudgetHint: 80
+    slug: merge-setup-fix
+    title: Run infra.setup in merge child worktree before gates
+  - description: "Salvage approved wave-1 spike research stranded on failed item
+      branches (all research steps ok, reviews approved; only wave-end merges
+      failed environmentally). Read-only via `git show <branch>:<path>` (NEVER
+      checkout/switch branches, NEVER write to .factory/** engine-owned paths):
+      topic/omp-workspaces--spike-omp-isolation
+      items/spike-omp-isolation/steps/002-research-r1-a2/output.yaml (+003
+      review), topic/omp-workspaces--spike-mock-provider
+      steps/001-research-r1-a1/output.yaml (+002 review),
+      topic/omp-workspaces--spike-cache-key steps/001-research-r1-a1/output.yaml
+      (+002 review), topic/omp-workspaces--spike-repo-rules
+      steps/001-research-r1-a1/output.yaml (+002 review), plus parent-branch
+      decisions/001 + 002 rulings. Write the four spike draft docs to
+      plugins/software-factory/docs/spikes/omp-3-isolation.md,
+      omp-4-mock-provider.md, omp-5-cache-keys.md, omp-6-repo-rules.md from the
+      embedded drafts (applying each review's optional polish notes where they
+      correct evidence, e.g. probe-26/18 softening, spec-path fix), and
+      items/spike-findings-recovery/RECOVERY.md mapping each M1 scenario to
+      evidence + followUps for iteration-2 planning. Docs only, zero prod lines.
+      Verify: all five files present with probe-evidence sections; parent branch
+      only."
+    kind: no-behavior
+    milestoneId: m1-omp-de-risk
+    prodBudgetHint: 0
+    slug: spike-findings-recovery
+    title: Recover wave-1 spike findings onto parent branch
+planDelta: "Wave 1 merged 0/4: all spikes failed environmentally at wave-end
+  merge (typecheck TS2688, childWt lacks node_modules, mergeItem skips
+  infra.setup — blocker c-552344216d); spike research itself is approved and
+  must be salvaged. Schedule the two new outlines WITHOUT deps (both self-heal
+  node_modules via their own develop-step gates): prefer packing merge-setup-fix
+  + spike-findings-recovery into wave 2 alongside pending usage-cache-tokens +
+  transport-byte-stability (4 total = maxParallelItems), else wave 3. Do NOT
+  reschedule/remove the failed wave-1 items (terminal) or the pending M2 items.
+  Recovery item reads failed branches read-only; fix item is engine prod code
+  with tests-first."
+rationale: "Wave 1: 0/4 merged. All four M1 spikes completed approved research
+  (status ok, reviews approved / accept-with-debt with iteration-2 rulings) but
+  were abandoned after 2/2 merge attempts failed on environmental typecheck
+  TS2688 — mergeItem runs gates in a fresh childWt without node_modules and
+  never runs infra.setup (blocker c-552344216d); my retry-with-guidance (bun
+  install in childWt) had no execution path on the merge-redrive route, so
+  redrives re-failed identically. Findings survive only on unmerged item
+  branches; M1 scenarios are unanswered on the parent. Wave 2 M2 items are
+  spike-independent and self-heal deps via their own gated develop steps, so the
+  iteration should proceed — but the plan must gain (1) the engine fix and (2) a
+  recovery item materializing the four spike drafts + RECOVERY map onto the
+  parent for iteration-2 planning. Amend (budget 0/3 used); continue would leave
+  M1 unevidenced, end-iteration would strand runnable wave-2 work."
+remarkable:
+  - alternatives:
+      - "continue: run wave 2 and ignore the M1 evidence gap (rejected:
+        iteration-2 epics would plan without spike findings on the parent)"
+      - "end-iteration: strand wave-2 M2 items and replan everything next
+        iteration (rejected: M2 is spike-independent and runnable now; wastes a
+        cycle)"
+    chosen: "amend: add merge-setup engine fix + spike-findings recovery, keep
+      wave-2 M2 items scheduled"
+    why: Minimal delta that unblocks all future merges, salvages approved research
+      onto the parent branch, and keeps runnable measurement work flowing.

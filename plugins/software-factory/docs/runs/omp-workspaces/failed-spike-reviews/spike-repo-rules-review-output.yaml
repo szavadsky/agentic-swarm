@@ -1,0 +1,60 @@
+status: approved
+summary: "Spike answers M1 scenario-4: root auto-inject once verified,
+  double-inject risk measured, scout RULES plan + M8 verification defined; 5
+  concerns triaged, no rework."
+suggestions:
+  - id: c-477404c672
+    disposition: architect
+    summary: Preflight no-op confirmed; schedule real-turn validation fix
+    detail: "Spike confirms with code + probe: preflight.ts:364-393 runs omp
+      --config <overlay> --version which exits 0 on bad overlay while a real
+      turn exits 1 with parse error. Read-only spike cannot fix prod code;
+      architect to schedule dev item replacing the check with a throwaway
+      mock-provider turn (recipe findings §5.1/§8.8)."
+    location:
+      file: plugins/software-factory/src/cli/preflight.ts
+      line: 364
+  - id: c-ba416d7313
+    disposition: architect
+    summary: Mock provider proven feasible; schedule M8 helper
+    detail: Spike demonstrates throwaway models.yml (openai-completions) + local SSE
+      stub capturing full system prompts with zero paid calls. Feasibility
+      de-risked; architect to schedule M8 scripted helper (request recorder +
+      scripted yield) and per-role request-body assertions per §7.1.
+  - id: c-d049242483
+    disposition: architect
+    summary: Hydration present for roots; scope remainder to scouts + verification
+    detail: "Spike reframes with evidence: root omp processes
+      (architect/dev/qa/reviewer via --system-prompt + --cwd) already receive
+      repo rules exactly once — no AGENTS/CLAUDE/RULES text in agents/ or
+      prompts.ts (verified), duplicate probe yields 2 copies. Remaining gap is
+      scouts (drop AGENTS.md, keep RULES.md/extra per docs; live task probe
+      inconclusive) + E2E verification. Architect to update M8 plan: keep omp
+      sole injector for roots, RULES.md/extra/context for scouts, assert one
+      sentinel per role."
+    location:
+      file: docs/factory.v2.md
+      line: 113
+  - id: c-342c07aba6
+    disposition: architect
+    summary: User-level prompt leak confirmed; decide M8 isolation policy
+    detail: "Harness inherits process.env with no --profile/PI_CODING_AGENT_DIR
+      (harness.ts:406-409 confirmed; no
+      --append-system-prompt/--no-context-files/--no-rules in prod args). Probe:
+      user AGENTS/RULES inject; APPEND_SYSTEM.md survives --system-prompt plus
+      both disable flags; only empty --append-system-prompt= suppresses.
+      Architect to choose M8 policy: profile/agent-dir isolation and/or
+      disabledExtensions + empty append for deterministic roles."
+    location:
+      file: plugins/software-factory/src/harness/omp/harness.ts
+      line: 406
+  - id: c-64046e8e72
+    disposition: optional
+    summary: Preserve worktree-root cwd; .omp/rules + .claude/CLAUDE.md are cwd-only
+    detail: "Probe: subdir launch loads root+sub AGENTS.md and root RULES.md but not
+      root .omp/rules or .claude/CLAUDE.md. Factory launches from worktree roots
+      today (taskWt/childWt); preserve that invariant and document. Low
+      severity."
+    location:
+      file: plugins/software-factory/src/harness/omp/harness.ts
+      line: 367

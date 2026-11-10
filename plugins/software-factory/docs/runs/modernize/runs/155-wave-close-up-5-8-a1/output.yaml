@@ -1,0 +1,16 @@
+blockedItems: []
+concernResolutions: []
+failedItems: []
+iteration: 5
+mergedItems: []
+recommendations:
+  - Empty wave (no items merged) with all gates now green — architect should
+    confirm whether iteration 5 modernize work is done or further waves are
+    needed.
+status: complete
+summary: "Wave 8 close-up: no items merged (empty wave). Tree clean: only
+  modified file is engine-managed .factory/tasks/modernize/journal.ndjson; no
+  untracked files; no git conflict markers in src/tests/config/docs. Gate Diff
+  shows zero regressions: format pass/pass green, test-integration pass/pass
+  green, lint fail->pass IMPROVED, test fail->pass IMPROVED."
+wave: 8

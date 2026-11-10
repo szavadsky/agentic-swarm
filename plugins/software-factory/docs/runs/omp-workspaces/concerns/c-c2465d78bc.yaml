@@ -1,0 +1,19 @@
+id: c-c2465d78bc
+kind: question
+summary: Scout context injection still unverified; live task probe inconclusive
+detail: Roots reframed as already-hydrated (exactly once); scout behavior per
+  docs (drop AGENTS.md, keep RULES.md/extra) could not be confirmed live. M8
+  must re-probe scouts through the mock provider (deterministic request capture)
+  before implementing the scout hydration path.
+affects:
+  - "19.9"
+severity: medium
+status: routed
+source:
+  record: 008-consult-spike-repo-rules-1-a1
+  agent: architect
+  step: consult-spike-repo-rules-1
+  lastSeen: 2026-11-10T01:03:17.651Z
+createdAt: 2026-11-10T01:03:17.651Z
+updatedAt: 2026-11-10T01:53:41.429Z
+disposition: architect

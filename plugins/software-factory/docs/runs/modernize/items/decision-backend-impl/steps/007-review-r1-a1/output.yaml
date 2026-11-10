@@ -1,0 +1,33 @@
+status: approved
+summary: "Approved: veto backend pins hold, SEMANTIC=0 golden preserved, no
+  security/boundary defects"
+suggestions:
+  - detail: get_backend tests RERANKER with truthiness but DECISION_MODEL with
+      is-not-None, so an empty-string value warns for model but stays silent for
+      reranker. Prefer is-not-None for both since set-but-empty is still
+      deprecated/configured; edge unpinned by tests, no gate impact.
+    disposition: optional
+    id: consistent-empty-env-warning-semantics
+    location:
+      file: src/python_setup_lint/checkers/_decision_backend.py
+      line: 51
+    summary: Align empty-string handling for reranker vs decision-model warnings
+  - detail: return raw.strip() if not reason_tokens else '' if subset else
+      reason.strip() nests two ternaries on one line; behavior is pinned by
+      code-echo tests, but if/elif/else would read clearer.
+    disposition: optional
+    id: normalize-ternary-clarity
+    location:
+      file: src/python_setup_lint/checkers/_base.py
+      line: 156
+    summary: Expand nested ternary in normalize_suppressed_codes
+  - detail: _base.pyi and _semantic.pyi document public contracts while
+      _decision_backend.pyi carries bare signatures (intentional size-budget
+      compression per developer notes); add minimal docstrings when budget
+      allows.
+    disposition: optional
+    id: decision-backend-pyi-docs
+    location:
+      file: src/python_setup_lint/checkers/_decision_backend.pyi
+      line: 1
+    summary: Add minimal docstrings to decision-backend stub

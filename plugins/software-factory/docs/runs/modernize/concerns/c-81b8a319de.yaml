@@ -1,0 +1,28 @@
+id: c-81b8a319de
+kind: blocker
+summary: Validated-map dependency was abandoned; no map-* report or drift list
+  existed to consume
+detail: ownership-map-revalidation exhausted its consult budget and was
+  abandoned. This gate had to reconstruct the map core and drift list at HEAD
+  1039df9 itself, so revision map-1039df9 is a gate-recorded amendment, not a
+  consumed validated-map artifact. Downstream consumers must cite this gate
+  report as the authority.
+location:
+  file: .factory/tasks/modernize/decisions/013-item-ownership-map-revalidation-abandon.yaml
+  line: 1
+affects:
+  - TD3-B2
+  - epic-kickoff-gate
+  - epic-shift-report-collection
+  - final-gate-validation
+severity: high
+status: routed
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: epic-kickoff-gate
+  lastSeen: 2026-11-10T00:08:48.409Z
+createdAt: 2026-11-10T00:08:48.409Z
+updatedAt: 2026-11-10T01:56:20.258Z
+disposition: human-awareness

@@ -1,0 +1,25 @@
+id: c-698cedaf11
+kind: risk
+summary: Merge result is byte-identical to the parent tip for every non-.factory
+  path, so the item branch contributes no code deltas of its own.
+detail: "The item's helper consolidation was independently (and more completely)
+  landed on topic/modernize via consolidate-integration-helpers-i2 /
+  golden-contract-hardening. A superset union therefore equals the parent tree:
+  our T4-conflict helper moves, integration.py rewiring and conftest re-export
+  are all redundant in the merged tree. If the factory expects item-specific
+  test deltas to be visible in the merge commit, they are not."
+affects:
+  - tests/_project_helpers.py
+  - tests/conftest.py
+  - tests/integration.py
+severity: medium
+status: routed
+source:
+  record: 005-integrate-r1-a1
+  agent: developer
+  step: integrate
+  item: consolidate-integration-helpers-v3
+  lastSeen: 2026-11-09T23:49:50.606Z
+createdAt: 2026-11-09T23:49:50.606Z
+updatedAt: 2026-11-10T01:22:03.274Z
+disposition: optional

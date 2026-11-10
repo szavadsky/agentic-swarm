@@ -1,0 +1,21 @@
+id: rm-960f2c7947
+chosen: Reclassify realized semantic reservations (_decision_backend.py/.pyi +
+  test_decision_backend.py) to semantic and amend counts to 65/91/15/7/16
+alternatives:
+  - Keep literal 65/94/15/4/16 and leave backend files checkers-owned
+  - Assign the 8 new factory files to root to stay within ±5
+  - Treat the count breach as unresolved and block the gate
+why: The literal path rule would assign the newly realized reservation files to
+  checkers, contradicting ADR-011's planned-path read-only rule and creating a
+  real ownership collision. Reclassification keeps one writer per path and gives
+  an exact sum-194 recount.
+status: routed
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: epic-kickoff-gate
+  lastSeen: 2026-11-10T00:08:48.409Z
+createdAt: 2026-11-10T00:08:48.409Z
+updatedAt: 2026-11-10T03:32:47.723Z
+disposition: optional

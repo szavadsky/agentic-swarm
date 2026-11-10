@@ -1,0 +1,15 @@
+[
+  {
+    "decision": true,
+    "files": [
+      "src/a.py"
+    ],
+    "justification": "a specific technical reason for retrying",
+    "key": "dk1.7slmqcwz.3uxhtzmb.pcuomhfv.dgqzmwkg.sfqkooqx.mttwjc2o.dv7q",
+    "last_seen": "2026-11-08",
+    "model": "fake-backend rev test prompt-v1",
+    "prompt_hash": "dk1.w7pwqwps.wha4vd4h.qu36v2gp.j3wnj7ry.yelfnocc.phnvns3m.jnhq",
+    "rule": "W9704",
+    "version": 1
+  }
+]

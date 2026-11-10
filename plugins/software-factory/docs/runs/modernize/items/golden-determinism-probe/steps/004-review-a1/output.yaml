@@ -1,0 +1,96 @@
+status: approved
+summary: "Approved: empty diff, read-only guard held; 7 capture-determinism
+  hazards documented for snapshot"
+suggestions:
+  - detail: Pylint R0801 records store file spans inside the rule string
+      (R0801:<span><-><span>) with file=None, so _relativize_file (file-field
+      only) never touches them. If pylint emits absolute spans on temp copies,
+      rule leaks tmp paths and cross-copy diff flakes despite file
+      normalization. Snapshot must also scan/normalize the rule field and assert
+      non-absolute over rule as well as file; probe must confirm span path form
+      on both copies.
+    disposition: optional
+    id: r0801-rule-embeds-paths
+    location:
+      file: src/python_setup_lint/runner/_record_parsers.py
+      line: 66
+    summary: R0801 rule string embeds file spans, bypasses file relativization
+  - detail: "_RECORD_PARSERS covers 9 tools; tach check, ruff format, mypy.stubtest,
+      pyright verify types, detect-secrets have no entry, so _capture_one
+      returns [] for them regardless of tool output. A snapshot pinning
+      _capture_baseline alone pins 9/14 tools and gives false confidence for the
+      other 5 (notably detect-secrets churn cited in assignment). Snapshot must
+      scope explicitly: capture for 9 plus statistics/exit-code pinning for the
+      5, or bounded src fix adding parsers."
+    disposition: optional
+    id: five-tools-uncaptured
+    location:
+      file: src/python_setup_lint/runner/parsers.py
+      line: 231
+    summary: 5/14 tools have no record parser; capture silently drops them
+  - detail: _capture_one feeds only r.stdout to record parsers, but the mypy
+      statistics parser reads only stderr and ignores stdout. If real mypy emits
+      to stderr, record captures are vacuously empty while statistics count
+      them, and a capture-only diff reports 'mypy stable' while missing the
+      routing defect. Snapshot harness must assert mypy capture non-empty on the
+      sample (or document empty as expected) and reconcile record vs statistics
+      streams.
+    disposition: optional
+    id: mypy-stdout-vs-stderr
+    location:
+      file: src/python_setup_lint/runner/baseline.py
+      line: 156
+    summary: Mypy record parser reads stdout but statistics parser reads stderr
+  - detail: "_relativize_file relativizes only absolute paths via unresolved
+      Path.relative_to: relative paths pass through verbatim (no ./ strip, no
+      backslash->/, no as_posix), absolutes outside cwd return absolute, and
+      symlink tmp roots defeat prefix match when pyright emits resolved
+      absolutes. This grounds the assignment test-side spec as REQUIRED since
+      src does none of it. Snapshot must resolve both sides before
+      relativizing."
+    disposition: optional
+    id: relativize-unresolved-no-normalize
+    location:
+      file: src/python_setup_lint/runner/baseline.py
+      line: 176
+    summary: _relativize_file uses unresolved relative_to and no ./ or separator
+      normalization
+  - detail: Sort keys exclude msg but equality tuples include it, so msg-distinct
+      duplicates are sort-equal and their order is tool-output order (stable
+      sort). If that order flips between runs, the two-pointer diff misaligns
+      identical multisets into added+removed false positives. Dropping msg per
+      spec collapses the ties; snapshot must drop msg AND compare multisets or
+      re-sort post-normalization, not order-sensitive lists.
+    disposition: optional
+    id: sort-excludes-msg-diff-includes
+    location:
+      file: src/python_setup_lint/runner/baseline.py
+      line: 48
+    summary: Sort keys exclude msg but diff tuples include it; tie-order flips
+      false-positive
+  - detail: _make_config writes project/rumdl.toml AFTER git add
+      (add-then-override), leaving it untracked so detect-secrets git ls-files
+      scan skips it; harness must replicate that order. The tests/data exclusion
+      removal is a brittle literal str.replace that silently no-ops if shipped
+      config formatting drifts, collapsing rumdl capture to empty. Harness must
+      assert rumdl capture contains planted MD072 to prove the override took
+      effect.
+    disposition: optional
+    id: rumdl-override-brittle
+    location:
+      file: tests/integration.py
+      line: 95
+    summary: Rumdl override uses brittle str.replace and post-git-add write; assert
+      MD072 non-empty
+  - detail: "Detect-secrets branches on baseline existence: fresh copy bootstraps
+      via scan, rerun uses git ls-files hook path with generated_at stripped.
+      Same-copy second run exercises a different code path than cross-copy
+      single runs. Probe must state which it did (same-copy rerun, cross-copy,
+      or both); snapshot regeneration must define whether rerun-on-same-copy or
+      fresh-copy is the golden path."
+    disposition: optional
+    id: detect-secrets-bootstrap-vs-hook
+    location:
+      file: src/python_setup_lint/runner/dispatch.py
+      line: 243
+    summary: First-run bootstrap vs rerun hook differ; same-copy rerun may diverge

@@ -1,0 +1,25 @@
+id: c-b18093e36e
+kind: assumption
+summary: PoC lock is POSIX-only fcntl.flock; no production lock code exists at HEAD
+detail: "`git grep fcntl|flock -- ':!.factory'` is empty in tracked source;
+  `_semantic.py` has only an in-process memo and the tracked cache is
+  unimplemented. The POSIX-only-lock concern is therefore deferred to
+  cache-design-spike/decision-cache-impl and must not be documented as a
+  delivered cross-platform mechanism."
+location:
+  file: src/python_setup_lint/checkers/_semantic.py
+  line: 15
+affects:
+  - cache-design-spike
+  - decision-cache-impl
+severity: low
+status: routed
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: final-gate-validation
+  lastSeen: 2026-11-10T00:27:58.391Z
+createdAt: 2026-11-10T00:27:58.391Z
+updatedAt: 2026-11-10T02:23:05.623Z
+disposition: optional

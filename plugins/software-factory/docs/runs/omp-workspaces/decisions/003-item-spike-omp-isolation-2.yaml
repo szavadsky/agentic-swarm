@@ -1,0 +1,27 @@
+id: decision-spike-omp-isolation-1794274945464
+context: item
+item: spike-omp-isolation
+afterRecord: 003-review-r1-a1
+decision: retry-with-guidance
+timestamp: 2026-11-10T01:42:25.464Z
+rationale: "Failure is environmental, not item-caused: the item diff touches
+  only .factory records (zero prod lines), yet the merge-path typecheck fails
+  with TS2688 because the child worktree lacks node_modules and mergeItem never
+  runs infra.setup there. Abandoning would lose the M1 scenario-1 evidence
+  (backend enum, retention matrix, probe). A bounded retry is correct: attempt
+  2/2 has not yet run for this consult cycle, and the fix is mechanical (install
+  deps in the merge worktree), not research rework."
+text: "RETRY (environmental failure, not spike failure): the typecheck error
+  TS2688 (missing 'bun' types) means the merge child worktree lacks node_modules
+  — mergeItem runs gates at childWt without infra.setup (cf. gates.ts:332-335
+  and runner.ts:915-917 which only set up temp worktrees). Before the redrive
+  merge, run the infra.setup command inside THIS item's child worktree: `cd
+  <childWt>/plugins/software-factory && bun install` (childWt =
+  worktreeRoot/topic_omp-workspaces--spike-omp-isolation). Then re-drive the
+  merge unchanged. Do NOT re-run spike probes, do NOT modify findings, do NOT
+  touch prod code. If typecheck still fails after bun install, yield failed with
+  the full gate output — do not burn further attempts. NOTE to wave loop:
+  sibling spikes (mock-provider, cache-key, repo-rules) will hit the identical
+  TS2688 on merge; apply the same bun-install-in-childWt remedy to each before
+  their redrive."
+persist: true

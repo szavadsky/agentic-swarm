@@ -1,0 +1,294 @@
+iteration: 5
+items:
+  - assignment: "Create NEW tests/assumptions/test_decision_cache_contracts.py ONLY
+      (append-only). FORBIDDEN: root __init__ edits, astroid/beartype/pylint
+      contract modules, tests/assumptions/test_pylint_cache_semantics.py, any
+      src, docs, tests/data, baseline changes. Build tmp JSON inline WITHOUT
+      importing production code so tests pass at M1; pin file-format only. Pin:
+      array sorted by (rule, justification, model) with indent=2 and sort_keys
+      round-trip; double-write byte-identical determinism; last-seen ISO date
+      updated ONLY when score/decision/files change; schema-controlled fields
+      never emit hex>=20 (rev short12 is 12 chars, prompt hash is sha256
+      hexdigest[:12], version and paths clean) via unit test with adversarial
+      SHA-bearing justification proving only the verbatim justification field
+      contains the SHA. Shell the installed hook on tmp files for representative
+      entries using detect-secrets-hook with a fresh tmp baseline and tmp cache
+      file; cite detect-secrets-hook --help at HEAD plus exact invocation in
+      report and assert zero findings. DEFER to M3 impl tests and do NOT pin
+      here: read-only hash, refresh CI-guard, prune, --path scoping, jobs>1.
+      Conventions: pytestmark no_external_api, test API given condition then
+      expected naming, offline, tmp_path only. Verify: new tests pass now via uv
+      run pytest on the new module, format-clean, no other files touched.
+      Report: file created, test count, hook help excerpt plus invocation plus
+      output, deferred list. Consumed downstream by decision-cache-storage-v2
+      via dep."
+    citations:
+      - tests/assumptions/test_decision_cache_contracts.py
+    deps: []
+    kind: test-assumptions
+    milestone: M1
+    outlineRef: cache-contract-assumptions
+    scenarioRefs:
+      - Cache and loader contracts pinned before implementation
+    slug: cache-contract-assumptions
+    title: Pin tracked-cache file format contracts
+    wave: 13
+  - assignment: "Create NEW tests/assumptions/test_decision_loader_contracts.py ONLY
+      with same forbiddens as cache-contracts (no root __init__, no
+      astroid/beartype/pylint contracts, no test_pylint_cache_semantics.py, no
+      src, docs, tests/data, baseline). DELTA ONLY: honors, ignores and
+      warn-once already pinned at
+      tests/checkers/test_decision_backend.py:117-165; cite that file and line
+      range in report and never duplicate those asserts. Pin exact strings:
+      PROD_MODEL_ID_RE ^[\\w.\\-/]+ rev [0-9a-f]{12} prompt-v\\d+$ and
+      FAKE_ALLOWLIST with fake-backend rev test prompt-v1 and dotted-loader rev
+      test prompt-v1 (strict regex would reject test; allowlist is explicit and
+      M4 loader output must match one); DECISION_MODEL_RE ^(?P<id>[\\w.\\-/]+)
+      rev (?P<rev>[0-9a-f]{12})$ parse plus malformed table mapping to None plus
+      exactly-one warning each for missing rev, rev len not 12, non-hex rev,
+      trailing prompt-vN, empty or whitespace, extra tokens; failure-to-None
+      maps to heuristic bool with no raise and no retry. Consumed downstream by
+      backend wiring via dep. Conventions: no_external_api, test API given
+      condition then expected naming, offline, tmp_path only. Verify: new tests
+      pass offline, format-clean, no other files. Report: file created, regex
+      and allowlist asserts, malformed table, cited existing pins."
+    citations:
+      - tests/assumptions/test_decision_loader_contracts.py
+      - tests/checkers/test_decision_backend.py
+    deps: []
+    kind: test-assumptions
+    milestone: M1
+    outlineRef: backend-loading-assumptions
+    scenarioRefs:
+      - Cache and loader contracts pinned before implementation
+    slug: backend-loading-assumptions
+    title: Pin backend loader delta contracts
+    wave: 13
+  - assignment: "Report-only with zero repo writes; prove no tracked modifications.
+      Build decision-model candidate matrix for GLiDE-0.4B plus
+      permissively-licensed Decision-Index smalls plus MiniLM baseline; recount
+      families from I5 pack section 6 plus live cards and verify each. Columns
+      per candidate: license with CC-BY-NC and non-commercial excluded and
+      Fastino Community plus unclear or no-license flagged for human review per
+      allowlist, params and weights bytes, runtime stack, py3.14 CPU wheels for
+      linux mac and win, custom-code and vendoring burden with never unpinned
+      trust_remote_code, pinnable revision, offline behavior, CPU evidence or
+      explicit none. Cite card URLs plus revision SHAs plus license texts. No
+      model choice, no code, no committed files; network inside spike only for
+      card and license lookup. Feeds eval-poc plus runtime-pinning via report.
+      Report must include matrix table, per-candidate license verdict, exclusion
+      and flag rationale, and handoff list for eval."
+    deps: []
+    kind: fact-finder
+    milestone: M1
+    outlineRef: model-candidate-matrix
+    scenarioRefs:
+      - Model verdict is evidence-based or explicitly blocked
+    slug: model-candidate-matrix
+    title: Decision-model candidate matrix
+    wave: 13
+  - assignment: "Report-only with zero repo writes; no committed corpus in I5 and
+      eval poc consumes report tables via schema. Collect N real repo
+      suppressions plus threshold 115-row table plus brush-off and meaningful
+      tables, DEDUPED by normalized justification with strip plus collapse
+      whitespace and keep case and target N at least 100 post-dedup, stratified
+      heuristic-rejected versus heuristic-accepted with both non-empty. Rubric:
+      specific technical justification is True versus placeholder deferral or
+      brush-off is False; disclose edge-case rubric for terse borderlines. Rater
+      protocol: pass-1 rates all; pass-2 re-rates blinded with shuffled order
+      and pass-1 hidden; disagreements resolved by documented adjudication rule
+      with rule disclosed. HANDOFF must be a json corpus.json code block with
+      list of id, justification, rule, context, stratum rejected or accepted,
+      label true or false, source repo or threshold or table, pass1, pass2,
+      adjudicated plus counts total, post_dedup, per_stratum, per_source plus
+      agreement. Single-author bias NOT fully repaired; include needs_human
+      field requiring human second rater before any go or no-go with engine
+      converting to steer and never write steer records directly. Or explicit
+      blocker for collection, license or CPU with I6 plan. No model choice.
+      Report: rubric, protocol, JSON block, counts, agreement, needs_human."
+    deps: []
+    escalate: true
+    kind: fact-finder
+    milestone: M1
+    outlineRef: brush-off-corpus-pilot
+    scenarioRefs:
+      - Model verdict is evidence-based or explicitly blocked
+    slug: brush-off-corpus-pilot
+    title: Build two-pass brush-off pilot sample
+    wave: 14
+  - assignment: "Report-only with zero repo writes; tmp copies plus tmp poc only, no
+      committed code, no golden change. First reproduce at HEAD with exact
+      commands plus outputs: tmp pyi with companion py even syntactically broken
+      to test skipped versus orphan pyi to test linted with pyi-underscore
+      firing. Second mechanism poc on tmp: implement ONE of temp-tree or copy or
+      pylint no-companion mode against tmp copies; broken-stub control must flip
+      skipped to linted with pyi-underscore firing; emit tmp-to-repo
+      path-mapping table from tmp path to repo-relative golden key proving
+      golden keys stay repo-relative. Third recount at HEAD via grep and do NOT
+      trust old probe 42 over 43 and 205 symbols: golden impact of pyi findings
+      on py versus pyi plus latent budget of non-TYPE_CHECKING private symbols
+      in src pyi plus duplicate-code findings on stubs. Recommend fix-with-regen
+      with proven mechanism plus mapping plus cleanup budget plus regen plan
+      versus document-orphan-only with scope-note text plus stubtest governance.
+      Feeds M5 pyi-scope-fix which consumes mechanism plus mapping and never
+      re-proves. Report: reproduction, poc plus control, mapping table,
+      recounts, recommendation."
+    deps: []
+    kind: fact-finder
+    milestone: M1
+    outlineRef: pylint-pyi-scope-spike
+    scenarioRefs:
+      - Pyi scope decided with budget
+    slug: pylint-pyi-scope-spike
+    title: Decide pylint-pyi companion-stub scope
+    wave: 14
+  - assignment: "Single-source checker-test harness with behavior identical. Owns
+      src/python_setup_lint/testing.py plus testing.pyi with atomic sync and
+      stubtest must pass for _make_tc and _walk_and_release options plus
+      _msg_ids and _msg_ids_sorted ONLY plus tests/checkers/test_*.py local
+      _make_tc, _walk_and_release and _msg_ids wrappers ONLY with enumeration
+      via grep at HEAD expecting about 13, 10 and 8 per pack but verify actual
+      and report full per-file migration table from file to shared call with
+      args. FORBIDDEN docs, baseline, tests/data, runner tests, conftest
+      fixtures. Red-test-exempt. Implement shared signatures: _walk_and_release
+      with code, cls, file_path None, module_name empty, open_checker False,
+      source_roots None where open_checker True sets linter config source_roots
+      to source_roots or src list then calls checker open before walk following
+      structlog pattern in tests/checkers/test_structlog_checker.py lines 23 to
+      31 with module_name passthrough kept; _msg_ids returns set of str;
+      _msg_ids_sorted returns list of str with stub_fidelity migrating to sorted
+      and 7 set-callers to set form. Delete all local copies with grep zero
+      defs; migrate importers; move touched files toward naming and marker
+      conventions. First writer with semantic-test-doubles-dedup serializing
+      after via dep and do NOT touch its files. Verify: testing.py and pyi plus
+      tests only; uv run pytest plus integration with no new failures versus I5
+      HEAD recount expecting 1357 and 9 per pack with recount; golden
+      hash-equal; format-clean; stubtest clean. Report: migration table,
+      grep-zero proof, gate counts."
+    citations:
+      - src/python_setup_lint/testing.py
+      - src/python_setup_lint/testing.pyi
+      - tests/checkers/test_structlog_checker.py
+    deps: []
+    kind: no-behavior
+    milestone: M2
+    outlineRef: checker-harness-dedup
+    scenarioRefs:
+      - Harness deduped without intent loss
+    slug: checker-harness-dedup
+    title: Single-source checker-test harness
+    wave: 15
+  - assignment: "Tests-only dedup with no behavior change. Owns
+      tests/runner/_factories.py plus _factories_extras.py plus
+      _factories_baseline.py plus test_setup.py plus test_setup_install.py plus
+      test_real_pipeline_smoke.py plus tests/conftest.py for sample_project
+      fixture lines only and nothing else. FORBIDDEN src, docs, baseline,
+      tests/data, checker tests. Red-test-exempt. Single-source 2x
+      _UvCallRecorder plus 2x extra_block into one home each. Dead helpers
+      CONDITIONAL for assert_violation_contains_any, assert_r4_reason,
+      baseline_entry_for_tool, sample_project with grep-zero no-call-site proof
+      per helper INCLUDING pytest-arg injection search for sample_project
+      fixture; delete only if zero else keep plus document survivor reason.
+      Smoke disposition: EITHER narrow test_real_pipeline_smoke.py to
+      non-overlapping asserts with int return plus markers that integration plus
+      fake orchestration do not already pin and with per-assert survivor
+      analysis OR delete with removal-to-survivor map to tests/integration.py
+      plus test_lint_runner_integration.py following never-test-linting boundary
+      per 644774e precedent. Verify: tests only; no new failures; golden
+      hash-equal; format-clean. Report: single-sourcing, per-helper proof or
+      survivor, smoke decision plus map."
+    citations:
+      - tests/runner/_factories.py
+      - tests/runner/_factories_extras.py
+      - tests/runner/_factories_baseline.py
+      - tests/conftest.py
+    deps: []
+    kind: test-only
+    milestone: M2
+    outlineRef: runner-test-helpers-dedup
+    scenarioRefs:
+      - Harness deduped without intent loss
+    slug: runner-test-helpers-dedup
+    title: Single-source runner/setup helpers and prune dead tests
+    wave: 15
+  - assignment: "Behavior-preserving source simplifications with at most 60 prod
+      lines. Owns src/python_setup_lint/checkers/_semantic.py for memo dict plus
+      clear ONLY with read-branch plus scored API plus memo-value-tuple owned by
+      M3 via dep and do NOT touch plus _base.py for boilerplate and phrase
+      frozensets to module level only plus
+      src/python_setup_lint/runner/cmd_build.py for NEW _resolve_tool_rcfile
+      with tool_key, config_paths, cwd, shipped and explicit override first then
+      shipped fallback param ONLY plus src/python_setup_lint/runner/dispatch.py
+      for pyi and tests rcfile blocks calling shared resolver passing default
+      config paths cwd get key with pylint migrating iff byte-identical commands
+      proven else stays with note plus checkers __init__.py for module docstring
+      only plus pyi fidelity rows for touched symbols ONLY. FORBIDDEN
+      _decision_backend.py, PROMPT_VERSION, DECISION_MODEL for M4 plus decisions
+      plus CLI threading plus checker observation lines plus _semantic read and
+      scored API for M3 plus testing.py for harness-dedup plus no_try_import
+      patterns for M4 plus tests/data, baseline, docs, tach.toml for M3. Prove
+      same literals and membership and same resolution order via byte-identical
+      built-command tests with before and after diff empty. Verify: prod at most
+      60; pytest plus integration with no new failures; lint 14 of 14 including
+      pylint, mypy and stubtest; golden hash-equal. Report: per-file change,
+      byte-identical proof, pylint migrate-or-note."
+    citations:
+      - src/python_setup_lint/checkers/_semantic.py
+      - src/python_setup_lint/checkers/_base.py
+      - src/python_setup_lint/runner/cmd_build.py
+      - src/python_setup_lint/runner/dispatch.py
+    deps: []
+    kind: no-behavior
+    milestone: M2
+    outlineRef: source-simplifications
+    scenarioRefs:
+      - Source simplified without drift
+    slug: source-simplifications
+    title: Simplify semantic memo, heuristic sets, rcfile paths
+    wave: 15
+  - assignment: "Make uv run lint check-only for ruff format as operator backlog
+      debt. Owns src/python_setup_lint/runner/_tool_specs.py ruff-format entry
+      plus src/python_setup_lint/runner/dispatch.py _RuffFormatLintTool
+      build_command and _build ONLY plus tests/runner/test_lint_runner
+      command-shape test ONLY. FORBIDDEN docs, baseline, tests/data, other
+      tools. Implement build_command appending check flag and _build adding
+      config for phase-1a-only per rm-717ccdc143; prove zero file mutation via
+      before and after content hash around lint run; report AGENTS snippet for
+      docs-v2 without editing docs. Declare target {'command':'uv run pytest
+      -q','customTarget':true}, NEVER {'gate':'tests'}. Verify: format, lint,
+      test and integration green, lint mutates zero files, golden hash-equal.
+      Report: command diff, hash proof, AGENTS snippet."
+    citations:
+      - src/python_setup_lint/runner/_tool_specs.py
+      - src/python_setup_lint/runner/dispatch.py
+    deps: []
+    kind: dev
+    milestone: M2
+    outlineRef: ruff-format-check-only-fix
+    slug: ruff-format-check-only-fix
+    title: Make ruff format ToolSpec check-only
+    wave: 16
+  - assignment: "Rename legacy scan and remove dead compat with W9704 byte-identical
+      under SEMANTIC 0. Owns
+      src/python_setup_lint/checkers/conformance/suppression_justification_chec\
+      ker.py _legacy_scan rename plus trivial _legacy_* plus astroid 3.x branch
+      plus unscoped register ONLY plus pyi rows plus
+      tests/checkers/test_suppression_justification_checker.py legacy block
+      ONLY. FORBIDDEN _base, _semantic, _decision_backend plus _source_stream.py
+      which is owned by checkers-stream-helper running in wave 2 and do NOT
+      touch plus tests/data, baseline, docs. Preserves W9704 byte-identical.
+      Supersedes stranded checkers-legacy-dead-cleanup I4 base to be removed by
+      engine. Declare target {'command':'uv run pytest -q','customTarget':true},
+      NEVER {'gate':'tests'}. Verify: grep zero _legacy_* and 3.x branch, pytest
+      plus integration with no new failures, lint 14 of 14, golden hash-equal.
+      Report: rename map, deletion proof, gate counts."
+    citations:
+      - src/python_setup_lint/checkers/conformance/suppression_justification_checker.py
+      - tests/checkers/test_suppression_justification_checker.py
+    deps: []
+    kind: no-behavior
+    milestone: M2
+    outlineRef: checkers-legacy-dead-cleanup-v2
+    slug: checkers-legacy-dead-cleanup-v2
+    title: Rename legacy scan and remove dead compat (v2 rewired)
+    wave: 16

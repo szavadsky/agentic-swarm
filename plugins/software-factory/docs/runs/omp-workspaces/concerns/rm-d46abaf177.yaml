@@ -1,0 +1,20 @@
+id: rm-d46abaf177
+chosen: M2 characterizes transport byte-stability with tests only, pinning
+  prompt-filename instability as documented behavior
+alternatives:
+  - Stabilize prompt filename now (content-addressed) in M2
+  - Leave transport uncharacterized until M7
+why: Spike-cache-key verdict (content-keyed, path-safe) was not yet merged when
+  M2 ran; tests-only characterization (tests-only check passed, no prod change)
+  locks in byte-identical system-prompt/overlay/prompt-content plus
+  argv-differs-only-at-prompt-filename, so M7 stabilization has a
+  failing-then-pointing test. Deferred per td-prompt-path.
+status: open
+source:
+  record: 024-plan-close-up-1-a1
+  agent: plan-close-up
+  step: plan-close-up-1
+  iteration: 1
+  lastSeen: 2026-11-10T06:32:04.799Z
+createdAt: 2026-11-10T06:32:04.799Z
+updatedAt: 2026-11-10T06:32:04.799Z

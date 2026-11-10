@@ -1,0 +1,97 @@
+status: ok
+summary: Authored test-first contract coverage for the ruff-format
+  check-vs-format modes, config wiring, and single-source 14-tool registry, and
+  migrated stale 13-tool assertions to the 14-tool contract. Added
+  tests/runner/test_runner_format_contract.py (ruff format check mode with
+  --check/--config, build_format_command mutating mode, shipped ruff.toml
+  discovery, _config_flag_for mapping,
+  EXPECTED_TOOL_NAMES/FORMATTER_ONLY/STATISTICS_PARSER_TOOLS/RECORD_PARSER_TOOLS/RECORDLESS_TOOLS
+  exports + dispatch ownership, no-fix vs --fix pipeline spying, golden tool
+  counts). Migrated test_lint_runner TestToolSpec (14 names/count),
+  _factories_extras invariant counts derived from EXPECTED_TOOL_NAMES
+  (all_14_tools_dispatched, package_name-none 12), stats/t3 parser-coverage
+  tests to STATISTICS_PARSER_TOOLS with FORMATTER_ONLY exemption, and updated
+  13→14 comments/docstrings in factories, fakes, smoke, self-lint and bench
+  tests. No production files were modified. Full suite is red only on the 17
+  declared target tests (all AssertionError, no collection/import failures);
+  everything else passes.
+target:
+  selectors:
+    - tests/runner/test_runner_format_contract.py
+    - tests/runner/test_lint_runner.py::TestToolSpec
+    - tests/runner/test_lint_runner_stats.py::test_statistics_parsers_given_all_tools_then_covered
+    - tests/runner/test_t3_coverage.py::TestParserCompleteness
+    - tests/runner/test_testing_fakes.py::test_run_lint_with_fake_dispatch_invariants
+  expectRed:
+    - tests/runner/test_runner_format_contract.py::TestRuffFormatStrategy::test_ruff_format_build_command_given_normal_pass_then_check_mode
+    - tests/runner/test_runner_format_contract.py::TestRuffFormatStrategy::test_ruff_format_build_format_command_given_fix_pass_then_mutating_mode
+    - tests/runner/test_runner_format_contract.py::TestRuffFormatConfig::test_default_config_paths_given_ruff_format_then_ruff_toml
+    - tests/runner/test_runner_format_contract.py::TestRuffFormatConfig::test_config_flag_for_ruff_format_then_config_flag
+    - tests/runner/test_runner_format_contract.py::TestRegistryConstants::test_expected_tool_names_given_exported_then_matches_builtins
+    - tests/runner/test_runner_format_contract.py::TestRegistryConstants::test_formatter_only_and_statistics_parser_tools_partition_all_tools
+    - tests/runner/test_runner_format_contract.py::TestRegistryConstants::test_record_parser_and_recordless_tools_partition_all_tools
+    - tests/runner/test_runner_format_contract.py::TestRegistryConstants::test_registry_constants_then_match_parser_tables
+    - tests/runner/test_runner_format_contract.py::TestRegistryConstants::test_registry_constants_given_runner_then_alias_dispatch_objects
+    - tests/runner/test_runner_format_contract.py::TestPipelineModes::test_run_lint_without_fix_runs_ruff_format_check_only
+    - tests/runner/test_runner_format_contract.py::TestPipelineModes::test_run_lint_with_fix_formats_first_then_checks
+    - tests/runner/test_lint_runner_stats.py::test_statistics_parsers_given_all_tools_then_covered
+    - tests/runner/test_t3_coverage.py::TestParserCompleteness::test_parser_completeness_given_all_tools_then_have_parser
+    - tests/runner/test_t3_coverage.py::TestParserCompleteness::test_parser_completeness_given_all_parsers_then_correspond_to_tools
+    - tests/runner/test_t3_coverage.py::TestParserCompleteness::test_parser_completeness_given_statistics_flags_then_align_with_parsers
+    - tests/runner/test_testing_fakes.py::test_run_lint_with_fake_dispatch_invariants[all_14_tools_dispatched]
+    - tests/runner/test_testing_fakes.py::test_run_lint_with_fake_dispatch_invariants[package_name_none_skips_stubtest_verifytypes]
+evidence:
+  - "Target selector run: `uv run pytest
+    tests/runner/test_runner_format_contract.py
+    tests/runner/test_lint_runner.py::TestToolSpec
+    tests/runner/test_lint_runner_stats.py::test_statistics_parsers_given_all_t\
+    ools_then_covered tests/runner/test_t3_coverage.py::TestParserCompleteness
+    tests/runner/test_testing_fakes.py::test_run_lint_with_fake_dispatch_invari\
+    ants -q` -> 17 failed, 7 passed; all 17 expectRed ids fail with
+    AssertionError (not import/collection errors)."
+  - "Full suite survey: `uv run pytest -q` -> 17 failed, 1335 passed, 4 skipped,
+    18 deselected; the only failures are the 17 declared target tests."
+  - "Red failure modes verified as behavioral: normal pass ruff format command
+    is ['ruff','format','<path>'] (missing --check/--config);
+    build_format_command absent; _config_flag_for('ruff format', ...) returns
+    []; registry constants not re-exported; run_lint --fix second ruff-format
+    call lacks --check."
+  - "Test infra proof: new tests collect and execute; 12-test contract file
+    reports 11 failed + 1 passed (golden counts guard), and collection lists all
+    expected node ids."
+  - "Golden data verified (not rewritten):
+    tests/data/golden/minimal_sample_project_tool_counts.json has 14 keys, ruff
+    format = 0; the passing
+    test_tool_counts_file_given_registry_then_14_keys_and_ruff_format_zero
+    asserts set(counts) == {t.name for t in TOOLS}."
+  - "Code quality of test changes: `uv run ruff check` on all modified/new tests
+    -> All checks passed; `uv run ruff format --check` -> 11 files already
+    formatted; `uv run mypy tests/runner/test_runner_format_contract.py
+    --no-incremental` -> Success; `uv run pyright
+    tests/runner/test_runner_format_contract.py` -> 0 errors."
+  - "Scope integrity: `git status --porcelain` shows only tests/runner test
+    files modified plus the new tests/runner/test_runner_format_contract.py; no
+    src/, docs/, AGENTS.md, README.md or lint.baseline changes."
+concerns:
+  - Production implementation (RuffFormatLintTool, registry constants, cli
+    phase-1a, docs 13→14 migration) is intentionally out of scope for this
+    test-first step and remains undone; the declared expectRed set is expected
+    to flip green after it lands.
+  - tests/data/tool_counts.json named in the assignment does not exist; the
+    committed golden tests/data/golden/minimal_sample_project_tool_counts.json
+    is the actual artifact and was verified in place without modification.
+  - Fixed a pre-existing pylint C0208 violation in
+    tests/runner/_factories_extras.py (set literal iteration in the fix-flag
+    invariant row) by iterating a tuple, so the later zero-violation lint gate
+    is achievable; this is unrelated to behavior and was in a file already
+    touched.
+  - The new pipeline tests rely on ruff.toml discovery from the repo root
+    (RunnerConfig(cwd=Path.cwd()) with no explicit config_paths), matching the
+    assignment's 'resolved by default' contract; implementation must fall back
+    to _default_config_paths when config_paths lacks 'ruff format'.
+notes: "Test-first only: 17 target tests are red for missing behavior, while the
+  migrated 13→14 count assertions pass against the already-present ruff format
+  ToolSpec. Factory/test counts are derived at runtime from the public
+  EXPECTED_TOOL_NAMES/STATISTICS_PARSER_TOOLS/FORMATTER_ONLY constants via
+  tests.runner._factories.runner_registry_constant, so a missing export fails
+  with a clear AssertionError instead of breaking collection."

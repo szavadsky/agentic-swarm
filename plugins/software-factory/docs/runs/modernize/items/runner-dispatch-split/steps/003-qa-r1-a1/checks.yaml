@@ -1,0 +1,60 @@
+checks:
+  - id: test-diff
+    status: pass
+    message: test-diff generated (1 test files, 1575 bytes)
+    details:
+      diff: >-
+        diff --git a/tests/runner/test_lint_runner.py
+        b/tests/runner/test_lint_runner.py
+
+        index 2c085d5..0968146 100644
+
+        --- a/tests/runner/test_lint_runner.py
+
+        +++ b/tests/runner/test_lint_runner.py
+
+        @@ -4,7 +4,6 @@ Per-tool / per-flag rows are parametrised via shared
+        tables in
+         ``tests/runner/_factories.py`` (T12 consolidation).
+         """
+
+         
+        -# pylint: disable=too-many-lines  # test file with many parametrised
+        classes; splitting would hurt readability
+         from __future__ import annotations
+         
+         from pathlib import Path
+        @@ -14,6 +13,7 @@ import pytest
+         
+         import python_setup_lint.runner.output as _output_module
+         from python_setup_lint.runner import (
+        +    EXPECTED_TOOL_NAMES,
+             STRATEGIES,
+             TOOLS,
+             TOOLS_BY_NAME,
+        @@ -47,7 +47,7 @@ _CONFIG = RunnerConfig(cwd=Path.cwd())
+         
+         
+         class TestToolSpec:
+        -    """The static 14-tool table invariant."""
+
+        +    """The built-in tool table invariant (names pinned by the oracle
+        above)."""
+         
+             def test_tool_spec_given_known_tools_then_present(self) -> None:
+                 assert frozenset(t.name for t in TOOLS) == EXPECTED_BUILTIN_TOOL_NAMES
+        @@ -59,7 +59,8 @@ class TestToolSpec:
+                     "ty check",
+                 }
+                 assert all(t.name for t in TOOLS)
+        -        assert len({t.name for t in TOOLS}) == len(TOOLS) == 14
+
+        +        assert frozenset(t.name for t in TOOLS) == EXPECTED_TOOL_NAMES
+
+        +        assert len({t.name for t in TOOLS}) == len(TOOLS) ==
+        len(EXPECTED_TOOL_NAMES)
+         
+             def test_tool_spec_given_yamllint_then_default_paths_is_dot(self) -> None:
+                 """yamllint default_paths changed from config/*.yaml to . (T5 fix)."""
+      files:
+        - tests/runner/test_lint_runner.py

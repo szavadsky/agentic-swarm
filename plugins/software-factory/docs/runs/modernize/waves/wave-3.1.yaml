@@ -1,0 +1,11 @@
+wave: 1
+iteration: 3
+status: complete
+mergedItems:
+  - secrets-baseline-exclusion
+  - pylint-cache-semantics-closure
+  - adr-formalization
+failedItems: []
+blockedItems: []
+summary: "Wave 1 completed. Merged items: secrets-baseline-exclusion,
+  pylint-cache-semantics-closure, adr-formalization"

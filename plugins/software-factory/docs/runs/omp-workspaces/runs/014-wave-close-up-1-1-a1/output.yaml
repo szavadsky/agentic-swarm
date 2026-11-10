@@ -1,0 +1,24 @@
+blockedItems: []
+debt:
+  - "Baseline-known test failure carried forward (not a regression):
+    test/disk-space.test.ts:57 checkDiskSpace expects 1 failing path, receives 2
+    — environment-sensitive, recorded in infra notes."
+failedItems: []
+iteration: 1
+mergedItems: []
+recommendations:
+  - Proceed to next wave/iteration; no hygiene or gate action required.
+  - Optionally investigate environment-sensitive disk-space test (expects 1
+    failing path, gets 2) outside wave flow since it keeps the test gate red at
+    baseline.
+status: complete
+summary: "Wave 1 close-up: no items listed as merged; tree is clean and gates
+  match baseline with no regressions. Hygiene: no untracked files, no stray
+  temp/build artifacts, no true merge-conflict marker lines (only intentional
+  references in docs/source: agents/wave-close-up.md, steps/integrate.md,
+  src/core/git/merge.ts, test/engine/merge-conflict.test.ts). Sole modified file
+  is engine-managed .factory/tasks/omp-workspaces/journal.ndjson (2 insertions),
+  not item junk. Gates per Gate Diff table: typecheck pass/pass green; test
+  fail/fail still failing, matches baseline-known disk-space failure, not a
+  regression."
+wave: 1

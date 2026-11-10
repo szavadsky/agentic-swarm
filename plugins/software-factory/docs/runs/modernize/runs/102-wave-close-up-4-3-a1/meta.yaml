@@ -1,0 +1,18 @@
+seq: 102
+name: wave-close-up-4-3
+attempt: 1
+agent: wave-close-up
+role: alt-workhorse
+models:
+  - opencode-go/muse-spark-1.3-contributor
+  - opencode-go/deepseek-v4.1-flash
+timeoutSec: 2700
+status: ok
+startedAt: 2026-11-09T06:28:05.266Z
+session: 01a1befe-1880-7168-809d-22b1111d50d3
+endedAt: 2026-11-09T06:30:49.300Z
+usage:
+  inputTokens: 26053
+  outputTokens: 15940
+  costUsd: 0.005993
+traceRef: /home/slava/aiexp/python-setup.factory-wt/.factory-runtime/sessions/2026-11-09T06-28-05-888Z_01a1befe-1880-7168-809d-22b1111d50d3

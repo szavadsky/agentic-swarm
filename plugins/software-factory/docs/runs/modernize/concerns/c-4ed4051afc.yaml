@@ -1,0 +1,28 @@
+id: c-4ed4051afc
+kind: risk
+summary: detect-secrets relies on the baseline `^\.factory/` filter for 1.84GB
+  of tracked safetensors
+detail: 9 tracked safetensors total 1,844,653,898 B (largest 789,581,344 B).
+  HEAD scan exits 0 only because .secrets.baseline:41-46 excludes them; the
+  bootstrap path (dispatch.py:190-198) would eagerly parse unknown extensions
+  via IniFileParser.__init__ (detect_secrets/transformers/config.py:97) and hit
+  the 2048MB RLIMIT_AS (runner/types.py:22, output.py:171-181) with MemoryError.
+  This is residual infra fragility, not a gate failure.
+location:
+  file: .secrets.baseline
+  line: 44
+affects:
+  - CI
+  - consumer repos
+  - lint gate
+severity: medium
+status: routed
+source:
+  record: 003-research-r2-a1
+  agent: fact-finder
+  step: research
+  item: final-gate-validation
+  lastSeen: 2026-11-10T03:19:38.948Z
+createdAt: 2026-11-10T03:19:38.948Z
+updatedAt: 2026-11-10T03:32:47.723Z
+disposition: optional

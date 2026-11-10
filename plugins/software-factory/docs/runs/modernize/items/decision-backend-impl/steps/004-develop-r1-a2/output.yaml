@@ -1,0 +1,113 @@
+status: ok
+summary: "Implemented the veto DecisionBackend and rewrote the semantic adapter,
+  then compressed the production diff from 444 to 299 lines (item-base metric)
+  without changing behavior. Backend: pinned
+  DECISION_THRESHOLD=0.5/PROMPT_VERSION=prompt-v1, FakeBackend (1.0,
+  'fake-backend rev test prompt-v1'), PYTEST_CURRENT_TEST-guarded dotted-path
+  loader, structlog once-per-process deprecation/model warnings, production
+  returns None. _semantic.py: digest-keyed in-process memo, one backend call per
+  unique (justification, rule, model) triple, no disk cache, no
+  sentence-transformers reference. _base.py: heuristic-first gate,
+  normalize_suppressed_codes (directive stripping + order-insensitive code-echo
+  rejection), backend kwarg defaulting to None, backend may only veto.
+  _base.pyi/_semantic.pyi/_decision_backend.pyi updated and stale
+  NLP/sentence-transformers docs removed; no_try_import optional-pattern set
+  emptied (committed in a1). All 120 target tests pass; full unit suite and all
+  14 lint tools pass. Integration golden shows the intended 3-finding shift at
+  the bare-noqa line, reported below because tests/data is out of scope for this
+  item."
+target:
+  selectors:
+    - tests/checkers/test_decision_backend.py
+    - tests/checkers/test_semantic_check.py
+    - tests/checkers/test_no_try_import_checker.py
+    - tests/checkers/test_suppression_justification_checker.py
+    - tests/assumptions/test_pylint_cache_semantics.py
+  expectRed:
+    - tests/checkers/test_decision_backend.py::test_fake_backend_defaults_to_one_and_pinned_model_id
+    - tests/checkers/test_decision_backend.py::test_fake_backend_returns_configured_score
+    - tests/checkers/test_decision_backend.py::test_fake_backend_satisfies_protocol
+    - tests/checkers/test_decision_backend.py::test_get_backend_is_none_without_configuration
+    - tests/checkers/test_decision_backend.py::test_get_backend_honors_dotted_path_under_pytest
+    - tests/checkers/test_decision_backend.py::test_get_backend_ignores_dotted_path_in_production
+    - tests/checkers/test_decision_backend.py::test_decision_model_parses_but_yields_none_with_exactly_one_warning
+    - tests/checkers/test_decision_backend.py::test_reranker_model_env_is_deprecated_with_exactly_one_warning
+    - tests/checkers/test_decision_backend.py::test_check_if_meaningful_has_backend_keyword_defaulting_to_none
+    - tests/checkers/test_decision_backend.py::test_registered_backend_rejects_a_meaningful_heuristic
+    - tests/checkers/test_decision_backend.py::test_brush_off_is_vetoed_before_the_backend
+    - tests/checkers/test_decision_backend.py::test_brush_off_does_not_reach_the_semantic_adapter
+    - tests/checkers/test_decision_backend.py::test_meaningful_heuristic_is_confirmed_by_backend
+    - tests/checkers/test_decision_backend.py::test_backend_below_threshold_rejects_a_meaningful_heuristic
+    - tests/checkers/test_decision_backend.py::test_semantic_disabled_never_calls_the_backend
+    - tests/checkers/test_decision_backend.py::test_check_if_meaningful_rejects_code_echo_justification
+    - tests/checkers/test_decision_backend.py::test_semantic_extra_is_empty
+    - tests/checkers/test_decision_backend.py::test_uv_lock_has_no_sentence_transformers_edge
+    - tests/checkers/test_semantic_check.py::test_signature_exposes_backend_keyword_defaulting_to_none
+    - tests/checkers/test_semantic_check.py::test_empty_primary_returns_false_without_calling_backend
+    - tests/checkers/test_semantic_check.py::test_one_backend_call_per_unique_pair
+    - tests/checkers/test_semantic_check.py::test_distinct_pairs_call_backend_again
+    - tests/checkers/test_semantic_check.py::test_memo_key_includes_backend_model_id
+    - tests/checkers/test_semantic_check.py::test_module_does_not_reference_sentence_transformers
+    - tests/checkers/test_semantic_check.py::test_check_writes_no_disk_cache
+    - tests/checkers/test_no_try_import_checker.py::test_sentence_transformers_is_no_longer_an_optional_import_pattern
+    - tests/checkers/test_no_try_import_checker.py::test_try_import_of_sentence_transformers_is_flagged
+    - tests/checkers/test_suppression_justification_checker.py::TestAnyElementCodeEcho::test_code_echo_on_any_element_is_rejected
+    - tests/assumptions/test_pylint_cache_semantics.py::TestSemanticInProcessMemo::test_given_new_verdicts_then_backend_calls_once_each_and_writes_nothing
+    - tests/assumptions/test_pylint_cache_semantics.py::TestSemanticInProcessMemo::test_given_repeated_pair_then_serves_memory_without_backend_or_write
+    - tests/assumptions/test_pylint_cache_semantics.py::TestSemanticInProcessMemo::test_given_empty_primary_then_returns_false_without_backend_or_write
+    - tests/assumptions/test_pylint_cache_semantics.py::TestSemanticPathScoping::test_semantic_check_if_meaningful_given_identical_inputs_then_signature_is_path_free
+    - tests/assumptions/test_pylint_cache_semantics.py::TestSemanticPathScoping::test_checker_sources_given_source_tree_then_no_result_cache_writer
+evidence:
+  - Size gate metric reconstructed from the a1 review (444 = full new backend
+    file + diff vs item base fc2770d); final `git diff --numstat fc2770d -- src`
+    = 133 added + 166 deleted = 299 <= 300.
+  - "Target suite: `uv run pytest -q tests/checkers/test_decision_backend.py
+    tests/checkers/test_semantic_check.py
+    tests/checkers/test_no_try_import_checker.py
+    tests/checkers/test_suppression_justification_checker.py
+    tests/assumptions/test_pylint_cache_semantics.py` -> 120 passed."
+  - "Full unit suite: `uv run pytest -q` -> 1377 passed, 13 deselected."
+  - "Full gate: `uv run lint` -> EXIT=0, all 14 tools PASSED (tach, ruff format,
+    ruff check, rumdl, mypy, yamllint, ty, mypy.stubtest, pyright check, pyright
+    verify types, pylint, pylint-pyi, pylint tests, detect-secrets)."
+  - Ruff format with project config on all 7 changed files -> 7 files already
+    formatted; `ruff check --config config/ruff.toml` on all changed files ->
+    All checks passed.
+  - "`uv run pylint --rcfile config/.pylintrc-pyi` on
+    _base.pyi/_semantic.pyi/_decision_backend.pyi -> 10.00/10 (justified
+    missing-beartype and generic-return-requires-returns inline suppressions
+    accepted, no useless-suppression)."
+  - "Behavior spot-checks: 11 selected expected-red cases passed, including
+    pinned FakeBackend, exactly-one model warning, brush-off veto, empty
+    [semantic] extra, uv.lock no sentence-transformers edge,
+    one-call-per-unique-pair, and any-element code echo."
+  - "Integration: `uv run pytest tests/integration.py -q` -> 8 passed, 1 failed
+    only on the reported golden shift (3 added W9704 findings at
+    src/minimal_sample/mod.py:42 for pylint, pylint tests, pylint-pyi)."
+concerns:
+  - "Golden shift (reported, not fixed): the sample project's bare `# noqa:
+    unused-argument` at src/minimal_sample/mod.py:42 is now correctly rejected
+    as a code-only suppression with no technical reason, adding 3 W9704 findings
+    (pylint, pylint tests, pylint-pyi). tests/data is explicitly forbidden to
+    this item, so the golden snapshot update is owed to the golden-snapshot
+    owner; the integration assertion only pins the brush-off (line 49) and
+    carry-from (line 56) behaviors, which still pass. The shift occurs with
+    PYTHON_SETUP_LINT_SEMANTIC=0 as well, matching the new code-echo tests."
+  - "Budget-driven doc compression: _decision_backend.pyi carries type
+    signatures without docstrings, and _base.pyi's normalize_suppressed_codes
+    doc is a single line plus a justified `generic-return-requires-returns`
+    disable. Public FakeBackend.decide uses an inline `pylint:
+    disable=missing-beartype` (deterministic test double ignores inputs) instead
+    of @beartype; the protocol method does the same because beartype never
+    validates protocol declarations."
+  - _semantic.py retains the original in-process memo shape (sha256 digest of
+    primary/rule/context/model_id -> bool) rather than a tuple key, to keep the
+    rewrite compact; the memo is process-only, reset by _reset_cache, and
+    tolerant of the assumptions test pinning _RESULT_CACHE=None.
+notes: "Compression path: a1 measured 429 by plain git diff but 444 by the gate
+  because the two _decision_backend files are new relative to the item base
+  fc2770d and are counted at full size. The final tree is 299 by that same
+  metric. Implementations preserve all pinned ADR-014 values (threshold 0.5,
+  prompt-v1, FakeBackend 1.0/model id, None fallback, one call per unique pair)
+  and ADR-010 loader semantics (PYTEST_CURRENT_TEST guard, dotted path,
+  production None, once-per-process warnings)."

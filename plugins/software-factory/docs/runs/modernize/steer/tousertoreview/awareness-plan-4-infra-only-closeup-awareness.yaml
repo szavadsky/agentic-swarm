@@ -1,0 +1,10 @@
+id: awareness-plan-4-infra-only-closeup-awareness
+ref: plan-4
+disposition: human-awareness
+question: Intent requires replacing the reranker with a CPU-friendly decision
+  model; plan defers all model wiring to I5 on corpus+license+CPU gates, which
+  is sound given the 215/0 no-go but is a scope deviation ADR-009 says the
+  operator must approve at close-up ('must not claim swap complete'). Proceed
+  with infra now; record operator awareness that close-up stays heuristic-first.
+status: open
+createdAt: 2026-11-09T00:19:55.180Z

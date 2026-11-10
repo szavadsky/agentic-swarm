@@ -1,0 +1,143 @@
+{
+  "all_loads_under_rlimit": true,
+  "loads": [
+    {
+      "command": [
+        "/home/slava/aiexp/python-setup.factory-wt/topic_modernize--decision-cache-design-spike/.venv/bin/python3",
+        "-m",
+        "pylint",
+        "--rcfile=/home/slava/aiexp/python-setup.factory-wt/topic_modernize--decision-cache-design-spike/config/.pylintrc",
+        "src/app.py"
+      ],
+      "elapsed_seconds": 1.328,
+      "exit_code": 0,
+      "memory_error": false,
+      "name": "pylint",
+      "peak_rss_mb": 80.08,
+      "rcfile": "/home/slava/aiexp/python-setup.factory-wt/topic_modernize--decision-cache-design-spike/config/.pylintrc",
+      "stderr_tail": [
+        "\tPage size (bytes): 4096",
+        "\tExit status: 0"
+      ],
+      "stdout_tail": [
+        "    }",
+        "}"
+      ],
+      "target": "src/app.py",
+      "time_reported_seconds": 1.32,
+      "timed_out": false
+    },
+    {
+      "command": [
+        "/home/slava/aiexp/python-setup.factory-wt/topic_modernize--decision-cache-design-spike/.venv/bin/python3",
+        "-m",
+        "pylint",
+        "--rcfile=/home/slava/aiexp/python-setup.factory-wt/topic_modernize--decision-cache-design-spike/config/.pylintrc-pyi",
+        "src/app.pyi"
+      ],
+      "elapsed_seconds": 1.17,
+      "exit_code": 0,
+      "memory_error": false,
+      "name": "pylint-pyi",
+      "peak_rss_mb": 79.67,
+      "rcfile": "/home/slava/aiexp/python-setup.factory-wt/topic_modernize--decision-cache-design-spike/config/.pylintrc-pyi",
+      "stderr_tail": [
+        "\tPage size (bytes): 4096",
+        "\tExit status: 0"
+      ],
+      "stdout_tail": [
+        "--------------------------------------------------------------------",
+        "Your code has been rated at 10.00/10 (previous run: 10.00/10, +0.00)"
+      ],
+      "target": "src/app.pyi",
+      "time_reported_seconds": 1.16,
+      "timed_out": false
+    },
+    {
+      "command": [
+        "/home/slava/aiexp/python-setup.factory-wt/topic_modernize--decision-cache-design-spike/.venv/bin/python3",
+        "-m",
+        "pylint",
+        "--rcfile=/home/slava/aiexp/python-setup.factory-wt/topic_modernize--decision-cache-design-spike/config/.pylintrc-tests",
+        "tests/test_app.py"
+      ],
+      "elapsed_seconds": 0.617,
+      "exit_code": 0,
+      "memory_error": false,
+      "name": "pylint tests",
+      "peak_rss_mb": 62.09,
+      "rcfile": "/home/slava/aiexp/python-setup.factory-wt/topic_modernize--decision-cache-design-spike/config/.pylintrc-tests",
+      "stderr_tail": [
+        "\tPage size (bytes): 4096",
+        "\tExit status: 0"
+      ],
+      "stdout_tail": [
+        "    }",
+        "}"
+      ],
+      "target": "tests/test_app.py",
+      "time_reported_seconds": 0.61,
+      "timed_out": false
+    }
+  ],
+  "ml_runtime": {
+    "onnxruntime": "absent",
+    "sentence_transformers": "absent",
+    "torch": "absent",
+    "transformers": "absent"
+  },
+  "model_eval_over_2048mb": {
+    "glide": 2845.5859375
+  },
+  "model_eval_stats": {
+    "bekko-17m": {
+      "load_seconds": 0.6837534769438207,
+      "params": 16800000,
+      "peak_rss_mb": 624.3125,
+      "sentence_transformers": "6.1.0",
+      "torch": "2.10.0+cpu",
+      "total_seconds": 11.765229595941491,
+      "weights_bytes": 67198244
+    },
+    "decider-nano": {
+      "load_seconds": 12.912264187005349,
+      "params": 149015041,
+      "peak_rss_mb": 1464.35546875,
+      "sentence_transformers": null,
+      "torch": "2.15.0+cpu",
+      "total_seconds": 57.87381588795688,
+      "weights_bytes": 298044578
+    },
+    "ettin-reranker-150m": {
+      "load_seconds": 0.6794025599956512,
+      "params": 149014272,
+      "peak_rss_mb": 990.9609375,
+      "sentence_transformers": "6.2.0",
+      "torch": "2.15.0+cpu",
+      "total_seconds": 175.06913636799436,
+      "weights_bytes": 598439036
+    },
+    "glide": {
+      "load_seconds": 33.91783796297386,
+      "params": 394781696,
+      "peak_rss_mb": 2845.5859375,
+      "sentence_transformers": null,
+      "torch": "2.14.0+cpu",
+      "total_seconds": 4.849025315023027,
+      "weights_bytes": 790103664
+    },
+    "minilm-l6-v2": {
+      "load_seconds": 0.7155748220393434,
+      "params": 22713728,
+      "peak_rss_mb": 556.390625,
+      "sentence_transformers": "6.2.0",
+      "torch": "2.15.0+cpu",
+      "total_seconds": 142.04959630093072,
+      "weights_bytes": 90868376
+    }
+  },
+  "onnx_vs_torch_note": "torch/onnxruntime are absent from this dev environment. The sibling model-eval PoC (torch 2.10 CPU + sentence-transformers) measured peak RSS 556-2846 MB: minilm 556 MB, bekko-17m 624 MB, ettin-150m 991 MB, decider-nano 1464 MB, GLiDE 2846 MB. GLiDE exceeds the runner's 2048 MB RLIMIT_AS; decider-nano is close. The model-eval research also notes bekko's upstream ONNX browser model is ~29 MB versus 67 MB safetensors, so an ONNX path is plausible; however ONNX Runtime is expected to avoid torch's import/framework overhead and lower peak RSS only as an unverified hypothesis. I5 must benchmark the chosen model under RLIMIT_AS=2048 in the pylint subprocess and prefer ONNX only if it fits without raising the runner cap.",
+  "rlimit_as_mb": 2048,
+  "three_load_note": "The runner invokes pylint, pylint-pyi and pylint tests as three sequential subprocesses. A model backend is loaded lazily per process, so up to three model loads per lint run unless every suppression is a cache hit. Cache hits avoid model load entirely; refresh should populate the tracked cache before normal lint in CI.",
+  "total_elapsed_seconds": 3.115
+}

@@ -1,0 +1,28 @@
+status: approved
+summary: "Docs-only salvage verified complete: 5/5 files at required paths, oMP
+  typo fixed, probe+recommendations in all 4 spikes, 4x M1 evidence+FollowUps
+  mapping, zero prod lines, custom target passes, no gate target."
+suggestions:
+  - id: c-8a26e7294b
+    disposition: human-awareness
+    summary: "Gate env lacks dep install: worktrees without infra.setup fail
+      typecheck/tests"
+    detail: "Confirmed by attempt-1 checks (TS2688 no @types/bun, Cannot find
+      package 'yaml') vs attempt-2 green after bun install. Not item-fixable:
+      this is a docs-only item and its gates already pass via baseline ratchet
+      (684 pass, 1 fail = known baseline disk-space test). Architect should
+      decide on adding dependency setup to the gate runner so future docs-only
+      items don't fail environmentally."
+    location:
+      file: plugins/software-factory/package.json
+  - id: recovery-line92-path-note
+    disposition: optional
+    summary: RECOVERY.md line 92 names non-v2 deliverable path
+    detail: Line 92 (copied from source) names the deliverable as
+      items/spike-findings-recovery/RECOVERY.md while the actual path is
+      items/spike-findings-recovery-v2/RECOVERY.md (correctly stated in the
+      line-5 placement note). One-phrase clarification possible; non-blocking
+      faithful-source quote otherwise.
+    location:
+      file: items/spike-findings-recovery-v2/RECOVERY.md
+      line: 92

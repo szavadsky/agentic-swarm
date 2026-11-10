@@ -1,0 +1,15 @@
+status: approved
+summary: "Docs-only ADR formalization verified: 12 ADRs structured, rumdl clean,
+  scope confined to docs/adr."
+suggestions:
+  - detail: "New/rewritten records (ADR-009 through ADR-012) use '# ADR-NNN:' H1
+      prefix while legacy ADR-001 through ADR-008 use bare titles. Both forms
+      render and the README index strips the prefix consistently, so this is
+      polish only: aligning H1 format (either add prefix to 001-008 or drop it
+      from 009-012) would remove the inconsistency."
+    disposition: optional
+    id: adr-heading-prefix-consistency
+    location:
+      file: docs/adr/ADR-009.md
+      line: 1
+    summary: H1 heading prefix inconsistent between new and legacy ADRs

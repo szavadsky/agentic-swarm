@@ -1,0 +1,119 @@
+newConcerns:
+  - affects:
+      - "19.3"
+    detail: Patch captures reported under
+      .factory-runtime/tmp/omp-eval-agent-<id>/*.patch, but the eval temp base
+      follows TMPDIR, so the path varies by host/env. gc/status must resolve the
+      actual tmp base plus concurrent agent ids instead of hard-coding one dir;
+      locks must cover concurrent agent ids.
+    kind: risk
+    location:
+      file: .factory/tasks/omp-workspaces/items/spike-omp-isolation/steps/002-research-r1-a2/output.yaml
+      line: 479
+    severity: medium
+    summary: Isolation patch dir is TMPDIR-dependent, outside gc scope
+remarkable:
+  - alternatives:
+      - Request fix round to reinterpret probes 26/18 before acceptance
+      - Full-omp apply:true merges (single-parent, no gates)
+      - "Full-engine git worktrees only (kept as isolation: engine fallback)"
+    chosen: "Approve spike: omp owns workspace creation/capture, engine owns
+      branches, merges, gates, commits, gc, records"
+    why: Retention matrix plus apply:true single-parent evidence (68e5586, no
+      gates/conflict agent) supports the split; preflight provably needs a real
+      turn (probes 17/27); probe 26/18 interpretation flaws do not change any
+      decision.
+status: approved
+suggestions:
+  - detail: Spike probes 2-5 enumerate the exact 9-value enum (auto, apfs, btrfs,
+      zfs, reflink, overlayfs, projfs, block-clone, rcopy), fresh-profile
+      default auto, host profile rcopy, and FICLONE-fallback behavior on
+      ext4/WSL2; independently re-verified via config-set oracle on omp 18.18.5.
+      The unknown is retired in findings; landing the omp-3 doc and config
+      surface is tracked via spike followUps, not this risk.
+    disposition: dismiss
+    id: c-e97dd18239
+    location:
+      file: .factory/tasks/omp-workspaces/items/spike-omp-isolation/steps/002-research-r1-a2/output.yaml
+      line: 18
+    summary: Backend enum now documented; retire unknown
+  - detail: "Spike confirms with probes 17/27: bogus overlay keys pass (BADKEY_OK
+      rc=0) and missing overlay is silently ignored by --version (rc=0,
+      re-verified). Read-only spike cannot fix prod code; architect to schedule
+      dev item replacing the preflight.ts:364-394 check with key/enum/catalog
+      validation plus one real isolated round-trip turn per findings F6."
+    disposition: architect
+    id: c-02f2086657
+    location:
+      file: plugins/software-factory/src/cli/preflight.ts
+      line: 383
+    summary: Preflight no-op confirmed; schedule real-turn replacement
+  - detail: "Spike F4/probe 24 confirms worktree.onStart is a no-op for -p
+      (interactive only); factory root mapping is omp worktree add -b
+      <topic-branch> <path> <base> -C <repo> then omp --cwd <path> -p, with
+      isolation: engine kept as fallback. Architect to ratify isolationDefault
+      and the draft workspaces.omp/taskIsolation config surface before 19.1
+      dev."
+    disposition: architect
+    id: c-6d3ab1a60d
+    location:
+      file: .factory/tasks/omp-workspaces/items/spike-omp-isolation/steps/002-research-r1-a2/output.yaml
+      line: 30
+    summary: "Ratify isolation mapping: omp worktree + --cwd for roots"
+  - detail: "Independent re-probe: in-base explicit-path worktrees DO appear in
+      worktree list --json when OMP_WORKTREE_DIR is aligned (kind pr-checkout);
+      clear --dry-run correctly reports no orphans for live trees while --all
+      --dry-run lists them. Revise F4 and the finding to outside-base invisible
+      plus live-trees-never-orphans. Recommendation (git worktree list + records
+      as source of truth) still stands."
+    disposition: optional
+    id: probe-26-worktree-list-overstated
+    location:
+      file: .factory/tasks/omp-workspaces/items/spike-omp-isolation/steps/002-research-r1-a2/output.yaml
+      line: 229
+    summary: "Correct probe 26: in-base explicit paths are listed"
+  - detail: omp config get ignores --config overlays (returns auto identically with
+      and without the invalid-backend overlay, re-verified), so reading auto
+      proves nothing about runtime coercion. Drop probe 18 from the no-op trio
+      or re-probe via a real turn; probes 17/27 already prove static checks are
+      no-ops.
+    disposition: optional
+    id: probe-18-coercion-unproven
+    location:
+      file: .factory/tasks/omp-workspaces/items/spike-omp-isolation/steps/002-research-r1-a2/output.yaml
+      line: 117
+    summary: "Soften probe 18: coercion claim unproven via config get"
+  - detail: F6/probe 23 describe the probe shape (one -p --no-session turn spawning
+      an isolated marker subagent with apply:false, assert .patch or omp/task/*
+      artifact, cleanup, ~16s) but give no copy-paste eval snippet, exact argv,
+      artifact assertion, or cleanup steps that M4 can implement directly. Add
+      the exact invocation plus marker code.
+    disposition: optional
+    id: preflight-probe-command-missing
+    location:
+      file: .factory/tasks/omp-workspaces/items/spike-omp-isolation/steps/002-research-r1-a2/output.yaml
+      line: 245
+    summary: Add exact preflight round-trip command to findings
+  - detail: F3 overturns omp-1-topology.md:195-201 by claiming isolated failures now
+      preserve branch/patch artifacts, citing throwaway-repo SHAs without
+      archived transcripts. Attach minimal transcript excerpts or scope the
+      claim to single-host 18.18.5 so 19.1 merge/gc design does not over-rely on
+      unarchived evidence.
+    disposition: optional
+    id: retention-overturn-evidence-thin
+    location:
+      file: .factory/tasks/omp-workspaces/items/spike-omp-isolation/steps/002-research-r1-a2/output.yaml
+    summary: Strengthen isolated-failure retention overturn evidence
+  - detail: Spike concern claims no mock provider surfaced, but sibling spikes
+      proved models.yml plus SSE stub and -e extension seams end to end.
+      Reconcile with spike-mock-provider seam decision before M8 test design so
+      19.8 does not re-spike the mechanism.
+    disposition: optional
+    id: mock-provider-negative-stale
+    location:
+      file: .factory/tasks/omp-workspaces/items/spike-omp-isolation/steps/002-research-r1-a2/output.yaml
+      line: 486
+    summary: Reconcile mock-provider negative with sibling spikes
+summary: Spike answers M1 scenario-1 (9-value backend, retention matrix,
+  real-turn probe) with independently verified core claims; no prod code
+  touched; probe 26/18 need interpretation softening as debt.

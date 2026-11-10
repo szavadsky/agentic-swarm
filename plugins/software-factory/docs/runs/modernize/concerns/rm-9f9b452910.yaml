@@ -1,0 +1,17 @@
+id: rm-9f9b452910
+chosen: Infer owners from ADR-011's visible five-owner taxonomy and flag the gap
+alternatives:
+  - Block the audit until the map is provided
+  - Invent new owner labels
+  - Treat every module as root-owned
+why: The UNIFIED map from coding-rules-audit was not injected and the
+  alternative (inspecting orchestration records) violates containment.
+status: open
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: test-debloat-audit
+  lastSeen: 2026-11-10T00:53:21.467Z
+createdAt: 2026-11-10T00:53:21.467Z
+updatedAt: 2026-11-10T00:53:21.467Z

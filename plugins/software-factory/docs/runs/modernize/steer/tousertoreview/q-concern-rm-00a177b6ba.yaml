@@ -1,0 +1,8 @@
+id: q-concern-rm-00a177b6ba
+ref: test-debloat-audit
+disposition: human-awareness
+question: Cache-design-spike key-derivation decision. Audit SKIPs
+  cache-semantics modules, so no interaction with audit rows. Retained as
+  digest.
+status: open
+createdAt: 2026-11-10T02:58:56.261Z

@@ -1,0 +1,39 @@
+id: decision-decision-backend-impl-1794196081770
+context: item
+item: decision-backend-impl
+afterRecord: 004-develop-r1-a2
+decision: retry-with-guidance
+timestamp: 2026-11-09T03:48:01.770Z
+rationale: "SEMANTIC=0 heuristic regression, not an intended shift. Golden
+  capture runs with PYTHON_SETUP_LINT_SEMANTIC=0 (tests/integration.py:112), so
+  ADR-014 requires byte-identical heuristic behavior: veto applies only when
+  SEMANTIC=1 with a live backend, and any-element echo is a no-op for
+  single-code rules. New finding at mod.py:42 (preceding-line reason 'pylint:
+  disable=some-rule' now rejected) proves the heuristic was tightened beyond the
+  joiner/sort/match allowance. Fix is bounded: restore exact heuristic under
+  SEMANTIC=0."
+text: "Fix in this order (zero tests/data writes; golden-regen-hatch is sole
+  golden writer; no shift report — this is a no-shift bug): (1) Preserve
+  SEMANTIC=0 exactly: keep
+  `os.environ.get('PYTHON_SETUP_LINT_SEMANTIC','1')=='1'` guard; when '0', skip
+  semantic/backend entirely and return the heuristic bool directly. (2) Restore
+  heuristic byte-identical to _base.py:160-238: primary=(comment or
+  text).strip(); empty/<5 False; exact `primary_lower in boilerplate` (50-entry,
+  no word-split/substring); exact `primary_lower in meaningless_phrases` (no
+  substring); rule-echo only as `primary_lower == any(element_lower)` over
+  normalize_suppressed_codes(rule).split(',') — no suppression-pattern
+  rejection, no extra boilerplate. Nachweis: check_if_meaningful('pylint:
+  disable=some-rule', rule='unjustified-suppression', code_context='def
+  _bare_suppression() -> None:', comment=same) with SEMANTIC=0 must be True
+  (preceding-suppression quirk from
+  suppression_justification_checker.py:377-386; checker-level fix belongs to
+  checkers-legacy, not backend). (3) None mapping: semantic_check returns None
+  (not False) when loader/backend None; veto heuristic AND (prob>=0.5) only when
+  backend returns float. (4) Revert any test asserts of the buggy False for
+  line-42-style reasons; keep test_decision_backend.py but pin SEMANTIC=0
+  preservation. Minimize tests/assumptions + test_semantic_check churn (full
+  rewrite is semantic-tests-rewrite via dep). (5) Verify: `uv run pytest
+  tests/integration.py::TestMinimalSampleProject::test_setup_new_and_lint -q`
+  golden hash-equal (line 41 only, no line 42); `uv run pytest -q` no new
+  failures vs M1 table; uv.lock still resolves."
+persist: true

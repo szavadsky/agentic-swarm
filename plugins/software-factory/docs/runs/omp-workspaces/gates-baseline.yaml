@@ -1,0 +1,102 @@
+timestamp: 2026-11-09T23:10:13.280Z
+gates:
+  - id: typecheck
+    command: bun --cwd=plugins/software-factory run typecheck
+    status: pass
+    durationMs: 5755
+    details: $ tsc --noEmit
+  - id: test
+    command: bun --cwd=plugins/software-factory test
+    status: fail
+    durationMs: 244730
+    details: >-
+      bun test v1.4.4 (38afee6c8)
+
+      Disk space check passed (threshold 2048 MB):
+        worktreeRoot (/tmp/factory-test-repo-bobZ0J.factory-wt): 4992 MB free
+        .factory-runtime/tmp (/tmp/factory-test-repo-bobZ0J.factory-wt/.factory-runtime/tmp): 4992 MB free
+        repoRoot (/tmp/factory-test-repo-bobZ0J): 4992 MB free
+        tmpdir (/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp): 95843 MB free
+        /tmp (/tmp): 4992 MB free
+      ================================================================
+
+      Task: status-test-task [ACTIVE]
+
+      Kind: unclassified | Iteration: 1 | Wave: 1
+
+      Worktree: (none - main checkout)
+
+      Config path: /tmp/factory-test-repo-3KaBfI/.factory/pipeline.yaml
+
+      Budget spent: $0.0000
+
+      ----------------------------------------------------------------
+
+      Waves & Items:
+        Wave 1:
+      Concerns: open 0 | dismissed 0 | routed 0 | resolved 0
+
+      ----------------------------------------------------------------
+
+      Blocking Questions:
+        (none)
+      ----------------------------------------------------------------
+
+      Digest Questions:
+        (none)
+      ================================================================
+
+
+
+      test/config-worktree-layering.test.ts:
+
+      [factory preflight] Preflight failed with 1 error(s):
+        - Pipeline config loading failed: Invalid pipeline configuration:
+      /limits/maxIterations: must be integer ({"type":"integer"})
+
+
+      test/disk-space.test.ts:
+
+      52 |       probe,
+
+      53 |     });
+
+      54 | 
+
+      55 |     expect(res.ok).toBe(false);
+
+      56 |     expect(res.minFreeDiskMb).toBe(2048);
+
+      57 |     expect(res.failingPaths.length).toBe(1);
+                                               ^
+      error: expect(received).toBe(expected)
+
+
+      Expected: 1
+
+      Received: 2
+
+            at <anonymous> (/home/slava/aiexp/agentic-swarm.factory-wt/topic_omp-workspaces/plugins/software-factory/test/disk-space.test.ts:57:37)
+      (fail) Disk-space guards (§limits.minFreeDiskMb) > checkDiskSpace verifies
+      worktreeRoot, .factory-runtime/tmp, repoRoot, and tmpdir [38.90ms]
+
+
+      test/cli/cli.test.ts:
+
+      [factory lock] Stale run lock for task "stale-lock-task" (PID 9999999 on
+      host Slava-Yoga) taken over by PID 2660959
+
+      [factory lock] Stale run lock for task "competing-takeover-task" (PID
+      9999999 on host Slava-Yoga) taken over by PID 2660959
+
+      [factory lock] Stale run lock for task "journal-worktree-task" (PID
+      9999999 on host Slava-Yoga) taken over by PID 2660959
+
+       663 pass
+       2 skip
+       1 fail
+       3736 expect() calls
+      Ran 666 tests across 101 files. [244.55s]
+    failingTests:
+      - Disk-space guards (§limits.minFreeDiskMb).checkDiskSpace verifies
+        worktreeRoot, .factory-runtime/tmp, repoRoot, and tmpdir

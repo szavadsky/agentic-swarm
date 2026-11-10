@@ -1,0 +1,28 @@
+id: c-acdaf1b5b0
+kind: question
+summary: ADR-013 stub says root-serialized delivery replaced epic decomposition
+  for iteration 4
+detail: docs/adr/ADR-013.md:1-3 claims epics were replaced by root-serialized
+  delivery; if that stub is accepted, the per-epic tables are ownership evidence
+  rather than a live spawn gate. The stub is not a full
+  Context/Decision/Consequences ADR at HEAD, so this gate keeps the ADR-011
+  spawn contract and records the conflict for root reconciliation.
+location:
+  file: docs/adr/ADR-013.md
+  line: 1
+affects:
+  - epic-checkers-modernize
+  - epic-kickoff-gate
+  - epic-runner-modernize
+  - epic-semantic-infrastructure
+severity: medium
+status: routed
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: epic-kickoff-gate
+  lastSeen: 2026-11-10T00:08:48.409Z
+createdAt: 2026-11-10T00:08:48.409Z
+updatedAt: 2026-11-10T01:56:20.258Z
+disposition: architect

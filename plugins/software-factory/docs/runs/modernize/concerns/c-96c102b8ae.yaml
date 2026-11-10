@@ -1,0 +1,27 @@
+id: c-96c102b8ae
+kind: risk
+summary: Legacy golden-regen-hatch could misread a missing handoff as all-no-shift
+detail: The legacy hatch is allowed a no-op only 'If all three handoff sections
+  declare no-shift' (items/golden-regen-hatch/assignment.yaml:4-12). With zero
+  sections neither shift nor no-shift is established. Running it on this
+  findings file as a handoff would violate the reviewed-shift precondition; the
+  I5 plan replaces it with golden-regen-hatch-v2 consuming behavior-item
+  declarations (plan-5.3:882-898).
+location:
+  file: .factory/tasks/modernize/items/golden-regen-hatch/assignment.yaml
+  line: 4
+affects:
+  - final-gate-validation
+  - golden-regen-hatch
+  - golden-regen-hatch-v2
+severity: medium
+status: routed
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: epic-shift-report-collection
+  lastSeen: 2026-11-10T00:14:51.554Z
+createdAt: 2026-11-10T00:14:51.554Z
+updatedAt: 2026-11-10T01:56:20.258Z
+disposition: optional

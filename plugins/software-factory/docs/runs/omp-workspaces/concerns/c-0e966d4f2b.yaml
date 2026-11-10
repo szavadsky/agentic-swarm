@@ -1,0 +1,25 @@
+id: c-0e966d4f2b
+kind: risk
+summary: User-level prompt files leak into factory role prompts; harness sets no
+  isolation flags
+detail: Root omp turns inherit process.env with no --profile/agent-dir
+  isolation, and harness passes no
+  --no-context-files/--no-rules/--append-system-prompt flags today. Spike probes
+  show user-level AGENTS/RULES inject into role prompts and APPEND_SYSTEM.md
+  survives --system-prompt plus both disable flags (only empty
+  --append-system-prompt= suppresses). M8 must pin the isolation policy with
+  per-role request-body tests; until then role prompts are not
+  byte-deterministic across machines.
+affects:
+  - "19.9"
+  - 20c
+severity: medium
+status: routed
+source:
+  record: 008-consult-spike-repo-rules-1-a1
+  agent: architect
+  step: consult-spike-repo-rules-1
+  lastSeen: 2026-11-10T01:03:17.651Z
+createdAt: 2026-11-10T01:03:17.651Z
+updatedAt: 2026-11-10T01:53:41.429Z
+disposition: architect

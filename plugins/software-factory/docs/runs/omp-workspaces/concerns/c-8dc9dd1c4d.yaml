@@ -1,0 +1,23 @@
+id: c-8dc9dd1c4d
+kind: risk
+summary: Full-suite gates under parallel wave items cause timeout flakes (5s default)
+detail: merge-setup-fix develop was rejected 2/2 by a 5000ms timeout in
+  stranded-wave.test.ts (a test that never touches mergeItem) plus a
+  between-tests teardown error, with 'killed 1 dangling process' in output —
+  while 4 wave-2 items each run the full ~250s bun suite as gates concurrently.
+  Full-suite-as-gate under parallel items makes timeouts load-dependent;
+  consider serializing full-suite gates, raising per-test timeout, or scoping
+  item gates to affected selectors.
+affects:
+  - gates
+  - wave-merge
+severity: medium
+status: routed
+source:
+  record: 017-consult-merge-setup-fix-1-a1
+  agent: architect
+  step: consult-merge-setup-fix-1
+  lastSeen: 2026-11-10T03:08:41.502Z
+createdAt: 2026-11-10T03:08:41.502Z
+updatedAt: 2026-11-10T04:54:39.246Z
+disposition: architect

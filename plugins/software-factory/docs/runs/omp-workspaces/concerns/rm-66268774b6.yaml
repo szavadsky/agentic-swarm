@@ -1,0 +1,19 @@
+id: rm-66268774b6
+chosen: amend with recovery-v2 + target-green ratchet fix in wave 3
+alternatives:
+  - end-iteration and defer recovery to iteration 2 (leaves M1 unevidenced on
+    parent; next planning turn would re-derive or re-read branches)
+  - continue with no new work (no pending waves; identical to end-iteration but
+    without closing the known gap)
+why: Minimal delta that lands M1 evidence on the parent branch for iteration-2
+  planning and closes the engine gap that caused the wave-2 failure, while M2
+  stays merged and green.
+status: open
+source:
+  record: 020-architect-wave-report-1-2-a1
+  agent: architect
+  step: architect-wave-report-1-2
+  iteration: 1
+  lastSeen: 2026-11-10T04:55:54.124Z
+createdAt: 2026-11-10T04:55:54.124Z
+updatedAt: 2026-11-10T04:55:54.124Z

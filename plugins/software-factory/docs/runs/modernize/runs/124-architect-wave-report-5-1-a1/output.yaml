@@ -1,0 +1,18 @@
+context: wave
+decision: continue
+rationale: Wave 1 (I5) merged 0/2 with both failures abandoned after exhausted
+  consults — but both are legacy stranded items, not I5 plan items, and
+  tree/gates are healthy (clean tree, zero regressions, lint/test fail->pass
+  IMPROVED). ownership-map-revalidation is superseded by ADR-013/023
+  root-serialized delivery (I5 has no map-revision gate; M2-M5 proceed via file
+  ownership + deps). pylint-cache-assumptions verdict already exists at HEAD
+  (tests/assumptions/test_pylint_cache_semantics.py writer-first verdict, reused
+  by I5 M1/M3 via cite-not-rederive). Explicit descope of both; no replacement
+  outlines needed, and failed (non-pending) slugs need no removeItemSlugs. I5
+  plan items unscheduled yet; stranded running items (decision-cache-impl,
+  checkers-stream-helper, secrets-triage-spike) assessed after merge.
+text: Proceed to next wave and schedule I5 plan items. Both failed items
+  explicitly descoped as obsolete/superseded — no replan, no replacements.
+  Revisit only if stranded running items (I4 decision-cache-impl prune-only
+  shape vs I5 scored-read+producer scope) merge in a form that conflicts with I5
+  M3/M4 deps.

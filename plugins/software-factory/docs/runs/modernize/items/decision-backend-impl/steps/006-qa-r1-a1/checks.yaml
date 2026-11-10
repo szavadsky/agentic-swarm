@@ -1,0 +1,138 @@
+checks:
+  - id: red-test
+    status: pass
+    message: "red-test passed: all 8 tests fail when prod changes are restored to
+      test-first commit"
+    details:
+      command: uv run pytest tests/checkers/test_decision_backend.py
+        tests/checkers/test_semantic_check.py
+        tests/checkers/test_no_try_import_checker.py
+        tests/checkers/test_suppression_justification_checker.py
+        tests/assumptions/test_pylint_cache_semantics.py
+        --junitxml=/home/slava/aiexp/python-setup.factory-wt/.factory-runtime/tmp/junit-redtest-1794197479426-79f5l8p7hes.xml
+      junitCaseCount: 121
+      junitCaseIds:
+        - tests.checkers.test_decision_backend.test_decision_threshold_is_pinned_at_half
+        - tests.checkers.test_decision_backend.test_prompt_version_is_pinned
+        - tests.checkers.test_decision_backend.test_fake_backend_defaults_to_one_and_pinned_model_id
+        - tests.checkers.test_decision_backend.test_fake_backend_returns_configured_score
+        - tests.checkers.test_decision_backend.test_fake_backend_satisfies_protocol
+        - tests.checkers.test_decision_backend.test_get_backend_is_none_without_configuration
+        - tests.checkers.test_decision_backend.test_get_backend_honors_dotted_path_under_pytest
+        - tests.checkers.test_decision_backend.test_get_backend_ignores_dotted_path_in_production
+        - tests.checkers.test_decision_backend.test_decision_model_parses_but_yields_none_with_exactly_one_warning
+        - tests.checkers.test_decision_backend.test_reranker_model_env_is_deprecated_with_exactly_one_warning
+        - tests.checkers.test_decision_backend.test_check_if_meaningful_has_backend_keyword_defaulting_to_none
+        - tests.checkers.test_decision_backend.test_registered_backend_rejects_a_meaningful_heuristic
+        - tests.checkers.test_decision_backend.test_brush_off_is_vetoed_before_the_backend
+        - tests.checkers.test_decision_backend.test_brush_off_does_not_reach_the_semantic_adapter
+        - tests.checkers.test_decision_backend.test_meaningful_heuristic_is_confirmed_by_backend
+        - tests.checkers.test_decision_backend.test_backend_below_threshold_rejects_a_meaningful_heuristic
+        - tests.checkers.test_decision_backend.test_loader_none_falls_back_to_the_heuristic
+        - tests.checkers.test_decision_backend.test_semantic_disabled_never_calls_the_backend
+        - tests.checkers.test_decision_backend.test_bare_directive_stays_meaningful_when_semantic_disabled
+        - "tests.checkers.test_decision_backend.test_normalize_suppressed_codes\
+          _drops_reason_that_echoes_codes[type: ignore[assignment]  #
+          assignment]"
+        - "tests.checkers.test_decision_backend.test_normalize_suppressed_codes\
+          _drops_reason_that_echoes_codes[type: ignore[assignment,arg-type]  #
+          arg-type, assignment]"
+        - "tests.checkers.test_decision_backend.test_normalize_suppressed_codes\
+          _drops_reason_that_echoes_codes[noqa: E501, W9704  # W9704,E501]"
+        - "tests.checkers.test_decision_backend.test_normalize_suppressed_codes\
+          _keeps_a_real_reason[type: ignore[assignment]  # carried from library
+          httpx for type compatibility]"
+        - tests.checkers.test_decision_backend.test_normalize_suppressed_codes_keeps_a_real_reason[carried
+          from library httpx for type compatibility]
+        - tests.checkers.test_decision_backend.test_normalize_suppressed_codes_leaves_bare_text_unchanged[W9704,E501-W9704,E501]
+        - tests.checkers.test_decision_backend.test_normalize_suppressed_codes_leaves_bare_text_unchanged[assignment-assignment]
+        - tests.checkers.test_decision_backend.test_check_if_meaningful_rejects_code_echo_justification
+        - tests.checkers.test_decision_backend.test_semantic_extra_is_empty
+        - tests.checkers.test_decision_backend.test_uv_lock_has_no_sentence_transformers_edge
+        - tests.checkers.test_semantic_check.test_signature_exposes_backend_keyword_defaulting_to_none
+        - tests.checkers.test_semantic_check.test_empty_primary_returns_false_without_calling_backend
+        - tests.checkers.test_semantic_check.test_loader_none_maps_to_none
+        - tests.checkers.test_semantic_check.test_backend_score_maps_at_pinned_threshold[0.0-False]
+        - tests.checkers.test_semantic_check.test_backend_score_maps_at_pinned_threshold[0.499-False]
+        - tests.checkers.test_semantic_check.test_backend_score_maps_at_pinned_threshold[0.5-True]
+        - tests.checkers.test_semantic_check.test_backend_score_maps_at_pinned_threshold[1.0-True]
+        - tests.checkers.test_semantic_check.test_one_backend_call_per_unique_pair
+        - tests.checkers.test_semantic_check.test_distinct_pairs_call_backend_again
+        - tests.checkers.test_semantic_check.test_memo_key_includes_backend_model_id
+        - tests.checkers.test_semantic_check.test_module_does_not_reference_sentence_transformers
+        - tests.checkers.test_semantic_check.test_check_writes_no_disk_cache
+        - tests.checkers.test_no_try_import_checker.test_sentence_transformers_is_no_longer_an_optional_import_pattern
+        - tests.checkers.test_no_try_import_checker.test_try_import_of_sentence_transformers_is_flagged
+        - tests.checkers.test_no_try_import_checker.test_checker_given_try_except_import_pattern_then_flags_violation[import_in_try_except_importerror]
+        - tests.checkers.test_no_try_import_checker.test_checker_given_try_except_import_pattern_then_flags_violation[import_in_try_except_modulenotfound]
+        - tests.checkers.test_no_try_import_checker.test_checker_given_try_except_import_pattern_then_flags_violation[from_import_in_try_except_importerror]
+        - tests.checkers.test_no_try_import_checker.test_checker_given_try_except_import_pattern_then_flags_violation[import_in_try_bare_except]
+        - tests.checkers.test_no_try_import_checker.test_checker_given_try_except_import_pattern_then_flags_violation[import_in_try_tuple_import_errors]
+        - tests.checkers.test_no_try_import_checker.test_checker_given_try_except_import_pattern_then_flags_violation[two_imports_separate_try_blocks]
+        - tests.checkers.test_no_try_import_checker.test_checker_given_try_except_import_pattern_then_flags_violation[two_imports_separate_handlers_one_try]
+      junitTruncated: true
+      collected: true
+      collectionErrors: []
+  - id: test-diff
+    status: pass
+    message: test-diff generated (1 test files, 912 bytes)
+    details:
+      diff: "diff --git a/tests/checkers/test_decision_backend.py
+        b/tests/checkers/test_decision_backend.py
+
+        index aa329b2..464d2f1 100644
+
+        --- a/tests/checkers/test_decision_backend.py
+
+        +++ b/tests/checkers/test_decision_backend.py
+
+        @@ -247,6 +247,23 @@ def test_semantic_disabled_never_calls_the_backend(
+
+        \     assert backend.calls == []
+
+        \\ 
+
+        \\ 
+
+        +def test_bare_directive_stays_meaningful_when_semantic_disabled(
+
+        +    monkeypatch: pytest.MonkeyPatch,
+
+        +) -> None:
+
+        +    \"\"\"A bare directive without a reason is accepted, as the golden
+        sample requires.\"\"\"
+
+        +    monkeypatch.setenv(_SEMANTIC_ENV, \"0\")
+
+        +    comment = \"pylint: disable=some-rule\"
+
+        +
+
+        +    result = check_if_meaningful(
+
+        +        comment,
+
+        +        comment=comment,
+
+        +        rule=\"unjustified-suppression\",
+
+        +        code_context=\"def _bare_suppression() -> None:\",
+
+        +    )
+
+        +
+
+        +    assert result is True
+
+        +
+
+        +
+
+        \ # ── Suppressed-code normalization ──────────────────────────────────
+
+        \\ 
+
+        \ "
+      files:
+        - tests/checkers/test_decision_backend.py

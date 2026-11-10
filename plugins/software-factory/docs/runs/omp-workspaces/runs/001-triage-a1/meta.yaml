@@ -1,0 +1,17 @@
+seq: 1
+name: triage
+attempt: 1
+agent: triage
+role: workhorse
+models:
+  - opencode-go/deepseek-v4.1-flash
+  - opencode-go/muse-spark-1.3-contributor
+timeoutSec: 2700
+status: interrupted
+startedAt: 2026-11-09T22:57:46.399Z
+session: 01a1c288-2d58-7300-ac5a-9ff8f3681b22
+endedAt: 2026-11-09T22:57:54.352Z
+usage:
+  inputTokens: 9020
+  outputTokens: 219
+  costUsd: 0.0014844

@@ -1,0 +1,25 @@
+id: c-3e935debcb
+kind: risk
+summary: PoC lock is POSIX-only fcntl.flock
+detail: The prototype locks with `fcntl.flock` on a persistent lock file (safe
+  against stale locks because the advisory lock, not file existence, is
+  authoritative). Windows needs an msvcrt/portable-lock fallback, and flock
+  semantics on NFS are unvalidated. The model matrix confirms win_amd64 CPU
+  wheels exist, so Windows is a supported consumer platform.
+location:
+  file: .factory/tasks/modernize/items/cache-design-spike/poc/decision_cache.py
+  line: 35
+affects:
+  - cache-design-spike
+  - decision-cache-impl
+severity: low
+status: routed
+source:
+  record: 001-develop-r1-a1
+  agent: developer
+  step: develop
+  item: cache-design-spike
+  lastSeen: 2026-11-09T23:18:39.934Z
+createdAt: 2026-11-09T23:18:39.934Z
+updatedAt: 2026-11-10T01:14:34.111Z
+disposition: optional

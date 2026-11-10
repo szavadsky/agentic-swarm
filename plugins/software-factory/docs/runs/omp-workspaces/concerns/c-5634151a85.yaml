@@ -1,0 +1,31 @@
+id: c-5634151a85
+kind: tech-debt
+summary: M1 decision records delivered in non-canonical shape/location (item
+  decisions + embedded YAML + RECOVERY.md, not NNN-<topic>.yaml)
+detail: "Plan interface requires {taskDir}/decisions/NNN-<topic>.yaml with
+  {status,decision,evidence,followUps}. What exists on parent branch: (a) engine
+  item decisions
+  .factory/tasks/omp-workspaces/decisions/001-item-spike-repo-rules-1.yaml and
+  002-item-spike-omp-isolation-1.yaml with schema
+  {id,context,item,afterRecord,decision,text,debt} (verified content: ratified
+  root mapping omp worktree add -b <topic-branch> <path> <base> -C <repo> then
+  omp --cwd -p, isolation:engine fallback, preflight replacement scope); (b)
+  decision YAML embedded in spike docs (omp-4-mock-provider.md:74-104
+  status:accepted, omp-5-cache-keys.md:235-272 status:proposed); (c)
+  items/spike-findings-recovery-v2/RECOVERY.md M1 scenario mapping + iteration-2
+  follow-up index. Functionally sufficient for iteration-2 planning, but
+  iteration-2 architect must read three sources, not one canonical NNN file."
+location:
+  file: plugins/software-factory/docs/spikes/omp-3-isolation.md
+affects:
+  - m1-omp-de-risk
+severity: low
+status: open
+source:
+  record: 024-plan-close-up-1-a1
+  agent: plan-close-up
+  step: plan-close-up-1
+  iteration: 1
+  lastSeen: 2026-11-10T06:32:04.799Z
+createdAt: 2026-11-10T06:32:04.799Z
+updatedAt: 2026-11-10T06:32:04.799Z

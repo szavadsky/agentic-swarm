@@ -1,0 +1,26 @@
+blockedItems:
+  - semantic-tests-rewrite
+debt:
+  - "Operator backlog (pre-existing): documented gate `uv run lint` is not
+    check-only — its `ruff format` ToolSpec runs plain `ruff format` without
+    --check/--config and silently rewrites files; declared gates work around it
+    by splitting format/lint."
+iteration: 5
+mergedItems: []
+recommendations:
+  - Retry or rescope `semantic-tests-rewrite` in the next wave; it is the only
+    wave-5 item reported as blocked-by-failure.
+  - "Operator: fix the `ruff format` ToolSpec (add --check + --config) or drop
+    it from TOOLS so AGENTS.md/CONTRIBUTING's `uv run lint` stops mutating
+    worktrees."
+status: has_failures
+summary: "Wave 5 close-up: no items reported merged; `semantic-tests-rewrite` is
+  blocked-by-failure. Tree hygiene is clean: `git status` shows only the
+  engine-managed `.factory/tasks/modernize/journal.ndjson` modified, zero
+  untracked files (excluding ignored), and no merge-conflict markers in
+  src/tests/config/docs/scripts. Gate diff vs baseline shows zero regressions
+  and two improvements: format pass/pass (green), lint fail->pass IMPROVED, test
+  fail->pass IMPROVED, test-integration pass/pass (green). All 4 gates are green
+  now; baseline red causes (6 unit-test failures assuming 13 tools vs 14, and
+  lint SIM102/W9704/R0914/C0208 violations) no longer fail."
+wave: 5

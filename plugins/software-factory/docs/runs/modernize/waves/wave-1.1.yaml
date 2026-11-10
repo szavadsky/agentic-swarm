@@ -1,0 +1,10 @@
+wave: 1
+iteration: 1
+status: complete
+mergedItems:
+  - golden-determinism-probe
+  - third-party-assumption-tests
+failedItems: []
+blockedItems: []
+summary: "Wave 1 completed. Merged items: golden-determinism-probe,
+  third-party-assumption-tests"

@@ -1,0 +1,18 @@
+id: rm-48c8d8400a
+chosen: Prune 13 superseded I4 pendings and add 2 gap outlines (ruff check-only,
+  legacy-v2)
+alternatives:
+  - Continue with 52 items and obsolete audits/epics/docs
+  - End-iteration with 0 merges despite green gates
+why: Fits 50-item cap, unblocks wave gate without losing M3 legacy scope, keeps
+  v2 cache/model/pyi/docs chain intact while gates stay green
+status: routed
+source:
+  record: 145-architect-wave-report-5-5-a1
+  agent: architect
+  step: architect-wave-report-5-5
+  iteration: 5
+  lastSeen: 2026-11-09T22:07:17.379Z
+createdAt: 2026-11-09T22:07:17.379Z
+updatedAt: 2026-11-10T02:32:36.259Z
+disposition: optional

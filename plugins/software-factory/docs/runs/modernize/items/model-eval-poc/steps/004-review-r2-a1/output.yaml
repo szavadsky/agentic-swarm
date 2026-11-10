@@ -1,0 +1,109 @@
+status: changes_requested
+summary: PoC substantially complete (336-item corpus, 8 full runs,
+  metrics+report, no-go) but report 4.3 Recall column duplicates Precision; fix
+  display bug and regenerate.
+suggestions:
+  - id: ablation-recall-column-duplicates-precision
+    disposition: fix
+    summary: Report 4.3 Recall column shows Precision twice (wrong numbers for all rows)
+    detail: "report.py:250 renders Recall as pct(precision and precision) instead of
+      pct(meaningful_recall). Verified against metrics.json: decider-nano rubric
+      0.5/veto displays Recall 3.1% but true recall is 27.9%; bekko rubric
+      displays 11.8% vs true 37.7%; ettin/minilm display n/a vs true 100%.
+      Best-cell selection (line 240-244) uses the correct recall key so
+      selection is right, only the displayed column is wrong. Fix to
+      accepted['meaningful_recall'] and regenerate report.md (lines 209-215).
+      Verdict unaffected (compliance table 4.4 reads correct values) but report
+      accuracy blocks approval."
+    location:
+      file: .factory/tasks/modernize/items/model-eval-poc/poc/eval/report.py
+      line: 250
+  - id: ettin-model-stats-include-unused-heads
+    disposition: optional
+    summary: Ettin params/bytes overcounted by unused Dense/LayerNorm heads (~592K
+      params)
+    detail: model_stats.py rglob sums all 4 safetensors (149,606,401 params /
+      598,439,036 bytes) but CrossEncoder loads only model.safetensors (134 keys
+      = 149,014,272 params, matching the adapter constant and the ettin_full.log
+      'Loading weights 134/134'). The 2_Dense (589,824) + 3_LayerNorm (1,536) +
+      4_Dense (769) heads are never loaded. Ordering vs decider-nano
+      (149,015,041) is unaffected (ettin still larger), so no verdict impact,
+      but the 'measured directly' provenance claim is inaccurate. Restrict
+      measure() to loaded tensors or annotate the unused-head delta.
+    location:
+      file: .factory/tasks/modernize/items/model-eval-poc/poc/eval/model_stats.py
+      line: 25
+  - id: glide-exclusion-smallest-rationale-invalid
+    disposition: optional
+    summary: GLiDE exclusion rationale 'cannot be smallest' is logically invalid
+      when 0 compliant
+    detail: "metrics.py exclusion text (and report.md §6) argues GLiDE/395M 'cannot
+      be the smallest compliant option' because it is largest. That holds only
+      if a smaller compliant candidate exists; with 0 contracted-compliant among
+      scored models, a compliant GLiDE would be the smallest by default
+      (singleton set). The correct justification is already present elsewhere:
+      contracted no-go is structural (215 accepted positives / 0 negatives,
+      precision vacuous, is_compliant requires non-None precision), so GLiDE's
+      6/336 gap affects only augmented-sensitivity completeness, not the formal
+      verdict. Reword to cite structural no-go + compute-budget sensitivity
+      gap."
+    location:
+      file: .factory/tasks/modernize/items/model-eval-poc/poc/eval/metrics.py
+      line: 373
+  - id: latency-contention-not-annotated-in-table
+    disposition: optional
+    summary: Table 2 presents contended p50/p95 as point estimates; annotate as
+      upper bounds
+    detail: "Report §6 discloses bekko/ettin/minilm overlapped the GLiDE run, but
+      Table 2 shows bare '439 ms / 1103 ms' (ettin) and '224 ms / 1341 ms'
+      (minilm). Verified inflation vs isolated smoke: ettin p50 439ms vs ~90ms
+      smoke, minilm p50 224ms vs ~15ms smoke (5-15x). p50 is the 4th
+      lexicographic tiebreaker so no verdict impact (0 compliant), but readers
+      will misread the table without the upper-bound qualifier. Add '≤' or
+      '(contended)' marker in Table 2 rows, matching the §6 footnote."
+    location:
+      file: .factory/tasks/modernize/items/model-eval-poc/poc/eval/report.py
+      line: 99
+  - id: glide-table-status-mislabels-eligible
+    disposition: optional
+    summary: Table 2 labels GLiDE 'eligible' while §6 excludes it from the
+      compliance matrix
+    detail: "Status derives from MODEL_SPECS eligible flag (True) even though all
+      three GLiDE prompts are status incomplete (6/336) and §6 explicitly
+      excludes GLiDE from compliance. Table shows '0 MB / n/a ms / eligible',
+      contradicting the exclusion list directly below. Change Table 2 status for
+      incomplete runs to 'excluded (incomplete: 6/336)' so the table and §6
+      agree."
+    location:
+      file: .factory/tasks/modernize/items/model-eval-poc/poc/eval/report.py
+      line: 95
+  - id: license-audit-inconsistent
+    disposition: optional
+    summary: Bekko excluded for 'no declared license' but decider/ettin licenses
+      unaudited
+    detail: Cache contains a licenses/ dir only for glide (Ettin-encoder-400m MIT);
+      bekko, decider-nano, ettin, minilm snapshots all lack license files, yet
+      only bekko is marked ineligible for license. Either document license
+      provenance for all five candidates (model cards / HF metadata) or drop
+      license as an eligibility criterion. Moot for the verdict (decider/ettin
+      fail on accuracy regardless), but the selective exclusion is inconsistent
+      as written.
+    location:
+      file: .factory/tasks/modernize/items/model-eval-poc/poc/eval/metrics.py
+      line: 52
+  - id: single-adjudicator-structural-no-go
+    disposition: human-awareness
+    summary: No-go reflects corpus structure (0 contracted accepted negatives) +
+      single-rater labels
+    detail: "Verified: contracted accepted stratum is 215 meaningful / 0 meaningless
+      (the sole repo_suppression negative c188 is heuristic-rejected), so 95%
+      precision is unevaluable by construction and heuristic baseline is 100% by
+      definition (test-table labels assert heuristic behavior). All 183 repo
+      labels are single-author (repo_labels.json) with terse borderlines
+      ('planted violation', 'usage docs in .pyi') all True; the 39 hard
+      negatives making augmented precision non-vacuous are author-written
+      sensitivity data. Report discloses this (§6 + §3). Architect can decide
+      whether a double-rated real brush-off sample is needed before any future
+      go/no-go; no further PoC action required for the no-go itself."
+    location:
+      file: .factory/tasks/modernize/items/model-eval-poc/poc/data/repo_labels.json

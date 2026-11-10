@@ -1,0 +1,47 @@
+status: ok
+summary: 'Guarded all 51 heuristic checker tests (40 W9704 suppression + 11
+  W9738 bare-except) with a monkeypatched SEMANTIC=0 fixture, leaving
+  TestSuppressionRerankerPipeline untouched for the M4 second writer. Each
+  module defines a `_semantic_disabled` fixture that calls
+  `monkeypatch.setenv("PYTHON_SETUP_LINT_SEMANTIC", "0")`; heuristic test
+  classes opt in via `@pytest.mark.usefixtures("_semantic_disabled")`. Added the
+  repo-standard justified `# pylint: disable=W9728` reason on the fixture defs
+  to keep lint clean. Tests-only diff: 2 files, +22 lines, 0 deletions; golden
+  fixtures untouched.'
+target:
+  command: uv run pytest tests/checkers/test_suppression_justification_checker.py
+    tests/checkers/test_bare_except_comment_checker.py -q
+  customTarget: true
+evidence:
+  - "Test recount at HEAD via `--collect-only -q`: 40 heuristic suppression
+    tests (TestJustifiedSuppressions 5, TestUnjustifiedSuppressions 8,
+    TestDataStrings 11, TestFunctionParamReturnAny 16) and 11 bare-except tests
+    (3+3+3+2); 2 slow TestSuppressionRerankerPipeline tests deselected."
+  - "Target tests after guards: `uv run pytest
+    tests/checkers/test_suppression_justification_checker.py
+    tests/checkers/test_bare_except_comment_checker.py -q` -> 51 passed, 2
+    deselected."
+  - "Guard efficacy proof: temporarily ran with `PYTHONPATH=$PWD/tests/checkers
+    PYTHON_SETUP_LINT_SEMANTIC=1 ... -p _semantic_probe_plugin` where the probe
+    stubbed `_semantic.semantic_check_if_meaningful` to always return False; all
+    51 heuristic tests still passed, proving the monkeypatched SEMANTIC=0 guard
+    bypasses the semantic pipeline. Probe file deleted afterward (git status
+    shows only the two intended test files)."
+  - "Full checkers suite: `uv run pytest tests/checkers -q` -> 666 passed, 4
+    skipped, 5 deselected."
+  - "Golden round-trip tests: `uv run pytest tests/test_golden.py -q` -> 31
+    passed; `git status --short` confirms no golden files changed (hash-equal)."
+  - "Full unit suite: `uv run pytest -q` -> 1378 passed, 4 skipped, 18
+    deselected, 0 failures."
+  - "Project gate: `uv run lint` -> returncode 0 (all 14 tools PASSED; pylint
+    tests 10.00/10)."
+  - "Reranker block untouched: `git diff ... | grep
+    TestSuppressionRerankerPipeline` returns nothing; diff is additions only
+    (+22, 0 deletions)."
+concerns:
+  - None. LSP emitted only hints (fixtures referenced via usefixtures string are
+    statically 'unaccessed'); tests/ is excluded from the pyright gate and lint
+    is clean.
+notes: Guards are class-scoped via usefixtures rather than module autouse so the
+  slow TestSuppressionRerankerPipeline block can keep exercising the real
+  semantic/reranker path and remain untouched for M4.

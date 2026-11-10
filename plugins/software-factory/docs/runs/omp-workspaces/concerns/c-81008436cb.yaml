@@ -1,0 +1,25 @@
+id: c-81008436cb
+kind: risk
+summary: Repo rules in worktrees are branch snapshots; mid-task rule changes can
+  diverge across item worktrees
+detail: omp resolves rules from the role's cwd files. An item worktree only has
+  rules committed on its branch; rules changed after the item branch was cut are
+  absent until merged. If M8 requires all roles in a wave to see the same rules,
+  sync/copy rule files at item/wave creation or define a branch-snapshot policy.
+location:
+  file: plugins/software-factory/src/core/flows/item-machine.ts
+  line: 960
+affects:
+  - "19"
+  - M1 scenario 4
+severity: medium
+status: routed
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: spike-repo-rules
+  lastSeen: 2026-11-09T23:58:38.970Z
+createdAt: 2026-11-09T23:58:38.970Z
+updatedAt: 2026-11-10T01:53:41.429Z
+disposition: architect

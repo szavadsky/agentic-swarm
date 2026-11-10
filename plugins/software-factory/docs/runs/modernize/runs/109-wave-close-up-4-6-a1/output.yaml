@@ -1,0 +1,27 @@
+blockedItems: []
+debt:
+  - Pre-existing tracked junk file ':bash' (186 bytes, committed in release
+    v1.2.5) contains an unrelated shell one-liner for another repo
+    (consultant.mcp); predates this wave, left untouched (read-only role) —
+    operator should delete it.
+  - "Standing infra note unresolved: documented gate 'uv run lint' still
+    includes a mutating 'ruff format' ToolSpec without --check/--config;
+    declared gates split format/lint to stay check-only."
+failedItems: []
+iteration: 4
+mergedItems: []
+recommendations:
+  - "Operator: delete the stale tracked file ':bash' left over from v1.2.5
+    (unrelated shell snippet, not wave output)."
+  - "Operator: add --check (+ --config config/ruff.toml) to the 'ruff format'
+    ToolSpec in src/python_setup_lint/runner/dispatch.py (or drop it from TOOLS)
+    so 'uv run lint' stops silently rewriting worktrees."
+status: complete
+summary: "Wave 6 close-up: empty wave (no items merged). Tree hygiene clean: no
+  untracked junk, no temp/backup artifacts, no conflict markers; sole
+  modification is engine-managed .factory/tasks/modernize/journal.ndjson. Gate
+  diff vs baseline shows zero regressions: format pass (green, matches
+  baseline), test-integration pass (green, matches baseline), lint now pass
+  (IMPROVED from baseline fail), test now pass (IMPROVED from baseline fail).
+  All four gates green on the merged branch. Verdict: complete."
+wave: 6

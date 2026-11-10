@@ -1,0 +1,22 @@
+id: c-aa4b0d0b31
+kind: tech-debt
+summary: RECOVERY.md line 92 cites stale non-v2 deliverable path
+detail: items/spike-findings-recovery-v2/RECOVERY.md:92 names
+  items/spike-findings-recovery/RECOVERY.md as the deliverable instead of the v2
+  path (stale copy from v1). Content mapping itself is intact. oMP typo verified
+  fixed (no oMP in spikes dir).
+location:
+  file: items/spike-findings-recovery-v2/RECOVERY.md
+  line: 92
+affects:
+  - m1-omp-de-risk
+severity: low
+status: open
+source:
+  record: 024-plan-close-up-1-a1
+  agent: plan-close-up
+  step: plan-close-up-1
+  iteration: 1
+  lastSeen: 2026-11-10T06:32:04.799Z
+createdAt: 2026-11-10T06:32:04.799Z
+updatedAt: 2026-11-10T06:32:04.799Z

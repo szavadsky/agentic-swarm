@@ -1,0 +1,57 @@
+context: wave
+decision: amend
+outlines:
+  - deps:
+      - baseline-violations-fix
+    description: "Close the M1 green-baseline tail: wave-2 report lists lint still
+      red, and the two W9704 sites from infra notes
+      (src/python_setup_lint/checkers/conformance/generic_key_dict_checker.py
+      options-Any site, src/python_setup_lint/testing.py list[Any]/type-ignore
+      site) were never owned by any item (TD2-B2 omitted them). Steps: (1)
+      Reproduce current failures via the declared gates (format check + 13-tool
+      lint) or scoped pylint/pylint-pyi/pylint-tests on src/** and tests/**;
+      capture exact remaining violations. (2) Fix with
+      justification-comment-only edits (no behavior change; red-test-exempt like
+      baseline-violations-fix): strengthen trailing justifications so the
+      justification checker accepts. If additional violations appear, fix only
+      if trivially behavior-preserving, else record as debt in the report — do
+      not balloon scope. FORBIDDEN: lint.baseline edits (stays []),
+      tests/data/** changes, golden regen, unrelated refactors,
+      .secrets.baseline, factory records. Secrets-triage verdict is human-async
+      and out of scope. Verify: lint gate zero violations in src/** and
+      tests/**; `pytest -q` + integration show no new failures; golden
+      byte-identical; touched files format-clean."
+    kind: story
+    milestoneId: M1
+    prodBudgetHint: 5
+    slug: remaining-lint-violations-fix
+    title: Fix remaining src/tests lint violations (W9704 tail)
+planDelta: "Wave 2 merged 3/3 with no regressions and test fail->pass improved.
+  Additive fix only: baseline-violations-fix resolved SIM102/R0914/C0208
+  (verified at HEAD: combined TypeAlias condition, _run_fix_phase extraction,
+  14-tool factory predicates), but lint stays red on the W9704 tail that no item
+  owned. Add small M1 tail item remaining-lint-violations-fix (dep:
+  baseline-violations-fix, already merged, so wave-3 schedulable). No other plan
+  changes: cache-design-spike proceeds model-agnostically
+  (schema/encoding/prune/refresh are model-independent; implementation stays
+  gated on the eval no-go escalation); decision-runtime-pinning takes its
+  specified no-go skip path (report-only, no file); secrets-triage-spike awaits
+  human-async and does not block dev acceptance; M4 audits proceed and verify
+  each row against HEAD at audit time so the 2-comment tail cannot stale them."
+rationale: "Wave 2 succeeded (3/3 merged, tree clean, no green-to-red
+  regressions, test gate improved). One targeted gap blocks the M1
+  green-baseline scenario: the two W9704 src sites recorded in infra notes were
+  never in any item's scope (TD2-B2 covered only SIM102/R0914/C0208), and the
+  wave report confirms lint still red. A small additive no-behavior tail item
+  closes M1 without disturbing wave 3/4 sequencing. No other amendment
+  warranted: eval no-go is already handled by decision-runtime-pinning's
+  conditional skip and the epic's escalate-on-no-go path; cache spike stays
+  valid model-agnostically; secrets spike is human-blocked by design."
+text: "Schedule remaining-lint-violations-fix in wave 3 (deps already merged).
+  M4 audits: verify each evidence row against HEAD at audit time; do not add a
+  dep on the tail fix (avoids dep-chain churn for 2 comment rows).
+  cache-design-spike: use a placeholder model id/revision; do not assume any
+  specific model — implementation is gated on the iteration-3 no-go escalation.
+  decision-runtime-pinning: execute the no-go branch (report-only skip, no
+  committed file). secrets-triage-spike stays human-blocked; M1 dev acceptance
+  does not wait on it."

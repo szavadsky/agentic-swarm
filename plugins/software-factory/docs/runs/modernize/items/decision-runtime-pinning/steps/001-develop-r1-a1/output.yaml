@@ -1,0 +1,47 @@
+status: ok
+summary: "Conditional no-go branch executed as a report-only skip:
+  model-eval-poc's final verdict is no-go (no runtime chosen,
+  smallest_compliant=null), so no
+  tests/assumptions/test_decision_runtime_contracts.py was added and no src/test
+  files were changed. Existing offline assumption suite remains green (8
+  passed)."
+target:
+  command: test ! -e tests/assumptions/test_decision_runtime_contracts.py && uv
+    run pytest tests/assumptions -q
+  customTarget: true
+evidence:
+  - Read .factory/tasks/modernize/items/model-eval-poc/poc/report.md:7-11 —
+    verdict is 'No-go for the contracted evaluation'; the contracted
+    heuristic-accepted stratum has 215 meaningful / 0 meaningless items, so the
+    precision bar cannot be evaluated, and the augmented sensitivity analysis
+    also finds no compliant eligible candidate.
+  - Read
+    .factory/tasks/modernize/items/model-eval-poc/steps/003-develop-r2-a1/output.yaml:16,45
+    — developer records 'formal recommendation is no-go' and '0
+    contracted-compliant, 0 augmented-compliant, smallest_compliant = null';
+    final review step 006-r1-a1 output is status approved with no verdict
+    change.
+  - Confirmed the conditional skip condition in
+    .factory/tasks/modernize/plan/plan-2.1.yaml:437-446 — 'Conditional on eval
+    recommendation (no-go -> report-only skip, no file)'; no chosen runtime
+    exists to pin wheels, device/offline behavior, or custom-code revisions
+    against.
+  - test -e tests/assumptions/test_decision_runtime_contracts.py -> ABSENT;
+    tests/assumptions contains only the pre-existing astroid/beartype/pylint
+    contract tests.
+  - git status --porcelain -> 0 lines (clean worktree; no src, test, config, or
+    dependency changes made by this step).
+  - uv run pytest tests/assumptions -q -> 8 passed in 2.07s (existing offline
+    assumption contract suite green).
+concerns:
+  - No wheels/APIs are pinned by design because the underlying runtime decision
+    is no-go; the iteration-3 semantic epic must re-run decision-runtime-pinning
+    only if a future eval reverses the verdict.
+  - The no-go is structural (zero heuristic-accepted negative examples in the
+    contracted corpus, single-adjudicator repo labels) rather than a clean
+    model-quality rejection; a future go/no-go needs an independent,
+    double-rated negative sample.
+notes: Per the assignment's explicit conditional ('no-go from model-eval-poc
+  means report-only skip with no file'), this step intentionally produces no
+  repository artifact. The worktree was left untouched; this yield is the
+  required report.

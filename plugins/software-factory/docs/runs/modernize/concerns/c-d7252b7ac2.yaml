@@ -1,0 +1,25 @@
+id: c-d7252b7ac2
+kind: tech-debt
+summary: Lockfile needs a gitignore entry and the retired machine-cache entry
+  should be replaced
+detail: Refresh leaves `.python-setup-decisions.lock` beside the committed
+  cache; without an ignore rule it becomes an untracked artifact.
+  `.gitignore:243-244` still names the retired `.cache/python-setup/semantic/`
+  path and should be replaced when the tracked cache lands.
+location:
+  file: .gitignore
+  line: 243
+affects:
+  - cache-design-spike
+  - decision-cache-impl
+severity: low
+status: routed
+source:
+  record: 001-develop-r1-a1
+  agent: developer
+  step: develop
+  item: cache-design-spike
+  lastSeen: 2026-11-09T23:18:39.934Z
+createdAt: 2026-11-09T23:18:39.934Z
+updatedAt: 2026-11-10T01:14:34.111Z
+disposition: optional

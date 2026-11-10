@@ -1,0 +1,89 @@
+context: wave
+decision: amend
+outlines:
+  - deps:
+      - checkers-legacy-dead-cleanup-v2
+      - semantic-test-doubles-dedup
+    description: "Owns NEW checkers/_source_stream.py/.pyi + stream sites ONLY (12
+      paths: 8 prod NEW _source_stream.py/.pyi, bare_except_comment_checker.py,
+      suppression_justification_checker.py/.pyi, stub/checker.py,
+      stub/coverage.py/.pyi; 4 tests NEW test_source_stream.py, astroid call,
+      stub_coverage call, TestCodeContextDerivation block). FORBIDDEN
+      _base.py/.pyi zero diff, no_try_import register/patterns, tests/data,
+      baseline, docs, tach.toml, decisions/, CLI, .factory/**. API @beartype
+      tach-clean <=500: read_module_source(node)->str (node.root().stream(),
+      decode-if-bytes UTF-8, str passthrough),
+      is_under_source_root(path,roots)->bool pure,
+      split_trailing_comment(line)->(code,comment|None) historical #\\s+(.+) raw
+      unstripped; coexistence with _base helper documented. Cherry-pick owned-12
+      from abandoned topic/modernize--checkers-stream-helper, adapting
+      visit_module _legacy_scan call to legacy-v2 renamed shape (grep HEAD) +
+      union TestCodeContextDerivation with HEAD TestAnyElementCodeEcho (drop
+      reranker) + keep HEAD _factories_stub_coverage import. Preserves first-#
+      code_context (src_line.split('#',1)[0].strip(), '_, comment'); preceding
+      paths keep local logic (report). Bytes=astroid bytes pinned, UTF-8 decode,
+      non-ASCII verified. Declare target {command:'uv run pytest
+      -q',customTarget:true} NEVER gate tests. Verify: grep single-owner
+      (.stream/decode/_is_under_source_root only _base), _base empty diff, diff
+      owned-only, no markers, owned 4-file pytest + pytest -q + lint 14/14 +
+      integration 9 passed, golden hash-equal (expect no-shift SEMANTIC=0)."
+    kind: story
+    milestoneId: M2
+    prodBudgetHint: 200
+    slug: checkers-stream-helper-v2
+    title: Single-source stream read/decode helper (v2 fresh HEAD)
+planDelta: "Prune 13 superseded I4 stranded pendings to fit 50-item cap (prior
+  amends discarded at 52/51): cache-design-spike by cache-contracts+storage-v2;
+  legacy-old by legacy-v2; coding-audits by harness+source (pack 4.4 measured);
+  docs-counts+docs-reconciliation (blocked wave6) by docs-v2; epics dropped per
+  ADR-023 no-epics; gate-old by gate-v2; hatch-old by hatch-v2; semantic-rewrite
+  (blocked wave5) by doubles+pin-v2; debloat-audits by runner-helpers. Add
+  stream-helper-v2 M2 deps [legacy-v2, doubles] wave9 (after legacy/doubles
+  wave7/8), cherry-pick owned-12 from abandoned branch adapting to legacy
+  renamed scan + doubles shape + HEAD factories. Next wave7 runs dep-free M1/M2
+  only (cache-contracts, backend-loading, matrix, corpus, pyi-spike, harness,
+  runner-helpers, source, ruff-fix, legacy-v2); never schedule removed slugs;
+  run one consolidate (prefer v3). PM staggers stream M2 wave9 before refresh M3
+  wave10 (suppression single-writer). Target discipline: never gate tests, use
+  custom command."
+rationale: "Wave6: 0 merged, docs-reconciliation blocked-by-failure, 0
+  regressions, 4/4 gates green (lint/test IMPROVED), tree clean. Waves 4-6 total
+  0 merges: stall is harness/merge-path (exit-127 unknown-gate 'tests',
+  refresh_blockers drift, stale I4 bases) + 52/51-item overflow, not code
+  defects. Failed cache already replanned as storage-v2+refresh-v2 in plan-5.2;
+  failed stream needs v2 (028); blocked docs/semantic superseded by
+  docs-v2/doubles+pin-v2. 13 stranded I4 pendings obsolete vs I5/ADR-023; prune
+  to fit cap and schedule stream-v2. No spike findings (0 merges)."
+text: "PM: wave7 dep-free M1/M2 + legacy-v2 only; wave8 doubles+storage; wave9
+  stream + pin pre-reqs; stagger stream M2 before refresh M3. Developers: fresh
+  HEAD, owned-only diffs, custom-command targets never gate tests, cherry-pick
+  owned files, verify pytest/lint/integration/golden, capture 127 stderr if
+  recurs."
+concernResolution:
+  action: resolve
+  id: c-55195ce9f3
+  note: Removed docs-reconciliation (superseded by docs-adr-reconciliation-v2);
+    wave6 blocked-by-failure cleared.
+remarkable:
+  - alternatives:
+      - Continue with overflow + obsolete audits/epics/docs
+      - End-iteration with 0 merges despite green gates
+    chosen: Prune 13 superseded I4 pendings and add stream-helper-v2 deps
+      legacy+doubles
+    why: Fits 50-item cap (prior 52/51 discards), unblocks wave gate, preserves M3
+      helper scope via fresh-HEAD v2, keeps v2 cache/model/pyi/docs chain intact
+      while gates green
+removeItemSlugs:
+  - cache-design-spike
+  - checkers-legacy-dead-cleanup
+  - coding-rules-audit
+  - coding-rules-audit-v2
+  - docs-counts-sync
+  - docs-reconciliation
+  - epic-kickoff-gate
+  - epic-shift-report-collection
+  - final-gate-validation
+  - golden-regen-hatch
+  - semantic-tests-rewrite
+  - test-debloat-audit
+  - test-debloat-audit-v2

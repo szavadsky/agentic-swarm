@@ -1,0 +1,93 @@
+status: ok
+summary: "Added test-only transport characterization:
+  test/harness/transport-stability.test.ts plus
+  test/fixtures/omp/mock-transport-omp.sh. The test renders the developer agent
+  definition and a step prompt twice, drives OmpHarness twice with identical
+  AgentRun input through a mock omp binary (no provider contact, no paid turns),
+  and asserts byte-equality of system-prompt content, prompt-file content, and
+  generated overlay bytes. The currently unstable transport piece is pinned
+  explicitly with comments: the per-turn prompt filename matches
+  prompt-<epoch-ms>-<random>.txt and necessarily differs between turns, while
+  argv is otherwise identical (verified by normalizing the prompt arg and
+  asserting the sole differing argv index). The deterministic system-prompt
+  path, --config path, --model and --session-dir are also pinned. A final
+  non-paid check runs `omp --config <overlay> --version` (the preflight
+  validation) and skips only when omp is absent. No production code changed.
+  `bun run typecheck` exits 0; full `bun test` with clean TMPDIR is 669 pass / 2
+  skip / 0 fail across 102 files."
+target:
+  command: cd plugins/software-factory && bun test
+    test/harness/transport-stability.test.ts
+  customTarget: true
+evidence:
+  - "bun test test/harness/transport-stability.test.ts (cwd
+    plugins/software-factory) -> 5 pass, 0 fail, 23 expect() calls:
+    system-prompt bytes equal across both turns, overlay bytes equal and equal
+    to a fresh writeOmpConfigOverlay generation, prompt-file bytes equal, prompt
+    filename pinned as prompt-<13+ digits>-<3-4 base36>.txt and asserted
+    different, argv identical after normalizing only that element."
+  - "env -u OMP_PATH PATH=/usr/bin:/bin bun test
+    test/harness/transport-stability.test.ts -> 4 pass, 1 skip, 0 fail: skips
+    cleanly only the non-paid real-omp overlay acceptance test when the binary
+    is absent; byte-stability characterization still runs."
+  - bun run typecheck -> exit 0 (tsc --noEmit).
+  - TMPDIR=/tmp bun test (cwd plugins/software-factory) -> 669 pass, 2 skip, 0
+    fail, 3765 expect() calls, 102 files, 248s; includes the new 5 tests.
+  - bun test test/harness test/prompts.test.ts -> 67 pass, 2 skip, 0 fail.
+  - git status --short -> only new paths
+    plugins/software-factory/test/harness/transport-stability.test.ts and
+    plugins/software-factory/test/fixtures/omp/mock-transport-omp.sh; no
+    production edits.
+  - "Environmental isolation check: with the inherited factory-runtime TMPDIR,
+    test/disk-space.test.ts fails (2 failing paths instead of 1) and amend-delta
+    shows git 'could not create temporary file' failures; both pass with
+    TMPDIR=/tmp (disk-space 7 pass, amend-delta 17 pass), confirming these are
+    environment-induced, not caused by this diff."
+concerns:
+  - kind: risk
+    summary: Gate runs that inherit the factory-runtime TMPDIR produce unrelated
+      test failures
+    detail: "When TMPDIR points under .factory-runtime/tmp, disk-space.test.ts
+      counts the tmpdir itself as a second low-space path (fails: expected 1
+      failing path, got 2) and several engine tests fail with git 'could not
+      create temporary file' or 5s timeouts under contention. With TMPDIR=/tmp
+      the same full suite is fully green (669 pass / 2 skip / 0 fail). This is
+      pre-existing/environmental and not caused by this test-only diff, but it
+      affects gate greenness for any item run in this environment."
+    severity: medium
+    affects:
+      - gates
+      - wave-merge
+remarkable:
+  - chosen: Characterize transport via a mock omp binary that snapshots argv plus
+      the --system-prompt/-p/--config files, and guard only the real-binary
+      overlay acceptance check with omp-presence skip.
+    why: This captures the exact bytes and argv the harness would hand to omp
+      without contacting a provider (no paid turns) and without requiring omp on
+      a clean checkout, while still validating the generated overlay with the
+      real binary when it is installed using the same non-paid `--config
+      <overlay> --version` preflight performs.
+    alternatives:
+      - "Run harness turns against real omp with live models: paid and flaky,
+        violates no-paid-turns constraint."
+      - "Mock the bun spawn module in-process: fragile, bypasses the real argv
+        assembly path."
+      - "Test only pure generateOmpConfigOverlay/render functions: cannot pin
+        the timestamped prompt filename or full argv instability."
+  - chosen: Pin the prompt filename instability with explicit shape and difference
+      assertions plus comments, instead of stabilizing transport.
+    why: Assignment defers stabilization to M7 after spike-cache-key; a
+      failing-explicit assertion documents the currently unstable behavior and
+      will point at the decision when transport is stabilized.
+    alternatives:
+      - "Stabilize prompt paths in production code: out of scope for this
+        test-only item."
+      - "Only compare normalized argv: would hide the unstable element instead
+        of pinning it."
+notes: "Ran `bun install --frozen-lockfile` in plugins/software-factory because
+  the worktree started without node_modules (matches open concern c-552344216d);
+  node_modules is gitignored. The new test resolves
+  pluginRoot/config/agents/fixtures from import.meta.dir, so it works when
+  invoked from plugins/software-factory (or any cwd). No paid model turns were
+  made: the mock binary never touches a provider and the real-omp check only
+  runs --version."

@@ -1,0 +1,33 @@
+slug: spike-omp-isolation
+kind: fact-finder
+title: "Spike: omp isolation mechanics + backend decision"
+assignment: "Fact-finder spike, no prod code. Probe installed omp (18.18.5) with
+  throwaway --profile and mktemp-isolated temp git repos (unique per run,
+  parallel-safe). 1) Enumerate isolation.backend allowed values via omp
+  help/config schema plus trial overlays. 2) Run retention matrix: omp
+  isolated-task vs omp worktree add + --cwd turn on success/failing/aborted
+  turns; record branch/commit retention in each case. 3) Determine which omp
+  mechanism maps to factory root-process workspaces. 4) Evaluate task.isolation
+  apply/merge/commits semantics vs current engine merge path (parent-into-child,
+  gates, child-into-parent). 5) Define cheapest validating preflight probe (must
+  be a real turn; --version/config-get are no-ops). 6) Test model/role
+  resolvability without paid turns if possible. Outputs:
+  items/{item}/findings.md with probe-command log table plus output excerpts,
+  full draft content for
+  plugins/software-factory/docs/spikes/omp-3-isolation.md, draft decision YAML
+  {status, decision, evidence, followUps} stating omp<->engine mapping,
+  retention guarantees, preflight probe command, draft isolation config surface.
+  Constraints: read-only on repo prod paths; cwd=plugins/software-factory for
+  repo-relative resolution; bounded real-omp turns allowed as research cost.
+  Acceptance: answers M1 isolation scenario (backend values, retention, probe)."
+outlineRef: spike-omp-isolation
+milestone: m1-omp-de-risk
+wave: 1
+scenarioRefs:
+  - m1-omp-de-risk:scenario-1
+citations:
+  - docs/factory.v2.md:104-113
+  - plugins/software-factory/docs/spikes/omp-1-topology.md:189-215
+  - plugins/software-factory/src/core/git/worktrees.ts:38-123
+  - plugins/software-factory/src/core/flows/merge-path.ts:131-243
+  - plugins/software-factory/src/cli/preflight.ts:365-393

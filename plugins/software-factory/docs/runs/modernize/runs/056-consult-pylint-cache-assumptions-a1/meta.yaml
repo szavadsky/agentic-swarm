@@ -1,0 +1,17 @@
+seq: 56
+name: consult-pylint-cache-assumptions
+attempt: 1
+agent: architect
+role: architect
+models:
+  - opencode-go/muse-spark-1.3-contributor
+session: 01a1b8a3-f9ce-7511-963e-37a3531a2d3a
+timeoutSec: 1200
+status: ok
+startedAt: 2026-11-08T12:04:14.319Z
+endedAt: 2026-11-08T12:04:45.510Z
+usage:
+  inputTokens: 181330
+  outputTokens: 2974
+  costUsd: 0.019089
+traceRef: /home/slava/aiexp/python-setup.factory-wt/.factory-runtime/sessions/2026-11-08T00-51-56-494Z_01a1b8a3-f9ce-7511-963e-37a3531a2d3a.jsonl

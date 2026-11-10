@@ -1,0 +1,94 @@
+status: approved
+summary: "Approved: read-only audit verified accurate at HEAD; 13 unrelated
+  remarkable triaged optional; 2 cosmetic findings-text nits optional."
+suggestions:
+  - detail: Merge/integration tradeoff from consolidate-integration-helpers scope.
+      Valid record; no bearing on audit rows. Retained as digest.
+    disposition: optional
+    id: rm-0237e4a7c9
+    summary: Unrelated merge tradeoff; retain as digest
+  - detail: Consistent with audit §6 prune precedent (644774e deleted
+      self-lint/config-consistency guards). Audit correctly treats these as
+      already-absent at HEAD. No action.
+    disposition: optional
+    id: rm-963829d74d
+    summary: Consistent premise for audit §6; no action
+  - detail: Integration-helper merge decision; does not affect audit inventory or
+      pinning limbs. Retained as digest.
+    disposition: optional
+    id: rm-9b3f69811e
+    summary: Unrelated merge tradeoff; retain as digest
+  - detail: Iteration-management decision; orthogonal to audit substance. Retained
+      as digest.
+    disposition: optional
+    id: rm-6396a0993e
+    summary: Unrelated iteration decision; retain as digest
+  - detail: Cache-design-spike key-derivation decision. Audit SKIPs cache-semantics
+      modules, so no interaction with audit rows. Retained as digest.
+    disposition: optional
+    id: rm-00a177b6ba
+    summary: Unrelated cache decision; retain as digest
+  - detail: Cache key-format decision; outside audit scope (semantic/cache files
+      SKIPPED). Retained as digest.
+    disposition: optional
+    id: rm-0e2de85be6
+    summary: Unrelated cache decision; retain as digest
+  - detail: Cache pruning policy; outside audit scope. Retained as digest.
+    disposition: optional
+    id: rm-644c24995b
+    summary: Unrelated cache decision; retain as digest
+  - detail: Cache concurrency decision; outside audit scope. Retained as digest.
+    disposition: optional
+    id: rm-d1f2b9dda9
+    summary: Unrelated cache decision; retain as digest
+  - detail: Config-layer resolution decision from another item; no bearing on test
+      inventory. Retained as digest.
+    disposition: optional
+    id: rm-49477e3be0
+    summary: Unrelated item decision; retain as digest
+  - detail: Coding-rules-audit reporting decision; audit's stub-family rows stand on
+      their own measurements (verified exact). No conflict.
+    disposition: optional
+    id: rm-8744aaa293
+    summary: Unrelated reporting decision; no conflict
+  - detail: Lint-gate execution decision; audit was read-only and verified via
+      collect-only plus direct reads. No interaction.
+    disposition: optional
+    id: rm-bc510f4b77
+    summary: Unrelated gate decision; no interaction
+  - detail: Merge-conflict resolution from integration-helpers scope; tests/ content
+      verified unchanged vs audit base. Retained as digest.
+    disposition: optional
+    id: rm-5f84f18bbd
+    summary: Unrelated merge decision; retain as digest
+  - detail: Conftest re-export removal; audit's conftest row (keep, canonical
+      registry snapshot at :132) verified and unaffected. No conflict.
+    disposition: optional
+    id: rm-6e63c3be9e
+    summary: Consistent with conftest row; no action
+  - detail: TestImportVariants is at :154-171, not :169-186, so the 'keep :1-160'
+      range splits the class mid-body. In test_stub_fidelity_invariants.py the
+      drop range :385-427 endpoint bleeds past TestCtxConstruction (:385-414)
+      into TestEmitFidelityViolationsOrchestrator (:415-428), which has no
+      explicit disposition. Implementation reads files directly so impact is
+      low; correct the ranges before test-debloat-impl.
+    disposition: optional
+    id: audit-line-refs
+    location:
+      file: tests/checkers/test_tmp_path_checker.py
+      line: 154
+    summary: Minor line-range errors in two rewrite dispositions
+  - detail: "All headline LoC verified exact (78 mods/18,124; SKIPPED 1,054; dup
+      defs 13/10/8; bench zero asserts; smoke unmarked-slow). Only labels drift:
+      unmarked-marker count off by a few (definitional: SKIPPED inclusion,
+      slow-decorator-only modules); checkers factories '8 files' vs 9 on disk
+      (1,513 LoC includes base, correct); support '19 modules'/'833 LoC' vs
+      18/22 and 819 (delta is __init__.py files outside owner buckets; buckets
+      sum 18,110 + 14 = 18,124 exact); debloat summary range vs §9 range vs
+      component sum inconsistent; mocking 35 vs ~36 sites with bench-file
+      attribution. None affect verdicts or downstream rows."
+    disposition: optional
+    id: audit-count-labels
+    location:
+      file: tests/checkers/_factories.py
+    summary: Cosmetic count/label inconsistencies; LoC verified exact

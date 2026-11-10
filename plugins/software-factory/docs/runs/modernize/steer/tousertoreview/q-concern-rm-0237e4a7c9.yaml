@@ -1,0 +1,7 @@
+id: q-concern-rm-0237e4a7c9
+ref: test-debloat-audit
+disposition: human-awareness
+question: Merge/integration tradeoff from consolidate-integration-helpers scope.
+  Valid record; no bearing on audit rows. Retained as digest.
+status: open
+createdAt: 2026-11-10T02:58:56.255Z

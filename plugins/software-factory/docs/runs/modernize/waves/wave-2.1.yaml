@@ -1,0 +1,11 @@
+wave: 1
+iteration: 2
+status: complete
+mergedItems:
+  - runner-format-contract
+  - consolidate-integration-helpers-i2
+  - model-candidate-matrix
+failedItems: []
+blockedItems: []
+summary: "Wave 1 completed. Merged items: runner-format-contract,
+  consolidate-integration-helpers-i2, model-candidate-matrix"

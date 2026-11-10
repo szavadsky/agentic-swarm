@@ -1,0 +1,18 @@
+iteration: 4
+status: next-iteration
+summary: "Iteration 4 partially delivered: M1/M2 VERIFIED (secrets filter,
+  factories splits <=500, threshold deduped + SEMANTIC=0 guards, baseline
+  2x<=500, portability grep-zero, prune 4/6 deleted + smoke kept, dispatch split
+  449+102 with live registry). M3 PARTIAL: shim retained with debt note,
+  _source_stream.py missing (3x .stream() copies remain), legacy cleanup missing
+  (_legacy_scan, trivial _legacy_*, astroid 3.x branch, unscoped register). M4
+  PARTIAL: veto backend infra landed (_decision_backend, _semantic rewrite,
+  [semantic]=[], .pyi fix) but normalize diverges from ADR-014, NoBackend
+  absent, decisions/_decision_cache + --refresh-decisions + tach edge missing,
+  slow+with_real_api skeleton + cache round-trip/hypothesis missing, ADR-014/016
+  incomplete. M5 FAILS: baseline [] + golden unchanged but docs exact-strings
+  fail everywhere
+  (semantic-justification/custom-checks/troubleshooting/AGENTS/CHANGELOG/README\
+  /ty.toml/ADR-013..018 stubs). Gates unverifiable read-only. Intent model swap
+  + git cache remain open by design (ADR-016 infra-only); 2 items still running
+  (stream-helper, cache-impl), 3 pending (legacy, semantic-tests, docs)."

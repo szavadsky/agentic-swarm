@@ -1,0 +1,8 @@
+id: decision-ownership-map-revalidation-consults-exhausted-1794225528277
+context: item
+item: ownership-map-revalidation
+decision: abandon
+reason: consults-exhausted
+rationale: Consult budget exhausted with no progress; abandoning item so the
+  wave gate absorbs it as failed
+timestamp: 2026-11-09T11:58:48.277Z

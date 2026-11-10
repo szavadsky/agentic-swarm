@@ -1,0 +1,261 @@
+{
+  "contract_atomic_failure": {
+    "cache_unchanged": true,
+    "failed_loudly": true,
+    "ok": true,
+    "seconds": 0.02
+  },
+  "contract_checker_root_hint": {
+    "matching": true,
+    "mismatched_blocked": true,
+    "ok": true,
+    "seconds": 0.0005
+  },
+  "contract_ci_fail": {
+    "cache_unchanged": true,
+    "exit_codes": {
+      "CI": 2,
+      "GITHUB_ACTIONS": 2
+    },
+    "ok": true,
+    "seconds": 0.1964
+  },
+  "contract_ci_guard_function": {
+    "guard": "CI/GITHUB_ACTIONS",
+    "ok": true,
+    "seconds": 0.0
+  },
+  "contract_corrupt_cache": {
+    "normal_tolerant": true,
+    "ok": true,
+    "refresh_failed_loudly": true,
+    "seconds": 0.0009
+  },
+  "contract_decisions_path_test_only": {
+    "ok": true,
+    "production_ignored": true,
+    "pytest_honored": true,
+    "seconds": 0.0203,
+    "written": "/home/slava/aiexp/python-setup.factory-wt/topic_modernize--decision-cache-design-spike/.factory/tasks/modernize/items/decision-cache-design-spike/poc/tmp/proofs/isolation_override/cache.json"
+  },
+  "contract_detect_secrets": {
+    "cache": "/home/slava/aiexp/python-setup.factory-wt/topic_modernize--decision-cache-design-spike/.factory/tasks/modernize/items/decision-cache-design-spike/poc/tmp/proofs/secrets/.python-setup-decisions.json",
+    "findings": 0,
+    "negative_control": [
+      "Hex High Entropy String"
+    ],
+    "ok": true,
+    "real_model_findings": [],
+    "seconds": 0.082,
+    "sha256": "fbb3161a40f66a6f552902ef0b25d6ca3c9bb0b5705060e6f1bd81930d2b3633"
+  },
+  "contract_determinism": {
+    "byte_identical": true,
+    "bytes": 1255,
+    "ok": true,
+    "seconds": 0.0492,
+    "sha256": "af120cc124c4b36f812cdbadf30d4409e6fcfeeb7f08be973df2f5f2f1294e24"
+  },
+  "contract_encoding_collision": {
+    "encoded_length": 62,
+    "ok": true,
+    "redacted": "see commit <hex:40> for the retry rationale",
+    "seconds": 0.2075,
+    "unique_keys": 25000
+  },
+  "contract_files_union_posix": {
+    "files": [
+      "src/a.py",
+      "src/b.py",
+      "src/c.py"
+    ],
+    "ok": true,
+    "seconds": 0.0182
+  },
+  "contract_jobs_guard": {
+    "auto_blocked": true,
+    "checks": [
+      "/home/slava/aiexp/python-setup.factory-wt/topic_modernize--decision-cache-design-spike/config/.pylintrc: jobs=1",
+      "/home/slava/aiexp/python-setup.factory-wt/topic_modernize--decision-cache-design-spike/config/.pylintrc-pyi: jobs=1",
+      "/home/slava/aiexp/python-setup.factory-wt/topic_modernize--decision-cache-design-spike/config/.pylintrc-tests: jobs=1"
+    ],
+    "flag_blocked": true,
+    "ok": true,
+    "rcfile_blocked": true,
+    "repo_overrides": {
+      ".pylintrc": [],
+      ".pylintrc-pyi": [],
+      ".pylintrc-tests": []
+    },
+    "seconds": 0.0943
+  },
+  "contract_lock_contention": {
+    "cache_unchanged": true,
+    "lock_blocked": true,
+    "ok": true,
+    "seconds": 0.0189
+  },
+  "contract_model_string": {
+    "fake": "fake-backend rev test prompt-v1",
+    "ok": true,
+    "real": "jina-reranker-v2-base-multilingual rev b886a1f9b91f prompt-v1",
+    "seconds": 0.0,
+    "short12": "b886a1f9b91f"
+  },
+  "contract_path_scoping": {
+    "before": 2,
+    "full_entries": 1,
+    "ok": true,
+    "scoped_entries": 2,
+    "seconds": 0.0545
+  },
+  "contract_production_untouched": {
+    "diff": "",
+    "head": "bd23263fa6c7d2496c67a133e236a99b95a94fbe",
+    "ok": true,
+    "production_lines": [],
+    "seconds": 0.041,
+    "status": " M .factory/tasks/modernize/items/decision-cache-design-spike/poc/out/proofs.json\n"
+  },
+  "contract_prune": {
+    "after_missing": [
+      [
+        "src/a.py"
+      ],
+      [
+        "src/b.py"
+      ]
+    ],
+    "after_stale": 0,
+    "ok": true,
+    "seconds": 0.0219
+  },
+  "contract_refresh_mode_env": {
+    "ok": true,
+    "schema_version": 1,
+    "seconds": 0.0,
+    "threshold": 0.5
+  },
+  "contract_root_guard": {
+    "cache": "/home/slava/aiexp/python-setup.factory-wt/topic_modernize--decision-cache-design-spike/.factory/tasks/modernize/items/decision-cache-design-spike/poc/tmp/proofs/root_guard/.python-setup-decisions.json",
+    "file_blocked": true,
+    "missing_blocked": true,
+    "ok": true,
+    "scope_blocked": true,
+    "seconds": 0.0016,
+    "symlink_blocked": true
+  },
+  "contract_schema_sort": {
+    "entry_count": 3,
+    "keys": [
+      "decision",
+      "files",
+      "justification",
+      "key",
+      "last_seen",
+      "model",
+      "prompt_hash",
+      "rule",
+      "version"
+    ],
+    "ok": true,
+    "order": [
+      [
+        "C0111",
+        "a justification",
+        "fake-backend rev test prompt-v1"
+      ],
+      [
+        "C0111",
+        "b justification",
+        "fake-backend rev test prompt-v1"
+      ],
+      [
+        "W9704",
+        "z justification",
+        "fake-backend rev other prompt-v1"
+      ]
+    ],
+    "seconds": 0.001
+  },
+  "contract_scoped_stale_mixed": {
+    "files": [
+      "src/a.py",
+      "src/b.py"
+    ],
+    "full_entries": 1,
+    "ok": true,
+    "scoped_entries": 2,
+    "seconds": 0.0612
+  },
+  "contract_tach_placement": {
+    "negative_exit": 1,
+    "negative_output": [],
+    "ok": true,
+    "positive_exit": 0,
+    "seconds": 1.3502
+  },
+  "contract_writer_verdict": {
+    "consumed": "path-free key -> per-entry files; jobs==1 single writer; non-atomic write -> refresh-only atomic replace",
+    "markers": [
+      "Writer identity",
+      "Timing",
+      "scoping",
+      "Sweep implication",
+      "Concurrency",
+      "Crash safety"
+    ],
+    "ok": true,
+    "path": "tests/assumptions/test_pylint_cache_semantics.py",
+    "seconds": 0.0002,
+    "sha256": "795da78900ffba8e5cfa2456d3e261d738660d6c52ec3f8ada2423eab5b0d0cd"
+  },
+  "failed_checks": [],
+  "generated_at_unix": 1794187513,
+  "model_a": "fake-backend rev test prompt-v1",
+  "prompt_hash": "dk1.w7pwqwps.wha4vd4h.qu36v2gp.j3wnj7ry.yelfnocc.phnvns3m.jnhq",
+  "proof_1_heuristic_rejected_without_backend": {
+    "backend_calls": 0,
+    "cache_entries": 0,
+    "decision": false,
+    "no_backend_decision": false,
+    "ok": true,
+    "seconds": 0.0191,
+    "source": "heuristic-reject"
+  },
+  "proof_2_accepted_hit_equals_persisted": {
+    "backend_called": false,
+    "hit_decision": false,
+    "ok": true,
+    "persisted": false,
+    "seconds": 0.0213,
+    "source": "cache-hit"
+  },
+  "proof_3_accepted_miss_absent_heuristic_true": {
+    "cache_absent": true,
+    "decision": true,
+    "ok": true,
+    "seconds": 0.0016,
+    "source": "heuristic-accept"
+  },
+  "proof_4_normal_lint_zero_writes_by_hash": {
+    "absent_cache_still_absent": true,
+    "backend_calls": 1,
+    "files_before": [
+      ".python-setup-decisions.json",
+      ".python-setup-decisions.lock",
+      "src"
+    ],
+    "mtime_ns": 1794187513300593086,
+    "ok": true,
+    "seconds": 0.0203,
+    "sha256": "dd5f82803c0cbcd3e93413f24bc7a75e96691e13f27d2deafbed7f5db06a0fcd"
+  },
+  "required_proofs": {
+    "proof_1_heuristic_rejected_without_backend": true,
+    "proof_2_accepted_hit_equals_persisted": true,
+    "proof_3_accepted_miss_absent_heuristic_true": true,
+    "proof_4_normal_lint_zero_writes_by_hash": true
+  },
+  "verdict": "feasible"
+}

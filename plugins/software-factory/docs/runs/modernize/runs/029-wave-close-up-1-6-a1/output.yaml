@@ -1,0 +1,30 @@
+blockedItems: []
+debt:
+  - "Baseline-red lint gate persists (matches baseline): ruff SIM102
+    coverage.py:196, pylint/pylint-pyi W9704 generic_key_dict_checker.py:40 +
+    testing.py:34, pylint R0914 cli.py:50, pylint-tests C0208
+    _factories_extras.py:383."
+  - "Baseline-red unit-test gate persists (matches baseline): 6 failures
+    assuming 13 tools while TOOLS now has 14 (ruff format added)."
+  - "Operator action outstanding: `uv run lint` ruff-format ToolSpec runs plain
+    `ruff format` without --check/--config and silently rewrites worktree;
+    declared gates split format/lint as workaround."
+failedItems: []
+iteration: 1
+mergedItems:
+  - golden-helpers-unit
+recommendations:
+  - Proceed to next wave / architect review; no close-up blockers.
+  - Schedule dedicated debt item(s) for the baseline-red lint violations and the
+    6 tool-count unit-test failures rather than folding into feature waves.
+  - "Operator: fix ruff-format ToolSpec (--check + --config) or drop it from
+    TOOLS so documented `uv run lint` is check-only."
+status: complete
+summary: "Wave 6 complete: merged golden-helpers-unit. Tree hygiene clean — no
+  untracked/stray artifacts; repo-only git status clean (sole modification is
+  engine-managed .factory journal); anchored conflict-marker scan of tracked
+  src/tests/config found none. Gate Diff shows zero regressions: format
+  pass/pass green, test-integration pass/pass green, lint fail/fail and test
+  fail/fail both still failing exactly matching baseline (pre-existing, not
+  regressions)."
+wave: 6

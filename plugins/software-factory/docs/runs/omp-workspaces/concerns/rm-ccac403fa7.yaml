@@ -1,0 +1,25 @@
+id: rm-ccac403fa7
+chosen: Characterize transport via a mock omp binary that snapshots argv plus
+  the --system-prompt/-p/--config files, and guard only the real-binary overlay
+  acceptance check with omp-presence skip.
+alternatives:
+  - "Run harness turns against real omp with live models: paid and flaky,
+    violates no-paid-turns constraint."
+  - "Mock the bun spawn module in-process: fragile, bypasses the real argv
+    assembly path."
+  - "Test only pure generateOmpConfigOverlay/render functions: cannot pin the
+    timestamped prompt filename or full argv instability."
+why: This captures the exact bytes and argv the harness would hand to omp
+  without contacting a provider (no paid turns) and without requiring omp on a
+  clean checkout, while still validating the generated overlay with the real
+  binary when it is installed using the same non-paid `--config <overlay>
+  --version` preflight performs.
+status: open
+source:
+  record: 001-develop-r1-a1
+  agent: developer
+  step: develop
+  item: transport-byte-stability
+  lastSeen: 2026-11-10T02:28:29.083Z
+createdAt: 2026-11-10T02:28:29.083Z
+updatedAt: 2026-11-10T02:28:29.083Z

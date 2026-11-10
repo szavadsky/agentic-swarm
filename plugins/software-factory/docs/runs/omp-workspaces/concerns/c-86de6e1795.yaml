@@ -1,0 +1,25 @@
+id: c-86de6e1795
+kind: risk
+summary: Mock-provider error-turn variant unprobed; no archived raw NDJSON excerpt
+detail: omp-4-mock-provider.md:61 states error turns optional, not probed; no
+  raw NDJSON transcript excerpt persisted (RECOVERY.md:86 discloses both as
+  limitations, not re-probed). M8 must verify error-turn variant before relying
+  on it. Mock seam itself is proven with zero paid calls (P3 catalog
+  mock/mock-chat, P5 text, P6 yield, P7/P8 tool loops, P9 resume, P11 @role,
+  P13/P14 OmpHarness wrapper).
+location:
+  file: plugins/software-factory/docs/spikes/omp-4-mock-provider.md
+  line: 61
+affects:
+  - m1-omp-de-risk
+  - m8-e2e-docs
+severity: low
+status: open
+source:
+  record: 024-plan-close-up-1-a1
+  agent: plan-close-up
+  step: plan-close-up-1
+  iteration: 1
+  lastSeen: 2026-11-10T06:32:04.799Z
+createdAt: 2026-11-10T06:32:04.799Z
+updatedAt: 2026-11-10T06:32:04.799Z

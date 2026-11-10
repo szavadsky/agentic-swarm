@@ -1,0 +1,47 @@
+status: ok
+summary: "Docs-only salvage verified complete: all four wave-1 spike docs are
+  committed at the required repo-relative paths and match the source branch,
+  with the sole intentional divergence being the `oMP` -> `omp` typo fix in
+  omp-6-repo-rules.md. RECOVERY.md is committed at
+  items/spike-findings-recovery-v2/RECOVERY.md (permitted fallback) with a
+  header naming the source
+  `.factory/.../items/spike-findings-recovery/RECOVERY.md` path, provenance
+  table, and per-M1-scenario evidence + FollowUps mapping. The reported gate
+  failure was environmental, not diff-caused: plugins/software-factory had no
+  node_modules (`Cannot find package 'yaml'`, missing `@types/bun`). Running
+  `bun install --frozen-lockfile` restored deps; `bun run typecheck` now exits 0
+  and previously-erroring test files pass 28/28. No target is recorded per the
+  assignment's mergeability constraint."
+evidence:
+  - "`git cat-file -e topic/omp-workspaces--spike-findings-recovery:<path>`
+    confirmed all four spike docs exist on the source branch; `git ls-tree -r
+    --name-only HEAD` confirmed all four are committed at identical
+    repo-relative paths on this item branch."
+target:
+  command: cd plugins/software-factory && test -s docs/spikes/omp-3-isolation.md
+    && test -s docs/spikes/omp-4-mock-provider.md && test -s
+    docs/spikes/omp-5-cache-keys.md && test -s docs/spikes/omp-6-repo-rules.md
+    && test -s ../../items/spike-findings-recovery-v2/RECOVERY.md && ! grep -q
+    'oMP' docs/spikes/omp-6-repo-rules.md
+  customTarget: true
+concerns:
+  - kind: risk
+    summary: "Gate environment lacks dependency install: child/item worktrees
+      without infra.setup fail typecheck and tests with `Cannot find package
+      'yaml'` / missing `@types/bun`."
+    detail: Before `bun install --frozen-lockfile` in plugins/software-factory, `bun
+      run typecheck` failed with TS2688 (no @types/bun) and test files failed to
+      resolve `yaml`; after install, typecheck exits 0 and previously failing
+      test files pass. This is the same environmental merge failure that sank
+      the wave-2 recovery, so the gate runner must run dependency setup before
+      typecheck/test or docs-only items will keep failing gates.
+    severity: medium
+    location:
+      file: plugins/software-factory/package.json
+notes: No production lines changed. The worktree was already clean with the five
+  recovered files committed from the prior attempt; this pass re-verified
+  content/provenance and fixed the gate blocker by installing the declared
+  dependencies (node_modules is gitignored, so the diff remains docs-only). Full
+  suite was not used as a gate per the assignment's explicit instruction that
+  full-suite exit 0 is unmergeable on the red baseline; a targeted pair of
+  previously-erroring test files was run instead with 28 pass / 0 fail.

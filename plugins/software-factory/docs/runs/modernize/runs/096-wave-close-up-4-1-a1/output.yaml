@@ -1,0 +1,26 @@
+blockedItems: []
+debt:
+  - "Pre-existing infra debt (unchanged by wave): `uv run lint` ruff format
+    ToolSpec still runs plain `ruff format` without --check/--config and mutates
+    worktrees; declared gates split format/lint as workaround — operator action
+    to add --check (+ --config) or drop it from TOOLS remains open."
+failedItems: []
+iteration: 1
+mergedItems:
+  - baseline-diff-merge
+  - semantic-threshold-consolidation
+  - decision-cache-design-spike
+  - checkers-semantic-guards
+recommendations:
+  - Proceed to next wave/iteration planning; no wave-level blockers.
+  - Operator to address ruff format ToolSpec mutation so documented `uv run
+    lint` becomes check-only.
+status: complete
+summary: "Wave 1 complete: all 4 items merged (baseline-diff-merge,
+  semantic-threshold-consolidation, decision-cache-design-spike,
+  checkers-semantic-guards). Tree hygiene clean: no untracked artifacts, no
+  stray temp/build junk in src/tests/config/docs, no merge conflict markers.
+  Gate diff vs baseline (table only): format pass→pass green, lint fail→pass
+  IMPROVED, test fail→pass IMPROVED, test-integration pass→pass green. No
+  regressions; baseline reds resolved; all gates now green."
+wave: 1

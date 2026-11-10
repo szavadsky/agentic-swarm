@@ -1,0 +1,27 @@
+slug: golden-regen-hatch
+kind: test-only
+title: Conditional golden regen on reviewed shift report
+assignment: "Root-owned conditional golden regen (test-only: edits strictly
+  confined to paths.tests; prod untouched; peer review; engine commits, agent
+  zero git writes). Execute ONLY on reviewed shift report in handoff record
+  (e.g. joined-rule encoding heuristic shift): run
+  PYTHON_SETUP_LINT_UPDATE_GOLDEN=1 locally only (pytest.fail under
+  CI/GITHUB_ACTIONS), verify byte-identical double run, review added/removed
+  diff key-by-key against shift report justification-class description, commit
+  golden + tool counts together. If all three handoff sections declare no-shift,
+  no-op verification (prove golden byte-identical). NEVER blind-regen. Output
+  regen report with key-by-key diff review (or no-op attestation) consumed by
+  final-gate-validation. Preserves golden 158-findings SEMANTIC=0 contract;
+  lint.baseline stays []."
+outlineRef: golden-regen-hatch
+milestone: M3
+wave: 4
+deps:
+  - epic-shift-report-collection
+scenarioRefs:
+  - "M3: Golden integrity preserved"
+citations:
+  - lint.baseline:1-1
+  - AGENTS.md:87-93
+  - AGENTS.md:121-139
+  - pyproject.toml:49-49

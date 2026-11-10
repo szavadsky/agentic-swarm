@@ -1,0 +1,26 @@
+slug: model-candidate-matrix
+kind: fact-finder
+title: Decision-model candidate matrix
+assignment: "GOAL: Evidence matrix for decision-model candidates to feed
+  eval-poc, cache spike, and runtime pinning (U1). No repo edits; report only.
+  STEPS: Build table for GLiDE-0.4B, tasksource-decider-nano, bekko-17m,
+  ettin-150m plus MiniLM baseline with columns: license, params and weights
+  bytes, runtime stack, py3.14 CPU wheels for linux/mac/win, custom-code and
+  vendoring burden, pinnable revision, offline behavior. Exclude CC-BY-NC; flag
+  Fastino plus bekko-unclear-license for human review per assumption. Record
+  model-id and rev format for cache spike. Output structured findings consumable
+  by eval-poc without re-research. VERIFY: Every candidate has explicit include
+  or exclude with reason; Fastino gating and Apache-first posture explicit; no
+  file writes."
+outlineRef: model-candidate-matrix
+milestone: M3
+wave: 1
+scenarioRefs:
+  - M3-1
+citations:
+  - src/python_setup_lint/checkers/_semantic.py:1-12
+  - src/python_setup_lint/checkers/_semantic.py:37-52
+  - src/python_setup_lint/checkers/_semantic.py:93-122
+  - pyproject.toml:28-31
+  - docs/semantic-justification.md:5-14
+  - AGENTS.md:79-85

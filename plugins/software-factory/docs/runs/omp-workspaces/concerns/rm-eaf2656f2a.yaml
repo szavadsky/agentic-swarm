@@ -1,0 +1,19 @@
+id: rm-eaf2656f2a
+chosen: Retained `test/e2e/mock-provider` in the mock-provider doc while
+  documenting why it is justified over `test/harness/mock-provider`.
+alternatives:
+  - Rename to `test/harness/mock-provider` (conflicts with the M8 plan interface)
+  - Drop the proposal path entirely (loses actionable M8 guidance)
+why: The M8 plan's directional interface explicitly names
+  `test/e2e/mock-provider/*`, and the split keeps the no-model scripted suite
+  separate from paid live coverage; the review allowed either the repo idiom or
+  a justification.
+status: open
+source:
+  record: 001-develop-r1-a1
+  agent: developer
+  step: develop
+  item: spike-findings-recovery
+  lastSeen: 2026-11-10T02:23:11.570Z
+createdAt: 2026-11-10T02:23:11.570Z
+updatedAt: 2026-11-10T02:23:11.570Z

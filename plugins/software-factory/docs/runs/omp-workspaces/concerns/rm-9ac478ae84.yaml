@@ -1,0 +1,19 @@
+id: rm-9ac478ae84
+chosen: "Approve spike: omp owns workspace creation/capture, engine owns
+  branches, merges, gates, commits, gc, records"
+alternatives:
+  - Request fix round to reinterpret probes 26/18 before acceptance
+  - Full-omp apply:true merges (single-parent, no gates)
+  - "Full-engine git worktrees only (kept as isolation: engine fallback)"
+why: Retention matrix plus apply:true single-parent evidence (68e5586, no
+  gates/conflict agent) supports the split; preflight provably needs a real turn
+  (probes 17/27); probe 26/18 interpretation flaws do not change any decision.
+status: open
+source:
+  record: 003-review-r1-a1
+  agent: reviewer
+  step: review
+  item: spike-omp-isolation
+  lastSeen: 2026-11-10T01:40:18.815Z
+createdAt: 2026-11-10T01:40:18.815Z
+updatedAt: 2026-11-10T01:40:18.815Z

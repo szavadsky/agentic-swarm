@@ -1,0 +1,27 @@
+blockedItems: []
+debt:
+  - lint gate still fail matching red baseline (pre-existing SIM102, R0914,
+    W9704, C0208) — not a wave regression, carried as baseline debt
+  - "Operator action carried: ruff format ToolSpec runs plain `ruff format`
+    without --check/--config and mutates worktrees; declared gates split format
+    vs lint as workaround"
+failedItems: []
+iteration: 2
+mergedItems:
+  - runner-format-contract
+  - consolidate-integration-helpers-i2
+  - model-candidate-matrix
+recommendations:
+  - Proceed to next wave/iteration planning — no regressions or hygiene blockers
+  - Address baseline lint failures as dedicated debt item outside wave flow
+  - "Operator: add --check (+ --config) to ruff format ToolSpec or drop it from
+    TOOLS so `uv run lint` is check-only"
+status: complete
+summary: "Wave 1 (iteration 2) complete: 3/3 items merged
+  (runner-format-contract, consolidate-integration-helpers-i2,
+  model-candidate-matrix). Tree hygiene clean: no untracked repo junk, no stray
+  temp files, no conflict markers in src/tests/config/docs; only modified file
+  is engine-managed .factory journal. Gates vs baseline (table-only verdict):
+  format pass/pass green, test-integration pass/pass green, test fail->pass
+  IMPROVED, lint fail/fail still failing matching baseline — no regressions."
+wave: 1

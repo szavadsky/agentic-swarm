@@ -1,0 +1,28 @@
+blockedItems: []
+debt:
+  - ownership-map-revalidation abandoned after consults exhausted; its intended
+    revalidation scope remains unaddressed
+  - pylint-cache-assumptions abandoned after consults exhausted; its intended
+    scope remains unaddressed
+failedItems:
+  - ownership-map-revalidation
+  - pylint-cache-assumptions
+iteration: 5
+mergedItems: []
+recommendations:
+  - "Architect: replan, rescope, or explicitly descope
+    ownership-map-revalidation and pylint-cache-assumptions in the next wave
+    (zero merges this wave; both items abandoned after exhausted consults)."
+  - "Operator (pre-existing infra note): make documented `uv run lint`
+    check-only by adding --check (+ --config) to the ruff format ToolSpec or
+    dropping it from TOOLS, so the declared split format/lint gates can be
+    reunified."
+status: has_failures
+summary: "Wave 1 (iteration 5) closed with zero merges:
+  ownership-map-revalidation and pylint-cache-assumptions both failed and were
+  abandoned after exhausted consults. Repo tree is clean — no modified or
+  untracked repo files (only engine-owned journal.ndjson touched), no merge
+  conflict markers, no stray artifacts. Gates show zero regressions vs baseline:
+  format and test-integration stayed green, while lint and test IMPROVED from
+  baseline-fail to now-pass."
+wave: 1

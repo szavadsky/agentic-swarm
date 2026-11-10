@@ -1,0 +1,24 @@
+slug: pylint-cache-semantics-closure
+kind: test-assumptions
+title: Land or verify pylint writer/timing verdict
+assignment: "Close iteration-2 M3 gap (test-assumptions: permanent tests in
+  paths.tests asserting assumptions; review checks validity; offline, no src
+  writes). If tests/assumptions/test_pylint_cache_semantics.py already merged at
+  HEAD, verify verdict exists and is readable and report location; else land
+  EXACTLY ONE new file at that path (no_external_api,
+  test_<api>_given_<condition>_then_<expected>, offline, no src writes).
+  Writer-first verdict must pin writer identity + timing + --path scoping
+  (crash-safe lock vs runner post-merge vs jobs=1/sidecars-if--j). Verdict is
+  consumed by epic-semantic-infrastructure cache concurrency (epic must not
+  invent semantics). Covers U3/TD3-I1 and ADR-010 writer-first input."
+outlineRef: pylint-cache-semantics-closure
+milestone: M1
+wave: 1
+scenarioRefs:
+  - "M1: Epic kickoff gated on validated artifacts"
+citations:
+  - src/python_setup_lint/checkers/_semantic.py:37-52
+  - docs/semantic-justification.md:34-45
+  - docs/semantic-justification.md:56-62
+  - pyproject.toml:49-49
+  - CodingRules.md:230-306

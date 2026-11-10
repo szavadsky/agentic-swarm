@@ -1,0 +1,21 @@
+id: c-556ca5ad29
+kind: question
+summary: Epic INTENT resolution for independent saga launches needs a new run contract
+detail: Epic INTENTs live under the parent task dir on the parent branch,
+  unresolvable by factory run from main; per-epic workspaces need an explicit
+  intent path/branch plus per-workspace locks and a saga coordination lock
+  before M6 can spawn parallel children. Design deferred to iteration 2 after
+  the M3 workspace abstraction lands.
+affects:
+  - "19.6"
+severity: medium
+status: routed
+source:
+  record: 005-architect-plan-1-a1
+  agent: architect
+  step: architect-plan-1
+  iteration: 1
+  lastSeen: 2026-11-09T23:33:06.263Z
+createdAt: 2026-11-09T23:33:06.263Z
+updatedAt: 2026-11-10T01:53:41.429Z
+disposition: architect

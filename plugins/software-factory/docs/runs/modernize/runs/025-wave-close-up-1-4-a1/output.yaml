@@ -1,0 +1,25 @@
+blockedItems: []
+debt:
+  - "Baseline-red gates pre-existing on clean checkout: lint (ruff SIM102,
+    pylint/pylint-pyi W9704, R0914, C0208) and test (6 failures assuming 13
+    tools vs 14 with ruff format)"
+  - Documented `uv run lint` mutates worktree via ruff format ToolSpec without
+    --check/--config (operator action pending)
+failedItems: []
+iteration: 1
+mergedItems: []
+recommendations:
+  - Resolve baseline-red lint violations (SIM102, W9704 x2, R0914, C0208) so
+    lint gate can go green
+  - Update the 6 failing unit tests for the 14-tool registry (ruff format added)
+    so test gate can go green
+  - Add --check (+ --config) to the ruff format ToolSpec or drop it from TOOLS
+    so `uv run lint` is check-only
+status: complete
+summary: "Wave 4 close-up: tree is clean (0 untracked files, no conflict
+  markers; sole modification is engine-managed
+  .factory/tasks/modernize/journal.ndjson). All 4 gates match baseline with zero
+  regressions: format pass, test-integration pass, lint and test still failing
+  exactly as at baseline (not regressions). No merged items reported for Wave 4;
+  nothing failed or blocked."
+wave: 4

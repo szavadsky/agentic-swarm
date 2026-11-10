@@ -1,0 +1,22 @@
+id: c-f9dc93315c
+kind: tech-debt
+summary: Runtime dirs sessions/prompts/system-prompts grow without cleanup
+detail: Only `.factory-runtime/tmp` is purged at run start
+  (`runtime-tmp.ts:16-45`). `sessions/` (transcripts), `prompts/`, and
+  `system-prompts/` accumulate and are not part of any gc path, which item 19.3
+  requires.
+location:
+  file: plugins/software-factory/src/core/runtime-tmp.ts
+  line: 16
+affects:
+  - "19.3"
+severity: medium
+status: routed
+source:
+  record: 004-context-pack-a1
+  agent: fact-finder
+  step: context-pack
+  lastSeen: 2026-11-09T23:21:29.949Z
+createdAt: 2026-11-09T23:21:29.949Z
+updatedAt: 2026-11-10T01:53:41.429Z
+disposition: optional

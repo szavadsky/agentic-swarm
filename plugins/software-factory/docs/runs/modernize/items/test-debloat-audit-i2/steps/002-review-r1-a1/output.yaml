@@ -1,0 +1,72 @@
+status: changes_requested
+summary: Audit verified on universe/owners/pins (184/73, 1361/18/9, helper
+  counts, CLI/scope gaps) but has 4 factual/coverage defects needing correction.
+suggestions:
+  - id: bench-slow-count
+    disposition: fix
+    summary: test_bench_runner_overhead.py has 1 slow test, not 2
+    detail: File defines a single test at
+      tests/runner/test_bench_runner_overhead.py:119; collect-only shows 1
+      deselected and the -m slow list has 1 bench entry. Report rows claim
+      '241/2 slow' and '(2 slow)'. Correct both rows and the slow-reduction
+      budget (total 18 stays correct).
+    location:
+      file: .factory/tasks/modernize/items/test-debloat-audit-i2/steps/001-research-r1-a1/output.yaml
+      line: 81
+  - id: stub-surface-lock-not-duplicate
+    disposition: fix
+    summary: TestPublicSymbolSurface is a unique surface lock, do not remove as
+      duplicate
+    detail: TestPublicSymbolSurface
+      (tests/checkers/test_stub_fidelity_invariants.py:277-322) hasattr-loops 19
+      re-exported fidelity names; grep confirms it is the sole surface-lock test
+      and other stub tests import only subsets. Removing it loses the
+      re-export/split-preservation contract with no named survivor. Keep it or
+      prove the import union covers all 19 names and name the surviving pin.
+    location:
+      file: .factory/tasks/modernize/items/test-debloat-audit-i2/steps/001-research-r1-a1/output.yaml
+      line: 64
+  - id: golden-canonical-not-pinned-by-replay
+    disposition: fix
+    summary: Serialization canonical/empty properties are not pinned by integration
+      replay
+    detail: tests/test_golden.py:152-215 asserts canonical format (sorted,
+      sort_keys, indent=2, trailing newline), empty-input arrays, and
+      tool-minimum mapping order. tests/integration.py:115-122 byte-identical
+      replay proves determinism on one non-empty real finding set, not
+      unsorted/empty/mapping-order properties. Narrow the removal to truly
+      redundant rows or keep the canonical/empty pins with surviving coverage.
+    location:
+      file: .factory/tasks/modernize/items/test-debloat-audit-i2/steps/001-research-r1-a1/output.yaml
+      line: 168
+  - id: semantic-pyi-range
+    disposition: fix
+    summary: _semantic.pyi citation 1-42 is wrong; file is 27 lines
+    detail: wc -l src/python_setup_lint/checkers/_semantic.pyi = 27, so '1-42' in
+      the exclusion table is impossible. Correct to 1-27 (whole-file exclusion
+      intent unchanged).
+    location:
+      file: .factory/tasks/modernize/items/test-debloat-audit-i2/steps/001-research-r1-a1/output.yaml
+      line: 244
+  - id: loc-methodology
+    disposition: optional
+    summary: Clarify LoC counting method; wc -l differs slightly
+    detail: "Report claims 14,664 test + 3,693 helper LoC; wc -l gives 14,650 (58
+      test_*.py + integration.py) and 3,716 (14 helpers). Gap is immaterial to
+      the 1.3-1.8k budget but state the counter (wc vs parser, trailing newline,
+      integration inclusion) for replan reproducibility. Uncertainty: runtime
+      figures (e.g. 6.53s vs 9.69s observed for test_setup_install) are
+      environment-sensitive; note measurement conditions."
+    location:
+      file: .factory/tasks/modernize/items/test-debloat-audit-i2/steps/001-research-r1-a1/output.yaml
+      line: 26
+  - id: case-count-default-vs-total
+    disposition: optional
+    summary: Clarify whether per-module N is default-collected or total incl slow
+    detail: "Rows like test_extra_tools_downstream '209/4 (1 slow)' are ambiguous:
+      default collect shows 4 while the slow list adds 1 (total 5?). State once
+      that N = default-collected unless noted, so replan does not miscount
+      slow-inclusive totals."
+    location:
+      file: tests/runner/test_extra_tools_downstream.py
+      line: 37

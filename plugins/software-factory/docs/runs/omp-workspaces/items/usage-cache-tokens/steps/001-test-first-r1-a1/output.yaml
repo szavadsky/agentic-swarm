@@ -1,0 +1,97 @@
+status: ok
+summary: "Authored the test-first specification for cache-token usage plumbing:
+  new NDJSON fixture with nonzero cacheRead/cacheWrite/totalTokens and cost
+  sub-fields, parser callback coverage, engine persistence into step-meta
+  records, backward compatibility for legacy records, budget/derive aggregation
+  with zero defaults, schema acceptance, and status cache columns. Production
+  code was left untouched; only test paths changed. All 11 declared expectation
+  tests execute and fail as assertion failures on current production (undefined
+  cache fields / schema rejection / absent status columns), not collection
+  errors."
+target:
+  selectors:
+    - test/harness/ndjson-usage-cache.test.ts
+    - test/engine/usage-cache-tokens.test.ts
+    - test/contracts/usage-cache-schema.test.ts
+    - test/sessions.test.ts
+  expectRed:
+    - parses cache read/write tokens, total tokens and cost breakdown
+    - zero-defaults cache fields when a historical turn omits them
+    - forwards cache fields to the onUsage callback
+    - persists cache tokens and cost breakdown into step meta records
+    - keeps historical records without cache keys and aggregates zero defaults
+    - sums cache tokens with zero defaults across mixed old and new records
+    - BudgetTracker sums cache tokens with zero defaults
+    - status output surfaces cache token columns
+    - step-meta accepts cache tokens and cost breakdown and keeps legacy usage
+      valid
+    - state spend breakdowns accept cache token columns
+    - accumulates cache tokens and cost breakdown across turns
+evidence:
+  - "`bun test test/harness/ndjson-usage-cache.test.ts` -> 0 pass, 3 fail; each
+    failure is `expect(...).toBe(...)` receiving undefined for
+    cacheReadTokens/cacheWriteTokens/totalTokens/cost."
+  - "`bun test test/engine/usage-cache-tokens.test.ts` -> 0 pass, 5 fail;
+    persistence test reaches `003-simple-implement-a1/meta.yaml` then fails on
+    undefined usage.cacheReadTokens; legacy/mixed scan fail on undefined
+    SpendTotals cache fields; BudgetTracker fail on undefined cache totals;
+    status output contains no cacheRead/cacheWrite columns."
+  - "`bun test test/contracts/usage-cache-schema.test.ts` -> 0 pass, 2 fail;
+    step-meta and state validators reject the new optional cache properties
+    (additionalProperties:false)."
+  - "`bun test test/sessions.test.ts` -> 5 pass, 1 fail; the new
+    cache-accumulation test is red while pre-existing session tests stay green."
+  - Combined target command with JUnit reporter (`bun test <4 selectors>
+    --reporter=junit`) produced 16 collected cases, 11 assertion failures;
+    verified every declared expectRed id matches the engine's
+    parseJunit/findMatchingCase logic and has status `fail` (suite
+    collected=true).
+  - "`git status --porcelain` shows only `test/sessions.test.ts` modified and
+    four new test-path files (schema, engine, parser, fixture); no files under
+    src were changed."
+  - "Baseline adjacent suites remain green after the test additions: `bun test
+    test/records-and-fingerprint.test.ts test/engine/status-budget.test.ts` ->
+    17 pass, 0 fail."
+remarkable:
+  - chosen: Declare expectRed ids as bare Bun test names rather than file-qualified
+      `file::test` node ids.
+    why: "Bun's JUnit reporter emits ids as `<innermost describe>.<test name>` with
+      no file path in the id; the engine's normalizer matches a bare id by
+      suffix (`id.endsWith('.' + expectId)`). Verified against parseJunit
+      output: all 11 ids match exactly one failing case."
+    alternatives:
+      - File-qualified `test/...::test` ids (would not match Bun's
+        describe-based JUnit ids unless the describe name is also embedded).
+      - Full `<describe>.<test>` ids (brittle to describe renames).
+  - chosen: Specify zero-default aggregation and optional schema properties, with no
+      migration of historical records.
+    why: "Matches the assignment contract: absent cache keys in old meta.yaml/NDJSON
+      must read as 0 and remain schema-valid, while new records persist
+      cacheReadTokens/cacheWriteTokens/totalTokens and a cost breakdown."
+    alternatives:
+      - Migration/backfill of old records (explicitly out of scope).
+      - Required schema fields (would invalidate historical records).
+concerns:
+  - kind: tech-debt
+    summary: Child/merge worktrees still need infra.setup (bun install) before the
+      bun test runner can collect tests; this worktree had no node_modules until
+      installed manually
+    detail: Running `bun test` in a fresh worktree failed with `Cannot find package
+      'yaml'` from test/records-and-fingerprint.test.ts and src/core/prompts.ts
+      until `bun install` was run. This is the pre-existing open concern
+      c-552344216d (missing infra.setup in merge-child worktrees), not
+      introduced by this step; node_modules is gitignored and not part of the
+      change.
+    severity: high
+    affects:
+      - target-red
+      - wave-merge
+notes: "Test-first only: production code untouched. Added
+  test/fixtures/omp/turn-cache-usage.ndjson plus
+  test/harness/ndjson-usage-cache.test.ts,
+  test/engine/usage-cache-tokens.test.ts,
+  test/contracts/usage-cache-schema.test.ts, and a cache-accumulation case in
+  test/sessions.test.ts. Ran `bun install` in plugins/software-factory so the
+  existing runner could resolve yaml/ajv (node_modules gitignored); anyone
+  re-running these selectors in a fresh merge worktree will need infra.setup to
+  do the same."

@@ -1,0 +1,1049 @@
+task: modernize
+kind: saga
+status: active
+iteration: 5
+currentWave: 3
+items:
+  adr-formalization:
+    kind: no-behavior
+    status: merged
+    branch: topic/modernize--adr-formalization
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0.051655
+    currentStep: review
+    mergedAt: 2026-11-08T17:38:59-05:00
+  baseline-diff-merge:
+    kind: test-only
+    status: merged
+    branch: topic/modernize--baseline-diff-merge
+    attempts: 1
+    fixRounds: 2
+    spendUsd: 0.11384300000000001
+    currentStep: review
+    mergedAt: 2026-11-08T20:41:25-05:00
+  checkers-semantic-guards:
+    kind: test-only
+    status: merged
+    branch: topic/modernize--checkers-semantic-guards
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0.032317
+    currentStep: review
+    mergedAt: 2026-11-08T20:47:46-05:00
+  consolidate-integration-helpers-i2:
+    kind: test-only
+    status: merged
+    branch: topic/modernize--consolidate-integration-helpers-i2
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0.07747
+    currentStep: review
+    mergedAt: 2026-11-08T07:59:15-05:00
+  decision-cache-design-spike:
+    kind: poc
+    status: merged
+    branch: topic/modernize--decision-cache-design-spike
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0.211512
+    currentStep: review
+    mergedAt: 2026-11-08T20:44:48-05:00
+  golden-determinism-probe:
+    kind: fact-finder
+    status: merged
+    branch: topic/modernize--golden-determinism-probe
+    attempts: 1
+    fixRounds: 2
+    spendUsd: 0.16489800000000002
+    currentStep: review
+    mergedAt: 2026-11-07T20:57:23-05:00
+  model-candidate-matrix:
+    kind: fact-finder
+    status: merged
+    branch: topic/modernize--model-candidate-matrix
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0.045265
+    currentStep: review
+    mergedAt: 2026-11-08T08:05:08-05:00
+  ownership-map-revalidation:
+    kind: fact-finder
+    status: failed
+    branch: topic/modernize--ownership-map-revalidation
+    attempts: 1
+    fixRounds: 5
+    spendUsd: 0.38394500000000004
+    currentStep: review
+  pylint-cache-assumptions:
+    kind: test-assumptions
+    status: failed
+    branch: topic/modernize--pylint-cache-assumptions
+    attempts: 2
+    fixRounds: 1
+    spendUsd: 0.23190968599999998
+    currentStep: develop
+  pylint-cache-semantics-closure:
+    kind: test-assumptions
+    status: merged
+    branch: topic/modernize--pylint-cache-semantics-closure
+    attempts: 1
+    fixRounds: 2
+    spendUsd: 0.18856
+    currentStep: review
+    mergedAt: 2026-11-08T17:36:11-05:00
+  runner-format-contract:
+    kind: dev
+    status: merged
+    branch: topic/modernize--runner-format-contract
+    attempts: 1
+    fixRounds: 2
+    spendUsd: 0.467148
+    currentStep: review
+    mergedAt: 2026-11-08T07:54:12-05:00
+  secrets-baseline-exclusion:
+    kind: no-behavior
+    status: merged
+    branch: topic/modernize--secrets-baseline-exclusion
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0.041534
+    currentStep: review
+    mergedAt: 2026-11-08T17:32:58-05:00
+  semantic-threshold-consolidation:
+    kind: test-only
+    status: merged
+    branch: topic/modernize--semantic-threshold-consolidation
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0.032682
+    currentStep: review
+    mergedAt: 2026-11-08T20:41:29-05:00
+  third-party-assumption-tests:
+    kind: test-assumptions
+    status: merged
+    branch: topic/modernize--third-party-assumption-tests
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0.076988
+    currentStep: review
+    mergedAt: 2026-11-07T21:00:28-05:00
+  baseline-violations-fix:
+    kind: no-behavior
+    status: merged
+    branch: topic/modernize--baseline-violations-fix
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0.06715600000000001
+    currentStep: review
+    mergedAt: 2026-11-08T09:50:28-05:00
+  checkers-factories-split:
+    kind: test-only
+    status: merged
+    branch: topic/modernize--checkers-factories-split
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0.09088800000000001
+    currentStep: review
+    mergedAt: 2026-11-09T00:24:29-05:00
+  checkers-stream-helper:
+    kind: no-behavior
+    status: failed
+    branch: topic/modernize--checkers-stream-helper
+    attempts: 1
+    fixRounds: 2
+    spendUsd: 0.227775
+    currentStep: integrate
+  decision-backend-impl:
+    kind: dev
+    status: merged
+    branch: topic/modernize--decision-backend-impl
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0.554482
+    currentStep: review
+    mergedAt: 2026-11-09T00:11:56-05:00
+  epic-kickoff-gate:
+    kind: fact-finder
+    status: failed
+    branch: topic/modernize--epic-kickoff-gate
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0.073828
+    currentStep: review
+  golden-contract-hardening:
+    kind: test-only
+    status: merged
+    branch: topic/modernize--golden-contract-hardening
+    attempts: 2
+    fixRounds: 1
+    spendUsd: 0.091885
+    currentStep: review
+    mergedAt: 2026-11-08T09:56:30-05:00
+  golden-findings-snapshot:
+    kind: dev
+    status: superseded
+    branch: topic/modernize--golden-findings-snapshot
+    attempts: 2
+    fixRounds: 1
+    spendUsd: 0.170578
+    currentStep: test-first
+  model-eval-poc:
+    kind: poc
+    status: merged
+    branch: topic/modernize--model-eval-poc
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0.57375
+    currentStep: review
+    mergedAt: 2026-11-08T10:03:05-05:00
+  runner-compat-shim-removal:
+    kind: no-behavior
+    status: merged
+    branch: topic/modernize--runner-compat-shim-removal
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0.056304
+    currentStep: review
+    mergedAt: 2026-11-09T00:09:28-05:00
+  secrets-triage-spike:
+    kind: fact-finder
+    status: merged
+    branch: topic/modernize--secrets-triage-spike
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0.19651400000000002
+    currentStep: review
+    mergedAt: 2026-11-09T13:56:23-05:00
+  cache-design-spike:
+    kind: poc
+    status: ready
+    branch: topic/modernize--cache-design-spike
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0.109595
+    currentStep: review
+  checkers-legacy-dead-cleanup:
+    kind: no-behavior
+    status: blocked
+    branch: topic/modernize--checkers-legacy-dead-cleanup
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0
+  coding-rules-audit-i2:
+    kind: fact-finder
+    status: merged
+    branch: topic/modernize--coding-rules-audit-i2
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0.133783
+    currentStep: review
+    mergedAt: 2026-11-08T10:57:08-05:00
+  consolidate-integration-helpers:
+    kind: test-only
+    status: superseded
+    branch: topic/modernize--consolidate-integration-helpers
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0
+  decision-runtime-pinning:
+    kind: test-assumptions
+    status: merged
+    branch: topic/modernize--decision-runtime-pinning
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0.016725999999999998
+    currentStep: review
+    mergedAt: 2026-11-08T10:47:48-05:00
+  epic-shift-report-collection:
+    kind: fact-finder
+    status: merged
+    branch: topic/modernize--epic-shift-report-collection
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0.04926
+    currentStep: review
+    mergedAt: 2026-11-09T22:05:57-05:00
+  remaining-lint-violations-fix:
+    kind: no-behavior
+    status: merged
+    branch: topic/modernize--remaining-lint-violations-fix
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0.053628
+    currentStep: review
+    mergedAt: 2026-11-08T11:04:13-05:00
+  runner-dispatch-split:
+    kind: no-behavior
+    status: merged
+    branch: topic/modernize--runner-dispatch-split
+    attempts: 2
+    fixRounds: 1
+    spendUsd: 0.128832
+    currentStep: review
+    mergedAt: 2026-11-09T01:16:27-05:00
+  runner-factories-trim:
+    kind: test-only
+    status: merged
+    branch: topic/modernize--runner-factories-trim
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0.041291
+    currentStep: review
+    mergedAt: 2026-11-09T01:16:31-05:00
+  stale-disables-portability-cleanup:
+    kind: test-only
+    status: merged
+    branch: topic/modernize--stale-disables-portability-cleanup
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0.025615000000000002
+    currentStep: review
+    mergedAt: 2026-11-09T01:20:54-05:00
+  coding-rules-audit:
+    kind: fact-finder
+    status: merged
+    branch: topic/modernize--coding-rules-audit
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0.117057
+    currentStep: review
+    mergedAt: 2026-11-09T22:02:16-05:00
+  decision-cache-impl:
+    kind: dev
+    status: failed
+    branch: topic/modernize--decision-cache-impl
+    attempts: 2
+    fixRounds: 2
+    spendUsd: 0.393308
+    currentStep: qa
+  golden-regen-hatch:
+    kind: test-only
+    status: ready
+    branch: topic/modernize--golden-regen-hatch
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0.043046
+    currentStep: review
+  never-test-linting-prune:
+    kind: test-only
+    status: merged
+    branch: topic/modernize--never-test-linting-prune
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0.055946
+    currentStep: review
+    mergedAt: 2026-11-09T03:06:02-05:00
+  test-debloat-audit-i2:
+    kind: fact-finder
+    status: merged
+    branch: topic/modernize--test-debloat-audit-i2
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0.258385
+    currentStep: review
+    mergedAt: 2026-11-08T12:55:17-05:00
+  final-gate-validation:
+    kind: fact-finder
+    status: merged
+    branch: topic/modernize--final-gate-validation
+    attempts: 1
+    fixRounds: 2
+    spendUsd: 0.160775
+    currentStep: review
+    mergedAt: 2026-11-09T22:38:07-05:00
+  semantic-tests-rewrite:
+    kind: test-only
+    status: blocked
+    branch: topic/modernize--semantic-tests-rewrite
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0
+  test-debloat-audit:
+    kind: fact-finder
+    status: merged
+    branch: topic/modernize--test-debloat-audit
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0.209342
+    currentStep: review
+    mergedAt: 2026-11-09T22:22:16-05:00
+  docs-reconciliation:
+    kind: no-behavior
+    status: blocked
+    branch: topic/modernize--docs-reconciliation
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0
+  golden-helpers-unit:
+    kind: test-only
+    status: merged
+    branch: topic/modernize--golden-helpers-unit
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0.057198
+    currentStep: review
+    mergedAt: 2026-11-08T00:11:56-05:00
+  golden-snapshot-wiring:
+    kind: dev
+    status: merged
+    branch: topic/modernize--golden-snapshot-wiring
+    attempts: 2
+    fixRounds: 1
+    spendUsd: 0.13088
+    currentStep: qa
+    mergedAt: 2026-11-08T00:54:17-05:00
+  consolidate-integration-helpers-v2:
+    kind: test-only
+    status: failed
+    branch: topic/modernize--consolidate-integration-helpers-v2
+    attempts: 2
+    fixRounds: 1
+    spendUsd: 0.258951
+    currentStep: integrate
+  coding-rules-audit-v2:
+    kind: fact-finder
+    status: blocked
+    branch: topic/modernize--coding-rules-audit-v2
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0
+  test-debloat-audit-v2:
+    kind: fact-finder
+    status: blocked
+    branch: topic/modernize--test-debloat-audit-v2
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0
+  consolidate-integration-helpers-v3:
+    kind: test-only
+    status: running
+    branch: topic/modernize--consolidate-integration-helpers-v3
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0.259824
+    currentStep: integrate
+  docs-counts-sync:
+    kind: dev
+    status: failed
+    branch: topic/modernize--docs-counts-sync
+    attempts: 2
+    fixRounds: 1
+    spendUsd: 0.051479
+    currentStep: qa
+concerns:
+  open: 0
+  dismissed: 0
+  routed: 41
+  resolved: 2
+debt:
+  - No compliant model proven (215/0 unevaluable, single-author labels, Fastino
+    review open, no CPU bench).
+  - "I4 cache producer gap (awareness: refresh prune-only until producer;
+    decisions/ missing at HEAD so gap is unmerged, not live)."
+  - Pylint-pyi blind spot (42/43 findings on .py, latent private stub symbols,
+    companion stubs unenforced per old probe).
+  - Semantic-on behavior unpinned (golden + integration capture with SEMANTIC=0;
+    model could change W9704/W9738 silently).
+  - Docs/ADR drift (semantic-justification, custom-checks, troubleshooting,
+    tutorials, AGENTS.md counts/scope/pipeline, README, CHANGELOG, ty.toml,
+    ADR-002/009/011/013/014/015/016 staleness, ADR index omits 013..016, 017/018
+    never merged).
+  - Test-harness duplication + dead code (13 _make_tc, 10 _walk_and_release, 8
+    _msg_ids, 3 _RecordingBackend, 2 _UvCallRecorder, 2 extra_block, 2
+    _semantic_disabled, dead helpers, vestigial cache tests, smoke overlap) +
+    source placeholders (globals, per-call sets, rcfile dup, missing docstring).
+  - Pre-existing tracked junk file ':bash' reported in I4 wave 6 (verify at HEAD
+    via git ls-files) + minor version drift (pyproject 1.2.10 vs CHANGELOG
+    v1.2.9).
+  - Legacy .gitignore .cache/python-setup/semantic/ lines (retired machine
+    cache) alongside new root decisions file.
+  - "M3 docs close-out RED: DecisionBackend/DECISION_MODEL/[semantic]/no-go
+    absent; stale reranker/7-pass/v1.2.5/v1.2.9/ADR-016:3/ADR-009:31 present.
+    Route to new root/epic follow-ups per ADR-011 map, never baseline edits;
+    carry to next iteration."
+  - "I6 backlog: M1 contracts+spikes, M2 harness/runner/source/legacy-v2 (+ruff
+    verify-only), M3 stream-v2 then storage-v2/refresh-v2, M4 pin-v2/wiring-v2
+    (default NO-GO without U1 verdict + Fastino + second-rater approvals), M5
+    pyi/docs-v2/hatch-v2/gate-v2; merge-path target discipline + fresh-HEAD
+    owned-only diffs."
+  - "RED-TEST WAIVED (gate inapplicable by design): golden-snapshot-wiring is a
+    tests-only M1 contract item — probe verdict was test-side normalization
+    sufficient, so the bounded src allowance was correctly NOT used and the diff
+    touches only tests/_golden.py (+collect_findings), tests/integration.py
+    wiring, and the two committed golden JSON files. Red-test (test must fail
+    without src changes) cannot hold when zero src changes are the correct
+    outcome. Compensating verification already in the item: drift injection on
+    in-memory list copies proves assert_matches_golden detects add/drop drift;
+    PYTHON_SETUP_LINT_UPDATE_GOLDEN=1 regen-twice byte-identical proves
+    determinism; oracle + per-tool coverage + tool-qualified brush-off/carry
+    lookups prove sensitivity. QA rejected 2/2 solely on red-test; all other
+    checks passed. No src follow-up required."
+  - "[cache-design-spike] PoC lock is POSIX-only fcntl.flock"
+  - "[cache-design-spike] Production call site passes a constant rule symbol,
+    collapsing the cache rule component"
+  - "[cache-design-spike] Tracked key excludes code_context, unlike the current
+    in-process semantic memo"
+  - "[cache-design-spike] Lockfile needs a gitignore entry and the retired
+    machine-cache entry should be replaced"
+  - "[coding-rules-audit] Production-dead _baseline_helpers module is pinned
+    only by tests"
+  - "[coding-rules-audit] peek_fallback_tools debt comment names a completed
+    owner"
+  - "[coding-rules-audit] Semantic docs still describe the removed cross-encoder
+    while the decision cache does not exist"
+  - "[coding-rules-audit] LoC deltas are gross estimates; public renames offset
+    stub deletion"
+  - "[coding-rules-audit] W9707 .pyi enforcement is blind, so 203 private stub
+    declarations are unguarded"
+  - "[consolidate-integration-helpers-v3] Accepted deletion of the two slow
+    self-lint guard tests instead of resurrecting them with item-side import
+    fixes."
+  - "[consolidate-integration-helpers-v3] Merge result is byte-identical to the
+    parent tip for every non-.factory path, so the item branch contributes no
+    code deltas of its own."
+  - "[consolidate-integration-helpers-v3] Stale doc references: _project_helpers
+    docstring still names 'the self-lint guards' (now pruned) and AGENTS.md test
+    counts are outdated."
+  - "[epic-kickoff-gate] ADR-011 names a test class that no longer exists and
+    carries stale line references"
+  - "[epic-kickoff-gate] Checkers owner count exceeds the ADR-011 ±5 drift
+    budget by 3"
+  - "[epic-shift-report-collection] ADR-011 shift-handoff contract remains
+    'Accepted' after epic decomposition was abandoned"
+  - "[epic-shift-report-collection] Legacy golden-regen-hatch could misread a
+    missing handoff as all-no-shift"
+  - "[final-gate-validation] Production call sites pass constant rule symbols,
+    collapsing the cache-key rule component"
+  - "[final-gate-validation] 1.72 GiB of .factory model artifacts are tracked;
+    detect-secrets safety depends on a prefix-anchored baseline filter"
+  - "[final-gate-validation] golden-regen-hatch report is absent from HEAD"
+  - "[final-gate-validation] PoC lock is POSIX-only fcntl.flock; no production
+    lock code exists at HEAD"
+  - "[golden-regen-hatch] Legacy golden-regen-hatch ran with a fail-open 0/3
+    handoff; this attestation is a no-regen byte-identity proof, not an
+    all-no-shift declaration"
+  - "[test-debloat-audit] coding-rules-audit UNIFIED ownership map was
+    unavailable in the prompt/inter-dep"
+  - "[test-debloat-audit] test_testing_fakes.py must not be removed as
+    test-infra-only coverage"
+  - "[test-debloat-audit] Shipped rcfile parity is unguarded after
+    test_config_consistency.py deletion"
+  - "[test-debloat-audit] Benchmark test has zero assertions and cannot gate
+    regressions"
+  - "[test-debloat-audit] Real-pipeline smoke test runs 14 real tools in the
+    default suite (not slow)"
+  - "[test-debloat-audit] Removing test_runner_private_imports.py broadens the
+    never-linting definition"
+  - "[test-debloat-audit] Fixture data test file is collected and leaks a temp
+    directory"
+  - "[test-debloat-audit] Marker taxonomy is effectively unenforced"
+  - "[test-debloat-audit] Assignment citation for semantic_check.py is stale/out
+    of range"
+  - "[final-gate-validation] detect-secrets scan --baseline rewrites the tracked
+    baseline in place during lint"
+  - "[final-gate-validation] detect-secrets relies on the baseline
+    `^\\.factory/` filter for 1.84GB of tracked safetensors"
+  - "[final-gate-validation] AGENTS.md unit-test counts are stale in addition to
+    the integration row"
+  - "[final-gate-validation] ADR-016 and ADR-009 contain HEAD-contradicted
+    claims without staleness notes"
+  - "[final-gate-validation] The 7-passed+2-skipped integration split is
+    environment-dependent"
+  - "[adr-formalization] ADR-012 examples could include conformance/ path prefix"
+  - "[adr-formalization] H1 heading prefix inconsistent between new and legacy
+    ADRs"
+  - "[baseline-diff-merge] Duplicate _capture_one section header from merge"
+  - "[baseline-diff-merge] Perf benchmark renames lack old-to-new mapping
+    comment"
+  - "[checkers-semantic-guards] Identical _semantic_disabled fixture duplicated
+    in two modules"
+  - "[consolidate-integration-helpers-i2] Parenthesize bare comma-except to
+    avoid Python-2 misread"
+  - "[decision-cache-design-spike] Scoped merge retains unvalidated file paths,
+    breaking strict-load round-trip"
+  - "[decision-cache-design-spike] _pass_files hardcodes src/tests partition,
+    drops other dirs"
+  - "[decision-cache-design-spike] CLI implements singular --path but docs claim
+    [--path ...]"
+  - "[decision-cache-design-spike] Merge last-wins conflicts while dump raises
+    on them"
+  - "[decision-cache-design-spike] Non-POSIX lock path silently provides no
+    mutual exclusion"
+  - "[decision-cache-design-spike] Three sequential lock+merge+write passes
+    leave partial-refresh window"
+  - "[decision-cache-design-spike] Stored key field plus sort tie-break extends
+    pinned schema"
+  - "[decision-cache-design-spike] Committed 476K regenerable poc/tmp plus
+    timing-churned proofs.json"
+  - "[golden-determinism-probe] Assert rumdl override fired instead of blind
+    string replace"
+  - "[golden-determinism-probe] Resolve symlinks and define outside-cwd
+    relativize policy"
+  - "[golden-determinism-probe] R0801 rule string embeds file spans, bypasses
+    file relativization"
+  - "[golden-determinism-probe] 5/14 tools have no record parser; capture
+    silently drops them"
+  - "[golden-determinism-probe] Mypy record parser reads stdout but statistics
+    parser reads stderr"
+  - "[golden-determinism-probe] _relativize_file uses unresolved relative_to and
+    no ./ or separator normalization"
+  - "[golden-determinism-probe] Sort keys exclude msg but diff tuples include
+    it; tie-order flips false-positive"
+  - "[golden-determinism-probe] Rumdl override uses brittle str.replace and
+    post-git-add write; assert MD072 non-empty"
+  - "[golden-determinism-probe] First-run bootstrap vs rerun hook differ;
+    same-copy rerun may diverge"
+  - "[model-candidate-matrix] Pinned-revision block joins ettin-encoder and
+    MiniLM pins on one line"
+  - "[model-candidate-matrix] GLiDE runtime-stack column omits triton /
+    flash-linear-attention / server pins"
+  - "[model-candidate-matrix] torch requires_python stated as >=3.11, PyPI says
+    >=3.10"
+  - "[model-candidate-matrix] GLIDE_DEVICE default is uncited; verified code
+    shows device='cuda' parameter default"
+  - "[ownership-map-revalidation] Duplicate-cluster counts lack scope qualifier"
+  - "[ownership-map-revalidation] Test-distribution 59 modules row omits file
+    filter"
+  - "[ownership-map-revalidation] Note PEP 758 except form vs helper tuple
+    normalization"
+  - "[ownership-map-revalidation] Pin map-a073b83 stale by 4 factory-only files
+    at review HEAD; add equivalence note not re-pin loop"
+  - "[ownership-map-revalidation] Packaging range cites :29-30 vs established
+    :28-31 convention"
+  - "[ownership-map-revalidation] D04 lumps a02b41e leg as 7 factory files,
+    actual 4"
+  - "[ownership-map-revalidation] Pin stale by factory-only review commits; add
+    equivalence note"
+  - "[pylint-cache-semantics-closure] Third no-write path (empty primary)
+    omitted from timing enumeration"
+  - "[pylint-cache-semantics-closure] Sequential runner assumed but only
+    registry order pinned"
+  - "[pylint-cache-semantics-closure] Separate-processes claim true today but
+    dispatch-only pinned"
+  - "[pylint-cache-semantics-closure] Pylint stats path cited as Linux-only
+    ~/.cache/pylint"
+  - "[pylint-cache-semantics-closure] Single-caller AST scan matches only bare
+    Name calls"
+  - "[pylint-cache-semantics-closure] Prediction-failure None path not
+    enumerated in Timing bullet"
+  - "[pylint-cache-semantics-closure] open()/close() non-writer claim pinned
+    only indirectly"
+  - "[runner-format-contract] Engine lint gate command omitted ruff format;
+    overall pass misleading"
+  - "[runner-format-contract] parsers.pyi 13s are statistics-parser counts,
+    correctly allowlisted"
+  - "[runner-format-contract] AGENTS.md test counts stale (1290/7 vs 1352/9),
+    defer to docs-counts-sync"
+  - "[runner-format-contract] AGENTS.md Tool Scope table lists 13 tools and
+    omits ruff format"
+  - "[runner-format-contract] AGENTS.md pytest/integration counts stale (1290/7
+    vs 1352/9)"
+  - "[runner-format-contract] Engine lint gate command omits ruff format"
+  - "[runner-format-contract] `--config ruff=...` applies to ruff check but not
+    ruff format"
+  - "[runner-format-contract] Redundant tautological assertion in statistics
+    coverage test"
+  - "[runner-format-contract] Consumer ruff config overrides do not reach ruff
+    format"
+  - "[runner-format-contract] AGENTS.md Tool Scope table still lists 13 tools,
+    omits ruff format"
+  - "[runner-format-contract] overlays.md claims 14 tools but documents only
+    ruff check's overlay"
+  - "[runner-format-contract] Integration comment still says first run lets ruff
+    format rewrite its copy"
+  - "[runner-format-contract] Several new tests omit the required given/then
+    naming pattern"
+  - "[runner-format-contract] Tautological parser-set assertion adds no coverage"
+  - "[runner-format-contract] Lint gate remains red on pre-existing
+    SIM102/R0914/detect-secrets noise"
+  - "[runner-format-contract] AGENTS.md test counts are stale (1290/7 vs 1352/9)"
+  - "[runner-format-contract] Factory helper header says 502 lines; file is now
+    511"
+  - "[secrets-baseline-exclusion] M1 report cites session HEAD lacking filter;
+    cite landed commit instead"
+  - "[secrets-baseline-exclusion] Pattern matches bare gate paths only; ./
+    prefix bypasses (gate form verified, no action)"
+  - "[semantic-threshold-consolidation] Header overlap arithmetic omits the
+    30-row pack and misstates the dedup math"
+  - "[third-party-assumption-tests] Module-global _LIFECYCLE_EVENTS could use
+    fixture-scoped clearing"
+  - "[third-party-assumption-tests] Assert confidence is not None before reading
+    .name"
+  - "[checkers-factories-split] _factories_stub.py at 474/500 lines leaves 26
+    lines of C0302 headroom"
+  - "[checkers-stream-helper] Add why-comment for intentional code_context
+    divergence from helper prefix"
+  - "[decision-backend-impl] Pin PYTHON_SETUP_LINT_SEMANTIC=1 explicitly in
+    backend-veto tests"
+  - "[decision-backend-impl] Align empty-string handling for reranker vs
+    decision-model warnings"
+  - "[decision-backend-impl] Expand nested ternary in normalize_suppressed_codes"
+  - "[decision-backend-impl] Add minimal docstrings to decision-backend stub"
+  - "[epic-kickoff-gate] ADR-011 stale test class and line refs"
+  - "[epic-kickoff-gate] Checkers +8 exceeds +-5 budget, enumerated and amended"
+  - "[epic-kickoff-gate] ADR-011 Accepted handoff contract stale"
+  - "[epic-kickoff-gate] Legacy hatch fail-open on missing handoff"
+  - "[epic-kickoff-gate] Drift row 21 cites regex def :27 as stream site"
+  - "[golden-contract-hardening] Add runs guard and messages to byte-identical
+    hash asserts"
+  - "[golden-contract-hardening] Consider SHA-256 comparison for counts payloads
+    too"
+  - "[golden-contract-hardening] Note fragility of stubbed private pipeline
+    symbols"
+  - "[model-eval-poc] Decision prompts inject '(unknown)'/'(none)' literals for
+    None rule/context"
+  - "[model-eval-poc] 11 HuggingFace 404 HTML pages committed under cache/code
+    (~580KB)"
+  - "[model-eval-poc] Per-source breakdown must disclose dedup collapse
+    (meaningful_table 33->3)"
+  - "[model-eval-poc] params/weights_bytes hardcoded in adapters without
+    provenance"
+  - "[model-eval-poc] Ettin params/bytes overcounted by unused Dense/LayerNorm
+    heads (~592K params)"
+  - "[model-eval-poc] GLiDE exclusion rationale 'cannot be smallest' is
+    logically invalid when 0 compliant"
+  - "[model-eval-poc] Table 2 presents contended p50/p95 as point estimates;
+    annotate as upper bounds"
+  - "[model-eval-poc] Table 2 labels GLiDE 'eligible' while §6 excludes it from
+    the compliance matrix"
+  - "[model-eval-poc] Bekko excluded for 'no declared license' but decider/ettin
+    licenses unaudited"
+  - "[model-eval-poc] Table 2 labels GLiDE 'eligible' with '0 MB' while §6
+    excludes it (6/336)"
+  - "[secrets-triage-spike] Scope the --baseline masking claim to
+    detect-secrets-scoped runs"
+  - "[cache-design-spike] Constant rule symbol collapses cache rule component"
+  - "[cache-design-spike] Tracked key excludes code_context"
+  - "[cache-design-spike] Lockfile gitignore plus retired cache entry"
+  - "[cache-design-spike] Heuristic docstring claims exactly as production"
+  - "[cache-design-spike] backend-failed marked contacted but skipped as
+    observation"
+  - "[cache-design-spike] Root escape guards triplicated"
+  - "[cache-design-spike] production_untouched fails post-commit on tracked out/"
+  - "[cache-design-spike] Docstrings say RefreshRefused vs RefreshRefusedError"
+  - "[coding-rules-audit-i2] Reconcile beartype taxonomy: true total is 26
+    sites, A22 undercounts by 2"
+  - "[coding-rules-audit-i2] A33 counts drift: measured 45 W9740 in src+scripts,
+    row says 43, title says 42"
+  - "[coding-rules-audit-i2] A20/A21 overcount and mix two stale-comment species
+    (20, not 23)"
+  - "[coding-rules-audit-i2] Minor number hygiene: 41 rows not 40; 17 runner
+    stubs not 18; 11 runtime PyLinter importers not 10"
+  - "[coding-rules-audit-i2] A4 overstates: only :76-77 is silent; :85-86
+    failure is surfaced via errors list"
+  - "[coding-rules-audit-i2] A7 deletion should re-verify
+    stubtest/pyright-verifytypes completeness after removing 4 stubs"
+  - "[remaining-lint-violations-fix] Cross-encoder score>=0.5 not
+    machine-validated locally (semantic extra absent); heuristic + pylint green
+    only"
+  - "[remaining-lint-violations-fix] Reranker score>=0.5 not machine-validated
+    (semantic extra absent); heuristic + pylint green only"
+  - "[runner-dispatch-split] Stale section header implies TOOLS defined in
+    dispatch.py"
+  - "[runner-dispatch-split] ty comment cites stale 'line 105' for pylint-pyi"
+  - "[runner-dispatch-split] dispatch.py at 449/500 leaves 51 lines headroom"
+  - "[stale-disables-portability-cleanup] Slow downstream test still uses fixed
+    Path.home()/.tmp scratch dir"
+  - "[coding-rules-audit] Dead _baseline_helpers pinned only by tests"
+  - "[coding-rules-audit] peek_fallback_tools shim names completed owner"
+  - "[coding-rules-audit] Semantic docs describe removed cross-encoder, cache
+    absent"
+  - "[coding-rules-audit] LoC deltas gross; renames offset stub deletion"
+  - "[coding-rules-audit] W9707 blind; 203 private stubs unguarded"
+  - "[coding-rules-audit] Accepted deletion of two slow self-lint guard tests"
+  - "[coding-rules-audit] Merge byte-identical to parent tip, no item deltas"
+  - "[coding-rules-audit] Stale helpers docstring plus AGENTS counts"
+  - "[coding-rules-audit] PYI-1 cites missing IMP-1 row"
+  - "[decision-cache-impl] decisions/ lacks __init__.py while checkers/ and
+    runner/ have one"
+  - "[golden-regen-hatch] Benchmark test has zero assertions and cannot gate
+    regressions"
+  - "[golden-regen-hatch] Real-pipeline smoke runs 14 tools in default suite"
+  - "[golden-regen-hatch] Removing private-imports guard broadens never-linting
+    definition"
+  - "[golden-regen-hatch] Fixture data test collected and leaks temp dir"
+  - "[golden-regen-hatch] Marker taxonomy effectively unenforced"
+  - "[golden-regen-hatch] Semantic_check citation stale/out of range"
+  - "[golden-regen-hatch] Check-only ruff format ToolSpec with phase-1a-only
+    mutation"
+  - "[golden-regen-hatch] Judged gates from Gate Diff table; lint/test fixed"
+  - "[golden-regen-hatch] Prune 13 I4 pendings, add 2 gap outlines"
+  - "[golden-regen-hatch] Lint/test IMPROVED, no regressions"
+  - "[golden-regen-hatch] Prune pendings, add stream-helper-v2 deps"
+  - "[never-test-linting-prune] Stale docstring references deleted live test
+    file; owner cleanup deferred"
+  - "[test-debloat-audit-i2] Clarify LoC counting method; wc -l differs slightly"
+  - "[test-debloat-audit-i2] Clarify whether per-module N is default-collected
+    or total incl slow"
+  - "[test-debloat-audit-i2] Confirm: 4 r1 fixes verified correct at HEAD"
+  - "[test-debloat-audit-i2] Shipped-label debt overstates unasserted set (ruff
+    format is pinned)"
+  - "[test-debloat-audit-i2] ruff check flag pin cited to wrong file"
+  - "[test-debloat-audit-i2] Two subgroup rows claim 1/1 for single slow tests
+    (should be 0/1)"
+  - "[test-debloat-audit-i2] Removal-pool slow parenthetical miscounts extras
+    and conflates core"
+  - "[test-debloat-audit-i2] Sources typo: baseline-diff-edge cited under
+    tests/checkers/"
+  - "[final-gate-validation] Constant rule symbols collapse cache-key rule
+    component"
+  - "[final-gate-validation] Tracked 1.72GiB safetensors; detect-secrets relies
+    on prefix filter"
+  - "[final-gate-validation] Golden-regen-hatch report absent from HEAD"
+  - "[final-gate-validation] No production lock; PoC fcntl concern deferred"
+  - "[final-gate-validation] Legacy hatch fail-open; this gate is no-regen
+    byte-identity only"
+  - "[final-gate-validation] UNIFIED ownership map unavailable; ADR-011 labels
+    provisional"
+  - "[final-gate-validation] Keep test_testing_fakes.py; testing.py is shipped
+    API"
+  - "[final-gate-validation] Rcfile parity unguarded after consistency-test
+    deletion"
+  - "[final-gate-validation] Transient baseline rewrite; normalized back, tree
+    clean"
+  - "[final-gate-validation] 1.84GB safetensors rely on prefix filter; HEAD
+    green"
+  - "[final-gate-validation] AGENTS unit counts stale alongside integration row"
+  - "[final-gate-validation] ADR-009/016 stale claims contradict HEAD"
+  - "[final-gate-validation] 7+2 integration split env-dependent via conftest
+    PATH"
+  - "[final-gate-validation] Deletion-wins for pruned self-lint guards verified"
+  - "[final-gate-validation] Runtime-derived docs counts; no hardcoded drift"
+  - "[final-gate-validation] Semantic block retarget to TestAnyElementCodeEcho
+    verified"
+  - "[final-gate-validation] Semantic reclassification 65/91/15/7/16 keeps
+    single-writer"
+  - "[test-debloat-audit] Unrelated merge tradeoff; retain as digest"
+  - "[test-debloat-audit] Consistent premise for audit §6; no action"
+  - "[test-debloat-audit] Unrelated iteration decision; retain as digest"
+  - "[test-debloat-audit] Unrelated cache decision; retain as digest"
+  - "[test-debloat-audit] Unrelated item decision; retain as digest"
+  - "[test-debloat-audit] Unrelated reporting decision; no conflict"
+  - "[test-debloat-audit] Unrelated gate decision; no interaction"
+  - "[test-debloat-audit] Unrelated merge decision; retain as digest"
+  - "[test-debloat-audit] Consistent with conftest row; no action"
+  - "[test-debloat-audit] Minor line-range errors in two rewrite dispositions"
+  - "[test-debloat-audit] Cosmetic count/label inconsistencies; LoC verified
+    exact"
+  - "[golden-helpers-unit] tool_minimums imports TOOLS via package root, pulling
+    CLI structlog side effects"
+  - "[golden-helpers-unit] Public FindingKey alias missing from __all__"
+  - "[golden-helpers-unit] Path normalization keeps '..' and misses Windows
+    drive-letter absolutes"
+  - "[golden-helpers-unit] Golden read silently drops extra keys and leaks raw
+    JSON errors"
+  - "[consolidate-integration-helpers-v2] Four docstrings/comments still say 13
+    tools after 14-tool reconciliation"
+  - "[consolidate-integration-helpers-v2] Bare-comma except clause works but
+    reads as Python 2 idiom"
+  - "[consolidate-integration-helpers-v2] Pre-existing pylint C0208 in touched
+    file could be fixed in passing"
+  - "[consolidate-integration-helpers-v2] Triple single-name re-export imports
+    could be one statement"
+  - "[consolidate-integration-helpers-v3] Triple single-name re-exports could be
+    one import statement"
+  - "[consolidate-integration-helpers-v3] Comma-form except tuple is valid but
+    obscure"
+  - '[consolidate-integration-helpers-v3] make_consumer_project hardcodes
+    "consumer" dirname for hooks test'
+budgetSpentUsd: 13.213127685999996
+spendByRole:
+  workhorse:
+    costUsd: 6.174068685999999
+    inputTokens: 12473704
+    outputTokens: 4521559
+  alt-workhorse:
+    costUsd: 1.6919320000000007
+    inputTokens: 8088134
+    outputTokens: 2867414
+  architect:
+    costUsd: 5.219643999999998
+    inputTokens: 21701830
+    outputTokens: 690318
+  alt-architect:
+    costUsd: 0.127483
+    inputTokens: 457640
+    outputTokens: 377177
+spendByItem:
+  golden-determinism-probe:
+    costUsd: 0.16489800000000002
+    inputTokens: 333924
+    outputTokens: 192372
+  third-party-assumption-tests:
+    costUsd: 0.076988
+    inputTokens: 162838
+    outputTokens: 78517
+  golden-findings-snapshot:
+    costUsd: 0.170578
+    inputTokens: 226110
+    outputTokens: 148096
+  decision-cache-design-spike:
+    costUsd: 0.211512
+    inputTokens: 419522
+    outputTokens: 197490
+  test-debloat-audit-i2:
+    costUsd: 0.258385
+    inputTokens: 707051
+    outputTokens: 283507
+  decision-runtime-pinning:
+    costUsd: 0.016725999999999998
+    inputTokens: 57664
+    outputTokens: 27228
+  semantic-threshold-consolidation:
+    costUsd: 0.032682
+    inputTokens: 87033
+    outputTokens: 43025
+  coding-rules-audit-i2:
+    costUsd: 0.133783
+    inputTokens: 266809
+    outputTokens: 117127
+  remaining-lint-violations-fix:
+    costUsd: 0.053628
+    inputTokens: 140260
+    outputTokens: 60983
+  golden-helpers-unit:
+    costUsd: 0.057198
+    inputTokens: 138170
+    outputTokens: 64014
+  adr-formalization:
+    costUsd: 0.051655
+    inputTokens: 168426
+    outputTokens: 56715
+  model-eval-poc:
+    costUsd: 0.57375
+    inputTokens: 1862227
+    outputTokens: 257459
+  baseline-violations-fix:
+    costUsd: 0.06715600000000001
+    inputTokens: 164765
+    outputTokens: 116111
+  decision-backend-impl:
+    costUsd: 0.554482
+    inputTokens: 1162533
+    outputTokens: 453941
+  model-candidate-matrix:
+    costUsd: 0.045265
+    inputTokens: 116110
+    outputTokens: 59317
+  checkers-semantic-guards:
+    costUsd: 0.032317
+    inputTokens: 74694
+    outputTokens: 40738
+  secrets-baseline-exclusion:
+    costUsd: 0.041534
+    inputTokens: 120849
+    outputTokens: 67989
+  pylint-cache-semantics-closure:
+    costUsd: 0.18856
+    inputTokens: 439297
+    outputTokens: 213083
+  baseline-diff-merge:
+    costUsd: 0.11384300000000001
+    inputTokens: 336919
+    outputTokens: 146988
+  runner-format-contract:
+    costUsd: 0.467148
+    inputTokens: 1187671
+    outputTokens: 340789
+  consolidate-integration-helpers-i2:
+    costUsd: 0.07747
+    inputTokens: 139419
+    outputTokens: 80611
+  golden-contract-hardening:
+    costUsd: 0.091885
+    inputTokens: 206331
+    outputTokens: 89105
+  checkers-stream-helper:
+    costUsd: 0.227775
+    inputTokens: 785745
+    outputTokens: 259441
+  runner-compat-shim-removal:
+    costUsd: 0.056304
+    inputTokens: 156193
+    outputTokens: 75024
+  golden-snapshot-wiring:
+    costUsd: 0.13088
+    inputTokens: 218824
+    outputTokens: 95126
+  stale-disables-portability-cleanup:
+    costUsd: 0.025615000000000002
+    inputTokens: 54537
+    outputTokens: 34612
+  checkers-factories-split:
+    costUsd: 0.09088800000000001
+    inputTokens: 274090
+    outputTokens: 70148
+  never-test-linting-prune:
+    costUsd: 0.055946
+    inputTokens: 148483
+    outputTokens: 85833
+  runner-dispatch-split:
+    costUsd: 0.128832
+    inputTokens: 294444
+    outputTokens: 136499
+  runner-factories-trim:
+    costUsd: 0.041291
+    inputTokens: 95491
+    outputTokens: 43569
+  secrets-triage-spike:
+    costUsd: 0.19651400000000002
+    inputTokens: 713974
+    outputTokens: 167344
+  consolidate-integration-helpers-v3:
+    costUsd: 0.259824
+    inputTokens: 463214
+    outputTokens: 227545
+  epic-kickoff-gate:
+    costUsd: 0.073828
+    inputTokens: 188519
+    outputTokens: 87729
+  test-debloat-audit:
+    costUsd: 0.209342
+    inputTokens: 792518
+    outputTokens: 167470
+  epic-shift-report-collection:
+    costUsd: 0.04926
+    inputTokens: 160531
+    outputTokens: 43523
+  coding-rules-audit:
+    costUsd: 0.117057
+    inputTokens: 249934
+    outputTokens: 111991
+  cache-design-spike:
+    costUsd: 0.109595
+    inputTokens: 192123
+    outputTokens: 99164
+  decision-cache-impl:
+    costUsd: 0.393308
+    inputTokens: 802730
+    outputTokens: 337356
+  consolidate-integration-helpers-v2:
+    costUsd: 0.258951
+    inputTokens: 549144
+    outputTokens: 175859
+  docs-counts-sync:
+    costUsd: 0.051479
+    inputTokens: 116644
+    outputTokens: 46244
+  golden-regen-hatch:
+    costUsd: 0.043046
+    inputTokens: 128334
+    outputTokens: 62037
+  pylint-cache-assumptions:
+    costUsd: 0.23190968599999998
+    inputTokens: 455233
+    outputTokens: 170443
+  ownership-map-revalidation:
+    costUsd: 0.38394500000000004
+    inputTokens: 1215172
+    outputTokens: 444746
+  (orchestration):
+    costUsd: 6.435319999999999
+    inputTokens: 25599585
+    outputTokens: 2207752
+  final-gate-validation:
+    costUsd: 0.160775
+    inputTokens: 547224
+    outputTokens: 171808
+lastUpdated: 2026-11-10T03:41:26.004Z

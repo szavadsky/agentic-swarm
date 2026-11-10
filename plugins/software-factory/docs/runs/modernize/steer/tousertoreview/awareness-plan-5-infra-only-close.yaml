@@ -1,0 +1,8 @@
+id: awareness-plan-5-infra-only-close
+ref: plan-5
+disposition: human-awareness
+question: No-go/blocked + missing approvals force cache+pinning+docs only
+  ([semantic] stays empty, pyproject.toml:28); I6 needs second rater + Fastino +
+  CPU bench. Close-up must not claim swap complete.
+status: open
+createdAt: 2026-11-09T09:40:54.987Z

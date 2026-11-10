@@ -1,0 +1,19 @@
+id: rm-1e7c79c252
+chosen: omp is the sole rules injector for root processes; factory adds no
+  injection for roots
+alternatives:
+  - "Original M8 plan: factory-owned {{repoRules}} resolver + injection for all
+    roles"
+  - Factory injection layered on top of omp injection
+why: Spike proves roots (--system-prompt + --cwd) already receive repo rules
+  exactly once and a duplicate probe yields 2 copies. Factory-side injection for
+  roots would double-inject and break 20c byte-stability. M8 scope is rescoped
+  to scouts + per-role exactly-once verification.
+status: open
+source:
+  record: 008-consult-spike-repo-rules-1-a1
+  agent: architect
+  step: consult-spike-repo-rules-1
+  lastSeen: 2026-11-10T01:03:17.651Z
+createdAt: 2026-11-10T01:03:17.651Z
+updatedAt: 2026-11-10T01:03:17.651Z

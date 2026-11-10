@@ -1,0 +1,49 @@
+status: approved
+summary: "Test-only transport characterization verified green: 2 new files, no
+  prod edits, byte-equality + pinned instability assertions pass (5 pass; 4
+  pass/1 skip without omp), typecheck clean. 1 duplicate concern dismissed, 2
+  polish optionals."
+suggestions:
+  - id: c-0647070832
+    detail: "Self-declared duplicate: the concern's own detail text states 'This is
+      the pre-existing open concern c-552344216d (missing infra.setup in
+      merge-child worktrees), not introduced by this step'. Same root cause (bun
+      install absent in fresh worktree), same affects. Keep c-552344216d as
+      canonical."
+    disposition: dismiss
+    summary: Duplicate of c-552344216d per its own detail text
+  - id: prompt-shape-regex-narrower-than-generator
+    detail: Generator is Math.random().toString(36).slice(2,6) (harness.ts:314),
+      which yields 1-4 chars (e.g. 0.5 -> '0.i' -> 'i'), while the pin regex
+      requires {3,4}. Flake probability is negligible (~short terminating base36
+      expansions) but the characterization is technically narrower than the
+      pinned behavior; widen to {1,4} to pin the generator exactly.
+    disposition: optional
+    location:
+      file: plugins/software-factory/test/harness/transport-stability.test.ts
+      line: 198
+    summary: Pin regex {3,4} narrower than slice(2,6) generator output
+  - id: resolution-comment-omits-hardcoded-fallback
+    detail: Comment claims to mirror preflight's resolution order but preflight has
+      4 levels (opts.ompBinary ?? OMP_PATH ?? Bun.which ?? hardcoded
+      '/home/slava/.bun/bin/omp' at preflight.ts:366-369); the test mirrors 2,
+      deliberately omitting the hardcoded path (correct choice for a
+      clean-checkout test). Note the deliberate omission so a future reader does
+      not 'fix' the divergence.
+    disposition: optional
+    location:
+      file: plugins/software-factory/test/harness/transport-stability.test.ts
+      line: 51
+    summary: Comment omits deliberate exclusion of preflight hardcoded fallback
+remarkable:
+  - chosen: Characterize transport via mock omp binary snapshotting argv + file
+      bytes, with only the real-binary --config --version acceptance check
+      behind describe.skipIf.
+    why: Captures exact harness-to-omp bytes/argv without provider contact (no paid
+      turns) or requiring omp on clean checkout, while still validating overlay
+      acceptance with the real binary when present using preflight's own
+      non-paid validation.
+    alternatives:
+      - Live-model harness turns (paid, flaky)
+      - In-process spawn mocking (bypasses real argv assembly)
+      - Pure-function tests only (cannot pin timestamped prompt filename)

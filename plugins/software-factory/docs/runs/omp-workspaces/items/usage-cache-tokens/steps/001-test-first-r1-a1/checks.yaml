@@ -1,0 +1,60 @@
+checks:
+  - id: test-first-scope
+    status: pass
+    message: test-first-scope passed (5 test files, 0 new prod stubs with 0 lines)
+    details:
+      testFiles:
+        - plugins/software-factory/test/sessions.test.ts
+        - plugins/software-factory/test/contracts/usage-cache-schema.test.ts
+        - plugins/software-factory/test/engine/usage-cache-tokens.test.ts
+        - plugins/software-factory/test/fixtures/omp/turn-cache-usage.ndjson
+        - plugins/software-factory/test/harness/ndjson-usage-cache.test.ts
+      newProdFiles: []
+      stubProdLines: 0
+  - id: target-red
+    status: pass
+    message: "target-red passed: all 11 expected tests failed with assertion failures"
+    details:
+      command: bun --cwd=plugins/software-factory test
+        test/harness/ndjson-usage-cache.test.ts
+        test/engine/usage-cache-tokens.test.ts
+        test/contracts/usage-cache-schema.test.ts test/sessions.test.ts
+        --reporter=junit
+        --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-1794276322009-sckvrbok1se.xml
+      junitCaseCount: 16
+      junitCaseIds:
+        - PersistentAgent sessions (§4, §6.1).serializes concurrent turn() calls
+          in strict FIFO order
+        - PersistentAgent sessions (§4, §6.1).threads session resume ID across
+          turns after first success
+        - PersistentAgent sessions (§4, §6.1).rehydrates once via rehydrate()
+          when session is lost
+        - PersistentAgent sessions (§4, §6.1).clears sessionId on sessionLost
+          even without a rehydrate callback
+        - PersistentAgent sessions (§4, §6.1).uses the per-turn label override
+          with fallback to labelBase
+        - PersistentAgent sessions (§4, §6.1).accumulates cache tokens and cost
+          breakdown across turns
+        - OmpNdjsonParser cache-token usage.parses cache read/write tokens,
+          total tokens and cost breakdown
+        - OmpNdjsonParser cache-token usage.zero-defaults cache fields when a
+          historical turn omits them
+        - OmpNdjsonParser cache-token usage.forwards cache fields to the onUsage
+          callback
+        - Usage cache-token schemas.step-meta accepts cache tokens and cost
+          breakdown and keeps legacy usage valid
+        - Usage cache-token schemas.state spend breakdowns accept cache token
+          columns
+        - "Cache-token usage: persistence, aggregation and status.persists cache
+          tokens and cost breakdown into step meta records"
+        - "Cache-token usage: persistence, aggregation and status.keeps
+          historical records without cache keys and aggregates zero defaults"
+        - "Cache-token usage: persistence, aggregation and status.sums cache
+          tokens with zero defaults across mixed old and new records"
+        - "Cache-token usage: persistence, aggregation and status.BudgetTracker
+          sums cache tokens with zero defaults"
+        - "Cache-token usage: persistence, aggregation and status.status output
+          surfaces cache token columns"
+      junitTruncated: false
+      collected: true
+      collectionErrors: []

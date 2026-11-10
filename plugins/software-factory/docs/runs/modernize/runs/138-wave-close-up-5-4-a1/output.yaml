@@ -1,0 +1,38 @@
+blockedItems: []
+concerns:
+  - detail: Item abandoned after consults exhausted per engine record; no code
+      merged for it in wave 4. Requires rescoping before retry.
+    affects:
+      - decision-cache-impl
+    kind: risk
+    severity: medium
+    summary: decision-cache-impl failed and was abandoned; needs replan
+debt:
+  - decision-cache-impl abandoned after consult exhaustion; carry re-scoped
+    retry to next wave
+failedItems:
+  - decision-cache-impl
+iteration: 5
+mergedItems: []
+recommendations:
+  - Replan decision-cache-impl with reduced scope or split into smaller items
+    for next wave
+  - Proceed to next wave planning since tree is clean and all gates are green
+remarkable:
+  - alternatives:
+      - Treat red baseline as blocking
+      - Infer fixes from raw log text comparison
+    chosen: Judged gates solely from Gate Diff table; lint and test count as fixed
+      (fail to pass), format and test-integration remain green
+    why: Per close-up rules, raw output text differs run to run; only
+      baseline-vs-now verdicts are authoritative, and both red-baseline gates
+      now pass with no regressions
+status: has_failures
+summary: "Wave 4 closed with 0 merges and 1 failure (decision-cache-impl). Tree
+  hygiene clean: no untracked junk in repo files (only engine-managed .factory
+  journal modified); no conflict markers in src/tests/config/docs. Gate Diff
+  shows zero regressions and two improvements: format pass/pass green,
+  test-integration pass/pass green, lint fail->pass IMPROVED, test fail->pass
+  IMPROVED. All 4 gates now green; iteration can continue with failed item
+  replanned."
+wave: 4

@@ -1,0 +1,21 @@
+id: c-fc5f2e54fb
+kind: tech-debt
+summary: Hard-coded omp fallback path in preflight
+detail: "`/home/slava/.bun/bin/omp` is the last fallback when `OMP_PATH` and
+  `Bun.which` fail; this is machine-specific and should be removed in favor of a
+  clear error."
+location:
+  file: plugins/software-factory/src/cli/preflight.ts
+  line: 365
+affects:
+  - "19.2"
+severity: medium
+status: routed
+source:
+  record: 004-context-pack-a1
+  agent: fact-finder
+  step: context-pack
+  lastSeen: 2026-11-09T23:21:29.949Z
+createdAt: 2026-11-09T23:21:29.949Z
+updatedAt: 2026-11-10T01:53:41.429Z
+disposition: optional

@@ -1,0 +1,231 @@
+task: omp-workspaces
+kind: saga
+status: failed
+iteration: 2
+currentWave: 3
+items:
+  spike-cache-key:
+    kind: fact-finder
+    status: failed
+    branch: topic/omp-workspaces--spike-cache-key
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0.155598
+    currentStep: review
+  spike-mock-provider:
+    kind: fact-finder
+    status: failed
+    branch: topic/omp-workspaces--spike-mock-provider
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0.12459699999999999
+    currentStep: review
+  spike-omp-isolation:
+    kind: fact-finder
+    status: failed
+    branch: topic/omp-workspaces--spike-omp-isolation
+    attempts: 2
+    fixRounds: 1
+    spendUsd: 0.45245700000000005
+    currentStep: review
+  spike-repo-rules:
+    kind: fact-finder
+    status: failed
+    branch: topic/omp-workspaces--spike-repo-rules
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0.11246700000000001
+    currentStep: review
+  merge-setup-fix:
+    kind: dev
+    status: merged
+    branch: topic/omp-workspaces--merge-setup-fix
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0.16351299999999996
+    currentStep: review
+    mergedAt: 2026-11-09T23:24:54-05:00
+  spike-findings-recovery:
+    kind: no-behavior
+    status: failed
+    branch: topic/omp-workspaces--spike-findings-recovery
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0.174178
+    currentStep: review
+  transport-byte-stability:
+    kind: test-only
+    status: merged
+    branch: topic/omp-workspaces--transport-byte-stability
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0.083151
+    currentStep: review
+    mergedAt: 2026-11-09T23:16:59-05:00
+  usage-cache-tokens:
+    kind: dev
+    status: merged
+    branch: topic/omp-workspaces--usage-cache-tokens
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0.181734
+    currentStep: review
+    mergedAt: 2026-11-09T23:09:02-05:00
+  spike-findings-recovery-v2:
+    kind: no-behavior
+    status: merged
+    branch: topic/omp-workspaces--spike-findings-recovery-v2
+    attempts: 2
+    fixRounds: 1
+    spendUsd: 0.04195
+    currentStep: review
+    mergedAt: 2026-11-10T00:56:58-05:00
+  target-green-ratchet-fix:
+    kind: dev
+    status: merged
+    branch: topic/omp-workspaces--target-green-ratchet-fix
+    attempts: 1
+    fixRounds: 1
+    spendUsd: 0.129847
+    currentStep: review
+    mergedAt: 2026-11-10T01:04:41-05:00
+concerns:
+  open: 9
+  dismissed: 3
+  routed: 39
+  resolved: 0
+debt:
+  - "spike-repo-rules follow-ups deferred to iteration 2: (1) M4 dev item
+    replacing the preflight omp --config --version no-op with a throwaway
+    mock-provider real-turn validation (spike recipe findings §5.1/§8.8); (2) M8
+    scripted mock-provider helper (request recorder + scripted yield) with
+    per-role request-body sentinel assertions; (3) M8 scout-hydration probe +
+    implementation (roots stay omp-injected exactly-once; no factory injection
+    for roots); (4) M8 harness prompt-isolation policy (isolated
+    profile/agent-dir for tests; disabledExtensions + empty
+    --append-system-prompt= for deterministic prod roles) pinned by tests."
+  - "spike-omp-isolation follow-ups deferred to iteration 2: (1) M4 dev item
+    replacing the preflight omp --config --version no-op (preflight.ts:364-394)
+    with key/enum/catalog validation plus one real isolated round-trip turn per
+    findings F6 (probes 17/27: bogus keys pass rc=0, missing overlay silently
+    ignored rc=0); (2) M3 workspace-backend dev implementing ratified root
+    mapping omp worktree add -b <topic-branch> <path> <base> -C <repo> then omp
+    --cwd <path> -p with isolation: engine fallback and draft
+    workspaces.omp/taskIsolation config surface."
+  - "[20c] Per-turn prompt transport path embeds timestamp+randomness"
+  - "[20-cost] Usage parser discards cache-read/write tokens needed for item 20
+    defaults"
+  - "[19.6] Saga launches do not exist and epic INTENT is not resolvable by
+    `factory run`"
+  - "[19.3] Runtime dirs sessions/prompts/system-prompts grow without cleanup"
+  - "[19.2] Hard-coded omp fallback path in preflight"
+  - "[spike-repo-rules] Cwd-scoped sources: `.omp/rules` and `.claude/CLAUDE.md`
+    are launch-directory-only"
+  - "[spike-mock-provider] OmpHarness has no extension/extra-arg seam; mock
+    provider needs a wrapper or new option"
+  - "[19.1] spike-omp-isolation polish notes deferred to iteration-2 M3/M4
+    planning"
+  - "[redrive] Merge redrive ignores retry-with-guidance (no execution path);
+    guidance-only recovery cannot fix environmental gate failures"
+  - "[wave-merge] target-green gate targets ignore baseline ratchet; gate:test
+    unmergeable on red baseline"
+  - "[spike-cache-key] Findings cite nonexistent
+    plugins/software-factory/docs/factory.v2.md"
+  - "[spike-cache-key] 7.1 misattributes tokensAfter/method to NDJSON result"
+  - "[spike-cache-key] Long/none retention probes lack archived NDJSON"
+  - "[spike-cache-key] harness.ts:280 docstring overstates resume guarantee"
+  - "[spike-cache-key] Audit uses steps/architect-resume flagged dead"
+  - "[spike-mock-provider] Proposed test/e2e/mock-provider diverges from
+    test/harness layout"
+  - "[spike-mock-provider] Add one raw NDJSON transcript excerpt to spike draft"
+  - "[spike-mock-provider] Error-turn scenario variant unprobed; verify before
+    M8 relies on it"
+  - "[spike-omp-isolation] Correct probe 26: in-base explicit paths are listed"
+  - "[spike-omp-isolation] Soften probe 18: coercion claim unproven via config
+    get"
+  - "[spike-omp-isolation] Add exact preflight round-trip command to findings"
+  - "[spike-omp-isolation] Strengthen isolated-failure retention overturn
+    evidence"
+  - "[spike-omp-isolation] Reconcile mock-provider negative with sibling spikes"
+  - "[spike-repo-rules] Preserve worktree-root cwd; .omp/rules +
+    .claude/CLAUDE.md are cwd-only"
+  - "[merge-setup-fix] Parity tests could assert absence of infra.setup evidence"
+  - "[merge-setup-fix] No test for sequential stop-on-first-failure or timeout"
+  - "[merge-setup-fix] runMergeSetup duplicates runner.ts setup logic"
+  - "[spike-findings-recovery] Test gate pass coexists with 1 documented
+    baseline failure"
+  - "[spike-findings-recovery] Fix `oMP` capitalization typo in repo-rules doc"
+  - "[transport-byte-stability] Pin regex {3,4} narrower than slice(2,6)
+    generator output"
+  - "[transport-byte-stability] Comment omits deliberate exclusion of preflight
+    hardcoded fallback"
+  - "[usage-cache-tokens] Duplicate 6-term has-usage guard in step-runner and
+    shutdown"
+  - "[spike-findings-recovery-v2] RECOVERY.md line 92 names non-v2 deliverable
+    path"
+  - "[target-green-ratchet-fix] Non-JUnit gate targets stay strict-fail on red
+    baseline (fail-closed vs runGates coarse-pass)"
+budgetSpentUsd: 2.0841073999999993
+spendByRole:
+  workhorse:
+    costUsd: 1.3625664000000002
+    inputTokens: 2984417
+    outputTokens: 1048953
+  alt-workhorse:
+    costUsd: 0.416479
+    inputTokens: 1905937
+    outputTokens: 745284
+  architect:
+    costUsd: 0.298698
+    inputTokens: 2313300
+    outputTokens: 98945
+  alt-architect:
+    costUsd: 0.006364
+    inputTokens: 28896
+    outputTokens: 15650
+spendByItem:
+  spike-omp-isolation:
+    costUsd: 0.45245700000000005
+    inputTokens: 1135682
+    outputTokens: 348841
+  spike-mock-provider:
+    costUsd: 0.12459699999999999
+    inputTokens: 255359
+    outputTokens: 168289
+  spike-repo-rules:
+    costUsd: 0.11246700000000001
+    inputTokens: 225196
+    outputTokens: 108718
+  usage-cache-tokens:
+    costUsd: 0.181734
+    inputTokens: 509493
+    outputTokens: 194135
+  spike-findings-recovery:
+    costUsd: 0.174178
+    inputTokens: 546734
+    outputTokens: 203800
+  transport-byte-stability:
+    costUsd: 0.083151
+    inputTokens: 192618
+    outputTokens: 106892
+  merge-setup-fix:
+    costUsd: 0.16351299999999996
+    inputTokens: 608055
+    outputTokens: 146795
+  spike-cache-key:
+    costUsd: 0.155598
+    inputTokens: 331901
+    outputTokens: 152018
+  (orchestration):
+    costUsd: 0.46461540000000007
+    inputTokens: 2814415
+    outputTokens: 269594
+  target-green-ratchet-fix:
+    costUsd: 0.129847
+    inputTokens: 362359
+    outputTokens: 178745
+  spike-findings-recovery-v2:
+    costUsd: 0.04195
+    inputTokens: 250738
+    outputTokens: 31005
+lastUpdated: 2026-11-10T06:32:29.892Z

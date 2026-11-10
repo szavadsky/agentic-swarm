@@ -1,0 +1,31 @@
+id: c-b0cfd8817b
+kind: risk
+summary: Legacy golden-regen-hatch ran with a fail-open 0/3 handoff; this
+  attestation is a no-regen byte-identity proof, not an all-no-shift declaration
+detail: The consolidated handoff record (commit 3d2d219) produced 0 of 3
+  required epic sections and explicitly says it must not be consumed as a
+  handoff. Existing open concern c-96c102b8ae warns that a missing handoff must
+  not be read as all-no-shift. This step therefore performed no regeneration and
+  makes no shift/no-shift claim; it only attests that the committed golden is
+  byte-identical to fresh SEMANTIC=0 collections. Downstream
+  final-gate-validation should consume it as 'no authorized regen + hash
+  equality'; the I5 replacement path is golden-regen-hatch-v2 consuming
+  behavior-item declarations.
+location:
+  file: .factory/tasks/modernize/items/golden-regen-hatch/assignment.yaml
+  line: 4
+affects:
+  - final-gate-validation
+  - golden-regen-hatch
+  - golden-regen-hatch-v2
+severity: medium
+status: routed
+source:
+  record: 001-develop-r1-a1
+  agent: developer
+  step: develop
+  item: golden-regen-hatch
+  lastSeen: 2026-11-10T00:36:23.179Z
+createdAt: 2026-11-10T00:36:23.179Z
+updatedAt: 2026-11-10T02:23:05.623Z
+disposition: optional

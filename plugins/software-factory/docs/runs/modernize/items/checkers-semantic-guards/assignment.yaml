@@ -1,0 +1,21 @@
+slug: checkers-semantic-guards
+kind: test-only
+title: Guard heuristic checker tests with SEMANTIC=0
+assignment: "Tests-only, first writer of 2 files wholly
+  (test_suppression_justification_checker.py +
+  test_bare_except_comment_checker.py). Red-test-exempt. Recount heuristic tests
+  at HEAD (40 W9704 + 11 W9738 per pack, verify) then add monkeypatched
+  SEMANTIC=0 guards to all heuristic tests; leave
+  TestSuppressionRerankerPipeline block untouched for M4 second writer
+  (serialized via dep on this item, not parallel). Outcomes pinned. Verify:
+  tests only; guarded tests pass; no new failures vs M1 table; golden
+  hash-equal."
+outlineRef: checkers-semantic-guards
+milestone: M2
+wave: 1
+scenarioRefs:
+  - "M2: Threshold deduped plus guards pinned"
+citations:
+  - src/python_setup_lint/checkers/_base.py:142-158
+  - src/python_setup_lint/checkers/conformance/suppression_justification_checker.py:152-158
+  - CodingRules.md:230-306

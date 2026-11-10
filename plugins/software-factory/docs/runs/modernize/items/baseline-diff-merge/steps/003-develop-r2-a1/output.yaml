@@ -1,0 +1,60 @@
+status: ok
+summary: "Fixed both blocking review defects with comment-only edits in
+  tests/runner/test_baseline_diff.py and removed the duplicate section header in
+  tests/runner/test_baseline_diff_parsers.py. (1) TestFlatRecordRoundTrip
+  docstring now maps all three originals:
+  TestMixedSchemaLoad::test_mixed_schema_given_legacy_pylint_output_then_upgrad\
+  ed_to_records is explicitly the renamed survivor (legacy 2-record shrink
+  body), and TestMixedShapeLegacyOutput::...round_trips plus
+  TestFallbackTracking::test_fallback_tracking_given_flat_records_then_no_viola\
+  tions_for_unchanged are named as the deleted duplicates — TestFallbackTracking
+  is greppable again (was zero HEAD references). (2) Provenance comment now
+  cites test_baseline_diff_parsers.py::TestCompareSortedEdgeCases (verified at
+  base ba01298 line 363) instead of the wrong edge module; the inline param
+  comment uses the same corrected source. Optional items also done: duplicate
+  '_capture_one edge cases' header deleted (1 left) and TestPerfBenchmark now
+  carries an old-to-new name mapping for both renamed perf cases. Kept sizes
+  inside the <=500 budget (499/485) after compacting the new comments; no
+  behavioral/test-body changes, no cases dropped beyond the documented folds."
+target:
+  gate: uv run pytest tests/runner/test_baseline_diff.py
+    tests/runner/test_baseline_diff_parsers.py -q -m 'slow or not slow'
+evidence:
+  - uv run pytest tests/runner/test_baseline_diff.py
+    tests/runner/test_baseline_diff_parsers.py -q -m 'slow or not slow' -> 75
+    passed (same 75 collected as pre-fix)
+  - uv run pytest -q -> 1375 passed, 4 skipped, 18 deselected, 0 failed (parity
+    with M1 table)
+  - uv run pytest tests/integration.py -q -> 9 passed
+  - uv run pytest tests/test_golden.py -q -> 31 passed (golden hash-equal)
+  - uv run lint (pipefail) -> PIPELINE_EXIT=0, all 14 tools PASSED incl. ruff
+    format, pylint tests, pyright/ty, mypy.stubtest
+  - grep 'TestFallbackTracking|test_fallback_tracking_given_flat_records'
+    tests/runner/*.py -> matches at tests/runner/test_baseline_diff.py:466
+    (deleted case now named as duplicate of the survivor)
+  - git show ba01298:tests/runner/test_baseline_diff_parsers.py | grep -> class
+    TestCompareSortedEdgeCases at line 363, confirming corrected provenance
+    comment (diff.py:29 and inline :110 both cite parsers.py)
+  - grep -c '_capture_one edge cases' tests/runner/test_baseline_diff_parsers.py
+    -> 1 (duplicate header removed)
+  - wc -l -> test_baseline_diff.py 499, test_baseline_diff_parsers.py 485, both
+    <=500; test_baseline_diff_edge.py absent
+  - "AST inventory base ba01298 vs worktree -> 21 vs 18 declarations: removals
+    are 2 perf renames, 1 compare case folded into TestCompareSorted params, 1
+    renamed legacy survivor, and the 2 documented duplicate deletions; additions
+    are exactly the 2 perf renames + flat-record survivor"
+  - git status --porcelain -> only ' M tests/runner/test_baseline_diff.py' and '
+    M tests/runner/test_baseline_diff_parsers.py'; git diff --check exit 0
+concerns:
+  - Touched modules remain at 499/485 lines, so further inline documentation
+    there must be offset to stay <=500.
+  - No CLI or autofix-pinning limbs exist in these two baseline-diff modules
+    (unchanged by this round); autofix pinning lives in untouched test_autofix_*
+    modules and is not blocking debt for this item.
+  - Moved classes TestPeekFallbackTools and TestMultiSavedToolDedup still lack
+    per-class provenance comments; adding them would breach the 500-line cap,
+    and the reviewer did not flag them.
+notes: "This round is comment-only: no test bodies, assertions, imports, or
+  module composition changed, so the r1 behavioral evidence still holds. Comment
+  text was compacted to a 9-line survivor docstring and 4-line provenance blocks
+  to keep the file at 499 lines (was 506 after the first draft)."

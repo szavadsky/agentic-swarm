@@ -1,0 +1,19 @@
+id: rm-0ee4f6bb10
+chosen: "amend: add merge-setup engine fix + spike-findings recovery, keep
+  wave-2 M2 items scheduled"
+alternatives:
+  - "continue: run wave 2 and ignore the M1 evidence gap (rejected: iteration-2
+    epics would plan without spike findings on the parent)"
+  - "end-iteration: strand wave-2 M2 items and replan everything next iteration
+    (rejected: M2 is spike-independent and runnable now; wastes a cycle)"
+why: Minimal delta that unblocks all future merges, salvages approved research
+  onto the parent branch, and keeps runnable measurement work flowing.
+status: open
+source:
+  record: 015-architect-wave-report-1-1-a1
+  agent: architect
+  step: architect-wave-report-1-1
+  iteration: 1
+  lastSeen: 2026-11-10T01:58:22.916Z
+createdAt: 2026-11-10T01:58:22.916Z
+updatedAt: 2026-11-10T01:58:22.916Z

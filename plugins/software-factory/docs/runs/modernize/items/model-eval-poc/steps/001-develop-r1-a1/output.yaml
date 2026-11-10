@@ -1,0 +1,65 @@
+status: blocked
+summary: PoC harness, corpus, downloads, and per-model CPU adapters are
+  implemented and smoke-tested under the item poc folder, but the deadline
+  expired before the full matrix scoring, metric aggregation, compliance
+  decision, and feasibility report could be completed. No production or test
+  paths were changed.
+target:
+  command: cd .factory/tasks/modernize/items/model-eval-poc/poc &&
+    .venv/bin/python eval/corpus.py
+  customTarget: true
+evidence:
+  - PoC confined to .factory/tasks/modernize/items/model-eval-poc/poc/ with
+    separate eval/, data/, cache/, out/, logs/ and three isolated venvs (.venv,
+    .venv-glide, .venv-bekko); no src/ or tests/ writes.
+  - Pinned snapshots downloaded for tasksource-decider-nano@2c7c01f,
+    GLiDE-0.4B@6bda7ab, bekko-17m@b886a1f, ettin-reranker-150m@025501c,
+    MiniLM-L6-v2@1110a24; code and weights verified present under
+    poc/cache/models.
+  - "Corpus builder eval/corpus.py executed: 340 deduplicated items = 217
+    meaningful / 123 meaningless, stratified 258 heuristic-accepted / 82
+    heuristic-rejected; 187 real repo suppressions plus 39 adversarial hard
+    negatives that evade the exact-match heuristic; repo labels recorded in
+    data/repo_labels.json."
+  - "All five candidates load and score on CPU: decider-nano 0.6398 on a
+    known-meaningful sample at ~0.17 s/item; GLiDE-0.4B 0.7351 at ~0.89 s/item
+    with float32 (bf16 measured ~4.2 s/item); bekko-17m 0.3491 at ~0.03-0.05
+    s/item; ettin-reranker raw logit 4.6626 (~0.99 sigmoid) at ~0.09 s/item;
+    MiniLM-CrossEncoder 0.5172 at ~0.015 s/item, with transformers reporting
+    classifier.weight/bias MISSING (untrained head)."
+  - "Scoring adapters implemented: eval/adapters/decider_nano.py, glide.py,
+    bekko.py, cross_encoder.py, plus eval/adapters/common.py and
+    eval/prompts.json with three decision prompt variants and three reranker
+    pair templates."
+  - Smoke commands executed successfully for every adapter with --limit 3/4 and
+    output JSONL/meta written under poc/out/; no model/load/runtime errors on
+    the sampled rows.
+concerns:
+  - "Full assignment is incomplete: no all-candidate scores at thresholds
+    0.5/0.6/0.7 in veto and replace modes, no
+    accuracy/meaningless-precision/meaningful-recall table, no
+    smallest-compliant recommendation, and no final feasibility report."
+  - MiniLM-L6-v2 has no trained decision head; its CrossEncoder classifier was
+    newly initialized, so its accuracy row is not comparable and it should be
+    recorded as an explicit exclusion (latency/RSS only).
+  - GLiDE-0.4B is CPU-runnable but its bf16 default is ~4x slower than float32
+    on this AVX2-only CPU; float32 peak RSS was ~2.85 GB. Its Fastino Community
+    License and 394.8M params still make it larger than the incumbent and
+    unsuitable as the smallest default.
+  - bekko-17m has no declared weight license and must remain ineligible for
+    recommendation regardless of accuracy.
+  - Real-repo ground truth is author-adjudicated against the stated rubric; only
+    3 of 187 accepted repressions were adjudicated meaningless, so 39 hard
+    negatives were added to avoid a vacuous 95% precision estimate. This
+    augmentation must be disclosed in the final report.
+  - The corpus currently treats preceding-line comments as justifications to
+    mirror production behavior; some are descriptive code comments rather than
+    true justifications (adjudicated false where identified).
+  - Time budget was exhausted before full evaluation; the next round should
+    resume from the scored artifacts rather than recreate the environment.
+notes: "Resume sequence: (1) run each adapter across all prompt variants for all
+  340 items; (2) implement eval/metrics.py to join scores with corpus labels,
+  compute both modes at 0.5/0.6/0.7 plus per-source/per-stratum breakdowns,
+  p50/p95/RSS; (3) compare smallest compliant with lexicographic
+  params/bytes/RSS/p50; (4) write the feasibility report and
+  recommendation/no-go."

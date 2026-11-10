@@ -1,0 +1,19 @@
+status: approved
+summary: "Consolidation verified: 115-row deduped table set-equal to HEAD union
+  with pinned outcomes, reranker classes untouched, scope clean, tests green"
+suggestions:
+  - detail: Header says '33 + 50 + 35 deduped to 115 (30 meaningful and 3
+      overlapped)'. Raw input was four packs (33+30+50+35=148); the 30-row pack
+      is a subset of the 33 and was omitted from the addend, so '118 minus 33
+      overlaps = 115' does not add up as written (118-33=85; correct is
+      148-33=115, or 118-3=115 with the 30 as subset). Reword to name all four
+      packs or clarify the 30 is fully contained in the 33, e.g.
+      '33+30+50+35=148 raw, minus 33 overlaps = 115 unique'. Comment-only; table
+      itself verified correct (115 unique, set-equal, outcomes pinned).
+    disposition: optional
+    id: header-overlap-arithmetic
+    location:
+      file: tests/checkers/test_semantic_threshold.py
+      line: 19
+    summary: Header overlap arithmetic omits the 30-row pack and misstates the dedup
+      math

@@ -1,0 +1,25 @@
+context: item
+decision: retry-with-guidance
+persist: false
+rationale: "Green-phase collection failure, not a design block:
+  tests/decisions/test_decision_cache.py:18 imports refresh_blockers but
+  red-test worktree prod file lacks that name. Gates show no failures, so item
+  worktree likely consistent and red-test snapshot is stale or prod/test drifted
+  in fix round. One mechanical fix round to pin export consistency and prove
+  red/green locally unblocks merge; waiving would risk merging a real import
+  break."
+text: "Fix import consistency with zero scope creep (forbidden
+  _base/_semantic/_decision_backend, dispatch*/__init__/baseline/parsers,
+  tests/data, baseline untouched): (1) Ensure
+  src/python_setup_lint/decisions/_decision_cache.py defines def
+  refresh_blockers with exact spelling and exports it, and _decision_cache.pyi
+  declares the same signature; fix any rename typo between prod and
+  tests/decisions/test_decision_cache.py:18. (2) Verify: grep -rn
+  refresh_blockers src/python_setup_lint/decisions/ tests/decisions/; python -c
+  import check; mypy.stubtest clean. (3) Prove red/green locally: pytest
+  tests/decisions/test_decision_cache.py tests/runner/test_refresh_decisions.py
+  must collect and pass with prod; move prod file aside, rerun must fail red,
+  restore and rerun must pass; record both. Clear __pycache__ before runs. (4)
+  Re-run gates: format check, uv run lint all 14 incl tach and detect-secrets,
+  uv run pytest -q, integration 9-collected; no new failures vs M1, golden
+  hash-equal or shift-reported."

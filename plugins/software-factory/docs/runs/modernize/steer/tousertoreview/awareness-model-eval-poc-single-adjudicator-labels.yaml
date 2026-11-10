@@ -1,0 +1,12 @@
+id: awareness-model-eval-poc-single-adjudicator-labels
+ref: model-eval-poc
+disposition: human-awareness
+question: All real-repo ground truth was adjudicated by one author with no
+  inter-rater check; borderline terse justifications ('planted violation',
+  'usage docs in .pyi', 'optional semantic extra', 'test helper for
+  readability') are all True. The 85% meaningful-recall / 95%
+  meaningless-precision bars inherit this subjectivity. Final report must
+  disclose the adjudication protocol and edge-case rubric; architect can decide
+  if sampled second-rating is needed.
+status: open
+createdAt: 2026-11-08T13:57:04.643Z

@@ -1,0 +1,20 @@
+blockedItems: []
+failedItems: []
+iteration: 1
+mergedItems:
+  - usage-cache-tokens
+  - transport-byte-stability
+  - merge-setup-fix
+recommendations: []
+status: complete
+summary: "Wave 2 complete: all 3 items (usage-cache-tokens,
+  transport-byte-stability, merge-setup-fix) merged. Tree hygiene clean: the
+  only modified file is the engine-managed orchestration journal
+  (.factory/tasks/omp-workspaces/journal.ndjson); no untracked junk, temp
+  artifacts, or build outputs. No unresolved merge conflict markers — grep hits
+  are intentional references only (merge-marker detection logic in
+  src/core/git/merge.ts, its tests, and agent/step docs). Gates match baseline
+  exactly: typecheck pass/pass (green), test fail/fail (still failing with the
+  known baseline disk-space env-sensitive failure, not a regression). No new
+  debt or blockers."
+wave: 2

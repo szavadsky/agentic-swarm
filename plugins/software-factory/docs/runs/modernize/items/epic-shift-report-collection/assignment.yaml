@@ -1,0 +1,25 @@
+slug: epic-shift-report-collection
+kind: fact-finder
+title: Consolidate epic shift reports into handoff record
+assignment: "Root-owned fan-in (fact-finder, read-only; findings.md + structured
+  findings; review checks validity; zero repo writes). M2 replanAfter:true is
+  enforceable gate: engine schedules only in post-replan wave after M2 epic
+  close-ups exist. Read three epic close-up reports; extract each epic's
+  shift-report section (or explicit no-shift declaration) with
+  {justification-class description, added/removed finding keys, CHANGELOG
+  snippet, evidence file:line}; consolidate into one handoff record with exactly
+  3 epic sections. If any close-up missing, stay pending (fails open, never
+  fabricates). Output feeds golden-regen-hatch exclusively. Verify handoff has
+  exactly 3 sections, each either shift report or explicit no-shift declaration.
+  Covers ADR-011 shift-handoff contract and M2->M3 gate."
+outlineRef: epic-shift-report-collection
+milestone: M3
+wave: 3
+deps:
+  - epic-kickoff-gate
+scenarioRefs:
+  - "M3: Golden integrity preserved"
+citations:
+  - lint.baseline:1-1
+  - AGENTS.md:87-93
+  - CodingRules.md:90-107

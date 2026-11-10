@@ -1,0 +1,29 @@
+id: c-342c07aba6
+kind: risk
+summary: User-level omp prompt files leak into every factory role;
+  `APPEND_SYSTEM.md` survives `--no-context-files` and `--no-rules`
+detail: OmpHarness inherits process.env and passes no `--profile` or
+  `PI_CODING_AGENT_DIR` (harness.ts:406-409). A probe with a temp HOME/agent dir
+  showed user `AGENTS.md` and `RULES.md` injected, and user `APPEND_SYSTEM.md`
+  appended even with `--system-prompt` plus both disable flags. Only an explicit
+  empty `--append-system-prompt=` suppressed the append. This can inject
+  operator instructions into every architect/developer/qa/reviewer turn and
+  defeats deterministic role prompts.
+location:
+  file: plugins/software-factory/src/harness/omp/harness.ts
+  line: 406
+affects:
+  - "19.1"
+  - "19.2"
+  - M8 hydration
+severity: high
+status: routed
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: spike-repo-rules
+  lastSeen: 2026-11-09T23:58:38.970Z
+createdAt: 2026-11-09T23:58:38.970Z
+updatedAt: 2026-11-10T01:01:32.465Z
+disposition: architect

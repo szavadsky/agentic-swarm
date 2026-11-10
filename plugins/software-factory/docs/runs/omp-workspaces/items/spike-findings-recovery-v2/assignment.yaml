@@ -1,0 +1,24 @@
+slug: spike-findings-recovery-v2
+kind: no-behavior
+title: Recover wave-1 spike findings onto parent branch (v2)
+assignment: "Docs-only salvage retry (zero prod lines, no-behavior kind). Source
+  branch topic/omp-workspaces--spike-findings-recovery holds the 5 approved
+  files from the failed wave-2 recovery. Using read-only `git show
+  <branch>:<path>` ONLY — NEVER checkout/switch/branch/merge and NEVER write to
+  .factory/** engine paths — copy onto this item branch at identical
+  repo-relative paths: plugins/software-factory/docs/spikes/omp-3-isolation.md,
+  omp-4-mock-provider.md, omp-5-cache-keys.md, omp-6-repo-rules.md, plus
+  items/spike-findings-recovery/RECOVERY.md (if that path is not writable from
+  this item worktree, place as items/spike-findings-recovery-v2/RECOVERY.md with
+  a header noting the source path). Fix the `oMP` capitalization typo in
+  omp-6-repo-rules.md to `omp`. Verify: all 5 files present, each spike doc
+  contains probe-evidence + recommendations sections, RECOVERY.md maps each M1
+  scenario to evidence + followUps for iteration-2 planning. CRITICAL
+  mergeability: do NOT record a gate target (target {gate:test} requires
+  full-suite exit 0 and is unmergeable on the red td-baseline-disk baseline);
+  omit target entirely or record a single passing selector target only. Minimal
+  verification from cwd=plugins/software-factory (e.g. file-presence check); do
+  not gate on full suite."
+outlineRef: spike-findings-recovery-v2
+milestone: m1-omp-de-risk
+wave: 3

@@ -1,0 +1,18 @@
+id: rm-1e89eca104
+chosen: Additive optional cache-token fields with zero-default aggregation, no
+  migration
+alternatives:
+  - Required fields with backfill migration
+  - Defer measurement until M7 policy
+why: Captures cacheRead/cacheWrite/totalTokens+cost breakdown for 20-cost
+  decisions without invalidating historical records; fixture confirms NDJSON
+  shape so M2 is spike-independent.
+status: open
+source:
+  record: 006-plan-review-1-1-a1
+  agent: plan-reviewer
+  step: plan-review-1-1
+  iteration: 1
+  lastSeen: 2026-11-09T23:40:10.522Z
+createdAt: 2026-11-09T23:40:10.522Z
+updatedAt: 2026-11-09T23:40:10.522Z

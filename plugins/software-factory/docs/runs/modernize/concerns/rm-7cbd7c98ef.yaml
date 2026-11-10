@@ -1,0 +1,20 @@
+id: rm-7cbd7c98ef
+chosen: Accept the integration golden byte-identity assertion as the golden gate
+  evidence and record the missing golden-regen-hatch report as a medium risk
+  rather than regenerating the golden.
+alternatives:
+  - Block close-out until the golden-regen-hatch item produces its report
+  - Regenerate via PYTHON_SETUP_LINT_UPDATE_GOLDEN=1 and review the diff
+  - Pin only the golden file hash without the replay assertion
+why: test_setup_new_and_lint asserts both multiset equality and a byte-identical
+  replay on a fresh copy; golden has been unchanged since 1a811af; regeneration
+  would be an unreviewed diff with no behavior change to justify it.
+status: open
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: final-gate-validation
+  lastSeen: 2026-11-10T00:27:58.391Z
+createdAt: 2026-11-10T00:27:58.391Z
+updatedAt: 2026-11-10T00:27:58.391Z

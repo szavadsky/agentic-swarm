@@ -1,0 +1,17 @@
+seq: 1
+name: triage
+attempt: 1
+agent: triage
+role: workhorse
+models:
+  - opencode-go/deepseek-v4.1-flash
+  - opencode-go/muse-spark-1.3-contributor
+timeoutSec: 900
+status: ok
+startedAt: 2026-11-07T15:43:19.645Z
+endedAt: 2026-11-07T15:45:39.188Z
+usage:
+  inputTokens: 33777
+  outputTokens: 11898
+  costUsd: 0.012956
+traceRef: /home/slava/aiexp/python-setup.factory-wt/.factory-runtime/sessions/2026-11-07T15-43-20-117Z_01a1b6ad-b635-73eb-ba2c-6c0340af11a5

@@ -1,0 +1,21 @@
+id: rm-644c24995b
+chosen: Age pruning is opt-in (`--max-age-days`), disabled by default
+alternatives:
+  - Fixed 90/180/365-day default TTL
+  - Prune on every lint run (violates read-only lint)
+  - No age mechanism at all (loses the ability to expire abandoned entries on
+    demand)
+why: No ADR defines a TTL, and a default would silently discard still-valid
+  decisions in rarely refreshed projects. Empty-file, missing-file, stale-model
+  and stale-prompt pruning already bound growth; the optional mechanism is
+  proven with a 30-day horizon.
+status: routed
+source:
+  record: 001-develop-r1-a1
+  agent: developer
+  step: develop
+  item: cache-design-spike
+  lastSeen: 2026-11-09T23:18:39.934Z
+createdAt: 2026-11-09T23:18:39.934Z
+updatedAt: 2026-11-10T02:58:56.108Z
+disposition: optional

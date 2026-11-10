@@ -1,0 +1,37 @@
+slug: coding-rules-audit
+kind: fact-finder
+title: Inventory CodingRules violations
+assignment: "Read-only audit of src/** and scripts/** vs CodingRules/AGENTS at
+  final state (post-golden/assumptions/consolidate; read beartype discovery
+  report from third-party item). No repo writes; output is structured
+  item-report tables (durable in orchestration records, no committed file).
+  Semantic exclusions marked SKIPPED (audit rest normally):
+  checkers/_semantic.py+.pyi, new _decision_backend/_decision_cache modules
+  (+.pyi), _base.py::check_if_meaningful (+stub section),
+  no_try_import_checker::_OPTIONAL_IMPORT_PATTERNS. Inventory: .pyi
+  fidelity/private symbols, @beartype + structural suppressions, trivial
+  wrappers/duplicated logic, redundant fallbacks (astroid 3.x), legacy stubs
+  (_FALLBACK_TOOLS, peek_fallback_tools, _compare_sorted re-export), over-long
+  comments, 500-line/R0912/R0915 proximity, structlog/error rules, rumdl
+  tests/data-exclude hack (TD-11). Output rows {module,section,evidence
+  file:line,category,est LoC delta,owner,fix} + UNIFIED disjoint-ownership map
+  (this audit is SINGLE owner; test-debloat-audit consumes via inter-dep). Deps:
+  read golden + helper final state; beartype report informs owner/fix."
+outlineRef: coding-rules-audit
+milestone: M3
+wave: 4
+deps:
+  - golden-findings-snapshot
+  - third-party-assumption-tests
+  - consolidate-integration-helpers
+scenarioRefs:
+  - "M3: Coding-rules debt inventoried"
+  - "M3: Ownership map is complete and disjoint"
+citations:
+  - CodingRules.md:90-107
+  - CodingRules.md:139-159
+  - src/python_setup_lint/checkers/_semantic.py:1-12
+  - src/python_setup_lint/checkers/_semantic.py:37-52
+  - src/python_setup_lint/checkers/_base.py:142-158
+  - src/python_setup_lint/runner/baseline.py:22-42
+  - lint.baseline:1-1

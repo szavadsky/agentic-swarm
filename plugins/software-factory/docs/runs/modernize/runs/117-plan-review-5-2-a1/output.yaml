@@ -1,0 +1,272 @@
+status: changes_requested
+summary: "Blocked: cache read/score unimplementable, harness/resolver/pyi/tach
+  contracts underspecified, loader/injection/steer/prune/gate gaps need plan
+  revision"
+suggestions:
+  - id: cache-read-path-missing
+    disposition: fix
+    summary: "M3 cache never read: no item owns ordinary-lint lookup"
+    detail: "M3 builds storage+refresh+sidecar producer but forbids
+      _semantic/_base/_decision_backend bodies and allows only refresh-only emit
+      lines in 2 checkers; M4 forbids decisions/. Persisted verdicts never
+      consulted, so M3 scenario 'emits persisted verdict with no model load'
+      unimplementable. Evidence _semantic.py:28 memo-only, no file lookup. Fix:
+      assign read ownership (cache-backed lookup in _semantic/_base or checker
+      pre-check) with joint ownership via dep, define hit/miss/absent table +
+      no-load proof."
+    location:
+      file: src/python_setup_lint/checkers/_semantic.py
+      line: 28
+  - id: observation-score-unavailable
+    disposition: fix
+    summary: Sidecar needs score but bool APIs hide float under zero-diff
+    detail: "Observation {file,justification,rule,model,score} requires float, but
+      check_if_meaningful()->bool (_base.py:160) and semantic_check()->bool|None
+      hide score; M3 forbids bodies so checker cannot obtain score without
+      duplicating heuristic+backend (drift). Fix: allow minimal scored API
+      (+.pyi) owned by cache-impl, or pin checker-direct backend call with
+      duplication tests, relax forbids."
+    location:
+      file: src/python_setup_lint/checkers/_base.py
+      line: 160
+  - id: resolve-pylintrc-ownership
+    disposition: fix
+    summary: Shared rcfile resolver impossible without cmd_build ownership
+    detail: "_resolve_pylintrc (cmd_build.py:143) handles only 'pylint'+cwd
+      fallback, while pyi/tests use explicit key+shipped fallback
+      (dispatch.py:262-264,294-296). 'Same resolution order' impossible without
+      changing resolver; source-simplifications lacks cmd_build ownership. Fix:
+      add cmd_build.py to owns, define
+      _resolve_pylintrc(tool_key,config_paths,cwd) with shipped fallback +
+      byte-identical command tests."
+    location:
+      file: src/python_setup_lint/runner/cmd_build.py
+      line: 143
+  - id: testing-pyi-missing
+    disposition: fix
+    summary: Harness changes testing.py without testing.pyi ownership
+    detail: "Harness-dedup adds open_checker/module_name to testing.py:25 but owns
+      testing.py only; testing.pyi:35 mirror must sync or mypy.stubtest fails
+      14-tool gate. Fix: add src/python_setup_lint/testing.pyi to harness-dedup
+      owns (atomic)."
+    location:
+      file: src/python_setup_lint/testing.py
+      line: 25
+  - id: harness-contract-gaps
+    disposition: fix
+    summary: open_checker bool misses source_roots; _msg_ids destination undefined
+    detail: "Structlog caller sets config.source_roots then open()
+      (test_structlog_checker.py:23-31) but interface offers only bool, forcing
+      behavior change or leftover copy; module_name already exists
+      (testing.py:25); 8 _msg_ids deleted with no shared replacement (7 set vs 1
+      sorted list). Fix: define full shared signatures + per-file migration
+      table."
+    location:
+      file: tests/checkers/test_structlog_checker.py
+      line: 23
+  - id: loader-shape-contradiction
+    disposition: fix
+    summary: FakeBackend 'rev test' claimed compliant with short12 regex
+    detail: "Plan pins '<id> rev <short12> prompt-vN' with regex yet FakeBackend
+      'fake-backend rev test prompt-v1' (_decision_backend.py:24) uses 4-char
+      non-hex 'test'; strict [0-9a-f]{12} rejects fake, loose weakens prod.
+      DECISION_MODEL slash/prompt/malformed rules undefined. Fix: define precise
+      regexes (prod strict + fake allowlist) + malformed→None+warn cases."
+    location:
+      file: src/python_setup_lint/checkers/_decision_backend.py
+      line: 24
+  - id: backend-injection-unproven
+    disposition: fix
+    summary: Call-counts unobservable; subprocess dotted-path import fails
+    detail: "_walk_and_release takes no backend (testing.py:25), checkers pass no
+      backend, get_backend() news instance per call (_decision_backend.py:37),
+      so test counts stay 0 even in-process; subprocess cwd=tmp lacks tests on
+      PYTHONPATH (_run_cmd output.py:153 does no PYTHONPATH). Fix: define
+      injection (monkeypatch get_backend for counts; sys.path/env proof for
+      subprocess) and split counts (direct semantic) vs verdicts (walks/runs)."
+    location:
+      file: src/python_setup_lint/runner/output.py
+      line: 153
+  - id: steer-vs-report-only
+    disposition: fix
+    summary: Report-only spikes cannot file steer questions
+    detail: "Matrix/corpus/eval are zero-committed-files yet must 'file steer
+      question on Fastino/unclear' + record steer IDs for M4 GO;
+      steer/tousertoreview writes are engine-managed, out of item scope. Fix:
+      request humans via report fields (needs_human) that engine converts to
+      steer; define ID discovery without item file writes."
+    location:
+      file: docs/adr/ADR-020.md
+      line: 1
+  - id: pyi-mechanism-ownership
+    disposition: fix
+    summary: Temp-tree path mapping unproven; stub ownership missing
+    detail: "Spike reproduces skip only, no temp-tree poc; temp-tree rewrites
+      src/... paths with no golden mapping; owns says tool+report ONLY yet
+      cleanup ≤200 stub lines 'same item' implies stub ownership missing; .py
+      co-changes for stubtest unowned. Fix: poc mechanism + path mapping +
+      broken-stub control, add src/**/*.pyi (+.py if needed) to owns."
+    location:
+      file: src/python_setup_lint/runner/dispatch.py
+      line: 249
+  - id: adr-index-gap
+    disposition: fix
+    summary: README must index 013..024 but 017/018 files missing
+    detail: "README indexes 001..012 (docs/adr/README.md:18); 017/018 never merged
+      per ADR-019 context, 013/015 stubs unowned. Cannot index missing files.
+      Fix: index 013-016,019-024 with 017/018 noted planned-unmerged (or
+      placeholders) + own 013/015 if rewrite needed."
+    location:
+      file: docs/adr/README.md
+      line: 18
+  - id: integration-gate-brittle
+    disposition: fix
+    summary: Gate requires 9 passed but 7+2 skipped is expected without pre-commit
+    detail: "Final-gate demands 9 passed with env pinned, yet assumption allows 7+2
+      skipped when pre-commit missing (tests/integration.py dry_run/pre_commit
+      skip, 0 failed). Factory without binary forces red. Fix: green = 9
+      collected, 0 failed (allow 2 skips with env+reasons cited)."
+    location:
+      file: tests/integration.py
+      line: 60
+  - id: bash-junk-ownership
+    disposition: fix
+    summary: No item owns :bash junk yet absolute green required
+    detail: "TD5-A3 leaves root ':bash' (186B) to operator outside iteration while
+      final-gate needs green; yamllint scans '.' and detect-secrets scans
+      tracked files could fail. Fix: own deletion/verification in iteration (git
+      ls-files proof) or explicitly prove :bash gate-neutral and exclude."
+    location:
+      file: :bash
+      line: 1
+  - id: cache-secrets-guarantee
+    disposition: fix
+    summary: Arbitrary justifications can embed hex>=20; tmp scan undefined
+    detail: "Cache stores verbatim justifications that may contain SHAs/secrets,
+      breaking 'no bare hex>=20 + secrets-clean' on committed file;
+      detect-secrets scans tracked files, not tmp, so M1 tmp check method
+      undefined. Fix: define handling (baseline
+      allowlist/redaction/risk-accepted docs) + tmp invocation."
+    location:
+      file: .secrets.baseline
+      line: 1
+  - id: prune-vs-path-rules
+    disposition: fix
+    summary: Prune missing/stale vs --path retain + stale undefined
+    detail: "Auto-prune missing/stale conflicts with '--path retains unscanned' when
+      unscanned missing; stale model-ids (prompt bump drops all?) and
+      file-vs-entry granularity undefined. RunnerConfig lacks refresh fields
+      (types.py:48). Fix: define scanned-only missing prune, stale=current
+      folded id, file-level removal + drop-empty-entry + tests."
+    location:
+      file: src/python_setup_lint/runner/types.py
+      line: 48
+  - id: loader-unknown-runtime
+    disposition: fix
+    summary: Story must wire loader for spike-unknown runtime + offline lock regen
+    detail: "Wiring (hint 80) implements loader for U1-unknown runtime (transformers
+      vs glide-vendored vs onnx APIs differ) + allowlist pins (shape undefined)
+      + uv.lock regen (needs PyPI network) with no loader poc; get_backend has
+      no prod path (_decision_backend.py:49). Fix: per-family loader
+      branches/budgets, pin assertions, network plan for lock."
+    location:
+      file: src/python_setup_lint/checkers/_decision_backend.py
+      line: 49
+  - id: tach-file-ambiguity
+    disposition: fix
+    summary: Which tach.toml gains decisions module unspecified
+    detail: "Root tach.toml (auto-discovered) vs config/tach.toml (shipped) both
+      list checkers/runner only; M3 sole-owner clause names 'tach.toml' without
+      path, breaking self-lint vs consumer sync. Fix: specify path(s) + exact
+      3-module/2-edge TOML."
+    location:
+      file: tach.toml
+      line: 1
+  - id: dead-helper-assumption
+    disposition: fix
+    summary: sample_project assumed dead but conftest fixture likely live
+    detail: "Runner-dedup deletes 4 helpers unconditionally, yet sample_project
+      (tests/conftest.py:167) is a shared fixture probably used; +3 factory
+      helpers need call-site proof. Fix: conditional delete (grep-zero proof per
+      helper, report each; keep+document survivors)."
+    location:
+      file: tests/conftest.py
+      line: 167
+  - id: pyi-overstatement-vague
+    disposition: fix
+    summary: "'Not overstated' pyi scenario lacks falsifiable strings"
+    detail: "M5 scenario ends with non-assertable 'coding rules enforced is not
+      overstated either way'; FIX vs ORPHAN need distinct truth (all .pyi linted
+      vs companion stubtest-only). Fix: concrete exact-strings per branch + grep
+      checks in docs item."
+    location:
+      file: docs/custom-checks.md
+      line: 1
+  - id: corpus-eval-schema
+    disposition: fix
+    summary: N>=100 report-table handoff has no schema
+    detail: "Corpus (no files) → eval via markdown tables; eval needs
+      justification/rule/context/strata/labels/rubric/adjudication/agreement for
+      115-row-scale data (test_semantic_threshold.py:23) with dedup
+      verification. Transcription risk. Fix: JSON code-block schema + counts +
+      re-dedup validation."
+    location:
+      file: tests/checkers/test_semantic_threshold.py
+      line: 23
+  - id: human-approval-workflow
+    disposition: fix
+    summary: M4 steer-ID gate has no filing/discovery workflow
+    detail: "GO needs recorded license+second-rater steer IDs (ADR-009/020 gating)
+      but 6 confirm-with-human assumptions lack resolution flow, spikes cannot
+      file (see steer finding), story cannot read engine steer records per
+      containment. Fix: define who files what/when, ID linkage in reports, check
+      vs default-no-go timing without pausing iteration."
+    location:
+      file: docs/adr/ADR-009.md
+      line: 1
+  - id: docs-strings-brittle
+    disposition: optional
+    summary: Exact-strings checklist brittle on reranker/ty comment
+    detail: "Semantic-justification 'no reranker' vs troubleshooting must-mention
+      deprecated RERANKER_MODEL; ty.toml:8 sentence_transformers comment removal
+      lacks replacement (GO runtime vs NO-GO dead ignore). Suggest: scope
+      grep-zero to code refs + per-branch ty text."
+    location:
+      file: docs/semantic-justification.md
+      line: 1
+  - id: eval-time-budget
+    disposition: optional
+    summary: ALL candidates x3 thresholds xN>=100 may overrun CPU budget
+    detail: "0.4B/0.81GB models x families with cold/warm+RSS+determinism, no
+      sampling/timebox. Suggest: pilot latency subset + full accuracy on top-2 +
+      per-candidate timeout with explicit exclusion, keep 90/95/85 bars."
+    location:
+      file: tests/checkers/test_semantic_threshold.py
+      line: 19
+  - id: gate-docs-independence
+    disposition: optional
+    summary: Final gate cites docs grep instead of independent rerun
+    detail: "Gate independence weakened by trusting producer proof. Suggest: rerun
+      cheap offline greps in final-gate and cite both."
+    location:
+      file: tests/test_golden.py
+      line: 1
+  - id: orphan-enforcement-gap
+    disposition: human-awareness
+    summary: Orphan-only leaves companion stubs unenforced vs intent
+    detail: ORPHAN (stubtest-only, pyi-underscore orphan-only) leaves ~205 latent
+      symbols + 42/43 findings unenforced; FIX needs temp-tree+cleanup+regen.
+      Architect may choose with spike evidence; operator should note gap
+      (stubtest≠style).
+    location:
+      file: config/.pylintrc-pyi
+      line: 1
+  - id: infra-only-close
+    disposition: human-awareness
+    summary: I5 may close infra-only on U1 no-go; swap not claimable
+    detail: No-go/blocked + missing approvals force cache+pinning+docs only
+      ([semantic] stays empty, pyproject.toml:28); I6 needs second rater +
+      Fastino + CPU bench. Close-up must not claim swap complete.
+    location:
+      file: pyproject.toml
+      line: 28

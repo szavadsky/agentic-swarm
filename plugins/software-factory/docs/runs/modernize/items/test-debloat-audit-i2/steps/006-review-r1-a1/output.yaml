@@ -1,0 +1,62 @@
+status: approved
+summary: r3 satisfies all 10 retry items (owners, 59 N|S, 14 debts, 7 removals,
+  reservations, symbols, D1-D7, smoke kept, 18->13, 65-107s) verified via
+  collect-only/grep/ls; 5 minor citation/accounting imprecisions as optional
+suggestions:
+  - id: shipped-label-unasserted-set
+    disposition: optional
+    summary: Shipped-label debt overstates unasserted set (ruff format is pinned)
+    detail: _SHIPPED_CONFIG_FILES has 11 labels (_config.py:8-20); t1b asserts
+      7-label subset (t1b:56-66); but TestRuffFormatConfig
+      (test_runner_format_contract.py:69-72) asserts 'ruff format' in
+      _default_config_paths. Asserted=8, unasserted=pylint tests, pylint-pyi,
+      tach check (3), not 4. Delete 'ruff format' from line 179 list.
+      Conservative overstatement; no coverage lost.
+    location:
+      file: .factory/tasks/modernize/items/test-debloat-audit-i2/steps/005-research-r2-a1/output.yaml
+      line: 179
+  - id: config-flag-ruff-check-cite
+    disposition: optional
+    summary: ruff check flag pin cited to wrong file
+    detail: Line 180 says ruff check/format both pinned at
+      test_runner_format_contract.py:74-77, but :74-77 covers only 'ruff
+      format'; the 'ruff check' pin is test_t1b_self_discovery.py:166-169
+      (test_config_flag_for_given_other_tool_then_unaffected). Substance correct
+      (yamllint + ruff check + ruff format covered; mypy/rumdl/ty at
+      cmd_build.py:114,118,119 unpinned); correct the citation.
+    location:
+      file: .factory/tasks/modernize/items/test-debloat-audit-i2/steps/005-research-r2-a1/output.yaml
+      line: 180
+  - id: subgroup-ns-slow-only
+    disposition: optional
+    summary: Two subgroup rows claim 1/1 for single slow tests (should be 0/1)
+    detail: TestRunLintFixDownstream (:44-112) holds one test at :56 marked slow;
+      TestDownstreamIntegration (:310-370) holds one test at :314 marked slow.
+      Under N=default-collected each is 0/1, not 1/1. Per-file rows 31 (12|1)
+      and 49 (21|1) are correct; slow-budget arithmetic unaffected. Correct
+      group N/S at lines 227-228 for consistency.
+    location:
+      file: .factory/tasks/modernize/items/test-debloat-audit-i2/steps/005-research-r2-a1/output.yaml
+      line: 227
+  - id: removal-pool-slow-accounting
+    disposition: optional
+    summary: Removal-pool slow parenthetical miscounts extras and conflates core
+    detail: "Headline 8 slow for 787 LoC removal pool is correct (self-lint 1 +
+      noise 2 + live 2 + bench 1 + autofix-downstream 1 + setup-downstream 1).
+      But '(5 core + 3 of six-group extras slow; other 3 not slow)' is wrong:
+      core 5 includes 3 rewrite slows (baseline-perf 2 + extra-perf 1) not in
+      the 787 pool, and among six extras 4 groups are slow (noise 2 + live 2 +
+      autofix 1 + setup 1 = 6 tests) with 2 non-slow (gates, AST scan). Core
+      18->13 and extended 7 remain correct; clarify the aside."
+    location:
+      file: .factory/tasks/modernize/items/test-debloat-audit-i2/steps/005-research-r2-a1/output.yaml
+      line: 262
+  - id: sources-path-typo
+    disposition: optional
+    summary: "Sources typo: baseline-diff-edge cited under tests/checkers/"
+    detail: Line 344 lists tests/checkers/test_baseline_diff_edge.py:74-110; file
+      lives at tests/runner/test_baseline_diff_edge.py (308 lines;
+      TestPerfBenchmark :74-110 verified). Correct path. No finding affected.
+    location:
+      file: .factory/tasks/modernize/items/test-debloat-audit-i2/steps/005-research-r2-a1/output.yaml
+      line: 344

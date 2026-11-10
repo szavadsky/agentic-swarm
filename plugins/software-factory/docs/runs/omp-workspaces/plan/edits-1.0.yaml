@@ -1,0 +1,178 @@
+iteration: 1
+amendmentIndex: 0
+items:
+  - slug: spike-omp-isolation
+    kind: fact-finder
+    title: "Spike: omp isolation mechanics + backend decision"
+    assignment: "Fact-finder spike, no prod code. Probe installed omp (18.18.5) with
+      throwaway --profile and mktemp-isolated temp git repos (unique per run,
+      parallel-safe). 1) Enumerate isolation.backend allowed values via omp
+      help/config schema plus trial overlays. 2) Run retention matrix: omp
+      isolated-task vs omp worktree add + --cwd turn on success/failing/aborted
+      turns; record branch/commit retention in each case. 3) Determine which omp
+      mechanism maps to factory root-process workspaces. 4) Evaluate
+      task.isolation apply/merge/commits semantics vs current engine merge path
+      (parent-into-child, gates, child-into-parent). 5) Define cheapest
+      validating preflight probe (must be a real turn; --version/config-get are
+      no-ops). 6) Test model/role resolvability without paid turns if possible.
+      Outputs: items/{item}/findings.md with probe-command log table plus output
+      excerpts, full draft content for
+      plugins/software-factory/docs/spikes/omp-3-isolation.md, draft decision
+      YAML {status, decision, evidence, followUps} stating omp<->engine mapping,
+      retention guarantees, preflight probe command, draft isolation config
+      surface. Constraints: read-only on repo prod paths;
+      cwd=plugins/software-factory for repo-relative resolution; bounded
+      real-omp turns allowed as research cost. Acceptance: answers M1 isolation
+      scenario (backend values, retention, probe)."
+    outlineRef: spike-omp-isolation
+    milestone: m1-omp-de-risk
+    wave: 1
+    deps: []
+    scenarioRefs:
+      - m1-omp-de-risk:scenario-1
+    citations:
+      - docs/factory.v2.md:104-113
+      - plugins/software-factory/docs/spikes/omp-1-topology.md:189-215
+      - plugins/software-factory/src/core/git/worktrees.ts:38-123
+      - plugins/software-factory/src/core/flows/merge-path.ts:131-243
+      - plugins/software-factory/src/cli/preflight.ts:365-393
+  - slug: spike-mock-provider
+    kind: fact-finder
+    title: "Spike: scripted mock provider seam for real omp"
+    assignment: "Fact-finder spike, no prod code. Probe installed omp
+      extension/provider registration with throwaway --profile and temp dirs
+      (parallel-safe). 1) Probe extension API and model catalog listing via
+      -e/--config overlays; enumerate any custom-provider/local-endpoint seam.
+      2) Capture streaming NDJSON contract for a scripted turn (events, usage,
+      yield envelope). 3) Propose canned scenario format {turns:
+      [{yield|toolCalls|text}]} sufficient for M8 runner. 4) Prove one minimal
+      real-omp turn against a scripted provider with zero paid-model calls, or
+      rule the seam out with command/output evidence. Outputs:
+      items/{item}/findings.md with probe log, full draft for
+      plugins/software-factory/docs/spikes/omp-4-mock-provider.md, draft
+      decision YAML {status, decision, evidence, followUps} naming the chosen
+      seam plus scenario format (or ruled-out alternatives). Constraints:
+      read-only on repo prod paths; cwd=plugins/software-factory; throwaway
+      profile/repos only; poc/runner implementation deferred to M8, proposal
+      only. Acceptance: answers M1 mock-provider scenario."
+    outlineRef: spike-mock-provider
+    milestone: m1-omp-de-risk
+    wave: 1
+    deps: []
+    scenarioRefs:
+      - m1-omp-de-risk:scenario-2
+    citations:
+      - docs/factory.v2.md:104-113
+      - plugins/software-factory/docs/ARCHITECTURE.md:40
+      - plugins/software-factory/src/cli/preflight.ts:365-393
+  - slug: spike-cache-key
+    kind: fact-finder
+    title: "Spike: prompt-cache keying + compaction/warming audit"
+    assignment: "Fact-finder spike, no prod code. 1) Render the same agent prompt
+      twice via current transport and diff bytes/argv (system-prompt content,
+      overlay bytes, prompt path/argv). 2) Run bounded live resume probes with
+      cache-miss markers: same vs changed prompt path, model switch, TTL expiry;
+      record cacheRead/cacheWrite/totalTokens and cost deltas. 3) Audit which
+      compaction.* and providers.cache* knobs affect one-process-per-turn
+      factory sessions and what cold-resume detection signals exist. 4)
+      Recommend cold-resume detection plus compaction-vs-fresh-brief mechanism
+      and standby-warming viability for M7. Outputs: items/{item}/findings.md
+      with byte-diff tables and probe log, full draft for
+      plugins/software-factory/docs/spikes/omp-5-cache-keys.md, draft decision
+      YAML {status, decision, evidence, followUps} stating content-vs-path
+      keying and applicable knobs. Constraints: read-only on repo prod paths;
+      cwd=plugins/software-factory; throwaway profile/repos, unique temp dirs;
+      no transport stabilization (M2 characterizes, M7 implements). Acceptance:
+      answers M1 cache-key scenario."
+    outlineRef: spike-cache-key
+    milestone: m1-omp-de-risk
+    wave: 1
+    deps: []
+    scenarioRefs:
+      - m1-omp-de-risk:scenario-3
+    citations:
+      - docs/factory.v2.md:114-120
+      - plugins/software-factory/docs/OMP_ADAPTER.md:163-168
+      - plugins/software-factory/docs/ARCHITECTURE.md:40
+  - slug: spike-repo-rules
+    kind: fact-finder
+    title: "Spike: repo-rules sources + omp injection audit"
+    assignment: "Fact-finder spike, no prod code. 1) Enumerate rule/context sources
+      (AGENTS.md/CLAUDE.md/.cursorrules/.omp/rules, root plus subdirs) and
+      precedence via omp docs plus config inspection. 2) With a sentinel fixture
+      repo (unique temp dir), probe root omp processes with and without
+      --system-prompt and with/without contextFiles.extra and
+      --no-context-files; record whether the sentinel is injected
+      (double-injection risk). 3) Map per-role hydration seams
+      (architect/developer/qa/reviewer prompt rendering) and define the M8
+      verification plan (probe agents quote sentinel). Outputs:
+      items/{item}/findings.md with source/precedence table and probe matrix,
+      full draft for plugins/software-factory/docs/spikes/omp-6-repo-rules.md,
+      draft decision YAML {status, decision, evidence, followUps} stating
+      sources, precedence, double-inject verdict. Constraints: read-only on repo
+      prod paths; cwd=plugins/software-factory; throwaway profile/repos;
+      hydration implementation deferred to M8. Acceptance: answers M1 repo-rules
+      scenario."
+    outlineRef: spike-repo-rules
+    milestone: m1-omp-de-risk
+    wave: 1
+    deps: []
+    scenarioRefs:
+      - m1-omp-de-risk:scenario-4
+    citations:
+      - docs/factory.v2.md:104-113
+      - plugins/software-factory/docs/OMP_ADAPTER.md:163-168
+      - plugins/software-factory/docs/ARCHITECTURE.md:40
+  - slug: usage-cache-tokens
+    kind: dev
+    title: Cache-token usage plumbing end to end
+    assignment: "Dev item, tests-first, prod budget ~180 lines. Extend
+      Usage/StepUsage types with optional
+      cacheReadTokens/cacheWriteTokens/totalTokens plus cost breakdown
+      {costUsd?, cost?: {input?, output?, cacheRead?, cacheWrite?}}; parse them
+      in the NDJSON usage parser tolerating absent keys; persist in step meta
+      records; aggregate with zero-defaults in budget/derive helpers; surface
+      cache columns in status output. All new fields optional; historical
+      records without cache keys remain valid (missing->0, no migration);
+      schemas gain optional properties only. Behavior tests (write failing
+      first): fixture NDJSON turn carrying usage.cacheRead/cacheWrite and cost
+      sub-fields parses and persists; old-record backward compat; budget sums
+      include cache with zero-defaults; status shows cache columns. Constraints:
+      cwd=plugins/software-factory, fixtures repo-relative; baseline red
+      disk-space test accepted as-is, ratchet on no NEW failures. Acceptance: M2
+      scenarios 1-2 (parse/persist/aggregate + backward compat)."
+    outlineRef: usage-cache-tokens
+    milestone: m2-measure-stabilize
+    wave: 2
+    deps: []
+    scenarioRefs:
+      - m2-measure-stabilize:scenario-1
+      - m2-measure-stabilize:scenario-2
+    citations:
+      - docs/factory.v2.md:114-120
+      - plugins/software-factory/docs/OMP_ADAPTER.md:163-168
+      - plugins/software-factory/src/cli/status.ts:24-70
+  - slug: transport-byte-stability
+    kind: test-only
+    title: Transport byte-stability characterization tests
+    assignment: "Test-only item, no prod code; edits confined to test paths. Add
+      test/harness/transport-stability.test.ts rendering the same agent prompt
+      twice and asserting byte-equality of system-prompt content and generated
+      overlay bytes, while pinning currently unstable argv parts
+      (timestamped/randomized prompt filename) as documented behavior with
+      explicit assertions plus comments. Tests must assume
+      cwd=plugins/software-factory and resolve fixtures repo-relatively; must
+      pass on clean checkout and skip cleanly only if omp binary is absent (no
+      paid turns). Do not stabilize transport; stabilization decision deferred
+      to M7 after spike-cache-key. Acceptance: M2 scenario 3 (byte-equality
+      where stable, instability pinned where not)."
+    outlineRef: transport-byte-stability
+    milestone: m2-measure-stabilize
+    wave: 2
+    deps: []
+    scenarioRefs:
+      - m2-measure-stabilize:scenario-3
+    citations:
+      - docs/factory.v2.md:114-120
+      - plugins/software-factory/docs/OMP_ADAPTER.md:163-168
+      - plugins/software-factory/src/cli/preflight.ts:365-393

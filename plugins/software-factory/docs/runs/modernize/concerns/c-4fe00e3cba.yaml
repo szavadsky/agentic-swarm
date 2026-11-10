@@ -1,0 +1,23 @@
+id: c-4fe00e3cba
+kind: assumption
+summary: coding-rules-audit UNIFIED ownership map was unavailable in the
+  prompt/inter-dep
+detail: ADR-013 states the map lives in orchestration records, which this agent
+  must not inspect. Owners were aligned to ADR-011's visible five-owner taxonomy
+  (runner/checkers/setup-testing/semantic/root); downstream implementation must
+  confirm each row against the UNIFIED map rather than treating these labels as
+  authoritative.
+affects:
+  - test-debloat-audit
+  - test-debloat-impl
+severity: medium
+status: routed
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: test-debloat-audit
+  lastSeen: 2026-11-10T00:53:21.467Z
+createdAt: 2026-11-10T00:53:21.467Z
+updatedAt: 2026-11-10T02:23:05.623Z
+disposition: optional

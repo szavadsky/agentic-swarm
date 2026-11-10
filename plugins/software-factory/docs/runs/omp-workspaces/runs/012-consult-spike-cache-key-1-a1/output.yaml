@@ -1,0 +1,14 @@
+context: item
+decision: retry-with-guidance
+persist: true
+rationale: "Same environmental TS2688 as sibling spikes: merge child worktree
+  lacks node_modules, mergeItem runs gates without infra.setup. Review approved
+  the spike (M1 scenario-3 answered: content-keyed verdict, cold-detection
+  signals, M7 policy). Fix is mechanical bun install in childWt, not research
+  rework."
+text: "RETRY (environmental failure, not spike failure): before the redrive
+  merge, run `cd <childWt>/plugins/software-factory && bun install` where
+  childWt = worktreeRoot/topic_omp-workspaces--spike-cache-key. Then re-drive
+  the merge unchanged. Do NOT re-run probes, do NOT modify findings, do NOT
+  touch prod code. If typecheck still fails after bun install, yield failed with
+  full gate output."

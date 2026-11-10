@@ -1,0 +1,160 @@
+status: changes_requested
+summary: r2 fixes the 4 flagged defects (bench 1 slow, surface KEEP, golden KEEP
+  152-198, pyi 1-27) but regresses counts, owners, pins, removals, and
+  reservations vs unified map and HEAD truth
+suggestions:
+  - detail: "Unified map
+      (.factory/tasks/modernize/items/coding-rules-audit-i2/steps/001-research-\
+      r1-a1/output.yaml:82-88) defines exactly 5 owners: runner 67, checkers 83,
+      setup-testing 15, semantic 4, root 15. r2 invents 10 tokens
+      (tests-infra/baseline/autofix/configs/setup/golden/integration) and
+      assigns e.g. test_suppression file to semantic. The inter-dep file EXISTS
+      in-repo, so the uncertainty claim is false. Restore 5-owner column,
+      67/83/15/4/15 counts, and checkers-file/semantic-symbol split."
+    disposition: fix
+    id: owners-unified-map
+    location:
+      file: .factory/tasks/modernize/items/test-debloat-audit-i2/steps/003-research-r2-a1/output.yaml
+      line: 113
+    summary: Owner column abandons unified map 5-owner scheme
+  - detail: "Per-file --collect-only truth (default|slow): asyncio 15|0 vs 4,
+      beartype 16 vs 5, generic-key 18 vs 2, missing-return 15 vs 4,
+      no-try-import 14 vs 2, stub 54 vs 23, callable 36 vs 12, class 27 vs 9,
+      coverage 57 vs 11, docstring 28 vs 8, normalizer 18 vs 4, unnamed 11 vs 2,
+      autofix 25 vs 20, baseline-diff 15 vs 3, baseline-edge 16|2 vs 12|1,
+      parsers 45 vs 6, config-consistency 11 vs 9, extra-tools 44 vs 21,
+      extra-downstream 4|1 vs 3|1, lint-runner 58 vs 41, lint-integration 40|1
+      vs 19|1, stats 87 vs 29, setup 51 vs 31, setup-install 21|1 vs 7|1, t11
+      16|1 vs 17|1, golden 31 vs 30, semantic-check 82|3 vs 19|3, threshold 80
+      vs 2, suppression 40|2 vs 42|1, noise-filter 0|2 vs 2|2. r2 counts defs,
+      not collected (parametrized) tests, violating its own N=default
+      convention."
+    disposition: fix
+    id: per-module-counts
+    location:
+      file: .factory/tasks/modernize/items/test-debloat-audit-i2/steps/003-research-r2-a1/output.yaml
+      line: 124
+    summary: Per-module N/S counts systematically wrong (~25 files)
+  - detail: "Product flags exist with zero test pins: cli.py:292-296 --force-fix +
+      PYTHON_SETUP_LINT_FORCE_FIX, :317-321 --format, :339-343 --cwd, :363-367
+      --config-status; grep tests for force-fix/config-status hits none;
+      MAIN_ARGPARSE_CASES (_factories_tables.py:148-173) covers only
+      path/fix/exclude/package-name/tools/default-py-dirs. Config gaps:
+      _SHIPPED_CONFIG_FILES has 11 labels (_config.py:8-20) but t1b asserts
+      7-label subset (test_t1b_self_discovery.py:60-69); _config_flag_for
+      mypy/rumdl/ty branches (cmd_build.py:108-124) only yamllint-tested;
+      dispatch scopes ty src / pylint-pyi src / pylint-tests tests / tach
+      whole-repo (dispatch.py:46-137), pyright tests/** exclusion
+      (pyrightconfig.json:10-20), rumdl tests/data exclusion (rumdl.toml:3) have
+      no direct pins. r1 listed ~15 blocking-debt limbs; r2 keeps only ty-scope.
+      Restore all."
+    disposition: fix
+    id: pinning-gaps-dropped
+    location:
+      file: .factory/tasks/modernize/items/test-debloat-audit-i2/steps/003-research-r2-a1/output.yaml
+      line: 374
+    summary: Pinning inventory drops ~14 blocking-debt limbs as pinned/omitted
+  - detail: "Still present at HEAD: test_pyright_noise_filter.py:17-50 (module-slow,
+      run_lint on repo_root), test_setup.py:326 TestModuleSizeGates,
+      test_runner_private_imports.py:69 repo-AST scan,
+      test_autofix_conflict_integration.py:44 TestRunLintFixDownstream (slow),
+      test_setup_install.py:310-325 TestDownstreamIntegration (Path.home()/.tmp
+      write), test_t9_7_compose_pyright_live.py:31 hardcoded /home/slava
+      checkout. r2 keeps noise-filter/live as keep and omits the other four,
+      claiming only self-lint is repo-self. List all six definite groups for
+      removal with surviving gates (uv run lint, unit filter tests,
+      integration.py)."
+    disposition: fix
+    id: repo-self-removals
+    location:
+      file: .factory/tasks/modernize/items/test-debloat-audit-i2/steps/003-research-r2-a1/output.yaml
+      line: 543
+    summary: Repo-self-lint removal list incomplete (1 of 6 groups)
+  - detail: "plan-1.2.yaml:123-124,315-316 reserves tests/checkers/conftest.py
+      (epic-created) and tests/assumptions runtime/decision/cache modules plus
+      _decision_backend/_decision_cache; all verified absent at HEAD. r2 omits
+      the conftest and assumption reservations and invents
+      tests/runner/conftest.py, runner/runtime/, tests/runner/runtime/ with no
+      plan citation, and mis-owns tests/conftest.py as tests-infra (unified map:
+      root). Restore epic reservations verbatim."
+    disposition: fix
+    id: planned-reservations
+    location:
+      file: .factory/tasks/modernize/items/test-debloat-audit-i2/steps/003-research-r2-a1/output.yaml
+      line: 511
+    summary: Planned-path reservations omit epic conftest/assumption paths
+  - detail: "Unified map (output.yaml:85) lists semantic symbol exclusions inside
+      checkers files: _base.py:143-238 check_if_meaningful (+_base.pyi:69-96)
+      and conformance/no_try_import_checker.py:12 _OPTIONAL_IMPORT_PATTERNS. r2
+      section 4 drops both and mis-owns
+      test_suppression_justification_checker.py as semantic (row 24) instead of
+      checkers-file with TestSuppressionRerankerPipeline:357-390 as the semantic
+      symbol skip. Restore both symbols and file/symbol separation."
+    disposition: fix
+    id: symbol-exclusions
+    location:
+      file: .factory/tasks/modernize/items/test-debloat-audit-i2/steps/003-research-r2-a1/output.yaml
+      line: 489
+    summary: Symbol exclusions drop check_if_meaningful and _OPTIONAL_IMPORT_PATTERNS
+  - detail: "Verified at HEAD: _make_tc x13, _walk_and_release x10, _msg_ids x8
+      across tests/checkers; exact parser-completeness duplicate
+      (test_t3_coverage.py:35-45 vs test_lint_runner_stats.py:72-77); autofix
+      fake-branch vs real-git overlap; setup 6x install() in
+      test_setup_install.py:263-266; _UvCallRecorder x2. r2 sets duplicate-of to
+      -- for nearly all rows and replaces 7 r1 clusters with 4 merges, losing
+      surviving-coverage mapping. Restore duplicate-of inventory or explicitly
+      justify each dropped cluster."
+    disposition: fix
+    id: duplicate-clusters
+    location:
+      file: .factory/tasks/modernize/items/test-debloat-audit-i2/steps/003-research-r2-a1/output.yaml
+      line: 124
+    summary: Duplicate-cluster inventory regressed (helper/cluster merges lost)
+  - detail: Default collect (1361/1379, 18 deselected) contains zero
+      tests/integration.py rows (explicit-only 9-test gate), so
+      test_real_pipeline_smoke.py (1 default test) is the sole default
+      full-pipeline smoke. r2 removes it with survivor
+      tests/integration.py:60-118 + :331-389, leaving no default full-pipeline
+      pin. Keep the smoke or name a default-collected surviving pin.
+    disposition: fix
+    id: smoke-remove-unsafe
+    location:
+      file: .factory/tasks/modernize/items/test-debloat-audit-i2/steps/003-research-r2-a1/output.yaml
+      line: 543
+    summary: Removing default pipeline smoke leaves no default full-pipeline pin
+  - detail: TestPerfBenchmark (test_baseline_diff_edge.py:75-110) holds BOTH slow
+      tests (:76 and :91); file truth is 16 default + 2 slow, but row 33 claims
+      12|1 and section 6.2 books 1 slow. Suppression truth is 40|2 but row 24
+      claims 42|1 (section 4 correctly says 2). Dropping
+      bench(1)+self-lint(1)+perf-class(2)+extra-perf(1) yields 18->13, not
+      18->14. Recompute slow budget from slow truth table.
+    disposition: fix
+    id: slow-budget
+    location:
+      file: .factory/tasks/modernize/items/test-debloat-audit-i2/steps/003-research-r2-a1/output.yaml
+      line: 543
+    summary: Slow budget miscounts baseline-edge and suppression slow tests
+  - detail: "coding-rules-audit measured 9 passed in 106.61s (output.yaml:27); r1
+      reported ~65-107s explicit. r2 row 28 claims ~10-20s with no evidence,
+      understating the explicit-gate cost ~5x for replan scheduling. Re-measure
+      or restore 65-107s with measurement conditions (WSL2/Python
+      3.14.4/warm-cache +/-30%). Uncertainty: runtimes are
+      environment-sensitive; self-lint exit-123 failure is
+      worktree-state-sensitive."
+    disposition: fix
+    id: integration-runtime
+    location:
+      file: .factory/tasks/modernize/items/test-debloat-audit-i2/steps/003-research-r2-a1/output.yaml
+      line: 224
+    summary: Integration runtime ~10-20s contradicts measured 106.61s
+  - detail: "Verified correct: bench 241 LoC/0 default/1 slow at :118-119;
+      TestPublicSymbolSurface 19-name loop at
+      test_stub_fidelity_invariants.py:287-307 is the sole stub_fidelity surface
+      lock (grep: only file); golden 152-198 canonical/empty/mapping pins kept;
+      _semantic.pyi wc -l = 27 so 1-27. No action; carry forward."
+    disposition: optional
+    id: r1-fixes-confirmed
+    location:
+      file: .factory/tasks/modernize/items/test-debloat-audit-i2/steps/003-research-r2-a1/output.yaml
+      line: 26
+    summary: "Confirm: 4 r1 fixes verified correct at HEAD"

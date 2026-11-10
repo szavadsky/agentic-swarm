@@ -1,0 +1,13 @@
+context: wave
+decision: continue
+rationale: Wave 3 merged 3/3 reported items (runner-dispatch-split,
+  runner-factories-trim, stale-disables-portability-cleanup) with clean hygiene
+  and zero regressions; lint/test fail->pass IMPROVED, format/integration
+  sustained green, all gates now pass. No failed/blocked items. Dispatch-split
+  merge unblocks decision-cache-impl (spike+shim+dispatch all merged) for wave
+  4; checkers-legacy-dead-cleanup correctly stays pending on running
+  checkers-stream-helper. No spike findings in this wave; gate-reunification
+  recommendation is infra operator action, not a plan change.
+text: Proceed to next scheduled wave (decision-cache-impl +
+  never-test-linting-prune + checkers-stream-helper retry/legacy follow-up). No
+  amendment needed.

@@ -1,0 +1,24 @@
+status: approved
+summary: "merge-setup-fix verified: 5/5 target green, typecheck+adjacent green,
+  no weakening, ordering and evidence hold"
+suggestions:
+  - detail: Empty/missing tests assert ok:true only. Pinning absence of
+      item_merge_gates_failed with infra.setup would lock the no-op more
+      strictly. Not blocking — current parity plus target-red/green proves
+      behavior.
+    disposition: optional
+    id: parity-assert-strength
+    location:
+      file: plugins/software-factory/test/engine/merge-setup.test.ts
+      line: 182
+    summary: Parity tests could assert absence of infra.setup evidence
+  - detail: runMergeSetup implements sequential stop-on-first-failure plus timeout
+      mirroring runner.ts:797-810, but tests cover single-command
+      success/failure only. Assignment acceptance does not require it; consider
+      follow-up coverage.
+    disposition: optional
+    id: multi-command-timeout-coverage
+    location:
+      file: plugins/software-factory/src/core/flows/merge-path.ts
+      line: 149
+    summary: No test for sequential stop-on-first-failure or timeout

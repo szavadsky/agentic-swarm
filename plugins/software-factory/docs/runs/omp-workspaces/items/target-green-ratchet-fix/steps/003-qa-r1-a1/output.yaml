@@ -1,0 +1,17 @@
+status: approved
+summary: Gate-target ratchet mirrors runGates; new spec 5/5 green, no weakening,
+  red credible
+suggestions:
+  - detail: runGates (gates.ts:693-701) tolerates red non-JUnit gates whose baseline
+      was already fail; checkTargetGreen (runner.ts:670-671) only ratchets
+      test-runner+JUnit gates, leaving red non-JUnit gate targets failing.
+      Fail-closed is safe (no per-test evidence to prove same failure) and out
+      of assignment scope; consider documenting if typecheck-style gate targets
+      later need baseline tolerance.
+    disposition: optional
+    id: non-junit-strict-fail-note
+    location:
+      file: plugins/software-factory/src/core/checks/runner.ts
+      line: 671
+    summary: Non-JUnit gate targets stay strict-fail on red baseline (fail-closed vs
+      runGates coarse-pass)

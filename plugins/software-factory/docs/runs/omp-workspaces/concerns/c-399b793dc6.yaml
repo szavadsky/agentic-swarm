@@ -1,0 +1,22 @@
+id: c-399b793dc6
+kind: blocker
+summary: Saga launches do not exist and epic INTENT is not resolvable by `factory run`
+detail: "`saga` is only a TaskKind; epic INTENT is written under the parent task
+  dir on the parent branch (`plan/apply.ts:9-16`), while `factory run`
+  resolves/loads intent from the main checkout (`cli/run.ts:27-75`). Independent
+  epic launches need an explicit parent/workspace contract."
+location:
+  file: plugins/software-factory/src/core/plan/apply.ts
+  line: 9
+affects:
+  - "19.6"
+severity: high
+status: routed
+source:
+  record: 004-context-pack-a1
+  agent: fact-finder
+  step: context-pack
+  lastSeen: 2026-11-09T23:21:29.949Z
+createdAt: 2026-11-09T23:21:29.949Z
+updatedAt: 2026-11-09T23:40:10.572Z
+disposition: optional

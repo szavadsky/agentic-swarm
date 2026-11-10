@@ -1,0 +1,55 @@
+status: ok
+summary: "Recovered the 4 approved wave-1 spike docs from
+  topic/omp-workspaces--spike-findings-recovery via read-only `git show` onto
+  this item branch at
+  plugins/software-factory/docs/spikes/{omp-3-isolation,omp-4-mock-provider,omp\
+  -5-cache-keys,omp-6-repo-rules}.md, and recovered RECOVERY.md to
+  items/spike-findings-recovery-v2/RECOVERY.md (source .factory engine path is
+  not writable, so a placement note naming the source path was added as the
+  header). Fixed the sole `oMP` capitalization typo to `omp` in
+  omp-6-repo-rules.md. Docs-only: 5 new markdown files, zero production lines,
+  no changes to existing files or .factory/** paths. No target recorded because
+  a full-suite gate is unmergeable on the red td-baseline-disk baseline;
+  verification was performed with targeted file-presence/content checks from
+  cwd=plugins/software-factory."
+evidence:
+  - git ls-tree -r --name-only topic/omp-workspaces--spike-findings-recovery
+    confirmed the 5 source paths exist (4 spike docs + RECOVERY.md); no
+    checkout/switch/branch/merge was run.
+  - "diff <(git show <src-branch>:plugins/software-factory/docs/spikes/<doc>.md)
+    <local>: omp-3-isolation, omp-4-mock-provider, omp-5-cache-keys are
+    byte-identical (also confirmed via matching sha256)."
+  - "diff for omp-6-repo-rules.md shows exactly one line changed (line 21: `oMP
+    task subagents` -> `omp task subagents`); after the fix `grep -c oMP`
+    returns 0."
+  - diff of RECOVERY.md vs its source shows only the added placement-note
+    blockquote; the rest of the 90-line content is unchanged.
+  - "File-presence check from cwd=plugins/software-factory: all 4 spike docs
+    present and non-empty (123, 133, 308, 128 lines)."
+  - "Section check: every spike doc has >=1 probe-evidence heading and >=1
+    recommendations heading (omp-3 'Probe-command log'/'Recommendations /
+    follow-ups'; omp-4 'Probe log'/'Recommendations'; omp-5 3 probe
+    headings/'Recommendations for M7'; omp-6 'Probe matrix
+    (condensed)'/'Recommendations')."
+  - "RECOVERY.md mapping check (python regex assert): 4 M1 scenario headings, 4
+    'Evidence:' markers, 4 'FollowUps:' markers, and iteration-2 milestones
+    M3/M4/M7/M8 referenced; PASS."
+  - git status --porcelain shows exactly 5 untracked markdown paths and no
+    .factory/ or non-doc modifications; all 5 files start with an H1 heading.
+notes: RECOVERY.md was placed at items/spike-findings-recovery-v2/RECOVERY.md
+  because the source path
+  .factory/tasks/omp-workspaces/items/spike-findings-recovery/RECOVERY.md is an
+  engine-owned location this worktree must not write; its H1 is followed by the
+  required source-path placement note. Both /items and the spike docs match the
+  assignment's repo-relative paths.
+remarkable:
+  - chosen: Omitted the target field entirely (docs-only, zero prod lines) and
+      verified with a targeted file-presence/content check run from
+      cwd=plugins/software-factory.
+    why: The assignment marks target {gate:test} as unmergeable on the red
+      td-baseline-disk baseline; a docs-only salvage has no behavioral selector
+      to assert.
+    alternatives:
+      - "target {command: 'test -s <files> ...', customTarget: true}"
+      - "target {gate: 'test'} (rejected: full suite is red for unrelated infra
+        reasons)"

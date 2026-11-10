@@ -1,0 +1,21 @@
+id: rm-ee109f9f41
+chosen: "omp worktree add + omp --cwd is the 19.1 root mapping; isolation:
+  engine kept as fallback"
+alternatives:
+  - "isolated-task subagents for roots (rejected: factory roots never spawn
+    subagents; failure-commit loss; hardcoded branches)"
+  - "worktree.onStart auto-provisioning (rejected: probe 24 proves no-op for -p,
+    interactive only)"
+  - "Engine worktrees as default (rejected: spec requires omp default with
+    engine as option)"
+why: Only mechanism proven to give omp-managed workspaces with full retention
+  for headless -p root turns; task.isolation stays scoped to subagent tasks,
+  engine merges retained.
+status: open
+source:
+  record: 009-consult-spike-omp-isolation-1-a1
+  agent: architect
+  step: consult-spike-omp-isolation-1
+  lastSeen: 2026-11-10T01:40:38.052Z
+createdAt: 2026-11-10T01:40:38.052Z
+updatedAt: 2026-11-10T01:40:38.052Z

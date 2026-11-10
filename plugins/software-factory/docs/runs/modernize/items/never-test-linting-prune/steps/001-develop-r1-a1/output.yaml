@@ -1,0 +1,66 @@
+status: ok
+summary: "Pruned gate-duplicating tests from the six owned files: deleted
+  test_self_lint_clean.py, test_config_consistency.py,
+  test_pyright_noise_filter.py, and test_t9_7_compose_pyright_live.py wholesale;
+  reduced test_runner_private_imports.py to the runtime __all__ public-surface
+  unit test; and removed TestRunLintFixDownstream plus the
+  TestPrecommitTemplateHasFix config re-checks from
+  test_autofix_conflict_integration.py, keeping TestRunLintFixDispatch (unit)
+  and TestAutofixRealGitIntegration (integration). The default full-pipeline pin
+  tests/runner/test_real_pipeline_smoke.py was left untouched and still passes;
+  no additional default-collected full-pipeline survivor was kept. 682 lines
+  removed, 4 added; no production code changed."
+target:
+  command: uv run pytest -q && uv run pytest tests/integration.py -q && uv run lint
+  customTarget: true
+evidence:
+  - "Pre-change baseline: `uv run pytest -q` -> 1377 passed, 13 deselected, 4
+    warnings in 33.82s"
+  - "Post-change: `uv run pytest -q` -> 1357 passed, 7 deselected, 4 warnings in
+    30.75s (delta exactly the 20 default-collected + 6 slow removed tests; no
+    new failures)"
+  - "Post-change: `uv run pytest tests/integration.py -q` -> 9 passed in 67.36s
+    (pre-change baseline was also 9 passed in 72.93s)"
+  - "Golden: `uv run pytest tests/test_golden.py -q` -> 31 passed; `git status
+    --short` lists only the 6 owned test files (no golden/config/prod files
+    touched)"
+  - "Full lint gate: `bash -o pipefail -c 'uv run lint'` -> LINT_EXIT:0, all 14
+    tools PASSED (pylint tests score 10.0/10), 66s"
+  - "Touched-file quality: `uv run ruff format --check --config
+    config/ruff.toml` -> 2 files already formatted; `uv run ruff check --config
+    config/ruff.toml` -> All checks passed"
+  - "Retained owned tests: `uv run pytest
+    tests/runner/test_autofix_conflict_integration.py
+    tests/runner/test_runner_private_imports.py -q` -> 7 passed (6 autofix: 3
+    dispatch unit + 3 real-git integration; 1 __all__ unit)"
+  - "Full-pipeline pin: `uv run pytest --collect-only -q
+    tests/runner/test_real_pipeline_smoke.py` -> 1 test collected by default
+    (test_consolidated_real_pipeline_smoke)"
+  - "Slow survivors: `uv run pytest --collect-only -q -m slow` -> 7 collected,
+    1357 deselected; none belong to pruned files"
+  - "Portability: grep for `/home/` or `aiexp` in surviving owned files -> no
+    hardcoded checkout paths"
+  - "Test-only diff: `git diff --stat` -> 6 files changed, 4 insertions(+), 682
+    deletions(-); no src/, config/, golden, or docs changes"
+concerns:
+  - Stale docstring cross-reference remains in the forbidden file
+    tests/runner/test_t9_7_compose_pyright.py:20, which still mentions the
+    deleted test_t9_7_compose_pyright_live.py; it does not affect runtime or
+    lint but should be cleaned by that file's owner.
+  - "Pre-commit `--fix` artifact coverage now relies on existing survivors
+    outside the owned set: tests/runner/test_setup_install.py::_ck_precommit
+    (asserts installed .pre-commit-config.yaml contains 'lint --fix --baseline
+    lint.baseline') and tests/integration.py pre-commit
+    validate-config/dry-run."
+notes: |-
+  Removal -> survivor map (per never-test-linting boundary):
+  1) tests/runner/test_self_lint_clean.py (1 slow subprocess re-lint) -> default full-pipeline pin tests/runner/test_real_pipeline_smoke.py::test_consolidated_real_pipeline_smoke + `uv run lint` gate.
+  2) tests/runner/test_config_consistency.py (11 config re-checks of shipped .pylintrc*) -> configs are the source of truth; assumption test tests/assumptions/test_pylint_cache_semantics.py exercises the real shipped rc files, and `uv run lint` runs pylint with them.
+  3) tests/runner/test_pyright_noise_filter.py (2 slow subprocess re-lints) -> unit survivor tests/runner/test_lint_runner.py::TestSummarizePyrightVerifyTypes (4 cases covering score/fallback/malformed/non-dict).
+  4) tests/runner/test_t9_7_compose_pyright_live.py (2 slow live-pyright tests + hardcoded /home/slava/.../.venv/bin/pyright) -> unit survivor tests/runner/test_t9_7_compose_pyright.py (compose fast-path/copy/cwd/run_lint-wire tests, no live pyright).
+  5) test_runner_private_imports.py::test_runner_imports_given_runner_namespace_then_no_private_symbols (duplicate __all__ assertion) -> kept unit test_runner_imports_given_runner_all_then_no_private_symbols.
+  6) test_runner_private_imports.py::test_runner_imports_given_init_then_no_private_submodule (regex source scan = lint re-implementation) -> kept runtime __all__ unit + tach check gate.
+  7) test_runner_private_imports.py::test_tests_import_privates_only_from_defining_submodule (AST re-implementation of import hygiene) -> unit survivor tests/runner/test_runner_format_contract.py::TestRegistryConstants::test_registry_constants_given_runner_then_alias_dispatch_objects + tach/lint gates.
+  8) test_autofix_conflict_integration.py::TestRunLintFixDownstream::test_run_lint_fix_given_downstream_then_does_not_crash (slow full-repo subprocess re-lint) -> TestRunLintFixDispatch (3 unit canary/dispatch cases) + TestAutofixRealGitIntegration (3 real-git conflict/staged-only/E999-revert integration cases) + pre-commit `lint --fix` hook.
+  9) TestPrecommitTemplateHasFix (6 template/config text re-checks, incl hardcoded dev_path=/home/slava/aiexp/python-setup) -> tests/runner/test_setup_install.py::TestInstall::test_install_given_fresh_project_then_creates_artifacts[writes_precommit] (portable python_setup_checkout fixture) + tests/integration.py pre-commit validate-config/dry-run.
+  Hardcoded paths: the /home/slava pyright path and the /home/slava checkout dev_path were both eliminated with their removed tests; surviving owned files contain none.

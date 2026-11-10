@@ -1,0 +1,17 @@
+id: rm-15d135d3c0
+chosen: Route docs red cells back instead of editing them in the gate
+alternatives:
+  - Patch docs in the gate item
+  - Add baseline entries for missing docs
+why: The gate is read-only and the red cells are owned by semantic, runner,
+  release and ADR items; baseline edits are explicitly forbidden and cannot
+  substitute for the missing strings.
+status: open
+source:
+  record: 003-research-r2-a1
+  agent: fact-finder
+  step: research
+  item: final-gate-validation
+  lastSeen: 2026-11-10T03:19:38.948Z
+createdAt: 2026-11-10T03:19:38.948Z
+updatedAt: 2026-11-10T03:19:38.948Z

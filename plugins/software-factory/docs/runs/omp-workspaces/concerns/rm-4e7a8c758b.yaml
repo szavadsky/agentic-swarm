@@ -1,0 +1,21 @@
+id: rm-4e7a8c758b
+chosen: Published the full embedded draft for isolation and enriched it with the
+  approved findings' 27-probe command log, config surface, and follow-ups.
+alternatives:
+  - Publish only the compact embedded full draft (fails the
+    probe-log/recommendations acceptance)
+  - Reconstruct the whole document from the pre-draft findings (duplicates the
+    approved draft)
+why: The M1 directional interface requires findings + probe logs +
+  recommendations, and the embedded compact draft had no dedicated
+  probe/recommendation sections; all added content comes from the same approved
+  research output, so no new probes were invented.
+status: open
+source:
+  record: 001-develop-r1-a1
+  agent: developer
+  step: develop
+  item: spike-findings-recovery
+  lastSeen: 2026-11-10T02:23:11.570Z
+createdAt: 2026-11-10T02:23:11.570Z
+updatedAt: 2026-11-10T02:23:11.570Z

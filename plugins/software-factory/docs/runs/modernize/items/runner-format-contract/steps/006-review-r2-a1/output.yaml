@@ -1,0 +1,115 @@
+status: approved
+summary: "Approved. Independently verified: 12/12 contract tests, 24/24 target
+  cases, full pytest 1352 passed/4 skipped, integration 9 passed, ruff format
+  gate 0, story-touched files ruff-clean, real normal pass check-only with no
+  mutation, real --fix mutates then checks, registry partitions 14/13/9, golden
+  14 keys with ruff format 0, lint.baseline [], worktree clean. Story-introduced
+  I001/R0801/W9700/C0302 regressions are fixed; remaining lint reds are
+  pre-existing SIM102/R0914 plus orchestration-journal detect-secrets noise.
+  Optional polish below."
+suggestions:
+  - id: ruff-format-config-override-gap
+    disposition: optional
+    summary: Consumer ruff config overrides do not reach ruff format
+    detail: _RuffFormatLintTool._build reads config_paths["ruff format"] then falls
+      back to _default_config_paths; it never consults the "ruff check" entry
+      that _apply_config_overrides composes from [tool.ruff] / --config
+      ruff=.... Consumer ruff overlays therefore apply to ruff check but not
+      ruff format, so line-length/format settings can diverge. The
+      shipped-config contract and the assignment's --check/--config spy are
+      satisfied; non-blocking. Suggest falling back to config_paths.get("ruff
+      check") or documenting the intentional split.
+    location:
+      file: src/python_setup_lint/runner/dispatch.py
+      line: 412
+  - id: agents-tool-scope-table-missing-ruff-format
+    disposition: optional
+    summary: AGENTS.md Tool Scope table still lists 13 tools, omits ruff format
+    detail: AGENTS.md Quick Commands now says 14 tools, but the Tool Scope table
+      still has 13 rows and no ruff format entry. Add a row such as `| ruff
+      format | src/, tests/ |` to keep the agent-facing table in lockstep with
+      the 14-tool registry. The assignment's per-hit list did not name this
+      table; non-blocking docs completeness.
+    location:
+      file: AGENTS.md
+      line: 21
+  - id: overlays-doc-lacks-ruff-format-mechanism
+    disposition: optional
+    summary: overlays.md claims 14 tools but documents only ruff check's overlay
+    detail: docs/overlays.md:3 now claims coverage of all 14 shipped tools, but the
+      Ruff section documents only the `extend` overlay used by ruff check; ruff
+      format is invoked with `--config <shipped ruff.toml>` and does not consume
+      the consumer [tool.ruff] overlay. Add a one-line note (or document the
+      intended override path) so the claim is accurate.
+    location:
+      file: docs/overlays.md
+      line: 7
+  - id: integration-comment-stale-check-only
+    disposition: optional
+    summary: Integration comment still says first run lets ruff format rewrite its copy
+    detail: tests/integration.py:166 says 'The first run lets ruff format rewrite
+      its copy'. After the check-only normal pass, run_lint(..., fix=False) no
+      longer mutates; the first run only checks. The pristine-copy snapshot
+      remains valid, but the rationale is now false. Update the comment to say
+      the first run is check-only (or remove the stale rationale).
+    location:
+      file: tests/integration.py
+      line: 166
+  - id: contract-test-names-diverge-from-convention
+    disposition: optional
+    summary: Several new tests omit the required given/then naming pattern
+    detail: "CodingRules.md:290 mandates
+      `test_<method>_given_<condition>_then_<expected>`. These new tests
+      diverge: test_config_flag_for_ruff_format_then_config_flag,
+      test_formatter_only_and_statistics_parser_tools_partition_all_tools,
+      test_record_parser_and_recordless_tools_partition_all_tools,
+      test_registry_constants_then_match_parser_tables,
+      test_run_lint_without_fix_runs_ruff_format_check_only,
+      test_run_lint_with_fix_formats_first_then_checks. Rename for consistency;
+      behavior/coverage unchanged."
+    location:
+      file: tests/runner/test_runner_format_contract.py
+      line: 74
+  - id: redundant-statistics-assertion
+    disposition: optional
+    summary: Tautological parser-set assertion adds no coverage
+    detail: "`assert statistics_tools == frozenset(_STATISTICS_PARSERS)` is true by
+      construction because STATISTICS_PARSER_TOOLS is derived from the same
+      table; it cannot catch drift. The following `TOOLS - FORMATTER_ONLY ==
+      statistics_tools` assertion carries the real coverage. Drop the tautology
+      or replace it with an independent oracle."
+    location:
+      file: tests/runner/test_lint_runner_stats.py
+      line: 73
+  - id: lint-gate-pre-existing-red
+    disposition: optional
+    summary: Lint gate remains red on pre-existing SIM102/R0914/detect-secrets noise
+    detail: Independent runs still exit non-zero on pre-existing SIM102
+      (src/python_setup_lint/checkers/stub/coverage.py:196), R0914
+      (src/python_setup_lint/runner/cli.py:51), and detect-secrets hits in
+      .factory/tasks/modernize/journal.ndjson; the assignment's literal 'lint
+      gate zero violations in src and tests' is therefore unmet. No
+      story-introduced violations remain (I001/R0801/W9700/C0302 fixed; ruff
+      check on all touched files passes). Prior review scoped these pre-existing
+      reds out; record for the operator/baseline owner.
+    location:
+      file: src/python_setup_lint/runner/cli.py
+      line: 51
+  - id: agents-test-counts-stale
+    disposition: optional
+    summary: AGENTS.md test counts are stale (1290/7 vs 1352/9)
+    detail: AGENTS.md:10-11 still say 1290 unit / 7 integration tests; current run
+      is 1352 passed + 4 skipped / 9 integration passed. Owned by the
+      docs-counts-sync follow-up per the QA/steer record; non-blocking here.
+    location:
+      file: AGENTS.md
+      line: 10
+  - id: factories-extras-line-count-comment-stale
+    disposition: optional
+    summary: Factory helper header says 502 lines; file is now 511
+    detail: tests/runner/_factories_extras.py:1 says '502 lines'; the file is 511
+      lines after this story's additions. Update the count or drop the number so
+      the too-many-lines rationale stays accurate.
+    location:
+      file: tests/runner/_factories_extras.py
+      line: 1

@@ -1,0 +1,6 @@
+id: decision-amend-remove-consolidate-integration-helpers
+context: wave
+item: consolidate-integration-helpers
+decision: split
+rationale: Amendment removed pending item consolidate-integration-helpers
+timestamp: 2026-11-08T07:19:12.494Z

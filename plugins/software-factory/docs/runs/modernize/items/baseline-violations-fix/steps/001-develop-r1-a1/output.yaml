@@ -1,0 +1,62 @@
+status: ok
+summary: "Fixed SIM102 in stub/coverage.py by combining the TypeAlias/AssignName
+  condition, and reduced _run_tool_pipeline locals from 23 to 18 by extracting
+  _run_fix_phase (phase 1a format + 1b fix passes) and _select_lint_tools
+  (ordered skip-reason selection preserving exact skip-message ordering). The
+  cited C0208 finding at tests/runner/_factories_extras.py:383 is not
+  reproducible in this tree: no set-literal iteration exists in tests (ast-grep
+  scan) and pylint tests passes clean; the table is already a
+  list[ParameterSet], so no test change was needed. Only two prod files
+  modified; baseline untouched at []."
+target:
+  command: uv run pytest -q
+  customTarget: true
+evidence:
+  - "Red state captured pre-fix: `uv run lint --tools 'ruff check,pylint,pylint
+    tests'` showed ruff SIM102 at checkers/stub/coverage.py:196 and pylint R0914
+    'Too many local variables (23/20)' at runner/cli.py:51; pylint tests passed
+    with zero messages."
+  - "Post-fix `uv run lint` (full 14-tool pipeline): tach check, ruff format,
+    ruff check, rumdl check, mypy, yamllint, ty check, mypy.stubtest, pyright
+    check, pyright verify types, pylint, pylint-pyi, pylint tests ALL PASSED."
+  - Only full-lint failure is detect-secrets (exit=123) reporting
+    .factory/tasks/modernize/journal.ndjson and .factory/.../output.yaml
+    locations only; these are orchestration records explicitly out of scope per
+    assignment (owned by secrets-triage-spike).
+  - "`uv run pytest -q`: 1352 passed, 4 skipped, 18 deselected, 4 warnings in
+    42.67s."
+  - "`uv run pytest tests/integration.py -v`: 9 passed in 64.61s
+    (install/lint/update/parity scenarios)."
+  - "Golden/real-pipeline gate: `uv run pytest tests/test_golden.py
+    tests/runner/test_real_pipeline_smoke.py -q`: 27 passed in 6.91s (golden
+    findings byte-identical)."
+  - "Focused pipeline tests: `uv run pytest tests/runner/test_lint_runner.py
+    tests/runner/test_runner_format_contract.py -q`: 70 passed; `uv run pytest
+    tests/checkers/test_stub_coverage.py -q`: 57 passed."
+  - "C0208 audit: `pylint --rcfile=config/.pylintrc --disable=all
+    --enable=use-sequence-for-iteration tests/` reports no C0208; ast-grep 'for
+    $_ in {$$$}: $BODY' over src/tests finds no set-literal iteration; targeted
+    pylint runs (tests and main rcfiles) on tests/runner/_factories_extras.py
+    report empty messages."
+  - "Hygiene: `git diff --check` exit 0; `git status --short` shows only
+    src/python_setup_lint/checkers/stub/coverage.py and
+    src/python_setup_lint/runner/cli.py modified; lint.baseline remains `[]`."
+concerns:
+  - "The assignment's step 3 (C0208 at tests/runner/_factories_extras.py:383)
+    appears stale: the cited line is the list-typed
+    RUN_LINT_FAKE_INVARIANT_CASES table and no set-iteration exists anywhere in
+    tests, so no code change was warranted and the test diff is empty (no
+    semantic assertions touched)."
+  - detect-secrets still fails the full lint gate on .factory orchestration
+    artifacts; per assignment this is explicitly out of scope (owned by
+    secrets-triage-spike). All src/tests violations are zero.
+  - New private helpers _run_fix_phase/_select_lint_tools are intentionally
+    absent from cli.pyi, consistent with the existing M3(b) pattern where
+    private runtime symbols are omitted (mypy.stubtest and pylint-pyi both
+    pass).
+notes: "Behavior preservation: fix mode still runs phase 1a format then phase 1b
+  fix-only before the all-tools lint pass with lint_fix=False;
+  non-fix/statistics semantics unchanged; skip messages are emitted in the same
+  per-spec order as before via ordered (tool, reason) pairs; monkeypatched
+  output._run_cmd/_print_result are still resolved at call time because imports
+  remain inside the helpers."

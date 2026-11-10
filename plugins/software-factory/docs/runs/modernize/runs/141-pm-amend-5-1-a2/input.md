@@ -1,0 +1,18 @@
+Your previous output failed deterministic validation with these errors (fix ONLY these; yield NEW items only, never re-emit existing ones, never invent outlineRefs):
+- Total items (57) exceeds maximum items limit of 50
+- Item "decision-cache-storage-v2" references unknown dependency "cache-contract-assumptions"
+- Item "decision-cache-refresh-wiring-v2" references unknown dependency "source-simplifications"
+- Item "model-backend-wiring-v2" references unknown dependency "semantic-test-doubles-dedup"
+- Item "model-backend-wiring-v2" references unknown dependency "backend-loading-assumptions"
+- Item "docs-adr-reconciliation-v2" references unknown dependency "checker-harness-dedup"
+- Item "docs-adr-reconciliation-v2" references unknown dependency "semantic-test-doubles-dedup"
+- Item "docs-adr-reconciliation-v2" references unknown dependency "runner-test-helpers-dedup"
+- Item "docs-adr-reconciliation-v2" references unknown dependency "source-simplifications"
+- Item "docs-adr-reconciliation-v2" references unknown dependency "pyi-scope-fix"
+- Item "golden-regen-hatch-v2" references unknown dependency "source-simplifications"
+- Item "golden-regen-hatch-v2" references unknown dependency "pyi-scope-fix"
+- Item "final-gate-validation-v2" references unknown dependency "checker-harness-dedup"
+- Item "final-gate-validation-v2" references unknown dependency "semantic-test-doubles-dedup"
+- Item "final-gate-validation-v2" references unknown dependency "runner-test-helpers-dedup"
+- Item "final-gate-validation-v2" references unknown dependency "source-simplifications"
+- Item "final-gate-validation-v2" references unknown dependency "pyi-scope-fix"

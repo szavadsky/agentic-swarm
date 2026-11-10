@@ -1,0 +1,729 @@
+status: ok
+summary: "Corrected the four review-flagged findings and re-verified them
+  against HEAD: (1) tests/runner/test_bench_runner_overhead.py holds exactly 1
+  test, marked slow (line 118-119) — 241 LoC, 0 default-collected, 1 slow; (2)
+  TestPublicSymbolSurface is a unique 19-name re-export surface lock and stays
+  KEEP, not remove; (3) tests/test_golden.py:152-198
+  canonical/empty/mapping-order pins are unique and stay KEEP —
+  integration.py:115-122 only proves determinism on one non-empty finding set;
+  (4) src/python_setup_lint/checkers/_semantic.pyi is 27 lines, so the
+  whole-file symbol exclusion is 1-27. Also documented the counting method (wc
+  -l: 14,650 test LoC over 58 test_*.py + tests/integration.py; 3,707 non-data
+  helper LoC over 13 files, or 3,716 including the 9-line tests/data fixture),
+  the N convention (N = default-collected because pyproject.toml:49 sets -m 'not
+  slow'; slow reported separately), and runtime measurement conditions (WSL2
+  x64, Python 3.14.4, uv venv, warm caches: 1357 passed + 4 skipped + 18
+  deselected in 24.33s; test_self_lint_clean measured 154.32s and FAILED on HEAD
+  with exit 123; test_bench_runner_overhead 8.36s). Slow budget: 18 on HEAD, 16
+  after removing bench+self-lint, 14 after dropping the two slow perf
+  benchmarks."
+findings: >-
+  # Test debloat audit — iteration 2 (corrected, fix round r2)
+
+
+  Scope: all files under `tests/` **except** `tests/data/**` (root-owned
+  fixtures; no dispositions, no edits). Read-only audit; no repository files
+  were written.
+
+
+  ## 0. Fix-round corrections (review r1)
+
+
+  | # | Review concern | Correction | Evidence (HEAD) |
+
+  |---|---|---|---|
+
+  | 1 | Bench row claimed 241 LoC / 2 slow | **241 LoC, 0 default-collected, 1
+  slow.** The file defines exactly one test function, decorated
+  `@pytest.mark.slow`; `--collect-only` reports `no tests collected (1
+  deselected)`. Slow-reduction budget recomputed below. |
+  `tests/runner/test_bench_runner_overhead.py:118-119`; `uv run pytest
+  tests/runner/test_bench_runner_overhead.py --collect-only -q` -> "no tests
+  collected (1 deselected)" |
+
+  | 2 | TestPublicSymbolSurface must not be removed as a duplicate | **KEEP.**
+  It is the sole surface lock for 19 re-exported `stub_fidelity` names; no other
+  test imports the full set (`grep -rn "stub_fidelity" tests` finds only this
+  file; the other stub tests import individual symbols). Removing it loses the
+  re-export/split-preservation contract with no named survivor. |
+  `tests/checkers/test_stub_fidelity_invariants.py:277-322` (19-name loop at
+  287-307) |
+
+  | 3 | Golden canonical/empty pins are not covered by integration replay |
+  **KEEP all of `tests/test_golden.py:152-198`.** The canonical tests pin
+  unsorted->sorted row order, `json.dumps(indent=2, sort_keys=True)`, exactly
+  one trailing newline, key order, empty arrays, and tool-minimum mapping
+  order/zero-fill. `tests/integration.py:115-122` replays one non-empty real
+  finding set and only proves byte-identical determinism. No removal in this
+  family; module disposition is KEEP (all 30 tests). |
+  `tests/test_golden.py:152-198`; `tests/integration.py:120-122`; only other
+  `serialize_*` call sites are inside `tests/_golden.py:398,406` (determinism
+  helper) |
+
+  | 4 | `_semantic.pyi` exclusion citation 1-42 is impossible | **Corrected to
+  `src/python_setup_lint/checkers/_semantic.pyi:1-27`** (whole file; `wc -l` =
+  27). Exclusion intent unchanged. | `wc -l
+  src/python_setup_lint/checkers/_semantic.pyi` = 27 |
+
+  | OPT 1 | LoC counter unclear; wc differs | Counting method stated in section
+  1. `wc -l` on 58 `test_*.py` + `tests/integration.py` (tests/data excluded) =
+  **14,650**. Helper set: **3,707** over 13 non-data `.py` files (incl. 4
+  `__init__.py`); the reviewer's **3,716 / 14 files** includes
+  `tests/data/minimal_sample_project/tests/test_tempfile.py` (9 lines), a
+  fixture file. The 9-line gap is immaterial to the 1.3-1.8k budget. | `find
+  tests -name 'test_*.py' ... | xargs wc -l`; `find tests -name '*.py' -not
+  -name 'test_*.py' ...` |
+
+  | OPT 2 | Is N default-collected or slow-inclusive? | **N =
+  default-collected.** `pyproject.toml:49-55` sets `addopts = "-m 'not slow'"`;
+  slow markers are listed separately as `+S slow`. Suite totals on HEAD: **1379
+  collected = 1357 default-collected (+4 skipped) + 18 slow-deselected**.
+  Slow-inclusive totals are N+S and are never implied by N. |
+  `pyproject.toml:49-55`; `uv run pytest tests --collect-only -q` -> 1361/1379
+  (18 deselected); `-m slow` -> 18/1379 |
+
+
+  ### Runtime measurement conditions (fixes OPT-1 note)
+
+  - WSL2 x64, Python 3.14.4, `uv run pytest -q -p no:tach -p no:cacheprovider`,
+  warm venv/tool caches, sequential execution. Full default suite: **1357
+  passed, 4 skipped, 18 deselected in 24.33s** (AGENTS.md quotes ~53s;
+  machine/load sensitive). Subprocess-heavy figures vary run-to-run (e.g.
+  `tests/runner/test_setup_install.py` measured **5.72s** here vs 6.53s/9.69s
+  observed earlier) — treat as +/-30% and environment-sensitive.
+  `test_self_lint_clean` measured **154.32s** (full 14-tool lint) and
+  `test_bench_runner_overhead` **8.36s** on the same run.
+
+
+  ## 1. Conventions
+
+  - **LoC** = `wc -l` per file (trailing newline counted; `tests/data/**`
+  excluded).
+
+  - **N** = tests collected under the default addopts (`-m 'not slow'`); `+S` =
+  tests excluded by the slow marker (direct decorator or module `pytestmark`).
+
+  - **Dispositions**: `keep` (unique coverage, no change), `merge` (tests folded
+  into the named survivor; retired file LoC is a candidate reduction but test
+  intent survives), `rewrite` (drop env-sensitive perf/benchmark assertions,
+  keep functional pins), `remove` (no unique product-behavior coverage),
+  `exclude-symbol` (owned by the semantic decision-model epic; do not
+  edit/remove here).
+
+  - **Owner tokens** are the subsystem owners used for the coding-rules-audit
+  unified map: `tests-infra`, `checkers`, `semantic`, `runner`, `baseline`,
+  `autofix`, `configs`, `setup`, `golden`, `integration`. File ownership is
+  separate from symbol skips: the semantic **symbols** remain owned by
+  `semantic` even where a file/class is excluded from this audit.
+
+  - Repo-self-lint tests (tests asserting python-setup's own lint state rather
+  than shipped product behavior) are listed for removal:
+  `tests/runner/test_self_lint_clean.py`.
+
+
+  ## 2. Per-module inventory (59 files; 14,650 LoC; 1379 collected)
+
+
+  | # | Module | LoC | N+S slow | Behaviors | Duplicate-of | Disposition |
+  Surviving coverage | Reason | Owner | Runtime |
+
+  |---|---|---|---|---|---|---|---|---|---|
+
+  | 1 | `tests/assumptions/test_astroid_contracts.py` | 153 | 4 | 0 | astroid
+  API contracts checkers rely on | — | keep | itself | third-party drift pin
+  (assumption-first) | tests-infra | 0.09s |
+
+  | 2 | `tests/assumptions/test_beartype_contracts.py` | 65 | 1 | 0 | beartype
+  TYPE_CHECKING forward refs | — | keep | itself | drift pin | tests-infra |
+  <=0.05s |
+
+  | 3 | `tests/assumptions/test_pylint_contracts.py` | 175 | 3 | 0 | pylint
+  behaviors checkers rely on | — | keep | itself | drift pin | tests-infra |
+  <=0.1s |
+
+  | 4 | `tests/checkers/test_asyncio_timeout_checker.py` | 124 | 4 | 0 | asyncio
+  timeout checker unit | — | keep | itself | unique checker | checkers | <=0.1s
+  |
+
+  | 5 | `tests/checkers/test_bare_except_comment_checker.py` | 175 | 11 | 0 |
+  bare-except comment checker | — | keep | itself | unique checker | checkers |
+  <=0.1s |
+
+  | 6 | `tests/checkers/test_beartype_checker.py` | 102 | 5 | 0 | beartype
+  checker | — | keep | itself | unique checker | checkers | <=0.1s |
+
+  | 7 | `tests/checkers/test_generic_key_dict_checker.py` | 116 | 2 | 0 |
+  generic key dict checker | — | keep | itself | unique checker | checkers |
+  <=0.1s |
+
+  | 8 | `tests/checkers/test_missing_error_chain_checker.py` | 192 | 12 | 0 |
+  missing error chain checker | — | keep | itself | unique checker | checkers |
+  <=0.1s |
+
+  | 9 | `tests/checkers/test_missing_return_annotation_checker.py` | 169 | 4 | 0
+  | missing return annotation checker | — | keep | itself | unique checker |
+  checkers | <=0.1s |
+
+  | 10 | `tests/checkers/test_no_try_import_checker.py` | 51 | 2 | 0 |
+  no-try-import checker | — | keep | itself | unique checker | checkers |
+  <=0.05s |
+
+  | 11 | `tests/checkers/test_pyi_underscore_checker.py` | 121 | 9 | 0 | pyi
+  underscore conformance checker | — | keep | itself | unique checker | checkers
+  | <=0.1s |
+
+  | 12 | `tests/checkers/test_redundant_type_guard_checker.py` | 240 | 18 | 0 |
+  redundant type-guard checker | — | keep | itself | unique checker | checkers |
+  <=0.2s |
+
+  | 13 | `tests/checkers/test_semantic_check.py` | 506 | 19 | 3 | `_semantic`
+  heuristic/reranker paths | — | exclude-symbol | decision-model epic
+  (`_decision*`) | semantic rewrite in flight; tests must not be edited/removed
+  here | semantic | ~2-5s |
+
+  | 14 | `tests/checkers/test_semantic_threshold.py` | 135 | 2 | 0 |
+  `check_if_meaningful` heuristic threshold | — | exclude-symbol |
+  decision-model epic | threshold semantics move to the replacement model |
+  semantic | <=0.5s |
+
+  | 15 | `tests/checkers/test_silent_except_checker.py` | 221 | 14 | 0 |
+  silent-except checker | — | keep | itself | unique checker | checkers | <=0.1s
+  |
+
+  | 16 | `tests/checkers/test_structlog_checker.py` | 141 | 14 | 0 | structlog
+  checker | — | keep | itself | unique checker | checkers | <=0.1s |
+
+  | 17 | `tests/checkers/test_stub_checker.py` | 456 | 23 | 0 | stub checker
+  core, message codes, pipeline | merge target for #23 | keep | itself + merged
+  `AnnotationNormalizer` tests | core stub behavior | checkers | <=0.5s |
+
+  | 18 | `tests/checkers/test_stub_checker_callable.py` | 276 | 12 | 0 |
+  callable fidelity (Invariant 3) | `test_stub_fidelity_invariants.py` | merge |
+  `test_stub_fidelity_invariants.py` (invariant-3 home) | same domain; duplicate
+  `ParamDescriptor` cases at :83/:96 vs :310 | checkers | 1.05s |
+
+  | 19 | `tests/checkers/test_stub_checker_class.py` | 155 | 9 | 0 | class
+  fidelity + E97B1/E97B2 dispatch | `test_stub_fidelity_invariants.py` | merge |
+  `test_stub_fidelity_invariants.py` | same invariant-3 domain; avoids a third
+  stub file | checkers | 2.82s |
+
+  | 20 | `tests/checkers/test_stub_coverage.py` | 191 | 11 | 0 | stub-coverage
+  helpers | — | keep | itself | distinct helper module | checkers | 0.04s |
+
+  | 21 | `tests/checkers/test_stub_docstring_checker.py` | 145 | 8 | 0 | stub
+  docstring checker | — | keep | itself | unique checker | checkers | <=0.1s |
+
+  | 22 | `tests/checkers/test_stub_fidelity_invariants.py` | 428 | 35 | 0 |
+  invariant fixtures + public surface lock | — | keep (merge target) | itself |
+  unique surface lock (fix 2); absorbs #18/#19 | checkers | <=0.5s |
+
+  | 23 | `tests/checkers/test_stub_normalizer.py` | 91 | 4 | 0 |
+  `AnnotationNormalizer` | `test_stub_checker.py:414-422` | merge |
+  `test_stub_checker.py` | duplicate normalizer coverage | checkers | <=0.1s |
+
+  | 24 | `tests/checkers/test_suppression_justification_checker.py` | 390 | 42 |
+  1 | W9704 suppression justification | — | keep (minus reranker class) |
+  `:1-356` + non-reranker tests | `TestSuppressionRerankerPipeline` is
+  symbol-excluded (`:357-390`) | semantic | ~1-2s |
+
+  | 25 | `tests/checkers/test_tmp_path_checker.py` | 219 | 27 | 0 | tmp-path
+  checker | — | keep | itself | unique checker | checkers | <=0.2s |
+
+  | 26 | `tests/checkers/test_trivial_wrapper_checker.py` | 259 | 19 | 0 |
+  trivial-wrapper checker | — | keep | itself | unique checker | checkers |
+  0.26s |
+
+  | 27 | `tests/checkers/test_unnamed_tuple_dict_checker.py` | 99 | 2 | 0 |
+  unnamed tuple/dict checker | — | keep | itself | unique checker | checkers |
+  <=0.05s |
+
+  | 28 | `tests/integration.py` | 498 | 9 | 0 | end-to-end
+  install/lint/update/golden | — | keep | itself | fit-for-purpose gate; golden
+  replay only determinism (fix 3) | integration | ~10-20s |
+
+  | 29 | `tests/runner/test_autofix_conflict.py` | 449 | 20 | 0 | conflict-aware
+  autofix helpers/observability/opt-out | — | keep | itself | autofix limb pin |
+  autofix | 0.16s |
+
+  | 30 | `tests/runner/test_autofix_conflict_apply.py` | 318 | 8 | 0 |
+  `_apply_autofix_conflict_aware` branches | — | keep | itself | autofix limb
+  pin | autofix | 0.15s |
+
+  | 31 | `tests/runner/test_autofix_conflict_integration.py` | 399 | 13 | 1 |
+  `--fix` route + pre-commit template | — | keep | itself | autofix limb pin |
+  autofix | 1.11s |
+
+  | 32 | `tests/runner/test_baseline_diff.py` | 249 | 3 | 0 | drift-resistant
+  baseline diff | — | keep | itself | baseline limb pin | baseline | <=0.1s |
+
+  | 33 | `tests/runner/test_baseline_diff_edge.py` | 308 | 12 | 1 | baseline
+  edge cases + perf benchmark | — | rewrite | functional tests `:25-73`,
+  `:113-312` | drop slow perf class `:74-110` (env-sensitive 200ms/1s ceilings)
+  | baseline | <=0.5s |
+
+  | 34 | `tests/runner/test_baseline_diff_parsers.py` | 486 | 6 | 0 |
+  parser/capture matrix + schema v2 | — | keep | itself | parser limb pin |
+  baseline | <=0.5s |
+
+  | 35 | `tests/runner/test_bench_runner_overhead.py` | 241 | 0 | 1 | benchmark:
+  per-tool time/RSS + runner overhead artifact | — | remove | none required (no
+  assertions; artifact only) | **241 LoC / 1 slow / 8.36s**, writes markdown but
+  asserts nothing (fix 1) | runner | 8.36s measured |
+
+  | 36 | `tests/runner/test_config_consistency.py` | 86 | 9 | 0 | shipped
+  pylintrc single-source consistency | — | keep | itself | config surface
+  invariant | configs | <=0.1s |
+
+  | 37 | `tests/runner/test_extra_tools.py` | 346 | 21 | 0 | extra-tool
+  parse/validation (R4) | — | keep | itself | config surface | configs | <=0.5s
+  |
+
+  | 38 | `tests/runner/test_extra_tools_downstream.py` | 209 | 3 | 1 |
+  downstream pipeline + observability + startup benchmark | — | rewrite |
+  pipeline `:44-96`, observability `:157-209` | drop slow perf test `:99-156`
+  (warm ratio <1.20, noise-sensitive) | configs | <=0.2s after drop |
+
+  | 39 | `tests/runner/test_lint_runner.py` | 479 | 41 | 0 | tool specs,
+  strategies, detect-secrets bootstrap, observability, print | — | keep | itself
+  | CLI/scope pins | runner | 0.20s |
+
+  | 40 | `tests/runner/test_lint_runner_integration.py` | 418 | 19 | 1 |
+  baseline overwrite, main exit codes, new-violation exit | — | keep | itself |
+  exit-code limb pin | runner | 1.18s |
+
+  | 41 | `tests/runner/test_lint_runner_stats.py` | 380 | 29 | 0 |
+  statistics/group/sort/fail-fast/registry | merge target for #52 | keep |
+  itself + merged stats cases | stats limb | runner | <=0.5s |
+
+  | 42 | `tests/runner/test_parsers_hypothesis.py` | 432 | 66 | 0 | Hypothesis
+  property tests for record/stats parsers | — | keep | itself | property
+  coverage | runner | 2.77s |
+
+  | 43 | `tests/runner/test_pyright_noise_filter.py` | 113 | 2 | 2 | pyright
+  noise-filter regression guard | — | keep | itself | regression guard | configs
+  | slow (2) |
+
+  | 44 | `tests/runner/test_real_pipeline_smoke.py` | 42 | 1 | 0 | full-pipeline
+  smoke; all 14 tool banners | `tests/integration.py:60-118` + `:331-389` |
+  remove | `tests/integration.py` (full pipeline golden + per-tool parity) |
+  duplicate end-to-end; 3.43s for no unique pin | runner | 3.43s measured |
+
+  | 45 | `tests/runner/test_runner_format_contract.py` | 157 | 12 | 0 | ADR-005
+  ruff-format modes + 14-tool registry | — | keep | itself | contract | configs
+  | 0.02s |
+
+  | 46 | `tests/runner/test_runner_private_imports.py` | 95 | 4 | 0 | no private
+  imports through runner package surface | — | keep | itself | surface lock |
+  runner | 0.11s |
+
+  | 47 | `tests/runner/test_self_lint_clean.py` | 59 | 1 | 1 | repo self-lint
+  (exit 0, no crash/skip, pylint 10.0) | `uv run lint` gate (AGENTS.md Quick
+  Commands) | remove | pre-commit/CI lint + `tests/integration.py` |
+  repo-self-lint, not product behavior; measured **154.32s and FAILED on HEAD
+  (exit 123)** | runner | 154.32s measured |
+
+  | 48 | `tests/runner/test_setup.py` | 385 | 31 | 0 | setup atomic
+  write/checksums/discovery/steps | — | keep | itself | setup | setup | 1.62s |
+
+  | 49 | `tests/runner/test_setup_install.py` | 371 | 7 | 1 | install steps +
+  downstream install->lint | — | keep (dedupe helper) | itself | duplicate
+  `_UvCallRecorder` only (`:36` vs `test_setup.py:39`) | setup | 5.72s |
+
+  | 50 | `tests/runner/test_t11_health_checks.py` | 383 | 17 | 1 |
+  consumer-agnostic health checks | — | keep | itself | product | runner | ~1s |
+
+  | 51 | `tests/runner/test_t1b_self_discovery.py` | 169 | 13 | 0 |
+  self-discovery helpers | — | keep | itself | product | runner | <=0.2s |
+
+  | 52 | `tests/runner/test_t3_coverage.py` | 390 | 33 | 0 | supplemental
+  parser/stats edge coverage | `test_lint_runner_stats.py` +
+  `test_baseline_diff_parsers.py` | merge | stats + parser matrices in the two
+  targets | supplementary cross-cutting cases; dedupe against parser matrix |
+  runner | <=0.5s |
+
+  | 53 | `tests/runner/test_t5_compose_ruff.py` | 366 | 21 | 0 |
+  `_compose_ruff_config` + RunnerConfig overrides | — | keep | itself | configs
+  limb pin | configs | 0.01s |
+
+  | 54 | `tests/runner/test_t9_7_compose_pyright.py` | 281 | 15 | 0 | pyright
+  compose + run_lint wire | — | keep | itself | configs limb pin | configs |
+  <=0.2s |
+
+  | 55 | `tests/runner/test_t9_7_compose_pyright_live.py` | 197 | 2 | 2 | live
+  pyright compose smoke | — | keep | itself | live config guard | configs | slow
+  (2) |
+
+  | 56 | `tests/runner/test_testing_fakes.py` | 197 | 9 | 0 | `testing`
+  lint-runner fakes | — | keep | itself | public testing surface | runner |
+  0.03s |
+
+  | 57 | `tests/test_golden.py` | 414 | 30 | 0 | golden
+  serialization/read/write/compare helpers | — | keep | itself (all 30) |
+  canonical/empty/order pins unique (fix 3) | golden | ~0.7s |
+
+  | 58 | `tests/test_setup_config_symlinks.py` | 162 | 7 | 0 |
+  `_step_config_symlinks` | — | keep | itself | setup | setup | <=0.2s |
+
+  | 59 | `tests/test_setup_precommit.py` | 176 | 7 | 0 | ruff version resolution
+  for pre-commit | — | keep | itself | setup | setup | <=0.2s |
+
+
+  Totals: 14,650 LoC, 1357 default-collected (+4 skipped), 18 slow.
+
+
+  ## 3. Pinning inventory for material limbs
+
+
+  ### 3.1 CLI and exit
+
+  | Limb | Pinning test(s) | Status |
+
+  |---|---|---|
+
+  | argparse flags/options accepted |
+  `tests/runner/test_lint_runner_integration.py:286-298`
+  (`test_main_argparse_given_flag_then_accepts` parametrized) | pinned |
+
+  | `main` exit codes (0/1/2 matrix) |
+  `tests/runner/test_lint_runner_integration.py:300-315`
+  (`test_main_exit_codes`) | pinned |
+
+  | `run_lint` returns int and runs all tools |
+  `tests/runner/test_lint_runner_integration.py:237-247`;
+  `tests/integration.py:60-118` (rc + no crash/skip + golden) | pinned |
+
+  | new violation exits nonzero |
+  `tests/runner/test_lint_runner_integration.py:366-388` | pinned |
+
+  | clean-project lint exit contract (0 or 2, never crash) |
+  `tests/integration.py:223-248` | pinned |
+
+
+  ### 3.2 Baseline and autofix
+
+  | Limb | Pinning test(s) | Status |
+
+  |---|---|---|
+
+  | baseline diff add/remove + drift resistance |
+  `tests/runner/test_baseline_diff.py:108-249`;
+  `tests/runner/test_baseline_diff_edge.py:25-73,113-312` (functional only; perf
+  class dropped) | pinned |
+
+  | baseline parser/capture matrix + schema v2 |
+  `tests/runner/test_baseline_diff_parsers.py:195-486` | pinned |
+
+  | baseline overwrite via CLI |
+  `tests/runner/test_lint_runner_integration.py:161-180`; `:317-364` | pinned |
+
+  | relative baseline paths | `tests/integration.py:295-330` | pinned |
+
+  | conflict-aware autofix apply (staged/unstaged/canary/revert) |
+  `tests/runner/test_autofix_conflict_apply.py:35-305` | pinned |
+
+  | `PYTHON_SETUP_LINT_NO_AUTOFIX` opt-out |
+  `tests/runner/test_autofix_conflict.py:229-303` | pinned |
+
+  | autofix observability skip/revert format |
+  `tests/runner/test_autofix_conflict.py:306-369` | pinned |
+
+  | downstream `--fix` does not crash; pre-commit entry has fix |
+  `tests/runner/test_autofix_conflict_integration.py:56-116`; `:117-140` |
+  pinned |
+
+  | built-in fix-tool set drift (`ruff`/`rumdl`/`ty`) |
+  `tests/runner/_autofix_helpers.py:17` (module import assert used by autofix
+  tests) | pinned |
+
+
+  ### 3.3 Configs and scopes
+
+  | Limb | Pinning test(s) | Status |
+
+  |---|---|---|
+
+  | ruff config composition (banned API, per-file ignores, temp dir, cache) |
+  `tests/runner/test_t5_compose_ruff.py:91-260` | pinned |
+
+  | run_lint consumes ruff/pyright overrides |
+  `tests/runner/test_t5_compose_ruff.py:298-360` | pinned |
+
+  | pyright compose (cwd, read-only fallback, JSON validity) |
+  `tests/runner/test_t9_7_compose_pyright.py:69-165`; live
+  `test_t9_7_compose_pyright_live.py:29-197` | pinned |
+
+  | config overlay end-to-end | `tests/integration.py:147-183`
+  (`test_config_overlay`) | pinned |
+
+  | shipped pylintrc single source of truth (main/tests/pyi) |
+  `tests/runner/test_config_consistency.py:35-90` | pinned |
+
+  | extra-tools parse/validation + downstream pipeline |
+  `tests/runner/test_extra_tools.py:1-346`;
+  `tests/runner/test_extra_tools_downstream.py:44-96,157-209` | pinned |
+
+  | 14-tool registry + ruff-format mode contract (ADR-005) |
+  `tests/runner/test_runner_format_contract.py:1-157` | pinned |
+
+  | tach whole-repo scope (`source_roots`) |
+  `tests/runner/test_lint_runner.py:318-334` | pinned |
+
+  | pylint scope/config discovery (`rcfile`, max-complexity warning) |
+  `tests/runner/test_lint_runner.py:123-180,335-346` | pinned |
+
+  | detect-secrets scope = `git ls-files` + baseline bootstrap |
+  `tests/runner/test_lint_runner.py:214-297` | pinned |
+
+  | per-tool scope parity end-to-end | `tests/integration.py:331-389`
+  (`test_individual_tool_parity`) | pinned |
+
+  | rumdl disabled-rules guard in shipped config |
+  `tests/integration.py:390-420` | pinned |
+
+  | **ty scope = `src/` only (oracle-reviewed exception)** | **No dedicated test
+  on HEAD**; only documented in `design/0002-ty-src-only-exception.md` +
+  `AGENTS.md` tool-scope table | **BLOCKING DEBT** — add a scope assertion in
+  iteration-3 (or explicitly accept the design doc as the pin) |
+
+
+  ## 4. Symbol exclusions (must not be edited/removed by debloat)
+
+  | Symbol/file | Range | Size | Owner | Rationale |
+
+  |---|---|---|---|---|
+
+  | `tests/checkers/test_semantic_check.py` | `:1-506` | whole file, 19 tests (3
+  slow) | semantic | replaced by CPU decision model (`_semantic.py` ->
+  `_decision*`); tests encode the outgoing reranker/embedding contract |
+
+  | `tests/checkers/test_semantic_threshold.py` | `:1-135` | whole file, 2 tests
+  | semantic | threshold behavior will be owned by the replacement model |
+
+  | `TestSuppressionRerankerPipeline` |
+  `tests/checkers/test_suppression_justification_checker.py:357-390` | 34 lines,
+  2 tests | semantic | full reranker pipeline; rest of file (`:1-356`) stays in
+  scope |
+
+  | `src/python_setup_lint/checkers/_semantic.pyi` | `:1-27` | 27 lines (whole
+  file; corrected from 1-42) | semantic | stub surface of the replaced module |
+
+
+  ## 5. Planned-path reservations
+
+  | Path | HEAD status | Owner | Purpose |
+
+  |---|---|---|---|
+
+  | `tests/conftest.py` (`:1-163`) | exists | tests-infra | epic-shared
+  conftest; reserve for cross-area fixtures and dedupe of `_UvCallRecorder`
+  (currently duplicated at `tests/runner/test_setup.py:39` and
+  `tests/runner/test_setup_install.py:36`) |
+
+  | `tests/runner/conftest.py` | **absent** (verified) | runner | runner-scoped
+  fixtures reserved; no HEAD collision |
+
+  | `src/python_setup_lint/runner/runtime/` | **absent** (verified) | runner |
+  runtime module package reservation; no HEAD collision |
+
+  | `tests/runner/runtime/` | **absent** (verified) | tests-infra | tests for
+  the runtime package |
+
+  | `src/python_setup_lint/checkers/_decision*.py` (+`.pyi`) | **absent**
+  (verified; `ls _decision*` empty) | semantic | CPU-friendly decision-model
+  replacement for `_semantic.py` |
+
+  | `tests/checkers/test_decision*.py` | **absent** (verified) | semantic |
+  decision-model tests replacing the excluded semantic symbols |
+
+  | `tests/data/golden/**`, `tests/data/minimal_sample_project/**` | exists |
+  root-owned (external) | fixtures; excluded from audit and from any debloat
+  edits |
+
+
+  ## 6. Removal list, slow budget, LoC budget
+
+
+  ### 6.1 Repo-self-lint / redundant removals (whole files)
+
+  | Module | LoC | Slow | Evidence |
+
+  |---|---|---|---|
+
+  | `tests/runner/test_self_lint_clean.py` | 59 | 1 | Repo self-lint duplicates
+  `uv run lint` (AGENTS.md Quick Commands); measured 154.32s and **FAILS on HEAD
+  with exit 123**. Surviving gate: pre-commit/CI lint + integration suite. |
+
+  | `tests/runner/test_bench_runner_overhead.py` | 241 | 1 | No assertions;
+  writes an artifact only. Measured 8.36s. 1 slow test, not 2 (fix 1). |
+
+  | `tests/runner/test_real_pipeline_smoke.py` | 42 | 0 | Duplicate end-to-end
+  of `tests/integration.py:60-118` (golden, crash/skip checks) + `:331-389`
+  (per-tool parity). Measured 3.43s. |
+
+
+  Hard-removal subtotal: **342 LoC, 2 slow tests**.
+
+
+  ### 6.2 Perf-assertion rewrites (functional tests retained)
+
+  | Module | Dropped lines | Slow | Retained |
+
+  |---|---|---|---|
+
+  | `tests/runner/test_baseline_diff_edge.py` | `:74-110` (`TestPerfBenchmark`:
+  200ms compare, 1s diff ceilings) | 1 | functional edge/schema tests
+  `:25-73,113-312` |
+
+  | `tests/runner/test_extra_tools_downstream.py` | `:99-156` (`_time_run_lint`
+  + warm ratio <1.20) | 1 | downstream pipeline `:44-96`, observability
+  `:157-209` |
+
+
+  Rewrite subtotal: **~95 LoC, 2 slow tests**.
+
+
+  ### 6.3 Merge-retired files (tests survive in the survivor)
+
+  | Module | LoC | Merge target |
+
+  |---|---|---|
+
+  | `tests/checkers/test_stub_checker_callable.py` | 276 |
+  `tests/checkers/test_stub_fidelity_invariants.py` |
+
+  | `tests/checkers/test_stub_checker_class.py` | 155 |
+  `tests/checkers/test_stub_fidelity_invariants.py` |
+
+  | `tests/checkers/test_stub_normalizer.py` | 91 |
+  `tests/checkers/test_stub_checker.py` |
+
+  | `tests/runner/test_t3_coverage.py` | 390 |
+  `tests/runner/test_lint_runner_stats.py` +
+  `tests/runner/test_baseline_diff_parsers.py` |
+
+
+  Merge-retired subtotal: **912 LoC** (candidate pool; net reduction is lower
+  because test bodies survive after dedup).
+
+
+  ### 6.4 Budget arithmetic (recomputed)
+
+  - Candidate LoC pool = 342 (remove) + 95 (rewrite) + 912 (merge-retired) =
+  **1,349 LoC**, inside the retained **1.3-1.8k** band.
+
+  - Net LoC reduction after dedup/merge is lower: hard removals 342 + perf
+  rewrites 95 + dedup estimate 250-550 = **~0.7-1.0k**; iteration-3 replan must
+  recompute after HEAD re-glob and must not book merge-retired LoC as net
+  deletion.
+
+  - **Slow budget: 18 on HEAD** -> 16 after the 2 hard removals (bench 1,
+  self-lint 1) -> **14** after dropping the 2 slow perf benchmarks. (No other
+  module loses a slow test in this audit; semantic slow tests are excluded, not
+  removed.)
+
+
+  ## 7. Verification of the review fixes
+
+  - Bench: `--collect-only` on the file -> `no tests collected (1 deselected)`;
+  one `@pytest.mark.slow` at `:118` on the single test at `:119`; slow run -> `1
+  passed in 8.36s`.
+
+  - Surface lock: `TestPublicSymbolSurface` retained;
+  `tests/checkers/test_stub_fidelity_invariants.py:277-322` selected together
+  with `tests/test_golden.py` -> **33 passed in 0.77s** (no behavioral change;
+  read-only evidence run).
+
+  - Golden pins: all four serialization tests `:152-198` retained; only non-test
+  serialization call sites are `tests/_golden.py:398,406` (determinism replay)
+  and `tests/test_golden.py:347-348` (round-trip).
+
+  - `_semantic.pyi`: `wc -l` = 27; exclusion row now `:1-27`.
+
+
+  ## 8. Uncertainties for iteration-3 replan
+
+  - Owner tokens are the r1 unified-map subsystem tokens; the coding-rules-audit
+  report is not in this repository, so owner alignment could not be re-verified
+  in this read-only step (review did not flag owner mismatches).
+
+  - Merge-dedup LoC and the 0.7-1.0k net-reduction estimate are approximations;
+  only the 342/95 hard figures and the 18->14 slow arithmetic are directly
+  measured.
+
+  - Runtimes are environment-sensitive (full suite 24.33s here vs ~53s in
+  AGENTS.md; setup_install 5.72s vs 6.53s/9.69s earlier).
+
+  - `test_self_lint_clean` exit 123 may reflect this worktree's current lint
+  state; the removal rationale rests on it duplicating the repo lint gate, not
+  on the specific failure.
+
+  - `tests/data/**` was excluded by instruction and not audited; the 9-line
+  `test_tempfile.py` fixture explains the 3,707 vs 3,716 helper LoC difference.
+contextPack: "HEAD facts for replan: 59 test files (58 test_*.py +
+  tests/integration.py), 14,650 wc -l LoC, 1379 collected = 1357 default + 4
+  skipped + 18 slow. Fixes: bench=241 LoC/0 default/1 slow (8.36s, no asserts);
+  TestPublicSymbolSurface KEEP (19-name surface lock,
+  test_stub_fidelity_invariants.py:277-322); golden canonical/empty/order pins
+  KEEP (test_golden.py:152-198; integration replay only determinism at
+  integration.py:120-122); _semantic.pyi exclusion = 1-27. Removals:
+  test_self_lint_clean.py (59, 1 slow, 154.32s, FAILS exit 123),
+  test_bench_runner_overhead.py (241, 1 slow), test_real_pipeline_smoke.py (42).
+  Rewrites: baseline_diff_edge perf class (:74-110), extra_tools_downstream perf
+  (:99-156), 2 slow. Merges:
+  stub_callable(276)+stub_class(155)->fidelity_invariants,
+  stub_normalizer(91)->stub_checker, t3_coverage(390)->stats+baseline parsers.
+  Candidate pool 1,349 LoC; slow 18->16->14. Blocking debt: ty src-only scope
+  has no test pin. Symbol skips: test_semantic_check.py:1-506,
+  test_semantic_threshold.py:1-135, TestSuppressionRerankerPipeline:357-390,
+  _semantic.pyi:1-27. Reservations: tests/conftest.py, tests/runner/conftest.py
+  (absent), runner/runtime/ (absent), checkers/_decision* (absent)."
+sources:
+  - tests/runner/test_bench_runner_overhead.py:118-241
+  - tests/checkers/test_stub_fidelity_invariants.py:277-322
+  - tests/test_golden.py:152-198
+  - tests/integration.py:115-122
+  - src/python_setup_lint/checkers/_semantic.pyi:1-27
+  - tests/checkers/test_semantic_check.py:1-506
+  - tests/checkers/test_semantic_threshold.py:1-135
+  - tests/checkers/test_suppression_justification_checker.py:357-390
+  - pyproject.toml:49-55
+  - AGENTS.md:1-30
+  - tests/runner/test_self_lint_clean.py:1-59
+  - tests/runner/test_real_pipeline_smoke.py:1-42
+  - tests/runner/test_extra_tools_downstream.py:99-156
+  - tests/runner/test_baseline_diff_edge.py:74-110
+  - tests/runner/test_lint_runner_integration.py:286-388
+  - tests/runner/test_baseline_diff_parsers.py:195-486
+  - tests/runner/test_autofix_conflict_apply.py:35-305
+  - tests/runner/test_autofix_conflict.py:229-369
+  - tests/runner/test_t5_compose_ruff.py:91-360
+  - tests/runner/test_t9_7_compose_pyright.py:69-270
+  - tests/runner/test_config_consistency.py:35-90
+  - tests/runner/test_lint_runner.py:214-346
+  - tests/conftest.py:1-163
+  - design/0002-ty-src-only-exception.md
+recommendations:
+  - "Apply the four corrections verbatim in iteration-3: bench row is 241/0/1
+    slow; TestPublicSymbolSurface and all test_golden.py:152-198 serialization
+    pins stay KEEP; _semantic.pyi exclusion is 1-27."
+  - Remove the three redundant whole files (test_self_lint_clean.py,
+    test_bench_runner_overhead.py, test_real_pipeline_smoke.py) and drop the two
+    slow perf-assertion blocks; this yields the verified 342 + ~95 LoC and the
+    18 -> 14 slow reduction.
+  - Execute the four merges only after a HEAD re-glob confirms the survivor
+    files still contain the target coverage; book merge-retired LoC as candidate
+    pool, not net deletion (net ~0.7-1.0k).
+  - Add a dedicated `ty check` src-only scope pin (or explicitly accept
+    design/0002 as the pin) to clear the only config/scope blocking-debt flag
+    found.
+  - "Keep semantic symbols untouched: do not edit test_semantic_check.py,
+    test_semantic_threshold.py, TestSuppressionRerankerPipeline, or
+    _semantic.pyi; the decision-model epic owns their replacement and the
+    reserved paths checkers/_decision* and tests/checkers/test_decision*."
+  - Reserve tests/runner/conftest.py and runner/runtime (absent on HEAD) for the
+    epic before any new fixtures/runtime modules land; dedupe the duplicated
+    `_UvCallRecorder` helper into tests/conftest.py.
+  - "Carry the runtime caveat into replan: figures are WSL2/Python
+    3.14.4/warm-cache measurements (+/-30% for subprocess tests); the self-lint
+    test's exit-123 failure is worktree-state-sensitive but does not affect the
+    removal rationale."

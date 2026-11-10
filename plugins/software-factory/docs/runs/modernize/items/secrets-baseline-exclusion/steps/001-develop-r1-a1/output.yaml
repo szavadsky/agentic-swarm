@@ -1,0 +1,71 @@
+status: ok
+summary: "Added the operator-approved `^\\.factory/` exclusion to
+  `.secrets.baseline` filters_used as
+  `detect_secrets.filters.regex.should_exclude_file` with a list-valued
+  `pattern`, after pre-validating the installed detect-secrets 1.5.0 contract
+  (signature `should_exclude_file(filename: str) -> bool`;
+  `_get_file_exclusion_regex` iterates `settings.filters[path]['pattern']`, so
+  the canonical list form is required). No other baseline edits and no test
+  changes. Verified on the full tracked file list (HEAD
+  b4f45b2100de43ed44acbef1ac5a0704622d535a): the detect-secrets hook now exits 0
+  in 9.2s (pre-change scan of the same list, dominated by 1.8GB of tracked
+  `.factory` model weights, had not completed after >2 minutes), the repo lint
+  runner's detect-secrets step PASSES, a planted control secret still exits 1,
+  the unit suite is green, and the full 14-tool lint gate exits 0."
+target:
+  command: uv run pytest -q
+  customTarget: true
+evidence:
+  - "Pre-validated filter schema against installed detect-secrets 1.5.0:
+    `inspect.signature(detect_secrets.filters.regex.should_exclude_file)` ->
+    `(filename: str) -> bool`; source shows `_get_file_exclusion_regex`
+    iterating `get_settings().filters[path]['pattern']`, and `--exclude-files`
+    argparse collects a list, so inserted `{\"path\":
+    \"detect_secrets.filters.regex.should_exclude_file\", \"pattern\":
+    [\"^\\\\.factory/\"]}` (list form, version-correct)."
+  - "Behavioral proof of the configured filter via detect_secrets API:
+    `configure_settings_from_baseline(json.load('.secrets.baseline'))` then
+    `should_exclude_file('.factory/project.yaml') is True`,
+    `should_exclude_file('.factory/tasks/modernize/journal.ndjson') is True`,
+    `should_exclude_file('src/python_setup_lint/runner/cli.py') is False`,
+    `should_exclude_file('docs/factory.md') is False`."
+  - "Full tracked-file scan after change: `git ls-files -z | xargs -0 uv run
+    detect-secrets-hook --baseline .secrets.baseline` -> exit 0 in 9.2s (859
+    tracked files)."
+  - Pre-change control on the same tracked list (launched before the edit, same
+    command) had not completed after >2 minutes and was stopped at ~3 minutes,
+    consistent with the runner's 120s/tool cap failure caused by 1.8GB of
+    tracked `.factory` model weights (10 tracked .safetensors); post-change
+    completes in 9.2s. Mechanism evidence, not finding counts.
+  - "Planted control secret: wrote `.tmp-control-secret.txt` with an AWS-style
+    access key and secret; `uv run detect-secrets-hook --baseline
+    .secrets.baseline .tmp-control-secret.txt` -> exit 1 (AWS Access Key, Base64
+    High Entropy String, Secret Keyword); file deleted immediately after and
+    `git status --porcelain` confirms no residue."
+  - "Runner integration: `uv run lint --tools detect-secrets` ->
+    `[detect-secrets] PASSED [11.1s]`, exit 0."
+  - "Unit tests: `uv run pytest -q` -> 1357 passed, 4 skipped, 18 deselected,
+    exit 0 in 43.27s."
+  - "Full project gate: `uv run lint` -> LINT_EXIT=0 in 85s; detect-secrets
+    PASSED 11.6s, all 14 tools passed."
+  - "JSON validity and diff hygiene: `python3 -m json.tool .secrets.baseline` ->
+    valid; `git diff --stat` -> `.secrets.baseline | 6 ++++++` (only intended
+    6-line insertion, sorted filter order retained); `git status --porcelain` ->
+    ` M .secrets.baseline` only, i.e. zero test-diff and no semantic assertion
+    changes; `.factory` journals remain committed."
+concerns:
+  - "Residual risk: this is a write-time/scan-time exclusion, not prevention.
+    Secrets placed under `.factory/` will no longer be caught by the standard
+    gate and remain committed. Mitigation: periodic unfiltered audits (e.g. run
+    detect-secrets-hook with `--disable-filter
+    detect_secrets.filters.regex.should_exclude_file`, or a scan without the
+    baseline filter) and keep the caveat in the M1 report."
+  - The `.factory` tree contains ~1.8GB of tracked model weights (10
+    `.safetensors`), making the unfiltered scan exceed the 120s per-tool cap;
+    the exclusion is load-bearing for gate runtime, not just noise suppression.
+  - No automated test asserts the baseline filter entry; verification is
+    mechanism-based (API predicate + hook exit codes), as appropriate for a
+    no-behavior config-only change.
+notes: "Final HEAD pinned for M1 citation:
+  b4f45b2100de43ed44acbef1ac5a0704622d535a. Only `.secrets.baseline` changed (6
+  insertions). Zero git write commands were issued."

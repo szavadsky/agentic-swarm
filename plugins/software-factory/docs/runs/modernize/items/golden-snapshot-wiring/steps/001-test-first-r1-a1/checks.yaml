@@ -1,0 +1,23 @@
+checks:
+  - id: test-first-scope
+    status: pass
+    message: test-first-scope passed (2 test files, 0 new prod stubs with 0 lines)
+    details:
+      testFiles:
+        - tests/_golden.py
+        - tests/integration.py
+      newProdFiles: []
+      stubProdLines: 0
+  - id: target-red
+    status: pass
+    message: "target-red passed: all 1 expected tests failed with assertion failures"
+    details:
+      command: uv run pytest
+        tests/integration.py::TestMinimalSampleProject::test_setup_new_and_lint
+        --junitxml=/home/slava/aiexp/python-setup.factory-wt/.factory-runtime/tmp/junit-1794116235686-ep47ilwbixu.xml
+      junitCaseCount: 1
+      junitCaseIds:
+        - tests.integration.TestMinimalSampleProject.test_setup_new_and_lint
+      junitTruncated: false
+      collected: true
+      collectionErrors: []

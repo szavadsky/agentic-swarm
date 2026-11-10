@@ -1,0 +1,30 @@
+id: c-000a3a71f2
+kind: blocker
+summary: Docs reconciliation is entirely red at HEAD (9 must-contain cells)
+detail: "All required strings are absent: semantic-justification.md
+  (DecisionBackend, .python-setup-decisions.json, ADR-009, prompt-v1 all 0),
+  custom-checks.md DecisionBackend 0, troubleshooting.md DECISION_MODEL/RERANKER
+  0, AGENTS.md pipeline DecisionBackend 0, CHANGELOG [semantic]/no-go 0 and no
+  v1.2.10 entry, AGENTS.md 7-pass row and missing ruff-format row, README v1.2.5
+  pin, ADR-016/ADR-009 stale claims. Code/test gates are green, so M3 close-out
+  cannot claim docs reconciliation without routing these back."
+location:
+  file: docs/semantic-justification.md
+  line: 3
+affects:
+  - ADR owner
+  - M3 close-out
+  - release owner
+  - runner docs owner
+  - semantic docs owner
+severity: high
+status: routed
+source:
+  record: 003-research-r2-a1
+  agent: fact-finder
+  step: research
+  item: final-gate-validation
+  lastSeen: 2026-11-10T03:19:38.948Z
+createdAt: 2026-11-10T03:19:38.948Z
+updatedAt: 2026-11-10T03:32:47.723Z
+disposition: architect

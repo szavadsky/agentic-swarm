@@ -1,0 +1,97 @@
+{
+  "base32_lower": {
+    "filename_findings": [],
+    "length": 52,
+    "value": "ysebfby5usvamupsxwbz33bsaffw7m3dsa3pkljwige4rslr7yga"
+  },
+  "base32_lower_dashed8": {
+    "filename_findings": [],
+    "length": 62,
+    "value": "dk1-ysebfby5-usvamups-xwbz33bs-affw7m3d-sa3pkljw-ige4rslr-7yga"
+  },
+  "base32_lower_dotted8": {
+    "filename_findings": [],
+    "length": 62,
+    "value": "dk1.ysebfby5.usvamups.xwbz33bs.affw7m3d.sa3pkljw.ige4rslr.7yga"
+  },
+  "base32_lower_prefixed": {
+    "filename_findings": [],
+    "length": 56,
+    "value": "dk1_ysebfby5usvamupsxwbz33bsaffw7m3dsa3pkljwige4rslr7yga"
+  },
+  "base32_upper": {
+    "filename_findings": [],
+    "length": 52,
+    "value": "YSEBFBY5USVAMUPSXWBZ33BSAFFW7M3DSA3PKLJWIGE4RSLR7YGA"
+  },
+  "base32_upper_dashed8": {
+    "filename_findings": [],
+    "length": 62,
+    "value": "DK1-YSEBFBY5-USVAMUPS-XWBZ33BS-AFFW7M3D-SA3PKLJW-IGE4RSLR-7YGA"
+  },
+  "base32_upper_dotted8": {
+    "filename_findings": [],
+    "length": 62,
+    "value": "DK1.YSEBFBY5.USVAMUPS.XWBZ33BS.AFFW7M3D.SA3PKLJW.IGE4RSLR.7YGA"
+  },
+  "base36": {
+    "filename_findings": [
+      {
+        "line": "4wc8skxsqct44mpklxn9jqpslc44n30z5vx8rfb0te96uqgkjw",
+        "type": "Base64 High Entropy String"
+      }
+    ],
+    "length": 50,
+    "value": "4wc8skxsqct44mpklxn9jqpslc44n30z5vx8rfb0te96uqgkjw"
+  },
+  "base58": {
+    "filename_findings": [
+      {
+        "line": "EEBFcFfZuojZqEdMBAJehNEUTG51zsjbPnrUDm7rWamR",
+        "type": "Base64 High Entropy String"
+      }
+    ],
+    "length": 44,
+    "value": "EEBFcFfZuojZqEdMBAJehNEUTG51zsjbPnrUDm7rWamR"
+  },
+  "base64url": {
+    "filename_findings": [
+      {
+        "line": "xIgShx2kqgZR8r2DnewyAUtvs2OQNvUtNkGJyMlx_gw",
+        "type": "Base64 High Entropy String"
+      }
+    ],
+    "length": 43,
+    "value": "xIgShx2kqgZR8r2DnewyAUtvs2OQNvUtNkGJyMlx_gw"
+  },
+  "decimal": {
+    "filename_findings": [],
+    "length": 77,
+    "value": "88893737397278910049857236387336479879413594793538904991125363394996377615884"
+  },
+  "decimal_prefixed": {
+    "filename_findings": [],
+    "length": 81,
+    "value": "dk1:88893737397278910049857236387336479879413594793538904991125363394996377615884"
+  },
+  "hex_dashed8": {
+    "filename_findings": [],
+    "length": 74,
+    "value": "d1-c4881287-1da4aa06-51f2bd83-9dec3201-4b6fb363-9036f52d-364189c8-c971fe0c"
+  },
+  "hex_full": {
+    "filename_findings": [
+      {
+        "line": "c48812871da4aa0651f2bd839dec32014b6fb3639036f52d364189c8c971fe0c",
+        "type": "Hex High Entropy String"
+      }
+    ],
+    "length": 64,
+    "value": "c48812871da4aa0651f2bd839dec32014b6fb3639036f52d364189c8c971fe0c"
+  },
+  "hex_short12": {
+    "filename_findings": [],
+    "length": 12,
+    "value": "c48812871da4"
+  }
+}

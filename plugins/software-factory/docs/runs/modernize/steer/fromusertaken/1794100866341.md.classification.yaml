@@ -1,0 +1,10 @@
+refs:
+  - plan-1
+  - awareness-plan-1-material-definition-needs-awareness
+  - awareness-plan-1-cache-file-needs-awareness
+  - awareness-plan-1-never-linting-policy-needs-awareness
+kind: answer
+urgency: next-architect-call
+summary: Operator accepts all three plan-1 awareness items (material definition,
+  git-stored cache at linted root, never-test-linting broadening) as
+  intentional; no further action, no regressions assumed.

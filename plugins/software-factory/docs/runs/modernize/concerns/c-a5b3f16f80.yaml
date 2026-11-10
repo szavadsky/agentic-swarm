@@ -1,0 +1,26 @@
+id: c-a5b3f16f80
+kind: tech-debt
+summary: ADR-016 and ADR-009 contain HEAD-contradicted claims without staleness notes
+detail: ADR-016:3 says no DecisionBackend/cache/FakeBackend exists and
+  [semantic] is sentence-transformers; DecisionBackend/FakeBackend are defined
+  at _decision_backend.py:17,23 and the extra is empty at pyproject.toml:29-30.
+  ADR-009:31 claims tracked-cache infrastructure delivered; no
+  .python-setup-decisions.json implementation exists and _semantic.py:15-21 is
+  an in-process memo only.
+location:
+  file: docs/adr/ADR-016.md
+  line: 3
+affects:
+  - ADR reconciliation
+  - downstream semantic work
+severity: medium
+status: routed
+source:
+  record: 003-research-r2-a1
+  agent: fact-finder
+  step: research
+  item: final-gate-validation
+  lastSeen: 2026-11-10T03:19:38.948Z
+createdAt: 2026-11-10T03:19:38.948Z
+updatedAt: 2026-11-10T03:32:47.723Z
+disposition: optional

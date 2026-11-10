@@ -1,0 +1,43 @@
+context: non-item
+decision: fix-item
+outline:
+  deps: []
+  description: "Supersedes ownership-map-revalidation (sole schedulable item; 3
+    empty waves). Narrowed to kickoff-blocking core; report-only, zero repo
+    writes. (1) At pinned HEAD: git ls-files filtered to src+scripts+tests minus
+    tests/data; recount universe total and per-owner counts from the audit
+    unified map (67/83/15/4/15); pass = each owner within ±5 AND total equals
+    recount. Record recount commands + HEAD SHA; revision ID map-<short SHA>
+    consistent throughout. (2) Symbol-exclusion existence check only (present
+    file:line, no content judgment): _semantic.py+.pyi,
+    _base.py::check_if_meaningful incl rule-echo line, no_try_import
+    _OPTIONAL_IMPORT_PATTERNS + register line, semantic test modules +
+    TestSuppressionRerankerPipeline block. (3) Reservations are
+    planned-paths-only (absent at HEAD; if present, disposition corrected). (4)
+    Root-owned group listed once. (5) Drift list in {path, auditRef,
+    headEvidence, disposition}; disputed rows ALLOWED (kickoff resolves;
+    zero-dispute is kickoff's criterion, not this item's). DEFERRED (do not gate
+    merge): exact stream-block file:line list + helper signature (checkers epic
+    re-pins at its first item), TD3-A1 docs-row full validation (confirm scope
+    only; kickoff assigns). Output consumed by epic-kickoff-gate."
+  kind: fact-finder
+  milestoneId: M1
+  slug: ownership-map-revalidation-v2
+  title: Re-validate ownership map core at HEAD
+rationale: "Single-item bottleneck: 3/4 schedulable M1 items merged (secrets,
+  pylint-closure, adr-formalization); ownership-map-revalidation is the only
+  running/schedulable item while epic-kickoff-gate and all M3 items are
+  dep-blocked, so stalled validation yields empty waves with Blocked:(none).
+  Original scope bundles kickoff-blocking core (counts, exclusions,
+  reservations, revision) with non-blocking consumer inputs (exact stream-block
+  re-pin, docs-row full validation), maximizing QA surface on a report-only
+  item. Narrowing to the mergeable core unblocks kickoff; deferred inputs are
+  re-pinned by consumers without loss."
+text: "PM edits: (1) Supersede ownership-map-revalidation with
+  ownership-map-revalidation-v2 (cancel/withdraw original to avoid conflicting
+  revision IDs). (2) Repoint epic-kickoff-gate dep from
+  ownership-map-revalidation to ownership-map-revalidation-v2. (3) Schedule v2
+  next wave; on its merge, kickoff proceeds and M2 epics spawn per ADR-011. QA:
+  accept disputed drift rows in v2 (kickoff resolves); reject only on missing
+  recount commands, inconsistent revision ID, or unverified
+  exclusion/reservation existence."

@@ -1,0 +1,17 @@
+context: wave
+decision: continue
+rationale: "Wave 3 delivered 3/3 merges with no regressions and test fail->pass
+  sustained: decision-runtime-pinning took the specified no-go skip path
+  (report-only, consistent with the eval no-go disclosure),
+  coding-rules-audit-i2 produced the unified ownership map for close-up, and
+  remaining-lint-violations-fix landed (verified: strengthened W9704
+  justifications in generic_key_dict_checker.py:38 and testing.py:32). Lint
+  fail/fail matches baseline — now only the human-async secrets exclusion
+  remains, which by design does not block dev acceptance. Tree hygiene clean.
+  Remaining: wave-4 test-debloat-audit-i2 (deps merged),
+  pylint-cache-assumptions retry, cache-design-spike (pending pylint verdict).
+  No finding invalidates remaining items; no amendment required."
+text: "Continue to wave 4. For close-up: M1 green-baseline scenario is satisfied
+  for src/** and tests/** (tail fix merged); lint's residual fail is the
+  human-blocked secrets exclusion (TD2-B3), owned by operator/engine action. No
+  plan change."

@@ -1,0 +1,25 @@
+id: c-f9635058d1
+kind: assumption
+summary: The 7-passed+2-skipped integration split is environment-dependent
+detail: tests/conftest.py:29-34 forcibly prepends .venv/bin to PATH, so this
+  worktree always exposes pre-commit and the skip path cannot be observed here;
+  the split materializes only where pre-commit is not installed. Mechanism is
+  pinned by tests/_project_helpers.py:185-191 and call sites
+  tests/integration.py:205,257.
+location:
+  file: tests/conftest.py
+  line: 29
+affects:
+  - AGENTS.md counts
+  - CI environments
+severity: low
+status: routed
+source:
+  record: 003-research-r2-a1
+  agent: fact-finder
+  step: research
+  item: final-gate-validation
+  lastSeen: 2026-11-10T03:19:38.948Z
+createdAt: 2026-11-10T03:19:38.948Z
+updatedAt: 2026-11-10T03:32:47.723Z
+disposition: optional

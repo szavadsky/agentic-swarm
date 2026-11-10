@@ -1,0 +1,27 @@
+id: c-717385e618
+kind: assumption
+summary: Spec 20(a)'s 'compact before an uncached resume' is a net loss for a
+  single resume because the summarizer itself pays the full history
+detail: Compaction 38,053→6,794 tokens was verified, but the summarization
+  request reads the full history; if the cache is already expired, cost ≈ cold
+  history + summary output + compacted-prefix write + resumed turn, which is
+  more than a direct cold resume. Compaction only pays while the cache is still
+  warm (at a wave boundary) or when amortized over several future turns.
+  Recommend fresh brief for already-cold long-history resumes.
+location:
+  file: docs/factory.v2.md
+  line: 115
+affects:
+  - 20a
+  - 20b
+severity: medium
+status: routed
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: spike-cache-key
+  lastSeen: 2026-11-10T00:16:23.859Z
+createdAt: 2026-11-10T00:16:23.859Z
+updatedAt: 2026-11-10T01:53:41.429Z
+disposition: architect

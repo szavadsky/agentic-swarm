@@ -1,0 +1,16 @@
+status: approved
+summary: "Approved: 51/51 heuristic tests pinned SEMANTIC=0 via monkeypatch
+  fixture; reranker block untouched; tests-only diff; 51 passed, 2 deselected."
+suggestions:
+  - id: shared-semantic-fixture
+    disposition: optional
+    summary: Identical _semantic_disabled fixture duplicated in two modules
+    detail: Both test modules define the same 4-line fixture pinning
+      PYTHON_SETUP_LINT_SEMANTIC=0. Duplication is acceptable now (avoids
+      touching shared conftest during serialized M2/M4 writes; per-class
+      usefixtures keeps TestSuppressionRerankerPipeline on the real semantic
+      path). If a third module needs the guard, hoist to
+      tests/checkers/conftest.py as an explicit opt-in fixture.
+    location:
+      file: tests/checkers/test_suppression_justification_checker.py
+      line: 24

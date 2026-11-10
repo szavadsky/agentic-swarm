@@ -1,0 +1,4 @@
+status: approved
+summary: "approved: 6-line .secrets.baseline exclusion version-correct,
+  gate-form verified, full scan exit 0 replicated, zero test diff"
+suggestions: []

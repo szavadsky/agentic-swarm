@@ -1,0 +1,17 @@
+id: rm-faffbf9aa0
+chosen: Leave src/python_setup_lint/runner/cli.py unchanged.
+alternatives:
+  - Touch the line anyway to satisfy the stale assignment wording (no behavioral
+    or textual change)
+why: The post-dependency tree already contains `all 14 tools` at cli.py:348, and
+  the target test verifies the help output contains `all 14 tools`; an edit
+  would be a no-op.
+status: open
+source:
+  record: 002-develop-r1-a1
+  agent: developer
+  step: develop
+  item: docs-counts-sync
+  lastSeen: 2026-11-10T01:33:58.765Z
+createdAt: 2026-11-10T01:33:58.765Z
+updatedAt: 2026-11-10T01:33:58.765Z

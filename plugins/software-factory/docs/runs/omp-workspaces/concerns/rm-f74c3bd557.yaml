@@ -1,0 +1,19 @@
+id: rm-f74c3bd557
+chosen: Use a throwaway omp agent dir with a custom OpenAI-compatible
+  `models.yml` plus a local SSE stub for no-paid-model probes
+alternatives:
+  - Live cheap models (paid, non-deterministic)
+  - omp SDK/in-process harness (heavier, different path than production)
+why: "Demonstrated end-to-end: omp 18.18.5 sent full prompts to the stub, which
+  recorded exact system messages and returned scripted text; no credentials or
+  paid calls. This directly supports M8's scripted mock model provider
+  requirement."
+status: open
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: spike-repo-rules
+  lastSeen: 2026-11-09T23:58:38.970Z
+createdAt: 2026-11-09T23:58:38.970Z
+updatedAt: 2026-11-09T23:58:38.970Z

@@ -1,0 +1,21 @@
+id: c-d9faccff32
+kind: risk
+summary: Parent abort loses isolated-subagent work with no artifact
+detail: SIGKILL of the parent mid-subagent left no branch, patch, file, or
+  worktree entry (probe 14). Item work parked in omp subagents must checkpoint
+  to branches before process boundaries.
+affects:
+  - "19.1"
+  - "19.2"
+  - "19.6"
+severity: high
+status: routed
+source:
+  record: 002-research-r1-a2
+  agent: fact-finder
+  step: research
+  item: spike-omp-isolation
+  lastSeen: 2026-11-10T01:26:13.601Z
+createdAt: 2026-11-10T01:26:13.601Z
+updatedAt: 2026-11-10T01:53:41.429Z
+disposition: architect

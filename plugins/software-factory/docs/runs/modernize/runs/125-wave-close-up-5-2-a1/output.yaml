@@ -1,0 +1,22 @@
+blockedItems: []
+debt:
+  - "Infra: `uv run lint` still mutates worktree via plain `ruff format`
+    ToolSpec (no --check/--config); declared gates keep format/lint split as
+    workaround."
+failedItems: []
+iteration: 5
+mergedItems:
+  - secrets-triage-spike
+recommendations:
+  - "Operator: make `uv run lint` check-only by adding --check (+ --config
+    config/ruff.toml) to the ruff format ToolSpec in
+    src/python_setup_lint/runner/dispatch.py or dropping it from TOOLS, then
+    reunify format/lint gates."
+summary: "Wave 2 complete: merged secrets-triage-spike (1/1). Tree hygiene
+  clean: no untracked files, no 7-char conflict markers in
+  src/tests/config/docs/design, no stray artifacts; only engine-managed record
+  touched. Gate Diff vs baseline (sole regression signal): format pass/pass
+  green, lint fail->pass IMPROVED, test fail->pass IMPROVED, test-integration
+  pass/pass green. No regressions; all gates now pass."
+wave: 2
+status: complete

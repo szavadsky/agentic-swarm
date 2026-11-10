@@ -1,0 +1,22 @@
+id: c-19cad43406
+kind: risk
+summary: Per-turn prompt transport path embeds timestamp+randomness
+detail: "`prompt-${Date.now()}-${random}.txt` is passed as `-p @path` on every
+  turn (`harness.ts:311-316`). Item 20c forbids timestamps/randomness/temp paths
+  in the cached prefix; whether omp keys cache by content or transport must be
+  audited and, if needed, made stable."
+location:
+  file: plugins/software-factory/src/harness/omp/harness.ts
+  line: 311
+affects:
+  - 20c
+severity: medium
+status: routed
+source:
+  record: 004-context-pack-a1
+  agent: fact-finder
+  step: context-pack
+  lastSeen: 2026-11-09T23:21:29.949Z
+createdAt: 2026-11-09T23:21:29.949Z
+updatedAt: 2026-11-09T23:40:10.572Z
+disposition: optional

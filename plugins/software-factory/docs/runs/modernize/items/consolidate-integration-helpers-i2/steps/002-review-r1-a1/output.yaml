@@ -1,0 +1,17 @@
+status: approved
+summary: "Approved: 661→497 lines tests-only consolidation verified; all pinned
+  helpers, rewired imports, cycle guard, pylint-10.0/mypy/ruff/golden clean,
+  integration suite green per engine checks."
+suggestions:
+  - id: except-parens-readability
+    disposition: optional
+    summary: Parenthesize bare comma-except to avoid Python-2 misread
+    detail: Line uses PEP 758 bare form `except FileNotFoundError,
+      subprocess.CalledProcessError:` (moved verbatim from integration.py).
+      Behavior verified correct on Python 3.14 (requires-python >=3.14;
+      empirically catches both, rejects ValueError), but pre-3.14 readers parse
+      `except A, B:` as 'catch A bind B'. Prefer `except (FileNotFoundError,
+      subprocess.CalledProcessError):` for unambiguous reading.
+    location:
+      file: tests/_project_helpers.py
+      line: 181

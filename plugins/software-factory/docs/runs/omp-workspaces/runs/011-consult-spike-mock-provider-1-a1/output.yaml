@@ -1,0 +1,17 @@
+context: item
+decision: retry-with-guidance
+persist: true
+rationale: "Identical environmental failure as spike-omp-isolation (same TS2688,
+  same zero-prod diff): the merge child worktree lacks node_modules and
+  mergeItem runs gates without infra.setup. Review approved the spike (M1
+  scenario-2 answered: -e registerProvider seam, scenario format, zero-paid
+  proof). Attempt 2/2 is the redrive for this consult cycle; the fix is
+  mechanical (bun install in childWt), not research rework."
+text: "RETRY (environmental failure, not spike failure — same as
+  spike-omp-isolation): TS2688 means the merge child worktree lacks
+  node_modules; mergeItem runs gates at childWt without infra.setup. Before the
+  redrive merge, run `cd <childWt>/plugins/software-factory && bun install`
+  where childWt = worktreeRoot/topic_omp-workspaces--spike-mock-provider. Then
+  re-drive the merge unchanged. Do NOT re-run probes, do NOT modify findings, do
+  NOT touch prod code. If typecheck still fails after bun install, yield failed
+  with full gate output."

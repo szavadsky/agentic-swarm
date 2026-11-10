@@ -1,0 +1,4 @@
+status: approved
+summary: "no-behavior verified: SIM102 collapsed, pipeline locals extracted with
+  preserved semantics, C0208 confirmed absent, gates green, baseline []"
+suggestions: []

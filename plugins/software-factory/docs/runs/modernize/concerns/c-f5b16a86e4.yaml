@@ -1,0 +1,23 @@
+id: c-f5b16a86e4
+kind: tech-debt
+summary: Assignment citation for semantic_check.py is stale/out of range
+detail: tests/checkers/test_semantic_check.py is 133 lines at HEAD, so the cited
+  :159-257 cannot exist. Downstream semantic items should re-cite against HEAD
+  to avoid planning on a stale branch state.
+location:
+  file: tests/checkers/test_semantic_check.py
+  line: 133
+affects:
+  - semantic items
+  - test-debloat-audit
+severity: low
+status: routed
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: test-debloat-audit
+  lastSeen: 2026-11-10T00:53:21.467Z
+createdAt: 2026-11-10T00:53:21.467Z
+updatedAt: 2026-11-10T02:32:36.259Z
+disposition: optional

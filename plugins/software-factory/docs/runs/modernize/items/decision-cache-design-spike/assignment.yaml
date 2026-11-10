@@ -1,0 +1,30 @@
+slug: decision-cache-design-spike
+kind: poc
+title: Prototype tracked-cache schema and refresh
+assignment: "Prototype on tmp copies only; zero committed files. Validate the
+  ADR-017 pinned contract (do not invent alternative): project-root = config.cwd
+  with traversal guard; schema + array sort (rule, justification, model) +
+  non-hex encoding (no bare hex>=20, detect-secrets clean, collision-safe);
+  prune auto missing/stale; lint --refresh-decisions [--path ...]; CI-fail;
+  DECISIONS_PATH test-only; files union POSIX; --path scoping; jobs==1 required;
+  decisions-module placement (ADR-018); memory/time notes (2048 RLIMIT_AS, 3
+  pylint loads, ONNX vs torch). Consume test_pylint_cache_semantics.py
+  writer-first verdict. Completeness gate: report {verdict: feasible|blocked};
+  feasible carries every field above + 4 tmp proofs (heuristic-rejected False
+  without backend; accepted+hit==persisted; accepted+miss+absent==heuristic
+  True; normal-lint zero writes by hash); blocked carries {blocker, evidence, I5
+  plan} and impls merge no-op attestations citing it. Feeds backend/cache
+  impls."
+outlineRef: decision-cache-design-spike
+milestone: M4
+wave: 1
+scenarioRefs:
+  - "M4: Veto backend without model"
+  - "M4: Cache read-only plus explicit refresh"
+citations:
+  - src/python_setup_lint/checkers/_semantic.py:37-52
+  - src/python_setup_lint/checkers/_semantic.py:125-189
+  - docs/semantic-justification.md:5-14
+  - docs/semantic-justification.md:34-45
+  - .gitignore:243-244
+escalate: true

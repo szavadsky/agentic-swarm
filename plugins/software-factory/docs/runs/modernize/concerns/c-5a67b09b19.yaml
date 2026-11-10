@@ -1,0 +1,27 @@
+id: c-5a67b09b19
+kind: risk
+summary: 1.72 GiB of .factory model artifacts are tracked; detect-secrets safety
+  depends on a prefix-anchored baseline filter
+detail: git ls-files includes 9 .safetensors totalling 1,844,653,898 bytes
+  (largest 789,581,344 B) under .factory/. The runner caps detect-secrets at
+  RLIMIT_AS 2048 MB; scanning one model file reproduces MemoryError in
+  detect_secrets/transformers/config.py:97. The committed `.secrets.baseline`
+  filter ^\\.factory/ is the only thing preventing the failure, and it can be
+  bypassed by a path that does not start with `.factory/` (e.g.
+  `./.factory/...`).
+location:
+  file: .secrets.baseline
+  line: 42
+affects:
+  - final-gate-validation
+severity: medium
+status: routed
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: final-gate-validation
+  lastSeen: 2026-11-10T00:27:58.391Z
+createdAt: 2026-11-10T00:27:58.391Z
+updatedAt: 2026-11-10T02:23:05.623Z
+disposition: optional

@@ -1,0 +1,17 @@
+id: rm-df9df7bd8a
+chosen: Epics run in-process as child tasks with an in-process `runTaskChild`
+alternatives:
+  - independent `factory run` per epic in its own workspace (what item 19.6 now
+    requires)
+  - omp subagent tasks with isolation
+why: It reuses one engine/process, shares the root budget and mailbox, and keeps
+  epic records on the parent branch with `child-closeup.yaml`; simple to make
+  restart-safe from records.
+status: open
+source:
+  record: 004-context-pack-a1
+  agent: fact-finder
+  step: context-pack
+  lastSeen: 2026-11-09T23:21:29.949Z
+createdAt: 2026-11-09T23:21:29.949Z
+updatedAt: 2026-11-09T23:21:29.949Z

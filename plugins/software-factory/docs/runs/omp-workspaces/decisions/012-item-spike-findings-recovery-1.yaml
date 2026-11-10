@@ -1,0 +1,19 @@
+id: decision-spike-findings-recovery-1794285990740
+context: item
+item: spike-findings-recovery
+afterRecord: 003-review-r1-a1
+decision: abandon
+timestamp: 2026-11-10T04:46:30.740Z
+rationale: "Item work is complete and approved (4 spike docs + RECOVERY.md,
+  QA/review approved, 0 prod lines). Merge verify passed gates (incl. typecheck
+  — the wave-2 setup fix works) and failed ONLY on target-green: developer
+  recorded target {gate:test}, which requires full-suite exit 0, but the suite
+  is baseline-red (disk-space env failure), so it exits 1 at 684 pass/2 skip/1
+  fail with the single failure being the known baseline. No fix-round code
+  change can make gate:test exit 0; a redrive would re-fail identically after
+  ~230s. The branch retains the complete docs for a v2 cherry-pick."
+reason: "target-green unsatisfiable: target {gate:test} needs full-suite exit 0
+  while baseline is red (disk-space env failure); target-green gate path lacks
+  the baseline ratchet the gates phase uses. Work complete on branch
+  topic/omp-workspaces--spike-findings-recovery; reschedule as v2 with no gate
+  target (or a passing selector target)."

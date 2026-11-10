@@ -1,0 +1,46 @@
+status: approved
+summary: Golden helpers meet contract; 26 synthetic tests pass; no src or golden
+  artifacts
+suggestions:
+  - id: runner-root-import-side-effect
+    disposition: optional
+    summary: tool_minimums imports TOOLS via package root, pulling CLI structlog
+      side effects
+    detail: Line 174 'from python_setup_lint.runner import TOOLS' triggers
+      runner/__init__ -> cli.structlog.configure at first call, contradicting
+      the 'keeps synthetic tests free of runner setup' comment. Import from
+      python_setup_lint.runner.dispatch (or top-level) to avoid hidden side
+      effect. No behavior break; tests pass.
+    location:
+      file: tests/_golden.py
+      line: 174
+  - id: findingkey-export-consistency
+    disposition: optional
+    summary: Public FindingKey alias missing from __all__
+    detail: FindingKey is a public name but not listed in __all__ while all other
+      public helpers are. Either export it or rename to _FindingKey for
+      consistency with private helpers.
+    location:
+      file: tests/_golden.py
+      line: 61
+  - id: normalize-dotdot-drive
+    disposition: optional
+    summary: Path normalization keeps '..' and misses Windows drive-letter absolutes
+    detail: _normalize_path filters '.' but preserves '..' (so 'a/../b' stays
+      uncollapsed and '../escape' passes the non-absolute assert), and
+      PurePosixPath does not treat 'C:/...' as absolute after backslash
+      conversion. Consider collapsing '..'/rejecting escapes and detecting drive
+      absolutes for cross-machine determinism.
+    location:
+      file: tests/_golden.py
+      line: 82
+  - id: golden-read-strictness
+    disposition: optional
+    summary: Golden read silently drops extra keys and leaks raw JSON errors
+    detail: _coerce_finding ignores unknown keys (a golden with stale 'msg'/extra
+      fields would still pass) and read_golden lets JSONDecodeError propagate
+      unwrapped instead of pytest.fail. Consider failing on unexpected keys and
+      wrapping decode errors for precise drift reporting.
+    location:
+      file: tests/_golden.py
+      line: 207

@@ -1,0 +1,20 @@
+id: rm-9571a69c19
+chosen: Keep omp root-session discovery as the sole repo-rules injector; do not
+  duplicate rule text in factory role/step prompts
+alternatives:
+  - Engine-rendered rules injected into the role system prompt with
+    `--no-context-files --no-rules`
+  - "Hybrid: omp for root roles, engine copy for scouts"
+why: Probes show root omp sessions already inject `<repo-rules>` and rules even
+  with `--system-prompt`; a second copy produced two sentinel occurrences. omp
+  also places context in the trailing project-context footer, so per-worktree
+  rules do not break the static prompt cache prefix (important for item 20).
+status: open
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: spike-repo-rules
+  lastSeen: 2026-11-09T23:58:38.970Z
+createdAt: 2026-11-09T23:58:38.970Z
+updatedAt: 2026-11-09T23:58:38.970Z

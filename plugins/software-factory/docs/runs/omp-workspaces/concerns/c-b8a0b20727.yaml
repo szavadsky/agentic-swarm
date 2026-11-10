@@ -1,0 +1,19 @@
+id: c-b8a0b20727
+kind: question
+summary: No mock model provider surfaced for no-models e2e
+detail: Only real catalog providers were exercised; no scripted/mock provider
+  mechanism was found or tested. Needs a dedicated follow-up before 19.8 test
+  design.
+affects:
+  - "19.8"
+severity: medium
+status: routed
+source:
+  record: 002-research-r1-a2
+  agent: fact-finder
+  step: research
+  item: spike-omp-isolation
+  lastSeen: 2026-11-10T01:26:13.601Z
+createdAt: 2026-11-10T01:26:13.601Z
+updatedAt: 2026-11-10T01:53:41.429Z
+disposition: architect

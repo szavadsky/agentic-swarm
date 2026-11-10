@@ -1,0 +1,126 @@
+amendmentIndex: 1
+items:
+  - assignment: >-
+      Fix wave-end merge to run infra.setup in the child worktree BEFORE
+      verify-checks. Context: wave 1 merged 0/4 — mergeItem failed with
+      typecheck TS2688 because childWt lacks node_modules; mergeItem currently
+      skips infra.setup (blocker c-552344216d). This fix takes effect on engine
+      restart, not mid-run.
+
+
+      Scope: plugins/software-factory/src/core/flows/merge-path.ts :: mergeItem
+      only (+ new behavior tests). Mirror runInfraSetup semantics from the
+      temp-worktree paths (gates.ts:332-335, runner.ts:796-810).
+
+
+      Steps (tests-first, cwd=plugins/software-factory, tmp-repo fixtures, no
+      network):
+
+      1. Add failing behavior tests first covering: (a) infra.setup writes a
+      marker file -> gates/snapshot observe it (setup runs before
+      snapshotWorktree so setup-created untracked files like node_modules are
+      NOT flagged as gate mutations); (b) empty/missing setup is a no-op and
+      merge behaves exactly as today; (c) failing setup fails the merge with
+      actionable evidence containing the setup command + output in the same
+      evidence shape as gate failures.
+
+      2. Implement: in mergeItem, execute infra.setup commands in childWt before
+      the verify-checks phase (strictly before snapshotWorktree and before gates
+      snapshot/run). No-op when setup is empty. On setup failure, abort merge
+      with gate-failure-shaped evidence.
+
+      3. Verify: run the new tests + existing merge-path/gates tests from
+      plugins/software-factory; pass with no NEW failures beyond the accepted
+      baseline red (test/disk-space.test.ts env-sensitive). Keep prod diff small
+      (~80 lines hint).
+
+
+      Acceptance: (1) marker-file test proves setup ran before gates; (2)
+      empty-setup parity; (3) failing-setup evidence includes command+output;
+      (4) node_modules-class untracked files created by setup are not reported
+      as gate mutations.
+
+
+      Constraints: dev kind, tests-first; no deps; wave-2 parallel with M2 items
+      (self-heals node_modules via own develop-step gates); out of scope:
+      preflight hardening, workspace backends, saga.
+    citations:
+      - "plugins/software-factory/src/core/flows/merge-path.ts :: mergeItem"
+      - gates.ts:332-335 runInfraSetup temp-worktree path
+      - runner.ts:796-810 runInfraSetup temp-worktree path
+    deps: []
+    kind: dev
+    milestone: m1-omp-de-risk
+    outlineRef: merge-setup-fix
+    slug: merge-setup-fix
+    title: Run infra.setup in merge child worktree before gates
+    wave: 2
+  - assignment: >-
+      Salvage approved wave-1 spike research stranded on environmentally-failed
+      item branches onto the parent branch. All research steps + reviews are
+      approved; only wave-end merges failed (missing node_modules). Docs only,
+      zero prod lines.
+
+
+      Read-only sources (NEVER checkout/switch branches, NEVER write to
+      .factory/** engine-owned paths; use `git show <branch>:<path>` only):
+
+      - topic/omp-workspaces--spike-omp-isolation ::
+      items/spike-omp-isolation/steps/002-research-r1-a2/output.yaml (+003
+      review)
+
+      - topic/omp-workspaces--spike-mock-provider ::
+      items/spike-mock-provider/steps/001-research-r1-a1/output.yaml (+002
+      review)
+
+      - topic/omp-workspaces--spike-cache-key ::
+      items/spike-cache-key/steps/001-research-r1-a1/output.yaml (+002 review)
+
+      - topic/omp-workspaces--spike-repo-rules ::
+      items/spike-repo-rules/steps/001-research-r1-a1/output.yaml (+002 review)
+
+      - parent-branch decisions/001 + 002 rulings (read on parent branch).
+
+
+      Steps:
+
+      1. git-show each research output.yaml + its review output; extract the
+      embedded spike-draft markdown.
+
+      2. Apply each review's optional polish notes ONLY where they correct
+      evidence (e.g. probe-26/18 softening, spec-path fix); do not invent new
+      probes.
+
+      3. Write the four drafts to:
+      plugins/software-factory/docs/spikes/omp-3-isolation.md,
+      omp-4-mock-provider.md, omp-5-cache-keys.md, omp-6-repo-rules.md.
+
+      4. Write items/spike-findings-recovery/RECOVERY.md mapping each M1
+      scenario (isolation probe matrix, mock-provider seam, cache-keying,
+      repo-rules injection) to branch evidence + followUps for iteration-2
+      planning (M3/M4/M6/M7/M8).
+
+      5. Verify on parent branch only: all five files exist, each spike doc
+      retains probe-evidence/logs + recommendations sections, RECOVERY.md covers
+      all four M1 scenarios.
+
+
+      Acceptance: 4 spike docs + RECOVERY.md present with probe evidence; no
+      prod code changed; no branch checkouts; no .factory/** writes.
+
+
+      Constraints: no-behavior kind; no deps; wave-2 parallel (self-contained,
+      self-heals node_modules via own develop-step gates).
+    citations:
+      - topic/omp-workspaces--spike-omp-isolation:items/spike-omp-isolation/steps/002-research-r1-a2/output.yaml
+      - topic/omp-workspaces--spike-mock-provider:items/spike-mock-provider/steps/001-research-r1-a1/output.yaml
+      - topic/omp-workspaces--spike-cache-key:items/spike-cache-key/steps/001-research-r1-a1/output.yaml
+      - topic/omp-workspaces--spike-repo-rules:items/spike-repo-rules/steps/001-research-r1-a1/output.yaml
+    deps: []
+    kind: no-behavior
+    milestone: m1-omp-de-risk
+    outlineRef: spike-findings-recovery
+    slug: spike-findings-recovery
+    title: Recover wave-1 spike findings onto parent branch
+    wave: 2
+iteration: 1

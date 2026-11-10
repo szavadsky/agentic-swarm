@@ -1,0 +1,15 @@
+id: rm-61c10c8318
+chosen: Schema-bound architect plan (`plan.schema.json`) with PM structuring item edits
+alternatives:
+  - schema-free telegraphic architect markdown plus cheap PM structuring (v1
+    lesson; item 20 asks to re-evaluate from measured repair turns)
+why: Guarantees mechanically valid plans and lets PM own scheduling/limits;
+  matches the current plan → plan-review → PM pipeline.
+status: open
+source:
+  record: 004-context-pack-a1
+  agent: fact-finder
+  step: context-pack
+  lastSeen: 2026-11-09T23:21:29.949Z
+createdAt: 2026-11-09T23:21:29.949Z
+updatedAt: 2026-11-09T23:21:29.949Z

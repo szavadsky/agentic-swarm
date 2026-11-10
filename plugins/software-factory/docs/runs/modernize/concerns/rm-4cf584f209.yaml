@@ -1,0 +1,21 @@
+id: rm-4cf584f209
+chosen: Derive expected docs counts from a real nested `pytest --collect-only`
+  run and from `dispatch.TOOLS` at test time
+alternatives:
+  - Hardcode expected 1360/9/14 in the test (stale immediately on any test
+    addition)
+  - Skip test-first for this docs-only item and rely on review (violates the
+    step contract; no durable guard)
+why: The acceptance criterion is that docs match the runtime tree; a hardcoded
+  1360/9/14 would silently drift the moment a test is added, while runtime
+  derivation makes drift a test failure
+status: routed
+source:
+  record: 001-test-first-r1-a1
+  agent: developer
+  step: test-first
+  item: docs-counts-sync
+  lastSeen: 2026-11-09T23:58:53.045Z
+createdAt: 2026-11-09T23:58:53.045Z
+updatedAt: 2026-11-10T03:32:47.723Z
+disposition: optional

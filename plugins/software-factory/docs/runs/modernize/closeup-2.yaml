@@ -1,0 +1,16 @@
+iteration: 2
+status: next-iteration
+summary: "Iteration 2 delivered the verifiable repo scope: M1 green baseline +
+  14-tool contract (check-only ruff format strategy, single-sourced registry,
+  14-site docs migration, SIM102/R0914/C0208/W9704-tail fixes, baseline []) and
+  M2 test-infra consolidation + golden hardening (11 helpers single-sourced,
+  integration.py 498 lines, caller asserts, shared slicer, golden
+  byte-identical) — both verified at HEAD by the close-up audit. M3 partial:
+  model matrix + CPU eval (structural no-go with disclosed single-adjudicator
+  limits) + runtime-pinning no-go skip merged; test_pylint_cache_semantics.py
+  still missing (pylint-cache-assumptions running, cache-design-spike pending on
+  its verdict). M4: both audits merged per engine records; report completeness
+  validates at the iteration-3 replan via HEAD re-glob per ADR-008. Secrets
+  verdict is human-async and does not block dev acceptance. Task intent (rule
+  enforcement, debloat, semantic swap) remains iteration-3 scope per plan; no
+  operator blocker."

@@ -1,0 +1,40 @@
+id: decision-spike-repo-rules-1794272597648
+context: item
+item: spike-repo-rules
+afterRecord: 001-research-r1-a1
+decision: accept-with-debt
+timestamp: 2026-11-10T01:03:17.648Z
+rationale: "Spike met its acceptance (M1 scenario-4): source/precedence table,
+  live probe matrix, draft omp-6-repo-rules.md, and decision YAML all delivered
+  with evidence. No fix requested by review; the four [ARCHITECT] notes are
+  plan-level follow-ups that belong to iteration-2 M4/M8 scope (already
+  replanAfter), not to another spike round. Accept so the item merges at wave
+  end and its findings/decision record are available to iteration-2 planning;
+  rulings below are recorded durably in this decision."
+text: "Rulings on the four review notes (all apply to iteration-2 planning; no
+  spike rework): (1) PREFLIGHT: confirmed no-op; iteration-2 M4 schedules a dev
+  item replacing the --config --version check with a throwaway mock-provider
+  real turn per findings §5.1/§8.8 (real turn exits 1 on bad overlay where
+  --version exits 0). (2) MOCK PROVIDER: feasibility accepted — models.yml
+  (openai-completions) + local SSE stub captures full system prompts with zero
+  paid calls; M8 builds the scripted helper (request recorder + scripted yield)
+  with per-role request-body assertions per §7.1, reconciled with
+  spike-mock-provider's seam decision. (3) HYDRATION SCOPE: reframe accepted —
+  roots already hydrated exactly once (no AGENTS/CLAUDE/RULES text in agents/ or
+  prompts.ts verified; duplicate = 2 copies), so M8 keeps omp as sole injector
+  for roots, implements RULES.md/extra/context path for scouts only, and
+  verifies E2E by asserting exactly one sentinel copy per role
+  (architect/developer/qa/reviewer + scouts). (4) ISOLATION POLICY: M8 e2e uses
+  isolated profile/agent-dir; prod harness gains deterministic-role flags
+  (disabledExtensions + empty --append-system-prompt=), with per-role body tests
+  pinning that user-level files no longer leak. Scout live probe stays open
+  until re-probed via the mock provider."
+debt: "spike-repo-rules follow-ups deferred to iteration 2: (1) M4 dev item
+  replacing the preflight omp --config --version no-op with a throwaway
+  mock-provider real-turn validation (spike recipe findings §5.1/§8.8); (2) M8
+  scripted mock-provider helper (request recorder + scripted yield) with
+  per-role request-body sentinel assertions; (3) M8 scout-hydration probe +
+  implementation (roots stay omp-injected exactly-once; no factory injection for
+  roots); (4) M8 harness prompt-isolation policy (isolated profile/agent-dir for
+  tests; disabledExtensions + empty --append-system-prompt= for deterministic
+  prod roles) pinned by tests."

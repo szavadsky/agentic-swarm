@@ -1,0 +1,18 @@
+seq: 24
+name: plan-close-up-1
+attempt: 1
+agent: plan-close-up
+role: alt-workhorse
+models:
+  - opencode-go/muse-spark-1.3-contributor
+  - opencode-go/deepseek-v4.1-flash
+timeoutSec: 2700
+status: ok
+startedAt: 2026-11-10T06:22:06.719Z
+session: 01a1c41e-faed-71c1-a33a-f341aee86044
+endedAt: 2026-11-10T06:32:05.250Z
+usage:
+  inputTokens: 94570
+  outputTokens: 45653
+  costUsd: 0.021518
+traceRef: /home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/sessions/2026-11-10T06-22-07-085Z_01a1c41e-faed-71c1-a33a-f341aee86044

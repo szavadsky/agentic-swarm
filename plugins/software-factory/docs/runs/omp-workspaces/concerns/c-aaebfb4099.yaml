@@ -1,0 +1,22 @@
+id: c-aaebfb4099
+kind: question
+summary: Parallel epics need lock/merge coordination beyond per-task locks
+detail: Run locks are keyed per task (`cli/lock.ts:45-55`); independent epic
+  launches of one saga would each hold a separate lock while sharing a parent
+  branch/status. Saga-level coordination for merges/status writes is undefined.
+location:
+  file: plugins/software-factory/src/cli/lock.ts
+  line: 45
+affects:
+  - "19.3"
+  - "19.6"
+severity: medium
+status: routed
+source:
+  record: 004-context-pack-a1
+  agent: fact-finder
+  step: context-pack
+  lastSeen: 2026-11-09T23:21:29.949Z
+createdAt: 2026-11-09T23:21:29.949Z
+updatedAt: 2026-11-10T01:53:41.429Z
+disposition: architect

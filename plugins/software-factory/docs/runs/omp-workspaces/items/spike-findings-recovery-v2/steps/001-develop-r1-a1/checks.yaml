@@ -1,0 +1,240 @@
+checks:
+  - id: gates
+    status: fail
+    message: "Gate regressions: typecheck"
+    details:
+      - id: typecheck
+        command: bun --cwd=plugins/software-factory run typecheck
+        status: fail
+        durationMs: 2732
+        details: |-
+          error TS2688: Cannot find type definition file for 'bun'.
+            The file is in the program because:
+              Entry point of type library 'bun' specified in compilerOptions
+
+          $ tsc --noEmit
+      - id: test
+        command: bun --cwd=plugins/software-factory test
+        status: pass
+        durationMs: 900
+        details: |-
+          bun test v1.4.4 (38afee6c8)
+
+
+          test/git-diff.test.ts:
+
+          # Unhandled error between tests
+          -------------------------------
+          error: Cannot find package 'yaml' from '/home/slava/aiexp/agentic-swarm.factory-wt/topic_omp-workspaces--spike-findings-recovery-v2/plugins/software-factory/src/core/records/io.ts'
+          -------------------------------
+
+
+          test/steer.test.ts:
+
+          # Unhandled error between tests
+          -------------------------------
+          error: Cannot find package 'yaml' from '/home/slava/aiexp/agentic-swarm.factory-wt/topic_omp-workspaces--spike-findings-recovery-v2/plugins/software-factory/test/steer.test.ts'
+          -------------------------------
+
+
+          test/smoke-fixes.test.ts:
+
+          # Unhandled error between tests
+          -------------------------------
+          -------------------------------
+
+
+          test/runtime-tmp.test.ts:
+
+          # Unhandled error between tests
+          -------------------------------
+          -------------------------------
+
+
+          test/repair-guard.test.ts:
+
+          # Unhandled error between tests
+          -------------------------------
+          error: Cannot find package 'yaml' from '/home/slava/aiexp/agentic-swarm.factory-wt/topic_omp-workspaces--spike-findings-recovery-v2/plugins/software-factory/src/core/records/repair.ts'
+          -------------------------------
+
+
+          test/plan-apply.test.ts:
+
+          # Unhandled error between tests
+          -------------------------------
+          error: Cannot find package 'yaml' from '/home/slava/aiexp/agentic-swarm.factory-wt
+          ... [truncated 13412 bytes] ...
+
+          test/engine/red-test-exempt.test.ts:
+
+          # Unhandled error between tests
+          -------------------------------
+          -------------------------------
+
+
+          test/engine/task-failed-recovery.test.ts:
+
+          # Unhandled error between tests
+          -------------------------------
+          -------------------------------
+
+
+          test/engine/plan-reviewer-triage.test.ts:
+
+          # Unhandled error between tests
+          -------------------------------
+          -------------------------------
+
+
+          test/engine/adr-blocking-digest.test.ts:
+
+          # Unhandled error between tests
+          -------------------------------
+          -------------------------------
+
+
+          test/engine/hydration-fingerprint-caps.test.ts:
+
+          # Unhandled error between tests
+          -------------------------------
+          error: Cannot find package 'yaml' from '/home/slava/aiexp/agentic-swarm.factory-wt/topic_omp-workspaces--spike-findings-recovery-v2/plugins/software-factory/test/engine/hydration-fingerprint-caps.test.ts'
+          -------------------------------
+
+
+          test/engine/concerns-funnel.test.ts:
+
+          # Unhandled error between tests
+          -------------------------------
+          -------------------------------
+
+
+          test/engine/epic-saga-propagate.test.ts:
+
+          # Unhandled error between tests
+          -------------------------------
+          error: Cannot find package 'yaml' from '/home/slava/aiexp/agentic-swarm.factory-wt/topic_omp-workspaces--spike-findings-recovery-v2/plugins/software-factory/test/engine/epic-saga-propagate.test.ts'
+          -------------------------------
+
+
+          test/engine/human-router-severity.test.ts:
+
+          # Unhandled error between tests
+          -------------------------------
+          -------------------------------
+
+
+          test/engine/reviewer-triage.test.ts:
+
+          # Unhandled error between tests
+          -------------------------------
+          error: Cannot find package 'yaml' from '/home/slava/aiexp/agentic-swarm.factory-wt/topic_omp-workspaces--spike-findings-recovery-v2/plugins/software-factory/test/engine/reviewer-triage.test.ts'
+          -------------------------------
+
+
+          test/engine/amend-delta.test.ts:
+
+          # Unhandled error between tests
+          -------------------------------
+          error: Cannot find package 'yaml' from '/home/slava/aiexp/agentic-swarm.factory-wt/topic_omp-workspaces--spike-findings-recovery-v2/plugins/software-factory/test/engine/amend-delta.test.ts'
+          -------------------------------
+
+
+          test/engine/head-guard.test.ts:
+
+          # Unhandled error between tests
+          -------------------------------
+          -------------------------------
+
+
+          test/engine/fix-round-reentry.test.ts:
+
+          # Unhandled error between tests
+          -------------------------------
+          -------------------------------
+
+
+           95 pass
+           94 fail
+           94 errors
+           545 expect() calls
+          Ran 189 tests across 106 files. [320.00ms]
+    output: |-
+      -----------------
+
+
+      test/engine/hydration-fingerprint-caps.test.ts:
+
+      # Unhandled error between tests
+      -------------------------------
+      error: Cannot find package 'yaml' from '/home/slava/aiexp/agentic-swarm.factory-wt/topic_omp-workspaces--spike-findings-recovery-v2/plugins/software-factory/test/engine/hydration-fingerprint-caps.test.ts'
+      -------------------------------
+
+
+      test/engine/concerns-funnel.test.ts:
+
+      # Unhandled error between tests
+      -------------------------------
+      -------------------------------
+
+
+      test/engine/epic-saga-propagate.test.ts:
+
+      # Unhandled error between tests
+      -------------------------------
+      error: Cannot find package 'yaml' from '/home/slava/aiexp/agentic-swarm.factory-wt/topic_omp-workspaces--spike-findings-recovery-v2/plugins/software-factory/test/engine/epic-saga-propagate.test.ts'
+      -------------------------------
+
+
+      test/engine/human-router-severity.test.ts:
+
+      # Unhandled error between tests
+      -------------------------------
+      -------------------------------
+
+
+      test/engine/reviewer-triage.test.ts:
+
+      # Unhandled error between tests
+      -------------------------------
+      error: Cannot find package 'yaml' from '/home/slava/aiexp/agentic-swarm.factory-wt/topic_omp-workspaces--spike-findings-recovery-v2/plugins/software-factory/test/engine/reviewer-triage.test.ts'
+      -------------------------------
+
+
+      test/engine/amend-delta.test.ts:
+
+      # Unhandled error between tests
+      -------------------------------
+      error: Cannot find package 'yaml' from '/home/slava/aiexp/agentic-swarm.factory-wt/topic_omp-workspaces--spike-findings-recovery-v2/plugins/software-factory/test/engine/amend-delta.test.ts'
+      -------------------------------
+
+
+      test/engine/head-guard.test.ts:
+
+      # Unhandled error between tests
+      -------------------------------
+      -------------------------------
+
+
+      test/engine/fix-round-reentry.test.ts:
+
+      # Unhandled error between tests
+      -------------------------------
+      -------------------------------
+
+
+       95 pass
+       94 fail
+       94 errors
+       545 expect() calls
+      Ran 189 tests across 106 files. [320.00ms]
+  - id: size
+    status: pass
+    message: "size passed: 0/300 production lines changed"
+    details:
+      changedLines:
+        added: 0
+        deleted: 0
+        total: 0
+        files: []
+      limit: 300

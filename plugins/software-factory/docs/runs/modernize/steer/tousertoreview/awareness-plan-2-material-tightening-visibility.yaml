@@ -1,0 +1,9 @@
+id: awareness-plan-2-material-tightening-visibility
+ref: plan-2
+disposition: human-awareness
+question: Assumption allows tightening (accepted+miss+absent True, hit False) as
+  intentional, not regression. Operator should be aware SEMANTIC=1 golden will
+  shift; shift report+CHANGELOG+root regen protocol must be visible before
+  iteration-3.
+status: open
+createdAt: 2026-11-08T10:44:23.580Z

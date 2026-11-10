@@ -1,0 +1,56 @@
+status: ok
+summary: "Completed the cache-token usage plumbing end to end: Usage/StepUsage
+  now carry optional cacheReadTokens/cacheWriteTokens/totalTokens and a cost
+  breakdown; the OMP NDJSON parser accumulates them (tolerating absent keys,
+  zero-defaulting totals) and forwards them to onUsage; step-meta/state schemas
+  accept the new optional properties while keeping historical records valid;
+  BudgetTracker, scanSpendFromDisk and deriveTaskState aggregate cache fields
+  with zero defaults; status prints cache token columns. Also tightened the
+  exception/interrupt persistence guards so cache-only usage is not discarded.
+  All four target test files pass, typecheck is clean, and the full suite has no
+  new failures (only the accepted baseline disk-space test)."
+target:
+  selectors:
+    - test/harness/ndjson-usage-cache.test.ts
+    - test/engine/usage-cache-tokens.test.ts
+    - test/contracts/usage-cache-schema.test.ts
+    - test/sessions.test.ts
+  expectRed:
+    - parses cache read/write tokens, total tokens and cost breakdown
+    - zero-defaults cache fields when a historical turn omits them
+    - forwards cache fields to the onUsage callback
+    - persists cache tokens and cost breakdown into step meta records
+    - keeps historical records without cache keys and aggregates zero defaults
+    - sums cache tokens with zero defaults across mixed old and new records
+    - BudgetTracker sums cache tokens with zero defaults
+    - status output surfaces cache token columns
+    - step-meta accepts cache tokens and cost breakdown and keeps legacy usage
+      valid
+    - state spend breakdowns accept cache token columns
+    - accumulates cache tokens and cost breakdown across turns
+evidence:
+  - cd plugins/software-factory && bun test
+    test/harness/ndjson-usage-cache.test.ts
+    test/engine/usage-cache-tokens.test.ts
+    test/contracts/usage-cache-schema.test.ts test/sessions.test.ts -> 16 pass,
+    0 fail, 119 assertions across 4 files
+  - cd plugins/software-factory && bun run typecheck -> tsc --noEmit exit 0
+  - cd plugins/software-factory && bun test (full suite) -> 674 pass, 2 skip, 1
+    fail, 3821 assertions across 104 files; the single failure is the
+    pre-existing accepted baseline test/disk-space.test.ts:57 (env-dependent
+    failingPaths count 2 vs 1), so no NEW failures
+  - bun test test/disk-space.test.ts alone -> 6 pass, 1 fail at the same
+    pre-existing assertion, confirming the baseline red is unchanged
+  - Targeted persistence test asserts meta.usage cacheReadTokens=4000,
+    cacheWriteTokens=500, totalTokens=5700, costUsd=0.0345 and
+    cost.{input,output,cacheRead,cacheWrite}; legacy/mixed aggregation tests
+    assert missing cache keys zero-default via scanSpendFromDisk,
+    deriveTaskState and BudgetTracker getters
+  - "git diff --numstat plus untracked src/core/usage.ts: 174 production
+    insertions, within the ~180 line budget"
+  - Second full-suite run executed after the final guard edits to shutdown.ts
+    and step-runner.ts, confirming the edits introduce no regressions
+notes: Worktree already contained the tests-first artifacts (target tests +
+  NDJSON fixture); this step finished/verified the production implementation.
+  Added only a small completeness fix to the exception/interrupt
+  usage-persistence guards so cache/total-only usage is also recorded.

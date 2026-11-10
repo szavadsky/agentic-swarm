@@ -1,0 +1,29 @@
+id: rm-5f84f18bbd
+chosen: Resolve all six content conflicts by taking the parent tip's
+  (topic/modernize) version of the shared test helpers, integration.py and the
+  autofix tests.
+alternatives:
+  - Union-merge both helper sets, keeping _write_file and make_consumer_project
+    alongside the parent's write_project_file and make_clean_consumer_project
+  - Keep the item-side files wholesale (as the previous merge commit b67837d
+    did) and drop the parent's collect_sample_findings/write_project_file
+    additions
+  - Rewrite the six files by hand to a third, mixed shape
+why: "The parent-side module is a strict superset of the item-side
+  consolidation: it keeps every helper the item introduced (git_init_bare,
+  stage_file, commit_all, shipped_config_paths, make_runner_config,
+  build_pylint_overlay_config, ensure_precommit_or_skip,
+  install_twice_assert_idempotent) and adds write_project_file /
+  collect_sample_findings / make_clean_consumer_project / SAMPLE_PROJECT.
+  Hand-merging both vocabularies would reintroduce duplicate scaffolding helpers
+  (_write_file vs write_project_file), defeating the item's single-source goal."
+status: routed
+source:
+  record: 005-integrate-r1-a1
+  agent: developer
+  step: integrate
+  item: consolidate-integration-helpers-v3
+  lastSeen: 2026-11-09T23:49:50.606Z
+createdAt: 2026-11-09T23:49:50.606Z
+updatedAt: 2026-11-10T02:58:56.108Z
+disposition: optional

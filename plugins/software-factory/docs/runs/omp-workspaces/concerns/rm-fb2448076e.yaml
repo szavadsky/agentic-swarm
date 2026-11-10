@@ -1,0 +1,19 @@
+id: rm-fb2448076e
+chosen: abandon now with v2 reschedule note
+alternatives:
+  - retry-with-guidance/redrive (re-runs 230s suite, fails identically, then
+    engine auto-abandons)
+  - human-async block awaiting operator (stalls autonomous wave for an engine
+    bug)
+why: Fails fast without burning another full-suite redrive; preserves complete
+  docs on the branch for a cheap v2; root cause is engine + target-choice, not
+  item content.
+status: open
+source:
+  record: 018-consult-spike-findings-recovery-1-a1
+  agent: architect
+  step: consult-spike-findings-recovery-1
+  iteration: 1
+  lastSeen: 2026-11-10T04:46:30.746Z
+createdAt: 2026-11-10T04:46:30.746Z
+updatedAt: 2026-11-10T04:46:30.746Z

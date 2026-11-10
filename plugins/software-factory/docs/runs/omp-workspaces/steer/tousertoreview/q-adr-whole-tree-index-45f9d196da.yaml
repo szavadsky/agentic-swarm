@@ -1,0 +1,11 @@
+id: q-adr-whole-tree-index-45f9d196da
+ref: adr-whole-tree-index
+disposition: human-awareness
+question: Remarkable architectural decision adr-whole-tree-index (Whole-tree
+  status/cleanup/gc derive on demand from records + git; no persistent registry)
+  recorded for awareness.
+draftDecision: M4 implements deriveWholeTree over orchestration dirs, journals,
+  and git worktree/branch state on every invocation; cleanup/gc compute
+  candidate sets from the same derivation and refuse while any run lock is live.
+status: open
+createdAt: 2026-11-09T23:33:06.255Z

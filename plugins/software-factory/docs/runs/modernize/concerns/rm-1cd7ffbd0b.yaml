@@ -1,0 +1,17 @@
+id: rm-1cd7ffbd0b
+chosen: Merge the stub family rather than delete it
+alternatives:
+  - Delete redundant pure-helper tests only
+  - Keep 7 modules and only dedupe factories
+why: E97B1-B4/W97B5 fired-message invariants are material checker behavior;
+  duplication is in pure helpers, exports and fixture wiring, not in the
+  invariants themselves.
+status: open
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: test-debloat-audit
+  lastSeen: 2026-11-10T00:53:21.467Z
+createdAt: 2026-11-10T00:53:21.467Z
+updatedAt: 2026-11-10T00:53:21.467Z

@@ -1,0 +1,39 @@
+completedMilestones:
+  - M1
+  - M2
+iteration: 2
+remainingMilestones:
+  - M3
+  - M4
+status: next-iteration
+summary: "Iteration 2 delivered the verifiable repo scope: M1 green baseline +
+  14-tool contract (check-only ruff format strategy, single-sourced registry,
+  14-site docs migration, SIM102/R0914/C0208/W9704-tail fixes, baseline []) and
+  M2 test-infra consolidation + golden hardening (11 helpers single-sourced,
+  integration.py 498 lines, caller asserts, shared slicer, golden
+  byte-identical) — both verified at HEAD by the close-up audit. M3 partial:
+  model matrix + CPU eval (structural no-go with disclosed single-adjudicator
+  limits) + runtime-pinning no-go skip merged; test_pylint_cache_semantics.py
+  still missing (pylint-cache-assumptions running, cache-design-spike pending on
+  its verdict). M4: both audits merged per engine records; report completeness
+  validates at the iteration-3 replan via HEAD re-glob per ADR-008. Secrets
+  verdict is human-async and does not block dev acceptance. Task intent (rule
+  enforcement, debloat, semantic swap) remains iteration-3 scope per plan; no
+  operator blocker."
+techDebt:
+  - "M3 gap: tests/assumptions/test_pylint_cache_semantics.py missing; existing
+    test_pylint_contracts.py does not pin writer/timing/--path scoping needed to
+    derive the cache lock/merge/sweep design"
+  - M3/M4 report deliverables (model matrix, CPU eval, cache design, pylint
+    semantics verdict, runtime pinning, coding-rules + test-debloat audit
+    tables) live in orchestration records outside the repo audit boundary;
+    architect must confirm them before the iteration-3 replan
+  - AGENTS.md Tool Scope table lists 13 scoped tools and omits a ruff format row
+    while the registry has 14 tools
+  - AGENTS.md Quick Commands test counts look stale (1290 pass / 7 pass;
+    integration.py now has 9 test methods)
+  - Gate execution (format exit 0, zero lint violations, pytest + integration
+    green) not verified by this read-only audit; confirm via engine gate results
+  - "Eval no-go gates semantic implementation: iteration-3 epic must escalate or
+    require double-rated real brush-off sample + human license review before any
+    model ships; cache spike stays model-agnostic"

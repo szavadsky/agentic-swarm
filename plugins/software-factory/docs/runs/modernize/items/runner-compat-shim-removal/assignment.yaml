@@ -1,0 +1,24 @@
+slug: runner-compat-shim-removal
+kind: no-behavior
+title: Remove runner compat shims
+assignment: "Owns runner/baseline.py/.pyi + runner/parsers.py re-export lines +
+  shim-asserting lines in the merged baseline-diff tests ONLY (applied onto
+  merged shape from baseline-diff-merge); FORBIDDEN dispatch*/__init__
+  (dispatch-split), types.py/cli-threading (cache-impl), tests/data, baseline
+  edits. Enumerate shim symbols + asserting tests via grep at HEAD
+  (peek_fallback_tools, _FALLBACK_TOOLS, _compare_sorted; incl
+  test_baseline_diff_edge.py:229-236, verify). Delete shims + stale parsers
+  re-exports and update asserting tests; leave __init__ re-export +
+  trivial_wrapper exemptions to dispatch/checkers items. Keep only with in-repo
+  consumer grep evidence + debt note. Verify: grep zero shim symbols (or
+  evidenced with file:line consumers); no new failures vs M1 table; golden
+  hash-equal or shift-reported."
+outlineRef: runner-compat-shim-removal
+milestone: M3
+wave: 2
+deps:
+  - baseline-diff-merge
+scenarioRefs:
+  - "M3: Runner split without drift"
+citations:
+  - CodingRules.md:90-107

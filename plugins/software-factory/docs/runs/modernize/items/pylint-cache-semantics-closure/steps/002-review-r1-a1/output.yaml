@@ -1,0 +1,95 @@
+status: changes_requested
+summary: "Verdict core true (writer/timing/key/sequential/no-j) but
+  single-writer overstated: jobs settable via consumer rcfile unpinned;
+  docstring cites phantom files field and misstates pylint pin."
+suggestions:
+  - id: jobs-rcfile-bypass-unpinned
+    disposition: fix
+    summary: Single-writer verdict bypassable via consumer rcfile jobs>1; no watchdog
+    detail: "jobs is an rcfile-settable int option (pylint/lint/base_options.py jobs
+      default 1). Runner resolves rcfile via _resolve_pylintrc (dispatch.py:307,
+      cmd_build.py:143-150): explicit config_paths['pylint'],
+      cwd/config/.pylintrc, cwd/.pylintrc, plus --config TOOL=PATH. A consumer
+      rcfile with jobs>1 silently enables the ProcessPoolExecutor path
+      (parallel.py:141 via pylinter.py:701) despite no CLI -j. Verdict docstring
+      claims 'single writer, no lockfile required today' unconditionally and no
+      test scans shipped config/.pylintrc* for jobs. Add watchdog in same file
+      scanning shipped rcfiles for jobs and qualify docstring: verdict holds
+      only when effective jobs==1."
+    location:
+      file: tests/assumptions/test_pylint_cache_semantics.py
+      line: 27
+  - id: tracked-schema-files-field-phantom
+    disposition: fix
+    summary: Docstring cites non-existent tracked schema files field as present fact
+    detail: Sweep bullet references 'the tracked schema's files field'. Current
+      schema is dict[int,bool] (_semantic.py:47,
+      docs/semantic-justification.md:42); grep over src+docs for files field
+      yields zero hits. ADR-007/010 frame tracked cache as future design.
+      Verdict is consumed as observed ground truth by cache-design-spike;
+      presenting a future field as existing misleads. Reword to proposed/future
+      input (e.g. 'would-be schema needs per-entry file refs').
+    location:
+      file: tests/assumptions/test_pylint_cache_semantics.py
+      line: 23
+  - id: pylint-pin-misstatement
+    disposition: fix
+    summary: Docstring claims pylint pinned at 4.0.6; pyproject has >= floor
+    detail: Line 3 says 'pylint 4.0.6 (pinned in pyproject.toml)' but
+      pyproject.toml:13 is 'pylint>=4.0.6'. Floor allows upgrades that can shift
+      jobs default or check_parallel implementation the verdict pins. Correct to
+      'floor' and note watchdog intent on upgrade.
+    location:
+      file: tests/assumptions/test_pylint_cache_semantics.py
+      line: 3
+  - id: empty-primary-no-write-unpinned
+    disposition: optional
+    summary: Third no-write path (empty primary) omitted from timing enumeration
+    detail: "_semantic.py:139-140 returns False before key computation when primary
+      empty: writes nothing and caches nothing. Verdict timing lists only 'hits
+      and heuristic fallbacks write nothing'. Pin this path or extend
+      enumeration so epic does not assume every False is cached."
+    location:
+      file: tests/assumptions/test_pylint_cache_semantics.py
+      line: 14
+  - id: runner-sequentiality-not-pinned
+    disposition: optional
+    summary: Sequential runner assumed but only registry order pinned
+    detail: Concurrency relies on cli.py:153 blocking for-loop over tools, but tests
+      pin only TOOLS order + no -j flags. A future ThreadPool/ProcessPool
+      dispatch in the runner would silently void single-writer. Consider an AST
+      watchdog (like the writer single-caller test) asserting no concurrent
+      dispatch in runner/cli pipeline.
+    location:
+      file: tests/assumptions/test_pylint_cache_semantics.py
+      line: 345
+  - id: check-parallel-process-ness-unpinned
+    disposition: optional
+    summary: Separate-processes claim true today but dispatch-only pinned
+    detail: Test pins jobs>1 dispatches to check_parallel, docstring claims
+      'separate processes'. True today via ProcessPoolExecutor
+      (pylint/lint/parallel.py:141) but not pinned; a pylint upgrade swapping to
+      threads would silently void the sidecar-vs-lock rationale. Pin
+      ProcessPoolExecutor in check_parallel source.
+    location:
+      file: tests/assumptions/test_pylint_cache_semantics.py
+      line: 357
+  - id: pylint-stats-path-platform
+    disposition: optional
+    summary: Pylint stats path cited as Linux-only ~/.cache/pylint
+    detail: Line 6 contrasts with '~/.cache/pylint/*.stats' as if universal; pylint
+      persistent-data home is platform-dependent. Qualify as Linux example to
+      avoid confusion on macOS/Windows.
+    location:
+      file: tests/assumptions/test_pylint_cache_semantics.py
+      line: 6
+  - id: single-caller-scan-misses-attribute
+    disposition: optional
+    summary: Single-caller AST scan matches only bare Name calls
+    detail: Writer watchdog checks getattr(node.func,'id')=='_save_result_cache',
+      missing module-qualified forms (e.g. semantic_module._save_result_cache,
+      self._save_result_cache). A second writer via attribute call would pass
+      silently. Also match ast.Attribute attr.
+    location:
+      file: tests/assumptions/test_pylint_cache_semantics.py
+      line: 294

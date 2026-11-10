@@ -1,0 +1,16 @@
+id: rm-63922d9635
+chosen: Configure omp via a generated YAML overlay per turn
+alternatives:
+  - persisted omp config writes
+  - per-agent omp profiles
+  - CLI flags per launch
+why: Deterministic given the same pipeline config and keeps role/fallback
+  mapping in one place; supports unattended switches.
+status: open
+source:
+  record: 004-context-pack-a1
+  agent: fact-finder
+  step: context-pack
+  lastSeen: 2026-11-09T23:21:29.949Z
+createdAt: 2026-11-09T23:21:29.949Z
+updatedAt: 2026-11-09T23:21:29.949Z

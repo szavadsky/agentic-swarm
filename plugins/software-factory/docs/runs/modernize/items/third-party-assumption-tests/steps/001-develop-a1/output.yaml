@@ -1,0 +1,74 @@
+status: ok
+summary: "Added tests/assumptions/ (empty __init__.py +
+  test_astroid_contracts.py, test_pylint_contracts.py,
+  test_beartype_contracts.py) with distinct
+  TestAstroidContracts/TestPylintContracts/TestBeartypeContracts classes,
+  pytestmark no_external_api, and exactly 8 tests (one per pinned contract)
+  named test_<api>_given_<condition>_then_<expected>. All 8 pass on the current
+  pinned versions: astroid 4.0.4, pylint 4.0.6, beartype 0.22.9. No src/ or
+  AGENTS.md changes; only untracked tests/assumptions files remain."
+target:
+  command: uv run pytest tests/assumptions -q
+  customTarget: true
+evidence:
+  - "`uv run pytest tests/assumptions -q` -> 8 passed (2.12s first run; repeated
+    green at 0.27s final)."
+  - "`uv run pytest tests/assumptions --collect-only -q` -> exactly 8 nodes: 4
+    TestAstroidContracts, 3 TestPylintContracts, 1 TestBeartypeContracts; every
+    name matches test_<api>_given_<condition>_then_<expected>."
+  - "`uv run pytest tests/assumptions -q -m no_external_api` -> 8 passed,
+    confirming the module-level marker selects all assumption tests."
+  - "Failure detection (astroid): temporarily changed pinned Const span
+    expectation 8 -> 9 in
+    test_const_and_joined_str_given_literals_then_span_attributes_are_ints; test
+    failed with `assert (1, 1, 8, 10) == (1, 1, 9, 10)`; restored and re-ran
+    green."
+  - "Failure detection (pylint): temporarily changed expected open order in
+    test_pylinter_register_checker_given_two_checkers_then_open_close_wrap_chec\
+    k_in_name_order; test failed with observed ['open:alpha','open:zulu',...] vs
+    mutated expected; restored and re-ran green."
+  - 'Failure detection (beartype): temporarily expected TypeError instead of
+    BeartypeCallHintForwardRefException; test failed with
+    `beartype.roar.BeartypeCallHintForwardRefException: Forward reference
+    "PyLinter" unimportable...`; restored and re-ran green.'
+  - "`uv run ruff check --config config/ruff.toml tests/assumptions` and `uv run
+    ruff format --check --config config/ruff.toml tests/assumptions` -> All
+    checks passed, 4 files already formatted."
+  - "`uv run pylint --rcfile=config/.pylintrc-tests tests/assumptions --score=n`
+    -> 0 messages (score 10.0), including no
+    trivial-wrapper/missing-return-annotation violations."
+  - "`uv run pytest -q` full unit suite -> 1308 passed, 4 skipped, 6 failed; the
+    6 failures are pre-existing tool-registry tests (expect 13 tools but
+    environment exposes 14 including 'ruff format') and are unrelated to
+    tests/assumptions."
+  - "`git status --porcelain` -> only `?? tests/assumptions/`; `git diff` line
+    count 0 (no tracked-file modifications)."
+concerns:
+  - "Full-suite failures are pre-existing/environmental:
+    tests/runner/test_lint_runner.py (TestToolSpec), test_lint_runner_stats.py,
+    test_t3_coverage.py and test_testing_fakes.py expect a 13-tool registry but
+    the worktree exposes 14 tools including 'ruff format'. They reproduce
+    without the assumption tests and do not involve the new files."
+  - Running `uv run lint` in this worktree autofixes unrelated tracked files (it
+    reflowed ~105 files). All such tracked modifications were reverse-applied
+    with a patch; the final tree contains only the new tests/assumptions files.
+notes: "Item report for M3 (beartype discovery): with beartype 0.22.9 and `from
+  __future__ import annotations`, a TYPE_CHECKING-only forward reference does
+  NOT fail at import/decoration time; every call raises
+  beartype.roar.BeartypeCallHintForwardRefException at CALL time, even when
+  passed an instance of the intended runtime type (name cannot be resolved from
+  module globals). Outcome is call-time, not import-time and not checker-only:
+  @beartype silences the static missing-beartype rule but cannot enforce such
+  signatures. Other observed pins: astroid 4.0.4 Module.stream().read() returns
+  bytes (product decode-if-bytes yields exact UTF-8 source), doc_node is Const
+  for module/class/function docstrings and None when absent,
+  nodes_of_class(tuple) yields the union in document pre-order, and
+  Const/JoinedStr expose exact int
+  fromlineno/end_lineno/col_offset/end_col_offset; pylint 4.0.6 register_checker
+  invokes no hooks while check() opens prepared checkers in checker-name order
+  then closes in reverse, CheckerTestCase/UnittestLinter release_messages
+  returns and drains list[MessageTest] with fields
+  (msg_id,line,node,args,confidence,col_offset,end_line,end_col_offset), and
+  MessageDefinitionTuple is a 3-or-4 element union whose leading positions are
+  msgid/symbol/description with optional 4th ExtraMessageOptions. No src/
+  changes; AGENTS.md untouched."

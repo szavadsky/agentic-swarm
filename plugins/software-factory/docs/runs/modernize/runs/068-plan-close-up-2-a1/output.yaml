@@ -1,0 +1,62 @@
+iteration: 2
+status: next-iteration
+summary: "M1 VERIFIED COMPLETE (repo): _RuffFormatLintTool with check-mode
+  build_command (--check + --config resolved ruff.toml) and mutating
+  build_format_command; cli.py phase-1a calls build_format_command, normal pass
+  calls build_command; 'ruff format'->ruff.toml mapped in _config.py +
+  _config_flag_for; registry invariants
+  (EXPECTED_TOOL_NAMES/FORAMTTER_ONLY/STATISTICS/RECORD/RECORDLESS) owned by
+  dispatch.py and re-exported via runner/__init__.py (+.pyi); 6 named tests
+  migrated to 14/EXPECTED with FORMATTER_ONLY exemptions; docs per-hit migration
+  verified (AGENTS 9,43,63,92,93; README 17,58; overlays 3; tutorials 26;
+  troubleshooting 155; factories/extras; bench/smoke/fakes sites) with
+  CHANGELOG:104 correctly staying 13; tool_counts.json has 14 keys incl 'ruff
+  format':0; SIM102 combined-condition fix, cli.py locals split
+  (_run_fix_phase/_select_lint_tools), C0208 sequence fix all present;
+  lint.baseline is []; TestPipelineModes/TestRuffFormatStrategy assert
+  check-only semantics. M2 VERIFIED COMPLETE (repo): 11 helpers defined exactly
+  once in tests/_project_helpers.py with pinned signatures (mkdir-parents copy,
+  test/test@test stage, rumdl-override idempotent config, -q bare init,
+  msg='init' commit); conftest def deleted with both importers rewritten; no
+  conftest/integration imports (cycle guard holds); stay-symbols untouched in
+  _autofix_helpers.py; integration.py is 498 lines with both stale suppressions
+  gone (too-many-locals globally disabled in .pylintrc-tests); collect_findings
+  keeps tool order with sorting only in serialize/_diff_keys; caller asserts
+  findings non-empty + [CRASH]-absent + SKIPPED-only-package_name; no __CRASH__
+  sentinel; UPDATE guard fails under CI; overlay test uses
+  slice_tool_section('[pylint]','[pylint-pyi]'); temp-copy double-collect
+  byte-identity asserted. M3 NOT VERIFIED / GAP: committed deliverable
+  tests/assumptions/test_pylint_cache_semantics.py required by
+  pylint-cache-assumptions is absent (tests/assumptions/ holds only
+  pylint/astroid/beartype contract tests; the pylint lifecycle test pins
+  open/close ordering but not writer identity, write timing, or --path scoping
+  across the 3 pylint invocations); decision-runtime-pinning file status is
+  conditional on the eval verdict and unverifiable from repo;
+  model-matrix/eval/cache/secrets spikes are report-only by design. M4 NOT
+  VERIFIABLE FROM REPO: both audits are zero-write by design with report tables
+  as replan input; no committed map exists (consistent with ADR-008) but report
+  completeness lives outside the repo audit boundary. This is a read-only audit:
+  gate exit codes (format/lint/pytest/integration) were not executed and must be
+  confirmed from engine gate results. Task intent (coding-rules enforcement,
+  debloat, semantic swap) remains scheduled for iteration 3 per the plan; no
+  semantic production code changed, as expected."
+completedMilestones:
+  - M1
+  - M2
+remainingMilestones:
+  - M3
+  - M4
+techDebt:
+  - "M3 gap: tests/assumptions/test_pylint_cache_semantics.py missing; existing
+    test_pylint_contracts.py does not pin writer/timing/--path scoping needed to
+    derive the cache lock/merge/sweep design"
+  - M3/M4 report deliverables (model matrix, CPU eval, cache design, pylint
+    semantics verdict, runtime pinning, coding-rules + test-debloat audit
+    tables) live in orchestration records outside the repo audit boundary;
+    architect must confirm them before the iteration-3 replan
+  - AGENTS.md Tool Scope table lists 13 scoped tools and omits a ruff format row
+    while the registry has 14 tools
+  - AGENTS.md Quick Commands test counts look stale (1290 pass / 7 pass;
+    integration.py now has 9 test methods)
+  - Gate execution (format exit 0, zero lint violations, pytest + integration
+    green) not verified by this read-only audit; confirm via engine gate results

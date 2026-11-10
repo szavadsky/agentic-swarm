@@ -1,0 +1,4 @@
+status: approved
+summary: "Conditional skip verified: clean worktree, no contract file, 8
+  assumption tests green, no src changes"
+suggestions: []

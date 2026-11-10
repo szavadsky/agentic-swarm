@@ -1,0 +1,13 @@
+context: wave
+decision: continue
+rationale: "Wave 6 empty but healthy: 0 merged/0 blocked/0 failed, tree clean
+  (only engine journal modified), no conflict markers, all 4 gates green with
+  lint/test IMPROVED vs baseline and zero regressions. 11/16 tracked items
+  merged; 2 running (checkers-stream-helper wave2, decision-cache-impl wave4)
+  gate pending legacy/tests/docs chain, explaining empty waves 5-6. No new spike
+  findings; cache-design verdict already consumed by merged backend. Debts are
+  pre-existing operator-owned (tracked ':bash' junk, mutating ruff format
+  ToolSpec), not plan blockers. Producer prune-only gap remains tracked
+  awareness until cache-impl merges."
+text: Proceed to next wave; allow running stream-helper and cache-impl to merge
+  to unblock legacy/tests/docs chain. No amendment.

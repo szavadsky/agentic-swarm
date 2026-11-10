@@ -1,0 +1,39 @@
+slug: semantic-tests-rewrite
+kind: test-only
+title: Rewrite semantic tests and docs (no AGENTS)
+assignment: "Second writer (after M2 handoffs): threshold 2 files (preserve M2
+  deduped table; rewrite reranker classes only) + suppression-file pipeline
+  block (after guards) + tests/assumptions runtime/decision/cache modules
+  (append-only; deliberate cache-semantics rewrite, not loosened; never touch
+  root __init__ + astroid/beartype/pylint contracts) + semantic-justification.md
+  + custom-checks bullet + troubleshooting section + docs/adr/ADR-014.md +
+  ADR-016.md ONLY; FORBIDDEN AGENTS.md/CHANGELOG.md (snippet in report; docs
+  writes file), tests/data, src. Merge tables pinned (preserved); FakeBackend
+  kwarg + env; cache tmp + hypothesis format incl sort-key determinism; delete
+  vacuous + ImportError-propagation; 4 pair tests
+  (test_semantic_check.py:432,453,473,493, verify): deleted iff the class
+  imports/calls sentence-transformers or _load_reranker/_reset_cache
+  (reranker-coupled), else marked slow; full PYTHON_SETUP_LINT_DECISION_MODEL
+  name in tests/docs. Modules <=500, no suppressions, never test linting;
+  exactly one slow+with_real_api e2e SKELETON required (skipped until model).
+  Docs state veto + cache + no-go; ADRs carry Context/Decision/Consequences +
+  pinned values. Verify: no new failures vs M1 table; golden hash-equal or
+  shift-reported; rumdl clean."
+outlineRef: semantic-tests-rewrite
+milestone: M4
+wave: 5
+deps:
+  - checkers-semantic-guards
+  - decision-backend-impl
+  - decision-cache-impl
+  - semantic-threshold-consolidation
+scenarioRefs:
+  - "M4: Veto backend without model"
+  - "M4: Cache read-only plus explicit refresh"
+citations:
+  - tests/checkers/test_semantic_check.py:1-7
+  - tests/checkers/test_semantic_check.py:263-424
+  - tests/checkers/test_semantic_threshold.py:19-25
+  - docs/semantic-justification.md:5-14
+  - docs/semantic-justification.md:56-62
+  - pyproject.toml:49

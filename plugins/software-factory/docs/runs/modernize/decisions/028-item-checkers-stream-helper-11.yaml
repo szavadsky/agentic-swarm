@@ -1,0 +1,22 @@
+id: decision-checkers-stream-helper-1794262492124
+context: item
+item: checkers-stream-helper
+afterRecord: 006-integrate-r1-a1
+decision: abandon
+timestamp: 2026-11-09T22:14:52.124Z
+rationale: "Exit 127 on gate 'tests' persists across 11 target overrides with
+  zero new execution on same integrate record; infra gates are
+  format/lint/test/test-integration, never 'tests'. Owned _source_stream 12
+  paths green in-worktree with QA first-# fix, but branch base is I4-wave-1
+  stale: tip-vs-HEAD reverts I4 M2 _tool_specs split, factories splits,
+  conftest/runner, ADR-019..024, state to I4. Fix rounds cannot rebase stale
+  branch; requires fresh HEAD v2."
+text: "Replan as checkers-stream-helper-v2 next wave from fresh HEAD: re-apply
+  owned-only 12 paths (NEW _source_stream.py/.pyi, bare_except, suppression+.pyi
+  with src_line.split('#',1)[0] preserved, stub checker/coverage+.pyi,
+  test_source_stream, astroid call, stub_coverage call,
+  TestCodeContextDerivation union, reranker dropped). Touch nothing else.
+  Declare target {command:uv run pytest -q,customTarget:true} never gate tests.
+  Cherry-pick owned files from abandoned branch; verify pytest, lint 14/14,
+  integration 9, grep single-owner."
+reason: consults-exhausted

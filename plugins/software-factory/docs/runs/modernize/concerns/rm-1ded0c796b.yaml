@@ -1,0 +1,19 @@
+id: rm-1ded0c796b
+chosen: Judged gates solely from Gate Diff table; lint and test count as fixed
+  (fail to pass), format and test-integration remain green
+alternatives:
+  - Treat red baseline as blocking
+  - Infer fixes from raw log text comparison
+why: Per close-up rules, raw output text differs run to run; only
+  baseline-vs-now verdicts are authoritative, and both red-baseline gates now
+  pass with no regressions
+status: routed
+source:
+  record: 138-wave-close-up-5-4-a1
+  agent: wave-close-up
+  step: wave-close-up-5-4
+  iteration: 5
+  lastSeen: 2026-11-09T21:50:23.652Z
+createdAt: 2026-11-09T21:50:23.652Z
+updatedAt: 2026-11-10T02:32:36.259Z
+disposition: optional

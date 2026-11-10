@@ -1,0 +1,11 @@
+context: wave
+decision: continue
+rationale: "Wave 2 (I5) succeeded: 1/1 merged (secrets-triage-spike, stranded),
+  0 failed/blocked, tree clean, gates green with lint/test IMPROVED fail->pass
+  and zero regressions. Merge is legacy stranded scope, not an I5 plan item; no
+  spike findings alter I5 U1/U2 verdicts and no new unknowns require rescope. I5
+  plan items remain unscheduled; stranded running items (decision-cache-impl,
+  checkers-stream-helper) still in flight and assessed after merge per prior
+  wave guidance."
+text: Proceed to next scheduled wave; schedule I5 M1/M2 dep-free items and allow
+  stranded running items to merge.

@@ -1,0 +1,210 @@
+status: changes_requested
+summary: "changes_requested: bounds pass (5 ms, 22 items, acyclic, hints <=300)
+  but 10 fix (dispatch alias, _base dedup contradiction, joiner dep gap, CLI
+  threading, docs deps, absolute-green vs red-tolerant, cache sort key,
+  spike-blocker, corpus raters, env naming) + 1 architect (tach) + 1 awareness
+  (infra-only) + 4 optional"
+suggestions:
+  - id: dispatch-alias-misidentification
+    disposition: fix
+    summary: Dispatch split misidentifies LINT_TOOLS as removable TOOLS alias
+    detail: "Plan orders removal of 'TOOLS legacy alias (dispatch.py:503-507)', but
+      those lines define LINT_TOOLS=list(TOOLS) (live registry); TOOLS itself is
+      the frozen built-ins at :46. LINT_TOOLS is consumed by _select_tools
+      (_cli_complexity.py:44), _config.py:127, cli.py, extra_tools — deleting it
+      breaks runtime. EXPECTED_TOOL_NAMES already derives from TOOLS (:144), so
+      the 'derives via re-exports' change is undefined. Revise: name canonical
+      list, preserve live-registry semantics, specify re-export shape."
+    location:
+      file: src/python_setup_lint/runner/dispatch.py
+      line: 507
+  - id: stream-helper-base-contradiction
+    disposition: fix
+    summary: Stream helper forbids _base diff yet requires _base dedup
+    detail: "Item mandates zero _base.py/.pyi diff but also 'dedupe coverage.py
+      _is_under_source_root to _base helper'. Signatures differ: _base(path,
+      source_roots) with resolve() vs coverage(checker, path) via
+      checker._coverage.patterns without resolve — dedup needs a _base change or
+      new helper. 'Share trailing/preceding comment extraction' likewise needs a
+      home outside the read_module_source-only scope. Revise: allow additive
+      _base helper or scope sharing to _source_stream with explicit API, and pin
+      surviving _is_under_source_root."
+    location:
+      file: src/python_setup_lint/checkers/stub/coverage.py
+      line: 131
+  - id: joiner-ownership-dep-gap
+    disposition: fix
+    summary: Joined-rule logic split across legacy and backend with no dep edge
+    detail: "Legacy-cleanup 'emit joined codes (strip/dedupe/ASCII-sort/join)' and
+      backend-impl 'joiner/sort/match' both own join logic; legacy notes
+      'matching implemented by backend-impl' but its deps (stream-helper,
+      shim-removal) exclude backend-impl. Result is either duplicated joiners or
+      a block on an undefined import (_base.py:238 is the current single-symbol
+      match site). Revise: single-owner joiner (e.g., backend owns helper in
+      _base, legacy deps backend) with explicit import contract."
+    location:
+      file: src/python_setup_lint/checkers/_base.py
+      line: 238
+  - id: cache-cli-threading-incomplete
+    disposition: fix
+    summary: Refresh flag cannot be implemented in cli.py alone;
+      RunnerConfig/parsing unowned
+    detail: "Cache-impl owns NEW _decision_cache + flag 'in runner cli ONLY', but
+      --refresh-decisions/--path needs a RunnerConfig field (types.py), arg
+      parsing/building
+      (_cli_complexity._parse_config_args/_build_runner_config), help/output.
+      None owned, no deps from dispatch-split (which owns
+      dispatch/__init__/registry tests only). Revise: extend cache-impl
+      ownership to types.py + cli-complexity parsing (or name second writer with
+      dep) and pin field names."
+    location:
+      file: src/python_setup_lint/runner/types.py
+      line: 49
+  - id: docs-missing-deps
+    disposition: fix
+    summary: Docs-reconciliation races M3 + semantic-tests count-affecting merges
+    detail: "Docs verifies AGENTS counts from rerun actuals but deps omit
+      runner-dispatch-split, runner-compat-shim-removal, checkers-stream-helper,
+      checkers-legacy-dead-cleanup, semantic-tests-rewrite — registry migration
+      and reranker-class rewrite change collection counts after docs runs.
+      Revise: add deps on those five (or narrow docs to M2-only counts with an
+      M3/M4 delta follow-up)."
+    location:
+      file: AGENTS.md
+      line: 10
+  - id: absolute-green-vs-red-baseline
+    disposition: fix
+    summary: Milestone scenarios demand absolute green while M1 tolerates red
+    detail: "M1 records red-as-red non-gating and items verify 'no new failures',
+      but M2/M3/M4 scenarios assert 'pytest + integration green'/'gates green'.
+      If HEAD is red (TD4-B2: I3 gate unclosed; baseline [] fails on any
+      violation), absolute-green scenarios are unsatisfiable mid-iteration and
+      contradict item-level relative checks. Revise scenarios to 'no new
+      failures vs M1 baseline table (exits/counts/hash cited)' with red-routing;
+      reserve absolute green for M5 final gate."
+    location:
+      file: lint.baseline
+      line: 1
+  - id: cache-sort-key-undefined
+    disposition: fix
+    summary: Tracked-cache array sort order undefined; determinism unprovable
+    detail: "Contract says 'sorted array, indent=2, sort_keys' but sort_keys orders
+      object keys, not array elements. Entry sort key (justification? rule?
+      model? tuple?) is unspecified in ADR-017/ADR-010, so refreshes may
+      serialize different orders (hash flakiness). Spike tmp proofs cannot
+      assert determinism without it. Revise: pin array sort key e.g.
+      (justification, rule, model) in ADR-017 + spike completeness gate."
+    location:
+      file: docs/adr/ADR-010.md
+      line: 26
+  - id: spike-blocker-propagation
+    disposition: fix
+    summary: Cache-spike blocker has no consumption mechanism; impls would run anyway
+    detail: "Spike contract says 'or explicit blocker (impls pause)' but
+      backend/cache impls only dep-order on the spike; no interface defines how
+      a blocker verdict halts them (report field? consult trigger? no-op
+      attestation?). Dep satisfaction is not a pause. Also M4 milestone
+      interfaces omit the cache-design-spike verdict shape (4 interfaces for 5
+      items). Revise: define verdict enum (feasible|blocked) + impl behavior on
+      blocked, and add the M4 spike interface."
+    location:
+      file: docs/adr/ADR-010.md
+      line: 35
+  - id: corpus-rater-resourcing
+    disposition: fix
+    summary: Double-rated corpus spike names no second rater; bias-repair unfalsifiable
+    detail: "Spike requires N>=100 post-dedup, both strata, rubric, adjudication +
+      inter-rater agreement, terse borderlines re-rated, 'repairing
+      single-author bias' — but a single fact-finder turn is one rater; no
+      second rater/adjudicator resourced. Single-agent double-pass does not
+      repair single-author bias. Revise: name rater identities (two independent
+      disclosed passes + adjudication rule, or human second rater) or downgrade
+      to single-rated pilot with bias NOT repaired."
+    location:
+      file: tests/checkers/test_semantic_check.py
+      line: 159
+  - id: decision-model-naming
+    disposition: fix
+    summary: Decision-model env var named inconsistently (DECISION_MODEL vs full name)
+    detail: "M4 interface says 'DECISION_MODEL parses but loader None' while M5 docs
+      checklist requires 'PYTHON_SETUP_LINT_DECISION_MODEL' in
+      troubleshooting.md; loader behavior (parse + None + exactly-one warning)
+      needs the exact variable, parallel to PYTHON_SETUP_LINT_RERANKER_MODEL.
+      Revise: use the full PYTHON_SETUP_LINT_DECISION_MODEL name everywhere
+      (interface, ADR-014/016, item descriptions)."
+    location:
+      file: src/python_setup_lint/checkers/_semantic.py
+      line: 49
+  - id: tach-cache-placement
+    disposition: architect
+    summary: Decision-cache placement contradicts tach (both modules depend on nothing)
+    detail: "tach gives checkers and runner empty depends_on, but the cache needs
+      cross-module use: runner CLI (refresh write path) and checkers _base (read
+      path) in either placement direction — unless duplicated or put in a third
+      module (also forbidden without a tach update). No item owns tach.toml
+      (docs owns ty.toml only), so 'tach-clean' is unverifiable. Architect:
+      decide placement (third module + tach update, duplication, or exception)
+      and assign tach.toml ownership."
+    location:
+      file: config/tach.toml
+      line: 15
+  - id: infra-only-closeup-awareness
+    disposition: human-awareness
+    summary: I4 ships infra-only while intent demands model swap; operator approval
+      needed
+    detail: Intent requires replacing the reranker with a CPU-friendly decision
+      model; plan defers all model wiring to I5 on corpus+license+CPU gates,
+      which is sound given the 215/0 no-go but is a scope deviation ADR-009 says
+      the operator must approve at close-up ('must not claim swap complete').
+      Proceed with infra now; record operator awareness that close-up stays
+      heuristic-first.
+    location:
+      file: docs/adr/ADR-009.md
+      line: 23
+  - id: sizing-hints-advisory
+    disposition: optional
+    summary: Backend/cache hints (150/120) look low for veto+loader+pyi /
+      refresh+lockfile scope
+    detail: "Advisory only per review rules (never blocking): decision-backend-impl
+      150 covers NEW backend+pyi, _base/_semantic rewrite, Fake/NoBackend,
+      loader+sentinel warnings, [semantic]+uv.lock; decision-cache-impl 120
+      covers NEW cache+pyi, refresh flag, lockfile+merge+atomic, prune, --path
+      scoping, jobs guard, CI-fail. Both may land above hint; no plan change
+      required unless the architect wants re-budgeting."
+    location:
+      file: src/python_setup_lint/checkers/_semantic.py
+      line: 1
+  - id: secrets-plant-tracking
+    disposition: optional
+    summary: Planted control secret must be git-added to be visible to git ls-files scan
+    detail: "Filtered scan pipes git ls-files (tracked only) into the hook, so a
+      plant in an untracked tmp location exits 0 instead of the asserted 1.
+      Clarify the procedure: plant + git add inside a scratch clone at pinned
+      HEAD, scan (expect 1), discard the clone so the pinned HEAD stays clean;
+      report exact add/scan/remove steps."
+    location:
+      file: .secrets.baseline
+      line: 42
+  - id: docs-exact-string-phrasing
+    disposition: optional
+    summary: Checklist string '9 collected, 0 failed' does not match pytest phrasing
+    detail: M5 requires the AGENTS integration row to contain '9 collected, 0
+      failed', but pytest reports 'N passed, M skipped' (9 passed with
+      pre-commit env, 7 passed + 2 skipped without per the two
+      ensure_precommit_or_skip tests). Pin the row to '--collect-only count +
+      pass/skip split' wording so the grep is satisfiable and unambiguous.
+    location:
+      file: AGENTS.md
+      line: 11
+  - id: unpinned-alternatives
+    disposition: optional
+    summary: Several 'A or B' acceptances unpinned; define selection rule per case
+    detail: "Examples: 4 pair tests 'slow or deleted', final detect-secrets 'lint
+      --tools on pinned paths, or full 14-tool lint on scoped tree', prune
+      'test_real_pipeline_smoke.py kept, or a named survivor'. Each branch is
+      individually falsifiable via the report citation, but pinning one (or
+      stating the chooser, e.g. 'deleted iff reranker-coupled, else slow') would
+      tighten M4/M5 verification."
+    location:
+      file: tests/checkers/test_semantic_check.py
+      line: 424

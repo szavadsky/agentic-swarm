@@ -1,0 +1,73 @@
+status: ok
+summary: "Generated and committed the golden snapshot artifacts via the helper
+  serializer: tests/data/golden/minimal_sample_project_findings.json (158
+  findings, 1108 lines) and
+  tests/data/golden/minimal_sample_project_tool_counts.json (14 tools, 16
+  lines), outside the sample dir and under the already-excluded tests/data tree.
+  Verified the existing test-first wiring of
+  tests/integration.py::test_setup_new_and_lint against the assignment (first
+  run assertions retained; dedicated pristine-copy capture with SEMANTIC=0,
+  git-init and rumdl override; golden equality + oracle/tool coverage;
+  tool-qualified brush-off/carry lookups; in-memory drift injection), then
+  proved determinism by regenerating twice with
+  PYTHON_SETUP_LINT_UPDATE_GOLDEN=1 (CI guard explicitly unset for local
+  regeneration) on different tmp copies: all three captures produced
+  byte-identical hashes. No src changes were needed: the probe's
+  path-relativization/normalization hazards are handled test-side and the golden
+  contains no absolute/temp paths (R0801 does not leak spans because pylint uses
+  the json2 symbol path). Target and acceptance commands pass; full unit suite
+  has 6 pre-existing unrelated fake-dispatch invariant failures (13 vs 14 tools)
+  from earlier commit 39caa24, untouched by this step."
+target:
+  selectors:
+    - tests/integration.py::TestMinimalSampleProject::test_setup_new_and_lint
+  expectRed:
+    - tests/integration.py::TestMinimalSampleProject::test_setup_new_and_lint
+evidence:
+  - uv run pytest
+    tests/integration.py::TestMinimalSampleProject::test_setup_new_and_lint -q
+    -> 1 passed in 27.24s (final run after last regeneration)
+  - uv run pytest tests/integration.py -v -> 9 passed in 64.63s (full acceptance
+    file)
+  - uv run pytest tests/test_golden.py -q -> 26 passed in 0.14s
+  - "PYTHON_SETUP_LINT_UPDATE_GOLDEN=1 regeneration run twice (each on a fresh
+    tmp copy, CI unset locally to satisfy the helper's CI guard): sha256 of both
+    artifacts identical across initial capture + 2 regens (findings c2b8dc3a...,
+    counts 1d239741...)"
+  - "Canonical round-trip check: serialize_findings(read_golden(path)) and
+    serialize_tool_minimums(tool_minimums(rows)) equal the committed bytes;
+    trailing newlines present; 158 findings / 14 tools"
+  - grep -cE '/home|/tmp|minimal_sample_project|\.factory' over both golden
+    files -> 0, proving no temp/absolute path leakage
+  - Golden artifacts live in tests/data/golden, outside
+    tests/data/minimal_sample_project, and are covered by existing tests/data
+    excludes in ruff/pylint/pyright/rumdl configs; detect-secrets scan of both
+    files -> empty results
+  - uv run ruff check --config config/ruff.toml and ruff format --check --config
+    config/ruff.toml on tests/_golden.py, tests/integration.py,
+    tests/test_golden.py -> clean
+  - uv run pytest -q -> 1334 passed, 4 skipped, 6 failed; all 6 failures are
+    pre-existing
+    tests/runner/test_testing_fakes.py::test_run_lint_with_fake_dispatch_invariants
+    cases expecting 13/11 calls while commit 39caa24 added a 14th (ruff format)
+    ToolSpec; working tree contains only untracked tests/data/golden/
+concerns:
+  - "Pre-existing unrelated failures: tests/runner/_factories_extras.py
+    RUN_LINT_FAKE_INVARIANT_CASES still asserts len(calls)==13 (and 11 for
+    package_name=None) after commit 39caa24 introduced the ruff format ToolSpec
+    (14 tools). Not caused by this item; left untouched to stay within
+    scope/budget."
+  - Only tools with record parsers contribute finding rows; the other five tools
+    are pinned at count 0 in the counts file, with registered-tool set equality
+    asserted by the test. This matches the probe's documented scope rather than
+    adding parsers.
+  - Probe's R0801 rule-embedded-path hazard does not manifest here because
+    pylint findings are captured through the json2 symbol path; verified no
+    absolute spans in the golden.
+  - Regeneration is intentionally refused when CI/GITHUB_ACTIONS is set by the
+    helper; local regen had to unset CI, as covered by the existing unit tests.
+notes: No production code was changed; the bounded src allowance was not needed
+  because test-side normalization already yields deterministic, relative-path
+  findings. tests/integration.py and tests/_golden.py already matched the
+  assignment from the test-first commit; this step supplied the missing
+  committed golden data and verified all acceptance behavior.

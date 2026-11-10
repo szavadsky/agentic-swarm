@@ -1,0 +1,66 @@
+status: ok
+summary: "Removed runner compatibility shims within the assigned ownership
+  boundary. baseline.py/.pyi: deleted `_FALLBACK_TOOLS` and the
+  `_compare_sorted` re-export (now imported directly from `_baseline_helpers` by
+  tests); retained only `peek_fallback_tools` with an explicit debt note because
+  the forbidden `runner/__init__.py`/`.pyi` re-export is a live in-repo consumer
+  (dispatch-split owns it). parsers.py: deleted the stale aliased
+  `_parse_*_records` back-compat re-export block, keeping only plain internal
+  imports needed to build `_RECORD_PARSERS`; `Record` stays exported via
+  `__all__`. Updated merged baseline-diff tests to import `_compare_sorted` from
+  `_baseline_helpers` and all record parsers from `_record_parsers`, and deleted
+  the shim-asserting `TestPeekFallbackTools` class. All target tests, the full
+  unit suite, integration/golden, and the 14-tool lint gate pass."
+target:
+  command: uv run pytest tests/runner/test_baseline_diff.py
+    tests/runner/test_baseline_diff_parsers.py -q
+  customTarget: true
+evidence:
+  - "`uv run pytest tests/runner/test_baseline_diff.py
+    tests/runner/test_baseline_diff_parsers.py -q` -> 72 passed, 2 deselected
+    (slow)."
+  - "`uv run pytest tests/runner/test_baseline_diff.py -q -m slow` -> 2 passed,
+    29 deselected (perf benchmarks using the new
+    `_baseline_helpers._compare_sorted` import)."
+  - "`uv run pytest -q` (final tree) -> 1341 passed, 4 skipped, 18 deselected, 0
+    failures."
+  - "`uv run pytest tests/integration.py -v` -> 9 passed, including golden
+    `assert_matches_golden`/`assert_golden_byte_identical` limbs (golden
+    byte-identical, no shift)."
+  - "`uv run lint` -> EXIT=0; 14/14 tools PASSED (ruff, rumdl, mypy, yamllint,
+    ty, mypy.stubtest, pyright check, pyright verify types, pylint, pylint-pyi,
+    pylint tests, tach, detect-secrets)."
+  - "Shim grep after change: `_FALLBACK_TOOLS` zero matches; `_compare_sorted`
+    only in `src/python_setup_lint/runner/_baseline_helpers.py(.pyi)` and the
+    test's direct import; `peek_fallback_tools` retained only with consumer
+    evidence `src/python_setup_lint/runner/__init__.py:22,62`,
+    `src/python_setup_lint/runner/__init__.pyi:20,60`,
+    `src/python_setup_lint/checkers/conformance/trivial_wrapper_checker.py:33`
+    plus the debt note at `baseline.py:19-22`, `baseline.pyi:10-11`."
+  - "Runtime assertion script: `python_setup_lint.runner.baseline` has no
+    `_FALLBACK_TOOLS`/`_compare_sorted`; `peek_fallback_tools()` returns
+    `frozenset()`; `runner.parsers.__all__` does not expose
+    `_parse_ruff_records`."
+  - "`uv run ruff check --config config/ruff.toml --select I` on all touched
+    files -> All checks passed (import order fixed in
+    test_baseline_diff_parsers.py)."
+  - "`git diff --check` -> CLEAN; workspace contains only the 5 intended
+    modified files (+22/−78 lines) and no temp artifacts."
+concerns:
+  - "`peek_fallback_tools` is intentionally retained (with debt note) because
+    `runner/__init__.py`/`.pyi` still re-export it and those files are forbidden
+    to this item; it must be deleted by the dispatch-split item together with
+    the package-level export. `trivial_wrapper_checker.py:33` still allowlists
+    the name (checkers item owns that exemption)."
+  - Deleted `TestPeekFallbackTools` (the only test asserting the removed legacy
+    stub behavior); module test count drops by one, which is the intended
+    shim-test removal rather than a coverage regression.
+  - "`parsers.py` still binds the `_parse_*_records` names at runtime via plain
+    imports required to build `_RECORD_PARSERS`; the typed back-compat re-export
+    contract (explicit `as` aliases, stub declarations, `__all__`) is gone, and
+    the only in-repo consumers now import `_record_parsers` directly."
+notes: "No behavior changes: baseline diffing and parser dispatch use the same
+  underlying functions; only import surfaces changed. `@beartype` was preserved
+  on the retained `peek_fallback_tools` because the project's pylint-pyi W9701
+  rule requires it. Assignment scope respected: no edits to dispatch*,
+  `__init__*`, types.py/cli threading, tests/data, or lint.baseline."

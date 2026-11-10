@@ -1,0 +1,17 @@
+status: approved
+summary: "Approved: 121 target + 1378 unit + golden + 14/14 lint all green;
+  veto/None/memo/warning pins probed; no weakening"
+suggestions:
+  - id: pin-semantic-env-in-veto-tests
+    disposition: optional
+    summary: Pin PYTHON_SETUP_LINT_SEMANTIC=1 explicitly in backend-veto tests
+    detail: test_registered_backend_rejects_a_meaningful_heuristic,
+      test_backend_below_threshold_rejects_a_meaningful_heuristic, and
+      test_loader_none_falls_back_to_the_heuristic exercise the SEMANTIC=1
+      backend path but rely on the ambient default (unset => '1') rather than
+      monkeypatch.setenv(_SEMANTIC_ENV,'1') like the neighboring veto tests.
+      Safe today (monkeypatch reverts, no leak), but explicit pinning hardens
+      against env-order surprises. Non-blocking.
+    location:
+      file: tests/checkers/test_decision_backend.py
+      line: 226

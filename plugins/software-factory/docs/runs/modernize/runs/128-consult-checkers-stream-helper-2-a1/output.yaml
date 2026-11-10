@@ -1,0 +1,24 @@
+context: item
+decision: retry-with-guidance
+persist: true
+rationale: "Merge-path 127 names gate 'tests' with no failing test: unknown-gate
+  (infra gates are format/lint/test/test-integration), not assertion failure.
+  Item work is green in-worktree and QA drift is fixed. Current Diff risk is
+  stale-base reversions outside ownership (_tool_specs delete, dispatch inline,
+  factories monolith restore, conftest/runner restores, ADR-019..024 deletes,
+  .factory noise). Reissue with supported target override plus strict owned-only
+  merge."
+target:
+  gate: test
+text: "Merge-verify with target gate 'test'; update record target from 'tests'
+  to 'test'. Zero owned-content changes: keep NEW _source_stream.py/.pyi,
+  bare_except + suppression (+.pyi), stub/checker.py, stub/coverage.py/.pyi,
+  test_source_stream.py, test_astroid_contracts.py, test_stub_coverage.py,
+  TestCodeContextDerivation only (first-# code_context preserved). Restore all
+  non-owned to HEAD exactly so diff shows only owned: runner/_tool_specs.* +
+  dispatch.* (keep split), tests/checkers/_factories* (keep split),
+  tests/conftest.py + tests/runner/* (keep HEAD, no /home/slava or deleted-test
+  restores), docs/adr/ADR-019..024 (keep), .factory/** untouched, lint.baseline
+  + tests/data untouched, _base.py/.pyi empty diff. Verify: diff --stat
+  owned-only, grep .stream() single-owner, pytest -q + lint + integration 9
+  passed; if 127 recurs capture full command + stderr."

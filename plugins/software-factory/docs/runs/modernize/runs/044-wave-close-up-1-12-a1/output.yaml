@@ -1,0 +1,25 @@
+blockedItems: []
+debt:
+  - Baseline-red unit tests (6 failures assuming 13 tools while TOOLS has 14
+    with `ruff format` added) remain unfixed since baseline.
+  - Baseline-red lint violations (SIM102, W9704 x2, R0914, C0208) remain unfixed
+    since baseline.
+  - Documented `uv run lint` mutates worktrees via `ruff format` ToolSpec
+    lacking --check/--config (operator action pending).
+failedItems: []
+iteration: 1
+mergedItems: []
+recommendations:
+  - "Operator: add --check (+ --config config/ruff.toml) to the `ruff format`
+    ToolSpec or drop it from TOOLS so `uv run lint` is check-only."
+  - Consider a cleanup item to update the 6 baseline-red tests to the 14-tool
+    registry and clear the 5 baseline-red lint violations.
+status: complete
+summary: "Wave 12 close-up: 0 items merged (empty wave). Tree hygiene clean:
+  zero untracked files, no conflict markers in tracked files, sole modified file
+  is engine-managed .factory/tasks/modernize/journal.ndjson. Gates match
+  baseline with zero regressions per Gate Diff table: format pass/pass,
+  test-integration pass/pass, lint fail/fail (expected baseline red), test
+  fail/fail (expected baseline red); no fail->pass fixes claimed. Iteration can
+  continue."
+wave: 12

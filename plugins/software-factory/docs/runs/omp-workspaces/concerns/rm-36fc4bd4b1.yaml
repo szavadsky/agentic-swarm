@@ -1,0 +1,16 @@
+id: rm-36fc4bd4b1
+chosen: Preflight = free static validation + one real isolated round-trip turn
+alternatives:
+  - Static-only preflight (misses bogus keys, invalid backend, missing overlay)
+  - Full-matrix preflight per run (~10 paid turns; reserve for CI)
+why: Probes 17/18/27 prove static-only checks are no-ops for overlay content;
+  probes 20/21 prove model/role negatives are free; probe 23 measures ~16s
+status: open
+source:
+  record: 002-research-r1-a2
+  agent: fact-finder
+  step: research
+  item: spike-omp-isolation
+  lastSeen: 2026-11-10T01:26:13.601Z
+createdAt: 2026-11-10T01:26:13.601Z
+updatedAt: 2026-11-10T01:26:13.601Z

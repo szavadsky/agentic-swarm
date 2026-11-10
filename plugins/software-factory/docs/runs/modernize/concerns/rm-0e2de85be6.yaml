@@ -1,0 +1,24 @@
+id: rm-0e2de85be6
+chosen: Store `dk1.` + dot-separated lowercase base32 of the full SHA-256
+  (8-char groups) as the cache key
+alternatives:
+  - Full SHA-256 as raw hex (secrets-unsafe)
+  - Base64 full digest (detect-secrets-unsafe)
+  - Truncated 128-bit digest (shorter but loses 128 bits for negligible gain)
+  - Readable normalization-based key (long, collision-prone, leaks justification
+    text into the committed file)
+why: "Raw hex violates ADR-010's no-bare-hex>=20 rule and HexHighEntropyString;
+  plain base64 triggers Base64HighEntropyString. Dotted base32 keeps all 256
+  bits, keeps every detector-visible token short and non-hex-contiguous, and the
+  25k probe is collision-free. Cost: opaque 62-char keys that cannot be reviewed
+  by eye."
+status: routed
+source:
+  record: 001-develop-r1-a1
+  agent: developer
+  step: develop
+  item: cache-design-spike
+  lastSeen: 2026-11-09T23:18:39.934Z
+createdAt: 2026-11-09T23:18:39.934Z
+updatedAt: 2026-11-10T02:58:56.108Z
+disposition: optional

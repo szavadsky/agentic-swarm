@@ -1,0 +1,17 @@
+iteration: 1
+status: next-iteration
+summary: "Iteration 1 scheduled scope (M1 spikes + M2 measurement) verified
+  delivered on parent branch; M3-M8 untouched by design (replanAfter) and need
+  iteration 2 with spike-informed epic intents. M1: omp-3..6 spike docs with
+  probe logs + recommendations (verified present), RECOVERY.md
+  scenario-to-evidence mapping, decisions 001/002 ratifying isolation mapping +
+  preflight-replacement scope. M2: additive optional cache-token plumbing end to
+  end + transport byte-stability characterization (tests-only), merged with
+  gates at baseline (typecheck green; test gate passes via ratchet, sole fail is
+  accepted disk-space baseline). Aux engine hardening (merge-setup-before-gates,
+  target-green JUnit ratchet) merged. Wave-1 spike items + recovery-v1 remain
+  failed-terminal by design (environmental merges only; evidence preserved on
+  branches/v2). Iteration 2 must read M1 decisions from three sources (item
+  decisions 001/002 + embedded YAML + RECOVERY.md), treat
+  retention/probe-18/long-none evidence as single-host/softened, re-baseline
+  transport against a live fragment, and run the open live scout probe in M8."

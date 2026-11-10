@@ -1,0 +1,23 @@
+id: c-1d2b5a307a
+kind: risk
+summary: Scout AGENTS.md-drop premise is docs-only; live scout probe still open for M8
+detail: "omp-6-repo-rules.md:19-21 verdict 1.4 verified by docs, not live: task
+  subagents drop AGENTS.md by basename but keep RULES.md/contextFiles.extra.
+  Decision 001 keeps scout live probe open until re-probed via mock provider.
+  Roots verified exactly-once injected; M8 must run the scout-hydration probe."
+location:
+  file: plugins/software-factory/docs/spikes/omp-6-repo-rules.md
+  line: 19
+affects:
+  - m1-omp-de-risk
+  - m8-e2e-docs
+severity: low
+status: open
+source:
+  record: 024-plan-close-up-1-a1
+  agent: plan-close-up
+  step: plan-close-up-1
+  iteration: 1
+  lastSeen: 2026-11-10T06:32:04.799Z
+createdAt: 2026-11-10T06:32:04.799Z
+updatedAt: 2026-11-10T06:32:04.799Z

@@ -1,0 +1,14 @@
+context: wave
+decision: continue
+rationale: "Wave 11 merged 0 with zero regressions: tree clean, format and
+  test-integration green, lint/test fail identically to baseline
+  (SIM102/R0914/C0208 + 6x 13-vs-14). consolidate-v3 sits ready after item
+  consult granted retry-with-guidance (revert lint.baseline, tests/**-only
+  diff). M2/M3 chain intact: v3 -> docs-counts-sync -> audit v3s. No plan change
+  needed."
+text: "Next: run wave 11 consolidate-v3 retry per consult guidance (revert
+  lint.baseline to [], tests/**-only diff, golden+counts byte-identical,
+  integration + test_golden pass). Then wave 12 docs-counts-sync, then audit v3
+  items in order. Engine: ignore blocked consolidate-v2; do not run removed
+  originals. Temp copies only, never bare uv run lint; do not touch .factory
+  records."

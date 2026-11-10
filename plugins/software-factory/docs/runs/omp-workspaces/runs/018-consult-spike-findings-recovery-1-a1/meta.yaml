@@ -1,0 +1,17 @@
+seq: 18
+name: consult-spike-findings-recovery-1
+attempt: 1
+agent: architect
+role: architect
+models:
+  - opencode-go/muse-spark-1.3-contributor
+session: 01a1c29e-2258-71ad-886f-375b051ddadb
+timeoutSec: 7200
+status: ok
+startedAt: 2026-11-10T04:44:38.320Z
+endedAt: 2026-11-10T04:46:30.871Z
+usage:
+  inputTokens: 183003
+  outputTokens: 9240
+  costUsd: 0.025811
+traceRef: /home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/sessions/2026-11-09T23-21-45-816Z_01a1c29e-2258-71ad-886f-375b051ddadb

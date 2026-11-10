@@ -1,0 +1,258 @@
+concerns:
+  - affects:
+      - m1-omp-de-risk
+    detail: "Plan interface requires {taskDir}/decisions/NNN-<topic>.yaml with
+      {status,decision,evidence,followUps}. What exists on parent branch: (a)
+      engine item decisions
+      .factory/tasks/omp-workspaces/decisions/001-item-spike-repo-rules-1.yaml
+      and 002-item-spike-omp-isolation-1.yaml with schema
+      {id,context,item,afterRecord,decision,text,debt} (verified content:
+      ratified root mapping omp worktree add -b <topic-branch> <path> <base> -C
+      <repo> then omp --cwd -p, isolation:engine fallback, preflight replacement
+      scope); (b) decision YAML embedded in spike docs
+      (omp-4-mock-provider.md:74-104 status:accepted,
+      omp-5-cache-keys.md:235-272 status:proposed); (c)
+      items/spike-findings-recovery-v2/RECOVERY.md M1 scenario mapping +
+      iteration-2 follow-up index. Functionally sufficient for iteration-2
+      planning, but iteration-2 architect must read three sources, not one
+      canonical NNN file."
+    kind: tech-debt
+    location:
+      file: plugins/software-factory/docs/spikes/omp-3-isolation.md
+    severity: low
+    summary: M1 decision records delivered in non-canonical shape/location (item
+      decisions + embedded YAML + RECOVERY.md, not NNN-<topic>.yaml)
+  - affects:
+      - m1-omp-de-risk
+      - m3-workspace-backend
+      - m4-lifecycle
+    detail: omp-3-isolation.md:20 explicitly scopes abort/SIGKILL retention to
+      single-host omp 18.18.5/ext4/WSL2 until re-probed elsewhere. Probe 18
+      softened (invalid backend overlay accepted but coercion unproven because
+      config get ignores --config overlays, :67-68). M3/M4 must not treat
+      retention/preflight behavior as portable without re-probe.
+    kind: risk
+    location:
+      file: plugins/software-factory/docs/spikes/omp-3-isolation.md
+      line: 20
+    severity: medium
+    summary: Isolation retention + probe-18 coercion are single-host/softened
+      evidence, not portable guarantees
+  - affects:
+      - m1-omp-de-risk
+      - m7-cache-policy
+    detail: "Disclosed in doc and state.yaml debt, accepted by review: (1) long/none
+      retention probes saved only YAML results, no NDJSON/transcript archived
+      (omp-5-cache-keys.md:308); (2) transport audit ran against
+      steps/architect-resume flagged dead in IMPLEMENTATION.md (omp-5:21,
+      mechanism identical per harness.ts:286-350,368-389 so byte-diffs remain
+      valid but M2 baseline should re-run against live fragment); (3)
+      harness.ts:280 docstring overstates resume guarantee (unfixed); (4)
+      spec-path fixed to docs/factory.v2.md:114-120 (verified omp-5:296, no
+      plugins/software-factory/docs/factory string remains). None invalidate the
+      content-keyed verdict (§0-§4) but M7 must re-baseline against a live
+      fragment and treat long/none numbers as YAML-only."
+    kind: tech-debt
+    location:
+      file: plugins/software-factory/docs/spikes/omp-5-cache-keys.md
+      line: 308
+    severity: low
+    summary: "Cache-key spike has disclosed provenance gaps: dead-fragment audit,
+      YAML-only long/none probes, overstated docstring"
+  - affects:
+      - m1-omp-de-risk
+      - m8-e2e-docs
+    detail: omp-4-mock-provider.md:61 states error turns optional, not probed; no
+      raw NDJSON transcript excerpt persisted (RECOVERY.md:86 discloses both as
+      limitations, not re-probed). M8 must verify error-turn variant before
+      relying on it. Mock seam itself is proven with zero paid calls (P3 catalog
+      mock/mock-chat, P5 text, P6 yield, P7/P8 tool loops, P9 resume, P11 @role,
+      P13/P14 OmpHarness wrapper).
+    kind: risk
+    location:
+      file: plugins/software-factory/docs/spikes/omp-4-mock-provider.md
+      line: 61
+    severity: low
+    summary: Mock-provider error-turn variant unprobed; no archived raw NDJSON excerpt
+  - affects:
+      - m1-omp-de-risk
+      - m8-e2e-docs
+    detail: "omp-6-repo-rules.md:19-21 verdict 1.4 verified by docs, not live: task
+      subagents drop AGENTS.md by basename but keep RULES.md/contextFiles.extra.
+      Decision 001 keeps scout live probe open until re-probed via mock
+      provider. Roots verified exactly-once injected; M8 must run the
+      scout-hydration probe."
+    kind: risk
+    location:
+      file: plugins/software-factory/docs/spikes/omp-6-repo-rules.md
+      line: 19
+    severity: low
+    summary: Scout AGENTS.md-drop premise is docs-only; live scout probe still open
+      for M8
+  - affects:
+      - m4-lifecycle
+    detail: "Directly inspected: src/cli/preflight.ts:365-394 still resolves
+      ompBinary via OMP_PATH ?? Bun.which(omp) ?? /home/slava/.bun/bin/omp and
+      validates only via --version and --config <overlay> --version. Spikes
+      prove this is a no-op (omp-3:38 probe 17/18/27: bogus keys BADKEY_OK rc=0,
+      invalid backend accepted, missing overlay silently ignored rc=0; omp-4
+      P17; omp-6 §1.5). Hardcoded fallback persists. Expected M4 scope per
+      decisions 001/002 and RECOVERY follow-ups, but preflight currently proves
+      binary existence, not overlay/config compatibility."
+    kind: tech-debt
+    location:
+      file: plugins/software-factory/src/cli/preflight.ts
+      line: 369
+    severity: medium
+    summary: Preflight overlay validation still a no-op and hardcodes omp fallback
+      path (M4 must replace)
+  - affects:
+      - m1-omp-de-risk
+    detail: "src/core/checks/runner.ts:666-735 implements baseline ratchet only when
+      ratchetEligible (baseline entry + isTestRunnerGate + junitArg). Non-JUnit
+      gate targets stay strict-fail on red baseline (fail-closed), unlike
+      runGates coarse-pass. Verified in code and
+      test/checks/target-green-ratchet.test.ts (5 tests: ratchet pass,
+      new-failure fail, green pass, no-baseline fail, old-baseline re-derive).
+      Documented behavior; iteration-2 planning must not assume all gate targets
+      ratchet."
+    kind: assumption
+    location:
+      file: plugins/software-factory/src/core/checks/runner.ts
+      line: 670
+    severity: low
+    summary: Target-green ratchet applies only to JUnit-capable test-runner gates;
+      non-JUnit stays strict
+  - affects:
+      - m1-omp-de-risk
+    detail: src/core/flows/merge-path.ts:149-172 runMergeSetup duplicates runner.ts
+      setup semantics (stop-on-first-failure, timeout, command+output evidence)
+      without shared helper; no test for sequential stop-on-first-failure
+      ordering or timeout path (tests cover before-gates visibility,
+      before-target, empty/missing no-op, failure evidence with exit 7 +
+      markers). Timeout handling exists in code (:158-164) but is unpinned by
+      tests.
+    kind: tech-debt
+    location:
+      file: plugins/software-factory/src/core/flows/merge-path.ts
+      line: 149
+    severity: low
+    summary: runMergeSetup duplicates runner setup logic; timeout/ordering paths
+      untested
+  - affects:
+      - m1-omp-de-risk
+    detail: items/spike-findings-recovery-v2/RECOVERY.md:92 names
+      items/spike-findings-recovery/RECOVERY.md as the deliverable instead of
+      the v2 path (stale copy from v1). Content mapping itself is intact. oMP
+      typo verified fixed (no oMP in spikes dir).
+    kind: tech-debt
+    location:
+      file: items/spike-findings-recovery-v2/RECOVERY.md
+      line: 92
+    severity: low
+    summary: RECOVERY.md line 92 cites stale non-v2 deliverable path
+completedMilestones:
+  - m1-omp-de-risk
+  - m2-measure-stabilize
+iteration: 1
+remainingMilestones:
+  - m3-workspace-backend
+  - m4-lifecycle
+  - m5-commits-merge
+  - m6-saga
+  - m7-cache-policy
+  - m8-e2e-docs
+remarkable:
+  - alternatives:
+      - Re-run all four spikes as new items with fresh paid probes
+      - Abandon wave-1 research and leave M1 empty
+    chosen: Docs-only salvage of approved wave-1 research via read-only git show
+      onto parent branch (spike-findings-recovery-v2)
+    why: All four wave-1 spike branches completed research ok + review approved;
+      only wave-end merges failed environmentally (merge child worktree lacked
+      node_modules, typecheck TS2688). Recovery preserved probe evidence without
+      inventing new probes, applied review polish where it corrected evidence
+      (probe-26/18 softening, spec-path fix, oMP typo), and recorded the M1
+      scenario-to-evidence mapping for iteration-2 planning with zero prod
+      lines.
+  - alternatives:
+      - Required cache fields with migration of historical records
+      - Separate cache-only sidecar records
+    chosen: Additive optional cache-token fields end to end with zero-default
+      aggregation
+    why: Usage/StepUsage/record/budget/derive/status all tolerate absent keys
+      (verified by legacy/mixed tests + schema tests), so historical
+      meta.yaml/state.yaml remain valid and M7 measured-defaults work can start
+      accumulating data immediately without a migration.
+  - alternatives:
+      - Stabilize prompt filename now (content-addressed) in M2
+      - Leave transport uncharacterized until M7
+    chosen: M2 characterizes transport byte-stability with tests only, pinning
+      prompt-filename instability as documented behavior
+    why: Spike-cache-key verdict (content-keyed, path-safe) was not yet merged when
+      M2 ran; tests-only characterization (tests-only check passed, no prod
+      change) locks in byte-identical system-prompt/overlay/prompt-content plus
+      argv-differs-only-at-prompt-filename, so M7 stabilization has a
+      failing-then-pointing test. Deferred per td-prompt-path.
+  - alternatives:
+      - Run infra.setup after gate snapshots (count setup artifacts as mutations)
+      - Require every item branch to commit node_modules
+    chosen: merge-path runs infra.setup in childWt before any gate/target snapshot,
+      with gate-shaped failure evidence
+    why: Mirrors temp-worktree runner.ts semantics; setup-created untracked files
+      (node_modules) become snapshot baseline rather than gate mutations
+      (asserted by zero worktree_mutation_detected events); failure fails merge
+      with id infra.setup + command + exit + output tail, same evidence shape as
+      gate failures.
+status: next-iteration
+summary: "Iteration-1 scheduled scope (M1 spikes + M2 measurement) is VERIFIED
+  DELIVERED on the parent branch; M3-M8 are untouched by design (replanAfter)
+  and require iteration 2. M1: all four spike docs exist with probe logs +
+  recommendations (omp-3 27-probe matrix + retention + root mapping + draft
+  workspaces.omp/taskIsolation surface + ~16s preflight recipe; omp-4 17-probe
+  extension -e + pi.registerProvider seam + {turns} scenario contract + decision
+  YAML; omp-5 content-keyed verdict with DeepSeek/Anthropic
+  resume/TTL/model/tool invalidation + knob audit + cold-detection signals +
+  compaction-vs-fresh-brief correction; omp-6 source/precedence + exactly-once
+  root injection + double-injection proof + scouts RULES/extra path), plus
+  RECOVERY.md scenario-to-evidence mapping and item decisions 001/002 ratifying
+  preflight replacement and isolation mapping. M2: cache-token plumbing verified
+  in src/harness/types.ts, src/harness/omp/ndjson.ts:94-128 (tolerates absent
+  keys), src/core/artifacts.ts:545-616 + schemas (optional), src/core/usage.ts +
+  src/core/budget.ts:53-60 + sessions.ts:151-152 (zero-default sums),
+  src/core/derive/task.ts:586-605 + src/cli/status.ts:76-91 (cache columns),
+  with tests test/harness/ndjson-usage-cache.test.ts,
+  test/engine/usage-cache-tokens.test.ts
+  (persist/legacy/mixed/BudgetTracker/status), test/sessions.test.ts
+  accumulation, test/contracts/usage-cache-schema.test.ts; transport
+  characterization verified in test/harness/transport-stability.test.ts
+  (byte-identical system-prompt/overlay/prompt-content, pinned
+  prompt-<Date.now>-<random> instability matching
+  src/harness/omp/harness.ts:314). Aux hardening verified: merge-setup-fix
+  (src/core/flows/merge-path.ts:367-396 before-snapshot ordering + 5
+  merge-setup.test.ts cases) and target-green-ratchet-fix
+  (src/core/checks/runner.ts:666-735 JUnit ratchet + 5
+  target-green-ratchet.test.ts cases). Gates: typecheck pass; test gate passes
+  via baseline ratchet with only the accepted disk-space baseline failure
+  (gates-baseline.yaml + transport/target-green checks: 668-689 pass, 1 baseline
+  fail). Remaining gaps are the planned M3-M8 builds (no isolation
+  backend/ensureWorkspace, no status --tree/cleanup/gc in dispatch.ts:109-176,
+  no wave-merger/commitScope/saga launcher/cache policy/e2e or docs/usage — all
+  grep-verified absent) plus disclosed spike limitations and preflight
+  no-op/hardcoded-path debt for M4."
+techDebt:
+  - "td-baseline-disk persists: test/disk-space.test.ts:57 still 1 baseline fail
+    (env-sensitive), gates ratchet on new failures only"
+  - "td-hardcoded-omp persists: src/cli/preflight.ts:369 fallback
+    /home/slava/.bun/bin/omp + --config --version no-op; M4 must replace with
+    key/enum/catalog validation + one real isolated round-trip turn"
+  - "td-runtime-growth persists: sessions/prompts/system-prompts unbounded; M4
+    gc + M8 e2e must cover"
+  - "td-no-lint: out of scope"
+  - "M1 decision-record shape debt: canonical NNN-<topic>.yaml not produced;
+    iteration-2 must read item decisions 001/002 + embedded YAML + RECOVERY.md"
+  - Duplicate 6-term has-usage guard in step-runner.ts:849 and shutdown.ts:122;
+    runMergeSetup duplicates runner setup logic
+  - Transport test pin regex {3,4} vs slice(2,6) generator + comment omits
+    preflight-fallback exclusion (low)
+  - RECOVERY.md:92 stale non-v2 deliverable path (low)

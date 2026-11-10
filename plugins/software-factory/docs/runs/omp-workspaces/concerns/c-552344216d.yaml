@@ -1,0 +1,33 @@
+id: c-552344216d
+kind: blocker
+summary: Merge-path gates run without infra.setup in the child worktree; missing
+  node_modules fails typecheck
+detail: Wave-end mergeItem runs infra gates with cwd=childWt but never runs
+  infra.setup there (runInfraSetup is only called for temp worktrees in
+  red-test/baseline-rederive). A fresh/cleaned child worktree without
+  node_modules fails typecheck with TS2688 (missing @types/bun) even when the
+  item diff touches zero prod files — as now for all four fact-finder spikes.
+  Same failure will recur for every merge until setup runs in the merge worktree
+  or gates tolerate missing deps.
+location:
+  file: plugins/software-factory/src/core/flows/merge-path.ts
+  line: 321
+affects:
+  - "19.2"
+  - wave-merge
+severity: high
+status: dismissed
+source:
+  record: 010-consult-spike-omp-isolation-2-a1
+  agent: architect
+  step: consult-spike-omp-isolation-2
+  iteration: 1
+  lastSeen: 2026-11-10T01:42:25.466Z
+createdAt: 2026-11-10T01:42:25.466Z
+updatedAt: 2026-11-10T04:08:59.946Z
+disposition: dismiss
+dismissReason: "Fixed: mergeItem runs infra.setup in childWt strictly before
+  runGates (snapshot inside gates.ts:477) and target-green, empty/missing no-op,
+  failure journals item_merge_gates_failed with infra.setup id + command +
+  output. Proven by 5/5 merge-setup tests (personally re-ran). Effective on
+  engine restart per assignment."

@@ -1,0 +1,56 @@
+status: approved
+summary: Spike answers M1 cache-key scenario; content-keyed verdict strongly
+  evidenced; minor doc provenance nits only
+suggestions:
+  - detail: Findings Sources and output.yaml sources list
+      plugins/software-factory/docs/factory.v2.md:114-120 which does not exist;
+      assignment citations and repo truth is docs/factory.v2.md:114-120. Correct
+      before publishing draft to
+      plugins/software-factory/docs/spikes/omp-5-cache-keys.md.
+    disposition: optional
+    id: wrong-spec-path
+    location:
+      file: .factory/tasks/omp-workspaces/items/spike-cache-key/steps/001-research-r1-a1/output.yaml
+    summary: Findings cite nonexistent plugins/software-factory/docs/factory.v2.md
+  - detail: Findings 7.1 claims NDJSON manual_compaction_end.result carries
+      tokensBefore/tokensAfter/method; raw NDJSON shows only
+      summary/shortSummary/firstKeptEntryId/tokensBefore/details.
+      tokensAfter+method live in transcript compaction entry (matches rpc.md
+      example). Numbers 38,053->6,794 soft still correct; fix provenance so M7
+      reads transcript not NDJSON for tokensAfter.
+    disposition: optional
+    id: compaction-result-source
+    location:
+      file: .factory/tasks/omp-workspaces/items/spike-cache-key/steps/001-research-r1-a1/output.yaml
+    summary: 7.1 misattributes tokensAfter/method to NDJSON result
+  - detail: Appendix A claims per-turn NDJSON captured under
+      /tmp/spike-cache-key-retention but long (ephemeral1h:6,705) and none
+      probes have only YAMLs, no NDJSON/transcript found. Claim consistent with
+      docs/settings but log overstates artifact completeness. Archive NDJSON or
+      qualify as YAML-only.
+    disposition: optional
+    id: retention-probe-artifacts
+    location:
+      file: .factory/tasks/omp-workspaces/items/spike-cache-key/steps/001-research-r1-a1/output.yaml
+    summary: Long/none retention probes lack archived NDJSON
+  - detail: Docstring implies resume determinism but harness.ts:318-326 re-resolves
+      @role every turn; role-map/fallback change silently switches model (spike
+      measured cacheRead=0, 8.9x cost). Note re-resolution; M7 already tasked to
+      record literal model.
+    disposition: optional
+    id: harness-resume-docstring
+    location:
+      file: plugins/software-factory/src/harness/omp/harness.ts
+      line: 280
+    summary: harness.ts:280 docstring overstates resume guarantee
+  - detail: Transport audit cites steps/architect-resume; IMPLEMENTATION.md flags
+      that fragment dead. Harness mechanism identical
+      (harness.ts:286-350,368-389) so byte diffs (sysprompt cb92bbca, prompt
+      4a9d87d4, overlay 6ebf5894/1472B, argv differs only -p @path) still valid,
+      but note status or re-run with live fragment for M2 baseline.
+    disposition: optional
+    id: dead-fragment-probe
+    location:
+      file: plugins/software-factory/src/harness/omp/harness.ts
+      line: 286
+    summary: Audit uses steps/architect-resume flagged dead

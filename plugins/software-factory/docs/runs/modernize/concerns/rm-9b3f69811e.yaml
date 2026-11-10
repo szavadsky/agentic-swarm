@@ -1,0 +1,19 @@
+id: rm-9b3f69811e
+chosen: Combined the item's `assert_golden_snapshot` with the parent's
+  fresh-copy byte-identical replay in test_setup_new_and_lint
+alternatives:
+  - Use only the parent's granular asserts
+  - Use only the item's aggregate snapshot helper
+why: "Both assertions cover complementary guarantees:
+  snapshot/oracle/tool-minimum conformance and determinism/ordering stability
+  across fresh runs."
+status: routed
+source:
+  record: 004-integrate-r1-a1
+  agent: developer
+  step: integrate
+  item: consolidate-integration-helpers-v2
+  lastSeen: 2026-11-09T22:46:16.556Z
+createdAt: 2026-11-09T22:46:16.556Z
+updatedAt: 2026-11-10T02:58:56.108Z
+disposition: optional

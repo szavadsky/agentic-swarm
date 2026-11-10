@@ -1,0 +1,6 @@
+{"id": "c001", "model": "glide", "prompt": "rubric", "prob": 0.8849407048536435, "latency_ms": 1083.3455980755389, "error": null}
+{"id": "c002", "model": "glide", "prompt": "rubric", "prob": 0.7061447190365173, "latency_ms": 1058.50298400037, "error": null}
+{"id": "c003", "model": "glide", "prompt": "rubric", "prob": 0.8765313245547544, "latency_ms": 1125.3450859803706, "error": null}
+{"id": "c004", "model": "glide", "prompt": "rubric", "prob": 0.7334228536419434, "latency_ms": 1108.4782199468464, "error": null}
+{"id": "c005", "model": "glide", "prompt": "rubric", "prob": 0.9680167936117497, "latency_ms": 1144.3146420642734, "error": null}
+{"id": "c006", "model": "glide", "prompt": "rubric", "prob": 0.5009293843533106, "latency_ms": 1125.568273011595, "error": null}

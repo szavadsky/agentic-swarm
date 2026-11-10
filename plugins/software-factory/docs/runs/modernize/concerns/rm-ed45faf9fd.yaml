@@ -1,0 +1,17 @@
+id: rm-ed45faf9fd
+chosen: Validate lint as a 13-tool pass plus a HEAD-baseline detect-secrets run
+alternatives:
+  - Run full `uv run lint` in the dirty worktree
+  - Run lint in a separate clean checkout
+why: The live full lint transiently rewrites the tracked .secrets.baseline and
+  the repository carries 1.84GB of tracked model artifacts; the scoped run
+  proves every tool green while avoiding both hazards.
+status: open
+source:
+  record: 003-research-r2-a1
+  agent: fact-finder
+  step: research
+  item: final-gate-validation
+  lastSeen: 2026-11-10T03:19:38.948Z
+createdAt: 2026-11-10T03:19:38.948Z
+updatedAt: 2026-11-10T03:19:38.948Z

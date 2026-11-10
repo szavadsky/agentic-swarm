@@ -1,0 +1,18 @@
+id: rm-de4534d29b
+chosen: omp creates worktrees and captures subagent diffs; engine owns branches,
+  merges, gates, commits, gc
+alternatives:
+  - Full-omp apply:true merges (single-parent commits, no gates, branch deleted)
+  - "Full-engine git worktree only (kept as isolation: engine fallback)"
+why: "Retention + merge-shape evidence: omp apply/merge cannot express gates,
+  conflict agents, --no-ff audit commits, or topic/* naming; engine path already
+  implements merge-path.ts:150-421"
+status: open
+source:
+  record: 002-research-r1-a2
+  agent: fact-finder
+  step: research
+  item: spike-omp-isolation
+  lastSeen: 2026-11-10T01:26:13.601Z
+createdAt: 2026-11-10T01:26:13.601Z
+updatedAt: 2026-11-10T01:26:13.601Z

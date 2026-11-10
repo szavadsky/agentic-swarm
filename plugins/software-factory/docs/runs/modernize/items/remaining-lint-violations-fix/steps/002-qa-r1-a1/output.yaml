@@ -1,0 +1,25 @@
+status: approved
+summary: "no-behavior comment-only W9704 fix verified: 4 files, zero
+  test/baseline changes, pylint/format/checker-tests green"
+suggestions:
+  - id: semantic-reranker-unvalidated
+    disposition: optional
+    summary: Cross-encoder score>=0.5 not machine-validated locally (semantic extra
+      absent); heuristic + pylint green only
+    detail: "Independent verification: check_if_meaningful returns True for both new
+      comments via heuristic fallback; semantic_check_if_meaningful returns
+      None; sentence_transformers import fails with ModuleNotFoundError
+      (developer's claim confirmed). Scoped pylint
+      --enable=unjustified-suppression on both touched .py files yields zero
+      messages (score 10.0); engine checks.yaml shows
+      pylint/pylint-pyi/pylint-tests each zero messages; ruff format --check on
+      4 touched files clean; tests/checkers/test_semantic_check +
+      test_suppression_justification_checker 118 passed/4 skipped independently.
+      testing.py wording is genuinely more code-specific
+      (release_messages/MessageTest/.msg_id/.args); generic_key wording
+      marginally so (heterogeneous). Reranker acceptance cannot be proven
+      without heavy optional install — accept as disclosed debt, optionally
+      validate in semantic-enabled env."
+    location:
+      file: src/python_setup_lint/testing.py
+      line: 32

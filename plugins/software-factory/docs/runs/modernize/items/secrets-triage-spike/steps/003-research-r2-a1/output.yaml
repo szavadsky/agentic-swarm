@@ -1,0 +1,227 @@
+status: ok
+summary: "Fix round complete. Verdict unchanged and now re-verified end-to-end:
+  ENVIRONMENTAL — detect-secrets flags only tracked .factory/ audit/journal
+  artifacts (git commit SHAs, sha256 evidence digests, and prose/test strings),
+  zero findings outside .factory/. The operator-approved exclusion is the
+  singular filter detect_secrets.filters.regex.should_exclude_file with pattern
+  ^\\.factory/ inserted into .secrets.baseline filters_used after line 40
+  (canonical post-edit sha256 412cab2d…). Full `git ls-files |
+  detect-secrets-hook --baseline <filtered>` exits 0 with zero output; a planted
+  AWS key still exits 1. Journals/runs are NOT to be untracked (audit records);
+  engine-side init/backfill seeding of the same filter is a harness follow-up.
+  Corrected the two stale claims (infra.yaml:43-51, gates-baseline.yaml:135 with
+  its 2026-11-07T19:11:42.005Z capture timestamp predating journal line 81 ts
+  2026-11-08T02:00:28.651Z) and scoped the --baseline masking claim to
+  detect-secrets-only runs: `uv run lint --tools detect-secrets --baseline
+  lint.baseline` exits 0 while printing `[detect-secrets] FAILED (exit=123)`,
+  but a full-gate --baseline run stays nonzero because record tools (ruff
+  SIM102, pylint R0914) yield records against empty baseline []. M1 acceptance
+  cites mechanism + pinned HEAD (a7fad649; current a9ed8fa4 has identical
+  journal blob sha256 1894aacd…), not finding count. Zero repository writes: git
+  status clean; .secrets.baseline and lint.baseline hashes unchanged."
+findings: |-
+  ## 0. Fix-round scope
+
+  This round addresses only the three review concerns: (1) do NOT untrack journals; seed the filter at factory init/backfill and correct the two stale claims; (2) operator approved adding `^\.factory/` to `.secrets.baseline` filters_used after line 40, keeping the residual-risk caveat; (3) scope the `--baseline` masking claim to detect-secrets-scoped runs. All prior evidence was re-verified; no full re-probe from scratch beyond targeted re-execution of the two probes.
+
+  ## 1. Verdict
+
+  **ENVIRONMENTAL — no real secret.** Every detect-secrets finding is inside tracked `.factory/` engine artifacts and is a non-secret: 40-hex git commit SHAs, 64-hex sha256 evidence digests embedded in this spike's own review text, or English prose / a well-known test string. Zero findings outside `.factory/` among 573 tracked files. `.secrets.baseline` has `"results": {}` (`.secrets.baseline:128`, sha256 `055c7196c94e92718da36530f8b2e12a49fd55df0a21c94b7f43a00ef5ee5f63`), and `lint.baseline` is `[]` (`lint.baseline:1`, sha256 `4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945`), so nothing is baselined and no entry absorbs these findings. detect-secrets is recordless and cannot be absorbed by `lint.baseline` (`src/python_setup_lint/runner/parsers.py:231-241` lists `_RECORD_PARSERS`; detect-secrets only appears in `_STATISTICS_PARSERS` at `parsers.py:256`).
+
+  ## 2. Complete flag inventory with file sha256 (current checkout HEAD a9ed8fa4)
+
+  19 detections across 17 unique lines in 4 files. All paths repo-root-relative, all under `.factory/`:
+
+  | # | File | sha256 | Flagged lines | Type(s) | Content verdict |
+  |---|------|--------|---------------|---------|-----------------|
+  | 1 | `.factory/tasks/modernize/journal.ndjson` | `1894aacd89836a36ea24de00c485db10a5a1a042dcfe5cdf351c07e645b471e3` | 81, 83, 204, 328, 933, 939, 945 | Hex High Entropy String (7) | 40-hex `"sha"` values = git commit IDs; all 7 verified `git cat-file -t` → `commit` |
+  | 2 | `.factory/tasks/modernize/runs/051-architect-revise-2-1-a1/output.yaml` | `744664c850a9f535cdba123f3c05622c9bac44e98c0c94413130d6151e63d509` | 230 | Secret Keyword (1) | YAML-spilled `description:` prose; matched value is a 358-char English sentence starting `triage on clean checkout; if environmental ...`, whose sha1 is exactly the reported `hashed_secret 43e65bf1414867b0fe6ada36116e53fc1521ec7c` (independently recomputed from the YAML-transformed item at line 230) |
+  | 3 | `.factory/tasks/modernize/items/secrets-triage-spike/steps/001-research-r1-a1/output.yaml` | `8bed8c0a7cf83923af6eeeef9078e0dd00506c18432467370e2d898478dcd6ed` | 18 (×2), 135 | Secret Keyword (3) | This spike's own findings text (`findings:` block scalar and `contextPack:` scalar); matches prose and quoted test string, not credentials |
+  | 4 | `.factory/tasks/modernize/items/secrets-triage-spike/steps/002-review-r1-a1/input.md` | `61d30fe24e944c30e174fe035e0e7e7cbebcbe9c337471cdeb180c79aa6a11f6` | 199-205 (7 hex), 265 (1 keyword) | Hex (7) + Keyword (1) | Review feedback quoting the 8 evidence digests and the planted-control sentence `password = "correcthorsebatterystaple123"` (well-known test string, not a credential) |
+
+  Pinned-HEAD evidence (HEAD `a7fad649374335d5e967370064b449de31ff0c68`): only files 1 and 2 above, **8 findings** (7 hex + 1 keyword). All 8/8 line sha256 values independently re-verified:
+  - journal.ndjson:81 `b5a7b39d753165d8d975ab2dceb30be654ce18fc349e4a46688a1fefeab52410`
+  - journal.ndjson:83 `6f80ae028f798b1c1b48e0d28953644cad907690efe4212e2c0bb810a72cd755`
+  - journal.ndjson:204 `d59dc1dcd0d5dc2d6b8d353cb9c10b3ce6f50e1f7731c53df83ca63108030731`
+  - journal.ndjson:328 `b430d1b95f9380357064e08041d6a9a79ba9dce3302a5f0028418c46da80be43`
+  - journal.ndjson:933 `6d3a2eccb502bb57a623b2de56184c82116e91f146ac3bb1f36340c050b1654a`
+  - journal.ndjson:939 `0825cd4664e0b7a0f468d4f1ccf6024e1a8ce282157882b5c8408ebd94343215`
+  - journal.ndjson:945 `2ffa573a6ebc7bc107e05ea5a6e5ddd5deee761abfd5b6940d162f9f340c337f`
+  - runs/051-…/output.yaml:230 `d9baeef3630f44fc53b0a8bbe501611c53b51ea36487f9244f9515e5d0ee40e9`
+
+  Current HEAD `a9ed8fa4efdd0b639fd58b4acaacb9ce615d5688` is NOT a descendant of `a7fad649` (same merge-base `b5a2680`); `.secrets.baseline` and `lint.baseline` are byte-identical across both, and the journal blob sha256 is identical (`1894aacd…`). The current checkout has 11 additional detections solely because this spike's own research/review artifacts (`001-research-r1-a1/output.yaml`, `002-review-r1-a1/input.md`) are now committed under `.factory/`. This growth is exactly why M1 acceptance must cite the mechanism + pinned HEAD, not a finding count.
+
+  ## 3. Exact exclusion mechanism (operator-approved)
+
+  **Operator edit (python-setup repo, task-branch commit):** insert this object into `.secrets.baseline` `filters_used` **after line 40** (line 40 is the closing `}` of the `is_templated_secret` entry; change it to `},` and add):
+
+  ```json
+  {
+    "path": "detect_secrets.filters.regex.should_exclude_file",
+    "pattern": ["^\\.factory/"]
+  }
+  ```
+
+  - Use the **singular** `should_exclude_file`. The plural `should_exclude_files` appears only in a detect-secrets docstring example; no such function exists in the installed package (`detect_secrets/filters/` has `def should_exclude_file` only).
+  - Canonical post-edit file (repo's own normalization `json.dump(..., indent=2, sort_keys=True)`, dispatch.py:280) is 2633 bytes, sha256 **`412cab2ddb6f7cd1c160b033b687b858d77f0edf18e429c1b7efbf214a4aaa2c`**. A plain text insertion with different whitespace hashes differently; the canonical hash is the stable target and the exact file used in Probe B.
+  - Do **not** regenerate the baseline via the runner's bootstrap branch (`detect-secrets scan > .secrets.baseline`, `src/python_setup_lint/runner/dispatch.py:283-290`): that path applies no baseline filters and would record `.factory/` hits into `results`. If a rescan is ever needed, use `detect-secrets scan --baseline .secrets.baseline` so the filter is imported (`detect_secrets/core/usage/baseline.py:21-32`).
+  - Do **not** untrack journals/runs. Human decision: `.factory/tasks/*/journal.ndjson` and `runs/` are audit records and stay committed.
+
+  **Engine/harness follow-up (human-async, does not block M1):** at factory init/backfill, seed the same `should_exclude_file` entry with pattern `^\.factory/` into the generated/patch-applied `.secrets.baseline` so fresh checkouts exclude `.factory/` by default. Note the seeding cannot rely on `detect-secrets scan` defaults: a fresh baseline's `filters_used` is derived from `Settings.json()`, which deliberately omits `DEFAULT_FILTERS` (`detect_secrets/settings.py:247-259`) and does not include `should_exclude_file` (`settings.py:127-160`). The init/backfill step must write/merge the entry explicitly.
+
+  **Why no gate-command flag works:** detect-secrets' `ToolSpec` declares only name+command, so `supports_exclude` keeps its default `False` (`src/python_setup_lint/runner/types.py:12-22`; `dispatch.py:133-136`), and the strategy explicitly discards `_path`, `_fix`, `_exclude` (`dispatch.py:272`). `uv run lint --exclude …` therefore cannot target it.
+
+  **Mechanism chain (verified in installed detect-secrets 1.5.0):** `detect-secrets-hook --baseline <file>` → `core/usage/baseline.py:21-32` loads the baseline → `core/baseline.py:39-52` `configure_settings_from_baseline` → `settings.py:30-34` applies `filters_used` → `filters/regex.py:24-33` compiles the `pattern` list and matches the filename → `core/scan.py:148-152` returns before reading when a filename filter matches. `Settings.configure_filters` resets to `DEFAULT_FILTERS` then applies the baseline's list (`settings.py:182-204`), so the entry must be present explicitly. `convert_local_os_path` (`detect_secrets/util/path.py:21-28`) normalizes separators on Windows to backslashes, so the approved `^\.factory/` is Linux/WSL2-correct but not Windows-portable; use `^\.factory[/\\]` if cross-platform support is required.
+
+  ## 4. Empirical verification (zero repo writes)
+
+  | Probe | Command (abridged) | Result |
+  |-------|--------------------|--------|
+  | A. Unfiltered baseline | `git ls-files -z \| xargs -0 .venv/bin/detect-secrets-hook --baseline /tmp/ds-orig-baseline.json` | `xargs_rc=123`; 19 detections / 17 unique lines / 4 files; all under `.factory/` |
+  | B. Filtered baseline (sha256 `412cab2d…`) | same with `/tmp/ds-filtered-baseline.json` | **exit 0**, zero output, 7.55 s (gate recorded 7.7 s) |
+  | C. Planted control | `.venv/bin/detect-secrets-hook --baseline /tmp/ds-filtered-baseline.json /tmp/ds-control-secret.py` (`aws_access_key_id = …`) | **exit 1**, `AWS Access Key` at line 1 — filter is not global disable |
+  | D. Masking scope | `uv run lint --tools detect-secrets --baseline lint.baseline` | **rc=0**; prints `[detect-secrets] FAILED (exit=123) [65.5s]` and `[baseline] No new violations — output matches baseline` |
+  | E. Record-tool control | `uv run lint --tools 'ruff check' --baseline lint.baseline` | **rc=1**; `[baseline] New violations detected: [ruff check] SIM102 … src/python_setup_lint/checkers/stub/coverage.py:196:5` |
+  | F. No writes | `git status --porcelain`; sha256 of baselines | empty; `.secrets.baseline` still `055c7196…`, `lint.baseline` still `4f53cda1…` |
+
+  ## 5. Stale-claim corrections (required edits, not applied — read-only)
+
+  - `.factory/tasks/modernize/infra.yaml:43-51` ends with “All other tools pass (…, detect-secrets).” This is stale at current HEAD: detect-secrets FAILS on tracked `.factory/` artifacts. Correction: annotate the snapshot as captured before `2026-11-08T02:00:28.651Z` and note detect-secrets now FAILS on tracked `.factory/` audit records (see these findings).
+  - `.factory/tasks/modernize/gates-baseline.yaml:135` records `[detect-secrets] PASSED [7.7s]`. The file's capture timestamp is `2026-11-07T19:11:42.005Z` (`gates-baseline.yaml:1`), which predates the first flagged journal line (`journal.ndjson:81`, `ts":"2026-11-08T02:00:28.651Z"`) by ~6 h 49 m. The PASSED result was valid at capture time but is not valid at HEAD. Correction: annotate with the capture timestamp and “predates journal entries adding commit SHAs”.
+
+  ## 6. Corrected `--baseline` masking statement (supersedes prior findings 5.3)
+
+  The prior claim “`uv run lint … --baseline lint.baseline` exits 0” must be qualified to **detect-secrets-scoped runs**: `uv run lint --tools detect-secrets --baseline lint.baseline` exits 0 while printing `[detect-secrets] FAILED (exit=123)`, because detect-secrets produces no record-parser output (`_RECORD_PARSERS` excludes it, `parsers.py:231-241`), `_capture_one` captures nothing (`baseline.py:116-158`), `_diff_baseline` sees no new issues (`baseline.py:262-282`), and `_handle_baseline` sets `overall_rc = 0` (`_cli_helpers.py:41-53`). On a **full gate**, `--baseline lint.baseline` stays nonzero: record tools yield violations against `[]` — confirmed with ruff SIM102 at `src/python_setup_lint/checkers/stub/coverage.py:196:5` (probe E), plus pylint/pylint-pyi R0914 at `src/python_setup_lint/runner/cli.py` per the review feedback. The warning “do not use `--baseline` as M1 evidence” stands, but it must not be stated as an unqualified “returns 0”.
+
+  ## 7. M1 acceptance wording
+
+  M1 dev acceptance cites the **mechanism + pinned HEAD**, not the finding count: at pinned HEAD `a7fad649374335d5e967370064b449de31ff0c68` (journal blob sha256 `1894aacd…`, identical at current HEAD `a9ed8fa4…`), the exact gate body flags 8 non-secret `.factory/` lines; the approved `.secrets.baseline` filter (canonical sha256 `412cab2d…`) makes the full `git ls-files | detect-secrets-hook --baseline` scan exit 0 while a planted control secret still exits 1. M1 dev acceptance does **not** wait on the operator commit or the engine filter-seeding follow-up.
+
+  ## 8. Residual risk (retained per human decision)
+
+  Excluding `.factory/` by filename means a genuine secret later written into journals/runs will not be caught by this gate. Mitigations retained: engine write-time redaction (runtime emits placeholders such as `$$HASH$$`) and periodic unfiltered audits of `.factory/` using a baseline copy without the filter. The filter is filename-based only; it does not inspect content.
+
+  ## 9. No-write attestation
+
+  All probes ran against `/tmp` baseline copies and a `/tmp` control file. `git status --porcelain` is empty at the end; `.secrets.baseline` sha256 remains `055c7196c94e92718da36530f8b2e12a49fd55df0a21c94b7f43a00ef5ee5f63` and `lint.baseline` remains `4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945`. Zero repository edits were made.
+contextPack: "FACTS FOR M1 (secrets-triage-spike, fix round): Verdict =
+  ENVIRONMENTAL. On current checkout a9ed8fa4, detect-secrets flags 19
+  detections across 17 lines in 4 tracked files, all under .factory/:
+  journal.ndjson (sha256
+  1894aacd89836a36ea24de00c485db10a5a1a042dcfe5cdf351c07e645b471e3; lines
+  81,83,204,328,933,939,945 = git commit SHAs, all git cat-file -t = commit),
+  runs/051-architect-revise-2-1-a1/output.yaml (sha256
+  744664c850a9f535cdba123f3c05622c9bac44e98c0c94413130d6151e63d509; line 230
+  keyword hit = 358-char prose, sha1 43e65bf1414867b0fe6ada36116e53fc1521ec7c),
+  plus this spike's own 001 output.yaml (sha256
+  8bed8c0a7cf83923af6eeeef9078e0dd00506c18432467370e2d898478dcd6ed; lines
+  18×2,135) and 002 input.md (sha256
+  61d30fe24e944c30e174fe035e0e7e7cbebcbe9c337471cdeb180c79aa6a11f6; lines
+  199-205 hex, 265 keyword test string). Pinned evidence HEAD a7fad649 had only
+  the first two files / 8 findings; all 8/8 line sha256 re-verified. APPROVED
+  FIX: insert
+  {\"path\":\"detect_secrets.filters.regex.should_exclude_file\",\"pattern\":[\
+  \"^\\\\.factory/\"]} into .secrets.baseline filters_used after line 40
+  (singular filter; canonical post-edit sha256
+  412cab2ddb6f7cd1c160b033b687b858d77f0edf18e429c1b7efbf214a4aaa2c). Proven:
+  filtered baseline full git-ls-files scan exit 0 / zero output / 7.55s; planted
+  AWS key exit 1. Do NOT untrack journals — seed the filter at factory
+  init/backfill (harness follow-up). Do NOT use --baseline as M1 evidence:
+  --tools detect-secrets --baseline lint.baseline exits 0 while printing
+  [detect-secrets] FAILED (masking); full-gate --baseline is nonzero from record
+  tools (ruff SIM102 src/python_setup_lint/checkers/stub/coverage.py:196:5;
+  pylint R0914). Stale claims to correct: infra.yaml:43-51 (says detect-secrets
+  passes) and gates-baseline.yaml:135 [detect-secrets] PASSED captured
+  2026-11-07T19:11:42.005Z, predating journal line 81 ts
+  2026-11-08T02:00:28.651Z. M1 acceptance = mechanism + pinned HEAD a7fad649,
+  not finding count; does not wait on operator/engine action. Residual risk:
+  filename-level exclusion; keep write-time redaction + periodic unfiltered
+  audits. Zero repo writes (git status clean; baseline hashes unchanged)."
+sources:
+  - .factory/tasks/modernize/journal.ndjson:81,83,204,328,933,939,945 (sha256
+    1894aacd89836a36ea24de00c485db10a5a1a042dcfe5cdf351c07e645b471e3)
+  - .factory/tasks/modernize/runs/051-architect-revise-2-1-a1/output.yaml:230
+    (sha256 744664c850a9f535cdba123f3c05622c9bac44e98c0c94413130d6151e63d509)
+  - .factory/tasks/modernize/items/secrets-triage-spike/steps/001-research-r1-a1/output.yaml:18,135
+    (sha256 8bed8c0a7cf83923af6eeeef9078e0dd00506c18432467370e2d898478dcd6ed)
+  - .factory/tasks/modernize/items/secrets-triage-spike/steps/002-review-r1-a1/input.md:199-205,265
+    (sha256 61d30fe24e944c30e174fe035e0e7e7cbebcbe9c337471cdeb180c79aa6a11f6)
+  - .secrets.baseline:2-41 (filters_used; insertion after line 40),
+    .secrets.baseline:128 (results {}), sha256
+    055c7196c94e92718da36530f8b2e12a49fd55df0a21c94b7f43a00ef5ee5f63
+  - lint.baseline:1 (content [], sha256
+    4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945)
+  - .factory/tasks/modernize/infra.yaml:43-51 (stale 'all other tools pass …
+    detect-secrets')
+  - .factory/tasks/modernize/gates-baseline.yaml:1 (timestamp
+    2026-11-07T19:11:42.005Z), :135 ([detect-secrets] PASSED [7.7s])
+  - src/python_setup_lint/runner/dispatch.py:133-136 (detect-secrets ToolSpec,
+    supports_exclude default False), :261-291 (git ls-files |
+    detect-secrets-hook --baseline; bootstrap branch), :272 (_path/_fix/_exclude
+    discarded)
+  - src/python_setup_lint/runner/types.py:12-22 (ToolSpec defaults)
+  - src/python_setup_lint/runner/parsers.py:231-241 (_RECORD_PARSERS excludes
+    detect-secrets), :256 (detect-secrets only in statistics parsers)
+  - src/python_setup_lint/runner/baseline.py:116-158 (_capture_one record-parser
+    only), :262-282 (diff + new violations)
+  - src/python_setup_lint/runner/_cli_helpers.py:41-53 (_handle_baseline masks
+    recordless failures when no new issues)
+  - .venv/lib/python3.14/site-packages/detect_secrets/core/usage/baseline.py:21-32
+    (--baseline loads and configures settings)
+  - .venv/lib/python3.14/site-packages/detect_secrets/core/baseline.py:39-52
+    (configure_settings_from_baseline)
+  - .venv/lib/python3.14/site-packages/detect_secrets/settings.py:30-34 (applies
+    filters_used), :127-160 (default filter set; no should_exclude_file),
+    :182-204 (configure_filters merge semantics), :247-259 (JSON omits
+    DEFAULT_FILTERS)
+  - .venv/lib/python3.14/site-packages/detect_secrets/filters/regex.py:24-33
+    (should_exclude_file pattern matching)
+  - .venv/lib/python3.14/site-packages/detect_secrets/core/scan.py:148-152
+    (filename filter short-circuits before reading)
+  - .venv/lib/python3.14/site-packages/detect_secrets/util/path.py:21-28
+    (separator normalization; Windows caveat)
+recommendations:
+  - 'OPERATOR (approved, repo-local, task-branch commit): insert `{"path":
+    "detect_secrets.filters.regex.should_exclude_file", "pattern":
+    ["^\\.factory/"]}` into `.secrets.baseline` `filters_used` after line 40
+    (line 40 becomes `},`). Expected canonical file sha256
+    `412cab2ddb6f7cd1c160b033b687b858d77f0edf18e429c1b7efbf214a4aaa2c` (2633
+    bytes). Verify with `uv run lint --tools detect-secrets` → `PASSED` (exit 0)
+    and `git ls-files -z | xargs -0 detect-secrets-hook --baseline
+    .secrets.baseline` → exit 0. Do not regenerate via plain `detect-secrets
+    scan`.'
+  - "DO NOT untrack `.factory/tasks/*/journal.ndjson` or
+    `.factory/tasks/*/runs/` — human decision: they are audit records and stay
+    committed. Remove the prior 5.2 'untrack' recommendation from M1 context."
+  - "HARNESS FOLLOW-UP (file as item, human-async): seed the identical
+    `should_exclude_file` / `^\\.factory/` filter into `.secrets.baseline` at
+    factory init/backfill so fresh checkouts exclude `.factory/` by default.
+    Seeding must write/merge the entry explicitly (a fresh `detect-secrets scan`
+    baseline does not include it). M1 dev acceptance does not wait on this."
+  - "Correct the two stale claims in place: (a)
+    `.factory/tasks/modernize/infra.yaml:43-51` — annotate that the snapshot
+    predates the flagged journal entries and detect-secrets now FAILS on tracked
+    `.factory/` records; (b) `.factory/tasks/modernize/gates-baseline.yaml:135`
+    — annotate `[detect-secrets] PASSED [7.7s]` with capture timestamp
+    `2026-11-07T19:11:42.005Z` and note it predates journal line 81 ts
+    `2026-11-08T02:00:28.651Z`."
+  - "Scope the `--baseline` masking warning: state that `uv run lint --tools
+    detect-secrets --baseline lint.baseline` exits 0 while printing
+    `[detect-secrets] FAILED (exit=123)` (masking), whereas a full-gate
+    `--baseline` run is nonzero because record tools yield violations against
+    `[]` (ruff SIM102 `src/python_setup_lint/checkers/stub/coverage.py:196:5`;
+    pylint R0914). Do not claim an unqualified '--baseline exits 0'."
+  - "M1 acceptance wording: cite the exclusion mechanism + pinned HEAD
+    `a7fad649374335d5e967370064b449de31ff0c68` (journal sha256
+    `1894aacd89836a36ea24de00c485db10a5a1a042dcfe5cdf351c07e645b471e3`,
+    identical at current HEAD `a9ed8fa4efdd0b639fd58b4acaacb9ce615d5688`), not
+    the finding count; M1-1 dev acceptance does not wait on the operator commit
+    or engine seeding."
+  - "Retain residual-risk mitigations: engine write-time redaction of sensitive
+    values (runtime placeholders such as `$$HASH$$`) plus periodic unfiltered
+    audits of `.factory/` using a baseline copy without the filter. The filter
+    is filename-based and does not inspect file content."
+  - "Portability note: `^\\\\.factory/` matches Linux/WSL2 repo-relative paths.
+    On Windows detect-secrets normalizes separators to backslashes
+    (`detect_secrets/util/path.py:21-28`), so use `^\\\\.factory[/\\\\\\\\]` if
+    the gate ever runs natively on Windows."

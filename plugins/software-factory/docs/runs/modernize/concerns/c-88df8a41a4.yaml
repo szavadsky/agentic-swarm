@@ -1,0 +1,23 @@
+id: c-88df8a41a4
+kind: tech-debt
+summary: AGENTS.md unit-test counts are stale in addition to the integration row
+detail: AGENTS.md:10 says 1290 pass / 4 skip / 15 deselected; the observed run
+  is 1357 passed / 0 skipped / 7 deselected. The assignment only names the
+  9-collected contract, but both Quick Commands rows will mislead after the docs
+  pass.
+location:
+  file: AGENTS.md
+  line: 10
+affects:
+  - docs reconciliation
+severity: low
+status: routed
+source:
+  record: 003-research-r2-a1
+  agent: fact-finder
+  step: research
+  item: final-gate-validation
+  lastSeen: 2026-11-10T03:19:38.948Z
+createdAt: 2026-11-10T03:19:38.948Z
+updatedAt: 2026-11-10T03:32:47.723Z
+disposition: optional

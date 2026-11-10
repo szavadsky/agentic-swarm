@@ -1,0 +1,15 @@
+context: wave
+decision: continue
+rationale: "Wave 1 merged 4/4 (baseline-diff-merge,
+  semantic-threshold-consolidation, decision-cache-design-spike,
+  checkers-semantic-guards) with clean tree hygiene and zero regressions:
+  format/integration sustained pass, lint and test fail->pass IMPROVED so all
+  gates now green. No failed/blocked items. Wave-2 deps satisfied (shim after
+  baseline-merge; backend after cache-spike+threshold; stream-helper/factories
+  dep-free). Cache spike verdict is consumed via the existing ADR-017
+  feasible|blocked path (implement vs no-op attestation) with no plan change
+  needed. Only debt is pre-existing ruff-format ToolSpec operator action,
+  already covered by scope-table check-only verification."
+text: Proceed to next scheduled wave. Backend/cache impls consume the merged
+  cache-spike verdict enum directly; blocked verdict merges no-op attestations
+  citing it, feasible verdict implements ADR-017/018.

@@ -1,0 +1,39 @@
+status: ok
+summary: Created tests/_golden.py as the sole golden-snapshot owner (env
+  constants, Finding TypedDict, None-safe finding_key mirroring
+  _violation_sort_key, POSIX/relative normalize_record with msg drop, canonical
+  sorting/serialization with indent=2/sort_keys/trailing newline, tool counts,
+  multiset-diff assert_matches_golden with CI-guarded UPDATE regeneration,
+  oracle-rule and per-tool coverage asserts, tool-section slicing) and
+  tests/test_golden.py with 26 synthetic unit tests (no run_lint/pipeline). No
+  src changes and no golden artifacts added.
+target:
+  command: uv run pytest tests/test_golden.py -q
+  customTarget: true
+evidence:
+  - "`uv run pytest tests/test_golden.py -q` -> 26 passed in 0.14s."
+  - "`uv run ruff format --check --config config/ruff.toml tests/_golden.py
+    tests/test_golden.py` -> 2 files already formatted."
+  - "`uv run ruff check --config config/ruff.toml tests/_golden.py
+    tests/test_golden.py` -> All checks passed."
+  - "`PYTHONPATH=src uv run pylint --rcfile=config/.pylintrc-tests
+    tests/_golden.py tests/test_golden.py` -> 0 messages, score 10.0."
+  - "`uv run tach check` -> All modules validated (exit 0)."
+  - "`uv run pytest -q` -> 1334 passed, 4 skipped, 26 new golden tests included;
+    6 failures are the documented pre-existing 13-vs-14 tool-count failures
+    (ruff format) unrelated to this test-only change."
+  - "`wc -l` -> tests/_golden.py 313 lines, tests/test_golden.py 341 lines (both
+    under the 500-line cap)."
+  - "`git status --porcelain` -> only ?? tests/_golden.py and ??
+    tests/test_golden.py; no src/ edits and no tests/data/golden files."
+concerns:
+  - Full-suite `uv run pytest -q` still reports the six pre-existing 13-vs-14
+    tool-count failures (ruff format) documented in the task context; they are
+    untouched by this test-only item.
+  - "`collect_findings` (run_lint capture) is intentionally deferred to the
+    golden-snapshot-wiring item, and no pipeline code is present or executed
+    here."
+notes: Counts file naming maps `*_findings.json` to `*_tool_counts.json`;
+  tool_minimums includes every registered TOOLS entry with zero for uncaptured
+  tools so downstream coverage checks see the full tool set. UPDATE regeneration
+  writes golden and counts together and refuses under CI/GITHUB_ACTIONS.

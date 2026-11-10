@@ -1,0 +1,22 @@
+id: rm-6e63c3be9e
+chosen: Leave the tests/conftest.py backwards-compat re-export of
+  shipped_config_paths removed.
+alternatives:
+  - Keep the re-export as a union of both sides to preserve the item's
+    compatibility shim
+  - Keep it but add an explicit deprecation comment
+why: After the parent-side refactor every consumer imports shipped_config_paths
+  from tests._project_helpers directly, so the `from tests._project_helpers
+  import shipped_config_paths as shipped_config_paths` line in conftest is a
+  dead fallback shim; the project philosophy calls for pruning fallback shims,
+  and the module imports cleanly without it.
+status: routed
+source:
+  record: 005-integrate-r1-a1
+  agent: developer
+  step: integrate
+  item: consolidate-integration-helpers-v3
+  lastSeen: 2026-11-09T23:49:50.606Z
+createdAt: 2026-11-09T23:49:50.606Z
+updatedAt: 2026-11-10T02:58:56.108Z
+disposition: optional

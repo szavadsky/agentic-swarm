@@ -1,0 +1,10 @@
+refs:
+  - secrets-triage-spike
+kind: answer
+urgency: next-architect-call
+summary: Answers q-secrets-triage-spike-engine-untrack-runtime-journals (keep
+  journals committed; seed should_exclude_file at init/backfill; correct stale
+  infra.yaml/gates-baseline claims; file harness follow-up) and
+  q-secrets-triage-spike-operator-secrets-baseline-exclusion (add ^\.factory/
+  filter after line 40 of .secrets.baseline, retain residual-risk caveat, M1
+  cites mechanism+pinned HEAD).

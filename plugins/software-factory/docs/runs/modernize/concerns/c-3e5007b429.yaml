@@ -1,0 +1,24 @@
+id: c-3e5007b429
+kind: assumption
+summary: Accepted deletion of the two slow self-lint guard tests instead of
+  resurrecting them with item-side import fixes.
+detail: tests/runner/test_pyright_noise_filter.py and
+  tests/runner/test_self_lint_clean.py were deleted on the parent tip (commit
+  644774e 'never-test-linting-prune'); the item branch only touched one import
+  line in one of them. Deletion was chosen over re-adding, matching the
+  established prune direction, but it does drop the `pytest -m slow` guards for
+  runner output noise/self-lint.
+affects:
+  - tests/runner/test_pyright_noise_filter.py
+  - tests/runner/test_self_lint_clean.py
+severity: low
+status: routed
+source:
+  record: 005-integrate-r1-a1
+  agent: developer
+  step: integrate
+  item: consolidate-integration-helpers-v3
+  lastSeen: 2026-11-09T23:49:50.606Z
+createdAt: 2026-11-09T23:49:50.606Z
+updatedAt: 2026-11-10T01:22:03.274Z
+disposition: optional

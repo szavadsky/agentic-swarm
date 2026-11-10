@@ -1,0 +1,24 @@
+id: awareness-consolidate-integration-helpers-v2-agents-counts-stale-followup
+ref: consolidate-integration-helpers-v2
+disposition: human-awareness
+question: Assignment named this story sole AGENTS.md counts owner, but
+  kind=test-only forbids non-test paths, so AGENTS.md was restored to base (1290
+  pass / 13 tools vs actual 1340 pass / 14 tools) and
+  src/python_setup_lint/runner/cli.py:314 help ('all 13 tools') was correctly
+  left untouched. Engine tests-only check passes. Needs a follow-up docs/prod
+  story to update AGENTS.md counts and the cli help text. Separately, `uv run
+  lint` stays red on pre-existing base failures (SIM102, R0914, C0208,
+  orchestration-journal detect-secrets) outside this story's budget; all files
+  touched here are ruff/format clean.
+status: answered
+createdAt: 2026-11-08T07:10:59.798Z
+answer: >
+  Operator acknowledges
+  awareness-consolidate-integration-helpers-v2-agents-counts-stale-followup:
+  restoring AGENTS.md + cli.py:314 to base inside a test-only story was correct
+  (kind forbids non-test paths). The follow-up docs/prod story to sync AGENTS.md
+  counts and the cli help text is approved — add it (small dev kind, depends on
+  the v3 line) when the wave-report next amends, or fold the two-line sync into
+  the docs-counts-sync story if it is still pending. Pre-existing red lint/test
+  baseline items stay out of story budgets. No other action.
+answeredAt: 2026-11-08T11:48:21.642Z

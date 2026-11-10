@@ -1,0 +1,28 @@
+blockedItems: []
+debt:
+  - "Pre-existing infra debt (carried): documented `uv run lint` ruff-format
+    ToolSpec runs plain `ruff format` without --check/--config and silently
+    rewrites files with default line-length; declared gates work around it by
+    splitting format (ruff format --check --config config/ruff.toml) and lint
+    (13 check-only tools). Operator action still open."
+failedItems: []
+iteration: 2
+mergedItems: []
+recommendations:
+  - Proceed to architect wave report / next planning step; no gate regressions
+    block progress.
+  - "Operator: add --check (+ --config config/ruff.toml) to the ruff-format
+    ToolSpec or drop it from TOOLS so AGENTS.md/CONTRIBUTING `uv run lint` is
+    check-only."
+  - Populate explicit merged item IDs in future wave reports for traceability
+    (this wave report listed none).
+status: complete
+summary: "Wave 2 (modernize): repo tree clean — no untracked files (git ls-files
+  --others --exclude-standard empty), no
+  *.tmp/*.bak/*.orig/*.rej/*.swp/test-output junk, no <<<<<<</>>>>>>> markers in
+  src/tests/config/docs/design, git diff --check clean; only engine-managed
+  .factory journal modified, excluded per containment. Gate Diff vs baseline:
+  format pass->pass green, test-integration pass->pass green, lint fail->pass
+  IMPROVED, test fail->pass IMPROVED; zero regressions. Wave report listed no
+  merged item names so mergedItems is empty; no failed/blocked items."
+wave: 2

@@ -1,0 +1,51 @@
+amendmentIndex: 2
+items:
+  - assignment: "Docs-only salvage retry (zero prod lines, no-behavior kind). Source
+      branch topic/omp-workspaces--spike-findings-recovery holds the 5 approved
+      files from the failed wave-2 recovery. Using read-only `git show
+      <branch>:<path>` ONLY — NEVER checkout/switch/branch/merge and NEVER write
+      to .factory/** engine paths — copy onto this item branch at identical
+      repo-relative paths:
+      plugins/software-factory/docs/spikes/omp-3-isolation.md,
+      omp-4-mock-provider.md, omp-5-cache-keys.md, omp-6-repo-rules.md, plus
+      items/spike-findings-recovery/RECOVERY.md (if that path is not writable
+      from this item worktree, place as
+      items/spike-findings-recovery-v2/RECOVERY.md with a header noting the
+      source path). Fix the `oMP` capitalization typo in omp-6-repo-rules.md to
+      `omp`. Verify: all 5 files present, each spike doc contains probe-evidence
+      + recommendations sections, RECOVERY.md maps each M1 scenario to evidence
+      + followUps for iteration-2 planning. CRITICAL mergeability: do NOT record
+      a gate target (target {gate:test} requires full-suite exit 0 and is
+      unmergeable on the red td-baseline-disk baseline); omit target entirely or
+      record a single passing selector target only. Minimal verification from
+      cwd=plugins/software-factory (e.g. file-presence check); do not gate on
+      full suite."
+    kind: no-behavior
+    milestone: m1-omp-de-risk
+    outlineRef: spike-findings-recovery-v2
+    slug: spike-findings-recovery-v2
+    title: Recover wave-1 spike findings onto parent branch (v2)
+    wave: 3
+  - assignment: "Dev fix, tests-first, small prod diff (~60 lines hint) in
+      plugins/software-factory/src/core/checks/runner.ts checkTargetGreen
+      gate-target branch (lines 644-676): apply the same baseline ratchet
+      runGates uses. When the gate command fails, load gates-baseline.yaml,
+      derive the failing-test set (with JUnit re-derivation parity where
+      runGates does it), and PASS when failures are a subset of baseline;
+      otherwise FAIL with actionable evidence (new failing tests + command +
+      output, same evidence shape as gate failures). No behavior change when
+      baseline is absent/empty or target is fully green. Behavior tests-first
+      with tmp-repo fixtures (cwd=plugins/software-factory, no network): (1)
+      gate target failing ONLY on baseline-listed tests passes via ratchet; (2)
+      gate target with one NEW failing test outside baseline still fails naming
+      the new test; (3) fully green gate target passes without invoking ratchet.
+      Record selector targets (new spec selector) — NEVER a gate target — so
+      this item itself merges cleanly on the red baseline (td-baseline-disk).
+      Verify the new spec file is green."
+    kind: dev
+    milestone: m1-omp-de-risk
+    outlineRef: target-green-ratchet-fix
+    slug: target-green-ratchet-fix
+    title: Apply baseline ratchet to target-green gate targets
+    wave: 3
+iteration: 1

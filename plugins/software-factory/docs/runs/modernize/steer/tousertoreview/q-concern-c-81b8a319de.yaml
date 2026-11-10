@@ -1,0 +1,10 @@
+id: q-concern-c-81b8a319de
+ref: epic-kickoff-gate
+disposition: human-awareness
+question: Decision 013 confirms abandonment; gate reconstruction under A0 with
+  explicit caveat is valid per amended assignment plus decision 009
+  mergeable-core rule. Downstream must cite this gate report as authority.
+  Operator should be aware authority shifted from validated-map artifact to gate
+  reconstruction.
+status: open
+createdAt: 2026-11-10T01:56:20.421Z

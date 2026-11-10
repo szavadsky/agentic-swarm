@@ -1,0 +1,71 @@
+status: ok
+summary: Fixed the golden regression by making suppressed-code normalization
+  distinguish "directive with no reason" from "reason that merely echoes the
+  codes". `_base.normalize_suppressed_codes` now returns the raw comment when a
+  directive carries no reason (restoring the pre-change heuristic outcome,
+  including the golden's preceding-suppression quirk) while still returning ""
+  when the reason only echoes the suppressed codes (preserving W9704 code-echo
+  rejection). `check_if_meaningful` keeps `primary =
+  normalize_suppressed_codes(comment or text).strip()`, the
+  `PYTHON_SETUP_LINT_SEMANTIC != "1"` early-return (backend never touched when
+  SEMANTIC=0), the None-loading path (semantic returns None -> heuristic True),
+  and rule-echo via elements of `normalize_suppressed_codes(rule).split(",")`.
+  Added a regression test pinning the SEMANTIC=0 bare-directive acceptance. All
+  target selectors, the full unit suite, the previously failing integration
+  golden gate, and the 14-tool lint gate pass.
+target:
+  selectors:
+    - tests/checkers/test_decision_backend.py
+    - tests/checkers/test_semantic_check.py
+    - tests/checkers/test_no_try_import_checker.py
+    - tests/checkers/test_suppression_justification_checker.py
+    - tests/assumptions/test_pylint_cache_semantics.py
+  expectRed:
+    - tests/checkers/test_decision_backend.py::test_fake_backend_defaults_to_one_and_pinned_model_id
+    - tests/checkers/test_decision_backend.py::test_get_backend_honors_dotted_path_under_pytest
+    - tests/checkers/test_decision_backend.py::test_get_backend_ignores_dotted_path_in_production
+    - tests/checkers/test_decision_backend.py::test_check_if_meaningful_rejects_code_echo_justification
+    - tests/checkers/test_semantic_check.py::test_one_backend_call_per_unique_pair
+    - tests/checkers/test_no_try_import_checker.py::test_try_import_of_sentence_transformers_is_flagged
+    - tests/checkers/test_suppression_justification_checker.py::TestAnyElementCodeEcho::test_code_echo_on_any_element_is_rejected
+    - tests/assumptions/test_pylint_cache_semantics.py::TestSemanticInProcessMemo::test_given_new_verdicts_then_backend_calls_once_each_and_writes_nothing
+evidence:
+  - "`uv run pytest
+    \"tests/integration.py::TestMinimalSampleProject::test_setup_new_and_lint\"
+    -q` -> 1 passed in 36.61s; golden findings hash-equal (the 3 added line-42
+    'unjustified-suppression' records are gone, line 41 record retained)."
+  - "`uv run pytest -q` -> 1377 passed, 13 deselected, 0 failed (35.17s) — no
+    new failures vs M1 table."
+  - "Target selectors: `uv run pytest tests/checkers/test_decision_backend.py
+    tests/checkers/test_semantic_check.py
+    tests/checkers/test_no_try_import_checker.py
+    tests/checkers/test_suppression_justification_checker.py
+    tests/assumptions/test_pylint_cache_semantics.py -q` -> 121 passed, 0
+    failed."
+  - "Manual SEMANTIC=0 probe: normalize('pylint: disable=some-rule') == 'pylint:
+    disable=some-rule'; check_if_meaningful(same,
+    rule='unjustified-suppression', code_context='def _bare_suppression() ->
+    None:', comment=same) is True; 'type: ignore[assignment]  # assignment' is
+    False; 'type: ignore[assignment]  # carried from library httpx for type
+    compatibility' is True."
+  - "`uv run lint` -> all 14 tools PASSED (tach, ruff format, ruff check, rumdl,
+    mypy, yamllint, ty, mypy.stubtest, pyright check, pyright verify types,
+    pylint, pylint-pyi, pylint tests, detect-secrets), exit code 0."
+  - "`git status --short` -> only src/python_setup_lint/checkers/_base.py,
+    src/python_setup_lint/checkers/_base.pyi,
+    tests/checkers/test_decision_backend.py modified; tests/data/golden and
+    uv.lock untouched."
+concerns:
+  - "Prod-line budget stays at the prior 299: all production edits are in-place
+    line-for-line replacements (no net added prod lines) in already-changed
+    lines of _base.py/_base.pyi."
+  - test_check_if_meaningful_rejects_code_echo_justification and
+    TestAnyElementCodeEcho keep passing because echo detection remains in the
+    heuristic via normalize_suppressed_codes; removing normalization entirely
+    proved to break 6 target tests (verified experimentally, then reverted).
+notes: 'Behavior split implemented in normalize_suppressed_codes: no reason
+  tokens -> raw comment (pre-quirk behavior); reason tokens subset of suppressed
+  codes -> "" (code echo -> W9704); otherwise the real reason.
+  check_if_meaningful keeps the SEMANTIC guard before any semantic/backend call,
+  so SEMANTIC=0 returns the heuristic bool directly and never resolves a
+  backend.'

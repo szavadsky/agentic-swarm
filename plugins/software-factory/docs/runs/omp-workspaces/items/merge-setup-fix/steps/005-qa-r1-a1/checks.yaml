@@ -1,0 +1,30 @@
+checks:
+  - id: red-test
+    status: pass
+    message: "red-test passed: all 3 tests fail when prod changes are restored to
+      test-first commit"
+    details:
+      command: bun --cwd=plugins/software-factory test test/engine/merge-setup.test.ts
+        --reporter=junit
+        --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-redtest-1794282431892-wblpe9tcdkj.xml
+      junitCaseCount: 5
+      junitCaseIds:
+        - merge-path infra.setup.runs setup in the child worktree before gates,
+          and setup-created untracked files are not gate mutations
+        - merge-path infra.setup.runs setup before target-green checks in the
+          child worktree
+        - merge-path infra.setup.treats an empty setup list as a no-op and
+          merges as before
+        - merge-path infra.setup.treats a missing setup key as a no-op and
+          merges as before
+        - merge-path infra.setup.fails the merge with gate-shaped evidence
+          containing the setup command and output
+      junitTruncated: false
+      collected: true
+      collectionErrors: []
+  - id: test-diff
+    status: pass
+    message: test-diff generated (0 test files, 0 bytes)
+    details:
+      diff: ""
+      files: []

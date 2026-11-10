@@ -1,0 +1,83 @@
+status: approved
+summary: "Approved. Independent verification: target 24/24; full pytest 1352
+  passed, 4 skipped, 18 deselected; integration 9/9. Ruff-format normal pass
+  builds `ruff format --check --config <existing config/ruff.toml> src/ tests/`;
+  fix phase builds the mutating form without `--check`; real `uv run lint
+  --tools 'ruff format'` and `--fix` left the worktree clean (180
+  unchanged/already formatted). Registry 14/13/9, FORMATTER_ONLY/RECORDLESS sets
+  and dispatch re-exports verified; golden tool_counts 14 keys incl `ruff
+  format: 0`; lint.baseline stays []. Engine red-test proved 17/17 declared
+  failures on baseline and the final target is green. Test-diff audit (engine
+  Test Diff was empty; reviewed the code-diff test changes): no test deletion,
+  no assertion relaxation; the R0801 fix shares a hardcoded 14-name oracle,
+  preserving strength. Story-introduced I001/R0801/W9700/C0302 are gone; only
+  pre-existing SIM102 (coverage.py:196), pre-existing R0914 (cli.py:51) and
+  orchestration-journal detect-secrets noise remain. Prod diff 141/300 (advisory
+  ~60 exceeded, mostly .pyi docs/registry). Non-blocking docs/process notes
+  below."
+suggestions:
+  - id: agents-tool-scope-missing-ruff-format
+    disposition: optional
+    summary: AGENTS.md Tool Scope table lists 13 tools and omits ruff format
+    detail: The table at AGENTS.md:18-32 enumerates 13 rows; line 9 documents a
+      14-tool pipeline and TOOLS contains `ruff format`. Add a `ruff format |
+      src/, tests/ (check-only; --fix mutates)` row (or note it under the ruff
+      row). While there, consider a one-line note in docs/overlays.md's Ruff
+      section that ruff format shares the same ruff.toml/--config mechanism.
+      Docs-only; no gate impact.
+    location:
+      file: AGENTS.md
+      line: 21
+  - id: agents-test-counts-stale
+    disposition: optional
+    summary: AGENTS.md pytest/integration counts stale (1290/7 vs 1352/9)
+    detail: Lines 10-11 still say 1290 pass, 15 deselected, ~53s and 7 integration
+      pass, ~30s; current gates are 1352 passed, 4 skipped, 18 deselected (~56s)
+      and 9 integration passed (~87s). If the assignment's 'counts table 10-11'
+      meant the tool_counts golden rows, those are verified (14 keys; ruff check
+      25; ruff format 0); otherwise this is pre-existing docs drift. Defer to
+      docs-counts-sync or fold into the same docs edit.
+    location:
+      file: AGENTS.md
+      line: 10
+  - id: engine-lint-gate-omits-ruff-format
+    disposition: optional
+    summary: Engine lint gate command omits ruff format
+    detail: The develop r2 lint gate runs 13 tools (`...pylint
+      tests,detect-secrets`) without `ruff format`, so the gate evidence does
+      not exercise the new tool. Independent `uv run lint --tools 'ruff format'`
+      passes (180 files already formatted) and the contract tests cover both
+      modes, so no repo change; add ruff format to the gate or record the
+      contract-test coverage.
+    location:
+      file: src/python_setup_lint/runner/cli.py
+      line: 73
+  - id: ruff-format-ignores-ruff-config-override
+    disposition: optional
+    summary: "`--config ruff=...` applies to ruff check but not ruff format"
+    detail: "`_RuffFormatLintTool._build` reads `config_paths['ruff format']` then
+      falls back to the shipped `_default_config_paths`; the CLI alias `--config
+      ruff=...` sets only `config_paths['ruff check']` and
+      `_SUPPORTED_CONFIG_KEYS` has no 'ruff format'. A consumer overriding the
+      ruff config gets ruff check on the custom file but ruff format on the
+      shipped config/ruff.toml; empirically `ruff format --config <shipped>`
+      ignores the consumer pyproject line-length/format overrides. The
+      shipped-config contract is met, so this is non-blocking; consider falling
+      back to `config_paths['ruff check']` for ruff format, adding 'ruff format'
+      to the config keys, or documenting the shipped-only behavior."
+    location:
+      file: src/python_setup_lint/runner/dispatch.py
+      line: 412
+  - id: stats-coverage-tautological-assert
+    disposition: optional
+    summary: Redundant tautological assertion in statistics coverage test
+    detail: "`tests/runner/test_lint_runner_stats.py:75` asserts
+      `STATISTICS_PARSER_TOOLS == frozenset(_STATISTICS_PARSERS)`, which is true
+      by construction (dispatch derives the constant from that table) and cannot
+      detect parser-table drift itself. The next assertion (TOOLS minus
+      FORMATTER_ONLY equals the statistics set) carries the real coverage, and
+      the new contract test repeats the equality as a drift guard. Keep or drop
+      the redundant line; no coverage loss."
+    location:
+      file: tests/runner/test_lint_runner_stats.py
+      line: 75

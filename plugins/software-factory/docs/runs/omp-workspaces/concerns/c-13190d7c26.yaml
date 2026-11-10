@@ -1,0 +1,24 @@
+id: c-13190d7c26
+kind: tech-debt
+summary: OmpHarness has no extension/extra-arg seam; mock provider needs a
+  wrapper or new option
+detail: OmpHarness hard-codes run/complete args at
+  src/harness/omp/harness.ts:368-388 and :707-715; it never passes -e. The
+  wrapper-binary workaround is proven, but M8 should add an
+  extraArgs/mockProvider option so tests do not depend on shell wrappers.
+location:
+  file: plugins/software-factory/src/harness/omp/harness.ts
+  line: 368
+affects:
+  - "19.8"
+severity: medium
+status: routed
+source:
+  record: 001-research-r1-a1
+  agent: fact-finder
+  step: research
+  item: spike-mock-provider
+  lastSeen: 2026-11-10T00:00:31.798Z
+createdAt: 2026-11-10T00:00:31.798Z
+updatedAt: 2026-11-10T01:53:41.429Z
+disposition: optional

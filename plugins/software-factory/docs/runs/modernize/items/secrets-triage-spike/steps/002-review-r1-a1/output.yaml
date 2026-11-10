@@ -1,0 +1,63 @@
+status: approved
+summary: "Approved: environmental verdict fully corroborated — 8/8 line hashes,
+  7/7 SHAs resolve to commits, zero non-.factory hits, filter proof replicated;
+  file 2 human-async exclusion requests, 1 precision nit, 1 residual-risk
+  notice."
+suggestions:
+  - id: operator-secrets-baseline-exclusion
+    disposition: human-async
+    summary: "Operator: add ^\\.factory/ should_exclude_file filter to
+      .secrets.baseline, then verify detect-secrets PASSED"
+    detail: 'Insert {"path": "detect_secrets.filters.regex.should_exclude_file",
+      "pattern": ["^\\.factory/"]} into .secrets.baseline filters_used after
+      line 40. Evidence: HEAD a7fad649, journal.ndjson sha256
+      1894aacd89836a36ea24de00c485db10a5a1a042dcfe5cdf351c07e645b471e3,
+      output.yaml sha256
+      744664c850a9f535cdba123f3c05622c9bac44e98c0c94413130d6151e63d509, 8/8 line
+      hashes verified, 7/7 hex hits verified as git commits via cat-file,
+      keyword hashed_secret 43e65bf1414867b0fe6ada36116e53fc1521ec7c verified as
+      sha1 of 358-char prose. Reviewer independently replicated: filtered
+      baseline makes full git-ls-files scan exit 0 while planted control secret
+      still exits 1. M1 dev acceptance does not wait on this.'
+    location:
+      file: .secrets.baseline
+      line: 41
+  - id: engine-untrack-runtime-journals
+    disposition: human-async
+    summary: "Engine: stop tracking .factory runtime journals (or seed the 5.1
+      filter) and fix stale detect-secrets PASSED claims"
+    detail: "Add .factory/tasks/*/journal.ndjson and .factory/tasks/*/runs/ to
+      .gitignore with git rm --cached, or seed the should_exclude_file filter at
+      init/backfill. Also correct stale claims: infra.yaml:43-51 note that
+      detect-secrets passes, and gates-baseline.yaml:135 [detect-secrets] PASSED
+      [7.7s] captured 2026-11-07T19:11:42Z (predates flagged journal line 81 ts
+      2026-11-08T02:00:28Z). M1 dev acceptance does not wait on this."
+    location:
+      file: .factory/tasks/modernize/infra.yaml
+      line: 43
+  - id: baseline-masking-scope-precision
+    disposition: optional
+    summary: Scope the --baseline masking claim to detect-secrets-scoped runs
+    detail: "`uv run lint ... --baseline lint.baseline` exits 0 while printing
+      [detect-secrets] FAILED only when no record-tool violations exist (e.g.
+      `--tools detect-secrets --baseline lint.baseline`). A full-gate --baseline
+      run on the current checkout exits nonzero because ruff SIM102 and pylint
+      R0914 yield records vs baseline [] (baseline.py:262-282), so
+      _handle_baseline keeps overall_rc nonzero (_cli_helpers.py:41-53).
+      Mechanism and warning are correct; suggest adding the `--tools
+      detect-secrets` qualifier to findings 5.3 and recommendations."
+    location:
+      file: .factory/tasks/modernize/items/secrets-triage-spike/steps/001-research-r1-a1/output.yaml
+  - id: factory-exclusion-residual-risk
+    disposition: human-awareness
+    summary: Excluding .factory/ blinds secret scanning on ~57% of tracked files;
+      keep engine redaction plus periodic filter-free audits
+    detail: "Finding count is HEAD-pinned, not stable: 8 at a7fad649, reviewer
+      re-measured 19 Secret Type lines with exit 123 on the advanced HEAD —
+      growth confirms the spike's dynamic-journal thesis, so M1 acceptance must
+      cite the mechanism plus pinned HEAD, not the number 8. A genuine secret
+      later written into engine journals would not be caught; retain write-time
+      redaction and periodic unfiltered audits per spike section 7."
+    location:
+      file: .secrets.baseline
+      line: 2

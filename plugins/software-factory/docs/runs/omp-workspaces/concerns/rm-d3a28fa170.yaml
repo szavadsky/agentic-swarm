@@ -1,0 +1,21 @@
+id: rm-d3a28fa170
+chosen: Deliver a test-only diff and defer the merge-path.ts implementation to
+  the follow-up develop step.
+alternatives:
+  - Implement mergeItem setup execution in this step as the story assignment
+    text lists — rejected because target-red would see green and
+    test-first-scope rejects modified src/** files.
+  - Introduce a prod interface stub — unnecessary because the tests exercise the
+    existing mergeItem export.
+why: The story.dev flow runs test-first-scope (rejects any modified prod file)
+  and target-red (declared tests must currently fail) in this step; shipping the
+  implementation here would fail both mechanical checks.
+status: open
+source:
+  record: 001-test-first-r1-a1
+  agent: developer
+  step: test-first
+  item: merge-setup-fix
+  lastSeen: 2026-11-10T02:12:17.201Z
+createdAt: 2026-11-10T02:12:17.201Z
+updatedAt: 2026-11-10T02:12:17.201Z

@@ -1,0 +1,14 @@
+context: wave
+decision: continue
+rationale: "Wave 1 delivered 3/3 merges with no regressions and one gate
+  improvement (test fail->pass): runner-format-contract landed
+  (_RuffFormatLintTool + EXPECTED_TOOL_NAMES registry verified in dispatch.py),
+  consolidate-integration-helpers-i2 landed (tests/_project_helpers.py exists),
+  model-candidate-matrix report feeds wave-2 model-eval-poc as planned. Lint
+  still fails matching the red baseline (SIM102/R0914/C0208) — expected, owned
+  by wave-2 baseline-violations-fix. Tree hygiene clean;
+  pylint-cache-assumptions retry proceeds under persisted consult guidance. No
+  spike finding invalidates remaining items; no amendment required."
+text: "Continue to wave 2. Note for close-up: runner-format-contract resolves
+  the infra operator action (ruff format mutation); declared split format/lint
+  gates can reunify at a future infra refresh. No plan change needed."

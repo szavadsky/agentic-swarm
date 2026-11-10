@@ -1,0 +1,12 @@
+context: item
+decision: accept-with-debt
+rationale: "Read-only fact-finder correct: empty diff, verified RED on all docs
+  must-contain cells (confirmed DecisionBackend 0 hits in
+  semantic-justification/custom-checks/AGENTS), R2 routing matches ADR-011 map
+  with no baseline edits. Scheduling follow-ups exceeds item scope."
+debt: "M3 docs close-out RED: DecisionBackend/DECISION_MODEL/[semantic]/no-go
+  absent; stale reranker/7-pass/v1.2.5/v1.2.9/ADR-016:3/ADR-009:31 present.
+  Route to new root/epic follow-ups per ADR-011 map, never baseline edits; carry
+  to next iteration."
+text: Approve findings as valid RED verdict with routing. No item rewrite;
+  follow-up scheduling belongs to wave/close-up.

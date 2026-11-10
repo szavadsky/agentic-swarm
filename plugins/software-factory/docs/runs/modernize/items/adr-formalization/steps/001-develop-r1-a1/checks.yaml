@@ -1,0 +1,163 @@
+checks:
+  - id: gates
+    status: pass
+    message: "Gates passed (4 gates, improvements:
+      tests.runner.test_lint_runner.TestToolSpec.test_tool_spec_given_known_too\
+      ls_then_present,
+      tests.runner.test_lint_runner.TestToolSpec.test_tool_spec_given_tools_the\
+      n_autofix_and_no_duplicates,
+      tests.runner.test_lint_runner_stats.test_statistics_parsers_given_all_too\
+      ls_then_covered,
+      tests.runner.test_t3_coverage.TestParserCompleteness.test_parser_complete\
+      ness_given_all_tools_then_have_parser,
+      tests.runner.test_testing_fakes.test_run_lint_with_fake_dispatch_invarian\
+      ts[package_name_none_skips_stubtest_verifytypes])"
+    details:
+      - id: format
+        command: uv run ruff format --check --config config/ruff.toml src tests
+        status: pass
+        durationMs: 323
+        details: 181 files already formatted
+      - id: lint
+        command: uv run lint --tools 'tach check,ruff check,rumdl check,mypy,yamllint,ty
+          check,mypy.stubtest,pyright check,pyright verify
+          types,pylint,pylint-pyi,pylint tests,detect-secrets'
+        status: fail
+        durationMs: 327556
+        details: |2-
+           check] PASSED [0.4s]
+          ============================================================
+          Configuration
+          [WARN] Warning: No first-party imports were found. You may need to use 'tach mod' to update your Python source roots. Docs: https://docs.gauge.sh/usage/configuration#source-roots
+          ✅ All modules validated!
+
+          ============================================================
+          [ruff check] PASSED [0.0s]
+          ============================================================
+          All checks passed!
+
+          ============================================================
+          [rumdl check] PASSED [0.0s]
+          ============================================================
+
+          Success: No issues found in 25 files (19ms)
+
+          ============================================================
+          [mypy] PASSED [4.8s]
+          ============================================================
+          Success: no issues found in 56 source files
+
+          ============================================================
+          [yamllint] PASSED [0.2s]
+          ============================================================
+
+          ============================================================
+          [ty check] PASSED [0.2s]
+          ============================================================
+          All checks passed!
+
+          ============================================================
+          [mypy.stubtest] PASSED [7.0s]
+          ===
+          ... [truncated 1845 bytes] ...
+
+          ============================================================
+          [detect-secrets] FAILED (exit=123) [104.1s]
+          ============================================================
+          Traceback (most recent call last):
+            File "/home/slava/aiexp/python-setup.factory-wt/topic_modernize--adr-formalization/.venv/bin/detect-secrets-hook", line 10, in <module>
+              sys.exit(main())
+                       ~~~~^^
+            File "/home/slava/aiexp/python-setup.factory-wt/topic_modernize--adr-formalization/.venv/lib/python3.14/site-packages/detect_secrets/pre_commit_hook.py", line 30, in main
+              secrets.scan_file(filename)
+              ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+            File "/home/slava/aiexp/python-setup.factory-wt/topic_modernize--adr-formalization/.venv/lib/python3.14/site-packages/detect_secrets/core/secrets_collection.py", line 76, in scan_file
+              for secret in scan.scan_file(os.path.join(self.root, convert_local_os_path(filename))):
+                            ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            File "/home/slava/aiexp/python-setup.factory-wt/topic_modernize--adr-formalization/.venv/lib/python3.14/site-packages/detect_secrets/core/scan.py", line 154, in scan_file
+              for lines in _get_lines_from_file(filename):
+                           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+            File "/home/slava/aiexp/python-setup.factory-wt/topic_modernize--adr-formalization/.venv/lib/python3.14/site-packages/detect_secrets/core/scan.py", line 265, in _get_lines_from_file
+              lines = get_transformed_file(cast(NamedIO, f))
+            File "/home/slava/aiexp/python-setup.factory-wt/topic_modernize--adr-formalization/.venv/lib/python3.14/site-packages/detect_secrets/transformers/__init__.py", line 31, in get_transformed_file
+              return transformer.parse_file(file)
+                     ~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+            File "/home/slava/aiexp/python-setup.factory-wt/topic_modernize--adr-formalization/.venv/lib/python3.14/site-packages/detect_secrets/transformers/config.py", line 24, in parse_file
+              return _parse_file(file)
+            File "/home/slava/aiexp/python-setup.factory-wt/topic_modernize--adr-formalization/.venv/lib/python3.14/site-packages/detect_secrets/transformers/config.py", line 49, in _parse_file
+              for key, value, line_number in IniFileParser(file, add_header=add_header):
+                                             ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            File "/home/slava/aiexp/python-setup.factory-wt/topic_modernize--adr-formalization/.venv/lib/python3.14/site-packages/detect_secrets/transformers/config.py", line 97, in __init__
+              content = file.read()
+            File "<frozen codecs>", line 325, in decode
+          MemoryError
+
+          [pylint] Using rcfile: /home/slava/aiexp/python-setup.factory-wt/topic_modernize--adr-formalization/config/.pylintrc
+      - id: test
+        command: uv run pytest -q
+        status: pass
+        durationMs: 42339
+        details: |-
+          [Tach] 1379 tests in 59 files unaffected by changes (~37.1s could be saved). Skip with: pytest --tach
+          [Tach] To disable: pytest -p no:tach (https://docs.gauge.sh/usage/commands#using-the-pytest-plugin-directly)
+          ........................................................................ [  5%]
+          ........................................................................ [ 10%]
+          ......................................................................ss [ 15%]
+          ss...................................................................... [ 21%]
+          ........................................................................ [ 26%]
+          ........................................................................ [ 31%]
+          ........................................................................ [ 37%]
+          ........................................................................ [ 42%]
+          ........................................................................ [ 47%]
+          ........................................................................ [ 52%]
+          ........................................................................ [ 58%]
+          ........................................................................ [ 63%]
+          ........................................................................ [ 68%]
+          ........................................................................ [ 74%]
+          ........................................................................ [ 79%]
+          ........................................................................ [ 84%]
+          ........................................................................ [ 89%]
+          ........................................................................ [ 95%]
+          .................................................................        [100%]
+          =============================== warnings summary ===============================
+          tests/checkers/test_stub_checker.py::test_is_classvar_given_expression_then_expected_bool[classvar_skipped]
+          tests/checkers/test_stub_checker.py::test_is_classvar_given_expression_then_expected_bool[non_classvar]
+            /home/slava/aiexp/python-setup.factory-wt/topic_modernize--adr-formalization/tests/checkers/test_stub_checker.py:410: DeprecationWarning: importing 'NodeNG' from 'astroid' is deprecated and will be removed in v5, import it from 'astroid.nodes' instead
+              assert isinstance(node, astroid.NodeNG)
+
+          tests/checkers/test_stub_fidelity_invariants.py::TestClassVarSkipInvariants::test_is_classvar_given_classvar_annotation_then_true
+            /home/slava/aiexp/python-setup.factory-wt/topic_modernize--adr-formalization/tests/checkers/test_stub_fidelity_invariants.py:258: DeprecationWarning: importing 'NodeNG' from 'astroid' is deprecated and will be removed in v5, import it from 'astroid.nodes' instead
+              assert isinstance(node, astroid.NodeNG)
+
+          tests/checkers/test_stub_fidelity_invariants.py::TestClassVarSkipInvariants::test_is_classvar_given_regular_annotation_then_false
+            /home/slava/aiexp/python-setup.factory-wt/topic_modernize--adr-formalization/tests/checkers/test_stub_fidelity_invariants.py:263: DeprecationWarning: importing 'NodeNG' from 'astroid' is deprecated and will be removed in v5, import it from 'astroid.nodes' instead
+              assert isinstance(node, astroid.NodeNG)
+
+          -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+          1357 passed, 4 skipped, 18 deselected, 4 warnings in 39.91s
+          [Improvements: tests.runner.test_lint_runner.TestToolSpec.test_tool_spec_given_known_tools_then_present, tests.runner.test_lint_runner.TestToolSpec.test_tool_spec_given_tools_then_autofix_and_no_duplicates, tests.runner.test_lint_runner_stats.test_statistics_parsers_given_all_tools_then_covered, tests.runner.test_t3_coverage.TestParserCompleteness.test_parser_completeness_given_all_tools_then_have_parser, tests.runner.test_testing_fakes.test_run_lint_with_fake_dispatch_invariants[package_name_none_skips_stubtest_verifytypes]]
+        improvements:
+          - tests.runner.test_lint_runner.TestToolSpec.test_tool_spec_given_known_tools_then_present
+          - tests.runner.test_lint_runner.TestToolSpec.test_tool_spec_given_tools_then_autofix_and_no_duplicates
+          - tests.runner.test_lint_runner_stats.test_statistics_parsers_given_all_tools_then_covered
+          - tests.runner.test_t3_coverage.TestParserCompleteness.test_parser_completeness_given_all_tools_then_have_parser
+          - tests.runner.test_testing_fakes.test_run_lint_with_fake_dispatch_invariants[package_name_none_skips_stubtest_verifytypes]
+      - id: test-integration
+        command: uv run pytest tests/integration.py -q
+        status: pass
+        durationMs: 73043
+        details: |-
+          [Tach] 9 tests in 4 files unaffected by changes (~0.1s could be saved). Skip with: pytest --tach
+          [Tach] To disable: pytest -p no:tach (https://docs.gauge.sh/usage/commands#using-the-pytest-plugin-directly)
+          .........                                                                [100%]
+          9 passed in 71.94s (0:01:11)
+  - id: size
+    status: pass
+    message: "size passed: 0/300 production lines changed"
+    details:
+      changedLines:
+        added: 0
+        deleted: 0
+        total: 0
+        files: []
+      limit: 300

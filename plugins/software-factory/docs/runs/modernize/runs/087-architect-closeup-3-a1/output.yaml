@@ -1,0 +1,39 @@
+iteration: 3
+status: next-iteration
+summary: "Iteration 3 partially delivered: M1 repo scope VERIFIED
+  (.secrets.baseline:41-46 ^\\.factory/ filter, test_pylint_cache_semantics.py
+  485 lines/19 tests writer-first verdict, 12 ADRs with 009-012 full +
+  001/005/006 staleness + README cross-ref) but M1 gate NOT closed per engine
+  records (ownership-map-revalidation running, epic-kickoff-gate pending; 3
+  empty waves on the single-item bottleneck). M2 ZERO DELIVERY: runner
+  dispatch.py:1 still 542-line disable, baseline.py:23-42 shims retained,
+  _factories_extras.py:1,6 duplicate disables, hardcoded paths + self-lint tests
+  retained; checkers no _source_stream.py, _legacy_scan retained,
+  trivial_wrapper exemptions retained, mixin misc unattempted, _factories.py
+  1393 unsplit, single-code rule args, no SEMANTIC=0 guards; semantic zero
+  DecisionBackend/cache/FakeBackend, _semantic.py still jina reranker +
+  ~/.cache, _base.py:238 exact-match, [semantic] still sentence-transformers. M3
+  FAILS: baseline [] holds and golden exists, but docs must-contain fails
+  everywhere and no shift/regen/gate-table evidence. Gates unverifiable under
+  read-only audit. Intent (rule enforcement, debloat, model swap) remains future
+  scope; no operator blocker."
+completedMilestones: []
+remainingMilestones:
+  - M1
+  - M2
+  - M3
+techDebt:
+  - "M1 gate still open: ownership-map-revalidation running + epic-kickoff-gate
+    pending; schedule narrowed v2 per non-item fix-item, then kickoff per
+    ADR-011"
+  - "TD3-B1 still open: no DecisionBackend/cache infra built; corpus 215/0
+    defect + Fastino license + CPU benchmark untouched"
+  - "TD3-A1 partially open: ADR reconciliation done, but AGENTS.md counts/scope
+    rows, CHANGELOG version, README pin still stale"
+  - "TD3-A2 fully open: dispatch.py 542 + _factories_extras.py 511 +
+    _factories.py 1393 over-limit with disables, baseline shims retained, stream
+    blocks unconsolidated, mixin misc unattempted"
+  - TD3-I2 mechanism landed but green-scan exit 0 + planted-secret exit 1
+    unverified without execution
+  - M2 epic work (runner/checkers/semantic) entirely outstanding; M3
+    golden/docs/gate close-out blocked on it

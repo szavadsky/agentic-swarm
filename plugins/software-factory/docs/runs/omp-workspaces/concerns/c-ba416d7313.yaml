@@ -1,0 +1,22 @@
+id: c-ba416d7313
+kind: risk
+summary: No mock model provider exists; live omp tests are paid-only and opt-in
+detail: Only FakeHarness engine tests and a `FACTORY_LIVE_OMP=1` smoke test
+  exist. The spec's "no models" e2e through real omp requires a scripted
+  provider (likely an omp extension registered via `-e`), which does not exist
+  yet.
+location:
+  file: plugins/software-factory/test/harness/smoke-live.test.ts
+  line: 9
+affects:
+  - "19.8"
+severity: medium
+status: routed
+source:
+  record: 004-context-pack-a1
+  agent: fact-finder
+  step: context-pack
+  lastSeen: 2026-11-09T23:21:29.949Z
+createdAt: 2026-11-09T23:21:29.949Z
+updatedAt: 2026-11-10T01:01:32.465Z
+disposition: architect

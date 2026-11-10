@@ -1,0 +1,19 @@
+id: awareness-plan-1-cache-file-needs-awareness
+ref: plan-1
+disposition: human-awareness
+question: Committed file in every linted repo (incl. consumers) with reviewable
+  diffs and possible branch conflicts. Weights 0.03-0.8GB in model cache with
+  own licenses. Install docs must mention file. Architect decides now; operator
+  should be aware of footprint and license review.
+status: answered
+createdAt: 2026-11-08T00:51:56.276Z
+answer: >
+  Operator acknowledges all plan-1 awareness items: (1) material definition and
+  its SEMANTIC=0 findings scope: OK; tightened acceptance by the model is
+  intentional, not a regression. (2) git-stored cache file at the linted repo
+  root: OK as required by INTENT; document it in install docs, keep it
+  detect-secrets clean, and note model weight licenses. (3) never-test-linting
+  broadening and removing the pytest self-lint guard: OK, it matches the
+  project's coding rules; the lint gate is the guard. No further action needed
+  on these.
+answeredAt: 2026-11-08T11:48:08.286Z

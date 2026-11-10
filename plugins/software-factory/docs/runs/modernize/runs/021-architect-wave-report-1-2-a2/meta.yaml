@@ -1,0 +1,17 @@
+seq: 21
+name: architect-wave-report-1-2
+attempt: 2
+agent: architect
+role: architect
+models:
+  - opencode-go/muse-spark-1.3-contributor
+session: 01a1b8a3-f9ce-7511-963e-37a3531a2d3a
+timeoutSec: 1200
+status: ok
+startedAt: 2026-11-08T04:35:53.769Z
+endedAt: 2026-11-08T04:36:21.518Z
+usage:
+  inputTokens: 253370
+  outputTokens: 2959
+  costUsd: 0.025929
+traceRef: /home/slava/aiexp/python-setup.factory-wt/.factory-runtime/sessions/2026-11-08T00-51-56-494Z_01a1b8a3-f9ce-7511-963e-37a3531a2d3a.jsonl

@@ -1,0 +1,28 @@
+blockedItems: []
+debt:
+  - Baseline-red test gate persists (6 failures assuming 13 tools while TOOLS
+    has 14 with ruff format added) — pre-existing, not a wave regression.
+  - Baseline-red lint gate persists (ruff SIM102, pylint/pylint-pyi W9704/R0914,
+    pylint-tests C0208) — pre-existing, not a wave regression.
+  - Documented `uv run lint` still mutates worktree via `ruff format` ToolSpec
+    without --check/--config (split format+lint gates remain the check-only
+    workaround).
+failedItems: []
+iteration: 1
+mergedItems: []
+recommendations:
+  - "Operator: add --check (+ --config config/ruff.toml) to the `ruff format`
+    ToolSpec or drop it from TOOLS so `uv run lint` is check-only."
+  - "Operator: update tests assuming 13 tools to 14 tools and clear baseline
+    lint violations to get test/lint gates green."
+  - Keep namespaced `lint --tools` list in sync if tool names change (unknown
+    names fail loudly).
+status: complete
+summary: "Wave 11 completed with no merged items reported. Tree hygiene clean:
+  no untracked junk, no conflict markers (<<<<<<</=======/>>>>>>>), no stray
+  repo modifications attributable to wave items. Gate diff shows zero
+  regressions vs baseline: format pass/pass and test-integration pass/pass
+  remain green; lint fail/fail and test fail/fail remain red matching baseline
+  (not regressions per table-only judgment). Baseline-red debt persists but wave
+  can proceed."
+wave: 11

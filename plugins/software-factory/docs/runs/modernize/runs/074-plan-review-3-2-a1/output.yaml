@@ -1,0 +1,196 @@
+status: changes_requested
+summary: "Plan unexecutable as written: orphaned setup-testing owner, M3 fan-in
+  without machine edge, concurrent _base.py edits, impossible AGENTS
+  prerequisite, root-file breach, plus extraction-ownership contradiction."
+suggestions:
+  - id: setup-testing-owner-orphaned
+    disposition: fix
+    summary: 5-owner enum leaves setup-testing (15 files) with no epic
+    detail: M1 interface defines {runner,checkers,setup-testing,semantic,root} with
+      67/83/15/4/15, but only runner/checkers/semantic epics exist; runner
+      intent claims runner/** only. setup.py, _setup_*.py, testing.py and setup
+      tests orphaned or ambiguously merged. Assign explicitly to runner epic or
+      root items at re-glob.
+    location:
+      file: src/python_setup_lint/setup.py
+      line: 1
+  - id: m3-fanin-missing-machine-edge
+    disposition: fix
+    summary: M3 fan-in depends only on kickoff gate, can run before epics
+    detail: epic-shift-report-collection deps=[epic-kickoff-gate]; M2 has zero root
+      items; plan claims 'milestone ordering is the fan-in mechanism'. No
+      enforceable edge from epic close-ups; collection->hatch->final can run
+      early and the 'wait, do not fabricate' has no wait mechanism. Add
+      completion preconditions or define replanAfter machine-checkably.
+    location:
+      file: tests/_golden.py
+      line: 306
+  - id: base-shared-file-concurrent-edits
+    disposition: fix
+    summary: _base.py edited by two epics in one wave with no merge order
+    detail: Checkers adds stream helper in _base.py while semantic rewrites
+      check_if_meaningful + :238 rule-echo to any-element match; same for
+      _OPTIONAL_IMPORT_PATTERNS. Contradicts ADR-011 'no concurrent shared-infra
+      edits'. Add symbol ranges + merge order like AGENTS.md (e.g. checkers
+      first, semantic rebases) or serialize waves.
+    location:
+      file: src/python_setup_lint/checkers/_base.py
+      line: 238
+  - id: joined-rule-extraction-contradiction
+    disposition: architect
+    summary: Joined-code extraction cannot live in body if callers stay single-symbol
+    detail: Checkers keeps single-symbol passthrough (rule='unjustified-suppression'
+      at :152, rule='bare-except-comment'); semantic claims joined extraction +
+      any-element match both owned in check_if_meaningful body. Body only sees
+      already-passed rule; extraction must happen at caller. Either semantic
+      edits checkers-owned caller (breach of shared-symbol-only) or checkers
+      must emit joined codes. Redesign caller/callee contract.
+    location:
+      file: src/python_setup_lint/checkers/conformance/suppression_justification_checker.py
+      line: 152
+  - id: semantic-edits-root-owned-files
+    disposition: fix
+    summary: Semantic epic claims pyproject/uv.lock/.gitignore owned by root
+    detail: Universe = src/scripts/tests excl tests/data; root group = tests/data,
+      config, docs, repo-root files. Semantic intent takes pyproject [semantic]
+      extra + uv.lock + .gitignore + hatch inclusion. No kickoff exception
+      covers packaging files. Move to root follow-up items or extend assignment
+      rule with explicit file list + order.
+    location:
+      file: pyproject.toml
+      line: 28
+  - id: agents-prerequisite-impossible
+    disposition: fix
+    summary: Prerequisite HEAD recorded at kickoff cannot be post-runner HEAD
+    detail: M1 interface orders runner-merge-first then semantic-rebase with
+      prerequisite recorded at kickoff, but post-runner HEAD does not exist at
+      kickoff. Epic intent correctly uses conditional merge-base check. Fix to
+      record post-kickoff HEAD + verification step. Also 'Testing Strategy
+      counts row' does not exist (counts are in Quick Commands :9-11); name
+      exact rows.
+    location:
+      file: AGENTS.md
+      line: 87
+  - id: git-merge-order-violates-engine
+    disposition: fix
+    summary: Epic merges/rebases prescribed but git writes reserved to engine
+    detail: ADR-011/M1 require 'runner merges first, semantic rebases onto
+      post-runner HEAD'. Agents must never run merge/rebase/commit; branches
+      managed by engine. Reframe as engine-enforced wave/item dependencies with
+      read-only merge-base verification.
+    location:
+      file: AGENTS.md
+      line: 5
+  - id: m1-ownership-scenario-vague
+    disposition: fix
+    summary: Counts confirmed modulo HEAD drift is not falsifiable
+    detail: M1 S1 pins no counts/tolerance; 67/83/15/4/15 appear only as 'expect
+      modulo drift' in item text. Add expected counts with drift budget, recount
+      procedure, revision-ID format, and drift-list schema (stale file:line ->
+      corrected).
+    location:
+      file: src/python_setup_lint/runner/dispatch.py
+      line: 1
+  - id: typed-base-misc-unproven
+    disposition: fix
+    summary: Shared typed base for type-ignore[misc] guessed without spike
+    detail: 4 checkers (e.g. beartype_checker :21) suppress SourceRootMixin.options
+      vs BaseChecker.options conflict. Removal via shared base asserted as
+      certain dev work; may be impossible without changing pylint typing.
+      Isolate into test-assumptions spike or qualify as attempt-with-fallback
+      like ADR-012.
+    location:
+      file: src/python_setup_lint/checkers/conformance/beartype_checker.py
+      line: 21
+  - id: conftest-verdict-file-refs
+    disposition: fix
+    summary: Semantic owns nonexistent conftest; new verdict file unprotected
+    detail: tests/checkers/ has no conftest.py (24 files, none) yet listed as
+      semantic-owned; either stale or needs planned-path reservation. Conversely
+      verdict tests/assumptions/test_pylint_cache_semantics.py is 5th file
+      beyond __init__+3 contracts but omitted from never-touch list. Fix both
+      lists.
+    location:
+      file: tests/assumptions/test_pylint_contracts.py
+      line: 1
+  - id: cache-gitignore-hatch-contradiction
+    disposition: fix
+    summary: Git-stored cache cannot be .gitignored and hatch-shipped
+    detail: "Tracked .python-setup-decisions.json at linted root contradicts
+      '.gitignore + hatch inclusion for tracked cache': gitignore untracks,
+      hatch ships wheel files, neither fits consumer-runtime tracked cache.
+      Clarify .gitignore delta (old .cache removal?) and drop/justify hatch
+      entry; split root vs semantic ownership."
+    location:
+      file: pyproject.toml
+      line: 38
+  - id: adr-lifecycle-unowned
+    disposition: fix
+    summary: ADR-009/010/011 reuse stubs; ADR-012 + reconciliation unassigned
+    detail: docs/adr already has 009/010/011 stubs with overlapping but differing
+      titles; plan does not state formalize-vs-overwrite. ADR-012 creation has
+      no owner. TD3-A1 routes reconciliation via final-gate follow-up but
+      final-gate-validation is report-only zero-writes. Assign formalization +
+      ADR-012.md to explicit root items.
+    location:
+      file: docs/adr/ADR-009.md
+      line: 1
+  - id: trivial-wrapper-legacy-gap
+    disposition: fix
+    summary: Runner shim deletion orphans checkers trivial-wrapper exemptions
+    detail: Runner deletes baseline compat shims; trivial_wrapper_checker :34-36
+      exempts _legacy_to_records/_legacy_current_output/_legacy_saved_output.
+      Neither epic owns exemption-list update nor orders the edits. Assign to
+      one epic with precondition on the other's close-up.
+    location:
+      file: src/python_setup_lint/checkers/conformance/trivial_wrapper_checker.py
+      line: 34
+  - id: epic-budget-model-unverified
+    disposition: architect
+    summary: Epics-as-child-tasks outside 50-item cap needs engine confirmation
+    detail: Assumption invents child-task budgets (12/12/10 outside cap, root 7) +
+      replanAfter fan-in; limits define only maxItemsPerPlan 50 with no
+      child-task concept. If unsupported, M2 with zero root items is
+      unexecutable. Confirm model or decompose epics into root items with real
+      deps.
+    location:
+      file: src/python_setup_lint/runner/dispatch.py
+      line: 144
+  - id: dotted-path-injection-risk
+    disposition: human-awareness
+    summary: Env dotted-path backend import is arbitrary-code-execution surface
+    detail: PYTHON_SETUP_LINT_DECISION_BACKEND dotted path has no test-only
+      enforcement (pytest guard/allowlist); if honored in production lint, env
+      control equals code execution. Architect can decide guard now; operator
+      should be aware. Document in ADR-010 with loader test.
+    location:
+      file: src/python_setup_lint/checkers/_semantic.py
+      line: 126
+  - id: factories-extras-ownership-mismatch
+    disposition: fix
+    summary: TD3-A2 groups runner-owned _factories_extras with checkers scope
+    detail: tests/runner/_factories_extras.py (511 lines) is runner-owned,
+      tests/checkers/_factories.py (1393) checkers-owned; joint row invites
+      kickoff dispute. Split drift rows by owner with explicit disable-dedup
+      owner.
+    location:
+      file: tests/runner/_factories_extras.py
+      line: 1
+  - id: stream-15-copies-unverified
+    disposition: optional
+    summary: ~15 stream blocks exceeds verified grep; validate at re-glob
+    detail: Grep finds 2 files with read/decode (bare_except :87, suppression
+      :55,59,142). Audit may count broader patterns. Use revalidation drift list
+      to pin exact block list + helper signature rather than ~15.
+    location:
+      file: src/python_setup_lint/checkers/conformance/suppression_justification_checker.py
+      line: 55
+  - id: docs-state-needs-grep-strings
+    disposition: optional
+    summary: Docs backend+cache+no-go assertions need explicit strings
+    detail: M2 S3 docs requirement has no mechanical check. Define per-doc
+      must-contain lines (DecisionBackend, .python-setup-decisions.json,
+      ADR-009, prompt-v1) for final-gate checklist.
+    location:
+      file: docs/semantic-justification.md
+      line: 1

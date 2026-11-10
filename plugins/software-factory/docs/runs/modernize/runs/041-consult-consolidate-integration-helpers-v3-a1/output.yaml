@@ -1,0 +1,23 @@
+context: item
+decision: retry-with-guidance
+persist: true
+rationale: "Both develop attempts rejected solely on tests-only: diff touches
+  lint.baseline (+18/-1) outside test paths. Test work itself matches the
+  outline (_project_helpers.py +210, integration.py +43/-218, conftest/_autofix
+  import switches). Baseline edit is never valid here — lint.baseline stays []
+  and acceptance is baseline-relative. Reverting that one file plus any
+  unrelated test edits unblocks merge; no split/escalate needed."
+text: "Retry granted. Fix in this order: (1) Revert lint.baseline to HEAD
+  exactly (must read `[]`, `git diff -- lint.baseline` empty). NEVER run `uv run
+  lint --overwrite-baseline` or bare `uv run lint` (ruff-format write hazard).
+  (2) Restrict diff to tests/** only: keep _project_helpers.py (10 helpers),
+  conftest.py/_autofix_helpers.py/integration.py per-consumer import switches,
+  and integration.py line-budget moves (>=127 removed, <=500, no suppression).
+  Revert any unrelated edits — especially tests/_golden.py behavior, tool-count
+  assertions (test_lint_runner*, test_t3_coverage), factory logic, or anything
+  beyond import migration. (3) Verify: `git diff --stat` shows only tests/**;
+  `git diff -- tests/data/golden/` empty (byte-identical); `uv run pytest
+  tests/integration.py -v` and `uv run pytest tests/test_golden.py -q` pass;
+  touched files ruff/format clean; pre-existing SIM102/R0914/C0208 + 6
+  tool-count failures persist by design (do not fix, do not baseline). Record
+  the golden diff check in the report."

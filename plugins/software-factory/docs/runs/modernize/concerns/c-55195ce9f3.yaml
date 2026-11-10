@@ -1,0 +1,19 @@
+id: c-55195ce9f3
+kind: blocker
+summary: docs-reconciliation blocked-by-failure with zero merges in Wave 6
+detail: Wave report lists no merged items and marks docs-reconciliation as
+  blocked-by-failure. No gate regression explains the block (all gates green or
+  improved), so the cause is item-level (dependency failure or retry
+  exhaustion), not tree or gate state.
+affects:
+  - docs-reconciliation
+severity: medium
+status: resolved
+source:
+  record: 149-wave-close-up-5-6-a1
+  agent: wave-close-up
+  step: wave-close-up-5-6
+  iteration: 5
+  lastSeen: 2026-11-09T22:19:17.543Z
+createdAt: 2026-11-09T22:19:17.543Z
+updatedAt: 2026-11-09T22:22:55.172Z

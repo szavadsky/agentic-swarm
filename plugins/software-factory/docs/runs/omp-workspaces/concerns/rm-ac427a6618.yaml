@@ -1,0 +1,20 @@
+id: rm-ac427a6618
+chosen: "Engine-managed git worktrees (`git worktree add` + `omp --cwd`) rather
+  than omp `isolated: true` subagent tasks"
+alternatives:
+  - "omp `isolated: true` with `apply:false` to keep a branch and avoid merging
+    into the parent"
+  - hybrid eval-kernel host
+  - omp extension-only host
+why: The prior spike verified omp's isolation runner skips `commitToBranch` when
+  the subagent fails or rejects, deleting the temporary worktree and losing all
+  branch commits; engine worktrees retain every file and commit regardless of
+  exit status and give full control of branch naming/base.
+status: open
+source:
+  record: 004-context-pack-a1
+  agent: fact-finder
+  step: context-pack
+  lastSeen: 2026-11-09T23:21:29.949Z
+createdAt: 2026-11-09T23:21:29.949Z
+updatedAt: 2026-11-09T23:21:29.949Z

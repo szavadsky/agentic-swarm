@@ -1,0 +1,9 @@
+id: q-concern-rm-960f2c7947
+ref: final-gate-validation
+disposition: human-awareness
+question: Reclassification of realized _decision_backend.py/.pyi +
+  test_decision_backend.py to semantic with amended 65/91/15/7/16 sum-194 keeps
+  one writer per path. Ownership evidence; orthogonal to gate verdict. Retain as
+  digest.
+status: open
+createdAt: 2026-11-10T03:32:47.854Z

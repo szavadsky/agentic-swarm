@@ -1,0 +1,11 @@
+id: awareness-plan-4-infra-only-closeup
+ref: plan-4
+disposition: human-awareness
+question: Intent replaces cross-encoder (_semantic.py:1 reranker,
+  sentence-transformers) with CPU decision model + git cache; ADR-016 ships
+  backend/cache/Fake/docs/corpus only, no wiring, close-up must not claim swap,
+  I5 gated on corpus + human Fastino + CPU bench. High-impact cut architect can
+  decide per ADR-009 no-go (215/0, single-author, no bench). Inform operator
+  swap open.
+status: open
+createdAt: 2026-11-08T23:58:11.969Z

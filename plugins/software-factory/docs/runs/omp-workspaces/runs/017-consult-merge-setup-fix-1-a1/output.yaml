@@ -1,0 +1,38 @@
+context: item
+decision: retry-with-guidance
+persist: true
+rationale: "2/2 develop attempts rejected solely by the test gate; the new
+  merge-setup tests pass (667 pass). The single new failure — stranded-wave
+  consult-refire — cannot be caused by this change: that test's item never
+  reaches ready/merge (perpetual fix dispositions + consults), its infra has
+  empty gates/setup, and it failed via a 5000ms timeout plus a between-tests
+  teardown error alongside 'killed 1 dangling process' — a load flake under 4
+  concurrent full-suite gate runs in wave 2. No evidence of prod regression;
+  abandoning would lose the critical wave-1 merge unblocker."
+text: "RETRY (gate flake, not prod regression — isolate before touching code):
+  1) Run ONLY the failing file in isolation from plugins/software-factory: `bun
+  test test/engine/stranded-wave.test.ts`. Expect pass. That test never invokes
+  mergeItem (item never becomes ready; infra has empty gates), so an isolated
+  pass proves the full-suite timeout was load contention — do NOT rewrite prod
+  code in that case. 2) Re-run the full `bun test` once; success = no NEW
+  failing tests vs baseline (only the accepted disk-space env failure may
+  remain). 3) ONLY if the isolated file also fails: treat as real regression —
+  audit your merge-path diff for strict empty-setup parity (no-op before any
+  journal/git/snapshot side effect, identical return paths when infra.setup is
+  empty/missing) and fix minimally. Keep prod diff ~80 lines; preserve the new
+  passing merge-setup tests."
+concerns:
+  - affects:
+      - gates
+      - wave-merge
+    detail: merge-setup-fix develop was rejected 2/2 by a 5000ms timeout in
+      stranded-wave.test.ts (a test that never touches mergeItem) plus a
+      between-tests teardown error, with 'killed 1 dangling process' in output —
+      while 4 wave-2 items each run the full ~250s bun suite as gates
+      concurrently. Full-suite-as-gate under parallel items makes timeouts
+      load-dependent; consider serializing full-suite gates, raising per-test
+      timeout, or scoping item gates to affected selectors.
+    kind: risk
+    severity: medium
+    summary: Full-suite gates under parallel wave items cause timeout flakes (5s
+      default)

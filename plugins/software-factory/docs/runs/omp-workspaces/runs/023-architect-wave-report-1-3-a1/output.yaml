@@ -1,0 +1,14 @@
+context: wave
+decision: end-iteration
+rationale: "Wave 3 merged 2/2 (recovery-v2 + target-green-ratchet-fix), gates at
+  baseline, no pending/running/blocked items remain. Iteration 1 goals are met
+  on the parent branch: M1 spike evidence landed via recovery-v2 (omp-3..6 docs
+  + RECOVERY.md + decisions 001/002), M2 measurement items merged in wave 2, and
+  both engine merge blockers (setup-before-gates, target-green ratchet) are
+  fixed and merged. Wave-1 spike items and recovery-v1 remain failed-terminal by
+  design (evidence preserved on branches/v2). No further waves scheduled;
+  proceed to plan close-up for iteration-2 epic planning."
+text: "End iteration 1. Close-up inputs: M1 scenarios answered via
+  docs/spikes/omp-3..6 + RECOVERY.md + decisions 001/002; M2 cache plumbing +
+  transport characterization merged; merge path unblocked. Carry to iteration 2:
+  define M3-M8 epics with spike-informed intents; replanAfter milestones stand."
