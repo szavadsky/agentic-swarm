@@ -1,0 +1,87 @@
+status: ok
+summary: "Authored test-first contract coverage for the producer type/schema
+  drift: (1) review/QA/plan-reviewer outputs must accept remarkable[] plus
+  lowercase concern detail (generated review-schema.ts and
+  config/schemas/review.schema.json currently reject remarkable via
+  additionalProperties:false); (2) architect decision outputs
+  (decisions.schema.json used by
+  architect-wave-report/consult-item/consult-nonitem) must accept
+  concernConfirms[] (id+confirm:accept|reject, optional note) and a singular
+  concernResolution {id, action:resolve|carry}; (3) plan-closeup schema (shared
+  by plan-close-up and architect-closeup) must accept concernConfirms[] while
+  retaining concernResolutions[] (resolve|carry|propagate); (4) TS artifacts
+  must type DeveloperOutput/FactFinder/Review/WaveCloseup/PlanCloseup/Decision
+  concerns as Concern[], add newConcerns/remarkable to ReviewArtifact, and add
+  ConcernConfirms/ConcernResolution types plus concernConfirms/concernResolution
+  fields. Also extended the untouched-schema guard to assert
+  triage/infra/pm-edit reject the new fields, and added regression coverage
+  across all developer steps
+  (develop/poc/test-assumptions/test-first/simple-implement/fix-round),
+  fact-finder research, architect plan/revise, and close-ups. Existing
+  production code is untouched; only the two test files changed."
+target:
+  selectors:
+    - test/contracts/concern-schemas.test.ts
+    - test/contracts/concern-artifact-types.test.ts
+  expectRed:
+    - Concern producer schemas.adds remarkable and lowercase detail to reviewer,
+      plan-reviewer, QA, and file review schemas
+    - Concern producer schemas.adds concernConfirms and concernResolution to
+      architect report decisions
+    - Concern producer schemas.adds concernConfirms to plan close-up outputs
+      while preserving concernResolutions
+    - Concern artifact types.types structured concerns and remarkable decisions
+      on every producer artifact
+    - Concern artifact types.types concern confirmations and decision
+      resolutions with strict vocabularies
+evidence:
+  - "Test infra proven: bun install completed; `bun test
+    test/contracts/concern-schemas.test.ts
+    test/contracts/concern-artifact-types.test.ts` runs 16 tests (11 pass, 5
+    fail) with the 5 target tests failing as assertion failures on current
+    production code."
+  - "JUnit check: ran the two files with `--reporter=junit
+    --reporter-outfile=/tmp/junit-target.xml`; parsed the XML and matched every
+    declared expectRed id to a `<failure>` case (none missing, none error/skip):
+    review/QA/plan-reviewer remarkable, decisions
+    concernConfirms+concernResolution, plan-closeup concernConfirms, producer
+    concern typing, and ConcernConfirms/ConcernResolution typing."
+  - "Red failure content verified: S1 reports missing inline remarkable[] for
+    qa/reviewer/review-file/plan-reviewer; S2 reports missing concernConfirms[]
+    and concernResolution for all three architect decision steps; S3 reports
+    missing concernConfirms[] for plan-closeup and architect-closeup; type tests
+    report missing concerns on FactFinder/WaveCloseup/PlanCloseup/Decision,
+    missing newConcerns on ReviewArtifact, string-typed DeveloperOutput
+    concerns, and missing ConcernConfirms/ConcernResolution exports."
+  - "`bun run typecheck` exits 0 with the new test code (no production changes)."
+  - "`bun test test/contracts/` runs 17 tests across 3 files: 12 pass, only the
+    5 declared target tests fail; existing state/concern contract tests remain
+    green."
+  - "`git status --short` shows only the two test files modified (no production
+    paths touched, no stub files needed)."
+concerns:
+  - Some required schema behavior already exists in the current base
+    (developer-output, fact-finder-output, plan.schema, wave-closeup and
+    plan-closeup already carry concerns/remarkable and lowercase detail), so the
+    new developer/fact-finder/plan/close-up schema test is regression coverage
+    that passes now; the declared red cases target the actual remaining drift
+    (TS interfaces, review remarkable, decisions
+    concernConfirms/concernResolution, plan-closeup concernConfirms).
+  - "Tests deliberately pin the assignment's API names: `ConcernConfirms`
+    (element type) and `ConcernResolution`, and the singular decision
+    `concernResolution.action` enum is resolve|carry with no propagate. Close-up
+    `concernResolutions[]` retains the existing resolve|carry|propagate
+    vocabulary."
+  - The singular `concernResolution` test shape is {id, action} per the
+    assignment; note is only required on concernConfirms and on close-up
+    concernResolutions.
+notes: "Implementation for the next step: artifacts.ts needs
+  ConcernConfirms/ConcernResolution interfaces,
+  DeveloperOutputArtifact.concerns: Concern[] (currently string[]),
+  ReviewArtifact.newConcerns/remarkable, and concerns/remarkable on
+  FactFinder/WaveCloseup/PlanCloseup/Decision plus concernConfirms on
+  PlanCloseup/Decision and concernResolution on Decision. review-schema.ts and
+  review.schema.json need remarkable[]; decisions.schema.json needs
+  concernConfirms[] and concernResolution; plan-closeup.schema.json needs
+  concernConfirms[]. Keep triage/infra/plan-edits schemas free of all concern
+  fields."

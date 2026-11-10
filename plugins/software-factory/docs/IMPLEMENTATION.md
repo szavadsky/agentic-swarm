@@ -1,8 +1,10 @@
 # software-factory — As-Built Implementation
 
-HEAD `e4d3570` (2026-11-09). Design companion: [`ARCHITECTURE.md`](ARCHITECTURE.md) (design intent).
+HEAD `57ec7c1` (2026-11-09). Design companion: [`ARCHITECTURE.md`](ARCHITECTURE.md) (design intent).
 This doc describes **as-built behavior at HEAD**: what the engine actually does,
-verified against code + live fire-test records.
+verified against code + live fire-test records. Every cited live record is mirrored
+in-repo under [`records/`](records/) (`records/<row>-<step>/input.md` + `output.yaml`)
+so the quotes and links work without the fire-test worktrees.
 
 ## 1. Overview
 
@@ -10,7 +12,7 @@ The factory is a **Bun/TS orchestration engine** (`plugins/software-factory/src/
 that drives work through **child `omp` processes**. The engine itself holds no model:
 every LLM turn is either `harness.run()` — spawning `omp` as a child process with a
 system prompt + turn prompt + JSON schema + tool allowlist, in a worktree cwd — or
-`harness.complete()` (in-process one-shot, used only for cheap judge/classify/repair
+`harness.complete()` (stateless one-shot child omp: `--no-session`, no tools; used only for cheap judge/classify/repair
 calls). omp provides persistent sessions (`--resume` + `--session-dir`); the engine is
 stateless per turn and re-discovers all state from **records on git branches**.
 
@@ -40,14 +42,157 @@ Live evidence below: fire-test task `concerns-funnel` at
 (branch `topic/concerns-funnel`), runtime
 `/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/sessions/`.
 Record shorthand: `CF = .../concerns-funnel`, `RT = .../.factory-runtime/sessions`.
+Each §5 row links its cited record to the in-repo mirror
+(`records/<row>-<step>/`, `input.md` + `output.yaml`); `meta.yaml`/`checks.yaml` stay in the
+live record only. Mermaid labels and quoted prompt text name schemas without links — the
+file is linked in the row's header and prose.
 
-## 2. Sequence diagrams
+## 2. How agents produce output
+
+Three distinct channels. The step record's `output.yaml` is the *structured payload*, not the
+only artifact — and for developer steps it is not the deliverable at all.
+
+| Channel | Steps | What lands on disk |
+|---|---|---|
+| **Structured `yield`** — omp's hidden built-in `yield` tool called with a JSON object | every `run()` step with an `outputSchema` (§5 A–U, Y) | `output.yaml` in the step record (+ `checks.yaml` when checks ran); `writeArtifact` additionally writes the step's canonical artifact |
+| **Worktree edits** — `edit` / `write` / `ast_edit` | developer tool set only: test-first, develop, fix-round, integrate, poc, test-assumptions, simple-implement | the real files in the worktree cwd; the engine commits them with the step |
+| **Stateless `complete()`** — one-shot child `omp -p --no-session --tools=`, JSON parsed from the reply text | brief-select, steer-classify, repair-simpler (§5 V–X) | nothing — parsed JSON returned to the caller; no record dir, no session |
+
+**Structured yield, end to end.** `OmpHarness.run()` appends
+`pipeline.tools.structuredOutput` (default `["yield"]`, [`pipeline.default.yaml`](../config/pipeline.default.yaml))
+to the step's `--tools` allowlist whenever a schema is present (`harness.ts:302-309`).
+The model ends its turn with a `yield` call whose argument is the schema-shaped object;
+`OmpNdjsonParser` captures the last `yield` payload (`turn_end` → `agent_end` →
+`tool_execution_start` → `tool_execution_end`, later wins) as `yieldData`
+(`ndjson.ts:60-145`). If no `yield` arrived, the harness tries
+`extractJsonFromText(finalAssistantText)` — direct JSON, fenced JSON, then outermost
+`{...}`/`[...]` (`harness.ts:78-110,561-570`); if that fails, the raw text is the candidate.
+Ajv validates against the step schema (`harness.ts:572-620`); on violation the repair chain
+runs — direct → `simpler_repair` (`complete@simpler`, leaf guard) → ask the same session when
+kept → relaunch once → `rejected` (`repair.ts:129-235`). On success `finishStepRecord` writes
+`output.yaml` + `checks.yaml` and updates `meta.yaml` (`step-record.ts:106-145`), then
+`writeArtifact` writes the canonical artifact and `ingestStepConcerns` feeds producer
+concerns (`step-runner.ts:1334-1388`); everything lands in one commit
+(`step-runner.ts:1396-1405`).
+
+**Worktree edits.** The developer agent is the only one whose tool set carries
+`edit/write/ast_edit` (`agents/developer.md` frontmatter). test-first/develop/fix-round/poc/
+simple-implement write the actual deliverable there; their `yield` payload carries only
+status/summary/target/evidence, and post-turn checks (`test-first-scope`, `target-red`,
+gates, size) inspect the tree and land in `checks.yaml`. integrate is the special case: it
+edits only to resolve `<<<<<<<` markers, then `concludeMerge` commits the merge.
+
+**Stateless `complete()`.** V/W/X never become step records: `OmpHarness.complete` spawns a
+throwaway `omp -p --no-session --tools= --config <overlay> --mode json --model <role>`
+(`harness.ts:645-720`), embeds the system prompt + schema in the prompt file, extracts JSON
+from the final assistant text (`extractJsonFromText`), validates it, and returns it — or
+throws; `complete()` has no repair chain, so the caller decides (fail-open for brief-select,
+message stays pending for steer-classify, next repair leg for repair-simpler). With no
+tools enabled these calls cannot read or write files.
+
+**Verdicts and comments.** Reviewer-shaped steps (plan-review, qa, review) yield
+[`review.schema.json`](../config/schemas/review.schema.json): `status` + `suggestions[]`
+with a `disposition`. The engine triages every suggestion (`ingestStepConcerns`), routes
+`fix` back to the developer, `architect` to a consult, and `human-*` to `tousertoreview`
+question files via `writeQuestion` — never as chat text. Architect turns yield
+[`decisions.schema.json`](../config/schemas/decisions.schema.json) (consult, wave report);
+close-ups yield [`plan-closeup.schema.json`](../config/schemas/plan-closeup.schema.json) /
+[`wave-closeup.schema.json`](../config/schemas/wave-closeup.schema.json).
+
+**Schema index.** Every schema the audit rows cite, plus the engine's own config/record
+schemas ([`config/schemas/`](../config/schemas/)):
+
+| Schema | Produced / used by |
+|---|---|
+| [`triage.schema.json`](../config/schemas/triage.schema.json) | triage (A) |
+| [`infra.schema.json`](../config/schemas/infra.schema.json) | infra (B) |
+| [`fact-finder-output.schema.json`](../config/schemas/fact-finder-output.schema.json) | context-pack (C), research (N) |
+| [`developer-output.schema.json`](../config/schemas/developer-output.schema.json) | test-first (H), develop (I), fix-round (J), integrate (M), poc (O), simple-implement (Y) |
+| [`plan.schema.json`](../config/schemas/plan.schema.json) | architect-plan (D), architect-revise (F) |
+| [`plan-edits.schema.json`](../config/schemas/plan-edits.schema.json) | pm-edits (G), pm-amend (S) |
+| [`review.schema.json`](../config/schemas/review.schema.json) | plan-review (E), qa (K), review (L) |
+| [`decisions.schema.json`](../config/schemas/decisions.schema.json) | consult (P), architect-wave-report (R) |
+| [`wave-closeup.schema.json`](../config/schemas/wave-closeup.schema.json) | wave-close-up (Q) |
+| [`plan-closeup.schema.json`](../config/schemas/plan-closeup.schema.json) | plan-close-up (T), architect-closeup (U) |
+| [`brief-select.schema.json`](../config/schemas/brief-select.schema.json) | brief-select judge (V) |
+| [`steer-classification.schema.json`](../config/schemas/steer-classification.schema.json) | steer-classify (W) |
+| [`step-meta.schema.json`](../config/schemas/step-meta.schema.json) | every record's `meta.yaml` |
+| [`checks-result.schema.json`](../config/schemas/checks-result.schema.json) | every record's `checks.yaml` |
+| [`assignment.schema.json`](../config/schemas/assignment.schema.json) | `items/<slug>/assignment.yaml` |
+| [`context.schema.json`](../config/schemas/context.schema.json) | `context.yaml` |
+| [`gates-baseline.schema.json`](../config/schemas/gates-baseline.schema.json) | `gates-baseline.yaml` |
+| [`pipeline.schema.json`](../config/schemas/pipeline.schema.json) | validates [`pipeline.default.yaml`](../config/pipeline.default.yaml) (layered config) |
+| [`project.schema.json`](../config/schemas/project.schema.json) | validates `.factory/project.yaml` ([template](../config/project.template.yaml)) |
+| [`state.schema.json`](../config/schemas/state.schema.json) | `state.yaml` |
+| [`steer-item.schema.json`](../config/schemas/steer-item.schema.json) | steer-mailbox items |
+
+Per-step answers are in the §5 table (`Output mechanism`) and each row's `Mechanism:` line.
+
+## 3. omp sessions, session tools, and extensions
+
+**Every factory turn is a plain omp print-mode session.** `OmpHarness.runAttempt` spawns
+(`harness.ts:367-389`):
+
+```text
+omp --cwd <worktree> --config <overlay.yaml> --mode json --model @<role> \
+    --session-dir <runtime>/sessions [--resume <id>] \
+    --tools=<allowlist>[,yield] --system-prompt <agent>.md -p @<prompt>.txt
+```
+
+There is **no extension in the launch path**: no `-e/--extension`, no `--hook`, no
+`--plugin-dir`, no `--no-extensions`; `src/harness/` holds no extension/plugin code and the
+engine ships none. Extension *discovery* is therefore whatever the host omp install has
+enabled — and it applies uniformly to every child session (there is no per-step switch).
+In this environment `~/.omp/plugins/omp-plugins.lock.json` records two plugins:
+
+| Plugin | State | What it adds to a factory session |
+|---|---|---|
+| `omp-antigravity-acp-provider@0.1.35` | **enabled** | model provider `antigravity-acp` (serves `google-antigravity/*`, i.e. the `simpler` primary `gemini-3.8-flash`), an ACP permission tool (registered but outside every factory `--tools` allowlist → inactive), `/antigravity-acp` command, and session lifecycle hooks (`session_start` / `agent_end` / `session_shutdown`) |
+| `@oh-my-pi/swarm-extension@13.17.0` | disabled | would add `/swarm` pipelines + subagent orchestration; **not active** |
+
+So the only extension actually modifying factory sessions is the **model-provider bridge**.
+It adds no structured-output tool and no subagent-spawn tool. `structOutput` is **not** an
+extension: it is the config key (`tools.structuredOutput`, default `[yield]`) naming omp's
+hidden built-in `yield` tool (omp's `HIDDEN_TOOL_NAMES = ["yield","goal","think"]`); subagent
+spawn is omp's built-in `task` tool. What would break without the provider extension: the
+`simpler` role's primary `google-antigravity/gemini-3.8-flash` becomes unresolvable, so
+brief-select / steer-classify / repair-simpler fall back to `workhorse` (V/W/X still run, at
+higher cost); every other role is unaffected.
+
+**What the factory adds beyond a generic launch** (the session-tool surface):
+
+| Addition | Where | Effect |
+|---|---|---|
+| `--tools=<allowlist>` | agent frontmatter / `agents.<name>.tools`; `resolveAgentTools` (`step-runner.ts:798-812`) | least privilege; PM resolves to `[]` (yield-only) and is guarded |
+| `yield` append | `harness.ts:302-309`, only when a schema exists | structured capture; without it only the text-JSON fallback remains |
+| `task` subagent spawn | `dev`, `ff`, `arch`, `qa`, `review` tool sets | nested omp subagents in the same cwd; read-only agents use it for parallel investigation |
+| `checkpoint` / `rewind` | `dev`, `ff`, `arch` sets; overlay `checkpoint.enabled: true` | opt-in worktree snapshots |
+| `--config` overlay | [`overlay.ts`](../src/harness/omp/overlay.ts) | modelRoles + fallbackChains; retry; auto-background off; title generator off; advisor off; git guard off; compound bash on; mnemopi off; update off |
+| `--session-dir` + `--resume` | `harness.ts:367-389`; session policy per §5 row | persistent sessions, `traceRef` discovery, restart resume |
+| `--system-prompt` file + `-p @file` | `harness.ts:289-316` | byte-stable system prompt (prompt cache), unique per-turn prompt files |
+| `--no-session` + `--tools=` (stateless) | `complete()` (`harness.ts:645-720`) | V/W/X one-shots: no tools, no session dir, JSON parsed from the reply text |
+
+**What would break without it.** No `yield` in the allowlist → every schema step loses its
+structured channel and depends on text extraction + repair. No `--tools` allowlist → every
+agent gets write tools (the PM guard fires; separation of concerns is gone). No overlay →
+title generation / auto-background / git-guard / mnemopi leak into unattended turns and the
+fallback chains disappear. No `--session-dir`/`--resume` → no session continuity, no
+`traceRef`, no restart resume. No host provider extension → the `simpler` chain loses its
+primary model (see above); no step's tools or output channel change.
+
+**Which steps are extension-modified:** all of them, identically — A–U/Y via `run()` and
+V–X via `complete()` both spawn `omp` without `--no-extensions`, so host-enabled extensions
+load in every turn. The enabled provider extension only changes model routing; it changes no
+step's tools or output channel. The disabled swarm extension would add orchestration
+commands but is never loaded. Each §5 row states its session kind.
+
+## 4. Sequence diagrams
 
 Agents are first-class actors below: `TRI` triage, `INF` infra, `FF` fact-finder,
 `ARC` architect, `PRV` plan-reviewer, `PM` project manager, `DEV` developer,
 `QA`, `REV` reviewer, `WCU` wave-close-up, `PCU` plan-close-up — plus `ENG` engine,
 `GIT` worktrees/branches, `OP` operator. Artifact files pass between actors.
-`run()` = child omp process turn; `complete()` = in-process one-shot.
+`run()` = child omp process turn; `complete()` = stateless one-shot child (no session, no tools).
 
 ### a. Simple task (triage → infra → simple-implement → gates/size → merge-or-convert)
 
@@ -164,7 +309,7 @@ sequenceDiagram
     ENG->>GIT: commit context-pack.md (no byte cap at HEAD)
     ENG->>ENG: buildArchitectBrief, skeleton of one-line entries
     alt skeleton non-empty
-        ENG->>ARC: brief-select judge, complete in-process, simpler model, system brief-select, returns include list
+        ENG->>ARC: brief-select judge, complete stateless one-shot, simpler model, system brief-select, returns include list
         Note over ENG: fail-open, judge error gives full brief, journal brief_select_fallback
     end
     ENG->>ARC: run() architect-plan, sessionMode reuse, architectSessionId if any, vars task iteration intent context infra debt+steering (brief) limits contextPack taskStatus + auto humanInvolvementCriteria concernsYaml + Output schema
@@ -226,14 +371,14 @@ sequenceDiagram
 
 ### f. Saga — NOT IMPLEMENTED
 
-> **NOT IMPLEMENTED.** Triage can classify `saga` (`triage.schema.json` enum + criteria
+> **NOT IMPLEMENTED.** Triage can classify `saga` ([`triage.schema.json`](../config/schemas/triage.schema.json) enum + criteria
 > row), but no saga launcher exists: `src/` has only `engine.ts:125-184` (`runChildTask`)
 > for epics and `epic-propagation.ts` (epic→parent concern push, comments call it
 > "epic-to-saga"). [`ARCHITECTURE.md`](ARCHITECTURE.md):40 defers this to the
 > `omp-workspaces` fire-test goal. What exists: epic→parent propagation (open/routed
 > concerns + open remarkables) and forwarded `q-epic-*` blocking questions.
 
-## 3. Per-step LLM audit (HUMAN REVIEW)
+## 5. Per-step LLM audit (HUMAN REVIEW)
 
 Shared launch mechanics (every `runAgentStep`, `step-runner.ts:369`): prompt =
 [`agents/steps/<fragment>.md`](../agents/steps/triage.md) rendered with the
@@ -255,7 +400,10 @@ session when kept → relaunch once → rejected) → `output.yaml` + `checks.ya
 
 Live quotes below are from the `concerns-funnel` fire-test records
 (2026-11-07/08). Where HEAD changed the prompt/config since (noted per step),
-the code is authoritative.
+the code is authoritative. Each row header links the in-repo record copy
+(`records/<row>-<step>/input.md` + `output.yaml`) and states the **output mechanism**
+(§2) and **session kind** (§3). Auxiliary records cited in passing (other rounds,
+`meta.yaml`, `checks.yaml`) are live-only.
 
 Tool-set shorthand (from agent frontmatter): `dev` = read grep glob find edit write
 ast_grep ast_edit bash debug eval lsp task checkpoint rewind; `ff` = read grep glob
@@ -271,43 +419,51 @@ failing-check summaries; `citations` = assignment citations; `context` = `contex
 `debt`+`steering` = `buildArchitectBrief`; `taskStatus` = derived state block;
 `concernsYaml` = concern store hydrated per step role; `*Criteria` = `agents/criteria/*`.
 
-| Step | Template links | Model role → models | Tools / subagents | Start / session kind |
-|---|---|---|---|---|
-| triage | [agent](../agents/triage.md) · [fragment](../agents/steps/triage.md) · [schema](../config/schemas/triage.schema.json) | workhorse → `deepseek-v4.1-flash`, fallback `muse-spark-1.3-contrib` | read grep glob find bash lsp ast_grep eval; no task/subagents | child omp `run()`; **new kept** session (only simple-implement resumes it) |
-| infra | [agent](../agents/infra.md) · [fragment](../agents/steps/infra.md) · [schema](../config/schemas/infra.schema.json) | workhorse → same chain | read grep glob find bash lsp ast_grep eval | child `run()`; **fresh** (no session passed) |
-| context-pack | [agent](../agents/fact-finder.md) · [fragment](../agents/steps/context-pack.md) · [schema](../config/schemas/fact-finder-output.schema.json) | workhorse → same chain | `ff` set | child `run()`; **fresh always**; re-runs as `context-pack-N` when stale |
-| simple-implement | [agent](../agents/developer.md) · [fragment](../agents/steps/simple-implement.md) · [schema](../config/schemas/developer-output.schema.json) | workhorse → same chain | `dev` set | child `run()`; resumes the triage session when triage ran in this process (restart → new); scratch worktree |
-| architect-plan | [agent](../agents/architect.md) · [fragment](../agents/steps/architect-plan.md) · [schema](../config/schemas/plan.schema.json) | architect → `claude-opus-5-5:max`, fallback `alt-architect` (`muse-spark-1.3-contrib`); fire-test aliases architect→cheap | `arch` set (no file writes) | child `run()`; **reuse `architectSessionId` when present** — one thread per iteration across plan/revise/consults/reports (cleared on next-iteration); outline-count violations → `resumedRepair`, errors-only prompt |
-| plan-review | [agent](../agents/plan-reviewer.md) · [fragment](../agents/steps/plan-review.md) · [schema](../config/schemas/review.schema.json) | alt-architect → `muse-spark-1.3-contrib` | read grep glob find lsp ast_grep | child `run()`; fresh per round (sequenced `plan-review-N-K`) |
-| architect-revise | [agent](../agents/architect.md) · [fragment](../agents/steps/architect-revise.md) · same plan schema | architect → same chain | `arch` set | child `run()`; reuse architect session (writes plan-N); second caller `architect-pmfix-N` = PM-validation bounce (same fragment, not exercised in this fire-test) |
-| pm-edits | [agent](../agents/pm.md) · [fragment](../agents/steps/pm-edits.md) · [schema](../config/schemas/plan-edits.schema.json) | pm (→alt-workhorse: `contrib`, `flash`) | **[] yield-only** (guarded: file tools → `pm_tools_guard_rejected` error) | child `run()`; new kept session; validation-repair resumes that PM session errors-only; `forceFresh` only on the architect-bounce re-run |
-| test-first | [agent](../agents/developer.md) · [fragment](../agents/steps/test-first.md) · same developer-output schema | workhorse → `flash` (no retryRole; fix rounds re-enter develop) | `dev` set | child `run()`; new session |
-| develop | [agent](../agents/developer.md) · [fragment](../agents/steps/develop.md) · same schema | workhorse, `retryRole: alt-workhorse`, `escalatable` | `dev` set | child `run()`; new kept session (repair-ask works); fixRound≥2 fresh |
-| fix-round | [agent](../agents/developer.md) · [fragment](../agents/steps/fix-round.md) · same schema | workhorse (fixRound≥2 → alt-workhorse) | `dev` set | child `run()`; fixRound≥2 = fresh session |
-| qa | [agent](../agents/qa.md) · [fragment](../agents/steps/qa.md) · review schema | task-reviewer→alt-workhorse | read grep glob find bash lsp ast_grep task checkpoint rewind | child `run()`; new session |
-| review | [agent](../agents/reviewer.md) · [fragment](../agents/steps/review.md) · review schema (flow `focus` declared, not rendered) | task-reviewer→alt-workhorse, escalatable | as qa | child `run()`; new session |
-| integrate | [agent](../agents/developer.md) · [fragment](../agents/steps/integrate.md) · developer-output schema | workhorse | `dev` set | child `run()`; on conflict only; diff in prompt |
-| research (spike) | [agent](../agents/fact-finder.md) · [fragment](../agents/steps/research.md) · [schema](../config/schemas/fact-finder-output.schema.json) | workhorse | `ff` set | child `run()`; new session |
-| poc / test-assumptions (spike develop) | [agent](../agents/developer.md) · [fragment](../agents/steps/poc.md) / [test-assumptions](../agents/steps/test-assumptions.md) · developer-output schema | workhorse | `dev` set | child `run()`; new session |
-| consult (item / non-item / empty-wave / merge / concern) | [agent](../agents/architect.md) · [fragments item](../agents/steps/architect-consult-item.md) / [non-item](../agents/steps/architect-consult-nonitem.md) · [schema](../config/schemas/decisions.schema.json) | architect → same chain | `arch` set | child `run()`; resume architect session; **sequenced id (`consult-<item>-<n>`) — never reuses done-ness** (`step-runner.ts:395`) |
-| wave-close-up | [agent](../agents/wave-close-up.md) · [fragment](../agents/steps/wave-close-up.md) · [schema](../config/schemas/wave-closeup.schema.json) | alt-workhorse → `contrib`, `flash` (call overrides agent role) | read grep glob find bash lsp ast_grep | child `run()`; fresh per wave (sequenced id) |
-| architect-wave-report | [agent](../agents/architect.md) · [fragment](../agents/steps/architect-wave-report.md) · decisions schema | architect | `arch` set | child `run()`; resume architect session |
-| pm-amend | [agent](../agents/pm.md) · [fragment](../agents/steps/pm-amend.md) · plan-edits schema | alt-workhorse → `contrib`, `flash` | [] yield-only | child `run()`; new kept session; repair resumes that PM session |
-| plan-close-up | [agent](../agents/plan-close-up.md) · [fragment](../agents/steps/plan-close-up.md) · [schema](../config/schemas/plan-closeup.schema.json) | alt-workhorse → `contrib`, `flash` (call overrides agent role) | read grep glob find lsp ast_grep | child `run()`; fresh |
-| architect-closeup | [agent](../agents/architect.md) · [fragment](../agents/steps/architect-closeup.md) · plan-closeup schema | architect | `arch` set | child `run()`; resume architect session |
-| brief-select judge | [system](../agents/system/brief-select.md) · [schema](../config/schemas/brief-select.schema.json) | **simpler → `gemini-3.8-flash`, fallback workhorse** | none (in-process) | **`harness.complete()` in-process**; no session; fail-open → full brief |
-| steer-classify | [system](../agents/system/steer-classify.md) · [schema](../config/schemas/steer-classification.schema.json) | **simpler** (passed by the poller) | none (in-process) | **`harness.complete()` in-process**; failure → message stays pending |
-| repair-simpler | inline system string (NOT [`system/repair.md`](../agents/system/repair.md), which no engine path uses) · same step schema | simpler | none (in-process) | **`harness.complete()` in-process**; leaf-value guard rejects hallucinated repairs |
+| Step | Template links | Model role → models | Tools / subagents | Session kind (§3) | Output mechanism |
+|---|---|---|---|---|---|
+| triage | [agent](../agents/triage.md) · [fragment](../agents/steps/triage.md) · [schema](../config/schemas/triage.schema.json) | workhorse → `deepseek-v4.1-flash`, fallback `muse-spark-1.3-contrib` | read grep glob find bash lsp ast_grep eval; no task/subagents | plain omp (host provider ext §3); **new kept** (only simple-implement resumes it) | `yield` → `output.yaml`; engine `writeArtifact` writes `triage.yaml` + `context.yaml` |
+| infra | [agent](../agents/infra.md) · [fragment](../agents/steps/infra.md) · [schema](../config/schemas/infra.schema.json) | workhorse → same chain | read grep glob find bash lsp ast_grep eval | plain omp (host provider ext §3); **fresh** (no session passed) | `yield` → `output.yaml`; engine writes `infra.yaml` + `gates-baseline.yaml` |
+| context-pack | [agent](../agents/fact-finder.md) · [fragment](../agents/steps/context-pack.md) · [schema](../config/schemas/fact-finder-output.schema.json) | workhorse → same chain | `ff` set | plain omp (host provider ext §3); **fresh always**; re-runs as `context-pack-N` when stale | `yield` (`findings`) → `output.yaml`; engine writes `context-pack.md` |
+| simple-implement | [agent](../agents/developer.md) · [fragment](../agents/steps/simple-implement.md) · [schema](../config/schemas/developer-output.schema.json) | workhorse → same chain | `dev` set | plain omp (host provider ext §3); resumes the triage session when triage ran in this process (restart → new); scratch worktree | `yield` + **worktree edits**; engine gates/size → merge or convert |
+| architect-plan | [agent](../agents/architect.md) · [fragment](../agents/steps/architect-plan.md) · [schema](../config/schemas/plan.schema.json) | architect → `claude-opus-5-5:max`, fallback `alt-architect` (`muse-spark-1.3-contrib`); fire-test aliases architect→cheap | `arch` set (no file writes) | plain omp (host provider ext §3); **reuse `architectSessionId` when present** — one thread per iteration across plan/revise/consults/reports (cleared on next-iteration); outline-count violations → `resumedRepair`, errors-only prompt | `yield` → `output.yaml`; engine writes `plan/plan-N.yaml` + ADR records |
+| plan-review | [agent](../agents/plan-reviewer.md) · [fragment](../agents/steps/plan-review.md) · [schema](../config/schemas/review.schema.json) | alt-architect → `muse-spark-1.3-contrib` | read grep glob find lsp ast_grep | plain omp (host provider ext §3); fresh per round (sequenced `plan-review-N-K`) | `yield` review → `output.yaml`; no artifact (concern triage only) |
+| architect-revise | [agent](../agents/architect.md) · [fragment](../agents/steps/architect-revise.md) · [plan schema](../config/schemas/plan.schema.json) | architect → same chain | `arch` set | plain omp (host provider ext §3); reuse architect session; second caller `architect-pmfix-N` = PM-validation bounce (same fragment, not exercised in this fire-test) | `yield` → `output.yaml`; engine rewrites `plan/plan-N.yaml` |
+| pm-edits | [agent](../agents/pm.md) · [fragment](../agents/steps/pm-edits.md) · [schema](../config/schemas/plan-edits.schema.json) | pm (→alt-workhorse: `contrib`, `flash`) | **[] yield-only** (guarded: file tools → `pm_tools_guard_rejected` error) | plain omp (host provider ext §3); new kept session; validation-repair resumes that PM session errors-only; `forceFresh` only on the architect-bounce re-run | `yield` → `output.yaml`; engine writes `items/<slug>/assignment.yaml` + `plan/edits-N.0.yaml` |
+| test-first | [agent](../agents/developer.md) · [fragment](../agents/steps/test-first.md) · [developer-output schema](../config/schemas/developer-output.schema.json) | workhorse → `flash` (no retryRole; fix rounds re-enter develop) | `dev` set | plain omp (host provider ext §3); new session | `yield` target + **worktree test edits**; `checks.yaml` |
+| develop | [agent](../agents/developer.md) · [fragment](../agents/steps/develop.md) · [developer-output schema](../config/schemas/developer-output.schema.json) | workhorse, `retryRole: alt-workhorse`, `escalatable` | `dev` set | plain omp (host provider ext §3); new kept session (repair-ask works); fixRound≥2 fresh | `yield` + **worktree edits**; `checks.yaml` |
+| fix-round | [agent](../agents/developer.md) · [fragment](../agents/steps/fix-round.md) · [developer-output schema](../config/schemas/developer-output.schema.json) | workhorse (fixRound≥2 → alt-workhorse) | `dev` set | plain omp (host provider ext §3); fixRound≥2 = fresh session | `yield` + **worktree edits**; `checks.yaml` |
+| qa | [agent](../agents/qa.md) · [fragment](../agents/steps/qa.md) · [review schema](../config/schemas/review.schema.json) | task-reviewer→alt-workhorse | read grep glob find bash lsp ast_grep task checkpoint rewind | plain omp (host provider ext §3); new session | `yield` review only (read-only agent) |
+| review | [agent](../agents/reviewer.md) · [fragment](../agents/steps/review.md) · [review schema](../config/schemas/review.schema.json) (flow `focus` declared, not rendered) | task-reviewer→alt-workhorse, escalatable | as qa | plain omp (host provider ext §3); new session | `yield` review only (read-only agent) |
+| integrate | [agent](../agents/developer.md) · [fragment](../agents/steps/integrate.md) · [developer-output schema](../config/schemas/developer-output.schema.json) | workhorse | `dev` set | plain omp (host provider ext §3); on conflict only; diff in prompt | `yield` + **edit** (conflict resolution); `concludeMerge` |
+| research (spike) | [agent](../agents/fact-finder.md) · [fragment](../agents/steps/research.md) · [schema](../config/schemas/fact-finder-output.schema.json) | workhorse | `ff` set | plain omp (host provider ext §3); new session | `yield` only; no artifact (findings.md gap, §N) |
+| poc / test-assumptions (spike develop) | [agent](../agents/developer.md) · [fragment](../agents/steps/poc.md) / [test-assumptions](../agents/steps/test-assumptions.md) · [developer-output schema](../config/schemas/developer-output.schema.json) | workhorse | `dev` set | plain omp (host provider ext §3); new session | `yield` + **worktree edits** (poc/ only for poc) |
+| consult (item / non-item / empty-wave / merge / concern) | [agent](../agents/architect.md) · [fragments item](../agents/steps/architect-consult-item.md) / [non-item](../agents/steps/architect-consult-nonitem.md) · [schema](../config/schemas/decisions.schema.json) | architect → same chain | `arch` set | plain omp (host provider ext §3); resume architect session; **sequenced id (`consult-<item>-<n>`) — never reuses done-ness** (`step-runner.ts:395`) | `yield` decisions → `output.yaml`; engine writes `decisions/NNN-*.yaml` |
+| wave-close-up | [agent](../agents/wave-close-up.md) · [fragment](../agents/steps/wave-close-up.md) · [schema](../config/schemas/wave-closeup.schema.json) | alt-workhorse → `contrib`, `flash` (call overrides agent role) | read grep glob find bash lsp ast_grep | plain omp (host provider ext §3); fresh per wave (sequenced id) | `yield` verdict only; no artifact, no `checks.yaml` |
+| architect-wave-report | [agent](../agents/architect.md) · [fragment](../agents/steps/architect-wave-report.md) · [decisions schema](../config/schemas/decisions.schema.json) | architect | `arch` set | plain omp (host provider ext §3); resume architect session | `yield` decisions → `output.yaml`; engine writes `waves/wave-N.M.yaml` |
+| pm-amend | [agent](../agents/pm.md) · [fragment](../agents/steps/pm-amend.md) · [plan-edits schema](../config/schemas/plan-edits.schema.json) | alt-workhorse → `contrib`, `flash` | [] yield-only | plain omp (host provider ext §3); new kept session; repair resumes that PM session | `yield` → `output.yaml`; engine writes `plan/edits-N.k.yaml` |
+| plan-close-up | [agent](../agents/plan-close-up.md) · [fragment](../agents/steps/plan-close-up.md) · [schema](../config/schemas/plan-closeup.schema.json) | alt-workhorse → `contrib`, `flash` (call overrides agent role) | read grep glob find lsp ast_grep | plain omp (host provider ext §3); fresh | `yield` verdict → `output.yaml`; consumed in memory |
+| architect-closeup | [agent](../agents/architect.md) · [fragment](../agents/steps/architect-closeup.md) · [plan-closeup schema](../config/schemas/plan-closeup.schema.json) | architect | `arch` set | plain omp (host provider ext §3); resume architect session | `yield` → `output.yaml`; engine writes `closeup-N.yaml` |
+| brief-select judge | [system](../agents/system/brief-select.md) · [schema](../config/schemas/brief-select.schema.json) | **simpler → `gemini-3.8-flash`, fallback workhorse** | none (`--tools=`) | **`harness.complete()` stateless** (`--no-session --tools=`); host provider extension still loads; fail-open → full brief | in-memory `{include: [...]}`; no record |
+| steer-classify | [system](../agents/system/steer-classify.md) · [schema](../config/schemas/steer-classification.schema.json) | **simpler** (passed by the poller) | none (`--tools=`) | **`harness.complete()` stateless**; no session; failure → message stays pending | in-memory classification; no record |
+| repair-simpler | inline system string (NOT [`system/repair.md`](../agents/system/repair.md), which no engine path uses) · the failing step's own schema (e.g. [plan.schema.json](../config/schemas/plan.schema.json)) | simpler | none (`--tools=`) | **`harness.complete()` stateless**; no session; leaf-value guard rejects hallucinated repairs | in-memory repaired JSON; no record |
+
+Session kind: every row is a **plain print-mode omp session** — the factory adds no per-step
+extension; the host-enabled provider extension (`omp-antigravity-acp-provider`) loads
+uniformly and only affects `google-antigravity/*` model routing (§3). Rows marked
+`harness.complete()` are stateless one-shots (`--no-session --tools=`).
 
 Record pointers (`CF/runs/...`, `CF/items/<item>/steps/...`): `meta.yaml` carries
 `role/models/timeoutSec/usage/traceRef`; `traceRef` = first `RT/` entry matching the
 session id (JSONL, occasionally the session dir).
 
-### A. triage — `ingest.ts:371` · record `CF/runs/002-triage-a1/` · `agent: triage / workhorse`
+### A. triage — [`ingest.ts:371`](../src/core/flows/ingest.ts#L371) · record [input.md](records/a-triage/input.md) · [output.yaml](records/a-triage/output.yaml) (live `CF/runs/002-triage-a1/`) · `agent: triage / workhorse`
+
+**Mechanism:** structured `yield` → `output.yaml`; engine `writeArtifact` writes `triage.yaml` + `context.yaml`.
+**Session:** plain omp, fresh + kept (no resume) — host provider extension only (§3).
 
 Prompt vars (`task,intent,triageCriteria`): `## Task` = slug; `## Intent` = full INTENT.md
 (acceptance bullets + scope); `## Triage Criteria` = hierarchy matrix (simple/story/spike/epic/saga).
-Live assembled prompt — `CF/runs/002-triage-a1/input.md` (67 lines; vars rendered, head + injected sections):
+Live assembled prompt — [`CF/runs/002-triage-a1/input.md`](records/a-triage/input.md) (67 lines; vars rendered, head + injected sections):
 
 ```text
 # Step: Triage
@@ -358,7 +514,10 @@ Meta: `role: workhorse, models: [deepseek-v4.1-flash, muse-spark-1.3-contrib]`,
 Engine writes `triage.yaml` + `context.yaml` in the same commit; citations are verified
 against the scratch worktree and invalid ones are dropped with a `citations_dropped` event.
 
-### B. infra — `ingest.ts:468` · record `CF/runs/003-infra-a1/` (live `input.md` 162 lines, `output.yaml`) · `agent: infra / workhorse`
+### B. infra — [`ingest.ts:468`](../src/core/flows/ingest.ts#L468) · record [input.md](records/b-infra/input.md) · [output.yaml](records/b-infra/output.yaml) (live `CF/runs/003-infra-a1/`, `input.md` 162 lines) · `agent: infra / workhorse`
+
+**Mechanism:** structured `yield` → `output.yaml`; engine writes `infra.yaml` + `gates-baseline.yaml` after running the baseline gates.
+**Session:** plain omp, fresh (no session passed) — host provider extension only (§3).
 
 Prompt vars (`task,intent,context`): same Task/Intent injection; fragment adds Tool Output
 Fields Specification (`setup`, `gates[]`, `testRunner{command,selectorArgs,junitArg}`, `notes`)
@@ -395,7 +554,10 @@ Downstream: `gates-baseline.yaml` recorded; develop/merge/close-up checkpoints r
 gates and ratchet against it. Engine writes `infra.yaml` + `gates-baseline.yaml` in the
 same `[ok]` commit (baseline gates run with retries disabled).
 
-### C. context-pack — `ingest.ts:268` · record `CF/runs/005-context-pack-a1/` (live `input.md` 158 lines, `output.yaml` + `context-pack.md`) · `agent: fact-finder / workhorse`
+### C. context-pack — [`ingest.ts:268`](../src/core/flows/ingest.ts#L268) · record [input.md](records/c-context-pack/input.md) · [output.yaml](records/c-context-pack/output.yaml) (live `CF/runs/005-context-pack-a1/`, `input.md` 158 lines; engine also writes `context-pack.md`) · `agent: fact-finder / workhorse`
+
+**Mechanism:** structured `yield` (`findings` markdown) → `output.yaml`; engine writes `context-pack.md`.
+**Session:** plain omp, fresh always — host provider extension only (§3).
 
 Prompt vars (`task,intent,context`): fragment's Document Structure (§1–5) + read-only
 + no-subagent rules. **HEAD has no byte cap** (`agents/steps/context-pack.md` says
@@ -427,7 +589,10 @@ recommendations:
   - "Plan item 3: Concern routing engine (blocker dependency cascading ...) ..."
 ```
 
-### D. architect-plan — `iteration.ts:1223` · record `CF/runs/006-architect-plan-1-a1/` (live `input.md` 1677 lines, `output.yaml`) · `agent: architect`
+### D. architect-plan — [`iteration.ts:1223`](../src/core/flows/iteration.ts#L1223) · record [input.md](records/d-architect-plan/input.md) · [output.yaml](records/d-architect-plan/output.yaml) (live `CF/runs/006-architect-plan-1-a1/`, `input.md` 1677 lines) · `agent: architect`
+
+**Mechanism:** structured `yield` → `output.yaml`; engine writes `plan/plan-N.yaml` + persisted ADR records.
+**Session:** plain omp, resumes `architectSessionId` when present — host provider extension only (§3).
 
 Prompt vars (`task,iteration,intent,context,infra,debt,steering,limits,contextPack,taskStatus`;
 auto-added `humanInvolvementCriteria,concernsYaml`). `debt` and `steering` both receive
@@ -481,10 +646,13 @@ Meta: `role: architect, models: [muse-spark-1.3-contrib]` (fire-test alias cheap
 `session: 01a1b894-…` — the iteration's architect thread; 31k/11k tokens.
 Same session recurs in `017-architect-wave-report-1-1-a2` and `012-consult-…`; a
 `next-iteration` close-up clears it so the next iteration starts fresh (hydrated from records).
-Pre-launch: brief-select judge (in-process `complete@simpler`, [schema](../config/schemas/brief-select.schema.json);
+Pre-launch: brief-select judge (stateless `complete@simpler`, [schema](../config/schemas/brief-select.schema.json);
 fail-open journals `brief_select_fallback`).
 
-### E. plan-review — `iteration.ts:1448` · record `CF/runs/007-plan-review-1-1-a1/` (live `input.md` 520 lines, `output.yaml`) · `agent: plan-reviewer`
+### E. plan-review — [`iteration.ts:1448`](../src/core/flows/iteration.ts#L1448) · record [input.md](records/e-plan-review/input.md) · [output.yaml](records/e-plan-review/output.yaml) (live `CF/runs/007-plan-review-1-1-a1/`, `input.md` 520 lines) · `agent: plan-reviewer`
+
+**Mechanism:** structured `yield` → `output.yaml` ([review schema](../config/schemas/review.schema.json)); no artifact write, concern triage only.
+**Session:** plain omp, fresh per round — host provider extension only (§3).
 
 Prompt vars (`plan,intent,context,limits,dispositionsCriteria,limitViolations,
 humanInvolvementCriteria,concernsYaml`). Live assembled prompt (head + injected limits JSON
@@ -525,7 +693,10 @@ suggestions:
 the review; only `fix` triggers a revision (awareness/human-* route to the mailbox), and
 a failed reviewer fails the iteration.
 
-### F. architect-revise — `iteration.ts:1544` · record `CF/runs/008-architect-revise-1-1-a1/` (live `input.md` 1659 lines, `output.yaml`)
+### F. architect-revise — [`iteration.ts:1544`](../src/core/flows/iteration.ts#L1544) · record [input.md](records/f-architect-revise/input.md) · [output.yaml](records/f-architect-revise/output.yaml) (live `CF/runs/008-architect-revise-1-1-a1/`, `input.md` 1659 lines) · schema [plan.schema.json](../config/schemas/plan.schema.json)
+
+**Mechanism:** structured `yield` → `output.yaml`; engine rewrites `plan/plan-N.yaml`.
+**Session:** plain omp, resumes the architect session — host provider extension only (§3).
 
 Vars (`plan,planReview,contextPack,taskStatus,…`). Live assembled prompt = approved plan + `## Plan Review Feedback` (review JSON below) + pack re-injection (`## Context Pack` §§0–6 again):
 
@@ -554,7 +725,10 @@ adrs:
 
 Engine shallow-merges the revised object over the current plan, writes `plan/plan-N.yaml`, and re-persists ADRs.
 
-### G. pm-edits — `iteration.ts:1753` · record `CF/runs/011-pm-edits-1-a1/` (live `input.md` 654 lines, `output.yaml`) · `agent: pm / yield-only`
+### G. pm-edits — [`iteration.ts:1753`](../src/core/flows/iteration.ts#L1753) · record [input.md](records/g-pm-edits/input.md) · [output.yaml](records/g-pm-edits/output.yaml) (live `CF/runs/011-pm-edits-1-a1/`, `input.md` 654 lines) · `agent: pm / yield-only` · schema [plan-edits.schema.json](../config/schemas/plan-edits.schema.json)
+
+**Mechanism:** structured `yield` → `output.yaml`; engine validates the delta and writes `items/<slug>/assignment.yaml` + `plan/edits-N.0.yaml`.
+**Session:** plain omp, new kept session (repair resumes it), yield-only — host provider extension only (§3).
 
 [rules](../agents/steps/pm-edits.md): item fields (`slug,kind,title,assignment,outlineRef,milestone,
 wave,deps,scenarioRefs,citations`); wave scheduling (deps only on earlier waves);
@@ -591,7 +765,10 @@ the bounce re-run after `architect-pmfix-N` uses `forceFresh` (e.g. `116-pm-edit
 Engine validates the delta (`validateEdits`: slugs, kinds, deps on earlier waves, outline
 refs), writes `items/<slug>/assignment.yaml` per item, then `plan/edits-<N>.0.yaml`.
 
-### H. test-first — item-machine `946` (step id) · record `CF/items/contracts-drift-fix/steps/001-test-first-r1-a1/` (live `input.md` 61 lines, `output.yaml` + `checks.yaml`) · `agent: developer / workhorse`
+### H. test-first — item-machine [`946`](../src/core/flows/item-machine.ts#L946) (step id) · record [input.md](records/h-test-first/input.md) · [output.yaml](records/h-test-first/output.yaml) (live `CF/items/contracts-drift-fix/steps/001-test-first-r1-a1/`, `input.md` 61 lines; `checks.yaml` in the live record) · `agent: developer / workhorse` · schema [developer-output.schema.json](../config/schemas/developer-output.schema.json)
+
+**Mechanism:** structured `yield` (target) + **worktree test edits**; after-checks write `checks.yaml`.
+**Session:** plain omp, new session — host provider extension only (§3).
 
 Vars (`assignment,citations,feedback,concernsYaml`). Live assembled prompt (61 lines, full):
 
@@ -618,7 +795,10 @@ after-phase; only `red-test`, `test-diff`, and custom `phase: before` checks run
 pre-launch) — failure records `rejected`; `target-red` requires the declared tests to
 fail on baseline code. `checks.yaml` in the record dir carries the JUnit evidence.
 
-### I. develop — same dispatcher · record `CF/items/contracts-drift-fix/steps/002-develop-r1-a1/` (live `input.md` 72 lines, `output.yaml` + `checks.yaml`) · `agent: developer / workhorse`
+### I. develop — same dispatcher · record [input.md](records/i-develop/input.md) · [output.yaml](records/i-develop/output.yaml) (live `CF/items/contracts-drift-fix/steps/002-develop-r1-a1/`, `input.md` 72 lines; `checks.yaml` in the live record) · `agent: developer / workhorse` · schema [developer-output.schema.json](../config/schemas/developer-output.schema.json)
+
+**Mechanism:** structured `yield` + **worktree edits** (prod + tests); `checks.yaml` carries the gate evidence.
+**Session:** plain omp, new kept session, fixRound≥2 fresh — host provider extension only (§3).
 
 Vars (`assignment,target,citations,feedback,concernsYaml`). Sections:
 `## Goal/## Rules` (target-green, gates, sizing budget, ~60-tool-call budget) →
@@ -626,7 +806,7 @@ Vars (`assignment,target,citations,feedback,concernsYaml`). Sections:
 `## Target` (selectors/expectRed) → `## Context & Citations` (engine citations list) →
 `## Review Feedback` (empty first round; fix suggestions on fix rounds) → `## Output`.
 
-Live assembled prompt — `items/contracts-drift-fix/steps/002-develop-r1-a1/input.md` (72 lines; fragment head + injected assignment/target/citations):
+Live assembled prompt — [`items/contracts-drift-fix/steps/002-develop-r1-a1/input.md`](records/i-develop/input.md) (72 lines; fragment head + injected assignment/target/citations):
 
 ```text
 # Step: Develop
@@ -660,7 +840,10 @@ After-checks `[gates, target-green, size]`; failure → `rejected` + fix loop.
 Meta: developer/workhorse, 108k/30k tokens, session `01a1bcab-…`, `repairedFrom: ask`
 (the repair chain's same-session leg).
 
-### J. fix-round — `item-machine.ts:887` · record `CF/items/adr-blocking-digest-v2/steps/005-develop-r2-a1/` (live `input.md` 4753 lines, `output.yaml` + `checks.yaml`) · `agent: developer` (round 2 → `alt-workhorse`)
+### J. fix-round — [`item-machine.ts:887`](../src/core/flows/item-machine.ts#L887) · record [input.md](records/j-fix-round/input.md) (**trimmed** — live file is 228,331 bytes) · [output.yaml](records/j-fix-round/output.yaml) (live `CF/items/adr-blocking-digest-v2/steps/005-develop-r2-a1/`, `input.md` 4753 lines; `checks.yaml` in the live record) · `agent: developer` (round 2 → `alt-workhorse`) · schema [developer-output.schema.json](../config/schemas/developer-output.schema.json)
+
+**Mechanism:** structured `yield` + **worktree edits**; `checks.yaml` carries the gate evidence.
+**Session:** plain omp, fixRound≥2 = fresh session + `retryRole: alt-workhorse` — host provider extension only (§3).
 
 Live assembled prompt (fragment head + injected assignment + prior `## Review Feedback` fix suggestions + checks/diff). Fragment head [fix-round](../agents/steps/fix-round.md):
 
@@ -678,13 +861,16 @@ Live assembled prompt (fragment head + injected assignment + prior `## Review Fe
 
 A fix re-entry runs the develop step at **fixRound 2: fresh session + `retryRole: alt-workhorse`** (later rounds stay fresh); the first develop turn is a new kept session. Meta confirms: `name: develop, fixRound: 2, role: alt-workhorse, models: [contrib, flash]`, 215k/70k tokens, `repairedFrom: relaunch` (output needed the relaunch leg of the repair chain). `checks.yaml` carries the gate evidence.
 
-### K. qa — same dispatcher · record `CF/items/adr-blocking-digest-v2/steps/003-qa-r1-a1/` · `agent: qa / task-reviewer`
+### K. qa — same dispatcher · record [input.md](records/k-qa/input.md) · [output.yaml](records/k-qa/output.yaml) (live `CF/items/adr-blocking-digest-v2/steps/003-qa-r1-a1/`; `checks.yaml` in the live record) · `agent: qa / task-reviewer` · schema [review.schema.json](../config/schemas/review.schema.json)
+
+**Mechanism:** structured `yield` only — read-only agent, no artifact.
+**Session:** plain omp, new session — host provider extension only (§3).
 
 Prompt vars (`assignment,checks,testDiff,diff,dispositionsCriteria,humanInvolvementCriteria,concernsYaml`).
 Caveat: the engine passes `testDiff: ""` and `checks:` = failing-check summaries only
 (`item-machine.ts:906-910`), so both sections are empty on a clean first attempt; the
 live record confirms it. Live assembled prompt —
-`items/adr-blocking-digest-v2/steps/003-qa-r1-a1/input.md` (1118 lines):
+[`items/adr-blocking-digest-v2/steps/003-qa-r1-a1/input.md`](records/k-qa/input.md) (1118 lines):
 
 ```text
 # Step: QA
@@ -723,12 +909,16 @@ suggestions:
 Verification: `checks.yaml` in the same record dir (`red-test` JUnit case ids, `test-diff`
 with `files: []`/empty diff; `bun test` command quoted). Meta: `role: alt-workhorse`,
 65k/31k tokens, session `01a1bb24-…`, timeout 900.
-### L. review — same dispatcher · record `CF/items/contracts-drift-fix/steps/004-review-r1-a1/` · `agent: reviewer / task-reviewer`
+
+### L. review — same dispatcher · record [input.md](records/l-review/input.md) · [output.yaml](records/l-review/output.yaml) (live `CF/items/contracts-drift-fix/steps/004-review-r1-a1/`) · `agent: reviewer / task-reviewer` · schema [review.schema.json](../config/schemas/review.schema.json)
+
+**Mechanism:** structured `yield` only — read-only agent, no artifact.
+**Session:** plain omp, new session — host provider extension only (§3).
 
 Prompt vars (`assignment,checks,diff,dispositionsCriteria,humanInvolvementCriteria,concernsYaml`).
 The flow's `focus: code` field is declared but never rendered at HEAD (`FlowStep.focus`
 has no engine reader).
-Live assembled prompt — `items/contracts-drift-fix/steps/004-review-r1-a1/input.md` (2803 lines; § head + dispositions + assignment + engine checks + full code diff):
+Live assembled prompt — [`items/contracts-drift-fix/steps/004-review-r1-a1/input.md`](records/l-review/input.md) (2803 lines; § head + dispositions + assignment + engine checks + full code diff):
 
 ```text
 # Step: Review
@@ -761,7 +951,10 @@ suggestions:
 
 Meta: `role: alt-workhorse, models: [contrib, flash]`, 101k/66k tokens, timeout 3600, session `01a1bcf2-…`.
 
-### M. integrate — `merge-path.ts:192` · record `CF/items/routing-human-debt-v2/steps/005-integrate-r1-a1/` · `agent: developer / workhorse` · [schema](../config/schemas/developer-output.schema.json)
+### M. integrate — [`merge-path.ts:192`](../src/core/flows/merge-path.ts#L192) · record [input.md](records/m-integrate/input.md) · [output.yaml](records/m-integrate/output.yaml) (live `CF/items/routing-human-debt-v2/steps/005-integrate-r1-a1/`) · `agent: developer / workhorse` · [schema](../config/schemas/developer-output.schema.json)
+
+**Mechanism:** structured `yield` + **edit** (conflict-marker resolution); `concludeMerge` commits the merged tree.
+**Session:** plain omp, on conflict only — host provider extension only (§3).
 
 Prompt vars (`item,diff`): `## Item` = slug; `## Conflict Diff` = `git diff` taken during the conflicted merge (renders as a combined `diff --cc`). Live assembled prompt (51 lines):
 
@@ -796,7 +989,10 @@ On the conflict path a resolved tree is committed with `concludeMerge`; the engi
 merges the child into the task branch (`mergeChildIntoParent`, `--no-ff`). A failed
 integrate aborts the merge and returns the item to the consult/redrive path.
 
-### N. research (spike) — item-machine flow `fact-finder` · record `.../concerns-funnel/items/spike-saga-commit/steps/001-research-a1/` (on branch `topic/concerns-funnel--spike-saga-commit`) · `agent: fact-finder / workhorse`
+### N. research (spike) — item-machine flow `fact-finder` · record [input.md](records/n-research/input.md) · [output.yaml](records/n-research/output.yaml) (live `.../concerns-funnel/items/spike-saga-commit/steps/001-research-a1/` on branch `topic/concerns-funnel--spike-saga-commit`) · `agent: fact-finder / workhorse` · schema [fact-finder-output.schema.json](../config/schemas/fact-finder-output.schema.json)
+
+**Mechanism:** structured `yield` only; no artifact — the engine does **not** write `findings.md` (gap below).
+**Session:** plain omp, new session — host provider extension only (§3).
 
 Prompt vars (`assignment,intent,citations,feedback,concernsYaml`). Live assembled prompt (head + injected assignment + `## Task Intent`):
 
@@ -826,7 +1022,10 @@ Meta: `role: workhorse, models: [flash, contrib]`, timeout 900, session `01a1b8a
 but `item-machine`'s `writeArtifact` only persists human questions — no findings file is
 written; the research result lives only in the step `output.yaml` (and no `checks.yaml`).
 
-### O. poc (spike develop) — item-machine stepFragment `poc` · record `modernize/items/model-eval-poc/steps/001-develop-r1-a1/` (fire-test `topic_modernize`, `python-setup.factory-wt`) · `agent: developer / workhorse`
+### O. poc (spike develop) — item-machine stepFragment `poc` · record [input.md](records/o-poc/input.md) · [output.yaml](records/o-poc/output.yaml) (live `modernize/items/model-eval-poc/steps/001-develop-r1-a1/`, fire-test `topic_modernize`, `python-setup.factory-wt`) · `agent: developer / workhorse` · schema [developer-output.schema.json](../config/schemas/developer-output.schema.json)
+
+**Mechanism:** structured `yield` + **worktree edits** confined to the item's `poc/` folder.
+**Session:** plain omp, new session — host provider extension only (§3).
 
 Prompt vars (`assignment,context,feedback,concernsYaml`). Live assembled prompt (head + injected assignment):
 
@@ -842,7 +1041,7 @@ Prompt vars (`assignment,context,feedback,concernsYaml`). Live assembled prompt 
 ```
 After-check `poc-scope` runs post-turn; `test-assumptions` runs `[gates, tests-only]`.
 
-Output (`output.yaml`, developer-output schema):
+Output (`output.yaml`, [developer-output schema](../config/schemas/developer-output.schema.json)):
 
 ```yaml
 status: blocked
@@ -854,10 +1053,13 @@ target: {command: "cd .factory/tasks/modernize/items/model-eval-poc/poc && ..."}
 
 Review fragment for the poc: `steps/002-review-r1-a1/input.md` head `# Step: Review` with `focus: result` (declared in `flows.spike.poc`; see §L — the engine does not render it). `test-assumptions` analogous ([fragment](../agents/steps/test-assumptions.md)): verified live at `CF/items/spike-text-budget/steps/001-develop-a1/input.md` (`# Step: Test Assumptions ... Permanent tests ... Test infra first ...`, 69-line assignment on funnel byte-budget assumptions, agent developer/workhorse, traceRef `RT/..._01a1b8a7-...`).
 
-### P. consult (item) — `consults.ts:154` · record `CF/runs/027-consult-concerns-store-v2-a1/` · `agent: architect`
+### P. consult (item) — [`consults.ts:154`](../src/core/flows/consults.ts#L154) · record [input.md](records/p-consult/input.md) · [output.yaml](records/p-consult/output.yaml) (live `CF/runs/027-consult-concerns-store-v2-a1/`, `input.md` 1156 lines) · `agent: architect` · schema [decisions.schema.json](../config/schemas/decisions.schema.json)
+
+**Mechanism:** structured `yield` ([`decisions.schema.json`](../config/schemas/decisions.schema.json)) → `output.yaml`; engine writes `decisions/NNN-*.yaml`.
+**Session:** plain omp, resumes the architect session under a sequenced id — host provider extension only (§3).
 
 Prompt vars (`item,assignment,priorAttempts,diff,feedback,contextPack,humanInvolvementCriteria,concernsYaml`).
-Live assembled prompt — `runs/027-consult-concerns-store-v2-a1/input.md` (1156 lines; rules + full pack + injected item/assignment/priorAttempts/diff/feedback):
+Live assembled prompt — [`runs/027-consult-concerns-store-v2-a1/input.md`](records/p-consult/input.md) (1156 lines; rules + full pack + injected item/assignment/priorAttempts/diff/feedback):
 
 ```text
 # Step: Architect Consult (Item)
@@ -893,7 +1095,10 @@ text: "Fix reconcile idempotency in concerns-store-v2 (one round): 1) Add opts.a
 
 Meta: `role: architect, models: [muse-spark-1.3-contrib]`, session `01a1b894-…` (same architect thread as plan/revise — one per iteration), 441k/2.8k tokens $0.0464. Live id `consult-concerns-store-v2` predates the `-<n>` suffix; HEAD emits `consult-<item>-<n>` and never reuses done-ness. Non-item variant ([fragment](../agents/steps/architect-consult-nonitem.md)) verified at `CF/runs/012-consult-concerns-contracts-a1/` (same session, same shape, `## Task` + `## Context` instead of item/assignment); empty-wave consults reuse it with seam `empty-waves-N`. Routed-concern consults (`consults.ts:456`, stepId `consult-concern-<id>`, same fragment) are idempotent by decision file existence.
 
-### Q. wave-close-up — `iteration.ts:3042` · record `CF/runs/014-wave-close-up-1-1-a1/` · `agent: wave-close-up / alt-workhorse`
+### Q. wave-close-up — [`iteration.ts:3042`](../src/core/flows/iteration.ts#L3042) · record [input.md](records/q-wave-close-up/input.md) · [output.yaml](records/q-wave-close-up/output.yaml) (live `CF/runs/014-wave-close-up-1-1-a1/`) · `agent: wave-close-up / alt-workhorse` · schema [wave-closeup.schema.json](../config/schemas/wave-closeup.schema.json)
+
+**Mechanism:** structured `yield` verdict only; no artifact, no `checks.yaml`.
+**Session:** plain omp, fresh per wave — host provider extension only (§3).
 
 Prompt vars (`task,waveReport,infra,gateDiff,humanInvolvementCriteria,concernsYaml`).
 Live assembled prompt (148 lines; rules + `## Task & Wave` + full `## Infrastructure Gates` block + gateDiff):
@@ -936,7 +1141,10 @@ debt:
 
 No `checks.yaml` on close-ups (verdict only). Fresh session per wave (sequenced `wave-close-up-W-N` id).
 
-### R. architect-wave-report — `iteration.ts:3129` · record `CF/runs/017-architect-wave-report-1-1-a2/` (attempt 2) · `agent: architect`
+### R. architect-wave-report — [`iteration.ts:3129`](../src/core/flows/iteration.ts#L3129) · record [input.md](records/r-architect-wave-report/input.md) · [output.yaml](records/r-architect-wave-report/output.yaml) (live `CF/runs/017-architect-wave-report-1-1-a2/`, attempt 2, `input.md` 3014 lines) · `agent: architect` · schema [decisions.schema.json](../config/schemas/decisions.schema.json)
+
+**Mechanism:** structured `yield` ([`decisions.schema.json`](../config/schemas/decisions.schema.json)) → `output.yaml`; engine writes `waves/wave-N.M.yaml` from the merge results.
+**Session:** plain omp, resumes the architect session — host provider extension only (§3).
 
 Prompt vars (`plan,waveReport,debt,steering,contextPack,taskStatus,…`).
 Live assembled prompt (3014 lines; rules + full pack + `## Current Plan` JSON + `## Wave Report` JSON).
@@ -972,7 +1180,10 @@ the merge results — not from the decision body. Only `decision: amend` is acte
 and the wave loop proceeds — iteration ending is owned by the plan/architect close-up
 (or an empty-wave consult).
 
-### S. pm-amend — `iteration.ts:3247` · record `CF/runs/016-pm-amend-1-1-a1/` · `agent: pm / yield-only`
+### S. pm-amend — [`iteration.ts:3247`](../src/core/flows/iteration.ts#L3247) · record [input.md](records/s-pm-amend/input.md) · [output.yaml](records/s-pm-amend/output.yaml) (live `CF/runs/016-pm-amend-1-1-a1/`, `input.md` 438 lines) · `agent: pm / yield-only` · schema [plan-edits.schema.json](../config/schemas/plan-edits.schema.json)
+
+**Mechanism:** structured `yield` ([`plan-edits.schema.json`](../config/schemas/plan-edits.schema.json)) → `output.yaml`; engine writes `plan/edits-N.k.yaml` and applies it.
+**Session:** plain omp, new kept session (repair resumes it), yield-only — host provider extension only (§3).
 
 Prompt vars (`plan,taskStatus,feedback,waveReport`). Live assembled prompt (438 lines; rules + `## Current Plan` JSON + `## Architect Amendment Directives` + `## Completed Wave Reports`):
 
@@ -1002,7 +1213,10 @@ drops re-emitted existing slugs, validates the delta, runs one resumed repair on
 then writes `plan/edits-<N>.<k>.yaml` (and `plan-<N>.<k>.yaml`) and materializes the new
 assignments; a failed/discarded amendment never fails the iteration.
 
-### T. plan-close-up — `iteration.ts:3850` · record `CF/runs/044-plan-close-up-1-a1/` · `agent: plan-close-up / alt-workhorse`
+### T. plan-close-up — [`iteration.ts:3850`](../src/core/flows/iteration.ts#L3850) · record [input.md](records/t-plan-close-up/input.md) · [output.yaml](records/t-plan-close-up/output.yaml) (live `CF/runs/044-plan-close-up-1-a1/`, `input.md` 543 lines) · `agent: plan-close-up / alt-workhorse` · schema [plan-closeup.schema.json](../config/schemas/plan-closeup.schema.json)
+
+**Mechanism:** structured `yield` verdict ([`plan-closeup.schema.json`](../config/schemas/plan-closeup.schema.json)) → `output.yaml`; consumed in memory by the architect close-up.
+**Session:** plain omp, fresh — host provider extension only (§3).
 
 Prompt vars (`intent,plan,context,humanInvolvementCriteria,concernsYaml`).
 Live assembled prompt (543 lines; rules + `## Task Intent` + `## Plan` JSON + `## Context`):
@@ -1034,7 +1248,10 @@ summary: "Skeptical audit of iteration 1 (concerns-funnel). M1 ..."
 Fresh session per iteration close-up. The output is consumed in memory by
 `architect-closeup` (no separate artifact write; only the step record's `output.yaml`).
 
-### U. architect-closeup — `iteration.ts:3885` · record `CF/runs/045-architect-closeup-1-a1/` · `agent: architect`
+### U. architect-closeup — [`iteration.ts:3885`](../src/core/flows/iteration.ts#L3885) · record [input.md](records/u-architect-closeup/input.md) · [output.yaml](records/u-architect-closeup/output.yaml) (live `CF/runs/045-architect-closeup-1-a1/`, `input.md` 1629 lines) · `agent: architect` · schema [plan-closeup.schema.json](../config/schemas/plan-closeup.schema.json)
+
+**Mechanism:** structured `yield` ([`plan-closeup.schema.json`](../config/schemas/plan-closeup.schema.json)) → `output.yaml`; engine writes `closeup-N.yaml` (+ a `human-async` question when blocked).
+**Session:** plain omp, resumes the architect session — host provider extension only (§3).
 
 Prompt vars (`closeup,plan,intent,contextPack,taskStatus,…`).
 Live assembled prompt (1629 lines; rules + full pack + `## Plan Close-Up Audit` JSON + `## Current Plan` + `## Task Intent` + pack re-injection + `## Task Status`).
@@ -1072,7 +1289,10 @@ Engine writes `closeup-<iteration>.yaml`; a `blocked` verdict also writes a `hum
 question (`blocks: ["task"]`). A `complete` verdict is refused (downgraded to
 `next-iteration`/`blocked`) when non-terminal items remain (`enforceCloseupTrustGate`).
 
-### V. brief-select judge — `brief.ts:376` via `harness.complete()` in-process · `role: simpler` · NO record dir (no input.md/output.yaml on disk)
+### V. brief-select judge — [`brief.ts:376`](../src/core/brief.ts#L376) via `harness.complete()` (stateless one-shot) · `role: simpler` · NO record dir (no input.md/output.yaml on disk) · schema [brief-select.schema.json](../config/schemas/brief-select.schema.json)
+
+**Mechanism:** stateless `complete()` — one prompt, parsed `{include: [...]}` returned to `buildArchitectBrief`; nothing written, journal only on fallback.
+**Session:** one-shot `omp -p --no-session --tools=` (host provider extension loads; no session dir); prompt built inline at [`brief.ts:340-380`](../src/core/brief.ts#L340-L380).
 
 No step record: invoked from `buildArchitectBrief` before the plan turn; inputs are function args, journal entry on fallback only (`brief_select_fallback`).
 Prompt (built inline): system = [system/brief-select](../agents/system/brief-select.md) rendered with `{}`; user prompt:
@@ -1089,14 +1309,20 @@ Return {"include": [...]} with the entry ids the architect needs for this step g
 Schema: [brief-select.schema.json](../config/schemas/brief-select.schema.json) (`{"include": [...]}`).
 Fail-open (failOpen): judge error, unparseable output, or schema-invalid → return the FULL brief; journal `brief_select_fallback` (never breaks the architect call).
 
-### W. steer-classify — `steer.ts:161` via `harness.complete()` in-process · `role: simpler` · NO record dir
+### W. steer-classify — [`steer.ts:161`](../src/core/steer.ts#L161) via `harness.complete()` (stateless one-shot) · `role: simpler` · NO record dir · schema [steer-classification.schema.json](../config/schemas/steer-classification.schema.json)
+
+**Mechanism:** stateless `complete()` — classification returned to the steer poller; nothing written.
+**Session:** one-shot `omp -p --no-session --tools=`; no session dir; host provider extension loads.
 
 No step record: invoked per pending steer message inside the steer-mailbox poll; inputs are the message file + open questions.
-Prompt: system = [system/steer-classify](../agents/system/steer-classify.md); user prompt = the pending message + open-question context (see `steer.ts:classify`).
+Prompt: system = [system/steer-classify](../agents/system/steer-classify.md); user prompt = the pending message + open-question context (see [`steer.ts:classify`](../src/core/steer.ts#L134-L200)).
 Schema: [steer-classification.schema.json](../config/schemas/steer-classification.schema.json).
 Failure: journal `steer_poll_error`, message stays pending (skipped, never blocks the run).
 
-### X. repair-simpler — `step-runner.ts:1272` via `harness.complete()` in-process · `role: simpler` · NO record dir
+### X. repair-simpler — [`step-runner.ts:1272`](../src/core/flows/step-runner.ts#L1272) via `harness.complete()` (stateless one-shot) · `role: simpler` · NO record dir
+
+**Mechanism:** stateless `complete()` — repaired JSON returned into the repair chain; nothing written.
+**Session:** one-shot `omp -p --no-session --tools=`; no session dir; host provider extension loads.
 
 No step record: one leg of the `validateAndRepair` chain after direct validation fails.
 Prompt (built inline): system = literal `"Output valid JSON according to schema."`
@@ -1106,7 +1332,10 @@ User prompt = `Repair the following raw agent output to strictly conform to the 
 Leaf-value presence guard (`checkLeafValuePresence`): every primitive leaf in the repaired JSON must already occur in the raw output — hallucinated values reject the repair.
 Live evidence: `CF/items/adr-blocking-digest-v2/steps/005-develop-r2-a1/meta.yaml` carries `repairedFrom: relaunch` (repair chain engaged on that step).
 
-### Y. simple-implement — `ingest.ts:578` · `agent: developer / workhorse` · NO live record in this fire-test (task triaged `epic`)
+### Y. simple-implement — [`ingest.ts:578`](../src/core/flows/ingest.ts#L578) · `agent: developer / workhorse` · NO live record in this fire-test (task triaged `epic`) · schema [developer-output.schema.json](../config/schemas/developer-output.schema.json)
+
+**Mechanism:** structured `yield` + **worktree edits** in a scratch worktree; engine gates/size then merges or converts to an item.
+**Session:** plain omp, resumes the triage session when available — host provider extension only (§3). Prompt path: [`ingest.ts:568-640`](../src/core/flows/ingest.ts#L568-L640).
 
 No `runs/*simple-implement*` record exists in `concerns-funnel` (simple path not taken) or in the `topic_concerns-funnel--simple` worktree (never ran — scratch dir only).
 Prompt vars (`intent,citations,concernsYaml`): fragment [simple-implement](../agents/steps/simple-implement.md) injects `## Intent` (same INTENT.md) + engine citations; turn resumes the triage session (when it ran in this process) in the scratch worktree; checks `[gates, size]` run after.

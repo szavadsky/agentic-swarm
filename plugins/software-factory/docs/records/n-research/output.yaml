@@ -1,0 +1,559 @@
+status: ok
+summary: "Verified all five spike questions against the current engine source
+  and with read-only execution probes. (1) runChildTask has a clean,
+  pre-cleanup/pre-merge parent-copy window immediately after runIteration
+  returns (engine.ts:246-274), and failed/blocked epics never merge, so this is
+  the only reliable saga propagation seam. (2) buildArchitectHydration is a
+  private, single-call-site function whose overflow policy keeps the tail
+  (iteration.ts:111-168, 293); concerns must be appended last or exposed as a
+  registered prompt var, and the wave-report hydration is a stale
+  iteration-start snapshot (iteration.ts:902-903). (3) taskWt has no per-task
+  lock; all git writes are globally serialized by a non-reentrant AsyncMutex
+  (repo.writeLock). A probe proved nested runExclusive deadlocks and that
+  unlocked read-modify-write loses 3/4 concurrent updates, while KeyedMutex
+  fixes it. Per-concern files named by fingerprint are safe under 4 parallel
+  items; shared index/status RMW is not. (4) writeYamlAtomic + immediate
+  commitAll is empirically idempotent (first of 4 parallel write+commit calls
+  commits all files, others return null; retry creates no commit). Immediate
+  commit is REQUIRED: startup repairWorktree stashes uncommitted taskWt files
+  not in operatorEditable, and {task}/concerns/** is not in that list
+  (engine.ts:325-335, repair.ts:53-74). (5) collectRoutedBlockers does not exist
+  anywhere; derive/task.ts is the correct owner (it already derives items,
+  waves, debt and state, and is shared by engine/CLI/iteration), but it must be
+  threaded into deriveItemState/wave derivation because dependents of a blocked
+  item only cascade when the item status is already 'blocked' (wave.ts:87-98).
+  Additional constraints found for routing/saga: any open steer question whose
+  ref matches an item blocks it regardless of disposition (item.ts:249-273,
+  385-386); review.schema additionalProperties is false and reusing
+  suggestions[] for concern triage would trigger the fix loop
+  (item-machine.ts:280-302); decision filenames are seq-allocated by
+  parallel-unsafe readdir (consults.ts:127-157); runChildTask maps
+  next-iteration child closeups to failed (engine.ts:265-266); rootTaskDir is
+  passed but unused (engine.ts:216,702) while mailbox processing only reads the
+  root taskDir (engine.ts:111-203); and the advertised per-session turn
+  serialization is not wired in production (PersistentAgent unused; step-runner
+  calls harness.run directly)."
+findings: >-
+  # Spike findings — saga propagation, commit, derive boundary
+
+
+  Scope note: read-only investigation; no production code changed. All probes
+  used temporary repos/tmp dirs. The full test suite was not run (time budget).
+
+
+  ## 1. runChildTask: parent-copy timing after child completion, before
+  cleanup/merge — CONFIRMED
+
+
+  - `runChildTask` (plugins/software-factory/src/core/engine.ts:208-281) creates
+  the child task dir as `<childWt>/<orchFolder>/<parentTaskSlug>/<epicSlug>`
+  (engine.ts:227-230), runs exactly ONE `runIteration` on it
+  (engine.ts:246-259), then writes `items/{epic}/child-closeup.yaml` into the
+  parent taskDir and commits on `parent.path` (= taskWt) (engine.ts:261-274).
+
+  - The child worktree is merged and removed only later in the wave-end merge
+  path: mergeItem -> mergeChildIntoParent then removeWorktree
+  (plugins/software-factory/src/core/flows/merge-path.ts:216-225, invoked from
+  iteration.ts:788-845).
+
+  - Therefore the exact seam is between `const itRes = await runIteration(...)`
+  (engine.ts:246) and the `return` (engine.ts:276). `childTaskDir` is already in
+  scope, so the parent can read `{childTaskDir}/concerns/*.yaml` there and write
+  `{parent.taskDir}/concerns/*.yaml`; the existing child-closeup commit
+  (engine.ts:273-274) will include those files.
+
+  - Why not copy later: (a) blocked/failed epic children are never merged
+  (mergeItem is only called for `waveState.ready`, iteration.ts:790-811) and no
+  failure-path removeWorktree exists (only engine.ts simple path and
+  merge-path.ts:225), so their files never appear in taskWt; (b) epic item state
+  is derived ONLY from child-closeup.yaml (derive/item.ts:91-108), so nothing
+  else surfaces the child's concerns; (c) child task files merge to
+  `{taskDir}/{epicSlug}/...`, not to `{taskDir}/concerns/` (ARCHITECTURE §6.2,
+  docs/ARCHITECTURE.md:185-196), and buildArchitectHydration does not scan that
+  nested path.
+
+  - Timing caveat: `runChildTask` can run while other parent items run
+  concurrently in the same wave batch (iteration.ts:732-776), so the copy must
+  be idempotent by fingerprint and must write to the explicit taskWt path, never
+  `cwd`.
+
+  - Related gap: `runChildTask` receives `opts.rootTaskDir` (engine.ts:212-217,
+  702) but never uses it. Child-raised human questions are written under
+  `{childTaskDir}/steer/tousertoreview` (via writeQuestion), while
+  `processSteeringMailbox` reads only root `{taskDir}/steer/tousertoreview`
+  (engine.ts:120-143, called with root taskDir at engine.ts:398-406). Epic
+  human-routed concerns are therefore stranded unless runChildTask also forwards
+  them to the root mailbox (writeQuestion is deterministic/idempotent,
+  steer.ts:63-110).
+
+  - Risk (adjacent): runIteration can return `next-iteration`/`stopped`
+  (iteration.ts:1170-1176), which runChildTask maps to `failed` (`itRes.status
+  === "done" ? "done" : blocked ? "blocked" : "failed"`, engine.ts:265-266). A
+  multi-iteration epic therefore fails after iteration 1 and later concerns
+  never propagate. Confirmed by code; intended behavior unknown.
+
+
+  ## 2. buildArchitectHydration: extension seam for concernsYaml — CONFIRMED
+  (private, single call site, tail-truncating)
+
+
+  - `buildArchitectHydration(taskDir, maxBytes)` (iteration.ts:111-168)
+  concatenates prior plans, prior closeups, taken steering and decisions; if
+  over cap it keeps the TAIL: `combined.slice(combined.length - maxBytes)`
+  (iteration.ts:167). Cap = `limits.hydrationBytes` default 65536 in code
+  (iteration.ts:218) / 40000 in shipped config
+  (config/pipeline.default.yaml:333).
+
+  - It is private and called once per iteration at iteration.ts:293; the
+  resulting string is passed as BOTH `debt` and `steering` to architect-plan
+  (iteration.ts:350-362) and to architect-wave-report (iteration.ts:899-904). It
+  duplicates content in the prompt.
+
+  - Consequence: append a concerns section LAST (or it will be sliced away), or
+  introduce a dedicated registered prompt variable. A new placeholder is a hard
+  preflight failure unless registered in PROMPT_VAR_DESCRIPTIONS and KNOWN_VARS
+  per fragment (src/core/prompt-vars.ts:12-38, 94-153; prompts.ts:452-484).
+  Relevant fragments: `steps/architect-plan` (prompt uses {{debt}},{{steering}},
+  agents/steps/architect-plan.md:26-35), `steps/architect-wave-report`
+  (agents/steps/architect-wave-report.md:21-24), plus `steps/plan-review`,
+  `steps/wave-close-up`, `steps/plan-close-up` for triage.
+
+  - Staleness: `hydrationContext` is computed at iteration start
+  (iteration.ts:293) and reused verbatim by the wave-report turn
+  (iteration.ts:902-903), so concerns raised during the iteration are invisible
+  there unless the wave close-up output carries them (iteration.ts:853-876, 901
+  passes waveCloseupRes.output as `waveReport`). Note the canonical wave
+  artifact writer (iteration.ts:908-922) ignores the wave-close-up output and
+  rebuilds status/mergedItems from merge results, so close-up concerns are not
+  persisted in waves/wave-*.yaml. Similarly, architect-closeup writeArtifact
+  copies only status/summary/question into closeup-N.yaml
+  (iteration.ts:1126-1137), dropping schema fields (plan-closeup.schema.json
+  includes techDebt/completedMilestones).
+
+  - Schema-generated Output sections: renderStepPrompt appends an Output section
+  from the step schema (prompts.ts:370-381, records/schema-format.ts:1-80), so
+  adding `concerns[]`/`remarkable[]` to the JSON schemas is the lowest-effort
+  prompt surface; but all current output schemas are strict
+  (`additionalProperties: false`), so schema must change before prompts mention
+  the fields (developer-output.schema.json:34-72,
+  fact-finder-output.schema.json:23, plan.schema.json:28-81+,
+  decisions.schema.json:49, plan-closeup.schema.json, wave-closeup.schema.json).
+
+
+  ## 3. taskWt runExclusive serialization under 4 parallel items — NO PER-TASK
+  LOCK EXISTS
+
+
+  - Parallelism: `maxParallelItems` defaults to 2 in code (iteration.ts:216) but
+  the shipped config sets 4 (config/pipeline.default.yaml:314); turns are
+  globally capped by maxParallelTurns (engine.ts:368-370; config default 6). The
+  wave loop runs `activeItems.slice(0, maxParallelItems)` through Promise.all,
+  one step per item tick (iteration.ts:732-776). No test exercises >1 concurrent
+  item except config-layering asserting the value 4; story-happy-path sets 2 but
+  schedules one item (test/engine/story-happy-path.test.ts:203-205).
+
+  - Locking: `Repo.writeLock` is ONE non-reentrant FIFO AsyncMutex for the whole
+  repo (git/repo.ts:13-31, mutex.ts:8-44); every commitAll takes it
+  (git/commit.ts:11-17). `Repo.mergeLocks` is a KeyedMutex keyed by parent
+  branch (repo.ts:23,30) used only for merge sequences (merge-path.ts:65,
+  ingest.ts:505). There is NO taskDir-scoped lock anywhere.
+
+  - Probe (read-only): nested `mutex.runExclusive(async () =>
+  mutex.runExclusive(...))` never resolves -> DEADLOCK. So concerns-store must
+  NOT wrap `commitAll` inside `repo.writeLock.runExclusive`.
+
+  - Probe: 4 concurrent writers doing readYaml -> delay -> push ->
+  writeYamlAtomic on one index file lost 3 of 4 updates (final items=["c"]); the
+  same code under `KeyedMutex.runExclusive("task")` retained all 4.
+  writeYamlAtomic alone is atomic per file (unique temp + rename, io.ts:9-24)
+  but provides NO read-modify-write atomicity.
+
+  - Probe: 4 concurrent `writeYamlAtomic(distinct file) + commitAll(taskWt)`
+  calls produced exactly ONE commit containing all 4 files; the other 3 calls
+  returned null; git status clean; repeating the same writes/commits produced
+  zero new commits. This is the correct pattern: per-concern files + immediate
+  commit, no shared index; use a KeyedMutex keyed by taskDir only for status
+  transitions/dedup merges.
+
+  - Existing precedent/risk: `tickItemMachine` already calls `refreshStateYaml`
+  after every step from every parallel item (item-machine.ts:729-730), i.e.
+  concurrent same-file writeYamlAtomic to state.yaml; harmless because
+  state.yaml is a materialized view never read for decisions
+  (derive/task.ts:41-43, 351-354, verified: no reader). Also, writeQuestion uses
+  check-then-write with a deterministic id and returns the existing file
+  (steer.ts:63-110) - idempotent but TOCTOU; fine for identical content, not
+  sufficient for status precedence.
+
+  - Parallel-unsafe sequence allocation precedent: runItemConsult allocates
+  decision filenames by readdir+max seq inside writeArtifact
+  (consults.ts:127-157, 249-274); two concurrent consults can pick the same
+  `${seq}-item-{item}.yaml`. Blocker routing that triggers consults inherits
+  this hazard; use fingerprint-based ids or a taskDir lock. Related:
+  ARCHITECTURE:56 claims per-session turn serialization via sessions.ts, but
+  production runAgentStep calls harness.run directly with a resume id
+  (step-runner.ts:370-378) and PersistentAgent is only imported, never used
+  (iteration.ts:34; sessions.ts:34); concurrent consults resuming the same
+  architect session are not serialized by the engine.
+
+
+  ## 4. writeYamlAtomic + immediate taskWt commit: idempotency and restart —
+  CONFIRMED, with a mandatory recovery fix
+
+
+  - `writeYamlAtomic` = yaml.stringify + writeTextAtomic (unique temp name +
+  rename; mkdir -p) (records/io.ts:5-24). Concurrent same-path writes leave one
+  complete document (last-writer-wins) and no temp leftovers on success (probe:
+  200 concurrent writes -> parsed i=146, 0 leftovers).
+
+  - `commitAll` stages `git add -A` and returns null when nothing is staged,
+  unless allowEmpty (git/commit.ts:11-44). Probe confirmed retry of identical
+  content creates no commit -> idempotent at-least-once ingestion with
+  exactly-once commit effect.
+
+  - CRITICAL restart hazard: on every `runTask` start, `repairWorktree(taskWt,
+  "task", {operatorEditable})` commits only matched globs and then `git stash
+  push -u` everything else (git/repair.ts:53-74). The current operatorEditable
+  list is INTENT/pipeline/.factory/*.yaml/steer/fromuserpending only
+  (engine.ts:325-335); `{orchFolder}/{task}/concerns/**` is NOT matched.
+  Therefore any concern file written but not yet committed at crash time is
+  stashed away on restart and disappears from the working tree (preserved only
+  in the stash), so derive/routing will not see it. Immediate commit is not
+  optional; additionally add a recovery glob (or a dedicated engine-owned
+  reconcile pass) for concerns. Test evidence for the stash semantics:
+  test/git/repair.test.ts:106-148.
+
+  - Step-record atomicity boundary: canonical artifacts are written in
+  `writeArtifact` before finishStepRecord and committed in one step commit
+  (step-runner.ts:610-655; ARCHITECTURE §6.2:197). But item step records are in
+  the item worktree (item-machine.ts:655-658; step-runner.ts:216-218 chooses
+  wtToCommit = cwd when recordDir is under cwd), while concerns must live in
+  taskWt. Cross-worktree atomicity is impossible; if concern ingestion throws
+  inside writeArtifact the whole step becomes error (step-runner.ts:611-618).
+  Recommended boundary: ingest concerns in an act-phase hook with internal error
+  handling (or after step finish), keeping dedup/idempotency; never let concern
+  I/O change step status.
+
+  - Restart recovery of triage verdicts: a reviewer's ok record is never re-run
+  (item machine advances on committed records, item-machine.ts:274-302; step
+  records output.yaml committed at step-runner.ts:642-648; finishStepRecord
+  writes output.yaml, records/step-record.ts:72-113). If the process crashes
+  after the reviewer record commit but before the concern status write, the
+  verdict is lost unless the engine reconciles from committed reviewer outputs.
+  `repairInterruptedRecords` (engine.ts:57-106) is the existing
+  startup-reconcile analogue; add a concerns reconcile there or immediately
+  after. Derive must remain read-only (ARCHITECTURE §6.3 Invariant 4: state
+  derived from committed records + git, docs/ARCHITECTURE.md:203).
+
+
+  ## 5. collectRoutedBlockers ownership — derive/task.ts, integrated into
+  wave/item derivation
+
+
+  - The symbol does not exist today (grep across src/test: zero matches for
+  routed/Routed/blocker except blockedByFailure/blockedItems).
+
+  - derive/task.ts is the right owner: deriveTaskState already loads all items
+  (task.ts:127-149), waves (151-165), tech debt (167-205), task/status (212-305)
+  and materializes state.yaml (307-330, 351-375); it is called by the engine
+  loop (engine.ts:462-472), the CLI status (cli/status.ts:47-52) and tests.
+  Tech-debt routing belongs in the existing debtSet block at task.ts:167-205
+  (plan.techDebt + accept-with-debt decisions + optional suggestions today).
+
+  - Scheduling constraint: deriveWaveState only cascades dependents when the
+  dependency's status is already `blocked` or `failed` (wave.ts:87-98); simply
+  filtering inside deriveWaveState would not block the affected item itself.
+  Either pass a `blockedBy` set into deriveItemState (new optional param,
+  precedence above pending/running, before status returns at item.ts:371-425) or
+  post-process the item arrays before every deriveWaveState call
+  (iteration.ts:706-711, 779-784, 1043-1046; engine simple path 572-607; item
+  machine tick 175). A blocked item is then excluded from runnable/running
+  (wave.ts:77-104), so it will not be ticked.
+
+  - Pure-derive routing effects: blockers -> blocked set; architect ->
+  hydration/wave-report prompt input; tech-debt -> debtSet; human-* -> mailbox.
+  Only the mailbox write is an act-phase side effect and can be made idempotent
+  via writeQuestion's deterministic id (steer.ts:63-107); a per-tick
+  `ensureConcernQuestions` pass is safe to repeat.
+
+  - Blocking semantics caveat: ANY open question whose ref equals an item slug
+  (or task/item) blocks that item, regardless of disposition or blocks[]
+  (derive/item.ts:249-273, 385-386); at task level, ref === plan/task or blocks
+  includes task blocks the task (derive/task.ts:215-220). So
+  `human-awareness`/digest entries cannot reuse tousertoreview with an item ref
+  without changing derive; either add a non-blocking disposition/blocks check or
+  use a separate digest directory ignored by derive (matches
+  docs/adr/adr-digest-mailbox.md framing).
+
+  - Blocker consult: runItemConsult writes a decision artifact and optionally a
+  human-async question (consults.ts:104-169); blocked items are never ticked, so
+  the consult must be triggered from the wave/iteration act phase (or routing
+  time), not from the item machine. Use a durable once-marker (concern status
+  routedTo/consultedAt or decision fingerprint) and remember the decision
+  seq-allocation race above.
+
+
+  ## 6. Triage/contracts constraints relevant to the gates
+
+
+  - Review output is generated (not the static review.schema.json) for
+  reviewer/qa/plan-reviewer via generateReviewSchema (step-runner.ts:87-105,
+  records/review-schema.ts:5-53); suggestions items are
+  additionalProperties:false. Reusing suggestions[] for concern triage is
+  hazardous: item-machine treats every suggestion with disposition "fix" as a
+  fix-loop trigger (item-machine.ts:280-302) and fingerprints suggestions for
+  loop detection (loops.ts:169-171). A separate `concernTriage[]` branch (or
+  filtering entries carrying concernId out of the fix loop) is safer; `dismiss`
+  is currently absent everywhere and must be a separate enum value, not a
+  code-review suggestion disposition.
+
+  - Plan-review currently acts only on suggestions with disposition "fix"
+  (iteration.ts:480-485) and gets
+  plan/intent/context/limits/dispositionsCriteria only (iteration.ts:455-464),
+  no concerns; its output is not written as a canonical artifact (no
+  writeArtifact), so triage verdicts exist only in the ok step record and must
+  be re-applied idempotently on restart.
+
+  - Architect output surface: plan.schema.json has techDebt
+  (adjacent/impacting/blocking) and adrs but NO blocking flag and no concerns
+  (config/schemas/plan.schema.json:92-130; artifacts.ts PlanAdr:234-241). The
+  ADR writer emits only `# title\n\ncontext` (iteration.ts:376-386), dropping
+  decision/consequences; epic ADRs land under repo docs/adr via child worktrees
+  and merge normally. Blocking/non-blocking ADR routing needs a schema field and
+  cannot be derived from the current .md files.
+
+  - Config strictness: pipeline.schema.json root additionalProperties:false
+  (config/schemas/pipeline.schema.json:1-6 and tail), so a new
+  concerns/humanInvolvement block must be added to the schema or config loading
+  fails (loader.ts:104-112). reviewPolicy is an open map of arrays
+  (pipeline.schema.json:202-218; artifacts.ts:124-127). No
+  humanInvolvement/autonomous/principal/detailed strings exist in src/config
+  today.
+
+  - State surfacing: state.schema.json root additionalProperties:false
+  (state.schema.json:1-40); StateArtifact has no concern counts
+  (artifacts.ts:449-459). Add counts to both and print in CLI status
+  (cli/status.ts:58-105).
+
+
+  ## 7. Test seams (behavior-level)
+
+
+  - Epic propagation: extend
+  plugins/software-factory/test/engine/epic-child-task.test.ts (FakeHarness
+  scripts child turns; parent branch assertions at lines 185-217) to assert
+  `{taskDir}/concerns/*.yaml` exists on taskWt after the epic child run
+  (including blocked/failed child), committed on the root topic branch, and
+  deduped on re-run.
+
+  - Concurrency: no existing test runs 4 items in parallel; add one using
+  FakeHarness scripted per item label, each returning a concern in the same
+  wave; assert 4 files, one or more commits, clean git status, no duplicate ids,
+  and correct aggregation.
+
+  - Restart: follow crash-restart.test.ts style (pre-populated records +
+  runTask). Pre-write an uncommitted concern file, run task, assert it is
+  preserved (today it would be stashed by repairWorktree). Re-run with identical
+  outputs and assert no duplicate concerns/no new commit.
+
+  - Derive routing: unit-test deriveTaskState/deriveWaveState with a concern
+  file: blocker+routed affecting item B where A->B dep; assert B blocked, C
+  (dependent on B) blocked via existing cascade, unrelated D runnable; resolving
+  the concern unblocks on next derive. Assert consult called once (FakeHarness)
+  and mailbox entry idempotent.
+
+
+  ## Uncertainties / open questions
+
+
+  - Whether the intended store is one-file-per-fingerprint or an index file;
+  evidence strongly favors one-file-per-fingerprint (atomicity + concurrency
+  probes), but the plan wording "stable id by fingerprint" permits either.
+
+  - Exact funnel filter for parent copy (all routed concerns vs only
+  epic-architect-confirmed/propagate=true) is a product decision; spec says each
+  level passes up less detail (docs/factory.v2.md:97), so raw worker concerns
+  should not be copied verbatim.
+
+  - Whether epic children are expected to loop multiple iterations inside
+  runChildTask; current code maps next-iteration to failed (engine.ts:265-266)
+  and no test covers it - likely a pre-existing gap, but confirm with the
+  saga-propagate item owner.
+
+  - Whether `PersistentAgent` was intended to be wired into runAgentStep;
+  code/docs disagree (ARCHITECTURE:56 vs step-runner.ts:370-378).
+
+  - Full test suite was not executed (read-only spike; time budget). Probes used
+  tmp repos and left the working tree clean.
+contextPack: >-
+  # Context for implementing concerns-funnel (item 18)
+
+
+  ## Verified mechanics
+
+  - Item steps: cwd=childWt, recordsDir=childWt/relTaskDir/items/{slug}/steps
+  (item-machine.ts:655-658); the step commit goes to childWt
+  (step-runner.ts:214-218, 642-648). TaskWt files touched by item steps (steer
+  questions, state.yaml, and the new concerns) are separate commits.
+
+  - Task-level steps (architect, plan-review, PM, consults, close-ups):
+  cwd=taskWt, recordsDir=taskDir/runs; commits go to taskWt.
+
+  - Startup: repairWorktree avoids stashing only whitelisted taskWt globs;
+  everything else is stashed (repair.ts:53-74, engine.ts:325-335). Add concerns
+  to recovery or commit immediately (both recommended).
+
+  - Single repo-wide git mutex (non-reentrant); per-task lock absent; KeyedMutex
+  available (mutex.ts:50-79).
+
+  - Epic child files: {parentTaskDir}/{epic}/... on the child branch;
+  runChildTask copies only child-closeup before merge (engine.ts:246-274).
+
+
+  ## Recommended module shape
+
+  - src/core/concerns.ts: Concern/RemarkableDecision types, fingerprint id,
+  per-file store under {taskDir}/concerns/{id}.yaml, write-if-absent insert,
+  KeyedMutex(taskDir) for status/source merges, taskWt-only writes, commitAll
+  after write, reconcile(read records) API; no imports from flows to avoid new
+  cycles.
+
+  - derive/task.ts: collectRoutedBlockers(taskDir) -> {
+  blockedItems:Set<string>, architect:string[], human:string[], debt:string[] };
+  used by deriveTaskState and by iteration wave loop; tech-debt added to debtSet
+  at task.ts:167-205.
+
+  - iteration.ts: append concerns section last in buildArchitectHydration;
+  recompute before wave report or pass via wave-close-up output; add prompt vars
+  for plan-review/wave-close-up/plan-close-up; register in prompt-vars.ts.
+
+  - runChildTask: copy child concerns (filtered/condensed) to parent concerns
+  with epic source; forward child human questions to root mailbox;
+  copy/reference child closeup for saga hydration.
+
+
+  ## Contract pitfalls
+
+  - Do not reuse suggestions[] for concern triage without excluding concern
+  entries from fix-loop detection; prefer concernTriage[].
+
+  - Do not use tousertoreview item-ref entries for non-blocking awareness:
+  deriveItemState blocks on any open matching question
+  (item.ts:249-273,385-386).
+
+  - All output schemas are additionalProperties:false; schema change precedes
+  prompt change.
+
+  - commitAll returns null when unchanged; never wrap it in
+  repo.writeLock.runExclusive (deadlock proven).
+sources:
+  - docs/factory.v2.md:89-103
+  - docs/adr/adr-concern-store-taskwt.md
+  - docs/adr/adr-routing-derived-state.md
+  - docs/adr/adr-digest-mailbox.md
+  - docs/adr/adr-triage-suggestions-dismiss.md
+  - docs/adr/adr-funnel-text-budget.md
+  - docs/adr/adr-humaninvolvement-config.md
+  - plugins/software-factory/docs/ARCHITECTURE.md:39,56,59,185-206,213-218
+  - plugins/software-factory/docs/FIRE_TEST.md:49-52
+  - plugins/software-factory/src/core/engine.ts:57-106,111-203,208-281,325-335,368-370,394-472,680-732
+  - plugins/software-factory/src/core/flows/iteration.ts:111-168,212-220,293,350-386,432-544,688-776,788-924,1043-1060,1088-1137,1163-1180
+  - plugins/software-factory/src/core/flows/item-machine.ts:175,274-302,655-730,748-770
+  - plugins/software-factory/src/core/flows/merge-path.ts:65-257
+  - plugins/software-factory/src/core/flows/step-runner.ts:87-105,160-218,263-305,370-378,610-655
+  - plugins/software-factory/src/core/flows/consults.ts:104-185,226-291
+  - plugins/software-factory/src/core/derive/task.ts:44-205,212-330,351-375
+  - plugins/software-factory/src/core/derive/item.ts:60-132,208-273,346-451
+  - plugins/software-factory/src/core/derive/wave.ts:23-126
+  - plugins/software-factory/src/core/plan/scheduler.ts:20-34
+  - plugins/software-factory/src/core/git/commit.ts:11-44
+  - plugins/software-factory/src/core/git/repo.ts:13-31
+  - plugins/software-factory/src/core/git/repair.ts:15-77
+  - plugins/software-factory/src/core/git/merge.ts:138-207
+  - plugins/software-factory/src/core/mutex.ts:8-79
+  - plugins/software-factory/src/core/records/io.ts:5-24
+  - plugins/software-factory/src/core/records/step-record.ts:72-113
+  - plugins/software-factory/src/core/records/review-schema.ts:5-53
+  - plugins/software-factory/src/core/steer.ts:63-110
+  - plugins/software-factory/src/core/prompt-vars.ts:12-38,44-153
+  - plugins/software-factory/src/core/prompts.ts:452-484
+  - plugins/software-factory/src/core/artifacts.ts:110-127,234-266,296-325,359-390,449-459
+  - plugins/software-factory/config/pipeline.default.yaml:313-334,370-378
+  - plugins/software-factory/config/schemas/pipeline.schema.json:1-6,202-218
+  - plugins/software-factory/config/schemas/plan.schema.json:92-130
+  - plugins/software-factory/config/schemas/state.schema.json:1-40
+  - plugins/software-factory/config/schemas/developer-output.schema.json:34-72
+  - plugins/software-factory/config/schemas/fact-finder-output.schema.json
+  - plugins/software-factory/config/schemas/decisions.schema.json:1-50
+  - plugins/software-factory/config/schemas/plan-closeup.schema.json
+  - plugins/software-factory/config/schemas/wave-closeup.schema.json
+  - plugins/software-factory/config/schemas/steer-item.schema.json
+  - plugins/software-factory/test/engine/epic-child-task.test.ts:78-218
+  - plugins/software-factory/test/engine/crash-restart.test.ts:1-143
+  - plugins/software-factory/test/engine/story-happy-path.test.ts:1-260
+  - plugins/software-factory/test/git/repair.test.ts:106-182
+  - plugins/software-factory/test/engine/blocked-closeup-iteration.test.ts:120-262
+  - plugins/software-factory/src/core/sessions.ts:34-110
+recommendations:
+  - "concerns-store: implement src/core/concerns.ts as one file per fingerprint
+    id under {taskDir}/concerns, write-if-absent for insertion,
+    KeyedMutex(taskDir) only for status/source merges; write to explicit taskWt
+    (never cwd) and call commitAll immediately (idempotent; returns null when
+    unchanged)."
+  - "concerns-store: never wrap commitAll inside repo.writeLock.runExclusive
+    (non-reentrant deadlock proven); serialize only the read-modify-write with
+    KeyedMutex and let repo.writeLock guard git."
+  - "concerns-store: add {orchFolder}/{task}/concerns/** to startup recovery
+    (engine.ts:325-335 / repair.ts) and add a startup reconcileConcerns that
+    re-ingests committed step outputs and re-applies triage verdicts; keep
+    derive read-only."
+  - "concerns-store: fingerprint on stable identity (type+kind+normalized
+    summary) excluding detail/severity/source; track sources[]; enforce
+    precedence so re-raises never reopen dismissed/resolved concerns; store
+    source record paths relative to taskDir."
+  - "concerns-store: test 4 concurrent items raising concerns in one wave (one
+    commit/all files present/clean git/no duplicate ids), retry idempotency, and
+    the crash window where a concern file exists uncommitted before restart."
+  - "routing-blocker-derive: add collectRoutedBlockers(taskDir) in
+    derive/task.ts reading {taskDir}/concerns/*.yaml (kind=blocker,
+    status=routed) and returning affected item slugs; thread a blockedBy set
+    into deriveItemState or post-process item arrays before every
+    deriveWaveState call so the affected item itself is blocked and dependents
+    cascade via wave.ts:87-98."
+  - "routing-blocker-derive: add routed tech-debt to the existing debtSet block
+    (derive/task.ts:167-205) and surface concern counts in state.yaml/CLI
+    (requires state.schema.json + StateArtifact updates)."
+  - "routing-blocker-derive: trigger the architect consult from the
+    wave/iteration act phase (blocked items are never ticked), exactly once per
+    routed concern, and avoid the seq-allocated decision filename race
+    (consults.ts:127-157) by using fingerprint ids or a taskDir lock."
+  - "routing-*-derive: do not route non-blocking human-awareness through
+    tousertoreview item refs until deriveItemState stops blocking on every
+    matching open question; either add disposition/blocks-aware blocking or a
+    separate digest directory ignored by derive."
+  - "reviewer-triage: prefer a separate concernTriage[] output branch (or
+    exclude concern entries from the fix-loop filter) rather than reusing
+    suggestions[]; add dismiss only to the triage enum; regenerate schemas via
+    generateReviewSchema and update all strict output schemas before prompt
+    changes."
+  - "saga-propagate: copy filtered/condensed child concerns at runChildTask
+    between runIteration return and child-closeup write (engine.ts:246-274) for
+    every child status; also forward child human-routed questions to the root
+    mailbox (rootTaskDir is currently unused) and copy/reference the child
+    closeup for saga hydration."
+  - "saga-propagate: extend buildArchitectHydration by appending concerns LAST
+    (tail-slice keeps it) or add a registered concerns prompt var to
+    architect-plan/wave-report/plan-review/wave-close-up/plan-close-up;
+    recompute concerns for the wave report instead of reusing the
+    iteration-start snapshot."
+  - "saga-propagate: persist condensed concerns in waves/wave-*.yaml and
+    closeup-N.yaml (the current writers drop close-up output and most
+    architect-closeup fields), and include concern-blocked items in the wave
+    report (blockedItems currently only lists blocked-by-failure)."
+  - "saga-propagate: fix or explicitly decide the runChildTask next-iteration
+    mapping (currently failed, engine.ts:265-266) and wire per-session turn
+    serialization (PersistentAgent is unused) before multiple concurrent
+    architect consults become reachable."
+  - "Add behavior tests only: extend epic-child-task.test.ts for concern
+    propagation from a failed/blocked epic, add a 4-parallel-item concerns test,
+    a derive-level blocker cascade test, and a crash/restart idempotency test;
+    do not test linting."

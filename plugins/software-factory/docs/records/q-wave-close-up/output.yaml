@@ -1,0 +1,50 @@
+wave: 1
+iteration: 1
+status: has_failures
+mergedItems:
+  - spike-text-budget
+failedItems:
+  - concerns-contracts
+blockedItems:
+  - spike-saga-commit
+debt:
+  - "Pre-existing test-gate red baseline persists: 2 head-guard failures when
+    TMPDIR sits under .factory-runtime (step-runner splits on /.factory); green
+    with TMPDIR=/tmp. Out of scope."
+  - concerns-contracts superseded/split into 3 sequenced stories (types ->
+    schemas+policy); children pending scheduling and downstream dep rewire.
+  - "spike-saga-commit accepted-with-debt but unmerged (environmental gate, zero
+    prod diff); reviewer nits carried: qualify epic-state claim (isMerged
+    precedence), prefix inline paths, scope removeWorktree claim, fold
+    contextPack key into findings."
+  - "spike-text-budget nits carried: cross-check item diffs via production git()
+    wrapper, add many-concerns 2000B hard-truncation case, clarify
+    trim-semantics comment."
+summary: "Wave 1 (iteration 1): 1/3 wave-1 items merged (spike-text-budget:
+  finding-only funnel byte-budget contract, 11 new tests in
+  test/engine/funnel-text-budget.test.ts, all pass). Tree clean: zero untracked
+  files, no stray tmp/log/orig/rej/dist/coverage artifacts, git diff --check
+  clean, no real conflict markers (grep hits only docs/comments/test
+  expectations and baseline logs; git grep for '<<<<<<< '/\">>>>>>> ' empty).
+  Only modified file is engine-managed journal.ndjson (+2 lines for this
+  close-up step). Gates vs baseline: typecheck pass (no regression); test 280
+  pass/2 skip/2 fail under inherited TMPDIR — identical 2 pre-existing
+  head-guard failures as baseline (269/2/2), +11 from the spike, no regression;
+  TMPDIR=/tmp run is fully green (282/2/0). concerns-contracts superseded via
+  split decision after 2 empty-diff attempts (oversize/scope conflation) into 3
+  sequenced stories. spike-saga-commit research complete and accepted-with-debt
+  as authoritative (decision 002) but unmerged due to the environmental
+  red-baseline gate, not content. Iteration can continue via split children +
+  binding downstream directives."
+recommendations:
+  - Normalize TMPDIR=/tmp for gate/merge runs or fix the '/.factory' split in
+    step-runner so the red baseline does not block read-only spike merges.
+  - Schedule the 3 concerns-contracts children (types, schemas, policy) and
+    rewire concerns-store/modes-prompts deps from concerns-contracts to all 3
+    children per decision 001.
+  - Record spike-saga-commit findings as authoritative without re-running the
+    spike; engine should merge/bypass the zero-diff read-only item or carry
+    findings forward so 3 gated items unblock.
+  - Proceed to wave 2 (concerns-store, modes-prompts) applying the binding
+    directives from decision 002 (per-fingerprint files, KeyedMutex scope, no
+    commitAll lock wrap, hydration tail-slice, derive threading).

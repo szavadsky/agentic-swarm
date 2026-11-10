@@ -1,0 +1,198 @@
+status: changes_requested
+summary: Plan structurally sound on bounds/DAG but unfalsifiable scenarios,
+  spike-less uncertainties, mode inversion, missing simple/close-up/remarkable
+  contracts, derive/commit races block approval
+suggestions:
+  - id: m1-scenario-disjunction
+    disposition: fix
+    summary: M1 invalid-payload scenario allows either repair or reject, unfalsifiable
+    detail: Given invalid concern Then repaired or rejected passes regardless.
+      Specify which shapes repair (e.g. missing severity defaults) vs reject
+      (unknown kind) and assert FakeHarness repair preserves existing outputs.
+    location:
+      file: plugins/software-factory/config/schemas/developer-output.schema.json
+      line: 61
+  - id: spikes-without-items
+    disposition: fix
+    summary: Uncertainties list spikeOutlines but plan schedules zero spike items
+    detail: u-text-budget and u-saga-propagation have spikeOutlines yet all 11 items
+      are story; funnel-closeups-saga pre-implements min(diffBytes,2000) cap and
+      parent-copy propagation the spikes were to settle. Add
+      fact-finder/test-assumptions spikes before dependents or drop
+      uncertainties.
+    location:
+      file: plugins/software-factory/src/core/engine.ts
+      line: 208
+  - id: mode-dependency-inversion
+    disposition: fix
+    summary: M3 ADR/mailbox routing gated by humanInvolvement mode defined only in M5
+    detail: adr-blocking-digest depends only on routing-human-debt but implements
+      gated-by-mode; modes-prompts schema+loader+criteria is M5. Move modes
+      before routing or add dep and define per-mode blocking table now from spec
+      autonomous/principal/detailed.
+    location:
+      file: plugins/software-factory/config/schemas/pipeline.schema.json
+      line: 253
+  - id: simple-flow-untriaged
+    disposition: fix
+    summary: Simple items have no reviewer so simple concerns stay open forever
+    detail: flows.simple is single develop/simple-implement with no review; plan
+      wires aggregation into develop/qa/review but triage only for
+      reviewer/plan-reviewer. Specify who triages simple concerns
+      (wave-close-up, next architect turn, auto-route) with scenario.
+    location:
+      file: plugins/software-factory/config/pipeline.default.yaml
+      line: 218
+  - id: closeup-retriage-no-contract
+    disposition: fix
+    summary: Close-up re-triage has no schema fields or reviewer step
+    detail: wave/plan-closeup schemas are additionalProperties:false without
+      concerns fields; wave-close-up is single workhorse call with no review,
+      yet M4 claims resolve/carry/propagate re-triage. Define output fields,
+      writeArtifact mapping, and who resolves/carries.
+    location:
+      file: plugins/software-factory/src/core/flows/iteration.ts
+      line: 853
+  - id: remarkable-storage-indecision
+    disposition: fix
+    summary: Remarkable storage is remarkable-*.yaml or decisions note with no scenario
+    detail: plan-reviewer-triage leaves storage as disjunction; M1 scenarios cover
+      only concerns[], never remarkable {what,alternatives,why}. Pick one
+      authoritative path and add Given/When/Then for aggregate+triage+digest.
+    location:
+      file: plugins/software-factory/src/core/artifacts.ts
+      line: 318
+  - id: prompt-vars-inconsistent
+    disposition: fix
+    summary: Concern prompt vars use three names with no fragment list
+    detail: M2 uses concernsYaml, M4 uses openConcernsYaml+openConcernsDigest;
+      KNOWN_VARS update lists no fragments (review, plan-review,
+      wave/plan-close-up, architect-wave-report/closeup) nor
+      PROMPT_VAR_DESCRIPTIONS. Unify naming and enumerate fragments tersely.
+    location:
+      file: plugins/software-factory/src/core/prompt-vars.ts
+      line: 44
+  - id: reviewpolicy-key-mismatch
+    disposition: fix
+    summary: Unify helper does not resolve default vs allowedDispositions canonical key
+    detail: PipelineConfig type is {default,[agent]} but
+      item-machine/step-runner/iteration read .allowedDispositions (treated as
+      agent name by schema). State canonical key, migration, and single
+      resolveReviewAllowed owner (contracts vs triage).
+    location:
+      file: plugins/software-factory/src/core/artifacts.ts
+      line: 124
+  - id: blocker-derive-purity
+    disposition: architect
+    summary: Blocker routing mixes pure derive with consult side effect; scheduler
+      input undefined
+    detail: derive/* must stay pure but plan triggers runItemConsult write on newly
+      blocked from derive/wave+scheduler; SchedItem has no concerns input,
+      transitive fixpoint may over-block beyond affects[]. Decide derive-vs-act
+      boundary and scheduler signature.
+    location:
+      file: plugins/software-factory/src/core/plan/scheduler.ts
+      line: 20
+  - id: taskwt-commit-race
+    disposition: architect
+    summary: Direct taskWt concerns writes uncommitted until wave merge; parallel
+      dedup races
+    detail: ADR claims wave-merge covers concerns/ but step-runner commits only
+      wtToCommit=childWt for item steps, leaving taskWt concerns/+steer/ dirty;
+      parallel items share taskDir with read-modify-write dedup preserving
+      triage status. Decide commit point, atomicity, restart recovery.
+    location:
+      file: plugins/software-factory/src/core/flows/step-runner.ts
+      line: 641
+  - id: human-stop-semantics
+    disposition: fix
+    summary: human-stop halt vs block undefined; awareness must never block unproven
+    detail: item-machine treats human-stop as fix-like staying running, not blocked;
+      derive/task blocks only if ref==plan/task or blocks includes task. Plan
+      says stop with halt semantics plus blocks set without defining halt path
+      (exit 10? item blocked?). Specify mailbox blocks and engine stop, prove
+      awareness blocks:[] never halts.
+    location:
+      file: plugins/software-factory/src/core/flows/item-machine.ts
+      line: 748
+  - id: severity-thresholds-missing
+    disposition: fix
+    summary: Spec configurability for raise allowlist and severity thresholds absent
+    detail: Spec requires configurable which agents may raise, allowed dispositions
+      per reviewer, severity thresholds; plan covers only dismiss enum +
+      humanInvolvement modes. Add pipeline config for raise allowlist/thresholds
+      or explicitly defer.
+    location:
+      file: docs/factory.v2.md
+      line: 95
+  - id: factfinder-concerns-gap
+    disposition: fix
+    summary: Contracts omit fact-finder and other producers despite every-agent
+      requirement
+    detail: M1 lists developer-output/plan/wave/plan-closeup/pipeline schemas but
+      not fact-finder-output nor decisions.schema for architect
+      consults/wave-reports. Spec says every agent output may carry concerns[].
+      Enumerate all producers or scope explicitly.
+    location:
+      file: plugins/software-factory/config/schemas/fact-finder-output.schema.json
+      line: 1
+  - id: fingerprint-update-policy
+    disposition: fix
+    summary: Fingerprint inputs make rewording duplicate; update policy undefined
+    detail: Assumption hashes {kind,summary,detail?,location?,affects?} so trivial
+      rewording creates second file; excluding detail loses updates. Define
+      normalization, stable c-{hash10} inputs, and merge policy for re-emit with
+      changed severity/detail while preserving dismissed/routed status.
+    location:
+      file: plugins/software-factory/src/core/fingerprint.ts
+      line: 20
+  - id: state-counts-ownership
+    disposition: fix
+    summary: State concernCounts claimed by both M1 and M4; schema is closed
+    detail: M1 lists StateArtifact.concernCounts? while status-state-surface adds
+      {open,dismissed,routed,resolved} to toStateArtifact/state.schema.json.
+      Pick one owner, define StateArtifact.concerns shape, state.schema update,
+      and derive handling of missing/corrupt concerns/.
+    location:
+      file: plugins/software-factory/src/core/artifacts.ts
+      line: 449
+  - id: triage-status-transition
+    disposition: fix
+    summary: M2 stay-open contradicts M3 routed; suggestion-to-concern matching
+      ambiguous
+    detail: M2 says non-dismissed stay open, M3 expects routed; ADR matches
+      suggestion.id to concern id via c- prefix but review id is free-form slug,
+      collision and location handling undefined, QA triage role unclear. Define
+      open->dismissed/routed/resolved transitions and id matching.
+    location:
+      file: plugins/software-factory/src/core/flows/item-machine.ts
+      line: 707
+  - id: digest-mailbox-reuse
+    disposition: human-awareness
+    summary: Digest as non-blocking tousertoreview reuses blocking mailbox path
+    detail: ADR avoids new dir but relies on engine never treating empty-blocks
+      awareness as blocker; factory status currently lists all
+      openSteerQuestions as blocking questions. Confirm status/derive/classify
+      filtering keeps digest low-noise per fire-test.
+    location:
+      file: plugins/software-factory/src/core/steer.ts
+      line: 63
+  - id: funnel-cap-empty-digest
+    disposition: optional
+    summary: min(diffBytes,2000) cap risks empty digest; units chars vs bytes
+    detail: Close-up hydration truncates to min(diffBytes,2000 chars); zero-diff
+      steps yield zero budget losing concerns. Clarify diff source
+      (item/wave/task), floor, and chars-vs-bytes measure.
+    location:
+      file: plugins/software-factory/src/core/flows/iteration.ts
+      line: 111
+  - id: item-sizing-risk
+    disposition: optional
+    summary: routing-blocker-architect and funnel-closeups-saga likely exceed 300
+      prod lines
+    detail: Each spans 3-4 subsystems (derive/wave/scheduler/consults/hydration plus
+      engine propagation and schemas/prompts). Consider splitting derive vs
+      consult trigger and hydration vs saga propagation.
+    location:
+      file: plugins/software-factory/src/core/derive/task.ts
+      line: 167

@@ -1,0 +1,47 @@
+completedMilestones:
+  - m3-routing
+iteration: 1
+remainingMilestones:
+  - m1-contracts-aggregate
+  - m2-triage-modes
+  - m4-funnel-surface
+  - m5-docs
+status: next-iteration
+summary: "Iteration 1 delivered M3 routing fully (pure derive + exactly-once
+  consult + hydration + human/ADR/debt) plus M1 store/contracts and M2 triage
+  cores, all green. Audit verified remaining gaps hold: M1 escalation surfacing
+  + stale TS types; M2 fragment wiring partial (steps/review lacks
+  humanInvolvementCriteria; architect reports/consults and close-ups lack
+  concernsYaml/criteria); M4 funnel caps/confirms/fallback/saga propagation
+  missing (only counts/status); M5 docs untouched — verified ARCHITECTURE §1 row
+  18 still 'Deliberately not hand-built'. Tail unmergeable this iteration
+  (amendments 3/3, funnel-closeups-v3 running, saga/docs pending on stale deps).
+  Proceed to iteration 2 with the audited remainder."
+techDebt:
+  - "M1 escalation surfacing: dismissed escalated flag set but excluded from
+    hydrate (open-only) and architect hydration (open|routed); no
+    digest/hydration surfacing or test"
+  - "M1 stale TS producer types: DeveloperOutput concerns string[], missing
+    structured concerns/remarkable/resolutions on
+    FactFinder/WaveCloseup/PlanCloseup/Decision/ReviewArtifact vs schemas"
+  - "M2 prompt wiring: steps/review + steps/qa lack humanInvolvementCriteria;
+    architect-plan/revise/wave-report/resume/consult-item/nonitem/closeup +
+    wave/plan-close-up lack concernsYaml/humanInvolvementCriteria placeholders;
+    mode criteria not reaching reviewer"
+  - "M2 contract: triage fixRequired unused by item-machine (behavioral parity
+    via hasIssues/hasHumanBlock); human-stop/awareness on concern ids not
+    deduped to q-concern-* (only human-async is)"
+  - "M2/M4 condensing: no output<input rule in reviewer/architect/close-up
+    prompts; no prod funnel caps (fixed hydrationBytes 8000)"
+  - "M4 missing: concernConfirms accept/reject schema + apply
+    (resolved/routed/propagated/clear)"
+  - "M4 missing: simple-item explicit + auto-route fallback
+    (tech-debt->optional, others->architect, human-* never)"
+  - "M4 missing: epic->saga propagation (propagateEpicConcerns timing, condensed
+    copy source.epic, parent detail<child, saga hydration)"
+  - "M5 missing: ARCHITECTURE §1 row 18 + §6.2 + §8
+    (lifecycle/funnel/routing/modes/partition/producer-matrix/resilience/exit-1\
+    0), README, fragment matrix 8 + 15/60 debloat check in prompts.test"
+  - "Uncertainty: full gates (bun run typecheck + TMPDIR=/tmp bun test) not
+    executed by read-only audit; pre-existing td-tmpdir-split head-guard
+    failures assumed out of scope"
