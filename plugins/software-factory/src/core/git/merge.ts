@@ -92,6 +92,80 @@ export async function hasConflictMarkers(wt: string): Promise<string[]> {
 }
 
 /**
+ * Scans worktree files for unresolved conflict markers (both `<<<<<<< ` and
+ * `>>>>>>> ` at column 0) across every path the merge path can affect:
+ * unmerged index entries, files in the merge-touched diff (HEAD..MERGE_HEAD),
+ * files changed vs `baseRef` (the item's own diff), and modified/untracked
+ * porcelain entries. `hasConflictMarkers` only covers merge-touched paths, so
+ * an integrate agent that leaves markers in a file outside that set (new file,
+ * unrelated edited file) passes the conclude check and the merge commits the
+ * markers. This wider scan is the post-integrate gate for that class.
+ *
+ * Column-0 anchoring keeps code that merely mentions markers (docs, tests
+ * indenting marker strings) from flagging.
+ */
+export async function scanConflictMarkers(
+  wt: string,
+  opts?: { baseRef?: string; excludePrefixes?: string[] }
+): Promise<string[]> {
+  const candidates = new Set<string>();
+  const excluded = (opts?.excludePrefixes ?? [])
+    .filter(Boolean)
+    .map((p) => (p.endsWith("/") ? p : `${p}/`));
+  const isExcluded = (f: string) => excluded.some((p) => f === p.slice(0, -1) || f.startsWith(p));
+
+  const unmergedPaths = new Set(await unmergedFiles(wt));
+  for (const f of unmergedPaths) candidates.add(f);
+
+  const mhRes = await git(wt, ["rev-parse", "-q", "--verify", "MERGE_HEAD"], {
+    allowFail: true,
+  });
+  if (mhRes.code === 0) {
+    const diffRes = await git(wt, ["diff", "--name-only", "HEAD", "MERGE_HEAD"], {
+      allowFail: true,
+    });
+    if (diffRes.code === 0) {
+      for (const f of diffRes.stdout.split("\n").map((s) => s.trim()).filter(Boolean)) {
+        candidates.add(f);
+      }
+    }
+  }
+
+  if (opts?.baseRef) {
+    const baseRes = await git(wt, ["diff", "--name-only", opts.baseRef], { allowFail: true });
+    if (baseRes.code === 0) {
+      for (const f of baseRes.stdout.split("\n").map((s) => s.trim()).filter(Boolean)) {
+        candidates.add(f);
+      }
+    }
+  }
+
+  for (const entry of await porcelainStatus(wt)) {
+    // Deleted paths have no content to scan; everything else (modified,
+    // added, renamed, untracked, unmerged) is a candidate.
+    if (entry.code.trim() === "D") continue;
+    candidates.add(entry.path);
+  }
+
+  const flagged: string[] = [];
+  for (const f of candidates) {
+    if (isExcluded(f)) continue;
+    try {
+      const content = await fs.promises.readFile(path.join(wt, f), "utf8");
+      // Binary content never carries text markers; NUL bytes flag binary.
+      if (content.includes("\0")) continue;
+      if (hasMarkerPair(content)) flagged.push(f);
+    } catch {
+      // Missing/unreadable path: an unmerged entry with no readable content
+      // is unresolved by definition (deleted during resolution); anything
+      // else is not a conflict.
+      if (unmergedPaths.has(f)) flagged.push(f);
+    }
+  }
+  return flagged.sort();
+}
+
+/**
  * Merges parent branch into child worktree.
  * Leaves conflict state on disk for an integrate step if conflicts occur.
  */
@@ -138,31 +212,23 @@ export async function mergeParentInto(
 export async function concludeMerge(
   repo: Repo,
   childWt: string,
-  message: string
+  message: string,
+  opts?: { excludePrefixes?: string[] }
 ): Promise<string> {
   return repo.writeLock.runExclusive(async () => {
     const env = repo.identityEnv();
 
-    // 1. Worktree files of the unmerged set must be marker-free.
-    const unmerged = await unmergedFiles(childWt);
-    const marked: string[] = [];
-    for (const f of unmerged) {
-      try {
-        const content = await fs.promises.readFile(path.join(childWt, f), "utf8");
-        if (hasMarkerPair(content)) {
-          marked.push(f);
-        }
-      } catch {
-        // Missing/unreadable while still unmerged: treat as unresolved.
-        marked.push(f);
-      }
-    }
+    // 1. Worktree files of the unmerged set must be marker-free — and so must
+    // any other changed/untracked path the integrate step left behind (the
+    // stage-everything step below would otherwise commit leftover markers).
+    const marked = await scanConflictMarkers(childWt, {
+      excludePrefixes: opts?.excludePrefixes,
+    });
     if (marked.length > 0) {
       throw new Error(
         `Cannot conclude merge: conflict markers or unmerged files remain in ${marked.join(", ")}`
       );
     }
-
     // 2. Stage the resolution (agent is not allowed git writes).
     await git(childWt, ["add", "-A"], { env });
 

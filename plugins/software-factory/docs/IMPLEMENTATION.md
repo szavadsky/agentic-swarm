@@ -1,6 +1,6 @@
 # software-factory — As-Built Implementation
 
-HEAD `57ec7c1` (2026-11-09). Design companion: [`ARCHITECTURE.md`](ARCHITECTURE.md) (design intent).
+HEAD `8a688be` (2026-11-10). Design companion: [`ARCHITECTURE.md`](ARCHITECTURE.md) (design intent).
 This doc describes **as-built behavior at HEAD**: what the engine actually does,
 verified against code + live fire-test records. Every cited live record is mirrored
 in-repo under [`records/`](records/) (`records/<row>-<step>/input.md` + `output.yaml`)
@@ -278,7 +278,7 @@ sequenceDiagram
         alt conflict
             ENG->>DEV: run() integrate, conflict diff, then conflict-free tree
         end
-        ENG->>ENG: if tree changed, gates ratchet vs gates-baseline.yaml + target-green
+        ENG->>ENG: if tree changed, infra.setup + gates ratchet vs gates-baseline.yaml + target-green (same ratchet)
         ENG->>GIT: merge passing items into task branch, commit merge-path records
         alt merge or integrate failure
             ENG->>ARC: run() consult-item with failing-gate evidence (unknown gate → corrected target override)
@@ -551,7 +551,8 @@ notes: ["Only plugins/software-factory is a Bun package; ...", "No lint/format g
 
 Meta: workhorse `[flash, contrib]`, 80k/29.8k tokens, timeout 900.
 Downstream: `gates-baseline.yaml` recorded; develop/merge/close-up checkpoints run these
-gates and ratchet against it. Engine writes `infra.yaml` + `gates-baseline.yaml` in the
+gates and ratchet against it (target-green gate targets ratchet too). Engine runs `infra.setup`
+in the item worktree before merge-path gates and writes `infra.yaml` + `gates-baseline.yaml` in the
 same `[ok]` commit (baseline gates run with retries disabled).
 
 ### C. context-pack — [`ingest.ts:268`](../src/core/flows/ingest.ts#L268) · record [input.md](records/c-context-pack/input.md) · [output.yaml](records/c-context-pack/output.yaml) (live `CF/runs/005-context-pack-a1/`, `input.md` 158 lines; engine also writes `context-pack.md`) · `agent: fact-finder / workhorse`
@@ -1185,7 +1186,10 @@ and the wave loop proceeds — iteration ending is owned by the plan/architect c
 **Mechanism:** structured `yield` ([`plan-edits.schema.json`](../config/schemas/plan-edits.schema.json)) → `output.yaml`; engine writes `plan/edits-N.k.yaml` and applies it.
 **Session:** plain omp, new kept session (repair resumes it), yield-only — host provider extension only (§3).
 
-Prompt vars (`plan,taskStatus,feedback,waveReport`). Live assembled prompt (438 lines; rules + `## Current Plan` JSON + `## Architect Amendment Directives` + `## Completed Wave Reports`):
+Prompt vars (`plan,taskStatus,feedback,waveReport,limits,limitViolations`). `limits` carries the pipeline limits
+plus the delta's remaining item budget (`formatAmendLimitsBlock`: existing items + cap → how many NEW
+items the amendment may add), so the PM cannot emit a 52nd item against a 50-item cap; `limitViolations`
+names plan outline-count violations. Live assembled prompt (438 lines; rules + `## Current Plan` JSON + `## Architect Amendment Directives` + `## Completed Wave Reports`):
 
 ```text
 # Step: PM Amend
@@ -1208,7 +1212,9 @@ items:
   - {assignment: "Types only (split 1/3 of concerns-contracts per decision 001; unblocks schemas+policy). In src/core/artifacts.ts add Concern/ConcernKind/ConcernSeverity/ConcernStatus, RemarkableDecision, StoredConcernArtifact ... Prod budget <=80 lines.", ...}
 ```
 
-Loop bound `maxAmendmentsPerIteration=3`; executed-wave protection enforced. The engine
+Loop bound `maxAmendmentsPerIteration=3`; executed-wave protection enforced. The fragment states the
+item-cap arithmetic and dep validity (only existing item slugs or same-delta earlier-wave slugs; outline
+and epic slugs are invalid deps). The engine
 drops re-emitted existing slugs, validates the delta, runs one resumed repair on failure,
 then writes `plan/edits-<N>.<k>.yaml` (and `plan-<N>.<k>.yaml`) and materializes the new
 assignments; a failed/discarded amendment never fails the iteration.

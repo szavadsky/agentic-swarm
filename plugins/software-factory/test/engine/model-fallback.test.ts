@@ -2,7 +2,14 @@ import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { OmpHarness, isModelResolutionError, buildModelCandidates } from "../../src/harness/omp/harness.js";
+import {
+  OmpHarness,
+  isModelResolutionError,
+  buildModelCandidates,
+  dedupeRolePrimary,
+  missingCredentialProvider,
+  modelProviderOf,
+} from "../../src/harness/omp/harness.js";
 import { FakeHarness } from "../../src/harness/fake/fake-harness.js";
 import { processSteeringMailbox } from "../../src/core/steer.js";
 import { deriveDeadSteerFiles } from "../../src/core/derive/task.js";
@@ -218,5 +225,128 @@ describe("D3: steer dead-letter after 5 consecutive errors + status surface", ()
     });
     const dead2 = await deriveDeadSteerFiles(taskDir);
     expect(dead2).toEqual([{ file: "1794100866341.md", errors: 5 }]);
+  });
+});
+
+describe("(g) missing-credential fallback: provider-wide single hop, role-primary dedupe", () => {
+  it("missingCredentialProvider names the provider; modelProviderOf parses provider ids", () => {
+    const err = "OMP complete failed with exit code 1: error: No API key found for google-antigravity.\nUse /login";
+    expect(missingCredentialProvider(err)).toBe("google-antigravity");
+    expect(missingCredentialProvider("unknown model 'x'")).toBeUndefined();
+    expect(modelProviderOf("google-antigravity/gemini-3.8-flash:max")).toBe("google-antigravity");
+    expect(modelProviderOf("opencode-go/deepseek-v4.1-flash")).toBe("opencode-go");
+    expect(modelProviderOf("@simpler")).toBeUndefined();
+    expect(modelProviderOf("bare-model")).toBeUndefined();
+  });
+
+  it("dedupeRolePrimary drops the literal primary the role candidate already resolves to", () => {
+    expect(
+      dedupeRolePrimary(
+        ["@simpler", "google-antigravity/gemini-3.8-flash", "opencode-go/deepseek-v4.1-flash"],
+        "google-antigravity/gemini-3.8-flash"
+      )
+    ).toEqual(["@simpler", "opencode-go/deepseek-v4.1-flash"]);
+    // Suffix-insensitive; the role candidate (index 0) always survives.
+    expect(dedupeRolePrimary(["@simpler", "m/x:max"], "m/x")).toEqual(["@simpler"]);
+    expect(dedupeRolePrimary(["@simpler", "m1"], undefined)).toEqual(["@simpler", "m1"]);
+  });
+
+  it("complete(): one missing credential skips the whole provider family in a single hop", async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "omp-credhop-"));
+    const stateFile = path.join(tmpDir, "calls.txt");
+    fs.writeFileSync(stateFile, "", "utf8");
+    const mockBinary = path.join(tmpDir, "mock-omp.sh");
+    fs.writeFileSync(
+      mockBinary,
+      `#!/bin/sh\nCALLS_FILE="${stateFile}"\necho "$*" >> "$CALLS_FILE"\ncase "$*" in\n*"--model @simpler"*) echo "error: No API key found for google-antigravity." >&2; echo "Use /model to select a model." >&2; exit 1;;\n*"--model google-antigravity/"*) echo "error: No API key found for google-antigravity." >&2; exit 1;;\nesac\necho '{"type":"session","id":"s-1"}'\necho '{"type":"turn_end","message":{"role":"assistant","content":[{"type":"text","text":"{\\"ok\\":true}"}],"stopReason":"stop"}}'\n`,
+      { mode: 0o755 }
+    );
+    try {
+      const harness = new OmpHarness({ ompBinary: mockBinary, runtimeDir: tmpDir });
+      harness.setPipeline({
+        models: {
+          roles: {
+            simpler: { model: "google-antigravity/gemini-3.8-flash", fallbacks: ["workhorse"] },
+            workhorse: { model: "opencode-go/deepseek-v4.1-flash" },
+          },
+        },
+      });
+      const seen: Array<{ from: string; to: string }> = [];
+      const out = await harness.complete({
+        role: "simpler",
+        models: [
+          "google-antigravity/gemini-3.8-flash",
+          "google-antigravity/gemini-3.8-flash-pro",
+          "opencode-go/deepseek-v4.1-flash",
+        ],
+        system: "sys",
+        prompt: "p",
+        schema: { type: "object" },
+        onModelFallback: async ({ from, to }) => {
+          seen.push({ from, to });
+        },
+      });
+      expect(out).toEqual({ ok: true });
+      // One hop straight out of the dead provider, not one per gemini model.
+      expect(seen).toEqual([
+        { from: "@simpler", to: "opencode-go/deepseek-v4.1-flash" },
+      ]);
+      const calls = fs.readFileSync(stateFile, "utf8");
+      expect(calls).toContain("--model @simpler");
+      expect(calls).toContain("--model opencode-go/deepseek-v4.1-flash");
+      // The dead provider is not retried (neither literal primary nor sibling).
+      expect(calls).not.toContain("--model google-antigravity/");
+    } finally {
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+    }
+  });
+
+  it("run(): same single-hop behavior for agent turns", async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "omp-runcred-"));
+    const stateFile = path.join(tmpDir, "calls.txt");
+    fs.writeFileSync(stateFile, "", "utf8");
+    const mockBinary = path.join(tmpDir, "mock-omp.sh");
+    fs.writeFileSync(
+      mockBinary,
+      `#!/bin/sh\nCALLS_FILE="${stateFile}"\necho "$*" >> "$CALLS_FILE"\ncase "$*" in\n*"--model @simpler"*) echo "error: No API key found for google-antigravity." >&2; exit 1;;\n*"--model google-antigravity/"*) echo "error: No API key found for google-antigravity." >&2; exit 1;;\nesac\necho '{"type":"session","id":"sess-cred"}'\necho '{"type":"turn_end","message":{"role":"assistant","content":[{"type":"text","text":"{\\"ok\\":true}"}],"stopReason":"stop"}}'\n`,
+      { mode: 0o755 }
+    );
+    try {
+      const harness = new OmpHarness({ ompBinary: mockBinary, runtimeDir: tmpDir });
+      harness.setPipeline({
+        models: {
+          roles: {
+            simpler: { model: "google-antigravity/gemini-3.8-flash", fallbacks: ["workhorse"] },
+            workhorse: { model: "opencode-go/deepseek-v4.1-flash" },
+          },
+        },
+      });
+      const seen: string[] = [];
+      const outcome = await harness.run({
+        agent: "developer",
+        definition: "# D",
+        prompt: "hi",
+        role: "simpler",
+        models: [
+          "google-antigravity/gemini-3.8-flash",
+          "google-antigravity/gemini-3.8-flash-pro",
+          "opencode-go/deepseek-v4.1-flash",
+        ],
+        tools: [],
+        cwd: tmpDir,
+        outputSchema: { type: "object" },
+        label: "t/cred",
+        session: { keep: false },
+        onModelFallback: async ({ from, to }) => { seen.push(`${from}->${to}`); },
+      });
+      expect(outcome.ok).toBe(true);
+      expect(seen).toEqual(["@simpler->opencode-go/deepseek-v4.1-flash"]);
+      const calls = fs.readFileSync(stateFile, "utf8");
+      expect(calls).toContain("--model @simpler");
+      expect(calls).toContain("--model opencode-go/deepseek-v4.1-flash");
+      expect(calls).not.toContain("--model google-antigravity/");
+    } finally {
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+    }
   });
 });

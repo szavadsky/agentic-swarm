@@ -35,6 +35,7 @@ import { blockedByConcern } from "../plan/scheduler.js";
 import { deriveWaveState, isIterationTerminal, nonTerminalWaveItems, type DerivedWaveState } from "../derive/wave.js";
 import { refreshStateYaml, countCommittedCloseupIterations, collectRoutedBlockers } from "../derive/task.js";
 import { appendJournal, readJournal } from "../journal.js";
+import type { JournalEvent } from "../journal.js";
 import { loadCriteriaBundle, formatDispositionsSection } from "../prompts.js";
 import { isTriagerAgent, resolveReviewAllowed } from "../review-policy.js";
 import {
@@ -43,12 +44,13 @@ import {
   partitionSuggestions,
 } from "../concerns.js";
 import { checkPlanReviewRounds, checkIterations, checkAmendments } from "../loops.js";
-import { validateEdits, checkPlanCountLimits } from "../plan/limits.js";
+import { validateEdits, checkPlanCountLimits, formatAmendLimitsBlock } from "../plan/limits.js";
 import { applyEdits } from "../plan/apply.js";
 import { getClock } from "../clock.js";
 import { buildGateDiffSection, runGates } from "../checks/gates.js";
 import type { CheckContext } from "../checks/types.js";
 import { sanitizeDeveloperTarget } from "../checks/junit.js";
+import { formatKnownGateTargets, resolveGateTarget } from "../checks/gate-target.js";
 import { isUnknownGateTargetError } from "../checks/runner.js";
 import { buildArchitectBrief } from "../brief.js";
 import { PersistentAgent } from "../sessions.js";
@@ -86,6 +88,74 @@ export function formatLimitViolationsVar(violations: string[]): string {
   if (violations.length === 0) return "none";
   return `Deterministic limit check FAILED — you MUST emit a fix-disposition suggestion for each:\n${violations.map((e) => `- ${e}`).join("\n")}`;
 }
+
+/**
+ * Re-drive bound for the iteration-complete gate (§8.4.7). Each round
+ * re-merges ready items / ticks mid-flow items and re-derives; the bound only
+ * fires when the non-terminal set persists, i.e. nothing is progressing.
+ */
+export const MAX_ITERATION_REDRIVES = 5;
+
+/**
+ * Last actionable failure per stalled item, drawn from the journal events the
+ * redrive rounds wrote (`item_merge_failed`, `merge_failed_terminal`,
+ * `iteration_redrive_error`). The stall error names WHAT kept the item
+ * non-terminal instead of only re-listing slugs — the modernize stall message
+ * gave no reason, so five re-drives looked like a mystery loop.
+ */
+export function lastIterationFailureEvidence(
+  events: JournalEvent[],
+  slugs: string[]
+): Record<string, string> {
+  const wanted = new Set(slugs);
+  const out: Record<string, string> = {};
+  const kinds = new Set([
+    "item_merge_failed",
+    "merge_failed_terminal",
+    "iteration_redrive_error",
+    "step_failed",
+    "item_failed",
+  ]);
+  for (const e of events) {
+    const slug = typeof e.item === "string" ? e.item : undefined;
+    if (!slug || !wanted.has(slug) || !kinds.has(e.type)) continue;
+    const err =
+      typeof e.error === "string"
+        ? e.error
+        : typeof e.reason === "string"
+          ? e.reason
+          : undefined;
+    if (!err) continue;
+    out[slug] = err.length > 300 ? `${err.slice(0, 300)}…` : err;
+  }
+  return out;
+}
+
+/**
+ * Terminal stall message for the iteration-complete gate. Lists each
+ * non-terminal item WITH its status and last failure evidence, states why
+ * closing is refused (unmerged/mid-flow work would be stranded off the
+ * integration branch), and points at the concrete fix.
+ */
+export function formatIterationStallReason(
+  iteration: number,
+  offenders: Array<{ slug: string; status: string }>,
+  evidence: Record<string, string> = {}
+): string {
+  const items = offenders.map((it) => {
+    const ev = evidence[it.slug];
+    return `${it.slug} (${it.status}${ev ? `; last failure: ${ev}` : "; no failure evidence recorded"})`;
+  });
+  const hasReady = offenders.some((it) => it.status === "ready");
+  return [
+    `Iteration ${iteration} stalled with non-terminal items after ${MAX_ITERATION_REDRIVES} re-drives: ${items.join(", ")}.`,
+    hasReady
+      ? "Ready items are review-passed but UNMERGED; their merge verify keeps failing, so closing the iteration would strand their work off the integration branch."
+      : "Pending/running items never reached a terminal state, so closing the iteration would strand mid-flow work.",
+    "Refusing plan-close-up. Fix the named failure (merge gates / target-green / the item step), then restart.",
+  ].join(" ");
+}
+
 
 /**
  * PM bounce marker (§8.4.4a): records that the once-per-iteration architect
@@ -453,7 +523,8 @@ export interface RedriveMergeOpts {
   iteration: number;
   turnsSemaphore?: Semaphore;
   architectSessionId?: string;
-  infraGates?: Array<{ id: string }>;
+  infraGates?: Array<{ id: string; command: string }>;
+  infraTestRunner?: { command: string; selectorArgs?: string[]; junitArg?: string };
   rootTaskWt?: string;
   rootTaskDir?: string;
 }
@@ -509,7 +580,7 @@ export async function redriveMergeAfterConsult(
   const unknownGate = isUnknownGateTargetError(failingError);
   const knownTargetsText = unknownGate
     ? [
-        `gates: ${(opts.infraGates ?? []).map((g) => g.id).join(", ") || "(none configured)"}`,
+        `gates: ${formatKnownGateTargets({ gates: opts.infraGates ?? [] })}`,
         "selectors form: {selectors: [<test ids>]}",
         "command form: {command, customTarget: true}",
       ].join("\n")
@@ -567,50 +638,20 @@ export async function redriveMergeAfterConsult(
   let targetOverride = undefined as import("../artifacts.js").DeveloperTarget | undefined;
   if (unknownGate) {
     const corrected = sanitizeDeveloperTarget((consultRes.decision as { target?: unknown }).target);
-    if (corrected && "gate" in corrected && corrected.gate) {
-      const known = (opts.infraGates ?? []).some((g) => g.id === corrected.gate);
-      if (!known) {
-        await appendJournal(opts.taskDir, {
-          type: "merge_failed_terminal",
-          wave,
-          iteration,
-          item: item.slug,
-          reason: `architect returned unknown gate "${(corrected as { gate: string }).gate}"; evidence: ${failingError ?? "unknown"}`,
-        });
-        await persistTerminalAbandon({
-          taskDir: opts.taskDir,
-          task: opts.task,
-          parentBranch: opts.parentBranch,
-          taskWt: opts.taskWt,
-          pipeline: opts.pipeline,
-          repo: opts.repo,
-          itemSlug: item.slug,
-          reason: "merge-unknown-gate-unresolvable",
-          rationale: `Architect corrected target names unknown gate "${(corrected as { gate: string }).gate}" with evidence: ${failingError ?? "unknown"}; abandoning so the wave gate absorbs the item as failed`,
-          commitMessage: `factory(${item.slug}): unknown gate unresolvable, abandon`,
-        });
-        return { sessionId, merged: false };
-      }
-    }
-    if (corrected) {
-      targetOverride = corrected;
-      await writeMergeTargetOverride(opts.taskDir, item.slug, String(wave), corrected);
-      await appendJournal(opts.taskDir, {
-        type: "item_merge_unknown_gate_correct",
-        item: item.slug,
-        wave,
-        badId,
-        correctedTarget: corrected,
-      });
-    } else {
+    const resolvedCorrectedGate =
+      corrected && "gate" in corrected && corrected.gate
+        ? resolveGateTarget(corrected.gate, {
+            gates: opts.infraGates ?? [],
+            testRunner: opts.infraTestRunner,
+          })
+        : undefined;
+    if (corrected && "gate" in corrected && corrected.gate && !resolvedCorrectedGate) {
       await appendJournal(opts.taskDir, {
         type: "merge_failed_terminal",
         wave,
         iteration,
         item: item.slug,
-        decision: consultRes.decision.decision,
-        status: postConsult.status,
-        reason: `unknown gate "${badId}" unresolvable (no corrected target); evidence: ${failingError ?? "unknown"}`,
+        reason: `architect returned unknown gate "${(corrected as { gate: string }).gate}"; evidence: ${failingError ?? "unknown"}`,
       });
       await persistTerminalAbandon({
         taskDir: opts.taskDir,
@@ -621,11 +662,52 @@ export async function redriveMergeAfterConsult(
         repo: opts.repo,
         itemSlug: item.slug,
         reason: "merge-unknown-gate-unresolvable",
-        rationale: `Merge verify targets unknown gate "${badId}" and the architect supplied no usable correction with evidence: ${failingError ?? "unknown"}; abandoning so the wave gate absorbs the item as failed`,
+        rationale: `Architect corrected target names unknown gate "${(corrected as { gate: string }).gate}" with evidence: ${failingError ?? "unknown"}; abandoning so the wave gate absorbs the item as failed`,
         commitMessage: `factory(${item.slug}): unknown gate unresolvable, abandon`,
       });
       return { sessionId, merged: false };
     }
+    if (corrected && resolvedCorrectedGate && "gate" in corrected) {
+      // Canonicalize a corrected command form to the gate id.
+      targetOverride = { gate: resolvedCorrectedGate.id };
+    }
+    if (corrected && !("gate" in corrected)) {
+      targetOverride = corrected;
+    }
+  }
+  if (targetOverride) {
+    const corrected = targetOverride;
+    await writeMergeTargetOverride(opts.taskDir, item.slug, String(wave), corrected);
+    await appendJournal(opts.taskDir, {
+      type: "item_merge_unknown_gate_correct",
+      item: item.slug,
+      wave,
+      badId,
+      correctedTarget: corrected,
+    });
+  } else if (unknownGate) {
+    await appendJournal(opts.taskDir, {
+      type: "merge_failed_terminal",
+      wave,
+      iteration,
+      item: item.slug,
+      decision: consultRes.decision.decision,
+      status: postConsult.status,
+      reason: `unknown gate "${badId}" unresolvable (no corrected target); evidence: ${failingError ?? "unknown"}`,
+    });
+    await persistTerminalAbandon({
+      taskDir: opts.taskDir,
+      task: opts.task,
+      parentBranch: opts.parentBranch,
+      taskWt: opts.taskWt,
+      pipeline: opts.pipeline,
+      repo: opts.repo,
+      itemSlug: item.slug,
+      reason: "merge-unknown-gate-unresolvable",
+      rationale: `Merge verify targets unknown gate "${badId}" and the architect supplied no usable correction with evidence: ${failingError ?? "unknown"}; abandoning so the wave gate absorbs the item as failed`,
+      commitMessage: `factory(${item.slug}): unknown gate unresolvable, abandon`,
+    });
+    return { sessionId, merged: false };
   }
   // Bounded redrive: merges up to the attempt cap, then fails terminally
   // (absorbed by the wave gate) — never spins the reconciler or ticks.
@@ -2205,7 +2287,7 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
         const res = await redriveMergeAfterConsult(it, err, {
           task, taskDir, taskWt, parentBranch, repo, harness, pipeline, project,
           prompts, wave: w, iteration, turnsSemaphore, architectSessionId,
-          infraGates: infraArtifact?.gates, rootTaskWt: params.rootTaskWt, rootTaskDir: params.rootTaskDir,
+          infraGates: infraArtifact?.gates, infraTestRunner: infraArtifact?.testRunner, rootTaskWt: params.rootTaskWt, rootTaskDir: params.rootTaskDir,
         });
         architectSessionId = res.sessionId ?? architectSessionId;
         if (res.merged) {
@@ -2394,7 +2476,7 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
             const res = await redriveMergeAfterConsult(it, err, {
               task, taskDir, taskWt, parentBranch, repo, harness, pipeline, project,
               prompts, wave: w, iteration, turnsSemaphore, architectSessionId,
-              infraGates: infraArtifact?.gates, rootTaskWt: params.rootTaskWt, rootTaskDir: params.rootTaskDir,
+              infraGates: infraArtifact?.gates, infraTestRunner: infraArtifact?.testRunner, rootTaskWt: params.rootTaskWt, rootTaskDir: params.rootTaskDir,
             });
             architectSessionId = res.sessionId ?? architectSessionId;
             if (res.merged) {
@@ -2771,7 +2853,7 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
           const redriveRes = await redriveMergeAfterConsult(readyItem, mRes.error ?? "Merge path failed", {
             task, taskDir, taskWt, parentBranch, repo, harness, pipeline, project,
             prompts, wave: w, iteration, turnsSemaphore, architectSessionId,
-            infraGates: infraArtifact?.gates, rootTaskWt: params.rootTaskWt, rootTaskDir: params.rootTaskDir,
+            infraGates: infraArtifact?.gates, infraTestRunner: infraArtifact?.testRunner, rootTaskWt: params.rootTaskWt, rootTaskDir: params.rootTaskDir,
           });
           architectSessionId = redriveRes.sessionId ?? architectSessionId;
           const redriveIdx = mergeResults.findIndex((m) => m.slug === readyItem.slug);
@@ -3242,6 +3324,17 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
         const amendStatusBlock = await buildTaskStatusBlock({
           taskDir, taskWt, parentBranch, itemSlugs: currentIterationItems, iteration, amendmentCount, pipeline, rootTaskDir: params.rootTaskDir,
         });
+        // The delta's items count against maxItemsPerPlan TOGETHER with every
+        // item already in task history; state the remaining budget up front so
+        // the PM does not emit an arithmetically impossible amendment (one
+        // turn + resumed repair wasted, then discarded).
+        const amendLimitsBlock = formatAmendLimitsBlock(
+          limits,
+          (await buildExistingList(taskDir)).length
+        );
+        const amendLimitViolations = formatLimitViolationsVar(
+          plan ? checkPlanCountLimits(plan, { limits }) : []
+        );
         const pmAmendStepId = `pm-amend-${iteration}-${amendmentCount}`;
         const pmAmendAttempt = getNextStepAttempt(runsDir, pmAmendStepId, pipeline.limits?.maxInterruptions ?? 3);
         const pmAmendRes = await runAgentStep({
@@ -3266,6 +3359,8 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
             taskStatus: amendStatusBlock,
             feedback: amendFeedback,
             waveReport: waveSummary,
+            limits: amendLimitsBlock,
+            limitViolations: amendLimitViolations,
           },
           turnsSemaphore,
           budgetTracker,
@@ -3353,6 +3448,8 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
                 taskStatus: amendStatusBlock,
                 feedback: amendFeedback,
                 waveReport: waveSummary,
+                limits: amendLimitsBlock,
+                limitViolations: amendLimitViolations,
               },
               turnsSemaphore,
               budgetTracker,
@@ -3712,11 +3809,17 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
   // Iteration-complete gate (§8.4.7): plan-close-up runs ONLY when every
   // iteration item is terminal (merged/failed/blocked/superseded). A `ready`
   // item is wave-terminal but iteration-still-open (unmerged); `running` /
-  // `pending` items are mid-flow. Refuse loudly with a journal event and
-  // re-drive the non-terminal items instead of silently closing the
-  // iteration and stranding them `running` forever. Bounded: at most 5
+  // `pending` items are mid-flow. Refusing on `ready` is deliberate, not
+  // over-strict: closing the iteration over an unmerged item strands its
+  // branch off the integration branch and the close-up would report work as
+  // complete that the parent tree does not contain. The redrive below MERGES
+  // ready items (the same path as the wave-end merge) before re-deriving, so
+  // a genuinely mergeable item clears the gate on the next round; repeated
+  // refusal means its merge verify keeps failing (e.g. unknown gate target,
+  // target-green, gates) — a real stall, reported with per-item evidence
+  // instead of closing silently. Bounded: at most MAX_ITERATION_REDRIVES
   // re-drive rounds, then fail loudly on a true stall.
-  for (let redrive = 0; redrive < 6; redrive++) {
+  for (let redrive = 0; redrive <= MAX_ITERATION_REDRIVES; redrive++) {
     // Routed blockers seed pending items here too: without the seed set a
     // an unscripted step instead of recognising it as `blocked`.
     const gateBlockedBy = await collectRoutedBlockers(
@@ -3766,10 +3869,21 @@ export async function runIteration(params: IterationParams): Promise<IterationRe
       statuses: Object.fromEntries(nonTerminal.map((it) => [it.slug, it.status])),
       redrive,
     });
-    if (redrive >= 5) {
-      await appendJournal(taskDir, { type: "iteration_stalled", iteration, stragglers: slugs });
+    if (redrive >= MAX_ITERATION_REDRIVES) {
+      const evidence = lastIterationFailureEvidence(await readJournal(taskDir), slugs);
+      await appendJournal(taskDir, {
+        type: "iteration_stalled",
+        iteration,
+        stragglers: slugs,
+        statuses: Object.fromEntries(nonTerminal.map((it) => [it.slug, it.status])),
+        evidence,
+      });
       throw new Error(
-        `Iteration ${iteration} stalled with non-terminal items after 5 re-drives: ${slugs.join(", ")} (refusing plan-close-up; fix the stall, then restart)`
+        formatIterationStallReason(
+          iteration,
+          nonTerminal.map((it) => ({ slug: it.slug, status: it.status })),
+          evidence
+        )
       );
     }
     for (const it of nonTerminal) {

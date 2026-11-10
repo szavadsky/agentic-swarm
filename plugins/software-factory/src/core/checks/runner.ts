@@ -9,8 +9,10 @@ import { countUntrackedLines } from "../git/untracked-lines.js";
 import { headOf } from "../git/commit.js";
 import { git } from "../git/exec.js";
 import { parseBranch } from "../git/naming.js";
-import { gateTimedOut, runGates, snapshotWorktree, checkAndRestoreWorktreeMutation } from "./gates.js";
-import { parseJunit, buildTargetCommand, shellQuote } from "./junit.js";
+import { gateTimedOut, isTestRunnerGate, runGates, snapshotWorktree, checkAndRestoreWorktreeMutation } from "./gates.js";
+import { parseJunit, buildTargetCommand, buildGateWithJunitCommand, shellQuote } from "./junit.js";
+import { formatKnownGateTargets, resolveGateTarget } from "./gate-target.js";
+import type { InfraGate } from "../artifacts.js";
 import { tailCap, type CheckContext, type CheckResult } from "./types.js";
 import { getClock, detectSuspend } from "../clock.js";
 import { appendJournal } from "../journal.js";
@@ -430,9 +432,11 @@ async function checkTargetRed(ctx: CheckContext): Promise<CheckResult> {
   // that looks like an environment failure. Fail loudly with the known ids.
   if ("gate" in ctx.target && ctx.target.gate) {
     const gateId = ctx.target.gate;
-    const gate = ctx.infra?.gates.find((g) => g.id === gateId);
+    // Accept a recorded gate *command* too (agents record `{gate: "pytest -q"}`
+    // while the configured gate id is `test`): resolve, never shell-execute.
+    const gate = resolveGateTarget(gateId, ctx.infra);
     if (!gate) {
-      const known = ctx.infra?.gates.map((g) => g.id).join(", ") || "(no gates configured)";
+      const known = formatKnownGateTargets(ctx.infra);
       const summary = `Unknown gate target: "${gateId}" (known gates: ${known}). Command: ${gateId}`;
       return {
         name: "target-red",
@@ -623,6 +627,148 @@ async function checkTargetRed(ctx: CheckContext): Promise<CheckResult> {
   }
 }
 
+/**
+ * target-green against a named gate (§9): the same baseline ratchet the gates
+ * phase applies (`runGates`) — a gate that was already red at baseline may
+ * stay red only while no NEW failure appears. Without this, an approved
+ * docs-only item is unmergeable whenever the repository baseline is red for an
+ * environment reason (the target-green-unsatisfiable class): `{gate:test}`
+ * demanded a full-suite exit 0 the item cannot influence. A baseline-green
+ * gate, or a failure with no baseline evidence, still fails.
+ *
+ * Test-runner gates with a configured junitArg run with JUnit reporting and
+ * compare failing case ids / collection errors per test; other gates compare
+ * status only (same documented rule as the gates phase).
+ */
+async function targetGreenGate(
+  ctx: CheckContext,
+  gate: InfraGate,
+  gateId: string,
+  timeout: number
+): Promise<CheckResult> {
+  const baseEntry = ctx.baseline?.gates.find((g) => g.id === gate.id);
+  const ratchetActive = Boolean(ctx.baseline) && baseEntry !== undefined && baseEntry.status !== "pass";
+  const testRunner = ctx.infra?.testRunner;
+  const hasJunit = isTestRunnerGate(gate, testRunner) && Boolean(testRunner?.junitArg?.trim());
+
+  const tmpJunit = hasJunit
+    ? path.join(
+        os.tmpdir(),
+        `junit-green-gate-${gate.id}-${Date.now()}-${Math.random().toString(36).slice(2)}.xml`
+      )
+    : undefined;
+  const cmd = hasJunit
+    ? buildGateWithJunitCommand(gate.command, testRunner!.junitArg!, tmpJunit!)
+    : gate.command;
+
+  try {
+    const res = await runProcess({ cmd, cwd: ctx.wt, timeoutSec: timeout, maxOutputBytes: ctx.outputBytes });
+    const timeoutFail = targetCommandTimeoutFail("target-green", `Gate ${gateId}`, res, timeout, ctx, cmd);
+    if (timeoutFail) return timeoutFail;
+    const output = tailCap((res.stdout + "\n" + res.stderr).trim(), ctx.outputBytes);
+
+    let parsed: ReturnType<typeof parseJunit> | undefined;
+    if (tmpJunit && fs.existsSync(tmpJunit)) {
+      const xml = await fs.promises.readFile(tmpJunit, "utf8");
+      if (xml.trim()) parsed = parseJunit(xml);
+    }
+
+    const fail = (summary: string, extra?: { failing?: string[] }): CheckResult => ({
+      name: "target-green",
+      ok: false,
+      summary,
+      output,
+      fingerprint: fingerprintText(summary),
+      details: {
+        ...targetDetail(cmd, parsed),
+        ...(extra?.failing && extra.failing.length > 0
+          ? { failingTests: extra.failing.slice(0, MAX_JUNIT_DETAIL_IDS) }
+          : {}),
+      },
+    });
+
+    const failing = (parsed?.cases ?? [])
+      .filter((c) => c.status === "fail" || c.status === "error")
+      .map((c) => c.id);
+    const collectionErrors = parsed?.errors ?? [];
+
+    if (!ratchetActive) {
+      if (res.code === 0 && (!parsed || (parsed.collected && failing.length === 0))) {
+        const summary = `Gate ${gateId} passed (green)`;
+        return {
+          name: "target-green",
+          ok: true,
+          summary,
+          output,
+          fingerprint: fingerprintText("target-green gate ok"),
+          details: targetDetail(cmd, parsed),
+        };
+      }
+      const summary = parsed && !parsed.collected
+        ? `Gate ${gateId} failed collection: ${collectionErrors.join("; ") || "collection error"}. Command: ${cmd}`
+        : failing.length > 0
+          ? `Gate ${gateId} failing tests: ${failing.slice(0, 10).join(", ")}${failing.length > 10 ? ", ..." : ""}. Command: ${cmd}`
+          : `Gate ${gateId} failed with exit code ${res.code}. Command: ${cmd}`;
+      return fail(summary, { failing });
+    }
+
+    // Ratchet active: the gate was red at baseline. Fail ONLY on new failures.
+    if (hasJunit) {
+      const junitMissingOnFailure =
+        res.code !== 0 && (!parsed || (!parsed.collected && (parsed?.cases.length ?? 0) === 0));
+      const baseFailing = new Set(baseEntry!.failingTests ?? []);
+      const baseCollection = new Set(baseEntry!.collectionErrors ?? []);
+      const newFailing = failing.filter((id) => !baseFailing.has(id));
+      const newCollection = collectionErrors.filter((e) => !baseCollection.has(e));
+      if (newFailing.length === 0 && newCollection.length === 0 && !junitMissingOnFailure) {
+        const summary =
+          res.code === 0
+            ? `Gate ${gateId} passed (green)`
+            : `Gate ${gateId} matches baseline (${baseEntry!.status}): no new failing tests or collection errors — treated as green vs baseline. Command: ${cmd}`;
+        return {
+          name: "target-green",
+          ok: true,
+          summary,
+          output,
+          fingerprint: fingerprintText("target-green gate baseline-ratchet ok"),
+          details: targetDetail(cmd, parsed),
+        };
+      }
+      const summary = junitMissingOnFailure && newFailing.length === 0 && newCollection.length === 0
+        ? `Gate ${gateId} failed with exit code ${res.code} and produced no JUnit XML: cannot attribute the failure to the baseline, treating it as new. Command: ${cmd}`
+        : `Gate ${gateId} has NEW failures vs baseline:${newFailing.length > 0 ? ` failing tests ${newFailing.slice(0, 10).join(", ")}` : ""}${newCollection.length > 0 ? ` collection errors ${newCollection.slice(0, 5).join("; ")}` : ""}. Command: ${cmd}`;
+      return fail(summary, { failing: newFailing });
+    }
+
+    // Non-junit gate: status-only comparison (same rule as the gates phase:
+    // a baseline-red gate that stays red is not a regression).
+    if (res.code === 0) {
+      const summary = `Gate ${gateId} passed (green)`;
+      return {
+        name: "target-green",
+        ok: true,
+        summary,
+        output,
+        fingerprint: fingerprintText("target-green gate ok"),
+        details: targetDetail(cmd),
+      };
+    }
+    const summary = `Gate ${gateId} still fails (baseline ${baseEntry!.status}, exit code ${res.code}) — matches baseline, not a regression. Command: ${cmd}`;
+    return {
+      name: "target-green",
+      ok: true,
+      summary,
+      output,
+      fingerprint: fingerprintText("target-green gate baseline-ratchet ok"),
+      details: targetDetail(cmd),
+    };
+  } finally {
+    if (tmpJunit && fs.existsSync(tmpJunit)) {
+      await fs.promises.rm(tmpJunit, { force: true });
+    }
+  }
+}
+
 async function checkTargetGreen(ctx: CheckContext): Promise<CheckResult> {
   if (!ctx.target) {
     const summary = "No target specified for target-green check";
@@ -636,16 +782,16 @@ async function checkTargetGreen(ctx: CheckContext): Promise<CheckResult> {
   }
   const timeout = gateTimeoutSec(ctx);
 
-  // A gate target names an infra gate id: resolving it is NOT optional.
-  // Falling back to executing the bare id as a shell command produces an
-  // unactionable exit-127 ("command not found") that looks like an
-  // environment failure — the merge-path 127 class. Fail loudly with the
-  // known gate ids instead.
+  // A gate target names an infra gate id (or the recorded gate command):
+  // resolving it is NOT optional. Falling back to executing the bare id as a
+  // shell command produces an unactionable exit-127 ("command not found") that
+  // looks like an environment failure — the merge-path 127 class. Fail loudly
+  // with the known gate ids and their commands instead.
   if ("gate" in ctx.target && ctx.target.gate) {
     const gateId = ctx.target.gate;
-    const gate = ctx.infra?.gates.find((g) => g.id === gateId);
+    const gate = resolveGateTarget(gateId, ctx.infra);
     if (!gate) {
-      const known = ctx.infra?.gates.map((g) => g.id).join(", ") || "(no gates configured)";
+      const known = formatKnownGateTargets(ctx.infra);
       const summary = `Unknown gate target: "${gateId}" (known gates: ${known}). Command: ${gateId}`;
       return {
         name: "target-green",
@@ -656,23 +802,7 @@ async function checkTargetGreen(ctx: CheckContext): Promise<CheckResult> {
         details: targetDetail(gateId),
       };
     }
-    const cmd = gate.command;
-    const res = await runProcess({ cmd, cwd: ctx.wt, timeoutSec: timeout, maxOutputBytes: ctx.outputBytes });
-    const timeoutFail = targetCommandTimeoutFail("target-green", `Gate ${gateId}`, res, timeout, ctx, cmd);
-    if (timeoutFail) return timeoutFail;
-    const ok = res.code === 0;
-    const summary = ok
-      ? `Gate ${gateId} passed (green)`
-      : `Gate ${gateId} failed with exit code ${res.code}. Command: ${cmd}`;
-    const output = tailCap((res.stdout + "\n" + res.stderr).trim(), ctx.outputBytes);
-    return {
-      name: "target-green",
-      ok,
-      summary,
-      output,
-      fingerprint: ok ? fingerprintText("target-green gate ok") : fingerprintText(summary),
-      details: targetDetail(cmd),
-    };
+    return await targetGreenGate(ctx, gate, gate.id, timeout);
   }
 
   if ("customTarget" in ctx.target && ctx.target.customTarget) {
@@ -842,9 +972,9 @@ async function checkRedTest(ctx: CheckContext): Promise<CheckResult> {
   // A gate target names an infra gate id — never execute the bare id (exit 127 class).
   if (ctx.target && "gate" in ctx.target && ctx.target.gate) {
     const gateId = ctx.target.gate;
-    const gate = ctx.infra?.gates.find((g) => g.id === gateId);
+    const gate = resolveGateTarget(gateId, ctx.infra);
     if (!gate) {
-      const known = ctx.infra?.gates.map((g) => g.id).join(", ") || "(no gates configured)";
+      const known = formatKnownGateTargets(ctx.infra);
       const summary = `Unknown gate target: "${gateId}" (known gates: ${known}). Command: ${gateId}`;
       return {
         name: "red-test",

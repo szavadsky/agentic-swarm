@@ -1,4 +1,5 @@
 import type { DeveloperTarget, InfraArtifact } from "../artifacts.js";
+import { resolveGateTarget } from "./gate-target.js";
 
 function decodeXml(str: string): string {
   return str
@@ -176,7 +177,7 @@ export function buildTargetCommand(
   }
 
   if ("gate" in target && target.gate) {
-    const gate = infra.gates.find((g) => g.id === target.gate);
+    const gate = resolveGateTarget(target.gate, infra);
     return gate ? gate.command : target.gate;
   }
 

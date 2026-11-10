@@ -38,7 +38,7 @@ export const PROMPT_VAR_DESCRIPTIONS: Record<string, string> = {
   contextPack: "Condensed, citation-backed context document covering module maps, signatures, excerpts, conventions, and open questions",
   gateDiff: "Structured gate/tool diff table (baseline-vs-now per-gate status) for regression judgment",
   hydrationContext: "Deterministic architect brief: relevance-selected one-line entries (id, section, headline) with task-relative file paths for full detail",
-  limitViolations: "Deterministic plan outline-count limit violations (milestone/item counts vs limits), empty when the plan is within limits",
+  limitViolations: "Deterministic plan outline-count limit violations (milestone/item counts vs limits), empty when the plan is within limits; for PM amendments the item budget block names the delta's remaining item allowance",
   humanInvolvementCriteria: "Active human-involvement mode rules plus shared ADR/concern blocking table (criteria.human-involvement)",
   concernsYaml: "Open concerns hydrated for this step, formatted as YAML",
 };
@@ -93,8 +93,8 @@ export const KNOWN_VARS: Record<string, string[]> = {
   "steps/pm-edits": ["plan", "taskStatus", "kinds", "citations", "limits", "storyKindsCriteria"],
   "pm-edits": ["plan", "taskStatus", "kinds", "citations", "limits", "storyKindsCriteria"],
 
-  "steps/pm-amend": ["plan", "taskStatus", "feedback", "waveReport"],
-  "pm-amend": ["plan", "taskStatus", "feedback", "waveReport"],
+  "steps/pm-amend": ["plan", "taskStatus", "feedback", "waveReport", "limits", "limitViolations"],
+  "pm-amend": ["plan", "taskStatus", "feedback", "waveReport", "limits", "limitViolations"],
 
   "steps/pm-single-item": ["intent", "citations", "kinds", "storyKindsCriteria", "taskStatus"],
   "pm-single-item": ["intent", "citations", "kinds", "storyKindsCriteria", "taskStatus"],

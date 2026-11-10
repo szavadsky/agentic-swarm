@@ -510,3 +510,29 @@ export function validateEdits(
 
   return errors;
 }
+
+/**
+ * Prompt block for PM amendments (§8.4.6): pipeline limits plus the item
+ * budget the delta must fit. `validateEdits` counts the delta's new items
+ * TOGETHER with every item already in task history against
+ * `limits.maxItemsPerPlan`, so a PM that only sees the plan can emit a delta
+ * that is arithmetically impossible (the "Total items (52) exceeds maximum
+ * items limit of 50" class: one full turn plus a resumed repair wasted, then
+ * the whole amendment discarded). The fragment states the rules; this block
+ * states the numbers.
+ */
+export function formatAmendLimitsBlock(limits: PipelineLimits, existingCount: number): string {
+  const maxItems = limits?.maxItemsPerPlan ?? 50;
+  const existing = Math.max(0, existingCount);
+  const remaining = Math.max(0, maxItems - existing);
+  const lines = [
+    JSON.stringify(limits, null, 2),
+    "",
+    `item budget: ${existing} item(s) already exist in task history; maxItemsPerPlan=${maxItems}; this delta may add at most ${remaining} NEW item(s).`,
+  ];
+  const maxAmendments = limits?.maxAmendmentsPerIteration;
+  if (typeof maxAmendments === "number") {
+    lines.push(`amendment budget: at most ${maxAmendments} amendment(s) per iteration.`);
+  }
+  return lines.join("\n");
+}

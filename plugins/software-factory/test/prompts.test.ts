@@ -465,7 +465,14 @@ tools:
       expect(lib.placeholders(frag)).toContain("taskStatus");
     }
     expect(lib.placeholders("steps/pm-amend")).toContain("feedback");
-    const amend = lib.render("steps/pm-amend", { plan: "p", taskStatus: "s", feedback: "f", waveReport: "w" });
+    const amend = lib.render("steps/pm-amend", {
+      plan: "p",
+      taskStatus: "s",
+      feedback: "f",
+      waveReport: "w",
+      limits: "l",
+      limitViolations: "none",
+    });
     expect(amend).toContain("Delta ONLY");
   });
 });

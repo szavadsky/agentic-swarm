@@ -35,6 +35,7 @@ import {
 import { loadCriteriaBundle, formatDispositionsSection } from "../prompts.js";
 import { isTriagerAgent, resolveReviewAllowed } from "../review-policy.js";
 import { runCheck } from "../checks/runner.js";
+import { normalizeDeveloperTarget } from "../checks/gate-target.js";
 import { tailCap, type CheckContext } from "../checks/types.js";
 import type { BudgetTracker } from "../budget.js";
 import type { Semaphore } from "../mutex.js";
@@ -714,6 +715,11 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
     }
   }
 
+  // A recorded `{gate: <command>}` target is mapped to the configured gate id
+  // here so target-red/target-green resolution, prompts, and merge overrides
+  // all see the same canonical target (records stay as the agent wrote them).
+  lastDeveloperTarget = normalizeDeveloperTarget(lastDeveloperTarget, infra);
+
   // Build feedback for fix rounds or retries (Finding 11; ShPost3 retry gap).
   let feedbackText = itemState.guidanceText ?? "";
   if (answeredAsyncFeedback) {
@@ -859,7 +865,7 @@ export async function tickItemMachine(opts: ItemMachineOptions): Promise<ItemMac
           if (output && typeof output === "object" && "target" in (output as any)) {
             const outTarget = (output as any).target;
             if (outTarget) {
-              lastDeveloperTarget = outTarget;
+              lastDeveloperTarget = normalizeDeveloperTarget(outTarget, infra);
             }
           }
           checkCtx.target = lastDeveloperTarget;

@@ -7,6 +7,7 @@ import type { OmpHarnessOptions } from "./types.js";
 import { OmpNdjsonParser } from "./ndjson.js";
 import { classifyOmpOutcome } from "./classify.js";
 import { generateOmpConfigOverlay, writeOmpConfigOverlay } from "./overlay.js";
+import { resolveRole } from "../../core/config/roles.js";
 import { createAjv, formatAjvErrors } from "../../core/config/ajv.js";
 import { resolveRuntimeDir } from "../../cli/lock.js";
 import { HeadTailBuffer } from "../../core/proc.js";
@@ -31,6 +32,53 @@ export function isModelResolutionError(stderr: string, exitCode: number): boolea
     /unknown\s+model/i.test(text) ||
     /use \/model to select a model/i.test(text)
   );
+}
+
+/**
+ * Provider named by a missing-credential failure ("No API key found for
+ * google-antigravity."). A missing key is provider-wide, not model-specific:
+ * every further candidate on the same provider fails identically, so the
+ * fallback walk must skip the whole family in one hop. Without this, the
+ * branch saw @simpler fail, then the SAME resolved model retried as a literal
+ * fallback (two identical missing-credential failures), then a third
+ * provider — noisy multi-hop chains for one missing key.
+ */
+export function missingCredentialProvider(text: string): string | undefined {
+  // Provider ids may contain internal dots/dashes; trailing sentence
+  // punctuation ("... for google-antigravity.") is not part of the id.
+  const m = /No API key found for\s+([A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*)/i.exec(text ?? "");
+  return m?.[1]?.replace(/[.]+$/, "");
+}
+
+/** Strips a trailing `:effort` suffix from a model argument. */
+export function stripThinkingSuffix(model: string): string {
+  return model.replace(/:\w+$/, "");
+}
+
+/**
+ * Provider id of a resolved model string (`provider/model[:effort]` →
+ * `provider`). Role-shaped (`@name`) or bare model args have no provider
+ * segment and return undefined.
+ */
+export function modelProviderOf(modelArg: string): string | undefined {
+  const model = stripThinkingSuffix((modelArg ?? "").replace(/^@/, ""));
+  const slash = model.indexOf("/");
+  return slash > 0 ? model.slice(0, slash) : undefined;
+}
+
+/**
+ * Drops the literal primary model from a candidate list when the first
+ * (role) candidate already resolves to it: `@role` and its own primary are
+ * the same underlying model, so retrying the literal only repeats the same
+ * failure. The role candidate itself is kept.
+ */
+export function dedupeRolePrimary(
+  candidates: string[],
+  primaryModel: string | undefined
+): string[] {
+  if (!primaryModel) return candidates;
+  const primary = stripThinkingSuffix(primaryModel);
+  return candidates.filter((c, i) => i === 0 || stripThinkingSuffix(c) !== primary);
 }
 
 /**
@@ -317,28 +365,41 @@ export class OmpHarness implements Harness {
 
     // 4. Model candidates: a fresh turn walks primary + fallbacks; a resume
     // keeps the recorded model (single candidate, never switch mid-session).
+    // The literal primary is dropped when the role candidate already resolves
+    // to it (@simpler + its own model = the same failure twice).
     const candidates = run.session?.resume
       ? [run.role.startsWith("@") ? run.role : `@${run.role}`]
-      : buildModelCandidates({
-          role: run.role,
-          models: run.models ?? [],
-          resolveName: (name) => Boolean(this.pipeline?.models?.roles?.[name]),
-        });
+      : dedupeRolePrimary(
+          buildModelCandidates({
+            role: run.role,
+            models: run.models ?? [],
+            resolveName: (name) => Boolean(this.pipeline?.models?.roles?.[name]),
+          }),
+          this.rolePrimaryModel(run.role)
+        );
 
     let lastOutcome: AgentOutcome | undefined;
+    // Provider whose credential was proven missing this call: every remaining
+    // candidate on it must be skipped (same key, same failure) so one missing
+    // credential costs exactly one failed attempt, not one per model.
+    let skipProvider: string | undefined;
     try {
       for (let ci = 0; ci < candidates.length; ci++) {
         const modelArg = candidates[ci]!;
+        if (skipProvider && this.candidateProvider(modelArg) === skipProvider) continue;
         const attempt = await this.runAttempt({ run, modelArg, tools, systemPromptPath, promptPath, sessionsDir, overlayPath });
         if (attempt.ok) return attempt.outcome;
         lastOutcome = attempt.outcome;
-        if (attempt.modelResolutionError && ci + 1 < candidates.length) {
+        if (attempt.modelResolutionError) {
+          const errText = (attempt.outcome as { error?: string }).error ?? "";
+          const missingProvider = missingCredentialProvider(errText);
+          if (missingProvider) skipProvider = missingProvider;
+          const next = candidates
+            .slice(ci + 1)
+            .find((c) => !skipProvider || this.candidateProvider(c) !== skipProvider);
+          if (!next) return attempt.outcome;
           try {
-            await run.onModelFallback?.({
-              from: modelArg,
-              to: candidates[ci + 1]!,
-              reason: (attempt.outcome as { error?: string }).error ?? "",
-            });
+            await run.onModelFallback?.({ from: modelArg, to: next, reason: errText });
           } catch {}
           continue;
         }
@@ -348,6 +409,40 @@ export class OmpHarness implements Harness {
   } finally {
       try { if (fs.existsSync(promptPath)) fs.unlinkSync(promptPath); } catch {}
     }
+  }
+
+  /**
+   * Primary model of a configured role, or undefined when the role is not in
+   * pipeline.models.roles (then `@role` is just a passthrough argument and its
+   * candidate list must not be deduped against the caller's models).
+   */
+  private rolePrimaryModel(roleName: string): string | undefined {
+    const name = roleName.startsWith("@") ? roleName.slice(1) : roleName;
+    const roles = this.pipeline?.models?.roles;
+    if (!roles?.[name]) return undefined;
+    try {
+      return resolveRole(name, roles).models[0];
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * Provider id for a `--model` argument: a literal model's `provider/` segment,
+   * or the primary model's provider when the argument is a configured `@role`.
+   */
+  private candidateProvider(modelArg: string): string | undefined {
+    const name = modelArg.startsWith("@") ? modelArg.slice(1) : modelArg;
+    const roles = this.pipeline?.models?.roles;
+    if (roles && roles[name]) {
+      try {
+        const resolved = resolveRole(name, roles);
+        return resolved.models[0] ? modelProviderOf(resolved.models[0]) : undefined;
+      } catch {
+        return undefined;
+      }
+    }
+    return modelProviderOf(modelArg);
   }
 
   /**
@@ -662,24 +757,35 @@ export class OmpHarness implements Harness {
     );
     fs.writeFileSync(promptPath, fullPrompt, "utf8");
 
-    const candidates = buildModelCandidates({
-      role: c.role,
-      models: c.models ?? [],
-      resolveName: (name) => Boolean(this.pipeline?.models?.roles?.[name]),
-    });
+    const candidates = dedupeRolePrimary(
+      buildModelCandidates({
+        role: c.role,
+        models: c.models ?? [],
+        resolveName: (name) => Boolean(this.pipeline?.models?.roles?.[name]),
+      }),
+      this.rolePrimaryModel(c.role)
+    );
     let lastError: unknown;
+    let skipProvider: string | undefined;
     try {
       for (let ci = 0; ci < candidates.length; ci++) {
         const modelArg = candidates[ci]!;
+        if (skipProvider && this.candidateProvider(modelArg) === skipProvider) continue;
         try {
           return await this.completeAttempt({ c, modelArg, cwd, promptPath, overlayPath });
         } catch (err: any) {
           lastError = err;
           const msg = err?.message ?? String(err);
           const resolution = /exit code 1/.test(msg) && isModelResolutionError(msg, 1);
-          if (resolution && ci + 1 < candidates.length) {
+          if (resolution) {
+            const missingProvider = missingCredentialProvider(msg);
+            if (missingProvider) skipProvider = missingProvider;
+            const next = candidates
+              .slice(ci + 1)
+              .find((cand) => !skipProvider || this.candidateProvider(cand) !== skipProvider);
+            if (!next) throw err;
             try {
-              await c.onModelFallback?.({ from: modelArg, to: candidates[ci + 1]!, reason: msg });
+              await c.onModelFallback?.({ from: modelArg, to: next, reason: msg });
             } catch {}
             continue;
           }

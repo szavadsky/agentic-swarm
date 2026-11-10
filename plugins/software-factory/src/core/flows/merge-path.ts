@@ -9,12 +9,15 @@ import {
   mergeChildIntoParent,
   removeWorktree,
   treeOf,
+  scanConflictMarkers,
 } from "../git/index.js";
 import { runAgentStep, getNextStepAttempt } from "./step-runner.js";
 import { runSeamHooks } from "./seams.js";
 import { appendJournal } from "../journal.js";
 import { runGates } from "../checks/gates.js";
 import { runCheck } from "../checks/runner.js";
+import { normalizeDeveloperTarget } from "../checks/gate-target.js";
+import { runWorktreeSetup } from "../checks/setup.js";
 import type { CheckContext } from "../checks/types.js";
 import type { DerivedItemState } from "../derive/item.js";
 import type { Semaphore } from "../mutex.js";
@@ -170,6 +173,18 @@ export async function mergeItem(params: MergeItemParams): Promise<MergeItemResul
       mergeAttempt,
     });
     const preMergeTree = await treeOf(childWt);
+    // Engine records (step records holding prompts/diffs with conflict-marker
+    // text) are written into the worktree under the orchestration folder.
+    // Marker scans must ignore them or every conflict resolution would
+    // "leave markers" in its own transcript.
+    const relTaskDir = path.relative(taskWt, taskDir);
+    const markerExcludePrefixes = Array.from(
+      new Set(
+        [relTaskDir, project.orchestrationFolder ?? ".factory", ".factory-runtime"]
+          .filter(Boolean)
+          .map((p) => p.replace(/\\/g, "/"))
+      )
+    );
 
     // 1. In child worktree: merge parent into child (§7)
     await appendJournal(taskDir, { type: "item_merge_phase", item: item.slug, phase: "merge-parent-into-child" });
@@ -185,7 +200,6 @@ export async function mergeItem(params: MergeItemParams): Promise<MergeItemResul
       });
 
       const diffRes = await git(childWt, ["diff"], { allowFail: true });
-      const relTaskDir = path.relative(taskWt, taskDir);
       const recordsDir = path.join(childWt, relTaskDir, "items", item.slug, "steps");
 
       const integrateAttempt = getNextStepAttempt(recordsDir, "integrate", pipeline.limits?.maxInterruptions ?? 3);
@@ -223,13 +237,38 @@ export async function mergeItem(params: MergeItemParams): Promise<MergeItemResul
         };
       }
 
+      // Post-integrate marker gate: an integrate turn can yield `ok` while
+      // leaving conflict markers in the tree. concludeMerge only inspects the
+      // merge-touched set, so markers in a new/unrelated changed file would be
+      // staged by `git add -A` and committed — the integrate-ok-with-markers
+      // class. Scan everything the merge path can affect and fail the step
+      // (with the file list) instead of concluding the merge.
+      const leftoverMarkers = await scanConflictMarkers(childWt, {
+        baseRef: parentBranch,
+        excludePrefixes: markerExcludePrefixes,
+      });
+      if (leftoverMarkers.length > 0) {
+        await appendJournal(taskDir, {
+          type: "integrate_conflict_markers_left",
+          item: item.slug,
+          files: leftoverMarkers,
+        });
+        await git(childWt, ["merge", "--abort"], { allowFail: true });
+        return {
+          ok: false,
+          mergeAttempt,
+          error: `Integrate step left conflict markers in ${leftoverMarkers.join(", ")} for item ${item.slug}; refusing to conclude the merge. Resolve the markers and re-run integrate.`,
+        };
+      }
+
       const mergeHeadCheck = await git(childWt, ["rev-parse", "-q", "--verify", "MERGE_HEAD"], { allowFail: true });
       if (mergeHeadCheck.code === 0) {
         try {
           await concludeMerge(
             repo,
             childWt,
-            `factory(${item.slug}): integrate conflict resolution`
+            `factory(${item.slug}): integrate conflict resolution`,
+            { excludePrefixes: markerExcludePrefixes }
           );
         } catch (err: any) {
           await git(childWt, ["merge", "--abort"], { allowFail: true });
@@ -284,7 +323,12 @@ export async function mergeItem(params: MergeItemParams): Promise<MergeItemResul
       // the record's stale target. Unknown-gate consults write the override
       // file; every later redrive in this wave picks it up automatically.
       const persistedOverride = await readMergeTargetOverride(taskDir, item.slug, waveKey);
-      const effectiveTarget = params.targetOverride ?? persistedOverride ?? lastDeveloperTarget;
+      const recordedTarget = params.targetOverride ?? persistedOverride ?? lastDeveloperTarget;
+      // Agents record the gate *command* they ran in the gate field
+      // (`{gate: "uv run pytest tests -q"}`). Map it to the configured gate id
+      // before verifying; an unmappable value keeps its loud unknown-target
+      // error. Normalizing here also makes the journal show the gate verified.
+      const effectiveTarget = normalizeDeveloperTarget(recordedTarget, infra);
       const targetSource = params.targetOverride
         ? "consult-override"
         : persistedOverride
@@ -292,12 +336,23 @@ export async function mergeItem(params: MergeItemParams): Promise<MergeItemResul
           : lastDeveloperTarget
             ? "record"
             : "none";
+      const targetMapped =
+        recordedTarget && effectiveTarget && JSON.stringify(recordedTarget) !== JSON.stringify(effectiveTarget);
+      if (targetMapped) {
+        await appendJournal(taskDir, {
+          type: "gate_target_mapped",
+          item: item.slug,
+          from: recordedTarget,
+          to: effectiveTarget,
+        });
+      }
       await appendJournal(taskDir, {
         type: "item_merge_verify_target",
         item: item.slug,
         wave: params.wave ?? item.wave,
         targetSource,
         target: effectiveTarget ?? null,
+        ...(targetMapped ? { targetMappedFrom: recordedTarget } : {}),
       });
 
       const checkCtx: CheckContext = {
@@ -317,6 +372,43 @@ export async function mergeItem(params: MergeItemParams): Promise<MergeItemResul
         limits: pipeline.limits ?? {},
         outputBytes: pipeline.limits?.checkOutputBytes ?? 4096,
       };
+
+      // Environment setup (infra.setup) before any gate runs: a fresh item
+      // worktree has no installed dependencies, so `typecheck`/`test` gates
+      // fail on environment errors (TS2688, missing modules) that have
+      // nothing to do with the item's diff. Only the merge path runs setup;
+      // the item worktree's own turns bootstrap their own tooling.
+      const willVerify =
+        Boolean(infra) &&
+        ((infra!.gates?.length ?? 0) > 0 || Boolean(infra!.testRunner && checkCtx.target));
+      const setupCommands = (infra?.setup ?? []).filter((c) => typeof c === "string" && c.trim());
+      if (willVerify && setupCommands.length > 0) {
+        const setupTimeout =
+          typeof checkCtx.limits.gateTimeoutSec === "number" && checkCtx.limits.gateTimeoutSec > 0
+            ? checkCtx.limits.gateTimeoutSec
+            : 900;
+        const setupRes = await runWorktreeSetup({
+          commands: setupCommands,
+          cwd: childWt,
+          timeoutSec: setupTimeout,
+          outputBytes: checkCtx.outputBytes,
+        });
+        await appendJournal(taskDir, {
+          type: setupRes.ok ? "item_merge_setup" : "item_merge_setup_failed",
+          item: item.slug,
+          commands: setupRes.commands,
+          ran: setupRes.ran,
+          durationMs: setupRes.durationMs,
+          ...(setupRes.ok ? {} : { failedCommand: setupRes.failedCommand, error: setupRes.error }),
+        });
+        if (!setupRes.ok) {
+          return {
+            ok: false,
+            mergeAttempt,
+            error: `infra.setup failed on merge path for ${item.slug}: ${setupRes.error ?? "unknown setup failure"}`,
+          };
+        }
+      }
 
       // Run gates if configured
       if (infra && infra.gates && infra.gates.length > 0) {
@@ -376,6 +468,27 @@ export async function mergeItem(params: MergeItemParams): Promise<MergeItemResul
     }
 
     // 3. Merge child into parent with --no-ff (§7)
+    // Pre-merge marker gate: never merge a branch whose changed files still
+    // carry conflict markers (e.g. committed by an earlier aborted attempt or
+    // present in the record's tree). The marker scan covers the item diff vs
+    // the parent plus all dirty paths.
+    const preMergeMarkers = await scanConflictMarkers(childWt, {
+      baseRef: parentBranch,
+      excludePrefixes: markerExcludePrefixes,
+    });
+    if (preMergeMarkers.length > 0) {
+      await appendJournal(taskDir, {
+        type: "conflict_markers_present",
+        item: item.slug,
+        files: preMergeMarkers,
+        phase: "pre-merge-child-into-parent",
+      });
+      return {
+        ok: false,
+        mergeAttempt,
+        error: `Refusing to merge ${item.slug}: conflict markers remain in ${preMergeMarkers.join(", ")}. Resolve them (integrate/repair), then retry the merge.`,
+      };
+    }
     await appendJournal(taskDir, { type: "item_merge_phase", item: item.slug, phase: "merge-child-into-parent" });
     const mergeCommitSha = await mergeChildIntoParent(
       repo,

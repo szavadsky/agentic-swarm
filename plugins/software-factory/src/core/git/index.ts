@@ -46,6 +46,7 @@ export type { EnforceHeadResult } from "./guard.js";
 export {
   mergeParentInto,
   hasConflictMarkers,
+  scanConflictMarkers,
   unmergedFiles,
   concludeMerge,
   mergeChildIntoParent,
