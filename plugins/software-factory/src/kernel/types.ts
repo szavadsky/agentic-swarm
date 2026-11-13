@@ -4,6 +4,7 @@
  */
 import { z } from "zod";
 import type { Harness, ModelRef, SessionRef, Stop, TurnAttempt, Usage } from "../harness/types.js";
+import type { PriceTable } from "./pricing.js";
 import type { CheckResult } from "../core/checks/types.js";
 import type { Repo } from "../core/git/repo.js";
 import type { PromptLibrary } from "../core/prompts.js";
@@ -260,6 +261,8 @@ export interface AliasConfig {
 
 export interface RunConfig {
   aliases: Record<string, AliasConfig>;
+  /** Model id -> USD per Mtok; absent model means unpriced, not free. */
+  prices?: PriceTable;
   limits: {
     concurrency: number;
     perHarness: Record<string, number>;

@@ -76,7 +76,20 @@ export const processConfigSchema = z
   })
   .strict();
 
-/** Run layer: not tracked; aliases, limits, session store, scout pin. */
+/**
+ * USD per million tokens. Every rate is required: a model is either fully
+ * priced or absent from the table, which is how unknown differs from $0.
+ */
+export const modelPriceSchema = z
+  .object({
+    input: z.number().nonnegative(),
+    cachedInput: z.number().nonnegative(),
+    output: z.number().nonnegative(),
+    reasoning: z.number().nonnegative(),
+  })
+  .strict();
+
+/** Run layer: not tracked; aliases, prices, limits, session store, scout pin. */
 export const aliasSchema = z
   .object({
     harness: z.string().min(1),
@@ -96,6 +109,8 @@ export const aliasSchema = z
 export const runConfigSchema = z
   .object({
     aliases: z.record(z.string(), aliasSchema).default({}),
+    /** Model id -> USD per Mtok; harnesses that report no cost are priced from here. */
+    prices: z.record(z.string(), modelPriceSchema).default({}),
     limits: z
       .object({
         concurrency: z.number().int().positive().default(2),

@@ -77,15 +77,26 @@ async function writeIterationFacts(
 ): Promise<string> {
   const records = await runtime.store.listRecords();
   const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+  const roleByStep = rolesByStep(runtime.configs.process.flows);
+  const prices = runtime.configs.run.prices;
   await writeMetrics(runtime.store, {
     iteration,
     status,
     records,
     state,
-    roleByStep: rolesByStep(runtime.configs.process.flows),
+    roleByStep,
+    prices,
     humanInterventions,
   });
-  return writeIterationSummary(runtime.store, { iteration, state, records, status, cause });
+  return writeIterationSummary(runtime.store, {
+    iteration,
+    state,
+    records,
+    status,
+    cause,
+    roleByStep,
+    prices,
+  });
 }
 
 async function safeSummary(

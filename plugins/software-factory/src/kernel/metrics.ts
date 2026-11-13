@@ -1,6 +1,7 @@
 import yaml from "yaml";
 import { addUsage, zeroUsage } from "../harness/usage.js";
 import type { Usage } from "../harness/types.js";
+import { pricedUsage, type PriceTable } from "./pricing.js";
 import type { ArtifactStore, FlowDefinition, State, StepRecord } from "./types.js";
 import type { SummaryStatus } from "./summary.js";
 
@@ -9,15 +10,18 @@ export interface RoleMetrics {
   turns: number;
   usage: Usage;
   tokens: number;
+  /** Turns whose model the harness did not price and the table does not carry. */
+  unpricedTurns: number;
 }
 
 export interface ArchitectMetrics {
   launches: number;
   usage: Usage;
   tokens: number;
-  /** 0 when every recorded turn was free (cost 0); tokens then carry the signal. */
+  /** 0 when no turn had a known cost, or when all known costs are 0. */
   costShare: number;
   tokenShare: number;
+  unpricedTurns: number;
 }
 
 export interface IterationMetrics {
@@ -28,10 +32,11 @@ export interface IterationMetrics {
   parked: string[];
   usage: Usage;
   tokens: number;
-  /** null when the iteration merged nothing. */
+  /** null when the iteration merged nothing or its cost is not fully known. */
   costPerMergedTask: number | null;
   roles: Record<string, RoleMetrics>;
   architect: ArchitectMetrics;
+  unpricedTurns: number;
   /** Parks whose cause names no-progress; the only loop signal in kernel-0. */
   loopIncidents: number;
   /** Steers moved from inbox to processed during this iteration. */
@@ -75,12 +80,8 @@ function tokenTotal(usage: Usage): number {
   );
 }
 
-function settled(usage: Usage): Usage {
-  return { ...usage, costUsd: usage.costUsd ?? 0 };
-}
-
 function emptyArchitect(): ArchitectMetrics {
-  return { launches: 0, usage: settled(zeroUsage()), tokens: 0, costShare: 0, tokenShare: 0 };
+  return { launches: 0, usage: zeroUsage(), tokens: 0, costShare: 0, tokenShare: 0, unpricedTurns: 0 };
 }
 
 function width(part: number, total: number): number {
@@ -92,26 +93,39 @@ function computeIteration(
   status: SummaryStatus,
   records: StepRecord[],
   roleByStep: Record<string, string>,
-  humanInterventions: number
+  humanInterventions: number,
+  prices: PriceTable
 ): IterationMetrics {
   const recs = records.filter((r) => r.iteration === n && r.endedAt && r.actor === "agent");
   let usage = zeroUsage();
+  let unpricedTurns = 0;
   const roles: Record<string, RoleMetrics> = {};
   const architect: ArchitectMetrics = emptyArchitect();
 
   for (const rec of recs) {
-    const part = settled(rec.usage ?? zeroUsage());
+    const priced = pricedUsage(rec.usage ?? zeroUsage(), rec.model?.id, prices);
+    const part = priced.usage;
+    const unpriced = priced.costKnown ? 0 : 1;
     usage = addUsage(usage, part);
+    unpricedTurns += unpriced;
     const role = roleByStep[rec.step] ?? DEFAULT_ROLE_BY_STEP[rec.step] ?? rec.step;
-    const entry = roles[role] ?? { role, turns: 0, usage: settled(zeroUsage()), tokens: 0 };
+    const entry = roles[role] ?? {
+      role,
+      turns: 0,
+      usage: zeroUsage(),
+      tokens: 0,
+      unpricedTurns: 0,
+    };
     entry.turns += 1;
-    entry.usage = settled(addUsage(entry.usage, part));
+    entry.unpricedTurns += unpriced;
+    entry.usage = addUsage(entry.usage, part);
     entry.tokens += tokenTotal(part);
     roles[role] = entry;
 
     if (role === "architect" || rec.step === "architect") {
       architect.launches += 1;
-      architect.usage = settled(addUsage(architect.usage, part));
+      architect.unpricedTurns += unpriced;
+      architect.usage = addUsage(architect.usage, part);
       architect.tokens += tokenTotal(part);
     }
   }
@@ -123,9 +137,8 @@ function computeIteration(
     (r) => r.step === "park" && r.endedAt && /no[- ]progress/i.test(r.cause ?? "")
   ).length;
   const tokens = tokenTotal(usage);
-  const finalUsage = settled(usage);
 
-  architect.costShare = width(architect.usage.costUsd ?? 0, finalUsage.costUsd ?? 0);
+  architect.costShare = width(architect.usage.costUsd ?? 0, usage.costUsd ?? 0);
   architect.tokenShare = width(architect.tokens, tokens);
   return {
     n,
@@ -133,11 +146,15 @@ function computeIteration(
     turns: recs.length,
     merged,
     parked,
-    usage: finalUsage,
+    usage,
     tokens,
-    costPerMergedTask: merged.length > 0 ? (finalUsage.costUsd ?? 0) / merged.length : null,
+    costPerMergedTask:
+      merged.length > 0 && usage.costUsd !== undefined && unpricedTurns === 0
+        ? usage.costUsd / merged.length
+        : null,
     roles,
     architect,
+    unpricedTurns,
     loopIncidents,
     humanInterventions,
   };
@@ -151,6 +168,7 @@ function totalsOf(iterations: IterationMetrics[]): MetricsTotals {
   let parked = 0;
   let loopIncidents = 0;
   let humanInterventions = 0;
+  let unpricedTurns = 0;
   const roles: Record<string, RoleMetrics> = {};
   const architect = emptyArchitect();
 
@@ -162,31 +180,43 @@ function totalsOf(iterations: IterationMetrics[]): MetricsTotals {
     parked += iteration.parked.length;
     loopIncidents += iteration.loopIncidents;
     humanInterventions += iteration.humanInterventions;
+    unpricedTurns += iteration.unpricedTurns;
     for (const entry of Object.values(iteration.roles)) {
-      const total = roles[entry.role] ?? { role: entry.role, turns: 0, usage: settled(zeroUsage()), tokens: 0 };
+      const total = roles[entry.role] ?? {
+        role: entry.role,
+        turns: 0,
+        usage: zeroUsage(),
+        tokens: 0,
+        unpricedTurns: 0,
+      };
       total.turns += entry.turns;
-      total.usage = settled(addUsage(total.usage, entry.usage));
+      total.usage = addUsage(total.usage, entry.usage);
       total.tokens += entry.tokens;
+      total.unpricedTurns += entry.unpricedTurns;
       roles[entry.role] = total;
     }
     architect.launches += iteration.architect.launches;
-    architect.usage = settled(addUsage(architect.usage, iteration.architect.usage));
+    architect.usage = addUsage(architect.usage, iteration.architect.usage);
     architect.tokens += iteration.architect.tokens;
+    architect.unpricedTurns += iteration.architect.unpricedTurns;
   }
 
-  const finalUsage = settled(usage);
-  architect.costShare = width(architect.usage.costUsd ?? 0, finalUsage.costUsd ?? 0);
+  architect.costShare = width(architect.usage.costUsd ?? 0, usage.costUsd ?? 0);
   architect.tokenShare = width(architect.tokens, tokens);
   return {
     iterations: iterations.length,
     turns,
     merged: mergedList(iterations),
     parked: parkedList(iterations),
-    usage: finalUsage,
+    usage,
     tokens,
-    costPerMergedTask: merged > 0 ? (finalUsage.costUsd ?? 0) / merged : null,
+    costPerMergedTask:
+      merged > 0 && usage.costUsd !== undefined && unpricedTurns === 0
+        ? usage.costUsd / merged
+        : null,
     roles,
     architect,
+    unpricedTurns,
     loopIncidents,
     humanInterventions,
   };
@@ -207,6 +237,8 @@ export interface MetricsInput {
   state?: State;
   /** Step id -> role, from the process flow config. */
   roleByStep?: Record<string, string>;
+  /** Model id -> USD per Mtok, from the run config. */
+  prices?: PriceTable;
   humanInterventions?: number;
 }
 
@@ -236,7 +268,7 @@ export async function writeMetrics(store: ArtifactStore, input: MetricsInput): P
       const previous = old.get(n);
       const status = n === input.iteration ? input.status : (previous?.status ?? "in-progress");
       const human = n === input.iteration ? (input.humanInterventions ?? 0) : (previous?.humanInterventions ?? 0);
-      return computeIteration(n, status, input.records, roleByStep, human);
+      return computeIteration(n, status, input.records, roleByStep, human, input.prices ?? {});
     });
   const metrics: GoalMetrics = { iterations, totals: totalsOf(iterations) };
 

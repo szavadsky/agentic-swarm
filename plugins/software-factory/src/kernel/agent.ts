@@ -1,4 +1,5 @@
-import type { Harness, ModelRef, SessionRef, Stop, Usage } from "../harness/types.js";
+import type { Harness, ModelRef, SessionRef, Stop } from "../harness/types.js";
+import { addUsage } from "../harness/usage.js";
 import { renderRolePrompt } from "./prompts.js";
 import {
   OutcomeInvalidError,
@@ -37,18 +38,6 @@ export interface AgentTurnResult {
   /** Absent when an infra/refusal/cancelled stop ended the turn before delivery. */
   outcome?: Outcome;
   text: string;
-}
-
-function addUsage(a: Usage, b: Usage): Usage {
-  return {
-    in: a.in + b.in,
-    cacheRead: a.cacheRead + b.cacheRead,
-    cacheWrite5m: a.cacheWrite5m + b.cacheWrite5m,
-    cacheWrite1h: a.cacheWrite1h + b.cacheWrite1h,
-    out: a.out + b.out,
-    reasoningOut: a.reasoningOut + b.reasoningOut,
-    costUsd: (a.costUsd ?? 0) + (b.costUsd ?? 0) || undefined,
-  };
 }
 
 export interface ResolvedRoleAlias {
