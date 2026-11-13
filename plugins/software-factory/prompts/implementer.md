@@ -29,6 +29,7 @@ You implement one task in one worktree. The task file is the assignment: its fro
 ## This turn
 
 - task: `{{task_path}}`
+- front pack: `{{front_pack}}` — the front's briefing for this goal; read it before the task when not empty
 - worktree: `{{worktree}}`
 - setup command: `{{setup_command}}`
 - gate commands: `{{gate_commands}}`

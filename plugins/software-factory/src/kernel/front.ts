@@ -1,10 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
-import yaml from "yaml";
-import { z } from "zod";
 import { runAgentTurn } from "./agent.js";
 import { contextPackRelPath } from "./context-pack.js";
-import { resolveRole, type RoleTarget } from "./flow-context.js";
+import { FrontClassError, frontTarget, readFrontClass, type FrontClass } from "./flow-context.js";
 import { scanInbox } from "./mailbox.js";
 import { parseTaskFile, TaskFileError, validateTaskGraph } from "./tasks.js";
 import type { KernelRuntime, StepRecord, TaskFile } from "./types.js";
@@ -24,17 +22,8 @@ interface FrontRunOptions {
   iteration: number;
 }
 
-const CLASS_FILE = "class.yaml";
 const PLAN_FILE = "plan.md";
-
-const classSchema = z
-  .object({
-    class: z.enum(["trivial", "task", "bigger"]),
-    slug: z.string().min(1).optional(),
-  })
-  .strict();
-
-type ClassFile = z.infer<typeof classSchema>;
+const CLASS_FILE = "class.yaml";
 
 /** A front output the script refuses; the launch ends as infra, never as a default class. */
 class FrontError extends Error {
@@ -47,32 +36,6 @@ class FrontError extends Error {
 function stopText(stop: StepRecord["stop"]): string {
   if (!stop) return "no stop";
   return "cause" in stop ? `${stop.kind}: ${stop.cause}` : stop.kind;
-}
-
-function parseClassText(text: string): ClassFile {
-  let raw: unknown;
-  try {
-    raw = yaml.parse(text);
-  } catch (err) {
-    throw new FrontError(`class.yaml is not valid YAML: ${(err as Error).message}`);
-  }
-  const parsed = classSchema.safeParse(raw);
-  if (!parsed.success) {
-    const findings = parsed.error.issues.map(
-      (issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`
-    );
-    throw new FrontError(`class.yaml is invalid: ${findings.join("; ")}`);
-  }
-  if (parsed.data.class !== "bigger" && !parsed.data.slug) {
-    throw new FrontError(`class.yaml class "${parsed.data.class}" needs a task slug`);
-  }
-  return parsed.data;
-}
-
-function readClassFile(goalDir: string): ClassFile | null {
-  const file = path.join(goalDir, CLASS_FILE);
-  if (!fs.existsSync(file)) return null;
-  return parseClassText(fs.readFileSync(file, "utf8"));
 }
 
 function readTasks(runtime: KernelRuntime): TaskFile[] {
@@ -96,11 +59,9 @@ function readTasks(runtime: KernelRuntime): TaskFile[] {
 /**
  * The front's task file gets the same `tasks.ts` validation as a PM file: parse,
  * graph (slug, scope, deps, base), and the run-config tier pre-flight would have
- * checked had the file existed before launch. A front-written task must also
- * name the pack in its brief: the implement turn starts de novo in the task
- * worktree, so that line is the only handoff of the front's context.
+ * checked had the file existed before launch.
  */
-function validateFrontTasks(runtime: KernelRuntime, cls: ClassFile, packRel?: string): void {
+function validateFrontTasks(runtime: KernelRuntime, cls: FrontClass): void {
   const tasks = readTasks(runtime);
   const findings = validateTaskGraph(tasks);
   if (findings.length > 0) {
@@ -131,34 +92,6 @@ function validateFrontTasks(runtime: KernelRuntime, cls: ClassFile, packRel?: st
       `front task "${task.slug}" names tier "${task.tier}", which is not a run-config alias`
     );
   }
-  if (packRel) {
-    const packPath = path.join(runtime.store.goalDir, packRel);
-    const namesPack = task.body
-      .split(/\r?\n/)
-      .some((line) => /^front pack:/i.test(line.trim()) && line.includes(packPath));
-    if (!namesPack) {
-      throw new FrontError(
-        `front task "${task.slug}" has no "Front pack: ${packPath}" line: a de novo implementer would start without the front's briefing`
-      );
-    }
-  }
-}
-
-/**
- * The front alias is optional: when the run config has no `front` alias, the
- * front speaks through the `pm` alias, so the ladder needs no new required knob.
- */
-function frontTarget(runtime: KernelRuntime): RoleTarget {
-  const configured = runtime.configs.process.roles.front;
-  if (!configured) throw new Error('process config has no role "front"');
-  const aliasName = configured.alias ?? "front";
-  if (runtime.configs.run.aliases[aliasName]) return resolveRole(runtime, "front");
-  if (aliasName === "front" && runtime.configs.run.aliases.pm) {
-    return resolveRole(runtime, "front", "pm");
-  }
-  throw new Error(
-    `run config has no alias "${aliasName}" (needed by role "front") and no "pm" fallback`
-  );
 }
 
 function gateCommands(runtime: KernelRuntime): string {
@@ -167,13 +100,13 @@ function gateCommands(runtime: KernelRuntime): string {
 
 function resultFor(
   runtime: KernelRuntime,
-  cls: ClassFile,
+  cls: FrontClass,
   opts: { ran: boolean; iteration: number }
 ): FrontResult {
   const packRel = contextPackRelPath(opts.iteration);
   // Every class gets a pack: a bigger front hands it to the architect, a
-  // trivial/task front leaves it as the implementer's briefing when its
-  // session cannot be resumed.
+  // trivial/task front leaves it as the implementer's briefing, delivered as
+  // the implement prompt's front_pack variable.
   if (opts.ran) {
     const pack = path.join(runtime.store.goalDir, packRel);
     if (!fs.existsSync(pack) || fs.statSync(pack).size === 0) {
@@ -183,7 +116,7 @@ function resultFor(
   if (cls.class === "bigger") {
     return opts.ran ? { action: "boundary", packPath: packRel } : { action: "boundary" };
   }
-  validateFrontTasks(runtime, cls, opts.ran ? packRel : undefined);
+  validateFrontTasks(runtime, cls);
   return { action: "dispatch" };
 }
 
@@ -206,7 +139,7 @@ export async function runFront(
     // boundary is the only steer consumer, so a pending steer must not be
     // skipped by a class that would dispatch without it.
     if ((await scanInbox(runtime.store)).length > 0) return { action: "boundary" };
-    const existing = readClassFile(goalDir);
+    const existing = readFrontClass(runtime);
     if (existing) return resultFor(runtime, existing, { ran: false, iteration: opts.iteration });
 
     const target = frontTarget(runtime);
@@ -246,13 +179,15 @@ export async function runFront(
         cause: `front turn ended ${result.outcome.status}: ${result.outcome.summary}`,
       };
     }
-    const cls = readClassFile(goalDir);
+    const cls = readFrontClass(runtime);
     if (!cls) {
       return { action: "infra", cause: `front turn wrote no ${CLASS_FILE} at ${path.join(goalDir, CLASS_FILE)}` };
     }
     return resultFor(runtime, cls, { ran: true, iteration: opts.iteration });
   } catch (err) {
-    if (err instanceof FrontError) return { action: "infra", cause: err.message };
+    if (err instanceof FrontError || err instanceof FrontClassError) {
+      return { action: "infra", cause: err.message };
+    }
     throw err;
   }
 }

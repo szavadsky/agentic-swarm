@@ -298,4 +298,56 @@ describe("derive", () => {
     expect(state.goal).toBe("done");
     expect(state.terminal).toBe(true);
   });
+
+  it("derives the goal decision from the front path's stop record", () => {
+    const stop = (seq: number, decision: "done" | "blocked"): StepRecord =>
+      script(seq, {
+        slug: undefined,
+        step: "front-stop",
+        outcome: { status: "done", summary: `front ${decision}`, concerns: [], forward: [], decision },
+      });
+
+    const landed = derive([task("a")], [stop(1, "done")]);
+    expect(landed.goal).toBe("done");
+    expect(landed.terminal).toBe(true);
+
+    const parked = derive([task("a")], [stop(1, "blocked")]);
+    expect(parked.goal).toBe("blocked");
+    expect(parked.terminal).toBe(true);
+  });
+
+  it("lets a later architect decision override the front path's stop", () => {
+    // The ordering a steered relaunch produces: the front path's blocked stop,
+    // then the architect turn that a pending steer made the next launch run.
+    const frontBlocked = script(1, {
+      slug: undefined,
+      step: "front-stop",
+      outcome: { status: "done", summary: "front blocked", concerns: [], forward: [], decision: "blocked" as const },
+    });
+    const architect = (seq: number, decision: "continue" | "done" | "blocked"): StepRecord =>
+      rec(seq, {
+        slug: undefined,
+        step: "architect",
+        iteration: 2,
+        outcome: { status: "done", summary: `architect ${decision}`, concerns: [], forward: [], decision },
+      });
+
+    expect(derive([task("a")], [frontBlocked, architect(2, "continue")]).goal).toBe("active");
+    expect(derive([task("a")], [frontBlocked, architect(2, "done")]).goal).toBe("done");
+    expect(derive([task("a")], [frontBlocked, architect(2, "blocked")]).goal).toBe("blocked");
+  });
+
+  it("ignores a front-stop record without an end, like any orphan", () => {
+    const state = derive([task("a")], [
+      {
+        ...script(1, {
+          slug: undefined,
+          step: "front-stop",
+          outcome: { status: "done", summary: "front done", concerns: [], forward: [], decision: "done" },
+        }),
+        endedAt: undefined,
+      },
+    ]);
+    expect(state.goal).toBe("active");
+  });
 });

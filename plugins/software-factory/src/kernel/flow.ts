@@ -26,7 +26,6 @@ import {
   firstBase,
   flowOf,
   followUpSession,
-  frontSessionFor,
   isFixTurn,
   promptVars,
   stepTarget,
@@ -145,11 +144,11 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
   const meta = { iteration, slug: task.slug, round: state.round };
   const preexisting = preexistingRed(recordedBaseGates(records));
   const target = stepTarget(runtime, task, state, step.id);
+  // A fix turn resumes the implement session in this worktree; a first turn is
+  // always de novo — the front's session is cwd-bound to the goal checkout.
   const session = isFixTurn(flow, state, step.id)
     ? await followUpSession(runtime, task, target, records, ensured.path)
-    : task.flow === "just-implement" && state.turns === 0
-      ? frontSessionFor(runtime, target.alias, records, ensured.path)
-      : undefined;
+    : undefined;
   const vars = promptVars(runtime, task, ensured.path, records, state.round, flow);
   vars.base_hash = firstBase(records, task.slug) ?? ensured.startPoint;
   vars.head_hash = await headSha(ensured.path);

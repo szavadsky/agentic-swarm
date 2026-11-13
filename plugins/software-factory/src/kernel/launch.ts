@@ -2,13 +2,15 @@ import fs from "node:fs";
 import path from "node:path";
 import { Repo } from "../core/git/repo.js";
 import { acquireRunLock, type RunLockHandle } from "../cli/lock.js";
-import { derive } from "./derive.js";
+import { derive, FRONT_STOP_STEP } from "./derive.js";
 import { runDispatch, type DispatchResult } from "./dispatch.js";
 import { loadConfigs, resolveGoalPaths, toLimits } from "./config.js";
 import { loadPrompts } from "./prompts.js";
 import { createFolderStore } from "./store.js";
 import { runBoundary, type BoundaryResult } from "./boundary.js";
 import { runFront } from "./front.js";
+import { scanInbox } from "./mailbox.js";
+import { scriptMeta } from "./record.js";
 import { writeIterationSummary } from "./summary.js";
 import { rolesByStep, writeMetrics } from "./metrics.js";
 import { preflight, type ModelCatalog } from "./preflight.js";
@@ -67,6 +69,49 @@ export interface LaunchResult {
 async function processedSteers(store: KernelRuntime["store"]): Promise<number> {
   const files = await store.listDir("mailbox/processed");
   return files.filter((f) => !f.startsWith(".")).length;
+}
+
+/**
+ * A blocked goal is not final while a steer is waiting: the architect boundary
+ * is the only steer consumer, so the next launch must resume instead of
+ * stopping on the goal decision that ended the previous one.
+ */
+async function steersWaiting(store: KernelRuntime["store"]): Promise<boolean> {
+  return (await scanInbox(store)).length > 0;
+}
+
+/** Tasks a front path dispatched that did not land, as `slug status`. */
+function unfinishedTasks(state: State): string[] {
+  return Object.entries(state.tasks)
+    .filter(([, task]) => task.status !== "merged" && task.status !== "finished")
+    .map(([slug, task]) => `${slug} ${task.status}`);
+}
+
+/**
+ * A front trivial/task goal has no architect turn, so the front path's stop is
+ * the recorded goal decision: `derive` reads it as the one source of truth.
+ */
+async function recordFrontStop(
+  store: KernelRuntime["store"],
+  iteration: number,
+  decision: GoalDecision,
+  summary: string
+): Promise<void> {
+  await store.appendRecord(scriptMeta(iteration, FRONT_STOP_STEP), {
+    ok: true,
+    outcome: {
+      status: decision === "done" ? "done" : "blocked",
+      summary,
+      concerns: [],
+      forward: [],
+      decision,
+    },
+  });
+}
+
+/** The classified cause plus the scrubbed error tail, as the boundary reports it. */
+function infraCause(stop: { cause: string; details?: string }): string {
+  return stop.details ? `${stop.cause}: ${stop.details}` : stop.cause;
 }
 
 async function writeIterationFacts(
@@ -201,13 +246,11 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
     let lastSummary: string | undefined;
     let ended: "infra" | "cancelled" | undefined;
     let stopCause: string | undefined;
-    /** A front-classified trivial/task goal has no architect decision; its landed tasks decide. */
-    let frontStop: LaunchStop | undefined;
 
     for (let i = 0; i < runtime.limits.iterations; i++) {
       if (signals.shouldStop()) break;
       const before = derive(await store.listTasks(), await store.listRecords(), runtime.configs.process.flows);
-      if (before.terminal) break;
+      if (before.terminal && !(before.goal === "blocked" && (await steersWaiting(store)))) break;
 
       let iteration = before.iteration + 1;
       let humanInterventions = 0;
@@ -218,9 +261,9 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
           const cause = `front turn ended the launch as blocked: ${
             front.cause ?? "unknown cause"
           }`;
+          await recordFrontStop(store, iteration, "blocked", cause);
           lastSummary = await writeIterationFacts(runtime, iteration, "blocked-by-user", 0, cause);
           stopCause = cause;
-          frontStop = "blocked";
           break;
         }
         if (front.action === "infra") {
@@ -235,6 +278,7 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
 
         let boundary: BoundaryResult | undefined;
         let decision: GoalDecision = "continue";
+        let seenSteers: string[] = [];
         if (front.action === "boundary") {
           boundary = await runBoundary(runtime, {
             relaunch: relaunch && i === 0,
@@ -243,13 +287,18 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
           });
           iteration = boundary.iteration;
           decision = boundary.decision;
+          seenSteers = boundary.seenSteers;
+          if (boundary.stop) {
+            ended = "infra";
+            stopCause = `infrastructure stop during iteration ${iteration}: ${infraCause(boundary.stop)}; relaunch to retry`;
+          }
         }
         iterations += 1;
 
         let dispatchCause: string | undefined;
         let dispatched: DispatchResult | undefined;
-        if (decision === "continue" && !signals.shouldStop()) {
-          dispatched = await runDispatch(runtime, { iteration });
+        if (decision === "continue" && ended === undefined && !signals.shouldStop()) {
+          dispatched = await runDispatch(runtime, { iteration, seenSteers });
           dispatchCause = dispatched.cause;
           if (dispatched.reason === "infra" || dispatched.reason === "cancelled") {
             ended = dispatched.reason;
@@ -261,32 +310,46 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
             }
           }
         }
-        const dispatchStopped = ended !== undefined;
+        const stopped = ended !== undefined;
         humanInterventions = Math.max(0, (await processedSteers(store)) - processedBefore);
 
-        const after = derive(
+        const frontFinished = front.action === "dispatch" && dispatched?.reason === "boundary";
+        if (frontFinished) {
+          const afterDispatch = derive(
+            await store.listTasks(),
+            await store.listRecords(),
+            runtime.configs.process.flows
+          );
+          const unfinished = unfinishedTasks(afterDispatch);
+          const landed = Object.keys(afterDispatch.tasks).length > 0 && unfinished.length === 0;
+          await recordFrontStop(
+            store,
+            iteration,
+            landed ? "done" : "blocked",
+            landed
+              ? `front path landed every task in iteration ${iteration}`
+              : `front path stopped with ${unfinished.join(", ")} in iteration ${iteration}`
+          );
+        }
+        const afterStop = derive(
           await store.listTasks(),
           await store.listRecords(),
           runtime.configs.process.flows
         );
-        const landed =
-          Object.keys(after.tasks).length > 0 &&
-          Object.values(after.tasks).every(
-            (task) => task.status === "merged" || task.status === "finished"
-          );
-        const frontFinished = front.action === "dispatch" && dispatched?.reason === "boundary";
         const status =
           decision === "done"
             ? "goal-met"
-            : decision === "blocked"
-              ? "blocked-by-user"
-              : signals.shouldStop() || dispatchStopped
-                ? "stopped-with-debt"
-                : frontFinished && landed
-                  ? "goal-met"
-                  : frontFinished
-                    ? "stopped-with-debt"
-                    : "in-progress";
+            : ended === "infra"
+              ? "stopped-with-debt"
+              : decision === "blocked"
+                ? "blocked-by-user"
+                : signals.shouldStop() || stopped
+                  ? "stopped-with-debt"
+                  : afterStop.goal === "done"
+                    ? "goal-met"
+                    : afterStop.goal === "blocked"
+                      ? "stopped-with-debt"
+                      : "in-progress";
         lastSummary = await writeIterationFacts(
           runtime,
           iteration,
@@ -294,11 +357,8 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
           humanInterventions,
           boundary?.cause ?? dispatchCause
         );
-        if (decision !== "continue" || dispatchStopped || signals.shouldStop()) break;
-        if (frontFinished) {
-          frontStop = landed ? "done" : "blocked";
-          break;
-        }
+        if (decision !== "continue" || stopped || signals.shouldStop()) break;
+        if (frontFinished) break;
       } catch (err) {
         await safeSummary(runtime, Math.max(1, iteration), humanInterventions, (err as Error).message);
         throw err;
@@ -309,15 +369,13 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
     const stop: LaunchStop =
       signals.interruptedBy || ended === "cancelled"
         ? "interrupted"
-        : frontStop !== undefined
-          ? frontStop
-          : state.goal === "done"
-            ? "done"
-            : state.goal === "blocked"
-              ? "blocked"
-              : ended === "infra"
-                ? "infra"
-                : "iteration-limit";
+        : state.goal === "done"
+          ? "done"
+          : state.goal === "blocked"
+            ? "blocked"
+            : ended === "infra"
+              ? "infra"
+              : "iteration-limit";
     return {
       goal: opts.goal,
       iterations,

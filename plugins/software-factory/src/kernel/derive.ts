@@ -1,6 +1,7 @@
 import { DEFAULT_FLOWS, reduceTask } from "./derive-task.js";
 import type {
   FlowDefinition,
+  GoalDecision,
   GoalStatus,
   State,
   StepRecord,
@@ -8,6 +9,13 @@ import type {
   TaskState,
   TaskStatus,
 } from "./types.js";
+
+/**
+ * The script record the launch appends when the front path stops: a front
+ * trivial/task goal has no architect turn, so this record carries its goal
+ * decision and `derive` reads it like an architect's.
+ */
+export const FRONT_STOP_STEP = "front-stop";
 
 /** Dependency edges are satisfied by merged work and by landed spike findings. */
 function depsSatisfied(task: TaskFile, statuses: ReadonlyMap<string, TaskStatus>): boolean {
@@ -19,6 +27,14 @@ function depsSatisfied(task: TaskFile, statuses: ReadonlyMap<string, TaskStatus>
 
 function bySeq(a: StepRecord, b: StepRecord): number {
   return a.seq - b.seq || a.startedAt.localeCompare(b.startedAt);
+}
+
+/** The goal decision a completed record carries: the architect's, or the front path's stop. */
+function recordedDecision(rec: StepRecord): GoalDecision | undefined {
+  if (!rec.endedAt || !rec.outcome?.decision) return undefined;
+  if (rec.actor === "agent" && rec.step === "architect") return rec.outcome.decision;
+  if (rec.actor === "script" && rec.step === FRONT_STOP_STEP) return rec.outcome.decision;
+  return undefined;
 }
 
 /**
@@ -40,8 +56,9 @@ export function derive(
   let goal: GoalStatus = "active";
   for (const rec of sorted) {
     iteration = Math.max(iteration, rec.iteration);
-    if (rec.actor === "agent" && rec.step === "architect" && rec.endedAt && rec.outcome?.decision) {
-      goal = rec.outcome.decision === "done" ? "done" : rec.outcome.decision === "blocked" ? "blocked" : "active";
+    const decision = recordedDecision(rec);
+    if (decision) {
+      goal = decision === "done" ? "done" : decision === "blocked" ? "blocked" : "active";
     }
   }
 

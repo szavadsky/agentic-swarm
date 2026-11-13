@@ -6,6 +6,7 @@ import { resolveRole } from "./flow-context.js";
 import { formatSteerTurn, holdsDir, type Steer } from "./mailbox.js";
 import { materialHash, parseTaskFile, validateTaskGraph, TaskFileError } from "./tasks.js";
 import { appendCancel, scriptMeta } from "./record.js";
+import type { Stop } from "../harness/types.js";
 import type { AliasConfig, KernelRuntime, Outcome, State, StepRecord, TaskFile, TaskStatus } from "./types.js";
 
 function taskPath(runtime: KernelRuntime, slug: string): string {
@@ -20,6 +21,66 @@ async function readTaskTexts(runtime: KernelRuntime): Promise<Map<string, string
     if (text !== null) out.set(name.slice(0, -".md".length), text);
   }
   return out;
+}
+
+/** The plan and every task file as they stood before a turn. */
+interface TurnSnapshot {
+  planPath: string;
+  plan: string;
+  /** An absent plan is restored by deleting the file, not by emptying it. */
+  planExists: boolean;
+  tasks: Map<string, string>;
+}
+
+async function snapshotTurn(runtime: KernelRuntime, planPath: string): Promise<TurnSnapshot> {
+  const planExists = fs.existsSync(planPath);
+  return {
+    planPath,
+    plan: planExists ? fs.readFileSync(planPath, "utf8") : "",
+    planExists,
+    tasks: await readTaskTexts(runtime),
+  };
+}
+
+/**
+ * Restores the plan and every task file a turn changed or created, byte for
+ * byte, and names what it restored. The PM task turn uses it to roll back a
+ * failed rung; the steer turn uses it to undo a write that must not happen.
+ */
+async function restoreTurn(
+  runtime: KernelRuntime,
+  snapshot: TurnSnapshot
+): Promise<{ plan: boolean; tasks: string[] }> {
+  const planExistsNow = fs.existsSync(snapshot.planPath);
+  const planNow = planExistsNow ? fs.readFileSync(snapshot.planPath, "utf8") : "";
+  let planChanged = false;
+  if (!snapshot.planExists) {
+    // A plan the turn created would send the next front to the boundary; it
+    // must be gone, not left behind as an empty file.
+    if (planExistsNow) {
+      fs.rmSync(snapshot.planPath, { force: true });
+      planChanged = true;
+    }
+  } else if (planNow !== snapshot.plan) {
+    await writeTextAtomic(snapshot.planPath, snapshot.plan);
+    planChanged = true;
+  }
+
+  const texts = await readTaskTexts(runtime);
+  const changed = new Set<string>();
+  for (const [slug, original] of snapshot.tasks) {
+    if (texts.get(slug) !== original) {
+      await writeTextAtomic(taskPath(runtime, slug), original);
+      changed.add(slug);
+    }
+  }
+  for (const slug of texts.keys()) {
+    if (!snapshot.tasks.has(slug)) {
+      fs.rmSync(taskPath(runtime, slug), { force: true });
+      changed.add(slug);
+    }
+  }
+  return { plan: planChanged, tasks: [...changed].sort() };
 }
 
 function parseTasks(texts: Map<string, string>): { tasks: TaskFile[]; findings: string[] } {
@@ -40,14 +101,20 @@ function isFrozenStatus(status: TaskStatus | "new"): boolean {
   return status === "merged" || status === "finished";
 }
 
+/** A cancelled slug is spent: reconcile restores it and the PM must not reuse it. */
+function readOnlyMarker(status: TaskStatus | "new"): string {
+  if (isFrozenStatus(status)) return " | frozen (read-only)";
+  if (status === "cancelled") return " | read-only (spent)";
+  return "";
+}
+
 function existingTasks(state: State, tasks: TaskFile[]): string {
   if (tasks.length === 0) return "none";
   return [...tasks]
     .sort((a, b) => a.slug.localeCompare(b.slug))
     .map((task) => {
       const status = state.tasks[task.slug]?.status ?? "new";
-      const frozen = isFrozenStatus(status) ? " | frozen (read-only)" : "";
-      return `- ${task.slug} | ${status} | ${materialHash(task).slice(0, 10)} | deps: ${task.deps.join(",") || "none"}${frozen}`;
+      return `- ${task.slug} | ${status} | ${materialHash(task).slice(0, 10)} | deps: ${task.deps.join(",") || "none"}${readOnlyMarker(status)}`;
     })
     .join("\n");
 }
@@ -178,10 +245,15 @@ export interface PmRung {
   failure: string;
 }
 
+/** A rung ended on infrastructure trouble the alias's own fallbacks could not cure. */
+export type PmInfraStop = Extract<Stop, { kind: "infra" }>;
+
 export type PmRun =
   | { status: "done"; outcome: Outcome; rungs: PmRung[] }
   /** An escalated rung stopped the ladder with a question for the architect. */
   | { status: "asked"; outcome: Outcome; rungs: PmRung[] }
+  /** A rung ended on an infra stop; a stronger model would not cure it, so the ladder stops. */
+  | { status: "infra"; stop: PmInfraStop; rungs: PmRung[] }
   /** Every tier failed both of its turns. */
   | { status: "exhausted"; rungs: PmRung[] };
 
@@ -264,39 +336,21 @@ function ladderNote(
   return notes.join("\n");
 }
 
-/** Restores the plan and every task file the failed rung may have changed. */
-async function restorePrePm(
-  runtime: KernelRuntime,
-  planPath: string,
-  planBefore: string,
-  taskSnapshot: Map<string, string>
-): Promise<void> {
-  const planNow = fs.existsSync(planPath) ? fs.readFileSync(planPath, "utf8") : "";
-  if (planNow !== planBefore) await writeTextAtomic(planPath, planBefore);
-
-  const texts = await readTaskTexts(runtime);
-  for (const [slug, original] of taskSnapshot) {
-    if (texts.get(slug) !== original) await writeTextAtomic(taskPath(runtime, slug), original);
-  }
-  for (const slug of texts.keys()) {
-    if (!taskSnapshot.has(slug)) fs.rmSync(taskPath(runtime, slug), { force: true });
-  }
-}
-
 /**
  * PM ladder: each tier gets its first turn and one de-novo retry; a failed rung
  * is rolled back before the next. The next alias in the chain escalates with a
- * broader mandate; only an escalated `blocked` stops with a question, and an
- * exhausted ladder reports every rung as alias, model and failure.
+ * broader mandate; an infra stop ends the ladder because a stronger model does
+ * not cure quota or crash trouble the fallbacks already absorbed. Only an
+ * escalated `blocked` stops with a question, and an exhausted ladder reports
+ * every rung as alias, model and failure.
  */
 export async function runPm(
   runtime: KernelRuntime,
   opts: { iteration: number; state: State; planPath: string; cwd: string }
 ): Promise<PmRun> {
-  const planBefore = fs.existsSync(opts.planPath)
-    ? fs.readFileSync(opts.planPath, "utf8")
-    : "";
-  const taskSnapshot = await readTaskTexts(runtime);
+  const snapshot = await snapshotTurn(runtime, opts.planPath);
+  const planBefore = snapshot.plan;
+  const taskSnapshot = snapshot.tasks;
   const rungs: PmRung[] = [];
   let failure: string[] = [];
 
@@ -322,6 +376,7 @@ export async function runPm(
     });
     const findings = await validate(runtime, { ...opts, round }, planBefore, taskSnapshot);
     const outcome = result.outcome;
+    const stop = result.record.stop;
 
     if (outcome?.status === "done" && findings.length === 0) {
       await cancelRemovedTasks(runtime, opts.state, planBefore, opts.iteration);
@@ -340,8 +395,13 @@ export async function runPm(
       ok: false,
       cause: failureText,
     });
-    await restorePrePm(runtime, opts.planPath, planBefore, taskSnapshot);
+    await restoreTurn(runtime, snapshot);
 
+    // Refusal and missing or invalid outcomes climb; an infra stop does not,
+    // because the alias's fallbacks already absorbed the same-harness trouble.
+    if (stop?.kind === "infra") {
+      return { status: "infra", stop, rungs };
+    }
     if (outcome?.status === "blocked" && rung.mandate.startsWith("escalated")) {
       return { status: "asked", outcome, rungs };
     }
@@ -358,11 +418,18 @@ export async function runPm(
  * or fails. A failed turn therefore writes no hold and changes no dispatch.
  * The record uses the PM step, so it stays out of the item turn budget and
  * prices into the iteration's spend like every other PM turn.
+ *
+ * A steer turn is not the task turn: any task-file or plan write it makes is
+ * restored from the pre-turn snapshot and named in a failed script record, so
+ * a malformed write cannot throw out of the next derive or stand all
+ * iteration.
  */
 export async function runSteerPm(
   runtime: KernelRuntime,
   opts: { iteration: number; state: State; tasks: TaskFile[]; steers: Steer[]; cwd: string }
 ): Promise<void> {
+  const planPath = path.join(runtime.store.goalDir, "plan.md");
+  const snapshot = await snapshotTurn(runtime, planPath);
   await runAgentTurn(runtime, {
     target: resolveRole(runtime, "pm"),
     cwd: opts.cwd,
@@ -370,7 +437,7 @@ export async function runSteerPm(
     vars: {
       iteration: String(opts.iteration),
       intent_path: path.join(runtime.store.goalDir, "intent.md"),
-      plan_path: path.join(runtime.store.goalDir, "plan.md"),
+      plan_path: planPath,
       tasks_dir: runtime.store.tasksDir,
       existing_tasks: existingTasks(opts.state, opts.tasks),
       repair: "",
@@ -379,4 +446,15 @@ export async function runSteerPm(
     },
     expectation: "any",
   });
+  const restored = await restoreTurn(runtime, snapshot);
+  const files = [
+    ...(restored.plan ? ["plan.md"] : []),
+    ...restored.tasks.map((slug) => `tasks/${slug}.md`),
+  ];
+  if (files.length > 0) {
+    await runtime.store.appendRecord(scriptMeta(opts.iteration, "steer-reconcile"), {
+      ok: false,
+      cause: `steer turn changed ${files.join(", ")}; restored: a steer structures holds and writes no task file or plan`,
+    });
+  }
 }

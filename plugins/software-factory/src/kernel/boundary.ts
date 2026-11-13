@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { git } from "../core/git/exec.js";
-import { compactArchitect, resumableSession } from "./architect-session.js";
+import { resumableSession } from "./architect-session.js";
 import { runAgentTurn } from "./agent.js";
 import { recordedBaseGates } from "./baseline.js";
 import {
@@ -13,7 +13,7 @@ import {
 } from "./context-pack.js";
 import { derive } from "./derive.js";
 import { writeLaunchDigest } from "./digest.js";
-import { resolveRole } from "./flow-context.js";
+import { compactSession, resolveRole } from "./flow-context.js";
 import { integrationHead } from "./worktree.js";
 import {
   formatSteers,
@@ -22,15 +22,19 @@ import {
   steerResponses,
   writeOutbox,
 } from "./mailbox.js";
-import { runPm, type PmRung } from "./pm.js";
+import { runPm, type PmInfraStop, type PmRung } from "./pm.js";
 import type { GoalDecision, KernelRuntime, Outcome } from "./types.js";
 
 export interface BoundaryResult {
   iteration: number;
   decision: GoalDecision;
   cause?: string;
+  /** A PM rung ended on infrastructure: the launch ends as infra, never dispatches. */
+  stop?: { cause: string; details?: string };
   outcome?: Outcome;
   packPath?: string;
+  /** Inbox steer ids the architect saw; dispatch must not steer them again. */
+  seenSteers: string[];
 }
 
 export interface BoundaryOptions {
@@ -51,6 +55,11 @@ function rungTrace(rungs: PmRung[]): string {
   return rungs
     .map((rung) => `rung ${rung.round} ${rung.alias} (${rung.model}): ${rung.failure}`)
     .join("; ");
+}
+
+/** Today's infra cause: the classified cause plus the scrubbed error tail. */
+function infraCause(stop: PmInfraStop): string {
+  return stop.details ? `${stop.cause}: ${stop.details}` : stop.cause;
 }
 
 async function taskSnapshot(goalDir: string): Promise<Map<string, string>> {
@@ -107,6 +116,7 @@ export async function runBoundary(
   const digestPath = digestRel ? path.join(runtime.store.goalDir, digestRel) : undefined;
 
   const steers = await scanInbox(runtime.store);
+  const seenSteers = steers.map((steer) => steer.id);
   const packRel = opts.frontPack ?? contextPackRelPath(iteration);
 
   if (!opts.frontPack) {
@@ -157,7 +167,7 @@ export async function runBoundary(
     session,
     settle: async (_record, outcome, live) => {
       if (!live || outcome?.decision !== "continue") return {};
-      const compacted = await compactArchitect(runtime, live);
+      const compacted = await compactSession(runtime, live);
       return compacted ? { session: compacted } : {};
     },
   });
@@ -182,6 +192,7 @@ export async function runBoundary(
       cause: `architect modified task file ${touched}; only the PM writes tasks`,
       outcome: result.outcome,
       packPath: packRel,
+      seenSteers,
     };
   }
 
@@ -194,11 +205,12 @@ export async function runBoundary(
       cause,
       outcome: result.outcome,
       packPath: packRel,
+      seenSteers,
     };
   }
 
   if (decision !== "continue") {
-    return { iteration, decision, outcome: result.outcome, packPath: packRel };
+    return { iteration, decision, outcome: result.outcome, packPath: packRel, seenSteers };
   }
 
   const planPath = path.join(runtime.store.goalDir, "plan.md");
@@ -209,6 +221,7 @@ export async function runBoundary(
       cause: `architect continued but ${planPath} does not exist`,
       outcome: result.outcome,
       packPath: packRel,
+      seenSteers,
     };
   }
 
@@ -225,6 +238,20 @@ export async function runBoundary(
       cause: `PM escalated and asked: ${pm.outcome.summary}`,
       outcome: result.outcome,
       packPath: packRel,
+      seenSteers,
+    };
+  }
+  if (pm.status === "infra") {
+    const rung = pm.rungs.at(-1);
+    const where = rung ? ` at rung ${rung.round} ${rung.alias} (${rung.model})` : "";
+    return {
+      iteration,
+      decision: "blocked",
+      cause: `PM ladder stopped on infrastructure${where}: ${infraCause(pm.stop)}`,
+      stop: { cause: pm.stop.cause, details: pm.stop.details },
+      outcome: result.outcome,
+      packPath: packRel,
+      seenSteers,
     };
   }
   if (pm.status === "exhausted") {
@@ -234,6 +261,7 @@ export async function runBoundary(
       cause: `PM ladder exhausted: ${rungTrace(pm.rungs)}`,
       outcome: result.outcome,
       packPath: packRel,
+      seenSteers,
     };
   }
   return {
@@ -241,5 +269,6 @@ export async function runBoundary(
     decision,
     outcome: result.outcome,
     packPath: packRel,
+    seenSteers,
   };
 }

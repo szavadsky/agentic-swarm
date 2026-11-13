@@ -402,6 +402,7 @@ const pmVars = {
 
 const implementerVars = {
   task_path: "/g/tasks/a.md",
+  front_pack: "",
   worktree: "/wt/a",
   setup_command: "none",
   gate_commands: "none",
