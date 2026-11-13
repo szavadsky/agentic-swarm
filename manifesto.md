@@ -275,7 +275,7 @@ Evidence is in `bootstrap/reports/review-2026-11-13/`: `REVIEW.md` (status, exec
 - **Free first did not hold.** 432 quota rejections; 136 of 172 turns finished on the paid fallback model.
 - **Throughput is set by scope overlap, not by models.** Iteration 11 ran one task at a time for 309 of its 369 minutes.
 - **It converges locally and diverges globally.** Parked work gets landed and review debt gets closed (103 of 121 items), but each review opens the next milestone. Pending tasks have not dropped below 10 since iteration 9.
-- **Against the manifesto.** Of 103 statements checked, 50 are built and tested, 8 built but untested, 23 partial, 9 missing, 9 built differently or contradicted by practice.
+- **Against the manifesto.** Of 104 statements checked, 50 are built and tested, 8 built but untested, 24 partial, 9 missing, 9 built differently or contradicted by practice. The other 4 are rules with no code to check.
 - **Against the goal's done condition: not done.** Hierarchy level 2 and harness rotation are unbuilt, the benchmark has never been run, the usage document and the evidence table are pending, debt is open.
 - **Harness breadth.** opencode ran 159 turns and omp 9; pi and codex ran none. This is the one owner steer the build does not honor.
 - **Safety.** Five high-severity kernel defects (B1–B5 below): B1 was hit in iteration 13, the other four are reproduced by test. One reported defect turned out to be fixed already.

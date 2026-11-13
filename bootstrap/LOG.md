@@ -310,3 +310,4 @@ Verbatim, newest last; each with what it changed.
 - Corrected in place in my own review text (R05, R30, Where the project stands, P4); no owner line changed. Table of old and new values: `reports/review-2026-11-13/REVIEW.md`, "Corrections after delivery". Final fact file replaces the partial copy.
 - Rule: a fact file is quoted only after its agent has reported completion.
 - No run was live during these commits.
+- Second correction, same entry: the manifesto matrix is 104 rows with 24 partial, not 103 with 23. One row (cache TTL, manifesto l.119) fell out of my count because its quote contains pipe characters; four rows are rules with no code to check. Fixed in the manifesto status line and `REVIEW.md`.

@@ -152,10 +152,10 @@ Counts are rows of the matrix in `manifesto-vs-built.md`.
 | Config-driven flows | 7 | 0 | 0 | 0 | 0 | |
 | Harness agnosticism | 0 | 0 | 2 | 0 | 1 | pi and codex never ran; no rotation; the opencode adapter contradicts the adapter rule |
 | Operating assumptions | 0 | 0 | 0 | 1 | 0 | the sandbox assumption is documented nowhere |
-| Notes on implementation | 12 | 0 | 7 | 0 | 3 | concern store deleted; no presets, no LSP, no cleanliness check; cache TTL hardcoded |
+| Notes on implementation | 12 | 0 | 8 | 0 | 3 | concern store deleted; no presets, no LSP, no cleanliness check; cache TTL hardcoded |
 | Bootstrap | 0 | 0 | 4 | 0 | 0 | pin by hand; benchmark never run; one run config; pi and codex untested |
 | Preamble, decisions, glossary | 1 | 0 | 3 | 0 | 0 | epics unproven; glossary terms without a mechanism |
-| **All 103 rows** | **50** | **8** | **23** | **9** | **9** | plus 4 rule-level rows with no code to check |
+| **All 104 rows** | **50** | **8** | **24** | **9** | **9** | plus 4 rule-level rows with no code to check |
 
 ## Built by practice, absent from the manifesto
 
@@ -228,5 +228,6 @@ The reports beside this file are kept as written. Where a later check contradict
 | R30, P4 | $1.19 per launch | $1.58 per turn that ran (ten turns, $0.83 to $2.51); $1.19 averaged in three launches that crashed at start and cost nothing | same |
 | R05, P4 | a turn is 15 to 45 requests | 15 to 42 requests, known only for iterations 10–13 (one surviving transcript); 45 was a tool-call count | same |
 | R05, P4 | 0.7 to 3.2 million cache-read tokens per turn against a few dozen fresh ones | 0.7 to 7.3 million over the ten turns that ran (iteration 5: 7.3 million); under 100 fresh input tokens on six of the ten, 68 thousand to 539 thousand on the other four | same |
+| Where the project stands, Against the manifesto | 103 statements, 23 partial | 104 statements, 24 partial; the 4 not in the five counts are rules with no code to check. The row for manifesto l.119 (cache TTL) was dropped from the count because its quote contains pipe characters | `manifesto-vs-built.md` part 1, recounted |
 
 None of this changes a proposal: the corrected figures make the P4 case stronger, not weaker.
