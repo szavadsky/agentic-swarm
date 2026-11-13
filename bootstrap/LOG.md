@@ -15,6 +15,8 @@ Append-only. Two parts: **Decisions** (rebuttable by practice — overturn by ad
 | D7 | 2026-11-12 | omp adapter drives one RPC process per turn (`--mode rpc`): prompt, read usage, explicit `compact` before exit when asked. Overlay per launch: `cacheRetention: short`, memory off, auto-learn off. | Verified: RPC resume + compact work, auto-compaction does not fire under RPC (`context/omp-probe.md`). | — |
 | D8 | 2026-11-12 | Free-tier quota errors (`provider.free-limit`, HTTP 429, retry-after ~24 h but often passing a minute later) are `infra: quota`: retried, never charged to the item budget. Run-config aliases carry a fallback chain: OpenCode free → OpenCode Go subscription → Alibaba token plan (all zero marginal cost), paid tiers last. | Both probes hit the 429 intermittently. | Chain exhausts during a launch → drain and exit with a remarkable; do not silently wait. |
 | D9 | 2026-11-12 | The self-run targets the `factory-v3` worktree; each goal has its own integration branch; the orchestrator merges it into `factory-v3` after independent verification, then promotes. Promotion is a bootstrap script (`bootstrap/promote.sh`), not a factory feature. | Pinned self-execution exists only because the factory edits itself; other target repositories never need it. | — |
+| D11 | 2026-11-12 | A reviewer sees the artifact, never how it was written: different model, clean worktree, review assignment in a file. Same-model same-session self-review does not count as a review round. | DOC1R evidence: a different free model checked 117 references and found 10 citation failures and 3 coverage gaps the writer never saw. | — |
+| D12 | 2026-11-12 | Review tier is `opencode-go/muse-spark-1.3-contributor` (heavily subsidized on the contributor tier; sits alongside deepseek implementers). Free flash models (`-free`: deepseek, glm, mimo, minimax) are free only through OpenCode and rate-limited — run-config aliases and pre-flight treat the free tier as opencode-only, with the same model on the contributor plan as fallback. | Owner steer; both probes hit `provider.free-limit` 429s under load. | A cheaper equally-strong reviewer is measured on the review task → replace. |
 
 ## Open for the owner
 
@@ -31,6 +33,8 @@ Verbatim, newest last; each with what it changed.
 
 - 2026-11-12 (task statement): "convert manifesto.md (and advisory only manifesto.advice.md) to a working, tested during bootstrapping, usage and ideology (based on manifesto) documented system. Use opencode cli with free models (preferable) or task subagents to prepare for first bootstrap step, meanwhile define intent for initial implementation, then manifesto +- small changes become intent; keep babysitting iterations of bootstrapping. Note: at some point this session will be converted to task grade agent, so think and create artifacts (rebuttable by practice) now; collect context using subagents." → `README.md`, `KERNEL0.md`, D1–D9.
 - 2026-11-12 (mid-build): "free model (deepseek v41 etc) are exactly same model that your task subagent is, just different billing. next task: assignment in file, launch cli see what will happen" → D10: the foreman layer of D3 is dropped. A slice is an assignment file under `bootstrap/assignments/`, executed directly by the OpenCode CLI on a free model (`opencode/deepseek-v4.1-flash-free#max`; on quota or context trouble `opencode-go/deepseek-v4.1-flash#max`), which reports into `bootstrap/reports/`. The orchestrator checks the stated acceptance itself and journals what happened. Event logs go to `~/.local/share/factory/bootstrap-runs/` (never git).
+- 2026-11-12 (session downgrade + schedule): "this session has been switched to task level model. opus / claude models no longer available till 5h claude expiry window at midnight. you can continue bootstrep preparation, use reviwer (would be muse, quite a smart model but not an opus), and simply wait being blocked by a task and launch first bootstapping step at midnight" → preparation continues on free/subscription models only (no Claude anywhere until the window); review work goes to Muse (D12); the first self-run launch waits for the Opus window at 2026-11-13 00:00 EST, and only after a green shakedown.
+- 2026-11-12 (reviewer model): "opencode-go muse-spark-1.3-contributor - hevily susidized by open code/contributor tier and make it perfect fit alongside deepseek. Deepseek and several good models (flash: glm/deepseek/mimo/minimax are available only through open code for free, but some rate limits)" → D12: review tier is `opencode-go/muse-spark-1.3-contributor`; the free tier is opencode-only with rate limits, so fallback chains name the same model on the contributor plan.
 
 ## Journal
 
@@ -78,3 +82,17 @@ Verbatim, newest last; each with what it changed.
 
 ### 2026-11-12 — CLI dispatch of S2, S3, S4 (D10)
 - Same model on two billing paths, to compare: S2 and S4 on `opencode/deepseek-v4.1-flash-free#max` (free tier, 200k context), S3 on `alibaba-token-plan/deepseek-v4.1-flash#max` (plan quota, 1M context). DOC1 already running on the free tier.
+
+### 2026-11-12 — DOC1 (ideology doc) — written by CLI, merged
+- `opencode/deepseek-v4.1-flash-free#max`, 476 s, 25 steps, 60 tool calls, exit 0, zero errors, zero cost. `docs/ideology.md` 149 lines (limit 120–180), 13 principle sections + rejected-list + glossary pointer, 114 file:line references, no TODOs. Mechanical check passed.
+- Review round: assignment `DOC1R` on `opencode/minimax-m3.1-flash-free` (different model, sees the document, not how it was written). `dispatch.sh` gained same-session follow-up (`SESSION` + `MESSAGE`) so review findings go back to the writer's session; review round on DOC1 will be the first test of that loop.
+- Merged as `cbc5b7f` before the review because nothing else touches `docs/`; findings will amend it.
+
+### 2026-11-12 — DOC1R review: verdict `changes`
+- `opencode/minimax-m3.1-flash-free`, 218 s, 17 steps, 26 tool calls, exit 0, zero cost. Read all 117 references mechanically: 107 ok, 10 failed (every citation resolves, but the cited line does not carry the claim — overstated Intent, invented mechanism, joined citation). Coverage complete; reader test names three real gaps (merge path absent, parked-work owner unnamed, no operator surface).
+- The writer's session resumed via `dispatch.sh` same-session follow-up (`SESSION` + `MESSAGE`) to amend `docs/ideology.md`.
+- Lesson (becomes D11 in the REV review assignment): a reviewer sees the artifact, not how it was written. Enforcement worked only because the reviewer was a different model in a clean worktree; same-model same-session self-review is not a substitute.
+
+### 2026-11-12 — session downgraded to task-grade; Opus window at midnight
+- No Claude/Opus models until 2026-11-13 00:00 EST. Preparation needs none: S2/S3/S4, INT, REV (Muse) and the free-model shakedown all run at zero/subscription cost. A wake job is scheduled for 00:00; the first self-run launch (goal-self, Opus architect) starts after it, and only on a green shakedown.
+- Reviewer from here on: `opencode-go/muse-spark-1.3-contributor`, 1M context (D12); REV assignment updated to name it.

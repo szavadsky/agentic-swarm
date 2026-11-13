@@ -1,5 +1,7 @@
 # REV — adversarial review of kernel-0
 
+Run on `opencode-go/muse-spark-1.3-contributor#xhigh` (D12). The reviewer model sees the artifact, never how it was written; self-review by the implementing model does not count.
+
 Worktree `/home/slava/aiexp/agentic-swarm.wt/rev`, branch `factory-v3-rev`. Rules: `bootstrap/assignments/RULES.md`, except: you change no code. Your only product is `bootstrap/reports/REV.md`, committed.
 
 ## Why
