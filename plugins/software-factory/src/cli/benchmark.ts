@@ -21,16 +21,10 @@ export interface BenchmarkReport {
   incidents: Array<{ label: string; count: number }>;
 }
 
-/** The incident classes `metrics.yaml` records; the benchmark row is their sum. */
-const INCIDENT_LABELS: Array<[keyof IncidentCounts, string]> = [
-  ["infraRetries", "infra retries"],
-  ["fallbackHops", "fallback hops"],
-  ["outcomeRepairs", "outcome-repair turns"],
-  ["mergeConflicts", "merge conflicts"],
-  ["mergedGateFailures", "merged-gate failures"],
-  ["roundLimitParks", "round-limit parks"],
+/** The incident classes `loopIncidents` counts; the row and its breakdown share them. */
+const LOOP_INCIDENT_LABELS: Array<[keyof IncidentCounts, string]> = [
   ["noProgressParks", "no-progress parks"],
-  ["budgetParks", "budget parks"],
+  ["emptyDiffParks", "empty-diff parks"],
 ];
 
 function mtok(tokens: number): string {
@@ -72,10 +66,6 @@ function wallText(ms: number | undefined): string {
   const minutes = Math.floor(ms / 60_000);
   const hours = Math.floor(minutes / 60);
   return hours > 0 ? `${hours} h ${minutes % 60} m` : `${minutes} m`;
-}
-
-function incidentTotal(totals: MetricsTotals): number {
-  return INCIDENT_LABELS.reduce((sum, [key]) => sum + totals.incidents[key], 0);
 }
 
 function readMetrics(text: string, metricsPath: string): GoalMetrics {
@@ -121,7 +111,7 @@ export async function benchmarkGoal(repo: string, goal: string): Promise<Benchma
     { metric: "cost", value: costText(totals.usage.costUsd, totals.unpricedTurns), unit: "USD" },
     { metric: "architect share", value: architectShare(totals), unit: "% of cost" },
     { metric: "cost per merged", value: costPerMerged(totals), unit: "USD/merged task" },
-    { metric: "loop incidents", value: String(incidentTotal(totals)), unit: "events" },
+    { metric: "loop incidents", value: String(totals.loopIncidents), unit: "events" },
     { metric: "human interventions", value: String(totals.humanInterventions), unit: "events" },
     { metric: "wall", value: wallText(wallMs(records)), unit: "h m" },
     { metric: "merged/parked", value: `${totals.merged.length} / ${totals.parked.length}`, unit: "tasks" },
@@ -132,7 +122,7 @@ export async function benchmarkGoal(repo: string, goal: string): Promise<Benchma
     goalDir: paths.goalDir,
     iterations: metrics.iterations.length,
     rows,
-    incidents: INCIDENT_LABELS.map(([key, label]) => ({ label, count: totals.incidents[key] })).filter(
+    incidents: LOOP_INCIDENT_LABELS.map(([key, label]) => ({ label, count: totals.incidents[key] })).filter(
       (entry) => entry.count > 0
     ),
   };
