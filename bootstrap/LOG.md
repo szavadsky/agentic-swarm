@@ -164,3 +164,8 @@ Verbatim, newest last; each with what it changed.
 - Merge into `factory-v3` needed `--no-ff` (bootstrap-only commits had landed meanwhile); no conflicts. Suite on the integration head: same 327 green.
 - Kernel-0 stands at 5.5k LOC in 33 files (largest 309 lines) — 3.7x the KERNEL0 guess, all of it wired and tested. Three honest gaps named with smallest next steps (journal.ndjson never written; implementer/reviewer sessions uncompacted; edited pending task reuses old branch) → seed backlog for the first self-run, not blockers.
 - REV dispatched on `opencode-go/muse-spark-1.3-contributor#xhigh` — the configured reviewer tier (D12/D17), first real test of muse as adversarial reviewer.
+
+### 2026-11-12 — REV (muse) verdict: do not launch yet; FIX dispatched
+- REV (`opencode-go/muse-spark-1.3-contributor#xhigh`): 55 steps / 108 tools, 2811 s, exit 0. First real muse run: the review is strong — 4 proven findings with repros (merge-crash sealer loses merged/parked distinction; infra ends the whole dispatch; red base written never read; no rogue-agent containment), a §5 suspected list, and verified passes (no unbounded loops, architect exactly 1/iteration, repair/round bounds all finite).
+- Triage: fix 1–4 + §5's gitignore/turnsUsed/empty-scope now (FIX.md on `opencode-go/deepseek-v4.1-flash#max`, bg_118); stall exit / $ brake / overflow path / taskHash / dedup / splits → factory self-run backlog. FIX acceptance includes the hostile shakedown as a test (red base + kill in the merge window), which is REV's required gate.
+- Muse as reviewer: validated. Findings are concrete (file:line + repro + smallest fix), the verdict is falsifiable, and §6–§8 show it checked what works too. D12 stands.
