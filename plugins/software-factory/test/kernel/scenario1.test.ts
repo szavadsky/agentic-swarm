@@ -124,12 +124,12 @@ function scriptPlanning(harness: FakeHarness, goalDir: string, taskDir: string):
   });
 }
 
-async function launch(repo: TmpRepo, harness: FakeHarness): Promise<void> {
+async function launch(repo: TmpRepo, harness: FakeHarness, expectedCode: number): Promise<void> {
   const code = await dispatch(
     ["run", "--repo", repo.dir, "--goal", "demo", "--iterations", "1"],
     { harnesses: { fake: harness } }
   );
-  expect(code).toBe(0);
+  expect(code).toBe(expectedCode);
 }
 
 async function runScenario(): Promise<void> {
@@ -137,7 +137,7 @@ async function runScenario(): Promise<void> {
   try {
     const first = newHarness();
     scriptPlanning(first, goalDir, path.join(goalDir, "tasks"));
-    await launch(repo, first);
+    await launch(repo, first, 3);
 
     let store = createFolderStore(goalDir);
     let state = derive(await store.listTasks(), await store.listRecords());
@@ -162,7 +162,7 @@ async function runScenario(): Promise<void> {
       ctx.writeOutcome(outcome({ summary: "goal met", decision: "done" }));
       return fakeTurnResult(req);
     });
-    await launch(repo, second);
+    await launch(repo, second, 0);
 
     store = createFolderStore(goalDir);
     const after = derive(await store.listTasks(), await store.listRecords());
