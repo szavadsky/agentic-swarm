@@ -149,7 +149,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
   const contained = await containmentSnapshot(runtime, ensured.path);
   let breach: string | undefined;
   const result = await runAgentTurn(runtime, {
-    role: target.role,
+    target,
     cwd: ensured.path,
     meta: {
       ...meta,

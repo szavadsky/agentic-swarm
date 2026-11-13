@@ -1,7 +1,8 @@
-import type { Harness, ModelRef, SessionRef, Stop } from "../harness/types.js";
+import type { ModelRef, SessionRef, Stop } from "../harness/types.js";
 import { addUsage } from "../harness/usage.js";
 import { contextPackRelPath, isPackTruncated } from "./context-pack.js";
 import { renderRolePrompt } from "./prompts.js";
+import type { RoleTarget } from "./flow-context.js";
 import {
   OutcomeInvalidError,
   failedOutcome,
@@ -14,9 +15,9 @@ import { DEFAULT_TIMEOUTS, type KernelRuntime, type Outcome, type RecordEnd, typ
 export { DEFAULT_TIMEOUTS } from "./types.js";
 
 export interface AgentTurnSpec {
-  role: string;
+  target: RoleTarget;
   cwd: string;
-  /** iteration/slug/step/round/taskHash/base; actor, alias, model are resolved here. */
+  /** iteration/slug/step/round/taskHash/base; actor, alias, model come from the target. */
   meta: Omit<RecordStart, "actor" | "alias" | "model">;
   vars: Record<string, string>;
   expectation: OutcomeExpectation;
@@ -41,38 +42,6 @@ export interface AgentTurnResult {
   text: string;
 }
 
-export interface ResolvedRoleAlias {
-  alias: string;
-  harness: Harness;
-  model: ModelRef;
-  effort?: string;
-  fallbacks?: string[];
-  timeouts?: { idleMs: number; wallMs: number };
-}
-
-/** Resolves a role to its run-config alias and harness; shared with the boundary. */
-export function resolveRoleAlias(runtime: KernelRuntime, role: string): ResolvedRoleAlias {
-  const roleConfig = runtime.configs.process.roles[role];
-  if (!roleConfig) throw new Error(`process config has no role "${role}"`);
-  const aliasName = roleConfig.alias ?? role;
-  const alias = runtime.configs.run.aliases[aliasName];
-  if (!alias) {
-    throw new Error(`run config has no alias "${aliasName}" (needed by role "${role}")`);
-  }
-  const harness = runtime.harnesses.get(alias.harness);
-  if (!harness) {
-    throw new Error(`no harness "${alias.harness}" registered for alias "${aliasName}"`);
-  }
-  return {
-    alias: aliasName,
-    harness,
-    model: { id: alias.model, ...(alias.effort ? { effort: alias.effort } : {}) },
-    effort: alias.effort,
-    fallbacks: alias.fallbacks,
-    timeouts: alias.timeouts,
-  };
-}
-
 /** Roles that run the boundary consult; only they see the iteration's pack. */
 const PACK_ROLES = new Set(["architect", "pm"]);
 
@@ -85,7 +54,7 @@ async function measurePack(
   runtime: KernelRuntime,
   spec: AgentTurnSpec
 ): Promise<{ bytes: number; truncated: boolean } | undefined> {
-  if (!PACK_ROLES.has(spec.role)) return undefined;
+  if (!PACK_ROLES.has(spec.target.role)) return undefined;
   const pack = await runtime.store.readFile(contextPackRelPath(spec.meta.iteration));
   if (pack === null) return undefined;
   return { bytes: Buffer.byteLength(pack, "utf8"), truncated: isPackTruncated(pack) };
@@ -117,7 +86,7 @@ function repairPrompt(outcomePath: string, findings: string[]): string {
  * so a crash leaves an orphan that `derive` redispatches.
  */
 export async function runAgentTurn(runtime: KernelRuntime, spec: AgentTurnSpec): Promise<AgentTurnResult> {
-  const { alias, harness, model, effort, fallbacks, timeouts: aliasTimeouts } = resolveRoleAlias(runtime, spec.role);
+  const { alias, harness, model, effort, fallbacks, timeouts: aliasTimeouts } = spec.target;
   const started = await runtime.store.startRecord({
     ...spec.meta,
     actor: "agent",
@@ -125,7 +94,7 @@ export async function runAgentTurn(runtime: KernelRuntime, spec: AgentTurnSpec):
     model,
   });
   const outcomePath = started.outcomePath;
-  const prompt = renderRolePrompt(runtime.prompts, runtime.configs.process, spec.role, {
+  const prompt = renderRolePrompt(runtime.prompts, runtime.configs.process, spec.target.role, {
     ...spec.vars,
     outcome_path: outcomePath,
   });

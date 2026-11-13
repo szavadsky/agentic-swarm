@@ -13,6 +13,7 @@ import {
 import { createFolderStore } from "../../src/kernel/store.js";
 import { FakeHarness } from "../../src/harness/fake/index.js";
 import type { Harness } from "../../src/harness/types.js";
+import { task } from "./helpers.js";
 
 const RUN_HEAD = `aliases:
   architect: { harness: fake, model: arch, effort: highest }
@@ -144,6 +145,37 @@ describe("pre-flight", () => {
     try {
       const err = await refusal({ ...f.input, binaries: { fake: undefined } });
       expect(err.findings).toContainEqual(expect.objectContaining({ key: "harness.fake" }));
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("refuses a task tier that names no alias, ignoring `default`", async () => {
+    const f = await fixture();
+    try {
+      await f.input.store.writeTask(task("escalated", { tier: "escalation" }));
+      await f.input.store.writeTask(task("plain", { tier: "default" }));
+      const err = await refusal(f.input);
+      const tierFindings = err.findings.filter((finding) => finding.key === "tier");
+      expect(tierFindings).toHaveLength(1);
+      expect(tierFindings[0]).toEqual(
+        expect.objectContaining({
+          file: path.join(f.input.store.tasksDir, "escalated.md"),
+          message: 'tier "escalation" names no run-config alias',
+        })
+      );
+      expect(err.report).toContain('tier "escalation" names no run-config alias');
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("accepts a tier that names a configured alias", async () => {
+    const f = await fixture(RUN_HEAD.replace("limits:", "  escalation: { harness: fake, model: esc }\nlimits:"));
+    try {
+      await f.input.store.writeTask(task("escalated", { tier: "escalation" }));
+      const result = await preflight(f.input);
+      expect(result.aliases.architect).toBe("max");
     } finally {
       f.repo.cleanup();
     }

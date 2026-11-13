@@ -1,5 +1,6 @@
 import path from "node:path";
-import { resolveRoleAlias, runAgentTurn } from "./agent.js";
+import { runAgentTurn } from "./agent.js";
+import { resolveRole, type RoleTarget } from "./flow-context.js";
 import { DEFAULT_ROLE_BY_STEP, costText, rolesByStep } from "./metrics.js";
 import { pricedUsage, type PriceTable } from "./pricing.js";
 import type { KernelRuntime, StepRecord } from "./types.js";
@@ -143,11 +144,11 @@ export async function writeLaunchDigest(
   // The scout is observability: without a digest alias the derived table below
   // is the whole digest, and the launch must not fail. Check by presence, not
   // by throwing — pre-flight deliberately does not require a digest alias.
-  let scout = true;
+  let scoutTarget: RoleTarget | undefined;
   try {
-    resolveRoleAlias(runtime, "digest");
+    scoutTarget = resolveRole(runtime, "digest");
   } catch {
-    scout = false;
+    scoutTarget = undefined;
   }
   const rel = `iterations/${iteration}/digest.md`;
   const digestPath = path.join(runtime.store.goalDir, rel);
@@ -164,10 +165,10 @@ export async function writeLaunchDigest(
     )
   );
 
-  if (scout) {
+  if (scoutTarget) {
     try {
       await runAgentTurn(runtime, {
-        role: "digest",
+        target: scoutTarget,
         cwd: runtime.paths.goalCheckout,
         meta: { iteration, step: "digest", round: 1 },
         vars: {

@@ -5,6 +5,7 @@ import path from "node:path";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { Repo } from "../../src/core/git/repo.js";
 import { runAgentTurn } from "../../src/kernel/agent.js";
+import { resolveRole } from "../../src/kernel/flow-context.js";
 import { renderContextPack } from "../../src/kernel/context-pack.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import { loadPrompts } from "../../src/kernel/prompts.js";
@@ -89,7 +90,7 @@ describe("agent turn outcome delivery", () => {
     });
 
     const result = await runAgentTurn(runtime, {
-      role: "architect",
+      target: resolveRole(runtime, "architect"),
       cwd: root,
       meta: { iteration: 1, step: "architect", round: 1 },
       vars,
@@ -112,7 +113,7 @@ describe("agent turn outcome delivery", () => {
     fake.script((req) => fakeTurnResult(req, { text: "still nothing" }));
 
     const result = await runAgentTurn(runtime, {
-      role: "architect",
+      target: resolveRole(runtime, "architect"),
       cwd: root,
       meta: { iteration: 1, step: "architect", round: 1 },
       vars,
@@ -134,7 +135,7 @@ describe("agent turn outcome delivery", () => {
     fake.script((req) => fakeTurnResult(req, { stop: { kind: "infra", cause: "quota" } }));
 
     const result = await runAgentTurn(runtime, {
-      role: "architect",
+      target: resolveRole(runtime, "architect"),
       cwd: root,
       meta: { iteration: 1, step: "architect", round: 1 },
       vars,
@@ -158,7 +159,7 @@ describe("agent turn outcome delivery", () => {
         return fakeTurnResult(req);
       });
       return runAgentTurn(runtime, {
-        role: "architect",
+        target: resolveRole(runtime, "architect"),
         cwd: root,
         meta: { iteration: 1, step: "architect", round: 1 },
         vars,
@@ -230,7 +231,7 @@ describe("agent turn prompt size", () => {
     });
 
     const result = await runAgentTurn(runtime, {
-      role: "implementer",
+      target: resolveRole(runtime, "implementer"),
       cwd: root,
       meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
       vars: implementerVars,
@@ -258,7 +259,7 @@ describe("agent turn prompt size", () => {
       return fakeTurnResult(req);
     });
     const architect = await runAgentTurn(runtime, {
-      role: "architect",
+      target: resolveRole(runtime, "architect"),
       cwd: root,
       meta: { iteration: 1, step: "architect", round: 1 },
       vars,
@@ -272,7 +273,7 @@ describe("agent turn prompt size", () => {
       return fakeTurnResult(req);
     });
     const pm = await runAgentTurn(runtime, {
-      role: "pm",
+      target: resolveRole(runtime, "pm"),
       cwd: root,
       meta: { iteration: 1, step: "pm", round: 1 },
       vars: pmVars,
@@ -296,7 +297,7 @@ describe("agent turn prompt size", () => {
     });
 
     const result = await runAgentTurn(runtime, {
-      role: "architect",
+      target: resolveRole(runtime, "architect"),
       cwd: root,
       meta: { iteration: 1, step: "architect", round: 1 },
       vars,

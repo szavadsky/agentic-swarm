@@ -7,6 +7,7 @@ import { recordedBaseGates } from "./baseline.js";
 import { contextPackRelPath, forwardedConcerns, renderContextPack, shallowCodeMap } from "./context-pack.js";
 import { derive } from "./derive.js";
 import { writeLaunchDigest } from "./digest.js";
+import { resolveRole } from "./flow-context.js";
 import { integrationHead } from "./worktree.js";
 import {
   formatSteers,
@@ -117,7 +118,7 @@ export async function runBoundary(
   const session = await resumableSession(runtime, records);
 
   const result = await runAgentTurn(runtime, {
-    role: "architect",
+    target: resolveRole(runtime, "architect"),
     cwd: runtime.paths.goalCheckout,
     meta: { iteration, step: "architect", round: 1 },
     vars: {

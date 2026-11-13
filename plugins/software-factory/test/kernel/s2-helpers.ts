@@ -19,7 +19,16 @@ export interface FlowRepoOptions {
   limits?: Record<string, unknown>;
   /** Model id -> USD per Mtok, for harnesses that report no cost. */
   prices?: Record<string, ModelPrice>;
-  aliases?: Record<string, { harness: string; model: string; effort?: string }>;
+  aliases?: Record<
+    string,
+    {
+      harness: string;
+      model: string;
+      effort?: string;
+      fallbacks?: string[];
+      timeouts?: { idleMs: number; wallMs: number };
+    }
+  >;
   goal?: string;
   /** `.factory/repo.yaml` identity for commits the engine authors. */
   identity?: { name: string; email: string };

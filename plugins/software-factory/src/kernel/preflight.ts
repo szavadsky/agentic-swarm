@@ -126,6 +126,17 @@ export async function preflight(input: PreflightInput): Promise<PreflightResult>
     }
   }
 
+  // A task tier names a run-config alias directly; an escalated task that names
+  // one the run config lacks would fail only mid-turn, after the plan spent.
+  for (const task of await store.listTasks()) {
+    if (!task.tier || task.tier === "default" || configs.run.aliases[task.tier]) continue;
+    findings.push({
+      file: path.join(store.tasksDir, `${task.slug}.md`),
+      key: "tier",
+      message: `tier "${task.tier}" names no run-config alias`,
+    });
+  }
+
   const usedHarnesses = new Set<string>();
   for (const alias of Object.values(configs.run.aliases)) usedHarnesses.add(alias.harness);
   const architectAlias = roleAlias(configs.process, "architect");

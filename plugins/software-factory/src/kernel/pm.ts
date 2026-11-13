@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { writeTextAtomic } from "../core/records/io.js";
 import { runAgentTurn } from "./agent.js";
+import { resolveRole } from "./flow-context.js";
 import { materialHash, parseTaskFile, validateTaskGraph, TaskFileError } from "./tasks.js";
 import { appendCancel, scriptMeta } from "./record.js";
 import type { KernelRuntime, Outcome, State, StepRecord, TaskFile } from "./types.js";
@@ -180,6 +181,7 @@ export async function runPm(
     ? fs.readFileSync(opts.planPath, "utf8")
     : "";
   const taskSnapshot = await readTaskTexts(runtime);
+  const target = resolveRole(runtime, "pm");
 
   const ask = async (
     repair: string,
@@ -188,7 +190,7 @@ export async function runPm(
   ): Promise<Outcome | undefined> => {
     const { tasks } = parseTasks(await readTaskTexts(runtime));
     const result = await runAgentTurn(runtime, {
-      role: "pm",
+      target,
       cwd: opts.cwd,
       meta: { iteration: opts.iteration, step: "pm", round: 1 },
       vars: {

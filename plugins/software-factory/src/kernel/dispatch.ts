@@ -188,15 +188,15 @@ export async function runDispatch(
         }
         if (agentCount() >= runtime.limits.concurrency) continue;
         const target = stepTarget(runtime, task, taskState, action.step);
-        const limit = runtime.limits.perHarness[target.harnessId];
+        const limit = runtime.limits.perHarness[target.harness.id];
         if (limit !== undefined) {
           const onHarness = [...running.values()].filter(
-            (r) => r.agent && r.harnessId === target.harnessId
+            (r) => r.agent && r.harnessId === target.harness.id
           ).length;
           if (onHarness >= limit) continue;
         }
         if (overlapsRunning(task.scope, running)) continue;
-        start(action, taskState, task, true, target.harnessId);
+        start(action, taskState, task, true, target.harness.id);
         continue;
       }
 
