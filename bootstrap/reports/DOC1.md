@@ -2,33 +2,36 @@
 
 ## Files changed
 
-- `docs/ideology.md` (new, 149 lines): five-line opening; 13 principle sections, each with Principle / Why / In the system / Forbids; "What was rejected and why"; a link to the manifesto glossary.
-- `bootstrap/reports/DOC1.md` (new, this report).
+- `docs/ideology.md` (149 lines): five-line opening; 13 principle sections, each with Principle / Why / In the system / Forbids; "What was rejected and why"; a link to the manifesto glossary. Amended after DOC1R.
+- `bootstrap/reports/DOC1.md` (this report).
+- No shared files changed.
+
+## DOC1R findings
+
+- F1 — fixed: dropped the unsourced mid-iteration-context sentence; the paragraph now ends on the cited $5.22 and 141,337-token facts.
+- F2 — fixed: the principle now says consults are batched to the boundary and a mid-iteration consult is the measured exception (`manifesto.md:17`; `manifesto.md:19`; `manifesto.md:26`), with no flat prohibition.
+- F3 — fixed: the capability rule now adds `manifesto.md:39` and `manifesto.advice.md:145` to the ACP/native-interface citations.
+- F4 — fixed: `upscope` now cites `manifesto.md:13` and `manifesto.advice.md:195`, not the status union.
+- F5 — fixed: the v2 hard-cap incident moved into Forbids; Why now names the wrong-authority failure without misattributing `bootstrap/context/repo-map.md:109`.
+- F6 — fixed: the handoff/rebuild claim now cites `manifesto.md:29` and `manifesto.md:30`.
+- F7 — fixed: the principle now says only "aggregated idempotently from artifacts" (`manifesto.md:33`); KERNEL0's stronger "never stored" invariant stays in In the system.
+- F8 — fixed: the forwarding criterion now cites `manifesto.md:42-44`.
+- F9 — fixed: the subarchitect-summary claim now cites both `manifesto.md:38` and `manifesto.md:33`.
+- F10 — fixed: the closing bullet now cites `manifesto.advice.md:325` for v2's six counters and `manifesto.md:99` for the compounding rule.
+- F11 — fixed: "human or reviewer" → "architect and reviewer" (`manifesto.md:22`).
+- F12 — kept, exception stated: KERNEL0 is cited only for named kernel mechanisms and invariants (`TaskStatus`, derived state, merge/park, on-disk layout); every number and incident still comes from `manifesto.md`, `manifesto.advice.md`, or `bootstrap/context/*.md`.
+
+## Reader test
+
+- Merge path — fixed: added one serial merge queue, gate-on-merged-result, and park-on-red (`manifesto.advice.md:269`; `bootstrap/KERNEL0.md:122`).
+- Parked-work owner — fixed: added parked-is-terminal and architect continuation through a new slug (`bootstrap/KERNEL0.md:103`).
+- Operator surface — fixed: added the `.factory/repo.yaml` / process / run config layout and the goal-directory contents (`bootstrap/KERNEL0.md:89-93`).
 
 ## Verified
 
 - `wc -l docs/ideology.md` → 149 (assignment range 120–180).
-- Placeholder-marker search in `docs/ideology.md` (`rg` for the two assignment tokens) → no output (exit 1).
 - 13 principle headings and 52 labelled parts (13 × 4), checked with `rg` counts.
-- Every `file:line` reference was extracted and each cited line printed and read; all resolve and say what is claimed. Factual references are confined to `manifesto.md`, `manifesto.advice.md`, and `bootstrap/context/repo-map.md`; `bootstrap/KERNEL0.md` is cited only for named mechanisms and invariants (`upscope`, `TaskStatus`, derived state).
-- `bun run typecheck` → green.
-- `bun test` → 238 pass, 0 fail, 938 expects, 37 files, 17.19 s.
-- `git diff --check` before commit → clean.
-
-## Deviations and choices
-
-- No deviation from KERNEL0. The assignment exempts code rules; I ran typecheck and tests anyway, since they were cheap and green.
-- Read the opening as five physical lines, one sentence each.
-- The manifesto does not say "state is never stored"; Intent requires idempotent aggregation (manifesto.md:33), and the document names KERNEL0's stronger invariant explicitly instead of presenting it as Intent.
-- Glossary link is `../manifesto.md#n19-glossary--decided`; the anchor follows GitHub's em-dash slug. If the site renders anchors differently, link to `../manifesto.md` instead.
-- No shared files changed.
-
-## Next
-
-- Owner review of the 13-section partition and the rejected-traits evidence lines.
-- Link the document from a docs index or README when an owner of that file exists; DOC1 owns only `docs/ideology.md`.
-
-## Surprises
-
-- The last v2 run's review signal was weak in the direction the funnel needs: 5/5 failed items had approved reviews (`bootstrap/context/repo-map.md:107`), so clean code as a result is not a footnote to the review flow.
-- Most architect spend was ceremony, not plans (`manifesto.advice.md:20-21`), which makes the iteration boundary the highest-leverage rule in the document.
+- Reference audit: 127 occurrences, 85 unique, 0 failed after the fixes; every cited line was opened and read against its claim.
+- Placeholder-marker search in `docs/ideology.md` → no output (exit 1).
+- `bun run typecheck` → green; `bun test` → 243 pass, 2 skip, 0 fail, 921 expects, 43 files, 20.99 s.
+- `git diff --check` → clean.
