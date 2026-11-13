@@ -225,4 +225,27 @@ describe("createFolderStore", () => {
     expect(records).toHaveLength(1);
     expect(records[0]!.outcome).toEqual(rewritten);
   });
+
+  it("survives a truncated agent-written outcome.yaml (rehydrates without outcome)", async () => {
+    const store = createFolderStore(goalDir);
+    const turn = await store.startRecord(start());
+    // Truncated JSON mid-string, as a cut-off reviewer turn leaves it.
+    await fs.promises.writeFile(
+      path.join(turn.dir, "outcome.yaml"),
+      '{\n  "status": "done",\n  "summary": "Deletions match the done-when exactly (docs/adr 22 files, docs/factory'
+    );
+    const records = await store.listRecords();
+    expect(records).toHaveLength(1);
+    expect(records[0]!.outcome).toBeUndefined();
+    expect(records[0]!.seq).toBe(turn.meta.seq);
+  });
+
+  it("degrades a torn end.yaml to an orphan instead of throwing", async () => {
+    const store = createFolderStore(goalDir);
+    const turn = await store.startRecord(start());
+    await fs.promises.writeFile(path.join(turn.dir, "end.yaml"), "stop: {kind: [unclosed\n");
+    const records = await store.listRecords();
+    expect(records).toHaveLength(1);
+    expect(records[0]!.stop).toBeUndefined();
+  });
 });

@@ -186,17 +186,20 @@ class FolderStore implements ArtifactStore {
       }
       if (!isPlainObject(started) || typeof started.seq !== "number") continue;
       const base = started as unknown as StepRecord;
+      // end.yaml is script-written but a torn write must degrade to an orphan,
+      // never kill the launch; outcome.yaml is agent-written and may be
+      // truncated or malformed — the turn's repair flow owns that, not rehydration.
       let end: RecordEnd & { endedAt?: string } = {};
       try {
         end = (await readYaml(path.join(dir, "end.yaml"))) as RecordEnd & { endedAt?: string };
       } catch (err) {
-        if (!isENOENT(err)) throw err;
+        if (!isENOENT(err) && !(err instanceof Error && err.name === "YAMLParseError")) throw err;
       }
       let outcome: Outcome | undefined;
       try {
         outcome = (await readYaml(path.join(dir, "outcome.yaml"))) as Outcome;
       } catch (err) {
-        if (!isENOENT(err)) throw err;
+        if (!isENOENT(err) && !(err instanceof Error && err.name === "YAMLParseError")) throw err;
       }
       records.push({ ...base, ...end, ...(outcome ? { outcome } : {}) });
     }
