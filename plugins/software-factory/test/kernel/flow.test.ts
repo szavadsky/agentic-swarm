@@ -4,6 +4,7 @@ import path from "node:path";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
+import { writeIterationSummary } from "../../src/kernel/summary.js";
 import { task } from "./helpers.js";
 import {
   cleanupFlowRepo,
@@ -83,6 +84,89 @@ describe("flow data drives the steps", () => {
       expect(checks[0]!.seq).toBeGreaterThan(steps[1]!.seq);
       expect(checks[0]!.seq).toBeLessThan(steps[2]!.seq);
       expect(repo.git(["show", "factory/demo:task.txt"]).stdout.trim()).toBe("polished");
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+});
+
+describe("just-implement", () => {
+  it("merges after gates with zero reviewer turns and keeps the implementer's debt", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script((req, ctx) => {
+        fs.writeFileSync(path.join(req.cwd!, "task.txt"), "done\n", "utf8");
+        ctx.writeOutcome(
+          outcome({
+            summary: "implemented directly",
+            concerns: [{ kind: "debt", calibration: "architect", text: "retry policy is untested" }],
+          })
+        );
+        return fakeTurnResult(req);
+      });
+
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("task", { flow: "just-implement", scope: ["task.txt"] }));
+      const result = await runDispatch(runtime, { iteration: 1 });
+      expect(result.reason).toBe("boundary");
+
+      const records = await runtime.store.listRecords();
+      const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+      expect(state.tasks.task!.status).toBe("merged");
+      expect(state.tasks.task!.phase).toBe("done");
+      expect(harness.calls.length).toBe(1);
+      expect(records.filter((r) => r.slug === "task" && r.step === "review")).toEqual([]);
+      expect(records.some((r) => r.slug === "task" && r.step === "debt")).toBe(false);
+      expect(records.filter((r) => r.slug === "task" && r.step === "checks").length).toBe(1);
+      expect(records.filter((r) => r.slug === "task" && r.step === "merge-checks").length).toBe(1);
+      expect(records.filter((r) => r.slug === "task" && r.step === "merge" && r.ok === true).length).toBe(1);
+
+      await writeIterationSummary(runtime.store, {
+        iteration: 1,
+        state,
+        records,
+        status: "in-progress",
+      });
+      const summary = fs.readFileSync(path.join(runtime.store.goalDir, "iterations/1/summary.md"), "utf8");
+      expect(summary).toMatch(/## Debt opened\n- task: retry policy is untested/);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("parks after a red merged gate and lets one gate-fix turn run first", async () => {
+    const { repo, goal } = setupFlowRepo({
+      // Passes on the task branch, fails on the detached merge scratch: the
+      // task's own gates are green while the merged-result gate is red.
+      gates: [{ id: "branch-only", command: "git symbolic-ref -q --short HEAD" }],
+    });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script((req, ctx) => {
+        fs.writeFileSync(path.join(req.cwd!, "task.txt"), "v1\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "v1" }));
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        fs.writeFileSync(path.join(req.cwd!, "task.txt"), "v2\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "v2" }));
+        return fakeTurnResult(req);
+      });
+
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("task", { flow: "just-implement", scope: ["task.txt"] }));
+      const result = await runDispatch(runtime, { iteration: 1 });
+      expect(result.reason).toBe("boundary");
+
+      const records = await runtime.store.listRecords();
+      const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+      expect(state.tasks.task!.status).toBe("parked");
+      expect(state.tasks.task!.cause).toContain("gates: branch-only");
+      expect(state.tasks.task!.round).toBe(1);
+      expect(harness.calls.length).toBe(2);
+      expect(records.filter((r) => r.slug === "task" && r.step === "merge" && r.ok === false).length).toBe(2);
+      expect(records.filter((r) => r.slug === "task" && r.step === "review")).toEqual([]);
     } finally {
       cleanupFlowRepo(repo);
     }

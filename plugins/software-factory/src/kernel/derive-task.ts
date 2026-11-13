@@ -18,6 +18,10 @@ export const DEFAULT_FLOWS: Record<string, FlowDefinition> = {
       { id: "review", role: "reviewer", review: true },
     ],
   },
+  "just-implement": {
+    reviewRounds: 2,
+    steps: [{ id: "implement", role: "implementer" }],
+  },
   spike: {
     reviewRounds: 1,
     steps: [

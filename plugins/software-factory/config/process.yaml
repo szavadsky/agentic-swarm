@@ -8,6 +8,10 @@ flows:
       - id: review
         role: reviewer
         review: true
+  just-implement:
+    steps:
+      - id: implement
+        role: implementer
   spike:
     reviewRounds: 1
     steps:

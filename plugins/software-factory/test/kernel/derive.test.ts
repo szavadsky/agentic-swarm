@@ -164,6 +164,34 @@ describe("derive", () => {
     expect(state.tasks.a!.phase).toBe("implement");
   });
 
+  it("merges a review-less flow without a review and parks after repeated red merge gates", () => {
+    const tasks = [task("a", { flow: "just-implement" })];
+    const merging = derive(tasks, [implement(1), doneCheck(2)]);
+    expect(merging.tasks.a!.phase).toBe("merge");
+    expect(merging.tasks.a!.round).toBe(1);
+
+    const fixed = derive(tasks, [
+      implement(1),
+      doneCheck(2),
+      script(3, { step: "merge", ok: false, cause: "gates: unit" }),
+    ]);
+    expect(fixed.tasks.a!.phase).toBe("implement");
+    expect(fixed.tasks.a!.round).toBe(1);
+    expect(fixed.tasks.a!.gateFix).toBe(true);
+
+    const parked = derive(tasks, [
+      implement(1),
+      doneCheck(2),
+      script(3, { step: "merge", ok: false, cause: "gates: unit" }),
+      implement(4),
+      doneCheck(5),
+      script(6, { step: "merge", ok: false, cause: "gates: unit" }),
+    ]);
+    expect(parked.tasks.a!.phase).toBe("parked");
+    expect(parked.tasks.a!.park).toContain("gates: unit");
+    expect(parked.tasks.a!.round).toBe(1);
+  });
+
   it("derives a park request for a failed attempt instead of retrying it", () => {
     const state = derive([task("a")], [
       implement(1, 1, { outcome: { status: "failed", summary: "tests red", concerns: [], forward: [] } }),
