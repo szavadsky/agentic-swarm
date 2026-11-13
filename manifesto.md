@@ -83,7 +83,7 @@ Modern harnesses deliver a decent story (several hundred lines of code). The age
 ### Harness agnosticism
 - Works through any acp-compatible harness with opaque config passed at launch (command-line args, env, or config files depending on the harness). omp is a special case that simplifies things, not a dependency; extra tools exposable through ACP. Supported and tested during bootstrapping: omp, OpenCode, codex, pi — with harness rotation across iterations so no harness-specific assumption survives untested.
 - Each harness has a role it is best at, discovered during bootstrapping and recorded in run configs, not in code: pi is the recommended task-flow implementer (minimal, great at the single task); omp and OpenCode fit spikes better out of the shelf, where subagent expansion matters; omp carries structured output in the orchestration folder, with LSP configured for YAML/JSON there (other harnesses' LSP support is unverified).
-- Resilience and fallbacks are important. omp provides model fallbacks; fallback across harnesses (e.g. an OpenCode free model → OpenCode Go through omp) is nice to have.
+- Harness adapters: a custom adapter only when the harness offers substantially more than ACP exposes (omp is that case: RPC, yield, compaction, overlays). Otherwise drive the harness through acpx, or at worst plain ACP — never a bespoke CLI wrapper for what the protocol already covers.
 
 ### Operating assumptions
 - The entire factory is assumed to run inside a sandbox (e.g. bubblewrap); this is documented, not enforced. Sandboxing individual harnesses can come in a subsequent iteration.
