@@ -193,3 +193,8 @@ Verbatim, newest last; each with what it changed.
 - Metrics: 10 agent + 18 script turns; tokens in 406k / cached 5.7M / out 57k / reasoning 128k; cost not reported (usage records lack cost from opencode-go — S4 metrics gap, backlog).
 - Deviation noted: shakedown ran on subsidized models, not free (free tier quota-exhausted). D4's "free-model architect" shakedown is unproven; the plan-quota run is the evidence we have.
 - Phase D (self-run, goal-self, Opus architect) is unblocked for the midnight window.
+
+### 2026-11-13 — phase D: self-run iteration 1 launched (bg_120)
+- Opus window verified live (`OPUS_OK` via omp). Pin `29936476b4b7` (335 green). Goal `self` in the v3 worktree, intent = manifesto + delta; repo config committed (`7bdc277`) with setup + typecheck/test gates on `plugins/software-factory`.
+- Run config `self.yaml`: architect Opus 5.5 high via omp (fallback go-deepseek), implementer free deepseek → go-deepseek, reviewer free minimax → go-deepseek, PM/digest beam-free → go-deepseek, escalation Sonnet, scouts pinned go-deepseek.
+- Escalation rule in force: stop and ask if this launch's architect cost exceeds $5.
