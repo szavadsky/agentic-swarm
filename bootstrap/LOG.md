@@ -250,3 +250,7 @@ Verbatim, newest last; each with what it changed.
 - 65 min, exit 3. Merged: acpx-session-loss, harness-hygiene, benchmark-kit (bench reset script + target-repo.yaml + run/benchmark.yaml now exist). Spike: hierarchy-probe. Parked: prune-checks (still), tier-escalation (still), +2 empty-diff (prune-checks-types, turn-target — the latter's diagnosis unified the resolver anyway). Pending 16.
 - turn-target's debt note claiming acpx-preflight.test.ts still reads bootstrap/ is stale — the inlined fix is in the tree and the export gate passes. No action.
 - Debt worth naming: benchmark-kit confirms the preflight-probe-* prefix collides with test-helper purges (my hour-cutoff is a band-aid; real fix = rename the scratch prefix in baseline.ts) → factory task. Merged clean (`9929a99`), promoting, iteration 10 running (bg_133).
+
+### 2026-11-13 — iteration 10: 0 merged, PM failed 2nd time → promoted to deepseek
+- 12 min, $1.99, status blocked-by-user. Architect diagnosed the iteration-9 empty-diff parks: `base:` continuations branch from stale tips lacking gates.sh → exit 127 → misclassified as empty-diff. Planned `turn-land`/`prune-checks-land` (merge kept branches, not `base:`) + `parked-base-sync` fix. PM failed identically to iteration 6 (beam-free, done, no outcome after repair).
+- Second beam PM failure → promoted per the logged rule: PM alias is now `opencode-go/deepseek-v4.1-flash#high` (fallback free deepseek). Digest stays beam (it succeeds). Committed (`12e46c8`), promoted, iteration 11 running (bg_135).
