@@ -56,6 +56,7 @@ Verbatim, newest last; each with what it changed.
 - 2026-11-12 (harness roles): "to be clear: omp, codex, pi, and open code are configured to use open code go subscription, omp furher configured to use claude sub. I forgot to mention that pi shall also be supported and tested by harness rotation during boostrapping change manifesto how to build moreover, I recommend to use pi as task flow implementer harness (minimal and great). Not so gret for spikes without adding a subagent expension, omp/opencode might be better of the shelf as spikes more likely to use spikes. omp is also great for any structured output in orchestration folder, lsp must be configured for yaml/json there, not sure if other harnesses support. add to manifest." → D18 + manifesto edit (Harness agnosticism + Bootstrap models/harness, committed on main as `ebb2808`, synced to factory-v3 as `6d64b74`).
 - 2026-11-12 (adapter policy): "note: custom harness adapter only if harness support way more then though acp (like omp), otherwise acpx or at least acp" → D19 + manifesto line (main `d10f5bb`, synced to factory-v3). Consequence: pi/codex adapters are acpx/ACP work, not CLI-wrapper work; the pi probe must check ACP/acpx support first.
 - 2026-11-13 (beam effort): "one minor for next launch: beam free shall be with max effort" → all `beam-free` aliases run at `effort: max` (verified variant exists on both opencode and opencode-go). Applied to `self.yaml` (digest) and `self-acpx.yaml` (pm/digest/implementer) in `f7e93f7`; takes effect from iteration 12 (iteration 11 already launched on the previous config).
+- 2026-11-13 (PM retry ladder): "also PM failues shall be deterministically retried and escalated to higher model witrh broader mandate by factory" → steered via mailbox (`steer-pm-ladder.md`): kernel-owned ladder — deterministic de-novo retry with restated contract, then escalation to a higher tier with broader mandate (may block with a precise architect question), top-tier double failure blocks with trace. The hand promotion of PM to deepseek stands as the run-config state; the ladder removes the owner from the next occurrence.
 ## Journal
 
 ### 2026-11-12 — context collection
@@ -258,3 +259,6 @@ Verbatim, newest last; each with what it changed.
 
 ### 2026-11-13 — beam-free at max effort (owner steer)
 - Every remaining beam alias (digest in self.yaml; pm/digest/implementer in self-acpx.yaml) now sets `effort: max`. No code change, no re-promote needed (run config is read at launch); iteration 11 is unaffected (already running), iteration 12 picks it up.
+
+### 2026-11-13 — PM retry ladder steered (owner steer)
+- The factory now owes the ladder as a kernel feature (retry de-novo → escalate tier → block with trace), planned by the architect at the next boundary that reads the inbox. My `12e46c8` promotion stays; iteration 11 tests whether deepseek PM holds.
