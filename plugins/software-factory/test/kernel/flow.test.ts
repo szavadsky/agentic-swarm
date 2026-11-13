@@ -174,7 +174,7 @@ describe("just-implement", () => {
 });
 
 describe("fix-round follow-up modes", () => {
-  it("same-session resumes the compacted implementer session", async () => {
+  it("same-session resumes the session compacted at the end of its turn", async () => {
     const { repo, goal } = setupFlowRepo();
     try {
       const harness = new FakeHarness({ id: "fake" });
@@ -183,16 +183,28 @@ describe("fix-round follow-up modes", () => {
       await writeTask(runtime, task("task", { scope: ["task.txt"] }));
       await runDispatch(runtime, { iteration: 1 });
 
-      expect(harness.compactions.length).toBe(1);
-      const fix = harness.calls[2]!;
       const records = await runtime.store.listRecords();
-      const firstImplement = records
+      const implement = records
         .filter((r) => r.slug === "task" && r.step === "implement")
-        .sort((a, b) => a.seq - b.seq)[0];
-      expect(fix.session?.id).toBe(firstImplement?.session?.id);
+        .sort((a, b) => a.seq - b.seq);
+      const review = records
+        .filter((r) => r.slug === "task" && r.step === "review")
+        .sort((a, b) => a.seq - b.seq);
+      // Each settled turn compacts its own session; the fix turn's resume adds
+      // none because the ref it resumes is already compacted.
+      expect(harness.compactions.map((c) => c.id)).toEqual([
+        implement[0]!.session!.id,
+        review[0]!.session!.id,
+        implement[1]!.session!.id,
+        review[1]!.session!.id,
+      ]);
+      expect(implement.map((r) => r.session?.compacted)).toEqual([true, true]);
+      expect(review.map((r) => r.session?.compacted)).toEqual([true, true]);
+
+      const fix = harness.calls[2]!;
+      expect(fix.session?.id).toBe(implement[0]?.session?.id);
       expect(fix.session?.compacted).toBe(true);
-      const implementRecords = records.filter((r) => r.slug === "task" && r.step === "implement");
-      expect(implementRecords.map((r) => r.alias)).toEqual(["implementer", "implementer"]);
+      expect(implement.map((r) => r.alias)).toEqual(["implementer", "implementer"]);
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -209,7 +221,6 @@ describe("fix-round follow-up modes", () => {
       await writeTask(runtime, task("task", { scope: ["task.txt"] }));
       await runDispatch(runtime, { iteration: 1 });
       expect(harness.calls[2]!.session).toBeUndefined();
-      expect(harness.compactions.length).toBe(0);
     } finally {
       cleanupFlowRepo(repo);
     }

@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { Harness, ModelRef, SessionRef } from "../harness/types.js";
+import { portable, type Harness, type ModelRef, type SessionRef } from "../harness/types.js";
 import { preexistingRed, recordedBaseGates } from "./baseline.js";
 import { formatFailingChecks, newGateFailures } from "./gates.js";
 import { formatConcerns } from "./record.js";
@@ -119,7 +119,7 @@ export function stepTarget(runtime: KernelRuntime, task: TaskFile, state: TaskSt
   return resolveRole(runtime, stepRole(runtime, task, state, stepId), step.review ? undefined : task.tier);
 }
 
-/** Resume + compact the last session for this alias in this worktree. */
+/** Resume the last session for this alias when it is portable to the alias's harness. */
 export async function resumeSessionFor(
   runtime: KernelRuntime,
   task: TaskFile,
@@ -133,16 +133,30 @@ export async function resumeSessionFor(
     .at(-1)?.session;
   if (!prior) return undefined;
   if (path.resolve(prior.cwd) !== path.resolve(worktree)) return undefined;
-  if (prior.compacted) return prior;
-  const harness = runtime.harnesses.get(prior.harness);
-  if (!harness) return prior;
-  try {
-    const caps = await harness.caps(prior.model);
-    if (caps.compact !== "none" && harness.compact) return await harness.compact(prior);
-  } catch {
-    // Cache hygiene only; an uncompacted resume is still a valid session.
-  }
+  // The alias may route elsewhere now (rotation, a changed run config): a
+  // session is only portable to the harness that recorded it. Compaction is not
+  // done here — a session is compacted by the turn that ended it.
+  if (!portable(prior.harness, aliasHarness(runtime, alias))) return undefined;
   return prior;
+}
+
+function aliasHarness(runtime: KernelRuntime, alias: string): string {
+  const configured = runtime.configs.run.aliases[alias];
+  if (!configured) throw new Error(`run config has no alias "${alias}"`);
+  return configured.harness;
+}
+
+/** Compaction is cache hygiene, not a gate; a failure keeps the uncompacted ref. */
+export async function compactSession(runtime: KernelRuntime, session: SessionRef): Promise<SessionRef | undefined> {
+  const harness = runtime.harnesses.get(session.harness);
+  if (!harness?.compact) return undefined;
+  try {
+    const caps = await harness.caps(session.model);
+    if (caps.compact === "none") return undefined;
+    return await harness.compact(session);
+  } catch {
+    return undefined;
+  }
 }
 
 export async function followUpSession(

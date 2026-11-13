@@ -21,6 +21,7 @@ import {
 } from "./worktree.js";
 import {
   checksDue,
+  compactSession,
   findStep,
   firstBase,
   flowOf,
@@ -165,10 +166,16 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
     vars,
     expectation: step.review ? "review" : "any",
     session,
-    settle: async () => {
+    settle: async (_record, outcome, live) => {
       breach = await containmentViolation(runtime, ensured.path, ensured.branch, contained);
       if (breach) return { ok: false, cause: `containment: ${breach}` };
-      return commitStep(runtime, meta, ensured.path, `factory: ${task.slug} ${step.id} r${state.round}`);
+      const settled = await commitStep(runtime, meta, ensured.path, `factory: ${task.slug} ${step.id} r${state.round}`);
+      // Compact where the session ends, so the stored ref is already compacted
+      // when a later fix turn resumes it. An infra/refusal stop delivers no
+      // outcome; that session is not kept.
+      if (!outcome || !live) return settled;
+      const compacted = await compactSession(runtime, live);
+      return compacted ? { ...settled, session: compacted } : settled;
     },
   });
   if (breach) {
