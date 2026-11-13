@@ -11,6 +11,8 @@ model="${2:-opencode/deepseek-v4.1-flash-free#max}"
 root="$(git -C "$(dirname "$(readlink -f "$0")")" rev-parse --show-toplevel)"
 lower="$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')"
 wt="$(dirname "$root")/$lower"
+logs="${FACTORY_BOOTSTRAP_RUNS:-$HOME/.local/share/factory/bootstrap-runs}"
+mkdir -p "$logs"
 slotdir="${FACTORY_SLOT_DIR:-$HOME/.local/share/factory/slots}"
 case "$model" in
   opencode/*-free*|opencode/big-pickle) mkdir -p "$slotdir"; exec 9>"$slotdir/opencode-free.lock"; flock 9 ;; # one free-tier run at a time (LOG D14)
