@@ -55,6 +55,13 @@ export type SessionRef = {
   compacted: boolean;
 };
 
+/** One call to the harness, after fallback expansion. */
+export type TurnAttempt = {
+  model: ModelRef;
+  stop: Stop;
+  usage: Usage;
+};
+
 export interface TurnRequest {
   model: ModelRef;
   effort?: string;
@@ -62,6 +69,8 @@ export interface TurnRequest {
   system?: string;
   prompt: string;
   session?: SessionRef;
+  /** Same-harness fallback chain, tried in order after the primary. */
+  fallbacks?: ModelRef[];
   /** Where a harness without native structured output expects the agent to write its outcome. */
   outcomePath?: string;
   timeouts: { idleMs: number; wallMs: number };
@@ -74,6 +83,10 @@ export type TurnResult = {
   text: string;
   usage: Usage;
   session?: SessionRef;
+  /** Model actually used (primary or the last fallback that produced this result). */
+  model: ModelRef;
+  /** Every attempt made for this turn; empty/one entry when no retry or fallback ran. */
+  attempts?: TurnAttempt[];
   /** Path to the raw stream transcript, when the harness stores one. */
   transcript?: string;
 };

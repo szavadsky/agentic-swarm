@@ -58,11 +58,16 @@ export function fakeTurnResult(
   req: TurnRequest,
   patch: Partial<Omit<TurnResult, "usage">> & { usage?: Partial<Usage> } = {}
 ): TurnResult {
+  const model = patch.model ?? req.model;
+  const stop = patch.stop ?? { kind: "done" };
+  const usage = { ...emptyUsage(), ...patch.usage };
   return {
-    stop: patch.stop ?? { kind: "done" },
+    stop,
     text: patch.text ?? "",
-    usage: { ...emptyUsage(), ...patch.usage },
+    usage,
     session: patch.session ?? req.session,
+    model,
+    attempts: patch.attempts ?? [{ model, stop, usage }],
     transcript: patch.transcript,
   };
 }

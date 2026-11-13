@@ -62,7 +62,26 @@ describe("FakeHarness (kernel contract)", () => {
     expect(res.session?.id).toMatch(/^fake-session-/);
     expect(res.session?.cwd).toBe(os.tmpdir());
     expect(res.session?.model).toEqual(model);
+    expect(res.model).toEqual(model);
+    expect(res.attempts).toEqual([
+      { model, stop: { kind: "done" }, usage: res.usage },
+    ]);
     expect(harness.calls).toHaveLength(1);
+  });
+
+  it("forwards the fallback chain and reports the model actually used", async () => {
+    const fallback = { id: "test/backup" };
+    const harness = new FakeHarness();
+    let seen: TurnRequest["fallbacks"];
+    harness.script((req) => {
+      seen = req.fallbacks;
+      return fakeTurnResult(req, { model: fallback, text: "from backup" });
+    });
+
+    const res = await harness.turn(request({ fallbacks: [fallback] }));
+    expect(seen).toEqual([fallback]);
+    expect(res.model).toEqual(fallback);
+    expect(res.attempts?.[0]?.model).toEqual(fallback);
   });
 
   it("keeps a resumed session id and gives distinct fresh ids", async () => {
