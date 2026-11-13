@@ -69,6 +69,11 @@ async function processedSteers(store: KernelRuntime["store"]): Promise<number> {
   return files.filter((f) => !f.startsWith(".")).length;
 }
 
+/** The classified cause plus the scrubbed error tail, as the boundary reports it. */
+function infraCause(stop: { cause: string; details?: string }): string {
+  return stop.details ? `${stop.cause}: ${stop.details}` : stop.cause;
+}
+
 async function writeIterationFacts(
   runtime: KernelRuntime,
   iteration: number,
@@ -243,12 +248,16 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
           });
           iteration = boundary.iteration;
           decision = boundary.decision;
+          if (boundary.stop) {
+            ended = "infra";
+            stopCause = `infrastructure stop during iteration ${iteration}: ${infraCause(boundary.stop)}; relaunch to retry`;
+          }
         }
         iterations += 1;
 
         let dispatchCause: string | undefined;
         let dispatched: DispatchResult | undefined;
-        if (decision === "continue" && !signals.shouldStop()) {
+        if (decision === "continue" && ended === undefined && !signals.shouldStop()) {
           dispatched = await runDispatch(runtime, { iteration });
           dispatchCause = dispatched.cause;
           if (dispatched.reason === "infra" || dispatched.reason === "cancelled") {
@@ -261,7 +270,7 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
             }
           }
         }
-        const dispatchStopped = ended !== undefined;
+        const stopped = ended !== undefined;
         humanInterventions = Math.max(0, (await processedSteers(store)) - processedBefore);
 
         const after = derive(
@@ -278,15 +287,17 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
         const status =
           decision === "done"
             ? "goal-met"
-            : decision === "blocked"
-              ? "blocked-by-user"
-              : signals.shouldStop() || dispatchStopped
-                ? "stopped-with-debt"
-                : frontFinished && landed
-                  ? "goal-met"
-                  : frontFinished
-                    ? "stopped-with-debt"
-                    : "in-progress";
+            : ended === "infra"
+              ? "stopped-with-debt"
+              : decision === "blocked"
+                ? "blocked-by-user"
+                : signals.shouldStop() || stopped
+                  ? "stopped-with-debt"
+                  : frontFinished && landed
+                    ? "goal-met"
+                    : frontFinished
+                      ? "stopped-with-debt"
+                      : "in-progress";
         lastSummary = await writeIterationFacts(
           runtime,
           iteration,
@@ -294,7 +305,7 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
           humanInterventions,
           boundary?.cause ?? dispatchCause
         );
-        if (decision !== "continue" || dispatchStopped || signals.shouldStop()) break;
+        if (decision !== "continue" || stopped || signals.shouldStop()) break;
         if (frontFinished) {
           frontStop = landed ? "done" : "blocked";
           break;

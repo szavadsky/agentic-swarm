@@ -6,6 +6,7 @@ import { resolveRole } from "./flow-context.js";
 import { formatSteerTurn, holdsDir, type Steer } from "./mailbox.js";
 import { materialHash, parseTaskFile, validateTaskGraph, TaskFileError } from "./tasks.js";
 import { appendCancel, scriptMeta } from "./record.js";
+import type { Stop } from "../harness/types.js";
 import type { AliasConfig, KernelRuntime, Outcome, State, StepRecord, TaskFile, TaskStatus } from "./types.js";
 
 function taskPath(runtime: KernelRuntime, slug: string): string {
@@ -40,14 +41,20 @@ function isFrozenStatus(status: TaskStatus | "new"): boolean {
   return status === "merged" || status === "finished";
 }
 
+/** A cancelled slug is spent: reconcile restores it and the PM must not reuse it. */
+function readOnlyMarker(status: TaskStatus | "new"): string {
+  if (isFrozenStatus(status)) return " | frozen (read-only)";
+  if (status === "cancelled") return " | read-only (spent)";
+  return "";
+}
+
 function existingTasks(state: State, tasks: TaskFile[]): string {
   if (tasks.length === 0) return "none";
   return [...tasks]
     .sort((a, b) => a.slug.localeCompare(b.slug))
     .map((task) => {
       const status = state.tasks[task.slug]?.status ?? "new";
-      const frozen = isFrozenStatus(status) ? " | frozen (read-only)" : "";
-      return `- ${task.slug} | ${status} | ${materialHash(task).slice(0, 10)} | deps: ${task.deps.join(",") || "none"}${frozen}`;
+      return `- ${task.slug} | ${status} | ${materialHash(task).slice(0, 10)} | deps: ${task.deps.join(",") || "none"}${readOnlyMarker(status)}`;
     })
     .join("\n");
 }
@@ -178,10 +185,15 @@ export interface PmRung {
   failure: string;
 }
 
+/** A rung ended on infrastructure trouble the alias's own fallbacks could not cure. */
+export type PmInfraStop = Extract<Stop, { kind: "infra" }>;
+
 export type PmRun =
   | { status: "done"; outcome: Outcome; rungs: PmRung[] }
   /** An escalated rung stopped the ladder with a question for the architect. */
   | { status: "asked"; outcome: Outcome; rungs: PmRung[] }
+  /** A rung ended on an infra stop; a stronger model would not cure it, so the ladder stops. */
+  | { status: "infra"; stop: PmInfraStop; rungs: PmRung[] }
   /** Every tier failed both of its turns. */
   | { status: "exhausted"; rungs: PmRung[] };
 
@@ -286,8 +298,10 @@ async function restorePrePm(
 /**
  * PM ladder: each tier gets its first turn and one de-novo retry; a failed rung
  * is rolled back before the next. The next alias in the chain escalates with a
- * broader mandate; only an escalated `blocked` stops with a question, and an
- * exhausted ladder reports every rung as alias, model and failure.
+ * broader mandate; an infra stop ends the ladder because a stronger model does
+ * not cure quota or crash trouble the fallbacks already absorbed. Only an
+ * escalated `blocked` stops with a question, and an exhausted ladder reports
+ * every rung as alias, model and failure.
  */
 export async function runPm(
   runtime: KernelRuntime,
@@ -322,6 +336,7 @@ export async function runPm(
     });
     const findings = await validate(runtime, { ...opts, round }, planBefore, taskSnapshot);
     const outcome = result.outcome;
+    const stop = result.record.stop;
 
     if (outcome?.status === "done" && findings.length === 0) {
       await cancelRemovedTasks(runtime, opts.state, planBefore, opts.iteration);
@@ -342,6 +357,11 @@ export async function runPm(
     });
     await restorePrePm(runtime, opts.planPath, planBefore, taskSnapshot);
 
+    // Refusal and missing or invalid outcomes climb; an infra stop does not,
+    // because the alias's fallbacks already absorbed the same-harness trouble.
+    if (stop?.kind === "infra") {
+      return { status: "infra", stop, rungs };
+    }
     if (outcome?.status === "blocked" && rung.mandate.startsWith("escalated")) {
       return { status: "asked", outcome, rungs };
     }

@@ -31,7 +31,3 @@ export async function resumableSession(
   if (session.model.id !== model.id) return undefined;
   return session;
 }
-
-// The boundary imports the architect-local name; the one implementation lives
-// in flow-context so the task-turn and architect paths share it.
-export { compactSession as compactArchitect } from "./flow-context.js";

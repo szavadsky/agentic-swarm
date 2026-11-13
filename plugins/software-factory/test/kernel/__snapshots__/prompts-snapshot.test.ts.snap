@@ -254,7 +254,7 @@ goal: false
 - Ambiguity: formalize only what the plan states. If a task's done-when or scope cannot be derived, file no task for it and record \`kind: uncertainty\`, \`calibration: architect\`, naming the missing statement and the plan heading.
 - Missing branch, misplaced artifact, plan bullet mapping to no task: resolve it in the task files only when the plan's intent is clear; otherwise concern.
 - The script validates after your turn and returns findings as \`repair\` on the next ask, on a fresh session at the same tier; the previous ask's plan and task writes were rolled back. Fix every finding listed there; a finding you cannot fix from the plan goes in the outcome.
-- Each tier gets two turns. After two failed turns the ladder climbs to the next configured alias with a broader mandate; an alias without one ends the iteration blocked with every rung in the summary. Only an escalated ask may stop the ladder by answering \`blocked\` with one question for the architect in the summary.
+- Each tier gets two turns. After two failed turns the ladder climbs to the next configured alias with a broader mandate; an alias without one ends the iteration blocked with every rung in the summary. An infrastructure stop (quota, crash) ends the ladder as infra instead of climbing, because the alias's fallbacks already absorbed it. Only an escalated ask may stop the ladder with a question for the architect in the summary.
 
 Write task files only under the tasks directory; the outcome file is the only other file you may write. Concerns are entries in the outcome, each carrying \`kind:\`, \`calibration: architect\`, the missing statement and the plan heading; write no concern files.
 

@@ -4,12 +4,15 @@ import os from "node:os";
 import path from "node:path";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { Repo } from "../../src/core/git/repo.js";
+import { runBoundary } from "../../src/kernel/boundary.js";
 import { derive } from "../../src/kernel/derive.js";
-import { loadPrompts } from "../../src/kernel/prompts.js";
+import { runGoal } from "../../src/kernel/launch.js";
 import { runPm } from "../../src/kernel/pm.js";
+import { loadPrompts } from "../../src/kernel/prompts.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import { parseTaskFile } from "../../src/kernel/tasks.js";
-import { cleanup, launch, makeGoal, outcome, simpleTask, writePlan } from "./e2e-helpers.js";
+import { cleanup, launch, makeGoal, outcome, simpleTask, writePlan, writeTask as writeGoalTask } from "./e2e-helpers.js";
+import { cleanupFlowRepo, makeRuntime, setupFlowRepo } from "./s2-helpers.js";
 import type { KernelRuntime, ProcessConfig, RepoConfig, RunConfig } from "../../src/kernel/types.js";
 
 function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
@@ -555,6 +558,161 @@ describe("PM turn reconciliation", () => {
 
       const pm = (await createFolderStore(goal.goalDir).listRecords()).filter((record) => record.step === "pm");
       expect(pm.map((record) => record.round)).toEqual([1, 2, 3]);
+    } finally {
+      cleanup(goal);
+    }
+  }, 60_000);
+
+  it("stops the ladder on an infrastructure stop and runs no further rung", async () => {
+    const { root, runtime, fake, planPath } = await ladderSetup(["escalation"]);
+    try {
+      fake.script((req) => {
+        fs.writeFileSync(path.join(runtime.store.tasksDir, "b.md"), simpleTask("b", "b.txt"), "utf8");
+        return fakeTurnResult(req, {
+          stop: { kind: "infra", cause: "quota", details: "quota exceeded for fake-pm" },
+        });
+      });
+
+      const result = await runPm(runtime, { iteration: 1, state: derive([], []), planPath, cwd: root });
+      expect(result.status).toBe("infra");
+      if (result.status === "infra") {
+        expect(result.stop).toEqual({
+          kind: "infra",
+          cause: "quota",
+          details: "quota exceeded for fake-pm",
+        });
+      }
+      expect(result.rungs).toHaveLength(1);
+      expect(result.rungs[0]).toMatchObject({ round: 1, alias: "pm", model: "fake-pm" });
+      expect(fake.calls).toHaveLength(1);
+      expect(fs.existsSync(path.join(runtime.store.tasksDir, "b.md"))).toBe(false);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("climbs after a refusal that delivered no outcome", async () => {
+    const { root, runtime, fake, planPath } = await ladderSetup(["escalation"]);
+    try {
+      fake.script((req) => fakeTurnResult(req, { stop: { kind: "refusal", details: "policy" } }));
+      fake.script((req, ctx) => {
+        expect(req.model.id).toBe("fake-pm");
+        expect(req.prompt).toContain("no outcome (refusal)");
+        fs.writeFileSync(
+          path.join(runtime.store.tasksDir, "alpha.md"),
+          simpleTask("alpha", "alpha.txt"),
+          "utf8"
+        );
+        ctx.writeOutcome(outcome({ summary: "filed alpha after the refusal" }));
+        return fakeTurnResult(req);
+      });
+
+      const result = await runPm(runtime, { iteration: 1, state: derive([], []), planPath, cwd: root });
+      expect(result.status).toBe("done");
+      expect(fake.calls).toHaveLength(2);
+      expect(result.rungs).toHaveLength(1);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("marks a cancelled task read-only in the PM prompt", async () => {
+    const { root, runtime, fake, planPath } = await setup();
+    try {
+      fs.writeFileSync(
+        planPath,
+        "# Plan\n\n## alpha\nCreate alpha.\n\n## spent\nCreate spent.\n",
+        "utf8"
+      );
+      for (const text of [simpleTask("alpha", "alpha.txt"), simpleTask("spent", "spent.txt")]) {
+        await runtime.store.writeTask(parseTaskFile(text, /^slug:\s*(\S+)/m.exec(text)![1]!));
+      }
+      await runtime.store.appendRecord(
+        { iteration: 1, slug: "spent", step: "cancel", round: 1, actor: "script" },
+        { ok: true, cause: "removed from the plan at iteration 1" }
+      );
+      const state = derive(await runtime.store.listTasks(), await runtime.store.listRecords());
+      expect(state.tasks.spent!.status).toBe("cancelled");
+
+      fake.script((req, ctx) => {
+        const line = (slug: string) =>
+          req.prompt.split("\n").find((candidate) => candidate.includes(`- ${slug} |`)) ?? "";
+        expect(line("spent")).toContain("read-only (spent)");
+        expect(line("alpha")).not.toContain("read-only");
+        ctx.writeOutcome(outcome({ summary: "left the spent slug alone" }));
+        return fakeTurnResult(req);
+      });
+
+      const result = await runPm(runtime, { iteration: 1, state, planPath, cwd: root });
+      expect(result.status).toBe("done");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("ends the boundary with the infra cause and details", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      fs.writeFileSync(path.join(runtime.store.goalDir, "plan.md"), "# Plan\n\n## alpha\n", "utf8");
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "planned alpha", decision: "continue" }));
+        return fakeTurnResult(req);
+      });
+      harness.script((req) =>
+        fakeTurnResult(req, {
+          stop: { kind: "infra", cause: "quota", details: "quota exceeded for fake-pm" },
+        })
+      );
+
+      const boundary = await runBoundary(runtime, { relaunch: false });
+      expect(boundary.decision).toBe("blocked");
+      expect(boundary.stop).toEqual({ cause: "quota", details: "quota exceeded for fake-pm" });
+      expect(boundary.cause).toBe(
+        "PM ladder stopped on infrastructure at rung 1 pm (fake-pm): quota: quota exceeded for fake-pm"
+      );
+      expect(harness.calls).toHaveLength(2);
+      const pm = (await runtime.store.listRecords()).filter((record) => record.step === "pm");
+      expect(pm).toHaveLength(1);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  });
+
+  it("ends the launch as infra when the first PM rung stops on quota", async () => {
+    const goal = makeGoal();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script((req, ctx) => {
+        writePlan(goal.goalDir, "# Milestone 1\n\n## alpha\nCreate alpha.txt.\nDone when: alpha.txt exists.\n");
+        ctx.writeOutcome(outcome({ summary: "planned alpha", decision: "continue" }));
+        return fakeTurnResult(req);
+      });
+      harness.script((req) => {
+        writeGoalTask(goal.goalDir, simpleTask("alpha", "alpha.txt"));
+        return fakeTurnResult(req, {
+          stop: { kind: "infra", cause: "quota", details: "quota exceeded for fake-pm" },
+        });
+      });
+
+      const result = await runGoal({
+        repo: goal.repo.dir,
+        goal: "demo",
+        iterations: 2,
+        harnesses: { fake: harness },
+      });
+
+      expect(result.stop).toBe("infra");
+      expect(result.cause).toContain("quota");
+      expect(result.cause).toContain("quota exceeded for fake-pm");
+      const summary = fs.readFileSync(path.join(goal.goalDir, "iterations/1/summary.md"), "utf8");
+      expect(summary).toContain("status: stopped-with-debt");
+      expect(summary).toContain("quota exceeded for fake-pm");
+      // Architect and PM only: the restored pre-PM task never reached dispatch.
+      expect(harness.calls).toHaveLength(2);
+      expect(fs.existsSync(path.join(goal.tasksDir, "alpha.md"))).toBe(false);
+      expect(fs.existsSync(path.join(goal.goalDir, "iterations/2/summary.md"))).toBe(false);
     } finally {
       cleanup(goal);
     }
