@@ -57,6 +57,8 @@ Verbatim, newest last; each with what it changed.
 - 2026-11-12 (adapter policy): "note: custom harness adapter only if harness support way more then though acp (like omp), otherwise acpx or at least acp" → D19 + manifesto line (main `d10f5bb`, synced to factory-v3). Consequence: pi/codex adapters are acpx/ACP work, not CLI-wrapper work; the pi probe must check ACP/acpx support first.
 - 2026-11-13 (beam effort): "one minor for next launch: beam free shall be with max effort" → all `beam-free` aliases run at `effort: max` (verified variant exists on both opencode and opencode-go). Applied to `self.yaml` (digest) and `self-acpx.yaml` (pm/digest/implementer) in `f7e93f7`; takes effect from iteration 12 (iteration 11 already launched on the previous config).
 - 2026-11-13 (PM retry ladder): "also PM failues shall be deterministically retried and escalated to higher model witrh broader mandate by factory" → steered via mailbox (`steer-pm-ladder.md`): kernel-owned ladder — deterministic de-novo retry with restated contract, then escalation to a higher tier with broader mandate (may block with a precise architect question), top-tier double failure blocks with trace. The hand promotion of PM to deepseek stands as the run-config state; the ladder removes the owner from the next occurrence.
+- 2026-11-13 (project review): "review status of the porject, execution histories manifest vs as build and what is left, add to manifesto [AI Review] inlines where intent is unclear or incorrect , and a separate section Fable proposal of how to improve or clarify what to do" → in progress: four read-only evidence reports (manifesto vs as-built, execution history, session forensics, kernel edge cases) feed additive `[AI Review]` inlines and a `Fable proposal` section in `manifesto.md`. Owner text is not reworded.
+- 2026-11-13 (review scope): "also add what remains to build, bugs and unhandled edge cases, proposals for handling strategy" → same manifesto edit gains three parts: remaining to build, bugs and unhandled edge cases, handling strategy per item.
 ## Journal
 
 ### 2026-11-12 — context collection
@@ -272,3 +274,8 @@ Verbatim, newest last; each with what it changed.
 - 2.4 h, exit 3. Merged: brake-priced, front-land, compact-shared, incident-surfaces, register-guards, sweep-land. Parked 8 (pm-ladder-tidy + prune-sweep + doc-drift upscoped with in-scope work complete — scope friction, not failure; front-ladder/harness-rotation still parked with land tasks planned). Pending 13.
 - Architect reversed a default with cost reasoning: a PM rung ending on infra no longer climbs to escalation (~13x price for trouble a stronger model doesn't fix); refusal/invalid still climb. Reversible in run config.
 - Merged clean (`4ec622e`), 420 tests green, promoted. Iteration 13 running (bg_138) with both logs redirected.
+
+### 2026-11-13 — project review started (owner steer)
+- Session switched to the economy-reasoner mode: discovery delegated, orchestrator keeps intent and judgment.
+- Four read-only agents running against iterations 1–12 (iteration 13 is live and excluded): manifesto-vs-built matrix, execution history, session forensics, kernel edge-case review. Orchestrator's own line-anchored reading of the manifesto is done (37 inline candidates).
+- Output will land as additive edits in `manifesto.md` on main, then synced to factory-v3.
