@@ -1,5 +1,9 @@
-import { runGoal } from "../kernel/launch.js";
+import { runGoal, type HarnessFactory, type LaunchResult } from "../kernel/launch.js";
+import type { DrainController } from "../kernel/signals.js";
+import type { ModelCatalog } from "../kernel/preflight.js";
 import type { Harness } from "../harness/types.js";
+import { createRealHarnesses, createRealModelCatalog, resolveHarnessBinaries } from "./harnesses.js";
+import { initGoal, readSteerSource, statusGoal, steerGoal } from "./commands.js";
 
 export interface ParsedArgs {
   command?: string;
@@ -7,61 +11,88 @@ export interface ParsedArgs {
   goal?: string;
   iterations?: number;
   runConfig?: string;
+  intent?: string;
+  file?: string;
   help: boolean;
   version: boolean;
 }
 
 export interface CliDeps {
-  /** Harness instances by run-config id; S1 adds the real registries. */
+  /** Ready harnesses (fake harness in tests); disables the real CLI checks. */
   harnesses?: Record<string, Harness>;
+  harnessFactory?: HarnessFactory;
+  modelCatalog?: ModelCatalog;
+  binaries?: Record<string, string | undefined>;
+  signals?: DrainController;
 }
 
 const ROOT_USAGE = `
 software-factory
 
 Commands:
+  init                     Create the repo config, goal directory and intent
   run                      Run bounded iterations of one goal
-
-Run:
-  run --repo <path> --goal <name> [--iterations N] [--run-config <path>]
-                           Pre-flight, then one architect consult + task
-                           dispatch per iteration until the goal is done,
-                           blocked, or the iteration limit is reached.
+  status                   Show derived state, parked causes and the last summary
+  steer                    Drop a steering file into the goal inbox
 
 Options:
   --repo <path>            Repository root (defaults to the current directory)
   --goal <name>            Goal directory name under the repo's artifact root
-  --iterations <n>         Launch iteration limit (overrides run config)
-  --run-config <path>      Run config path (defaults to .factory/run.yaml)
   --help, -h               Show this help message
   --version, -v            Show version
+`;
+
+const INIT_USAGE = `
+factory init --repo <path> --goal <name> [--intent <file>]
+
+Writes .factory/repo.yaml when it is missing, creates the goal directory and
+copies --intent into <goal>/intent.md. Without --intent a short template is
+written. An existing intent is never overwritten.
 `;
 
 const RUN_USAGE = `
 factory run --repo <path> --goal <name> [--iterations N] [--run-config <path>]
 
-Loads the three config layers, takes the goal lock, prepares the stable goal
-checkout on the integration branch, then alternates one architect boundary
-(plan + PM task files) with dispatch of ready tasks until the goal reports
-done/blocked or the iteration limit is reached. State is derived from
-<artifactRoot>/<goal>/{tasks,records}; there is no state file.
-
-Exit status is 0 for done/in-progress and 1 for blocked or a launch error.
-
-Options:
-  --repo <path>            Repository root (defaults to the current directory)
-  --goal <name>            Goal directory name under the repo's artifact root
-  --iterations <n>         Launch iteration limit (overrides run config)
-  --run-config <path>      Run config path (defaults to .factory/run.yaml)
-  --help, -h               Show this help message
+Loads the three config layers, runs pre-flight (models, effort, fallbacks,
+binaries, roots, base gates), takes the goal lock, recovers interrupted records
+and stale worktrees, then alternates one architect boundary with task dispatch.
+State is derived from <artifactRoot>/<goal>/{tasks,records}; there is no state
+file. Exit: 0 done, 1 failure, 2 blocked, 3 iteration limit, 130/143 signal.
 `;
 
-function parseNonNegativeInt(flag: string, value: string | undefined): number {
+const STATUS_USAGE = `
+factory status --repo <path> --goal <name>
+
+Prints the state derived from task files and records, every parked cause, and
+the path of the last iteration summary.
+`;
+
+const STEER_USAGE = `
+factory steer --repo <path> --goal <name> <file | ->
+
+Atomically drops the file (or stdin) into mailbox/inbox. The architect reads it
+at the next iteration boundary and answers in mailbox/outbox.
+`;
+
+function usageFor(command: string | undefined): string {
+  if (command === "init") return INIT_USAGE;
+  if (command === "run") return RUN_USAGE;
+  if (command === "status") return STATUS_USAGE;
+  if (command === "steer") return STEER_USAGE;
+  return ROOT_USAGE;
+}
+
+function parsePositiveInt(flag: string, value: string | undefined): number {
   const n = Number(value);
   if (!Number.isInteger(n) || n <= 0) {
     throw new Error(`${flag} requires a positive integer, got "${value ?? ""}"`);
   }
   return n;
+}
+
+function valueOf(arg: string, flag: string, args: string[], index: number): { value: string; next: number } {
+  if (arg.startsWith(`${flag}=`)) return { value: arg.slice(flag.length + 1), next: index };
+  return { value: args[index + 1] ?? "", next: index + 1 };
 }
 
 export function parseCliArgs(args: string[]): ParsedArgs {
@@ -75,29 +106,83 @@ export function parseCliArgs(args: string[]): ParsedArgs {
     } else if (arg === "--version" || arg === "-v") {
       result.version = true;
     } else if (arg === "--repo" || arg.startsWith("--repo=")) {
-      const value = arg.startsWith("--repo=") ? arg.slice("--repo=".length) : args[++i];
-      if (value === undefined) throw new Error("--repo requires a path");
-      result.repo = value;
+      const parsed = valueOf(arg, "--repo", args, i);
+      result.repo = parsed.value;
+      i = parsed.next;
+      if (!result.repo) throw new Error("--repo requires a path");
     } else if (arg === "--goal" || arg.startsWith("--goal=")) {
-      const value = arg.startsWith("--goal=") ? arg.slice("--goal=".length) : args[++i];
-      if (value === undefined) throw new Error("--goal requires a name");
-      result.goal = value;
+      const parsed = valueOf(arg, "--goal", args, i);
+      result.goal = parsed.value;
+      i = parsed.next;
+      if (!result.goal) throw new Error("--goal requires a name");
     } else if (arg === "--iterations" || arg.startsWith("--iterations=")) {
-      const value = arg.startsWith("--iterations=") ? arg.slice("--iterations=".length) : args[++i];
-      result.iterations = parseNonNegativeInt("--iterations", value);
+      const parsed = valueOf(arg, "--iterations", args, i);
+      result.iterations = parsePositiveInt("--iterations", parsed.value);
+      i = parsed.next;
     } else if (arg === "--run-config" || arg.startsWith("--run-config=")) {
-      const value = arg.startsWith("--run-config=") ? arg.slice("--run-config=".length) : args[++i];
-      if (value === undefined) throw new Error("--run-config requires a path");
-      result.runConfig = value;
-    } else if (!arg.startsWith("-")) {
+      const parsed = valueOf(arg, "--run-config", args, i);
+      result.runConfig = parsed.value;
+      i = parsed.next;
+      if (!result.runConfig) throw new Error("--run-config requires a path");
+    } else if (arg === "--intent" || arg.startsWith("--intent=")) {
+      const parsed = valueOf(arg, "--intent", args, i);
+      result.intent = parsed.value;
+      i = parsed.next;
+      if (!result.intent) throw new Error("--intent requires a file");
+    } else if (arg === "-" || !arg.startsWith("-")) {
       positional.push(arg);
     }
   }
   result.command = positional[0];
+  result.file = positional[1];
   return result;
 }
 
-/** Main dispatch entrypoint; `run` is wired to the kernel launch loop. */
+function exitCode(result: LaunchResult): number {
+  if (result.stop === "interrupted") return result.interruptedBy === "SIGTERM" ? 143 : 130;
+  if (result.stop === "done") return 0;
+  if (result.stop === "blocked") return 2;
+  return 3;
+}
+
+function printStatus(out: Awaited<ReturnType<typeof statusGoal>>): void {
+  console.log(`goal ${out.goal}: ${out.state.goal} (iteration ${out.state.iteration})`);
+  for (const slug of Object.keys(out.state.tasks).sort()) {
+    const task = out.state.tasks[slug]!;
+    const commit = task.commit ? ` (commit ${task.commit.slice(0, 8)})` : "";
+    const cause = task.cause ? ` — ${task.cause}` : "";
+    console.log(`  ${slug}: ${task.status}${commit}${cause}`);
+  }
+  console.log(`last summary: ${out.lastSummary ?? "none"}`);
+}
+
+async function runCommand(parsed: ParsedArgs, deps: CliDeps): Promise<number> {
+  if (!parsed.goal) throw new Error("run requires --goal <name>");
+  const injected = deps.harnesses !== undefined || deps.harnessFactory !== undefined;
+  const result = await runGoal({
+    repo: parsed.repo,
+    goal: parsed.goal,
+    iterations: parsed.iterations,
+    runConfigPath: parsed.runConfig,
+    harnesses: deps.harnesses,
+    harnessFactory: deps.harnessFactory ?? (injected ? undefined : createRealHarnesses),
+    modelCatalog: deps.modelCatalog ?? (injected ? undefined : createRealModelCatalog()),
+    binaries: deps.binaries ?? (injected ? undefined : resolveHarnessBinaries()),
+    signals: deps.signals,
+  });
+  console.log(
+    [
+      `goal ${result.goal}: ${result.state.goal}, ${result.iterations} iteration(s), stop=${result.stop}`,
+      `summary: ${result.lastSummary ? `${result.lastSummary}` : "none"}`,
+      result.recoveredRecords > 0 ? `recovered: ${result.recoveredRecords} interrupted record(s)` : undefined,
+    ]
+      .filter(Boolean)
+      .join("\n")
+  );
+  return exitCode(result);
+}
+
+/** Main dispatch entrypoint; each command maps to one kernel or mailbox call. */
 export async function dispatch(args: string[], deps: CliDeps = {}): Promise<number> {
   let parsed: ParsedArgs;
   try {
@@ -107,9 +192,12 @@ export async function dispatch(args: string[], deps: CliDeps = {}): Promise<numb
     return 1;
   }
 
-  if (parsed.help && (!parsed.command || parsed.command === "run")) {
-    console.log(parsed.command === "run" ? RUN_USAGE : ROOT_USAGE);
-    return 0;
+  if (parsed.help) {
+    const known = ["init", "run", "status", "steer"];
+    if (!parsed.command || known.includes(parsed.command)) {
+      console.log(usageFor(parsed.command));
+      return 0;
+    }
   }
   if (parsed.version) {
     console.log("software-factory 0.1.0");
@@ -119,29 +207,32 @@ export async function dispatch(args: string[], deps: CliDeps = {}): Promise<numb
     console.log(ROOT_USAGE);
     return 0;
   }
-  if (parsed.command !== "run") {
+
+  try {
+    if (parsed.command === "run") return await runCommand(parsed, deps);
+    if (parsed.command === "init") {
+      if (!parsed.goal) throw new Error("init requires --goal <name>");
+      const result = await initGoal({ repo: parsed.repo, goal: parsed.goal, intent: parsed.intent });
+      console.log(`goal: ${result.goalDir}`);
+      console.log(`repo config: ${result.repoConfig} (${result.repoConfigCreated ? "created" : "existing"})`);
+      console.log(`intent: ${result.intentPath} (${result.intentCreated ? "created" : "existing"})`);
+      return 0;
+    }
+    if (parsed.command === "status") {
+      if (!parsed.goal) throw new Error("status requires --goal <name>");
+      printStatus(await statusGoal(parsed.repo, parsed.goal));
+      return 0;
+    }
+    if (parsed.command === "steer") {
+      if (!parsed.goal) throw new Error("steer requires --goal <name>");
+      if (!parsed.file) throw new Error("steer requires a file path or - for stdin");
+      const path = await steerGoal(parsed.repo, parsed.goal, await readSteerSource(parsed.file));
+      console.log(`steer: ${path}`);
+      return 0;
+    }
     console.error(`Error: unknown command "${parsed.command}"`);
     console.log(ROOT_USAGE);
     return 1;
-  }
-  if (!parsed.goal) {
-    console.error("Error: run requires --goal <name>");
-    console.log(RUN_USAGE);
-    return 1;
-  }
-
-  try {
-    const result = await runGoal({
-      repo: parsed.repo,
-      goal: parsed.goal,
-      iterations: parsed.iterations,
-      runConfigPath: parsed.runConfig,
-      harnesses: deps.harnesses,
-    });
-    console.log(
-      `goal ${result.goal}: ${result.state.goal}, ${result.iterations} iteration(s), ${result.lastSummary ?? "no summary"}`
-    );
-    return result.state.goal === "blocked" ? 1 : 0;
   } catch (err) {
     console.error(`Error: ${(err as Error).message}`);
     return 1;

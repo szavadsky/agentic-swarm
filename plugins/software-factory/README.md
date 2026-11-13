@@ -1,40 +1,100 @@
 # Software Factory
 
-The factory is being rebuilt in place on branch `factory-v3`; the v2 orchestrator (`core/flows`,
-`core/plan`, `core/engine`, the 21 JSON schemas and the step prompts that used them) has been
-removed. Direction for the rebuild: `bootstrap/KERNEL0.md`; decisions: `bootstrap/LOG.md`.
-
-## Layout
-
-| Path | Contents |
-|---|---|
-| `src/harness/types.ts` | Kernel harness contract: `ModelRef`, `Caps`, `Stop`, `Usage`, `SessionRef`, `TurnRequest`, `TurnResult`, `Harness`. |
-| `src/harness/fake/` | Scripted `FakeHarness` implementing that contract. |
-| `src/harness/omp/` | v2 omp adapter, still on its private contract (`src/harness/omp/contract.ts`) until S1. |
-| `src/core/git/` | Worktrees, commits, head guard, merge, naming, diff/status. |
-| `src/core/{proc,shutdown,mutex,clock,journal,runtime-tmp,disk-space}.ts` | Process, lifecycle, and runtime primitives. |
-| `src/core/checks/` | Deterministic setup/gates/JUnit runner. |
-| `src/core/{prompts,records}`, `src/core/concerns.ts`, `src/core/{budget,steer}.ts`, `src/core/config/{ajv,roles}.ts` | Prompt partials, atomic IO, concern store, budgets, mailbox, role resolution. |
-| `src/cli/` | Argument dispatch and run lock. The `run` command returns with the kernel. |
-
-Kept-module API, gotchas and test locations: `bootstrap/context/kept-modules.md`.
+The factory runs one goal as bounded iterations. Each iteration is one
+architect consult (plan) plus the task dispatch it starts. State is derived from
+task files and append-only records; there is no state file to repair.
 
 ## Commands
 
 ```bash
 cd plugins/software-factory
-bun install
-bun run typecheck
-bun test
+bun bin/factory.ts init   --repo <path> --goal <name> [--intent <file>]
+bun bin/factory.ts run    --repo <path> --goal <name> --run-config <file> [--iterations N]
+bun bin/factory.ts status --repo <path> --goal <name>
+bun bin/factory.ts steer  --repo <path> --goal <name> <file | ->
 ```
 
-No factory command is wired yet; S0 adds `factory run` against `src/kernel/`.
+`init` writes `.factory/repo.yaml` if missing, creates the goal directory and
+copies the intent (or writes a template). `run` pre-flights, takes the goal
+lock, recovers interrupted work and runs the iteration loop. `status` prints
+derived state and parked causes; `steer` drops a file into the inbox atomically.
 
-## History
+Exit codes for `run`: `0` goal done, `1` failure, `2` blocked, `3` iteration
+limit, `130`/`143` interrupted by SIGINT/SIGTERM. The first signal drains (no
+new dispatch, in-flight turns finish), the second aborts in-flight turns and
+records their partial usage.
 
-The rejected v2 modules remain readable from the main branch:
+## Configuration
 
-```bash
-git show main:plugins/software-factory/src/core/engine.ts
-git show main:plugins/software-factory/config/schemas/plan.schema.json
+Three layers, all validated with one report naming file and key.
+
+**Repo** — `.factory/repo.yaml`, tracked:
+
+```yaml
+baseBranch: main
+artifactRoot: .factory/artifacts
+setup: [bun install]
+gates:
+  - id: typecheck
+    command: bun run typecheck
 ```
+
+**Process** — package `config/process.yaml`, optionally overridden by
+`.factory/process.yaml`:
+
+```yaml
+itemTurns: 8
+flows:
+  implement-review:
+    reviewRounds: 2
+    steps:
+      - { id: implement, role: implementer }
+      - { id: review, role: reviewer, review: true }
+roles:
+  architect: { prompt: architect }
+  implementer: { prompt: implementer }
+```
+
+**Run** — transient, passed with `--run-config`:
+
+```yaml
+aliases:
+  architect: { harness: opencode, model: opencode/minimax-m3.1-flash-free, effort: highest }
+  implementer: { harness: opencode, model: opencode/deepseek-v4.1-flash-free }
+limits: { concurrency: 3, iterations: 1 }
+sessions: { dir: ~/.local/share/factory/sessions, keepRuns: 5 }
+worktreeRoot: ~/.local/share/factory/worktrees
+scouts: { model: opencode-go/deepseek-v4.1-flash }   # omp architect subagents
+```
+
+Pre-flight resolves every alias (and fallback) through the harness, checks the
+model list, `effort: highest` (highest level the model accepts), binaries, the
+base branch, and that session/worktree roots are writable and outside the repo.
+Gates run once on the base; a red base is recorded and warned once, not fatal.
+
+## Goal directory
+
+```
+<artifactRoot>/<goal>/
+  intent.md plan.md tasks/
+  records/                  # one directory per turn: started/end/outcome
+  mailbox/{inbox,processed,outbox}/
+  iterations/<n>/{context-pack.md,summary.md,metrics.yaml}
+  metrics.yaml
+```
+
+## Steering
+
+`factory steer --goal demo notes.md` (or `-` for stdin) puts the file in
+`mailbox/inbox` without a partial-file window. The architect reads it at the
+next boundary, marks it processed and writes its answer to
+`mailbox/outbox/steer-<id>.md`.
+
+## Summary and metrics
+
+Each iteration writes exactly one `iterations/<n>/summary.md` (also copied to
+the outbox): status, merged/finished/parked tasks, remarkable concerns,
+assumptions and debt. `metrics.yaml` is rebuilt from the usage records:
+architect launches, architect cost and token share, cost per merged task, loop
+incidents (no-progress parks), human interventions (processed steers), and turns
+and tokens by role. Free models report cost `0`; token counts carry the signal.
