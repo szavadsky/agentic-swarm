@@ -11,8 +11,16 @@ export function zeroUsage(): Usage {
   };
 }
 
-/** Field-wise sum; the four token counters stay disjoint. */
+/**
+ * Field-wise sum; the token counters stay disjoint. Cost stays known when
+ * either side knows it, so an explicit $0 never degrades to unknown and
+ * unknown plus unknown stays unknown.
+ */
 export function addUsage(a: Usage, b: Usage): Usage {
+  const costUsd =
+    a.costUsd === undefined && b.costUsd === undefined
+      ? undefined
+      : (a.costUsd ?? 0) + (b.costUsd ?? 0);
   return {
     in: a.in + b.in,
     cacheRead: a.cacheRead + b.cacheRead,
@@ -20,6 +28,6 @@ export function addUsage(a: Usage, b: Usage): Usage {
     cacheWrite1h: a.cacheWrite1h + b.cacheWrite1h,
     out: a.out + b.out,
     reasoningOut: a.reasoningOut + b.reasoningOut,
-    costUsd: (a.costUsd ?? 0) + (b.costUsd ?? 0),
+    ...(costUsd !== undefined ? { costUsd } : {}),
   };
 }

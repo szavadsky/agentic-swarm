@@ -42,6 +42,12 @@ export interface ContextPackInput {
 
 const DEFAULT_MAX_BYTES = 8000;
 const CODE_MAP_ENTRIES = 40;
+const TRUNCATION_SUFFIX = "\n[pack truncated: size cap reached; drill into the paths above]\n";
+
+/** Goal-relative path the boundary renders an iteration's pack to. */
+export function contextPackRelPath(iteration: number): string {
+  return `iterations/${iteration}/context-pack.md`;
+}
 
 function short(hash: string | undefined): string {
   return hash ? hash.slice(0, 10) : "-";
@@ -151,9 +157,13 @@ export function renderContextPack(input: ContextPackInput): string {
 export function capPack(text: string, maxBytes: number): string {
   const buf = Buffer.from(text, "utf8");
   if (buf.length <= maxBytes) return text;
-  const suffix = "\n[pack truncated: size cap reached; drill into the paths above]\n";
-  const keep = Math.max(0, maxBytes - Buffer.byteLength(suffix));
-  return buf.subarray(0, keep).toString("utf8").replace(/\uFFFD+$/g, "") + suffix;
+  const keep = Math.max(0, maxBytes - Buffer.byteLength(TRUNCATION_SUFFIX));
+  return buf.subarray(0, keep).toString("utf8").replace(/\uFFFD+$/g, "") + TRUNCATION_SUFFIX;
+}
+
+/** True when `capPack` clipped this pack to its size cap. */
+export function isPackTruncated(text: string): boolean {
+  return text.endsWith(TRUNCATION_SUFFIX);
 }
 
 /**

@@ -4,6 +4,7 @@
  */
 import { z } from "zod";
 import type { Harness, ModelRef, SessionRef, Stop, TurnAttempt, Usage } from "../harness/types.js";
+import type { PriceTable } from "./pricing.js";
 import type { CheckResult } from "../core/checks/types.js";
 import type { Repo } from "../core/git/repo.js";
 import type { PromptLibrary } from "../core/prompts.js";
@@ -160,6 +161,12 @@ export interface StepRecord {
   base?: string;
   stop?: Stop; usage?: Usage;
   session?: SessionRef; commit?: string;
+  /** UTF-8 bytes of the rendered prompt sent to the harness (agent steps only). */
+  promptBytes?: number;
+  /** Boundary roles only: UTF-8 bytes of the iteration context pack. */
+  packBytes?: number;
+  /** Boundary roles only: the pack was clipped by its size cap. */
+  packTruncated?: boolean;
   /** Raw stream transcript in the session store, when the harness keeps one. */
   transcript?: string;
   /** Tree of the resulting worktree, the per-step no-progress component. */
@@ -187,6 +194,8 @@ export interface RecordEnd {
   /** Set when the harness reports the model actually used (S1 contract). */
   model?: ModelRef;
   stop?: Stop; usage?: Usage; session?: SessionRef;
+  /** Rendered prompt and, for the boundary roles, context-pack size. */
+  promptBytes?: number; packBytes?: number; packTruncated?: boolean;
   transcript?: string;
   attempts?: TurnAttempt[];
   commit?: string; tree?: string;
@@ -260,6 +269,8 @@ export interface AliasConfig {
 
 export interface RunConfig {
   aliases: Record<string, AliasConfig>;
+  /** Model id -> USD per Mtok; absent model means unpriced, not free. */
+  prices?: PriceTable;
   limits: {
     concurrency: number;
     perHarness: Record<string, number>;

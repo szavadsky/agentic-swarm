@@ -23,6 +23,15 @@ describe("three config layers", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
+  it("defines just-implement as one implement step with no reviewer", () => {
+    const root = tmpRepo();
+    const configs = loadConfigs(root);
+    expect(configs.process.flows["just-implement"]!.steps).toEqual([
+      { id: "implement", role: "implementer", review: false },
+    ]);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
   it("merges the package process default with a repo override", () => {
     const root = tmpRepo();
     fs.mkdirSync(path.join(root, ".factory"), { recursive: true });

@@ -117,7 +117,7 @@ export async function runOmpTurn(
             error instanceof OmpRpcTimeout
               ? { timedOut: true }
               : error instanceof OmpRpcExit
-                ? { signal: error.signal, stderr: error.stderr }
+                ? { code: error.code, signal: error.signal, stderr: error.stderr }
                 : { stderr: String(error) },
         }),
         text: "",
@@ -212,7 +212,11 @@ export async function runOmpTurn(
 
   const failure: OmpTurnFailure | undefined =
     promptFailed instanceof OmpRpcExit
-      ? { signal: promptFailed.signal, stderr: promptFailed.stderr || rpc.stderr() }
+      ? {
+          code: promptFailed.code,
+          signal: promptFailed.signal,
+          stderr: promptFailed.stderr || rpc.stderr(),
+        }
       : promptFailed instanceof OmpRpcTimeout
         ? { timedOut: true }
         : promptFailed

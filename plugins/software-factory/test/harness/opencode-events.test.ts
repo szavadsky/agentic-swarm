@@ -102,6 +102,7 @@ describe("classifyOpencodeError", () => {
     expect(classifyOpencodeError({ message: "unknown failure" })).toEqual({
       kind: "infra",
       cause: "crash",
+      details: "unknown failure",
     });
     expect(classifyOpencodeError({ type: "provider.overloaded" })).toEqual({
       kind: "infra",
@@ -136,6 +137,25 @@ describe("classifyOpencodeTurn", () => {
     ).toEqual({ kind: "cancelled" });
     expect(
       classifyOpencodeTurn({ summary: empty, code: null, signal: "SIGKILL", timedOut: false })
-    ).toEqual({ kind: "infra", cause: "crash" });
+    ).toEqual({
+      kind: "infra",
+      cause: "crash",
+      details: "exit none, signal SIGKILL",
+    });
+  });
+
+  it("carries process stderr on a crash and falls back to exit code", () => {
+    expect(
+      classifyOpencodeTurn({
+        summary: empty,
+        code: 2,
+        signal: null,
+        timedOut: false,
+        stderr: "fatal: boom",
+      })
+    ).toEqual({ kind: "infra", cause: "crash", details: "fatal: boom" });
+    expect(
+      classifyOpencodeTurn({ summary: empty, code: 2, signal: null, timedOut: false })
+    ).toEqual({ kind: "infra", cause: "crash", details: "exit 2, signal none" });
   });
 });

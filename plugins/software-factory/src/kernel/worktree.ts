@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { isAncestor } from "../core/git/commit.js";
 import { git } from "../core/git/exec.js";
 import { parseWorktreeList } from "../core/git/status.js";
 import { runWorktreeSetup, type SetupResult } from "../core/checks/setup.js";
@@ -41,6 +42,59 @@ async function registeredWorktrees(runtime: KernelRuntime): Promise<string[]> {
   return parseWorktreeList(res.stdout);
 }
 
+/** A base advance that cannot merge cleanly into the integration branch. */
+export class BaseFollowConflictError extends Error {
+  constructor(
+    baseBranch: string,
+    readonly paths: string[]
+  ) {
+    const named = paths.length > 0 ? paths.join(", ") : "git reported no unmerged paths";
+    super(
+      `base "${baseBranch}" conflicts with the integration branch in: ${named}; ` +
+        "the integration branch was left untouched — resolve the conflict on base and relaunch"
+    );
+    this.name = "BaseFollowConflictError";
+  }
+}
+
+/** A merge cut off by a crash must not block or contaminate the next one. */
+async function abortInFlightMerge(cwd: string): Promise<void> {
+  const mergeHead = await git(cwd, ["rev-parse", "--verify", "--quiet", "MERGE_HEAD"], { allowFail: true });
+  if (mergeHead.code === 0) await git(cwd, ["merge", "--abort"]);
+}
+
+/**
+ * Operator fixes on base never reach task worktrees unless the stable checkout
+ * follows them. Fast-forward when the integration branch is behind; otherwise
+ * a merge commit — never a rebase, because task branches and records name
+ * integration commits. A conflict aborts the merge and leaves the ref where it
+ * was, so the next launch tries again.
+ */
+async function followBase(runtime: KernelRuntime): Promise<void> {
+  const { goalCheckout } = runtime.paths;
+  const baseBranch = runtime.configs.repo.baseBranch;
+  const base = (await git(runtime.paths.repoRoot, ["rev-parse", "--verify", `${baseBranch}^{commit}`])).stdout.trim();
+  const head = (await git(goalCheckout, ["rev-parse", "HEAD"])).stdout.trim();
+  if (await isAncestor(goalCheckout, base, head)) return;
+
+  await runtime.repo.writeLock.runExclusive(async () => {
+    if (await isAncestor(goalCheckout, head, base)) {
+      await git(goalCheckout, ["merge", "--ff-only", base]);
+      return;
+    }
+    const merge = await git(goalCheckout, ["merge", "--no-edit", base], { allowFail: true });
+    if (merge.code === 0) return;
+    const unmerged = await git(goalCheckout, ["diff", "--name-only", "--diff-filter=U"], { allowFail: true });
+    const paths = unmerged.stdout
+      .split("\n")
+      .map((p) => p.trim())
+      .filter(Boolean)
+      .sort();
+    await abortInFlightMerge(goalCheckout);
+    throw new BaseFollowConflictError(baseBranch, paths);
+  });
+}
+
 /**
  * Creates (or recovers) the stable integration checkout. It is the only
  * worktree the merge queue moves; task worktrees are disposable.
@@ -77,6 +131,8 @@ export async function prepareIntegrationCheckout(runtime: KernelRuntime): Promis
   // A crashed merge must not leave staged or conflicted state for the next launch.
   await git(goalCheckout, ["reset", "--hard", "HEAD"]);
   await git(goalCheckout, ["clean", "-fd"]);
+  await abortInFlightMerge(goalCheckout);
+  await followBase(runtime);
 }
 
 export interface EnsuredWorktree {

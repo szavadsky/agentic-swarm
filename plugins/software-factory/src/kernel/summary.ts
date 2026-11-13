@@ -1,8 +1,10 @@
 import path from "node:path";
+import { addUsage, zeroUsage } from "../harness/usage.js";
 import type { Usage } from "../harness/types.js";
 import { recordedBaseGates } from "./baseline.js";
 import { derive } from "./derive.js";
-import { rolesByStep, writeMetrics } from "./metrics.js";
+import { DEFAULT_ROLE_BY_STEP, rolesByStep, writeMetrics } from "./metrics.js";
+import { pricedUsage, type PriceTable } from "./pricing.js";
 import type { ArtifactStore, GoalDecision, KernelRuntime, State, StepRecord } from "./types.js";
 
 export type SummaryStatus = "goal-met" | "in-progress" | "blocked-by-user" | "stopped-with-debt";
@@ -16,6 +18,10 @@ export interface SummaryInput {
   cause?: string;
   /** Crash or drain override; the architect decision wins when present. */
   status?: SummaryStatus;
+  /** Step id -> role, from the process flow config. */
+  roleByStep?: Record<string, string>;
+  /** Model id -> USD per Mtok, from the run config. */
+  prices?: PriceTable;
 }
 
 function defaultStatus(decision: GoalDecision | undefined): SummaryStatus {
@@ -28,20 +34,47 @@ function shortHash(hash: string): string {
   return hash.slice(0, 10);
 }
 
-function zeroUsage(): Usage {
-  return { in: 0, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0, out: 0, reasoningOut: 0 };
+interface RoleCost {
+  role: string;
+  costUsd?: number;
+  unpricedTurns: number;
 }
 
-function addUsage(total: Usage, part: Usage | undefined): Usage {
-  if (!part) return total;
+/** Known zero stays $0.0000; unknown never does; a partial sum says so. */
+function costText(costUsd: number | undefined, unpricedTurns: number): string {
+  const unknown = `${unpricedTurns} unpriced ${unpricedTurns === 1 ? "turn" : "turns"}`;
+  if (unpricedTurns === 0) return `$${(costUsd ?? 0).toFixed(4)}`;
+  if (costUsd === undefined) return `unknown (${unknown})`;
+  return `$${costUsd.toFixed(4)} (partial; ${unknown})`;
+}
+
+function aggregateUsage(
+  recs: StepRecord[],
+  roleByStep: Record<string, string>,
+  prices: PriceTable
+): { usage: Usage; unpricedTurns: number; roles: RoleCost[] } {
+  let usage = zeroUsage();
+  let unpricedTurns = 0;
+  const roles = new Map<string, RoleCost>();
+  for (const rec of recs) {
+    if (!rec.usage) continue;
+    const priced = pricedUsage(rec.usage, rec.model?.id, prices);
+    usage = addUsage(usage, priced.usage);
+    const unpriced = priced.costKnown ? 0 : 1;
+    unpricedTurns += unpriced;
+    if (rec.actor !== "agent") continue;
+    const role = roleByStep[rec.step] ?? DEFAULT_ROLE_BY_STEP[rec.step] ?? rec.step;
+    const entry = roles.get(role) ?? { role, unpricedTurns: 0 };
+    entry.unpricedTurns += unpriced;
+    if (priced.usage.costUsd !== undefined) {
+      entry.costUsd = (entry.costUsd ?? 0) + priced.usage.costUsd;
+    }
+    roles.set(role, entry);
+  }
   return {
-    in: total.in + part.in,
-    cacheRead: total.cacheRead + part.cacheRead,
-    cacheWrite5m: total.cacheWrite5m + part.cacheWrite5m,
-    cacheWrite1h: total.cacheWrite1h + part.cacheWrite1h,
-    out: total.out + part.out,
-    reasoningOut: total.reasoningOut + part.reasoningOut,
-    costUsd: (total.costUsd ?? 0) + (part.costUsd ?? 0) || undefined,
+    usage,
+    unpricedTurns,
+    roles: [...roles.values()].sort((a, b) => a.role.localeCompare(b.role)),
   };
 }
 
@@ -131,7 +164,12 @@ export async function writeIterationSummary(
       .map((text) => `- ${text}`)
   );
 
-  const usage = recs.reduce((sum, rec) => addUsage(sum, rec.usage), zeroUsage());
+  const roleByStep = { ...DEFAULT_ROLE_BY_STEP, ...(input.roleByStep ?? {}) };
+  const {
+    usage,
+    unpricedTurns,
+    roles: roleCosts,
+  } = aggregateUsage(recs, roleByStep, input.prices ?? {});
   const agentTurns = recs.filter((r) => r.actor === "agent" && r.endedAt).length;
   const scriptTurns = recs.filter((r) => r.actor === "script" && r.endedAt).length;
   const base = recordedBaseGates(input.records);
@@ -189,7 +227,12 @@ export async function writeIterationSummary(
     "## Metrics",
     `- turns: ${agentTurns} agent, ${scriptTurns} script`,
     `- tokens: input ${usage.in}, cached ${usage.cacheRead}, output ${usage.out}, reasoning ${usage.reasoningOut}`,
-    `- cost: ${usage.costUsd !== undefined ? `$${usage.costUsd.toFixed(4)}` : "not reported"}`,
+    `- cost: ${costText(usage.costUsd, unpricedTurns)}`,
+    `- cost by role: ${
+      roleCosts.length
+        ? roleCosts.map((entry) => `${entry.role} ${costText(entry.costUsd, entry.unpricedTurns)}`).join("; ")
+        : "none"
+    }`,
     `- merged: ${merged.length}; parked: ${[...parkedByCause.values()].flat().length}; pending: ${pending.length}`,
     "",
   ];
@@ -211,15 +254,24 @@ export async function backfillSummaries(runtime: KernelRuntime): Promise<void> {
   const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
   const status =
     state.goal === "done" ? "goal-met" : state.goal === "blocked" ? "blocked-by-user" : "stopped-with-debt";
+  const roleByStep = rolesByStep(runtime.configs.process.flows);
   for (let n = 1; n <= state.iteration; n++) {
     if (await runtime.store.readFile(`iterations/${n}/summary.md`)) continue;
-    await writeIterationSummary(runtime.store, { iteration: n, state, records, status });
+    await writeIterationSummary(runtime.store, {
+      iteration: n,
+      state,
+      records,
+      status,
+      roleByStep,
+      prices: runtime.configs.run.prices,
+    });
     await writeMetrics(runtime.store, {
       iteration: n,
       status,
       records,
       state,
-      roleByStep: rolesByStep(runtime.configs.process.flows),
+      roleByStep,
+      prices: runtime.configs.run.prices,
     });
   }
 }

@@ -12,6 +12,7 @@ import { writeIterationSummary } from "./summary.js";
 import { rolesByStep, writeMetrics } from "./metrics.js";
 import { preflight, type ModelCatalog } from "./preflight.js";
 import { recoverLaunch } from "./recovery.js";
+import { BaseFollowConflictError } from "./worktree.js";
 import { createLaunchSessions } from "./sessions.js";
 import { createDrainController, type DrainController, type DrainSignal } from "./signals.js";
 import type { Harness, ModelRef } from "../harness/types.js";
@@ -56,6 +57,8 @@ export interface LaunchResult {
   state: State;
   lastSummary?: string;
   stop: LaunchStop;
+  /** Why the launch stopped before any iteration could run. */
+  cause?: string;
   interruptedBy?: DrainSignal;
   recoveredRecords: number;
 }
@@ -74,15 +77,26 @@ async function writeIterationFacts(
 ): Promise<string> {
   const records = await runtime.store.listRecords();
   const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+  const roleByStep = rolesByStep(runtime.configs.process.flows);
+  const prices = runtime.configs.run.prices;
   await writeMetrics(runtime.store, {
     iteration,
     status,
     records,
     state,
-    roleByStep: rolesByStep(runtime.configs.process.flows),
+    roleByStep,
+    prices,
     humanInterventions,
   });
-  return writeIterationSummary(runtime.store, { iteration, state, records, status, cause });
+  return writeIterationSummary(runtime.store, {
+    iteration,
+    state,
+    records,
+    status,
+    cause,
+    roleByStep,
+    prices,
+  });
 }
 
 async function safeSummary(
@@ -165,7 +179,22 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
       catalog: opts.modelCatalog,
       baseGates: opts.baseGates,
     });
-    const recoveredRecords = await recoverLaunch(runtime);
+    const interrupted = (await store.listRecords()).filter((r) => !r.endedAt).length;
+    let recoveredRecords: number;
+    try {
+      recoveredRecords = await recoverLaunch(runtime);
+    } catch (err) {
+      if (!(err instanceof BaseFollowConflictError)) throw err;
+      console.warn(`[factory] ${err.message}`);
+      return {
+        goal: opts.goal,
+        iterations: 0,
+        state: derive(await store.listTasks(), await store.listRecords(), runtime.configs.process.flows),
+        stop: "infra",
+        cause: err.message,
+        recoveredRecords: interrupted,
+      };
+    }
     const relaunch = (await store.listRecords()).some((r) => r.iteration > 0);
     let iterations = 0;
     let lastSummary: string | undefined;

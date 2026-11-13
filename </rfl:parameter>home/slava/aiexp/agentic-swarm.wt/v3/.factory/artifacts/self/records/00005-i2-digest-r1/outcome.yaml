@@ -1,0 +1,49 @@
+# Digest — previous launch (before iteration 2)
+
+launch: previous-launch-before-2
+records: 4
+
+## Cost and turns by role
+| role | alias | turns | input | cached | output | cost |
+|---|---|---|---|---|---|---|
+| architect | architect | 1 | 345000 | 3578918 | 41678 | $1.2505 |
+| pm | pm | 1 | 72278 | 413056 | 1640 | $0.0000 |
+
+## Totals
+- turns: 2
+- input: 417278; cached: 3991974; output: 43318
+- cost: $1.2505
+- tokens: 4544861 [metrics.yaml]
+- wall time: 2026-11-13T05:02:00.614Z to 2026-11-13T05:14:38.615Z (~12m38s) [records/00001-i0-baseline-r1/started.yaml, records/00004-i0-baseline-r1/end.yaml]
+- iterations used: 1 (iteration 1); baseline runs: 2 (iteration 0) [metrics.yaml]
+
+## Transcripts (sampled)
+- /home/slava/.local/share/factory/sessions/self/20261113T050157465Z-2d7cd9/omp/sessions/2026-11-13T05-02-01-340Z_01a1d348-ba7c-7693-ad18-fad57480655e.jsonl — 134 lines, 79 messages; inspected all 40 tool-use entries [partial: tool calls only]
+- /home/slava/.local/share/factory/sessions/self/20261113T050157465Z-2d7cd9/opencode/ses_e2cafd3f9ffeztymKupqBxG9hW.export.json — 23 messages; inspected text; no tool calls observed [partial]
+
+## Loops
+- No task (slug,step) pair repeated across distinct rounds: no task slugs dispatched [records/00003-i1-pm-r1/outcome.yaml].
+- Baseline step repeated twice (records/00001-i0-baseline-r1, records/00004-i0-baseline-r1), both round 1, bases bfd1465393e15a29b7f90fa9dec2107eface1339 and cd8a1efe5e659b676e5200996b415d2e3cbcc166.
+- Same failing check across rounds: test fingerprint 6289e6678c202815b6cdb6e98d04253a04b9e778 in records/00001 and 00004 (2).
+- No-progress fingerprint: baseline test ENOENT on preflight-probe-* self-deletion (same fingerprint above).
+- Rounds per task: 0 tasks; architect 1 round, pm 1 round.
+
+## Failures
+- status failed: architect [records/00002-i1-architect-r1/outcome.yaml] — plan.md header only, no milestones/bullets.
+- Base gates red: records/00001 (typecheck fail "Script not found"; test fail) and records/00004 (typecheck pass; test fail, same fingerprint).
+- Stop reasons: architect stop kind done with outcome failed; pm stop kind done with outcome done [records/00002-i1-architect-r1/end.yaml, records/00003-i1-pm-r1/end.yaml].
+- Parked tasks: none [metrics.yaml parked: []].
+- Repeated failures (top 3): (1) baseline test fingerprint 6289e6678c202815b6cdb6e98d04253a04b9e778 x2; (2) architect incomplete plan x1; (3) pm derived no task bullets x1.
+
+## Interventions
+- Steers/mailbox traffic: none recorded (mailbox has outbox only: metrics.yaml, iteration-1-summary.md; no inbox/processed) [mailbox/].
+- Manual edits/owner changes: none recorded.
+- Retries: architect turn had 2 model attempts [records/00002-i1-architect-r1/end.yaml attempts]; pm had 1 [records/00003-i1-pm-r1/end.yaml attempts].
+
+## Outcomes
+- Merged: 0; parked: 0; abandoned: 0; tasks created: 0 [metrics.yaml; records/00003-i1-pm-r1/outcome.yaml].
+- Rounds: architect 1, pm 1.
+
+## Cost centres (tokens)
+- architect 4052431 ($1.2505); pm 492430 ($0.00); only two recorded.
+" path="/home/slava/aiexp/agentic-swarm.wt/v3/.factory/artifacts/self/iterations/2/digest.md"
