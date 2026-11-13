@@ -3,6 +3,7 @@ import path from "node:path";
 import { writeTextAtomic } from "../core/records/io.js";
 import { runAgentTurn } from "./agent.js";
 import { resolveRole } from "./flow-context.js";
+import { formatSteerTurn, holdsDir, type Steer } from "./mailbox.js";
 import { materialHash, parseTaskFile, validateTaskGraph, TaskFileError } from "./tasks.js";
 import { appendCancel, scriptMeta } from "./record.js";
 import type { AliasConfig, KernelRuntime, Outcome, State, StepRecord, TaskFile, TaskStatus } from "./types.js";
@@ -314,6 +315,8 @@ export async function runPm(
         tasks_dir: runtime.store.tasksDir,
         existing_tasks: existingTasks(opts.state, tasks),
         repair: round === 1 ? "" : ladderNote(rung, target, failure),
+        steers: "none",
+        holds_dir: holdsDir(runtime.store),
       },
       expectation: "any",
     });
@@ -346,4 +349,34 @@ export async function runPm(
   }
 
   return { status: "exhausted", rungs };
+}
+
+/**
+ * One PM turn for steers dropped mid-iteration. The PM structures each steer
+ * into a hold file and writes no task file; there is no ladder because the
+ * steer still reaches the architect at the boundary whether this turn succeeds
+ * or fails. A failed turn therefore writes no hold and changes no dispatch.
+ * The record uses the PM step, so it stays out of the item turn budget and
+ * prices into the iteration's spend like every other PM turn.
+ */
+export async function runSteerPm(
+  runtime: KernelRuntime,
+  opts: { iteration: number; state: State; tasks: TaskFile[]; steers: Steer[]; cwd: string }
+): Promise<void> {
+  await runAgentTurn(runtime, {
+    target: resolveRole(runtime, "pm"),
+    cwd: opts.cwd,
+    meta: { iteration: opts.iteration, step: "pm", round: 1 },
+    vars: {
+      iteration: String(opts.iteration),
+      intent_path: path.join(runtime.store.goalDir, "intent.md"),
+      plan_path: path.join(runtime.store.goalDir, "plan.md"),
+      tasks_dir: runtime.store.tasksDir,
+      existing_tasks: existingTasks(opts.state, opts.tasks),
+      repair: "",
+      steers: formatSteerTurn(opts.steers),
+      holds_dir: holdsDir(runtime.store),
+    },
+    expectation: "any",
+  });
 }

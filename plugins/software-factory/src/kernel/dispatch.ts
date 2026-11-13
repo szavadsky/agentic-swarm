@@ -1,9 +1,12 @@
 import { derive } from "./derive.js";
 import { executeTaskAction, type TaskActionResult } from "./flow.js";
 import { stepTarget } from "./flow-context.js";
+import { readHolds, scanInbox, type Hold } from "./mailbox.js";
 import { next } from "./next.js";
+import { runSteerPm } from "./pm.js";
 import { priceUsage, type PriceTable } from "./pricing.js";
-import type { Action, KernelRuntime, StepRecord, TaskFile, TaskState } from "./types.js";
+import { appendPark } from "./record.js";
+import type { Action, KernelRuntime, State, StepRecord, TaskFile, TaskState } from "./types.js";
 import type { MergeResult } from "./integrate.js";
 
 export interface DispatchResult {
@@ -54,6 +57,20 @@ function overlapsRunning(scope: readonly string[], running: ReadonlyMap<string, 
   return false;
 }
 
+/** Agent turns charged to the item budget; boundary roles and infra stops are free. */
+function settledTurns(records: StepRecord[], iteration: number): number {
+  return records.filter(
+    (r) =>
+      r.iteration === iteration &&
+      r.actor === "agent" &&
+      r.endedAt &&
+      r.slug !== undefined &&
+      r.step !== "architect" &&
+      r.step !== "pm" &&
+      r.stop?.kind !== "infra"
+  ).length;
+}
+
 function iterationStart(records: StepRecord[], iteration: number): number {
   const times = records
     .filter((r) => r.iteration === iteration)
@@ -82,6 +99,31 @@ function agentStop(result: TaskActionResult | MergeResult): { reason: "infra" | 
   if ("infra" in result && result.infra) return { reason: "infra", cause: result.infra.cause };
   if ("cancelled" in result && result.cancelled) return { reason: "cancelled" };
   return undefined;
+}
+
+interface ActiveHolds {
+  /** Task slug -> the steer that holds it. First steer in file order wins. */
+  slugs: Map<string, string>;
+  /** The steer holding the whole goal, when one does. */
+  goal?: string;
+}
+
+/**
+ * A hold applies only while its steer is still pending: the architect answers a
+ * steer at the boundary and moves it to processed, and the hold then expires
+ * with it. This also keeps a hold file from surviving into later iterations.
+ */
+function activeHolds(holds: Hold[], pending: ReadonlySet<string>): ActiveHolds {
+  const slugs = new Map<string, string>();
+  let goal: string | undefined;
+  for (const hold of holds) {
+    if (!pending.has(hold.steer)) continue;
+    if (hold.goal && goal === undefined) goal = hold.steer;
+    for (const slug of hold.slugs) {
+      if (!slugs.has(slug)) slugs.set(slug, hold.steer);
+    }
+  }
+  return { slugs, goal };
 }
 
 /**
@@ -114,6 +156,35 @@ export async function runDispatch(
   let drain: string | undefined;
   const usdLimit = runtime.limits.iterationUsd;
 
+  // Steers already in the inbox when dispatch starts are the boundary's: the
+  // architect saw them and only the architect marks them processed. Only drops
+  // after this point get a mid-run PM turn, so a boundary steer never triggers
+  // a second PM consult in the same iteration.
+  const steersAtStart = await scanInbox(runtime.store, { settleMs: 0 });
+  const seenSteers = new Set(steersAtStart.map((steer) => steer.id));
+  let holds = await readHolds(runtime.store);
+
+  /**
+   * Polls the inbox between dispatch decisions, never inside a turn. New
+   * steers get exactly one PM turn for the batch; its record lands before the
+   * caller reads records, so its dollars count against the iteration brake.
+   */
+  const pollSteers = async (
+    state: State,
+    tasks: TaskFile[]
+  ): Promise<{ hold: ActiveHolds; steerTurn: boolean }> => {
+    const steers = await scanInbox(runtime.store, { settleMs: 0 });
+    const pending = new Set(steers.map((steer) => steer.id));
+    const fresh = steers.filter((steer) => !seenSteers.has(steer.id));
+    for (const steer of fresh) seenSteers.add(steer.id);
+    if (cancelled || fresh.length === 0) {
+      return { hold: activeHolds(holds, pending), steerTurn: false };
+    }
+    await runSteerPm(runtime, { iteration, state, tasks, steers: fresh, cwd: runtime.paths.goalCheckout });
+    holds = await readHolds(runtime.store);
+    return { hold: activeHolds(holds, pending), steerTurn: true };
+  };
+
   const start = (action: Action & { slug: string }, taskState: TaskState, task: TaskFile, agent: boolean, harnessId?: string): void => {
     const promise = (async () => {
       const result = await executeTaskAction(runtime, task, action, iteration, taskState);
@@ -134,28 +205,30 @@ export async function runDispatch(
     // after can pair a stale state with an idle slug and dispatch it twice.
     const runningAtRead = new Set(running.keys());
     const tasks = await runtime.store.listTasks();
-    const records = await runtime.store.listRecords();
-    const state = derive(tasks, records, runtime.configs.process.flows);
-    const turnsUsed = records.filter(
-      (r) =>
-        r.iteration === iteration &&
-        r.actor === "agent" &&
-        r.endedAt &&
-        r.slug !== undefined &&
-        r.step !== "architect" &&
-        r.step !== "pm" &&
-        r.stop?.kind !== "infra"
-    ).length;
+    const recordsBefore = await runtime.store.listRecords();
+    const state = derive(tasks, recordsBefore, runtime.configs.process.flows);
 
     if (state.terminal) {
       await Promise.allSettled([...running.values()].map((r) => r.promise));
-      return { reason: "terminal", turns: turnsUsed };
+      const turns = settledTurns(recordsBefore, iteration);
+      return { reason: "terminal", turns };
     }
+
+    const polled = await pollSteers(state, tasks);
+    const hold = polled.hold;
+    // A steer PM turn is an agent record written after the first read; re-read
+    // so it prices into this iteration's brake like every other PM turn.
+    const records = polled.steerTurn ? await runtime.store.listRecords() : recordsBefore;
+    const turnsUsed = settledTurns(records, iteration);
 
     const agentCount = (): number => [...running.values()].filter((r) => r.agent).length;
     const elapsedMs = Date.now() - iterationStart(records, iteration);
     if (!drain && !cancelled) {
-      if (runtime.limits.iterationTurns !== undefined && turnsUsed >= runtime.limits.iterationTurns) {
+      if (hold.goal !== undefined) {
+        // A goal hold is a drain with a name: in-flight steps settle unmerged,
+        // nothing new starts, and the architect sees the remainder.
+        drain = `steer: ${hold.goal} goal hold`;
+      } else if (runtime.limits.iterationTurns !== undefined && turnsUsed >= runtime.limits.iterationTurns) {
         drain = `iteration turn limit ${runtime.limits.iterationTurns} reached`;
       } else if (
         runtime.limits.iterationWallMs !== undefined &&
@@ -180,6 +253,22 @@ export async function runDispatch(
       const task = tasks.find((t) => t.slug === action.slug);
       if (!task) throw new Error(`action names unknown task "${action.slug}"`);
       const taskState = state.tasks[action.slug]!;
+
+      // A held task that has not run this iteration waits for the architect;
+      // one that has finishes its in-flight step first, then parks unmerged.
+      // A park the task earned itself runs with its own cause: the steer did
+      // not stop it, and the architect needs the reason the task stopped.
+      const heldBySteer = hold.goal ?? hold.slugs.get(action.slug);
+      if (heldBySteer !== undefined && action.kind !== "park") {
+        if (started.has(action.slug)) {
+          await appendPark(
+            runtime.store,
+            { iteration, slug: action.slug, round: taskState.round },
+            `steer: ${heldBySteer}`
+          );
+        }
+        continue;
+      }
 
       if (action.kind === "step") {
         if (drain && !started.has(action.slug)) continue;

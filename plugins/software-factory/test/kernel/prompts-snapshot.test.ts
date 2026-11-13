@@ -23,6 +23,8 @@ const ROLES: Record<string, Record<string, string>> = {
     tasks_dir: "/goal/tasks",
     existing_tasks: "- alpha | merged | abcdef1234 | deps: none | frozen",
     repair: "- task \"beta\" depends on missing task \"ghost\"",
+    steers: "- s1 (mailbox/inbox/s1.md):\n  keep the API stable",
+    holds_dir: "/goal/mailbox/holds",
     outcome_path: "/goal/records/00043-i3-pm-r1/outcome.yaml",
   },
   implementer: {

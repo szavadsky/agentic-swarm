@@ -4,8 +4,11 @@ import os from "node:os";
 import path from "node:path";
 import {
   formatSteers,
+  formatSteerTurn,
+  holdsDir,
   markProcessed,
   postSteer,
+  readHolds,
   scanInbox,
   steerResponses,
   writeOutbox,
@@ -71,6 +74,37 @@ describe("mailbox", () => {
     }
   });
 
+  it("reads one hold per steer and ignores files that are not hold YAML", async () => {
+    const { root, store } = await setup();
+    try {
+      const dir = holdsDir(store);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, "s1.yaml"), "slugs: [alpha, beta]\ngoal: false\n", "utf8");
+      fs.writeFileSync(path.join(dir, "s2.yaml"), "slugs: []\ngoal: true\n", "utf8");
+      fs.writeFileSync(path.join(dir, "notes.txt"), "not a hold\n", "utf8");
+      fs.writeFileSync(path.join(dir, ".draft.yaml"), "slugs: [ghost]\ngoal: false\n", "utf8");
+
+      expect(await readHolds(store)).toEqual([
+        { steer: "s1", slugs: ["alpha", "beta"], goal: false },
+        { steer: "s2", slugs: [], goal: true },
+      ]);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("fails loudly on a malformed hold instead of letting held work run", async () => {
+    const { root, store } = await setup();
+    try {
+      const dir = holdsDir(store);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, "s1.yaml"), "slugs: alpha\ngoal: false\n", "utf8");
+      await expect(readHolds(store)).rejects.toThrow('hold file "s1.yaml" must be');
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("parses steer answers only from steer <id>: lines", async () => {
     const responses = steerResponses({
       status: "done",
@@ -88,6 +122,7 @@ describe("mailbox", () => {
       await postSteer(store, "s3", "line one\nline two");
       const steers = await scanInbox(store, { settleMs: 0 });
       expect(formatSteers(steers)).toBe("- s3 (mailbox/inbox/s3.md): line one");
+      expect(formatSteerTurn(steers)).toBe("- s3 (mailbox/inbox/s3.md):\n  line one\n  line two");
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }

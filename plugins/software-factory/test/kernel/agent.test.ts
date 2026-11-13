@@ -396,6 +396,8 @@ const pmVars = {
   tasks_dir: "/g/tasks",
   existing_tasks: "none",
   repair: "",
+  steers: "none",
+  holds_dir: "/g/mailbox/holds",
 };
 
 const implementerVars = {

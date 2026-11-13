@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
+import { z } from "zod";
+import yaml from "yaml";
 import { writeTextAtomic } from "../core/records/io.js";
 import type { ArtifactStore, Outcome } from "./types.js";
 
@@ -21,8 +23,21 @@ export interface ScanOptions {
   settleMs?: number;
 }
 
+/** What the PM's steer turn decided one steer blocks. */
+export interface Hold {
+  steer: string;
+  slugs: string[];
+  goal: boolean;
+}
+
 const DEFAULT_SETTLE_MS = 50;
 const TMP_DIR = ".tmp";
+const YAML_HOLD = /\.ya?ml$/i;
+
+const holdFileSchema = z.object({
+  slugs: z.array(z.string()),
+  goal: z.boolean(),
+});
 
 function contentHash(text: string): string {
   return createHash("sha1").update(text.replace(/\r\n/g, "\n"), "utf8").digest("hex");
@@ -211,6 +226,45 @@ export async function markProcessed(store: ArtifactStore, steer: Steer): Promise
   }
 }
 
+/** Where the PM's steer turn writes one `<steer-id>.yaml` per structured steer. */
+export function holdsDir(store: ArtifactStore): string {
+  return path.join(store.mailboxDir, "holds");
+}
+
+/**
+ * Reads the PM's hold decisions. A malformed hold is script input corruption,
+ * not a steer: it fails loudly instead of silently letting held work merge.
+ * Holds for steers the architect already processed are the caller's to ignore.
+ */
+export async function readHolds(store: ArtifactStore): Promise<Hold[]> {
+  const dir = holdsDir(store);
+  let names: string[];
+  try {
+    names = await fs.promises.readdir(dir);
+  } catch (err) {
+    if (isENOENT(err)) return [];
+    throw err;
+  }
+  const holds: Hold[] = [];
+  for (const name of names.sort()) {
+    if (name.startsWith(".") || !YAML_HOLD.test(name)) continue;
+    const file = path.join(dir, name);
+    let raw: unknown;
+    try {
+      raw = yaml.parse(await fs.promises.readFile(file, "utf8"));
+    } catch (err) {
+      if (isENOENT(err)) continue;
+      throw new Error(`hold file "${name}" is not valid YAML: ${(err as Error).message}`);
+    }
+    const parsed = holdFileSchema.safeParse(raw);
+    if (!parsed.success) {
+      throw new Error(`hold file "${name}" must be { slugs: string[], goal: boolean }`);
+    }
+    holds.push({ steer: path.basename(name, path.extname(name)), ...parsed.data });
+  }
+  return holds;
+}
+
 export async function writeOutbox(store: ArtifactStore, id: string, text: string): Promise<string> {
   const rel = path.join("mailbox", "outbox", `steer-${id}.md`);
   await writeTextAtomic(path.join(store.mailboxDir, "outbox", `steer-${id}.md`), `${text.trim()}\n`);
@@ -234,5 +288,13 @@ export function formatSteers(steers: Steer[]): string {
       const first = s.text.trim().split(/\r?\n/)[0] ?? "";
       return `- ${s.id} (${s.relPath}): ${first}`;
     })
+    .join("\n");
+}
+
+/** Full steer text for the PM's steer turn; the architect only needs the first line. */
+export function formatSteerTurn(steers: Steer[]): string {
+  if (steers.length === 0) return "none";
+  return steers
+    .map((s) => `- ${s.id} (${s.relPath}):\n${s.text.trim().replace(/^/gm, "  ")}`)
     .join("\n");
 }
