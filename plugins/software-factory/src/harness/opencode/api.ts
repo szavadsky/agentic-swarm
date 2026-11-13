@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { runProcess } from "../../core/proc.js";
 import { registerChildGroup, unregisterChildGroup } from "../../core/shutdown.js";
+import type { OpencodeSessionTokens } from "./usage.js";
 
 export interface OpencodeModelInfo {
   providerID: string;
@@ -25,6 +26,16 @@ export class OpencodeApi {
     const result = await this.run(["api", "GET", "/api/model"], cwd, 60);
     const parsed = JSON.parse(result);
     return Array.isArray(parsed.data) ? parsed.data : [];
+  }
+
+  /** Cumulative session counters, including cache writes the step stream omits. */
+  async sessionTokens(
+    sessionId: string,
+    cwd: string
+  ): Promise<OpencodeSessionTokens | undefined> {
+    const raw = await this.run(["api", "GET", `/api/session/${sessionId}`], cwd, 30);
+    const parsed = JSON.parse(raw);
+    return parsed?.data?.tokens;
   }
 
   /** POST compact, then wait for the completed compaction message (API returns admission only). */

@@ -8,6 +8,11 @@ import type { ModelRef, SessionRef, TurnRequest, TurnResult } from "../types.js"
 import { classifyOpencodeTurn } from "./classifier.js";
 import { OpencodeEventParser } from "./events.js";
 import type { OpencodeRuntime } from "./types.js";
+import {
+  readExportTokens,
+  usageFromSessionDelta,
+  type OpencodeSessionTokens,
+} from "./usage.js";
 
 const MAX_STDERR_BYTES = 64 * 1024;
 
@@ -33,6 +38,11 @@ export async function runOpencodeTurn(
   const selector = model.effort ? `${model.id}#${model.effort}` : model.id;
   const resume =
     req.session && req.session.harness === "opencode" ? req.session.id : undefined;
+  const beforeTokens = resume
+    ? await runtime.api.sessionTokens(resume, req.cwd).catch(() => undefined)
+    : undefined;
+  // Without a baseline the export total is the whole session, not this turn's usage.
+  const sessionUsageKnown = !resume || beforeTokens !== undefined;
   const prompt = !resume && req.system ? `${req.system}\n\n${req.prompt}` : req.prompt;
   const args = ["run", "--auto", "--archived", "--format", "json", "-m", selector];
   if (resume) args.push("-s", resume);
@@ -131,6 +141,7 @@ export async function runOpencodeTurn(
 
   const summary = parser.result();
   let transcript: string | undefined;
+  let exportedTokens: OpencodeSessionTokens | undefined;
   if (summary.sessionId) {
     const out = path.join(runtime.sessionDir, "opencode", `${summary.sessionId}.export.json`);
     try {
@@ -140,9 +151,18 @@ export async function runOpencodeTurn(
         req.cwd,
         timeoutCause ? 15_000 : 120_000
       );
+      exportedTokens = readExportTokens(out);
     } catch {
       transcript = undefined;
     }
+  }
+
+  const usage =
+    exportedTokens && sessionUsageKnown
+      ? usageFromSessionDelta(beforeTokens, exportedTokens)
+      : summary.usage;
+  if (exportedTokens && sessionUsageKnown && summary.usage.costUsd !== undefined) {
+    usage.costUsd = summary.usage.costUsd;
   }
 
   const stop = classifyOpencodeTurn({
@@ -168,7 +188,7 @@ export async function runOpencodeTurn(
   return {
     stop,
     text: summary.text,
-    usage: summary.usage,
+    usage,
     session,
     model: session?.model ?? model,
     transcript,
