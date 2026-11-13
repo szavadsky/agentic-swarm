@@ -1,2 +1,2 @@
 export { dispatch, parseCliArgs } from "./dispatch.js";
-export type { ParsedArgs } from "./dispatch.js";
+export type { CliDeps, ParsedArgs } from "./dispatch.js";

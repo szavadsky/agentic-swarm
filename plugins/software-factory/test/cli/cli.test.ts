@@ -12,14 +12,29 @@ import {
 
 describe("CLI dispatch", () => {
   it("parses global flags and the positional command", () => {
-    expect(parseCliArgs(["run", "--repo", "/tmp/x", "--max-iterations=2"])).toEqual({
+    expect(parseCliArgs(["run", "--repo", "/tmp/x", "--iterations=2", "--goal", "g"])).toEqual({
       command: "run",
       repo: "/tmp/x",
+      goal: "g",
+      iterations: 2,
+      runConfig: undefined,
       help: false,
       version: false,
     });
     expect(parseCliArgs(["--help"]).help).toBe(true);
     expect(parseCliArgs(["-v"]).version).toBe(true);
+  });
+
+  it("documents the run command in help", async () => {
+    const original = console.log;
+    const lines: string[] = [];
+    console.log = (msg: string) => lines.push(msg);
+    try {
+      expect(await dispatch(["run", "--help"])).toBe(0);
+      expect(lines.join("\n")).toContain("factory run --repo <path> --goal <name>");
+    } finally {
+      console.log = original;
+    }
   });
 
   it("prints help when called without a command", async () => {
