@@ -89,8 +89,9 @@ function agentStop(result: TaskActionResult | MergeResult): { reason: "infra" | 
  * The dispatch loop: `next` proposes, this loop admits. Admission holds the
  * absolute and per-harness turn limits and never starts two tasks whose scopes
  * touch. On an optional iteration limit — turns, wall clock or dollars — the
- * loop drains: no new turns, in-flight work finishes, then the caller ends the
- * iteration normally.
+ * loop drains: a task that has not started this iteration gets no turn, tasks
+ * already started finish their flow, in-flight work settles, then the caller
+ * ends the iteration normally.
  */
 export async function runDispatch(
   runtime: KernelRuntime,

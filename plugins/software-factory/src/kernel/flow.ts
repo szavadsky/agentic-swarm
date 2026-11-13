@@ -75,7 +75,12 @@ async function handleStepResult(
   stop: StepRecord["stop"],
   outcome: StepRecord["outcome"]
 ): Promise<TaskActionResult> {
-  if (stop?.kind === "infra") return { infra: { kind: "infra", cause: stop.cause } };
+  if (stop?.kind === "infra") {
+    // The classifier already scrubbed and capped `details`; append it verbatim
+    // so the operator sees the provider error behind a bare cause like "auth".
+    const cause = stop.details ? `${stop.cause}: ${stop.details}` : stop.cause;
+    return { infra: { kind: "infra", cause } };
+  }
   if (stop?.kind === "cancelled") return { cancelled: true };
   if (stop?.kind === "truncated") return {};
   const meta = { iteration, slug: task.slug, round: state.round };

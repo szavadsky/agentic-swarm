@@ -135,7 +135,9 @@ export async function attemptConflictMerge(
   const stop = result.record.stop;
   if (stop?.kind === "infra") {
     await abortMerge(ensured.path);
-    return { ok: false, infra: { kind: "infra", cause: stop.cause } };
+    // Verbatim: `details` is already scrubbed and capped by the classifier.
+    const cause = stop.details ? `${stop.cause}: ${stop.details}` : stop.cause;
+    return { ok: false, infra: { kind: "infra", cause } };
   }
   if (stop?.kind === "cancelled") {
     await abortMerge(ensured.path);
