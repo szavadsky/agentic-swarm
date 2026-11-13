@@ -6,7 +6,22 @@ import { rec, script, task } from "./helpers.js";
 
 const limits: Limits = {
   itemTurns: 4,
-  flows: { "implement-review": { reviewRounds: 2 }, spike: { reviewRounds: 1 } },
+  flows: {
+    "implement-review": {
+      reviewRounds: 2,
+      steps: [
+        { id: "implement", role: "implementer" },
+        { id: "review", role: "reviewer", review: true },
+      ],
+    },
+    spike: {
+      reviewRounds: 1,
+      steps: [
+        { id: "implement", role: "implementer" },
+        { id: "review", role: "reviewer", review: true },
+      ],
+    },
+  },
   iterations: 1,
   concurrency: 1,
   perHarness: {},
@@ -69,7 +84,7 @@ describe("next", () => {
     expect(next(state, limits, new Set())).toEqual([{ kind: "finish", slug: "s" }]);
   });
 
-  it("parks on a last-round changes verdict and on an exhausted item budget", () => {
+  it("merges last-round changes instead of parking, and parks on an exhausted item budget", () => {
     const lastRound = derive([task("a")], [
       implement(1),
       check(2),
@@ -78,19 +93,19 @@ describe("next", () => {
       check(5),
       review(6, "changes", 2),
     ]);
-    const park = next(lastRound, limits, new Set())[0]!;
-    expect(park.kind).toBe("park");
-    if (park.kind === "park") expect(park.cause).toContain("round limit");
+    expect(next(lastRound, limits, new Set())).toEqual([{ kind: "merge", slug: "a" }]);
+    expect(lastRound.tasks.a!.round).toBe(2);
 
     const spent = derive([task("a")], [
       implement(1),
       check(2),
       review(3, "changes", 1),
       implement(4, 2),
+      check(5),
     ]);
     const budget = next(spent, { ...limits, itemTurns: 3 }, new Set())[0]!;
     expect(budget.kind).toBe("park");
-    if (budget.kind === "park") expect(budget.cause).toContain("item budget");
+    if (budget.kind === "park") expect(budget.cause).toContain("budget");
   });
 
   it("merges approved work even when the item budget is already spent", () => {
