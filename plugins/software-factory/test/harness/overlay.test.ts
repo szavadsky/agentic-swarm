@@ -8,7 +8,20 @@ import {
   writeOmpConfigOverlay,
   ensureThinkingSuffix,
 } from "../../src/harness/omp/overlay.js";
-import { loadPipelineConfig } from "../../src/core/config/loader.js";
+import type { OmpPipelineConfig } from "../../src/harness/omp/types.js";
+
+const pipeline: OmpPipelineConfig = {
+  models: {
+    roles: {
+      workhorse: {
+        model: "opencode-go/deepseek-v4.1-flash",
+        fallbacks: ["alt-workhorse"],
+      },
+      "alt-workhorse": { model: "opencode-go/muse-spark-1.3-contributor" },
+      "task-reviewer": { alias: "alt-workhorse" },
+    },
+  },
+};
 
 describe("OMP config overlay generation", () => {
   it("ensures :max thinking suffix when absent", () => {
@@ -23,29 +36,22 @@ describe("OMP config overlay generation", () => {
     );
   });
 
-  it("generates correct overlay from pipeline.default.yaml", () => {
-    const pluginRoot = path.resolve(import.meta.dir, "../..");
-    const { config } = loadPipelineConfig({ pluginRoot });
+  it("generates correct overlay from resolved roles", () => {
+    const overlay = generateOmpConfigOverlay(pipeline) as any;
 
-    const overlay = generateOmpConfigOverlay(config) as any;
-
-    // 1. Roles mapped
     expect(overlay.modelRoles).toBeDefined();
     expect(overlay.modelRoles.workhorse).toBe("opencode-go/deepseek-v4.1-flash:max");
     expect(overlay.modelRoles["alt-workhorse"]).toBe("opencode-go/muse-spark-1.3-contributor:max");
-    // Alias task-reviewer should resolve to alt-workhorse primary
+    // Alias task-reviewer resolves to alt-workhorse's primary.
     expect(overlay.modelRoles["task-reviewer"]).toBe("opencode-go/muse-spark-1.3-contributor:max");
 
-    // 2. Retry and fallback chains
     expect(overlay.retry.modelFallback).toBe(true);
     expect(overlay.retry.maxRetries).toBe(3);
     expect(overlay.retry.usageAwareFallback).toBe(true);
-    expect(overlay.retry.fallbackChains).toBeDefined();
     expect(overlay.retry.fallbackChains.workhorse).toEqual([
       "opencode-go/muse-spark-1.3-contributor:max",
     ]);
 
-    // 3. Unattended keys
     expect(overlay.eval.autoBackground.enabled).toBe(false);
     expect(overlay.title.generator).toBe("none");
     expect(overlay.checkpoint.enabled).toBe(true);
@@ -57,12 +63,9 @@ describe("OMP config overlay generation", () => {
   });
 
   it("writes valid YAML to disk via writeOmpConfigOverlay", () => {
-    const pluginRoot = path.resolve(import.meta.dir, "../..");
-    const { config } = loadPipelineConfig({ pluginRoot });
-
     const tmpFile = path.join(os.tmpdir(), `test-overlay-${Date.now()}.yaml`);
     try {
-      writeOmpConfigOverlay(config, tmpFile);
+      writeOmpConfigOverlay(pipeline, tmpFile);
       expect(fs.existsSync(tmpFile)).toBe(true);
 
       const parsed = yaml.parse(fs.readFileSync(tmpFile, "utf8"));

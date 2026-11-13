@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import yaml from "yaml";
-import type { PipelineConfig } from "../../core/artifacts.js";
+import type { OmpPipelineConfig } from "./types.js";
 import { resolveRole } from "../../core/config/roles.js";
 
 /**
@@ -17,13 +17,13 @@ export function ensureThinkingSuffix(model: string): string {
 }
 
 /**
- * Generates an OMP unattended YAML overlay object from a PipelineConfig (§5, §12.4).
+ * Generates an OMP unattended YAML overlay object from role definitions (§5, §12.4).
  * Configures:
  *  - `modelRoles`: mapped roles and aliases with resolved primary models and thinking suffixes.
  *  - `retry.fallbackChains`: automatic model fallback chains for resilience.
  *  - Unattended switches: disables prompts, git guard, auto-backgrounding, advisor, title generator, mnemopi.
  */
-export function generateOmpConfigOverlay(pipeline: PipelineConfig): Record<string, unknown> {
+export function generateOmpConfigOverlay(pipeline: OmpPipelineConfig): Record<string, unknown> {
   const modelRoles: Record<string, string> = {};
   const fallbackChains: Record<string, string[]> = {};
 
@@ -88,7 +88,7 @@ export function generateOmpConfigOverlay(pipeline: PipelineConfig): Record<strin
 /**
  * Serializes the generated overlay to YAML and writes it atomically to the target path.
  */
-export function writeOmpConfigOverlay(pipeline: PipelineConfig, targetPath: string): string {
+export function writeOmpConfigOverlay(pipeline: OmpPipelineConfig, targetPath: string): string {
   const overlayObj = generateOmpConfigOverlay(pipeline);
   const yamlContent = yaml.stringify(overlayObj, { indent: 2 });
   const dir = path.dirname(targetPath);

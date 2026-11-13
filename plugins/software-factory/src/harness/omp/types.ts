@@ -1,5 +1,12 @@
-import type { PipelineConfig } from "../../core/artifacts.js";
-import type { JSONSchema, Usage } from "../types.js";
+import type { RoleDefinition } from "../../core/config/roles.js";
+import type { Usage } from "./contract.js";
+
+/** The slice of v2 pipeline config the omp overlay and tool resolution still read. */
+export interface OmpPipelineConfig {
+  models?: { roles?: Record<string, RoleDefinition> };
+  tools?: { structuredOutput?: string[] };
+  [key: string]: unknown;
+}
 
 export interface OmpHarnessOptions {
   /** Path to omp binary (defaults to process.env.OMP_PATH || Bun.which("omp") || "omp") */
@@ -7,7 +14,7 @@ export interface OmpHarnessOptions {
   /** Path to pre-generated YAML configuration overlay */
   configOverlayPath?: string;
   /** Pipeline configuration used to generate the overlay dynamically */
-  pipeline?: PipelineConfig;
+  pipeline?: OmpPipelineConfig;
   /** Root directory for runtime state (sessions, prompts, overlay). Defaults to cwd/.factory-runtime */
   runtimeDir?: string;
   /** Default execution timeout per turn in milliseconds (defaults to 2_700_000 = 45m) */

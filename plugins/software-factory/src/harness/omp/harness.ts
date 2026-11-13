@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "bun";
-import type { JSONSchema, Harness, AgentRun, AgentOutcome } from "../types.js";
+import type { JSONSchema, Harness, AgentRun, AgentOutcome } from "./contract.js";
 import type { OmpHarnessOptions } from "./types.js";
 import { OmpNdjsonParser } from "./ndjson.js";
 import { classifyOmpOutcome } from "./classify.js";
