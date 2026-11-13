@@ -41,7 +41,8 @@ export async function runOpencodeTurn(
   const beforeTokens = resume
     ? await runtime.api.sessionTokens(resume, req.cwd).catch(() => undefined)
     : undefined;
-  // Without a baseline the export total is the whole session, not this turn's usage.
+  // A resumed turn without a baseline cannot subtract: the export total covers the
+  // whole session, not this turn, so the step stream's usage is the safe fallback.
   const sessionUsageKnown = !resume || beforeTokens !== undefined;
   const prompt = !resume && req.system ? `${req.system}\n\n${req.prompt}` : req.prompt;
   const args = ["run", "--auto", "--archived", "--format", "json", "-m", selector];

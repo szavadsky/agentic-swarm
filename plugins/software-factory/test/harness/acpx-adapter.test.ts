@@ -1,5 +1,4 @@
 import { describe, expect, it } from "bun:test";
-import fs from "node:fs";
 import path from "node:path";
 import { AcpxHarness } from "../../src/harness/acpx/harness.js";
 import { priceUsage } from "../../src/kernel/pricing.js";
@@ -21,7 +20,7 @@ function request(cwd: string, prompt: string, extra: Record<string, unknown> = {
 describe("AcpxHarness", () => {
   it("creates a named pi session, passes model and effort, and returns the last agent text", async () => {
     const stub = createAcpxStub();
-    const harness = new AcpxHarness({ agent: "pi", sessionDir: path.join(stub.binary, "..", "sessions"), binary: stub.binary });
+    const harness = new AcpxHarness({ agent: "pi", binary: stub.binary });
     try {
       const cwd = path.dirname(stub.binary);
       const outcomePath = path.join(cwd, "outbox", "outcome.yaml");
@@ -40,13 +39,15 @@ describe("AcpxHarness", () => {
       // pi reports no usage on the prompt; absence stays unknown, not a fake zero cost.
       expect(result.usage.costUsd).toBeUndefined();
       expect(result.usage.in).toBe(0);
-      // The agent writes the file the prompt named; nothing in the stub knows the path otherwise.
-      expect(fs.readFileSync(outcomePath, "utf8")).toContain("status: done");
 
       const calls = stub.invocations();
       const create = calls.find((args) => args.includes("sessions") && args.includes("new"))!;
       const set = calls.find((args) => args.includes("set"))!;
       const prompt = calls.find((args) => args.at(-1)?.includes("[[text:PONG]]"))!;
+
+      // The stub logs argv and never writes the outcome, so this is the path the
+      // adapter actually handed the agent, not a file the stub invented.
+      expect(prompt.at(-1)).toContain(`outcome path: \`${outcomePath}\``);
 
       for (const args of [create, set, prompt]) {
         expect(args.indexOf("--format")).toBeLessThan(args.indexOf("pi"));
@@ -65,7 +66,7 @@ describe("AcpxHarness", () => {
 
   it("resumes the same named session from a second process without creating a new one", async () => {
     const stub = createAcpxStub();
-    const options = { agent: "pi" as const, sessionDir: path.join(stub.binary, "..", "sessions"), binary: stub.binary };
+    const options = { agent: "pi" as const, binary: stub.binary };
     const harness = new AcpxHarness(options);
     try {
       const cwd = path.dirname(stub.binary);
@@ -90,7 +91,7 @@ describe("AcpxHarness", () => {
 
   it("retries de novo with a new name when the resumed session is gone", async () => {
     const stub = createAcpxStub();
-    const harness = new AcpxHarness({ agent: "pi", sessionDir: path.join(stub.binary, "..", "sessions"), binary: stub.binary });
+    const harness = new AcpxHarness({ agent: "pi", binary: stub.binary });
     try {
       const cwd = path.dirname(stub.binary);
       const first = await harness.turn(request(cwd, "first"));
@@ -116,9 +117,76 @@ describe("AcpxHarness", () => {
     }
   });
 
+  it("retries de novo when the resumed session's effort set answers NO_SESSION", async () => {
+    const stub = createAcpxStub();
+    const harness = new AcpxHarness({ agent: "pi", binary: stub.binary });
+    try {
+      const cwd = path.dirname(stub.binary);
+      const first = await harness.turn(request(cwd, "first", { effort: "high" }));
+      stub.closeSession(first.session!.id);
+
+      const second = await harness.turn(
+        request(cwd, "second [[text:ALPHA]]", { session: first.session, effort: "high" })
+      );
+
+      expect(second.stop).toEqual({ kind: "done" });
+      expect(second.text).toBe("ALPHA");
+      expect(second.session?.id).toMatch(/^pi-/);
+      expect(second.session?.id).not.toBe(first.session!.id);
+
+      const calls = stub.invocations();
+      const creates = calls.filter((args) => args.includes("sessions") && args.includes("new"));
+      expect(creates).toHaveLength(2);
+      expect(creates[1]).toContain(second.session!.id);
+
+      const sets = calls.filter((args) => args.includes("set"));
+      expect(sets).toHaveLength(3);
+      expect(sets[1]![sets[1]!.indexOf("-s") + 1]).toBe(first.session!.id);
+      expect(sets[2]![sets[2]!.indexOf("-s") + 1]).toBe(second.session!.id);
+      expect(sets[2]!.slice(sets[2]!.indexOf("set"))).toEqual(["set", "thought_level", "high"]);
+
+      const prompts = calls.filter((args) => args.at(-1)?.startsWith("second"));
+      expect(prompts).toHaveLength(1);
+      expect(prompts[0]![prompts[0]!.indexOf("-s") + 1]).toBe(second.session!.id);
+    } finally {
+      stub.cleanup();
+    }
+  });
+
+  it("stops with infra details and no session when the retry also answers NO_SESSION", async () => {
+    const stub = createAcpxStub();
+    const harness = new AcpxHarness({ agent: "pi", binary: stub.binary });
+    try {
+      const cwd = path.dirname(stub.binary);
+      const first = await harness.turn(request(cwd, "first", { effort: "high" }));
+      stub.closeSession(first.session!.id);
+
+      const second = await harness.turn(
+        request(cwd, "second [[mode:no_session]]", { session: first.session, effort: "high" })
+      );
+
+      expect(second.stop).toMatchObject({
+        kind: "infra",
+        cause: "crash",
+        details: expect.stringMatching(/No acpx session found/),
+      });
+      expect(second.session).toBeUndefined();
+
+      const calls = stub.invocations();
+      // One de-novo retry: the dead-record set, one new session, then the prompt
+      // that also answers NO_SESSION must end the turn, not start another retry.
+      expect(calls.filter((args) => args.includes("sessions") && args.includes("new"))).toHaveLength(2);
+      const prompts = calls.filter((args) => args.at(-1)?.includes("[[mode:no_session]]"));
+      expect(prompts).toHaveLength(1);
+      expect(prompts[0]![prompts[0]!.indexOf("-s") + 1]).not.toBe(first.session!.id);
+    } finally {
+      stub.cleanup();
+    }
+  });
+
   it("gives two fresh sessions in the same worktree distinct names", async () => {
     const stub = createAcpxStub();
-    const harness = new AcpxHarness({ agent: "pi", sessionDir: path.join(stub.binary, "..", "sessions"), binary: stub.binary });
+    const harness = new AcpxHarness({ agent: "pi", binary: stub.binary });
     try {
       const cwd = path.dirname(stub.binary);
       const first = await harness.turn(request(cwd, "implementer"));
@@ -140,7 +208,7 @@ describe("AcpxHarness", () => {
     const stub = createAcpxStub({
       codexUsage: { totalTokens: 6320, inputTokens: 556, cachedReadTokens: 5760, outputTokens: 4, thoughtTokens: 0 },
     });
-    const harness = new AcpxHarness({ agent: "codex", sessionDir: path.join(stub.binary, "..", "sessions"), binary: stub.binary });
+    const harness = new AcpxHarness({ agent: "codex", binary: stub.binary });
     try {
       const result = await harness.turn({
         ...request(path.dirname(stub.binary), "Say [[text:PONG]]"),
@@ -205,7 +273,7 @@ describe("AcpxHarness", () => {
 
     for (const testCase of cases) {
       const stub = createAcpxStub();
-      const harness = new AcpxHarness({ agent: "pi", sessionDir: path.join(stub.binary, "..", "sessions"), binary: stub.binary });
+      const harness = new AcpxHarness({ agent: "pi", binary: stub.binary });
       try {
         const result = await harness.turn(
           request(path.dirname(stub.binary), `[[mode:${testCase.mode}]]`)
@@ -219,7 +287,7 @@ describe("AcpxHarness", () => {
 
   it("maps a cancelled stop reason to cancelled even though acpx exits 0", async () => {
     const stub = createAcpxStub();
-    const harness = new AcpxHarness({ agent: "codex", sessionDir: path.join(stub.binary, "..", "sessions"), binary: stub.binary });
+    const harness = new AcpxHarness({ agent: "codex", binary: stub.binary });
     try {
       const result = await harness.turn(
         request(path.dirname(stub.binary), "[[mode:cancelled]]")
@@ -232,7 +300,7 @@ describe("AcpxHarness", () => {
 
   it("rejects a session bound to another cwd instead of reusing its acpx record", async () => {
     const stub = createAcpxStub();
-    const harness = new AcpxHarness({ agent: "pi", sessionDir: path.join(stub.binary, "..", "sessions"), binary: stub.binary });
+    const harness = new AcpxHarness({ agent: "pi", binary: stub.binary });
     try {
       const cwd = path.dirname(stub.binary);
       const first = await harness.turn(request(cwd, "first"));

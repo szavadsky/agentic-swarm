@@ -27,7 +27,17 @@ function globalArgs(cwd: string): string[] {
   return ["--format", "json", "--cwd", path.resolve(cwd)];
 }
 
-async function runSetup(runtime: AcpxRuntime, args: string[], cwd: string): Promise<Stop | undefined> {
+interface SetupFailure {
+  stop: Stop;
+  /** acpx answered NO_SESSION: the named record is gone. */
+  noSession: boolean;
+}
+
+async function runSetup(
+  runtime: AcpxRuntime,
+  args: string[],
+  cwd: string
+): Promise<SetupFailure | undefined> {
   const result = await runProcess({
     cmd: commandLine(runtime, args),
     cwd,
@@ -36,11 +46,14 @@ async function runSetup(runtime: AcpxRuntime, args: string[], cwd: string): Prom
   });
   const errors = acpxErrors(result.stdout);
   const error = errors.at(-1);
-  if (error) return classifyAcpxError(error);
-  if (result.timedOut) return { kind: "infra", cause: "timeout" };
+  if (error) return { stop: classifyAcpxError(error), noSession: isNoSessionError(error) };
+  if (result.timedOut) return { stop: { kind: "infra", cause: "timeout" }, noSession: false };
   if (result.code !== 0) {
     const details = stopDetails(result.stderr) ?? exitDetails(result.code, result.signal ?? null);
-    return details ? { kind: "infra", cause: "crash", details } : { kind: "infra", cause: "crash" };
+    const stop: Stop = details
+      ? { kind: "infra", cause: "crash", details }
+      : { kind: "infra", cause: "crash" };
+    return { stop, noSession: false };
   }
   return undefined;
 }
@@ -175,26 +188,48 @@ export async function runAcpxTurn(
   // A named session per turn: acpx records are cwd-keyed, so implementer and
   // reviewer sharing a worktree would otherwise land in one record.
   const resume = req.session && req.session.harness === agent ? req.session.id : undefined;
-  let name = resume ?? `${agent}-${randomUUID()}`;
+  const freshName = () => `${agent}-${randomUUID()}`;
+  let name = resume ?? freshName();
   const base = globalArgs(req.cwd);
 
   // A resumed record may be gone (TTL, `sessions close`); acpx then answers
   // NO_SESSION. Retry once de novo with a new name so the returned ref is live
-  // and the next turn does not resume the same dead record forever.
+  // and the next turn does not resume the same dead record forever. The retry
+  // covers both setup commands and the prompt, and attempt 0 is the only
+  // attempt that may resume, so at most one de-novo retry runs per turn.
   for (let attempt = 0; ; attempt += 1) {
+    const canRetryDeNovo = resume !== undefined && attempt === 0;
+    const shouldRetryDeNovo = (failure: SetupFailure) => failure.noSession && canRetryDeNovo;
+
     if (!resume || attempt > 0) {
-      const stop = await runSetup(runtime, [...base, agent, "sessions", "new", "--name", name], req.cwd);
-      if (stop) return { stop, text: "", usage: zeroUsage(), model };
+      const failure = await runSetup(
+        runtime,
+        [...base, agent, "sessions", "new", "--name", name],
+        req.cwd
+      );
+      if (failure) {
+        if (shouldRetryDeNovo(failure)) {
+          name = freshName();
+          continue;
+        }
+        return { stop: failure.stop, text: "", usage: zeroUsage(), model };
+      }
     }
 
     const effort = model.effort;
     if (effort) {
-      const stop = await runSetup(
+      const failure = await runSetup(
         runtime,
         [...base, agent, "-s", name, "set", ACPX_EFFORT[agent].configId, effort],
         req.cwd
       );
-      if (stop) return { stop, text: "", usage: zeroUsage(), model };
+      if (failure) {
+        if (shouldRetryDeNovo(failure)) {
+          name = freshName();
+          continue;
+        }
+        return { stop: failure.stop, text: "", usage: zeroUsage(), model };
+      }
     }
 
     const startedAt = new Date().toISOString();
@@ -209,8 +244,8 @@ export async function runAcpxTurn(
     const summary: AcpxTurnSummary = parser.result();
     const lost = summary.errors.some(isNoSessionError);
 
-    if (lost && attempt === 0 && resume) {
-      name = `${agent}-${randomUUID()}`;
+    if (lost && canRetryDeNovo) {
+      name = freshName();
       continue;
     }
 

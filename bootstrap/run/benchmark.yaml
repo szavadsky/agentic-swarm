@@ -1,0 +1,52 @@
+# Fixed benchmark (bootstrap/context/benchmark.md §3-4): the cheap tier of self.yaml.
+# self.yaml's paid architect (Opus through omp) is pinned to the subsidized
+# deepseek tier with no fallback, so a flaky architect parks the step instead of
+# silently changing the model under comparison; the free implementer/reviewer/PM
+# aliases and their fallbacks are unchanged. One iteration per launch; the goal
+# is reset before every launch. Runtime dirs are relative to the target repo,
+# which reset.sh keeps at <dest>/target, so both land under <dest> and outside
+# the repository.
+aliases:
+  architect:
+    harness: opencode
+    model: opencode-go/deepseek-v4.1-flash
+    effort: high
+  pm:
+    harness: opencode
+    model: opencode/beam-free
+    fallbacks:
+      - opencode-go/deepseek-v4.1-flash
+  digest:
+    harness: opencode
+    model: opencode/beam-free
+    fallbacks:
+      - opencode-go/deepseek-v4.1-flash
+  implementer:
+    harness: opencode
+    model: opencode/deepseek-v4.1-flash-free
+    fallbacks:
+      - opencode-go/deepseek-v4.1-flash
+  reviewer:
+    harness: opencode
+    model: opencode/minimax-m3.1-flash-free
+    fallbacks:
+      - opencode-go/deepseek-v4.1-flash
+
+# USD per million tokens. A model absent here is unpriced (unknown), never $0;
+# free models are listed explicitly at 0.
+prices:
+  opencode/beam-free: { input: 0, cachedInput: 0, output: 0, reasoning: 0 }
+  opencode/deepseek-v4.1-flash-free: { input: 0, cachedInput: 0, output: 0, reasoning: 0 }
+  opencode/minimax-m3.1-flash-free: { input: 0, cachedInput: 0, output: 0, reasoning: 0 }
+  opencode-go/beam-free: { input: 0, cachedInput: 0, output: 0, reasoning: 0 }
+  opencode-go/deepseek-v4.1-flash: { input: 0.15, cachedInput: 0.003, output: 0.6, reasoning: 0.6 }
+
+limits:
+  concurrency: 3
+  iterations: 1
+
+sessions:
+  dir: ../runtime/sessions
+  keepRuns: 5
+
+worktreeRoot: ../runtime/worktrees

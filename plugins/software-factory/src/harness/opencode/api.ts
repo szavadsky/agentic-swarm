@@ -28,7 +28,13 @@ export class OpencodeApi {
     return Array.isArray(parsed.data) ? parsed.data : [];
   }
 
-  /** Cumulative session counters, including cache writes the step stream omits. */
+  /**
+   * Lifetime session counters, including cache writes the step stream omits.
+   * On a resumed turn the caller reads them before the turn and subtracts that
+   * baseline from the post-turn export. A fresh turn owns the whole session, so
+   * the export total is already this turn's usage. Only a resumed turn whose
+   * baseline read failed, or an export without counters, uses step usage instead.
+   */
   async sessionTokens(
     sessionId: string,
     cwd: string
@@ -67,7 +73,11 @@ export class OpencodeApi {
     throw new Error(`opencode compact timed out for session ${sessionId}`);
   }
 
-  /** `opencode session export` straight into the session store; returns the file path. */
+  /**
+   * `opencode session export` straight into the session store; returns the file path.
+   * A zero exit proves only that the file was written: it may still be malformed
+   * or lack tokens, and the usage reader rejects both before use.
+   */
   async export(sessionId: string, outPath: string, cwd: string, timeoutMs = 120_000): Promise<string> {
     fs.mkdirSync(path.dirname(outPath), { recursive: true });
     const temp = `${outPath}.tmp`;

@@ -6,11 +6,6 @@ export type AcpxAgent = "pi" | "codex";
 
 export interface AcpxHarnessOptions {
   agent: AcpxAgent;
-  /**
-   * Accepted for interface parity with the other adapters. acpx owns session
-   * persistence under `~/.acpx/sessions`; this adapter never reads the directory.
-   */
-  sessionDir: string;
   /** Explicit acpx executable (tests and ACPX_PATH); defaults to PATH, then `bunx acpx`. */
   binary?: string;
   retry?: Partial<RetryPolicy>;

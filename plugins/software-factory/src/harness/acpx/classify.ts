@@ -1,4 +1,4 @@
-import { exitDetails, stopDetails } from "../details.js";
+import { exitDetails, stopDetails, withDetails } from "../details.js";
 import type { Stop } from "../types.js";
 import type { AcpxError, AcpxTurnSummary } from "./types.js";
 
@@ -23,13 +23,6 @@ export function isNoSessionError(error: AcpxError): boolean {
     error.code === -32002 ||
     /no acpx session found/i.test(errorText(error))
   );
-}
-
-/** Attaches the scrubbed error text where the Stop shape allows details. */
-function withDetails(stop: Stop, text: string): Stop {
-  if (stop.kind !== "infra" && stop.kind !== "refusal") return stop;
-  const details = stopDetails(text);
-  return details ? { ...stop, details } : stop;
 }
 
 /**

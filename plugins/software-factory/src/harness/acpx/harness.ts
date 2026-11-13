@@ -1,5 +1,3 @@
-import fs from "node:fs";
-import path from "node:path";
 import { runWithFallbacks, type RetryPolicy } from "../fallback.js";
 import type {
   Caps,
@@ -27,9 +25,6 @@ export class AcpxHarness implements Harness {
   private readonly retry: Partial<RetryPolicy>;
 
   constructor(opts: AcpxHarnessOptions) {
-    // acpx persists sessions under ~/.acpx; this directory exists for parity
-    // with the adapters that own their store.
-    fs.mkdirSync(path.resolve(opts.sessionDir), { recursive: true });
     this.id = opts.agent;
     this.runtime = runtimeOf(opts);
     this.retry = opts.retry ?? {};

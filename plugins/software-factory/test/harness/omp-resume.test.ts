@@ -31,6 +31,10 @@ if (resumeId && (model === "provider/resume-retry" || model === "provider/resume
 if (!resumeId && model === "provider/resume-dead") {
   fail("de novo launch exploded", 1);
 }
+// Any other resume failure must surface as infra, not trigger a de-novo retry.
+if (resumeId && model === "provider/resume-denied") {
+  fail("permission denied opening session " + resumeId, 1);
+}
 
 const sessionId = resumeId ?? (model === "provider/resume-retry" ? "fresh-session" : "live-1");
 const write = (frame) => process.stdout.write(JSON.stringify(frame) + "\\n");
@@ -135,6 +139,51 @@ describe("omp resume", () => {
       expect(flag(calls[0]!, "--session-dir")).toBe(storedDir);
       expect(flag(calls[1]!, "--resume")).toBeUndefined();
       expect(flag(calls[1]!, "--session-dir")).toBe(home);
+    } finally {
+      fake.cleanup();
+    }
+  }, 20_000);
+
+  it("does not retry de novo when the resume failure is not a missing session", async () => {
+    const fake = createFakeOmp();
+    const root = path.dirname(fake.binary);
+    const sessionDir = path.join(root, "sessions");
+    const home = defaultHome(sessionDir);
+    try {
+      const harness = new OmpHarness({
+        binary: fake.binary,
+        sessionDir,
+        readyTimeoutMs: 5_000,
+        retry: { retries: 5 },
+      });
+      const session: SessionRef = {
+        harness: "omp",
+        id: "sess-denied",
+        cwd: root,
+        model: { id: "provider/resume-denied" },
+        lastRequestStartedAt: new Date().toISOString(),
+        retentionTier: "short",
+        compacted: false,
+        dir: home,
+      };
+
+      const result = await harness.turn({
+        model: { id: "provider/resume-denied" },
+        session,
+        cwd: root,
+        prompt: "go",
+        timeouts: silent,
+      });
+
+      expect(result.stop).toEqual({
+        kind: "infra",
+        cause: "crash",
+        details: "permission denied opening session sess-denied",
+      });
+      expect(result.attempts).toHaveLength(1);
+      const calls = fake.invocations();
+      expect(calls).toHaveLength(1);
+      expect(flag(calls[0]!, "--resume")).toBe("sess-denied");
     } finally {
       fake.cleanup();
     }

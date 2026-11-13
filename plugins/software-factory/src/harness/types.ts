@@ -27,7 +27,13 @@ export type Stop =
   | { kind: "refusal"; details?: string }
   /** Task-side: the turn was cut short with a half-written artifact. */
   | { kind: "truncated"; cause: "max-tokens" | "turn-limit" }
-  /** Infrastructure trouble must never consume item budget or review rounds. `details` carries truncated stderr for crashes. */
+  /**
+   * Infrastructure trouble must never consume item budget or review rounds.
+   * `details` carries the scrubbed, one-line tail of the harness error text: at
+   * most 500 characters of text, with a leading `…` added when truncated. The
+   * text is a structured error message, stderr, or a synthetic cause, falling
+   * back to the exit code and signal when stderr is empty.
+   */
   | {
       kind: "infra";
       cause: "quota" | "rate" | "auth" | "crash" | "overflow" | "timeout";

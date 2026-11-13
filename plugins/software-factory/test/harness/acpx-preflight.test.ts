@@ -72,12 +72,11 @@ describe("self-acpx run config", () => {
       const store = createFolderStore(paths.goalDir);
       await store.ensureLayout();
 
-      const sessionDir = path.join(paths.sessionsDir, "probe");
       const harnesses = new Map<string, Harness>([
         ["opencode", new FakeHarness({ id: "opencode", caps: { effort: EFFORTS } })],
         ["omp", new FakeHarness({ id: "omp", caps: { effort: EFFORTS } })],
-        ["pi", new AcpxHarness({ agent: "pi", sessionDir, binary: stub.binary })],
-        ["codex", new AcpxHarness({ agent: "codex", sessionDir, binary: stub.binary })],
+        ["pi", new AcpxHarness({ agent: "pi", binary: stub.binary })],
+        ["codex", new AcpxHarness({ agent: "codex", binary: stub.binary })],
       ]);
       const acpxCatalog = createRealModelCatalog({ pi: stub.binary, codex: stub.binary });
       const catalog: ModelCatalog = (harness, model) =>

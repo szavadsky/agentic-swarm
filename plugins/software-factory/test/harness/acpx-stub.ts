@@ -19,7 +19,9 @@ export interface AcpxStubOptions {
 /**
  * A stub acpx executable that replays the probe's JSON-RPC frames. It keeps a
  * named-session record in its own state dir, so a missing `-s` is a real
- * NO_SESSION failure and a second turn can only resume by name.
+ * NO_SESSION failure for both `set` and the prompt, and a second turn can only
+ * resume by name. It logs argv and never writes the outcome file: a test that
+ * cares about the outcome path asserts the prompt the stub received.
  */
 export function createAcpxStub(opts: AcpxStubOptions = {}): AcpxStub {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acpx-stub-"));
@@ -64,20 +66,6 @@ const marker = (name) => {
 const mode = marker("mode");
 const reply = marker("text") ?? "PONG";
 const sessionFile = (name) => path.join(stateDir, "session-" + name);
-
-if (args.includes("sessions") && args.includes("new")) {
-  const name = flag(["--name"]) ?? "default";
-  fs.writeFileSync(sessionFile(name), "1");
-  emit({ action: "session_ensured", created: true, acpxRecordId: "rec-" + name, acpxSessionId: "sess-" + name, name });
-  process.exit(0);
-}
-if (args.includes("set")) {
-  const at = args.indexOf("set");
-  fs.writeFileSync(path.join(stateDir, "config-" + session), args[at + 1] + "=" + args[at + 2]);
-  emit({ action: "config_set", configId: args[at + 1], value: args[at + 2] });
-  process.exit(0);
-}
-
 const noSession = () =>
   emit({
     jsonrpc: "2.0",
@@ -88,6 +76,23 @@ const noSession = () =>
       data: { acpxCode: "NO_SESSION", origin: "cli", sessionId: "unknown" },
     },
   });
+
+if (args.includes("sessions") && args.includes("new")) {
+  const name = flag(["--name"]) ?? "default";
+  fs.writeFileSync(sessionFile(name), "1");
+  emit({ action: "session_ensured", created: true, acpxRecordId: "rec-" + name, acpxSessionId: "sess-" + name, name });
+  process.exit(0);
+}
+if (args.includes("set")) {
+  if (!session || !fs.existsSync(sessionFile(session))) {
+    noSession();
+    process.exit(4);
+  }
+  const at = args.indexOf("set");
+  fs.writeFileSync(path.join(stateDir, "config-" + session), args[at + 1] + "=" + args[at + 2]);
+  emit({ action: "config_set", configId: args[at + 1], value: args[at + 2] });
+  process.exit(0);
+}
 
 if (mode === "no_session" || !session || !fs.existsSync(sessionFile(session))) {
   noSession();
@@ -136,12 +141,6 @@ if (agent === "codex") {
   emit({ jsonrpc: "2.0", id: 7, result: { stopReason: "end_turn", usage: ${usage} } });
 } else {
   emit({ jsonrpc: "2.0", id: 7, result: { stopReason: "end_turn" } });
-}
-
-const outcome = /outcome path: \`([^\`]+)\`/.exec(prompt);
-if (outcome) {
-  fs.mkdirSync(path.dirname(outcome[1]), { recursive: true });
-  fs.writeFileSync(outcome[1], "status: done\\nsummary: stub\\n");
 }
 `;
 

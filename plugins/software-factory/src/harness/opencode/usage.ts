@@ -13,8 +13,10 @@ export interface OpencodeSessionTokens {
 /**
  * A real export records cache writes only on the session total (`info.tokens`),
  * not on any assistant message or `step_finish` part, so per-turn usage comes
- * from the session-level delta. Opencode reports one cache-write counter with no
- * TTL split, so it prices as 5m like the step stream does.
+ * from the export counters: the totals alone when the turn owns the whole
+ * session (no resume), or the post-turn total minus the pre-turn baseline when
+ * the session is resumed. Callers fall back to the step stream's usage only when
+ * a resumed turn could not read its baseline, or the export carries no counters.
  */
 export function usageFromSessionDelta(
   before: OpencodeSessionTokens | undefined,
@@ -31,7 +33,11 @@ export function usageFromSessionDelta(
   return usage;
 }
 
-/** Session counters from a `session export` file, or undefined when it is unreadable. */
+/**
+ * Session counters from a `session export` file, or undefined when the file is
+ * unreadable, holds malformed JSON, or carries no `info.tokens`. Callers then
+ * fall back to the step stream's usage.
+ */
 export function readExportTokens(file: string): OpencodeSessionTokens | undefined {
   try {
     const parsed = JSON.parse(fs.readFileSync(file, "utf8"));

@@ -26,8 +26,8 @@ export function createRealHarnesses(context: HarnessFactoryContext): Record<stri
   return {
     opencode: new OpencodeHarness({ sessionDir: context.sessionDir }),
     omp: new OmpHarness({ sessionDir: context.sessionDir, subagentModel: context.scouts }),
-    pi: new AcpxHarness({ agent: "pi", sessionDir: context.sessionDir }),
-    codex: new AcpxHarness({ agent: "codex", sessionDir: context.sessionDir }),
+    pi: new AcpxHarness({ agent: "pi" }),
+    codex: new AcpxHarness({ agent: "codex" }),
   };
 }
 
