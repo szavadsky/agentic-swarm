@@ -180,3 +180,8 @@ Verbatim, newest last; each with what it changed.
 
 ### 2026-11-12 — adapter policy (D19)
 - The owner's rule lands in Harness agnosticism: omp earns its custom adapter (RPC/yield/compaction/overlays); everything else rides acpx or plain ACP. This re-scopes the self-run's pi/codex work: no new CLI parsers — an acpx client (or ACP client) plus per-harness capability discovery. The opencode CLI adapter stays (grandfathered, proven), replaceable only on measured acpx parity.
+
+### 2026-11-12 — FIX done, merged (`5c89c3c`); kernel-0 complete
+- FIX (`opencode-go/deepseek-v4.1-flash#max`): 157 steps / 177 tools, 1904 s, exit 0. All four REV findings repaired with regression tests + hostile shakedown test (red base + kill in merge window → merged-not-parked, unrelated merges, base attribution). Verified myself: typecheck green; suite 331 pass / 4 skip / 0 fail (39 s) — one transient failure on my first run did not reproduce in two re-runs (flaky, likely settle timing; watch).
+- Merge into `factory-v3` clean, no conflicts. Suite on the head: same 335 green.
+- REV's gate is satisfied: findings 1–3 fixed, two-test coverage added, hostile shakedown exists as a test. Next: promote → live shakedown on the toy goal (phase C) → midnight self-run (phase D).
