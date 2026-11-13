@@ -1,0 +1,6 @@
+{"type":"model_change","timestamp":"2026-11-13T00:46:00.278Z","model":"cheap/model","role":null}
+{"type":"model_change","timestamp":"2026-11-13T00:46:00.289Z","model":"cheap/model","role":"subagent:ScoutCost"}
+{"type":"message","timestamp":"2026-11-13T00:46:00.291Z","message":{"role":"user","usage":null,"timestamp":1000}}
+{"type":"message","timestamp":"2026-11-13T00:46:00.303Z","message":{"role":"assistant","usage":{"input":120,"output":12,"cacheRead":0,"cacheWrite":0,"totalTokens":132,"reasoningTokens":2,"cost":{"input":0.0009,"output":0.0001,"cacheRead":0,"cacheWrite":0,"total":0.001}},"model":"cheap/model","timestamp":1000}}
+{"type":"message","timestamp":"2026-11-13T00:46:01.303Z","message":{"role":"assistant","usage":{"input":4790,"output":279,"cacheRead":100,"cacheWrite":20,"totalTokens":5189,"reasoningTokens":247,"cost":{"input":0.0357,"output":0.0115,"cacheRead":0,"cacheWrite":0,"total":0.0472}},"model":"cheap/model","timestamp":4102444800000}}
+{"type":"message","timestamp":"2026-11-13T00:46:07.046Z","message":{"role":"toolResult","usage":null,"timestamp":4102444801000}}

@@ -155,6 +155,32 @@ export function subagentUsage(sessionFile: string | undefined, sinceMs: number):
   return total;
 }
 
+export interface OmpTurnUsage {
+  /** Session stats before the prompt; absent when the RPC query failed. */
+  before?: OmpStats;
+  /** Session stats after the prompt; absent when the RPC query failed. */
+  after?: OmpStats;
+  /** Frame-sum usage, used when either stats snapshot is missing. */
+  fallback: Usage;
+  /** Parent session file; child transcripts live beside it. */
+  sessionFile?: string;
+  /** Epoch ms at which the prompt was sent; earlier child messages belong to an earlier turn. */
+  sinceMs: number;
+}
+
+/**
+ * Usage for one turn: the parent's stats delta (or the frame-sum fallback),
+ * plus the child sessions it spawned. `get_session_stats` excludes children,
+ * so without the second term their tokens and cost are recorded nowhere.
+ */
+export function turnUsage(input: OmpTurnUsage): Usage {
+  const parent =
+    input.before && input.after
+      ? statsDelta(input.before, input.after)
+      : input.fallback;
+  return addUsage(parent, subagentUsage(input.sessionFile, input.sinceMs));
+}
+
 /** True when the session file already carries a compaction entry. */
 export function isSessionCompacted(sessionFile: string | undefined): boolean {
   if (!sessionFile) return false;
