@@ -3,6 +3,7 @@ import { recordedBaseGates } from "./baseline.js";
 import { derive } from "./derive.js";
 import {
   DEFAULT_ROLE_BY_STEP,
+  costText,
   iterationMetrics,
   rolesByStep,
   writeMetrics,
@@ -37,14 +38,6 @@ function defaultStatus(decision: GoalDecision | undefined): SummaryStatus {
 
 function shortHash(hash: string): string {
   return hash.slice(0, 10);
-}
-
-/** Known zero stays $0.0000; unknown never does; a partial sum says so. */
-function costText(costUsd: number | undefined, unpricedTurns: number): string {
-  const unknown = `${unpricedTurns} unpriced ${unpricedTurns === 1 ? "turn" : "turns"}`;
-  if (unpricedTurns === 0) return `$${(costUsd ?? 0).toFixed(4)}`;
-  if (costUsd === undefined) return `unknown (${unknown})`;
-  return `$${costUsd.toFixed(4)} (partial; ${unknown})`;
 }
 
 function spendTable(

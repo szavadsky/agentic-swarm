@@ -101,6 +101,14 @@ export const DEFAULT_ROLE_BY_STEP: Record<string, string> = {
   review: "reviewer",
 };
 
+/** Known zero stays $0.0000; unknown never does; a partial sum says so. */
+export function costText(costUsd: number | undefined, unpricedTurns: number): string {
+  const unknown = `${unpricedTurns} unpriced ${unpricedTurns === 1 ? "turn" : "turns"}`;
+  if (unpricedTurns === 0) return `$${(costUsd ?? 0).toFixed(4)}`;
+  if (costUsd === undefined) return `unknown (${unknown})`;
+  return `$${costUsd.toFixed(4)} (partial; ${unknown})`;
+}
+
 function tokenTotal(usage: Usage): number {
   return (
     usage.in +
@@ -204,7 +212,7 @@ export function iterationMetrics(
   const architect: ArchitectMetrics = emptyArchitect();
 
   for (const rec of recs) {
-    const priced = pricedUsage(rec.usage ?? zeroUsage(), rec.model?.id, prices);
+    const priced = pricedUsage(rec.usage, rec.model?.id, prices);
     const part = priced.usage;
     const unpriced = priced.costKnown ? 0 : 1;
     const promptBytes = rec.promptBytes ?? 0;

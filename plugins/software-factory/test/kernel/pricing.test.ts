@@ -53,7 +53,7 @@ describe("price usage at aggregation time", () => {
 
   it("keeps known zero distinct from unknown and lets a non-zero harness cost win", () => {
     expect(priceUsage(usage({ costUsd: 0 }), "free/zero", TABLE)).toBe(0);
-    expect(priceUsage(usage({ costUsd: 0 }), "mystery/model", TABLE)).toBe(0);
+    expect(priceUsage(usage({ costUsd: 0 }), "mystery/model", TABLE)).toBeUndefined();
     expect(priceUsage(usage({ costUsd: 0.05, in: 1_000_000 }), "paid/one", TABLE)).toBe(0.05);
     expect(priceUsage(usage({ in: 1_000_000 }), "mystery/model", TABLE)).toBeUndefined();
     expect(priceUsage(usage({ in: 1 }), "free/zero", TABLE)).toBe(0);
@@ -115,6 +115,68 @@ describe("priced metrics and summary", () => {
       // Aggregation prices copies; the records themselves stay raw.
       expect(records[0]!.usage?.costUsd).toBeUndefined();
       expect(records[1]!.usage?.costUsd).toBeUndefined();
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("counts a harness zero on an absent model and a usage-less record as unpriced", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-pricing-"));
+    const store = createFolderStore(path.join(root, "goal"));
+    try {
+      await store.ensureLayout();
+      const records = [
+        rec(1, { step: "architect", slug: undefined, model: { id: "paid/one" }, usage: usage({ in: 1_000_000 }) }),
+        // A harness zero is not a price when no table entry exists.
+        rec(2, { slug: "a", model: { id: "mystery/model" }, usage: usage({ costUsd: 0, in: 1_000_000 }) }),
+        // A known zero comes only from an explicit table entry.
+        rec(3, { slug: "a", step: "review", model: { id: "free/zero" }, usage: usage({ costUsd: 0 }) }),
+        // A crash-sealed record has no usage; its model's table entry cannot price it.
+        rec(4, { slug: undefined, step: "pm", model: { id: "paid/one" } }),
+        // A non-zero harness figure still wins for a model outside the table.
+        rec(5, {
+          slug: undefined,
+          step: "digest",
+          model: { id: "mystery/model" },
+          usage: usage({ costUsd: 0.05 }),
+        }),
+        script(6, { slug: "a", step: "merge", ok: true }),
+      ];
+
+      await writeMetrics(store, { iteration: 1, status: "in-progress", records, prices: TABLE });
+      const metrics = yaml.parse((await store.readFile("metrics.yaml"))!) as GoalMetrics;
+      const one = metrics.iterations[0]!;
+
+      expect(one.roles.architect!.usage.costUsd).toBeCloseTo(4, 10);
+      expect(one.roles.implementer!.usage.costUsd).toBeUndefined();
+      expect(one.roles.implementer!.unpricedTurns).toBe(1);
+      expect(one.roles.reviewer!.usage.costUsd).toBe(0);
+      expect(one.roles.reviewer!.unpricedTurns).toBe(0);
+      expect(one.roles.pm!.usage.costUsd).toBeUndefined();
+      expect(one.roles.pm!.unpricedTurns).toBe(1);
+      expect(one.roles.digest!.usage.costUsd).toBeCloseTo(0.05, 10);
+      expect(one.unpricedTurns).toBe(2);
+      expect(one.usage.costUsd).toBeCloseTo(4.05, 10);
+      expect(one.costPerMergedTask).toBeNull();
+      expect(metrics.totals.unpricedTurns).toBe(2);
+
+      // Aggregation prices copies; the records themselves stay raw.
+      expect(records[1]!.usage?.costUsd).toBe(0);
+      expect(records[3]!.usage).toBeUndefined();
+
+      const state = derive([task("a")], records);
+      const rel = await writeIterationSummary(store, {
+        iteration: 1,
+        state,
+        records,
+        status: "in-progress",
+        prices: TABLE,
+      });
+      const text = fs.readFileSync(path.join(store.goalDir, rel), "utf8");
+      expect(text).toContain("- cost: $4.0500 (partial; 2 unpriced turns)");
+      expect(text).toContain(
+        "- cost by role: architect $4.0000; digest $0.0500; implementer unknown (1 unpriced turn); pm unknown (1 unpriced turn); reviewer $0.0000"
+      );
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
