@@ -9,7 +9,7 @@ import { loadConfigs, resolveGoalPaths, toLimits } from "./config.js";
 import { loadPrompts } from "./prompts.js";
 import { createFolderStore } from "./store.js";
 import { runBoundary } from "./boundary.js";
-import { writeIterationSummary } from "./summary.js";
+import { backfillSummaries, writeIterationSummary } from "./summary.js";
 import { writeMetrics } from "./metrics.js";
 import { prepareIntegrationCheckout } from "./worktree.js";
 import type { Harness } from "../harness/types.js";
@@ -147,6 +147,7 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
 
   try {
     await prepareIntegrationCheckout(runtime);
+    await backfillSummaries(runtime);
     const relaunch = (await store.listRecords()).length > 0;
     let iterations = 0;
     let lastSummary: string | undefined;

@@ -22,6 +22,24 @@ function previousSummary(goalDir: string, iteration: number): string | undefined
   return fs.existsSync(path.join(goalDir, rel)) ? path.join(goalDir, rel) : undefined;
 }
 
+async function taskSnapshot(goalDir: string): Promise<Map<string, string>> {
+  const dir = path.join(goalDir, "tasks");
+  const out = new Map<string, string>();
+  if (!fs.existsSync(dir)) return out;
+  for (const name of (await fs.promises.readdir(dir)).sort()) {
+    if (name.endsWith(".md")) out.set(name, await fs.promises.readFile(path.join(dir, name), "utf8"));
+  }
+  return out;
+}
+
+function snapshotDiff(before: Map<string, string>, after: Map<string, string>): string | null {
+  const names = new Set([...before.keys(), ...after.keys()]);
+  for (const name of [...names].sort()) {
+    if (before.get(name) !== after.get(name)) return name;
+  }
+  return null;
+}
+
 async function compactArchitect(
   runtime: KernelRuntime,
   session: NonNullable<import("./types.js").StepRecord["session"]>
@@ -74,6 +92,7 @@ export async function runBoundary(
   });
   await runtime.store.writeFile(packRel, pack);
 
+  const tasksBefore = await taskSnapshot(runtime.store.goalDir);
   const lastArchitect = records
     .filter((r) => r.step === "architect" && r.session && r.session.cwd === runtime.paths.goalCheckout)
     .sort((a, b) => a.seq - b.seq)
@@ -96,6 +115,17 @@ export async function runBoundary(
     expectation: "architect",
     session: lastArchitect?.session,
   });
+
+  const touched = snapshotDiff(tasksBefore, await taskSnapshot(runtime.store.goalDir));
+  if (touched) {
+    return {
+      iteration,
+      decision: "blocked",
+      cause: `architect modified task file ${touched}; only the PM writes tasks`,
+      outcome: result.outcome,
+      packPath: packRel,
+    };
+  }
 
   const decision = result.outcome?.decision;
   if (!decision) {

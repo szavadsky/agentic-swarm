@@ -149,6 +149,7 @@ async function runScenario(): Promise<void> {
     expect(repo.git(["show", "factory/demo:alpha.txt"]).stdout.trim()).toBe("alpha");
     expect(repo.git(["show", "factory/demo:beta.txt"]).stdout.trim()).toBe("beta");
     expect(fs.existsSync(path.join(goalDir, "iterations/1/summary.md"))).toBe(true);
+    expect(fs.existsSync(path.join(goalDir, "mailbox/outbox/iteration-1-summary.md"))).toBe(true);
     expect(fs.existsSync(path.join(goalDir, "metrics.yaml"))).toBe(true);
     const mergeRecords = (await store.listRecords()).filter((r) => r.step === "merge");
     expect(mergeRecords.map((r) => [r.slug, r.ok])).toEqual([

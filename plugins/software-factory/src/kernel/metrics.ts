@@ -76,5 +76,7 @@ export async function writeMetrics(
     parked: metrics.iterations.reduce((n, i) => n + i.parked.length, 0),
     usage: metrics.iterations.reduce((u, i) => addUsage(u, i.usage), zeroUsage()),
   };
-  await store.writeFile("metrics.yaml", yaml.stringify(metrics));
+  const text = yaml.stringify(metrics);
+  await store.writeFile("metrics.yaml", text);
+  await store.writeFile("mailbox/outbox/metrics.yaml", text);
 }

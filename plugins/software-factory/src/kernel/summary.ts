@@ -1,4 +1,6 @@
-import type { ArtifactStore, GoalDecision, State, StepRecord } from "./types.js";
+import type { ArtifactStore, GoalDecision, KernelRuntime, State, StepRecord } from "./types.js";
+import { derive } from "./derive.js";
+import { writeMetrics } from "./metrics.js";
 
 export type SummaryStatus = "goal-met" | "in-progress" | "blocked-by-user" | "stopped-with-debt";
 
@@ -98,6 +100,24 @@ export async function writeIterationSummary(
     "",
   ];
   const rel = `iterations/${iteration}/summary.md`;
-  await store.writeFile(rel, lines.join("\n"));
+  const text = lines.join("\n");
+  await store.writeFile(rel, text);
+  // The outbox is how the owner sees the guaranteed remarkable without reading the goal dir.
+  await store.writeFile(`mailbox/outbox/iteration-${iteration}-summary.md`, text);
   return rel;
+}
+
+/**
+ * A killed launch leaves records without a summary. Backfill one per missing
+ * iteration before the next boundary, so every iteration is reported exactly
+ * once even across crash recovery.
+ */
+export async function backfillSummaries(runtime: KernelRuntime): Promise<void> {
+  const records = await runtime.store.listRecords();
+  const state = derive(await runtime.store.listTasks(), records);
+  for (let n = 1; n <= state.iteration; n++) {
+    if (await runtime.store.readFile(`iterations/${n}/summary.md`)) continue;
+    await writeIterationSummary(runtime.store, { iteration: n, state, records, status: "stopped-with-debt" });
+    await writeMetrics(runtime.store, { iteration: n, status: "stopped-with-debt", records, state });
+  }
 }
