@@ -11,13 +11,15 @@ cd plugins/software-factory
 bun bin/factory.ts init   --repo <path> --goal <name> [--intent <file>]
 bun bin/factory.ts run    --repo <path> --goal <name> --run-config <file> [--iterations N]
 bun bin/factory.ts status --repo <path> --goal <name>
+bun bin/factory.ts benchmark --repo <path> --goal <name>
 bun bin/factory.ts steer  --repo <path> --goal <name> <file | ->
 ```
 
 `init` writes `.factory/repo.yaml` if missing, creates the goal directory and
 copies the intent (or writes a template). `run` pre-flights, takes the goal
 lock, recovers interrupted work and runs the iteration loop. `status` prints
-derived state and parked causes; `steer` drops a file into the inbox atomically.
+derived state and parked causes; `benchmark` prints one goal's benchmark rows;
+`steer` drops a file into the inbox atomically.
 
 Exit codes for `run`: `0` goal done, `1` failure, `2` blocked, `3` iteration
 limit, `130`/`143` interrupted by SIGINT/SIGTERM. The first signal drains (no
@@ -61,11 +63,27 @@ roles:
 aliases:
   architect: { harness: opencode, model: opencode/minimax-m3.1-flash-free, effort: highest }
   implementer: { harness: opencode, model: opencode/deepseek-v4.1-flash-free }
-limits: { concurrency: 3, iterations: 1 }
+prices:
+  opencode/minimax-m3.1-flash-free: { input: 0, cachedInput: 0, output: 0, reasoning: 0 }
+  opencode/deepseek-v4.1-flash-free: { input: 0, cachedInput: 0, output: 0, reasoning: 0 }
+  opencode-go/deepseek-v4.1-flash: { input: 0.15, cachedInput: 0.003, output: 0.6, reasoning: 0.6 }
+limits: { concurrency: 3, iterations: 1, iterationUsd: 5 }
 sessions: { dir: ~/.local/share/factory/sessions, keepRuns: 5 }
 worktreeRoot: ~/.local/share/factory/worktrees
 scouts: { model: opencode-go/deepseek-v4.1-flash }   # omp architect subagents
 ```
+
+`prices` maps a model id to USD per million tokens: `input`, `cachedInput`,
+`output` and `reasoning`, all four required. A turn costs its harness's
+non-zero figure, else the table's price for the model. A model absent from the
+table is unpriced — unknown, never `$0`; a free model is a known `$0` only
+through an explicit all-zero entry. opencode reports `0` for turns it cannot
+price, so the table is what separates that from free.
+
+`limits.iterationUsd` is an optional brake: once the iteration's priced spend
+reaches it, dispatch drains — no new task starts; tasks already started finish
+their remaining steps and merge, and the summary records the cause and how many
+turns the brake could not price.
 
 Pre-flight resolves every alias (and fallback) through the harness, checks the
 model list, `effort: highest` (highest level the model accepts), binaries, the
@@ -77,7 +95,7 @@ Gates run once on the base; a red base is recorded and warned once, not fatal.
 ```
 <artifactRoot>/<goal>/
   intent.md plan.md tasks/
-  records/                  # one directory per turn: started/end/outcome
+  records/                  # one directory per settled step and round: started/end/outcome
   mailbox/{inbox,processed,outbox}/
   iterations/<n>/{context-pack.md,summary.md,metrics.yaml}
   metrics.yaml
@@ -97,4 +115,8 @@ the outbox): status, merged/finished/parked tasks, remarkable concerns,
 assumptions and debt. `metrics.yaml` is rebuilt from the usage records:
 architect launches, architect cost and token share, cost per merged task, loop
 incidents (no-progress parks), human interventions (processed steers), and turns
-and tokens by role. Free models report cost `0`; token counts carry the signal.
+and tokens by role. Costs come from the price table; a turn neither the harness
+nor the table priced is counted as unpriced, so a total containing one is
+partial and cost per merged task is unset rather than `$0`. A free model prices
+to a known `$0` through its all-zero table entry, and its tokens still carry the
+signal. `factory benchmark --goal <name>` prints these aggregates as rows.

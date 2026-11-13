@@ -56,7 +56,7 @@ type Outcome = {
   verdict?: 'approve' | 'changes' | 'reject'      // review steps
   decision?: 'continue' | 'done' | 'blocked'      // architect step
 }
-// Append-only, one directory per turn; script-set fields around the agent's outcome.
+// Append-only, one directory per settled step and round; script-set fields around the agent's outcome.
 type StepRecord = { seq: number; iteration: number; slug?: string; step: string; round: number; alias: string
   model: ModelRef; stop: Stop; usage: Usage; session?: SessionRef; commit?: string; checks?: CheckResult[]
   outcome?: Outcome; startedAt: string; endedAt?: string }
@@ -88,7 +88,7 @@ Outcome delivery, in order of preference per `Caps`: native structured output �
 On disk (defaults, all paths in config):
 - repo config `.factory/repo.yaml` (tracked): base branch, gates (setup / typecheck / test), artifact root;
 - process config: package default + optional repo override — flows, roles → prompt templates, review rounds, item budget, calibration text;
-- run config (not tracked): aliases → harness + model + effort + fallbacks, concurrency, launch limits, session-store path, runs kept, worktree root;
+- run config (not tracked): aliases → harness + model + effort + fallbacks, price table (model → USD/Mtok; absent = unpriced, explicit zero = known $0), concurrency, launch limits (turns, wall, per-iteration USD brake), session-store path, runs kept, worktree root;
 - goal dir `<artifactRoot>/<goal>/` (plain folder, gitignored): `intent.md`, `plan.md`, `tasks/`, `records/`, `mailbox/{inbox,processed,outbox}/`, `iterations/<n>/{context-pack,digest,summary}.md`, `metrics.yaml`, `journal.ndjson`;
 - session store outside the repo and worktrees: transcripts and raw agent I/O, last N launches kept;
 - goal checkout (integration branch worktree) is stable across launches; task worktrees are disposable.
@@ -122,7 +122,7 @@ Architect subagents (scouts) are pinned to a cheap model in the harness overlay 
 5. Gate fails on the merged result → not merged, one fix round, then parked.
 6. Steer in inbox → present in architect context → processed + response in outbox.
 7. Plan edit between iterations: one pending task changed, one removed, one added; merged task frozen.
-8. Drain: iteration limit hit → no new dispatch, in-flight finishes, summary written.
+8. Drain: iteration limit hit → no new task starts, started tasks finish their remaining steps, summary written.
 9. Alternating outcomes (A, B, A, B) → no-progress trips on history → parked, loop incident counted.
 
 ## 8. Build slices
