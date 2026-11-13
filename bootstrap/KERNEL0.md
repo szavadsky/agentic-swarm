@@ -111,6 +111,8 @@ Prompts: one template per role (`architect`, `pm`, `implementer`, `reviewer`, `d
 
 Checklist = advice §5 (233-301) plus v2's observed failures (`context/repo-map.md` §6). Non-negotiable in kernel-0: fresh worktree gets its setup step before checks (v2 lost 4 spikes to a missing `node_modules`); idle timeout distinct from wall timeout; partial usage persisted on timeout/SIGTERM; merge conflict → one implementer attempt, then park; red base → report once at pre-flight, do not block unrelated merges silently; stop-reason classification fixed (`classify.ts:104`, `"aborted"`); prompt size capped — links to files, never pasted content.
 
+Architect subagents (scouts) are pinned to a cheap model in the harness overlay — inline subagents inherit the parent's model otherwise — and their usage counts toward the architect turn.
+
 ## 7. Acceptance — no-model E2E suite (fake harness, temp git repo)
 
 1. Happy path: plan with two dependent tasks → both merged → summary + metrics; second launch: architect says done → goal done.

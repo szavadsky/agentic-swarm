@@ -25,8 +25,36 @@ Non-blocking; the stated assumption is in force until overruled.
 - **Benchmark goal.** Assumption: the smallest v2 baseline under `plugins/software-factory/docs/runs` that still exercises review and merge; chosen by a scout before phase D.
 - **Superseded root documents** (`docs/adr/`, `docs/factory.v2.md`, `docs/dev-process.md`, `plugins/software-builder/`). Assumption: removed by a factory task at phase E, visible in the merge to `main` for the owner to veto.
 
+## Owner steering
+
+Verbatim, newest last; each with what it changed.
+
+- 2026-11-12 (task statement): "convert manifesto.md (and advisory only manifesto.advice.md) to a working, tested during bootstrapping, usage and ideology (based on manifesto) documented system. Use opencode cli with free models (preferable) or task subagents to prepare for first bootstrap step, meanwhile define intent for initial implementation, then manifesto +- small changes become intent; keep babysitting iterations of bootstrapping. Note: at some point this session will be converted to task grade agent, so think and create artifacts (rebuttable by practice) now; collect context using subagents." → `README.md`, `KERNEL0.md`, D1–D9.
+- 2026-11-12 (mid-build): "free model (deepseek v41 etc) are exactly same model that your task subagent is, just different billing. next task: assignment in file, launch cli see what will happen" → D10: the foreman layer of D3 is dropped. A slice is an assignment file under `bootstrap/assignments/`, executed directly by the OpenCode CLI on a free model (`opencode/deepseek-v4.1-flash-free#max`; on quota or context trouble `opencode-go/deepseek-v4.1-flash#max`), which reports into `bootstrap/reports/`. The orchestrator checks the stated acceptance itself and journals what happened. Event logs go to `~/.local/share/factory/bootstrap-runs/` (never git).
+
 ## Journal
 
 ### 2026-11-12 — context collection
 - Scout briefs written: `context/repo-map.md` (v2 inventory, reuse classification, failure modes), `context/advice-digest.md` (build order A1–E2, technical recommendations, advice-vs-intent conflicts X1–X10), `context/opencode-probe.md`, `context/omp-probe.md`.
 - Finding: `manifesto.md` has no `[REVIEW Mn]` / U / O labels; the N1–N19 decision log (`manifesto.md:145-200`) is the record of owner decisions. All items decided.
+
+### 2026-11-12 — slice P (prune + contract) — done
+- Commits `e5b41c4`, `1f80533`, `39cc69d` on `factory-v3`. src 26,059 → 8,964 LOC (90 → 50 files); tests 36,641 → 5,020 LOC, 700 tests / 154 s → 188 tests / 15 s; typecheck green.
+- Deleted beyond the KERNEL0 list: `derive/*`, `triage`, `review-policy`, `sessions`, budget disk-scan, `concerns.reconcile` (all bound to v2 record shapes), `docs/OMP_ADAPTER.md`.
+- `src/harness/types.ts` is the contract; `ModelRef = { id, effort? }` was invented there (the advice leaves it undefined). Fake harness is queue-scripted with file side effects and every stop kind.
+- Free models: not used (judgement-heavy deletion).
+- Stale by design until later slices: `docs/runs` and `.omp/lsp.json` reference deleted paths; `skills/factory-run-target`, `agents/skills/factory-selfhost` describe the v2 CLI.
+
+### 2026-11-12 — slices S0 (skeleton, `factory-v3`) and S1 (harness adapters, `factory-v3-s1` in `../agentic-swarm.wt/s1`) — started in parallel
+- S1 owns `src/harness/**`; S0 owns kernel, CLI, prompts, config. Contract additions announced to both: `TurnResult.model` (actual model), `TurnRequest.fallbacks`.
+- Prompt drafts being written to `bootstrap/drafts/prompts/` with a free-model advisory review per prompt.
+
+### 2026-11-12 — prompt drafts — done
+- `bootstrap/drafts/prompts/`: `architect` (92 lines), `pm`, `implementer`, `reviewer`, `digest` (37–43 lines each), partials `_outcome`, `_calibration`, `_clean-code`, `VARIABLES.md` (inputs the kernel must supply, e.g. `baseline_checks`, `turn = first | relaunch | boundary`), `REVIEW.md`.
+- Orchestrator review of `architect.md` applied: stop-decision order, once-per-iteration consult, cheap-recipient rule, architect-named immutable slugs, parked work continued only through a new slug with `base`, alias `escalation` instead of a model name, hierarchy text removed until the mechanism exists.
+- Evidence for "weaker reviews stronger" (manifesto §Model economics; advice §8 S2): `opencode/minimax-m3.1-flash-free` reviewed each prompt from the recipient's seat; all five reviews produced accepted changes (24 findings changed the drafts, 1 ignored on fact), zero cost, no 429.
+
+### 2026-11-12 — benchmark goal chosen (`context/benchmark.md`)
+- Benchmark = v2's `omp-workspaces` goal verbatim: target is this repository at `572a6e0` plus the archived INTENT, iteration limit 1; 10 tasks in 3 waves. `modernize` rejected as a benchmark (50 items, 60 h, $13.2, red gates, network downloads).
+- v2 baseline: 13 architect launches of 45; architect share 14.3% ($0.299 of $2.084); $0.417 per merged task (5 of 10 merged). v2 never recorded loop incidents or human interventions — journal proxies only.
+- Reset recipe verified in `/tmp` (archive at `572a6e0`, offline install, typecheck green, v2 suite 664 pass / 160 s). This settles the "Benchmark goal" item under Open for the owner unless overruled.
