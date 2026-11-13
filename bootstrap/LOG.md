@@ -245,3 +245,8 @@ Verbatim, newest last; each with what it changed.
 ### 2026-11-13 — iteration 8: 1 merged; export-based gates (architect's proposal)
 - 16 min, $1.05, status in-progress. Architect turn ended early waiting on scouts (no plan edit); PM + dispatch ran docs-truth round 2 → merged. Parked 2 unchanged, pending 2.
 - Owner-attention acted on: plan rules don't stop outside-package test reads (broken twice). Took the architect's stronger option over its default: `plugins/software-factory/scripts/gates.sh` copies the package working tree to a bare tmp dir and runs install+typecheck+test there; `.factory/repo.yaml` gates now call it (50 s all-in, verified). Task gates and promote gates can no longer diverge. Merged docs-truth (`1a950b1`), promoted, relaunched as iteration 9 (bg_132).
+
+### 2026-11-13 — iteration 9: 3 merged + 1 spike; steady state ($2.10)
+- 65 min, exit 3. Merged: acpx-session-loss, harness-hygiene, benchmark-kit (bench reset script + target-repo.yaml + run/benchmark.yaml now exist). Spike: hierarchy-probe. Parked: prune-checks (still), tier-escalation (still), +2 empty-diff (prune-checks-types, turn-target — the latter's diagnosis unified the resolver anyway). Pending 16.
+- turn-target's debt note claiming acpx-preflight.test.ts still reads bootstrap/ is stale — the inlined fix is in the tree and the export gate passes. No action.
+- Debt worth naming: benchmark-kit confirms the preflight-probe-* prefix collides with test-helper purges (my hour-cutoff is a band-aid; real fix = rename the scratch prefix in baseline.ts) → factory task. Merged clean (`9929a99`), promoting, iteration 10 running (bg_133).
