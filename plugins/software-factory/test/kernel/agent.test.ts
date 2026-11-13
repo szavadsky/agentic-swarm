@@ -136,4 +136,34 @@ describe("agent turn outcome delivery", () => {
     expect(result.record.stop).toEqual({ kind: "infra", cause: "quota" });
     fs.rmSync(root, { recursive: true, force: true });
   });
+
+  it("takes turn timeouts from the alias, and a step may override them", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-agent-"));
+    const fake = new FakeHarness({ id: "fake" });
+    const runtime = runtimeFor(fake, root);
+    await runtime.store.ensureLayout();
+    const turn = async (timeouts?: { idleMs: number; wallMs: number }) => {
+      fake.script((req, ctx) => {
+        ctx.writeOutcome({ status: "done", summary: "ok", decision: "continue" });
+        return fakeTurnResult(req);
+      });
+      return runAgentTurn(runtime, {
+        role: "architect",
+        cwd: root,
+        meta: { iteration: 1, step: "architect", round: 1 },
+        vars,
+        expectation: "architect",
+        ...(timeouts ? { timeouts } : {}),
+      });
+    };
+
+    await turn();
+    expect(fake.calls[0]!.timeouts).toEqual({ idleMs: 20 * 60_000, wallMs: 60 * 60_000 });
+    runtime.configs.run.aliases.architect!.timeouts = { idleMs: 111, wallMs: 222 };
+    await turn();
+    expect(fake.calls[1]!.timeouts).toEqual({ idleMs: 111, wallMs: 222 });
+    await turn({ idleMs: 7, wallMs: 9 });
+    expect(fake.calls[2]!.timeouts).toEqual({ idleMs: 7, wallMs: 9 });
+    fs.rmSync(root, { recursive: true, force: true });
+  });
 });

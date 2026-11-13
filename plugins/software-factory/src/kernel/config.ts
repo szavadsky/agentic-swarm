@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import yaml from "yaml";
-import type { ConfigBundle, GoalPaths, Limits, ProcessConfig, RepoConfig, RunConfig } from "./types.js";
+import { DEFAULT_TIMEOUTS, type ConfigBundle, type GoalPaths, type Limits, type ProcessConfig, type RepoConfig, type RunConfig } from "./types.js";
 
 const packageRoot = fileURLToPath(new URL("../..", import.meta.url));
 
@@ -50,6 +50,13 @@ export const aliasSchema = z.object({
   model: z.string().min(1),
   effort: z.string().optional(),
   fallbacks: z.array(z.string()).default([]),
+  /** Per-alias turn bounds; the defaults cover a full test-suite run. */
+  timeouts: z
+    .object({
+      idleMs: z.number().int().positive().default(DEFAULT_TIMEOUTS.idleMs),
+      wallMs: z.number().int().positive().default(DEFAULT_TIMEOUTS.wallMs),
+    })
+    .default(() => ({ ...DEFAULT_TIMEOUTS })),
 });
 
 export const runConfigSchema = z.object({

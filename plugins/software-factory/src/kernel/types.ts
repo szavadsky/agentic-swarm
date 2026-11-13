@@ -99,6 +99,15 @@ export interface Limits {
 
 export type StepActor = "agent" | "script";
 
+/** Idle is separate from wall: a long tool call streams nothing but is not stuck. */
+export interface Timeouts {
+  idleMs: number;
+  wallMs: number;
+}
+
+/** A full test-suite run can stream nothing for many minutes. */
+export const DEFAULT_TIMEOUTS: Timeouts = { idleMs: 20 * 60_000, wallMs: 60 * 60_000 };
+
 /**
  * One append-only record, materialized from `records/<dir>/`: `started.yaml`
  * exists before a turn, `end.yaml` commits it, `outcome.yaml` holds the agent's
@@ -118,6 +127,8 @@ export interface StepRecord {
   base?: string;
   stop?: Stop; usage?: Usage;
   session?: SessionRef; commit?: string;
+  /** Raw stream transcript in the session store, when the harness keeps one. */
+  transcript?: string;
   checks?: CheckResult[]; outcome?: Outcome;
   ok?: boolean; cause?: string;
   startedAt: string; endedAt?: string;
@@ -139,6 +150,7 @@ export interface RecordEnd {
   /** Set when the harness reports the model actually used (S1 contract). */
   model?: ModelRef;
   stop?: Stop; usage?: Usage; session?: SessionRef;
+  transcript?: string;
   commit?: string; checks?: CheckResult[]; outcome?: Outcome;
   ok?: boolean; cause?: string;
 }
@@ -203,6 +215,8 @@ export interface AliasConfig {
   model: string;
   effort?: string;
   fallbacks?: string[];
+  /** Alias-level turn bounds; config defaults match `DEFAULT_TIMEOUTS`. */
+  timeouts?: Timeouts;
 }
 
 export interface RunConfig {

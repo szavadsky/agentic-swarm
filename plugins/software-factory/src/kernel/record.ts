@@ -43,6 +43,15 @@ export async function appendFinish(
   await store.appendRecord(scriptMeta(meta.iteration, "finish", meta), { ok: true, commit });
 }
 
+/** A pending task the architect dropped from the plan; the slug stays spent. */
+export async function appendCancel(
+  store: ArtifactStore,
+  meta: { iteration: number; slug: string; round: number },
+  cause: string
+): Promise<void> {
+  await store.appendRecord(scriptMeta(meta.iteration, "cancel", meta), { ok: true, cause });
+}
+
 /** Normalized concern text for prompts; outcome concerns carry no ids in KERNEL0. */
 export function formatConcerns(outcome: Outcome): string {
   const lines = outcome.concerns.map(

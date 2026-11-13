@@ -1,6 +1,8 @@
-import type { ArtifactStore, GoalDecision, KernelRuntime, State, StepRecord } from "./types.js";
+import path from "node:path";
+import type { Usage } from "../harness/types.js";
 import { derive } from "./derive.js";
 import { writeMetrics } from "./metrics.js";
+import type { ArtifactStore, GoalDecision, KernelRuntime, State, StepRecord } from "./types.js";
 
 export type SummaryStatus = "goal-met" | "in-progress" | "blocked-by-user" | "stopped-with-debt";
 
@@ -21,10 +23,40 @@ function defaultStatus(decision: GoalDecision | undefined): SummaryStatus {
   return "in-progress";
 }
 
+function zeroUsage(): Usage {
+  return { in: 0, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0, out: 0, reasoningOut: 0 };
+}
+
+function addUsage(total: Usage, part: Usage | undefined): Usage {
+  if (!part) return total;
+  return {
+    in: total.in + part.in,
+    cacheRead: total.cacheRead + part.cacheRead,
+    cacheWrite5m: total.cacheWrite5m + part.cacheWrite5m,
+    cacheWrite1h: total.cacheWrite1h + part.cacheWrite1h,
+    out: total.out + part.out,
+    reasoningOut: total.reasoningOut + part.reasoningOut,
+    costUsd: (total.costUsd ?? 0) + (part.costUsd ?? 0) || undefined,
+  };
+}
+
+function concernLines(recs: StepRecord[], kind?: string): string[] {
+  return recs.flatMap((rec) =>
+    (rec.outcome?.concerns ?? [])
+      .filter((concern) => !kind || concern.kind === kind)
+      .map(
+        (concern) =>
+          `- ${rec.slug ? `${rec.slug}: ` : ""}${concern.text}${
+            concern.evidence ? ` (${concern.evidence})` : ""
+          }`
+      )
+  );
+}
+
 /**
  * The guaranteed remarkable: exactly one summary per iteration, written even
- * when the iteration crashed. Everything here is derived from records, so a
- * recovery run produces the same facts.
+ * when the iteration crashed. Everything here is derived from records and
+ * task files, so a recovery run produces the same facts.
  */
 export async function writeIterationSummary(
   store: ArtifactStore,
@@ -39,64 +71,109 @@ export async function writeIterationSummary(
 
   const merged = recs.filter((r) => r.step === "merge" && r.ok === true).map((r) => r.slug!);
   const finished = recs.filter((r) => r.step === "finish" && r.ok === true).map((r) => r.slug!);
-  const parked = input.state.tasks;
-  const parkedSlugs = Object.keys(parked)
-    .filter((slug) => parked[slug]!.status === "parked")
-    .sort();
+  const parkedByCause = new Map<string, string[]>();
+  const pending: string[] = [];
+  const cancelled: string[] = [];
+  for (const slug of Object.keys(input.state.tasks).sort()) {
+    const task = input.state.tasks[slug]!;
+    if (task.status === "parked") {
+      const cause = task.cause ?? "no recorded cause";
+      parkedByCause.set(cause, [...(parkedByCause.get(cause) ?? []), slug]);
+    } else if (task.status === "pending" || task.status === "ready") {
+      pending.push(slug);
+    } else if (task.status === "cancelled") {
+      cancelled.push(slug);
+    }
+  }
 
-  const remarkable: string[] = [];
-  if (input.cause) remarkable.push(`boundary: ${input.cause}`);
+  const ownerRemarkable = recs.flatMap((rec) =>
+    (rec.outcome?.concerns ?? [])
+      .filter((concern) => concern.calibration === "owner")
+      .map(
+        (concern) =>
+          `- [${concern.kind}] ${rec.slug ? `${rec.slug}: ` : ""}${concern.text}${
+            concern.evidence ? ` (${concern.evidence})` : ""
+          }`
+      )
+  );
+  const inbox = (await store.listDir("mailbox/inbox")).filter((name) => !name.startsWith("."));
+  const unanswered = inbox.map(
+    (file) =>
+      `- steer ${path.basename(file, path.extname(file))} is still in mailbox/inbox/${file}`
+  );
+
+  const remarks: string[] = [];
+  if (input.cause) remarks.push(`boundary: ${input.cause}`);
   if (architect?.outcome) {
-    remarkable.push(`architect: ${architect.outcome.summary}`);
-    remarkable.push(...architect.outcome.forward);
-    for (const concern of architect.outcome.concerns) {
-      if (concern.calibration === "fyi") continue;
-      remarkable.push(`[${concern.kind}/${concern.calibration}] ${concern.text}`);
+    remarks.push(`architect: ${architect.outcome.summary}`);
+    for (const forward of architect.outcome.forward) {
+      if (/^steer\s/i.test(forward) || /^debt closed:/i.test(forward)) continue;
+      remarks.push(forward);
     }
   }
   for (const rec of recs) {
-    if (!rec.outcome) continue;
-    for (const concern of rec.outcome.concerns) {
-      if (concern.calibration === "fyi") continue;
-      remarkable.push(
-        `[${concern.kind}/${concern.calibration}] ${rec.slug ?? rec.step}: ${concern.text}`
-      );
+    if (rec.actor === "script" && rec.ok === false && rec.cause) {
+      remarks.push(`${rec.step}: ${rec.cause}`);
     }
   }
-  for (const slug of parkedSlugs) {
-    remarkable.push(`parked ${slug}: ${parked[slug]!.cause ?? "no recorded cause"}`);
-  }
 
-  const assumed = recs.flatMap((r) =>
-    (r.outcome?.concerns ?? [])
-      .filter((c) => c.kind === "choice")
-      .map((c) => `- ${c.text}${c.evidence ? ` (${c.evidence})` : ""}`)
+  const assumed = concernLines(recs.filter((r) => r.step === "architect"), "choice");
+  const debtOpened = concernLines(recs, "debt");
+  const debtClosed = recs.flatMap((rec) =>
+    (rec.outcome?.forward ?? [])
+      .map((forward) => /^debt closed:\s*(.+)$/i.exec(forward)?.[1]?.trim())
+      .filter((text): text is string => Boolean(text))
+      .map((text) => `- ${text}`)
   );
-  const debt = recs.flatMap((r) =>
-    (r.outcome?.concerns ?? [])
-      .filter((c) => c.kind === "debt")
-      .map((c) => `- ${c.text}${c.evidence ? ` (${c.evidence})` : ""}`)
-  );
+
+  const usage = recs.reduce((sum, rec) => addUsage(sum, rec.usage), zeroUsage());
+  const agentTurns = recs.filter((r) => r.actor === "agent" && r.endedAt).length;
+  const scriptTurns = recs.filter((r) => r.actor === "script" && r.endedAt).length;
 
   const lines = [
     `# Iteration ${iteration} summary`,
     "",
     `status: ${status}`,
+    ...(input.decision ? [`decision: ${input.decision}`] : []),
+    "",
+    "## Architect",
+    ...(architect?.outcome
+      ? [`- summary: ${architect.outcome.summary}`]
+      : ["- no architect outcome recorded"]),
+    "",
+    "## Assumptions",
+    ...(assumed.length ? assumed : ["- none recorded"]),
     "",
     "## Outcome",
     `- merged: ${merged.length ? merged.join(", ") : "none"}`,
     `- spikes finished: ${finished.length ? finished.join(", ") : "none"}`,
-    `- parked: ${parkedSlugs.length ? parkedSlugs.join(", ") : "none"}`,
-    `- agent turns: ${recs.filter((r) => r.actor === "agent" && r.endedAt).length}`,
+    `- pending: ${pending.length ? pending.join(", ") : "none"}`,
+    `- cancelled: ${cancelled.length ? cancelled.join(", ") : "none"}`,
+    "",
+    "## Parked by root cause",
+    ...(parkedByCause.size
+      ? [...parkedByCause.entries()].flatMap(([cause, slugs]) => [`- ${cause}`, `  - ${slugs.join(", ")}`])
+      : ["- none"]),
+    "",
+    "## Debt opened",
+    ...(debtOpened.length ? debtOpened : ["- none"]),
+    "",
+    "## Debt closed",
+    ...(debtClosed.length ? debtClosed : ["- none"]),
+    "",
+    "## Owner attention",
+    ...(ownerRemarkable.length || unanswered.length
+      ? [...ownerRemarkable, ...unanswered]
+      : ["- none"]),
     "",
     "## Remarkable",
-    ...(remarkable.length ? remarkable.map((r) => `- ${r}`) : ["- none"]),
+    ...(remarks.length ? remarks.map((r) => `- ${r}`) : ["- none"]),
     "",
-    "## Assumed",
-    ...(assumed.length ? assumed : ["- none recorded"]),
-    "",
-    "## Debt",
-    ...(debt.length ? debt.map((d) => `opened ${d}`) : ["- opened: none", "- closed: none"]),
+    "## Metrics",
+    `- turns: ${agentTurns} agent, ${scriptTurns} script`,
+    `- tokens: input ${usage.in}, cached ${usage.cacheRead}, output ${usage.out}, reasoning ${usage.reasoningOut}`,
+    `- cost: ${usage.costUsd !== undefined ? `$${usage.costUsd.toFixed(4)}` : "not reported"}`,
+    `- merged: ${merged.length}; parked: ${[...parkedByCause.values()].flat().length}; pending: ${pending.length}`,
     "",
   ];
   const rel = `iterations/${iteration}/summary.md`;

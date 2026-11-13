@@ -45,6 +45,27 @@ describe("three config layers", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
+  it("resolves alias-level timeouts with long defaults", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, ".factory/run.yaml"),
+      [
+        "aliases:",
+        "  architect: { harness: fake, model: big }",
+        "  implementer: { harness: fake, model: small, timeouts: { idleMs: 5000, wallMs: 9000 } }",
+        "",
+      ].join("\n")
+    );
+    const configs = loadConfigs(root);
+    expect(configs.run.aliases.architect!.timeouts).toEqual({
+      idleMs: 20 * 60_000,
+      wallMs: 60 * 60_000,
+    });
+    expect(configs.run.aliases.implementer!.timeouts).toEqual({ idleMs: 5000, wallMs: 9000 });
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
   it("rejects an unsafe goal name", () => {
     const root = tmpRepo();
     const configs = loadConfigs(root);

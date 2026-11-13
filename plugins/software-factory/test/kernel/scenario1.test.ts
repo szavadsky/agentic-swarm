@@ -75,6 +75,7 @@ function setupRepo(): { repo: TmpRepo; goalDir: string; planPath: string; newHar
       "  pm: { harness: fake, model: fake-pm }",
       "  implementer: { harness: fake, model: fake-impl }",
       "  reviewer: { harness: fake, model: fake-review }",
+      "  digest: { harness: fake, model: fake-digest }",
       "limits: { iterations: 1, concurrency: 1 }",
       "",
     ].join("\n")
@@ -159,6 +160,13 @@ async function runScenario(): Promise<void> {
 
     const second = newHarness();
     second.script((req, ctx) => {
+      const digest = path.join(goalDir, "iterations/2/digest.md");
+      expect(fs.readFileSync(digest, "utf8")).toContain("architect");
+      fs.appendFileSync(digest, "\n## Loops\n- none\n", "utf8");
+      ctx.writeOutcome(outcome({ summary: "digest written" }));
+      return fakeTurnResult(req);
+    });
+    second.script((req, ctx) => {
       ctx.writeOutcome(outcome({ summary: "goal met", decision: "done" }));
       return fakeTurnResult(req);
     });
@@ -169,6 +177,7 @@ async function runScenario(): Promise<void> {
     expect(after.goal).toBe("done");
     expect(after.iteration).toBe(2);
     expect(fs.existsSync(path.join(goalDir, "iterations/2/summary.md"))).toBe(true);
+    expect(fs.readFileSync(path.join(goalDir, "iterations/2/digest.md"), "utf8")).toContain("Loops");
 
     // State is only derived: deleting everything but tasks/ and records/ loses nothing.
     const configs = loadConfigs(repo.dir);
