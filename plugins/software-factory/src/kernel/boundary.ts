@@ -70,7 +70,7 @@ export async function runBoundary(
 ): Promise<BoundaryResult> {
   const tasks = await runtime.store.listTasks();
   const records = await runtime.store.listRecords();
-  const state = derive(tasks, records);
+  const state = derive(tasks, records, runtime.configs.process.flows);
   const iteration = state.iteration + 1;
   // Script records (baseline, checks) may exist before the first architect turn;
   // "first" means no architect turn has run yet, not an empty record store.

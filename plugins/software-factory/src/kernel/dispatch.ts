@@ -103,6 +103,11 @@ export async function runDispatch(
   };
 
   for (;;) {
+    // Snapshot the running set before reading records: an action that finishes
+    // during the reads is then still blocked, and one that is absent from the
+    // snapshot has already written its records. Reading first and snapshotting
+    // after can pair a stale state with an idle slug and dispatch it twice.
+    const runningAtRead = new Set(running.keys());
     const tasks = await runtime.store.listTasks();
     const records = await runtime.store.listRecords();
     const state = derive(tasks, records, runtime.configs.process.flows);
@@ -128,12 +133,12 @@ export async function runDispatch(
       }
     }
 
-    const candidates = next(state, runtime.limits, new Set(running.keys())).filter(
+    const candidates = next(state, runtime.limits, runningAtRead).filter(
       (a): a is Action & { slug: string } => a.kind !== "boundary" && a.kind !== "exit"
     );
 
     for (const action of candidates) {
-      if (running.has(action.slug)) continue;
+      if (runningAtRead.has(action.slug) || running.has(action.slug)) continue;
       const task = tasks.find((t) => t.slug === action.slug);
       if (!task) throw new Error(`action names unknown task "${action.slug}"`);
       const taskState = state.tasks[action.slug]!;

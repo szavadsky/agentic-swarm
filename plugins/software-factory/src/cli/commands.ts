@@ -76,7 +76,7 @@ export async function statusGoal(repo: string, goal: string): Promise<StatusResu
   const paths = resolveGoalPaths(configs, repoRoot, goal);
   if (!fs.existsSync(paths.goalDir)) throw new Error(`goal "${goal}" has no directory at ${paths.goalDir}`);
   const store = createFolderStore(paths.goalDir);
-  const state = derive(await store.listTasks(), await store.listRecords());
+  const state = derive(await store.listTasks(), await store.listRecords(), configs.process.flows);
 
   let lastSummary: string | undefined;
   const iterations = (await store.listDir("iterations"))

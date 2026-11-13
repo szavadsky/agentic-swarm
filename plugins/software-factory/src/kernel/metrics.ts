@@ -1,7 +1,7 @@
 import yaml from "yaml";
 import { addUsage, zeroUsage } from "../harness/usage.js";
 import type { Usage } from "../harness/types.js";
-import type { ArtifactStore, State, StepRecord } from "./types.js";
+import type { ArtifactStore, FlowDefinition, State, StepRecord } from "./types.js";
 import type { SummaryStatus } from "./summary.js";
 
 export interface RoleMetrics {
@@ -45,6 +45,15 @@ export interface MetricsTotals extends Omit<IterationMetrics, "n" | "status"> {
 export interface GoalMetrics {
   iterations: IterationMetrics[];
   totals: MetricsTotals;
+}
+
+/** Step id -> role across every configured flow; metrics name roles, not steps. */
+export function rolesByStep(flows: Record<string, FlowDefinition>): Record<string, string> {
+  const roles: Record<string, string> = {};
+  for (const flow of Object.values(flows)) {
+    for (const step of flow.steps) roles[step.id] = step.role;
+  }
+  return roles;
 }
 
 const DEFAULT_ROLE_BY_STEP: Record<string, string> = {

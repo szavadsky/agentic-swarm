@@ -135,6 +135,7 @@ export async function runAgentTurn(runtime: KernelRuntime, spec: AgentTurnSpec):
   };
   let result = await harness.turn(request);
   let lastResult = result;
+  let attempts = [...(result.attempts ?? [])];
   let stop: Stop = result.stop;
   let usage = result.usage;
   let session = result.session;
@@ -167,6 +168,7 @@ export async function runAgentTurn(runtime: KernelRuntime, spec: AgentTurnSpec):
       session,
     });
     lastResult = repair;
+    attempts = [...attempts, ...(repair.attempts ?? [])];
     stop = repair.stop;
     usage = addUsage(usage, repair.usage);
     session = repair.session ?? session;
@@ -188,6 +190,7 @@ export async function runAgentTurn(runtime: KernelRuntime, spec: AgentTurnSpec):
     ...(actualModel ? { model: actualModel } : {}),
     stop,
     usage,
+    ...(attempts.length > 0 ? { attempts } : {}),
     ...(lastResult.transcript ? { transcript: lastResult.transcript } : {}),
     session: settled.session ?? session,
     outcome: outcome ?? undefined,
