@@ -1,0 +1,1127 @@
+diff --git a/plugins/software-factory/README.md b/plugins/software-factory/README.md
+index 2746109..a930f30 100644
+--- a/plugins/software-factory/README.md
++++ b/plugins/software-factory/README.md
+@@ -80,6 +80,27 @@ with one question for the architect. Without `escalateTo` the iteration blocks
+ with every rung in the summary. `fallbacks` stay infrastructure-only (same
+ harness, quota and crash), so escalation is model routing, not a retry.
+ 
++An alias may also carry `rotate` for per-iteration routing:
++
++```yaml
++implementer:
++  harness: opencode
++  model: opencode/beam-free
++  rotate:
++    - { harness: opencode, model: opencode/beam-free, effort: high }
++    - { harness: pi, model: opencode-go/beam-free, effort: high }
++    - { harness: codex, model: deepseek-v4.1-flash, effort: high }
++```
++
++Iteration N runs entry N mod length, so iteration 1 takes the second entry of a
++three-entry list and iteration 2 the third. Each entry supplies its own harness
++and model; an entry without `effort` inherits the alias's. `fallbacks` and
++`timeouts` stay alias-level and apply to the routed entry, and the routed
++harness — not the alias's static one — is what `limits.perHarness` counts. A
++turn resumes a prior session only on the harness that recorded it, so rotation
++never carries a session across harnesses. Pre-flight resolves every entry the
++way it resolves the alias, and a red entry refuses the launch before dispatch.
++
+ `prices` maps a model id to USD per million tokens: `input`, `cachedInput`,
+ `output` and `reasoning`, all four required. A turn costs its harness's
+ non-zero figure, else the table's price for the model. Counters that are all
+diff --git a/plugins/software-factory/src/kernel/architect-session.ts b/plugins/software-factory/src/kernel/architect-session.ts
+index 70e7d51..ef75ff0 100644
+--- a/plugins/software-factory/src/kernel/architect-session.ts
++++ b/plugins/software-factory/src/kernel/architect-session.ts
+@@ -10,14 +10,15 @@ import type { KernelRuntime, StepRecord } from "./types.js";
+  */
+ export async function resumableSession(
+   runtime: KernelRuntime,
+-  records: StepRecord[]
++  records: StepRecord[],
++  iteration: number
+ ): Promise<SessionRef | undefined> {
+   const last = records
+     .filter((r) => r.step === "architect" && r.session && r.endedAt)
+     .sort((a, b) => a.seq - b.seq)
+     .at(-1);
+   if (!last?.session) return undefined;
+-  const { harness, model } = resolveRole(runtime, "architect");
++  const { harness, model } = resolveRole(runtime, "architect", { iteration });
+   let resume = false;
+   try {
+     resume = (await harness.caps(model)).resume;
+diff --git a/plugins/software-factory/src/kernel/boundary.ts b/plugins/software-factory/src/kernel/boundary.ts
+index 2d3efe5..f2914b9 100644
+--- a/plugins/software-factory/src/kernel/boundary.ts
++++ b/plugins/software-factory/src/kernel/boundary.ts
+@@ -147,10 +147,10 @@ export async function runBoundary(
+   }
+ 
+   const tasksBefore = await taskSnapshot(runtime.store.goalDir);
+-  const session = await resumableSession(runtime, records);
++  const session = await resumableSession(runtime, records, iteration);
+ 
+   const result = await runAgentTurn(runtime, {
+-    target: resolveRole(runtime, "architect"),
++    target: resolveRole(runtime, "architect", { iteration }),
+     cwd: runtime.paths.goalCheckout,
+     meta: { iteration, step: "architect", round: 1 },
+     vars: {
+diff --git a/plugins/software-factory/src/kernel/config.ts b/plugins/software-factory/src/kernel/config.ts
+index 867a4db..07890fd 100644
+--- a/plugins/software-factory/src/kernel/config.ts
++++ b/plugins/software-factory/src/kernel/config.ts
+@@ -89,6 +89,15 @@ export const modelPriceSchema = z
+   })
+   .strict();
+ 
++/** One per-iteration route of an alias; `effort` inherits the alias's when absent. */
++const aliasEntrySchema = z
++  .object({
++    harness: z.string().min(1),
++    model: z.string().min(1),
++    effort: z.string().min(1).optional(),
++  })
++  .strict();
++
+ /** Run layer: not tracked; aliases, prices, limits, session store, scout pin. */
+ export const aliasSchema = z
+   .object({
+@@ -98,6 +107,8 @@ export const aliasSchema = z
+     fallbacks: z.array(z.string().min(1)).default([]),
+     /** Run-config alias the PM ladder climbs to after this alias's tier fails. */
+     escalateTo: z.string().min(1).optional(),
++    /** Per-iteration routing: iteration N runs entry N mod length. */
++    rotate: z.array(aliasEntrySchema).min(1).optional(),
+     /** Per-alias turn bounds; the defaults cover a full test-suite run. */
+     timeouts: z
+       .object({
+diff --git a/plugins/software-factory/src/kernel/digest.ts b/plugins/software-factory/src/kernel/digest.ts
+index 3c1be24..fdf528a 100644
+--- a/plugins/software-factory/src/kernel/digest.ts
++++ b/plugins/software-factory/src/kernel/digest.ts
+@@ -145,7 +145,7 @@ export async function writeLaunchDigest(
+   // by throwing — pre-flight deliberately does not require a digest alias.
+   let scoutTarget: RoleTarget | undefined;
+   try {
+-    scoutTarget = resolveRole(runtime, "digest");
++    scoutTarget = resolveRole(runtime, "digest", { iteration });
+   } catch {
+     scoutTarget = undefined;
+   }
+diff --git a/plugins/software-factory/src/kernel/dispatch.ts b/plugins/software-factory/src/kernel/dispatch.ts
+index 42614b0..ac9b375 100644
+--- a/plugins/software-factory/src/kernel/dispatch.ts
++++ b/plugins/software-factory/src/kernel/dispatch.ts
+@@ -342,16 +342,16 @@ export async function runDispatch(
+           continue;
+         }
+         if (agentCount() >= runtime.limits.concurrency) continue;
+-        const target = stepTarget(runtime, task, taskState, action.step);
+-        const limit = runtime.limits.perHarness[target.harness.id];
++        const target = stepTarget(runtime, task, taskState, action.step, iteration);
++        const limit = runtime.limits.perHarness[target.harnessId];
+         if (limit !== undefined) {
+           const onHarness = [...running.values()].filter(
+-            (r) => r.agent && r.harnessId === target.harness.id
++            (r) => r.agent && r.harnessId === target.harnessId
+           ).length;
+           if (onHarness >= limit) continue;
+         }
+         if (overlapsRunning(task.scope, running)) continue;
+-        start(action, taskState, task, true, target.harness.id);
++        start(action, taskState, task, true, target.harnessId);
+         continue;
+       }
+ 
+diff --git a/plugins/software-factory/src/kernel/flow-context.ts b/plugins/software-factory/src/kernel/flow-context.ts
+index eab05b6..367b920 100644
+--- a/plugins/software-factory/src/kernel/flow-context.ts
++++ b/plugins/software-factory/src/kernel/flow-context.ts
+@@ -21,6 +21,7 @@ import type {
+ export interface RoleTarget {
+   role: string;
+   alias: string;
++  harnessId: string;
+   harness: Harness;
+   model: ModelRef;
+   effort?: string;
+@@ -28,6 +29,13 @@ export interface RoleTarget {
+   timeouts?: Timeouts;
+ }
+ 
++/** The role's alias may be overridden per call; every turn resolves at one iteration. */
++export interface RoleOptions {
++  /** Overrides the role's configured alias: a task tier, a PM rung, the front's fallback. */
++  alias?: string;
++  iteration: number;
++}
++
+ function bySeq(a: StepRecord, b: StepRecord): number {
+   return a.seq - b.seq || a.startedAt.localeCompare(b.startedAt);
+ }
+@@ -121,25 +129,28 @@ export function isFixTurn(flow: FlowDefinition, state: TaskState, stepId: string
+ }
+ 
+ /**
+- * Resolves a role to its alias, harness and model. A task tier names an alias
+- * directly (`default` and absent mean no override); flows branch on this,
+- * never on a harness id.
++ * Resolves a role to its alias, harness and model. `alias` overrides the role's
++ * configured alias (`default` is the reserved "no override"); a rotating alias
++ * picks its entry by iteration, so every turn resolves at the loop's iteration.
+  */
+-export function resolveRole(runtime: KernelRuntime, role: string, tier?: string): RoleTarget {
++export function resolveRole(runtime: KernelRuntime, role: string, opts: RoleOptions): RoleTarget {
+   const roleConfig = runtime.configs.process.roles[role];
+   if (!roleConfig) throw new Error(`process config has no role "${role}"`);
+-  const override = tier && tier !== "default" ? tier : undefined;
++  const override = opts.alias && opts.alias !== "default" ? opts.alias : undefined;
+   const aliasName = override ?? roleConfig.alias ?? role;
+   const alias = runtime.configs.run.aliases[aliasName];
+   if (!alias) throw new Error(`run config has no alias "${aliasName}" (needed by role "${role}")`);
+-  const harness = runtime.harnesses.get(alias.harness);
+-  if (!harness) throw new Error(`no harness "${alias.harness}" registered for alias "${aliasName}"`);
++  const entry = alias.rotate ? alias.rotate[opts.iteration % alias.rotate.length]! : alias;
++  const harness = runtime.harnesses.get(entry.harness);
++  if (!harness) throw new Error(`no harness "${entry.harness}" registered for alias "${aliasName}"`);
++  const effort = entry.effort ?? alias.effort;
+   return {
+     role,
+     alias: aliasName,
++    harnessId: entry.harness,
+     harness,
+-    model: { id: alias.model, ...(alias.effort ? { effort: alias.effort } : {}) },
+-    effort: alias.effort,
++    model: { id: entry.model, ...(effort ? { effort } : {}) },
++    effort,
+     fallbacks: alias.fallbacks,
+     timeouts: alias.timeouts,
+   };
+@@ -162,20 +173,46 @@ function stepRole(runtime: KernelRuntime, task: TaskFile, state: TaskState, step
+ /**
+  * The front alias is optional: when the run config has no `front` alias, the
+  * front speaks through the `pm` alias, so the ladder needs no new required knob.
++ *
++ * The front turn runs before the loop's first step, so its caller may not have
++ * an iteration; a rotating alias is then refused rather than pinned to one
++ * harness. Step targets always pass the iteration, so a trivial task's front
++ * handoff rotates with it.
+  */
+-export function frontTarget(runtime: KernelRuntime): RoleTarget {
++export function frontTarget(runtime: KernelRuntime, iteration?: number): RoleTarget {
+   const configured = runtime.configs.process.roles.front;
+   if (!configured) throw new Error('process config has no role "front"');
+   const aliasName = configured.alias ?? "front";
+-  if (runtime.configs.run.aliases[aliasName]) return resolveRole(runtime, "front");
++  if (runtime.configs.run.aliases[aliasName]) {
++    return resolveRole(runtime, "front", {
++      alias: configured.alias,
++      iteration: inheritedIteration(runtime, "front", aliasName, iteration),
++    });
++  }
+   if (aliasName === "front" && runtime.configs.run.aliases.pm) {
+-    return resolveRole(runtime, "front", "pm");
++    return resolveRole(runtime, "front", {
++      alias: "pm",
++      iteration: inheritedIteration(runtime, "front", "pm", iteration),
++    });
+   }
+   throw new Error(
+     `run config has no alias "${aliasName}" (needed by role "front") and no "pm" fallback`
+   );
+ }
+ 
++function inheritedIteration(
++  runtime: KernelRuntime,
++  role: string,
++  aliasName: string,
++  iteration: number | undefined
++): number {
++  if (iteration !== undefined) return iteration;
++  if (runtime.configs.run.aliases[aliasName]?.rotate) {
++    throw new Error(`role "${role}" resolves rotating alias "${aliasName}" without an iteration`);
++  }
++  return 0;
++}
++
+ function lastFrontRecord(records: StepRecord[]): StepRecord | undefined {
+   return records
+     .filter((r) => r.step === "front" && r.actor === "agent" && r.endedAt)
+@@ -201,7 +238,13 @@ function frontPack(runtime: KernelRuntime, task: TaskFile, records: StepRecord[]
+   return path.join(runtime.store.goalDir, contextPackRelPath(front.iteration));
+ }
+ 
+-export function stepTarget(runtime: KernelRuntime, task: TaskFile, state: TaskState, stepId: string): RoleTarget {
++export function stepTarget(
++  runtime: KernelRuntime,
++  task: TaskFile,
++  state: TaskState,
++  stepId: string,
++  iteration: number
++): RoleTarget {
+   const step = findStep(flowOf(runtime, task), stepId);
+   const role = stepRole(runtime, task, state, stepId);
+   // The ladder's "same agent": a trivial task runs its implement step on the
+@@ -210,22 +253,25 @@ export function stepTarget(runtime: KernelRuntime, task: TaskFile, state: TaskSt
+   if (!step.review && role === "implementer" && frontTaskClass(runtime, task) === "trivial") {
+     // The front's alias and model run the turn, but the prompt stays the
+     // implementer's: the role names the prompt, not the agent's history.
+-    return { ...frontTarget(runtime), role };
++    return { ...frontTarget(runtime, iteration), role };
+   }
+   // A task tier escalates the producer; review keeps the reviewer alias.
+-  return resolveRole(runtime, role, step.review ? undefined : task.tier);
++  return resolveRole(runtime, role, {
++    alias: step.review ? undefined : task.tier,
++    iteration,
++  });
+ }
+ 
+-/** Resume the last session for this alias when it is portable to the alias's harness. */
++/** Resume the last session for this alias when the resolved target's harness can take it. */
+ export async function resumeSessionFor(
+   runtime: KernelRuntime,
+   task: TaskFile,
+-  alias: string,
++  target: RoleTarget,
+   records: StepRecord[],
+   worktree: string
+ ): Promise<SessionRef | undefined> {
+   const prior = records
+-    .filter((r) => r.slug === task.slug && r.actor === "agent" && r.endedAt && r.session && r.alias === alias)
++    .filter((r) => r.slug === task.slug && r.actor === "agent" && r.endedAt && r.session && r.alias === target.alias)
+     .sort(bySeq)
+     .at(-1)?.session;
+   if (!prior) return undefined;
+@@ -233,16 +279,10 @@ export async function resumeSessionFor(
+   // The alias may route elsewhere now (rotation, a changed run config): a
+   // session is only portable to the harness that recorded it. Compaction is not
+   // done here — a session is compacted by the turn that ended it.
+-  if (!portable(prior.harness, aliasHarness(runtime, alias))) return undefined;
++  if (!portable(prior.harness, target.harnessId)) return undefined;
+   return prior;
+ }
+ 
+-function aliasHarness(runtime: KernelRuntime, alias: string): string {
+-  const configured = runtime.configs.run.aliases[alias];
+-  if (!configured) throw new Error(`run config has no alias "${alias}"`);
+-  return configured.harness;
+-}
+-
+ /** Compaction is cache hygiene, not a gate; a failure keeps the uncompacted ref. */
+ export async function compactSession(runtime: KernelRuntime, session: SessionRef): Promise<SessionRef | undefined> {
+   const harness = runtime.harnesses.get(session.harness);
+@@ -266,7 +306,7 @@ export async function followUpSession(
+   const flow = flowOf(runtime, task);
+   const followUp = flow.followUp ?? { mode: "same-session" as const };
+   if (followUp.mode !== "same-session") return undefined;
+-  return resumeSessionFor(runtime, task, target.alias, records, worktree);
++  return resumeSessionFor(runtime, task, target, records, worktree);
+ }
+ 
+ /** Prompt inputs shared by the implementer and reviewer templates. */
+diff --git a/plugins/software-factory/src/kernel/flow.ts b/plugins/software-factory/src/kernel/flow.ts
+index e8b16ea..f706ee8 100644
+--- a/plugins/software-factory/src/kernel/flow.ts
++++ b/plugins/software-factory/src/kernel/flow.ts
+@@ -143,7 +143,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
+ 
+   const meta = { iteration, slug: task.slug, round: state.round };
+   const preexisting = preexistingRed(recordedBaseGates(records));
+-  const target = stepTarget(runtime, task, state, step.id);
++  const target = stepTarget(runtime, task, state, step.id, iteration);
+   // A fix turn resumes the implement session in this worktree; a first turn is
+   // always de novo — the front's session is cwd-bound to the goal checkout.
+   const session = isFixTurn(flow, state, step.id)
+diff --git a/plugins/software-factory/src/kernel/merge-attempt.ts b/plugins/software-factory/src/kernel/merge-attempt.ts
+index 6ae613c..775fc9d 100644
+--- a/plugins/software-factory/src/kernel/merge-attempt.ts
++++ b/plugins/software-factory/src/kernel/merge-attempt.ts
+@@ -87,7 +87,7 @@ export async function attemptConflictMerge(
+ 
+   const flow = runtime.configs.process.flows[task.flow];
+   const roleName = flow?.steps.find((s) => !s.review)?.role ?? "implementer";
+-  const target = resolveRole(runtime, roleName, task.tier);
++  const target = resolveRole(runtime, roleName, { alias: task.tier, iteration });
+   const base = records.filter((r) => r.slug === task.slug && r.actor === "agent" && r.base).sort((a, b) => a.seq - b.seq)[0]?.base;
+   const vars = flow
+     ? promptVars(runtime, task, ensured.path, records, state.round, flow)
+@@ -115,7 +115,7 @@ export async function attemptConflictMerge(
+     },
+     vars,
+     expectation: "any",
+-    session: await resumeSessionFor(runtime, task, target.alias, records, ensured.path),
++    session: await resumeSessionFor(runtime, task, target, records, ensured.path),
+     settle: async (_record, outcome, live) => {
+       breach = await containmentViolation(runtime, ensured.path, ensured.branch, contained);
+       if (breach) return { ok: false, cause: `containment: ${breach}` };
+diff --git a/plugins/software-factory/src/kernel/pm.ts b/plugins/software-factory/src/kernel/pm.ts
+index cbfdbf4..0c0e620 100644
+--- a/plugins/software-factory/src/kernel/pm.ts
++++ b/plugins/software-factory/src/kernel/pm.ts
+@@ -267,10 +267,10 @@ interface RungStep {
+  * turns per tier: the first and one de-novo retry. The chain is built once; a
+  * cycle is a config error pre-flight rejects.
+  */
+-function rungSteps(runtime: KernelRuntime): RungStep[] {
++function rungSteps(runtime: KernelRuntime, iteration: number): RungStep[] {
+   const chain: string[] = [];
+   const seen = new Set<string>();
+-  let name: string | undefined = resolveRole(runtime, "pm").alias;
++  let name: string | undefined = resolveRole(runtime, "pm", { iteration }).alias;
+   while (name) {
+     if (seen.has(name)) {
+       throw new Error(`PM escalation cycle: ${[...seen, name].join(" -> ")}`);
+@@ -354,8 +354,8 @@ export async function runPm(
+   const rungs: PmRung[] = [];
+   let failure: string[] = [];
+ 
+-  for (const [index, rung] of rungSteps(runtime).entries()) {
+-    const target = resolveRole(runtime, "pm", rung.alias);
++  for (const [index, rung] of rungSteps(runtime, opts.iteration).entries()) {
++    const target = resolveRole(runtime, "pm", { alias: rung.alias, iteration: opts.iteration });
+     const round = index + 1;
+     const { tasks } = parseTasks(await readTaskTexts(runtime));
+     const result = await runAgentTurn(runtime, {
+@@ -431,7 +431,7 @@ export async function runSteerPm(
+   const planPath = path.join(runtime.store.goalDir, "plan.md");
+   const snapshot = await snapshotTurn(runtime, planPath);
+   await runAgentTurn(runtime, {
+-    target: resolveRole(runtime, "pm"),
++    target: resolveRole(runtime, "pm", { iteration: opts.iteration }),
+     cwd: opts.cwd,
+     meta: { iteration: opts.iteration, step: "pm", round: 1 },
+     vars: {
+diff --git a/plugins/software-factory/src/kernel/preflight.ts b/plugins/software-factory/src/kernel/preflight.ts
+index f6ab661..c1d007f 100644
+--- a/plugins/software-factory/src/kernel/preflight.ts
++++ b/plugins/software-factory/src/kernel/preflight.ts
+@@ -4,7 +4,7 @@ import { formatFindings, type Finding } from "./findings.js";
+ import { checkBase, resolveBaseCommit, type BaselineResult } from "./baseline.js";
+ import { configFilePaths } from "./config.js";
+ import { checkAlias, checkScouts, type AliasContext, type ModelCatalog } from "./preflight-aliases.js";
+-import type { AliasConfig, ArtifactStore, ConfigBundle, GoalPaths, ProcessConfig } from "./types.js";
++import type { AliasConfig, AliasEntry, ArtifactStore, ConfigBundle, GoalPaths, ProcessConfig } from "./types.js";
+ import type { Harness } from "../harness/types.js";
+ 
+ export type { ModelCatalog } from "./preflight-aliases.js";
+@@ -193,7 +193,10 @@ export async function preflight(input: PreflightInput): Promise<PreflightResult>
+   }
+ 
+   const usedHarnesses = new Set<string>();
+-  for (const alias of Object.values(configs.run.aliases)) usedHarnesses.add(alias.harness);
++  for (const alias of Object.values(configs.run.aliases)) {
++    usedHarnesses.add(alias.harness);
++    for (const entry of alias.rotate ?? []) usedHarnesses.add(entry.harness);
++  }
+   const architectAlias = roleAlias(configs.process, "architect");
+   if (configs.run.scouts && architectAlias) {
+     const architect = configs.run.aliases[architectAlias];
+@@ -225,9 +228,20 @@ export async function preflight(input: PreflightInput): Promise<PreflightResult>
+     modelCache: new Map(),
+   };
+   const resolvedAliases: Record<string, string | undefined> = {};
++  /** Rotated entries resolve their own model's effort; keys are alias-entry paths. */
++  const rotateEfforts: { entry: AliasEntry; effort: string | undefined }[] = [];
+   for (const [name, alias] of Object.entries(configs.run.aliases)) {
+     await checkAlias(ctx, name, alias, resolvedAliases);
++    for (const [index, entry] of (alias.rotate ?? []).entries()) {
++      const key = `${name}.rotate.${index}`;
++      const resolved: Record<string, string | undefined> = {};
++      // The entry's harness and model replace the alias's; alias-level fallbacks,
++      // effort and timeouts still apply to the routed entry.
++      await checkAlias(ctx, key, { ...alias, ...entry }, resolved);
++      if (key in resolved) rotateEfforts.push({ entry, effort: resolved[key] });
++    }
+   }
++  for (const { entry, effort } of rotateEfforts) entry.effort = effort;
+   await checkScouts(ctx, configs, roleAlias(configs.process, "architect"), resolvedAliases);
+ 
+   const worktreeFile =
+diff --git a/plugins/software-factory/src/kernel/types.ts b/plugins/software-factory/src/kernel/types.ts
+index 2b86c2b..1e5f9ca 100644
+--- a/plugins/software-factory/src/kernel/types.ts
++++ b/plugins/software-factory/src/kernel/types.ts
+@@ -259,6 +259,14 @@ export interface ProcessConfig {
+   promptsDir?: string;
+ }
+ 
++/** One per-iteration route of an alias: the harness and model that turn runs on. */
++export interface AliasEntry {
++  harness: string;
++  model: string;
++  /** Absent inherits the alias's effort. */
++  effort?: string;
++}
++
+ export interface AliasConfig {
+   harness: string;
+   model: string;
+@@ -268,6 +276,11 @@ export interface AliasConfig {
+   escalateTo?: string;
+   /** Alias-level turn bounds; config defaults match `DEFAULT_TIMEOUTS`. */
+   timeouts?: Timeouts;
++  /**
++   * Per-iteration routing: iteration N uses entry N mod length. Fallbacks and
++   * timeouts stay alias-level and apply to the routed entry.
++   */
++  rotate?: AliasEntry[];
+ }
+ 
+ export interface RunConfig {
+diff --git a/plugins/software-factory/test/kernel/agent.test.ts b/plugins/software-factory/test/kernel/agent.test.ts
+index 39ce090..74e495b 100644
+--- a/plugins/software-factory/test/kernel/agent.test.ts
++++ b/plugins/software-factory/test/kernel/agent.test.ts
+@@ -91,7 +91,7 @@ describe("agent turn outcome delivery", () => {
+     });
+ 
+     const result = await runAgentTurn(runtime, {
+-      target: resolveRole(runtime, "architect"),
++      target: resolveRole(runtime, "architect", { iteration: 1 }),
+       cwd: root,
+       meta: { iteration: 1, step: "architect", round: 1 },
+       vars,
+@@ -114,7 +114,7 @@ describe("agent turn outcome delivery", () => {
+     fake.script((req) => fakeTurnResult(req, { text: "still nothing" }));
+ 
+     const result = await runAgentTurn(runtime, {
+-      target: resolveRole(runtime, "architect"),
++      target: resolveRole(runtime, "architect", { iteration: 1 }),
+       cwd: root,
+       meta: { iteration: 1, step: "architect", round: 1 },
+       vars,
+@@ -136,7 +136,7 @@ describe("agent turn outcome delivery", () => {
+     fake.script((req) => fakeTurnResult(req, { stop: { kind: "infra", cause: "quota" } }));
+ 
+     const result = await runAgentTurn(runtime, {
+-      target: resolveRole(runtime, "architect"),
++      target: resolveRole(runtime, "architect", { iteration: 1 }),
+       cwd: root,
+       meta: { iteration: 1, step: "architect", round: 1 },
+       vars,
+@@ -223,7 +223,7 @@ describe("agent turn outcome delivery", () => {
+       });
+ 
+       const result = await runAgentTurn(runtime, {
+-        target: resolveRole(runtime, "implementer"),
++        target: resolveRole(runtime, "implementer", { iteration: 1 }),
+         cwd: root,
+         meta: { iteration: 1, slug: "a", step: "implement", round: 2 },
+         vars: implementerVars,
+@@ -268,7 +268,7 @@ describe("agent turn outcome delivery", () => {
+       });
+ 
+       const result = await runAgentTurn(runtime, {
+-        target: resolveRole(runtime, "implementer"),
++        target: resolveRole(runtime, "implementer", { iteration: 1 }),
+         cwd: root,
+         meta: { iteration: 1, slug: "a", step: "implement", round: 2 },
+         vars: implementerVars,
+@@ -290,7 +290,7 @@ describe("agent turn outcome delivery", () => {
+       fake.script((req) => fakeTurnResult(req, { stop: { kind: "infra", cause: "overflow" } }));
+ 
+       const result = await runAgentTurn(runtime, {
+-        target: resolveRole(runtime, "implementer"),
++        target: resolveRole(runtime, "implementer", { iteration: 1 }),
+         cwd: root,
+         meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
+         vars: implementerVars,
+@@ -317,7 +317,7 @@ describe("agent turn outcome delivery", () => {
+       fake.script((req) => fakeTurnResult(req, { stop: { kind: "infra", cause: "overflow" } }));
+ 
+       const result = await runAgentTurn(runtime, {
+-        target: resolveRole(runtime, "implementer"),
++        target: resolveRole(runtime, "implementer", { iteration: 1 }),
+         cwd: root,
+         meta: { iteration: 1, slug: "a", step: "implement", round: 2 },
+         vars: implementerVars,
+@@ -341,7 +341,7 @@ describe("agent turn outcome delivery", () => {
+       fake.script((req) => fakeTurnResult(req, { stop: { kind: "infra", cause: "auth" } }));
+ 
+       const result = await runAgentTurn(runtime, {
+-        target: resolveRole(runtime, "implementer"),
++        target: resolveRole(runtime, "implementer", { iteration: 1 }),
+         cwd: root,
+         meta: { iteration: 1, slug: "a", step: "implement", round: 2 },
+         vars: implementerVars,
+@@ -369,7 +369,7 @@ describe("agent turn outcome delivery", () => {
+         return fakeTurnResult(req);
+       });
+       return runAgentTurn(runtime, {
+-        target: resolveRole(runtime, "architect"),
++        target: resolveRole(runtime, "architect", { iteration: 1 }),
+         cwd: root,
+         meta: { iteration: 1, step: "architect", round: 1 },
+         vars,
+@@ -444,7 +444,7 @@ describe("agent turn prompt size", () => {
+     });
+ 
+     const result = await runAgentTurn(runtime, {
+-      target: resolveRole(runtime, "implementer"),
++      target: resolveRole(runtime, "implementer", { iteration: 1 }),
+       cwd: root,
+       meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
+       vars: implementerVars,
+@@ -472,7 +472,7 @@ describe("agent turn prompt size", () => {
+       return fakeTurnResult(req);
+     });
+     const architect = await runAgentTurn(runtime, {
+-      target: resolveRole(runtime, "architect"),
++      target: resolveRole(runtime, "architect", { iteration: 1 }),
+       cwd: root,
+       meta: { iteration: 1, step: "architect", round: 1 },
+       vars,
+@@ -486,7 +486,7 @@ describe("agent turn prompt size", () => {
+       return fakeTurnResult(req);
+     });
+     const pm = await runAgentTurn(runtime, {
+-      target: resolveRole(runtime, "pm"),
++      target: resolveRole(runtime, "pm", { iteration: 1 }),
+       cwd: root,
+       meta: { iteration: 1, step: "pm", round: 1 },
+       vars: pmVars,
+@@ -510,7 +510,7 @@ describe("agent turn prompt size", () => {
+     });
+ 
+     const result = await runAgentTurn(runtime, {
+-      target: resolveRole(runtime, "architect"),
++      target: resolveRole(runtime, "architect", { iteration: 1 }),
+       cwd: root,
+       meta: { iteration: 1, step: "architect", round: 1 },
+       vars,
+diff --git a/plugins/software-factory/test/kernel/front-handoff.test.ts b/plugins/software-factory/test/kernel/front-handoff.test.ts
+index 8f0a82c..d6a291f 100644
+--- a/plugins/software-factory/test/kernel/front-handoff.test.ts
++++ b/plugins/software-factory/test/kernel/front-handoff.test.ts
+@@ -20,7 +20,7 @@ describe("front prompt handoff", () => {
+       const vars = promptVars(runtime, taskFile, "/worktrees/demo-tasks/task", records, 1, flow);
+ 
+       expect(vars.front_pack).toBe("");
+-      expect(stepTarget(runtime, taskFile, state, "implement").alias).toBe("implementer");
++      expect(stepTarget(runtime, taskFile, state, "implement", 1).alias).toBe("implementer");
+     } finally {
+       cleanupFlowRepo(repo);
+     }
+@@ -48,7 +48,7 @@ describe("front prompt handoff", () => {
+       const records = await runtime.store.listRecords();
+ 
+       const vars = promptVars(runtime, taskFile, "/worktrees/demo-tasks/tiny", records, 2, flow);
+-      const fixTarget = stepTarget(runtime, taskFile, { ...state, round: 2 }, "implement");
++      const fixTarget = stepTarget(runtime, taskFile, { ...state, round: 2 }, "implement", 1);
+ 
+       expect(vars.front_pack).toBe(path.join(goalDir, "iterations/3/context-pack.md"));
+       expect(fixTarget.alias).toBe("front");
+diff --git a/plugins/software-factory/test/kernel/preflight.test.ts b/plugins/software-factory/test/kernel/preflight.test.ts
+index a436cd8..b61cf51 100644
+--- a/plugins/software-factory/test/kernel/preflight.test.ts
++++ b/plugins/software-factory/test/kernel/preflight.test.ts
+@@ -122,6 +122,59 @@ describe("pre-flight", () => {
+     }
+   });
+ 
++  it("validates every rotation entry and resolves its effort", async () => {
++    const f = await fixture(
++      RUN_HEAD.replace(
++        "implementer: { harness: fake, model: impl }",
++        [
++          "implementer:",
++          "    harness: fake",
++          "    model: impl",
++          "    rotate:",
++          "      - { harness: fake, model: impl, effort: highest }",
++          "      - { harness: fake, model: impl, effort: low }",
++        ].join("\n")
++      )
++    );
++    try {
++      await preflight(f.input);
++      expect(f.configs.run.aliases.implementer!.rotate![0]!.effort).toBe("max");
++      expect(f.configs.run.aliases.implementer!.rotate![1]!.effort).toBe("low");
++    } finally {
++      f.repo.cleanup();
++    }
++  });
++
++  it("refuses a rotation entry with an unknown harness, model or effort", async () => {
++    const f = await fixture(
++      RUN_HEAD.replace(
++        "implementer: { harness: fake, model: impl }",
++        [
++          "implementer:",
++          "    harness: fake",
++          "    model: impl",
++          "    rotate:",
++          "      - { harness: ghost, model: impl }",
++          "      - { harness: fake, model: gone }",
++          "      - { harness: fake, model: impl, effort: ultra }",
++        ].join("\n")
++      )
++    );
++    try {
++      const err = await refusal({
++        ...f.input,
++        catalog: async (_harness, model) => model !== "gone",
++      });
++      const keys = err.findings.map((finding) => finding.key);
++      expect(keys).toContain("aliases.implementer.rotate.0.harness");
++      expect(keys).toContain("aliases.implementer.rotate.1.model");
++      expect(keys).toContain("aliases.implementer.rotate.2.effort");
++      expect(err.report).toContain('effort "ultra" is not supported');
++    } finally {
++      f.repo.cleanup();
++    }
++  });
++
+   it("refuses a model the harness does not list and a missing fallback", async () => {
+     const f = await fixture(
+       RUN_HEAD.replace("model: pm", "model: ghost").replace(
+diff --git a/plugins/software-factory/test/kernel/s2-helpers.ts b/plugins/software-factory/test/kernel/s2-helpers.ts
+index d5e2db5..bfb1ae2 100644
+--- a/plugins/software-factory/test/kernel/s2-helpers.ts
++++ b/plugins/software-factory/test/kernel/s2-helpers.ts
+@@ -27,6 +27,7 @@ export interface FlowRepoOptions {
+       effort?: string;
+       fallbacks?: string[];
+       timeouts?: { idleMs: number; wallMs: number };
++      rotate?: { harness: string; model: string; effort?: string }[];
+     }
+   >;
+   goal?: string;
+diff --git a/plugins/software-factory/test/kernel/session-compact.test.ts b/plugins/software-factory/test/kernel/session-compact.test.ts
+index 6b8857a..8207bf8 100644
+--- a/plugins/software-factory/test/kernel/session-compact.test.ts
++++ b/plugins/software-factory/test/kernel/session-compact.test.ts
+@@ -4,7 +4,7 @@ import path from "node:path";
+ import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
+ import { portable, type SessionRef } from "../../src/harness/types.js";
+ import { runDispatch } from "../../src/kernel/dispatch.js";
+-import { resumeSessionFor } from "../../src/kernel/flow-context.js";
++import { resolveRole, resumeSessionFor } from "../../src/kernel/flow-context.js";
+ import { ensureTaskWorktree } from "../../src/kernel/worktree.js";
+ import { task } from "./helpers.js";
+ import { cleanupFlowRepo, makeRuntime, outcome, setupFlowRepo, writeTask } from "./s2-helpers.js";
+@@ -73,12 +73,14 @@ describe("session portability", () => {
+       const recorded = records.find((r) => r.slug === "task" && r.step === "implement")!.session!;
+       expect(recorded.compacted).toBe(true);
+ 
+-      const resumed = await resumeSessionFor(runtime, taskFile, "implementer", records, worktree);
++      const target = resolveRole(runtime, "implementer", { iteration: 1 });
++      const resumed = await resumeSessionFor(runtime, taskFile, target, records, worktree);
+       expect(resumed?.id).toBe(recorded.id);
+ 
+       // Rotation: the same alias now routes to a different harness.
+       runtime.configs.run.aliases.implementer!.harness = "other";
+-      expect(await resumeSessionFor(runtime, taskFile, "implementer", records, worktree)).toBeUndefined();
++      const rotated = resolveRole(runtime, "implementer", { iteration: 1 });
++      expect(await resumeSessionFor(runtime, taskFile, rotated, records, worktree)).toBeUndefined();
+     } finally {
+       cleanupFlowRepo(repo);
+     }
+diff --git a/plugins/software-factory/test/kernel/tier-target.test.ts b/plugins/software-factory/test/kernel/tier-target.test.ts
+index ff40033..2b75aad 100644
+--- a/plugins/software-factory/test/kernel/tier-target.test.ts
++++ b/plugins/software-factory/test/kernel/tier-target.test.ts
+@@ -35,13 +35,13 @@ describe("task tier resolution", () => {
+       const escalatedState = derive([escalated], [], runtime.configs.process.flows).tasks.escalated!;
+       const plainState = derive([plain], [], runtime.configs.process.flows).tasks.plain!;
+ 
+-      expect(stepTarget(runtime, escalated, escalatedState, "implement").alias).toBe("escalation");
+-      expect(stepTarget(runtime, escalated, escalatedState, "review").alias).toBe("reviewer");
+-      expect(stepTarget(runtime, plain, plainState, "implement").alias).toBe("implementer");
++      expect(stepTarget(runtime, escalated, escalatedState, "implement", 1).alias).toBe("escalation");
++      expect(stepTarget(runtime, escalated, escalatedState, "review", 1).alias).toBe("reviewer");
++      expect(stepTarget(runtime, plain, plainState, "implement", 1).alias).toBe("implementer");
+ 
+       // A tier value is an alias name; `default` is no override.
+-      expect(resolveRole(runtime, "implementer", "default").alias).toBe("implementer");
+-      expect(resolveRole(runtime, "implementer", "escalation")).toMatchObject({
++      expect(resolveRole(runtime, "implementer", { iteration: 1 }).alias).toBe("implementer");
++      expect(resolveRole(runtime, "implementer", { alias: "escalation", iteration: 1 })).toMatchObject({
+         alias: "escalation",
+         model: { id: "fake-escalated", effort: "high" },
+         effort: "high",
+@@ -73,7 +73,7 @@ describe("task tier resolution", () => {
+ 
+       const taskFile = (await runtime.store.listTasks()).find((t) => t.slug === "task")!;
+       const initialState = derive([taskFile], [], runtime.configs.process.flows).tasks.task!;
+-      const admitted = stepTarget(runtime, taskFile, initialState, "implement");
++      const admitted = stepTarget(runtime, taskFile, initialState, "implement", 1);
+       expect(admitted.harness.id).toBe("expensive");
+ 
+       expect((await runDispatch(runtime, { iteration: 1 })).reason).toBe("boundary");
+diff --git a/bootstrap/run/self-rotate.yaml b/bootstrap/run/self-rotate.yaml
+new file mode 100644
+index 0000000..9913138
+--- /dev/null
++++ b/bootstrap/run/self-rotate.yaml
+@@ -0,0 +1,75 @@
++# Self-run with a rotating implementer. Iteration N uses rotation entry N mod 3
++# (iteration 1 pi, 2 codex, 3 opencode), so no harness-specific assumption in
++# the task flow survives untested. Models are the ones the acpx probes ran
++# (bootstrap/context/acpx-probe.md); the owner adopts rotation by copying this
++# file over self.yaml.
++aliases:
++  architect:
++    harness: omp
++    model: anthropic/claude-opus-5-5
++    effort: high
++    fallbacks:
++      - opencode-go/deepseek-v4.1-flash
++  pm:
++    harness: opencode
++    model: opencode-go/deepseek-v4.1-flash
++    effort: high
++    escalateTo: escalation
++    fallbacks:
++      - opencode/deepseek-v4.1-flash-free
++  digest:
++    harness: opencode
++    model: opencode/beam-free
++    effort: max
++    fallbacks:
++      - opencode-go/deepseek-v4.1-flash
++  implementer:
++    # Rotation crosses harnesses, so a single same-harness fallback list cannot
++    # apply to every entry; the entry's model is the fallback-free primary.
++    harness: opencode
++    model: opencode/beam-free
++    effort: high
++    rotate:
++      - harness: opencode
++        model: opencode/beam-free
++        effort: high
++      - harness: pi
++        model: opencode-go/beam-free
++        effort: high
++      - harness: codex
++        model: deepseek-v4.1-flash
++        effort: high
++  reviewer:
++    harness: opencode
++    model: opencode/minimax-m3.1-flash-free
++    fallbacks:
++      - opencode-go/deepseek-v4.1-flash
++  escalation:
++    harness: omp
++    model: anthropic/claude-sonnet-5-5
++
++scouts:
++  model: opencode-go/deepseek-v4.1-flash
++
++# USD per million tokens. A model absent here is unpriced (unknown), never $0;
++# free models are listed explicitly at 0. Cache writes are priced at the input
++# rate because the table carries no separate write rate.
++prices:
++  anthropic/claude-opus-5-5: { input: 4, cachedInput: 0.2, output: 20, reasoning: 20 }
++  anthropic/claude-sonnet-5-5: { input: 2, cachedInput: 0.1, output: 10, reasoning: 10 }
++  opencode/beam-free: { input: 0, cachedInput: 0, output: 0, reasoning: 0 }
++  opencode/deepseek-v4.1-flash-free: { input: 0, cachedInput: 0, output: 0, reasoning: 0 }
++  opencode/minimax-m3.1-flash-free: { input: 0, cachedInput: 0, output: 0, reasoning: 0 }
++  opencode-go/beam-free: { input: 0, cachedInput: 0, output: 0, reasoning: 0 }
++  opencode-go/deepseek-v4.1-flash: { input: 0.15, cachedInput: 0.003, output: 0.6, reasoning: 0.6 }
++  deepseek-v4.1-flash: { input: 0.15, cachedInput: 0.003, output: 0.6, reasoning: 0.6 }
++
++limits:
++  concurrency: 3
++  iterations: 1
++
++sessions:
++  dir: ~/.local/share/factory/sessions
++  keepRuns: 5
++
++worktreeRoot: ~/.local/share/factory/worktrees
+diff --git a/plugins/software-factory/test/kernel/rotation.test.ts b/plugins/software-factory/test/kernel/rotation.test.ts
+new file mode 100644
+index 0000000..b98ffc1
+--- /dev/null
++++ b/plugins/software-factory/test/kernel/rotation.test.ts
+@@ -0,0 +1,285 @@
++import { describe, expect, it } from "bun:test";
++import fs from "node:fs";
++import path from "node:path";
++import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
++import { derive } from "../../src/kernel/derive.js";
++import { runDispatch } from "../../src/kernel/dispatch.js";
++import {
++  frontTarget,
++  resolveRole,
++  resumeSessionFor,
++  stepTarget,
++} from "../../src/kernel/flow-context.js";
++import { ensureTaskWorktree } from "../../src/kernel/worktree.js";
++import { task } from "./helpers.js";
++import {
++  cleanupFlowRepo,
++  goalCheckout,
++  makeRuntime,
++  outcome,
++  setupFlowRepo,
++  writeTask,
++} from "./s2-helpers.js";
++
++/** Iteration 1 routes to `other`, iteration 2 back to `fake`. */
++const ROTATING_IMPLEMENTER = {
++  implementer: {
++    harness: "fake",
++    model: "base-impl",
++    fallbacks: ["base-fallback"],
++    rotate: [
++      { harness: "fake", model: "base-impl" },
++      { harness: "other", model: "other-impl" },
++    ],
++  },
++  reviewer: { harness: "fake", model: "fake-review" },
++};
++
++function writeOwnFile(req: Parameters<FakeHarness["turn"]>[0], text: string): void {
++  const slug = path.basename(req.cwd!);
++  fs.writeFileSync(path.join(req.cwd!, `${slug}.txt`), text, "utf8");
++}
++
++function implementHandler(req: Parameters<FakeHarness["turn"]>[0], ctx: { writeOutcome(value: unknown): void }) {
++  writeOwnFile(req, "implemented\n");
++  ctx.writeOutcome(outcome({ summary: "implemented" }));
++  return fakeTurnResult(req);
++}
++
++function approveHandler(req: Parameters<FakeHarness["turn"]>[0], ctx: { writeOutcome(value: unknown): void }) {
++  writeOwnFile(req, "reviewed\n");
++  ctx.writeOutcome(outcome({ summary: "approved", verdict: "approve" }));
++  return fakeTurnResult(req);
++}
++
++describe("alias rotation", () => {
++  it("routes iteration N through entry N mod length and keeps alias-level fallbacks", async () => {
++    const { repo, goal } = setupFlowRepo({
++      aliases: {
++        ...ROTATING_IMPLEMENTER,
++        "rotated-tier": {
++          harness: "fake",
++          model: "tier-base",
++          rotate: [
++            { harness: "fake", model: "tier-base" },
++            { harness: "other", model: "tier-other" },
++          ],
++        },
++      },
++    });
++    try {
++      const runtime = await makeRuntime(repo, goal, {
++        fake: new FakeHarness({ id: "fake" }),
++        other: new FakeHarness({ id: "other" }),
++      });
++
++      expect(resolveRole(runtime, "implementer", { iteration: 1 })).toMatchObject({
++        alias: "implementer",
++        harnessId: "other",
++        model: { id: "other-impl" },
++        fallbacks: ["base-fallback"],
++      });
++      const second = resolveRole(runtime, "implementer", { iteration: 2 });
++      expect(second.harnessId).toBe("fake");
++      expect(second.model.id).toBe("base-impl");
++      expect(resolveRole(runtime, "implementer", { iteration: 3 }).harnessId).toBe("other");
++
++      // A tier is an alias name; that alias resolves its own rotation.
++      expect(
++        resolveRole(runtime, "implementer", { alias: "rotated-tier", iteration: 1 })
++      ).toMatchObject({ alias: "rotated-tier", harnessId: "other", model: { id: "tier-other" } });
++
++      // `default` is the reserved "no override" name.
++      expect(
++        resolveRole(runtime, "implementer", { alias: "default", iteration: 2 }).alias
++      ).toBe("implementer");
++    } finally {
++      cleanupFlowRepo(repo);
++    }
++  }, 60_000);
++
++  it("dispatches two iterations on the rotated harness of one alias", async () => {
++    const { repo, goal } = setupFlowRepo({ aliases: ROTATING_IMPLEMENTER });
++    try {
++      const fake = new FakeHarness({ id: "fake" });
++      const other = new FakeHarness({ id: "other" });
++      other.script(implementHandler);
++      fake.script(approveHandler);
++      fake.script(implementHandler);
++      fake.script(approveHandler);
++
++      const runtime = await makeRuntime(repo, goal, { fake, other });
++      await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
++      expect((await runDispatch(runtime, { iteration: 1 })).reason).toBe("boundary");
++      await writeTask(runtime, task("beta", { scope: ["beta.txt"] }));
++      expect((await runDispatch(runtime, { iteration: 2 })).reason).toBe("boundary");
++
++      const implement = (await runtime.store.listRecords())
++        .filter((r) => r.alias === "implementer" && r.step === "implement")
++        .sort((a, b) => a.seq - b.seq);
++      expect(implement.map((r) => r.iteration)).toEqual([1, 2]);
++      expect(implement.map((r) => r.session?.harness)).toEqual(["other", "fake"]);
++      expect(implement.map((r) => r.model?.id)).toEqual(["other-impl", "base-impl"]);
++      expect(other.calls).toHaveLength(1);
++      expect(other.calls[0]!.model.id).toBe("other-impl");
++    } finally {
++      cleanupFlowRepo(repo);
++    }
++  }, 60_000);
++
++  it("rotates a trivial task's front handoff and refuses to pin a rotating front turn", async () => {
++    const { repo, goal, goalDir } = setupFlowRepo({
++      aliases: {
++        front: {
++          harness: "fake",
++          model: "fake-front",
++          rotate: [
++            { harness: "fake", model: "fake-front" },
++            { harness: "other", model: "other-front" },
++          ],
++        },
++        implementer: { harness: "fake", model: "base-impl" },
++        reviewer: { harness: "fake", model: "fake-review" },
++      },
++    });
++    try {
++      const runtime = await makeRuntime(repo, goal, {
++        fake: new FakeHarness({ id: "fake" }),
++        other: new FakeHarness({ id: "other" }),
++      });
++      fs.writeFileSync(path.join(goalDir, "class.yaml"), "class: trivial\nslug: tiny\n", "utf8");
++      const taskFile = task("tiny", { flow: "just-implement" });
++      const state = derive([taskFile], [], runtime.configs.process.flows).tasks.tiny!;
++
++      expect(stepTarget(runtime, taskFile, state, "implement", 1)).toMatchObject({
++        role: "implementer",
++        harnessId: "other",
++        model: { id: "other-front" },
++      });
++      // front.ts does not pass the loop's iteration yet (out of this task's
++      // scope), so a rotating front alias must fail loudly, not pin one entry.
++      expect(() => frontTarget(runtime)).toThrow(/without an iteration/);
++    } finally {
++      cleanupFlowRepo(repo);
++    }
++  }, 60_000);
++
++  it("does not resume an iteration-1 session on the iteration-2 rotated harness", async () => {
++    const { repo, goal } = setupFlowRepo({ aliases: ROTATING_IMPLEMENTER });
++    try {
++      const fake = new FakeHarness({ id: "fake" });
++      const other = new FakeHarness({ id: "other" });
++      other.script(implementHandler);
++      fake.script(approveHandler);
++
++      const runtime = await makeRuntime(repo, goal, { fake, other });
++      await writeTask(runtime, task("task", { scope: ["task.txt"] }));
++      expect((await runDispatch(runtime, { iteration: 1 })).reason).toBe("boundary");
++
++      const records = await runtime.store.listRecords();
++      const taskFile = (await runtime.store.listTasks()).find((t) => t.slug === "task")!;
++      const worktree = (await ensureTaskWorktree(runtime, taskFile)).path;
++      const recorded = records.find((r) => r.slug === "task" && r.step === "implement")!.session!;
++      expect(recorded.harness).toBe("other");
++
++      const recordedHarness = resolveRole(runtime, "implementer", { iteration: 1 });
++      const rotatedHarness = resolveRole(runtime, "implementer", { iteration: 2 });
++      expect(
++        (await resumeSessionFor(runtime, taskFile, recordedHarness, records, worktree))?.id
++      ).toBe(recorded.id);
++      expect(
++        await resumeSessionFor(runtime, taskFile, rotatedHarness, records, worktree)
++      ).toBeUndefined();
++    } finally {
++      cleanupFlowRepo(repo);
++    }
++  }, 60_000);
++
++  it("resolves a conflict-merge turn on the rotated entry and resumes its session", async () => {
++    const { repo, goal } = setupFlowRepo({ aliases: ROTATING_IMPLEMENTER });
++    const checkout = goalCheckout(repo, goal);
++    try {
++      const fake = new FakeHarness({ id: "fake" });
++      const other = new FakeHarness({ id: "other" });
++      other.script((req, ctx) => {
++        fs.writeFileSync(path.join(req.cwd!, "conflict.txt"), "task\n", "utf8");
++        ctx.writeOutcome(outcome({ summary: "task side" }));
++        return fakeTurnResult(req);
++      });
++      fake.script((req, ctx) => {
++        fs.writeFileSync(path.join(checkout, "conflict.txt"), "integration\n", "utf8");
++        repo.git(["add", "conflict.txt"], { cwd: checkout });
++        repo.git(["commit", "-m", "concurrent integration change"], { cwd: checkout });
++        ctx.writeOutcome(outcome({ summary: "approved", verdict: "approve" }));
++        return fakeTurnResult(req);
++      });
++      other.script((req, ctx) => {
++        expect(req.prompt).toContain("Conflicted files: conflict.txt");
++        fs.writeFileSync(path.join(req.cwd!, "conflict.txt"), "resolved\n", "utf8");
++        ctx.writeOutcome(outcome({ summary: "conflict resolved" }));
++        return fakeTurnResult(req);
++      });
++
++      const runtime = await makeRuntime(repo, goal, { fake, other });
++      await writeTask(runtime, task("task", { scope: ["conflict.txt"] }));
++      expect((await runDispatch(runtime, { iteration: 1 })).reason).toBe("boundary");
++
++      const records = await runtime.store.listRecords();
++      const implement = records.find((r) => r.slug === "task" && r.step === "implement")!;
++      const attempt = records.find((r) => r.slug === "task" && r.step === "merge-attempt");
++      expect(attempt?.alias).toBe("implementer");
++      expect(attempt?.session?.harness).toBe("other");
++      expect(other.calls).toHaveLength(2);
++      expect(other.calls[1]!.model.id).toBe("other-impl");
++      expect(other.calls[1]!.session?.id).toBe(implement.session!.id);
++      expect(repo.git(["show", "factory/demo:conflict.txt"]).stdout.trim()).toBe("resolved");
++    } finally {
++      cleanupFlowRepo(repo);
++    }
++  }, 60_000);
++
++  it("admits a turn against the rotated harness's per-harness limit", async () => {
++    const { repo, goal } = setupFlowRepo({
++      aliases: ROTATING_IMPLEMENTER,
++      limits: { concurrency: 2, perHarness: { other: 1 } },
++    });
++    try {
++      const fake = new FakeHarness({ id: "fake" });
++      const other = new FakeHarness({ id: "other" });
++      let active = 0;
++      let max = 0;
++      const slowImplement = async (
++        req: Parameters<FakeHarness["turn"]>[0],
++        ctx: { writeOutcome(value: unknown): void }
++      ) => {
++        active += 1;
++        max = Math.max(max, active);
++        try {
++          await new Promise((resolve) => setTimeout(resolve, 20));
++          writeOwnFile(req, "implemented\n");
++          ctx.writeOutcome(outcome({ summary: "implemented" }));
++          return fakeTurnResult(req);
++        } finally {
++          active -= 1;
++        }
++      };
++      other.script(slowImplement);
++      other.script(slowImplement);
++      fake.script(approveHandler);
++      fake.script(approveHandler);
++
++      const runtime = await makeRuntime(repo, goal, { fake, other });
++      await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
++      await writeTask(runtime, task("beta", { scope: ["beta.txt"] }));
++      expect((await runDispatch(runtime, { iteration: 1 })).reason).toBe("boundary");
++
++      // Both implement turns routed to `other`, so its limit capped them at one;
++      // admitting on the alias's static harness would have run both at once.
++      expect(other.calls).toHaveLength(2);
++      expect(max).toBe(1);
++      expect(fake.calls.filter((call) => call.model.id === "base-impl")).toHaveLength(0);
++    } finally {
++      cleanupFlowRepo(repo);
++    }
++  }, 60_000);
++});

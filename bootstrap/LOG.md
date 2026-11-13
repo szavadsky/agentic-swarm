@@ -290,3 +290,17 @@ Verbatim, newest last; each with what it changed.
 ### 2026-11-13 — review method corrected (owner steer)
 - Wrong split, mine: one agent carried all session forensics, and two task-grade agents were asked to judge and word the inlines and tables before the forensics facts were in. Both assembly agents stopped before producing output.
 - New split: narrow fact agents in parallel, structured outputs, no judgment; reasoning and the write-up stay with the orchestrator. Iteration 13 is merged into factory-v3 (`b4a2d9f`, 436 tests, 0 fail); iteration 14 stays unlaunched until the review is committed.
+
+### 2026-11-13 — project review delivered
+- `manifesto.md` gained 40 `[AI Review R01–R40]` inlines and a `## Fable proposal` section (where the project stands, P1–P13, remaining work W1–W24, bugs B1–B28 with handling, handling strategy, seven owner decisions). Additive only: 210 insertions, 0 deletions (main `382cad6`, synced here).
+- Evidence: `bootstrap/reports/review-2026-11-13/` — `REVIEW.md` (digest written by the orchestrator), four broad reports, `facts/` from twelve narrow agents, `repro/` with the tests that reproduce the defects, `salvage/`.
+- Verified before writing: four of five high-severity defects reproduced by test, the fifth (containment) observed in iteration 13; one reported high-severity defect (blocked goal never reads a steer) was already fixed by `front-status`; one forensic claim (round-two outcome path) was not confirmed and was dropped.
+- Salvage: `rotation-threaded` lost its uncommitted work to the park my commit caused (20 paths). The diff is saved as `salvage/rotation-threaded.patch`.
+- Iteration 14 is not launched. Its first work would be the hierarchy chain, which the proposal recommends deferring; it waits for the owner's decisions.
+
+### 2026-11-13 — journal corrections (records win)
+- Iteration 9 cost was $2.63, not $2.10 ($2.10 was the architect alone). Iteration 5 cost was $3.33; its summary exists, written by the relaunch recovery.
+- beam-free at max effort took effect in iteration 11's digest, not from iteration 12.
+- Iteration 12 had one new park (`pm-ladder-tidy`). `doc-drift` was never dispatched, `prune-sweep` parked in iteration 11, and `front-ladder` was retired by `front-land` in iteration 12.
+- Iteration 13 had one new park (`rotation-threaded`); the other eight in its summary were carried over.
+- From now on iteration lines in this journal are taken from `metrics.yaml` and the records, not from the summary's first screen.
