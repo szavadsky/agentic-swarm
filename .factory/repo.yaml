@@ -1,9 +1,9 @@
 baseBranch: factory-v3
 artifactRoot: .factory/artifacts
 setup:
-  - bun install --frozen-lockfile --silent --cwd plugins/software-factory
+  - bun install --cwd plugins/software-factory --frozen-lockfile --silent
 gates:
   - id: typecheck
-    command: bun run typecheck --cwd plugins/software-factory
+    command: bun run --cwd plugins/software-factory typecheck
   - id: test
     command: bun test --cwd plugins/software-factory

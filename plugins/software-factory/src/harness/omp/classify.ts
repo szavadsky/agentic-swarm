@@ -48,7 +48,7 @@ export function classifyOmpError(error: OmpPromptError | undefined): Stop {
   if (RATE.test(text) || (status !== undefined && status >= 500)) {
     return { kind: "infra", cause: "rate" };
   }
-  return { kind: "infra", cause: "crash" };
+  return { kind: "infra", cause: "crash", details: truncate(text) };
 }
 
 /** Assistant `stopReason` values that override a "completed" prompt result. */
@@ -76,9 +76,16 @@ export function classifyOmpStopReason(stopReason: string | undefined): Stop | un
 /** omp exiting before the RPC ready frame: bad model/credential, or a launch crash. */
 export function classifyOmpLaunchFailure(stderr: string): Stop {
   if (AUTH.test(stderr) || /no api key|not authenticated|login/i.test(stderr)) {
-    return { kind: "infra", cause: "auth" };
+    return { kind: "infra", cause: "auth", details: truncate(stderr) };
   }
-  return { kind: "infra", cause: "crash" };
+  return { kind: "infra", cause: "crash", details: truncate(stderr) };
+}
+
+/** Keep the tail: the reason is usually the last line. Secrets are omp's own stderr, never credentials. */
+function truncate(text: string, max = 500): string | undefined {
+  const t = text.trim().replace(/\s+/g, " ");
+  if (!t) return undefined;
+  return t.length > max ? `…${t.slice(-max)}` : t;
 }
 
 export interface OmpTurnFailure {
@@ -112,7 +119,11 @@ export function classifyOmpTurn(input: OmpTurnOutcomeInput): Stop {
     return { kind: "cancelled" };
   }
   if (input.failure) {
-    return classifyOmpLaunchFailure(input.failure.stderr ?? "");
+    const stop = classifyOmpLaunchFailure(input.failure.stderr ?? "");
+    if (stop.kind === "infra" && !stop.details && input.failure.signal) {
+      return { ...stop, details: `signal ${input.failure.signal}` };
+    }
+    return stop;
   }
-  return { kind: "infra", cause: "crash" };
+  return { kind: "infra", cause: "crash", details: "no prompt_result and no failure captured" };
 }

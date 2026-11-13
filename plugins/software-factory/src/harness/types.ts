@@ -27,10 +27,11 @@ export type Stop =
   | { kind: "refusal"; details?: string }
   /** Task-side: the turn was cut short with a half-written artifact. */
   | { kind: "truncated"; cause: "max-tokens" | "turn-limit" }
-  /** Infrastructure trouble must never consume item budget or review rounds. */
+  /** Infrastructure trouble must never consume item budget or review rounds. `details` carries truncated stderr for crashes. */
   | {
       kind: "infra";
       cause: "quota" | "rate" | "auth" | "crash" | "overflow" | "timeout";
+      details?: string;
     };
 
 export type Usage = {
@@ -53,6 +54,8 @@ export type SessionRef = {
   lastRequestStartedAt: string;
   retentionTier: "short" | "long";
   compacted: boolean;
+  /** Harness-managed session home; resume resolves against it, not the current launch dir. */
+  dir?: string;
 };
 
 /** One call to the harness, after fallback expansion. */
