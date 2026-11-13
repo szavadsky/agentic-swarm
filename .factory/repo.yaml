@@ -3,7 +3,5 @@ artifactRoot: .factory/artifacts
 setup:
   - bun install --cwd plugins/software-factory --frozen-lockfile --silent
 gates:
-  - id: typecheck
-    command: bun run --cwd plugins/software-factory typecheck
-  - id: test
-    command: bun test --cwd plugins/software-factory
+  - id: package
+    command: plugins/software-factory/scripts/gates.sh plugins/software-factory
