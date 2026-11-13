@@ -3,7 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { Repo } from "../../src/core/git/repo.js";
-import { commitAll, headOf, isAncestor } from "../../src/core/git/commit.js";
+import { commitAll, isAncestor } from "../../src/core/git/commit.js";
+import { git } from "../../src/core/git/exec.js";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 
 describe("Git commit and revision inspection (§7)", () => {
@@ -48,15 +49,14 @@ describe("Git commit and revision inspection (§7)", () => {
     expect(shaEmpty).not.toBe(sha1);
   });
 
-  it("headOf and isAncestor inspect revision state accurately", async () => {
-    const head1 = await headOf(tmpRepo.dir);
-    expect(head1.branch).toBe("main");
-    expect(head1.sha.length).toBe(40);
+  it("isAncestor distinguishes older from newer commits", async () => {
+    const head1 = (await git(tmpRepo.dir, ["rev-parse", "HEAD"])).stdout.trim();
+    expect(head1.length).toBe(40);
 
     fs.writeFileSync(path.join(tmpRepo.dir, "ancestor-test.txt"), "data\n", "utf8");
     const sha2 = (await commitAll(repo, tmpRepo.dir, "feat: next commit"))!;
 
-    expect(await isAncestor(tmpRepo.dir, head1.sha, sha2)).toBe(true);
-    expect(await isAncestor(tmpRepo.dir, sha2, head1.sha)).toBe(false);
+    expect(await isAncestor(tmpRepo.dir, head1, sha2)).toBe(true);
+    expect(await isAncestor(tmpRepo.dir, sha2, head1)).toBe(false);
   });
 });

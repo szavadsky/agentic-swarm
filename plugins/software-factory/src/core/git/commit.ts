@@ -42,18 +42,6 @@ export async function commitAll(
 }
 
 /**
- * Returns the current branch name (or "HEAD" if detached) and commit SHA of a worktree.
- */
-export async function headOf(wt: string): Promise<{ branch: string; sha: string }> {
-  const branchRes = await git(wt, ["rev-parse", "--abbrev-ref", "HEAD"]);
-  const shaRes = await git(wt, ["rev-parse", "HEAD"]);
-  return {
-    branch: branchRes.stdout.trim(),
-    sha: shaRes.stdout.trim(),
-  };
-}
-
-/**
  * Checks whether commit `a` is an ancestor of commit `b`.
  */
 export async function isAncestor(wt: string, a: string, b: string): Promise<boolean> {
