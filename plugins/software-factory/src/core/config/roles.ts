@@ -1,8 +1,7 @@
-import type {
-  FlowStep,
-  RoleDefinition,
-  AgentConfig,
-} from "../artifacts.js";
+/** A role is either a concrete model with fallbacks or an alias to another role. */
+export type RoleDefinition =
+  | { model: string; fallbacks?: string[] }
+  | { alias: string };
 
 export interface ResolvedRole {
   role: string;
@@ -118,76 +117,4 @@ export function resolveRole(
     role: currentName,
     models,
   };
-}
-
-export interface StepRoleSelectionParams {
-  step: FlowStep;
-  isEscalated?: boolean;
-  fixRound?: number;
-  baseProducerRole?: string;
-  /**
-   * The producer step's retryRole for this kind, or null/undefined when the
-   * producer does not rotate on retry. The reviewer alt-swap only applies
-   * when the producer really rotated.
-   */
-  producerRetryRole?: string | null;
-  rolesConfig: Record<string, RoleDefinition>;
-  agentsConfig?: Record<string, AgentConfig>;
-}
-
-/**
- * Step role selection function covering escalation (§12.4) and alt-on-retry pair swap (§12.4):
- * - Escalated items: if step.escalatable is true, role is "task-escalation"
- * - Alt on retry (fixRound >= 2):
- *   - Developer with retryRole runs `retryRole` (e.g. alt-workhorse)
- *   - When the producer really rotated (producerRetryRole set), reviewing steps
- *     resolving to the same primary model swap to the producer's base role (workhorse)
- */
-export function resolveStepRole(params: StepRoleSelectionParams): ResolvedRole {
-  const {
-    step,
-    isEscalated = false,
-    fixRound = 1,
-    baseProducerRole = "workhorse",
-    producerRetryRole = null,
-    rolesConfig,
-    agentsConfig,
-  } = params;
-
-  // 1. Escalation: escalatable steps use task-escalation on escalated tasks/items
-  if (isEscalated && step.escalatable) {
-    if (rolesConfig["task-escalation"]) {
-      return resolveRole("task-escalation", rolesConfig);
-    }
-  }
-
-  // Determine standard role for this step
-  const defaultAgentRole = agentsConfig?.[step.agent]?.role ?? step.agent;
-  const configuredRole = step.role ?? defaultAgentRole;
-
-  // 2. Producer step retry rotation (fixRound >= 2)
-  if (fixRound >= 2 && step.retryRole) {
-    return resolveRole(step.retryRole, rolesConfig);
-  }
-
-  // 3. Reviewer step pair-swap on retry rotation (fixRound >= 2)
-  // Only when the producer really rotated: the caller passes the producer
-  // step's actual retryRole (null when the producer has none). Assuming a
-  // rotation that never happened would collapse the producer/reviewer split.
-  if (fixRound >= 2 && !step.retryRole && producerRetryRole) {
-    const devResolved = resolveRole(producerRetryRole, rolesConfig);
-    const devPrimary = devResolved.models[0];
-
-    const reviewerResolved = resolveRole(configuredRole, rolesConfig);
-    const reviewerPrimary = reviewerResolved.models[0];
-
-    // If reviewer resolves to the same primary model as the developer's rotated role,
-    // swap the reviewer to the producer's base role
-    if (devPrimary && reviewerPrimary && devPrimary === reviewerPrimary) {
-      return resolveRole(baseProducerRole, rolesConfig);
-    }
-  }
-
-  // 4. Default role
-  return resolveRole(configuredRole, rolesConfig);
 }

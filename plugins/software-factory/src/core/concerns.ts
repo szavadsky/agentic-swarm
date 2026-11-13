@@ -1,10 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
-import type { Concern, ConcernConfirms, ConcernCounts, ConcernSeverity, ConcernSource, RemarkableDecision, ReviewSuggestion, StoredConcernArtifact } from "./artifacts.js";
+import type { Concern, ConcernConfirms, ConcernCounts, ConcernSeverity, ConcernSource, RemarkableDecision, ReviewSuggestion, StoredConcernArtifact } from "./concern-types.js";
 import type { Repo } from "./git/repo.js";
 import { commitAll } from "./git/commit.js";
-import { git } from "./git/exec.js";
 import { KeyedMutex } from "./mutex.js";
 import { readYaml, writeYamlAtomic } from "./records/io.js";
 
@@ -26,11 +25,9 @@ export function severityAtLeast(severity: ConcernSeverity, min: ConcernSeverity)
 }
 
 /**
- * Agents whose output schemas can raise concerns; mirrors the shipped
- * `pipeline.default.yaml` allowlist. The key is the raising step's
- * `source.agent`, never its fragment: developer covers develop/poc/
- * test-assumptions/test-first/simple-implement/fix-round, fact-finder covers
- * research, and architect covers architect-*.
+ * Default agents allowed to raise concerns. The key is the raising step's
+ * `source.agent`, never its fragment: developer covers implement/fix steps,
+ * fact-finder covers research, and architect covers architect turns.
  */
 export const DEFAULT_RAISE_ALLOWLIST = [
   "developer",
@@ -369,48 +366,4 @@ export function partitionSuggestions(
     triage: suggestions.filter((s) => ids.has(s.id)),
     findings: suggestions.filter((s) => !ids.has(s.id)),
   };
-}
-
-interface CommittedRecord { name: string; item?: string; meta: Obj; output: Obj }
-
-async function committedStepRecords(ctx: ConcernStoreContext): Promise<CommittedRecord[]> {
-  const res = await git(ctx.taskWt, ["ls-tree", "-r", "--name-only", "HEAD"], { allowFail: true, env: ctx.repo.identityEnv() });
-  if (res.code !== 0) return [];
-  const committed = new Set(res.stdout.split("\n").filter(Boolean));
-  const prefix = path.relative(ctx.taskWt, ctx.taskDir).replace(/\\/g, "/");
-  const records: CommittedRecord[] = [];
-  for (const metaRel of [...committed].sort()) {
-    const outputRel = metaRel.replace(/meta\.yaml$/, "output.yaml");
-    if (!metaRel.startsWith(`${prefix}/`) || outputRel === metaRel || !committed.has(outputRel)) continue;
-    const parts = metaRel.slice(prefix.length + 1).split("/");
-    const item = parts[0] === "items" && parts.length === 5 ? parts[1] : undefined;
-    if (!item && (parts[0] !== "runs" || parts.length !== 3)) continue;
-    try {
-      const meta = await readYaml<Obj>(path.join(ctx.taskWt, metaRel));
-      if (meta?.status !== "ok") continue;
-      records.push({ name: parts[parts.length - 2]!, ...(item ? { item } : {}), meta,
-        output: await readYaml<Obj>(path.join(ctx.taskWt, outputRel)) });
-    } catch { /* A corrupt record is not a usable derivation input. */ }
-  }
-  return records;
-}
-
-/** Rebuilds concern artifacts from committed step records; merging keeps it idempotent. Startup calls it after repairWorktree, so the worktree matches HEAD and ls-tree enumeration is authoritative. */
-export async function reconcileConcerns(ctx: ConcernStoreContext): Promise<StoredConcernArtifact[]> {
-  const records = await committedStepRecords(ctx);
-  records.sort((a, b) => String(a.meta.endedAt ?? "").localeCompare(String(b.meta.endedAt ?? "")) || (a.meta.seq ?? 0) - (b.meta.seq ?? 0) || a.name.localeCompare(b.name));
-  const reconciled: StoredConcernArtifact[] = [];
-  let dirty = false;
-  for (const r of records) {
-    const concerns = [...(r.output.concerns ?? []), ...(r.output.newConcerns ?? [])].filter((c: any) => c && typeof c === "object");
-    const remarkables = Array.isArray(r.output.remarkable) ? r.output.remarkable : [];
-    if (!concerns.length && !remarkables.length) continue;
-    const source: ConcernSource = { record: r.name, agent: String(r.meta.agent ?? "unknown"), ...(r.meta.name ? { step: String(r.meta.name) } : {}), ...(r.item ? { item: r.item } : {}) };
-    const at = typeof r.meta.endedAt === "string" && r.meta.endedAt ? r.meta.endedAt : atOf(ctx);
-    const o: { at: string; commit: false; dirty?: boolean } = { at, commit: false };
-    reconciled.push(...(await aggregateConcerns({ ...ctx, source }, concerns, remarkables, o)));
-    dirty = dirty || !!o.dirty;
-  }
-  if (dirty) await commitAll(ctx.repo, ctx.taskWt, "factory: concerns reconcile");
-  return reconciled;
 }

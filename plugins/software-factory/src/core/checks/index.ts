@@ -1,4 +1,17 @@
-export type { CheckContext, CheckResult } from "./types.js";
+export type {
+  CheckContext,
+  CheckResult,
+  CheckLimits,
+  CheckPipelineConfig,
+  CheckProjectConfig,
+  CustomCheckConfig,
+  DeveloperTarget,
+  GateBaselineEntry,
+  GatesBaselineArtifact,
+  InfraArtifact,
+  InfraGate,
+  TestRunnerConfig,
+} from "./types.js";
 export { tailCap } from "./types.js";
 export { runCheck } from "./runner.js";
 export { runGates } from "./gates.js";

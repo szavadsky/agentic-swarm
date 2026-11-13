@@ -4,7 +4,7 @@ import path from "node:path";
 import os from "node:os";
 import { runCheck } from "../../src/core/checks/runner.js";
 import type { CheckContext } from "../../src/core/checks/types.js";
-import type { GatesBaselineArtifact, InfraArtifact } from "../../src/core/artifacts.js";
+import type { GatesBaselineArtifact, InfraArtifact } from "../../src/core/checks/types.js";
 
 // (f) Target-green baseline ratchet. `{gate:test}` required a full-suite exit
 // 0 while the repository baseline was red for an environment reason, so an

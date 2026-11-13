@@ -1,14 +1,22 @@
 import fs from "node:fs";
 import { readYaml, writeYamlAtomic } from "./records/io.js";
 import { appendJournal } from "./journal.js";
-import type { StepMetaArtifact } from "./artifacts.js";
+import type { Usage } from "../harness/types.js";
+
+/** Fields the shutdown path may write back into a started record's meta.yaml. */
+interface InterruptedStepMeta {
+  status?: string;
+  endedAt?: string;
+  session?: string;
+  usage?: Usage;
+}
 
 export interface ActiveStepRecord {
   recordDir: string;
   metaPath: string;
   taskDir: string;
   sessionId?: string;
-  getUsage?: () => { inputTokens?: number; outputTokens?: number; costUsd?: number } | undefined;
+  getUsage?: () => Usage | undefined;
 }
 
 const activeChildGroups = new Set<number>();
@@ -110,7 +118,7 @@ export async function markActiveStepsInterrupted(signalName?: string): Promise<v
   for (const [recordDir, step] of steps) {
     try {
       if (fs.existsSync(step.metaPath)) {
-        const meta = await readYaml<StepMetaArtifact>(step.metaPath);
+        const meta = await readYaml<InterruptedStepMeta>(step.metaPath);
         if (meta.status === "started") {
           meta.status = "interrupted";
           meta.endedAt = new Date().toISOString();
@@ -118,7 +126,7 @@ export async function markActiveStepsInterrupted(signalName?: string): Promise<v
             meta.session = step.sessionId;
           }
           const u = step.getUsage?.();
-          if (u && (u.inputTokens || u.outputTokens || u.costUsd)) {
+          if (u && (u.in || u.out || u.costUsd)) {
             meta.usage = { ...u };
           }
           await writeYamlAtomic(step.metaPath, meta);

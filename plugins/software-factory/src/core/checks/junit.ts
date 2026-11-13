@@ -1,4 +1,4 @@
-import type { DeveloperTarget, InfraArtifact } from "../artifacts.js";
+import type { DeveloperTarget, InfraArtifact } from "./types.js";
 import { resolveGateTarget } from "./gate-target.js";
 
 function decodeXml(str: string): string {

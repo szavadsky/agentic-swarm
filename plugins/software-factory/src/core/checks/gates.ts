@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { runProcess } from "../proc.js";
-import type { GateBaselineEntry, GatesBaselineArtifact, InfraGate, TestRunnerConfig } from "../artifacts.js";
+import type { GateBaselineEntry, GatesBaselineArtifact, InfraGate, TestRunnerConfig } from "./types.js";
 import { readYaml, writeYamlAtomic } from "../records/io.js";
 import { commitAll } from "../git/commit.js";
 import { tailCap, type CheckContext } from "./types.js";

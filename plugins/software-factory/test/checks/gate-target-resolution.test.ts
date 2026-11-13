@@ -9,7 +9,7 @@ import {
 } from "../../src/core/checks/gate-target.js";
 import { runCheck } from "../../src/core/checks/runner.js";
 import type { CheckContext } from "../../src/core/checks/types.js";
-import type { InfraArtifact } from "../../src/core/artifacts.js";
+import type { InfraArtifact } from "../../src/core/checks/types.js";
 
 // (a) Gate command -> name mapping. Merge verify received `{gate: "uv run
 // pytest tests -q"}` while the configured gate id was `test`, and failed with

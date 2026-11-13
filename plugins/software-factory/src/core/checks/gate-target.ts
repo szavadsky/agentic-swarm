@@ -1,4 +1,4 @@
-import type { DeveloperTarget, InfraArtifact, InfraGate } from "../artifacts.js";
+import type { DeveloperTarget, InfraArtifact, InfraGate } from "./types.js";
 
 /**
  * Gate-target resolution (§7, §9).

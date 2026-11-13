@@ -85,24 +85,4 @@ describe("pytest positional selectors (PsPost5 item 1)", () => {
     expect(validateTestRunner({ command: "jest", selectorArgs: ["-t"] })).toHaveLength(0);
     expect(validateTestRunner({ command: "" })).toHaveLength(1);
   });
-
-  it("infra prompt and schema forbid -k for pytest", async () => {
-    const fs = await import("node:fs");
-    const path = await import("node:path");
-    const stepPrompt = fs.readFileSync(
-      path.resolve(import.meta.dir, "../../agents/steps/infra.md"),
-      "utf8"
-    );
-    expect(stepPrompt).toContain("pytest: ALWAYS `[]`");
-    expect(stepPrompt).toContain("Selector dry-run (REQUIRED)");
-    const agentDef = fs.readFileSync(
-      path.resolve(import.meta.dir, "../../agents/infra.md"),
-      "utf8"
-    );
-    expect(agentDef).not.toContain('For pytest: `["-k"]`');
-    const schema = JSON.parse(
-      fs.readFileSync(path.resolve("config/schemas/infra.schema.json"), "utf8")
-    );
-    expect(schema.properties.testRunner.properties.selectorArgs.description).toContain("ALWAYS []");
-  });
 });

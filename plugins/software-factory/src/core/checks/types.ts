@@ -1,20 +1,89 @@
 import type { Repo } from "../git/repo.js";
-import type {
-  ProjectConfig,
-  PipelineConfig,
-  InfraArtifact,
-  GatesBaselineArtifact,
-  DeveloperTarget,
-  PipelineLimits,
-} from "../artifacts.js";
+
+export interface InfraGate {
+  id: string;
+  command: string;
+}
+
+export interface TestRunnerConfig {
+  command: string;
+  selectorArgs?: string[];
+  junitArg?: string;
+}
+
+/** Infra artifact produced by the infra step: setup commands and quality gates. */
+export interface InfraArtifact {
+  setup: string[];
+  gates: InfraGate[];
+  testRunner: TestRunnerConfig;
+  notes?: string[];
+}
+
+export interface GateBaselineEntry {
+  id: string;
+  command?: string;
+  status: "pass" | "fail" | "flaky";
+  durationMs?: number;
+  details?: string;
+  mutatesWorktree?: boolean;
+  failingTests?: string[];
+  collectionErrors?: string[];
+  improvements?: string[];
+}
+
+export interface GatesBaselineArtifact {
+  timestamp?: string;
+  gates: GateBaselineEntry[];
+}
+
+export type DeveloperTarget =
+  | { selectors: string[]; expectRed: string[] }
+  | { gate: string }
+  | { command: string; customTarget: boolean };
+
+export interface CustomCheckConfig {
+  run: string;
+  expect?: "pass" | "fail";
+  cwd?: "item" | "task";
+  timeoutSec?: number;
+  phase?: "before" | "after";
+  onFail?: "retry-step" | "fix-loop" | "consult" | "feed";
+}
+
+/** Project settings the checks read; the kernel config layer supplies these. */
+export interface CheckProjectConfig {
+  orchestrationFolder?: string;
+  worktreeRoot?: string;
+  paths?: {
+    tests?: string | string[];
+    prod?: string | string[];
+  };
+}
+
+export interface CheckLimits {
+  gateRetries?: number;
+  gateTimeoutSec?: number;
+  stubMaxProdLines?: number;
+  storyMaxProdLines?: number;
+  simpleMaxProdLines?: number;
+  minFreeDiskMb?: number;
+  [key: string]: unknown;
+}
+
+/** Process settings the checks read; the kernel config layer supplies these. */
+export interface CheckPipelineConfig {
+  checks?: Record<string, CustomCheckConfig>;
+  limits?: CheckLimits;
+  [key: string]: unknown;
+}
 
 export interface CheckContext {
   repo: Repo;
   wt: string;
   base: string;
   head?: string;
-  project: ProjectConfig;
-  pipeline: PipelineConfig;
+  project: CheckProjectConfig;
+  pipeline: CheckPipelineConfig;
   infra?: InfraArtifact;
   baseline?: GatesBaselineArtifact;
   kind?: string;
@@ -25,7 +94,7 @@ export interface CheckContext {
   target?: DeveloperTarget;
   checkTimeoutSec?: number;
   testFirstCommit?: string;
-  limits: PipelineLimits;
+  limits: CheckLimits;
   outputBytes: number;
 }
 

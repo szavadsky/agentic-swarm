@@ -1,9 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import yaml from "yaml";
-import type { PipelineConfig } from "./artifacts.js";
-import { KNOWN_VARS } from "./prompt-vars.js";
 import { formatOutputSchemaSection } from "./records/schema-format.js";
+
+/** Process-config slice read by tool resolution. */
+export interface PromptPipelineConfig {
+  agents?: Record<string, { tools?: string[] }>;
+}
+
+export type HumanInvolvement = "autonomous" | "principal" | "detailed";
 
 export interface PromptLibrary {
   agentDefinition(agent: string): {
@@ -34,7 +39,7 @@ export interface PromptLibrary {
 export function resolveAgentTools(
   agent: string,
   frontmatterTools: string[],
-  pipeline?: Pick<PipelineConfig, "agents">
+  pipeline?: PromptPipelineConfig
 ): string[] {
   const override = pipeline?.agents?.[agent]?.tools;
   if (override !== undefined) return [...override];
@@ -55,55 +60,17 @@ export const FILE_TOOL_IDS = new Set([
   "lsp",
   "ast_grep",
 ]);
-export interface CriteriaBundle {
-  triage?: string;
-  dispositions?: string;
-  storyKinds?: string;
-  humanInvolvement?: string;
-}
-
-/**
- * Loads criteria markdown files (§8.7) declared in `pipeline.criteria`.
- * Returns file contents keyed by criteria section; missing/empty entries are skipped.
- * The engine is expected to wire these into triage/PM/review prompts
- * (e.g. append to promptVars as `triageCriteria`, `dispositionsCriteria`, `storyKindsCriteria`).
- */
-export function loadCriteriaBundle(
-  criteria: Record<string, string> | undefined,
-  opts?: { readFile?: (p: string) => string }
-): CriteriaBundle {
-  const bundle: CriteriaBundle = {};
-  if (!criteria) return bundle;
-  const readFile = opts?.readFile ?? ((p: string) => fs.readFileSync(p, "utf8"));
-  const mapping: Array<[string, keyof CriteriaBundle]> = [
-    ["triage", "triage"],
-    ["dispositions", "dispositions"],
-    ["story-kinds", "storyKinds"],
-    ["human-involvement", "humanInvolvement"],
-  ];
-  for (const [key, field] of mapping) {
-    const filePath = criteria[key];
-    if (typeof filePath !== "string" || filePath.length === 0) continue;
-    try {
-      const content = readFile(filePath).trim();
-      if (content.length > 0) bundle[field] = content;
-    } catch {
-      // Missing criteria file: skip silently; prompts still render without it.
-    }
-  }
-  return bundle;
-}
 
 /**
  * Selects the active mode's `## <mode>` section from the human-involvement
- * criteria file plus every shared section (notably the ADR blocking table).
+ * criteria file plus every shared section.
  * Inactive mode sections are dropped; empty input renders an empty string.
  */
 const HUMAN_INVOLVEMENT_MODES = new Set(["autonomous", "principal", "detailed"]);
 
 export function formatHumanInvolvementCriteria(
   criteria: string | undefined,
-  mode: PipelineConfig["humanInvolvement"] = "autonomous"
+  mode: HumanInvolvement = "autonomous"
 ): string {
   if (!criteria || criteria.trim().length === 0) return "";
   const active = mode ?? "autonomous";
@@ -118,34 +85,6 @@ export function formatHumanInvolvementCriteria(
   }
   return kept.join("\n").trim();
 }
-
-/**
- * Formats the dispositions criteria section for review prompts (§8.7).
- * Drops `human-stop` and `dismiss` rows/rules unless the agent's allowed
- * dispositions include them (e.g. QA excludes both; triagers get `dismiss`).
- */
-export function formatDispositionsSection(
-  dispositionsCriteria: string | undefined,
-  allowedDispositions: string[]
-): string {
-  const lines = [
-    `Allowed dispositions for this review: ${allowedDispositions.join(", ")}.`,
-    `Use ONLY these dispositions; any other disposition value fails validation.`,
-  ];
-  if (dispositionsCriteria && dispositionsCriteria.trim().length > 0) {
-    const excluded = ["human-stop", "dismiss"].filter(
-      (d) => !allowedDispositions.includes(d)
-    );
-    const criteriaText = dispositionsCriteria
-      .split("\n")
-      .filter((line) => !excluded.some((d) => line.includes(d)))
-      .join("\n")
-      .trim();
-    if (criteriaText.length > 0) lines.push(criteriaText);
-  }
-  return lines.join("\n");
-}
-
 
 /**
  * Searches directories for a prompt fragment or agent definition file.
@@ -458,179 +397,3 @@ export function renderStepPrompt(opts: {
   return opts.prompts.renderStepPrompt(opts.fragment, opts.vars, opts.schema);
 }
 
-/**
- * Standard orchestration step fragments invoked directly by the engine
- * (outside flows.* step lists). Preflight checks these for existence and
- * placeholder validity exactly like flow step fragments.
- */
-export const ENGINE_STEP_FRAGMENTS: string[] = [
-  "steps/triage",
-  "steps/infra",
-  "steps/context-pack",
-  "steps/integrate",
-  "steps/fix-round",
-  "steps/pm-edits",
-  "steps/pm-amend",
-  "steps/pm-single-item",
-  "steps/architect-plan",
-  "steps/architect-revise",
-  "steps/architect-resume",
-  "steps/architect-wave-report",
-  "steps/architect-closeup",
-  "steps/architect-consult-item",
-  "steps/architect-consult-nonitem",
-  "steps/plan-review",
-  "steps/wave-close-up",
-  "steps/plan-close-up",
-];
-
-export const SYSTEM_FRAGMENTS: string[] = ["system/steer-classify", "system/brief-select", "system/repair"];
-
-/**
- * Validates prompt configuration at preflight (§10, §11).
- *
- * Checks:
- * 1. Every agent declared in `pipeline.agents` has a loadable definition
- * 2. Every step in `pipeline.flows` references an existing step fragment
- * 3. Every placeholder in referenced step fragments is known to the engine (in KNOWN_VARS)
- * 4. Engine-invoked orchestration fragments (ENGINE_STEP_FRAGMENTS) exist with valid placeholders
- * 5. System fragments exist and have valid placeholders
- * 6. Full render check: every checked fragment renders with dummy KNOWN_VARS values
- *
- * Returns list of validation error strings (empty if all valid).
- */
-export function preflightPrompts(
-  lib: PromptLibrary,
-  pipeline: PipelineConfig
-): string[] {
-  const errors: string[] = [];
-  const checkedFragments = new Set<string>();
-
-  function knownVarsFor(fragmentName: string): string[] | undefined {
-    return (
-      KNOWN_VARS[fragmentName] ??
-      KNOWN_VARS[`steps/${fragmentName}`] ??
-      KNOWN_VARS[fragmentName.replace(/^steps\//, "")]
-    );
-  }
-
-  // Helper to validate a step fragment
-  function checkStepFragment(stepId: string, fragmentName: string, label = "Step"): void {
-    checkedFragments.add(fragmentName);
-    let phs: string[];
-    try {
-      phs = lib.placeholders(fragmentName);
-    } catch (err) {
-      errors.push(
-        `${label} fragment "${fragmentName}" for step "${stepId}" not found: ${(err as Error).message}`
-      );
-      return;
-    }
-    const known = knownVarsFor(fragmentName);
-    if (!known) {
-      errors.push(
-        `${label} fragment "${fragmentName}" for step "${stepId}" has no KNOWN_VARS registration`
-      );
-      return;
-    }
-    for (const ph of phs) {
-      if (!known.includes(ph)) {
-        errors.push(
-          `Unknown placeholder "${ph}" in fragment "${fragmentName}" (engine does not supply it)`
-        );
-      }
-    }
-    // Full render check with dummy values for every KNOWN_VARS entry.
-    try {
-      const sampleVars: Record<string, string> = {};
-      for (const v of known) sampleVars[v] = `sample-${v}`;
-      lib.render(fragmentName, sampleVars);
-    } catch (err) {
-      errors.push(
-        `Render check failed for fragment "${fragmentName}": ${(err as Error).message}`
-      );
-    }
-  }
-
-  // 1. Check all agents defined in pipeline
-  if (pipeline.agents) {
-    for (const agentName of Object.keys(pipeline.agents)) {
-      try {
-        lib.agentDefinition(agentName);
-      } catch (err) {
-        errors.push(`Agent definition "${agentName}" not found: ${(err as Error).message}`);
-      }
-    }
-  }
-
-  // 2. Check flow steps
-  if (pipeline.flows) {
-    // Simple flow
-    if (pipeline.flows.simple?.steps) {
-      for (const step of pipeline.flows.simple.steps) {
-        const frag = step.stepFragment ?? step.id;
-        checkStepFragment(step.id, frag);
-      }
-    }
-
-    // Story flows
-    if (pipeline.flows.story) {
-      for (const kindConfig of Object.values(pipeline.flows.story)) {
-        if (kindConfig?.steps) {
-          for (const step of kindConfig.steps) {
-            const frag = step.stepFragment ?? step.id;
-            checkStepFragment(step.id, frag);
-          }
-        }
-      }
-    }
-
-    // Spike flows
-    if (pipeline.flows.spike) {
-      for (const kindConfig of Object.values(pipeline.flows.spike)) {
-        if (kindConfig?.steps) {
-          for (const step of kindConfig.steps) {
-            const frag = step.stepFragment ?? step.id;
-            checkStepFragment(step.id, frag);
-          }
-        }
-      }
-    }
-  }
-
-  // 3. Check engine-invoked orchestration fragments
-  for (const frag of ENGINE_STEP_FRAGMENTS) {
-    if (checkedFragments.has(frag)) continue;
-    checkStepFragment("engine", frag, "Engine");
-  }
-
-  // 4. Check system fragments
-  for (const sysFrag of SYSTEM_FRAGMENTS) {
-    let phs: string[];
-    try {
-      phs = lib.placeholders(sysFrag);
-    } catch (err) {
-      errors.push(
-        `System fragment "${sysFrag}" not found: ${(err as Error).message}`
-      );
-      continue;
-    }
-    const known = KNOWN_VARS[sysFrag] ?? [];
-    for (const ph of phs) {
-      if (!known.includes(ph)) {
-        errors.push(
-          `Unknown placeholder "${ph}" in system fragment "${sysFrag}" (engine does not supply it)`
-        );
-      }
-    }
-    try {
-      lib.render(sysFrag, {});
-    } catch (err) {
-      errors.push(
-        `Render check failed for system fragment "${sysFrag}": ${(err as Error).message}`
-      );
-    }
-  }
-
-  return errors;
-}

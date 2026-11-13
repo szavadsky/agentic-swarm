@@ -5,8 +5,12 @@ import { appendJournal } from "./journal.js";
 import { writeYamlAtomic } from "./records/io.js";
 import { git } from "./git/exec.js";
 import { commitAll } from "./git/commit.js";
-import type { PipelineConfig } from "./artifacts.js";
 import type { Repo } from "./git/repo.js";
+
+/** Process-config slice read by the disk guard. */
+export interface DiskSpacePipelineConfig {
+  limits?: { minFreeDiskMb?: number };
+}
 
 export const DEFAULT_MIN_FREE_DISK_MB = 2048;
 
@@ -174,7 +178,7 @@ export async function assertDiskSpace(options: {
   repoRoot: string;
   worktreeRoot?: string;
   runtimeTmpDir?: string;
-  pipeline?: PipelineConfig;
+  pipeline?: DiskSpacePipelineConfig;
   task?: string;
   taskDir?: string;
   taskWt?: string;

@@ -12,8 +12,8 @@ import { parseBranch } from "../git/naming.js";
 import { gateTimedOut, isTestRunnerGate, runGates, snapshotWorktree, checkAndRestoreWorktreeMutation } from "./gates.js";
 import { parseJunit, buildTargetCommand, buildGateWithJunitCommand, shellQuote } from "./junit.js";
 import { formatKnownGateTargets, resolveGateTarget } from "./gate-target.js";
-import type { InfraGate } from "../artifacts.js";
-import { tailCap, type CheckContext, type CheckResult } from "./types.js";
+import type { CheckContext, CheckResult, InfraGate } from "./types.js";
+import { tailCap } from "./types.js";
 import { getClock, detectSuspend } from "../clock.js";
 import { appendJournal } from "../journal.js";
 
