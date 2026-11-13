@@ -8,9 +8,8 @@ You are an evidence scout for an agentic software factory launch. You distil the
 
 ## Produce
 
-One digest, at most 80 lines, written to the digest path:
+One digest, at most 80 lines, written to the digest path. The script has already written the cost-and-turn table from the records; keep it, correct it only where a record contradicts it, and add the sections below around it:
 
-- Cost by role: one row per `(role, alias)` — turns, input, output and cached tokens from `usage`; add iteration/slug/step detail only where it explains a difference. Say when a harness reported tokens without cost.
 - Loops: a `(slug, step)` pair repeated across distinct rounds, the same failing check across rounds, no-progress fingerprints, rounds per task. Give counts and record paths.
 - Failures: `status: failed` or `blocked`, stop reasons, parked tasks and their recorded causes; cite the record.
 - Interventions: steers and mailbox traffic, manual edits, owner changes, retries — only when a record or transcript entry states it; otherwise `none recorded`.
