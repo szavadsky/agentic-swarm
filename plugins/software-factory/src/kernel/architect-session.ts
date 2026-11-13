@@ -32,18 +32,6 @@ export async function resumableSession(
   return session;
 }
 
-/** Compaction is cache hygiene, not a gate; a failure keeps the stored ref. */
-export async function compactArchitect(
-  runtime: KernelRuntime,
-  session: SessionRef
-): Promise<SessionRef | undefined> {
-  const harness = runtime.harnesses.get(session.harness);
-  if (!harness?.compact) return undefined;
-  try {
-    const caps = await harness.caps(session.model);
-    if (caps.compact === "none") return undefined;
-    return await harness.compact(session);
-  } catch {
-    return undefined;
-  }
-}
+// The boundary imports the architect-local name; the one implementation lives
+// in flow-context so the task-turn and architect paths share it.
+export { compactSession as compactArchitect } from "./flow-context.js";
