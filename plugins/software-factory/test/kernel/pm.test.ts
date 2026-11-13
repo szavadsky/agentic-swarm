@@ -117,38 +117,119 @@ describe("PM turn reconciliation", () => {
     }
   });
 
-  it("restores a merged task the PM touched and reports it", async () => {
+  it("restores a merged task and a finished spike the PM touched and reports both", async () => {
     const { root, runtime, fake, planPath } = await setup();
     try {
       const alpha = simpleTask("alpha", "alpha.txt");
+      const probe = simpleTask("probe", "finding.md", { kind: "spike", flow: "spike" });
       await runtime.store.writeTask(parseTaskFile(alpha, "alpha"));
-      const alphaOnDisk = fs.readFileSync(path.join(runtime.store.tasksDir, "alpha.md"), "utf8");
+      await runtime.store.writeTask(parseTaskFile(probe, "probe"));
+      const before = new Map(
+        ["alpha", "probe"].map((slug) => [
+          slug,
+          fs.readFileSync(path.join(runtime.store.tasksDir, `${slug}.md`), "utf8"),
+        ])
+      );
       await runtime.store.appendRecord(
         { iteration: 1, slug: "alpha", step: "merge", round: 1, actor: "script" },
         { ok: true }
       );
+      await runtime.store.appendRecord(
+        { iteration: 1, slug: "probe", step: "finish", round: 1, actor: "script" },
+        { ok: true }
+      );
       const state = derive(await runtime.store.listTasks(), await runtime.store.listRecords());
       expect(state.tasks.alpha!.status).toBe("merged");
+      expect(state.tasks.probe!.status).toBe("finished");
 
       fake.script((req, ctx) => {
-        fs.appendFileSync(path.join(runtime.store.tasksDir, "alpha.md"), "\nPM edit.\n", "utf8");
-        ctx.writeOutcome({ status: "done", summary: "filed", concerns: [], forward: [] });
+        for (const slug of ["alpha", "probe"]) {
+          fs.appendFileSync(path.join(runtime.store.tasksDir, `${slug}.md`), "\nPM edit.\n", "utf8");
+        }
+        ctx.writeOutcome({ status: "done", summary: "edited frozen work", concerns: [], forward: [] });
         return fakeTurnResult(req);
       });
       fake.script((req, ctx) => {
         expect(req.prompt).toContain('frozen task "alpha" was edited; restored');
-        expect(fs.readFileSync(path.join(runtime.store.tasksDir, "alpha.md"), "utf8")).toBe(alphaOnDisk);
+        expect(req.prompt).toContain('frozen task "probe" was edited; restored');
+        for (const slug of ["alpha", "probe"]) {
+          expect(fs.readFileSync(path.join(runtime.store.tasksDir, `${slug}.md`), "utf8")).toBe(
+            before.get(slug)!
+          );
+        }
         ctx.writeOutcome({ status: "done", summary: "acknowledged", concerns: [], forward: [] });
         return fakeTurnResult(req);
       });
 
       const result = await runPm(runtime, { iteration: 1, state, planPath, cwd: root });
       expect(result.status).toBe("done");
-      expect(fs.readFileSync(path.join(runtime.store.tasksDir, "alpha.md"), "utf8")).toBe(alphaOnDisk);
+      for (const slug of ["alpha", "probe"]) {
+        expect(fs.readFileSync(path.join(runtime.store.tasksDir, `${slug}.md`), "utf8")).toBe(before.get(slug)!);
+      }
       const records = await runtime.store.listRecords();
       const reconcile = records.find((r) => r.step === "pm-reconcile");
       expect(reconcile?.ok).toBe(false);
-      expect(reconcile?.cause).toContain("frozen task");
+      expect(reconcile?.cause).toContain('frozen task "alpha"');
+      expect(reconcile?.cause).toContain('frozen task "probe"');
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("marks merged and finished tasks frozen and read-only while pending tasks stay editable", async () => {
+    const { root, runtime, fake, planPath } = await setup();
+    try {
+      fs.writeFileSync(
+        planPath,
+        "# Plan\n\n## alpha\nCreate alpha.\n\n## probe\nProbe.\n\n## work\nWork.\n\n## later\nLater.\n",
+        "utf8"
+      );
+      for (const text of [
+        simpleTask("alpha", "alpha.txt"),
+        simpleTask("probe", "finding.md", { kind: "spike", flow: "spike" }),
+        simpleTask("work", "work.txt"),
+        simpleTask("later", "later.txt", { deps: ["work"] }),
+      ]) {
+        await runtime.store.writeTask(parseTaskFile(text, /^slug:\s*(\S+)/m.exec(text)![1]!));
+      }
+      await runtime.store.appendRecord(
+        { iteration: 1, slug: "alpha", step: "merge", round: 1, actor: "script" },
+        { ok: true }
+      );
+      await runtime.store.appendRecord(
+        { iteration: 1, slug: "probe", step: "finish", round: 1, actor: "script" },
+        { ok: true }
+      );
+      const state = derive(await runtime.store.listTasks(), await runtime.store.listRecords());
+      expect(state.tasks.alpha!.status).toBe("merged");
+      expect(state.tasks.probe!.status).toBe("finished");
+      expect(state.tasks.later!.status).toBe("pending");
+      const frozenBefore = new Map(
+        ["alpha", "probe"].map((slug) => [
+          slug,
+          fs.readFileSync(path.join(runtime.store.tasksDir, `${slug}.md`), "utf8"),
+        ])
+      );
+
+      fake.script((req, ctx) => {
+        const line = (slug: string) =>
+          req.prompt.split("\n").find((candidate) => candidate.includes(`- ${slug} |`)) ?? "";
+        expect(line("alpha")).toContain("| frozen (read-only)");
+        expect(line("probe")).toContain("| frozen (read-only)");
+        expect(line("later")).not.toContain("frozen");
+        fs.appendFileSync(path.join(runtime.store.tasksDir, "later.md"), "\nPM edit.\n", "utf8");
+        ctx.writeOutcome({ status: "done", summary: "edited the pending task", concerns: [], forward: [] });
+        return fakeTurnResult(req);
+      });
+
+      const result = await runPm(runtime, { iteration: 1, state, planPath, cwd: root });
+      expect(result.status).toBe("done");
+      for (const [slug, text] of frozenBefore) {
+        expect(fs.readFileSync(path.join(runtime.store.tasksDir, `${slug}.md`), "utf8")).toBe(text);
+      }
+      expect(fs.readFileSync(path.join(runtime.store.tasksDir, "later.md"), "utf8")).toContain("PM edit.");
+      const records = await runtime.store.listRecords();
+      expect(records.filter((record) => record.step === "pm-reconcile")).toEqual([]);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }

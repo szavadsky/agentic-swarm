@@ -151,7 +151,7 @@ Body: the brief, condensed from the plan with pointers — why, done-when, the i
 
 ## Rules
 
-- Frozen means status \`merged\`, \`finished\`, \`parked\` or \`cancelled\`; every other status may change. Never edit a frozen file, never reword a slug.
+- Frozen means status \`merged\` or \`finished\`; those lines are marked \`frozen (read-only)\`. A \`cancelled\` slug is spent: its file is read-only and the slug is never reused. Every other status may change. Never edit a frozen file, never reword a slug.
 - A change to a frozen task arrives as a new bullet with its own slug. If the plan states a change but gives no new bullet, file nothing and record a concern; never edit the frozen file and never synthesize a rework slug.
 - Split or merge only as formalization of the plan's own bullets: every resulting task keeps a done-when; merge only when the plan gives one direction.
 - Ambiguity: formalize only what the plan states. If a task's done-when or scope cannot be derived, file no task for it and record \`kind: uncertainty\`, \`calibration: architect\`, naming the missing statement and the plan heading.

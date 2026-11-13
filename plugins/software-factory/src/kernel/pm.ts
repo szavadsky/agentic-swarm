@@ -5,7 +5,7 @@ import { runAgentTurn } from "./agent.js";
 import { resolveRole } from "./flow-context.js";
 import { materialHash, parseTaskFile, validateTaskGraph, TaskFileError } from "./tasks.js";
 import { appendCancel, scriptMeta } from "./record.js";
-import type { AliasConfig, KernelRuntime, Outcome, State, StepRecord, TaskFile } from "./types.js";
+import type { AliasConfig, KernelRuntime, Outcome, State, StepRecord, TaskFile, TaskStatus } from "./types.js";
 
 function taskPath(runtime: KernelRuntime, slug: string): string {
   return path.join(runtime.store.tasksDir, `${slug}.md`);
@@ -34,13 +34,18 @@ function parseTasks(texts: Map<string, string>): { tasks: TaskFile[]; findings: 
   return { tasks, findings };
 }
 
+/** The frozen set: reconcile restores these and the PM may not edit them. */
+function isFrozenStatus(status: TaskStatus | "new"): boolean {
+  return status === "merged" || status === "finished";
+}
+
 function existingTasks(state: State, tasks: TaskFile[]): string {
   if (tasks.length === 0) return "none";
   return [...tasks]
     .sort((a, b) => a.slug.localeCompare(b.slug))
     .map((task) => {
       const status = state.tasks[task.slug]?.status ?? "new";
-      const frozen = status === "merged" || status === "finished" ? " | frozen" : "";
+      const frozen = isFrozenStatus(status) ? " | frozen (read-only)" : "";
       return `- ${task.slug} | ${status} | ${materialHash(task).slice(0, 10)} | deps: ${task.deps.join(",") || "none"}${frozen}`;
     })
     .join("\n");
@@ -48,7 +53,7 @@ function existingTasks(state: State, tasks: TaskFile[]): string {
 
 function frozenSlugs(state: State): string[] {
   return Object.entries(state.tasks)
-    .filter(([, task]) => task.status === "merged" || task.status === "finished")
+    .filter(([, task]) => isFrozenStatus(task.status))
     .map(([slug]) => slug)
     .sort();
 }
