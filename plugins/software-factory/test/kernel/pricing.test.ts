@@ -251,11 +251,24 @@ describe("run-config price table", () => {
     ).toThrow();
     expect(() => modelPriceSchema.parse({ input: 1, cachedInput: 0, output: 0 })).toThrow();
 
-    const selfPath = path.resolve(import.meta.dir, "../../../../bootstrap/run/self.yaml");
-    const run = runConfigSchema.parse(yaml.parse(fs.readFileSync(selfPath, "utf8")));
+    // The package suite must not reach outside the package: an equivalent
+    // run-config shape, inline. (Validating a real run file's coverage is a
+    // `factory doctor` job, not a unit test.)
+    const run = runConfigSchema.parse(
+      yaml.parse(`
+aliases:
+  architect: { harness: omp, model: anthropic/claude-opus-5-5, fallbacks: [opencode-go/deepseek-v4.1-flash] }
+  implementer: { harness: opencode, model: opencode/deepseek-v4.1-flash-free }
+prices:
+  anthropic/claude-opus-5-5: { input: 4, cachedInput: 0.2, output: 20, reasoning: 20 }
+  opencode-go/deepseek-v4.1-flash: { input: 0.15, cachedInput: 0.003, output: 0.6, reasoning: 0.6 }
+  opencode/deepseek-v4.1-flash-free: { input: 0, cachedInput: 0, output: 0, reasoning: 0 }
+`)
+    );
     expect(run.aliases.architect!.model).toBe("anthropic/claude-opus-5-5");
     for (const alias of Object.values(run.aliases)) {
       expect(run.prices[alias.model]).toBeDefined();
+      for (const fb of alias.fallbacks) expect(run.prices[fb]).toBeDefined();
     }
   });
 });
