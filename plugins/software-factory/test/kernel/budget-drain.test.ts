@@ -4,6 +4,7 @@ import path from "node:path";
 import { FakeHarness, emptyUsage, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
+import { iterationMetrics } from "../../src/kernel/metrics.js";
 import { writeIterationSummary } from "../../src/kernel/summary.js";
 import { task } from "./helpers.js";
 import {
@@ -69,6 +70,59 @@ describe("iteration USD brake", () => {
         "- budget: iteration USD limit $1.0000 reached (spent $1.1000); brake blind for 1 unpriced turn"
       );
       expect(text).not.toContain("boundary: budget");
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("counts every reported attempt toward the USD brake, equal to the metrics figure", async () => {
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: 1, iterationUsd: 1 },
+      prices: { "retry/model": { input: 4, cachedInput: 0.2, output: 20, reasoning: 20 } },
+    });
+    try {
+      const runtime = await makeRuntime(repo, goal, { fake: new FakeHarness({ id: "fake" }) });
+      await writeTask(runtime, task("a", { scope: ["a.txt"] }));
+      // A turn that retried onto another model: the harness priced one call,
+      // the table prices the other. `usage` repeats only the last call, so
+      // counting it as well would double that call.
+      await runtime.store.appendRecord(
+        {
+          iteration: 1,
+          step: "architect",
+          round: 1,
+          actor: "agent",
+          alias: "architect",
+          model: { id: "retry/model" },
+        },
+        {
+          stop: { kind: "done" },
+          usage: { ...emptyUsage(), in: 1_000_000 },
+          attempts: [
+            {
+              model: { id: "mystery/model" },
+              stop: { kind: "infra", cause: "quota" },
+              usage: { ...emptyUsage(), costUsd: 0.5 },
+            },
+            {
+              model: { id: "retry/model" },
+              stop: { kind: "done" },
+              usage: { ...emptyUsage(), in: 1_000_000 },
+            },
+          ],
+          outcome: outcome({ summary: "go", decision: "continue" }),
+        }
+      );
+
+      const result = await runDispatch(runtime, { iteration: 1 });
+      const records = await runtime.store.listRecords();
+      const metrics = iterationMetrics(1, "in-progress", records, {}, 0, runtime.configs.run.prices ?? {});
+
+      expect(metrics.usage.costUsd).toBeCloseTo(4.5, 10);
+      // $0.50 from the harness-priced first call plus $4.00 from the table-priced
+      // second: `usage`'s $4.00 last call is not added a second time.
+      expect(result.reason).toBe("drained");
+      expect(result.cause).toBe("budget: iteration USD limit $1.0000 reached (spent $4.5000)");
     } finally {
       cleanupFlowRepo(repo);
     }
