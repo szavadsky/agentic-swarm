@@ -304,3 +304,9 @@ Verbatim, newest last; each with what it changed.
 - Iteration 12 had one new park (`pm-ladder-tidy`). `doc-drift` was never dispatched, `prune-sweep` parked in iteration 11, and `front-ladder` was retired by `front-land` in iteration 12.
 - Iteration 13 had one new park (`rotation-threaded`); the other eight in its summary were carried over.
 - From now on iteration lines in this journal are taken from `metrics.yaml` and the records, not from the summary's first screen.
+
+### 2026-11-13 — review figures corrected after delivery
+- **My error:** I copied `facts/architect-anatomy.md` into the evidence folder and quoted from it while its agent was still writing. The final file shows four review lines in the manifesto overstated or narrowed the architect figures: 74% of the bill, not 75%; $1.58 per turn that ran, not $1.19 per launch; 0.7 to 7.3 million cache-read tokens per turn, not 0.7 to 3.2; 15 to 42 requests, known for four turns only; $6.28 is 30% of the money, not a third.
+- Corrected in place in my own review text (R05, R30, Where the project stands, P4); no owner line changed. Table of old and new values: `reports/review-2026-11-13/REVIEW.md`, "Corrections after delivery". Final fact file replaces the partial copy.
+- Rule: a fact file is quoted only after its agent has reported completion.
+- No run was live during these commits.

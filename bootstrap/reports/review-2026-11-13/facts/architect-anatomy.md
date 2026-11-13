@@ -7,7 +7,7 @@
 - **One prompt**, 9,826 B / 125 lines (9,935 B in iteration 11, which added a steer), fixed sections: bounds; `## Turn order` = 1 completeness check, 2 relaunch debt review, 3 stop decision, 4 edit the plan; the plan bullet schema; the outcome schema (transcript T, user message 1).
 - **Fixed inputs**: `intent.md` (21 lines); `iterations/<n>/context-pack.md` (8,000 B cap; 92/89/80/90 lines at iterations 10–13); `digest.md` (52/60/57/59 lines); the whole plan (216→430 lines); the previous iteration summary.
 - **Reads**: pack, digest and prior summary first; then the specific record outcomes behind failed/parked tasks, then code and git evidence. 30 code-read calls in the four surviving turns.
-- **Optional scouts**: 1 in iteration 10 (`HierarchySeams`, 2m55s, killed as redundant after completing), 2 in iteration 8 (`IntentGap`, `DebtCheck`), 1 documented in iteration 1 (`MeasurementSurface`).
+- **Optional scouts**: 1 documented in iteration 1 (`MeasurementSurface`), 1 in iteration 5 (`PruneMap`, import-graph inventory), 2 in iteration 8 (`IntentGap`, `DebtCheck`), 1 in iteration 10 (`HierarchySeams`, 2m55s, killed as redundant after completing).
 - **Plan edit**: 1–2 `edit` calls with line-range patches; the first attempt was refused in 4 of 10 edit calls because the anchor line had been shown truncated, then re-issued.
 - **Outcome**: one `write` of `records/<id>/outcome.yaml` (3.7–4.5 KB), then the session compacts (compaction event at the end of each of iterations 10–13).
 
@@ -21,7 +21,7 @@ Token shape is cache-read dominated: the resumed session re-sends its history on
 | 2 | `00006-i2-architect-r1` | 0.0 | 0.0000* | 0 | 0 | 0 | resume `01a1d348` → crash | 0 | — | — | 0 (12→12) | +0/−0 | no | infra crash |
 | 3 | `00009-i3-architect-r1` | 0.0 | 0.0000* | 0 | 0 | 0 | resume `01a1d348` → crash | 0 | — | — | 0 (12→12) | +0/−0 | no | infra crash |
 | 4 | `00012-i4-architect-r1` | 0.0 | 0.0000* | 0 | 0 | 0 | resume `01a1d348` → crash ("Session not found") | 0 | — | — | 0 (12→12) | +0/−0 | no | infra crash |
-| 5 | `00015-i5-architect-r1` | 9.7 | 2.5091 | 538,511 | 7,333,396 | 76,376 | new `01a1d36c` | unknown (0 documented) | — | — | unknown (12→?) | +18/−0 | yes | done |
+| 5 | `00015-i5-architect-r1` | 9.7 | 2.5091 | 538,511 | 7,333,396 | 76,376 | new `01a1d36c` | 1 documented (PruneMap) | — | — | unknown (12→?) | +18/−0 | yes | done |
 | 6 | `00100-i6-architect-r1` | 8.6 | 1.9987 | 70 | 2,494,682 | 43,721 | resumed `01a1d36c` | unknown (0 documented) | — | — | unknown | +9/−0 | yes | done |
 | 7 | `00104-i7-architect-r1` | 3.3 | 0.8293 | 44 | 1,105,763 | 13,159 | resumed `01a1d36c` | unknown (0 documented) | — | — | unknown | +0/−0 | yes | done |
 | 8 | `00226-i8-architect-r1` | 5.3 | 1.0348 | 113,294 | 1,927,050 | 23,486 | resumed `01a1d36c` | 2 | — | — | 0 (unchanged) | +0/−0 | no | done |
@@ -36,7 +36,7 @@ Legend. Wall = `endedAt − startedAt` (record YAML). Cost = `metrics.yaml` `rol
 Turn notes (record evidence):
 - Iteration 1: 2 attempts in one turn (345,000 then 6 fresh input); outcome `failed`; plan left as a 12-line header + gate-rules stub (`records/00002-i1-architect-r1/outcome.yaml:1-2`; `iterations/2/digest.md:40`).
 - Iterations 2–4: both attempts (Opus, then `opencode-go/deepseek-v4.1-flash`) crashed in 0.4 s with zero usage; iteration 4's stop carries `Error: Session "01a1d348-..." not found` (`records/00012-i4-architect-r1/end.yaml`; `bootstrap/LOG.md:213,218,223`).
-- Iteration 5: 18 tasks in six milestones (`records/00015-i5-architect-r1/outcome.yaml:2`); archived session dir `20261113T053254201Z-21dfa4` is absent.
+- Iteration 5: 18 tasks in six milestones (`records/00015-i5-architect-r1/outcome.yaml:2`); M3 came from the scout `PruneMap` inventory (:13); archived session dir `20261113T053254201Z-21dfa4` is absent.
 - Iteration 6: +9 tasks (2 acpx + 7 M7 debt removers); M1 collapsed to one line (`records/00100-i6-architect-r1/outcome.yaml:17-25`).
 - Iteration 7: 0 new tasks; strategy rewritten, 2 rules added, iteration-7 debt register (`records/00104-i7-architect-r1/outcome.yaml:20-28`).
 - Iteration 8: no plan edit; ended waiting on 2 scouts (`iterations/8/summary.md:6`); outcome `failed`.

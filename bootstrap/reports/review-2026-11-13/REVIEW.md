@@ -216,3 +216,17 @@ The reports beside this file are kept as written. Where a later check contradict
 ## Salvaged work
 
 `rotation-threaded` (harness rotation) was parked in iteration 13 by an operator commit, not by its own fault (records 00559, 00560), and its work was never committed: 20 changed paths in the task worktree. `salvage/rotation-threaded.patch` holds that diff against `83c9e6c`, in case launch recovery removes the worktree.
+
+## Corrections after delivery
+
+`facts/architect-anatomy.md` was copied while its agent was still writing. The final file (replaced here) changes no number in its own table, but it shows that four lines of the manifesto review generalised from a partial view. Corrected in place on main; owner text untouched.
+
+| Manifesto line | Published | Corrected | Source |
+|---|---|---|---|
+| Where the project stands, Cost | architect is 75% of the $21.25 bill | 74% ($15.79 of $21.25); 75.1% is the iteration 1–12 share in the table above | `facts/architect-anatomy.md` part 1 |
+| Where the project stands, Cost | a third of the money ($6.28) | $6.28 is 30% of $21.25; it is 33% of the $19.05 spent through iteration 12 | same |
+| R30, P4 | $1.19 per launch | $1.58 per turn that ran (ten turns, $0.83 to $2.51); $1.19 averaged in three launches that crashed at start and cost nothing | same |
+| R05, P4 | a turn is 15 to 45 requests | 15 to 42 requests, known only for iterations 10–13 (one surviving transcript); 45 was a tool-call count | same |
+| R05, P4 | 0.7 to 3.2 million cache-read tokens per turn against a few dozen fresh ones | 0.7 to 7.3 million over the ten turns that ran (iteration 5: 7.3 million); under 100 fresh input tokens on six of the ten, 68 thousand to 539 thousand on the other four | same |
+
+None of this changes a proposal: the corrected figures make the P4 case stronger, not weaker.
