@@ -3,7 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import yaml from "yaml";
-import { fingerprintText, fingerprintObject, normalizeText } from "../src/core/fingerprint.js";
+import { fingerprintText } from "../src/core/fingerprint.js";
+import { concernFingerprint, type ConcernInput } from "../src/core/concerns.js";
 import {
   readText,
   readYaml,
@@ -15,16 +16,27 @@ describe("fingerprint", () => {
   it("normalizes text and fingerprints it consistently", () => {
     const textA = "  Hello   World \r\n Line 2  ";
     const textB = "hello world\nline 2";
-    expect(normalizeText(textA)).toBe("hello world line 2");
     expect(fingerprintText(textA)).toBe(fingerprintText(textB));
     expect(fingerprintText("a")).not.toBe(fingerprintText("b"));
   });
 
-  it("fingerprints objects stably across key order", () => {
-    expect(fingerprintObject({ a: 1, b: [2, 3] })).toBe(
-      fingerprintObject({ b: [2, 3], a: 1 })
+  it("fingerprints concerns stably across whitespace and severity", () => {
+    const a: ConcernInput = {
+      kind: "risk",
+      summary: "  Race   in lock ",
+      location: { file: "a.ts" },
+      severity: "high",
+    };
+    const b: ConcernInput = {
+      kind: "risk",
+      summary: "race in lock",
+      location: { file: "a.ts" },
+      severity: "low",
+    };
+    expect(concernFingerprint(a)).toBe(concernFingerprint(b));
+    expect(concernFingerprint(a)).not.toBe(
+      concernFingerprint({ kind: "risk", summary: "race in lock" })
     );
-    expect(fingerprintObject({ a: 1 })).not.toBe(fingerprintObject({ a: 2 }));
   });
 });
 

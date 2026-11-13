@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { AsyncMutex, KeyedMutex, Semaphore } from "../src/core/mutex.js";
+import { AsyncMutex, KeyedMutex } from "../src/core/mutex.js";
 
 describe("Async synchronization primitives (§2)", () => {
   it("AsyncMutex enforces sequential FIFO execution without interleaving", async () => {
@@ -83,24 +83,5 @@ describe("Async synchronization primitives (§2)", () => {
     ]);
     expect(order).toEqual([1, 2]);
     expect(keyed.activeKeys).toBe(0);
-  });
-
-  it("Semaphore restricts active concurrency to maxConcurrency limit", async () => {
-    const sem = new Semaphore(2);
-    let active = 0;
-    let maxConcurrent = 0;
-
-    const worker = async () => {
-      await sem.run(async () => {
-        active++;
-        maxConcurrent = Math.max(maxConcurrent, active);
-        await new Promise((resolve) => setTimeout(resolve, 15));
-        active--;
-      });
-    };
-
-    await Promise.all([worker(), worker(), worker(), worker(), worker()]);
-
-    expect(maxConcurrent).toBe(2);
   });
 });

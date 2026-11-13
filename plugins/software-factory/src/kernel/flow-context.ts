@@ -146,6 +146,29 @@ function aliasHarness(runtime: KernelRuntime, alias: string): string {
   return configured.harness;
 }
 
+/**
+ * The front turn's session for a trivial task's first implement turn. A resume
+ * is cwd-bound, and the front runs in the goal checkout while the task runs in
+ * its own worktree, so this fires only when the stored ref is bound to that
+ * worktree; the alias must also route to the harness that recorded it. Either
+ * miss starts the implement turn de novo with the front's pack.
+ */
+export function frontSessionFor(
+  runtime: KernelRuntime,
+  alias: string,
+  records: StepRecord[],
+  worktree: string
+): SessionRef | undefined {
+  const prior = records
+    .filter((r) => r.step === "front" && r.actor === "agent" && r.endedAt && r.session)
+    .sort(bySeq)
+    .at(-1)?.session;
+  if (!prior) return undefined;
+  if (path.resolve(prior.cwd) !== path.resolve(worktree)) return undefined;
+  if (!portable(prior.harness, aliasHarness(runtime, alias))) return undefined;
+  return prior;
+}
+
 /** Compaction is cache hygiene, not a gate; a failure keeps the uncompacted ref. */
 export async function compactSession(runtime: KernelRuntime, session: SessionRef): Promise<SessionRef | undefined> {
   const harness = runtime.harnesses.get(session.harness);

@@ -2,7 +2,7 @@ import { git } from "../core/git/exec.js";
 import { commitAll } from "../core/git/commit.js";
 import { hasConflictMarkers, unmergedFiles } from "../core/git/merge.js";
 import { runAgentTurn } from "./agent.js";
-import { promptVars, resolveRole, resumeSessionFor } from "./flow-context.js";
+import { compactSession, promptVars, resolveRole, resumeSessionFor } from "./flow-context.js";
 import { scriptMeta } from "./record.js";
 import { materialHash } from "./tasks.js";
 import {
@@ -116,15 +116,21 @@ export async function attemptConflictMerge(
     vars,
     expectation: "any",
     session: await resumeSessionFor(runtime, task, target.alias, records, ensured.path),
-    settle: async () => {
+    settle: async (_record, outcome, live) => {
       breach = await containmentViolation(runtime, ensured.path, ensured.branch, contained);
       if (breach) return { ok: false, cause: `containment: ${breach}` };
-      return settleMergeAttempt(
+      const settled = await settleMergeAttempt(
         runtime,
         { iteration, slug: task.slug, round: state.round },
         ensured.path,
         `factory: ${task.slug} merge integration head`
       );
+      // Compact where this session ends, as the task-turn settle does: a later
+      // fix turn resumes the stored ref. A stop with no accepted outcome keeps
+      // the ref as it is.
+      if (!outcome || !live) return settled;
+      const compacted = await compactSession(runtime, live);
+      return compacted ? { ...settled, session: compacted } : settled;
     },
   });
 

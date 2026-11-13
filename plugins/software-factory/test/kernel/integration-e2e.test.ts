@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import yaml from "yaml";
 import { createTmpRepo } from "../helpers/tmp-repo.js";
-import { dispatch } from "../../src/cli/index.js";
+import { dispatch } from "../../src/cli/dispatch.js";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import type { GoalMetrics } from "../../src/kernel/metrics.js";
@@ -120,6 +120,7 @@ describe("cross-slice E2E — init, steer and three launches through S2/S3/S4", 
       expect(initCode).toBe(0);
       expect(fs.existsSync(path.join(repo.dir, ".factory/repo.yaml"))).toBe(true);
       expect(fs.readFileSync(path.join(goalDir, "intent.md"), "utf8")).toContain("Build alpha");
+      fs.writeFileSync(path.join(goalDir, "class.yaml"), "class: bigger\n", "utf8");
 
       // Launch 1: alpha merges, beta is rejected in the last round, gamma waits.
       const first = new FakeHarness({ id: "fake" });

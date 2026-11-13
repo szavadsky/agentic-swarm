@@ -26,6 +26,7 @@ import {
   firstBase,
   flowOf,
   followUpSession,
+  frontSessionFor,
   isFixTurn,
   promptVars,
   stepTarget,
@@ -146,7 +147,9 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
   const target = stepTarget(runtime, task, state, step.id);
   const session = isFixTurn(flow, state, step.id)
     ? await followUpSession(runtime, task, target, records, ensured.path)
-    : undefined;
+    : task.flow === "just-implement" && state.turns === 0
+      ? frontSessionFor(runtime, target.alias, records, ensured.path)
+      : undefined;
   const vars = promptVars(runtime, task, ensured.path, records, state.round, flow);
   vars.base_hash = firstBase(records, task.slug) ?? ensured.startPoint;
   vars.head_hash = await headSha(ensured.path);

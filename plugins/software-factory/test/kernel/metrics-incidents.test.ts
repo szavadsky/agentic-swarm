@@ -76,6 +76,8 @@ function incidentRecords() {
     script(7, { slug: "b", step: "park", ok: true, cause: 'review round limit reached after verdict "changes" (2 rounds)' }),
     script(8, { slug: "c", step: "park", ok: true, cause: "no-progress: implement r2 repeats r1 (deadbeef)" }),
     script(9, { slug: "d", step: "park", ok: true, cause: "budget: item budget exhausted after 8 turns" }),
+    script(10, { slug: "e", step: "park", ok: true, cause: "empty-diff: implement r1 committed no changes" }),
+    script(11, { slug: "f", step: "park", ok: true, cause: "overflow" }),
   ];
 }
 
@@ -87,6 +89,8 @@ const EXPECTED_INCIDENTS = {
   mergedGateFailures: 1,
   roundLimitParks: 1,
   noProgressParks: 1,
+  emptyDiffParks: 1,
+  overflowParks: 1,
   budgetParks: 1,
 };
 
@@ -98,6 +102,8 @@ const SUMMARY_LABELS = {
   "merged-gate failures": "mergedGateFailures",
   "round-limit parks": "roundLimitParks",
   "no-progress parks": "noProgressParks",
+  "empty-diff parks": "emptyDiffParks",
+  "overflow parks": "overflowParks",
   "budget parks": "budgetParks",
 } as const;
 
@@ -124,7 +130,7 @@ describe("iteration metrics incidents and spend tables", () => {
       const one = metrics.iterations[0]!;
       expect(one.incidents).toEqual(EXPECTED_INCIDENTS);
       expect(metrics.totals.incidents).toEqual(EXPECTED_INCIDENTS);
-      expect(one.loopIncidents).toBe(1);
+      expect(one.loopIncidents).toBe(2);
       expect(one.turns).toBe(4);
       expect(one.tokens).toBe(110);
 
@@ -137,11 +143,15 @@ describe("iteration metrics incidents and spend tables", () => {
       expect(one.aliases.cheap!.usage.costUsd).toBeCloseTo(0.02, 10);
       expect(metrics.totals.aliases.cheap).toMatchObject({ turns: 1, tokens: 22, promptBytes: 200 });
 
-      const state = derive([task("a"), task("b"), task("c"), task("d")], records);
+      const state = derive(
+        [task("a"), task("b"), task("c"), task("d"), task("e"), task("f")],
+        records
+      );
       await writeIterationSummary(store, { iteration: 1, state, records, status: "in-progress" });
       const text = fs.readFileSync(path.join(store.goalDir, "iterations/1/summary.md"), "utf8");
 
       expect(summaryIncidents(text)).toEqual(one.incidents);
+      expect(text).toContain("- loop incidents: 2");
       expect(text).toContain("| role | turns | tokens | cost | prompt bytes |");
       expect(text).toContain("| implementer | 2 | 55 | $0.0500 | 500 |");
       expect(text).toContain("| architect | 1 | 11 | $0.0100 | 100 |");
@@ -182,6 +192,8 @@ describe("iteration metrics incidents and spend tables", () => {
       expect(metrics.iterations[0]!.loopIncidents).toBe(2);
       expect(metrics.totals.loopIncidents).toBe(2);
       expect(metrics.iterations[0]!.incidents.noProgressParks).toBe(1);
+      expect(metrics.iterations[0]!.incidents.emptyDiffParks).toBe(1);
+      expect(metrics.iterations[0]!.incidents.overflowParks).toBe(0);
       expect(metrics.iterations[0]!.incidents.roundLimitParks).toBe(0);
       expect(metrics.iterations[0]!.parked).toEqual(["a", "b"]);
     } finally {
@@ -215,6 +227,8 @@ describe("iteration metrics incidents and spend tables", () => {
         mergedGateFailures: 0,
         roundLimitParks: 0,
         noProgressParks: 0,
+        emptyDiffParks: 0,
+        overflowParks: 0,
         budgetParks: 0,
       });
     } finally {

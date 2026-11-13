@@ -3,13 +3,6 @@ import path from "node:path";
 import yaml from "yaml";
 import { formatOutputSchemaSection } from "./records/schema-format.js";
 
-/** Process-config slice read by tool resolution. */
-export interface PromptPipelineConfig {
-  agents?: Record<string, { tools?: string[] }>;
-}
-
-export type HumanInvolvement = "autonomous" | "principal" | "detailed";
-
 export interface PromptLibrary {
   agentDefinition(agent: string): {
     body: string;
@@ -26,64 +19,6 @@ export interface PromptLibrary {
     schema?: Record<string, unknown>
   ): string;
   placeholders(fragment: string): string[];
-}
-
-/**
- * Resolves the effective tool list for an agent step (§5, §10).
- *
- * `pipeline.agents.<name>.tools`, when present, OVERRIDES the agent
- * definition's frontmatter tools (arrays replace per config merge semantics).
- * An explicit empty array means yield-only: the agent gets no tools and the
- * harness still appends `yield` for structured output.
- */
-export function resolveAgentTools(
-  agent: string,
-  frontmatterTools: string[],
-  pipeline?: PromptPipelineConfig
-): string[] {
-  const override = pipeline?.agents?.[agent]?.tools;
-  if (override !== undefined) return [...override];
-  return [...frontmatterTools];
-}
-
-/**
- * File-reading and code-search tools. A yield-only agent (e.g. PM) MUST NOT
- * carry any of these after tool resolution; the step-runner rejects such
- * steps deterministically before launch so the PM stays non-technical by
- * construction.
- */
-export const FILE_TOOL_IDS = new Set([
-  "read",
-  "grep",
-  "glob",
-  "find",
-  "lsp",
-  "ast_grep",
-]);
-
-/**
- * Selects the active mode's `## <mode>` section from the human-involvement
- * criteria file plus every shared section.
- * Inactive mode sections are dropped; empty input renders an empty string.
- */
-const HUMAN_INVOLVEMENT_MODES = new Set(["autonomous", "principal", "detailed"]);
-
-export function formatHumanInvolvementCriteria(
-  criteria: string | undefined,
-  mode: HumanInvolvement = "autonomous"
-): string {
-  if (!criteria || criteria.trim().length === 0) return "";
-  const active = mode ?? "autonomous";
-  const kept: string[] = [];
-  let keep = true;
-  for (const line of criteria.split("\n")) {
-    const heading = /^##\s+(.+?)\s*$/.exec(line)?.[1]?.toLowerCase();
-    if (heading !== undefined) {
-      keep = !HUMAN_INVOLVEMENT_MODES.has(heading) || heading === active;
-    }
-    if (keep) kept.push(line);
-  }
-  return kept.join("\n").trim();
 }
 
 /**
@@ -384,16 +319,5 @@ export function loadPromptLibrary(opts: {
       return `${basePrompt.trimEnd()}\n\n${outputSection}\n`;
     },
   };
-}
-
-export { formatOutputSchemaSection } from "./records/schema-format.js";
-
-export function renderStepPrompt(opts: {
-  prompts: PromptLibrary;
-  fragment: string;
-  vars: Record<string, string>;
-  schema?: Record<string, unknown>;
-}): string {
-  return opts.prompts.renderStepPrompt(opts.fragment, opts.vars, opts.schema);
 }
 

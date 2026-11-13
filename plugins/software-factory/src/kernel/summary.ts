@@ -21,7 +21,7 @@ export interface SummaryInput {
   state: State;
   records: StepRecord[];
   decision?: GoalDecision;
-  /** Boundary/launch cause shown as a remarkable (PM validation, crash). */
+  /** Boundary/launch cause shown as a remarkable (PM ladder, crash). */
   cause?: string;
   /** Crash or drain override; the architect decision wins when present. */
   status?: SummaryStatus;
@@ -56,7 +56,7 @@ function spendTable(
   ];
 }
 
-function incidentLines(incidents: IncidentCounts): string[] {
+function incidentLines(incidents: IncidentCounts, loopIncidents: number): string[] {
   return [
     `- infra retries: ${incidents.infraRetries}`,
     `- fallback hops: ${incidents.fallbackHops}`,
@@ -65,7 +65,10 @@ function incidentLines(incidents: IncidentCounts): string[] {
     `- merged-gate failures: ${incidents.mergedGateFailures}`,
     `- round-limit parks: ${incidents.roundLimitParks}`,
     `- no-progress parks: ${incidents.noProgressParks}`,
+    `- empty-diff parks: ${incidents.emptyDiffParks}`,
+    `- overflow parks: ${incidents.overflowParks}`,
     `- budget parks: ${incidents.budgetParks}`,
+    `- loop incidents: ${loopIncidents}`,
   ];
 }
 
@@ -160,7 +163,7 @@ export async function writeIterationSummary(
 
   const roleByStep = { ...DEFAULT_ROLE_BY_STEP, ...(input.roleByStep ?? {}) };
   const computed = iterationMetrics(iteration, status, input.records, roleByStep, 0, input.prices ?? {});
-  const { usage, unpricedTurns, roles: roleCosts, aliases, incidents } = computed;
+  const { usage, unpricedTurns, roles: roleCosts, aliases, incidents, loopIncidents } = computed;
   const roleNames = Object.values(roleCosts)
     .map((entry) => ({ name: entry.role, ...entry }))
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -242,7 +245,7 @@ export async function writeIterationSummary(
     `- merged: ${merged.length}; parked: ${[...parkedByCause.values()].flat().length}; pending: ${pending.length}`,
     "",
     "## Incidents",
-    ...incidentLines(incidents),
+    ...incidentLines(incidents, loopIncidents),
     "",
     "## Spend by role",
     ...spendTable("role", roleNames),

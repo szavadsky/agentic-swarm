@@ -4,7 +4,7 @@ import { stepTarget } from "./flow-context.js";
 import { readHolds, scanInbox, type Hold } from "./mailbox.js";
 import { next } from "./next.js";
 import { runSteerPm } from "./pm.js";
-import { priceUsage, type PriceTable } from "./pricing.js";
+import { pricedRecord, type PriceTable } from "./pricing.js";
 import { appendPark } from "./record.js";
 import type { Action, KernelRuntime, State, StepRecord, TaskFile, TaskState } from "./types.js";
 import type { MergeResult } from "./integrate.js";
@@ -81,15 +81,16 @@ function iterationStart(records: StepRecord[], iteration: number): number {
 
 /**
  * Dollars this iteration has already spent: every settled agent record priced
- * through `priceUsage`. A turn whose cost is unknown adds $0 — the brake treats
- * it as free because it has nothing better to go on, and the summary reports
- * how many turns were blind.
+ * through `pricedRecord`, the same call metrics and digest make, so a retried
+ * or fallen-back turn counts each reported attempt exactly once. A turn whose
+ * cost is unknown adds $0 — the brake treats it as free because it has nothing
+ * better to go on, and the summary reports how many turns were blind.
  */
 function iterationSpend(records: StepRecord[], iteration: number, prices: PriceTable): number {
   let usd = 0;
   for (const rec of records) {
     if (rec.iteration !== iteration || rec.actor !== "agent" || !rec.endedAt) continue;
-    const cost = rec.usage ? priceUsage(rec.usage, rec.model?.id ?? "", prices) : undefined;
+    const cost = pricedRecord(rec, prices).usage.costUsd;
     if (cost !== undefined) usd += cost;
   }
   return usd;

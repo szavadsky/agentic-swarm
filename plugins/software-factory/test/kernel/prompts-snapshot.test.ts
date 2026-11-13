@@ -16,6 +16,18 @@ const ROLES: Record<string, Record<string, string>> = {
     steers: "- s1 (mailbox/inbox/s1.md): keep the API stable",
     outcome_path: "/goal/records/00042-i3-architect-r1/outcome.yaml",
   },
+  front: {
+    iteration: "3",
+    intent_path: "/goal/intent.md",
+    plan_path: "/goal/plan.md",
+    tasks_dir: "/goal/tasks",
+    class_path: "/goal/class.yaml",
+    pack_path: "/goal/iterations/3/context-pack.md",
+    checkout: "/worktrees/demo",
+    setup_command: "bun install",
+    gate_commands: "- test: bun test",
+    outcome_path: "/goal/records/00041-i3-front-r1/outcome.yaml",
+  },
   pm: {
     iteration: "3",
     intent_path: "/goal/intent.md",

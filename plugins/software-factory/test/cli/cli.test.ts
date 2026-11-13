@@ -5,7 +5,7 @@ import path from "node:path";
 import yaml from "yaml";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 import { FakeHarness } from "../../src/harness/fake/index.js";
-import { dispatch, parseCliArgs } from "../../src/cli/index.js";
+import { dispatch, parseCliArgs } from "../../src/cli/dispatch.js";
 import {
   acquireRunLock,
   getRunLockPath,

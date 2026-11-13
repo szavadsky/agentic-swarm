@@ -2,12 +2,7 @@ import { describe, expect, it, beforeEach, afterEach } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import {
-  loadPromptLibrary,
-  resolveAgentTools,
-  formatHumanInvolvementCriteria,
-  FILE_TOOL_IDS,
-} from "../src/core/prompts.js";
+import { loadPromptLibrary } from "../src/core/prompts.js";
 
 describe("prompts: PromptLibrary", () => {
   let dir: string;
@@ -87,36 +82,5 @@ describe("prompts: PromptLibrary", () => {
     });
     expect(withSchema).toContain("## Output");
     expect(withSchema).toContain("status");
-  });
-});
-
-describe("prompts: config helpers", () => {
-  it("agent tools override frontmatter tools, including an empty list", () => {
-    expect(resolveAgentTools("dev", ["read"], undefined)).toEqual(["read"]);
-    expect(resolveAgentTools("dev", ["read"], { agents: { dev: { tools: [] } } })).toEqual([]);
-    expect(
-      resolveAgentTools("dev", ["read"], { agents: { dev: { tools: ["edit"] } } })
-    ).toEqual(["edit"]);
-  });
-
-  it("keeps only the active human-involvement section and shared text", () => {
-    const criteria = [
-      "# Preamble",
-      "## autonomous",
-      "A rules",
-      "## principal",
-      "P rules",
-      "## detailed",
-      "D rules",
-    ].join("\n");
-    expect(formatHumanInvolvementCriteria(criteria, "principal")).toBe(
-      "# Preamble\n## principal\nP rules"
-    );
-    expect(formatHumanInvolvementCriteria(undefined)).toBe("");
-  });
-
-  it("recognises file-reading tools as non-yield-only", () => {
-    expect([...FILE_TOOL_IDS]).toContain("read");
-    expect(FILE_TOOL_IDS.has("yield")).toBe(false);
   });
 });

@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { expect } from "bun:test";
-import { dispatch } from "../../src/cli/index.js";
+import { dispatch } from "../../src/cli/dispatch.js";
 import { FakeHarness, fakeTurnResult, type FakeTurnHandler } from "../../src/harness/fake/index.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import { derive } from "../../src/kernel/derive.js";
@@ -18,6 +18,8 @@ export interface E2EGoal {
 export interface GoalOptions {
   runYaml?: string;
   repoYaml?: string;
+  /** `null` leaves the goal without a class so the front turn runs; default is a bigger-class goal. */
+  classYaml?: string | null;
 }
 
 const DEFAULT_RUN_YAML = [
@@ -51,6 +53,9 @@ export function makeGoal(opts: GoalOptions = {}): E2EGoal {
   const goalDir = path.join(repo.dir, ".factory/artifacts/demo");
   fs.mkdirSync(goalDir, { recursive: true });
   fs.writeFileSync(path.join(goalDir, "intent.md"), "# Goal\n\nBuild the demo.\n", "utf8");
+  if (opts.classYaml !== null) {
+    fs.writeFileSync(path.join(goalDir, "class.yaml"), opts.classYaml ?? "class: bigger\n", "utf8");
+  }
   return { repo, goalDir, planPath: path.join(goalDir, "plan.md"), tasksDir: path.join(goalDir, "tasks") };
 }
 

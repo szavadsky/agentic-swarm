@@ -1,5 +1,3 @@
-import fs from "node:fs";
-import path from "node:path";
 import { git, GitError } from "./exec.js";
 import type { Repo } from "./repo.js";
 
@@ -67,26 +65,3 @@ export async function isAncestor(wt: string, a: string, b: string): Promise<bool
   throw new GitError(`merge-base --is-ancestor ${a} ${b}`, res.code, res.stderr, res.stdout);
 }
 
-/**
- * Checks whether the given files exist on disk and are committed in HEAD
- * with no uncommitted modifications in the worktree.
- */
-export async function areFilesCommitted(wt: string, filePaths: string[]): Promise<boolean> {
-  try {
-    const gitCheck = await git(wt, ["rev-parse", "--is-inside-work-tree"], { allowFail: true });
-    if (gitCheck.code !== 0) {
-      return filePaths.every((f) => fs.existsSync(f));
-    }
-    for (const filePath of filePaths) {
-      if (!fs.existsSync(filePath)) return false;
-      const gitRelPath = (path.isAbsolute(filePath) ? path.relative(wt, filePath) : filePath).replace(/\\/g, "/");
-      const catRes = await git(wt, ["cat-file", "-e", `HEAD:${gitRelPath}`], { allowFail: true });
-      if (catRes.code !== 0) return false;
-      const diffRes = await git(wt, ["diff", "--quiet", "HEAD", "--", gitRelPath], { allowFail: true });
-      if (diffRes.code !== 0) return false;
-    }
-    return true;
-  } catch {
-    return false;
-  }
-}

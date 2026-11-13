@@ -27,7 +27,7 @@ export interface AliasMetrics extends GroupMetrics {
 /**
  * Incidents that consume turns and money without producing a flow step:
  * harness retries and fallback hops, outcome repairs, conflicts, failed
- * merged-result gates, and the three park causes that are not task failures.
+ * merged-result gates, and the park causes that are not task failures.
  */
 export interface IncidentCounts {
   /** Extra calls on the same model after an infra stop. */
@@ -41,6 +41,10 @@ export interface IncidentCounts {
   mergedGateFailures: number;
   roundLimitParks: number;
   noProgressParks: number;
+  /** Parks whose cause names a turn that committed no changes. */
+  emptyDiffParks: number;
+  /** Parks whose cause names a turn that could not fit its context. */
+  overflowParks: number;
   budgetParks: number;
 }
 
@@ -133,6 +137,8 @@ function emptyIncidents(): IncidentCounts {
     mergedGateFailures: 0,
     roundLimitParks: 0,
     noProgressParks: 0,
+    emptyDiffParks: 0,
+    overflowParks: 0,
     budgetParks: 0,
   };
 }
@@ -190,19 +196,14 @@ function parkIncidents(all: StepRecord[], incidents: IncidentCounts): void {
       const cause = rec.cause ?? "";
       if (/^review round limit reached/i.test(cause)) incidents.roundLimitParks += 1;
       else if (/no[- ]progress/i.test(cause)) incidents.noProgressParks += 1;
+      // An empty-diff park is a loop signal: the turn consumed budget without
+      // producing work. A spike's empty turn is a normal `finish` record, not a
+      // park, so it never reaches this count.
+      else if (/^empty-diff:/i.test(cause)) incidents.emptyDiffParks += 1;
+      else if (/^overflow\b/i.test(cause)) incidents.overflowParks += 1;
       else if (/^budget:/i.test(cause)) incidents.budgetParks += 1;
     }
   }
-}
-
-/**
- * An empty-diff park is a loop signal: the turn consumed budget without
- * producing work. A spike's empty turn is a normal `finish` record, not a park,
- * so it never reaches this count.
- */
-function emptyDiffParks(all: StepRecord[]): number {
-  return all.filter((r) => r.step === "park" && r.endedAt && /^empty-diff:/i.test(r.cause ?? ""))
-    .length;
 }
 
 /** One iteration's spend and incidents, shared by `metrics.yaml` and its summary. */
@@ -290,7 +291,7 @@ export function iterationMetrics(
     architect,
     unpricedTurns,
     incidents,
-    loopIncidents: incidents.noProgressParks + emptyDiffParks(all),
+    loopIncidents: incidents.noProgressParks + incidents.emptyDiffParks,
     humanInterventions,
   };
 }

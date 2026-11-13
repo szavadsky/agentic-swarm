@@ -1,9 +1,8 @@
 import { spawn } from "node:child_process";
 import { registerChildGroup, unregisterChildGroup } from "./shutdown.js";
 import { getClock, createActiveTimer, detectSuspend } from "./clock.js";
-import { getFactoryTmpDir } from "./runtime-tmp.js";
 
-export interface RunProcessOptions {
+interface RunProcessOptions {
   cmd: string | string[];
   cwd: string;
   env?: Record<string, string>;
@@ -12,7 +11,7 @@ export interface RunProcessOptions {
   stdin?: string;
 }
 
-export interface ProcessResult {
+interface ProcessResult {
   code: number | null;
   signal?: string;
   stdout: string;
@@ -34,7 +33,7 @@ const DEFAULT_STREAM_RING_BYTES = 1024 * 1024;
  * tailBytes from the end, dropping the middle. Total memory is strictly
  * bounded by maxBytes at all times during streaming.
  */
-export class HeadTailBuffer {
+class HeadTailBuffer {
   private headChunks: Buffer[] = [];
   private headBytes = 0;
   private tailChunks: Buffer[] = [];
@@ -92,18 +91,6 @@ export class HeadTailBuffer {
   }
 }
 
-/** Backward compatibility wrapper for capOutput */
-export function capOutput(text: string, maxBytes: number): string {
-  if (!maxBytes || maxBytes <= 0) return text;
-  const buf = Buffer.from(text, "utf8");
-  if (buf.length <= maxBytes) return text;
-  const htb = new HeadTailBuffer(maxBytes);
-  htb.push(buf);
-  return htb.toString();
-}
-
-/** Bounded tail buffer (kept for backwards compatibility). */
-export class TailRing extends HeadTailBuffer {}
 /**
  * Runs a process with process-group cleanup on timeout, bounded output
  * capture, and support for string shell command (via bash -lc) or argument
@@ -146,7 +133,7 @@ export function runProcess(options: RunProcessOptions): Promise<ProcessResult> {
       args = cmd.slice(1);
     }
 
-    const factoryTmp = getFactoryTmpDir();
+    const factoryTmp = process.env.TMPDIR;
     const tmpEnv: Record<string, string> = factoryTmp
       ? { TMPDIR: factoryTmp, TMP: factoryTmp, TEMP: factoryTmp }
       : {};

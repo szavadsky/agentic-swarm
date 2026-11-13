@@ -40,7 +40,7 @@ const EPIC_NAME = /^[a-z0-9-]+$/;
  * are not rows. The section runs until the next level-1/2 heading, so bullets
  * under a nested subheading stay rows instead of disappearing.
  */
-function registerRows(plan: string): { found: boolean; rows: string[] } {
+function registerRows(plan: string): { found: boolean; rows: string[]; unterminatedFence: boolean } {
   const rows: string[] = [];
   let found = false;
   let inRegister = false;
@@ -65,7 +65,7 @@ function registerRows(plan: string): { found: boolean; rows: string[] } {
     }
     if (inRegister && BULLET.test(line)) rows.push(line.trim());
   }
-  return { found, rows };
+  return { found, rows, unterminatedFence: fence !== null };
 }
 
 function relativePathIssue(path: string): string | null {
@@ -81,20 +81,27 @@ function relativePathIssue(path: string): string | null {
 
 /**
  * Parses the register and returns its rows plus every finding that blocks the
- * iteration. A plan without the heading has no register: no rows, no findings,
- * so `depth: 1` gains no read path. Grammar findings drop the offending row;
- * cross-row findings (duplicates, missing plans, unknown task epics) keep it
- * so the caller can report what was written.
+ * iteration. A plan without the heading has no register: no rows and no
+ * findings, so `depth: 1` gains no read path. An unterminated fence at EOF is
+ * the exception: it hides everything after it, so the heading may exist and be
+ * unreadable; that is a finding even when no heading is visible. Grammar
+ * findings drop the offending row; cross-row findings (duplicates, missing
+ * plans, unknown task epics) keep it so the caller can report what was written.
  */
 export function parseArchitectRegister(
   plan: string,
   ctx: RegisterContext
 ): ArchitectRegister {
   const located = registerRows(plan);
-  if (!located.found) return { epics: [], findings: [] };
+  const findings: string[] = [];
+  if (located.unterminatedFence) {
+    findings.push(
+      "plan ends inside an unterminated code fence; markdown after it cannot be read, so the architect register is unverifiable"
+    );
+  }
+  if (!located.found) return { epics: [], findings };
 
   const epics: EpicRow[] = [];
-  const findings: string[] = [];
 
   for (const line of located.rows) {
     const match = ROW.exec(line);
@@ -169,6 +176,11 @@ export function parseArchitectRegister(
     if (planIssue === null && row.architect === "subarchitect" && row.plan !== epicPlan) {
       findings.push(
         `epic "${row.epic}" is owned by a subarchitect; its plan must be "${epicPlan}", not "${row.plan}"`
+      );
+    }
+    if (planIssue === null && row.architect === "main" && row.plan !== "plan.md") {
+      findings.push(
+        `epic "${row.epic}" is owned by the main architect; its plan must be "plan.md", not "${row.plan}"`
       );
     }
   }

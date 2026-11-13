@@ -2,9 +2,9 @@ import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import yaml from "yaml";
-import { dispatch } from "../../src/cli/index.js";
+import { dispatch } from "../../src/cli/dispatch.js";
 import type { Usage } from "../../src/harness/types.js";
-import { writeMetrics } from "../../src/kernel/metrics.js";
+import { writeMetrics, type GoalMetrics } from "../../src/kernel/metrics.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import type { ArtifactStore, StepRecord } from "../../src/kernel/types.js";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
@@ -147,11 +147,72 @@ describe("benchmark command", () => {
       expect(out).toContain("| cost | $2.0000 | USD |");
       expect(out).toContain("| architect share | 75.0% | % of cost |");
       expect(out).toContain("| cost per merged | $2.0000 | USD/merged task |");
-      expect(out).toContain("| loop incidents | 3 | events |");
+      expect(out).toContain("| loop incidents | 0 | events |");
       expect(out).toContain("| human interventions | 1 | events |");
       expect(out).toContain("| wall | 3 h 5 m | h m |");
       expect(out).toContain("| merged/parked | 1 / 1 | tasks |");
-      expect(out).toContain("loop incidents: fallback hops 1, merge conflicts 1, budget parks 1");
+      expect(out).toContain("loop incidents: none");
+    } finally {
+      fixture.repo.cleanup();
+    }
+  });
+
+  it("prints metrics.loopIncidents as the loop row and excludes other incident classes", async () => {
+    const fixture = fixtureGoal();
+    try {
+      const records: StepRecord[] = [
+        rec(1, {
+          iteration: 1,
+          step: "architect",
+          slug: undefined,
+          alias: "architect",
+          usage: usage(0.1, 100, 10),
+        }),
+        rec(2, {
+          iteration: 1,
+          slug: "alpha",
+          alias: "implementer",
+          usage: usage(0.2, 200, 20),
+          attempts: [
+            { model: { id: "model-a" }, stop: { kind: "infra", cause: "quota" }, usage: usage(0, 0, 0) },
+            { model: { id: "model-a" }, stop: { kind: "done" }, usage: usage(0, 0, 0) },
+          ],
+        }),
+        script(3, {
+          iteration: 1,
+          slug: "alpha",
+          step: "park",
+          ok: true,
+          cause: "no-progress: implement r2 repeats r1 (deadbeef)",
+        }),
+        script(4, {
+          iteration: 1,
+          slug: "beta",
+          step: "park",
+          ok: true,
+          cause: "empty-diff: implement r1 committed no changes",
+        }),
+        script(5, { iteration: 1, slug: "gamma", step: "park", ok: true, cause: "overflow" }),
+        // A spike produces knowledge: its empty finish is not an empty-diff park.
+        script(6, { iteration: 1, slug: "probe", step: "finish", ok: true }),
+      ];
+      for (const record of records) writeRecord(fixture.goalDir, record);
+      await writeMetrics(fixture.store, { iteration: 1, status: "in-progress", records, prices: {} });
+
+      const metrics = yaml.parse((await fixture.store.readFile("metrics.yaml"))!) as GoalMetrics;
+      expect(metrics.totals.loopIncidents).toBe(2);
+      expect(metrics.totals.incidents).toMatchObject({
+        infraRetries: 1,
+        noProgressParks: 1,
+        emptyDiffParks: 1,
+        overflowParks: 1,
+      });
+
+      const { code, out } = await benchmark(fixture);
+      expect(code).toBe(0);
+      expect(out).toContain(`| loop incidents | ${metrics.totals.loopIncidents} | events |`);
+      expect(out).toContain("loop incidents: no-progress parks 1, empty-diff parks 1");
+      expect(out).not.toContain("overflow parks");
     } finally {
       fixture.repo.cleanup();
     }

@@ -122,9 +122,12 @@ next boundary, marks it processed and writes its answer to
 Each iteration writes exactly one `iterations/<n>/summary.md` (also copied to
 the outbox): status, merged/finished/parked tasks, remarkable concerns,
 assumptions and debt. `metrics.yaml` is rebuilt from the usage records:
-architect launches, architect cost and token share, cost per merged task, loop
-incidents (no-progress and empty-diff parks; a spike's empty finish is not one),
-human interventions (processed steers), and turns and tokens by role. Costs come
+architect launches, architect cost and token share, cost per merged task,
+incident counts (infra retries, fallback hops, outcome-repair turns, merge
+conflicts, merged-gate failures, and round-limit, no-progress, empty-diff,
+overflow and budget parks), loop incidents (no-progress and empty-diff parks; a
+spike's empty finish and overflow parks are not loop incidents), human
+interventions (processed steers), and turns and tokens by role. Costs come
 from the price table, and every retry or fallback call the harness reports in
 `attempts` is priced too, each call once. A turn whose counters are all zero
 carries no usage report and is unpriced even when its model has a table entry. A

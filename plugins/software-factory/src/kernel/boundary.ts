@@ -33,6 +33,14 @@ export interface BoundaryResult {
   packPath?: string;
 }
 
+export interface BoundaryOptions {
+  relaunch: boolean;
+  /** The front turn's iteration; the boundary runs in it instead of starting a new one. */
+  iteration?: number;
+  /** Goal-relative pack the front prepared; the scripted pack is not rendered. */
+  frontPack?: string;
+}
+
 function previousSummary(goalDir: string, iteration: number): string | undefined {
   if (iteration <= 0) return undefined;
   const rel = summaryRelPath(iteration);
@@ -80,12 +88,12 @@ async function codeMap(checkout: string): Promise<string[]> {
  */
 export async function runBoundary(
   runtime: KernelRuntime,
-  opts: { relaunch: boolean }
+  opts: BoundaryOptions
 ): Promise<BoundaryResult> {
   const tasks = await runtime.store.listTasks();
   const records = await runtime.store.listRecords();
   const state = derive(tasks, records, runtime.configs.process.flows);
-  const iteration = state.iteration + 1;
+  const iteration = opts.iteration ?? state.iteration + 1;
   // Script records (baseline, checks) may exist before the first architect turn;
   // "first" means no architect turn has run yet, not an empty record store.
   const firstTurn = !records.some((r) => r.step === "architect");
@@ -99,32 +107,34 @@ export async function runBoundary(
   const digestPath = digestRel ? path.join(runtime.store.goalDir, digestRel) : undefined;
 
   const steers = await scanInbox(runtime.store);
-  const head = await integrationHead(runtime);
-  const packRel = contextPackRelPath(iteration);
-  const previous = previousSummary(runtime.store.goalDir, state.iteration);
+  const packRel = opts.frontPack ?? contextPackRelPath(iteration);
 
-  const pack = renderContextPack({
-    goal: path.basename(runtime.paths.goalDir),
-    iteration,
-    intentPath: path.join(runtime.store.goalDir, "intent.md"),
-    planPath: path.join(runtime.store.goalDir, "plan.md"),
-    checkout: runtime.paths.goalCheckout,
-    integrationBranch: runtime.paths.integrationBranch,
-    headHash: head,
-    recordsDir: runtime.store.recordsDir,
-    tasksDir: runtime.store.tasksDir,
-    previousSummary: previous,
-    digestPath,
-    tasks,
-    state,
-    codeMap: await codeMap(runtime.paths.goalCheckout),
-    steers,
-    setup: runtime.configs.repo.setup,
-    gates: runtime.configs.repo.gates,
-    baseGates: recordedBaseGates(records),
-    forwarded: forwardedConcerns(records),
-  });
-  await runtime.store.writeFile(packRel, pack);
+  if (!opts.frontPack) {
+    const head = await integrationHead(runtime);
+    const previous = previousSummary(runtime.store.goalDir, iteration - 1);
+    const pack = renderContextPack({
+      goal: path.basename(runtime.paths.goalDir),
+      iteration,
+      intentPath: path.join(runtime.store.goalDir, "intent.md"),
+      planPath: path.join(runtime.store.goalDir, "plan.md"),
+      checkout: runtime.paths.goalCheckout,
+      integrationBranch: runtime.paths.integrationBranch,
+      headHash: head,
+      recordsDir: runtime.store.recordsDir,
+      tasksDir: runtime.store.tasksDir,
+      previousSummary: previous,
+      digestPath,
+      tasks,
+      state,
+      codeMap: await codeMap(runtime.paths.goalCheckout),
+      steers,
+      setup: runtime.configs.repo.setup,
+      gates: runtime.configs.repo.gates,
+      baseGates: recordedBaseGates(records),
+      forwarded: forwardedConcerns(records),
+    });
+    await runtime.store.writeFile(packRel, pack);
+  }
 
   const tasksBefore = await taskSnapshot(runtime.store.goalDir);
   const session = await resumableSession(runtime, records);
