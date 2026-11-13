@@ -134,6 +134,24 @@ describe("architect register", () => {
     );
   });
 
+  it("requires exactly plan.md for a main row", () => {
+    const parsed = parseArchitectRegister(
+      register(
+        "- epic `billing` | architect `main` | plan `epics/billing.md` | scope `src/billing/**` | opened i8 | active",
+        "- epic `search` | architect `main` | plan `src/search/search.ts` | scope `src/search/**` | opened i9 | active"
+      ),
+      ctx()
+    );
+    expect(parsed.epics).toHaveLength(2);
+    expect(parsed.findings).toHaveLength(2);
+    expect(parsed.findings.join("\n")).toMatch(
+      /epic "billing" is owned by the main architect; its plan must be "plan\.md", not "epics\/billing\.md"/
+    );
+    expect(parsed.findings.join("\n")).toMatch(
+      /epic "search" is owned by the main architect; its plan must be "plan\.md", not "src\/search\/search\.ts"/
+    );
+  });
+
   it("reports an active plan that does not exist, not a closed one", () => {
     const seen: string[] = [];
     const parsed = parseArchitectRegister(EXAMPLE, {
@@ -286,6 +304,43 @@ describe("architect register", () => {
     );
     expect(parsed.epics.map((row) => row.epic)).toEqual(["auth"]);
     expect(parsed.findings).toEqual([]);
+  });
+
+  it("reports an unterminated fence at EOF, unlike a plan with no register", () => {
+    const unclosed = parseArchitectRegister(
+      [
+        "# Plan",
+        "",
+        "```markdown",
+        "## Architect register",
+        "",
+        "- epic `auth` | architect `subarchitect` | plan `epics/auth.md` | scope `src/auth/**` | opened i7 | active",
+        "",
+      ].join("\n"),
+      ctx()
+    );
+    const absent = parseArchitectRegister("# Plan\n\n## Milestones\n\n- a task\n", ctx());
+    expect(absent).toEqual({ epics: [], findings: [] });
+    expect(unclosed.epics).toEqual([]);
+    expect(unclosed.findings).toHaveLength(1);
+    expect(unclosed.findings[0]).toMatch(/unterminated code fence/);
+  });
+
+  it("reports an unterminated fence that starts after the register rows", () => {
+    const parsed = parseArchitectRegister(
+      [
+        "## Architect register",
+        "",
+        "- epic `auth` | architect `subarchitect` | plan `epics/auth.md` | scope `src/auth/**` | opened i7 | active",
+        "",
+        "```markdown",
+        "no closing fence",
+      ].join("\n"),
+      ctx()
+    );
+    expect(parsed.epics.map((row) => row.epic)).toEqual(["auth"]);
+    expect(parsed.findings).toHaveLength(1);
+    expect(parsed.findings[0]).toMatch(/unterminated code fence/);
   });
 
   it("keeps rows under a nested heading inside the register", () => {
