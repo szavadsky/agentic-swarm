@@ -1,0 +1,19 @@
+# Bootstrap log
+
+Append-only. Two parts: **Decisions** (rebuttable by practice — overturn by adding a dated entry, never by editing history) and **Journal** (one entry per build step / launch). Authority order: `manifesto.md` Intent > owner steering in chat/mailbox > this log > `manifesto.advice.md`.
+
+## Decisions
+
+| # | Date | Decision | Why | Rebut when |
+|---|---|---|---|---|
+| D1 | 2026-11-12 | Rebuild the core in place: branch `factory-v3` of `plugins/software-factory` (worktree `../agentic-swarm.wt/v3`; the owner's `main` checkout is not switched). Rejected modules (`core/flows/*`, `core/plan/*`, `core/artifacts.ts`, `config/schemas/*`, old step prompts, coupled tests) are deleted first; the new core in `src/kernel/` imports the kept leaf modules (git, proc/mutex/journal, harness, checks runner, prompts partials, concerns, budget, mailbox). No new package, no copies, no shims; v2 stays readable via `git show main:<path>`. | Honors advice:56 (in place, on a branch) and the manifesto (design rejected, components reusable) at once. The target core (pure `derive`/`next`, one step-outcome record, advice:186-208) replaces `flows/*` + `plan/*` (~7k LOC); patching 12 architect call sites inside a 4k-line file (advice:78) is the part cheap models do worst and the part that would be deleted anyway. Deleting first keeps cheap implementers from imitating rejected code and makes the suite fast. | A v2 flow module turns out to be cheaper to patch than to replace → restore it from `main` and patch (advice §3 gives the call sites). |
+| D2 | 2026-11-12 | Kernel-0 is a walking skeleton of the whole loop, thin at every stage (see `KERNEL0.md`). Escalation-ladder trivial/task paths, advisory plan review, hierarchy level 2, hygiene check, mid-run mailbox + PM steer structuring, extra storage backends, cross-harness fallback are built by the factory on itself. | Manifesto bootstrap rule: the factory is built by running itself; earliest honest self-run gives the earliest evidence. | Factory cannot make progress on itself because a deferred piece is missing → lift that piece into the kernel by hand, log it as a human intervention. |
+| D3 | 2026-11-12 | Kernel-0 is built by foreman `task` agents that drive OpenCode free models for implementation and verify/repair the result themselves. Every free-model attempt is recorded (model, task size, outcome) in the Journal. | Owner preference (free models first); produces the "promote on measured failure" evidence before the factory exists. | Two consecutive free-model failures on the same slice → foreman implements directly; record it. |
+| D4 | 2026-11-12 | Shakedown launches use a toy goal and a free model in the architect alias; Opus is used only once plumbing is proven by a green shakedown. | Architect tier is ~50x; plumbing bugs must not be paid for at that rate. | Free model cannot produce a usable plan at all → use the cheapest paid capable model for shakedown. |
+| D5 | 2026-11-12 | Orchestrator artifacts live in `bootstrap/` (tracked): `README.md` handoff + runbook, `KERNEL0.md` initial intent, `LOG.md`, `context/*.md` scout briefs. Factory runtime artifacts follow the manifesto (plain folder, gitignored; sessions outside git). | The session will continue as a task-grade agent; state must be on disk, small, and ordered by authority. | — |
+
+## Journal
+
+### 2026-11-12 — context collection
+- Scout briefs written: `context/repo-map.md` (v2 inventory, reuse classification, failure modes), `context/advice-digest.md` (build order A1–E2, technical recommendations, advice-vs-intent conflicts X1–X10), `context/opencode-probe.md`, `context/omp-probe.md`.
+- Finding: `manifesto.md` has no `[REVIEW Mn]` / U / O labels; the N1–N19 decision log (`manifesto.md:145-200`) is the record of owner decisions. All items decided.
