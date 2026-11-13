@@ -96,6 +96,9 @@ export async function writeIterationSummary(
   const status = input.decision
     ? defaultStatus(input.decision)
     : (input.status ?? defaultStatus(undefined));
+  // Dispatch marks a drain from the USD brake with a `budget:` cause; it is a
+  // spend fact, so it gets its own metrics line instead of the boundary remark.
+  const budgetStop = input.cause ? /^budget:\s*(.+)$/i.exec(input.cause)?.[1]?.trim() : undefined;
 
   const merged = recs.filter((r) => r.step === "merge" && r.ok === true).map((r) => r.slug!);
   const finished = recs.filter((r) => r.step === "finish" && r.ok === true).map((r) => r.slug!);
@@ -131,7 +134,7 @@ export async function writeIterationSummary(
   );
 
   const remarks: string[] = [];
-  if (input.cause) remarks.push(`boundary: ${input.cause}`);
+  if (input.cause && !budgetStop) remarks.push(`boundary: ${input.cause}`);
   if (architect?.outcome) {
     remarks.push(`architect: ${architect.outcome.summary}`);
     for (const forward of architect.outcome.forward) {
@@ -228,6 +231,13 @@ export async function writeIterationSummary(
             .join("; ")
         : "none"
     }`,
+    ...(budgetStop
+      ? [
+          `- budget: ${budgetStop}; brake blind for ${unpricedTurns} unpriced ${
+            unpricedTurns === 1 ? "turn" : "turns"
+          }`,
+        ]
+      : []),
     `- merged: ${merged.length}; parked: ${[...parkedByCause.values()].flat().length}; pending: ${pending.length}`,
     "",
     "## Incidents",

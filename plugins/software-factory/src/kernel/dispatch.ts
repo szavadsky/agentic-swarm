@@ -1,7 +1,9 @@
+import { iterationUsdBrake } from "./config.js";
 import { derive } from "./derive.js";
 import { executeTaskAction, type TaskActionResult } from "./flow.js";
 import { stepTarget } from "./flow-context.js";
 import { next } from "./next.js";
+import { priceUsage, type PriceTable } from "./pricing.js";
 import type { Action, KernelRuntime, StepRecord, TaskFile, TaskState } from "./types.js";
 import type { MergeResult } from "./integrate.js";
 
@@ -61,6 +63,22 @@ function iterationStart(records: StepRecord[], iteration: number): number {
   return times.length > 0 ? Math.min(...times) : Date.now();
 }
 
+/**
+ * Dollars this iteration has already spent: every settled agent record priced
+ * through `priceUsage`. A turn whose cost is unknown adds $0 — the brake treats
+ * it as free because it has nothing better to go on, and the summary reports
+ * how many turns were blind.
+ */
+function iterationSpend(records: StepRecord[], iteration: number, prices: PriceTable): number {
+  let usd = 0;
+  for (const rec of records) {
+    if (rec.iteration !== iteration || rec.actor !== "agent" || !rec.endedAt) continue;
+    const cost = rec.usage ? priceUsage(rec.usage, rec.model?.id ?? "", prices) : undefined;
+    if (cost !== undefined) usd += cost;
+  }
+  return usd;
+}
+
 function agentStop(result: TaskActionResult | MergeResult): { reason: "infra" | "cancelled"; cause?: string } | undefined {
   if ("infra" in result && result.infra) return { reason: "infra", cause: result.infra.cause };
   if ("cancelled" in result && result.cancelled) return { reason: "cancelled" };
@@ -70,8 +88,9 @@ function agentStop(result: TaskActionResult | MergeResult): { reason: "infra" | 
 /**
  * The dispatch loop: `next` proposes, this loop admits. Admission holds the
  * absolute and per-harness turn limits and never starts two tasks whose scopes
- * touch. On an optional iteration limit the loop drains: no new turns, in-flight
- * work finishes, then the caller ends the iteration normally.
+ * touch. On an optional iteration limit — turns, wall clock or dollars — the
+ * loop drains: no new turns, in-flight work finishes, then the caller ends the
+ * iteration normally.
  */
 export async function runDispatch(
   runtime: KernelRuntime,
@@ -93,6 +112,7 @@ export async function runDispatch(
   const infra = new Map<string, string | undefined>();
   let cancelled = false;
   let drain: string | undefined;
+  const usdLimit = iterationUsdBrake(runtime.configs);
 
   const start = (action: Action & { slug: string }, taskState: TaskState, task: TaskFile, agent: boolean, harnessId?: string): void => {
     const promise = (async () => {
@@ -142,6 +162,11 @@ export async function runDispatch(
         elapsedMs >= runtime.limits.iterationWallMs
       ) {
         drain = `iteration wall limit ${runtime.limits.iterationWallMs}ms reached`;
+      } else if (usdLimit !== undefined) {
+        const spent = iterationSpend(records, iteration, runtime.configs.run.prices ?? {});
+        if (spent >= usdLimit) {
+          drain = `budget: iteration USD limit $${usdLimit.toFixed(4)} reached (spent $${spent.toFixed(4)})`;
+        }
       }
     }
 
