@@ -1,3 +1,4 @@
+import { exitDetails, stopDetails } from "../details.js";
 import type { Stop } from "../types.js";
 
 /** Error object omp attaches to `prompt_result.status === "error"`. */
@@ -48,7 +49,7 @@ export function classifyOmpError(error: OmpPromptError | undefined): Stop {
   if (RATE.test(text) || (status !== undefined && status >= 500)) {
     return { kind: "infra", cause: "rate" };
   }
-  return { kind: "infra", cause: "crash", details: truncate(text) };
+  return { kind: "infra", cause: "crash", details: stopDetails(text) };
 }
 
 /** Assistant `stopReason` values that override a "completed" prompt result. */
@@ -76,19 +77,14 @@ export function classifyOmpStopReason(stopReason: string | undefined): Stop | un
 /** omp exiting before the RPC ready frame: bad model/credential, or a launch crash. */
 export function classifyOmpLaunchFailure(stderr: string): Stop {
   if (AUTH.test(stderr) || /no api key|not authenticated|login/i.test(stderr)) {
-    return { kind: "infra", cause: "auth", details: truncate(stderr) };
+    return { kind: "infra", cause: "auth", details: stopDetails(stderr) };
   }
-  return { kind: "infra", cause: "crash", details: truncate(stderr) };
-}
-
-/** Keep the tail: the reason is usually the last line. Secrets are omp's own stderr, never credentials. */
-function truncate(text: string, max = 500): string | undefined {
-  const t = text.trim().replace(/\s+/g, " ");
-  if (!t) return undefined;
-  return t.length > max ? `…${t.slice(-max)}` : t;
+  return { kind: "infra", cause: "crash", details: stopDetails(stderr) };
 }
 
 export interface OmpTurnFailure {
+  /** Child process exit code, when omp died before a prompt_result. */
+  code?: number | null;
   /** Child process exit signal, when omp died before a prompt_result. */
   signal?: string | null;
   stderr?: string;
@@ -120,8 +116,9 @@ export function classifyOmpTurn(input: OmpTurnOutcomeInput): Stop {
   }
   if (input.failure) {
     const stop = classifyOmpLaunchFailure(input.failure.stderr ?? "");
-    if (stop.kind === "infra" && !stop.details && input.failure.signal) {
-      return { ...stop, details: `signal ${input.failure.signal}` };
+    if (stop.kind === "infra" && !stop.details) {
+      const exit = exitDetails(input.failure.code ?? null, input.failure.signal ?? null);
+      if (exit) return { ...stop, details: exit };
     }
     return stop;
   }

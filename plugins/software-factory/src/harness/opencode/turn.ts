@@ -150,6 +150,7 @@ export async function runOpencodeTurn(
     code: exit.code,
     signal: exit.signal,
     timedOut: timeoutCause !== undefined,
+    stderr,
   });
 
   const session: SessionRef | undefined = summary.sessionId

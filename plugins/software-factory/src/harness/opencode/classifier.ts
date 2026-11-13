@@ -1,3 +1,4 @@
+import { exitDetails, stopDetails } from "../details.js";
 import type { Stop } from "../types.js";
 import type { OpencodeError, OpencodeEventSummary } from "./events.js";
 
@@ -53,7 +54,8 @@ export function classifyOpencodeError(error: OpencodeError): Stop {
   if (status !== undefined && status >= 500) {
     return { kind: "infra", cause: "rate" };
   }
-  return { kind: "infra", cause: "crash" };
+  const details = stopDetails(text);
+  return { kind: "infra", cause: "crash", ...(details ? { details } : {}) };
 }
 
 /** Final stop for one `opencode run` process. */
@@ -62,6 +64,8 @@ export function classifyOpencodeTurn(input: {
   code: number | null;
   signal: string | null;
   timedOut: boolean;
+  /** Raw process stderr; only reached when the JSON stream carried no error event. */
+  stderr?: string;
 }): Stop {
   if (input.timedOut) return { kind: "infra", cause: "timeout" };
   const lastError = input.summary.errors.at(-1);
@@ -71,7 +75,11 @@ export function classifyOpencodeTurn(input: {
     if (input.signal === "SIGTERM" || input.signal === "SIGINT") {
       return { kind: "cancelled" };
     }
-    return { kind: "infra", cause: "crash" };
+    const details =
+      stopDetails(input.stderr) ?? exitDetails(input.code, input.signal);
+    return details
+      ? { kind: "infra", cause: "crash", details }
+      : { kind: "infra", cause: "crash" };
   }
 
   const reason = input.summary.lastStepReason;
