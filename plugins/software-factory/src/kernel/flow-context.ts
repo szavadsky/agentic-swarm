@@ -1,6 +1,10 @@
+import fs from "node:fs";
 import path from "node:path";
+import yaml from "yaml";
+import { z } from "zod";
 import { portable, type Harness, type ModelRef, type SessionRef } from "../harness/types.js";
 import { preexistingRed, recordedBaseGates } from "./baseline.js";
+import { contextPackRelPath } from "./context-pack.js";
 import { formatFailingChecks, newGateFailures } from "./gates.js";
 import { formatConcerns } from "./record.js";
 import type {
@@ -26,6 +30,48 @@ export interface RoleTarget {
 
 function bySeq(a: StepRecord, b: StepRecord): number {
   return a.seq - b.seq || a.startedAt.localeCompare(b.startedAt);
+}
+
+const CLASS_FILE = "class.yaml";
+
+const classSchema = z
+  .object({
+    class: z.enum(["trivial", "task", "bigger"]),
+    slug: z.string().min(1).optional(),
+  })
+  .strict();
+
+export type FrontClass = z.infer<typeof classSchema>;
+
+/** A class.yaml the launch refuses; runFront turns it into an infra result. */
+export class FrontClassError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "FrontClassError";
+  }
+}
+
+/** The goal's front classification; null when the front has not run yet. */
+export function readFrontClass(runtime: KernelRuntime): FrontClass | null {
+  const file = path.join(runtime.store.goalDir, CLASS_FILE);
+  if (!fs.existsSync(file)) return null;
+  let raw: unknown;
+  try {
+    raw = yaml.parse(fs.readFileSync(file, "utf8"));
+  } catch (err) {
+    throw new FrontClassError(`class.yaml is not valid YAML: ${(err as Error).message}`);
+  }
+  const parsed = classSchema.safeParse(raw);
+  if (!parsed.success) {
+    const findings = parsed.error.issues.map(
+      (issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`
+    );
+    throw new FrontClassError(`class.yaml is invalid: ${findings.join("; ")}`);
+  }
+  if (parsed.data.class !== "bigger" && !parsed.data.slug) {
+    throw new FrontClassError(`class.yaml class "${parsed.data.class}" needs a task slug`);
+  }
+  return parsed.data;
 }
 
 function lastReview(records: StepRecord[], slug: string, flow: FlowDefinition): StepRecord | undefined {
@@ -113,10 +159,61 @@ function stepRole(runtime: KernelRuntime, task: TaskFile, state: TaskState, step
   return step.role;
 }
 
+/**
+ * The front alias is optional: when the run config has no `front` alias, the
+ * front speaks through the `pm` alias, so the ladder needs no new required knob.
+ */
+export function frontTarget(runtime: KernelRuntime): RoleTarget {
+  const configured = runtime.configs.process.roles.front;
+  if (!configured) throw new Error('process config has no role "front"');
+  const aliasName = configured.alias ?? "front";
+  if (runtime.configs.run.aliases[aliasName]) return resolveRole(runtime, "front");
+  if (aliasName === "front" && runtime.configs.run.aliases.pm) {
+    return resolveRole(runtime, "front", "pm");
+  }
+  throw new Error(
+    `run config has no alias "${aliasName}" (needed by role "front") and no "pm" fallback`
+  );
+}
+
+function lastFrontRecord(records: StepRecord[]): StepRecord | undefined {
+  return records
+    .filter((r) => r.step === "front" && r.actor === "agent" && r.endedAt)
+    .sort(bySeq)
+    .at(-1);
+}
+
+/** The class.yaml names this task when its class is not bigger and the slug matches. */
+function frontTaskClass(runtime: KernelRuntime, task: TaskFile): "trivial" | "task" | undefined {
+  const cls = readFrontClass(runtime);
+  if (!cls || cls.class === "bigger" || cls.slug !== task.slug) return undefined;
+  return cls.class;
+}
+
+/**
+ * The front's record proves the front ran and names the iteration whose pack is
+ * the task's briefing.
+ */
+function frontPack(runtime: KernelRuntime, task: TaskFile, records: StepRecord[]): string | undefined {
+  if (!frontTaskClass(runtime, task)) return undefined;
+  const front = lastFrontRecord(records);
+  if (!front) return undefined;
+  return path.join(runtime.store.goalDir, contextPackRelPath(front.iteration));
+}
+
 export function stepTarget(runtime: KernelRuntime, task: TaskFile, state: TaskState, stepId: string): RoleTarget {
-  // A task tier escalates the producer; review keeps the reviewer alias.
   const step = findStep(flowOf(runtime, task), stepId);
-  return resolveRole(runtime, stepRole(runtime, task, state, stepId), step.review ? undefined : task.tier);
+  const role = stepRole(runtime, task, state, stepId);
+  // The ladder's "same agent": a trivial task runs its implement step on the
+  // front's target, de novo in the task worktree. Fix turns keep that target,
+  // so they resume the implement session by alias.
+  if (!step.review && role === "implementer" && frontTaskClass(runtime, task) === "trivial") {
+    // The front's alias and model run the turn, but the prompt stays the
+    // implementer's: the role names the prompt, not the agent's history.
+    return { ...frontTarget(runtime), role };
+  }
+  // A task tier escalates the producer; review keeps the reviewer alias.
+  return resolveRole(runtime, role, step.review ? undefined : task.tier);
 }
 
 /** Resume the last session for this alias when it is portable to the alias's harness. */
@@ -144,29 +241,6 @@ function aliasHarness(runtime: KernelRuntime, alias: string): string {
   const configured = runtime.configs.run.aliases[alias];
   if (!configured) throw new Error(`run config has no alias "${alias}"`);
   return configured.harness;
-}
-
-/**
- * The front turn's session for a trivial task's first implement turn. A resume
- * is cwd-bound, and the front runs in the goal checkout while the task runs in
- * its own worktree, so this fires only when the stored ref is bound to that
- * worktree; the alias must also route to the harness that recorded it. Either
- * miss starts the implement turn de novo with the front's pack.
- */
-export function frontSessionFor(
-  runtime: KernelRuntime,
-  alias: string,
-  records: StepRecord[],
-  worktree: string
-): SessionRef | undefined {
-  const prior = records
-    .filter((r) => r.step === "front" && r.actor === "agent" && r.endedAt && r.session)
-    .sort(bySeq)
-    .at(-1)?.session;
-  if (!prior) return undefined;
-  if (path.resolve(prior.cwd) !== path.resolve(worktree)) return undefined;
-  if (!portable(prior.harness, aliasHarness(runtime, alias))) return undefined;
-  return prior;
 }
 
 /** Compaction is cache hygiene, not a gate; a failure keeps the uncompacted ref. */
@@ -228,5 +302,6 @@ export function promptVars(
     head_hash: "",
     max_rounds: String(flow.reviewRounds),
     prior_findings: review?.outcome ? formatConcerns(review.outcome) : "",
+    front_pack: frontPack(runtime, task, records) ?? "",
   };
 }

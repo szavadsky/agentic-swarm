@@ -59,6 +59,7 @@ Template syntax: `{{name}}` interpolates one value; `{{> partial-name}}` inlines
 | variable | meaning |
 |---|---|
 | `task_path` | path to this task's file: frontmatter plus brief |
+| `front_pack` | path to the front's context pack for a front-classified trivial or task goal; empty string when no front classified this task |
 | `worktree` | path to the task worktree to edit |
 | `setup_command` | worktree bootstrap command (dependencies etc.); `none` when not needed |
 | `gate_commands` | configured compile/lint/test commands, one per line with ids |

@@ -151,7 +151,7 @@ When in doubt, choose \`bigger\`. A class changes only by escalation; if \`class
    slug: the task slug   # trivial and task only
    \`\`\`
 
-2. For \`trivial\` or \`task\`, one task file in the tasks directory. Frontmatter: \`slug\` (namespaced kebab-case, unique), \`title\`, \`kind: task\`, \`flow\` (\`just-implement\` for trivial, \`implement-review\` for task), \`deps: []\`, \`scope\` (the globs the task may touch), \`source: front\`. Body: the brief with a \`Done when:\` line. It passes the same validation as a PM task file: a valid slug, a non-empty scope, no missing dependency and a \`tier\` that names a configured alias or \`default\`. End the brief with \`Front pack: <pack path>\`.
+2. For \`trivial\` or \`task\`, one task file in the tasks directory. Frontmatter: \`slug\` (namespaced kebab-case, unique), \`title\`, \`kind: task\`, \`flow\` (\`just-implement\` for trivial, \`implement-review\` for task), \`deps: []\`, \`scope\` (the globs the task may touch), \`source: front\`. Body: the brief with a \`Done when:\` line. It passes the same validation as a PM task file: a valid slug, a non-empty scope, no missing dependency and a \`tier\` that names a configured alias or \`default\`. The launch passes your pack to the implement turn as a prompt variable, so the brief need not name it.
 
 3. The context pack at the pack path, for every class: a deterministic index — paths, risks and open questions; never paste file bodies. A \`bigger\` architect reads it instead of the scripted pack. For \`trivial\` or \`task\` it is the implementer's briefing, so it must carry the scope and the risks the task file leaves implicit.
 
@@ -383,6 +383,7 @@ verdict: approve | changes | reject; decision: continue | done | blocked
 ## This turn
 
 - task: \`/goal/tasks/alpha.md\`
+- front pack: \`/goal/iterations/3/context-pack.md\` — the front's briefing for this goal; read it before the task when not empty
 - worktree: \`/worktrees/demo-tasks/alpha\`
 - setup command: \`bun install\`
 - gate commands: \`- test: bun test
