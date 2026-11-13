@@ -23,7 +23,7 @@ Template syntax: `{{name}}` interpolates one value; `{{> partial-name}}` inlines
 | `checkout` | path to the stable goal checkout (integration worktree) |
 | `pack_path` | path to the iteration context pack: derived status, short hashes, per-task rounds, infra commands, code facts, links |
 | `digest_path` | path to the previous launch's digest; empty string on a first launch |
-| `steers` | formatted pending steers: id, targets, effect, one-line summary, file path; `none` when empty |
+| `steers` | formatted pending steers: id, first line, file path; `none` when empty |
 | `outcome_path` | path where the outcome file must be written when the harness asks for a file |
 
 ## pm.md
@@ -34,7 +34,7 @@ Template syntax: `{{name}}` interpolates one value; `{{> partial-name}}` inlines
 | `intent_path` | path to the goal's `intent.md`, for resolving wording only |
 | `plan_path` | path to the plan to derive from; read-only to the PM |
 | `tasks_dir` | directory where task files are written, one `<slug>.md` per task |
-| `existing_tasks` | existing task files, one `slug \| status \| material hash` line each |
+| `existing_tasks` | existing task files, one `slug \| status \| material hash \| deps` line each; merged/finished marked frozen |
 | `repair` | the script validator's findings from the previous ask; empty string on first ask |
 | `outcome_path` | path where the outcome file must be written when the harness asks for a file |
 
@@ -71,5 +71,7 @@ Template syntax: `{{name}}` interpolates one value; `{{> partial-name}}` inlines
 | `goal_dir` | path to the goal directory (records, journal, mailbox, iterations) |
 | `records_dir` | path to the append-only step records, scoped to the named launch |
 | `transcripts_dir` | path to the session transcripts outside the repo |
-| `digest_path` | path where the digest must be written |
+| `digest_path` | path where the digest must be written; the script has already written the cost-and-turn table there |
 | `outcome_path` | path where the outcome file must be written when the harness asks for a file |
+
+The digest scout appends loops, failures and interventions; it does not restate the script table.

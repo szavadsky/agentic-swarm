@@ -105,6 +105,8 @@ function terminalFromRecords(task: TaskFile, recs: StepRecord[]): Terminal | nul
     if (!rec.endedAt) continue;
     if (rec.step === "park") {
       out = { status: "parked", cause: rec.cause ?? "parked without a recorded cause" };
+    } else if (rec.step === "cancel") {
+      out = { status: "cancelled", cause: rec.cause ?? "cancelled without a recorded cause" };
     } else if (rec.step === "merge" && rec.ok === true) {
       out = { status: task.kind === "spike" ? "finished" : "merged", commit: rec.commit };
     } else if (rec.step === "finish" && rec.ok === true) {

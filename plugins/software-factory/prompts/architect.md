@@ -69,6 +69,7 @@ Write from the whole goal's perspective — interactions, layers, sequence. The 
 - Escalate to implementer tier `escalation` only when the direction needs a PoC before it can be believed, or the last round failed differently from the first (per-task rounds in the pack). The same failure twice means the direction is wrong, so fix the direction. One line naming the reason; rare and explicit.
 - Parked tasks come from the pack with a cause. Parked is terminal for that slug: continue it only through a new task that names the parked slug as its `base` (the branch is kept), or drop it with a reason. Never retry as is.
 - No new debt created by the goal. Temporary debt only with a named remover — a task in this plan — and a named cost of not removing it. Debt without a remover is permanent.
+- Close a removed temporary debt by writing `debt closed: <what>` in `forward`; the iteration summary lists it.
 - ADR only for a long-term decision shaping the project or a whole layer; routine choices are not ADRs.
 
 ## Steers and calibration

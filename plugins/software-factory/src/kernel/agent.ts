@@ -7,9 +7,9 @@ import {
   validateExpectation,
   type OutcomeExpectation,
 } from "./outcome.js";
-import type { KernelRuntime, Outcome, RecordEnd, RecordStart, StepRecord } from "./types.js";
+import { DEFAULT_TIMEOUTS, type KernelRuntime, type Outcome, type RecordEnd, type RecordStart, type StepRecord } from "./types.js";
 
-export const DEFAULT_TIMEOUTS = { idleMs: 10 * 60_000, wallMs: 60 * 60_000 };
+export { DEFAULT_TIMEOUTS } from "./types.js";
 
 export interface AgentTurnSpec {
   role: string;
@@ -20,8 +20,16 @@ export interface AgentTurnSpec {
   expectation: OutcomeExpectation;
   session?: SessionRef;
   timeouts?: { idleMs: number; wallMs: number };
-  /** Runs after the turn, before the end record commits (e.g. mechanical commit). */
-  settle?: (record: StepRecord) => Promise<RecordEnd>;
+  /**
+   * Runs after the turn and before the end record commits. `settle` sees the
+   * accepted outcome and the live session, so it can compact and return the
+   * compacted ref that must be stored (mechanical commits ignore the extras).
+   */
+  settle?: (
+    record: StepRecord,
+    outcome: Outcome | undefined,
+    session: SessionRef | undefined
+  ) => Promise<RecordEnd>;
 }
 
 export interface AgentTurnResult {
@@ -43,13 +51,17 @@ function addUsage(a: Usage, b: Usage): Usage {
   };
 }
 
-function resolveAlias(runtime: KernelRuntime, role: string): {
+export interface ResolvedRoleAlias {
   alias: string;
   harness: Harness;
   model: ModelRef;
   effort?: string;
   fallbacks?: string[];
-} {
+  timeouts?: { idleMs: number; wallMs: number };
+}
+
+/** Resolves a role to its run-config alias and harness; shared with the boundary. */
+export function resolveRoleAlias(runtime: KernelRuntime, role: string): ResolvedRoleAlias {
   const roleConfig = runtime.configs.process.roles[role];
   if (!roleConfig) throw new Error(`process config has no role "${role}"`);
   const aliasName = roleConfig.alias ?? role;
@@ -67,6 +79,7 @@ function resolveAlias(runtime: KernelRuntime, role: string): {
     model: { id: alias.model, ...(alias.effort ? { effort: alias.effort } : {}) },
     effort: alias.effort,
     fallbacks: alias.fallbacks,
+    timeouts: alias.timeouts,
   };
 }
 
@@ -96,7 +109,7 @@ function repairPrompt(outcomePath: string, findings: string[]): string {
  * so a crash leaves an orphan that `derive` redispatches.
  */
 export async function runAgentTurn(runtime: KernelRuntime, spec: AgentTurnSpec): Promise<AgentTurnResult> {
-  const { alias, harness, model, effort, fallbacks } = resolveAlias(runtime, spec.role);
+  const { alias, harness, model, effort, fallbacks, timeouts: aliasTimeouts } = resolveRoleAlias(runtime, spec.role);
   const started = await runtime.store.startRecord({
     ...spec.meta,
     actor: "agent",
@@ -108,7 +121,7 @@ export async function runAgentTurn(runtime: KernelRuntime, spec: AgentTurnSpec):
     ...spec.vars,
     outcome_path: outcomePath,
   });
-  const timeouts = spec.timeouts ?? DEFAULT_TIMEOUTS;
+  const timeouts = spec.timeouts ?? aliasTimeouts ?? DEFAULT_TIMEOUTS;
 
   const request = {
     model,
@@ -168,14 +181,15 @@ export async function runAgentTurn(runtime: KernelRuntime, spec: AgentTurnSpec):
     }
   }
 
-  const settled = spec.settle ? await spec.settle(started.meta) : {};
+  const settled = spec.settle ? await spec.settle(started.meta, outcome ?? undefined, session) : {};
   const actualModel = (lastResult as typeof lastResult & { model?: ModelRef }).model ?? model;
   const record = await started.finish({
     ...settled,
     ...(actualModel ? { model: actualModel } : {}),
     stop,
     usage,
-    session,
+    ...(lastResult.transcript ? { transcript: lastResult.transcript } : {}),
+    session: settled.session ?? session,
     outcome: outcome ?? undefined,
   });
   return { record, outcome: outcome ?? undefined, text };

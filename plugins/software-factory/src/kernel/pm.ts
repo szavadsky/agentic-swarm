@@ -1,8 +1,9 @@
 import fs from "node:fs";
-import { fingerprintText } from "../core/fingerprint.js";
+import path from "node:path";
+import { writeTextAtomic } from "../core/records/io.js";
 import { runAgentTurn } from "./agent.js";
 import { materialHash, parseTaskFile, validateTaskGraph, TaskFileError } from "./tasks.js";
-import { scriptMeta } from "./record.js";
+import { appendCancel, scriptMeta } from "./record.js";
 import type { KernelRuntime, Outcome, State, StepRecord, TaskFile } from "./types.js";
 
 export class PmValidationError extends Error {
@@ -12,14 +13,24 @@ export class PmValidationError extends Error {
   }
 }
 
-async function readTaskFiles(runtime: KernelRuntime): Promise<{ tasks: TaskFile[]; findings: string[] }> {
-  const tasks: TaskFile[] = [];
-  const findings: string[] = [];
+function taskPath(runtime: KernelRuntime, slug: string): string {
+  return path.join(runtime.store.tasksDir, `${slug}.md`);
+}
+
+async function readTaskTexts(runtime: KernelRuntime): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
   for (const name of await runtime.store.listDir("tasks")) {
     if (!name.endsWith(".md")) continue;
-    const slug = name.slice(0, -3);
     const text = await runtime.store.readFile(`tasks/${name}`);
-    if (text === null) continue;
+    if (text !== null) out.set(name.slice(0, -".md".length), text);
+  }
+  return out;
+}
+
+function parseTasks(texts: Map<string, string>): { tasks: TaskFile[]; findings: string[] } {
+  const tasks: TaskFile[] = [];
+  const findings: string[] = [];
+  for (const [slug, text] of [...texts.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
     try {
       tasks.push(parseTaskFile(text, slug));
     } catch (err) {
@@ -41,69 +52,141 @@ function existingTasks(state: State, tasks: TaskFile[]): string {
     .join("\n");
 }
 
-function frozenFindings(state: State, tasks: TaskFile[], records: StepRecord[]): string[] {
-  const bySlug = new Map(tasks.map((t) => [t.slug, t]));
+function frozenSlugs(state: State): string[] {
+  return Object.entries(state.tasks)
+    .filter(([, task]) => task.status === "merged" || task.status === "finished")
+    .map(([slug]) => slug)
+    .sort();
+}
+
+function cancelledSlugs(state: State): string[] {
+  return Object.entries(state.tasks)
+    .filter(([, task]) => task.status === "cancelled")
+    .map(([slug]) => slug)
+    .sort();
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Position carries no meaning in a task file; the plan's bullet names the slug. */
+export function planMentionsSlug(plan: string, slug: string): boolean {
+  return new RegExp(`(?<![a-z0-9.-])${escapeRegExp(slug)}(?![a-z0-9.-])`, "i").test(plan);
+}
+
+/**
+ * Undoes what the PM may not do and reports it: plan edits are restored,
+ * merged/finished task files are restored byte for byte. A second failure is
+ * handled by the caller as a blocked iteration.
+ */
+async function reconcile(
+  runtime: KernelRuntime,
+  opts: { iteration: number; state: State; planPath: string },
+  planBefore: string,
+  taskSnapshot: Map<string, string>
+): Promise<string[]> {
   const findings: string[] = [];
-  for (const [slug, taskState] of Object.entries(state.tasks)) {
-    if (taskState.status !== "merged" && taskState.status !== "finished") continue;
-    const file = bySlug.get(slug);
-    if (!file) {
-      findings.push(`frozen task "${slug}" was removed; frozen files stay, rework goes to a new slug`);
+  const planNow = fs.existsSync(opts.planPath)
+    ? fs.readFileSync(opts.planPath, "utf8")
+    : "";
+  if (planNow !== planBefore) {
+    await writeTextAtomic(opts.planPath, planBefore);
+    findings.push("plan.md changed during the PM turn; restored: only the architect edits the plan");
+  }
+
+  const texts = await readTaskTexts(runtime);
+  for (const slug of frozenSlugs(opts.state)) {
+    const original = taskSnapshot.get(slug);
+    const now = texts.get(slug);
+    if (original === undefined) {
+      if (now !== undefined) {
+        findings.push(`frozen task "${slug}" appeared; frozen slugs are immutable`);
+      }
       continue;
     }
-    const dispatch = [...records]
-      .filter((r) => r.slug === slug && r.actor === "agent" && r.taskHash)
-      .sort((a, b) => a.seq - b.seq)
-      .at(-1);
-    if (dispatch?.taskHash && dispatch.taskHash !== materialHash(file)) {
+    if (now !== original) {
+      await writeTextAtomic(taskPath(runtime, slug), original);
       findings.push(
-        `frozen task "${slug}" was edited; file a rework task "${slug}-r2" with deps: [${slug}] instead`
+        `frozen task "${slug}" was edited; restored: merged work is history, rework needs a new slug`
       );
     }
+  }
+  for (const slug of cancelledSlugs(opts.state)) {
+    const original = taskSnapshot.get(slug);
+    if (original === undefined) continue;
+    if (texts.get(slug) !== original) {
+      await writeTextAtomic(taskPath(runtime, slug), original);
+      findings.push(`cancelled task "${slug}" was edited; restored: a spent slug cannot be reused`);
+    }
+  }
+
+  if (findings.length > 0) {
+    await runtime.store.appendRecord(
+      scriptMeta(opts.iteration, "pm-reconcile", { round: 1 }),
+      { ok: false, cause: findings.join("; ") }
+    );
   }
   return findings;
 }
 
 async function validate(
   runtime: KernelRuntime,
-  state: State,
-  planPath: string,
-  planHashBefore: string
+  opts: { iteration: number; state: State; planPath: string },
+  planBefore: string,
+  taskSnapshot: Map<string, string>
 ): Promise<string[]> {
-  const { tasks, findings } = await readTaskFiles(runtime);
+  const findings = await reconcile(runtime, opts, planBefore, taskSnapshot);
+  const { tasks, findings: parseFindings } = parseTasks(await readTaskTexts(runtime));
+  findings.push(...parseFindings);
   const parked = new Set(
-    Object.keys(state.tasks).filter((slug) => state.tasks[slug]!.status === "parked")
+    Object.keys(opts.state.tasks).filter((slug) => opts.state.tasks[slug]!.status === "parked")
   );
-  const records = await runtime.store.listRecords();
-  const planHashAfter = fs.existsSync(planPath)
-    ? fingerprintText(fs.readFileSync(planPath, "utf8"), { lowercase: false })
-    : "";
-  if (planHashAfter !== planHashBefore) {
-    findings.push("plan.md changed during the PM turn; only the architect edits the plan");
-  }
   findings.push(...validateTaskGraph(tasks, { parked }));
-  findings.push(...frozenFindings(state, tasks, records));
-  return findings;
+  return [...new Set(findings)];
 }
 
 /**
- * PM turn plus script validation. One repair ask in the same session; a second
- * failure ends the iteration as blocked (KERNEL0 §3).
+ * A task the architect dropped from the plan becomes cancelled by a record, so
+ * its slug stays spent and state needs no memory. A changed task that remains
+ * in the plan needs nothing: dispatch re-reads the file.
+ */
+async function cancelRemovedTasks(
+  runtime: KernelRuntime,
+  state: State,
+  plan: string,
+  iteration: number
+): Promise<void> {
+  for (const [slug, task] of Object.entries(state.tasks)) {
+    if (task.status !== "pending" && task.status !== "ready") continue;
+    if (planMentionsSlug(plan, slug)) continue;
+    await appendCancel(
+      runtime.store,
+      { iteration, slug, round: task.round },
+      `removed from the plan at iteration ${iteration}`
+    );
+  }
+}
+
+/**
+ * PM turn plus script validation. One repair ask carrying the findings; a
+ * second failure ends the iteration as blocked (KERNEL0 §3).
  */
 export async function runPm(
   runtime: KernelRuntime,
   opts: { iteration: number; state: State; planPath: string; cwd: string; repair?: string }
 ): Promise<Outcome | undefined> {
-  const planHashBefore = fs.existsSync(opts.planPath)
-    ? fingerprintText(fs.readFileSync(opts.planPath, "utf8"), { lowercase: false })
+  const planBefore = fs.existsSync(opts.planPath)
+    ? fs.readFileSync(opts.planPath, "utf8")
     : "";
+  const taskSnapshot = await readTaskTexts(runtime);
 
   const ask = async (
     repair: string,
     session?: StepRecord["session"],
     isRepair = false
   ): Promise<Outcome | undefined> => {
-    const { tasks } = await readTaskFiles(runtime);
+    const { tasks } = parseTasks(await readTaskTexts(runtime));
     const result = await runAgentTurn(runtime, {
       role: "pm",
       cwd: opts.cwd,
@@ -119,9 +202,12 @@ export async function runPm(
       expectation: "any",
       session,
     });
-    const findings = await validate(runtime, opts.state, opts.planPath, planHashBefore);
-    if (findings.length === 0) return result.outcome;
-    if (!isRepair && result.record.session) {
+    const findings = await validate(runtime, opts, planBefore, taskSnapshot);
+    if (findings.length === 0) {
+      await cancelRemovedTasks(runtime, opts.state, planBefore, opts.iteration);
+      return result.outcome;
+    }
+    if (!isRepair) {
       return ask(findings.map((f) => `- ${f}`).join("\n"), result.record.session, true);
     }
     await runtime.store.appendRecord(scriptMeta(opts.iteration, "pm-validate", { round: 1 }), {

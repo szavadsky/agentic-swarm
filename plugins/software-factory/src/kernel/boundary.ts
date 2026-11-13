@@ -1,10 +1,19 @@
 import fs from "node:fs";
 import path from "node:path";
+import { git } from "../core/git/exec.js";
+import { compactArchitect, resumableSession } from "./architect-session.js";
 import { runAgentTurn } from "./agent.js";
-import { forwardedConcerns, renderContextPack } from "./context-pack.js";
+import { forwardedConcerns, renderContextPack, shallowCodeMap } from "./context-pack.js";
 import { derive } from "./derive.js";
+import { writeLaunchDigest } from "./digest.js";
 import { integrationHead } from "./worktree.js";
-import { formatSteers, markProcessed, scanInbox, steerResponses, writeOutbox } from "./mailbox.js";
+import {
+  formatSteers,
+  markProcessed,
+  scanInbox,
+  steerResponses,
+  writeOutbox,
+} from "./mailbox.js";
 import { PmValidationError, runPm } from "./pm.js";
 import type { GoalDecision, KernelRuntime, Outcome } from "./types.js";
 
@@ -40,24 +49,20 @@ function snapshotDiff(before: Map<string, string>, after: Map<string, string>): 
   return null;
 }
 
-async function compactArchitect(
-  runtime: KernelRuntime,
-  session: NonNullable<import("./types.js").StepRecord["session"]>
-): Promise<void> {
-  const harness = runtime.harnesses.get(session.harness);
-  if (!harness?.compact) return;
+async function codeMap(checkout: string): Promise<string[]> {
   try {
-    const caps = await harness.caps(session.model);
-    if (caps.compact !== "none") await harness.compact(session);
+    const listed = await git(checkout, ["ls-files"], { allowFail: true });
+    if (listed.code !== 0) return [];
+    return shallowCodeMap(listed.stdout.split("\n").filter(Boolean));
   } catch {
-    // Compaction is cache hygiene, not a gate: a failure must not end the iteration.
+    return [];
   }
 }
 
 /**
- * One architect consult: inbox, deterministic pack, architect turn (plan edited
- * in place), steers answered, then the PM turn and its validation. Called at
- * every iteration start, never mid-iteration.
+ * One architect consult: digest on a relaunch, inbox, deterministic pack,
+ * architect turn (plan edited in place), steer answers, then the PM turn and
+ * its validation. Called at every iteration start, never mid-iteration.
  */
 export async function runBoundary(
   runtime: KernelRuntime,
@@ -67,6 +72,16 @@ export async function runBoundary(
   const records = await runtime.store.listRecords();
   const state = derive(tasks, records);
   const iteration = state.iteration + 1;
+  const firstTurn = records.length === 0;
+  const turn = firstTurn ? "first" : opts.relaunch ? "relaunch" : "boundary";
+
+  fs.mkdirSync(runtime.paths.sessionsDir, { recursive: true });
+  const digestRel =
+    opts.relaunch && records.length > 0
+      ? await writeLaunchDigest(runtime, iteration, records)
+      : null;
+  const digestPath = digestRel ? path.join(runtime.store.goalDir, digestRel) : undefined;
+
   const steers = await scanInbox(runtime.store);
   const head = await integrationHead(runtime);
   const packRel = `iterations/${iteration}/context-pack.md`;
@@ -83,38 +98,54 @@ export async function runBoundary(
     recordsDir: runtime.store.recordsDir,
     tasksDir: runtime.store.tasksDir,
     previousSummary: previous,
+    digestPath,
     tasks,
     state,
+    codeMap: await codeMap(runtime.paths.goalCheckout),
     steers,
     setup: runtime.configs.repo.setup,
     gates: runtime.configs.repo.gates,
-    forwarded: forwardedConcerns(records, Math.max(1, state.iteration)),
+    forwarded: forwardedConcerns(records),
   });
   await runtime.store.writeFile(packRel, pack);
 
   const tasksBefore = await taskSnapshot(runtime.store.goalDir);
-  const lastArchitect = records
-    .filter((r) => r.step === "architect" && r.session && r.session.cwd === runtime.paths.goalCheckout)
-    .sort((a, b) => a.seq - b.seq)
-    .at(-1);
+  const session = await resumableSession(runtime, records);
 
   const result = await runAgentTurn(runtime, {
     role: "architect",
     cwd: runtime.paths.goalCheckout,
     meta: { iteration, step: "architect", round: 1 },
     vars: {
-      turn: opts.relaunch ? "relaunch" : "boundary",
+      turn,
       iteration: String(iteration),
       intent_path: path.join(runtime.store.goalDir, "intent.md"),
       plan_path: path.join(runtime.store.goalDir, "plan.md"),
       checkout: runtime.paths.goalCheckout,
       pack_path: path.join(runtime.store.goalDir, packRel),
-      digest_path: "",
+      digest_path: digestPath ?? "",
       steers: formatSteers(steers),
     },
     expectation: "architect",
-    session: lastArchitect?.session,
+    session,
+    settle: async (_record, outcome, live) => {
+      if (!live || outcome?.decision !== "continue") return {};
+      const compacted = await compactArchitect(runtime, live);
+      return compacted ? { session: compacted } : {};
+    },
   });
+
+  const responses = result.outcome ? steerResponses(result.outcome) : new Map<string, string>();
+  for (const steer of steers) {
+    const answer = responses.get(steer.id);
+    if (!answer) continue;
+    await writeOutbox(
+      runtime.store,
+      steer.id,
+      `# Steer ${steer.id}\n\n${answer}\n\nSource: ${steer.relPath}`
+    );
+    await markProcessed(runtime.store, steer);
+  }
 
   const touched = snapshotDiff(tasksBefore, await taskSnapshot(runtime.store.goalDir));
   if (touched) {
@@ -130,27 +161,18 @@ export async function runBoundary(
   const decision = result.outcome?.decision;
   if (!decision) {
     const cause = `architect turn produced no decision: ${result.outcome?.summary ?? "no outcome"}`;
-    return { iteration, decision: "blocked", cause, outcome: result.outcome, packPath: packRel };
-  }
-
-  const responses = result.outcome ? steerResponses(result.outcome) : new Map<string, string>();
-  for (const steer of steers) {
-    await markProcessed(runtime.store, steer);
-    const answer = responses.get(steer.id);
-    await writeOutbox(
-      runtime.store,
-      steer.id,
-      answer
-        ? `# Steer ${steer.id}\n\n${answer}\n\nSource: ${steer.relPath}`
-        : `# Steer ${steer.id}\n\nNo response recorded in the architect outcome.\n\nSource: ${steer.relPath}`
-    );
+    return {
+      iteration,
+      decision: "blocked",
+      cause,
+      outcome: result.outcome,
+      packPath: packRel,
+    };
   }
 
   if (decision !== "continue") {
     return { iteration, decision, outcome: result.outcome, packPath: packRel };
   }
-
-  if (result.record.session) await compactArchitect(runtime, result.record.session);
 
   const planPath = path.join(runtime.store.goalDir, "plan.md");
   if (!fs.existsSync(planPath)) {
@@ -189,5 +211,10 @@ export async function runBoundary(
       packPath: packRel,
     };
   }
-  return { iteration, decision, outcome: result.outcome, packPath: packRel };
+  return {
+    iteration,
+    decision,
+    outcome: result.outcome,
+    packPath: packRel,
+  };
 }
