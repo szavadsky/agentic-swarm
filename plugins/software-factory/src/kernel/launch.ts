@@ -112,7 +112,8 @@ async function writeIterationFacts(
   runtime: KernelRuntime,
   iteration: number,
   status: "goal-met" | "in-progress" | "blocked-by-user" | "stopped-with-debt",
-  humanInterventions: number
+  humanInterventions: number,
+  cause?: string
 ): Promise<string> {
   const records = await runtime.store.listRecords();
   const state = derive(await runtime.store.listTasks(), records);
@@ -124,7 +125,7 @@ async function writeIterationFacts(
     roleByStep: roleByStep(runtime.configs),
     humanInterventions,
   });
-  return writeIterationSummary(runtime.store, { iteration, state, records, status });
+  return writeIterationSummary(runtime.store, { iteration, state, records, status, cause });
 }
 
 async function safeSummary(
@@ -234,7 +235,7 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
               : signals.shouldStop()
                 ? "stopped-with-debt"
                 : "in-progress";
-        lastSummary = await writeIterationFacts(runtime, iteration, status, humanInterventions);
+        lastSummary = await writeIterationFacts(runtime, iteration, status, humanInterventions, boundary.cause);
         if (boundary.decision !== "continue" || signals.shouldStop()) break;
       } catch (err) {
         await safeSummary(runtime, Math.max(1, iteration), humanInterventions);

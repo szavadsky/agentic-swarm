@@ -120,28 +120,37 @@ export async function writeLaunchDigest(
   const previous = records.filter((r) => r.iteration < iteration);
   if (previous.length === 0) return null;
 
-  // A missing digest alias is a configuration error, not a scout failure.
-  resolveRoleAlias(runtime, "digest");
+  // The scout is observability: without a digest alias the derived table below
+  // is the whole digest, and the launch must not fail. Check by presence, not
+  // by throwing — pre-flight deliberately does not require a digest alias.
+  let scout = true;
+  try {
+    resolveRoleAlias(runtime, "digest");
+  } catch {
+    scout = false;
+  }
   const rel = `iterations/${iteration}/digest.md`;
   const digestPath = path.join(runtime.store.goalDir, rel);
   await runtime.store.writeFile(rel, renderDigestFacts(records, iteration));
 
-  try {
-    await runAgentTurn(runtime, {
-      role: "digest",
-      cwd: runtime.paths.goalCheckout,
-      meta: { iteration, step: "digest", round: 1 },
-      vars: {
-        launch_id: `previous-launch-before-${iteration}`,
-        goal_dir: runtime.store.goalDir,
-        records_dir: runtime.store.recordsDir,
-        transcripts_dir: runtime.paths.sessionsDir,
-        digest_path: digestPath,
-      },
-      expectation: "any",
-    });
-  } catch {
-    // The scout is an enhancement; the derived table already answers the facts.
+  if (scout) {
+    try {
+      await runAgentTurn(runtime, {
+        role: "digest",
+        cwd: runtime.paths.goalCheckout,
+        meta: { iteration, step: "digest", round: 1 },
+        vars: {
+          launch_id: `previous-launch-before-${iteration}`,
+          goal_dir: runtime.store.goalDir,
+          records_dir: runtime.store.recordsDir,
+          transcripts_dir: runtime.paths.sessionsDir,
+          digest_path: digestPath,
+        },
+        expectation: "any",
+      });
+    } catch {
+      // The scout is an enhancement; the derived table already answers the facts.
+    }
   }
   return rel;
 }

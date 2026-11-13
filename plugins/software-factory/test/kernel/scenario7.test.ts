@@ -131,7 +131,7 @@ describe("KERNEL0 scenario 7 — plan edit between iterations", () => {
     try {
       const first = new FakeHarness({ id: "fake" });
       scriptFirstIteration(first, goal.goalDir);
-      expect(await launch(goal.repo, first)).toBe(0);
+      expect(await launch(goal.repo, first)).toBe(3);
 
       let state = await stateOf(goal.goalDir);
       expect(state.tasks.alpha!.status).toBe("merged");

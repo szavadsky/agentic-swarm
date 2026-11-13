@@ -27,7 +27,7 @@ describe("architect session continuity", () => {
         return fakeTurnResult(req);
       });
 
-      expect(await launch(goal.repo, first)).toBe(0);
+      expect(await launch(goal.repo, first)).toBe(3);
       const store = createFolderStore(goal.goalDir);
       const records = await store.listRecords();
       const architect = records.find((r) => r.step === "architect");
@@ -82,7 +82,7 @@ describe("architect session continuity", () => {
         ctx.writeOutcome(outcome({ summary: "nothing to file" }));
         return fakeTurnResult(req);
       });
-      expect(await launch(goal.repo, first)).toBe(0);
+      expect(await launch(goal.repo, first)).toBe(3);
 
       const second = new FakeHarness({ id: "fake", caps: { resume: false } });
       scriptDigest(second, goal.goalDir, 2);

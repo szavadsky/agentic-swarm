@@ -177,7 +177,7 @@ describe("PM turn reconciliation", () => {
         return fakeTurnResult(req);
       });
 
-      expect(await launch(goal.repo, harness)).toBe(0);
+      expect(await launch(goal.repo, harness)).toBe(3);
       const summary = fs.readFileSync(path.join(goal.goalDir, "iterations/1/summary.md"), "utf8");
       expect(summary).toContain("status: blocked-by-user");
       expect(summary).toContain("PM validation failed twice");

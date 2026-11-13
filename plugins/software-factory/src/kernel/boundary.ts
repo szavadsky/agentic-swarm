@@ -72,7 +72,9 @@ export async function runBoundary(
   const records = await runtime.store.listRecords();
   const state = derive(tasks, records);
   const iteration = state.iteration + 1;
-  const firstTurn = records.length === 0;
+  // Script records (baseline, checks) may exist before the first architect turn;
+  // "first" means no architect turn has run yet, not an empty record store.
+  const firstTurn = !records.some((r) => r.step === "architect");
   const turn = firstTurn ? "first" : opts.relaunch ? "relaunch" : "boundary";
 
   fs.mkdirSync(runtime.paths.sessionsDir, { recursive: true });
