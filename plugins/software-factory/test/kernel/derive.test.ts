@@ -202,7 +202,38 @@ describe("derive", () => {
       implement(6, 2, { tree: "tree-1", commit: "c1", base: "c0" }),
     ]);
     expect(state.tasks.a!.phase).toBe("parked");
-    expect(state.tasks.a!.park!.startsWith("empty-diff:")).toBe(true);
+    expect(state.tasks.a!.park).toBe("empty-diff: implement r2 committed no changes");
+  });
+
+  it("names the red merge checks when a gate-fix turn commits nothing", () => {
+    const state = derive([task("a", { flow: "just-implement" })], [
+      implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
+      script(2, { step: "commit", ok: true, commit: "c1", tree: "tree-1" }),
+      doneCheck(3),
+      script(4, {
+        step: "merge",
+        ok: false,
+        cause: "gates: unit",
+        checks: [
+          { name: "unit", ok: false, summary: "exit 1", output: "boom", fingerprint: "x" },
+          // Inherited red: not in the merge cause, so not part of the fix turn.
+          { name: "docs", ok: false, summary: "exit 2", output: "stale", fingerprint: "y" },
+        ],
+      }),
+      implement(5, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
+    ]);
+    expect(state.tasks.a!.phase).toBe("parked");
+    expect(state.tasks.a!.park).toBe(
+      "empty-diff: implement r1 committed no changes after red checks: unit (exit 1)"
+    );
+  });
+
+  it("keeps the plain empty-diff cause for a first turn with no commit", () => {
+    const state = derive([task("a")], [
+      implement(1, 1, { tree: "tree-0", commit: "c0", base: "c0" }),
+    ]);
+    expect(state.tasks.a!.phase).toBe("parked");
+    expect(state.tasks.a!.park).toBe("empty-diff: implement r1 committed no changes");
   });
 
   it("does not park a productive turn that changed the tree", () => {

@@ -60,7 +60,7 @@ function usage(costUsd: number, tin: number, out: number): Usage {
   return { in: tin, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0, out, reasoningOut: 0, costUsd };
 }
 
-async function benchmark(fixture: FixtureGoal): Promise<{ code: number; out: string; err: string }> {
+async function benchmark(fixture: FixtureGoal, goal = "demo"): Promise<{ code: number; out: string; err: string }> {
   const lines: string[] = [];
   const errors: string[] = [];
   const originalLog = console.log;
@@ -68,7 +68,7 @@ async function benchmark(fixture: FixtureGoal): Promise<{ code: number; out: str
   console.log = (...args: unknown[]) => lines.push(args.map(String).join(" "));
   console.error = (...args: unknown[]) => errors.push(args.map(String).join(" "));
   try {
-    const code = await dispatch(["benchmark", "--repo", fixture.repo.dir, "--goal", "demo"]);
+    const code = await dispatch(["benchmark", "--repo", fixture.repo.dir, "--goal", goal]);
     return { code, out: lines.join("\n"), err: errors.join("\n") };
   } finally {
     console.log = originalLog;
@@ -214,6 +214,19 @@ describe("benchmark command", () => {
       expect(out).toContain("| cost per merged | n/a (no merged tasks) | USD/merged task |");
       expect(out).toContain("| merged/parked | 0 / 0 | tasks |");
       expect(out).toContain("loop incidents: none");
+    } finally {
+      fixture.repo.cleanup();
+    }
+  });
+
+  it("fails loudly at the missing goal directory before reading metrics", async () => {
+    const fixture = fixtureGoal();
+    try {
+      const missing = path.join(fixture.repo.dir, ".factory/artifacts/absent");
+      const { code, err } = await benchmark(fixture, "absent");
+      expect(code).toBe(1);
+      expect(err).toContain(`goal "absent" has no directory at ${missing}`);
+      expect(err).not.toContain("metrics.yaml");
     } finally {
       fixture.repo.cleanup();
     }

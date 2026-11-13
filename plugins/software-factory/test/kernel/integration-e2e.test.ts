@@ -239,6 +239,7 @@ describe("cross-slice E2E — init, steer and three launches through S2/S3/S4", 
         return fakeTurnResult(req);
       });
 
+      const integrationBefore = repo.git(["rev-parse", "factory/demo"]).stdout.trim();
       expect(await dispatch(["run", "--repo", repo.dir, "--goal", "demo"], { harnesses: { fake: second } })).toBe(3);
 
       state = await stateOf(goalDir);
@@ -253,8 +254,10 @@ describe("cross-slice E2E — init, steer and three launches through S2/S3/S4", 
       const betaMerge = records.find((r) => r.slug === "beta" && r.step === "merge");
       expect(betaMerge).toBeUndefined();
       const continuation = records.find((r) => r.slug === "beta2" && r.step === "implement");
-      expect(continuation?.base).toBe(betaTip);
+      expect(continuation?.base).toBe(integrationBefore);
+      expect(continuation?.base).not.toBe(betaTip);
       const pack = fs.readFileSync(path.join(goalDir, "iterations/2/context-pack.md"), "utf8");
+      expect(pack).toContain(`previous iteration summary: ${path.join(goalDir, "iterations/1/summary.md")}`);
       expect(pack).toContain(`- ${steerId}: mailbox/inbox/`);
       expect(fs.readdirSync(path.join(goalDir, "mailbox/inbox"))).toEqual([]);
       expect(fs.readdirSync(path.join(goalDir, "mailbox/processed"))).toContain(`${steerId}.md`);

@@ -52,11 +52,20 @@ describe("price usage at aggregation time", () => {
   });
 
   it("keeps known zero distinct from unknown and lets a non-zero harness cost win", () => {
-    expect(priceUsage(usage({ costUsd: 0 }), "free/zero", TABLE)).toBe(0);
-    expect(priceUsage(usage({ costUsd: 0 }), "mystery/model", TABLE)).toBeUndefined();
+    expect(priceUsage(usage({ costUsd: 0, in: 1 }), "free/zero", TABLE)).toBe(0);
+    expect(priceUsage(usage({ costUsd: 0, in: 1 }), "mystery/model", TABLE)).toBeUndefined();
     expect(priceUsage(usage({ costUsd: 0.05, in: 1_000_000 }), "paid/one", TABLE)).toBe(0.05);
     expect(priceUsage(usage({ in: 1_000_000 }), "mystery/model", TABLE)).toBeUndefined();
     expect(priceUsage(usage({ in: 1 }), "free/zero", TABLE)).toBe(0);
+  });
+
+  it("treats all-zero counters as unreported, even on a table-listed or free model", () => {
+    // pi via acpx reports no usage; a real turn always consumes input.
+    expect(priceUsage(usage(), "paid/one", TABLE)).toBeUndefined();
+    expect(priceUsage(usage(), "free/zero", TABLE)).toBeUndefined();
+    expect(priceUsage(usage({ costUsd: 0 }), "free/zero", TABLE)).toBeUndefined();
+    // A non-zero harness figure is a report even without token counters.
+    expect(priceUsage(usage({ costUsd: 0.02 }), "mystery/model", TABLE)).toBe(0.02);
   });
 
   it("reprices a harness zero that contradicts a table entry", () => {
@@ -130,7 +139,7 @@ describe("priced metrics and summary", () => {
         // A harness zero is not a price when no table entry exists.
         rec(2, { slug: "a", model: { id: "mystery/model" }, usage: usage({ costUsd: 0, in: 1_000_000 }) }),
         // A known zero comes only from an explicit table entry.
-        rec(3, { slug: "a", step: "review", model: { id: "free/zero" }, usage: usage({ costUsd: 0 }) }),
+        rec(3, { slug: "a", step: "review", model: { id: "free/zero" }, usage: usage({ costUsd: 0, in: 1_000 }) }),
         // A crash-sealed record has no usage; its model's table entry cannot price it.
         rec(4, { slug: undefined, step: "pm", model: { id: "paid/one" } }),
         // A non-zero harness figure still wins for a model outside the table.
@@ -235,6 +244,130 @@ describe("priced metrics and summary", () => {
         state,
         records,
         status: "in-progress",
+      });
+      const text = fs.readFileSync(path.join(store.goalDir, rel), "utf8");
+      expect(text).toContain("- cost: unknown (2 unpriced turns)");
+      expect(text).toContain(
+        "- cost by role: architect unknown (1 unpriced turn); implementer unknown (1 unpriced turn)"
+      );
+      expect(text).not.toContain("- cost: $0.0000");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("prices every reported attempt once and keeps a partially priced turn partial", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-pricing-"));
+    const store = createFolderStore(path.join(root, "goal"));
+    try {
+      await store.ensureLayout();
+      const records = [
+        // retry: both calls reported input; the record's own usage repeats the last one.
+        rec(1, {
+          step: "architect",
+          slug: undefined,
+          model: { id: "paid/one" },
+          usage: usage({ in: 1_000_000 }),
+          attempts: [
+            { model: { id: "paid/one" }, stop: { kind: "infra", cause: "quota" }, usage: usage({ in: 1_000_000 }) },
+            { model: { id: "paid/one" }, stop: { kind: "done" }, usage: usage({ in: 1_000_000 }) },
+          ],
+        }),
+        // fallback: one attempt priced by the table, one unpriced; the harness cost wins.
+        rec(2, {
+          slug: "a",
+          model: { id: "mystery/one" },
+          usage: usage({ in: 7 }),
+          attempts: [
+            { model: { id: "mystery/one" }, stop: { kind: "done" }, usage: usage({ in: 7 }) },
+            { model: { id: "mystery/one" }, stop: { kind: "done" }, usage: usage({ costUsd: 0.25 }) },
+          ],
+        }),
+      ];
+
+      await writeMetrics(store, { iteration: 1, status: "in-progress", records, prices: TABLE });
+      const metrics = yaml.parse((await store.readFile("metrics.yaml"))!) as GoalMetrics;
+      const one = metrics.iterations[0]!;
+
+      // Two paid attempts, each $4, not $4 plus the record total again.
+      expect(one.roles.architect!.usage.costUsd).toBeCloseTo(8, 10);
+      expect(one.roles.architect!.tokens).toBe(2_000_000);
+      expect(one.roles.architect!.unpricedTurns).toBe(0);
+      expect(one.roles.implementer!.usage.costUsd).toBeCloseTo(0.25, 10);
+      expect(one.roles.implementer!.unpricedTurns).toBe(1);
+      expect(one.unpricedTurns).toBe(1);
+      expect(one.usage.costUsd).toBeCloseTo(8.25, 10);
+
+      const state = derive([task("a")], records);
+      const rel = await writeIterationSummary(store, {
+        iteration: 1,
+        state,
+        records,
+        status: "in-progress",
+        prices: TABLE,
+      });
+      const text = fs.readFileSync(path.join(store.goalDir, rel), "utf8");
+      expect(text).toContain("- cost: $8.2500 (partial; 1 unpriced turn)");
+      expect(text).toContain("architect $8.0000; implementer $0.2500 (partial; 1 unpriced turn)");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("falls back to the record's own usage when its attempts report nothing", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-pricing-"));
+    const store = createFolderStore(path.join(root, "goal"));
+    try {
+      await store.ensureLayout();
+      const records = [
+        rec(1, {
+          step: "architect",
+          slug: undefined,
+          model: { id: "paid/one" },
+          usage: usage({ in: 1_000_000 }),
+          // A harness that lists calls but reports no per-call counters.
+          attempts: [{ model: { id: "paid/one" }, stop: { kind: "done" }, usage: usage() }],
+        }),
+      ];
+
+      await writeMetrics(store, { iteration: 1, status: "in-progress", records, prices: TABLE });
+      const metrics = yaml.parse((await store.readFile("metrics.yaml"))!) as GoalMetrics;
+      expect(metrics.iterations[0]!.usage.costUsd).toBeCloseTo(4, 10);
+      expect(metrics.iterations[0]!.usage.in).toBe(1_000_000);
+      expect(metrics.iterations[0]!.unpricedTurns).toBe(0);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("prices all-zero usage as an unpriced turn in metrics and summary", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-pricing-"));
+    const store = createFolderStore(path.join(root, "goal"));
+    try {
+      await store.ensureLayout();
+      const records = [
+        rec(1, { step: "architect", slug: undefined, model: { id: "paid/one" }, usage: usage() }),
+        rec(2, { slug: "a", model: { id: "paid/one" }, usage: usage() }),
+      ];
+
+      await writeMetrics(store, { iteration: 1, status: "in-progress", records, prices: TABLE });
+      const metrics = yaml.parse((await store.readFile("metrics.yaml"))!) as GoalMetrics;
+      const one = metrics.iterations[0]!;
+      expect(one.usage.costUsd).toBeUndefined();
+      expect(one.unpricedTurns).toBe(2);
+      expect(one.costPerMergedTask).toBeNull();
+      expect(one.roles.architect!.usage.costUsd).toBeUndefined();
+      expect(one.roles.architect!.unpricedTurns).toBe(1);
+      expect(one.roles.implementer!.unpricedTurns).toBe(1);
+      expect(metrics.totals.unpricedTurns).toBe(2);
+
+      const state = derive([task("a")], records);
+      const rel = await writeIterationSummary(store, {
+        iteration: 1,
+        state,
+        records,
+        status: "in-progress",
+        prices: TABLE,
       });
       const text = fs.readFileSync(path.join(store.goalDir, rel), "utf8");
       expect(text).toContain("- cost: unknown (2 unpriced turns)");

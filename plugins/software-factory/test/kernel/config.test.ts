@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { iterationUsdBrake, loadConfigs, resolveGoalPaths, toLimits } from "../../src/kernel/config.js";
+import { loadConfigs, resolveGoalPaths, toLimits } from "../../src/kernel/config.js";
 
 function tmpRepo(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "factory-config-"));
@@ -75,12 +75,14 @@ describe("three config layers", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
-  it("reads the optional iteration USD brake and rejects a non-positive one", () => {
+  it("maps the optional iteration USD brake into the typed limits", () => {
     const root = tmpRepo();
     fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
     const runYaml = path.join(root, ".factory/run.yaml");
     fs.writeFileSync(runYaml, "limits: { iterations: 1, iterationUsd: 2.5 }\n");
-    expect(iterationUsdBrake(loadConfigs(root))).toBe(2.5);
+    expect(toLimits(loadConfigs(root)).iterationUsd).toBe(2.5);
+    fs.writeFileSync(runYaml, "limits: { iterations: 1 }\n");
+    expect(toLimits(loadConfigs(root)).iterationUsd).toBeUndefined();
     fs.writeFileSync(runYaml, "limits: { iterations: 1, iterationUsd: 0 }\n");
     expect(() => loadConfigs(root)).toThrow(/iterationUsd/);
     fs.rmSync(root, { recursive: true, force: true });

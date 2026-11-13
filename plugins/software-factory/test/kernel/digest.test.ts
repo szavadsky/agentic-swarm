@@ -234,6 +234,65 @@ describe("launch digest", () => {
     }
   });
 
+  it("agrees with metrics on all-zero and multi-attempt turns", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-digest-"));
+    const fake = new FakeHarness({ id: "fake" });
+    const runtime = runtimeFor(fake, root);
+    const prices: PriceTable = {
+      "paid/one": { input: 4, cachedInput: 0.2, output: 20, reasoning: 20 },
+    };
+    runtime.configs.run.prices = prices;
+    try {
+      await runtime.store.ensureLayout();
+      // pi via acpx: all-zero counters are no usage report, even on a priced model.
+      await runtime.store.appendRecord(
+        { iteration: 1, step: "architect", round: 1, actor: "agent", alias: "architect", model: { id: "paid/one" } },
+        { usage: usage() }
+      );
+      // A retry: both calls reported input, and rec.usage repeats the last one.
+      await runtime.store.appendRecord(
+        { iteration: 1, slug: "a", step: "implement", round: 1, actor: "agent", alias: "implementer", model: { id: "paid/one" } },
+        {
+          usage: usage({ in: 1_000_000 }),
+          attempts: [
+            { model: { id: "paid/one" }, stop: { kind: "infra", cause: "quota" }, usage: usage({ in: 1_000_000 }) },
+            { model: { id: "paid/one" }, stop: { kind: "done" }, usage: usage({ in: 1_000_000 }) },
+          ],
+        }
+      );
+      // A non-zero harness figure wins without token counters.
+      await runtime.store.appendRecord(
+        { iteration: 1, slug: "a", step: "review", round: 1, actor: "agent", alias: "reviewer", model: { id: "mystery/model" } },
+        { usage: usage({ costUsd: 0.05 }) }
+      );
+      const records = await runtime.store.listRecords();
+      fake.scriptResult({});
+
+      const rel = await writeLaunchDigest(runtime, 2, records);
+      const digest = fs.readFileSync(path.join(runtime.store.goalDir, rel!), "utf8");
+
+      expect(digest).toContain("| architect | architect | 1 | 0 | 0 | 0 | unknown (1 unpriced turn) |");
+      expect(digest).toContain("| implementer | implementer | 1 | 2000000 | 0 | 0 | $8.0000 |");
+      expect(digest).toContain("| reviewer | reviewer | 1 | 0 | 0 | 0 | $0.0500 |");
+      expect(digest).toContain("- cost: $8.0500 (partial; 1 unpriced turn)");
+
+      const metrics = iterationMetrics(1, "in-progress", records, DEFAULT_ROLE_BY_STEP, 0, prices);
+      const rows = digestCostRows(digest);
+      for (const [role, expected] of Object.entries(metrics.roles)) {
+        const rowsForRole = rows.filter((row) => row.role === role);
+        const known = rowsForRole.flatMap((row) => (row.costUsd === undefined ? [] : [row.costUsd]));
+        const cost = known.length === 0 ? undefined : known.reduce((sum, value) => sum + value, 0);
+        if (expected.usage.costUsd === undefined) expect(cost).toBeUndefined();
+        else expect(cost).toBeCloseTo(expected.usage.costUsd, 10);
+        expect(rowsForRole.reduce((sum, row) => sum + row.unpricedTurns, 0)).toBe(expected.unpricedTurns);
+      }
+      expect(metrics.usage.costUsd).toBeCloseTo(8.05, 10);
+      expect(metrics.unpricedTurns).toBe(1);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("does nothing when there is no previous launch", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-digest-"));
     const runtime = runtimeFor(new FakeHarness({ id: "fake" }), root);

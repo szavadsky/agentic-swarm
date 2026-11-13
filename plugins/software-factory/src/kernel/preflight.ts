@@ -4,7 +4,7 @@ import { formatFindings, type Finding } from "./findings.js";
 import { checkBase, resolveBaseCommit, type BaselineResult } from "./baseline.js";
 import { configFilePaths } from "./config.js";
 import { checkAlias, checkScouts, type AliasContext, type ModelCatalog } from "./preflight-aliases.js";
-import type { ArtifactStore, ConfigBundle, GoalPaths, ProcessConfig } from "./types.js";
+import type { AliasConfig, ArtifactStore, ConfigBundle, GoalPaths, ProcessConfig } from "./types.js";
 import type { Harness } from "../harness/types.js";
 
 export type { ModelCatalog } from "./preflight-aliases.js";
@@ -44,6 +44,51 @@ function roleAlias(process: ProcessConfig, role: string): string | undefined {
   return config ? (config.alias ?? role) : undefined;
 }
 
+/**
+ * An alias's `escalateTo` must name a configured alias and its chain must end:
+ * a missing name or a cycle would only fail mid-turn, after the plan spent.
+ */
+function escalationFindings(
+  aliases: Record<string, AliasConfig>,
+  file: string
+): Finding[] {
+  const findings: Finding[] = [];
+  for (const [name, alias] of Object.entries(aliases)) {
+    if (!alias.escalateTo) continue;
+    if (alias.escalateTo === "default") {
+      findings.push({
+        file,
+        key: `aliases.${name}.escalateTo`,
+        message: `escalateTo "default" is reserved for "no tier override"; it would re-run the PM's own alias`,
+      });
+      continue;
+    }
+    if (!aliases[alias.escalateTo]) {
+      findings.push({
+        file,
+        key: `aliases.${name}.escalateTo`,
+        message: `escalateTo "${alias.escalateTo}" names no run-config alias`,
+      });
+      continue;
+    }
+    const seen = new Set<string>([name]);
+    let current: string | undefined = alias.escalateTo;
+    while (current) {
+      if (seen.has(current)) {
+        findings.push({
+          file,
+          key: `aliases.${name}.escalateTo`,
+          message: `escalateTo chain forms a cycle: ${[...seen, current].join(" -> ")}`,
+        });
+        break;
+      }
+      seen.add(current);
+      current = aliases[current]?.escalateTo;
+    }
+  }
+  return findings;
+}
+
 /** Roles the kernel actually calls: architect, PM and every configured flow step. */
 function requiredRoles(process: ProcessConfig): Set<string> {
   const roles = new Set(["architect", "pm"]);
@@ -58,6 +103,14 @@ function inside(child: string, parent: string): boolean {
   const rel = path.relative(path.resolve(parent), path.resolve(child));
   return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
 }
+
+/**
+ * resolveAcpxCommand's last-resort executable when acpx is not on PATH
+ * (`src/harness/acpx/command.ts`): either the literal `bunx` or the absolute
+ * bunx path it resolves. Pre-flight receives only the binary, so this basename
+ * identifies the on-demand route.
+ */
+const ACPX_ON_DEMAND_BINARY = "bunx";
 
 function executable(value: string | undefined): boolean {
   if (!value) return false;
@@ -126,6 +179,19 @@ export async function preflight(input: PreflightInput): Promise<PreflightResult>
     }
   }
 
+  findings.push(...escalationFindings(configs.run.aliases, files.run));
+
+  // A task tier names a run-config alias directly; an escalated task that names
+  // one the run config lacks would fail only mid-turn, after the plan spent.
+  for (const task of await store.listTasks()) {
+    if (!task.tier || task.tier === "default" || configs.run.aliases[task.tier]) continue;
+    findings.push({
+      file: path.join(store.tasksDir, `${task.slug}.md`),
+      key: "tier",
+      message: `tier "${task.tier}" names no run-config alias`,
+    });
+  }
+
   const usedHarnesses = new Set<string>();
   for (const alias of Object.values(configs.run.aliases)) usedHarnesses.add(alias.harness);
   const architectAlias = roleAlias(configs.process, "architect");
@@ -136,13 +202,16 @@ export async function preflight(input: PreflightInput): Promise<PreflightResult>
   const unavailable = new Set<string>();
   if (input.binaries) {
     for (const harness of [...usedHarnesses].sort()) {
-      if (executable(input.binaries[harness])) continue;
+      const binary = input.binaries[harness];
+      if (executable(binary)) continue;
       unavailable.add(harness);
-      findings.push({
-        file: files.run,
-        key: `harness.${harness}`,
-        message: `binary "${input.binaries[harness] ?? harness}" is not executable or not on PATH`,
-      });
+      // resolveAcpxCommand reports `bunx` when acpx is absent; naming only the
+      // shim would hide the dispatcher and the route the operator must provide.
+      const message =
+        binary !== undefined && path.basename(binary) === ACPX_ON_DEMAND_BINARY
+          ? `acpx is not on PATH and the on-demand \`bunx acpx\` route cannot run: binary "bunx" is not executable or not on PATH`
+          : `binary "${binary ?? harness}" is not executable or not on PATH`;
+      findings.push({ file: files.run, key: `harness.${harness}`, message });
     }
   }
 

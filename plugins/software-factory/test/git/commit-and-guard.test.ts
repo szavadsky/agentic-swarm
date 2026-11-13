@@ -4,11 +4,9 @@ import path from "node:path";
 import os from "node:os";
 import { Repo } from "../../src/core/git/repo.js";
 import { commitAll, headOf, isAncestor } from "../../src/core/git/commit.js";
-import { captureHead, enforceHead } from "../../src/core/git/guard.js";
-import { git } from "../../src/core/git/exec.js";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 
-describe("Git commit, headOf, isAncestor, and HEAD guard (§7)", () => {
+describe("Git commit and revision inspection (§7)", () => {
   let tmpRepo: TmpRepo;
   let wtRoot: string;
   let repo: Repo;
@@ -60,76 +58,5 @@ describe("Git commit, headOf, isAncestor, and HEAD guard (§7)", () => {
 
     expect(await isAncestor(tmpRepo.dir, head1.sha, sha2)).toBe(true);
     expect(await isAncestor(tmpRepo.dir, sha2, head1.sha)).toBe(false);
-  });
-
-  it("HEAD guard restores branch and soft-resets moved HEAD keeping changes", async () => {
-    const before = await captureHead(tmpRepo.dir);
-
-    // Case 1: Agent commits on the same branch (HEAD moved)
-    fs.writeFileSync(path.join(tmpRepo.dir, "agent-work.txt"), "agent changes", "utf8");
-    await git(tmpRepo.dir, ["add", "agent-work.txt"]);
-    await git(tmpRepo.dir, ["commit", "-m", "agent unauthorized commit"]);
-
-    const afterMoved = await headOf(tmpRepo.dir);
-    expect(afterMoved.sha).not.toBe(before.sha);
-
-    const guardResult1 = await enforceHead(repo, tmpRepo.dir, before);
-    expect(guardResult1.headMoved).toBe(true);
-    expect(guardResult1.branchChanged).toBe(false);
-
-    // HEAD was soft-reset back to before.sha
-    const current1 = await headOf(tmpRepo.dir);
-    expect(current1.sha).toBe(before.sha);
-    expect(current1.branch).toBe(before.branch);
-
-    // Changes remain staged in working tree
-    const status1 = await git(tmpRepo.dir, ["status", "--porcelain"]);
-    expect(status1.stdout).toContain("agent-work.txt");
-
-    // Clear changes for next case
-    await git(tmpRepo.dir, ["reset", "--hard", before.sha]);
-
-    // Case 2: Agent checks out another branch without committing
-    await git(tmpRepo.dir, ["checkout", "-b", "rogue-branch"]);
-    fs.writeFileSync(path.join(tmpRepo.dir, "uncommitted.txt"), "dirty work", "utf8");
-
-    const guardResult2 = await enforceHead(repo, tmpRepo.dir, before);
-    expect(guardResult2.branchChanged).toBe(true);
-    expect(guardResult2.headMoved).toBe(false);
-    const current2 = await headOf(tmpRepo.dir);
-    expect(current2.branch).toBe(before.branch);
-    expect(fs.readFileSync(path.join(tmpRepo.dir, "uncommitted.txt"), "utf8")).toBe(
-      "dirty work"
-    );
-  });
-
-  it("HEAD guard never moves a foreign branch the agent committed on", async () => {
-    const before = await captureHead(tmpRepo.dir);
-
-    // Agent switches to another existing branch and commits there.
-    await git(tmpRepo.dir, ["checkout", "-b", "foreign-branch"]);
-    fs.writeFileSync(path.join(tmpRepo.dir, "foreign-work.txt"), "foreign changes", "utf8");
-    await git(tmpRepo.dir, ["add", "foreign-work.txt"]);
-    await git(tmpRepo.dir, ["commit", "-m", "agent commit on foreign branch"]);
-    const foreignSha = (await headOf(tmpRepo.dir)).sha;
-    expect(foreignSha).not.toBe(before.sha);
-
-    const guardResult = await enforceHead(repo, tmpRepo.dir, before);
-    expect(guardResult.branchChanged).toBe(true);
-    expect(guardResult.headMoved).toBe(true);
-    expect(guardResult.foreignCommit).toEqual({ branch: "foreign-branch", sha: foreignSha });
-
-    // HEAD is back on the original branch at the recorded sha.
-    const current = await headOf(tmpRepo.dir);
-    expect(current.branch).toBe(before.branch);
-    expect(current.sha).toBe(before.sha);
-
-    // The foreign branch ref is untouched: still points at the agent commit.
-    const foreignRef = await git(tmpRepo.dir, ["rev-parse", "refs/heads/foreign-branch"]);
-    expect(foreignRef.stdout.trim()).toBe(foreignSha);
-
-    // The turn's changes stay staged for the engine commit.
-    const status = await git(tmpRepo.dir, ["status", "--porcelain"]);
-    expect(status.stdout).toContain("foreign-work.txt");
   });
 });

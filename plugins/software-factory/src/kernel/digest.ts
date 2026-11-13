@@ -1,7 +1,8 @@
 import path from "node:path";
-import { resolveRoleAlias, runAgentTurn } from "./agent.js";
+import { runAgentTurn } from "./agent.js";
+import { resolveRole, type RoleTarget } from "./flow-context.js";
 import { DEFAULT_ROLE_BY_STEP, costText, rolesByStep } from "./metrics.js";
-import { pricedUsage, type PriceTable } from "./pricing.js";
+import { pricedRecord, type PriceTable } from "./pricing.js";
 import type { KernelRuntime, StepRecord } from "./types.js";
 
 interface RoleRow {
@@ -36,7 +37,7 @@ function renderDigestFacts(
     if (rec.actor !== "agent" || !rec.endedAt) continue;
     if (rec.iteration >= iteration) continue;
     turns += 1;
-    const priced = pricedUsage(rec.usage, rec.model?.id, prices);
+    const priced = pricedRecord(rec, prices);
     const role = roleOf(rec, roleByStep);
     const alias = rec.alias ?? "-";
     const key = `${role}\u0000${alias}`;
@@ -57,12 +58,11 @@ function renderDigestFacts(
     row.in += priced.usage.in;
     row.cacheRead += priced.usage.cacheRead;
     row.out += priced.usage.out;
-    if (priced.costKnown) {
-      row.costUsd += priced.usage.costUsd ?? 0;
+    if (priced.usage.costUsd !== undefined) {
+      row.costUsd += priced.usage.costUsd;
       row.costKnown = true;
-    } else {
-      row.unpricedTurns += 1;
     }
+    if (!priced.costKnown) row.unpricedTurns += 1;
     rows.set(key, row);
   }
 
@@ -143,11 +143,11 @@ export async function writeLaunchDigest(
   // The scout is observability: without a digest alias the derived table below
   // is the whole digest, and the launch must not fail. Check by presence, not
   // by throwing — pre-flight deliberately does not require a digest alias.
-  let scout = true;
+  let scoutTarget: RoleTarget | undefined;
   try {
-    resolveRoleAlias(runtime, "digest");
+    scoutTarget = resolveRole(runtime, "digest");
   } catch {
-    scout = false;
+    scoutTarget = undefined;
   }
   const rel = `iterations/${iteration}/digest.md`;
   const digestPath = path.join(runtime.store.goalDir, rel);
@@ -164,10 +164,10 @@ export async function writeLaunchDigest(
     )
   );
 
-  if (scout) {
+  if (scoutTarget) {
     try {
       await runAgentTurn(runtime, {
-        role: "digest",
+        target: scoutTarget,
         cwd: runtime.paths.goalCheckout,
         meta: { iteration, step: "digest", round: 1 },
         vars: {

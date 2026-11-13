@@ -11,6 +11,7 @@ aliases:
     harness: opencode
     model: opencode/beam-free
     effort: max
+    escalateTo: escalation
     fallbacks:
       - opencode-go/deepseek-v4.1-flash
   digest:

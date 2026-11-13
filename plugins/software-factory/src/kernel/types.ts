@@ -124,9 +124,10 @@ export interface Limits {
   iterations: number;
   concurrency: number;
   perHarness: Record<string, number>;
-  /** Optional drain limits for one iteration: new turns and wall clock. */
+  /** Optional drain limits for one iteration: new turns, wall clock and USD. */
   iterationTurns?: number;
   iterationWallMs?: number;
+  iterationUsd?: number;
 }
 
 export type StepActor = "agent" | "script";
@@ -263,6 +264,8 @@ export interface AliasConfig {
   model: string;
   effort?: string;
   fallbacks?: string[];
+  /** Alias the PM ladder climbs to after a tier fails; absent ends the ladder. */
+  escalateTo?: string;
   /** Alias-level turn bounds; config defaults match `DEFAULT_TIMEOUTS`. */
   timeouts?: Timeouts;
 }
@@ -277,6 +280,8 @@ export interface RunConfig {
     iterations: number;
     turns?: number;
     wallMinutes?: number;
+    /** Optional USD brake: crossing it drains the iteration. */
+    iterationUsd?: number;
   };
   sessions: { dir: string; keepRuns: number };
   worktreeRoot?: string;

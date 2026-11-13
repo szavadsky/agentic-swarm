@@ -21,6 +21,7 @@ import {
 } from "./worktree.js";
 import {
   checksDue,
+  compactSession,
   findStep,
   firstBase,
   flowOf,
@@ -75,7 +76,12 @@ async function handleStepResult(
   stop: StepRecord["stop"],
   outcome: StepRecord["outcome"]
 ): Promise<TaskActionResult> {
-  if (stop?.kind === "infra") return { infra: { kind: "infra", cause: stop.cause } };
+  if (stop?.kind === "infra") {
+    // The classifier already scrubbed and capped `details`; append it verbatim
+    // so the operator sees the provider error behind a bare cause like "auth".
+    const cause = stop.details ? `${stop.cause}: ${stop.details}` : stop.cause;
+    return { infra: { kind: "infra", cause } };
+  }
   if (stop?.kind === "cancelled") return { cancelled: true };
   if (stop?.kind === "truncated") return {};
   const meta = { iteration, slug: task.slug, round: state.round };
@@ -149,7 +155,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
   const contained = await containmentSnapshot(runtime, ensured.path);
   let breach: string | undefined;
   const result = await runAgentTurn(runtime, {
-    role: target.role,
+    target,
     cwd: ensured.path,
     meta: {
       ...meta,
@@ -160,10 +166,16 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
     vars,
     expectation: step.review ? "review" : "any",
     session,
-    settle: async () => {
+    settle: async (_record, outcome, live) => {
       breach = await containmentViolation(runtime, ensured.path, ensured.branch, contained);
       if (breach) return { ok: false, cause: `containment: ${breach}` };
-      return commitStep(runtime, meta, ensured.path, `factory: ${task.slug} ${step.id} r${state.round}`);
+      const settled = await commitStep(runtime, meta, ensured.path, `factory: ${task.slug} ${step.id} r${state.round}`);
+      // Compact where the session ends, so the stored ref is already compacted
+      // when a later fix turn resumes it. An infra/refusal stop delivers no
+      // outcome; that session is not kept.
+      if (!outcome || !live) return settled;
+      const compacted = await compactSession(runtime, live);
+      return compacted ? { ...settled, session: compacted } : settled;
     },
   });
   if (breach) {

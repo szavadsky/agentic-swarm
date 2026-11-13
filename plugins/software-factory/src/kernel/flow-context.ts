@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { SessionRef } from "../harness/types.js";
+import { portable, type Harness, type ModelRef, type SessionRef } from "../harness/types.js";
 import { preexistingRed, recordedBaseGates } from "./baseline.js";
 import { formatFailingChecks, newGateFailures } from "./gates.js";
 import { formatConcerns } from "./record.js";
@@ -10,14 +10,18 @@ import type {
   StepRecord,
   TaskFile,
   TaskState,
+  Timeouts,
 } from "./types.js";
 
+/** Everything one turn needs to run: the resolved alias, harness, model and its own limits. */
 export interface RoleTarget {
   role: string;
   alias: string;
-  harnessId: string;
-  model: { id: string; effort?: string };
+  harness: Harness;
+  model: ModelRef;
   effort?: string;
+  fallbacks?: string[];
+  timeouts?: Timeouts;
 }
 
 function bySeq(a: StepRecord, b: StepRecord): number {
@@ -70,19 +74,28 @@ export function isFixTurn(flow: FlowDefinition, state: TaskState, stepId: string
   return flow.steps[0]?.id === stepId && (state.round > 1 || state.gateFix === true);
 }
 
-/** Resolves a role to its alias and harness; flows branch on this, never on a harness id. */
-export function resolveRole(runtime: KernelRuntime, role: string): RoleTarget {
+/**
+ * Resolves a role to its alias, harness and model. A task tier names an alias
+ * directly (`default` and absent mean no override); flows branch on this,
+ * never on a harness id.
+ */
+export function resolveRole(runtime: KernelRuntime, role: string, tier?: string): RoleTarget {
   const roleConfig = runtime.configs.process.roles[role];
   if (!roleConfig) throw new Error(`process config has no role "${role}"`);
-  const aliasName = roleConfig.alias ?? role;
+  const override = tier && tier !== "default" ? tier : undefined;
+  const aliasName = override ?? roleConfig.alias ?? role;
   const alias = runtime.configs.run.aliases[aliasName];
   if (!alias) throw new Error(`run config has no alias "${aliasName}" (needed by role "${role}")`);
+  const harness = runtime.harnesses.get(alias.harness);
+  if (!harness) throw new Error(`no harness "${alias.harness}" registered for alias "${aliasName}"`);
   return {
     role,
     alias: aliasName,
-    harnessId: alias.harness,
+    harness,
     model: { id: alias.model, ...(alias.effort ? { effort: alias.effort } : {}) },
     effort: alias.effort,
+    fallbacks: alias.fallbacks,
+    timeouts: alias.timeouts,
   };
 }
 
@@ -101,10 +114,12 @@ function stepRole(runtime: KernelRuntime, task: TaskFile, state: TaskState, step
 }
 
 export function stepTarget(runtime: KernelRuntime, task: TaskFile, state: TaskState, stepId: string): RoleTarget {
-  return resolveRole(runtime, stepRole(runtime, task, state, stepId));
+  // A task tier escalates the producer; review keeps the reviewer alias.
+  const step = findStep(flowOf(runtime, task), stepId);
+  return resolveRole(runtime, stepRole(runtime, task, state, stepId), step.review ? undefined : task.tier);
 }
 
-/** Resume + compact the last session for this alias in this worktree. */
+/** Resume the last session for this alias when it is portable to the alias's harness. */
 export async function resumeSessionFor(
   runtime: KernelRuntime,
   task: TaskFile,
@@ -118,16 +133,30 @@ export async function resumeSessionFor(
     .at(-1)?.session;
   if (!prior) return undefined;
   if (path.resolve(prior.cwd) !== path.resolve(worktree)) return undefined;
-  if (prior.compacted) return prior;
-  const harness = runtime.harnesses.get(prior.harness);
-  if (!harness) return prior;
-  try {
-    const caps = await harness.caps(prior.model);
-    if (caps.compact !== "none" && harness.compact) return await harness.compact(prior);
-  } catch {
-    // Cache hygiene only; an uncompacted resume is still a valid session.
-  }
+  // The alias may route elsewhere now (rotation, a changed run config): a
+  // session is only portable to the harness that recorded it. Compaction is not
+  // done here — a session is compacted by the turn that ended it.
+  if (!portable(prior.harness, aliasHarness(runtime, alias))) return undefined;
   return prior;
+}
+
+function aliasHarness(runtime: KernelRuntime, alias: string): string {
+  const configured = runtime.configs.run.aliases[alias];
+  if (!configured) throw new Error(`run config has no alias "${alias}"`);
+  return configured.harness;
+}
+
+/** Compaction is cache hygiene, not a gate; a failure keeps the uncompacted ref. */
+export async function compactSession(runtime: KernelRuntime, session: SessionRef): Promise<SessionRef | undefined> {
+  const harness = runtime.harnesses.get(session.harness);
+  if (!harness?.compact) return undefined;
+  try {
+    const caps = await harness.caps(session.model);
+    if (caps.compact === "none") return undefined;
+    return await harness.compact(session);
+  } catch {
+    return undefined;
+  }
 }
 
 export async function followUpSession(

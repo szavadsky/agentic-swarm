@@ -1,7 +1,7 @@
 import yaml from "yaml";
 import { addUsage, zeroUsage } from "../harness/usage.js";
 import type { Usage } from "../harness/types.js";
-import { pricedUsage, type PriceTable } from "./pricing.js";
+import { pricedRecord, type PriceTable } from "./pricing.js";
 import type { ArtifactStore, FlowDefinition, State, StepRecord } from "./types.js";
 import type { SummaryStatus } from "./summary.js";
 
@@ -69,7 +69,7 @@ export interface IterationMetrics {
   architect: ArchitectMetrics;
   unpricedTurns: number;
   incidents: IncidentCounts;
-  /** Parks whose cause names no-progress; the only loop signal in kernel-0. */
+  /** Parks that name no-progress or an empty diff; the loop signals in kernel-0. */
   loopIncidents: number;
   /** Steers moved from inbox to processed during this iteration. */
   humanInterventions: number;
@@ -195,6 +195,16 @@ function parkIncidents(all: StepRecord[], incidents: IncidentCounts): void {
   }
 }
 
+/**
+ * An empty-diff park is a loop signal: the turn consumed budget without
+ * producing work. A spike's empty turn is a normal `finish` record, not a park,
+ * so it never reaches this count.
+ */
+function emptyDiffParks(all: StepRecord[]): number {
+  return all.filter((r) => r.step === "park" && r.endedAt && /^empty-diff:/i.test(r.cause ?? ""))
+    .length;
+}
+
 /** One iteration's spend and incidents, shared by `metrics.yaml` and its summary. */
 export function iterationMetrics(
   n: number,
@@ -212,7 +222,7 @@ export function iterationMetrics(
   const architect: ArchitectMetrics = emptyArchitect();
 
   for (const rec of recs) {
-    const priced = pricedUsage(rec.usage, rec.model?.id, prices);
+    const priced = pricedRecord(rec, prices);
     const part = priced.usage;
     const unpriced = priced.costKnown ? 0 : 1;
     const promptBytes = rec.promptBytes ?? 0;
@@ -280,7 +290,7 @@ export function iterationMetrics(
     architect,
     unpricedTurns,
     incidents,
-    loopIncidents: incidents.noProgressParks,
+    loopIncidents: incidents.noProgressParks + emptyDiffParks(all),
     humanInterventions,
   };
 }

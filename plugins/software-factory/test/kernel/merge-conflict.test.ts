@@ -60,6 +60,37 @@ describe("merge conflicts", () => {
     }
   }, 60_000);
 
+  it("keeps a no-route infra stop's details when the conflict attempt fails", async () => {
+    const { repo, goal } = setupFlowRepo();
+    const checkout = goalCheckout(repo, goal);
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      scriptConflict(harness, repo, checkout);
+      harness.script((req) =>
+        fakeTurnResult(req, {
+          stop: {
+            kind: "infra",
+            cause: "auth",
+            details: "provider.no-route Model unavailable: opencode/does-not-exist-free",
+          },
+        })
+      );
+
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("task", { scope: ["conflict.txt"] }));
+      const result = await runDispatch(runtime, { iteration: 1 });
+      expect(result.reason).toBe("infra");
+      expect(result.cause).toBe(
+        "task: auth: provider.no-route Model unavailable: opencode/does-not-exist-free"
+      );
+
+      const state = derive(await runtime.store.listTasks(), await runtime.store.listRecords(), runtime.configs.process.flows);
+      expect(state.tasks.task!.status).toBe("ready");
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
   it("parks with conflict when the implementer attempt leaves the merge unresolved", async () => {
     const { repo, goal } = setupFlowRepo();
     const checkout = goalCheckout(repo, goal);

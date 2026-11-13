@@ -5,6 +5,7 @@ import yaml from "yaml";
 import { git } from "../core/git/exec.js";
 import { writeTextAtomic } from "../core/records/io.js";
 import { configFilePaths, loadConfigs, repoConfigSchema, resolveGoalPaths } from "../kernel/config.js";
+import { summaryRelPath } from "../kernel/context-pack.js";
 import { derive } from "../kernel/derive.js";
 import { createFolderStore } from "../kernel/store.js";
 import type { State } from "../kernel/types.js";
@@ -84,7 +85,7 @@ export async function statusGoal(repo: string, goal: string): Promise<StatusResu
     .filter((n) => Number.isInteger(n) && n > 0)
     .sort((a, b) => b - a);
   for (const n of iterations) {
-    const rel = `iterations/${n}/summary.md`;
+    const rel = summaryRelPath(n);
     if (await store.readFile(rel)) {
       lastSummary = path.join(paths.goalDir, rel);
       break;

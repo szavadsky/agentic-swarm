@@ -96,6 +96,8 @@ export const aliasSchema = z
     model: z.string().min(1),
     effort: z.string().min(1).optional(),
     fallbacks: z.array(z.string().min(1)).default([]),
+    /** Run-config alias the PM ladder climbs to after this alias's tier fails. */
+    escalateTo: z.string().min(1).optional(),
     /** Per-alias turn bounds; the defaults cover a full test-suite run. */
     timeouts: z
       .object({
@@ -302,16 +304,9 @@ export function resolveGoalPaths(configs: ConfigBundle, repoRoot: string, goal: 
 }
 
 /**
- * The optional per-iteration USD brake. `runConfigSchema` parses it, while the
- * hand-written `RunConfig["limits"]` does not declare it; this accessor is the
- * one place the parsed shape and that type meet. It goes away once
- * `RunConfig["limits"]` and `Limits` (types.ts) declare `iterationUsd` and
- * `toLimits` maps it: dispatch then reads `runtime.limits.iterationUsd`.
+ * Everything `next` and dispatch need from the three layers. The drain limits
+ * are carried here, so no caller has to reach back into the config for them.
  */
-export function iterationUsdBrake(configs: ConfigBundle): number | undefined {
-  return (configs.run.limits as RunConfig["limits"] & { iterationUsd?: number }).iterationUsd;
-}
-
 export function toLimits(configs: ConfigBundle): Limits {
   const flows: Limits["flows"] = {};
   for (const [name, flow] of Object.entries(configs.process.flows)) {
@@ -327,6 +322,7 @@ export function toLimits(configs: ConfigBundle): Limits {
     iterationWallMs: configs.run.limits.wallMinutes
       ? Math.round(configs.run.limits.wallMinutes * 60_000)
       : undefined,
+    iterationUsd: configs.run.limits.iterationUsd,
   };
 }
 

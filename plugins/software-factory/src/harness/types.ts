@@ -100,6 +100,15 @@ export type TurnResult = {
   transcript?: string;
 };
 
+/**
+ * Whether a session recorded by `from` may be resumed by `to`. Portability is
+ * directional and only same-harness edges are proven: any other pair starts de
+ * novo with the rendered prompt.
+ */
+export function portable(from: string, to: string): boolean {
+  return from === to;
+}
+
 export interface Harness {
   id: string;
   /** Probed at pre-flight, per model. */

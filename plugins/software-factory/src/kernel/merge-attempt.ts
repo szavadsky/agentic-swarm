@@ -87,7 +87,7 @@ export async function attemptConflictMerge(
 
   const flow = runtime.configs.process.flows[task.flow];
   const roleName = flow?.steps.find((s) => !s.review)?.role ?? "implementer";
-  const target = resolveRole(runtime, roleName);
+  const target = resolveRole(runtime, roleName, task.tier);
   const base = records.filter((r) => r.slug === task.slug && r.actor === "agent" && r.base).sort((a, b) => a.seq - b.seq)[0]?.base;
   const vars = flow
     ? promptVars(runtime, task, ensured.path, records, state.round, flow)
@@ -103,7 +103,7 @@ export async function attemptConflictMerge(
   const contained = await containmentSnapshot(runtime, ensured.path);
   let breach: string | undefined;
   const result = await runAgentTurn(runtime, {
-    role: target.role,
+    target,
     cwd: ensured.path,
     meta: {
       iteration,
@@ -135,7 +135,9 @@ export async function attemptConflictMerge(
   const stop = result.record.stop;
   if (stop?.kind === "infra") {
     await abortMerge(ensured.path);
-    return { ok: false, infra: { kind: "infra", cause: stop.cause } };
+    // Verbatim: `details` is already scrubbed and capped by the classifier.
+    const cause = stop.details ? `${stop.cause}: ${stop.details}` : stop.cause;
+    return { ok: false, infra: { kind: "infra", cause } };
   }
   if (stop?.kind === "cancelled") {
     await abortMerge(ensured.path);

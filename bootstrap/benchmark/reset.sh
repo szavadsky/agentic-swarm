@@ -18,7 +18,7 @@ if [ "$#" -ne 1 ]; then
 fi
 
 kit="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
-repo="$(git -C "$kit" rev-parse --show-toplevel)"
+repo="$(realpath -- "$(git -C "$kit" rev-parse --show-toplevel)")"
 dest="$(realpath -m -- "$1")"
 intent="$repo/plugins/software-factory/docs/runs/omp-workspaces/INTENT.md"
 factory="$repo/plugins/software-factory/bin/factory.ts"
@@ -27,7 +27,8 @@ target_rev="572a6e0"
 target_tree="1379b0fd46fc07fcf2f26a80c67d7a47dc84cae4"
 
 # rm -rf is only safe on a named directory: reject filesystem/one-level paths
-# (/tmp, /home) and any directory that contains this checkout or $HOME.
+# (/tmp, /home), any directory that contains this checkout or $HOME, and any
+# directory inside this checkout (reset.sh bootstrap would delete tracked files).
 if [ "$(printf '%s' "$dest" | tr -cd / | wc -c)" -lt 2 ]; then
   echo "refusing to delete $dest: use a directory such as /tmp/bench-omp" >&2
   exit 2
@@ -41,6 +42,12 @@ for kept in "${HOME:-}" "$repo"; do
       ;;
   esac
 done
+case "$dest/" in
+  "$repo"/*)
+    echo "refusing to delete $dest: it is inside this checkout ($repo)" >&2
+    exit 2
+    ;;
+esac
 
 # Serial runs: a live launch holds <dest>/runtime/worktrees/.factory-runtime/locks.
 # Deleting its runtime under it would corrupt the run, so refuse while it is live.
@@ -84,9 +91,11 @@ echo "tree: $tree"
 cp "$kit/target-repo.yaml" "$dest/target/.factory/repo.yaml"
 bun "$factory" init --repo "$dest/target" --goal omp-workspaces --intent "$intent"
 
-echo "gates: offline install, typecheck, test"
+echo "gates: offline install, typecheck, test (TMPDIR=$dest/gates-tmp)"
+mkdir -p "$dest/gates-tmp"
 (
   cd "$dest/target/plugins/software-factory"
+  export TMPDIR="$dest/gates-tmp"
   bun install --offline --frozen-lockfile
   bun run typecheck
   bun test

@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import yaml from "yaml";
 import { loadConfigs, resolveGoalPaths } from "../kernel/config.js";
@@ -102,6 +103,7 @@ export async function benchmarkGoal(repo: string, goal: string): Promise<Benchma
   const repoRoot = path.resolve(repo);
   const configs = loadConfigs(repoRoot);
   const paths = resolveGoalPaths(configs, repoRoot, goal);
+  if (!fs.existsSync(paths.goalDir)) throw new Error(`goal "${goal}" has no directory at ${paths.goalDir}`);
   const store = createFolderStore(paths.goalDir, path.dirname(paths.goalDir));
   const metricsPath = path.join(paths.goalDir, "metrics.yaml");
   const text = await store.readFile("metrics.yaml");

@@ -73,12 +73,21 @@ worktreeRoot: ~/.local/share/factory/worktrees
 scouts: { model: opencode-go/deepseek-v4.1-flash }   # omp architect subagents
 ```
 
+An alias may carry `escalateTo: <alias>` to name the PM's next rung. A PM turn
+that is not usable gets a fresh retry on the same alias; after two failed turns
+the ladder climbs to `escalateTo`, which carries a broader mandate and may stop
+with one question for the architect. Without `escalateTo` the iteration blocks
+with every rung in the summary. `fallbacks` stay infrastructure-only (same
+harness, quota and crash), so escalation is model routing, not a retry.
+
 `prices` maps a model id to USD per million tokens: `input`, `cachedInput`,
 `output` and `reasoning`, all four required. A turn costs its harness's
-non-zero figure, else the table's price for the model. A model absent from the
-table is unpriced — unknown, never `$0`; a free model is a known `$0` only
-through an explicit all-zero entry. opencode reports `0` for turns it cannot
-price, so the table is what separates that from free.
+non-zero figure, else the table's price for the model. Counters that are all
+zero mean the harness reported no usage, so the turn stays unpriced even when
+its model has a table entry. A model absent from the table is unpriced —
+unknown, never `$0`; a free model is a known `$0` only through an explicit
+all-zero entry. opencode reports `0` for turns it cannot price, so the table is
+what separates that from free.
 
 `limits.iterationUsd` is an optional brake: once the iteration's priced spend
 reaches it, dispatch drains — no new task starts; tasks already started finish
@@ -114,9 +123,13 @@ Each iteration writes exactly one `iterations/<n>/summary.md` (also copied to
 the outbox): status, merged/finished/parked tasks, remarkable concerns,
 assumptions and debt. `metrics.yaml` is rebuilt from the usage records:
 architect launches, architect cost and token share, cost per merged task, loop
-incidents (no-progress parks), human interventions (processed steers), and turns
-and tokens by role. Costs come from the price table; a turn neither the harness
-nor the table priced is counted as unpriced, so a total containing one is
-partial and cost per merged task is unset rather than `$0`. A free model prices
-to a known `$0` through its all-zero table entry, and its tokens still carry the
-signal. `factory benchmark --goal <name>` prints these aggregates as rows.
+incidents (no-progress and empty-diff parks; a spike's empty finish is not one),
+human interventions (processed steers), and turns and tokens by role. Costs come
+from the price table, and every retry or fallback call the harness reports in
+`attempts` is priced too, each call once. A turn whose counters are all zero
+carries no usage report and is unpriced even when its model has a table entry. A
+turn neither the harness nor the table priced is counted as unpriced, so a total
+containing one is partial and cost per merged task is unset rather than `$0`. A
+free model prices to a known `$0` through its all-zero table entry, and its
+tokens still carry the signal. `factory benchmark --goal <name>` prints these
+aggregates as rows.

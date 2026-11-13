@@ -57,7 +57,7 @@ export interface LaunchResult {
   state: State;
   lastSummary?: string;
   stop: LaunchStop;
-  /** Why the launch stopped before any iteration could run. */
+  /** Why the launch stopped: the pre-iteration failure, or the infrastructure stop that ended it. */
   cause?: string;
   interruptedBy?: DrainSignal;
   recoveredRecords: number;
@@ -199,6 +199,7 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
     let iterations = 0;
     let lastSummary: string | undefined;
     let ended: "infra" | "cancelled" | undefined;
+    let stopCause: string | undefined;
 
     for (let i = 0; i < runtime.limits.iterations; i++) {
       if (signals.shouldStop()) break;
@@ -219,12 +220,12 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
           dispatchCause = dispatched.cause;
           if (dispatched.reason === "infra" || dispatched.reason === "cancelled") {
             ended = dispatched.reason;
-            dispatchCause =
-              dispatched.reason === "infra"
-                ? `infrastructure stop during iteration ${iteration}: ${
-                    dispatched.cause ?? "unknown cause"
-                  }; relaunch to retry`
-                : dispatchCause;
+            if (dispatched.reason === "infra") {
+              dispatchCause = `infrastructure stop during iteration ${iteration}: ${
+                dispatched.cause ?? "unknown cause"
+              }; relaunch to retry`;
+              stopCause = dispatchCause;
+            }
           }
         }
         const dispatchStopped = ended !== undefined;
@@ -268,6 +269,7 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
       state,
       lastSummary,
       stop,
+      cause: stopCause,
       interruptedBy: signals.interruptedBy,
       recoveredRecords,
     };
