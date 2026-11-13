@@ -198,3 +198,8 @@ Verbatim, newest last; each with what it changed.
 - Opus window verified live (`OPUS_OK` via omp). Pin `29936476b4b7` (335 green). Goal `self` in the v3 worktree, intent = manifesto + delta; repo config committed (`7bdc277`) with setup + typecheck/test gates on `plugins/software-factory`.
 - Run config `self.yaml`: architect Opus 5.5 high via omp (fallback go-deepseek), implementer free deepseek → go-deepseek, reviewer free minimax → go-deepseek, PM/digest beam-free → go-deepseek, escalation Sonnet, scouts pinned go-deepseek.
 - Escalation rule in force: stop and ask if this launch's architect cost exceeds $5.
+
+### 2026-11-13 — self-run iteration 1: 0 merged, architect diagnosed the red base ($1.25)
+- 11 min, exit 0. The architect's turn ended before writing the plan — but with verified findings: (1) my gate form `bun run typecheck --cwd X` is wrong ("Script not found"; correct: `bun run --cwd X typecheck`); (2) REAL factory bug: `test/helpers/tmp-repo.ts` cleanup sweeps every `preflight-probe-*` in tmpdir, deleting the baseline's own live worktree — the suite deletes itself when run under the factory (my direct runs passed only because no baseline existed concurrently).
+- Architect cost $1.25 (under the $5 bound). Remarkables already direct iteration 2: gates-hermetic first, measurement milestone (cost-pricing, prompt-size, metrics-incidents), acpx-probe spike (D18/D19), prune candidates, no `just-implement` flow yet, benchmark report command.
+- Human intervention 3 (blocks next launch): fixed both by hand — gate forms in `.factory/repo.yaml`, tmp sweep now deletes only dirs older than the process. Relaunched as iteration 2 (bg_122).
