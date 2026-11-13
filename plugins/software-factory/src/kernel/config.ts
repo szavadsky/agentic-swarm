@@ -1,79 +1,167 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import yaml from "yaml";
-import type { ConfigBundle, GoalPaths, Limits, ProcessConfig, RepoConfig, RunConfig } from "./types.js";
+import { formatFindings, type Finding } from "./findings.js";
+import type {
+  ConfigBundle,
+  ConfigFiles,
+  GoalPaths,
+  Limits,
+  ProcessConfig,
+  RepoConfig,
+  RunConfig,
+} from "./types.js";
 
 const packageRoot = fileURLToPath(new URL("../..", import.meta.url));
 
-const identitySchema = z.object({ name: z.string(), email: z.string() });
+const identitySchema = z.object({ name: z.string().min(1), email: z.string().min(1) }).strict();
+const gateSchema = z.object({ id: z.string().min(1), command: z.string().min(1) }).strict();
 
 /** `.factory/repo.yaml` — the tracked layer: branches, paths, gates. */
-export const repoConfigSchema = z.object({
-  baseBranch: z.string().min(1).default("main"),
-  artifactRoot: z.string().min(1).default(".factory/artifacts"),
-  worktreeRoot: z.string().optional(),
-  identity: identitySchema.optional(),
-  setup: z.array(z.string().min(1)).default([]),
-  gates: z
-    .array(z.object({ id: z.string().min(1), command: z.string().min(1) }))
-    .default([]),
-});
+export const repoConfigSchema = z
+  .object({
+    baseBranch: z.string().min(1).default("main"),
+    artifactRoot: z.string().min(1).default(".factory/artifacts"),
+    worktreeRoot: z.string().min(1).optional(),
+    identity: identitySchema.optional(),
+    setup: z.array(z.string().min(1)).default([]),
+    gates: z.array(gateSchema).default([]),
+  })
+  .strict();
 
 /** One flow step; `review` marks the step that consumes a review round. */
-export const flowStepSchema = z.object({
-  id: z.string().min(1),
-  role: z.string().min(1),
-  review: z.boolean().default(false),
-});
+export const flowStepSchema = z
+  .object({
+    id: z.string().min(1),
+    role: z.string().min(1),
+    review: z.boolean().default(false),
+  })
+  .strict();
 
-export const flowSchema = z.object({
-  steps: z.array(flowStepSchema).min(1),
-  reviewRounds: z.number().int().positive().default(2),
-});
+export const flowSchema = z
+  .object({
+    steps: z.array(flowStepSchema).min(1),
+    reviewRounds: z.number().int().positive().default(2),
+  })
+  .strict();
 
 /** Process layer: package default deep-merged with an optional repo override. */
-export const processConfigSchema = z.object({
-  flows: z.record(z.string(), flowSchema).default({}),
-  roles: z
-    .record(z.string(), z.object({ prompt: z.string().min(1), alias: z.string().optional() }))
-    .default({}),
-  itemTurns: z.number().int().positive().default(8),
-  calibration: z.string().optional(),
-  promptsDir: z.string().optional(),
-});
+export const processConfigSchema = z
+  .object({
+    flows: z.record(z.string(), flowSchema).default({}),
+    roles: z
+      .record(
+        z.string(),
+        z.object({ prompt: z.string().min(1), alias: z.string().min(1).optional() }).strict()
+      )
+      .default({}),
+    itemTurns: z.number().int().positive().default(8),
+    calibration: z.string().optional(),
+    promptsDir: z.string().min(1).optional(),
+  })
+  .strict();
 
-/** Run layer: not tracked; aliases, limits, session store. */
-export const aliasSchema = z.object({
-  harness: z.string().min(1),
-  model: z.string().min(1),
-  effort: z.string().optional(),
-  fallbacks: z.array(z.string()).default([]),
-});
+/** Run layer: not tracked; aliases, limits, session store, scout pin. */
+export const aliasSchema = z
+  .object({
+    harness: z.string().min(1),
+    model: z.string().min(1),
+    effort: z.string().min(1).optional(),
+    fallbacks: z.array(z.string().min(1)).default([]),
+  })
+  .strict();
 
-export const runConfigSchema = z.object({
-  aliases: z.record(z.string(), aliasSchema).default({}),
-  limits: z
-    .object({
-      concurrency: z.number().int().positive().default(2),
-      perHarness: z.record(z.string(), z.number().int().positive()).default({}),
-      iterations: z.number().int().positive().default(1),
-    })
-    .default(() => ({ concurrency: 2, perHarness: {}, iterations: 1 })),
-  sessions: z
-    .object({
-      /** Empty resolves to <worktreeRoot>/.sessions, outside the repo. */
-      dir: z.string().default(""),
-      keepRuns: z.number().int().nonnegative().default(5),
-    })
-    .default(() => ({ dir: "", keepRuns: 5 })),
-  worktreeRoot: z.string().optional(),
-});
+export const runConfigSchema = z
+  .object({
+    aliases: z.record(z.string(), aliasSchema).default({}),
+    limits: z
+      .object({
+        concurrency: z.number().int().positive().default(2),
+        perHarness: z.record(z.string(), z.number().int().positive()).default({}),
+        iterations: z.number().int().positive().default(1),
+      })
+      .strict()
+      .default(() => ({ concurrency: 2, perHarness: {}, iterations: 1 })),
+    sessions: z
+      .object({
+        /** Empty resolves to <worktreeRoot>/.sessions, outside the repo. */
+        dir: z.string().default(""),
+        keepRuns: z.number().int().positive().default(5),
+      })
+      .strict()
+      .default(() => ({ dir: "", keepRuns: 5 })),
+    worktreeRoot: z.string().min(1).optional(),
+    scouts: z.object({ model: z.string().min(1), effort: z.string().min(1).optional() }).strict().optional(),
+  })
+  .strict();
 
-function readYamlFile(filePath: string): unknown {
-  if (!fs.existsSync(filePath)) return undefined;
-  return yaml.parse(fs.readFileSync(filePath, "utf8")) ?? undefined;
+export class ConfigError extends Error {
+  readonly findings: Finding[];
+  readonly report: string;
+
+  constructor(findings: Finding[]) {
+    const report = formatFindings(`configuration is invalid (${findings.length} violation(s)):`, findings);
+    super(report);
+    this.name = "ConfigError";
+    this.findings = findings;
+    this.report = report;
+  }
+}
+
+export interface LoadConfigOptions {
+  /** Overrides run-config launch limit (--iterations). */
+  iterations?: number;
+  /** Explicit run-config path; defaults to <repo>/.factory/run.yaml. */
+  runConfigPath?: string;
+}
+
+export function configFilePaths(repoRoot: string, opts: LoadConfigOptions = {}): ConfigFiles {
+  const root = path.resolve(repoRoot);
+  return {
+    repo: path.join(root, ".factory", "repo.yaml"),
+    processDefault: path.join(packageRoot, "config", "process.yaml"),
+    processOverride: path.join(root, ".factory", "process.yaml"),
+    run: path.resolve(
+      opts.runConfigPath ?? globalThis.process.env.FACTORY_RUN_CONFIG ?? path.join(root, ".factory", "run.yaml")
+    ),
+  };
+}
+
+interface Layer {
+  data?: unknown;
+  findings: Finding[];
+}
+
+function readLayer(file: string): Layer {
+  if (!fs.existsSync(file)) return { findings: [] };
+  try {
+    return { data: yaml.parse(fs.readFileSync(file, "utf8")) ?? undefined, findings: [] };
+  } catch (err) {
+    return {
+      findings: [{ file, key: "(yaml)", message: (err as Error).message.split("\n")[0] ?? "parse error" }],
+    };
+  }
+}
+
+function parseLayer<T>(
+  schema: z.ZodType<T>,
+  data: unknown,
+  fileFor: string | ((issuePath: PropertyKey[]) => string),
+  findings: Finding[]
+): T | undefined {
+  const result = schema.safeParse(data ?? {});
+  if (result.success) return result.data;
+  for (const issue of result.error.issues) {
+    findings.push({
+      file: typeof fileFor === "string" ? fileFor : fileFor(issue.path),
+      key: issue.path.length > 0 ? issue.path.join(".") : "(root)",
+      message: issue.message,
+    });
+  }
+  return undefined;
 }
 
 /** Arrays replace; plain objects merge key by key. */
@@ -90,32 +178,56 @@ function deepMerge(base: unknown, override: unknown): unknown {
   return override;
 }
 
-export interface LoadConfigOptions {
-  /** Overrides run-config launch limit (--iterations). */
-  iterations?: number;
-  /** Explicit run-config path; defaults to <repo>/.factory/run.yaml. */
-  runConfigPath?: string;
+function processFileFor(data: unknown, issuePath: PropertyKey[], files: ConfigFiles): string {
+  const key = issuePath[0];
+  if (typeof key === "string" && data && typeof data === "object" && key in data) {
+    return files.processOverride;
+  }
+  return files.processDefault;
 }
 
 /**
- * Loads the three layers. Missing files fall back to schema defaults; a
- * missing run config leaves aliases empty so pre-flight can name what is
- * unresolved instead of inventing a harness.
+ * Loads the three layers into one report. Missing files take schema defaults;
+ * a missing run config leaves aliases empty so pre-flight names the roles
+ * instead of inventing a harness.
  */
 export function loadConfigs(repoRoot: string, opts: LoadConfigOptions = {}): ConfigBundle {
-  const repo = repoConfigSchema.parse(readYamlFile(path.join(repoRoot, ".factory", "repo.yaml")) ?? {});
-  const processBase = readYamlFile(path.join(packageRoot, "config", "process.yaml"));
-  const processOverride = readYamlFile(path.join(repoRoot, ".factory", "process.yaml"));
-  const processConfig = processConfigSchema.parse(deepMerge(processBase ?? {}, processOverride) ?? {});
-  const runPath =
-    opts.runConfigPath ?? globalThis.process.env.FACTORY_RUN_CONFIG ?? path.join(repoRoot, ".factory", "run.yaml");
-  const run = runConfigSchema.parse(readYamlFile(runPath) ?? {});
-  if (opts.iterations !== undefined) run.limits.iterations = opts.iterations;
+  const files = configFilePaths(repoRoot, opts);
+  const findings: Finding[] = [];
+  const repoLayer = readLayer(files.repo);
+  const baseLayer = readLayer(files.processDefault);
+  const overrideLayer = readLayer(files.processOverride);
+  const runLayer = readLayer(files.run);
+  findings.push(...repoLayer.findings, ...baseLayer.findings, ...overrideLayer.findings, ...runLayer.findings);
+
+  const repo = parseLayer(repoConfigSchema, repoLayer.data, files.repo, findings);
+  const processMerged = deepMerge(baseLayer.data ?? {}, overrideLayer.data);
+  const processData = parseLayer(
+    processConfigSchema,
+    processMerged,
+    (issuePath) => processFileFor(overrideLayer.data, issuePath, files),
+    findings
+  );
+  const run = parseLayer(runConfigSchema, runLayer.data, files.run, findings);
+  if (findings.length > 0) throw new ConfigError(findings);
+
+  if (opts.iterations !== undefined) run!.limits.iterations = opts.iterations;
   return {
     repo: repo as RepoConfig,
-    process: processConfig as ProcessConfig,
+    process: processData as ProcessConfig,
     run: run as RunConfig,
+    files,
   };
+}
+
+export function expandHome(value: string): string {
+  if (value === "~") return os.homedir();
+  if (value.startsWith("~/") || value.startsWith("~\\")) return path.join(os.homedir(), value.slice(2));
+  return value;
+}
+
+function fromRoot(root: string, value: string): string {
+  return path.resolve(root, expandHome(value));
 }
 
 export function resolveGoalPaths(configs: ConfigBundle, repoRoot: string, goal: string): GoalPaths {
@@ -123,18 +235,18 @@ export function resolveGoalPaths(configs: ConfigBundle, repoRoot: string, goal: 
     throw new Error(`goal name "${goal}" must be kebab-case (a-z, 0-9, dashes)`);
   }
   const root = path.resolve(repoRoot);
-  const worktreeRoot = path.resolve(
-    root,
-    configs.run.worktreeRoot ?? configs.repo.worktreeRoot ?? path.join("..", ".factory-worktrees", path.basename(root))
-  );
+  const configuredWorktree = configs.run.worktreeRoot ?? configs.repo.worktreeRoot;
+  const worktreeRoot = configuredWorktree
+    ? fromRoot(root, configuredWorktree)
+    : path.resolve(root, "..", ".factory-worktrees", path.basename(root));
   return {
     repoRoot: root,
-    goalDir: path.resolve(root, configs.repo.artifactRoot, goal),
+    goalDir: fromRoot(root, path.join(expandHome(configs.repo.artifactRoot), goal)),
     goalCheckout: path.join(worktreeRoot, goal),
     integrationBranch: `factory/${goal}`,
     worktreeRoot,
     sessionsDir: configs.run.sessions.dir
-      ? path.resolve(root, configs.run.sessions.dir)
+      ? fromRoot(root, configs.run.sessions.dir)
       : path.join(worktreeRoot, ".sessions"),
   };
 }

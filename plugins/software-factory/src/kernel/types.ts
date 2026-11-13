@@ -210,12 +210,23 @@ export interface RunConfig {
   limits: { concurrency: number; perHarness: Record<string, number>; iterations: number };
   sessions: { dir: string; keepRuns: number };
   worktreeRoot?: string;
+  /** Cheap model pinned for architect subagents. */
+  scouts?: { model: string; effort?: string };
+}
+
+/** Absolute paths of the three layers, for findings that must name the file. */
+export interface ConfigFiles {
+  repo: string;
+  processDefault: string;
+  processOverride: string;
+  run: string;
 }
 
 export interface ConfigBundle {
   repo: RepoConfig;
   process: ProcessConfig;
   run: RunConfig;
+  files?: ConfigFiles;
 }
 
 export interface GoalPaths {
