@@ -33,6 +33,8 @@ export interface BoundaryResult {
   stop?: { cause: string; details?: string };
   outcome?: Outcome;
   packPath?: string;
+  /** Inbox steer ids the architect saw; dispatch must not steer them again. */
+  seenSteers: string[];
 }
 
 export interface BoundaryOptions {
@@ -114,6 +116,7 @@ export async function runBoundary(
   const digestPath = digestRel ? path.join(runtime.store.goalDir, digestRel) : undefined;
 
   const steers = await scanInbox(runtime.store);
+  const seenSteers = steers.map((steer) => steer.id);
   const packRel = opts.frontPack ?? contextPackRelPath(iteration);
 
   if (!opts.frontPack) {
@@ -189,6 +192,7 @@ export async function runBoundary(
       cause: `architect modified task file ${touched}; only the PM writes tasks`,
       outcome: result.outcome,
       packPath: packRel,
+      seenSteers,
     };
   }
 
@@ -201,11 +205,12 @@ export async function runBoundary(
       cause,
       outcome: result.outcome,
       packPath: packRel,
+      seenSteers,
     };
   }
 
   if (decision !== "continue") {
-    return { iteration, decision, outcome: result.outcome, packPath: packRel };
+    return { iteration, decision, outcome: result.outcome, packPath: packRel, seenSteers };
   }
 
   const planPath = path.join(runtime.store.goalDir, "plan.md");
@@ -216,6 +221,7 @@ export async function runBoundary(
       cause: `architect continued but ${planPath} does not exist`,
       outcome: result.outcome,
       packPath: packRel,
+      seenSteers,
     };
   }
 
@@ -232,6 +238,7 @@ export async function runBoundary(
       cause: `PM escalated and asked: ${pm.outcome.summary}`,
       outcome: result.outcome,
       packPath: packRel,
+      seenSteers,
     };
   }
   if (pm.status === "infra") {
@@ -244,6 +251,7 @@ export async function runBoundary(
       stop: { cause: pm.stop.cause, details: pm.stop.details },
       outcome: result.outcome,
       packPath: packRel,
+      seenSteers,
     };
   }
   if (pm.status === "exhausted") {
@@ -253,6 +261,7 @@ export async function runBoundary(
       cause: `PM ladder exhausted: ${rungTrace(pm.rungs)}`,
       outcome: result.outcome,
       packPath: packRel,
+      seenSteers,
     };
   }
   return {
@@ -260,5 +269,6 @@ export async function runBoundary(
     decision,
     outcome: result.outcome,
     packPath: packRel,
+    seenSteers,
   };
 }

@@ -240,6 +240,7 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
 
         let boundary: BoundaryResult | undefined;
         let decision: GoalDecision = "continue";
+        let seenSteers: string[] = [];
         if (front.action === "boundary") {
           boundary = await runBoundary(runtime, {
             relaunch: relaunch && i === 0,
@@ -248,6 +249,7 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
           });
           iteration = boundary.iteration;
           decision = boundary.decision;
+          seenSteers = boundary.seenSteers;
           if (boundary.stop) {
             ended = "infra";
             stopCause = `infrastructure stop during iteration ${iteration}: ${infraCause(boundary.stop)}; relaunch to retry`;
@@ -258,7 +260,7 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
         let dispatchCause: string | undefined;
         let dispatched: DispatchResult | undefined;
         if (decision === "continue" && ended === undefined && !signals.shouldStop()) {
-          dispatched = await runDispatch(runtime, { iteration });
+          dispatched = await runDispatch(runtime, { iteration, seenSteers });
           dispatchCause = dispatched.cause;
           if (dispatched.reason === "infra" || dispatched.reason === "cancelled") {
             ended = dispatched.reason;

@@ -1,11 +1,12 @@
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import yaml from "yaml";
 import { FakeHarness, fakeTurnResult, type FakeTurnHandler } from "../../src/harness/fake/index.js";
 import { runBoundary } from "../../src/kernel/boundary.js";
 import { derive } from "../../src/kernel/derive.js";
-import { runDispatch } from "../../src/kernel/dispatch.js";
+import { runDispatch, type DispatchResult } from "../../src/kernel/dispatch.js";
 import { holdsDir, postSteer } from "../../src/kernel/mailbox.js";
 import { task } from "./helpers.js";
 import {
@@ -214,7 +215,7 @@ describe("mid-run steer holds", () => {
       harness.script(implementer("alpha.txt"));
       harness.script(approver("alpha is correct"));
 
-      const dispatched = await runDispatch(runtime, { iteration: 1 });
+      const dispatched = await runDispatch(runtime, { iteration: 1, seenSteers: ["s1"] });
       expect(dispatched.reason).toBe("boundary");
       expect(harness.calls).toHaveLength(2);
       expect((await runtime.store.listRecords()).filter((r) => r.step === "pm")).toEqual([]);
@@ -326,6 +327,212 @@ describe("mid-run steer holds", () => {
       expect(state.tasks.alpha!.status).toBe("parked");
       expect(state.tasks.gamma!.status).toBe("ready");
       expect((await runtime.store.listRecords()).some((r) => r.slug === "gamma")).toBe(false);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("restores a task file the steer turn edits and records the failed guard", async () => {
+    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
+      const taskFile = path.join(runtime.store.tasksDir, "alpha.md");
+      const original = fs.readFileSync(taskFile, "utf8");
+
+      harness.script(
+        implementer("alpha.txt", async () => {
+          await postSteer(runtime.store, "s1", "Structure me; write no task file.");
+        })
+      );
+      harness.script((req, ctx) => {
+        // A malformed file would throw out of the next derive without the guard.
+        fs.writeFileSync(taskFile, "# not a task file\n\nbroken: [\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "tried to rewrite alpha" }));
+        return fakeTurnResult(req);
+      });
+      harness.script(approver("alpha is correct"));
+
+      const dispatched = await runDispatch(runtime, { iteration: 1, seenSteers: [] });
+      expect(dispatched.reason).toBe("boundary");
+      expect(fs.readFileSync(taskFile, "utf8")).toBe(original);
+      expect((await tasks(runtime)).tasks.alpha!.status).toBe("merged");
+
+      const records = await runtime.store.listRecords();
+      const guard = records.find((record) => record.step === "steer-reconcile");
+      expect(guard?.ok).toBe(false);
+      expect(guard?.cause).toContain("tasks/alpha.md");
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("removes a plan the steer turn creates when none existed", async () => {
+    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
+      const planPath = path.join(runtime.store.goalDir, "plan.md");
+      expect(fs.existsSync(planPath)).toBe(false);
+
+      harness.script(
+        implementer("alpha.txt", async () => {
+          await postSteer(runtime.store, "s1", "Structure me; do not plan.");
+        })
+      );
+      harness.script((req, ctx) => {
+        // An empty plan.md would send the next front to the boundary instead of
+        // dispatching the tasks that already exist.
+        fs.writeFileSync(planPath, "# Plan\n\n## smuggled\nPM-authored direction.\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "tried to write a plan" }));
+        return fakeTurnResult(req);
+      });
+      harness.script(approver("alpha is correct"));
+
+      const dispatched = await runDispatch(runtime, { iteration: 1, seenSteers: [] });
+      expect(dispatched.reason).toBe("boundary");
+      expect(fs.existsSync(planPath)).toBe(false);
+      expect((await tasks(runtime)).tasks.alpha!.status).toBe("merged");
+
+      const guard = (await runtime.store.listRecords()).find(
+        (record) => record.step === "steer-reconcile"
+      );
+      expect(guard?.ok).toBe(false);
+      expect(guard?.cause).toContain("plan.md");
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("stops as infra when the steer turn writes a malformed hold", async () => {
+    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 2 } });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
+      await writeTask(runtime, task("beta", { scope: ["beta.txt"] }));
+
+      // Both implement turns start before the first poll; the handler keys off
+      // the worktree so their start order does not decide the script order.
+      const implementOnce: FakeTurnHandler = async (req, ctx) => {
+        const slug = path.basename(req.cwd!);
+        if (slug === "beta") {
+          await sleep(100);
+        }
+        fs.writeFileSync(path.join(req.cwd!, `${slug}.txt`), `${slug}\n`, "utf8");
+        if (slug === "alpha") await postSteer(runtime.store, "s1", "Structure me.");
+        ctx.writeOutcome(outcome({ summary: `${slug} implemented` }));
+        return fakeTurnResult(req);
+      };
+      harness.script(implementOnce);
+      harness.script(implementOnce);
+      harness.script((req, ctx) => {
+        fs.mkdirSync(holdsDir(runtime.store), { recursive: true });
+        fs.writeFileSync(path.join(holdsDir(runtime.store), "s1.yaml"), "slugs: alpha\ngoal: maybe\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "wrote an invalid hold" }));
+        return fakeTurnResult(req);
+      });
+
+      const dispatched = await runDispatch(runtime, { iteration: 1, seenSteers: [] });
+      expect(dispatched.reason).toBe("infra");
+      expect(dispatched.cause).toContain("holds");
+      expect(dispatched.cause).toContain("s1.yaml");
+
+      const records = await runtime.store.listRecords();
+      // The turn already in flight settled instead of being abandoned.
+      expect(
+        records.find((record) => record.slug === "beta" && record.step === "implement")?.outcome
+          ?.status
+      ).toBe("done");
+      expect(records.some((record) => record.step === "merge")).toBe(false);
+      expect((await tasks(runtime)).tasks.beta!.status).not.toBe("merged");
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("does not claim a fresh steer that is still growing across the settle interval", async () => {
+    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    let writer: ReturnType<typeof setInterval> | undefined;
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
+
+      const inbox = path.join(runtime.store.goalDir, "mailbox/inbox");
+      const file = path.join(inbox, "s1.md");
+      let appends = 0;
+      // The file must keep growing until the whole first dispatch resolves:
+      // any pair of passes that sees the same content may claim the steer.
+      writer = setInterval(() => {
+        if (!fs.existsSync(file)) return;
+        fs.appendFileSync(file, " unmerged until I answer.", "utf8");
+        appends += 1;
+      }, 5);
+
+      harness.script(
+        implementer("alpha.txt", () => {
+          fs.mkdirSync(inbox, { recursive: true });
+          fs.writeFileSync(file, "Keep alpha", "utf8");
+        })
+      );
+      harness.script(approver("alpha is correct"));
+
+      let first: DispatchResult;
+      try {
+        first = await runDispatch(runtime, { iteration: 1, seenSteers: [] });
+      } finally {
+        clearInterval(writer);
+      }
+      expect(first.reason).toBe("boundary");
+      // The half-written steer is not claimed on that pass: no PM turn yet and
+      // the drop stays in the inbox for a later reader.
+      expect(
+        (await runtime.store.listRecords()).filter((record) => record.step === "pm")
+      ).toHaveLength(0);
+      expect(fs.existsSync(file)).toBe(true);
+      expect(appends).toBeGreaterThan(0);
+
+      const full = fs.readFileSync(file, "utf8").trim();
+      expect(full).toContain("Keep alpha unmerged until I answer.");
+      harness.script((req, ctx) => {
+        expect(req.prompt).toContain(full);
+        ctx.writeOutcome(outcome({ summary: "structured the settled steer" }));
+        return fakeTurnResult(req);
+      });
+
+      const second = await runDispatch(runtime, { iteration: 2, seenSteers: [] });
+      expect(second.reason).toBe("boundary");
+      expect(
+        (await runtime.store.listRecords()).filter((record) => record.step === "pm")
+      ).toHaveLength(1);
+      expect(harness.calls.filter((call) => call.prompt.includes("Keep alpha"))).toHaveLength(1);
+    } finally {
+      if (writer) clearInterval(writer);
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("stops the iteration as infra on a malformed hold and dispatches nothing", async () => {
+    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
+      await writeTask(runtime, task("gamma", { scope: ["gamma.txt"] }));
+      const dir = holdsDir(runtime.store);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, "s1.yaml"), "slugs: alpha\ngoal: maybe\n", "utf8");
+
+      const dispatched = await runDispatch(runtime, { iteration: 1, seenSteers: [] });
+      expect(dispatched.reason).toBe("infra");
+      expect(dispatched.cause).toContain("s1.yaml");
+      expect(harness.calls).toHaveLength(0);
+      const records = await runtime.store.listRecords();
+      expect(records.filter((record) => record.slug !== undefined)).toEqual([]);
+      expect((await tasks(runtime)).tasks.alpha!.status).toBe("ready");
     } finally {
       cleanupFlowRepo(repo);
     }

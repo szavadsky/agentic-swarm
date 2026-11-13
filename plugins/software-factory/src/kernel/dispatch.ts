@@ -1,7 +1,7 @@
 import { derive } from "./derive.js";
 import { executeTaskAction, type TaskActionResult } from "./flow.js";
 import { stepTarget } from "./flow-context.js";
-import { readHolds, scanInbox, type Hold } from "./mailbox.js";
+import { readHolds, scanInbox, type Hold, type Steer } from "./mailbox.js";
 import { next } from "./next.js";
 import { runSteerPm } from "./pm.js";
 import { pricedRecord, type PriceTable } from "./pricing.js";
@@ -14,6 +14,16 @@ export interface DispatchResult {
   cause?: string;
   /** Completed agent turns in this iteration. */
   turns: number;
+}
+
+export interface DispatchOptions {
+  iteration?: number;
+  /**
+   * The inbox steer ids the boundary's read covered. Anything else present at
+   * dispatch start was dropped after that read, and the architect never saw
+   * it, so it gets a PM steer turn here.
+   */
+  seenSteers?: string[];
 }
 
 interface Running {
@@ -137,7 +147,7 @@ function activeHolds(holds: Hold[], pending: ReadonlySet<string>): ActiveHolds {
  */
 export async function runDispatch(
   runtime: KernelRuntime,
-  opts: { iteration?: number } = {}
+  opts: DispatchOptions = {}
 ): Promise<DispatchResult> {
   const initialTasks = await runtime.store.listTasks();
   const initialRecords = await runtime.store.listRecords();
@@ -157,32 +167,82 @@ export async function runDispatch(
   let drain: string | undefined;
   const usdLimit = runtime.limits.iterationUsd;
 
-  // Steers already in the inbox when dispatch starts are the boundary's: the
-  // architect saw them and only the architect marks them processed. Only drops
-  // after this point get a mid-run PM turn, so a boundary steer never triggers
-  // a second PM consult in the same iteration.
-  const steersAtStart = await scanInbox(runtime.store, { settleMs: 0 });
-  const seenSteers = new Set(steersAtStart.map((steer) => steer.id));
-  let holds = await readHolds(runtime.store);
+  // Only the ids the boundary actually read are the boundary's. A steer that
+  // was not read there never reached the architect, so dispatch must not lose
+  // it: it gets a PM steer turn on the first poll.
+  const seenSteers = new Set(opts.seenSteers ?? []);
+  /** Fresh files seen once but not yet stable: steer id -> last content hash. */
+  const settling = new Map<string, string>();
+
+  let holds: Hold[];
+  try {
+    holds = await readHolds(runtime.store);
+  } catch (err) {
+    // A hold file that cannot be read decides what may merge, so nothing is
+    // dispatched this iteration; the launch surfaces the infra stop.
+    return {
+      reason: "infra",
+      cause: `steer holds: ${(err as Error).message}`,
+      turns: settledTurns(initialRecords, iteration),
+    };
+  }
 
   /**
-   * Polls the inbox between dispatch decisions, never inside a turn. New
-   * steers get exactly one PM turn for the batch; its record lands before the
-   * caller reads records, so its dollars count against the iteration brake.
+   * Polls the inbox between dispatch decisions, never inside a turn. A newly
+   * seen batch gets one settle window for the whole batch; a still-growing
+   * file is remembered by content hash and claimed only once that content
+   * held across a later pass. The batch then gets exactly one PM turn; its
+   * record lands before the caller reads records, so its dollars count against
+   * the iteration brake.
    */
   const pollSteers = async (
     state: State,
     tasks: TaskFile[]
-  ): Promise<{ hold: ActiveHolds; steerTurn: boolean }> => {
+  ): Promise<{ hold: ActiveHolds; steerTurn: boolean; holdError?: string }> => {
     const steers = await scanInbox(runtime.store, { settleMs: 0 });
     const pending = new Set(steers.map((steer) => steer.id));
-    const fresh = steers.filter((steer) => !seenSteers.has(steer.id));
-    for (const steer of fresh) seenSteers.add(steer.id);
-    if (cancelled || fresh.length === 0) {
+    if (cancelled) return { hold: activeHolds(holds, pending), steerTurn: false };
+
+    const claim: Steer[] = [];
+    const firstSight = steers.filter(
+      (steer) => !seenSteers.has(steer.id) && !settling.has(steer.id)
+    );
+    const firstIds = new Set(firstSight.map((steer) => steer.id));
+    if (firstSight.length > 0) {
+      const settled = new Map(
+        (await scanInbox(runtime.store)).map((steer) => [steer.id, steer])
+      );
+      for (const steer of firstSight) {
+        const stable = settled.get(steer.id);
+        if (stable) claim.push(stable);
+        else settling.set(steer.id, steer.hash);
+      }
+    }
+    for (const steer of steers) {
+      if (seenSteers.has(steer.id) || firstIds.has(steer.id)) continue;
+      const before = settling.get(steer.id);
+      if (before === undefined) continue;
+      if (before === steer.hash) claim.push(steer);
+      else settling.set(steer.id, steer.hash);
+    }
+    for (const steer of claim) {
+      seenSteers.add(steer.id);
+      settling.delete(steer.id);
+    }
+    if (claim.length === 0) {
       return { hold: activeHolds(holds, pending), steerTurn: false };
     }
-    await runSteerPm(runtime, { iteration, state, tasks, steers: fresh, cwd: runtime.paths.goalCheckout });
-    holds = await readHolds(runtime.store);
+
+    await runSteerPm(runtime, { iteration, state, tasks, steers: claim, cwd: runtime.paths.goalCheckout });
+    try {
+      holds = await readHolds(runtime.store);
+    } catch (err) {
+      return {
+        hold: activeHolds(holds, pending),
+        steerTurn: true,
+        holdError: `steer holds after ${claim.map((steer) => steer.id).join(", ")}: ${(err as Error).message}`,
+      };
+    }
     return { hold: activeHolds(holds, pending), steerTurn: true };
   };
 
@@ -216,6 +276,11 @@ export async function runDispatch(
     }
 
     const polled = await pollSteers(state, tasks);
+    if (polled.holdError) {
+      await Promise.allSettled([...running.values()].map((r) => r.promise));
+      const turns = settledTurns(await runtime.store.listRecords(), iteration);
+      return { reason: "infra", cause: polled.holdError, turns };
+    }
     const hold = polled.hold;
     // A steer PM turn is an agent record written after the first read; re-read
     // so it prices into this iteration's brake like every other PM turn.
