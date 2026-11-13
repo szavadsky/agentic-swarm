@@ -69,7 +69,7 @@ Template syntax: `{{name}}` interpolates one value; `{{> partial-name}}` inlines
 | variable | meaning |
 |---|---|
 | `launch_id` | identifier of the previous launch being summarised |
-| `goal_dir` | path to the goal directory (records, journal, mailbox, iterations) |
+| `goal_dir` | path to the goal directory (records, mailbox, iterations) |
 | `records_dir` | path to the append-only step records, scoped to the named launch |
 | `transcripts_dir` | path to the session transcripts outside the repo |
 | `digest_path` | path where the digest must be written; the script has already written the cost-and-turn table there |
