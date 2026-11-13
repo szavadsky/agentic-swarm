@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import type { ModelRef, SessionRef, Stop } from "../harness/types.js";
 import { addUsage } from "../harness/usage.js";
 import { contextPackRelPath, isPackTruncated } from "./context-pack.js";
@@ -10,6 +11,7 @@ import {
   validateExpectation,
   type OutcomeExpectation,
 } from "./outcome.js";
+import { appendPark } from "./record.js";
 import { DEFAULT_TIMEOUTS, type KernelRuntime, type Outcome, type RecordEnd, type RecordStart, type StepRecord } from "./types.js";
 
 export { DEFAULT_TIMEOUTS } from "./types.js";
@@ -58,6 +60,11 @@ async function measurePack(
   const pack = await runtime.store.readFile(contextPackRelPath(spec.meta.iteration));
   if (pack === null) return undefined;
   return { bytes: Buffer.byteLength(pack, "utf8"), truncated: isPackTruncated(pack) };
+}
+
+/** Overflow is the one infra stop a fresh session with the same prompt can cure. */
+function overflowed(stop: Stop): boolean {
+  return stop.kind === "infra" && stop.cause === "overflow";
 }
 
 function repairPrompt(outcomePath: string, findings: string[]): string {
@@ -124,6 +131,21 @@ export async function runAgentTurn(runtime: KernelRuntime, spec: AgentTurnSpec):
   let outcome: Outcome | null = null;
   let findings: string[] = [];
 
+  // A resumed session can overflow on its own history. The prompt is self-
+  // contained, so retry once de novo instead of spending a review round; a
+  // second overflow is terminal because the prompt itself does not fit.
+  if (spec.session && overflowed(stop)) {
+    // A half-delivered outcome from the failed attempt is not the retry's.
+    fs.rmSync(outcomePath, { force: true });
+    const retry = await harness.turn({ ...request, session: undefined });
+    lastResult = retry;
+    attempts = [...attempts, ...(retry.attempts ?? [])];
+    stop = retry.stop;
+    usage = addUsage(usage, retry.usage);
+    session = retry.session;
+    text = retry.text;
+  }
+
   const collect = (): void => {
     try {
       const delivered = readDeliveredOutcome(outcomePath, text);
@@ -178,5 +200,14 @@ export async function runAgentTurn(runtime: KernelRuntime, spec: AgentTurnSpec):
     session: settled.session ?? session,
     outcome: outcome ?? undefined,
   });
+  // An overflow that survived the de-novo retry cannot succeed on this item:
+  // park it so a later launch does not burn another attempt.
+  if (overflowed(stop) && spec.meta.slug) {
+    await appendPark(
+      runtime.store,
+      { iteration: spec.meta.iteration, slug: spec.meta.slug, round: spec.meta.round },
+      "overflow"
+    );
+  }
   return { record, outcome: outcome ?? undefined, text };
 }

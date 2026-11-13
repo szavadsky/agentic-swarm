@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
+import type { SessionRef } from "../../src/harness/types.js";
 import { Repo } from "../../src/core/git/repo.js";
 import { runAgentTurn } from "../../src/kernel/agent.js";
 import { resolveRole } from "../../src/kernel/flow-context.js";
@@ -10,7 +11,7 @@ import { renderContextPack } from "../../src/kernel/context-pack.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import { loadPrompts } from "../../src/kernel/prompts.js";
 import { derive } from "../../src/kernel/derive.js";
-import type { KernelRuntime, ProcessConfig, RepoConfig, RunConfig } from "../../src/kernel/types.js";
+import type { FlowDefinition, KernelRuntime, ProcessConfig, RepoConfig, RunConfig } from "../../src/kernel/types.js";
 import { task } from "./helpers.js";
 
 function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
@@ -146,6 +147,215 @@ describe("agent turn outcome delivery", () => {
     expect(result.outcome).toBeUndefined();
     expect(result.record.stop).toEqual({ kind: "infra", cause: "quota" });
     fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  describe("resumed overflow", () => {
+    const flow: FlowDefinition = {
+      reviewRounds: 2,
+      steps: [
+        { id: "implement", role: "implementer" },
+        { id: "review", role: "reviewer", review: true },
+      ],
+    };
+    const flows = { "implement-review": flow };
+
+    function priorSession(root: string): SessionRef {
+      return {
+        harness: "fake",
+        id: "prior-session",
+        cwd: root,
+        model: { id: "fake-implementer" },
+        lastRequestStartedAt: new Date(0).toISOString(),
+        retentionTier: "short",
+        compacted: false,
+      };
+    }
+
+    it("retries once de novo with the full prompt and charges one turn", async () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-agent-"));
+      const fake = new FakeHarness({ id: "fake" });
+      const runtime = runtimeFor(fake, root);
+      await runtime.store.ensureLayout();
+      // An item already through one review round: implement r1, green checks,
+      // review changes. The r2 fix turn is the one that overflows.
+      await runtime.store.appendRecord(
+        {
+          iteration: 1,
+          slug: "a",
+          step: "implement",
+          round: 1,
+          actor: "agent",
+          alias: "implementer",
+          model: { id: "fake-implementer" },
+        },
+        {
+          stop: { kind: "done" },
+          outcome: { status: "done", summary: "implemented", concerns: [], forward: [] },
+          session: priorSession(root),
+        }
+      );
+      await runtime.store.appendRecord(
+        { iteration: 1, slug: "a", step: "checks", round: 1, actor: "script" },
+        { ok: true, checks: [] }
+      );
+      await runtime.store.appendRecord(
+        {
+          iteration: 1,
+          slug: "a",
+          step: "review",
+          round: 1,
+          actor: "agent",
+          alias: "reviewer",
+          model: { id: "fake-reviewer" },
+        },
+        {
+          stop: { kind: "done" },
+          outcome: { status: "done", summary: "needs a fix", concerns: [], forward: [], verdict: "changes" },
+        }
+      );
+      fake.script((req) => {
+        expect(req.session?.id).toBe("prior-session");
+        return fakeTurnResult(req, { stop: { kind: "infra", cause: "overflow" }, usage: { in: 40 } });
+      });
+      fake.script((req, ctx) => {
+        ctx.writeOutcome({ status: "done", summary: "implemented" });
+        return fakeTurnResult(req, { usage: { in: 2 } });
+      });
+
+      const result = await runAgentTurn(runtime, {
+        target: resolveRole(runtime, "implementer"),
+        cwd: root,
+        meta: { iteration: 1, slug: "a", step: "implement", round: 2 },
+        vars: implementerVars,
+        expectation: "any",
+        session: priorSession(root),
+      });
+
+      expect(fake.calls).toHaveLength(2);
+      expect(fake.calls[1]!.session).toBeUndefined();
+      expect(fake.calls[1]!.prompt).toBe(fake.calls[0]!.prompt);
+      expect(result.record.stop).toEqual({ kind: "done" });
+      expect(result.outcome?.status).toBe("done");
+      expect(result.record.usage?.in).toBe(42);
+      expect(result.record.session?.id).not.toBe("prior-session");
+
+      const records = await runtime.store.listRecords();
+      expect(records.filter((r) => r.step === "implement" && r.actor === "agent" && r.endedAt)).toHaveLength(2);
+      const state = derive([task("a")], records, flows);
+      expect(state.tasks.a!.turns).toBe(3);
+      expect(state.tasks.a!.round).toBe(2);
+      expect(state.tasks.a!.status).toBe("ready");
+      expect(state.tasks.a!.park).toBeUndefined();
+      fs.rmSync(root, { recursive: true, force: true });
+    });
+
+    it("does not accept an outcome left by the overflowed attempt", async () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-agent-"));
+      const fake = new FakeHarness({ id: "fake" });
+      const runtime = runtimeFor(fake, root);
+      await runtime.store.ensureLayout();
+      fake.script((req) => {
+        fs.writeFileSync(
+          req.outcomePath!,
+          JSON.stringify({ status: "done", summary: "stale from the resumed attempt" })
+        );
+        return fakeTurnResult(req, { stop: { kind: "infra", cause: "overflow" } });
+      });
+      fake.script((req) => fakeTurnResult(req));
+      fake.script((req, ctx) => {
+        ctx.writeOutcome({ status: "done", summary: "delivered after retry" });
+        return fakeTurnResult(req);
+      });
+
+      const result = await runAgentTurn(runtime, {
+        target: resolveRole(runtime, "implementer"),
+        cwd: root,
+        meta: { iteration: 1, slug: "a", step: "implement", round: 2 },
+        vars: implementerVars,
+        expectation: "any",
+        session: priorSession(root),
+      });
+
+      expect(fake.calls).toHaveLength(3);
+      expect(fake.calls[1]!.session).toBeUndefined();
+      expect(result.outcome?.summary).toBe("delivered after retry");
+      fs.rmSync(root, { recursive: true, force: true });
+    });
+
+    it("parks a de-novo overflow with cause overflow", async () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-agent-"));
+      const fake = new FakeHarness({ id: "fake" });
+      const runtime = runtimeFor(fake, root);
+      await runtime.store.ensureLayout();
+      fake.script((req) => fakeTurnResult(req, { stop: { kind: "infra", cause: "overflow" } }));
+
+      const result = await runAgentTurn(runtime, {
+        target: resolveRole(runtime, "implementer"),
+        cwd: root,
+        meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
+        vars: implementerVars,
+        expectation: "any",
+      });
+
+      expect(fake.calls).toHaveLength(1);
+      expect(result.record.stop).toEqual({ kind: "infra", cause: "overflow" });
+      const records = await runtime.store.listRecords();
+      expect(records.find((r) => r.step === "park")?.cause).toBe("overflow");
+      const state = derive([task("a")], records, flows);
+      expect(state.tasks.a!.status).toBe("parked");
+      expect(state.tasks.a!.cause).toBe("overflow");
+      expect(state.tasks.a!.turns).toBe(0);
+      fs.rmSync(root, { recursive: true, force: true });
+    });
+
+    it("parks when the de-novo retry overflows too", async () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-agent-"));
+      const fake = new FakeHarness({ id: "fake" });
+      const runtime = runtimeFor(fake, root);
+      await runtime.store.ensureLayout();
+      fake.script((req) => fakeTurnResult(req, { stop: { kind: "infra", cause: "overflow" } }));
+      fake.script((req) => fakeTurnResult(req, { stop: { kind: "infra", cause: "overflow" } }));
+
+      const result = await runAgentTurn(runtime, {
+        target: resolveRole(runtime, "implementer"),
+        cwd: root,
+        meta: { iteration: 1, slug: "a", step: "implement", round: 2 },
+        vars: implementerVars,
+        expectation: "any",
+        session: priorSession(root),
+      });
+
+      expect(fake.calls).toHaveLength(2);
+      expect(result.record.stop).toEqual({ kind: "infra", cause: "overflow" });
+      const state = derive([task("a")], await runtime.store.listRecords(), flows);
+      expect(state.tasks.a!.status).toBe("parked");
+      expect(state.tasks.a!.cause).toBe("overflow");
+      fs.rmSync(root, { recursive: true, force: true });
+    });
+
+    it("does not retry a resumed turn on another infra cause", async () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-agent-"));
+      const fake = new FakeHarness({ id: "fake" });
+      const runtime = runtimeFor(fake, root);
+      await runtime.store.ensureLayout();
+      fake.script((req) => fakeTurnResult(req, { stop: { kind: "infra", cause: "auth" } }));
+
+      const result = await runAgentTurn(runtime, {
+        target: resolveRole(runtime, "implementer"),
+        cwd: root,
+        meta: { iteration: 1, slug: "a", step: "implement", round: 2 },
+        vars: implementerVars,
+        expectation: "any",
+        session: priorSession(root),
+      });
+
+      expect(fake.calls).toHaveLength(1);
+      expect(result.record.stop).toEqual({ kind: "infra", cause: "auth" });
+      const records = await runtime.store.listRecords();
+      expect(records.filter((r) => r.step === "park")).toHaveLength(0);
+      expect(derive([task("a")], records, flows).tasks.a!.park).toBeUndefined();
+      fs.rmSync(root, { recursive: true, force: true });
+    });
   });
 
   it("takes turn timeouts from the alias, and a step may override them", async () => {
