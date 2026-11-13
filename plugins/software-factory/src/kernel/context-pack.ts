@@ -49,6 +49,11 @@ export function contextPackRelPath(iteration: number): string {
   return `iterations/${iteration}/context-pack.md`;
 }
 
+/** Goal-relative path an iteration's guaranteed summary is written to. */
+export function summaryRelPath(iteration: number): string {
+  return `iterations/${iteration}/summary.md`;
+}
+
 function short(hash: string | undefined): string {
   return hash ? hash.slice(0, 10) : "-";
 }

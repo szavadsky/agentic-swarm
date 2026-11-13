@@ -15,9 +15,9 @@ export interface RunLockHandle {
 
 /**
  * Resolves the runtime directory outside the main repository checkout (§2, §7).
- * The caller supplies a worktree root, normally the run config's; without one,
- * the runtime lives beside the repository. A root inside the checkout is moved
- * beside it. The result is `<worktree root>/.factory-runtime`.
+ * Uses `worktreeRoot` when it is outside the checkout; when omitted, it defaults
+ * to the sibling `wt-<repository name>`; a root at or inside the checkout is
+ * relocated to that sibling. The result is `<worktree root>/.factory-runtime`.
  */
 export function resolveRuntimeDir(repoRoot: string, worktreeRoot?: string): string {
   let resolvedWorktreeRoot = path.resolve(

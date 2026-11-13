@@ -1,5 +1,6 @@
 import path from "node:path";
 import { recordedBaseGates } from "./baseline.js";
+import { summaryRelPath } from "./context-pack.js";
 import { derive } from "./derive.js";
 import {
   DEFAULT_ROLE_BY_STEP,
@@ -250,7 +251,7 @@ export async function writeIterationSummary(
     ...spendTable("alias", aliasNames),
     "",
   ];
-  const rel = `iterations/${iteration}/summary.md`;
+  const rel = summaryRelPath(iteration);
   const text = lines.join("\n");
   await store.writeFile(rel, text);
   // The outbox is how the owner sees the guaranteed remarkable without reading the goal dir.
@@ -270,7 +271,7 @@ export async function backfillSummaries(runtime: KernelRuntime): Promise<void> {
     state.goal === "done" ? "goal-met" : state.goal === "blocked" ? "blocked-by-user" : "stopped-with-debt";
   const roleByStep = rolesByStep(runtime.configs.process.flows);
   for (let n = 1; n <= state.iteration; n++) {
-    if (await runtime.store.readFile(`iterations/${n}/summary.md`)) continue;
+    if (await runtime.store.readFile(summaryRelPath(n))) continue;
     await writeIterationSummary(runtime.store, {
       iteration: n,
       state,

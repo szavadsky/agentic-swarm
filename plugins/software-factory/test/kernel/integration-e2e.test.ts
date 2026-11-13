@@ -257,6 +257,7 @@ describe("cross-slice E2E — init, steer and three launches through S2/S3/S4", 
       expect(continuation?.base).toBe(integrationBefore);
       expect(continuation?.base).not.toBe(betaTip);
       const pack = fs.readFileSync(path.join(goalDir, "iterations/2/context-pack.md"), "utf8");
+      expect(pack).toContain(`previous iteration summary: ${path.join(goalDir, "iterations/1/summary.md")}`);
       expect(pack).toContain(`- ${steerId}: mailbox/inbox/`);
       expect(fs.readdirSync(path.join(goalDir, "mailbox/inbox"))).toEqual([]);
       expect(fs.readdirSync(path.join(goalDir, "mailbox/processed"))).toContain(`${steerId}.md`);

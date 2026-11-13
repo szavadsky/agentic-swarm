@@ -4,7 +4,13 @@ import { git } from "../core/git/exec.js";
 import { compactArchitect, resumableSession } from "./architect-session.js";
 import { runAgentTurn } from "./agent.js";
 import { recordedBaseGates } from "./baseline.js";
-import { contextPackRelPath, forwardedConcerns, renderContextPack, shallowCodeMap } from "./context-pack.js";
+import {
+  contextPackRelPath,
+  forwardedConcerns,
+  renderContextPack,
+  shallowCodeMap,
+  summaryRelPath,
+} from "./context-pack.js";
 import { derive } from "./derive.js";
 import { writeLaunchDigest } from "./digest.js";
 import { resolveRole } from "./flow-context.js";
@@ -29,7 +35,7 @@ export interface BoundaryResult {
 
 function previousSummary(goalDir: string, iteration: number): string | undefined {
   if (iteration <= 0) return undefined;
-  const rel = `iterations/${iteration}/summary.md`;
+  const rel = summaryRelPath(iteration);
   return fs.existsSync(path.join(goalDir, rel)) ? path.join(goalDir, rel) : undefined;
 }
 

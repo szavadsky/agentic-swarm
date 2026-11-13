@@ -147,6 +147,18 @@ describe("Run lock", () => {
     expect(runtimeDir).toBe(path.resolve(repo, "../wt-test", ".factory-runtime"));
   });
 
+  it("defaults the worktree root to a sibling named for the repository", () => {
+    const runtimeDir = resolveRuntimeDir(repo);
+    expect(runtimeDir).toBe(path.join(path.dirname(repo), `wt-${path.basename(repo)}`, ".factory-runtime"));
+    expect(runtimeDir.startsWith(repo + path.sep)).toBe(false);
+  });
+
+  it("relocates a worktree root inside the checkout beside it", () => {
+    const runtimeDir = resolveRuntimeDir(repo, path.join(repo, "inside"));
+    expect(runtimeDir).toBe(path.join(path.dirname(repo), `wt-${path.basename(repo)}`, ".factory-runtime"));
+    expect(runtimeDir.startsWith(repo + path.sep)).toBe(false);
+  });
+
   it("is exclusive while held and free after release", () => {
     const task = "t1";
     const lockPath = getRunLockPath(repo, task, { runtimeDir: path.join(repo, "rt") });
