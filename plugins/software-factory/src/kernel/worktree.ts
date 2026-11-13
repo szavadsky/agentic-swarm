@@ -65,6 +65,34 @@ async function abortInFlightMerge(cwd: string): Promise<boolean> {
   return true;
 }
 
+type MergeAttempt = { ok: true } | { ok: false; paths: string[] };
+
+/**
+ * Merges `ref` into the checkout at `cwd`. A conflict aborts the merge so no
+ * state is left behind and returns the unmerged paths; any other refusal
+ * (merge.ff=only, unrelated histories) leaves no merge state either, and git's
+ * own reason is the only diagnosis, so it is thrown.
+ */
+async function mergeRef(
+  cwd: string,
+  ref: string,
+  env: Record<string, string> | undefined
+): Promise<MergeAttempt> {
+  const merge = await git(cwd, ["merge", "--no-edit", ref], { allowFail: true, env });
+  if (merge.code === 0) return { ok: true };
+  const unmerged = await git(cwd, ["diff", "--name-only", "--diff-filter=U"], { allowFail: true });
+  const paths = unmerged.stdout
+    .split("\n")
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .sort();
+  const inFlight = await abortInFlightMerge(cwd);
+  if (!inFlight && paths.length === 0) {
+    throw new GitError(`merge --no-edit ${ref}`, merge.code, merge.stderr, merge.stdout);
+  }
+  return { ok: false, paths };
+}
+
 /**
  * Operator fixes on base never reach task worktrees unless the stable checkout
  * follows them. Fast-forward when the integration branch is behind; otherwise
@@ -84,24 +112,8 @@ async function followBase(runtime: KernelRuntime): Promise<void> {
       await git(goalCheckout, ["merge", "--ff-only", base]);
       return;
     }
-    const merge = await git(goalCheckout, ["merge", "--no-edit", base], {
-      allowFail: true,
-      env: runtime.repo.identityEnv(),
-    });
-    if (merge.code === 0) return;
-    const unmerged = await git(goalCheckout, ["diff", "--name-only", "--diff-filter=U"], { allowFail: true });
-    const paths = unmerged.stdout
-      .split("\n")
-      .map((p) => p.trim())
-      .filter(Boolean)
-      .sort();
-    // Any other refusal (merge.ff=only, unrelated histories) leaves no merge
-    // state behind; git's own reason is the only diagnosis, so surface it.
-    const inFlight = await abortInFlightMerge(goalCheckout);
-    if (!inFlight && paths.length === 0) {
-      throw new GitError(`merge --no-edit ${base}`, merge.code, merge.stderr, merge.stdout);
-    }
-    throw new BaseFollowConflictError(baseBranch, paths);
+    const attempt = await mergeRef(goalCheckout, base, runtime.repo.identityEnv());
+    if (!attempt.ok) throw new BaseFollowConflictError(baseBranch, attempt.paths);
   });
 }
 
@@ -166,23 +178,32 @@ async function setupMarker(cwd: string): Promise<string | null> {
 
 /**
  * Branches from the integration head at dispatch time (never at plan time).
- * A task with `base` continues a parked task from its kept branch tip.
+ * A task with `base` continues a parked task from its kept branch tip, then
+ * merges the integration head into the new branch: tools and fixes merged since
+ * the park are present, and review diffs from the integration head so the
+ * carried parked commits are in the diff. `startPoint` is that head.
  */
 export async function ensureTaskWorktree(runtime: KernelRuntime, task: TaskFile): Promise<EnsuredWorktree> {
   const branch = taskBranchName(runtime, task.slug);
   const wtPath = taskWorktreePath(runtime, task.slug);
-  const startPoint = task.base
-    ? taskBranchName(runtime, task.base)
-    : runtime.paths.integrationBranch;
+  const branchPoint = task.base ? taskBranchName(runtime, task.base) : runtime.paths.integrationBranch;
 
-  const baseExists = await branchExists(runtime, startPoint);
-  if (!baseExists) {
-    return { path: wtPath, branch, created: false, startPoint, error: `branch "${startPoint}" does not exist` };
+  const branchPointExists = await branchExists(runtime, branchPoint);
+  if (!branchPointExists) {
+    return {
+      path: wtPath,
+      branch,
+      created: false,
+      startPoint: branchPoint,
+      error: `branch "${branchPoint}" does not exist`,
+    };
   }
-  const startSha = (await git(runtime.paths.repoRoot, ["rev-parse", startPoint])).stdout.trim();
+  const startSha = (await git(runtime.paths.repoRoot, ["rev-parse", branchPoint])).stdout.trim();
+  let startPoint = task.base ? await integrationHead(runtime) : startSha;
 
   const registered = (await registeredWorktrees(runtime)).map((p) => path.resolve(p));
   let created = false;
+  let conflict: string[] | undefined;
   if (!registered.includes(path.resolve(wtPath))) {
     if (fs.existsSync(wtPath)) fs.rmSync(wtPath, { recursive: true, force: true });
     fs.mkdirSync(path.dirname(wtPath), { recursive: true });
@@ -192,8 +213,17 @@ export async function ensureTaskWorktree(runtime: KernelRuntime, task: TaskFile)
       } else {
         await git(runtime.paths.repoRoot, ["worktree", "add", "-b", branch, wtPath, startSha]);
       }
+      if (!task.base) return;
+      // The parked branch is never rewritten: only this continuation branch moves.
+      startPoint = await integrationHead(runtime);
+      const attempt = await mergeRef(wtPath, startPoint, runtime.repo.identityEnv());
+      if (!attempt.ok) conflict = attempt.paths;
     });
     created = true;
+  }
+  if (conflict) {
+    const named = conflict.length > 0 ? conflict.join(", ") : "git reported no unmerged paths";
+    return { path: wtPath, branch, created, startPoint, error: `base-conflict: ${named}` };
   }
 
   let setup: SetupResult | undefined;
@@ -202,12 +232,12 @@ export async function ensureTaskWorktree(runtime: KernelRuntime, task: TaskFile)
     if (created || !marker || !fs.existsSync(marker)) {
       setup = await runWorktreeSetup({ commands: runtime.configs.repo.setup, cwd: wtPath });
       if (!setup.ok) {
-        return { path: wtPath, branch, created, startPoint: startSha, setup, error: setup.error };
+        return { path: wtPath, branch, created, startPoint, setup, error: setup.error };
       }
       if (marker) fs.writeFileSync(marker, new Date().toISOString(), "utf8");
     }
   }
-  return { path: wtPath, branch, created, startPoint: startSha, setup };
+  return { path: wtPath, branch, created, startPoint, setup };
 }
 
 /** Head of the task worktree; also used as the reviewer's diff head. */

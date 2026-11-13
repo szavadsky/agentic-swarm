@@ -14,7 +14,7 @@ import {
 } from "./s2-helpers.js";
 
 describe("parked continuation", () => {
-  it("branches a task with base from the parked task's kept branch, not the integration head", async () => {
+  it("continues a task with base from the parked task's kept branch", async () => {
     const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
     try {
       const harness = new FakeHarness({ id: "fake" });
@@ -39,6 +39,7 @@ describe("parked continuation", () => {
       });
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
+      const integrationHead = repo.git(["rev-parse", "factory/demo"]).stdout.trim();
       await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
       await writeTask(runtime, task("beta", { base: "alpha", scope: ["beta.txt"] }));
 
@@ -50,11 +51,12 @@ describe("parked continuation", () => {
       expect(state.tasks.alpha!.status).toBe("parked");
       expect(state.tasks.beta!.status).toBe("merged");
 
-      const alphaTip = repo.git(["rev-parse", "factory-task/demo/alpha"]).stdout.trim();
+      // The continuation carries alpha's commits but reviews from the
+      // integration head it synced to, so the parked commits are in the diff.
       const betaFirst = records
         .filter((r) => r.slug === "beta" && r.step === "implement")
         .sort((a, b) => a.seq - b.seq)[0];
-      expect(betaFirst?.base).toBe(alphaTip);
+      expect(betaFirst?.base).toBe(integrationHead);
 
       expect(repo.git(["show", "factory/demo:alpha.txt"]).stdout.trim()).toBe("alpha");
       expect(repo.git(["show", "factory/demo:beta.txt"]).stdout.trim()).toBe("beta");
