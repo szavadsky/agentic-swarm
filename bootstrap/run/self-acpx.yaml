@@ -10,17 +10,19 @@ aliases:
   pm:
     harness: opencode
     model: opencode/beam-free
+    effort: max
     fallbacks:
       - opencode-go/deepseek-v4.1-flash
   digest:
     harness: opencode
     model: opencode/beam-free
+    effort: max
     fallbacks:
       - opencode-go/deepseek-v4.1-flash
   implementer:
     harness: pi
     model: opencode-go/beam-free
-    effort: high
+    effort: max
   reviewer:
     harness: codex
     model: deepseek-v4.1-flash

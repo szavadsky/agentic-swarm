@@ -15,6 +15,7 @@ aliases:
   digest:
     harness: opencode
     model: opencode/beam-free
+    effort: max
     fallbacks:
       - opencode-go/deepseek-v4.1-flash
   implementer:
