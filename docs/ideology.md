@@ -10,17 +10,17 @@ It refuses to be a process that mistakes ceremony for progress.
 
 **Principle.** A cheap but capable agent classifies a goal as trivial, task or bigger and scopes a task, while only the architect decides how far above task "bigger" reaches (manifesto.md:11-13).
 
-**Why.** The classifier is explicitly not smart enough to decide how big "bigger" is (manifesto.md:11), and a task review that finds the real scope larger auto-escalates rather than letting the mistake stand (manifesto.md:13). The failure is silent under-scoping: in v2 a fixed plan cap turned ordinary size into formal rejection when 52 items exceeded `maxItemsPerPlan: 50`, producing four `pm_amend_validation_failed` events (bootstrap/context/repo-map.md:109).
+**Why.** The classifier is explicitly not smart enough to decide how big "bigger" is (manifesto.md:11), and a task review that finds the real scope larger auto-escalates rather than letting the mistake stand (manifesto.md:13). The failure it answers is a size decision made once, by the wrong authority: the cheap classifier can scope a task, but only the architect can judge how far above task the work reaches (manifesto.md:11).
 
-**In the system.** Trivial work is implemented by the same classifying agent, a task goes through implement and review without the architect, and bigger work reaches the architect (manifesto.md:11-13). A review that finds scope growth returns `upscope` (bootstrap/KERNEL0.md:52), and the same agent prepares the context pack for task or bigger work (manifesto.md:14).
+**In the system.** Trivial work is implemented by the same classifying agent, a task goes through implement and review without the architect, and bigger work reaches the architect (manifesto.md:11-13). A review that finds scope growth returns `upscope` (manifesto.md:13; manifesto.advice.md:195), and the same agent prepares the context pack for task or bigger work (manifesto.md:14).
 
-**Forbids.** Letting a fixed size cap or the classifier decide architecture, and approving a task whose real scope has outgrown the definition it was reviewed against.
+**Forbids.** Letting a fixed size cap or the classifier decide architecture — v2's `maxItemsPerPlan: 50` rejected 52 items with four `pm_amend_validation_failed` events (bootstrap/context/repo-map.md:109) — and approving a task whose real scope has outgrown the definition it was reviewed against.
 
 ## The iteration bounds architect attention
 
-**Principle.** An iteration is one architect engagement plus all the orchestration it launches; the architect is consulted at its boundary, not during it (manifesto.md:17).
+**Principle.** An iteration is one architect engagement plus all the orchestration it launches; consults are batched to its boundary, and a mid-iteration consult is the measured exception (manifesto.md:17; manifesto.md:19; manifesto.md:26).
 
-**Why.** Architect attention was the largest single cost in the last v2 run: 81 launches, 21.7M input tokens and $5.22 of $11.01 (manifesto.md:103). The census showed most of it was ceremony — about 34 wave reports, 10 revisions and 4 close-ups against 5 plans (manifesto.advice.md:21) — and a sample 20-second wave report took 141,337 input tokens (bootstrap/context/repo-map.md:104). A mid-iteration consult repeats that context for one decision (manifesto.md:19).
+**Why.** Architect attention was the largest single cost in the last v2 run: 81 launches, 21.7M input tokens and $5.22 of $11.01 (manifesto.md:103). The census showed most of it was ceremony — about 34 wave reports, 10 revisions and 4 close-ups against 5 plans (manifesto.advice.md:21) — and a sample 20-second wave report took 141,337 input tokens (bootstrap/context/repo-map.md:104).
 
 **In the system.** Every consult starts with a completeness check — truly blocked or worth continuing, what is incomplete or must be redone — and sub-epics get their own (manifesto.md:18). Consults are batched until non-blocked tasks are exhausted (manifesto.md:26); the script dispatches until the DAG is exhausted or blocked, then derives status and builds the next brief (manifesto.advice.md:44). A landed spike does not end the iteration; dependents idle until the boundary (manifesto.md:19).
 
@@ -38,7 +38,7 @@ It refuses to be a process that mistakes ceremony for progress.
 
 ## Same context, same agent
 
-**Principle.** A job stays with one agent while its context is unchanged; a different context calls for a different agent, and every handoff has to rebuild what the previous one knew (manifesto.md:29).
+**Principle.** A job stays with one agent while its context is unchanged; a different context calls for a different agent, and every handoff has to rebuild what the previous one knew (manifesto.md:29; manifesto.md:30).
 
 **Why.** Every handoff re-establishes context, and v2's context volume was large: the modernize run generated 36.3 MB of step input, median 91 KB and maximum 1.14 MB per step (bootstrap/context/repo-map.md:103). v2 split triage, context-pack and infra into separate steps; Intent collapses them into the same agent because the context is the same (manifesto.md:14; manifesto.md:94).
 
@@ -48,31 +48,31 @@ It refuses to be a process that mistakes ceremony for progress.
 
 ## The plan is markdown and the PM is a paper-pusher
 
-**Principle.** The architect owns one markdown plan written for a human or reviewer; a cheap PM turns it into task files, the DAG and dispatch sets, and has no authority to disagree with it (manifesto.md:22; manifesto.md:32).
+**Principle.** The architect owns one markdown plan written for the architect and reviewer; a cheap PM turns it into task files, the DAG and dispatch sets, and has no authority to disagree with it (manifesto.md:22; manifesto.md:32).
 
-**Why.** Schema maintenance is not architect work (manifesto.md:22), and v2's plan-review/PM bounce re-issued whole plans — a named loop cause (manifesto.md:101). The PM's job is to interpret bullet-point intent into formal shape, splitting and merging tasks as formalization requires, not to negotiate the intent (manifesto.md:32). The economics reinforce it: one $2.86 Opus plan call cost more than the entire developer bill (manifesto.advice.md:20), so plan turns must produce readable direction, not file-format upkeep.
+**Why.** Schema maintenance is not architect work (manifesto.md:22), and v2's plan-review/PM bounce re-issued whole plans — a named loop cause (manifesto.md:101). The PM's job is to interpret bullet-point intent into formal shape, splitting and merging tasks as formalization requires, not to negotiate the intent (manifesto.md:32).
 
 **In the system.** The architect edits `plan.md` in place and never in flight; tasks get short immutable slugs, and the orchestrator reconciles execution state from a semantic diff (manifesto.md:32). The PM derives task files, owns the DAG and dispatch sets, and resolves what cannot be derived deterministically — missing branches, misplaced artifacts (manifesto.md:32). Reconcile freezes done tasks, makes rework a new slug and re-reads pending tasks at dispatch (manifesto.md:111).
 
 **Forbids.** Architect-maintained schema-consistent task files or hand-edited status; PM edits to the plan or overrides of architect intent; whole-plan re-issue through a strict schema (manifesto.md:32); and editing a plan while work is in flight.
 
-## State is derived, never stored
+## State is derived from records
 
-**Principle.** Execution state is a pure function of task files and append-only records; the script recomputes it rather than keeping a mutable status store (manifesto.md:33).
+**Principle.** Execution state is aggregated idempotently from artifacts; the script recomputes it rather than keeping a mutable status store (manifesto.md:33).
 
 **Why.** Intent requires status to be aggregated idempotently from structured artifacts, with the context pack built from it (manifesto.md:33). A stored status would be a second truth needing repair after interruption: the v2 journal recorded 303 step starts against 289 finishes and 20 stranded items (bootstrap/context/repo-map.md:106). Recovery from any such break is then a recomputation, not a repair.
 
-**In the system.** Intent asks for idempotent aggregation from artifacts (manifesto.md:33); the kernel makes the stronger choice that state is never stored, deleting everything but `tasks/` and `records/` loses nothing, and `derive` reads nothing else (bootstrap/KERNEL0.md:104). Task status is a closed set from pending to cancelled (bootstrap/KERNEL0.md:65), and context packs are built from derived status (manifesto.md:33). A subarchitect's status summary is a summary, not the state (manifesto.md:38).
+**In the system.** Intent asks for idempotent aggregation from artifacts (manifesto.md:33); the kernel makes the stronger choice that state is never stored, deleting everything but `tasks/` and `records/` loses nothing, and `derive` reads nothing else (bootstrap/KERNEL0.md:104). Task status is a closed set from pending to cancelled (bootstrap/KERNEL0.md:65), and context packs are built from derived status (manifesto.md:33). A subarchitect's status summary is a summary of his iteration (manifesto.md:38), not the derived state (manifesto.md:33).
 
 **Forbids.** A mutable status file as the source of truth; deriving status from agent prose or memory; hand-repairing state after a crash; and letting a status summary compete with the records.
 
 ## Only the remarkable travels up
 
-**Principle.** Work moves implementer → reviewer → architect → top architect → human, and each stage forwards only what is different from or additive to the plan (manifesto.md:42-43).
+**Principle.** Work moves implementer → reviewer → architect → top architect → human, and each stage forwards only what is different from or additive to the plan (manifesto.md:42-44).
 
-**Why.** Implementers over-report trivia, so the reviewer decides what deserves architecture attention; even a same-model reviewer with a different focus adds a lot (manifesto.md:44). The perspective gap is deliberate: the implementer sees one task, the reviewer its diff, the architect the epic's interactions, layers and sequence, and the gap holds between same-class models (manifesto.md:43). The filter is also a cost control: about 34 v2 wave reports consumed roughly 8.7M input tokens (manifesto.advice.md:21).
+**Why.** Implementers over-report trivia, so the reviewer decides what deserves architecture attention; even a same-model reviewer with a different focus adds a lot (manifesto.md:44). The perspective gap is deliberate: the implementer sees one task, the reviewer its diff, the architect the epic's interactions, layers and sequence, and the gap holds between same-class models (manifesto.md:43).
 
-**In the system.** Concerns carry a calibration — FYI, blocked-by-architect, blocked-by-user — and remarkables propagate up the chain (manifesto.md:46). Reviewer pairing is per task-type flow; there is no separate integration wave review, because the next iteration's completeness check is the integration point (manifesto.md:45). The reviewer's prompt and context are tailored to the review focus, not the implementation context — not the implementer's edits or reasoning (manifesto.md:45). Files stay on disk, and the architect scouts or reads paths rather than receiving pasted content (manifesto.md:47).
+**In the system.** Concerns carry a calibration — FYI, blocked-by-architect, blocked-by-user — and remarkables propagate up the chain (manifesto.md:46). Reviewer pairing is per task-type flow; there is no separate integration wave review, because the next iteration's completeness check is the integration point (manifesto.md:45). The reviewer's prompt and context are tailored to the review focus, not the implementation context — not the implementer's edits or reasoning (manifesto.md:45). Files stay on disk, and the architect scouts or reads paths rather than receiving pasted content (manifesto.md:47). Approved work enters one serial merge queue; gates run on the merged result, not the branch, and a red gate parks the task (manifesto.advice.md:269; bootstrap/KERNEL0.md:122).
 
 **Forbids.** A separate wave review; one agent both implementing and reviewing to save a step; raw transcripts or pasted files travelling up; and treating every implementer note as architecture input.
 
@@ -92,9 +92,9 @@ It refuses to be a process that mistakes ceremony for progress.
 
 **Why.** A process told to keep going until complete has no brake; v2's plan did exactly that and is recorded as a loop cause (manifesto.md:102). The stop criteria are prompt text: goal met, or no meaningful development without owner feedback, with no new debt, no slop and clean-code principles met (manifesto.md:55). Existing debt may be addressed to enable the goal, but the goal itself may not add to it (manifesto.md:56).
 
-**In the system.** The architect may authorize temporary debt with removal by the end of the same goal (manifesto.md:57). A launch bounds iterations, review cycles and optionally dollars, subscription use or time; on a per-iteration budget hit the run drains — no new dispatch, in-flight work finishes within its own bound (manifesto.md:58). Relaunching a goal starts with a debt and gap review before planning (manifesto.md:56).
+**In the system.** The architect may authorize temporary debt with removal by the end of the same goal (manifesto.md:57). A launch bounds iterations, review cycles and optionally dollars, subscription use or time; on a per-iteration budget hit the run drains — no new dispatch, in-flight work finishes within its own bound (manifesto.md:58). Relaunching a goal starts with a debt and gap review before planning (manifesto.md:56). Parked work is terminal for its slug; the architect continues it through a new slug that may use the parked branch as base (bootstrap/KERNEL0.md:103).
 
-**Forbids.** Unbounded continuation; new debt left at goal completion; a budget hit treated as permission for one more dispatch; and relaunching straight into new planning without the debt review.
+**Forbids.** Unbounded continuation; new debt left at goal completion; and relaunching straight into new planning without the debt review.
 
 ## Steer by mailbox, decide by reversible assumption
 
@@ -112,13 +112,13 @@ It refuses to be a process that mistakes ceremony for progress.
 
 **Why.** v2 encoded its process as ceremony: 21 schemas and 1,554 lines of schema code, 48 prompt files and 25 documented step kinds (bootstrap/context/repo-map.md:102), the restrictive and loop-prone shape the manifesto rejects (manifesto.md:5). Flows as data let one script run "just implement", "implement/review" or TDD without new orchestrator branches (manifesto.md:76).
 
-**In the system.** Three config layers separate repo locations and gates, factory process settings, and transient run settings (manifesto.md:75). Prompts are templated, not copy-pasted (manifesto.md:77). Review retries are configurable with follow-up options — same agent on compacted context, a different model, or de novo (manifesto.md:78) — and task review defaults to two rounds, with the last round deciding park or merge-with-debt (manifesto.md:79). Concurrency has an absolute limit plus per-harness limits, and config is schema-validated at pre-flight (manifesto.md:80-81).
+**In the system.** Three config layers separate repo locations and gates, factory process settings, and transient run settings (manifesto.md:75). Prompts are templated, not copy-pasted (manifesto.md:77). Review retries are configurable with follow-up options — same agent on compacted context, a different model, or de novo (manifesto.md:78) — and task review defaults to two rounds, with the last round deciding park or merge-with-debt (manifesto.md:79). Concurrency has an absolute limit plus per-harness limits, and config is schema-validated at pre-flight (manifesto.md:80-81). On disk these are `.factory/repo.yaml`, a process config and a run config, with a goal directory holding `plan.md`, `tasks/`, `records/`, `mailbox/` and `iterations/` (bootstrap/KERNEL0.md:89-93).
 
 **Forbids.** A new orchestrator branch per flow; copy-pasted prompts; task-review rounds or concurrency changed in code; and unvalidated configuration reaching a run.
 
 ## Harnesses are interchangeable, capabilities are not
 
-**Principle.** The factory runs through any ACP-compatible harness with opaque launch config, prefers native interfaces where they are more capable, and branches on capabilities rather than harness names (manifesto.md:84; manifesto.md:116).
+**Principle.** The factory runs through any ACP-compatible harness with opaque launch config, prefers native interfaces where they are more capable, and branches on capabilities rather than harness names (manifesto.md:39; manifesto.md:84; manifesto.md:116; manifesto.advice.md:145).
 
 **Why.** v2 grew a 1,454-line omp-specific adapter with exact CLI flags, while a bad credential caused multi-hop fallback chains (bootstrap/context/repo-map.md:111). omp is a special case that simplifies things, not a dependency (manifesto.md:84). The script owns everything down to task level through an abstraction that knows each harness's capabilities (manifesto.md:39).
 
@@ -140,7 +140,7 @@ It refuses to be a process that mistakes ceremony for progress.
 
 - **Ceremony launches.** Architect-role launches were the biggest single cost — 81 launches, 21.7M input tokens, $5.22 of $11.01 — mostly wave reports and consults (manifesto.md:103; manifesto.advice.md:20), so the iteration boundary replaced them.
 - **Schema sprawl.** v2 carried 21 schemas and 1,554 lines of schema code, turning process into file maintenance (bootstrap/context/repo-map.md:102); the plan is now markdown and strict schema is kept for small, simple outputs (manifesto.md:106).
-- **Nested retries.** Step attempts × fix rounds × consults × plan reviews × amendments compound, so v2's budgets bounded the nests rather than the item (manifesto.md:99); the factory has a single budget per item.
+- **Nested retries.** Step attempts × fix rounds × consults × plan reviews × amendments compound (manifesto.md:99), and v2 ran six counters of ~3 at different levels (manifesto.advice.md:325); the factory has a single budget per item.
 - **ADR spam.** The ADRs v2 produced are "agentic spam", one reason v2 is unacceptable, and they bind nothing (manifesto.md:94); an ADR now needs a long-term decision shaping the project or a layer (manifesto.md:72).
 - **Strict-schema plan re-issue.** Plan review and PM bounce re-issued whole plans, a named loop cause (manifesto.md:101); the plan is edited in place and reconciled by semantic diff (manifesto.md:32).
 
