@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
-import { dispatch } from "../../src/cli/index.js";
+import { dispatch } from "../../src/cli/dispatch.js";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import { derive } from "../../src/kernel/derive.js";

@@ -13,13 +13,13 @@ export class GitError extends Error {
   }
 }
 
-export interface GitOptions {
+interface GitOptions {
   allowFail?: boolean;
   input?: string;
   env?: Record<string, string>;
 }
 
-export interface GitResult {
+interface GitResult {
   stdout: string;
   stderr: string;
   code: number;

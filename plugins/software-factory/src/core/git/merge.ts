@@ -104,7 +104,7 @@ export async function hasConflictMarkers(wt: string): Promise<string[]> {
  * Column-0 anchoring keeps code that merely mentions markers (docs, tests
  * indenting marker strings) from flagging.
  */
-export async function scanConflictMarkers(
+async function scanConflictMarkers(
   wt: string,
   opts?: { baseRef?: string; excludePrefixes?: string[] }
 ): Promise<string[]> {

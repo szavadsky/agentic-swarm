@@ -1,7 +1,7 @@
 import path from "node:path";
 import { AsyncMutex, KeyedMutex } from "../mutex.js";
 
-export interface RepoOptions {
+interface RepoOptions {
   mainRoot: string;
   worktreeRoot: string;
   identity?: {

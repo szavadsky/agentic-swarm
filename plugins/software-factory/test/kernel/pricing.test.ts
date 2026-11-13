@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import yaml from "yaml";
 import { createTmpRepo } from "../helpers/tmp-repo.js";
-import { dispatch } from "../../src/cli/index.js";
+import { dispatch } from "../../src/cli/dispatch.js";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { addUsage, zeroUsage } from "../../src/harness/usage.js";
 import type { Usage } from "../../src/harness/types.js";

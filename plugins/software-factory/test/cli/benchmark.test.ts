@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import yaml from "yaml";
-import { dispatch } from "../../src/cli/index.js";
+import { dispatch } from "../../src/cli/dispatch.js";
 import type { Usage } from "../../src/harness/types.js";
 import { writeMetrics, type GoalMetrics } from "../../src/kernel/metrics.js";
 import { createFolderStore } from "../../src/kernel/store.js";

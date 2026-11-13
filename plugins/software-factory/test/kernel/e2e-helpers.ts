@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { expect } from "bun:test";
-import { dispatch } from "../../src/cli/index.js";
+import { dispatch } from "../../src/cli/dispatch.js";
 import { FakeHarness, fakeTurnResult, type FakeTurnHandler } from "../../src/harness/fake/index.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import { derive } from "../../src/kernel/derive.js";
