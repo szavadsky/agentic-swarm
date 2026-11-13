@@ -8,6 +8,13 @@ function errorText(error: OpencodeError): string {
     .join(" ");
 }
 
+/** Attaches the scrubbed error text where the Stop shape allows details. */
+function withDetails(stop: Stop, text: string | undefined): Stop {
+  if (stop.kind !== "infra" && stop.kind !== "refusal") return stop;
+  const details = stopDetails(text);
+  return details ? { ...stop, details } : stop;
+}
+
 /**
  * opencode error events carry a provider error type plus free text; HTTP 429
  * and free-tier limits are quota (LOG D8), not task failure.
@@ -22,40 +29,39 @@ export function classifyOpencodeError(error: OpencodeError): Stop {
         : undefined;
 
   if (/free[- ]?limit|quota|usage limit|insufficient|billing|exceeded your/i.test(text)) {
-    return { kind: "infra", cause: "quota" };
+    return withDetails({ kind: "infra", cause: "quota" }, text);
   }
   if (status === 402 || status === 429 || /\b(402|429)\b/.test(text)) {
-    return { kind: "infra", cause: "quota" };
+    return withDetails({ kind: "infra", cause: "quota" }, text);
   }
   if (status === 401 || status === 403) {
-    return { kind: "infra", cause: "auth" };
+    return withDetails({ kind: "infra", cause: "auth" }, text);
   }
   if (/rate[\s_-]?limit|too many requests|overloaded|service unavailable|bad gateway/i.test(text)) {
-    return { kind: "infra", cause: "rate" };
+    return withDetails({ kind: "infra", cause: "rate" }, text);
   }
   if (/unauthori[sz]ed|forbidden|invalid api key|no api key|credential|auth/i.test(text)) {
-    return { kind: "infra", cause: "auth" };
+    return withDetails({ kind: "infra", cause: "auth" }, text);
   }
   if (/context (length|window)|maximum context|too many tokens|token limit|prompt is too long|overflow/i.test(text)) {
-    return { kind: "infra", cause: "overflow" };
+    return withDetails({ kind: "infra", cause: "overflow" }, text);
   }
   if (/refus|safety|content policy|declined/i.test(text)) {
-    return { kind: "refusal", details: error.message };
+    return withDetails({ kind: "refusal" }, error.message ?? text);
   }
   if (/abort|cancel|interrupted/i.test(text)) {
     return { kind: "cancelled" };
   }
   if (/no-route|model unavailable|unknown model|not found/i.test(text)) {
-    return { kind: "infra", cause: "auth" };
+    return withDetails({ kind: "infra", cause: "auth" }, text);
   }
   if (/timed out|timeout|deadline/i.test(text)) {
-    return { kind: "infra", cause: "timeout" };
+    return withDetails({ kind: "infra", cause: "timeout" }, text);
   }
   if (status !== undefined && status >= 500) {
-    return { kind: "infra", cause: "rate" };
+    return withDetails({ kind: "infra", cause: "rate" }, text);
   }
-  const details = stopDetails(text);
-  return { kind: "infra", cause: "crash", ...(details ? { details } : {}) };
+  return withDetails({ kind: "infra", cause: "crash" }, text);
 }
 
 /** Final stop for one `opencode run` process. */
