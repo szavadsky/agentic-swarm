@@ -73,10 +73,18 @@ describe("task files", () => {
   });
 
   it("requires a base to name a parked task when a parked set is supplied", () => {
-    const tasks = [task("old"), task("new", { base: "old" })];
+    const tasks = [
+      task("old", { scope: ["old.txt"] }),
+      task("new", { base: "old", scope: ["new.txt"] }),
+    ];
     expect(validateTaskGraph(tasks, { parked: new Set() })).toContain(
       'task "new" continues "old", which is not parked'
     );
     expect(validateTaskGraph(tasks, { parked: new Set(["old"]) })).toEqual([]);
+  });
+
+  it("rejects a task with no scope", () => {
+    const findings = validateTaskGraph([task("narrow", { scope: [] })]);
+    expect(findings).toContain('task "narrow" has no scope: list the files or globs it may touch');
   });
 });

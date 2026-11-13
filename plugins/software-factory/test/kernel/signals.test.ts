@@ -100,7 +100,7 @@ describe("signal policy", () => {
         ctx.writeOutcome(outcome({ summary: "planned", decision: "continue" }));
       });
       harness.script((req, ctx) => {
-        fs.writeFileSync(path.join(s.taskDir, "alpha.md"), "---\nslug: alpha\ntitle: A\n---\nBody.\n", "utf8");
+        fs.writeFileSync(path.join(s.taskDir, "alpha.md"), "---\nslug: alpha\ntitle: A\nscope: [alpha.txt]\n---\nBody.\n", "utf8");
         ctx.writeOutcome(outcome({ summary: "filed" }));
         return fakeTurnResult(req);
       });

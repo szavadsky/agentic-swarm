@@ -87,14 +87,19 @@ export async function runDispatch(
       .filter((r) => r.iteration === iteration && r.actor === "agent" && r.slug)
       .map((r) => r.slug!)
   );
-  let stop: { reason: "infra" | "cancelled"; cause?: string } | undefined;
+  // Infra stops are per slug for this iteration: the faulted task waits for the
+  // next launch, independent work keeps going, and only an iteration where
+  // nothing else is dispatchable ends as infra.
+  const infra = new Map<string, string | undefined>();
+  let cancelled = false;
   let drain: string | undefined;
 
   const start = (action: Action & { slug: string }, taskState: TaskState, task: TaskFile, agent: boolean, harnessId?: string): void => {
     const promise = (async () => {
       const result = await executeTaskAction(runtime, task, action, iteration, taskState);
       const ended = agentStop(result);
-      if (ended) stop = ended;
+      if (ended?.reason === "infra") infra.set(action.slug, ended.cause);
+      else if (ended?.reason === "cancelled") cancelled = true;
     })().finally(() => {
       running.delete(action.slug);
     });
@@ -112,7 +117,14 @@ export async function runDispatch(
     const records = await runtime.store.listRecords();
     const state = derive(tasks, records, runtime.configs.process.flows);
     const turnsUsed = records.filter(
-      (r) => r.iteration === iteration && r.actor === "agent" && r.endedAt
+      (r) =>
+        r.iteration === iteration &&
+        r.actor === "agent" &&
+        r.endedAt &&
+        r.slug !== undefined &&
+        r.step !== "architect" &&
+        r.step !== "pm" &&
+        r.stop?.kind !== "infra"
     ).length;
 
     if (state.terminal) {
@@ -122,7 +134,7 @@ export async function runDispatch(
 
     const agentCount = (): number => [...running.values()].filter((r) => r.agent).length;
     const elapsedMs = Date.now() - iterationStart(records, iteration);
-    if (!drain && !stop) {
+    if (!drain && !cancelled) {
       if (runtime.limits.iterationTurns !== undefined && turnsUsed >= runtime.limits.iterationTurns) {
         drain = `iteration turn limit ${runtime.limits.iterationTurns} reached`;
       } else if (
@@ -139,12 +151,12 @@ export async function runDispatch(
 
     for (const action of candidates) {
       if (runningAtRead.has(action.slug) || running.has(action.slug)) continue;
+      if (cancelled || infra.has(action.slug)) continue;
       const task = tasks.find((t) => t.slug === action.slug);
       if (!task) throw new Error(`action names unknown task "${action.slug}"`);
       const taskState = state.tasks[action.slug]!;
 
       if (action.kind === "step") {
-        if (stop) continue;
         if (drain && !started.has(action.slug)) continue;
         if (!drain && runtime.limits.iterationTurns !== undefined && turnsUsed + agentCount() >= runtime.limits.iterationTurns) {
           continue;
@@ -164,7 +176,6 @@ export async function runDispatch(
       }
 
       if (action.kind === "checks" || action.kind === "merge") {
-        if (stop) continue;
         if (drain && !started.has(action.slug) && taskState.turns === 0) continue;
         if (overlapsRunning(task.scope, running)) continue;
         start(action, taskState, task, false);
@@ -175,11 +186,20 @@ export async function runDispatch(
       // start work, so they are allowed even while draining.
       const result = await executeTaskAction(runtime, task, action, iteration, taskState);
       const ended = agentStop(result);
-      if (ended) stop = ended;
+      if (ended?.reason === "infra") infra.set(action.slug, ended.cause);
+      else if (ended?.reason === "cancelled") cancelled = true;
     }
 
     if (running.size === 0) {
-      if (stop) return { reason: stop.reason, cause: stop.cause, turns: turnsUsed };
+      // A task seen running at the snapshot may have settled during the reads:
+      // its fresh records are visible but its slug was excluded above. Re-derive
+      // instead of reporting boundary with dispatchable work on disk.
+      if (runningAtRead.size > 0) continue;
+      if (cancelled) return { reason: "cancelled", turns: turnsUsed };
+      if (infra.size > 0) {
+        const causes = [...infra.entries()].map(([slug, cause]) => (cause ? `${slug}: ${cause}` : slug));
+        return { reason: "infra", cause: causes.join("; "), turns: turnsUsed };
+      }
       if (drain) return { reason: "drained", cause: drain, turns: turnsUsed };
       return { reason: "boundary", turns: turnsUsed };
     }

@@ -51,6 +51,43 @@ describe("KERNEL0 scenario 4 — infra stops and the item budget", () => {
     }
   }, 60_000);
 
+  it("confines an infra stop to its slug and lets an independent task merge", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script((req) => fakeTurnResult(req, { stop: { kind: "infra", cause: "rate" } }));
+      harness.script((req, ctx) => {
+        fs.writeFileSync(path.join(req.cwd!, "beta.txt"), "beta\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "beta implemented" }));
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "approved", verdict: "approve" }));
+        return fakeTurnResult(req);
+      });
+
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
+      await writeTask(runtime, task("beta", { scope: ["beta.txt"] }));
+
+      const result = await runDispatch(runtime, { iteration: 1 });
+      expect(result.reason).toBe("infra");
+      expect(result.cause).toContain("alpha");
+      expect(result.cause).toContain("rate");
+
+      const records = await runtime.store.listRecords();
+      const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+      expect(state.tasks.alpha!.status).toBe("ready");
+      expect(state.tasks.alpha!.turns).toBe(0);
+      expect(state.tasks.beta!.status).toBe("merged");
+      expect(records.filter((r) => r.slug === "beta" && r.step === "merge" && r.ok === true)).toHaveLength(1);
+      expect(records.filter((r) => r.slug === "alpha" && r.step === "park")).toHaveLength(0);
+      expect(harness.calls.length).toBe(3);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
   it("ends a launch with a summary and exit 1 when the harness is out of quota", async () => {
     const goal = makeGoal();
     try {
