@@ -81,7 +81,8 @@ Modern harnesses deliver a decent story (several hundred lines of code). The age
 - Config has a schema and pre-flight validation.
 
 ### Harness agnosticism
-- Works through any acp-compatible harness with opaque config passed at launch (command-line args, env, or config files depending on the harness). omp is a special case that simplifies things, not a dependency; extra tools exposable through ACP.
+- Works through any acp-compatible harness with opaque config passed at launch (command-line args, env, or config files depending on the harness). omp is a special case that simplifies things, not a dependency; extra tools exposable through ACP. Supported and tested during bootstrapping: omp, OpenCode, codex, pi — with harness rotation across iterations so no harness-specific assumption survives untested.
+- Each harness has a role it is best at, discovered during bootstrapping and recorded in run configs, not in code: pi is the recommended task-flow implementer (minimal, great at the single task); omp and OpenCode fit spikes better out of the shelf, where subagent expansion matters; omp carries structured output in the orchestration folder, with LSP configured for YAML/JSON there (other harnesses' LSP support is unverified).
 - Resilience and fallbacks are important. omp provides model fallbacks; fallback across harnesses (e.g. an OpenCode free model → OpenCode Go through omp) is nice to have.
 
 ### Operating assumptions
@@ -134,12 +135,13 @@ Always execute from a pinned last-good version, never from the tree being edited
 #### Bootstrap models/harness
 - Architect: Claude Opus 5.5 at high (omp, Claude Code).
 - Escalation implementer: Sonnet 5.5 — exists in our environment; minimize use.
+- Subscriptions: omp, OpenCode, codex and pi all run on the OpenCode Go subscription; omp additionally on the Claude subscription (Opus/Sonnet). Self-improvement runs cover both legs: codex through OpenCode Go (muse/deepseek) and Claude through omp (Opus architects, Sonnet escalation).
 - OpenCode Go subscription: beam-free (least capable; steer ingestion, schema fixes, commits); capable implementers deepseek-v4.1-flash and muse-spark-1.3-contributor — through omp, codex, OpenCode.
 - OpenCode-only free models (OpenCode harness only): glm-5.3-flash-free, deepseek-v4.1-flash-free (most capable), minimax-m3.1-flash-free, mimo-v2.6-flash-free, inkling-2-small-free — reasonably capable for development tasks.
 - Leverage OpenCode with the free models early in bootstrapping: front agent, review, PM structuring and evidence digests run there first; paid tiers only where the free models demonstrably fail. Promote a step to a paid tier on measured failure, not by default.
-- All implementers / task reviewers at the highest supported effort, resolved at pre-flight (effort syntax differs per harness; `:max` exists only on some models).
-- Develop several "model" configs and alternate them to test different harness combinations across iterations.
-- Installed and authorized: omp, Claude Code, OpenCode, codex (only through the OpenCode subscription; muse/deepseek enabled).
+- All implementers / task reviewers at the highest supported effort, resolved at pre-flight (effort syntax differs per harness; `:max` exists only on some models; muse takes `:max` on omp, `#xhigh` on OpenCode, the bare id on codex).
+- Develop several "model" configs and alternate them to test different harness combinations across iterations; pi is one of the rotated harnesses.
+- Installed and authorized: omp, Claude Code, OpenCode, codex (only through the OpenCode subscription; muse/deepseek enabled), pi (OpenCode Go subscription).
 - What we use as a hobby setup is not what we build for production: this list is one run config, not a factory assumption.
 
 ## Owner decisions propagated — 2026-11-12
