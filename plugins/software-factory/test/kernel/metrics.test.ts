@@ -87,6 +87,7 @@ describe("iteration metrics", () => {
       const taskDir = path.join(goalDir, "tasks");
       fs.mkdirSync(goalDir, { recursive: true });
       fs.writeFileSync(path.join(goalDir, "intent.md"), "# Goal\n\nCreate alpha.\n", "utf8");
+      fs.writeFileSync(path.join(goalDir, "class.yaml"), "class: bigger\n", "utf8");
 
       const harness = new FakeHarness({ id: "fake" });
       handled(harness, usage(0.1, 100, 10), (req, ctx) => {

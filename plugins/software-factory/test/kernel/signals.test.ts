@@ -38,6 +38,7 @@ function setupRepo(): { repo: TmpRepo; goalDir: string; taskDir: string } {
   const goalDir = path.join(repo.dir, ".factory/artifacts/demo");
   fs.mkdirSync(path.join(goalDir, "tasks"), { recursive: true });
   fs.writeFileSync(path.join(goalDir, "intent.md"), "# Goal\n\nCreate alpha.\n", "utf8");
+  fs.writeFileSync(path.join(goalDir, "class.yaml"), "class: bigger\n", "utf8");
   return { repo, goalDir, taskDir: path.join(goalDir, "tasks") };
 }
 

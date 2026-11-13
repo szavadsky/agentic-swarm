@@ -124,6 +124,9 @@ describe("CLI end to end — init, steer, run, status", () => {
       expect(fs.readFileSync(path.join(goalDir, "intent.md"), "utf8")).toContain("Create alpha.txt");
       expect(fs.existsSync(path.join(goalDir, "tasks"))).toBe(true);
       expect(fs.existsSync(path.join(goalDir, "records"))).toBe(true);
+      // This goal is a bigger one: the class file stands in for the front
+      // consult, so the launch still reaches the architect boundary.
+      fs.writeFileSync(path.join(goalDir, "class.yaml"), "class: bigger\n", "utf8");
 
       expect(await dispatch(["init", "--repo", repo.dir, "--goal", "demo", "--intent", intentSource])).toBe(0);
       const otherIntent = path.join(path.dirname(repo.dir), `${base}-other.md`);

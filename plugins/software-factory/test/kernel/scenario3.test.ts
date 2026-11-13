@@ -66,6 +66,7 @@ function setupRepo(): Scenario {
   const goalDir = path.join(repo.dir, ".factory/artifacts/demo");
   fs.mkdirSync(goalDir, { recursive: true });
   fs.writeFileSync(path.join(goalDir, "intent.md"), "# Goal\n\nCreate alpha.\n", "utf8");
+  fs.writeFileSync(path.join(goalDir, "class.yaml"), "class: bigger\n", "utf8");
   return { repo, goalDir, taskDir: path.join(goalDir, "tasks"), harness: () => new FakeHarness({ id: "fake" }) };
 }
 

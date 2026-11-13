@@ -5,6 +5,7 @@ Template syntax: `{{name}}` interpolates one value; `{{> partial-name}}` inlines
 | prompt | partials |
 |---|---|
 | architect | `_calibration`, `_outcome` |
+| front | `_calibration`, `_outcome` |
 | pm | `_calibration`, `_outcome` |
 | implementer | `_clean-code`, `_calibration`, `_outcome` |
 | reviewer | `_clean-code`, `_calibration`, `_outcome` |
@@ -24,6 +25,21 @@ Template syntax: `{{name}}` interpolates one value; `{{> partial-name}}` inlines
 | `pack_path` | path to the iteration context pack: derived status, short hashes, per-task rounds, infra commands, code facts, links |
 | `digest_path` | path to the previous launch's digest; empty string on a first launch |
 | `steers` | formatted pending steers: id, first line, file path; `none` when empty |
+| `outcome_path` | path where the outcome file must be written when the harness asks for a file |
+
+## front.md
+
+| variable | meaning |
+|---|---|
+| `iteration` | 1-based iteration number of this launch |
+| `intent_path` | path to the goal's `intent.md` |
+| `plan_path` | path to the goal's markdown plan; may not exist yet |
+| `tasks_dir` | directory where the one task file is written, `<slug>.md` |
+| `class_path` | path to `class.yaml`: `{ class: trivial\|task\|bigger, slug? }` beside the plan |
+| `pack_path` | path to the iteration context pack the front writes: the architect's input on `bigger`, the implementer's briefing on `trivial`/`task` |
+| `checkout` | path to the stable goal checkout the front reads |
+| `setup_command` | repository setup command; `none` when not needed |
+| `gate_commands` | configured gate commands, one per line with ids |
 | `outcome_path` | path where the outcome file must be written when the harness asks for a file |
 
 ## pm.md

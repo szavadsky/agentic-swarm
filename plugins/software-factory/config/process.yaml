@@ -22,6 +22,7 @@ flows:
         review: true
 roles:
   architect: { prompt: architect }
+  front: { prompt: front }
   pm: { prompt: pm }
   implementer: { prompt: implementer }
   reviewer: { prompt: reviewer }
