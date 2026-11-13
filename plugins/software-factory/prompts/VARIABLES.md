@@ -60,6 +60,7 @@ Template syntax: `{{name}}` interpolates one value; `{{> partial-name}}` inlines
 | `head_hash` | commit hash after the latest implementer turn |
 | `round` | 1-based review round |
 | `max_rounds` | configured review round limit for this flow |
+| `baseline_checks` | gate failures recorded on the base before any task; pre-existing, not findings against this diff |
 | `prior_findings` | previous round's findings; empty string in round 1 |
 | `outcome_path` | path where the outcome file must be written when the harness asks for a file |
 

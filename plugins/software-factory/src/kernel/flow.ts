@@ -1,5 +1,6 @@
 import { commitAll } from "../core/git/commit.js";
 import { runAgentTurn } from "./agent.js";
+import { preexistingRed, recordedBaseGates } from "./baseline.js";
 import { runGates } from "./gates.js";
 import { mergeTask, type MergeResult } from "./integrate.js";
 import {
@@ -11,7 +12,13 @@ import {
   scriptMeta,
 } from "./record.js";
 import { materialHash } from "./tasks.js";
-import { ensureTaskWorktree, headSha, treeSha } from "./worktree.js";
+import {
+  containmentSnapshot,
+  containmentViolation,
+  ensureTaskWorktree,
+  headSha,
+  treeSha,
+} from "./worktree.js";
 import {
   checksDue,
   findStep,
@@ -64,6 +71,7 @@ async function handleStepResult(
   flow: FlowDefinition,
   iteration: number,
   worktree: string,
+  preexisting: ReadonlySet<string>,
   stop: StepRecord["stop"],
   outcome: StepRecord["outcome"]
 ): Promise<TaskActionResult> {
@@ -95,7 +103,7 @@ async function handleStepResult(
   }
   if (checksDue(flow, step.id)) {
     const checks = await runGates(runtime, worktree);
-    await appendChecks(runtime.store, meta, checks);
+    await appendChecks(runtime.store, meta, checks, { preexisting });
   }
   return {};
 }
@@ -128,6 +136,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
   }
 
   const meta = { iteration, slug: task.slug, round: state.round };
+  const preexisting = preexistingRed(recordedBaseGates(records));
   const target = stepTarget(runtime, task, state, step.id);
   const session = isFixTurn(flow, state, step.id)
     ? await followUpSession(runtime, task, target, records, ensured.path)
@@ -135,6 +144,10 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
   const vars = promptVars(runtime, task, ensured.path, records, state.round, flow);
   vars.base_hash = firstBase(records, task.slug) ?? ensured.startPoint;
   vars.head_hash = await headSha(ensured.path);
+  // A turn may only change its own worktree (implementer.md). Snapshot the
+  // shared checkouts now; the settle below refuses the commit on any breach.
+  const contained = await containmentSnapshot(runtime, ensured.path);
+  let breach: string | undefined;
   const result = await runAgentTurn(runtime, {
     role: target.role,
     cwd: ensured.path,
@@ -147,9 +160,16 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
     vars,
     expectation: step.review ? "review" : "any",
     session,
-    settle: async () =>
-      commitStep(runtime, meta, ensured.path, `factory: ${task.slug} ${step.id} r${state.round}`),
+    settle: async () => {
+      breach = await containmentViolation(runtime, ensured.path, ensured.branch, contained);
+      if (breach) return { ok: false, cause: `containment: ${breach}` };
+      return commitStep(runtime, meta, ensured.path, `factory: ${task.slug} ${step.id} r${state.round}`);
+    },
   });
+  if (breach) {
+    await appendPark(runtime.store, meta, `containment: ${breach}`);
+    return {};
+  }
   return handleStepResult(
     runtime,
     task,
@@ -158,6 +178,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
     flow,
     iteration,
     ensured.path,
+    preexisting,
     result.record.stop,
     result.outcome
   );
@@ -184,7 +205,10 @@ async function runChecks(
     return {};
   }
   const checks = await runGates(runtime, ensured.path);
-  await appendChecks(runtime.store, { iteration, slug: task.slug, round: state.round }, checks);
+  const preexisting = preexistingRed(recordedBaseGates(await runtime.store.listRecords()));
+  await appendChecks(runtime.store, { iteration, slug: task.slug, round: state.round }, checks, {
+    preexisting,
+  });
   return {};
 }
 

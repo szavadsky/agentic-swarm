@@ -34,7 +34,7 @@ export async function initGoal(opts: { repo: string; goal: string; intent?: stri
 
   const configs = loadConfigs(repoRoot);
   const paths = resolveGoalPaths(configs, repoRoot, opts.goal);
-  const store = createFolderStore(paths.goalDir);
+  const store = createFolderStore(paths.goalDir, path.dirname(paths.goalDir));
   await store.ensureLayout();
 
   const intentPath = path.join(paths.goalDir, "intent.md");
@@ -75,7 +75,7 @@ export async function statusGoal(repo: string, goal: string): Promise<StatusResu
   const configs = loadConfigs(repoRoot);
   const paths = resolveGoalPaths(configs, repoRoot, goal);
   if (!fs.existsSync(paths.goalDir)) throw new Error(`goal "${goal}" has no directory at ${paths.goalDir}`);
-  const store = createFolderStore(paths.goalDir);
+  const store = createFolderStore(paths.goalDir, path.dirname(paths.goalDir));
   const state = derive(await store.listTasks(), await store.listRecords(), configs.process.flows);
 
   let lastSummary: string | undefined;
@@ -107,7 +107,7 @@ export async function steerGoal(repo: string, goal: string, source: SteerSource)
   const configs = loadConfigs(repoRoot);
   const paths = resolveGoalPaths(configs, repoRoot, goal);
   if (!fs.existsSync(paths.goalDir)) throw new Error(`goal "${goal}" has no directory at ${paths.goalDir}`);
-  const store = createFolderStore(paths.goalDir);
+  const store = createFolderStore(paths.goalDir, path.dirname(paths.goalDir));
   await store.ensureLayout();
 
   const hash = crypto.createHash("sha256").update(source.text).digest("hex").slice(0, 8);

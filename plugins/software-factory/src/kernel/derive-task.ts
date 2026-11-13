@@ -120,6 +120,9 @@ export function reduceTask(task: TaskFile, records: StepRecord[], flow: FlowDefi
       continue;
     }
     if (rec.step === "merge") {
+      // A merge start sealed by crash recovery is not an outcome: the planned
+      // commit is still in the record and the merge queue recovers it.
+      if (rec.stop?.kind === "infra") continue;
       if (rec.ok === true) {
         gateFix = false;
         pendingChecks = null;

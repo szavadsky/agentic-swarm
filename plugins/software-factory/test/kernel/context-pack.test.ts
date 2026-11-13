@@ -29,6 +29,11 @@ describe("context pack", () => {
       steers: [],
       setup: [],
       gates: [{ id: "test", command: "bun test" }],
+      baseGates: {
+        commit: "feedfacecafebeef",
+        ok: false,
+        checks: [{ name: "lint", ok: false, summary: "exit 1", output: "2 errors", fingerprint: "f" }],
+      },
       forwarded: [{ source: "a review r1", calibration: "architect", kind: "risk", text: "watch it" }],
     };
     const first = renderContextPack(input);
@@ -40,6 +45,8 @@ describe("context pack", () => {
     expect(first).toContain("bun test");
     expect(first).toContain("iterations/2/digest.md");
     expect(first).toContain("src/kernel/ — 8 files");
+    expect(first).toContain("base feedfaceca was red before any task");
+    expect(first).toContain("lint: exit 1");
   });
 
   it("caps the pack by bytes and says it truncated", () => {

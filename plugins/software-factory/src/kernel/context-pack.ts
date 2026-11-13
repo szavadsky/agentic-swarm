@@ -1,5 +1,6 @@
 import { concernFingerprint } from "../core/concerns.js";
 import type { ConcernKind } from "../core/concern-types.js";
+import type { BaseGateState } from "./baseline.js";
 import type { State, StepRecord, TaskFile } from "./types.js";
 import type { Steer } from "./mailbox.js";
 
@@ -33,6 +34,8 @@ export interface ContextPackInput {
   steers: Steer[];
   setup: string[];
   gates: { id: string; command: string }[];
+  /** Last recorded pre-flight base run; absent when it was skipped. */
+  baseGates?: BaseGateState;
   forwarded: ForwardedConcern[];
   maxBytes?: number;
 }
@@ -115,6 +118,20 @@ export function renderContextPack(input: ContextPackInput): string {
   lines.push("", "## Infra");
   lines.push(`- setup: ${input.setup.length ? input.setup.join(" && ") : "none"}`);
   for (const gate of input.gates) lines.push(`- gate ${gate.id}: ${gate.command}`);
+
+  lines.push("", "## Base gates");
+  if (!input.baseGates) {
+    lines.push("- not recorded");
+  } else if (input.baseGates.ok) {
+    lines.push(`- base ${short(input.baseGates.commit)}: green`);
+  } else {
+    lines.push(
+      `- base ${short(input.baseGates.commit)} was red before any task (pre-existing; not a task finding):`
+    );
+    for (const check of input.baseGates.checks.filter((c) => !c.ok)) {
+      lines.push(`  - ${check.name}: ${check.summary}`);
+    }
+  }
 
   lines.push("", "## Pending steers");
   lines.push(

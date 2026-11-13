@@ -38,5 +38,6 @@ Forward only what the calibration calls remarkable; everything else stays on the
 - worktree: `{{worktree}}` (run git as `git -C <worktree>`; cited paths are relative to it)
 - diff range: `{{base_hash}}..{{head_hash}}` — spans every round of this task
 - round: `{{round}}` of `{{max_rounds}}`
+- pre-existing base gate failures: `{{baseline_checks}}` — red before this diff; not findings against it
 - prior findings: `{{prior_findings}}` — empty in round 1
 - outcome path: `{{outcome_path}}`

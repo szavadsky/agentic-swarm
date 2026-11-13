@@ -1,5 +1,6 @@
 import path from "node:path";
 import type { Usage } from "../harness/types.js";
+import { recordedBaseGates } from "./baseline.js";
 import { derive } from "./derive.js";
 import { rolesByStep, writeMetrics } from "./metrics.js";
 import type { ArtifactStore, GoalDecision, KernelRuntime, State, StepRecord } from "./types.js";
@@ -21,6 +22,10 @@ function defaultStatus(decision: GoalDecision | undefined): SummaryStatus {
   if (decision === "done") return "goal-met";
   if (decision === "blocked") return "blocked-by-user";
   return "in-progress";
+}
+
+function shortHash(hash: string): string {
+  return hash.slice(0, 10);
 }
 
 function zeroUsage(): Usage {
@@ -129,6 +134,15 @@ export async function writeIterationSummary(
   const usage = recs.reduce((sum, rec) => addUsage(sum, rec.usage), zeroUsage());
   const agentTurns = recs.filter((r) => r.actor === "agent" && r.endedAt).length;
   const scriptTurns = recs.filter((r) => r.actor === "script" && r.endedAt).length;
+  const base = recordedBaseGates(input.records);
+  const baseLines = !base
+    ? ["- not recorded"]
+    : base.ok
+      ? [`- ${shortHash(base.commit)}: green`]
+      : [
+          `- ${shortHash(base.commit)} was red before any task (pre-existing; not attributed to tasks):`,
+          ...base.checks.filter((c) => !c.ok).map((c) => `  - ${c.name}: ${c.summary}`),
+        ];
 
   const lines = [
     `# Iteration ${iteration} summary`,
@@ -149,6 +163,9 @@ export async function writeIterationSummary(
     `- spikes finished: ${finished.length ? finished.join(", ") : "none"}`,
     `- pending: ${pending.length ? pending.join(", ") : "none"}`,
     `- cancelled: ${cancelled.length ? cancelled.join(", ") : "none"}`,
+    "",
+    "## Base gates",
+    ...baseLines,
     "",
     "## Parked by root cause",
     ...(parkedByCause.size

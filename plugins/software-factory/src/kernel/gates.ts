@@ -55,3 +55,14 @@ export function formatFailingChecks(checks: readonly CheckResult[] | undefined):
     .map((c) => `### ${c.name}: ${c.summary}\n${c.output}`)
     .join("\n\n");
 }
+
+/**
+ * Failing gates that are the task's own: already-red base gates are inherited
+ * (KERNEL0 §6) and neither force a fix round nor block a merge.
+ */
+export function newGateFailures(
+  checks: readonly CheckResult[],
+  preexisting: ReadonlySet<string>
+): CheckResult[] {
+  return failingChecks(checks).filter((c) => !preexisting.has(c.name));
+}

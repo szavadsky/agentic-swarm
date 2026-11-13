@@ -79,7 +79,7 @@ export async function makeRuntime(
 ): Promise<KernelRuntime> {
   const configs = loadConfigs(repo.dir);
   const paths = resolveGoalPaths(configs, repo.dir, goal);
-  const store = createFolderStore(paths.goalDir);
+  const store = createFolderStore(paths.goalDir, path.dirname(paths.goalDir));
   await store.ensureLayout();
   const runtime: KernelRuntime = {
     paths,

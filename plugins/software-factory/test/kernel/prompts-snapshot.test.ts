@@ -41,6 +41,7 @@ const ROLES: Record<string, Record<string, string>> = {
     head_hash: "def5678",
     round: "1",
     max_rounds: "2",
+    baseline_checks: "- test: 2 failing",
     prior_findings: "",
     outcome_path: "/worktrees/demo-tasks/alpha/outcome.yaml",
   },

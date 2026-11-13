@@ -1,6 +1,7 @@
 import path from "node:path";
 import type { SessionRef } from "../harness/types.js";
-import { formatFailingChecks } from "./gates.js";
+import { preexistingRed, recordedBaseGates } from "./baseline.js";
+import { formatFailingChecks, newGateFailures } from "./gates.js";
 import { formatConcerns } from "./record.js";
 import type {
   FlowDefinition,
@@ -158,15 +159,17 @@ export function promptVars(
     .filter((r): r is StepRecord => Boolean(r))
     .sort(bySeq)
     .at(-1);
+  const base = recordedBaseGates(records);
+  const preexisting = preexistingRed(base);
   let findings = "";
   if (latest === review && review?.outcome) findings = formatConcerns(review.outcome);
-  else if (latest?.checks) findings = formatFailingChecks(latest.checks);
+  else if (latest?.checks) findings = formatFailingChecks(newGateFailures(latest.checks, preexisting));
   return {
     task_path: `${runtime.store.tasksDir}/${task.slug}.md`,
     worktree,
     setup_command: runtime.configs.repo.setup.join(" && ") || "none",
     gate_commands: runtime.configs.repo.gates.map((g) => `- ${g.id}: ${g.command}`).join("\n") || "none",
-    baseline_checks: checks?.checks ? formatFailingChecks(checks.checks) || "none" : "none",
+    baseline_checks: base ? formatFailingChecks(base.checks) || "none" : "none",
     findings,
     round: String(round),
     base_hash: "",

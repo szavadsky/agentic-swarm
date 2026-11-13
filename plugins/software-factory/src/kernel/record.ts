@@ -1,4 +1,5 @@
 import type { CheckResult } from "../core/checks/types.js";
+import { newGateFailures } from "./gates.js";
 import type { ArtifactStore, Concern, Outcome, RecordStart } from "./types.js";
 
 export function scriptMeta(
@@ -24,10 +25,10 @@ export async function appendChecks(
   store: ArtifactStore,
   meta: { iteration: number; slug: string; round: number },
   checks: CheckResult[],
-  opts: { step?: string } = {}
+  opts: { step?: string; preexisting?: ReadonlySet<string> } = {}
 ): Promise<void> {
   await store.appendRecord(scriptMeta(meta.iteration, opts.step ?? "checks", meta), {
-    ok: checks.every((c) => c.ok),
+    ok: newGateFailures(checks, opts.preexisting ?? new Set()).length === 0,
     checks,
   });
 }
