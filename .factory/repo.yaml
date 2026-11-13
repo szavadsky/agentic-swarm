@@ -1,0 +1,8 @@
+baseBranch: factory-v3
+artifactRoot: .factory/artifacts
+workdir: plugins/software-factory
+setup:
+  - bun install --frozen-lockfile --silent
+gates:
+  - bun run typecheck
+  - bun test
