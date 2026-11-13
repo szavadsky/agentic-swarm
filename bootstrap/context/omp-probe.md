@@ -1,6 +1,6 @@
 # omp CLI probe (v18.20.0)
 
-Tags: `[V]` ran/read locally; `[D]` help/docs only. Scratch repo `/tmp/omp-probe-20261112-191037`. All calls used free `opencode-go/beam-free`; no global config/auth changed (isolation test used `PI_CODING_AGENT_DIR` + `omp auth export|import` copy).
+Tags: `[V]` ran/read locally; `[D]` help/docs only. Scratch repo `/tmp/omp-probe-20261112-191037`. All model calls used free models (`opencode-go/beam-free`; `opencode-zen/*-free` only for the 429 fallback test); no global config/auth changed (isolation test used `PI_CODING_AGENT_DIR` + `omp auth export|import` copy, then deleted).
 
 ## 0. Binary
 - `/home/slava/.bun/bin/omp`, `omp/18.20.0`. `omp --help` (269 lines), `omp models --json`, `omp://` internal docs (`rpc.md`, `session.md`, `compaction.md`, `settings.md`, `approval-mode.md`, `sdk.md`, `session-operations-...md`). [V]
@@ -34,14 +34,14 @@ omp --mode rpc --model M --cwd D --session-dir D/sessions --tools= --no-lsp --co
 ## 2. Sessions
 - Default: `~/.omp/agent/sessions/<encoded-cwd>/<timestamp>_<sessionId>.jsonl` (observed `-tmp-omp-probe-.../2026-11-13T00-15-34-116Z_01a1d242-....jsonl`). Encoding: `-<rel>` under home, `-tmp-<rel>` under tmp, `--<abs>--` else. [V/D]
 - Pin dir `--session-dir DIR`; exact file `--session PATH` (hidden flag; appended, not forked) [V]; ephemeral `--no-session`.
-- Resume id or path: `--resume <sessionId|prefix>` / `--resume /abs/x.jsonl` [V]; `--continue` newest [D]; `--fork <id|path>` creates a new session (rejected with `--no-session`) [V].
+- Resume id or path: `--resume <sessionId|prefix>` / `--resume /abs/x.jsonl` [V/D]; `--continue` newest [D]; `--fork <id|path>` creates a new session, rejected with `--no-session` [V/D].
 - 2-turn resume verified: same sessionId, turn 2 answered `ALPHA`, cacheRead=1728. [V]
 - Format: 256-byte `title` slot line, then `{"type":"session","version":3,"id","timestamp","cwd"}`, then entries. Observed entry types: `message` (role camelCase), `model_change`, `thinking_level_change`, `model_usage`, `compaction`, `custom` (`session_exit`, `date-cwd-reminder`, `system-prompt-digest`), `title`. [V]
 - RPC fork: `{"id":"f","type":"fork"}` -> `data:{"cancelled":false}`; `get_state` then shows new `sessionFile`/`sessionId`; header `parentSession` = old id. `fork` with `entryId` truncates root->entry. [V/D]
 - RPC `open_session {"sessionDir":D}` -> `{"cancelled":false,"resumed":false,"sessionId","sessionFile"}` (adopt thread; resumed:true if existing); `new_session` -> `{"cancelled":false}` + new id. [V]
 - Compact programmatically (no CLI flag): `{"id":"c","type":"compact","customInstructions"?}` -> `data:{summary,shortSummary,firstKeptEntryId,tokensBefore,details{readFiles,modifiedFiles}}`; events `manual_compaction_start`/`manual_compaction_end`; session entry `{"type":"compaction",summary,firstKeptEntryId,tokensBefore,tokensAfter,method}` (`tokensAfter` only in the entry). [V]
 - Small sessions fail `success:false,error:"Nothing to compact (session too small)"` until history > `compaction.keepRecentTokens`; force in tests with overlay `compaction:{keepRecentTokens:1,reserveTokens:1,methodOrder:[soft]}`. [V]
-- Auto-compaction did NOT fire under RPC after 4 attempts with lowered `thresholdTokens`/`thresholdPercent`; use RPC `compact` (or `/compact` prompt). One writer per session file (lease moves a contested session to a sibling). [V-negative/D]
+- Auto-compaction did NOT fire under RPC across 3 configured variants (lowered `thresholdTokens` 900/2000, `thresholdPercent` 1); use RPC `compact` (or `/compact` prompt). One writer per session file (lease moves a contested session to a sibling). [V-negative/D]
 
 ## 3. Model selection
 - List: `omp models [--json] [find SUBSTR|PROVIDER] [--kind all]`. JSON: `{"models":[{provider,id,selector,name,contextWindow,maxTokens,reasoning,thinking:[efforts],input,cost{input,output,cacheRead,cacheWrite},pricingStatus}]}`. [V]

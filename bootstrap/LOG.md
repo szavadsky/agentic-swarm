@@ -11,6 +11,19 @@ Append-only. Two parts: **Decisions** (rebuttable by practice — overturn by ad
 | D3 | 2026-11-12 | Kernel-0 is built by foreman `task` agents that drive OpenCode free models for implementation and verify/repair the result themselves. Every free-model attempt is recorded (model, task size, outcome) in the Journal. | Owner preference (free models first); produces the "promote on measured failure" evidence before the factory exists. | Two consecutive free-model failures on the same slice → foreman implements directly; record it. |
 | D4 | 2026-11-12 | Shakedown launches use a toy goal and a free model in the architect alias; Opus is used only once plumbing is proven by a green shakedown. | Architect tier is ~50x; plumbing bugs must not be paid for at that rate. | Free model cannot produce a usable plan at all → use the cheapest paid capable model for shakedown. |
 | D5 | 2026-11-12 | Orchestrator artifacts live in `bootstrap/` (tracked): `README.md` handoff + runbook, `KERNEL0.md` initial intent, `LOG.md`, `context/*.md` scout briefs. Factory runtime artifacts follow the manifesto (plain folder, gitignored; sessions outside git). | The session will continue as a task-grade agent; state must be on disk, small, and ordered by authority. | — |
+| D6 | 2026-11-12 | Kernel-0 gets every outcome as a file the agent writes at a path named in the prompt, same for all harnesses; fallback is a fenced block in the final message. Native structured output (omp `yield`, Claude Code, Codex) is backlog. | OpenCode 2.2.7 has no schema output (`context/opencode-probe.md` §5); one mechanism keeps flows free of harness branches. | Free models miss the file in more than ~1 of 10 turns → add the native path where `Caps` offers it. |
+| D7 | 2026-11-12 | omp adapter drives one RPC process per turn (`--mode rpc`): prompt, read usage, explicit `compact` before exit when asked. Overlay per launch: `cacheRetention: short`, memory off, auto-learn off. | Verified: RPC resume + compact work, auto-compaction does not fire under RPC (`context/omp-probe.md`). | — |
+| D8 | 2026-11-12 | Free-tier quota errors (`provider.free-limit`, HTTP 429, retry-after ~24 h but often passing a minute later) are `infra: quota`: retried, never charged to the item budget. Run-config aliases carry a fallback chain: OpenCode free → OpenCode Go subscription → Alibaba token plan (all zero marginal cost), paid tiers last. | Both probes hit the 429 intermittently. | Chain exhausts during a launch → drain and exit with a remarkable; do not silently wait. |
+| D9 | 2026-11-12 | The self-run targets the `factory-v3` worktree; each goal has its own integration branch; the orchestrator merges it into `factory-v3` after independent verification, then promotes. Promotion is a bootstrap script (`bootstrap/promote.sh`), not a factory feature. | Pinned self-execution exists only because the factory edits itself; other target repositories never need it. | — |
+
+## Open for the owner
+
+Non-blocking; the stated assumption is in force until overruled.
+
+- **Core rebuilt, not patched** (D1). The advice (56, 78) patches twelve architect call sites inside v2's flow modules; D1 deletes those modules and writes a small pure core on the kept leaf modules, still in place on a branch.
+- **Architect spend bound for self-runs.** Assumption: one iteration per launch, one architect launch per iteration, stop and ask if a single launch's architect cost exceeds $5 (v2's largest single plan call was $2.86).
+- **Benchmark goal.** Assumption: the smallest v2 baseline under `plugins/software-factory/docs/runs` that still exercises review and merge; chosen by a scout before phase D.
+- **Superseded root documents** (`docs/adr/`, `docs/factory.v2.md`, `docs/dev-process.md`, `plugins/software-builder/`). Assumption: removed by a factory task at phase E, visible in the merge to `main` for the owner to veto.
 
 ## Journal
 

@@ -100,7 +100,8 @@ Prompts: one template per role (`architect`, `pm`, `implementer`, `reviewer`, `d
 - Architect is launched only at an iteration boundary; count of architect launches per iteration is 1.
 - The architect never writes a schema-bound file; the PM never edits `plan.md`; nobody edits the plan in flight.
 - Done tasks are frozen; slugs are immutable; rework is a new slug.
-- State is never stored — it is derived; deleting everything but `tasks/` and `records/` loses nothing.
+- Parked is terminal for a slug. The architect continues parked work through a new slug that may name the parked branch as its base — parked work is kept, never merged silently, never retried silently.
+- State is never stored — it is derived; deleting everything but `tasks/` and `records/` loses nothing. Script steps (commit, checks, merge) write records like agent steps; `derive` reads nothing else.
 - Every iteration emits exactly one summary; nothing else reaches the owner unless calibrated `owner`.
 - One budget per item; no retry counter nested inside another.
 - The factory executes from the pinned build; the tree being edited is never on the execution path.
