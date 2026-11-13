@@ -279,3 +279,9 @@ Verbatim, newest last; each with what it changed.
 - Session switched to the economy-reasoner mode: discovery delegated, orchestrator keeps intent and judgment.
 - Four read-only agents running against iterations 1–12 (iteration 13 is live and excluded): manifesto-vs-built matrix, execution history, session forensics, kernel edge-case review. Orchestrator's own line-anchored reading of the manifesto is done (37 inline candidates).
 - Output will land as additive edits in `manifesto.md` on main, then synced to factory-v3.
+
+### 2026-11-13 — iteration 13: 5 merged, 9 parked; one park caused by the orchestrator ($2.20)
+- 2.6 h, exit 3. Merged: git-helpers-prune, front-handoff, pm-infra-stop, steer-guards, front-status. Pending 11. Architect spend is $1.48 of $2.20 (67%), third iteration in a row whose review says "the plan drew the scope too tight".
+- **My fault:** rotation-threaded parked on `containment: HEAD moved outside the worktree` (records 00559/00560, ended 22:42:55Z). The HEAD that moved was mine: `676a296` (review-steer log) committed on factory-v3 at 22:37:36Z while the turn was live. The check at `src/kernel/worktree.ts:296-302` blames any change to the repo root's HEAD or status on the running turn.
+- Rule from now: no edits and no commits in this worktree while a run is live. Journal, merge and manifesto sync happen between runs only. The kernel defect (operator change blamed on a task) goes into the review as a bug with handling.
+- Merge of iteration 13 and the relaunch are held until the review's evidence agents finish reading this tree, so their file:line citations stay valid.
