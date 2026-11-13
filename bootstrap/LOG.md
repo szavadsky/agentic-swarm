@@ -123,3 +123,7 @@ Verbatim, newest last; each with what it changed.
 
 ### 2026-11-12 — S3 merged into `factory-v3` (`a67189f`)
 - Fast-forward-shaped merge, no conflicts. Suite on the integration branch: 273 pass / 2 skip / 0 fail, 22 s; typecheck green. S2/S4 branches predate the merge — the INT assignment now merges them into a `factory-v3` that already contains S3, which shrinks its conflict surface to S2↔S4 shared-core changes.
+
+### 2026-11-12 — free tier truly exhausted; S2/S4 moved to subscription
+- Both free-tier resumes failed with `provider.free-limit` 429, retryAfter 80,035 s (~22 h), steps=0. First 429 with a full-day retry window that also blocks the immediate retry — the earlier "passes a minute later" behavior is gone. S2 and S4 resumed in-session on `opencode-go/deepseek-v4.1-flash#max` (same weights, subscription billing); sessions `ses_e2d85ffacf…` / `ses_e2d85ffaaf…`.
+- Lesson for D8/D14: the `flock` slot limits our own concurrency but not the account-wide free quota the probes share. Next free-tier availability unknown — assume none until the retry window passes; run everything billable meanwhile.
