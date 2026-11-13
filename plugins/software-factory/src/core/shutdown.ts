@@ -1,6 +1,5 @@
 import fs from "node:fs";
 import { readYaml, writeYamlAtomic } from "./records/io.js";
-import { appendJournal } from "./journal.js";
 import type { Usage } from "../harness/types.js";
 
 /** Fields the shutdown path may write back into a started record's meta.yaml. */
@@ -14,7 +13,6 @@ interface InterruptedStepMeta {
 export interface ActiveStepRecord {
   recordDir: string;
   metaPath: string;
-  taskDir: string;
   sessionId?: string;
   getUsage?: () => Usage | undefined;
 }
@@ -113,9 +111,9 @@ export async function terminateAllChildGroups(graceMs = 500): Promise<void> {
 /**
  * Marks all currently registered active step records with status "interrupted" cleanly.
  */
-export async function markActiveStepsInterrupted(signalName?: string): Promise<void> {
-  const steps = Array.from(activeSteps.entries());
-  for (const [recordDir, step] of steps) {
+export async function markActiveStepsInterrupted(): Promise<void> {
+  const steps = Array.from(activeSteps.values());
+  for (const step of steps) {
     try {
       if (fs.existsSync(step.metaPath)) {
         const meta = await readYaml<InterruptedStepMeta>(step.metaPath);
@@ -130,15 +128,10 @@ export async function markActiveStepsInterrupted(signalName?: string): Promise<v
             meta.usage = { ...u };
           }
           await writeYamlAtomic(step.metaPath, meta);
-          await appendJournal(step.taskDir, {
-            type: "step_interrupted",
-            signal: signalName,
-            recordDir,
-          });
         }
       }
     } catch {}
-    activeSteps.delete(recordDir);
+    activeSteps.delete(step.recordDir);
   }
 }
 
@@ -160,7 +153,7 @@ export function installShutdownHandlers(onShutdown?: () => Promise<void>): () =>
         } catch {}
       }
       await terminateAllChildGroups(500);
-      await markActiveStepsInterrupted(sig);
+      await markActiveStepsInterrupted();
     } finally {
       process.exit(sig === "SIGINT" ? 130 : 143);
     }

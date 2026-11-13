@@ -10,7 +10,6 @@ import {
   mergeChildIntoParent,
   treeOf,
 } from "../../src/core/git/merge.js";
-import { ensureTaskWorktree, ensureChildWorktree } from "../../src/core/git/worktrees.js";
 import { commitAll } from "../../src/core/git/commit.js";
 import { git } from "../../src/core/git/exec.js";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
@@ -37,6 +36,15 @@ describe("Merge path primitives (§7)", () => {
     }
   });
 
+  async function addWorktree(
+    branch: string,
+    startPoint = "HEAD"
+  ): Promise<{ branch: string; path: string }> {
+    const wtPath = path.join(wtRoot, branch.replace(/[^A-Za-z0-9._-]+/g, "_"));
+    await git(repo.mainRoot, ["worktree", "add", "-b", branch, wtPath, startPoint]);
+    return { branch, path: wtPath };
+  }
+
   it("treeOf returns valid git tree sha", async () => {
     const tree = await treeOf(tmpRepo.dir, "HEAD");
     expect(tree).toBeString();
@@ -44,15 +52,8 @@ describe("Merge path primitives (§7)", () => {
   });
 
   it("mergeParentInto cleanly merges when no conflicts exist", async () => {
-    const intentPath = path.join(tmpRepo.dir, "INTENT.md");
-    fs.writeFileSync(intentPath, "Intent", "utf8");
-
-    const parent = await ensureTaskWorktree(repo, "clean-task", {
-      intentPath,
-      orchestrationFolder: ".factory",
-    });
-
-    const child = await ensureChildWorktree(repo, parent, "item-clean");
+    const parent = await addWorktree("topic/clean-task");
+    const child = await addWorktree("topic/clean-task--item-clean", parent.branch);
 
     // Parent adds file A
     fs.writeFileSync(path.join(parent.path, "file-a.txt"), "parent content", "utf8");
@@ -73,19 +74,13 @@ describe("Merge path primitives (§7)", () => {
   });
 
   it("mergeParentInto conflict state leaves conflicts on disk + concludeMerge commits once resolved", async () => {
-    const intentPath = path.join(tmpRepo.dir, "INTENT.md");
-    fs.writeFileSync(intentPath, "Intent", "utf8");
-
-    const parent = await ensureTaskWorktree(repo, "conflict-task", {
-      intentPath,
-      orchestrationFolder: ".factory",
-    });
+    const parent = await addWorktree("topic/conflict-task");
 
     // Create a base file
     fs.writeFileSync(path.join(parent.path, "conflict.txt"), "base line\n", "utf8");
     await commitAll(repo, parent.path, "feat: add base conflict file");
 
-    const child = await ensureChildWorktree(repo, parent, "item-conflict");
+    const child = await addWorktree("topic/conflict-task--item-conflict", parent.branch);
 
     // Parent edits conflict.txt
     fs.writeFileSync(path.join(parent.path, "conflict.txt"), "parent line\n", "utf8");
@@ -126,15 +121,8 @@ describe("Merge path primitives (§7)", () => {
   });
 
   it("mergeChildIntoParent performs --no-ff merge into parent worktree", async () => {
-    const intentPath = path.join(tmpRepo.dir, "INTENT.md");
-    fs.writeFileSync(intentPath, "Intent", "utf8");
-
-    const parent = await ensureTaskWorktree(repo, "noff-task", {
-      intentPath,
-      orchestrationFolder: ".factory",
-    });
-
-    const child = await ensureChildWorktree(repo, parent, "item-noff");
+    const parent = await addWorktree("topic/noff-task");
+    const child = await addWorktree("topic/noff-task--item-noff", parent.branch);
 
     fs.writeFileSync(path.join(child.path, "feature.txt"), "feature data", "utf8");
     await commitAll(repo, child.path, "feat: add feature");
@@ -150,19 +138,13 @@ describe("Merge path primitives (§7)", () => {
   });
 
   it("hasConflictMarkers ignores legitimate ======= lines in merge-touched files", async () => {
-    const intentPath = path.join(tmpRepo.dir, "INTENT.md");
-    fs.writeFileSync(intentPath, "Intent", "utf8");
-
-    const parent = await ensureTaskWorktree(repo, "marker-task", {
-      intentPath,
-      orchestrationFolder: ".factory",
-    });
+    const parent = await addWorktree("topic/marker-task");
 
     // Tracked file with a legitimate 7-equals separator line (RST heading).
     fs.writeFileSync(path.join(parent.path, "doc.rst"), "Title\n=======\n\nBody text\n", "utf8");
     await commitAll(repo, parent.path, "feat: add doc");
 
-    const child = await ensureChildWorktree(repo, parent, "item-marker");
+    const child = await addWorktree("topic/marker-task--item-marker", parent.branch);
 
     // Touch the doc on the parent side so it lands in the merge-touched set.
     fs.writeFileSync(path.join(parent.path, "doc.rst"), "Title\n=======\n\nParent body\n", "utf8");
