@@ -114,3 +114,9 @@ Verbatim, newest last; each with what it changed.
 
 ### 2026-11-12 — mechanical tier (D15) + live queue state
 - `opencode-go/beam-free` owns mechanical work. Model map now: implementer/planner = deepseek-v4.1 / minimax-m3.1 flash (D13); reviewer = muse-spark-1.3-contributor (D12); different-model reviewer = longcat-2.5-free (D13); mechanical = beam-free (D15). No change to running slices: none of them assigned roles to these models yet except by the opencode-probe recommendation, which S2–S4 never read (they read only RULES.md + assignment + KERNEL0).
+
+### 2026-11-12 — session downgrade killed all dispatches; S3 resumed and done
+- The task-grade switch cancelled bg_98/99/100 (S2/S3/S4 at 25 min in) and the midnight wake. Opencode sessions survived: resumed in-session via `dispatch.sh` SESSION+MESSAGE (S3: `ses_e2d85ff08ffe…`, first resumed before a `dispatch.sh` bug fix, needed a second resume).
+- `dispatch.sh` follow-up: the D14 slot edit dropped the `logs=`/`mkdir` lines → `logs: unbound variable` killed the first three resumes (commits `e80db86` fixed, re-committed Bootstrap docs). All dispatch failures are in the bootstrap-run logs, never in git.
+- S3 verified myself: typecheck green; 273 tests, 271 pass, 2 live skips, 0 fail, 23.7 s; scenarios 6/7 as named tests; scenario 1 green twice; `bootstrap/reports/S3.md` lists shared-file changes (Timeouts in types/config, cancel in derive/record) and handoffs to S4 (adapter constructors need sessionsDir; digest alias needed for pre-flight). 7 commits on `factory-v3-s3`, clean worktree.
+- `alibaba-token-plan/deepseek-v4.1-flash#max` for S3: first run 567 events/233 tools, continuation only 4 steps/3 tools to confirm completion. S2/S4 resumes launched (free tier, flock-serialized).
