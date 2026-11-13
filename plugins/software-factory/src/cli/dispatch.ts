@@ -4,6 +4,7 @@ import type { ModelCatalog } from "../kernel/preflight.js";
 import type { Harness } from "../harness/types.js";
 import { createRealHarnesses, createRealModelCatalog, resolveHarnessBinaries } from "./harnesses.js";
 import { initGoal, readSteerSource, statusGoal, steerGoal } from "./commands.js";
+import { benchmarkGoal, formatBenchmark } from "./benchmark.js";
 
 export interface ParsedArgs {
   command?: string;
@@ -33,6 +34,7 @@ Commands:
   init                     Create the repo config, goal directory and intent
   run                      Run bounded iterations of one goal
   status                   Show derived state, parked causes and the last summary
+  benchmark                Print the benchmark rows for one goal's artifacts
   steer                    Drop a steering file into the goal inbox
 
 Options:
@@ -67,6 +69,15 @@ Prints the state derived from task files and records, every parked cause, and
 the path of the last iteration summary.
 `;
 
+const BENCHMARK_USAGE = `
+factory benchmark --repo <path> --goal <name>
+
+Prints the rows and units of bootstrap/context/benchmark.md section 1 for the
+goal's artifacts: launches, architect launches, tokens in/out, cost, architect
+share, cost per merged, loop incidents, human interventions, wall and
+merged/parked. Reads <artifactRoot>/<goal>/metrics.yaml and its records.
+`;
+
 const STEER_USAGE = `
 factory steer --repo <path> --goal <name> <file | ->
 
@@ -78,6 +89,7 @@ function usageFor(command: string | undefined): string {
   if (command === "init") return INIT_USAGE;
   if (command === "run") return RUN_USAGE;
   if (command === "status") return STATUS_USAGE;
+  if (command === "benchmark") return BENCHMARK_USAGE;
   if (command === "steer") return STEER_USAGE;
   return ROOT_USAGE;
 }
@@ -195,7 +207,7 @@ export async function dispatch(args: string[], deps: CliDeps = {}): Promise<numb
   }
 
   if (parsed.help) {
-    const known = ["init", "run", "status", "steer"];
+    const known = ["init", "run", "status", "benchmark", "steer"];
     if (!parsed.command || known.includes(parsed.command)) {
       console.log(usageFor(parsed.command));
       return 0;
@@ -223,6 +235,11 @@ export async function dispatch(args: string[], deps: CliDeps = {}): Promise<numb
     if (parsed.command === "status") {
       if (!parsed.goal) throw new Error("status requires --goal <name>");
       printStatus(await statusGoal(parsed.repo, parsed.goal));
+      return 0;
+    }
+    if (parsed.command === "benchmark") {
+      if (!parsed.goal) throw new Error("benchmark requires --goal <name>");
+      console.log(formatBenchmark(await benchmarkGoal(parsed.repo, parsed.goal)));
       return 0;
     }
     if (parsed.command === "steer") {
