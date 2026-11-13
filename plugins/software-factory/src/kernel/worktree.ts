@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { isAncestor } from "../core/git/commit.js";
-import { git } from "../core/git/exec.js";
+import { git, GitError } from "../core/git/exec.js";
 import { parseWorktreeList } from "../core/git/status.js";
 import { runWorktreeSetup, type SetupResult } from "../core/checks/setup.js";
 import type { KernelRuntime, TaskFile } from "./types.js";
@@ -57,10 +57,12 @@ export class BaseFollowConflictError extends Error {
   }
 }
 
-/** A merge cut off by a crash must not block or contaminate the next one. */
-async function abortInFlightMerge(cwd: string): Promise<void> {
+/** Clears a merge left in flight before it can block the next one; true when there was one. */
+async function abortInFlightMerge(cwd: string): Promise<boolean> {
   const mergeHead = await git(cwd, ["rev-parse", "--verify", "--quiet", "MERGE_HEAD"], { allowFail: true });
-  if (mergeHead.code === 0) await git(cwd, ["merge", "--abort"]);
+  if (mergeHead.code !== 0) return false;
+  await git(cwd, ["merge", "--abort"]);
+  return true;
 }
 
 /**
@@ -82,7 +84,10 @@ async function followBase(runtime: KernelRuntime): Promise<void> {
       await git(goalCheckout, ["merge", "--ff-only", base]);
       return;
     }
-    const merge = await git(goalCheckout, ["merge", "--no-edit", base], { allowFail: true });
+    const merge = await git(goalCheckout, ["merge", "--no-edit", base], {
+      allowFail: true,
+      env: runtime.repo.identityEnv(),
+    });
     if (merge.code === 0) return;
     const unmerged = await git(goalCheckout, ["diff", "--name-only", "--diff-filter=U"], { allowFail: true });
     const paths = unmerged.stdout
@@ -90,7 +95,12 @@ async function followBase(runtime: KernelRuntime): Promise<void> {
       .map((p) => p.trim())
       .filter(Boolean)
       .sort();
-    await abortInFlightMerge(goalCheckout);
+    // Any other refusal (merge.ff=only, unrelated histories) leaves no merge
+    // state behind; git's own reason is the only diagnosis, so surface it.
+    const inFlight = await abortInFlightMerge(goalCheckout);
+    if (!inFlight && paths.length === 0) {
+      throw new GitError(`merge --no-edit ${base}`, merge.code, merge.stderr, merge.stdout);
+    }
     throw new BaseFollowConflictError(baseBranch, paths);
   });
 }
@@ -131,7 +141,6 @@ export async function prepareIntegrationCheckout(runtime: KernelRuntime): Promis
   // A crashed merge must not leave staged or conflicted state for the next launch.
   await git(goalCheckout, ["reset", "--hard", "HEAD"]);
   await git(goalCheckout, ["clean", "-fd"]);
-  await abortInFlightMerge(goalCheckout);
   await followBase(runtime);
 }
 

@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { TmpRepo } from "../helpers/tmp-repo.js";
 import { FakeHarness } from "../../src/harness/fake/index.js";
+import { GitError } from "../../src/core/git/exec.js";
 import { runGoal } from "../../src/kernel/launch.js";
 import { BaseFollowConflictError, prepareIntegrationCheckout } from "../../src/kernel/worktree.js";
 import { cleanupFlowRepo, goalCheckout, makeRuntime, setupFlowRepo } from "./s2-helpers.js";
@@ -82,6 +83,53 @@ describe("launch follows base advances into the integration branch", () => {
       expect(fs.readFileSync(path.join(checkout, "delta.txt"), "utf8")).toBe("same content\n");
       expect(parentCount(repo, checkout)).toBe(2);
       expect(repo.git(["merge-base", "--is-ancestor", baseSha, "HEAD"], { cwd: checkout }).code).toBe(0);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("authors the follow merge commit with the configured factory identity", async () => {
+    const { repo, goal } = setupFlowRepo({ identity: { name: "Factory Bot", email: "factory-bot@test.local" } });
+    try {
+      const runtime = await makeRuntime(repo, goal, {});
+      const checkout = goalCheckout(repo, goal);
+      commitFile(repo, checkout, "task.txt", "task\n", "factory: merge task");
+
+      repo.writeFile("base-fix.txt", "fixed on base\n");
+      repo.commit("base fix");
+
+      await prepareIntegrationCheckout(runtime);
+      expect(parentCount(repo, checkout)).toBe(2);
+      // The target repo has its own user configured; only a real follow env
+      // makes the merge commit carry the factory identity.
+      const authors = repo
+        .git(["log", "-1", "--format=%an <%ae>|%cn <%ce>"], { cwd: checkout })
+        .stdout.trim();
+      expect(authors).toBe("Factory Bot <factory-bot@test.local>|Factory Bot <factory-bot@test.local>");
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("reports git's stderr when the target repo refuses a non-fast-forward merge", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const runtime = await makeRuntime(repo, goal, {});
+      const checkout = goalCheckout(repo, goal);
+      commitFile(repo, checkout, "task.txt", "task\n", "factory: merge task");
+      const integrationSha = head(repo, checkout);
+
+      repo.writeFile("base-fix.txt", "fixed on base\n");
+      repo.commit("base fix");
+      repo.git(["config", "merge.ff", "only"]);
+
+      const refusal = await prepareIntegrationCheckout(runtime).catch((err: unknown) => err);
+      expect(refusal).toBeInstanceOf(GitError);
+      expect(refusal).not.toBeInstanceOf(BaseFollowConflictError);
+      expect((refusal as Error).message).toContain("Not possible to fast-forward");
+      expect((refusal as Error).message).not.toContain("conflicts");
+      expect(head(repo, checkout)).toBe(integrationSha);
+      expect(repo.git(["status", "--porcelain"], { cwd: checkout }).stdout).toBe("");
     } finally {
       cleanupFlowRepo(repo);
     }

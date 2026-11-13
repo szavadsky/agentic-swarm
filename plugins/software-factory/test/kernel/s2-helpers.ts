@@ -18,6 +18,8 @@ export interface FlowRepoOptions {
   limits?: Record<string, unknown>;
   aliases?: Record<string, { harness: string; model: string; effort?: string }>;
   goal?: string;
+  /** `.factory/repo.yaml` identity for commits the engine authors. */
+  identity?: { name: string; email: string };
 }
 
 export interface FlowRepo {
@@ -47,6 +49,7 @@ export function setupFlowRepo(opts: FlowRepoOptions = {}): FlowRepo {
       artifactRoot: ".factory/artifacts",
       setup: opts.setup ?? [],
       gates,
+      ...(opts.identity ? { identity: opts.identity } : {}),
     })
   );
   const aliases = opts.aliases ?? {

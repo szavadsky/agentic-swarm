@@ -174,6 +174,7 @@ async function runCommand(parsed: ParsedArgs, deps: CliDeps): Promise<number> {
   console.log(
     [
       `goal ${result.goal}: ${result.state.goal}, ${result.iterations} iteration(s), stop=${result.stop}`,
+      result.cause ? `cause: ${result.cause}` : undefined,
       `summary: ${result.lastSummary ? `${result.lastSummary}` : "none"}`,
       result.recoveredRecords > 0 ? `recovered: ${result.recoveredRecords} interrupted record(s)` : undefined,
     ]
