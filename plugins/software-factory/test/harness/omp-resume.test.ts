@@ -1,0 +1,225 @@
+import { describe, expect, it } from "bun:test";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { OmpHarness } from "../../src/harness/omp/harness.js";
+import type { SessionRef } from "../../src/harness/types.js";
+
+function fakeOmpScript(logPath: string): string {
+  return `#!/usr/bin/env bun
+const fs = require("node:fs");
+const readline = require("node:readline");
+const argv = process.argv.slice(2);
+const logPath = ${JSON.stringify(logPath)};
+fs.appendFileSync(logPath, JSON.stringify(argv) + "\\n");
+const flag = (name) => {
+  const index = argv.indexOf(name);
+  return index >= 0 ? argv[index + 1] : undefined;
+};
+const model = flag("--model") ?? "unknown";
+const resumeId = flag("--resume");
+const fail = (message, code) => {
+  process.stderr.write(message + "\\n");
+  process.exit(code);
+};
+
+// A resumed session that was pruned reports omp's "Session ... not found"
+// wording before the ready frame. The retry launch then fails for real.
+if (resumeId && (model === "provider/resume-retry" || model === "provider/resume-dead")) {
+  fail("Session " + resumeId + " not found", 1);
+}
+if (!resumeId && model === "provider/resume-dead") {
+  fail("de novo launch exploded", 1);
+}
+
+const sessionId = resumeId ?? (model === "provider/resume-retry" ? "fresh-session" : "live-1");
+const write = (frame) => process.stdout.write(JSON.stringify(frame) + "\\n");
+write({ type: "ready", protocolVersion: 1 });
+let prompted = false;
+const rl = readline.createInterface({ input: process.stdin });
+rl.on("close", () => process.exit(0));
+rl.on("line", (line) => {
+  let frame;
+  try { frame = JSON.parse(line); } catch { return; }
+  const respond = (data) =>
+    write({ id: frame.id, type: "response", command: frame.type, success: true, data });
+  if (frame.type === "get_session_stats") {
+    respond(prompted
+      ? { sessionId, tokens: { input: 5, output: 3, reasoning: 0, cacheRead: 0, cacheWrite: 0 }, cost: 0 }
+      : { sessionId, tokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 }, cost: 0 });
+  } else if (frame.type === "get_last_assistant_text") {
+    respond({ text: "resumed" });
+  } else if (frame.type === "get_state") {
+    respond({ sessionId, thinkingLevel: "low", model: { provider: "provider", id: model.split("/")[1] } });
+  } else if (frame.type === "prompt") {
+    prompted = true;
+    write({ type: "message_end", message: { role: "assistant", usage: { input: 5, output: 3 }, stopReason: "stop" } });
+    write({ type: "prompt_result", id: frame.id, agentInvoked: true, status: "completed", sessionSettled: true });
+  }
+});
+`;
+}
+
+interface FakeOmp {
+  binary: string;
+  /** argv of every launch, in order. */
+  invocations(): string[][];
+  cleanup(): void;
+}
+
+function createFakeOmp(): FakeOmp {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "omp-resume-"));
+  const logPath = path.join(tmp, "invocations.ndjson");
+  const binary = path.join(tmp, "fake-omp.js");
+  fs.writeFileSync(binary, fakeOmpScript(logPath), { mode: 0o755 });
+  return {
+    binary,
+    invocations: () =>
+      fs
+        .readFileSync(logPath, "utf8")
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as string[]),
+    cleanup: () => fs.rmSync(tmp, { recursive: true, force: true }),
+  };
+}
+
+function flag(args: string[], name: string): string | undefined {
+  const index = args.indexOf(name);
+  return index >= 0 ? args[index + 1] : undefined;
+}
+
+/** The runtime's default launch home (`OmpRuntime.dirs().sessions`) for a harness. */
+function defaultHome(sessionDir: string): string {
+  return path.join(sessionDir, "omp", "sessions");
+}
+
+const silent = { idleMs: 0, wallMs: 10_000 };
+
+describe("omp resume", () => {
+  it("retries once de novo when the resumed session is not found", async () => {
+    const fake = createFakeOmp();
+    const root = path.dirname(fake.binary);
+    const sessionDir = path.join(root, "sessions");
+    const home = defaultHome(sessionDir);
+    const storedDir = path.join(root, "stored-home");
+    fs.mkdirSync(storedDir, { recursive: true });
+    try {
+      const harness = new OmpHarness({ binary: fake.binary, sessionDir, readyTimeoutMs: 5_000 });
+      const session: SessionRef = {
+        harness: "omp",
+        id: "sess-old",
+        cwd: root,
+        model: { id: "provider/resume-retry" },
+        lastRequestStartedAt: new Date().toISOString(),
+        retentionTier: "short",
+        compacted: false,
+        dir: storedDir,
+      };
+
+      const result = await harness.turn({
+        model: { id: "provider/resume-retry" },
+        session,
+        cwd: root,
+        prompt: "go",
+        timeouts: silent,
+      });
+
+      expect(result.stop).toEqual({ kind: "done" });
+      expect(result.session?.id).toBe("fresh-session");
+      expect(result.session?.dir).toBe(home);
+
+      const calls = fake.invocations();
+      expect(calls).toHaveLength(2);
+      expect(flag(calls[0]!, "--resume")).toBe("sess-old");
+      expect(flag(calls[0]!, "--session-dir")).toBe(storedDir);
+      expect(flag(calls[1]!, "--resume")).toBeUndefined();
+      expect(flag(calls[1]!, "--session-dir")).toBe(home);
+    } finally {
+      fake.cleanup();
+    }
+  }, 20_000);
+
+  it("stores the launch session home and resumes against it", async () => {
+    const fake = createFakeOmp();
+    const root = path.dirname(fake.binary);
+    const sessionDir = path.join(root, "sessions");
+    const home = defaultHome(sessionDir);
+    try {
+      const harness = new OmpHarness({ binary: fake.binary, sessionDir, readyTimeoutMs: 5_000 });
+      const first = await harness.turn({
+        model: { id: "provider/resume-ok" },
+        cwd: root,
+        prompt: "go",
+        timeouts: silent,
+      });
+
+      expect(first.stop).toEqual({ kind: "done" });
+      expect(first.session?.id).toBe("live-1");
+      expect(first.session?.dir).toBe(home);
+      expect(flag(fake.invocations()[0]!, "--session-dir")).toBe(first.session?.dir);
+
+      const second = await harness.turn({
+        model: { id: "provider/resume-ok" },
+        session: first.session,
+        cwd: root,
+        prompt: "again",
+        timeouts: silent,
+      });
+
+      expect(second.stop).toEqual({ kind: "done" });
+      expect(second.session?.id).toBe("live-1");
+      expect(second.session?.dir).toBe(first.session?.dir);
+
+      const resumeCall = fake.invocations()[1]!;
+      expect(flag(resumeCall, "--resume")).toBe("live-1");
+      expect(flag(resumeCall, "--session-dir")).toBe(first.session?.dir);
+    } finally {
+      fake.cleanup();
+    }
+  }, 20_000);
+
+  it("reports a failed de-novo retry as an infra crash instead of looping", async () => {
+    const fake = createFakeOmp();
+    const root = path.dirname(fake.binary);
+    const sessionDir = path.join(root, "sessions");
+    const storedDir = path.join(root, "stored-home");
+    fs.mkdirSync(storedDir, { recursive: true });
+    try {
+      const harness = new OmpHarness({
+        binary: fake.binary,
+        sessionDir,
+        readyTimeoutMs: 5_000,
+        retry: { retries: 5 },
+      });
+      const session: SessionRef = {
+        harness: "omp",
+        id: "sess-gone",
+        cwd: root,
+        model: { id: "provider/resume-dead" },
+        lastRequestStartedAt: new Date().toISOString(),
+        retentionTier: "short",
+        compacted: false,
+        dir: storedDir,
+      };
+
+      const result = await harness.turn({
+        model: { id: "provider/resume-dead" },
+        session,
+        cwd: root,
+        prompt: "go",
+        timeouts: silent,
+      });
+
+      expect(result.stop).toEqual({
+        kind: "infra",
+        cause: "crash",
+        details: "de novo launch exploded",
+      });
+      expect(result.attempts).toHaveLength(1);
+      expect(fake.invocations()).toHaveLength(2);
+    } finally {
+      fake.cleanup();
+    }
+  }, 20_000);
+});
