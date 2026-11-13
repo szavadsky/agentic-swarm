@@ -5,14 +5,7 @@ import { runAgentTurn } from "./agent.js";
 import { resolveRole } from "./flow-context.js";
 import { materialHash, parseTaskFile, validateTaskGraph, TaskFileError } from "./tasks.js";
 import { appendCancel, scriptMeta } from "./record.js";
-import type { KernelRuntime, Outcome, State, StepRecord, TaskFile } from "./types.js";
-
-export class PmValidationError extends Error {
-  constructor(public readonly findings: string[]) {
-    super(findings.join("; "));
-    this.name = "PmValidationError";
-  }
-}
+import type { AliasConfig, KernelRuntime, Outcome, State, StepRecord, TaskFile } from "./types.js";
 
 function taskPath(runtime: KernelRuntime, slug: string): string {
   return path.join(runtime.store.tasksDir, `${slug}.md`);
@@ -83,7 +76,7 @@ function planMentionsSlug(plan: string, slug: string): boolean {
  */
 async function reconcile(
   runtime: KernelRuntime,
-  opts: { iteration: number; state: State; planPath: string },
+  opts: { iteration: number; state: State; planPath: string; round: number },
   planBefore: string,
   taskSnapshot: Map<string, string>
 ): Promise<string[]> {
@@ -124,7 +117,7 @@ async function reconcile(
 
   if (findings.length > 0) {
     await runtime.store.appendRecord(
-      scriptMeta(opts.iteration, "pm-reconcile", { round: 1 }),
+      scriptMeta(opts.iteration, "pm-reconcile", { round: opts.round }),
       { ok: false, cause: findings.join("; ") }
     );
   }
@@ -133,7 +126,7 @@ async function reconcile(
 
 async function validate(
   runtime: KernelRuntime,
-  opts: { iteration: number; state: State; planPath: string },
+  opts: { iteration: number; state: State; planPath: string; round: number },
   planBefore: string,
   taskSnapshot: Map<string, string>
 ): Promise<string[]> {
@@ -169,55 +162,183 @@ async function cancelRemovedTasks(
   }
 }
 
+export type PmMandate = "first" | "retry" | "escalated-first" | "escalated-retry";
+
+/** One attempted PM turn; the round is its 1-based position in the ladder. */
+export interface PmRung {
+  round: number;
+  alias: string;
+  model: string;
+  failure: string;
+}
+
+export type PmRun =
+  | { status: "done"; outcome: Outcome; rungs: PmRung[] }
+  /** An escalated rung stopped the ladder with a question for the architect. */
+  | { status: "asked"; outcome: Outcome; rungs: PmRung[] }
+  /** Every tier failed both of its turns. */
+  | { status: "exhausted"; rungs: PmRung[] };
+
+interface RungStep {
+  alias: string;
+  mandate: PmMandate;
+}
+
 /**
- * PM turn plus script validation. One repair ask carrying the findings; a
- * second failure ends the iteration as blocked (KERNEL0 §3).
+ * The ladder is the alias chain from the PM alias through `escalateTo`, two
+ * turns per tier: the first and one de-novo retry. The chain is built once; a
+ * cycle is a config error pre-flight rejects.
+ */
+function rungSteps(runtime: KernelRuntime): RungStep[] {
+  const chain: string[] = [];
+  const seen = new Set<string>();
+  let name: string | undefined = resolveRole(runtime, "pm").alias;
+  while (name) {
+    if (seen.has(name)) {
+      throw new Error(`PM escalation cycle: ${[...seen, name].join(" -> ")}`);
+    }
+    seen.add(name);
+    const alias: AliasConfig | undefined = runtime.configs.run.aliases[name];
+    if (!alias) throw new Error(`run config has no alias "${name}" (needed by role "pm")`);
+    chain.push(name);
+    name = alias.escalateTo;
+  }
+  return chain.flatMap((alias, tier) => {
+    const escalated = tier > 0;
+    return [
+      { alias, mandate: escalated ? "escalated-first" : "first" },
+      { alias, mandate: escalated ? "escalated-retry" : "retry" },
+    ];
+  });
+}
+
+function stopText(stop: StepRecord["stop"]): string {
+  if (!stop) return "no stop";
+  return "cause" in stop ? `${stop.kind}: ${stop.cause}` : stop.kind;
+}
+
+/** Why a rung is not usable: its outcome status, concerns, findings or stop. */
+function failureReasons(
+  outcome: Outcome | undefined,
+  findings: string[],
+  record: StepRecord
+): string[] {
+  const reasons: string[] = [];
+  if (outcome && outcome.status !== "done") {
+    reasons.push(`status ${outcome.status}: ${outcome.summary}`);
+    for (const concern of outcome.concerns) {
+      reasons.push(`${concern.kind}/${concern.calibration}: ${concern.text}`);
+    }
+  }
+  reasons.push(...findings);
+  if (!outcome) reasons.push(`no outcome (${stopText(record.stop)})`);
+  return reasons;
+}
+
+function ladderNote(
+  rung: { alias: string; mandate: PmMandate },
+  target: ReturnType<typeof resolveRole>,
+  failure: string[]
+): string {
+  const notes: string[] = [];
+  if (rung.mandate.startsWith("escalated")) {
+    notes.push(
+      `The PM ladder escalated to alias "${target.alias}" (model "${target.model.id}"). You hold a broader mandate: derive the task files from the plan again, and if the plan itself cannot be turned into tasks, answer "blocked" with one question for the architect in the summary.`
+    );
+  }
+  if (rung.mandate.endsWith("retry")) {
+    notes.push(
+      `This is a fresh retry on alias "${target.alias}"; the previous turn's plan and task-file writes were rolled back to the pre-PM snapshot.`
+    );
+  }
+  notes.push(
+    "Restated PM contract: you are the PM — never edit the plan, never plan, never implement, never invent intent. Write task files under the tasks directory, then the outcome."
+  );
+  if (failure.length > 0) notes.push("", "Findings:", ...failure.map((reason) => `- ${reason}`));
+  return notes.join("\n");
+}
+
+/** Restores the plan and every task file the failed rung may have changed. */
+async function restorePrePm(
+  runtime: KernelRuntime,
+  planPath: string,
+  planBefore: string,
+  taskSnapshot: Map<string, string>
+): Promise<void> {
+  const planNow = fs.existsSync(planPath) ? fs.readFileSync(planPath, "utf8") : "";
+  if (planNow !== planBefore) await writeTextAtomic(planPath, planBefore);
+
+  const texts = await readTaskTexts(runtime);
+  for (const [slug, original] of taskSnapshot) {
+    if (texts.get(slug) !== original) await writeTextAtomic(taskPath(runtime, slug), original);
+  }
+  for (const slug of texts.keys()) {
+    if (!taskSnapshot.has(slug)) fs.rmSync(taskPath(runtime, slug), { force: true });
+  }
+}
+
+/**
+ * PM ladder: each tier gets its first turn and one de-novo retry; a failed rung
+ * is rolled back before the next. The next alias in the chain escalates with a
+ * broader mandate; only an escalated `blocked` stops with a question, and an
+ * exhausted ladder reports every rung as alias, model and failure.
  */
 export async function runPm(
   runtime: KernelRuntime,
-  opts: { iteration: number; state: State; planPath: string; cwd: string; repair?: string }
-): Promise<Outcome | undefined> {
+  opts: { iteration: number; state: State; planPath: string; cwd: string }
+): Promise<PmRun> {
   const planBefore = fs.existsSync(opts.planPath)
     ? fs.readFileSync(opts.planPath, "utf8")
     : "";
   const taskSnapshot = await readTaskTexts(runtime);
-  const target = resolveRole(runtime, "pm");
+  const rungs: PmRung[] = [];
+  let failure: string[] = [];
 
-  const ask = async (
-    repair: string,
-    session?: StepRecord["session"],
-    isRepair = false
-  ): Promise<Outcome | undefined> => {
+  for (const [index, rung] of rungSteps(runtime).entries()) {
+    const target = resolveRole(runtime, "pm", rung.alias);
+    const round = index + 1;
     const { tasks } = parseTasks(await readTaskTexts(runtime));
     const result = await runAgentTurn(runtime, {
       target,
       cwd: opts.cwd,
-      meta: { iteration: opts.iteration, step: "pm", round: 1 },
+      meta: { iteration: opts.iteration, step: "pm", round },
       vars: {
         iteration: String(opts.iteration),
         intent_path: `${runtime.store.goalDir}/intent.md`,
         plan_path: opts.planPath,
         tasks_dir: runtime.store.tasksDir,
         existing_tasks: existingTasks(opts.state, tasks),
-        repair,
+        repair: round === 1 ? "" : ladderNote(rung, target, failure),
       },
       expectation: "any",
-      session,
     });
-    const findings = await validate(runtime, opts, planBefore, taskSnapshot);
-    if (findings.length === 0) {
-      await cancelRemovedTasks(runtime, opts.state, planBefore, opts.iteration);
-      return result.outcome;
-    }
-    if (!isRepair) {
-      return ask(findings.map((f) => `- ${f}`).join("\n"), result.record.session, true);
-    }
-    await runtime.store.appendRecord(scriptMeta(opts.iteration, "pm-validate", { round: 1 }), {
-      ok: false,
-      cause: findings.join("; "),
-    });
-    throw new PmValidationError(findings);
-  };
+    const findings = await validate(runtime, { ...opts, round }, planBefore, taskSnapshot);
+    const outcome = result.outcome;
 
-  return ask(opts.repair ?? "");
+    if (outcome?.status === "done" && findings.length === 0) {
+      await cancelRemovedTasks(runtime, opts.state, planBefore, opts.iteration);
+      return { status: "done", outcome, rungs };
+    }
+
+    const reasons = failureReasons(outcome, findings, result.record);
+    const failureText = reasons.join("; ");
+    rungs.push({
+      round,
+      alias: target.alias,
+      model: target.model.id,
+      failure: failureText,
+    });
+    await runtime.store.appendRecord(scriptMeta(opts.iteration, "pm-validate", { round }), {
+      ok: false,
+      cause: failureText,
+    });
+    await restorePrePm(runtime, opts.planPath, planBefore, taskSnapshot);
+
+    if (outcome?.status === "blocked" && rung.mandate.startsWith("escalated")) {
+      return { status: "asked", outcome, rungs };
+    }
+    failure = reasons;
+  }
+
+  return { status: "exhausted", rungs };
 }

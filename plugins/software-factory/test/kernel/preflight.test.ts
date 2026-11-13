@@ -209,6 +209,62 @@ describe("pre-flight", () => {
     }
   });
 
+  it("refuses an escalateTo that names no alias", async () => {
+    const f = await fixture(
+      RUN_HEAD.replace("pm: { harness: fake, model: pm }", "pm: { harness: fake, model: pm, escalateTo: ghost }")
+    );
+    try {
+      const err = await refusal(f.input);
+      expect(err.findings).toContainEqual(
+        expect.objectContaining({
+          file: path.join(f.repo.dir, ".factory/run.yaml"),
+          key: "aliases.pm.escalateTo",
+          message: 'escalateTo "ghost" names no run-config alias',
+        })
+      );
+      expect(err.report).toContain("aliases.pm.escalateTo");
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("refuses an escalateTo of the reserved tier name `default`", async () => {
+    const f = await fixture(
+      RUN_HEAD.replace(
+        "pm: { harness: fake, model: pm }",
+        "pm: { harness: fake, model: pm, escalateTo: default }\n  default: { harness: fake, model: dflt }"
+      )
+    );
+    try {
+      const err = await refusal(f.input);
+      expect(err.findings).toContainEqual(
+        expect.objectContaining({
+          key: "aliases.pm.escalateTo",
+          message: 'escalateTo "default" is reserved for "no tier override"; it would re-run the PM\'s own alias',
+        })
+      );
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("refuses an escalateTo chain that forms a cycle", async () => {
+    const f = await fixture(
+      RUN_HEAD.replace(
+        "pm: { harness: fake, model: pm }",
+        "pm: { harness: fake, model: pm, escalateTo: esc }\n  esc: { harness: fake, model: esc, escalateTo: pm }"
+      )
+    );
+    try {
+      const err = await refusal(f.input);
+      const finding = err.findings.find((item) => item.key === "aliases.pm.escalateTo");
+      expect(finding?.message).toContain("cycle");
+      expect(finding?.message).toContain("pm -> esc -> pm");
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
   it("refuses session and worktree roots inside the repository", async () => {
     const f = await fixture(
       RUN_HEAD +

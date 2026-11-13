@@ -10,6 +10,7 @@ aliases:
     harness: opencode
     model: opencode-go/deepseek-v4.1-flash
     effort: high
+    escalateTo: escalation
     fallbacks:
       - opencode/deepseek-v4.1-flash-free
   digest:

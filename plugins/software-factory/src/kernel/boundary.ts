@@ -16,7 +16,7 @@ import {
   steerResponses,
   writeOutbox,
 } from "./mailbox.js";
-import { PmValidationError, runPm } from "./pm.js";
+import { runPm, type PmRung } from "./pm.js";
 import type { GoalDecision, KernelRuntime, Outcome } from "./types.js";
 
 export interface BoundaryResult {
@@ -31,6 +31,12 @@ function previousSummary(goalDir: string, iteration: number): string | undefined
   if (iteration <= 0) return undefined;
   const rel = `iterations/${iteration}/summary.md`;
   return fs.existsSync(path.join(goalDir, rel)) ? path.join(goalDir, rel) : undefined;
+}
+
+function rungTrace(rungs: PmRung[]): string {
+  return rungs
+    .map((rung) => `rung ${rung.round} ${rung.alias} (${rung.model}): ${rung.failure}`)
+    .join("; ");
 }
 
 async function taskSnapshot(goalDir: string): Promise<Map<string, string>> {
@@ -190,28 +196,26 @@ export async function runBoundary(
     };
   }
 
-  try {
-    const pm = await runPm(runtime, {
-      iteration,
-      state,
-      planPath,
-      cwd: runtime.paths.goalCheckout,
-    });
-    if (!pm || pm.status !== "done") {
-      return {
-        iteration,
-        decision: "blocked",
-        cause: `PM turn did not complete: ${pm ? `${pm.status}: ${pm.summary}` : "no outcome"}`,
-        outcome: result.outcome,
-        packPath: packRel,
-      };
-    }
-  } catch (err) {
-    if (!(err instanceof PmValidationError)) throw err;
+  const pm = await runPm(runtime, {
+    iteration,
+    state,
+    planPath,
+    cwd: runtime.paths.goalCheckout,
+  });
+  if (pm.status === "asked") {
     return {
       iteration,
       decision: "blocked",
-      cause: `PM validation failed twice: ${err.findings.join("; ")}`,
+      cause: `PM escalated and asked: ${pm.outcome.summary}`,
+      outcome: result.outcome,
+      packPath: packRel,
+    };
+  }
+  if (pm.status === "exhausted") {
+    return {
+      iteration,
+      decision: "blocked",
+      cause: `PM ladder exhausted: ${rungTrace(pm.rungs)}`,
       outcome: result.outcome,
       packPath: packRel,
     };

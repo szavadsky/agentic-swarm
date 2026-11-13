@@ -100,6 +100,9 @@ function scriptSecondIteration(harness: FakeHarness, goalDir: string): void {
   harness.script((req, ctx) => {
     expect(req.prompt).toContain('frozen task "alpha" was edited; restored');
     expect(fs.readFileSync(path.join(goalDir, "tasks/alpha.md"), "utf8")).toBe(ALPHA);
+    // The failed rung's task writes were rolled back; the retry re-derives them.
+    writeTask(goalDir, BETA_2);
+    writeTask(goalDir, DELTA);
     ctx.writeOutcome(outcome({ summary: "repair acknowledged" }));
     return fakeTurnResult(req);
   });

@@ -4,7 +4,7 @@ import { formatFindings, type Finding } from "./findings.js";
 import { checkBase, resolveBaseCommit, type BaselineResult } from "./baseline.js";
 import { configFilePaths } from "./config.js";
 import { checkAlias, checkScouts, type AliasContext, type ModelCatalog } from "./preflight-aliases.js";
-import type { ArtifactStore, ConfigBundle, GoalPaths, ProcessConfig } from "./types.js";
+import type { AliasConfig, ArtifactStore, ConfigBundle, GoalPaths, ProcessConfig } from "./types.js";
 import type { Harness } from "../harness/types.js";
 
 export type { ModelCatalog } from "./preflight-aliases.js";
@@ -42,6 +42,51 @@ export class PreflightError extends Error {
 function roleAlias(process: ProcessConfig, role: string): string | undefined {
   const config = process.roles[role];
   return config ? (config.alias ?? role) : undefined;
+}
+
+/**
+ * An alias's `escalateTo` must name a configured alias and its chain must end:
+ * a missing name or a cycle would only fail mid-turn, after the plan spent.
+ */
+function escalationFindings(
+  aliases: Record<string, AliasConfig>,
+  file: string
+): Finding[] {
+  const findings: Finding[] = [];
+  for (const [name, alias] of Object.entries(aliases)) {
+    if (!alias.escalateTo) continue;
+    if (alias.escalateTo === "default") {
+      findings.push({
+        file,
+        key: `aliases.${name}.escalateTo`,
+        message: `escalateTo "default" is reserved for "no tier override"; it would re-run the PM's own alias`,
+      });
+      continue;
+    }
+    if (!aliases[alias.escalateTo]) {
+      findings.push({
+        file,
+        key: `aliases.${name}.escalateTo`,
+        message: `escalateTo "${alias.escalateTo}" names no run-config alias`,
+      });
+      continue;
+    }
+    const seen = new Set<string>([name]);
+    let current: string | undefined = alias.escalateTo;
+    while (current) {
+      if (seen.has(current)) {
+        findings.push({
+          file,
+          key: `aliases.${name}.escalateTo`,
+          message: `escalateTo chain forms a cycle: ${[...seen, current].join(" -> ")}`,
+        });
+        break;
+      }
+      seen.add(current);
+      current = aliases[current]?.escalateTo;
+    }
+  }
+  return findings;
 }
 
 /** Roles the kernel actually calls: architect, PM and every configured flow step. */
@@ -133,6 +178,8 @@ export async function preflight(input: PreflightInput): Promise<PreflightResult>
       });
     }
   }
+
+  findings.push(...escalationFindings(configs.run.aliases, files.run));
 
   // A task tier names a run-config alias directly; an escalated task that names
   // one the run config lacks would fail only mid-turn, after the plan spent.

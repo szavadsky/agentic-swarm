@@ -73,6 +73,13 @@ worktreeRoot: ~/.local/share/factory/worktrees
 scouts: { model: opencode-go/deepseek-v4.1-flash }   # omp architect subagents
 ```
 
+An alias may carry `escalateTo: <alias>` to name the PM's next rung. A PM turn
+that is not usable gets a fresh retry on the same alias; after two failed turns
+the ladder climbs to `escalateTo`, which carries a broader mandate and may stop
+with one question for the architect. Without `escalateTo` the iteration blocks
+with every rung in the summary. `fallbacks` stay infrastructure-only (same
+harness, quota and crash), so escalation is model routing, not a retry.
+
 `prices` maps a model id to USD per million tokens: `input`, `cachedInput`,
 `output` and `reasoning`, all four required. A turn costs its harness's
 non-zero figure, else the table's price for the model. A model absent from the

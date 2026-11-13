@@ -96,6 +96,8 @@ export const aliasSchema = z
     model: z.string().min(1),
     effort: z.string().min(1).optional(),
     fallbacks: z.array(z.string().min(1)).default([]),
+    /** Run-config alias the PM ladder climbs to after this alias's tier fails. */
+    escalateTo: z.string().min(1).optional(),
     /** Per-alias turn bounds; the defaults cover a full test-suite run. */
     timeouts: z
       .object({

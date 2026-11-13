@@ -263,6 +263,8 @@ export interface AliasConfig {
   model: string;
   effort?: string;
   fallbacks?: string[];
+  /** Alias the PM ladder climbs to after a tier fails; absent ends the ladder. */
+  escalateTo?: string;
   /** Alias-level turn bounds; config defaults match `DEFAULT_TIMEOUTS`. */
   timeouts?: Timeouts;
 }
