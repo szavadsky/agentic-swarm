@@ -1,9 +1,13 @@
 import type { Action, Limits, State } from "./types.js";
 
+function park(slug: string, cause: string): Action {
+  return { kind: "park", slug, cause };
+}
+
 /**
- * Pure dispatch decision. Actions are ordered by dependency-independent slug
- * order; the shell executes them serially (S2 adds concurrency) and re-derives
- * after every record. `running` guards against dispatching a task twice.
+ * Pure dispatch decision. Actions are ordered by slug; the dispatcher admits
+ * them against concurrency, scope and drain limits and re-derives after every
+ * record. `running` guards against dispatching a task twice.
  */
 export function next(state: State, limits: Limits, running: ReadonlySet<string>): Action[] {
   if (state.terminal) {
@@ -19,45 +23,63 @@ export function next(state: State, limits: Limits, running: ReadonlySet<string>)
     }
     if (task.status !== "ready") continue;
 
+    if (task.park) {
+      actions.push(park(slug, task.park));
+      continue;
+    }
+    if (task.loop) {
+      const loop = task.loop;
+      actions.push(
+        park(
+          slug,
+          `no-progress: ${loop.step} r${loop.round} repeats r${loop.firstRound} (${loop.fingerprint.slice(0, 8)})`
+        )
+      );
+      continue;
+    }
+
     const flow = limits.flows[task.flow];
     if (!flow) {
-      actions.push({ kind: "park", slug, cause: `flow "${task.flow}" is not configured` });
+      actions.push(park(slug, `flow "${task.flow}" is not configured`));
       continue;
     }
 
-    if (task.phase === "implement" && task.round > flow.reviewRounds) {
-      actions.push({
-        kind: "park",
-        slug,
-        cause: `review round limit reached after verdict "${task.verdict ?? "none"}" (${flow.reviewRounds} rounds)`,
-      });
+    if (task.phase === "checks") {
+      actions.push({ kind: "checks", slug });
       continue;
     }
-    if ((task.phase === "implement" || task.phase === "review") && task.turns >= limits.itemTurns) {
-      actions.push({
-        kind: "park",
-        slug,
-        cause: `item budget exhausted after ${task.turns} turns`,
-      });
+    if (task.phase === "merge") {
+      actions.push({ kind: "merge", slug });
+      continue;
+    }
+    if (task.phase === "finish") {
+      actions.push({ kind: "finish", slug });
+      continue;
+    }
+    if (task.phase === "done" || task.phase === "parked") {
+      actions.push(park(slug, `stuck: no next action for phase "${task.phase}"`));
       continue;
     }
 
-    switch (task.phase) {
-      case "implement":
-        actions.push({ kind: "step", slug, step: "implement", round: task.round });
-        break;
-      case "review":
-        actions.push({ kind: "step", slug, step: "review", round: task.round });
-        break;
-      case "merge":
-        actions.push({ kind: "merge", slug });
-        break;
-      case "finish":
-        actions.push({ kind: "finish", slug });
-        break;
-      default:
-        break;
+    const step = flow.steps.find((s) => s.id === task.phase);
+    if (!step) {
+      actions.push(park(slug, `flow "${task.flow}" has no step "${task.phase}"`));
+      continue;
     }
+    if (step.review && task.round > flow.reviewRounds) {
+      actions.push(
+        park(
+          slug,
+          `review round limit reached after verdict "${task.verdict ?? "none"}" (${flow.reviewRounds} rounds)`
+        )
+      );
+      continue;
+    }
+    if (task.turns >= limits.itemTurns) {
+      actions.push(park(slug, `budget: item budget exhausted after ${task.turns} turns`));
+      continue;
+    }
+    actions.push({ kind: "step", slug, step: step.id, round: task.round });
   }
 
   if (actions.length > 0) return actions;

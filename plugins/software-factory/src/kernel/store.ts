@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { readText, readYaml, writeTextAtomic, writeYamlAtomic } from "../core/records/io.js";
+import { AsyncMutex } from "../core/mutex.js";
 import { parseTaskFile, renderTaskFile } from "./tasks.js";
 import type {
   ArtifactStore,
@@ -33,6 +34,8 @@ class FolderStore implements ArtifactStore {
   readonly recordsDir: string;
   readonly mailboxDir: string;
   readonly iterationsDir: string;
+  /** Concurrent dispatches allocate sequence numbers; one allocator per store. */
+  private readonly seqLock = new AsyncMutex();
 
   constructor(goalDir: string) {
     this.goalDir = goalDir;
@@ -115,12 +118,15 @@ class FolderStore implements ArtifactStore {
 
   async startRecord(meta: RecordStart): Promise<TurnRecord> {
     await fs.promises.mkdir(this.recordsDir, { recursive: true });
-    const seq = (await this.nextSeq()) + 1;
-    const started: StepRecord = { ...meta, seq, startedAt: new Date().toISOString() };
-    const dir = path.join(this.recordsDir, recordDirName(seq, meta));
-    await fs.promises.mkdir(dir, { recursive: true });
+    const { dir, started } = await this.seqLock.runExclusive(async () => {
+      const seq = (await this.nextSeq()) + 1;
+      const record: StepRecord = { ...meta, seq, startedAt: new Date().toISOString() };
+      const recordDir = path.join(this.recordsDir, recordDirName(seq, meta));
+      await fs.promises.mkdir(recordDir, { recursive: true });
+      await writeYamlAtomic(path.join(recordDir, "started.yaml"), record);
+      return { dir: recordDir, started: record };
+    });
     const outcomePath = path.join(dir, "outcome.yaml");
-    await writeYamlAtomic(path.join(dir, "started.yaml"), started);
     const finish = async (end: RecordEnd): Promise<StepRecord> => {
       if (end.outcome) await writeYamlAtomic(outcomePath, end.outcome);
       const ended = { ...end, endedAt: new Date().toISOString() };

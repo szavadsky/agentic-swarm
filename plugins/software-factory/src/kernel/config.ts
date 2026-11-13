@@ -23,14 +23,25 @@ export const repoConfigSchema = z.object({
 
 /** One flow step; `review` marks the step that consumes a review round. */
 export const flowStepSchema = z.object({
-  id: z.string().min(1),
+  id: z
+    .string()
+    .min(1)
+    .regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/, "step id must be a simple name (no path separators)"),
   role: z.string().min(1),
   review: z.boolean().default(false),
 });
 
+export const followUpSchema = z
+  .object({
+    mode: z.enum(["same-session", "de-novo", "different-model"]).default("same-session"),
+    role: z.string().min(1).optional(),
+  })
+  .default({ mode: "same-session" });
+
 export const flowSchema = z.object({
   steps: z.array(flowStepSchema).min(1),
   reviewRounds: z.number().int().positive().default(2),
+  followUp: followUpSchema,
 });
 
 /** Process layer: package default deep-merged with an optional repo override. */
@@ -59,6 +70,9 @@ export const runConfigSchema = z.object({
       concurrency: z.number().int().positive().default(2),
       perHarness: z.record(z.string(), z.number().int().positive()).default({}),
       iterations: z.number().int().positive().default(1),
+      /** Optional drain limits for one iteration. */
+      turns: z.number().int().positive().optional(),
+      wallMinutes: z.number().positive().optional(),
     })
     .default(() => ({ concurrency: 2, perHarness: {}, iterations: 1 })),
   sessions: z
@@ -111,6 +125,11 @@ export function loadConfigs(repoRoot: string, opts: LoadConfigOptions = {}): Con
     opts.runConfigPath ?? globalThis.process.env.FACTORY_RUN_CONFIG ?? path.join(repoRoot, ".factory", "run.yaml");
   const run = runConfigSchema.parse(readYamlFile(runPath) ?? {});
   if (opts.iterations !== undefined) run.limits.iterations = opts.iterations;
+  for (const [name, flow] of Object.entries(processConfig.flows)) {
+    if (flow.followUp?.mode === "different-model" && !flow.followUp.role) {
+      throw new Error(`process flow "${name}": follow-up mode different-model needs a role`);
+    }
+  }
   return {
     repo: repo as RepoConfig,
     process: processConfig as ProcessConfig,
@@ -142,7 +161,7 @@ export function resolveGoalPaths(configs: ConfigBundle, repoRoot: string, goal: 
 export function toLimits(configs: ConfigBundle): Limits {
   const flows: Limits["flows"] = {};
   for (const [name, flow] of Object.entries(configs.process.flows)) {
-    flows[name] = { reviewRounds: flow.reviewRounds };
+    flows[name] = flow;
   }
   return {
     itemTurns: configs.process.itemTurns,
@@ -150,6 +169,10 @@ export function toLimits(configs: ConfigBundle): Limits {
     iterations: configs.run.limits.iterations,
     concurrency: configs.run.limits.concurrency,
     perHarness: configs.run.limits.perHarness,
+    iterationTurns: configs.run.limits.turns,
+    iterationWallMs: configs.run.limits.wallMinutes
+      ? Math.round(configs.run.limits.wallMinutes * 60_000)
+      : undefined,
   };
 }
 
