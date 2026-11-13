@@ -90,25 +90,42 @@ export async function runOmpTurn(
     idleTimer.unref?.();
   };
 
-  try {
-    rpc = await runtime.launch(model, req.cwd, overlayPath, dirs.sessions, resume, extraArgs);
-  } catch (error) {
-    clearTimers();
-    return {
-      stop: classifyOmpTurn({
-        failure:
-          error instanceof OmpRpcTimeout
-            ? { timedOut: true }
-            : error instanceof OmpRpcExit
-              ? { signal: error.signal, stderr: error.stderr }
-              : { stderr: String(error) },
-      }),
-      text: "",
-      usage: zeroUsage(),
-      model,
-    };
+  // The session lives in its own launch dir; resume against that home, and when
+  // it is gone (retention pruned it) retry de novo once instead of crashing.
+  let resumeDir = dirs.sessions;
+  let resumeId = resume;
+  if (resume && req.session?.dir && fs.existsSync(req.session.dir)) {
+    resumeDir = req.session.dir;
   }
-
+  try {
+    rpc = await runtime.launch(model, req.cwd, overlayPath, resumeDir, resumeId, extraArgs);
+  } catch (error) {
+    if (resumeId && /session .*not found/i.test(error instanceof OmpRpcExit ? error.stderr : String(error))) {
+      resumeId = undefined;
+      resumeDir = dirs.sessions;
+      try {
+        rpc = await runtime.launch(model, req.cwd, overlayPath, resumeDir, undefined, extraArgs);
+      } catch (retryError) {
+        error = retryError;
+      }
+    }
+    if (!rpc) {
+      clearTimers();
+      return {
+        stop: classifyOmpTurn({
+          failure:
+            error instanceof OmpRpcTimeout
+              ? { timedOut: true }
+              : error instanceof OmpRpcExit
+                ? { signal: error.signal, stderr: error.stderr }
+                : { stderr: String(error) },
+        }),
+        text: "",
+        usage: zeroUsage(),
+        model,
+      };
+    }
+  }
   // Idle resets on every frame, including streamed deltas the RPC discards.
   rpc.setOnFrame((frame: any) => {
     if (finished) return;
@@ -216,6 +233,7 @@ export async function runOmpTurn(
         harness: OMP_ID,
         id: sessionId,
         cwd: req.cwd,
+        dir: resumeDir,
         model: actualModel(state, model),
         lastRequestStartedAt: startedAt,
         retentionTier: "short" as const,

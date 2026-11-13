@@ -54,6 +54,8 @@ export type SessionRef = {
   lastRequestStartedAt: string;
   retentionTier: "short" | "long";
   compacted: boolean;
+  /** Harness-managed session home; resume resolves against it, not the current launch dir. */
+  dir?: string;
 };
 
 /** One call to the harness, after fallback expansion. */

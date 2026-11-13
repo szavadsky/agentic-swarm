@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import type { RetryPolicy } from "../fallback.js";
 import { runWithFallbacks } from "../fallback.js";
 import type {
@@ -67,11 +68,12 @@ export class OmpHarness implements Harness {
     }
     const dirs = this.runtime.dirs();
     const overlayPath = await this.runtime.overlay();
+    const home = ref.dir && fs.existsSync(ref.dir) ? ref.dir : dirs.sessions;
     const rpc = await this.runtime.launch(
       ref.model,
       ref.cwd,
       overlayPath,
-      dirs.sessions,
+      home,
       ref.id,
       []
     );
