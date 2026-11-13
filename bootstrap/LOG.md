@@ -127,3 +127,12 @@ Verbatim, newest last; each with what it changed.
 ### 2026-11-12 — free tier truly exhausted; S2/S4 moved to subscription
 - Both free-tier resumes failed with `provider.free-limit` 429, retryAfter 80,035 s (~22 h), steps=0. First 429 with a full-day retry window that also blocks the immediate retry — the earlier "passes a minute later" behavior is gone. S2 and S4 resumed in-session on `opencode-go/deepseek-v4.1-flash#max` (same weights, subscription billing); sessions `ses_e2d85ffacf…` / `ses_e2d85ffaaf…`.
 - Lesson for D8/D14: the `flock` slot limits our own concurrency but not the account-wide free quota the probes share. Next free-tier availability unknown — assume none until the retry window passes; run everything billable meanwhile.
+
+### 2026-11-12 — S4 done, merged; S3↔S4 integration fixed by hand (human intervention 2)
+- S4 (`opencode-go/deepseek-v4.1-flash#max` after free-tier 429): 20 steps/23 tools in continuation, 232 s, exit 0. Verified myself on its branch first: typecheck green, 269 tests / 0 fail. Run configs written (`bootstrap/run/shakedown.yaml`: free minimax architect + beam PM/digest + deepseek implementer + minimax reviewer, plan fallbacks; `self.yaml`: Opus architect via omp). Live gate (`FACTORY_LIVE=1`) passed against real CLIs per the report — not re-run by me.
+- Merge into `factory-v3` (`fb21bf8`): one conflict in `config.ts` — S3's `timeouts` field vs S4's `min(1)`+`strict` tightening; resolved as S4's shape plus S3's field (plus an import union). Then 7 red tests, all S3↔S4 contract seams, fixed in `27dbb55`:
+  1. Digest scout is observability: a missing `digest` alias now skips the scout (derived table still written) instead of failing the launch — S4's pre-flight deliberately doesn't require the alias. Healed scenario3 ×2 and e2e.
+  2. `firstTurn` means "no architect step on record", not "no records" — S4's baseline record broke the old check and the architect prompt mislabeled `first` as `boundary`. Real bug, one-line fix.
+  3. `boundary.cause` is threaded through `writeIterationFacts` into the summary (`boundary: …` remarkable) — the PM-double-failure cause was computed and dropped.
+  4. Four S3 test expectations updated to S4's exit-code contract (done=0, blocked=2, iteration-limit=3).
+- Suite on `factory-v3`: 297 pass / 4 skip / 0 fail, 26 s. INT's job shrinks to merging S2 only.
