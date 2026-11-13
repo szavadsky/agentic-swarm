@@ -267,3 +267,8 @@ Verbatim, newest last; each with what it changed.
 - 6.2 h, exit 3. Deepseek PM derived 25+ task files for $0.03 — the promotion worked. Merged 18: pm-ladder (answers steer-pm-ladder: escalateTo field, base-failed climbs, only escalated rung blocks with a question, rollback between rungs, repair ask removed; self.yaml pm.escalateTo = escalation/sonnet), turn-land, prune-checks-land, parked-base-sync, session-end-compact (sessions compact at end — resume era begins), pm-frozen, empty-diff-cause, overflow-denovo, limits-usd-typed, steer-holds, +8 more. Parked 7 (front-ladder + harness-rotation upscoped with precise interface diagnoses; 5 others). Pending 10.
 - Merged clean (`550b275`), 401 tests green, promoted. Iteration 12 running (bg_137) — first launch with beam-max digest + pm-ladder in the kernel.
 - Launch hygiene note: bg_135's result dumped promote's full suite log; bg_137 redirects to /tmp/self-i12.log instead.
+
+### 2026-11-13 — iteration 12: 6 merged, 8 parked; infra-no-climb reversal ($2.27)
+- 2.4 h, exit 3. Merged: brake-priced, front-land, compact-shared, incident-surfaces, register-guards, sweep-land. Parked 8 (pm-ladder-tidy + prune-sweep + doc-drift upscoped with in-scope work complete — scope friction, not failure; front-ladder/harness-rotation still parked with land tasks planned). Pending 13.
+- Architect reversed a default with cost reasoning: a PM rung ending on infra no longer climbs to escalation (~13x price for trouble a stronger model doesn't fix); refusal/invalid still climb. Reversible in run config.
+- Merged clean (`4ec622e`), 420 tests green, promoted. Iteration 13 running (bg_138) with both logs redirected.
