@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import yaml from "yaml";
 
 export interface LockData {
   pid: number;
@@ -16,22 +15,14 @@ export interface RunLockHandle {
 
 /**
  * Resolves the runtime directory outside the main repository checkout (§2, §7).
- * Defaults to `{worktreeRoot}/.factory-runtime`.
+ * The worktree root comes from the run config; without one, the runtime lives
+ * beside the repository. Defaults to `{worktreeRoot}/.factory-runtime`.
  */
 export function resolveRuntimeDir(repoRoot: string, worktreeRoot?: string): string {
-  let wt = worktreeRoot;
-  if (!wt) {
-    const projectYamlPath = path.join(repoRoot, ".factory", "project.yaml");
-    if (fs.existsSync(projectYamlPath)) {
-      try {
-        const parsed = yaml.parse(fs.readFileSync(projectYamlPath, "utf8"));
-        if (parsed?.worktreeRoot) {
-          wt = parsed.worktreeRoot;
-        }
-      } catch {}
-    }
-  }
-  let resolvedWorktreeRoot = path.resolve(repoRoot, wt ?? `../wt-${path.basename(repoRoot)}`);
+  let resolvedWorktreeRoot = path.resolve(
+    repoRoot,
+    worktreeRoot ?? `../wt-${path.basename(repoRoot)}`
+  );
   if (resolvedWorktreeRoot === repoRoot || resolvedWorktreeRoot.startsWith(repoRoot + path.sep)) {
     resolvedWorktreeRoot = path.resolve(repoRoot, "..", `wt-${path.basename(repoRoot)}`);
   }
