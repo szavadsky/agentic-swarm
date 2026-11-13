@@ -375,6 +375,7 @@ verdict: approve | changes | reject; decision: continue | done | blocked
 - worktree: \`/worktrees/demo-tasks/alpha\` (run git as \`git -C <worktree>\`; cited paths are relative to it)
 - diff range: \`abc1234..def5678\` — spans every round of this task
 - round: \`1\` of \`2\`
+- pre-existing base gate failures: \`- test: 2 failing\` — red before this diff; not findings against it
 - prior findings: \`\` — empty in round 1
 - outcome path: \`/worktrees/demo-tasks/alpha/outcome.yaml\`
 "

@@ -34,15 +34,18 @@ class FolderStore implements ArtifactStore {
   readonly recordsDir: string;
   readonly mailboxDir: string;
   readonly iterationsDir: string;
+  /** Directory holding all goals; its `.gitignore` keeps records out of git. */
+  private readonly artifactRoot?: string;
   /** Concurrent dispatches allocate sequence numbers; one allocator per store. */
   private readonly seqLock = new AsyncMutex();
 
-  constructor(goalDir: string) {
+  constructor(goalDir: string, artifactRoot?: string) {
     this.goalDir = goalDir;
     this.tasksDir = path.join(goalDir, "tasks");
     this.recordsDir = path.join(goalDir, "records");
     this.mailboxDir = path.join(goalDir, "mailbox");
     this.iterationsDir = path.join(goalDir, "iterations");
+    this.artifactRoot = artifactRoot;
   }
 
   async ensureLayout(): Promise<void> {
@@ -54,6 +57,26 @@ class FolderStore implements ArtifactStore {
       fs.promises.mkdir(path.join(this.mailboxDir, "outbox"), { recursive: true }),
       fs.promises.mkdir(this.iterationsDir, { recursive: true }),
     ]);
+    await this.ensureArtifactIgnore();
+  }
+
+  /**
+   * Goal records are not repository content (KERNEL0 §5). A local `.gitignore`
+   * at the artifact root makes a stray `git add` skip every goal directory;
+   * never replaces an existing file and never writes into a git root.
+   */
+  private async ensureArtifactIgnore(): Promise<void> {
+    const root = this.artifactRoot;
+    if (!root) return;
+    if (fs.existsSync(path.join(root, ".git"))) return;
+    const ignore = path.join(root, ".gitignore");
+    if (fs.existsSync(ignore)) return;
+    await fs.promises.mkdir(root, { recursive: true });
+    await fs.promises.writeFile(
+      ignore,
+      "# Factory goal records live here; keep them out of the repository.\n*\n",
+      "utf8"
+    );
   }
 
   async readFile(rel: string): Promise<string | null> {
@@ -181,6 +204,7 @@ class FolderStore implements ArtifactStore {
   }
 }
 
-export function createFolderStore(goalDir: string): ArtifactStore {
-  return new FolderStore(goalDir);
+/** `artifactRoot` (the goal's parent) receives a `.gitignore` so records stay out of git. */
+export function createFolderStore(goalDir: string, artifactRoot?: string): ArtifactStore {
+  return new FolderStore(goalDir, artifactRoot);
 }

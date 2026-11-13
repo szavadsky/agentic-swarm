@@ -115,6 +115,9 @@ export function validateTaskGraph(
     if (!isValidTaskSlug(task.slug)) {
       findings.push(`slug "${task.slug}" is not namespaced kebab-case (example: auth.token-refresh)`);
     }
+    if (task.scope.length === 0) {
+      findings.push(`task "${task.slug}" has no scope: list the files or globs it may touch`);
+    }
     if (bySlug.has(task.slug)) {
       findings.push(`slug "${task.slug}" is declared twice`);
     }

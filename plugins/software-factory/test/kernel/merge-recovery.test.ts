@@ -6,6 +6,7 @@ import { commitAll } from "../../src/core/git/commit.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
 import { scriptMeta } from "../../src/kernel/record.js";
+import { recoverLaunch } from "../../src/kernel/recovery.js";
 import {
   ensureTaskWorktree,
   integrationHead,
@@ -60,6 +61,15 @@ describe("merge queue crash recovery", () => {
         ...scriptMeta(1, "merge", { slug: "task", round: 1 }),
         commit: mergeCommit,
       });
+
+      // The next launch always runs recovery first; it seals the interrupted
+      // merge, and the merge queue must still recover the recorded commit.
+      await recoverLaunch(runtime);
+      const sealed = (await runtime.store.listRecords()).filter(
+        (r) => r.slug === "task" && r.step === "merge"
+      );
+      expect(sealed).toHaveLength(1);
+      expect(sealed[0]!.stop).toEqual({ kind: "infra", cause: "crash" });
 
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("boundary");

@@ -5,7 +5,14 @@ import { runAgentTurn } from "./agent.js";
 import { promptVars, resolveRole, resumeSessionFor } from "./flow-context.js";
 import { scriptMeta } from "./record.js";
 import { materialHash } from "./tasks.js";
-import { ensureTaskWorktree, headSha, integrationHead, treeSha } from "./worktree.js";
+import {
+  containmentSnapshot,
+  containmentViolation,
+  ensureTaskWorktree,
+  headSha,
+  integrationHead,
+  treeSha,
+} from "./worktree.js";
 import type { KernelRuntime, RecordEnd, StepRecord, TaskFile, TaskState } from "./types.js";
 
 export interface AttemptResult {
@@ -93,6 +100,8 @@ export async function attemptConflictMerge(
   vars.base_hash = head;
   vars.head_hash = before;
 
+  const contained = await containmentSnapshot(runtime, ensured.path);
+  let breach: string | undefined;
   const result = await runAgentTurn(runtime, {
     role: target.role,
     cwd: ensured.path,
@@ -107,15 +116,22 @@ export async function attemptConflictMerge(
     vars,
     expectation: "any",
     session: await resumeSessionFor(runtime, task, target.alias, records, ensured.path),
-    settle: async () =>
-      settleMergeAttempt(
+    settle: async () => {
+      breach = await containmentViolation(runtime, ensured.path, ensured.branch, contained);
+      if (breach) return { ok: false, cause: `containment: ${breach}` };
+      return settleMergeAttempt(
         runtime,
         { iteration, slug: task.slug, round: state.round },
         ensured.path,
         `factory: ${task.slug} merge integration head`
-      ),
+      );
+    },
   });
 
+  if (breach) {
+    await abortMerge(ensured.path);
+    return { ok: false, cause: `containment: ${breach}` };
+  }
   const stop = result.record.stop;
   if (stop?.kind === "infra") {
     await abortMerge(ensured.path);

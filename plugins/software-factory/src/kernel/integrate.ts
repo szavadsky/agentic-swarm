@@ -2,7 +2,8 @@ import { git } from "../core/git/exec.js";
 import { commitAll, isAncestor } from "../core/git/commit.js";
 import { runWorktreeSetup } from "../core/checks/setup.js";
 import { KeyedMutex } from "../core/mutex.js";
-import { runGates } from "./gates.js";
+import { preexistingRed, recordedBaseGates } from "./baseline.js";
+import { newGateFailures, runGates } from "./gates.js";
 import { attemptConflictMerge } from "./merge-attempt.js";
 import { appendChecks, scriptMeta } from "./record.js";
 import {
@@ -55,6 +56,17 @@ async function recordMerge(
 }
 
 /**
+ * A merge start that carries the planned commit and did not succeed. Recovery
+ * seals interrupted records as `infra: crash` before dispatch, so the match
+ * includes those; an explicit failure of any other kind is a real outcome.
+ */
+function recoverableMergeStart(record: StepRecord): boolean {
+  if (!record.commit || record.ok === true) return false;
+  if (!record.endedAt) return true;
+  return record.stop?.kind === "infra";
+}
+
+/**
  * A crash after the planned commit was recorded but before (or just after) the
  * ref moved must complete that merge, never squash it a second time. The open
  * record carries the planned commit; the parent check makes a stale plan inert.
@@ -67,7 +79,7 @@ async function recoverOpenMerge(
   round: number
 ): Promise<boolean> {
   const open = records
-    .filter((r) => r.slug === task.slug && r.step === "merge" && !r.endedAt && r.commit)
+    .filter((r) => r.slug === task.slug && r.step === "merge" && recoverableMergeStart(r))
     .sort(bySeq)
     .at(-1);
   if (!open?.commit) return false;
@@ -182,8 +194,12 @@ export async function mergeTask(
       return {};
     }
     const checks = await runGates(runtime, scratch);
-    await appendChecks(runtime.store, { iteration, slug: task.slug, round }, checks, { step: "merge-checks" });
-    const red = checks.filter((c) => !c.ok);
+    const preexisting = preexistingRed(recordedBaseGates(records));
+    await appendChecks(runtime.store, { iteration, slug: task.slug, round }, checks, {
+      step: "merge-checks",
+      preexisting,
+    });
+    const red = newGateFailures(checks, preexisting);
     if (red.length > 0) {
       await removeMergeScratch(runtime);
       await recordMerge(runtime, task, iteration, round, {

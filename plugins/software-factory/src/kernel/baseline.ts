@@ -19,6 +19,29 @@ export interface BaselineResult {
   fresh: boolean;
 }
 
+/** The last recorded base-gate run; absent before pre-flight has checked a base. */
+export interface BaseGateState {
+  commit: string;
+  ok: boolean;
+  checks: CheckResult[];
+}
+
+/**
+ * Pre-flight records one base run per commit. Everything that judges a task's
+ * gates reads this: a failure already red on the base is not the task's.
+ */
+export function recordedBaseGates(records: StepRecord[]): BaseGateState | undefined {
+  const latest = records
+    .filter((r) => r.step === "baseline" && r.actor === "script" && r.endedAt && r.base && r.checks)
+    .sort((a, b) => b.seq - a.seq)[0];
+  if (!latest?.base || !latest.checks) return undefined;
+  return { commit: latest.base, ok: latest.ok !== false, checks: latest.checks };
+}
+
+export function preexistingRed(base: BaseGateState | undefined): Set<string> {
+  return new Set((base?.checks ?? []).filter((c) => !c.ok).map((c) => c.name));
+}
+
 function result(name: string, ok: boolean, summary: string, output = ""): CheckResult {
   return {
     name,

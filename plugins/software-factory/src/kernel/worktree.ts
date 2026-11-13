@@ -150,6 +150,71 @@ export async function headSha(cwd: string): Promise<string> {
   return (await git(cwd, ["rev-parse", "HEAD"])).stdout.trim();
 }
 
+interface WorktreeState {
+  head: string;
+  status: string;
+}
+
+export interface ContainmentSnapshot {
+  branch: string;
+  /** The main checkout: only a rogue turn changes it during dispatch. */
+  root: WorktreeState;
+  /** The integration checkout; a merge moves its HEAD legitimately. */
+  checkout: WorktreeState;
+}
+
+async function worktreeState(dir: string): Promise<WorktreeState> {
+  const head = await git(dir, ["rev-parse", "HEAD"], { allowFail: true });
+  const status = await git(dir, ["status", "--porcelain"], { allowFail: true });
+  return { head: head.stdout.trim(), status: status.stdout };
+}
+
+/**
+ * The worktree a turn runs in is the only place it may change (implementer.md).
+ * The main checkout and the integration checkout are the shared surfaces a
+ * rogue write can damage; sibling task worktrees belong to other live turns and
+ * are not attributed here. Taken before the turn; the settle proves them equal.
+ */
+export async function containmentSnapshot(
+  runtime: KernelRuntime,
+  taskWorktree: string
+): Promise<ContainmentSnapshot> {
+  const branch = await git(taskWorktree, ["rev-parse", "--abbrev-ref", "HEAD"], { allowFail: true });
+  return {
+    branch: branch.stdout.trim(),
+    root: await worktreeState(runtime.paths.repoRoot),
+    checkout: await worktreeState(runtime.paths.goalCheckout),
+  };
+}
+
+/** Text for the park cause when a turn left its worktree; undefined when contained. */
+export async function containmentViolation(
+  runtime: KernelRuntime,
+  taskWorktree: string,
+  expectedBranch: string,
+  snapshot: ContainmentSnapshot
+): Promise<string | undefined> {
+  const breaches: string[] = [];
+  const branch = await git(taskWorktree, ["rev-parse", "--abbrev-ref", "HEAD"], { allowFail: true });
+  const now = branch.stdout.trim();
+  if (snapshot.branch !== expectedBranch || now !== expectedBranch) {
+    breaches.push(`HEAD is on "${now || "detached"}", not the task branch "${expectedBranch}"`);
+  }
+  const root = await worktreeState(runtime.paths.repoRoot);
+  if (root.head !== snapshot.root.head) {
+    breaches.push(`HEAD moved outside the worktree in ${runtime.paths.repoRoot}`);
+  } else if (root.status !== snapshot.root.status) {
+    breaches.push(`files changed outside the worktree in ${runtime.paths.repoRoot}`);
+  }
+  const checkout = await worktreeState(runtime.paths.goalCheckout);
+  // The merge queue moves this checkout's HEAD and resets it; a move is a
+  // merge, not an outside write. With HEAD unchanged, dirt is the turn's.
+  if (checkout.head === snapshot.checkout.head && checkout.status !== snapshot.checkout.status) {
+    breaches.push(`files changed outside the worktree in ${runtime.paths.goalCheckout}`);
+  }
+  return breaches.length > 0 ? breaches.join("; ") : undefined;
+}
+
 /**
  * The merge queue's scratch worktree: detached at the integration head, so a
  * squash commit can be gated without touching the stable goal checkout.

@@ -5,6 +5,7 @@ import path from "node:path";
 import { readYaml, writeYamlAtomic } from "../../src/core/records/io.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import type { RecordStart, TaskFile } from "../../src/kernel/types.js";
+import { createTmpRepo } from "../helpers/tmp-repo.js";
 
 const MODEL = { id: "fake/model" };
 
@@ -66,8 +67,26 @@ describe("createFolderStore", () => {
     expect(store.iterationsDir).toBe(path.join(goalDir, "iterations"));
   });
 
-  it("reads, writes and lists goal-relative files", async () => {
-    const store = createFolderStore(goalDir);
+  it("writes a .gitignore at the artifact root so goal records stay out of git", async () => {
+    const repo = createTmpRepo();
+    try {
+      const artifactRoot = path.join(repo.dir, ".factory/artifacts");
+      const store = createFolderStore(path.join(artifactRoot, "demo"), artifactRoot);
+      await store.ensureLayout();
+      await store.writeFile("records/00001/started.yaml", "seq: 1\n");
+      expect(fs.existsSync(path.join(artifactRoot, ".gitignore"))).toBe(true);
+      expect(repo.git(["status", "--porcelain"]).stdout).toBe("");
+
+      repo.writeFile(".factory/artifacts/.gitignore", "existing\n");
+      const other = createFolderStore(path.join(artifactRoot, "other"), artifactRoot);
+      await other.ensureLayout();
+      expect(fs.readFileSync(path.join(artifactRoot, ".gitignore"), "utf8")).toBe("existing\n");
+    } finally {
+      repo.cleanup();
+    }
+  });
+
+  it("reads, writes and lists goal-relative files", async () => {    const store = createFolderStore(goalDir);
     expect(await store.readFile("missing.txt")).toBeNull();
     expect(await store.listDir("missing")).toEqual([]);
 

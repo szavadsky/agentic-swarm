@@ -115,7 +115,7 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
     throw new LaunchError(`goal "${opts.goal}" has no intent: ${intentPath}`);
   }
 
-  const store = createFolderStore(paths.goalDir);
+  const store = createFolderStore(paths.goalDir, path.dirname(paths.goalDir));
   await store.ensureLayout();
   const sessions = await createLaunchSessions(paths.sessionsDir, opts.goal, configs.run.sessions.keepRuns, {
     repo: repoRoot,

@@ -3,6 +3,7 @@ import path from "node:path";
 import { git } from "../core/git/exec.js";
 import { compactArchitect, resumableSession } from "./architect-session.js";
 import { runAgentTurn } from "./agent.js";
+import { recordedBaseGates } from "./baseline.js";
 import { forwardedConcerns, renderContextPack, shallowCodeMap } from "./context-pack.js";
 import { derive } from "./derive.js";
 import { writeLaunchDigest } from "./digest.js";
@@ -107,6 +108,7 @@ export async function runBoundary(
     steers,
     setup: runtime.configs.repo.setup,
     gates: runtime.configs.repo.gates,
+    baseGates: recordedBaseGates(records),
     forwarded: forwardedConcerns(records),
   });
   await runtime.store.writeFile(packRel, pack);
