@@ -1,0 +1,43 @@
+# Shakedown on plan quota (free tier exhausted): primaries on alibaba-token-plan, fallbacks across billing paths.
+aliases:
+  architect:
+    harness: opencode
+    model: alibaba-token-plan/deepseek-v4.1-flash
+    effort: high
+    fallbacks:
+      - opencode-go/deepseek-v4.1-flash
+      - alibaba-token-plan/deepseek-v4.1-flash
+  pm:
+    harness: opencode
+    model: alibaba-token-plan/qwen3.8-flash
+    fallbacks:
+      - opencode-go/deepseek-v4.1-flash
+      - alibaba-token-plan/deepseek-v4.1-flash
+  digest:
+    harness: opencode
+    model: alibaba-token-plan/qwen3.8-flash
+    fallbacks:
+      - opencode-go/deepseek-v4.1-flash
+      - alibaba-token-plan/deepseek-v4.1-flash
+  implementer:
+    harness: opencode
+    model: alibaba-token-plan/deepseek-v4.1-flash
+    fallbacks:
+      - opencode-go/deepseek-v4.1-flash
+      - alibaba-token-plan/deepseek-v4.1-flash
+  reviewer:
+    harness: opencode
+    model: alibaba-token-plan/deepseek-v4.1-flash
+    fallbacks:
+      - opencode-go/deepseek-v4.1-flash
+      - alibaba-token-plan/deepseek-v4.1-flash
+
+limits:
+  concurrency: 3
+  iterations: 1
+
+sessions:
+  dir: ~/.local/share/factory/sessions
+  keepRuns: 5
+
+worktreeRoot: ~/.local/share/factory/worktrees
