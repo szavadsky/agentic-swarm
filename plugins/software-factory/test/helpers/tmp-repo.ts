@@ -167,18 +167,19 @@ export function createTmpRepo(options?: { initialCommitMessage?: string }): TmpR
       } catch {}
 
       // Clean up stray preflight-probe / preflight-overlay dirs left by crashed
-      // runs — but only ones older than this process. A live baseline worktree
-      // (or a concurrent launch) uses the same prefix and must never be swept.
+      // runs — but only ones older than an hour. A live baseline worktree (or a
+      // concurrent launch) uses the same prefix and must never be swept; process
+      // birth is the wrong comparison because the parent factory predates us.
       try {
         const tmp = os.tmpdir();
-        const born = Date.now() - Math.round(process.uptime() * 1000);
+        const cutoff = Date.now() - 3_600_000;
         if (fs.existsSync(tmp)) {
           const entries = fs.readdirSync(tmp);
           for (const entry of entries) {
             if (entry.startsWith("preflight-probe-") || entry.startsWith("preflight-overlay-")) {
               try {
                 const st = fs.statSync(path.join(tmp, entry));
-                if (st.mtimeMs < born) fs.rmSync(path.join(tmp, entry), { recursive: true, force: true });
+                if (st.mtimeMs < cutoff) fs.rmSync(path.join(tmp, entry), { recursive: true, force: true });
               } catch {}
             }
           }

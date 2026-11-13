@@ -72,10 +72,13 @@ describe("classifyOmpLaunchFailure", () => {
       path.join(FIXTURES, "turn-error-model-not-found.txt"),
       "utf8"
     );
-    expect(classifyOmpLaunchFailure(stderr)).toEqual({ kind: "infra", cause: "auth" });
+    const stop = classifyOmpLaunchFailure(stderr);
+    expect(stop.kind).toBe("infra");
+    expect((stop as { cause: string }).cause).toBe("auth");
+    expect((stop as { details?: string }).details).toContain("not found");
   });
 
   it("classifies other launch stderr as crash", () => {
-    expect(classifyOmpLaunchFailure("boom")).toEqual({ kind: "infra", cause: "crash" });
+    expect(classifyOmpLaunchFailure("boom")).toEqual({ kind: "infra", cause: "crash", details: "boom" });
   });
 });
