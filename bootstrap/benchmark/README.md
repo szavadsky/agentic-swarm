@@ -22,12 +22,14 @@ bootstrap/benchmark/reset.sh /tmp/bench-omp
                  (tree 1379b0f), .factory/repo.yaml from target-repo.yaml, and a goal
                  initialized with the archived intent
 <dest>/runtime   session store and worktrees, outside the target repo
+<dest>/gates-tmp TMPDIR for the reset gate run (install, typecheck, test)
 ```
 
 The script asserts the tree hash, runs the target's gates offline (install,
-typecheck, test), and prints the `factory run` line. It refuses to delete `$HOME`,
-this checkout, a filesystem or one-level path, or a `<dest>` whose launch lock is
-still live.
+typecheck, test) with `TMPDIR` set to `<dest>/gates-tmp`, and prints the
+`factory run` line. It refuses to delete `$HOME`, this checkout, a path inside
+this checkout, a filesystem or one-level path, or a `<dest>` whose launch lock
+is still live.
 
 ## Run
 
