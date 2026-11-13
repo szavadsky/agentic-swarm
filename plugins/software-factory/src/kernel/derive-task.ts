@@ -89,6 +89,25 @@ function committedNothing(kind: TaskKind, rec: StepRecord, priorTree: string | u
 }
 
 /**
+ * The red checks a merge gate failure names, as `name (summary)`. The cause
+ * lists only the new failures; the record's checks also carry inherited reds,
+ * so read the names from the cause. Records without checks keep the plain cause.
+ */
+function redChecksText(rec: StepRecord): string | undefined {
+  const names = (rec.cause ?? "")
+    .slice("gates:".length)
+    .split(",")
+    .map((name) => name.trim())
+    .filter(Boolean);
+  const red: string[] = [];
+  for (const name of names) {
+    const check = rec.checks?.find((c) => c.name === name);
+    if (check) red.push(`${check.name} (${check.summary})`);
+  }
+  return red.length > 0 ? red.join(", ") : undefined;
+}
+
+/**
  * One task's phase machine. It reads records, never config side effects: the
  * configured flow supplies the step order, `checks` gates the last productive
  * step before a review, and a merged-result gate failure adds one fix turn
@@ -107,6 +126,7 @@ export function reduceTask(task: TaskFile, records: StepRecord[], flow: FlowDefi
   let park: string | undefined;
   let loop: ProgressRepeat | undefined;
   let gateFix = false;
+  let gateFailure: string | undefined;
   let gatesFailures = 0;
   let pendingChecks: PendingChecks | null = null;
   let lastTree: string | undefined;
@@ -151,6 +171,7 @@ export function reduceTask(task: TaskFile, records: StepRecord[], flow: FlowDefi
           gatesFailures += 1;
           if (gatesFailures === 1) {
             gateFix = true;
+            gateFailure = redChecksText(rec);
             stepIndex = 0;
             phase = firstStep;
             pendingChecks = null;
@@ -216,9 +237,13 @@ export function reduceTask(task: TaskFile, records: StepRecord[], flow: FlowDefi
     const idx = flowIndex.get(rec.step)!;
     const step = flow.steps[idx]!;
     // An empty commit is its own no-progress signal: skip the reviewer and park
-    // now, instead of spending review rounds until the fingerprint repeats.
+    // now, instead of spending review rounds until the fingerprint repeats. A
+    // gate-fix turn names the red checks that sent it back, so the cause says
+    // why a task that already committed looks empty.
     if (!step.review && committedNothing(task.kind, rec, priorTree)) {
-      park = `empty-diff: ${rec.step} r${rec.round} committed no changes`;
+      park = gateFix && gateFailure
+        ? `empty-diff: ${rec.step} r${rec.round} committed no changes after red checks: ${gateFailure}`
+        : `empty-diff: ${rec.step} r${rec.round} committed no changes`;
       phase = "parked";
       continue;
     }
