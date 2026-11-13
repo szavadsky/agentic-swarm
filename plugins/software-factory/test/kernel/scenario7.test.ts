@@ -85,6 +85,7 @@ function scriptFirstIteration(harness: FakeHarness, goalDir: string): void {
 function scriptSecondIteration(harness: FakeHarness, goalDir: string): void {
   scriptDigest(harness, goalDir, 2);
   harness.script((req, ctx) => {
+    expect(req.prompt).toContain("- turn: `relaunch`");
     writePlan(goalDir, PLAN_2);
     ctx.writeOutcome(outcome({ summary: "changed beta, dropped gamma, added delta", decision: "continue" }));
     return fakeTurnResult(req);
@@ -118,6 +119,7 @@ function scriptSecondIteration(harness: FakeHarness, goalDir: string): void {
     return fakeTurnResult(req);
   });
   harness.script((req, ctx) => {
+    expect(req.prompt).toContain("- turn: `boundary`");
     ctx.writeOutcome(outcome({ summary: "goal met", decision: "done" }));
     return fakeTurnResult(req);
   });
