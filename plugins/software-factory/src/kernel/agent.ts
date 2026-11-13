@@ -1,5 +1,6 @@
 import type { Harness, ModelRef, SessionRef, Stop } from "../harness/types.js";
 import { addUsage } from "../harness/usage.js";
+import { contextPackRelPath, isPackTruncated } from "./context-pack.js";
 import { renderRolePrompt } from "./prompts.js";
 import {
   OutcomeInvalidError,
@@ -72,6 +73,24 @@ export function resolveRoleAlias(runtime: KernelRuntime, role: string): Resolved
   };
 }
 
+/** Roles that run the boundary consult; only they see the iteration's pack. */
+const PACK_ROLES = new Set(["architect", "pm"]);
+
+/**
+ * The pack is the boundary consult's shared context: the architect reads it,
+ * the PM derives tasks from the plan it produced in the same iteration. The
+ * measurement is the rendered artifact, so a cap clip is visible.
+ */
+async function measurePack(
+  runtime: KernelRuntime,
+  spec: AgentTurnSpec
+): Promise<{ bytes: number; truncated: boolean } | undefined> {
+  if (!PACK_ROLES.has(spec.role)) return undefined;
+  const pack = await runtime.store.readFile(contextPackRelPath(spec.meta.iteration));
+  if (pack === null) return undefined;
+  return { bytes: Buffer.byteLength(pack, "utf8"), truncated: isPackTruncated(pack) };
+}
+
 function repairPrompt(outcomePath: string, findings: string[]): string {
   return [
     "Your outcome was not accepted.",
@@ -110,6 +129,10 @@ export async function runAgentTurn(runtime: KernelRuntime, spec: AgentTurnSpec):
     ...spec.vars,
     outcome_path: outcomePath,
   });
+  // The rendered role prompt is the cost driver; a repair ask is small and
+  // replaces it in the same session, so the record carries the first ask.
+  const promptBytes = Buffer.byteLength(prompt, "utf8");
+  const pack = await measurePack(runtime, spec);
   const timeouts = spec.timeouts ?? aliasTimeouts ?? DEFAULT_TIMEOUTS;
 
   const request = {
@@ -176,6 +199,8 @@ export async function runAgentTurn(runtime: KernelRuntime, spec: AgentTurnSpec):
   const actualModel = (lastResult as typeof lastResult & { model?: ModelRef }).model ?? model;
   const record = await started.finish({
     ...settled,
+    promptBytes,
+    ...(pack ? { packBytes: pack.bytes, packTruncated: pack.truncated } : {}),
     ...(actualModel ? { model: actualModel } : {}),
     stop,
     usage,
