@@ -6,31 +6,26 @@ aliases:
     effort: high
     fallbacks:
       - opencode-go/deepseek-v4.1-flash
-      - alibaba-token-plan/deepseek-v4.1-flash
   pm:
     harness: opencode
     model: opencode/beam-free
     fallbacks:
       - opencode-go/deepseek-v4.1-flash
-      - alibaba-token-plan/deepseek-v4.1-flash
   digest:
     harness: opencode
     model: opencode/beam-free
     fallbacks:
       - opencode-go/deepseek-v4.1-flash
-      - alibaba-token-plan/deepseek-v4.1-flash
   implementer:
     harness: opencode
     model: opencode/deepseek-v4.1-flash-free
     fallbacks:
       - opencode-go/deepseek-v4.1-flash
-      - alibaba-token-plan/deepseek-v4.1-flash
   reviewer:
     harness: opencode
     model: opencode/minimax-m3.1-flash-free
     fallbacks:
       - opencode-go/deepseek-v4.1-flash
-      - alibaba-token-plan/deepseek-v4.1-flash
 
 limits:
   concurrency: 3

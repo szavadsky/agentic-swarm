@@ -1,36 +1,31 @@
-# Shakedown on plan quota (free tier exhausted): primaries on alibaba-token-plan, fallbacks across billing paths.
+# Shakedown while the free tier is exhausted: primaries on opencode-go subsidy (deepseek-v4.1), mechanical on beam-free. No alibaba except qwen-max (D16).
 aliases:
   architect:
     harness: opencode
-    model: alibaba-token-plan/deepseek-v4.1-flash
+    model: opencode-go/deepseek-v4.1-flash
     effort: high
     fallbacks:
-      - opencode-go/deepseek-v4.1-flash
-      - alibaba-token-plan/deepseek-v4.1-flash
+      - opencode-go/muse-spark-1.3-contributor
   pm:
     harness: opencode
-    model: alibaba-token-plan/qwen3.8-flash
+    model: opencode-go/beam-free
     fallbacks:
       - opencode-go/deepseek-v4.1-flash
-      - alibaba-token-plan/deepseek-v4.1-flash
   digest:
     harness: opencode
-    model: alibaba-token-plan/qwen3.8-flash
+    model: opencode-go/beam-free
     fallbacks:
       - opencode-go/deepseek-v4.1-flash
-      - alibaba-token-plan/deepseek-v4.1-flash
   implementer:
     harness: opencode
-    model: alibaba-token-plan/deepseek-v4.1-flash
+    model: opencode-go/deepseek-v4.1-flash
     fallbacks:
-      - opencode-go/deepseek-v4.1-flash
-      - alibaba-token-plan/deepseek-v4.1-flash
+      - opencode-go/muse-spark-1.3-contributor
   reviewer:
     harness: opencode
-    model: alibaba-token-plan/deepseek-v4.1-flash
+    model: opencode-go/deepseek-v4.1-flash
     fallbacks:
-      - opencode-go/deepseek-v4.1-flash
-      - alibaba-token-plan/deepseek-v4.1-flash
+      - opencode-go/muse-spark-1.3-contributor
 
 limits:
   concurrency: 3
