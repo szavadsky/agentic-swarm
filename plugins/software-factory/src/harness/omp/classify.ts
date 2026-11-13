@@ -1,141 +1,118 @@
-import type { OmpClassificationResult, OmpParsedResult } from "./types.js";
+import type { Stop } from "../types.js";
 
-const TRANSIENT_PATTERNS: RegExp[] = [
-  /rate[\s_-]?limit/i,
-  /quota[\s_-]?exceeded/i,
-  /resource[\s_-]?exhausted/i,
-  /overloaded/i,
-  /context[\s_-]?deadline[\s_-]?exceeded/i,
-  /econnreset/i,
-  /etimedout/i,
-  /enotfound/i,
-  /socket\s+hang\s+up/i,
-  /connection\s+reset/i,
-  /fetch\s+failed/i,
-  /network\s+error/i,
-  /temporary\s+failure/i,
-  /service\s+unavailable/i,
-  /bad\s+gateway/i,
-  /gateway\s+timeout/i,
-  /internal\s+server\s+error/i,
-  /\b(429|500|502|503|504)\b/,
-];
+/** Error object omp attaches to `prompt_result.status === "error"`. */
+export interface OmpPromptError {
+  message?: string;
+  provider?: string;
+  model?: string;
+  httpStatus?: number;
+  retryable?: boolean;
+  code?: string;
+}
 
-const SESSION_LOST_PATTERNS: RegExp[] = [
-  /session\s+["']?[^"'\s]+["']?\s+not\s+found/i,
-  /no\s+session\s+(found|with\s+id)/i,
-  /unknown\s+session/i,
-  /failed\s+to\s+load\s+session/i,
-  /cannot\s+resume/i,
-  /session\s+file\s+not\s+found/i,
-];
-const LAUNCH_ERROR_PATTERNS: RegExp[] = [
-  /built-in tools? unavailable/i,
-  /unknown tools? in --tools/i,
-  /no such tool/i,
-  /unknown flag/i,
-  /unrecognized (flag|option|argument)/i,
-  /invalid.*--tools/i,
-  /bad flag/i,
-  /failed to parse (flags|options|config)/i,
-];
+const AUTH = /unauthori[sz]ed|forbidden|invalid api key|no api key|missing api key|credential|model .*not found|no-route|model unavailable/i;
+const OVERFLOW = /context (length|window)|maximum context|too many tokens|token limit|prompt is too long|overflow/i;
+const REFUSAL = /refus|safety|content policy|blocked by|declined/i;
+const ABORTED = /abort|interrupted by user/i;
+const TIMEOUT = /timed out|timeout|deadline exceeded/i;
+const QUOTA = /free[- ]?limit|free usage limit|quota|usage limit|insufficient|billing|exceeded your/i;
+const RATE = /rate[\s_-]?limit|too many requests|overloaded|service unavailable|bad gateway/i;
 
 /**
- * Classifies an OMP process outcome as transient, sessionLost, or permanent agent failure (§12.3).
+ * Maps a provider error to the kernel's infra/task-side stop vocabulary.
+ * HTTP 429 and free-tier limits are quota (LOG D8), even when the message also
+ * says "rate limit"; the policy retries quota and rate alike.
  */
-export function classifyOmpOutcome(opts: {
-  exitCode: number;
-  stderr: string;
-  stdout?: string;
-  parsed?: OmpParsedResult;
-  resumeRequested?: boolean;
+export function classifyOmpError(error: OmpPromptError | undefined): Stop {
+  const text = [error?.message, error?.code].filter(Boolean).join(" ");
+  const status = error?.httpStatus;
+
+  if (status === 401 || status === 403 || AUTH.test(text)) {
+    return { kind: "infra", cause: "auth" };
+  }
+  if (status === 429 || QUOTA.test(text)) {
+    return { kind: "infra", cause: "quota" };
+  }
+  if (OVERFLOW.test(text)) {
+    return { kind: "infra", cause: "overflow" };
+  }
+  if (REFUSAL.test(text)) {
+    return { kind: "refusal", details: error?.message };
+  }
+  if (ABORTED.test(text)) {
+    return { kind: "cancelled" };
+  }
+  if (status === 408 || status === 504 || TIMEOUT.test(text)) {
+    return { kind: "infra", cause: "timeout" };
+  }
+  if (RATE.test(text) || (status !== undefined && status >= 500)) {
+    return { kind: "infra", cause: "rate" };
+  }
+  return { kind: "infra", cause: "crash" };
+}
+
+/** Assistant `stopReason` values that override a "completed" prompt result. */
+export function classifyOmpStopReason(stopReason: string | undefined): Stop | undefined {
+  switch (stopReason) {
+    case "max_tokens":
+    case "max-tokens":
+    case "length":
+      return { kind: "truncated", cause: "max-tokens" };
+    case "turn_limit":
+    case "turn-limit":
+    case "max_turns":
+      return { kind: "truncated", cause: "turn-limit" };
+    case "aborted":
+      return { kind: "cancelled" };
+    case "refusal":
+      return { kind: "refusal" };
+    case "error":
+      return { kind: "infra", cause: "crash" };
+    default:
+      return undefined;
+  }
+}
+
+/** omp exiting before the RPC ready frame: bad model/credential, or a launch crash. */
+export function classifyOmpLaunchFailure(stderr: string): Stop {
+  if (AUTH.test(stderr) || /no api key|not authenticated|login/i.test(stderr)) {
+    return { kind: "infra", cause: "auth" };
+  }
+  return { kind: "infra", cause: "crash" };
+}
+
+export interface OmpTurnFailure {
+  /** Child process exit signal, when omp died before a prompt_result. */
+  signal?: string | null;
+  stderr?: string;
+  /** The adapter's own wall/idle timer caused the kill. */
   timedOut?: boolean;
-}): OmpClassificationResult {
-  const { exitCode, stderr, stdout = "", parsed, resumeRequested = false, timedOut = false } = opts;
+}
 
-  // 1. Timeout detection
-  if (timedOut) {
-    return {
-      transient: true,
-      sessionLost: false,
-      error: "Execution timed out",
-    };
+export interface OmpTurnOutcomeInput {
+  abortReason?: "idle" | "wall";
+  failure?: OmpTurnFailure;
+  promptResult?: any;
+  lastStopReason?: string;
+}
+
+/** Final stop for one omp RPC process, from the frames the adapter collected. */
+export function classifyOmpTurn(input: OmpTurnOutcomeInput): Stop {
+  if (input.abortReason || input.failure?.timedOut) {
+    return { kind: "infra", cause: "timeout" };
   }
-
-  // 2. Killed by SIGTERM (143) or SIGKILL (137)
-  if (exitCode === 143 || exitCode === 137) {
-    return {
-      transient: true,
-      sessionLost: false,
-      error: `Process terminated by signal (${exitCode})`,
-    };
+  if (input.promptResult?.status === "error") {
+    return classifyOmpError(input.promptResult.error as OmpPromptError);
   }
-
-  const combinedText = [
-    stderr,
-    stdout,
-    ...(parsed?.errors ?? []),
-  ].join("\n");
-
-  // 3. Resume target missing (sessionLost)
-  if (resumeRequested) {
-    for (const pat of SESSION_LOST_PATTERNS) {
-      if (pat.test(combinedText)) {
-        return {
-          transient: false,
-          sessionLost: true,
-          error: stderr.trim() || "Resumed session target not found",
-        };
-      }
-    }
+  if (input.promptResult?.status === "aborted") return { kind: "cancelled" };
+  if (input.promptResult?.status === "completed") {
+    return classifyOmpStopReason(input.lastStopReason) ?? { kind: "done" };
   }
-
-  // 4. Provider / network / transient error
-  for (const pat of TRANSIENT_PATTERNS) {
-    if (pat.test(combinedText)) {
-      return {
-        transient: true,
-        sessionLost: false,
-        error: stderr.trim() || combinedText.trim() || "Transient provider or network error",
-      };
-    }
+  if (input.failure?.signal === "SIGTERM" || input.failure?.signal === "SIGINT") {
+    return { kind: "cancelled" };
   }
-  // 4b. Stop reason abort or error (§4, spike 2)
-  if (parsed?.stopReason === "abort") {
-    return {
-      transient: false,
-      sessionLost: false,
-      error: stderr.trim() || (parsed.errors.length ? parsed.errors.join("\n") : undefined) || "Agent turn aborted (stopReason: abort)",
-    };
+  if (input.failure) {
+    return classifyOmpLaunchFailure(input.failure.stderr ?? "");
   }
-
-  if (parsed?.stopReason === "error") {
-    return {
-      transient: false,
-      sessionLost: false,
-      error: stderr.trim() || (parsed.errors.length ? parsed.errors.join("\n") : undefined) || "Agent turn failed (stopReason: error)",
-    };
-  }
-
-  // 4c. Launch/config error: omp never ran the agent (bad tools, flags, config).
-  // Not transient (retrying with the same config cannot help) and not an agent
-  // failure — callers fail the RUN fast with the error surfaced, burning no
-  // attempts or consults.
-  for (const pat of LAUNCH_ERROR_PATTERNS) {
-    if (pat.test(combinedText)) {
-      return {
-        transient: false,
-        sessionLost: false,
-        launchError: true,
-        error: stderr.trim() || combinedText.trim(),
-      };
-    }
-  }
-
-  // 5. Normal agent / client failure
-  return {
-    transient: false,
-    sessionLost: false,
-    error: stderr.trim() || combinedText.trim() || `Process failed with exit code ${exitCode}`,
-  };
+  return { kind: "infra", cause: "crash" };
 }
