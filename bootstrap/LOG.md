@@ -19,6 +19,7 @@ Append-only. Two parts: **Decisions** (rebuttable by practice — overturn by ad
 | D12 | 2026-11-12 | Review tier is `opencode-go/muse-spark-1.3-contributor` (heavily subsidized on the contributor tier; sits alongside deepseek implementers). Free flash models (`-free`: deepseek, glm, mimo, minimax) are free only through OpenCode and rate-limited — run-config aliases and pre-flight treat the free tier as opencode-only, with the same model on the contributor plan as fallback. | Owner steer; both probes hit `provider.free-limit` 429s under load. | A cheaper equally-strong reviewer is measured on the review task → replace. |
 | D13 | 2026-11-12 | Implementer/planner free models: `deepseek-v4.1-flash` and `minimax-m3.1-flash` families (free tier first, contributor plan as fallback). `longcat-2.5-free` is dropped as implementer — usable only as a "different model" reviewer or for mechanical pieces. Prompt-review evidence stands: minimax 5/5 useful, DOC1R 10/117 bad citations found. | Owner judgement; longcat is not a good coding model. | A measured benchmark overturns it. |
 | D14 | 2026-11-12 | At most one OpenCode free-tier run at a time: `dispatch.sh` takes an `flock` slot for any `opencode/*-free*` or `big-pickle` model (queued runs wait on the lock instead of racing). Contributor/plan/subscription models are not slot-limited. | Owner steer; free-tier 429s correlate with concurrent load. | Sustained measurement shows 2 concurrent free runs stay clean → widen the slot to 2. |
+| D15 | 2026-11-12 | Mechanical tier is `opencode-go/beam-free` (fastest smoke: 15 s, 1M ctx): lint-class fixes, report formatting, reference audits, replaying a dispatch script. Never an implementer or planner. | Owner steer; matches opencode-probe §7 "reviewer/fast" ranking for that lane. | A mechanical job beam mishandles twice → promote that job class to a flash model. |
 
 ## Open for the owner
 
@@ -41,6 +42,8 @@ Verbatim, newest last; each with what it changed.
 - 2026-11-12 (free-model roles): "I believbe longcat-2.5-free is not a good coding model. migh be ok \"different model reviwer\" deepseek v4.1 and minimal 3.1 flash are good" → D13: deepseek-v4.1-flash and minimax-m3.1-flash become the free implementer/planner models; longcat-2.5-free is reviewer/mechanical only; opencode-probe's "longcat = implementer" recommendation is superseded.
 
 - 2026-11-12 (free-tier concurrency): "limit concurrency with free models to avoid 429" → D14: one free-tier slot in `dispatch.sh` via `flock`; extra free-tier dispatches queue behind it. Subscription/plan models unaffected.
+
+- 2026-11-12 (mechanical tier): "beam-free is perfect for mechanical (through open code go)" → D15: `opencode-go/beam-free` is the mechanical tier; `longcat-2.5-free` keeps the different-model-reviewer lane only.
 
 ## Journal
 
@@ -108,3 +111,6 @@ Verbatim, newest last; each with what it changed.
 
 ### 2026-11-12 — free-tier concurrency capped (D14)
 - Four concurrent dispatches were in flight (S2 free, S3 alibaba, S4 free, DOC1R free) when the owner limited free-tier concurrency. The rule lands in `dispatch.sh` itself (an `flock` slot, queued not racing) so it survives this session. From here: dispatch sequence is free-tier one at a time; parallelize across billing paths (alibaba-token-plan, opencode-go) instead.
+
+### 2026-11-12 — mechanical tier (D15) + live queue state
+- `opencode-go/beam-free` owns mechanical work. Model map now: implementer/planner = deepseek-v4.1 / minimax-m3.1 flash (D13); reviewer = muse-spark-1.3-contributor (D12); different-model reviewer = longcat-2.5-free (D13); mechanical = beam-free (D15). No change to running slices: none of them assigned roles to these models yet except by the opencode-probe recommendation, which S2–S4 never read (they read only RULES.md + assignment + KERNEL0).
