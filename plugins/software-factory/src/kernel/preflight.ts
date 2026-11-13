@@ -59,6 +59,14 @@ function inside(child: string, parent: string): boolean {
   return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
 }
 
+/**
+ * resolveAcpxCommand's last-resort executable when acpx is not on PATH
+ * (`src/harness/acpx/command.ts`): either the literal `bunx` or the absolute
+ * bunx path it resolves. Pre-flight receives only the binary, so this basename
+ * identifies the on-demand route.
+ */
+const ACPX_ON_DEMAND_BINARY = "bunx";
+
 function executable(value: string | undefined): boolean {
   if (!value) return false;
   if (!value.includes(path.sep)) return Bun.which(value) !== null;
@@ -147,13 +155,16 @@ export async function preflight(input: PreflightInput): Promise<PreflightResult>
   const unavailable = new Set<string>();
   if (input.binaries) {
     for (const harness of [...usedHarnesses].sort()) {
-      if (executable(input.binaries[harness])) continue;
+      const binary = input.binaries[harness];
+      if (executable(binary)) continue;
       unavailable.add(harness);
-      findings.push({
-        file: files.run,
-        key: `harness.${harness}`,
-        message: `binary "${input.binaries[harness] ?? harness}" is not executable or not on PATH`,
-      });
+      // resolveAcpxCommand reports `bunx` when acpx is absent; naming only the
+      // shim would hide the dispatcher and the route the operator must provide.
+      const message =
+        binary !== undefined && path.basename(binary) === ACPX_ON_DEMAND_BINARY
+          ? `acpx is not on PATH and the on-demand \`bunx acpx\` route cannot run: binary "bunx" is not executable or not on PATH`
+          : `binary "${binary ?? harness}" is not executable or not on PATH`;
+      findings.push({ file: files.run, key: `harness.${harness}`, message });
     }
   }
 

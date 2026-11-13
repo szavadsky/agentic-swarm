@@ -144,7 +144,35 @@ describe("pre-flight", () => {
     const f = await fixture();
     try {
       const err = await refusal({ ...f.input, binaries: { fake: undefined } });
-      expect(err.findings).toContainEqual(expect.objectContaining({ key: "harness.fake" }));
+      expect(err.findings).toContainEqual(
+        expect.objectContaining({
+          key: "harness.fake",
+          message: 'binary "fake" is not executable or not on PATH',
+        })
+      );
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("names acpx and the bunx route when an acpx alias has no binary", async () => {
+    const f = await fixture(
+      RUN_HEAD.replace("implementer: { harness: fake, model: impl }", "implementer: { harness: pi, model: impl }")
+    );
+    try {
+      const harnesses = new Map(f.input.harnesses);
+      harnesses.set("pi", new FakeHarness({ id: "pi" }));
+      // resolveAcpxCommand falls back to a bunx executable when acpx is absent;
+      // a missing bunx is the host state where that on-demand route cannot run.
+      const err = await refusal({
+        ...f.input,
+        harnesses,
+        binaries: { fake: process.execPath, pi: "/nonexistent/bin/bunx" },
+      });
+      const finding = err.findings.find((x) => x.key === "harness.pi");
+      expect(finding?.message).toContain("acpx");
+      expect(finding?.message).toContain("bunx acpx");
+      expect(err.report).toContain("bunx acpx");
     } finally {
       f.repo.cleanup();
     }
