@@ -11,8 +11,11 @@ model="${2:-opencode/deepseek-v4.1-flash-free#max}"
 root="$(git -C "$(dirname "$(readlink -f "$0")")" rev-parse --show-toplevel)"
 lower="$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')"
 wt="$(dirname "$root")/$lower"
-logs="${FACTORY_BOOTSTRAP_RUNS:-$HOME/.local/share/factory/bootstrap-runs}"
-mkdir -p "$logs"
+slotdir="${FACTORY_SLOT_DIR:-$HOME/.local/share/factory/slots}"
+case "$model" in
+  opencode/*-free*|opencode/big-pickle) mkdir -p "$slotdir"; exec 9>"$slotdir/opencode-free.lock"; flock 9 ;; # one free-tier run at a time (LOG D14)
+esac
+log="$logs/$name-$(date +%Y%m%dT%H%M%S).jsonl"
 
 [ -d "$wt" ] || git -C "$root" worktree add -q -b "factory-v3-$lower" "$wt" factory-v3
 (cd "$wt/plugins/software-factory" && bun install --frozen-lockfile --silent)
