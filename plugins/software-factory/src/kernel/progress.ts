@@ -1,5 +1,5 @@
 import { fingerprintText } from "../core/fingerprint.js";
-import type { Outcome, StepRecord, TaskKind } from "./types.js";
+import type { StepRecord, TaskKind } from "./types.js";
 
 /**
  * One fingerprint per completed step: what ran, how it ended, and the tree it

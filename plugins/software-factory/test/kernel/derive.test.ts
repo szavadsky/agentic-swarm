@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { derive } from "../../src/kernel/derive.js";
-import type { StepRecord, TaskFile } from "../../src/kernel/types.js";
+import type { StepRecord } from "../../src/kernel/types.js";
 import { rec, script, task } from "./helpers.js";
 
 const doneCheck = (seq: number): StepRecord => script(seq, {
