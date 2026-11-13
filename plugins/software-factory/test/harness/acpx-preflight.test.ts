@@ -11,7 +11,27 @@ import { createRealModelCatalog } from "../../src/cli/harnesses.js";
 import { createTmpRepo } from "../helpers/tmp-repo.js";
 import { createAcpxStub } from "./acpx-stub.js";
 
-const RUN_CONFIG = path.resolve(import.meta.dir, "../../../../bootstrap/run/self-acpx.yaml");
+// Mirrors bootstrap/run/self-acpx.yaml (implementer on pi, reviewer on codex).
+// Inlined: the package suite must not reach outside the package.
+const RUN_CONFIG_TEXT = `aliases:
+  architect: { harness: omp, model: anthropic/claude-opus-5-5, effort: high, fallbacks: [opencode-go/deepseek-v4.1-flash] }
+  pm: { harness: opencode, model: opencode/beam-free, fallbacks: [opencode-go/deepseek-v4.1-flash] }
+  digest: { harness: opencode, model: opencode/beam-free, fallbacks: [opencode-go/deepseek-v4.1-flash] }
+  implementer: { harness: pi, model: opencode-go/beam-free, effort: high }
+  reviewer: { harness: codex, model: deepseek-v4.1-flash, effort: high }
+  escalation: { harness: omp, model: anthropic/claude-sonnet-5-5 }
+scouts: { model: opencode-go/deepseek-v4.1-flash }
+prices:
+  anthropic/claude-opus-5-5: { input: 4, cachedInput: 0.2, output: 20, reasoning: 20 }
+  anthropic/claude-sonnet-5-5: { input: 2, cachedInput: 0.1, output: 10, reasoning: 10 }
+  opencode/beam-free: { input: 0, cachedInput: 0, output: 0, reasoning: 0 }
+  opencode-go/beam-free: { input: 0, cachedInput: 0, output: 0, reasoning: 0 }
+  opencode-go/deepseek-v4.1-flash: { input: 0.15, cachedInput: 0.003, output: 0.6, reasoning: 0.6 }
+  deepseek-v4.1-flash: { input: 0.15, cachedInput: 0.003, output: 0.6, reasoning: 0.6 }
+limits: { concurrency: 3, iterations: 1 }
+sessions: { dir: "", keepRuns: 5 }
+worktreeRoot: "/tmp/worktrees"
+`;
 const EFFORTS = ["low", "medium", "high", "xhigh", "max"];
 
 describe("self-acpx run config", () => {
@@ -27,7 +47,9 @@ describe("self-acpx run config", () => {
         "baseBranch: main\nartifactRoot: .factory/artifacts\nsetup: []\ngates: []\n"
       );
       repo.commit("factory config");
-      const configs = loadConfigs(repo.dir, { runConfigPath: RUN_CONFIG });
+      const runConfigPath = path.join(repo.dir, ".factory", "run-acpx.yaml");
+      fs.writeFileSync(runConfigPath, RUN_CONFIG_TEXT, "utf8");
+      const configs = loadConfigs(repo.dir, { runConfigPath });
       const base = path.basename(repo.dir);
       configs.run.sessions.dir = path.join(path.dirname(repo.dir), `${base}-sessions`);
       configs.run.worktreeRoot = path.join(path.dirname(repo.dir), `${base}-worktrees`);
