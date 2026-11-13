@@ -262,3 +262,8 @@ Verbatim, newest last; each with what it changed.
 
 ### 2026-11-13 — PM retry ladder steered (owner steer)
 - The factory now owes the ladder as a kernel feature (retry de-novo → escalate tier → block with trace), planned by the architect at the next boundary that reads the inbox. My `12e46c8` promotion stays; iteration 11 tests whether deepseek PM holds.
+
+### 2026-11-13 — iteration 11: 18 merged incl pm-ladder; deepseek PM held ($2.67)
+- 6.2 h, exit 3. Deepseek PM derived 25+ task files for $0.03 — the promotion worked. Merged 18: pm-ladder (answers steer-pm-ladder: escalateTo field, base-failed climbs, only escalated rung blocks with a question, rollback between rungs, repair ask removed; self.yaml pm.escalateTo = escalation/sonnet), turn-land, prune-checks-land, parked-base-sync, session-end-compact (sessions compact at end — resume era begins), pm-frozen, empty-diff-cause, overflow-denovo, limits-usd-typed, steer-holds, +8 more. Parked 7 (front-ladder + harness-rotation upscoped with precise interface diagnoses; 5 others). Pending 10.
+- Merged clean (`550b275`), 401 tests green, promoted. Iteration 12 running (bg_137) — first launch with beam-max digest + pm-ladder in the kernel.
+- Launch hygiene note: bg_135's result dumped promote's full suite log; bg_137 redirects to /tmp/self-i12.log instead.
