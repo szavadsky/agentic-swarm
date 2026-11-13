@@ -120,3 +120,6 @@ Verbatim, newest last; each with what it changed.
 - `dispatch.sh` follow-up: the D14 slot edit dropped the `logs=`/`mkdir` lines → `logs: unbound variable` killed the first three resumes (commits `e80db86` fixed, re-committed Bootstrap docs). All dispatch failures are in the bootstrap-run logs, never in git.
 - S3 verified myself: typecheck green; 273 tests, 271 pass, 2 live skips, 0 fail, 23.7 s; scenarios 6/7 as named tests; scenario 1 green twice; `bootstrap/reports/S3.md` lists shared-file changes (Timeouts in types/config, cancel in derive/record) and handoffs to S4 (adapter constructors need sessionsDir; digest alias needed for pre-flight). 7 commits on `factory-v3-s3`, clean worktree.
 - `alibaba-token-plan/deepseek-v4.1-flash#max` for S3: first run 567 events/233 tools, continuation only 4 steps/3 tools to confirm completion. S2/S4 resumes launched (free tier, flock-serialized).
+
+### 2026-11-12 — S3 merged into `factory-v3` (`a67189f`)
+- Fast-forward-shaped merge, no conflicts. Suite on the integration branch: 273 pass / 2 skip / 0 fail, 22 s; typecheck green. S2/S4 branches predate the merge — the INT assignment now merges them into a `factory-v3` that already contains S3, which shrinks its conflict surface to S2↔S4 shared-core changes.
