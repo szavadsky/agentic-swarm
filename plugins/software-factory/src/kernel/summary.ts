@@ -1,10 +1,16 @@
 import path from "node:path";
-import { addUsage, zeroUsage } from "../harness/usage.js";
-import type { Usage } from "../harness/types.js";
 import { recordedBaseGates } from "./baseline.js";
 import { derive } from "./derive.js";
-import { DEFAULT_ROLE_BY_STEP, rolesByStep, writeMetrics } from "./metrics.js";
-import { pricedUsage, type PriceTable } from "./pricing.js";
+import {
+  DEFAULT_ROLE_BY_STEP,
+  costText,
+  iterationMetrics,
+  rolesByStep,
+  writeMetrics,
+  type GroupMetrics,
+  type IncidentCounts,
+} from "./metrics.js";
+import type { PriceTable } from "./pricing.js";
 import type { ArtifactStore, GoalDecision, KernelRuntime, State, StepRecord } from "./types.js";
 
 export type SummaryStatus = "goal-met" | "in-progress" | "blocked-by-user" | "stopped-with-debt";
@@ -34,48 +40,32 @@ function shortHash(hash: string): string {
   return hash.slice(0, 10);
 }
 
-interface RoleCost {
-  role: string;
-  costUsd?: number;
-  unpricedTurns: number;
+function spendTable(
+  label: string,
+  rows: Array<{ name: string } & GroupMetrics>
+): string[] {
+  if (rows.length === 0) return ["- none"];
+  return [
+    `| ${label} | turns | tokens | cost | prompt bytes |`,
+    "| --- | --- | --- | --- | --- |",
+    ...rows.map(
+      (row) =>
+        `| ${row.name} | ${row.turns} | ${row.tokens} | ${costText(row.usage.costUsd, row.unpricedTurns)} | ${row.promptBytes} |`
+    ),
+  ];
 }
 
-/** Known zero stays $0.0000; unknown never does; a partial sum says so. */
-function costText(costUsd: number | undefined, unpricedTurns: number): string {
-  const unknown = `${unpricedTurns} unpriced ${unpricedTurns === 1 ? "turn" : "turns"}`;
-  if (unpricedTurns === 0) return `$${(costUsd ?? 0).toFixed(4)}`;
-  if (costUsd === undefined) return `unknown (${unknown})`;
-  return `$${costUsd.toFixed(4)} (partial; ${unknown})`;
-}
-
-function aggregateUsage(
-  recs: StepRecord[],
-  roleByStep: Record<string, string>,
-  prices: PriceTable
-): { usage: Usage; unpricedTurns: number; roles: RoleCost[] } {
-  let usage = zeroUsage();
-  let unpricedTurns = 0;
-  const roles = new Map<string, RoleCost>();
-  for (const rec of recs) {
-    if (!rec.usage) continue;
-    const priced = pricedUsage(rec.usage, rec.model?.id, prices);
-    usage = addUsage(usage, priced.usage);
-    const unpriced = priced.costKnown ? 0 : 1;
-    unpricedTurns += unpriced;
-    if (rec.actor !== "agent") continue;
-    const role = roleByStep[rec.step] ?? DEFAULT_ROLE_BY_STEP[rec.step] ?? rec.step;
-    const entry = roles.get(role) ?? { role, unpricedTurns: 0 };
-    entry.unpricedTurns += unpriced;
-    if (priced.usage.costUsd !== undefined) {
-      entry.costUsd = (entry.costUsd ?? 0) + priced.usage.costUsd;
-    }
-    roles.set(role, entry);
-  }
-  return {
-    usage,
-    unpricedTurns,
-    roles: [...roles.values()].sort((a, b) => a.role.localeCompare(b.role)),
-  };
+function incidentLines(incidents: IncidentCounts): string[] {
+  return [
+    `- infra retries: ${incidents.infraRetries}`,
+    `- fallback hops: ${incidents.fallbackHops}`,
+    `- outcome-repair turns: ${incidents.outcomeRepairs}`,
+    `- merge conflicts: ${incidents.mergeConflicts}`,
+    `- merged-gate failures: ${incidents.mergedGateFailures}`,
+    `- round-limit parks: ${incidents.roundLimitParks}`,
+    `- no-progress parks: ${incidents.noProgressParks}`,
+    `- budget parks: ${incidents.budgetParks}`,
+  ];
 }
 
 function concernLines(recs: StepRecord[], kind?: string): string[] {
@@ -106,6 +96,9 @@ export async function writeIterationSummary(
   const status = input.decision
     ? defaultStatus(input.decision)
     : (input.status ?? defaultStatus(undefined));
+  // Dispatch marks a drain from the USD brake with a `budget:` cause; it is a
+  // spend fact, so it gets its own metrics line instead of the boundary remark.
+  const budgetStop = input.cause ? /^budget:\s*(.+)$/i.exec(input.cause)?.[1]?.trim() : undefined;
 
   const merged = recs.filter((r) => r.step === "merge" && r.ok === true).map((r) => r.slug!);
   const finished = recs.filter((r) => r.step === "finish" && r.ok === true).map((r) => r.slug!);
@@ -141,7 +134,7 @@ export async function writeIterationSummary(
   );
 
   const remarks: string[] = [];
-  if (input.cause) remarks.push(`boundary: ${input.cause}`);
+  if (input.cause && !budgetStop) remarks.push(`boundary: ${input.cause}`);
   if (architect?.outcome) {
     remarks.push(`architect: ${architect.outcome.summary}`);
     for (const forward of architect.outcome.forward) {
@@ -165,11 +158,14 @@ export async function writeIterationSummary(
   );
 
   const roleByStep = { ...DEFAULT_ROLE_BY_STEP, ...(input.roleByStep ?? {}) };
-  const {
-    usage,
-    unpricedTurns,
-    roles: roleCosts,
-  } = aggregateUsage(recs, roleByStep, input.prices ?? {});
+  const computed = iterationMetrics(iteration, status, input.records, roleByStep, 0, input.prices ?? {});
+  const { usage, unpricedTurns, roles: roleCosts, aliases, incidents } = computed;
+  const roleNames = Object.values(roleCosts)
+    .map((entry) => ({ name: entry.role, ...entry }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const aliasNames = Object.values(aliases)
+    .map((entry) => ({ name: entry.alias, ...entry }))
+    .sort((a, b) => a.name.localeCompare(b.name));
   const agentTurns = recs.filter((r) => r.actor === "agent" && r.endedAt).length;
   const scriptTurns = recs.filter((r) => r.actor === "script" && r.endedAt).length;
   const base = recordedBaseGates(input.records);
@@ -229,11 +225,29 @@ export async function writeIterationSummary(
     `- tokens: input ${usage.in}, cached ${usage.cacheRead}, output ${usage.out}, reasoning ${usage.reasoningOut}`,
     `- cost: ${costText(usage.costUsd, unpricedTurns)}`,
     `- cost by role: ${
-      roleCosts.length
-        ? roleCosts.map((entry) => `${entry.role} ${costText(entry.costUsd, entry.unpricedTurns)}`).join("; ")
+      roleNames.length
+        ? roleNames
+            .map((entry) => `${entry.name} ${costText(entry.usage.costUsd, entry.unpricedTurns)}`)
+            .join("; ")
         : "none"
     }`,
+    ...(budgetStop
+      ? [
+          `- budget: ${budgetStop}; brake blind for ${unpricedTurns} unpriced ${
+            unpricedTurns === 1 ? "turn" : "turns"
+          }`,
+        ]
+      : []),
     `- merged: ${merged.length}; parked: ${[...parkedByCause.values()].flat().length}; pending: ${pending.length}`,
+    "",
+    "## Incidents",
+    ...incidentLines(incidents),
+    "",
+    "## Spend by role",
+    ...spendTable("role", roleNames),
+    "",
+    "## Spend by alias",
+    ...spendTable("alias", aliasNames),
     "",
   ];
   const rel = `iterations/${iteration}/summary.md`;

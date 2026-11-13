@@ -192,6 +192,53 @@ describe("derive", () => {
     expect(parked.tasks.a!.round).toBe(1);
   });
 
+  it("parks a productive turn that commits nothing before the reviewer runs", () => {
+    const state = derive([task("a")], [
+      implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
+      script(2, { step: "commit", ok: true, commit: "c1", tree: "tree-1" }),
+      doneCheck(3),
+      review(4, "changes", 1),
+      script(5, { step: "commit", ok: true, commit: "c1", tree: "tree-1" }),
+      implement(6, 2, { tree: "tree-1", commit: "c1", base: "c0" }),
+    ]);
+    expect(state.tasks.a!.phase).toBe("parked");
+    expect(state.tasks.a!.park!.startsWith("empty-diff:")).toBe(true);
+  });
+
+  it("does not park a productive turn that changed the tree", () => {
+    const state = derive([task("a")], [
+      implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
+      script(2, { step: "commit", ok: true, commit: "c1", tree: "tree-1" }),
+      doneCheck(3),
+      review(4, "changes", 1),
+      script(5, { step: "commit", ok: true, commit: "c1", tree: "tree-1" }),
+      implement(6, 2, { tree: "tree-2", commit: "c2", base: "c0" }),
+      doneCheck(7),
+    ]);
+    expect(state.tasks.a!.phase).toBe("review");
+    expect(state.tasks.a!.round).toBe(2);
+    expect(state.tasks.a!.park).toBeUndefined();
+  });
+
+  it("does not read a commit from a turn derive ignores as the next turn's empty diff", () => {
+    const ignored = [
+      { kind: "infra", cause: "crash" },
+      { kind: "truncated", cause: "turn-limit" },
+    ] as const;
+    for (const stop of ignored) {
+      const state = derive([task("a")], [
+        implement(1, 1, { base: "c0", stop, outcome: undefined }),
+        script(2, { step: "commit", ok: true, commit: "c1", tree: "tree-1" }),
+        implement(3, 1, { base: "c0", commit: "c1", tree: "tree-1" }),
+        doneCheck(4),
+      ]);
+      expect(state.tasks.a!.park).toBeUndefined();
+      expect(state.tasks.a!.phase).toBe("review");
+      // Truncated turns consume budget; infra turns never do.
+      expect(state.tasks.a!.turns).toBe(stop.kind === "infra" ? 1 : 2);
+    }
+  });
+
   it("derives a park request for a failed attempt instead of retrying it", () => {
     const state = derive([task("a")], [
       implement(1, 1, { outcome: { status: "failed", summary: "tests red", concerns: [], forward: [] } }),

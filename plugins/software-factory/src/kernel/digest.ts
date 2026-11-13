@@ -1,6 +1,7 @@
 import path from "node:path";
 import { resolveRoleAlias, runAgentTurn } from "./agent.js";
-import { DEFAULT_ROLE_BY_STEP, rolesByStep } from "./metrics.js";
+import { DEFAULT_ROLE_BY_STEP, costText, rolesByStep } from "./metrics.js";
+import { pricedUsage, type PriceTable } from "./pricing.js";
 import type { KernelRuntime, StepRecord } from "./types.js";
 
 interface RoleRow {
@@ -12,6 +13,7 @@ interface RoleRow {
   out: number;
   costUsd: number;
   costKnown: boolean;
+  unpricedTurns: number;
 }
 
 function roleOf(rec: StepRecord, roleByStep: Record<string, string>): string {
@@ -25,7 +27,8 @@ function roleOf(rec: StepRecord, roleByStep: Record<string, string>): string {
 function renderDigestFacts(
   records: StepRecord[],
   iteration: number,
-  roleByStep: Record<string, string>
+  roleByStep: Record<string, string>,
+  prices: PriceTable
 ): string {
   const rows = new Map<string, RoleRow>();
   let turns = 0;
@@ -33,19 +36,32 @@ function renderDigestFacts(
     if (rec.actor !== "agent" || !rec.endedAt) continue;
     if (rec.iteration >= iteration) continue;
     turns += 1;
+    const priced = pricedUsage(rec.usage, rec.model?.id, prices);
     const role = roleOf(rec, roleByStep);
     const alias = rec.alias ?? "-";
     const key = `${role}\u0000${alias}`;
     const row =
       rows.get(key) ??
-      ({ role, alias, turns: 0, in: 0, cacheRead: 0, out: 0, costUsd: 0, costKnown: false } as RoleRow);
+      ({
+        role,
+        alias,
+        turns: 0,
+        in: 0,
+        cacheRead: 0,
+        out: 0,
+        costUsd: 0,
+        costKnown: false,
+        unpricedTurns: 0,
+      } as RoleRow);
     row.turns += 1;
-    row.in += rec.usage?.in ?? 0;
-    row.cacheRead += rec.usage?.cacheRead ?? 0;
-    row.out += rec.usage?.out ?? 0;
-    if (rec.usage?.costUsd !== undefined) {
-      row.costUsd += rec.usage.costUsd;
+    row.in += priced.usage.in;
+    row.cacheRead += priced.usage.cacheRead;
+    row.out += priced.usage.out;
+    if (priced.costKnown) {
+      row.costUsd += priced.usage.costUsd ?? 0;
       row.costKnown = true;
+    } else {
+      row.unpricedTurns += 1;
     }
     rows.set(key, row);
   }
@@ -58,8 +74,9 @@ function renderDigestFacts(
       out: sum.out + row.out,
       costUsd: sum.costUsd + row.costUsd,
       costKnown: sum.costKnown || row.costKnown,
+      unpricedTurns: sum.unpricedTurns + row.unpricedTurns,
     }),
-    { turns: 0, in: 0, cacheRead: 0, out: 0, costUsd: 0, costKnown: false }
+    { turns: 0, in: 0, cacheRead: 0, out: 0, costUsd: 0, costKnown: false, unpricedTurns: 0 }
   );
 
   const lines = [
@@ -76,9 +93,10 @@ function renderDigestFacts(
     (a, b) => a.role.localeCompare(b.role) || a.alias.localeCompare(b.alias)
   )) {
     lines.push(
-      `| ${row.role} | ${row.alias} | ${row.turns} | ${row.in} | ${row.cacheRead} | ${row.out} | ${
-        row.costKnown ? `$${row.costUsd.toFixed(4)}` : "n/a"
-      } |`
+      `| ${row.role} | ${row.alias} | ${row.turns} | ${row.in} | ${row.cacheRead} | ${row.out} | ${costText(
+        row.costKnown ? row.costUsd : undefined,
+        row.unpricedTurns
+      )} |`
     );
   }
   if (rows.size === 0) lines.push("| (none) | | | | | | |");
@@ -87,7 +105,11 @@ function renderDigestFacts(
     "## Totals",
     `- turns: ${turns}`,
     `- input: ${totals.in}; cached: ${totals.cacheRead}; output: ${totals.out}`,
-    `- cost: ${totals.costKnown ? `$${totals.costUsd.toFixed(4)}` : "not reported by the harness"}`,
+    `- cost: ${
+      rows.size === 0
+        ? "not reported by the harness"
+        : costText(totals.costKnown ? totals.costUsd : undefined, totals.unpricedTurns)
+    }`,
     ""
   );
 
@@ -131,10 +153,15 @@ export async function writeLaunchDigest(
   const digestPath = path.join(runtime.store.goalDir, rel);
   await runtime.store.writeFile(
     rel,
-    renderDigestFacts(records, iteration, {
+    renderDigestFacts(
+      records,
+      iteration,
+      {
         ...DEFAULT_ROLE_BY_STEP,
         ...rolesByStep(runtime.configs.process.flows),
-      })
+      },
+      runtime.configs.run.prices ?? {}
+    )
   );
 
   if (scout) {

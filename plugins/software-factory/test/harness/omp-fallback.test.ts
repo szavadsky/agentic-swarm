@@ -76,7 +76,11 @@ describe("OmpHarness fallback chain", () => {
         "provider/bad",
         "provider/good",
       ]);
-      expect(result.attempts?.[0]?.stop).toEqual({ kind: "infra", cause: "quota" });
+      expect(result.attempts?.[0]?.stop).toEqual({
+        kind: "infra",
+        cause: "quota",
+        details: "429 Free usage limit reached",
+      });
       expect(result.usage.in).toBe(5);
       expect(result.usage.out).toBe(2);
       expect(result.usage.cacheRead).toBe(2);

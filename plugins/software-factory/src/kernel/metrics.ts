@@ -5,13 +5,43 @@ import { pricedUsage, type PriceTable } from "./pricing.js";
 import type { ArtifactStore, FlowDefinition, State, StepRecord } from "./types.js";
 import type { SummaryStatus } from "./summary.js";
 
-export interface RoleMetrics {
-  role: string;
+/** Spend one role or alias accumulated over an iteration. */
+export interface GroupMetrics {
   turns: number;
   usage: Usage;
   tokens: number;
+  /** UTF-8 bytes of the rendered prompts sent for these turns. */
+  promptBytes: number;
   /** Turns whose model the harness did not price and the table does not carry. */
   unpricedTurns: number;
+}
+
+export interface RoleMetrics extends GroupMetrics {
+  role: string;
+}
+
+export interface AliasMetrics extends GroupMetrics {
+  alias: string;
+}
+
+/**
+ * Incidents that consume turns and money without producing a flow step:
+ * harness retries and fallback hops, outcome repairs, conflicts, failed
+ * merged-result gates, and the three park causes that are not task failures.
+ */
+export interface IncidentCounts {
+  /** Extra calls on the same model after an infra stop. */
+  infraRetries: number;
+  /** Calls moved to the next model in the chain after an infra stop. */
+  fallbackHops: number;
+  /** Second harness turns spent re-asking for a valid outcome. */
+  outcomeRepairs: number;
+  mergeConflicts: number;
+  /** `merge-checks` that went red without a recorded cause. */
+  mergedGateFailures: number;
+  roundLimitParks: number;
+  noProgressParks: number;
+  budgetParks: number;
 }
 
 export interface ArchitectMetrics {
@@ -35,8 +65,10 @@ export interface IterationMetrics {
   /** null when the iteration merged nothing or its cost is not fully known. */
   costPerMergedTask: number | null;
   roles: Record<string, RoleMetrics>;
+  aliases: Record<string, AliasMetrics>;
   architect: ArchitectMetrics;
   unpricedTurns: number;
+  incidents: IncidentCounts;
   /** Parks whose cause names no-progress; the only loop signal in kernel-0. */
   loopIncidents: number;
   /** Steers moved from inbox to processed during this iteration. */
@@ -69,6 +101,14 @@ export const DEFAULT_ROLE_BY_STEP: Record<string, string> = {
   review: "reviewer",
 };
 
+/** Known zero stays $0.0000; unknown never does; a partial sum says so. */
+export function costText(costUsd: number | undefined, unpricedTurns: number): string {
+  const unknown = `${unpricedTurns} unpriced ${unpricedTurns === 1 ? "turn" : "turns"}`;
+  if (unpricedTurns === 0) return `$${(costUsd ?? 0).toFixed(4)}`;
+  if (costUsd === undefined) return `unknown (${unknown})`;
+  return `$${costUsd.toFixed(4)} (partial; ${unknown})`;
+}
+
 function tokenTotal(usage: Usage): number {
   return (
     usage.in +
@@ -84,11 +124,79 @@ function emptyArchitect(): ArchitectMetrics {
   return { launches: 0, usage: zeroUsage(), tokens: 0, costShare: 0, tokenShare: 0, unpricedTurns: 0 };
 }
 
+function emptyIncidents(): IncidentCounts {
+  return {
+    infraRetries: 0,
+    fallbackHops: 0,
+    outcomeRepairs: 0,
+    mergeConflicts: 0,
+    mergedGateFailures: 0,
+    roundLimitParks: 0,
+    noProgressParks: 0,
+    budgetParks: 0,
+  };
+}
+
 function width(part: number, total: number): number {
   return total > 0 ? part / total : 0;
 }
 
-function computeIteration(
+function sameModel(left: { id: string; effort?: string }, right: { id: string; effort?: string }): boolean {
+  return left.id === right.id && (left.effort ?? "") === (right.effort ?? "");
+}
+
+function addTurn<T extends GroupMetrics>(
+  entry: T,
+  part: Usage,
+  unpriced: number,
+  promptBytes: number
+): void {
+  entry.turns += 1;
+  entry.unpricedTurns += unpriced;
+  entry.usage = addUsage(entry.usage, part);
+  entry.tokens += tokenTotal(part);
+  entry.promptBytes += promptBytes;
+}
+
+/**
+ * Retries, fallbacks and outcome repairs all live in one `attempts` array.
+ * Inside a harness turn attempts continue only after an infra stop; a call
+ * that follows any other stop is the separate repair turn `agent.ts` appends.
+ */
+function attemptIncidents(recs: StepRecord[], incidents: IncidentCounts): void {
+  for (const rec of recs) {
+    const attempts = rec.attempts ?? [];
+    for (let i = 1; i < attempts.length; i += 1) {
+      const previous = attempts[i - 1]!;
+      const next = attempts[i]!;
+      if (previous.stop.kind !== "infra") {
+        incidents.outcomeRepairs += 1;
+      } else if (sameModel(previous.model, next.model)) {
+        incidents.infraRetries += 1;
+      } else {
+        incidents.fallbackHops += 1;
+      }
+    }
+  }
+}
+
+function parkIncidents(all: StepRecord[], incidents: IncidentCounts): void {
+  for (const rec of all) {
+    if (rec.step === "merge" && rec.cause?.startsWith("conflict:")) {
+      incidents.mergeConflicts += 1;
+    } else if (rec.step === "merge-checks" && rec.ok === false && !rec.cause) {
+      incidents.mergedGateFailures += 1;
+    } else if (rec.step === "park" && rec.endedAt) {
+      const cause = rec.cause ?? "";
+      if (/^review round limit reached/i.test(cause)) incidents.roundLimitParks += 1;
+      else if (/no[- ]progress/i.test(cause)) incidents.noProgressParks += 1;
+      else if (/^budget:/i.test(cause)) incidents.budgetParks += 1;
+    }
+  }
+}
+
+/** One iteration's spend and incidents, shared by `metrics.yaml` and its summary. */
+export function iterationMetrics(
   n: number,
   status: SummaryStatus,
   records: StepRecord[],
@@ -100,27 +208,42 @@ function computeIteration(
   let usage = zeroUsage();
   let unpricedTurns = 0;
   const roles: Record<string, RoleMetrics> = {};
+  const aliases: Record<string, AliasMetrics> = {};
   const architect: ArchitectMetrics = emptyArchitect();
 
   for (const rec of recs) {
-    const priced = pricedUsage(rec.usage ?? zeroUsage(), rec.model?.id, prices);
+    const priced = pricedUsage(rec.usage, rec.model?.id, prices);
     const part = priced.usage;
     const unpriced = priced.costKnown ? 0 : 1;
+    const promptBytes = rec.promptBytes ?? 0;
     usage = addUsage(usage, part);
     unpricedTurns += unpriced;
+
     const role = roleByStep[rec.step] ?? DEFAULT_ROLE_BY_STEP[rec.step] ?? rec.step;
-    const entry = roles[role] ?? {
+    const roleEntry = roles[role] ?? {
       role,
       turns: 0,
       usage: zeroUsage(),
       tokens: 0,
+      promptBytes: 0,
       unpricedTurns: 0,
     };
-    entry.turns += 1;
-    entry.unpricedTurns += unpriced;
-    entry.usage = addUsage(entry.usage, part);
-    entry.tokens += tokenTotal(part);
-    roles[role] = entry;
+    addTurn(roleEntry, part, unpriced, promptBytes);
+    roles[role] = roleEntry;
+
+    // Records written before aliases existed fall back to the role name, so a
+    // spend row always names a grouping the run config can resolve.
+    const alias = rec.alias ?? role;
+    const aliasEntry = aliases[alias] ?? {
+      alias,
+      turns: 0,
+      usage: zeroUsage(),
+      tokens: 0,
+      promptBytes: 0,
+      unpricedTurns: 0,
+    };
+    addTurn(aliasEntry, part, unpriced, promptBytes);
+    aliases[alias] = aliasEntry;
 
     if (role === "architect" || rec.step === "architect") {
       architect.launches += 1;
@@ -133,9 +256,9 @@ function computeIteration(
   const all = records.filter((r) => r.iteration === n);
   const merged = all.filter((r) => r.step === "merge" && r.ok === true).map((r) => r.slug!).sort();
   const parked = all.filter((r) => r.step === "park" && r.endedAt).map((r) => r.slug!).sort();
-  const loopIncidents = all.filter(
-    (r) => r.step === "park" && r.endedAt && /no[- ]progress/i.test(r.cause ?? "")
-  ).length;
+  const incidents = emptyIncidents();
+  attemptIncidents(recs, incidents);
+  parkIncidents(all, incidents);
   const tokens = tokenTotal(usage);
 
   architect.costShare = width(architect.usage.costUsd ?? 0, usage.costUsd ?? 0);
@@ -153,9 +276,11 @@ function computeIteration(
         ? usage.costUsd / merged.length
         : null,
     roles,
+    aliases,
     architect,
     unpricedTurns,
-    loopIncidents,
+    incidents,
+    loopIncidents: incidents.noProgressParks,
     humanInterventions,
   };
 }
@@ -170,6 +295,8 @@ function totalsOf(iterations: IterationMetrics[]): MetricsTotals {
   let humanInterventions = 0;
   let unpricedTurns = 0;
   const roles: Record<string, RoleMetrics> = {};
+  const aliases: Record<string, AliasMetrics> = {};
+  const incidents = emptyIncidents();
   const architect = emptyArchitect();
 
   for (const iteration of iterations) {
@@ -187,13 +314,34 @@ function totalsOf(iterations: IterationMetrics[]): MetricsTotals {
         turns: 0,
         usage: zeroUsage(),
         tokens: 0,
+        promptBytes: 0,
         unpricedTurns: 0,
       };
       total.turns += entry.turns;
       total.usage = addUsage(total.usage, entry.usage);
       total.tokens += entry.tokens;
+      total.promptBytes += entry.promptBytes;
       total.unpricedTurns += entry.unpricedTurns;
       roles[entry.role] = total;
+    }
+    for (const entry of Object.values(iteration.aliases)) {
+      const total = aliases[entry.alias] ?? {
+        alias: entry.alias,
+        turns: 0,
+        usage: zeroUsage(),
+        tokens: 0,
+        promptBytes: 0,
+        unpricedTurns: 0,
+      };
+      total.turns += entry.turns;
+      total.usage = addUsage(total.usage, entry.usage);
+      total.tokens += entry.tokens;
+      total.promptBytes += entry.promptBytes;
+      total.unpricedTurns += entry.unpricedTurns;
+      aliases[entry.alias] = total;
+    }
+    for (const key of Object.keys(incidents) as (keyof IncidentCounts)[]) {
+      incidents[key] += iteration.incidents[key];
     }
     architect.launches += iteration.architect.launches;
     architect.usage = addUsage(architect.usage, iteration.architect.usage);
@@ -215,8 +363,10 @@ function totalsOf(iterations: IterationMetrics[]): MetricsTotals {
         ? usage.costUsd / merged
         : null,
     roles,
+    aliases,
     architect,
     unpricedTurns,
+    incidents,
     loopIncidents,
     humanInterventions,
   };
@@ -268,7 +418,7 @@ export async function writeMetrics(store: ArtifactStore, input: MetricsInput): P
       const previous = old.get(n);
       const status = n === input.iteration ? input.status : (previous?.status ?? "in-progress");
       const human = n === input.iteration ? (input.humanInterventions ?? 0) : (previous?.humanInterventions ?? 0);
-      return computeIteration(n, status, input.records, roleByStep, human, input.prices ?? {});
+      return iterationMetrics(n, status, input.records, roleByStep, human, input.prices ?? {});
     });
   const metrics: GoalMetrics = { iterations, totals: totalsOf(iterations) };
 

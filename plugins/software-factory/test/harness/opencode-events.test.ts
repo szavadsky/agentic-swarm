@@ -43,7 +43,11 @@ describe("OpencodeEventParser on recorded streams", () => {
     expect(summary.errors[0]?.type).toBe("provider.no-route");
     expect(
       classifyOpencodeTurn({ summary, code: 1, signal: null, timedOut: false })
-    ).toEqual({ kind: "infra", cause: "auth" });
+    ).toEqual({
+      kind: "infra",
+      cause: "auth",
+      details: "provider.no-route Model unavailable: opencode/does-not-exist-free",
+    });
   });
 
   it("keeps only the last assistant message's text when a run has several", () => {
@@ -79,10 +83,15 @@ describe("classifyOpencodeError", () => {
         message: "Free usage limit reached",
         status: 429,
       })
-    ).toEqual({ kind: "infra", cause: "quota" });
+    ).toEqual({
+      kind: "infra",
+      cause: "quota",
+      details: "provider.free-limit Free usage limit reached 429",
+    });
     expect(classifyOpencodeError({ message: "429 Too Many Requests" })).toEqual({
       kind: "infra",
       cause: "quota",
+      details: "429 Too Many Requests",
     });
   });
 
@@ -90,10 +99,12 @@ describe("classifyOpencodeError", () => {
     expect(classifyOpencodeError({ status: 401 })).toEqual({
       kind: "infra",
       cause: "auth",
+      details: "401",
     });
     expect(classifyOpencodeError({ message: "context window exceeded" })).toEqual({
       kind: "infra",
       cause: "overflow",
+      details: "context window exceeded",
     });
     expect(classifyOpencodeError({ message: "content policy refusal" })).toEqual({
       kind: "refusal",
@@ -107,7 +118,21 @@ describe("classifyOpencodeError", () => {
     expect(classifyOpencodeError({ type: "provider.overloaded" })).toEqual({
       kind: "infra",
       cause: "rate",
+      details: "provider.overloaded",
     });
+  });
+
+  it("masks and truncates a refusal message that carries a token", () => {
+    const secret = "sk-live-TOPSECRETTOKEN1234567890";
+    const message = `content policy refusal ${"x".repeat(600)} api_key=${secret}`;
+    const stop = classifyOpencodeError({ message });
+    expect(stop.kind).toBe("refusal");
+    const details = stop.kind === "refusal" ? stop.details : undefined;
+    expect(details).toBeDefined();
+    expect(details).not.toContain(secret);
+    expect(details).toContain("api_key=[redacted]");
+    expect(details?.startsWith("…")).toBe(true);
+    expect(details?.length).toBeLessThanOrEqual(501);
   });
 });
 

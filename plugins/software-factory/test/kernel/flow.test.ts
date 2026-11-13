@@ -282,6 +282,69 @@ describe("worktree setup", () => {
   }, 60_000);
 });
 
+describe("empty diff", () => {
+  it("parks a task whose implement turn commits nothing instead of running the reviewer", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "reported done without a change" }));
+        return fakeTurnResult(req);
+      });
+
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("task", { scope: ["task.txt"] }));
+      const result = await runDispatch(runtime, { iteration: 1 });
+      expect(result.reason).toBe("boundary");
+
+      const records = await runtime.store.listRecords();
+      const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+      expect(state.tasks.task!.status).toBe("parked");
+      expect(state.tasks.task!.cause!.startsWith("empty-diff:")).toBe(true);
+      expect(harness.calls.length).toBe(1);
+      expect(records.filter((r) => r.slug === "task" && r.step === "review")).toEqual([]);
+      expect(
+        records.filter((r) => r.slug === "task" && r.step === "park" && r.cause?.startsWith("empty-diff:"))
+      ).toHaveLength(1);
+      expect(repo.git(["show", "factory/demo:task.txt"], { allowFail: true }).code).not.toBe(0);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("treats an empty diff in a spike as a normal finish", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "the cache approach holds; no artifact needed" }));
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "finding is sound", verdict: "approve" }));
+        return fakeTurnResult(req);
+      });
+
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("probe", { kind: "spike", flow: "spike", scope: ["finding.md"] }));
+      const result = await runDispatch(runtime, { iteration: 1 });
+      expect(result.reason).toBe("boundary");
+
+      const records = await runtime.store.listRecords();
+      const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+      expect(state.tasks.probe!.status).toBe("finished");
+      expect(state.tasks.probe!.cause).toBeUndefined();
+      expect(harness.calls.length).toBe(2);
+      expect(records.filter((r) => r.slug === "probe" && r.step === "park")).toEqual([]);
+      expect(
+        records.filter((r) => r.slug === "probe" && r.step === "finish" && r.ok === true)
+      ).toHaveLength(1);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+});
+
 describe("spikes", () => {
   it("finishes a spike without merging and keeps its branch", async () => {
     const { repo, goal } = setupFlowRepo();

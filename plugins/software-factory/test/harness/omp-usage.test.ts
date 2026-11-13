@@ -7,6 +7,7 @@ import {
   statsDelta,
   subagentUsage,
   summarizeOmpFrames,
+  turnUsage,
   usageFromMessage,
 } from "../../src/harness/omp/usage.js";
 
@@ -18,6 +19,25 @@ function frames(file: string): any[] {
     .split("\n")
     .filter(Boolean)
     .map((line) => JSON.parse(line));
+}
+
+/** A parent session file whose sibling `parent/` dir holds one child transcript. */
+function withChildSession(fixture: string, run: (sessionFile: string) => void): void {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "omp-turn-usage-"));
+  try {
+    const parent = path.join(tmp, "parent.jsonl");
+    fs.writeFileSync(parent, "");
+    const childDir = path.join(tmp, "parent");
+    fs.mkdirSync(childDir);
+    fs.copyFileSync(path.join(FIXTURES, fixture), path.join(childDir, "Scout.jsonl"));
+    run(parent);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+function statsOf(recorded: any[], id: string): any {
+  return recorded.find((frame) => frame.id === id)?.data;
 }
 
 describe("omp usage", () => {
@@ -133,6 +153,49 @@ describe("omp usage", () => {
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
+  });
+
+  // The fixture dates its pre-turn message at 1s and its in-turn message in 2100.
+  it("sums parent stats and child-session usage for one turn, cost included", () => {
+    const recorded = frames("rpc-subagent.ndjson");
+    withChildSession("child-session-cost.jsonl", (sessionFile) => {
+      const usage = turnUsage({
+        before: statsOf(recorded, "s0"),
+        after: statsOf(recorded, "s1"),
+        fallback: summarizeOmpFrames(recorded).usage,
+        sessionFile,
+        sinceMs: 2000,
+      });
+      expect(usage).toEqual({
+        in: 15374,
+        cacheRead: 30436,
+        cacheWrite5m: 20,
+        cacheWrite1h: 0,
+        out: 178,
+        reasoningOut: 398,
+        costUsd: 0.0472,
+      });
+    });
+  });
+
+  it("sums frame usage and child-session usage when session stats are unavailable", () => {
+    const recorded = frames("rpc-subagent.ndjson");
+    withChildSession("child-session-cost.jsonl", (sessionFile) => {
+      const usage = turnUsage({
+        fallback: summarizeOmpFrames(recorded).usage,
+        sessionFile,
+        sinceMs: 2000,
+      });
+      expect(usage).toEqual({
+        in: 15374,
+        cacheRead: 30436,
+        cacheWrite5m: 20,
+        cacheWrite1h: 0,
+        out: 178,
+        reasoningOut: 398,
+        costUsd: 0.0472,
+      });
+    });
   });
 
   it("detects compaction entries in a session file", () => {

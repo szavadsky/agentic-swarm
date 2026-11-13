@@ -4,7 +4,7 @@ import { git } from "../core/git/exec.js";
 import { compactArchitect, resumableSession } from "./architect-session.js";
 import { runAgentTurn } from "./agent.js";
 import { recordedBaseGates } from "./baseline.js";
-import { forwardedConcerns, renderContextPack, shallowCodeMap } from "./context-pack.js";
+import { contextPackRelPath, forwardedConcerns, renderContextPack, shallowCodeMap } from "./context-pack.js";
 import { derive } from "./derive.js";
 import { writeLaunchDigest } from "./digest.js";
 import { integrationHead } from "./worktree.js";
@@ -87,7 +87,7 @@ export async function runBoundary(
 
   const steers = await scanInbox(runtime.store);
   const head = await integrationHead(runtime);
-  const packRel = `iterations/${iteration}/context-pack.md`;
+  const packRel = contextPackRelPath(iteration);
   const previous = previousSummary(runtime.store.goalDir, state.iteration);
 
   const pack = renderContextPack({

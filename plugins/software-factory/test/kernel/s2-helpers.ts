@@ -5,6 +5,7 @@ import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { Repo } from "../../src/core/git/repo.js";
 import { loadConfigs, resolveGoalPaths, toLimits } from "../../src/kernel/config.js";
+import type { ModelPrice } from "../../src/kernel/pricing.js";
 import { loadPrompts } from "../../src/kernel/prompts.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import { prepareIntegrationCheckout } from "../../src/kernel/worktree.js";
@@ -16,8 +17,12 @@ export interface FlowRepoOptions {
   /** Raw `.factory/process.yaml` override. */
   process?: Record<string, unknown>;
   limits?: Record<string, unknown>;
+  /** Model id -> USD per Mtok, for harnesses that report no cost. */
+  prices?: Record<string, ModelPrice>;
   aliases?: Record<string, { harness: string; model: string; effort?: string }>;
   goal?: string;
+  /** `.factory/repo.yaml` identity for commits the engine authors. */
+  identity?: { name: string; email: string };
 }
 
 export interface FlowRepo {
@@ -47,6 +52,7 @@ export function setupFlowRepo(opts: FlowRepoOptions = {}): FlowRepo {
       artifactRoot: ".factory/artifacts",
       setup: opts.setup ?? [],
       gates,
+      ...(opts.identity ? { identity: opts.identity } : {}),
     })
   );
   const aliases = opts.aliases ?? {
@@ -59,6 +65,7 @@ export function setupFlowRepo(opts: FlowRepoOptions = {}): FlowRepo {
     ".factory/run.yaml",
     yaml.stringify({
       aliases,
+      ...(opts.prices ? { prices: opts.prices } : {}),
       limits: { iterations: 1, concurrency: 1, ...(opts.limits ?? {}) },
     })
   );

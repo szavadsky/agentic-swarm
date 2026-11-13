@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { addUsage, zeroUsage } from "../usage.js";
+import { zeroUsage } from "../usage.js";
 import type { ModelRef, TurnRequest, TurnResult } from "../types.js";
 import { classifyOmpTurn, type OmpTurnFailure } from "./classify.js";
 import { OmpRpc, OmpRpcExit, OmpRpcTimeout } from "./rpc.js";
@@ -9,10 +9,9 @@ import { actualModel, type OmpRuntime } from "./runtime.js";
 import { DEFAULT_TOOLS, OMP_ID, type OmpTurnOpaque } from "./types.js";
 import {
   isSessionCompacted,
-  statsDelta,
-  subagentUsage,
   summarizeOmpFrames,
   textOfContent,
+  turnUsage,
   type OmpStats,
 } from "./usage.js";
 
@@ -206,9 +205,13 @@ export async function runOmpTurn(
   const postStats = statsFrame?.data as OmpStats | undefined;
   const state = stateFrame?.data;
   const sessionFile: string | undefined = state?.sessionFile ?? postStats?.sessionFile;
-  const parentUsage =
-    postStats && baseline ? statsDelta(baseline, postStats) : summary.usage;
-  const usage = addUsage(parentUsage, subagentUsage(sessionFile, startedAtMs));
+  const usage = turnUsage({
+    before: baseline,
+    after: postStats,
+    fallback: summary.usage,
+    sessionFile,
+    sinceMs: startedAtMs,
+  });
 
   const failure: OmpTurnFailure | undefined =
     promptFailed instanceof OmpRpcExit

@@ -19,6 +19,13 @@ const TIMEOUT = /timed out|timeout|deadline exceeded/i;
 const QUOTA = /free[- ]?limit|free usage limit|quota|usage limit|insufficient|billing|exceeded your/i;
 const RATE = /rate[\s_-]?limit|too many requests|overloaded|service unavailable|bad gateway/i;
 
+/** Attaches the scrubbed error text where the Stop shape allows details. */
+function withDetails(stop: Stop, text: string | undefined): Stop {
+  if (stop.kind !== "infra" && stop.kind !== "refusal") return stop;
+  const details = stopDetails(text);
+  return details ? { ...stop, details } : stop;
+}
+
 /**
  * Maps a provider error to the kernel's infra/task-side stop vocabulary.
  * HTTP 429 and free-tier limits are quota (LOG D8), even when the message also
@@ -29,27 +36,27 @@ export function classifyOmpError(error: OmpPromptError | undefined): Stop {
   const status = error?.httpStatus;
 
   if (status === 401 || status === 403 || AUTH.test(text)) {
-    return { kind: "infra", cause: "auth" };
+    return withDetails({ kind: "infra", cause: "auth" }, text);
   }
   if (status === 429 || QUOTA.test(text)) {
-    return { kind: "infra", cause: "quota" };
+    return withDetails({ kind: "infra", cause: "quota" }, text);
   }
   if (OVERFLOW.test(text)) {
-    return { kind: "infra", cause: "overflow" };
+    return withDetails({ kind: "infra", cause: "overflow" }, text);
   }
   if (REFUSAL.test(text)) {
-    return { kind: "refusal", details: error?.message };
+    return withDetails({ kind: "refusal" }, error?.message ?? text);
   }
   if (ABORTED.test(text)) {
     return { kind: "cancelled" };
   }
   if (status === 408 || status === 504 || TIMEOUT.test(text)) {
-    return { kind: "infra", cause: "timeout" };
+    return withDetails({ kind: "infra", cause: "timeout" }, text);
   }
   if (RATE.test(text) || (status !== undefined && status >= 500)) {
-    return { kind: "infra", cause: "rate" };
+    return withDetails({ kind: "infra", cause: "rate" }, text);
   }
-  return { kind: "infra", cause: "crash", details: stopDetails(text) };
+  return withDetails({ kind: "infra", cause: "crash" }, text);
 }
 
 /** Assistant `stopReason` values that override a "completed" prompt result. */
@@ -122,5 +129,8 @@ export function classifyOmpTurn(input: OmpTurnOutcomeInput): Stop {
     }
     return stop;
   }
-  return { kind: "infra", cause: "crash", details: "no prompt_result and no failure captured" };
+  return withDetails(
+    { kind: "infra", cause: "crash" },
+    "no prompt_result and no failure captured"
+  );
 }

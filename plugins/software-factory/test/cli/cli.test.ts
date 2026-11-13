@@ -2,6 +2,9 @@ import { describe, expect, it, beforeEach, afterEach } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import yaml from "yaml";
+import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
+import { FakeHarness } from "../../src/harness/fake/index.js";
 import { dispatch, parseCliArgs } from "../../src/cli/index.js";
 import {
   acquireRunLock,
@@ -9,6 +12,43 @@ import {
   isRunLockFree,
   resolveRuntimeDir,
 } from "../../src/cli/lock.js";
+
+function conflictingBaseRepo(): TmpRepo {
+  const repo = createTmpRepo();
+  const base = path.basename(repo.dir);
+  repo.writeFile(
+    ".factory/repo.yaml",
+    yaml.stringify({ baseBranch: "main", artifactRoot: ".factory/artifacts" })
+  );
+  repo.writeFile(
+    ".factory/run.yaml",
+    [
+      "aliases:",
+      "  architect: { harness: fake, model: fake-architect }",
+      "  pm: { harness: fake, model: fake-pm }",
+      "  implementer: { harness: fake, model: fake-impl }",
+      "  reviewer: { harness: fake, model: fake-review }",
+      "limits: { iterations: 1, concurrency: 1 }",
+      `worktreeRoot: ../${base}-wt`,
+      `sessions: { dir: ../${base}-sessions, keepRuns: 1 }`,
+      "",
+    ].join("\n")
+  );
+  repo.commit("factory config");
+
+  // The integration branch and base diverge on the same file.
+  repo.git(["checkout", "-b", "factory/demo"]);
+  repo.writeFile("shared.txt", "integration\n");
+  repo.commit("factory: merge task");
+  repo.git(["checkout", "main"]);
+  repo.writeFile("shared.txt", "base\n");
+  repo.commit("base edit");
+
+  const goalDir = path.join(repo.dir, ".factory/artifacts", "demo");
+  fs.mkdirSync(goalDir, { recursive: true });
+  fs.writeFileSync(path.join(goalDir, "intent.md"), "# Goal\n\nTest goal.\n", "utf8");
+  return repo;
+}
 
 describe("CLI dispatch", () => {
   it("parses global flags and the positional command", () => {
@@ -63,6 +103,32 @@ describe("CLI dispatch", () => {
       console.log = originalLog;
     }
   });
+
+  it("prints the launch cause when a base follow stops the run", async () => {
+    const repo = conflictingBaseRepo();
+    try {
+      const originalLog = console.log;
+      const originalWarn = console.warn;
+      const lines: string[] = [];
+      console.log = (...args: unknown[]) => lines.push(args.map(String).join(" "));
+      console.warn = () => {};
+      let code: number;
+      try {
+        code = await dispatch(["run", "--repo", repo.dir, "--goal", "demo"], {
+          harnesses: { fake: new FakeHarness({ id: "fake" }) },
+        });
+      } finally {
+        console.log = originalLog;
+        console.warn = originalWarn;
+      }
+      expect(code!).toBe(1);
+      expect(lines.join("\n")).toContain("stop=infra");
+      expect(lines.join("\n")).toContain('cause: base "main" conflicts');
+      expect(lines.join("\n")).toContain("shared.txt");
+    } finally {
+      repo.cleanup();
+    }
+  }, 60_000);
 });
 
 describe("Run lock", () => {

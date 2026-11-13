@@ -119,6 +119,8 @@ export const runConfigSchema = z
         /** Optional drain limits for one iteration. */
         turns: z.number().int().positive().optional(),
         wallMinutes: z.number().positive().optional(),
+        /** Optional USD brake: crossing it drains the iteration. */
+        iterationUsd: z.number().positive().optional(),
       })
       .strict()
       .default(() => ({ concurrency: 2, perHarness: {}, iterations: 1 })),
@@ -297,6 +299,17 @@ export function resolveGoalPaths(configs: ConfigBundle, repoRoot: string, goal: 
       ? fromRoot(root, configs.run.sessions.dir)
       : path.join(worktreeRoot, ".sessions"),
   };
+}
+
+/**
+ * The optional per-iteration USD brake. `runConfigSchema` parses it, while the
+ * hand-written `RunConfig["limits"]` does not declare it; this accessor is the
+ * one place the parsed shape and that type meet. It goes away once
+ * `RunConfig["limits"]` and `Limits` (types.ts) declare `iterationUsd` and
+ * `toLimits` maps it: dispatch then reads `runtime.limits.iterationUsd`.
+ */
+export function iterationUsdBrake(configs: ConfigBundle): number | undefined {
+  return (configs.run.limits as RunConfig["limits"] & { iterationUsd?: number }).iterationUsd;
 }
 
 export function toLimits(configs: ConfigBundle): Limits {

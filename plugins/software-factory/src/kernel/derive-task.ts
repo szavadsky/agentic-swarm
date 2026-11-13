@@ -5,6 +5,7 @@ import type {
   ReviewVerdict,
   StepRecord,
   TaskFile,
+  TaskKind,
   TaskPhase,
   TaskStatus,
 } from "./types.js";
@@ -77,6 +78,17 @@ function phaseAfter(flow: FlowDefinition, index: number, kind: TaskFile["kind"])
 }
 
 /**
+ * A productive step that reported done but left the branch where it was. On a
+ * first turn the commit is the branch start; later turns keep the tree the last
+ * counted turn left. Spikes are exempt: their product is the finding, not a diff.
+ */
+function committedNothing(kind: TaskKind, rec: StepRecord, priorTree: string | undefined): boolean {
+  if (kind === "spike" || rec.outcome?.status !== "done" || rec.tree === undefined) return false;
+  if (priorTree !== undefined) return rec.tree === priorTree;
+  return rec.commit !== undefined && rec.commit === rec.base;
+}
+
+/**
  * One task's phase machine. It reads records, never config side effects: the
  * configured flow supplies the step order, `checks` gates the last productive
  * step before a review, and a merged-result gate failure adds one fix turn
@@ -98,6 +110,8 @@ export function reduceTask(task: TaskFile, records: StepRecord[], flow: FlowDefi
   let gatesFailures = 0;
   let pendingChecks: PendingChecks | null = null;
   let lastTree: string | undefined;
+  /** Tree of the last counted turn; ignored turns leave the branch baseline here. */
+  let countedTree: string | undefined;
   let turns = 0;
   const seen = new Map<string, { step: string; round: number }>();
 
@@ -159,6 +173,12 @@ export function reduceTask(task: TaskFile, records: StepRecord[], flow: FlowDefi
     turns += 1;
     if (rec.stop?.kind === "truncated" || rec.stop?.kind === "cancelled") continue;
 
+    // The empty-diff baseline is the tree the last counted turn left. A commit
+    // written by a turn derive ignores (crash recovery, truncation) is not work
+    // the next turn produced, so it must not stand in for a diff from base.
+    const priorTree = countedTree;
+    if (rec.tree !== undefined) countedTree = rec.tree;
+
     const fp = stepFingerprint(task.kind, rec, lastTree);
     if (fp) {
       const prior = seen.get(fp);
@@ -195,6 +215,13 @@ export function reduceTask(task: TaskFile, records: StepRecord[], flow: FlowDefi
 
     const idx = flowIndex.get(rec.step)!;
     const step = flow.steps[idx]!;
+    // An empty commit is its own no-progress signal: skip the reviewer and park
+    // now, instead of spending review rounds until the fingerprint repeats.
+    if (!step.review && committedNothing(task.kind, rec, priorTree)) {
+      park = `empty-diff: ${rec.step} r${rec.round} committed no changes`;
+      phase = "parked";
+      continue;
+    }
     if (step.review) {
       verdict = outcome?.verdict;
       if (verdict === "approve") {
