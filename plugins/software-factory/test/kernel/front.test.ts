@@ -1,10 +1,23 @@
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
+import { dispatch } from "../../src/cli/dispatch.js";
 import { FakeHarness, fakeTurnResult, type FakeTurnHandler } from "../../src/harness/fake/index.js";
 import { contextPackRelPath } from "../../src/kernel/context-pack.js";
 import { createFolderStore } from "../../src/kernel/store.js";
-import { cleanup, launch, makeGoal, outcome, simpleTask, writePlan, writeTask, type E2EGoal } from "./e2e-helpers.js";
+import {
+  cleanup,
+  implementerTurn,
+  launch,
+  makeGoal,
+  outcome,
+  scriptDigest,
+  simpleTask,
+  stateOf,
+  writePlan,
+  writeTask,
+  type E2EGoal,
+} from "./e2e-helpers.js";
 
 function writeClass(goal: E2EGoal, text: string): void {
   fs.writeFileSync(path.join(goal.goalDir, "class.yaml"), text, "utf8");
@@ -51,6 +64,19 @@ function taskFront(goal: E2EGoal, slug: string): FakeTurnHandler {
 
 async function recordsOf(goal: E2EGoal) {
   return createFolderStore(goal.goalDir).listRecords();
+}
+
+/** The `factory status` output, with console.log captured. */
+async function statusLine(goal: E2EGoal): Promise<string> {
+  const lines: string[] = [];
+  const original = console.log;
+  console.log = (...args: unknown[]) => lines.push(args.map(String).join(" "));
+  try {
+    expect(await dispatch(["status", "--repo", goal.repo.dir, "--goal", "demo"])).toBe(0);
+  } finally {
+    console.log = original;
+  }
+  return lines.join("\n");
 }
 
 describe("front ladder", () => {
@@ -144,6 +170,117 @@ describe("front ladder", () => {
       expect(implement?.session?.harness).toBe("fake");
       expect(implement?.session?.id).not.toBe(front?.session?.id);
       expect(records.some((r) => r.slug === "tiny" && r.step === "merge" && r.ok === true)).toBe(true);
+    } finally {
+      cleanup(goal);
+    }
+  }, 90_000);
+
+  it("derives a landed front goal as done and prints it in the status line", async () => {
+    const goal = makeGoal({ classYaml: null });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script(trivialFront(goal, "tiny"));
+      harness.script(implementerTurn("tiny.txt"));
+
+      expect(await launch(goal.repo, harness, 3)).toBe(0);
+
+      const state = await stateOf(goal.goalDir);
+      expect(state.goal).toBe("done");
+      expect(state.terminal).toBe(true);
+      expect(state.tasks.tiny!.status).toBe("merged");
+      const stops = (await recordsOf(goal)).filter((r) => r.step === "front-stop");
+      expect(stops.map((r) => r.outcome?.decision)).toEqual(["done"]);
+      expect(await statusLine(goal)).toContain("goal demo: done");
+    } finally {
+      cleanup(goal);
+    }
+  }, 90_000);
+
+  it("derives a parked front goal as blocked and prints it in the status line", async () => {
+    const goal = makeGoal({ classYaml: null });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script(trivialFront(goal, "tiny"));
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ status: "blocked", summary: "missing an input" }));
+        return fakeTurnResult(req);
+      });
+
+      expect(await launch(goal.repo, harness, 3)).toBe(2);
+
+      const state = await stateOf(goal.goalDir);
+      expect(state.goal).toBe("blocked");
+      expect(state.tasks.tiny!.status).toBe("parked");
+      const stops = (await recordsOf(goal)).filter((r) => r.step === "front-stop");
+      expect(stops.map((r) => r.outcome?.decision)).toEqual(["blocked"]);
+      expect(stops[0]?.outcome?.summary).toBe("front path stopped with tiny parked in iteration 1");
+      expect(await statusLine(goal)).toContain("goal demo: blocked");
+    } finally {
+      cleanup(goal);
+    }
+  }, 90_000);
+
+  it("resumes a blocked front goal on a waiting steer and lets the architect decide", async () => {
+    const goal = makeGoal({ classYaml: null });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script(trivialFront(goal, "tiny"));
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ status: "blocked", summary: "missing an input" }));
+        return fakeTurnResult(req);
+      });
+
+      expect(await launch(goal.repo, harness, 3)).toBe(2);
+      expect((await stateOf(goal.goalDir)).goal).toBe("blocked");
+
+      const inbox = path.join(goal.goalDir, "mailbox/inbox");
+      fs.mkdirSync(inbox, { recursive: true });
+      fs.writeFileSync(path.join(inbox, "s1.md"), "The input arrived; close the goal.\n", "utf8");
+
+      scriptDigest(harness, goal.goalDir, 2);
+      harness.script((req, ctx) => {
+        expect(req.prompt).toContain("You are the architect");
+        expect(req.prompt).toContain("- s1 (mailbox/inbox/s1.md): The input arrived; close the goal.");
+        ctx.writeOutcome(
+          outcome({
+            summary: "the input arrived",
+            decision: "done",
+            forward: ["steer s1: input accepted"],
+          })
+        );
+        return fakeTurnResult(req);
+      });
+
+      expect(await launch(goal.repo, harness, 3)).toBe(0);
+
+      const state = await stateOf(goal.goalDir);
+      expect(state.goal).toBe("done");
+      expect(state.terminal).toBe(true);
+      const records = await recordsOf(goal);
+      const architect = records.filter((r) => r.step === "architect");
+      expect(architect.map((r) => r.outcome?.decision)).toEqual(["done"]);
+      // The front's blocked stop stays on record; the architect's later
+      // decision is what derives the goal.
+      expect(records.filter((r) => r.step === "front-stop").map((r) => r.outcome?.decision)).toEqual([
+        "blocked",
+      ]);
+      expect(fs.existsSync(path.join(inbox, "s1.md"))).toBe(false);
+      expect(
+        fs.readFileSync(path.join(goal.goalDir, "mailbox/outbox/steer-s1.md"), "utf8")
+      ).toContain("input accepted");
+      expect(await statusLine(goal)).toContain("goal demo: done");
+    } finally {
+      cleanup(goal);
+    }
+  }, 90_000);
+
+  it("does not derive the goal status from class.yaml alone", async () => {
+    const goal = makeGoal({ classYaml: "class: trivial\nslug: tiny\n" });
+    try {
+      writeTask(goal.goalDir, simpleTask("tiny", "tiny.txt", { flow: "just-implement" }));
+
+      expect((await stateOf(goal.goalDir)).goal).toBe("active");
+      expect(await statusLine(goal)).toContain("goal demo: active");
     } finally {
       cleanup(goal);
     }
