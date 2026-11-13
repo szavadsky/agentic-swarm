@@ -115,9 +115,11 @@ export async function writeIterationSummary(
 export async function backfillSummaries(runtime: KernelRuntime): Promise<void> {
   const records = await runtime.store.listRecords();
   const state = derive(await runtime.store.listTasks(), records);
+  const status =
+    state.goal === "done" ? "goal-met" : state.goal === "blocked" ? "blocked-by-user" : "stopped-with-debt";
   for (let n = 1; n <= state.iteration; n++) {
     if (await runtime.store.readFile(`iterations/${n}/summary.md`)) continue;
-    await writeIterationSummary(runtime.store, { iteration: n, state, records, status: "stopped-with-debt" });
-    await writeMetrics(runtime.store, { iteration: n, status: "stopped-with-debt", records, state });
+    await writeIterationSummary(runtime.store, { iteration: n, state, records, status });
+    await writeMetrics(runtime.store, { iteration: n, status, records, state });
   }
 }
