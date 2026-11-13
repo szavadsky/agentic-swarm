@@ -22,8 +22,8 @@ function usage(costUsd: number, tin: number, out: number): Usage {
   };
 }
 
-function attempt(model: string, stop: Stop) {
-  return { model: { id: model }, stop, usage: usage(0, 1, 0) };
+function attempt(model: string, stop: Stop, usageValue?: Usage) {
+  return { model: { id: model }, stop, usage: usageValue ?? usage(0, 0, 0) };
 }
 
 const OK: Stop = { kind: "done" };
@@ -32,14 +32,14 @@ const QUOTA: Stop = { kind: "infra", cause: "quota" };
 /** One record per incident kind, with alias groups distinct from role groups. */
 function incidentRecords() {
   return [
-    // One infra stop retried on the same model.
+    // One infra stop retried on the same model; the infra call reported no usage.
     rec(1, {
       step: "architect",
       slug: undefined,
       alias: "architect",
       usage: usage(0.01, 10, 1),
       promptBytes: 100,
-      attempts: [attempt("model-a", QUOTA), attempt("model-a", OK)],
+      attempts: [attempt("model-a", QUOTA), attempt("model-a", OK, usage(0.01, 10, 1))],
     }),
     // A repair turn (prev stop done) whose own first call was retried.
     rec(2, {
@@ -47,7 +47,11 @@ function incidentRecords() {
       alias: "cheap",
       usage: usage(0.02, 20, 2),
       promptBytes: 200,
-      attempts: [attempt("model-a", OK), attempt("model-a", QUOTA), attempt("model-a", OK)],
+      attempts: [
+        attempt("model-a", OK, usage(0.01, 10, 1)),
+        attempt("model-a", QUOTA),
+        attempt("model-a", OK, usage(0.01, 10, 1)),
+      ],
     }),
     // An infra stop that moved to the next model in the chain.
     rec(3, {
@@ -56,16 +60,16 @@ function incidentRecords() {
       alias: "escalated",
       usage: usage(0.03, 30, 3),
       promptBytes: 300,
-      attempts: [attempt("model-a", QUOTA), attempt("model-b", OK)],
+      attempts: [attempt("model-a", QUOTA), attempt("model-b", OK, usage(0.03, 30, 3))],
     }),
-    // A final infra stop without a retry is not an infra retry.
+    // A final infra stop without a retry is not an infra retry; its usage counts.
     rec(4, {
       slug: "a",
       step: "review",
       alias: "reviewer",
       usage: usage(0.04, 40, 4),
       promptBytes: 400,
-      attempts: [attempt("model-a", QUOTA)],
+      attempts: [attempt("model-a", QUOTA, usage(0.04, 40, 4))],
     }),
     script(5, { slug: "a", step: "merge", ok: false, cause: "conflict: alpha.txt" }),
     script(6, { slug: "a", step: "merge-checks", ok: false, checks: [] }),
@@ -145,6 +149,74 @@ describe("iteration metrics incidents and spend tables", () => {
       expect(text).toContain("| alias | turns | tokens | cost | prompt bytes |");
       expect(text).toContain("| cheap | 1 | 22 | $0.0200 | 200 |");
       expect(text).toContain("| escalated | 1 | 33 | $0.0300 | 300 |");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("counts an empty-diff park as a loop incident but not a spike's empty finish", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-incidents-"));
+    const store = createFolderStore(path.join(root, "goal"));
+    try {
+      await store.ensureLayout();
+      const records = [
+        rec(1, { step: "architect", slug: undefined, usage: usage(0.01, 10, 1) }),
+        script(2, {
+          slug: "a",
+          step: "park",
+          ok: true,
+          cause: "empty-diff: implement r1 committed no changes",
+        }),
+        // A spike produces knowledge: no commit is a normal finish, not a park.
+        script(3, { slug: "probe", step: "finish", ok: true }),
+        script(4, {
+          slug: "b",
+          step: "park",
+          ok: true,
+          cause: "no-progress: implement r2 repeats r1 (deadbeef)",
+        }),
+      ];
+
+      await writeMetrics(store, { iteration: 1, status: "in-progress", records });
+      const metrics = yaml.parse((await store.readFile("metrics.yaml"))!) as GoalMetrics;
+      expect(metrics.iterations[0]!.loopIncidents).toBe(2);
+      expect(metrics.totals.loopIncidents).toBe(2);
+      expect(metrics.iterations[0]!.incidents.noProgressParks).toBe(1);
+      expect(metrics.iterations[0]!.incidents.roundLimitParks).toBe(0);
+      expect(metrics.iterations[0]!.parked).toEqual(["a", "b"]);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("counts zero loop incidents and zero unpriced turns when no signal is present", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-incidents-"));
+    const store = createFolderStore(path.join(root, "goal"));
+    try {
+      await store.ensureLayout();
+      const records = [
+        rec(1, { step: "architect", slug: undefined, usage: usage(0.01, 10, 1) }),
+        // A spike's knowledge-only turn and its normal finish record.
+        rec(2, { slug: "probe", usage: usage(0.02, 20, 2) }),
+        script(3, { slug: "probe", step: "finish", ok: true }),
+        script(4, { slug: "b", step: "park", ok: true, cause: "review rejected: missing test" }),
+      ];
+
+      await writeMetrics(store, { iteration: 1, status: "in-progress", records });
+      const metrics = yaml.parse((await store.readFile("metrics.yaml"))!) as GoalMetrics;
+      expect(metrics.iterations[0]!.loopIncidents).toBe(0);
+      expect(metrics.totals.loopIncidents).toBe(0);
+      expect(metrics.iterations[0]!.unpricedTurns).toBe(0);
+      expect(metrics.iterations[0]!.incidents).toEqual({
+        infraRetries: 0,
+        fallbackHops: 0,
+        outcomeRepairs: 0,
+        mergeConflicts: 0,
+        mergedGateFailures: 0,
+        roundLimitParks: 0,
+        noProgressParks: 0,
+        budgetParks: 0,
+      });
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
