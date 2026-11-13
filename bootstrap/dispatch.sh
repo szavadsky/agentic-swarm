@@ -3,6 +3,7 @@
 # usage: dispatch.sh <assignment> [model]        e.g. dispatch.sh S2
 # Worktree and branch follow the assignment name: ../<name> on factory-v3-<name>, created from factory-v3 when missing.
 # Event log (JSONL) goes outside git: $FACTORY_BOOTSTRAP_RUNS or ~/.local/share/factory/bootstrap-runs.
+# Follow-up round in the same session (same context, same agent): SESSION=<id> MESSAGE="..." dispatch.sh <assignment>
 set -euo pipefail
 
 name="${1:?usage: dispatch.sh <assignment> [model]}"
@@ -19,9 +20,9 @@ mkdir -p "$logs"
 log="$logs/$name-$(date +%Y%m%dT%H%M%S).jsonl"
 cd "$wt"
 status=0
+message="${MESSAGE:-Your assignment is the file bootstrap/assignments/$name.md in this git worktree ($wt). Read bootstrap/assignments/RULES.md and the assignment in full, then carry it out to completion.}"
 timeout "${FACTORY_DISPATCH_TIMEOUT:-3h}" opencode run --auto --archived --format json --title "bootstrap $name" -m "$model" \
-  "Your assignment is the file bootstrap/assignments/$name.md in this git worktree ($wt). Read bootstrap/assignments/RULES.md and the assignment in full, then carry it out to completion." \
-  >"$log" 2>"$log.stderr" || status=$?
+  ${SESSION:+-s "$SESSION"} "$message" >"$log" 2>"$log.stderr" || status=$?
 
 echo "assignment=$name model=$model exit=$status log=$log"
 echo "session=$(jq -r 'select(.type=="step_start") | .sessionID' "$log" | head -1)"
