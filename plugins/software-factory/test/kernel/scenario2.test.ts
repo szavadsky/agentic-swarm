@@ -77,6 +77,15 @@ describe("KERNEL0 scenario 2 — last-round review decisions", () => {
       expect(commits.every((r) => r.commit && r.tree)).toBe(true);
       expect(repo.git(["show", "factory/demo:beta.txt"]).stdout.trim()).toBe("beta");
       expect(repo.git(["show", "factory/demo:alpha.txt"], { allowFail: true }).code).not.toBe(0);
+
+      await writeIterationSummary(runtime.store, {
+        iteration: 1,
+        state,
+        records: await runtime.store.listRecords(),
+        status: "in-progress",
+      });
+      const summary = fs.readFileSync(path.join(runtime.store.goalDir, "iterations/1/summary.md"), "utf8");
+      expect(summary).toContain("parked alpha: review rejected");
     } finally {
       cleanupFlowRepo(repo);
     }
