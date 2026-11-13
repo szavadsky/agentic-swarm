@@ -77,13 +77,16 @@ export async function runDispatch(
   runtime: KernelRuntime,
   opts: { iteration?: number } = {}
 ): Promise<DispatchResult> {
-  const initial = derive(
-    await runtime.store.listTasks(),
-    await runtime.store.listRecords(),
-    runtime.configs.process.flows
-  );
+  const initialTasks = await runtime.store.listTasks();
+  const initialRecords = await runtime.store.listRecords();
+  const initial = derive(initialTasks, initialRecords, runtime.configs.process.flows);
   const iteration = opts.iteration ?? Math.max(1, initial.iteration);
   const running = new Map<string, Running>();
+  const started = new Set(
+    initialRecords
+      .filter((r) => r.iteration === iteration && r.actor === "agent" && r.slug)
+      .map((r) => r.slug!)
+  );
   let stop: { reason: "infra" | "cancelled"; cause?: string } | undefined;
   let drain: string | undefined;
 
@@ -96,6 +99,7 @@ export async function runDispatch(
       running.delete(action.slug);
     });
     running.set(action.slug, { promise, scope: task.scope, agent, harnessId });
+    if (agent) started.add(action.slug);
   };
 
   for (;;) {
@@ -135,8 +139,9 @@ export async function runDispatch(
       const taskState = state.tasks[action.slug]!;
 
       if (action.kind === "step") {
-        if (stop || drain) continue;
-        if (runtime.limits.iterationTurns !== undefined && turnsUsed + agentCount() >= runtime.limits.iterationTurns) {
+        if (stop) continue;
+        if (drain && !started.has(action.slug)) continue;
+        if (!drain && runtime.limits.iterationTurns !== undefined && turnsUsed + agentCount() >= runtime.limits.iterationTurns) {
           continue;
         }
         if (agentCount() >= runtime.limits.concurrency) continue;
@@ -155,7 +160,7 @@ export async function runDispatch(
 
       if (action.kind === "checks" || action.kind === "merge") {
         if (stop) continue;
-        if (drain && taskState.turns === 0) continue;
+        if (drain && !started.has(action.slug) && taskState.turns === 0) continue;
         if (overlapsRunning(task.scope, running)) continue;
         start(action, taskState, task, false);
         continue;

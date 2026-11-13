@@ -24,6 +24,10 @@ describe("KERNEL0 scenario 8 — drain", () => {
         ctx.writeOutcome(outcome({ summary: "a implemented" }));
         return fakeTurnResult(req);
       });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "a approved", verdict: "approve" }));
+        return fakeTurnResult(req);
+      });
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("a", { scope: ["a.txt"] }));
@@ -33,16 +37,16 @@ describe("KERNEL0 scenario 8 — drain", () => {
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("drained");
       expect(result.cause).toContain("turn limit 1");
-      expect(harness.calls.length).toBe(1);
+      expect(harness.calls.length).toBe(2);
 
       const records = await runtime.store.listRecords();
       const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
-      expect(state.tasks.a!.status).toBe("ready");
-      expect(state.tasks.a!.phase).toBe("review");
-      expect(state.tasks.a!.turns).toBe(1);
+      expect(state.tasks.a!.status).toBe("merged");
+      expect(state.tasks.a!.turns).toBe(2);
       expect(state.tasks.b!.turns).toBe(0);
       expect(state.tasks.c!.turns).toBe(0);
-      expect(records.filter((r) => r.step === "implement").length).toBe(1);
+      expect(records.filter((r) => r.slug === "b" && r.actor === "agent").length).toBe(0);
+      expect(records.filter((r) => r.slug === "c" && r.actor === "agent").length).toBe(0);
 
       await writeIterationSummary(runtime.store, {
         iteration: 1,
