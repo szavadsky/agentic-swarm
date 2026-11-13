@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 import { ConfigError, loadConfigs, resolveGoalPaths } from "../../src/kernel/config.js";
@@ -198,6 +199,44 @@ describe("pre-flight", () => {
     } finally {
       console.warn = original;
       f.repo.cleanup();
+    }
+  });
+
+  it("keeps the base-gate scratch out of the swept tmp prefix", async () => {
+    // A private TMPDIR stands in for os.tmpdir(): the gate sweeps exactly the
+    // prefix this package's own test helper sweeps, and must not reach the
+    // worktree it is running in.
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "preflight-gate-tmp-"));
+    const probePrefix = path.join(tmp, "preflight-probe-");
+    const cwdFile = path.join(tmp, "scratch-cwd.txt");
+    const repoYaml = [
+      "baseBranch: main",
+      "artifactRoot: .factory/artifacts",
+      "gates:",
+      "  - id: sweep",
+      "    command: |",
+      `      rm -rf "${probePrefix}"*`,
+      `      pwd > "${cwdFile}"`,
+      "      test -f README.md",
+      "",
+    ].join("\n");
+    const f = await fixture(undefined, repoYaml);
+    const previousTmp = process.env.TMPDIR;
+    process.env.TMPDIR = tmp;
+    try {
+      const result = await preflight(f.input);
+      expect(result.base?.fresh).toBe(true);
+      expect(result.base?.checks.map((c) => c.ok)).toEqual([true]);
+
+      const scratch = fs.readFileSync(cwdFile, "utf8").trim();
+      expect(scratch.startsWith(path.resolve(f.paths.worktreeRoot) + path.sep)).toBe(true);
+      expect(scratch.startsWith(path.resolve(f.repo.dir) + path.sep)).toBe(false);
+      expect(fs.existsSync(scratch)).toBe(false);
+    } finally {
+      if (previousTmp === undefined) delete process.env.TMPDIR;
+      else process.env.TMPDIR = previousTmp;
+      f.repo.cleanup();
+      fs.rmSync(tmp, { recursive: true, force: true });
     }
   });
 });

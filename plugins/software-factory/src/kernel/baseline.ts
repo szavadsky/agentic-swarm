@@ -1,11 +1,11 @@
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { runProcess } from "../core/proc.js";
 import { runWorktreeSetup } from "../core/checks/setup.js";
 import { fingerprintText } from "../core/fingerprint.js";
 import { git } from "../core/git/exec.js";
 import type { CheckResult } from "../core/checks/types.js";
+import { resolveGoalPaths } from "./config.js";
 import type { ArtifactStore, ConfigBundle, RecordStart, StepRecord } from "./types.js";
 
 const GATE_TIMEOUT_SEC = 900;
@@ -58,15 +58,25 @@ function baselineRecord(records: StepRecord[], commit: string): StepRecord | und
     .sort((a, b) => b.seq - a.seq)[0];
 }
 
-function scratchPath(): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "preflight-probe-"));
+/**
+ * The scratch worktree lives under the run's runtime dir, which pre-flight
+ * holds outside the repository. A gate that sweeps the ambient tmp prefix
+ * (`os.tmpdir()/preflight-probe-*` — this package's own suite does) must not be
+ * able to delete the worktree it runs in. The goal only shapes goalDir; the
+ * worktree root is goal-independent.
+ */
+function scratchPath(configs: ConfigBundle, repoRoot: string): string {
+  const worktreeRoot = resolveGoalPaths(configs, repoRoot, "preflight").worktreeRoot;
+  const runtimeDir = path.join(worktreeRoot, ".factory-runtime");
+  fs.mkdirSync(runtimeDir, { recursive: true });
+  const dir = fs.mkdtempSync(path.join(runtimeDir, "preflight-probe-"));
   fs.rmSync(dir, { recursive: true, force: true });
   return dir;
 }
 
 async function runBaseGates(configs: ConfigBundle, repoRoot: string, commit: string): Promise<CheckResult[]> {
   if (configs.repo.gates.length === 0 && configs.repo.setup.length === 0) return [];
-  const dir = scratchPath();
+  const dir = scratchPath(configs, repoRoot);
   const root = path.resolve(repoRoot);
   try {
     const added = await git(root, ["worktree", "add", "--detach", dir, commit], { allowFail: true });
