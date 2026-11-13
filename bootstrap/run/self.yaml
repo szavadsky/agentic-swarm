@@ -8,9 +8,10 @@ aliases:
       - opencode-go/deepseek-v4.1-flash
   pm:
     harness: opencode
-    model: opencode/beam-free
+    model: opencode-go/deepseek-v4.1-flash
+    effort: high
     fallbacks:
-      - opencode-go/deepseek-v4.1-flash
+      - opencode/deepseek-v4.1-flash-free
   digest:
     harness: opencode
     model: opencode/beam-free
