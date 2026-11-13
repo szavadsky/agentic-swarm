@@ -33,7 +33,7 @@ export function next(state: State, limits: Limits, running: ReadonlySet<string>)
       });
       continue;
     }
-    if (task.turns >= limits.itemTurns) {
+    if ((task.phase === "implement" || task.phase === "review") && task.turns >= limits.itemTurns) {
       actions.push({
         kind: "park",
         slug,

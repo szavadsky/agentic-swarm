@@ -65,10 +65,9 @@ const vars = {
 describe("agent turn outcome delivery", () => {
   it("repairs an invalid outcome once in the same session", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-agent-"));
-    const runtime = runtimeFor(new FakeHarness({ id: "fake" }), root);
-    await runtime.store.ensureLayout();
     const fake = new FakeHarness({ id: "fake" });
-    runtime.harnesses.set("fake", fake);
+    const runtime = runtimeFor(fake, root);
+    await runtime.store.ensureLayout();
     fake.script((req) => {
       fs.writeFileSync(req.outcomePath!, "status: done\nsummary: no decision\n");
       return fakeTurnResult(req, { usage: { in: 10 } });

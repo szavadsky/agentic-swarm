@@ -23,7 +23,16 @@ export async function mergeTask(
 ): Promise<void> {
   const branch = taskBranchName(runtime, task.slug);
   const checkout = runtime.paths.goalCheckout;
+  const records = await runtime.store.listRecords();
+  if (records.some((r) => r.slug === task.slug && r.step === "merge" && r.ok === true)) return;
   await checkoutClean(runtime);
+
+  const base = records
+    .filter((r) => r.slug === task.slug && r.step === "implement" && r.base)
+    .sort((a, b) => a.seq - b.seq)[0]?.base;
+  const ahead = base
+    ? Number((await git(checkout, ["rev-list", "--count", `${base}..${branch}`], { allowFail: true })).stdout.trim() || 0)
+    : 0;
 
   const merge = await git(checkout, ["merge", "--squash", branch], { allowFail: true });
   if (merge.code !== 0) {
@@ -45,6 +54,21 @@ export async function mergeTask(
     return;
   }
 
+  const staged = await git(checkout, ["diff", "--cached", "--quiet"], { allowFail: true });
+  if (staged.code === 0) {
+    // A crash after the merge commit but before its record must not duplicate
+    // or park the merge: the branch may still carry work already integrated.
+    await checkoutClean(runtime);
+    if (ahead === 0) {
+      const cause = "task branch has no commits since dispatch";
+      await storeMerge(runtime, task, iteration, round, false, cause);
+      await appendPark(runtime.store, { iteration, slug: task.slug, round }, cause);
+      return;
+    }
+    const head = (await git(checkout, ["rev-parse", "HEAD"])).stdout.trim();
+    await storeMerge(runtime, task, iteration, round, true, undefined, head);
+    return;
+  }
   const commit = await commitAll(runtime.repo, checkout, `factory: merge ${task.slug}`);
   if (!commit) {
     await storeMerge(runtime, task, iteration, round, false, "squash merge produced no changes");

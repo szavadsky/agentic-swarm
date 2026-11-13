@@ -93,6 +93,13 @@ describe("next", () => {
     if (budget.kind === "park") expect(budget.cause).toContain("item budget");
   });
 
+  it("merges approved work even when the item budget is already spent", () => {
+    const approved = derive([task("a")], [implement(1), check(2), review(3, "approve")]);
+    expect(next(approved, { ...limits, itemTurns: 2 }, new Set())).toEqual([
+      { kind: "merge", slug: "a" },
+    ]);
+  });
+
   it("does not redispatch a task that is already running", () => {
     const state = derive([task("a")], []);
     expect(next(state, limits, new Set(["a"]))).toEqual([]);

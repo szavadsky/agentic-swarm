@@ -3,7 +3,7 @@ import { fingerprintText } from "../core/fingerprint.js";
 import { runAgentTurn } from "./agent.js";
 import { materialHash, parseTaskFile, validateTaskGraph, TaskFileError } from "./tasks.js";
 import { scriptMeta } from "./record.js";
-import type { KernelRuntime, State, StepRecord, TaskFile } from "./types.js";
+import type { KernelRuntime, Outcome, State, StepRecord, TaskFile } from "./types.js";
 
 export class PmValidationError extends Error {
   constructor(public readonly findings: string[]) {
@@ -93,12 +93,16 @@ async function validate(
 export async function runPm(
   runtime: KernelRuntime,
   opts: { iteration: number; state: State; planPath: string; cwd: string; repair?: string }
-): Promise<void> {
+): Promise<Outcome | undefined> {
   const planHashBefore = fs.existsSync(opts.planPath)
     ? fingerprintText(fs.readFileSync(opts.planPath, "utf8"), { lowercase: false })
     : "";
 
-  const ask = async (repair: string, session?: StepRecord["session"]): Promise<void> => {
+  const ask = async (
+    repair: string,
+    session?: StepRecord["session"],
+    isRepair = false
+  ): Promise<Outcome | undefined> => {
     const { tasks } = await readTaskFiles(runtime);
     const result = await runAgentTurn(runtime, {
       role: "pm",
@@ -116,10 +120,9 @@ export async function runPm(
       session,
     });
     const findings = await validate(runtime, opts.state, opts.planPath, planHashBefore);
-    if (findings.length === 0) return;
-    if (session === undefined) {
-      await ask(findings.map((f) => `- ${f}`).join("\n"), result.record.session);
-      return;
+    if (findings.length === 0) return result.outcome;
+    if (!isRepair && result.record.session) {
+      return ask(findings.map((f) => `- ${f}`).join("\n"), result.record.session, true);
     }
     await runtime.store.appendRecord(scriptMeta(opts.iteration, "pm-validate", { round: 1 }), {
       ok: false,
@@ -128,5 +131,5 @@ export async function runPm(
     throw new PmValidationError(findings);
   };
 
-  await ask(opts.repair ?? "");
+  return ask(opts.repair ?? "");
 }

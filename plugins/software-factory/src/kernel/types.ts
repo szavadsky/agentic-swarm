@@ -8,7 +8,6 @@ import type { CheckResult } from "../core/checks/types.js";
 import type { Repo } from "../core/git/repo.js";
 import type { PromptLibrary } from "../core/prompts.js";
 
-/** Outcome kinds and calibration levels are closed: one schema for every step. */
 export const concernSchema = z.object({
   kind: z.enum(["debt", "risk", "uncertainty", "choice"]),
   calibration: z.enum(["fyi", "architect", "owner"]),
@@ -16,6 +15,7 @@ export const concernSchema = z.object({
   evidence: z.string().optional(),
 });
 
+/** The only agent ↔ script surface; one schema for every step. */
 export const outcomeSchema = z.object({
   status: z.enum(["done", "blocked", "failed", "upscope"]),
   summary: z.string(),
@@ -27,41 +27,24 @@ export const outcomeSchema = z.object({
 
 export type Concern = z.infer<typeof concernSchema>;
 export type Outcome = z.infer<typeof outcomeSchema>;
-export type OutcomeStatus = Outcome["status"];
 export type ReviewVerdict = NonNullable<Outcome["verdict"]>;
 export type GoalDecision = NonNullable<Outcome["decision"]>;
-
 export type TaskKind = "task" | "spike";
 
-/** One PM-derived task file; `body` is the brief below the frontmatter. */
 export interface TaskFile {
   slug: string;
   title: string;
   kind: TaskKind;
   flow: string;
-  deps: string[];
-  scope: string[];
-  tier?: string;
-  /** Slug of a parked task whose kept branch this task continues from. */
+  deps: string[]; scope: string[]; tier?: string;
+  /** A parked task whose kept branch this task continues from. */
   base?: string;
   /** Plan heading this task derives from. */
   source: string;
   body: string;
 }
 
-export type TaskStatus =
-  | "pending"
-  | "ready"
-  | "running"
-  | "merged"
-  | "finished"
-  | "parked"
-  | "cancelled";
-
-/**
- * What the shell must do next for a task. Derived from the record sequence;
- * `next` maps it to an action and applies the round/item limits.
- */
+export type TaskStatus = "pending" | "ready" | "running" | "merged" | "finished" | "parked" | "cancelled";
 export type TaskPhase = "implement" | "review" | "merge" | "finish" | "parked" | "done";
 
 export interface TaskState {
@@ -71,12 +54,8 @@ export interface TaskState {
   turns: number;
   /** Current implementation/review round, 1-based. */
   round: number;
-  kind: TaskKind;
-  flow: string;
-  phase: TaskPhase;
-  /** Last commit produced by the slug (implement commit or merge commit). */
-  commit?: string;
-  verdict?: ReviewVerdict;
+  kind: TaskKind; flow: string; phase: TaskPhase;
+  commit?: string; verdict?: ReviewVerdict;
 }
 
 export type GoalStatus = "active" | "done" | "blocked";
@@ -121,46 +100,34 @@ export interface Limits {
 export type StepActor = "agent" | "script";
 
 /**
- * One append-only record, materialized from `records/<dir>/`:
- * `started.yaml` exists before a turn, `end.yaml` commits it, `outcome.yaml`
- * holds the agent's raw outcome. Script steps (checks, merge, park, finish)
- * have actor `script` and no outcome.
+ * One append-only record, materialized from `records/<dir>/`: `started.yaml`
+ * exists before a turn, `end.yaml` commits it, `outcome.yaml` holds the agent's
+ * accepted outcome. Script steps have actor `script` and no outcome.
  */
 export interface StepRecord {
   seq: number;
   iteration: number;
-  slug?: string;
-  step: string;
-  round: number;
-  actor: StepActor;
-  /** Agent steps only. `model` is the model actually used when the harness reports it. */
+  slug?: string; step: string;
+  round: number; actor: StepActor;
+  /** Agent steps only; `model` is the model actually used when reported. */
   alias?: string;
   model?: ModelRef;
-  /** Task file hash captured when the task was dispatched (frozen-task check). */
+  /** Task hash at dispatch, for the frozen-task check. */
   taskHash?: string;
-  /** Integration head the task branch started from. */
+  /** Integration head (or parked branch tip) the branch started from. */
   base?: string;
-  stop?: Stop;
-  usage?: Usage;
-  session?: SessionRef;
-  commit?: string;
-  checks?: CheckResult[];
-  outcome?: Outcome;
-  /** Script result; absent for agent steps that have not started/ended. */
-  ok?: boolean;
-  cause?: string;
-  startedAt: string;
-  endedAt?: string;
+  stop?: Stop; usage?: Usage;
+  session?: SessionRef; commit?: string;
+  checks?: CheckResult[]; outcome?: Outcome;
+  ok?: boolean; cause?: string;
+  startedAt: string; endedAt?: string;
 }
 
 /** Input of one turn/script step, written before the turn starts. */
 export interface RecordStart {
   iteration: number;
-  slug?: string;
-  step: string;
-  round: number;
-  actor: StepActor;
-  /** Agent steps only; script records carry neither. */
+  slug?: string; step: string;
+  round: number; actor: StepActor;
   alias?: string;
   model?: ModelRef;
   taskHash?: string;
@@ -169,17 +136,14 @@ export interface RecordStart {
 
 /** Settled fields written atomically as `end.yaml`. */
 export interface RecordEnd {
-  stop?: Stop;
-  usage?: Usage;
-  session?: SessionRef;
-  commit?: string;
-  checks?: CheckResult[];
-  outcome?: Outcome;
-  ok?: boolean;
-  cause?: string;
+  /** Set when the harness reports the model actually used (S1 contract). */
+  model?: ModelRef;
+  stop?: Stop; usage?: Usage; session?: SessionRef;
+  commit?: string; checks?: CheckResult[]; outcome?: Outcome;
+  ok?: boolean; cause?: string;
 }
 
-/** Handle for an in-flight turn; the record directory exists but has no end. */
+/** Handle for an in-flight turn; the directory exists but has no end. */
 export interface TurnRecord {
   dir: string;
   meta: StepRecord;
@@ -243,11 +207,7 @@ export interface AliasConfig {
 
 export interface RunConfig {
   aliases: Record<string, AliasConfig>;
-  limits: {
-    concurrency: number;
-    perHarness: Record<string, number>;
-    iterations: number;
-  };
+  limits: { concurrency: number; perHarness: Record<string, number>; iterations: number };
   sessions: { dir: string; keepRuns: number };
   worktreeRoot?: string;
 }

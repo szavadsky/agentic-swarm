@@ -48,9 +48,7 @@ function computeIteration(n: number, status: SummaryStatus, records: StepRecord[
     status,
     turns,
     merged: recs.filter((r) => r.step === "merge" && r.ok === true).map((r) => r.slug!).sort(),
-    parked: Object.keys(state.tasks)
-      .filter((slug) => state.tasks[slug]!.status === "parked")
-      .sort(),
+    parked: recs.filter((r) => r.step === "park").map((r) => r.slug!).sort(),
     usage,
   };
 }

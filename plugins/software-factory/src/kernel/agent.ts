@@ -43,7 +43,13 @@ function addUsage(a: Usage, b: Usage): Usage {
   };
 }
 
-function resolveAlias(runtime: KernelRuntime, role: string): { alias: string; harness: Harness; model: ModelRef; effort?: string } {
+function resolveAlias(runtime: KernelRuntime, role: string): {
+  alias: string;
+  harness: Harness;
+  model: ModelRef;
+  effort?: string;
+  fallbacks?: string[];
+} {
   const roleConfig = runtime.configs.process.roles[role];
   if (!roleConfig) throw new Error(`process config has no role "${role}"`);
   const aliasName = roleConfig.alias ?? role;
@@ -60,6 +66,7 @@ function resolveAlias(runtime: KernelRuntime, role: string): { alias: string; ha
     harness,
     model: { id: alias.model, ...(alias.effort ? { effort: alias.effort } : {}) },
     effort: alias.effort,
+    fallbacks: alias.fallbacks,
   };
 }
 
@@ -89,7 +96,7 @@ function repairPrompt(outcomePath: string, findings: string[]): string {
  * so a crash leaves an orphan that `derive` redispatches.
  */
 export async function runAgentTurn(runtime: KernelRuntime, spec: AgentTurnSpec): Promise<AgentTurnResult> {
-  const { alias, harness, model, effort } = resolveAlias(runtime, spec.role);
+  const { alias, harness, model, effort, fallbacks } = resolveAlias(runtime, spec.role);
   const started = await runtime.store.startRecord({
     ...spec.meta,
     actor: "agent",
@@ -103,7 +110,9 @@ export async function runAgentTurn(runtime: KernelRuntime, spec: AgentTurnSpec):
   });
   const timeouts = spec.timeouts ?? DEFAULT_TIMEOUTS;
 
-  let result = await harness.turn({
+  // `fallbacks` and `TurnResult.model` are the S1 contract additions; passing
+  // them now keeps the kernel free of a second edit when that branch lands.
+  const request = {
     model,
     effort,
     cwd: spec.cwd,
@@ -111,7 +120,9 @@ export async function runAgentTurn(runtime: KernelRuntime, spec: AgentTurnSpec):
     session: spec.session,
     outcomePath,
     timeouts,
-  });
+    fallbacks,
+  };
+  let result = await harness.turn(request);
   let stop: Stop = result.stop;
   let usage = result.usage;
   let session = result.session;
@@ -137,15 +148,11 @@ export async function runAgentTurn(runtime: KernelRuntime, spec: AgentTurnSpec):
     findings = ["no outcome written to the outcome path and no fenced YAML block in the final message"];
   }
 
-  if (findings.length > 0) {
+  if (findings.length > 0 && stop.kind !== "infra" && stop.kind !== "refusal" && stop.kind !== "cancelled") {
     const repair = await harness.turn({
-      model,
-      effort,
-      cwd: spec.cwd,
+      ...request,
       prompt: repairPrompt(outcomePath, findings),
       session,
-      outcomePath,
-      timeouts,
     });
     stop = repair.stop;
     usage = addUsage(usage, repair.usage);
@@ -154,14 +161,18 @@ export async function runAgentTurn(runtime: KernelRuntime, spec: AgentTurnSpec):
     outcome = null;
     findings = [];
     collect();
-    if (findings.length > 0 || !outcome) {
+    if (!outcome && (stop.kind === "infra" || stop.kind === "refusal" || stop.kind === "cancelled")) {
+      // An infrastructure interruption of the repair turn consumes no outcome.
+    } else if (findings.length > 0 || !outcome) {
       outcome = failedOutcome(findings.length > 0 ? findings : ["no outcome after repair"]);
     }
   }
 
   const settled = spec.settle ? await spec.settle(started.meta) : {};
+  const actualModel = (result as typeof result & { model?: ModelRef }).model ?? model;
   const record = await started.finish({
     ...settled,
+    ...(actualModel ? { model: actualModel } : {}),
     stop,
     usage,
     session,

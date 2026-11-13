@@ -157,7 +157,7 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
 
       let iteration = state.iteration + 1;
       try {
-        const boundary = await runBoundary(runtime, { relaunch });
+        const boundary = await runBoundary(runtime, { relaunch: relaunch && i === 0 });
         iteration = boundary.iteration;
         iterations += 1;
         if (boundary.decision === "continue") await drain(runtime);
@@ -169,6 +169,7 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
           state: after,
           records,
           decision: boundary.decision,
+          cause: boundary.cause,
         });
         await writeMetrics(store, {
           iteration,

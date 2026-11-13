@@ -53,7 +53,7 @@ function outcome(value: Record<string, unknown>) {
   return { status: "done", summary: "ok", concerns: [], forward: [], ...value };
 }
 
-function setupRepo(): { repo: TmpRepo; goalDir: string; planPath: string; harnesses: () => Record<string, FakeHarness> } {
+function setupRepo(): { repo: TmpRepo; goalDir: string; planPath: string; newHarness: () => FakeHarness } {
   const repo = createTmpRepo();
   repo.writeFile(
     ".factory/repo.yaml",
@@ -87,7 +87,7 @@ function setupRepo(): { repo: TmpRepo; goalDir: string; planPath: string; harnes
     repo,
     goalDir,
     planPath: path.join(goalDir, "plan.md"),
-    harnesses: () => ({ fake: new FakeHarness({ id: "fake" }) }),
+    newHarness: () => new FakeHarness({ id: "fake" }),
   };
 }
 
@@ -124,19 +124,19 @@ function scriptPlanning(harness: FakeHarness, goalDir: string, taskDir: string):
   });
 }
 
-async function launch(repo: TmpRepo, harnesses: Record<string, FakeHarness>): Promise<void> {
+async function launch(repo: TmpRepo, harness: FakeHarness): Promise<void> {
   const code = await dispatch(
     ["run", "--repo", repo.dir, "--goal", "demo", "--iterations", "1"],
-    { harnesses }
+    { harnesses: { fake: harness } }
   );
   expect(code).toBe(0);
 }
 
 async function runScenario(): Promise<void> {
-  const { repo, goalDir, planPath, harnesses } = setupRepo();
+  const { repo, goalDir, planPath, newHarness } = setupRepo();
   try {
-    const first = harnesses();
-    scriptPlanning(first.fake, goalDir, path.join(goalDir, "tasks"));
+    const first = newHarness();
+    scriptPlanning(first, goalDir, path.join(goalDir, "tasks"));
     await launch(repo, first);
 
     let store = createFolderStore(goalDir);
@@ -156,8 +156,8 @@ async function runScenario(): Promise<void> {
       ["beta", true],
     ]);
 
-    const second = harnesses();
-    second.fake.script((req, ctx) => {
+    const second = newHarness();
+    second.script((req, ctx) => {
       ctx.writeOutcome(outcome({ summary: "goal met", decision: "done" }));
       return fakeTurnResult(req);
     });
@@ -181,7 +181,9 @@ async function runScenario(): Promise<void> {
     const derivedAgain = derive(await stripped.listTasks(), await stripped.listRecords());
     expect(derivedAgain).toEqual(after);
   } finally {
+    const worktreeRoot = path.resolve(repo.dir, "..", ".factory-worktrees", path.basename(repo.dir));
     repo.cleanup();
+    fs.rmSync(worktreeRoot, { recursive: true, force: true });
   }
 }
 

@@ -145,7 +145,7 @@ function reducePhase(task: TaskFile, recs: StepRecord[]): Reducer {
       continue;
     }
     if (rec.actor !== "agent" || rec.slug !== task.slug) continue;
-    if (rec.stop?.kind === "infra" || rec.stop?.kind === "truncated") {
+    if (rec.stop?.kind === "infra" || rec.stop?.kind === "truncated" || rec.stop?.kind === "cancelled") {
       // The turn did not count as a normal step; repeat the phase already in force.
       if (rec.step === "implement") state.phase = "implement";
       if (rec.step === "review") state.phase = "review";

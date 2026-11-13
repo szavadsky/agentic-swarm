@@ -43,11 +43,13 @@ function promptVars(
 ): Record<string, string> {
   const review = lastReview(records, task.slug);
   const checks = lastChecks(records, task.slug);
-  const findings = review?.outcome
-    ? formatConcerns(review.outcome)
-    : checks?.checks
-      ? formatFailingChecks(checks.checks)
-      : "";
+  const latest = (review?.seq ?? -1) > (checks?.seq ?? -1) ? review : checks;
+  const findings =
+    latest === review && review?.outcome
+      ? formatConcerns(review.outcome)
+      : checks?.checks
+        ? formatFailingChecks(checks.checks)
+        : "";
   return {
     task_path: `${runtime.store.tasksDir}/${task.slug}.md`,
     worktree,

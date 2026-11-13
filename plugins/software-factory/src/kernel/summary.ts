@@ -7,6 +7,8 @@ export interface SummaryInput {
   state: State;
   records: StepRecord[];
   decision?: GoalDecision;
+  /** Boundary/launch cause shown as a remarkable (PM validation, crash). */
+  cause?: string;
   /** Crash or drain override; the architect decision wins when present. */
   status?: SummaryStatus;
 }
@@ -41,6 +43,7 @@ export async function writeIterationSummary(
     .sort();
 
   const remarkable: string[] = [];
+  if (input.cause) remarkable.push(`boundary: ${input.cause}`);
   if (architect?.outcome) {
     remarkable.push(`architect: ${architect.outcome.summary}`);
     remarkable.push(...architect.outcome.forward);

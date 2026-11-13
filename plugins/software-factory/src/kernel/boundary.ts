@@ -134,12 +134,21 @@ export async function runBoundary(
   }
 
   try {
-    await runPm(runtime, {
+    const pm = await runPm(runtime, {
       iteration,
       state,
       planPath,
       cwd: runtime.paths.goalCheckout,
     });
+    if (!pm || pm.status !== "done") {
+      return {
+        iteration,
+        decision: "blocked",
+        cause: `PM turn did not complete: ${pm ? `${pm.status}: ${pm.summary}` : "no outcome"}`,
+        outcome: result.outcome,
+        packPath: packRel,
+      };
+    }
   } catch (err) {
     if (!(err instanceof PmValidationError)) throw err;
     return {
