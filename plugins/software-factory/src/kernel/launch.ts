@@ -48,7 +48,7 @@ export interface RunGoalOptions {
   baseGates?: boolean;
 }
 
-export type LaunchStop = "done" | "blocked" | "iteration-limit" | "interrupted";
+export type LaunchStop = "done" | "blocked" | "iteration-limit" | "interrupted" | "infra";
 
 export interface LaunchResult {
   goal: string;
@@ -169,6 +169,7 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
     const relaunch = (await store.listRecords()).some((r) => r.iteration > 0);
     let iterations = 0;
     let lastSummary: string | undefined;
+    let ended: "infra" | "cancelled" | undefined;
 
     for (let i = 0; i < runtime.limits.iterations; i++) {
       if (signals.shouldStop()) break;
@@ -184,19 +185,20 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
         iterations += 1;
         humanInterventions = Math.max(0, (await processedSteers(store)) - processedBefore);
         let dispatchCause: string | undefined;
-        let dispatchStopped = false;
         if (boundary.decision === "continue" && !signals.shouldStop()) {
           const dispatched = await runDispatch(runtime, { iteration });
           dispatchCause = dispatched.cause;
-          dispatchStopped = dispatched.reason === "infra" || dispatched.reason === "cancelled";
-          if (dispatched.reason === "infra") {
-            throw new LaunchError(
-              `infrastructure stop during iteration ${iteration}: ${
-                dispatched.cause ?? "unknown cause"
-              }; relaunch to retry`
-            );
+          if (dispatched.reason === "infra" || dispatched.reason === "cancelled") {
+            ended = dispatched.reason;
+            dispatchCause =
+              dispatched.reason === "infra"
+                ? `infrastructure stop during iteration ${iteration}: ${
+                    dispatched.cause ?? "unknown cause"
+                  }; relaunch to retry`
+                : dispatchCause;
           }
         }
+        const dispatchStopped = ended !== undefined;
 
         const status =
           boundary.decision === "done"
@@ -221,13 +223,16 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
     }
 
     const state = derive(await store.listTasks(), await store.listRecords(), runtime.configs.process.flows);
-    const stop: LaunchStop = signals.interruptedBy
-      ? "interrupted"
-      : state.goal === "done"
-        ? "done"
-        : state.goal === "blocked"
-          ? "blocked"
-          : "iteration-limit";
+    const stop: LaunchStop =
+      signals.interruptedBy || ended === "cancelled"
+        ? "interrupted"
+        : state.goal === "done"
+          ? "done"
+          : state.goal === "blocked"
+            ? "blocked"
+            : ended === "infra"
+              ? "infra"
+              : "iteration-limit";
     return {
       goal: opts.goal,
       iterations,

@@ -39,7 +39,7 @@ export interface TaskActionResult {
 }
 
 /** Mechanical commit, recorded with its tree for no-progress history. */
-export async function commitStep(
+async function commitStep(
   runtime: KernelRuntime,
   meta: { iteration: number; slug: string; round: number },
   cwd: string,

@@ -1,5 +1,6 @@
 import path from "node:path";
 import { resolveRoleAlias, runAgentTurn } from "./agent.js";
+import { DEFAULT_ROLE_BY_STEP, rolesByStep } from "./metrics.js";
 import type { KernelRuntime, StepRecord } from "./types.js";
 
 interface RoleRow {
@@ -13,29 +14,26 @@ interface RoleRow {
   costKnown: boolean;
 }
 
-function roleOf(rec: StepRecord): string {
-  switch (rec.step) {
-    case "implement":
-      return "implementer";
-    case "review":
-      return "reviewer";
-    default:
-      return rec.step;
-  }
+function roleOf(rec: StepRecord, roleByStep: Record<string, string>): string {
+  return roleByStep[rec.step] ?? rec.step;
 }
 
 /**
  * The script half of the digest: cost and turns by role, straight from the
  * records. No model is asked to add numbers it can only approximate.
  */
-export function renderDigestFacts(records: StepRecord[], iteration: number): string {
+function renderDigestFacts(
+  records: StepRecord[],
+  iteration: number,
+  roleByStep: Record<string, string>
+): string {
   const rows = new Map<string, RoleRow>();
   let turns = 0;
   for (const rec of records) {
     if (rec.actor !== "agent" || !rec.endedAt) continue;
     if (rec.iteration >= iteration) continue;
     turns += 1;
-    const role = roleOf(rec);
+    const role = roleOf(rec, roleByStep);
     const alias = rec.alias ?? "-";
     const key = `${role}\u0000${alias}`;
     const row =
@@ -131,7 +129,13 @@ export async function writeLaunchDigest(
   }
   const rel = `iterations/${iteration}/digest.md`;
   const digestPath = path.join(runtime.store.goalDir, rel);
-  await runtime.store.writeFile(rel, renderDigestFacts(records, iteration));
+  await runtime.store.writeFile(
+    rel,
+    renderDigestFacts(records, iteration, {
+        ...DEFAULT_ROLE_BY_STEP,
+        ...rolesByStep(runtime.configs.process.flows),
+      })
+  );
 
   if (scout) {
     try {

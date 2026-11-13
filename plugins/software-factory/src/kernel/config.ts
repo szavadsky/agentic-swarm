@@ -253,7 +253,7 @@ export function loadConfigs(repoRoot: string, opts: LoadConfigOptions = {}): Con
   };
 }
 
-export function expandHome(value: string): string {
+function expandHome(value: string): string {
   if (value === "~") return os.homedir();
   if (value.startsWith("~/") || value.startsWith("~\\")) return path.join(os.homedir(), value.slice(2));
   return value;

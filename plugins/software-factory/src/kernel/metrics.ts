@@ -56,7 +56,7 @@ export function rolesByStep(flows: Record<string, FlowDefinition>): Record<strin
   return roles;
 }
 
-const DEFAULT_ROLE_BY_STEP: Record<string, string> = {
+export const DEFAULT_ROLE_BY_STEP: Record<string, string> = {
   architect: "architect",
   pm: "pm",
   digest: "digest",
@@ -64,7 +64,7 @@ const DEFAULT_ROLE_BY_STEP: Record<string, string> = {
   review: "reviewer",
 };
 
-export function tokenTotal(usage: Usage): number {
+function tokenTotal(usage: Usage): number {
   return (
     usage.in +
     usage.cacheRead +

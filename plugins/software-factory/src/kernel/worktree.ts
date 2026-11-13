@@ -13,7 +13,7 @@ export function taskBranchName(runtime: KernelRuntime, slug: string): string {
   return `factory-task/${goal}/${slug}`;
 }
 
-export function taskWorktreePath(runtime: KernelRuntime, slug: string): string {
+function taskWorktreePath(runtime: KernelRuntime, slug: string): string {
   const goal = path.basename(runtime.paths.goalDir);
   return path.join(runtime.paths.worktreeRoot, `${goal}-tasks`, slug);
 }
@@ -154,7 +154,7 @@ export async function headSha(cwd: string): Promise<string> {
  * The merge queue's scratch worktree: detached at the integration head, so a
  * squash commit can be gated without touching the stable goal checkout.
  */
-export function mergeScratchPath(runtime: KernelRuntime): string {
+function mergeScratchPath(runtime: KernelRuntime): string {
   const goal = path.basename(runtime.paths.goalDir);
   return path.join(runtime.paths.worktreeRoot, `${goal}-merge`);
 }

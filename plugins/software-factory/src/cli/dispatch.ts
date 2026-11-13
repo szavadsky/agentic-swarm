@@ -142,6 +142,7 @@ function exitCode(result: LaunchResult): number {
   if (result.stop === "interrupted") return result.interruptedBy === "SIGTERM" ? 143 : 130;
   if (result.stop === "done") return 0;
   if (result.stop === "blocked") return 2;
+  if (result.stop === "infra") return 1;
   return 3;
 }
 

@@ -45,7 +45,7 @@ function roleAlias(process: ProcessConfig, role: string): string | undefined {
 }
 
 /** Roles the kernel actually calls: architect, PM and every configured flow step. */
-export function requiredRoles(process: ProcessConfig): Set<string> {
+function requiredRoles(process: ProcessConfig): Set<string> {
   const roles = new Set(["architect", "pm"]);
   for (const flow of Object.values(process.flows)) {
     for (const step of flow.steps) roles.add(step.role);

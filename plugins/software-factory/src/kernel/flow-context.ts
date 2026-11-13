@@ -23,7 +23,7 @@ function bySeq(a: StepRecord, b: StepRecord): number {
   return a.seq - b.seq || a.startedAt.localeCompare(b.startedAt);
 }
 
-export function lastReview(records: StepRecord[], slug: string, flow: FlowDefinition): StepRecord | undefined {
+function lastReview(records: StepRecord[], slug: string, flow: FlowDefinition): StepRecord | undefined {
   const reviewIds = new Set(flow.steps.filter((s) => s.review).map((s) => s.id));
   return records
     .filter((r) => r.slug === slug && reviewIds.has(r.step) && r.outcome)
@@ -86,7 +86,7 @@ export function resolveRole(runtime: KernelRuntime, role: string): RoleTarget {
 }
 
 /** The role that actually runs this step: a `different-model` fix turn overrides it. */
-export function stepRole(runtime: KernelRuntime, task: TaskFile, state: TaskState, stepId: string): string {
+function stepRole(runtime: KernelRuntime, task: TaskFile, state: TaskState, stepId: string): string {
   const flow = flowOf(runtime, task);
   const step = findStep(flow, stepId);
   const followUp = flow.followUp ?? { mode: "same-session" as const };

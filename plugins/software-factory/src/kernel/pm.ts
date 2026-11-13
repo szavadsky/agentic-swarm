@@ -71,7 +71,7 @@ function escapeRegExp(text: string): string {
 }
 
 /** Position carries no meaning in a task file; the plan's bullet names the slug. */
-export function planMentionsSlug(plan: string, slug: string): boolean {
+function planMentionsSlug(plan: string, slug: string): boolean {
   return new RegExp(`(?<![a-z0-9.-])${escapeRegExp(slug)}(?![a-z0-9.-])`, "i").test(plan);
 }
 
