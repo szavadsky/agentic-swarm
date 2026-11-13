@@ -123,6 +123,7 @@ export async function runAgentTurn(runtime: KernelRuntime, spec: AgentTurnSpec):
     fallbacks,
   };
   let result = await harness.turn(request);
+  let lastResult = result;
   let stop: Stop = result.stop;
   let usage = result.usage;
   let session = result.session;
@@ -154,6 +155,7 @@ export async function runAgentTurn(runtime: KernelRuntime, spec: AgentTurnSpec):
       prompt: repairPrompt(outcomePath, findings),
       session,
     });
+    lastResult = repair;
     stop = repair.stop;
     usage = addUsage(usage, repair.usage);
     session = repair.session ?? session;
@@ -169,7 +171,7 @@ export async function runAgentTurn(runtime: KernelRuntime, spec: AgentTurnSpec):
   }
 
   const settled = spec.settle ? await spec.settle(started.meta) : {};
-  const actualModel = (result as typeof result & { model?: ModelRef }).model ?? model;
+  const actualModel = (lastResult as typeof lastResult & { model?: ModelRef }).model ?? model;
   const record = await started.finish({
     ...settled,
     ...(actualModel ? { model: actualModel } : {}),
