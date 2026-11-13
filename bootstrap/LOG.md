@@ -241,3 +241,7 @@ Verbatim, newest last; each with what it changed.
 ### 2026-11-13 — promote failed again: same outside-package disease, second instance (intervention 8)
 - `acpx-preflight.test.ts` reads `bootstrap/run/self-acpx.yaml` (package suite reaching outside the package — same class as pricing.test.ts). In the export the config is missing → null alias → fail. Pipefail correctly stopped the chain this time (no stale-pin run). Fixed by hand: config text inlined into the tmp repo; plus a guard in `live-run-configs.test.ts` (skip when bootstrap/ is absent) and a repo-wide sweep — no other outside reads (the `src/cli` hits are comments).
 - Pattern for the architect: package tests must be hermetic to the package; real-bootstrap validation belongs to `factory doctor` (backlog). Committed, promoting, relaunching iteration 8 (bg_131).
+
+### 2026-11-13 — iteration 8: 1 merged; export-based gates (architect's proposal)
+- 16 min, $1.05, status in-progress. Architect turn ended early waiting on scouts (no plan edit); PM + dispatch ran docs-truth round 2 → merged. Parked 2 unchanged, pending 2.
+- Owner-attention acted on: plan rules don't stop outside-package test reads (broken twice). Took the architect's stronger option over its default: `plugins/software-factory/scripts/gates.sh` copies the package working tree to a bare tmp dir and runs install+typecheck+test there; `.factory/repo.yaml` gates now call it (50 s all-in, verified). Task gates and promote gates can no longer diverge. Merged docs-truth (`1a950b1`), promoted, relaunched as iteration 9 (bg_132).
