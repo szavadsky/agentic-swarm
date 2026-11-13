@@ -185,3 +185,11 @@ Verbatim, newest last; each with what it changed.
 - FIX (`opencode-go/deepseek-v4.1-flash#max`): 157 steps / 177 tools, 1904 s, exit 0. All four REV findings repaired with regression tests + hostile shakedown test (red base + kill in merge window → merged-not-parked, unrelated merges, base attribution). Verified myself: typecheck green; suite 331 pass / 4 skip / 0 fail (39 s) — one transient failure on my first run did not reproduce in two re-runs (flaky, likely settle timing; watch).
 - Merge into `factory-v3` clean, no conflicts. Suite on the head: same 335 green.
 - REV's gate is satisfied: findings 1–3 fixed, two-test coverage added, hostile shakedown exists as a test. Next: promote → live shakedown on the toy goal (phase C) → midnight self-run (phase D).
+
+### 2026-11-12 — phase C shakedown GREEN (first live launch)
+- Pin `4c6a5c190fa4`, toy goal `kv`, run config `shakedown-plan.yaml` (opencode-go deepseek primaries, beam PM/digest — free tier dead). 41 min wall, exit 3 (iteration-limit, expected). 3/3 tasks merged (store-core, cli-surface, readme-usage), 0 parked, 0 pending.
+- Plan quality (deepseek architect stand-in): risk-ordered (persistence first), real seams (`run(argv,env)`, Store API, atomic temp+fsync+rename, 0600), reversible assumptions with intent line refs. Debt recorded with file:line evidence (3 items). Base-gate handling worked: TS2688 on missing node_modules → `bun install` → green, recorded.
+- Independent verification (not the factory's own gates): integration head in a copy — 24 tests green, typecheck green, real CLI set/get/del/list + exit codes 0/1 correct.
+- Metrics: 10 agent + 18 script turns; tokens in 406k / cached 5.7M / out 57k / reasoning 128k; cost not reported (usage records lack cost from opencode-go — S4 metrics gap, backlog).
+- Deviation noted: shakedown ran on subsidized models, not free (free tier quota-exhausted). D4's "free-model architect" shakedown is unproven; the plan-quota run is the evidence we have.
+- Phase D (self-run, goal-self, Opus architect) is unblocked for the midnight window.
