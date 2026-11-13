@@ -1,0 +1,5 @@
+{"type":"model_change","model":"opencode-go/longcat-2.5-free","role":null,"timestamp":"2026-11-13T00:46:00.278Z"}
+{"type":"model_change","model":"opencode-go/longcat-2.5-free","role":"subagent:ScoutReply","timestamp":"2026-11-13T00:46:00.289Z"}
+{"type":"message","message":{"role":"user","usage":null,"model":null,"timestamp":1794530760291}}
+{"type":"message","message":{"role":"assistant","usage":{"input":4790,"output":279,"cacheRead":0,"cacheWrite":0,"totalTokens":5069,"reasoningTokens":247,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"model":"longcat-2.5-free","timestamp":1794530760303}}
+{"type":"message","message":{"role":"toolResult","usage":null,"model":null,"timestamp":1794530767046}}

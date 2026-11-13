@@ -1,100 +1,73 @@
-import fs from "node:fs";
+import { createHash } from "node:crypto";
 import path from "node:path";
-import yaml from "yaml";
-import type { OmpPipelineConfig } from "./types.js";
-import { resolveRole } from "../../core/config/roles.js";
+import { writeYamlAtomic } from "../../core/records/io.js";
 
-/**
- * Ensures a model name includes a thinking effort level suffix (defaults to `:max`).
- * If the model identifier already specifies a suffix (e.g. `:max`, `:high`, `:low`),
- * it is returned unchanged.
- */
-export function ensureThinkingSuffix(model: string): string {
-  if (/:\w+$/.test(model)) {
-    return model;
-  }
-  return `${model}:max`;
+/** Agents omp ships with; their bundled frontmatter would otherwise inherit the parent model. */
+const BUNDLED_SUBAGENTS = [
+  "task",
+  "scout",
+  "reviewer",
+  "sonic",
+  "security-reviewer",
+];
+
+export interface OmpOverlayOptions {
+  /** Cheap model every spawned subagent must run on. */
+  subagentModel?: string;
+  /** Provider cache lifetime; kernel-0 pins short (advice:290). */
+  retention?: "short" | "long";
+  approvalMode?: "always-ask" | "always-ask-cached" | "write" | "yolo";
+  /** Test-only top-level overrides (for example a forced compaction threshold). */
+  extra?: Record<string, unknown>;
 }
 
-/**
- * Generates an OMP unattended YAML overlay object from role definitions (§5, §12.4).
- * Configures:
- *  - `modelRoles`: mapped roles and aliases with resolved primary models and thinking suffixes.
- *  - `retry.fallbackChains`: automatic model fallback chains for resilience.
- *  - Unattended switches: disables prompts, git guard, auto-backgrounding, advisor, title generator, mnemopi.
- */
-export function generateOmpConfigOverlay(pipeline: OmpPipelineConfig): Record<string, unknown> {
-  const modelRoles: Record<string, string> = {};
-  const fallbackChains: Record<string, string[]> = {};
-
-  const rolesConfig = pipeline.models?.roles ?? {};
-
-  for (const roleName of Object.keys(rolesConfig)) {
-    try {
-      const resolved = resolveRole(roleName, rolesConfig);
-      if (resolved.models.length > 0) {
-        const primary = resolved.models[0];
-        if (primary) {
-          modelRoles[roleName] = ensureThinkingSuffix(primary);
-        }
-
-        if (resolved.models.length > 1) {
-          fallbackChains[roleName] = resolved.models.slice(1).map(ensureThinkingSuffix);
-        }
-      }
-    } catch {
-      // If resolution fails during overlay generation (e.g. cycle detected),
-      // leave role unmapped so preflight / validation catches it.
-    }
-  }
-
-  return {
-    modelRoles,
-    retry: {
-      modelFallback: true,
-      maxRetries: 3,
-      usageAwareFallback: true,
-      fallbackChains,
-    },
-    eval: {
-      autoBackground: {
-        enabled: false,
-      },
-    },
-    title: {
-      generator: "none",
-    },
-    checkpoint: {
-      enabled: true, // mounts checkpoint/rewind tools (agents opt in via tools list)
-    },
-    advisor: {
-      enabled: false,
-    },
-    bash: {
-      gitGuard: false,
-      allowCompoundCommands: true,
-    },
-    mnemopi: {
-      polyphonicRecall: false,
-      enhancedRecall: false,
-      proactiveLinking: false,
-    },
-    update: {
-      auto: false,
-    },
+export function ompOverlay(opts: OmpOverlayOptions = {}): Record<string, unknown> {
+  const overlay: Record<string, unknown> = {
+    providers: { cacheRetention: opts.retention ?? "short" },
+    memory: { backend: "off" },
+    autolearn: { enabled: false },
+    skills: { enabled: false },
+    defaultThinkingLevel: "low",
+    features: { unexpectedStopDetection: false },
+    tools: { approvalMode: opts.approvalMode ?? "yolo", xdev: false },
+    compaction: { experimentalContextManagement: false },
+    disabledProviders: [
+      "native",
+      "claude",
+      "codex",
+      "gemini",
+      "opencode",
+      "cursor",
+      "agents-md",
+    ],
+    // The adapter owns retries and fallbacks so every hop stays visible.
+    retry: { enabled: false, modelFallback: false },
+    ...opts.extra,
   };
+
+  if (opts.subagentModel) {
+    overlay.task = {
+      agentModelOverrides: Object.fromEntries(
+        BUNDLED_SUBAGENTS.map((name) => [name, opts.subagentModel])
+      ),
+    };
+    overlay.modelRoles = { task: opts.subagentModel };
+  }
+
+  return overlay;
 }
 
-/**
- * Serializes the generated overlay to YAML and writes it atomically to the target path.
- */
-export function writeOmpConfigOverlay(pipeline: OmpPipelineConfig, targetPath: string): string {
-  const overlayObj = generateOmpConfigOverlay(pipeline);
-  const yamlContent = yaml.stringify(overlayObj, { indent: 2 });
-  const dir = path.dirname(targetPath);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-  fs.writeFileSync(targetPath, yamlContent, "utf8");
-  return targetPath;
+/** Writes the overlay under `dir`, keyed by content so concurrent turns never share one. */
+export async function writeOmpOverlay(
+  opts: OmpOverlayOptions,
+  dir: string
+): Promise<string> {
+  const content = ompOverlay(opts);
+  const hash = createHash("sha1")
+    .update(JSON.stringify(content))
+    .digest("hex")
+    .slice(0, 12);
+  const target = path.join(dir, `overlay-${hash}.yaml`);
+  await writeYamlAtomic(target, content);
+  return target;
 }
