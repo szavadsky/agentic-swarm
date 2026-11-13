@@ -1,4 +1,3 @@
-import { iterationUsdBrake } from "./config.js";
 import { derive } from "./derive.js";
 import { executeTaskAction, type TaskActionResult } from "./flow.js";
 import { stepTarget } from "./flow-context.js";
@@ -113,7 +112,7 @@ export async function runDispatch(
   const infra = new Map<string, string | undefined>();
   let cancelled = false;
   let drain: string | undefined;
-  const usdLimit = iterationUsdBrake(runtime.configs);
+  const usdLimit = runtime.limits.iterationUsd;
 
   const start = (action: Action & { slug: string }, taskState: TaskState, task: TaskFile, agent: boolean, harnessId?: string): void => {
     const promise = (async () => {
