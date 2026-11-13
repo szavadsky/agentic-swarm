@@ -1,4 +1,4 @@
-import { exitDetails, stopDetails } from "../details.js";
+import { exitDetails, stopDetails, withDetails } from "../details.js";
 import type { Stop } from "../types.js";
 import type { OpencodeError, OpencodeEventSummary } from "./events.js";
 
@@ -6,13 +6,6 @@ function errorText(error: OpencodeError): string {
   return [error.type, error.message, error.status, error.statusCode]
     .filter((part) => part !== undefined && part !== null)
     .join(" ");
-}
-
-/** Attaches the scrubbed error text where the Stop shape allows details. */
-function withDetails(stop: Stop, text: string | undefined): Stop {
-  if (stop.kind !== "infra" && stop.kind !== "refusal") return stop;
-  const details = stopDetails(text);
-  return details ? { ...stop, details } : stop;
 }
 
 /**

@@ -19,6 +19,8 @@ interface FakeConfig {
   beforeTokens?: TokenCounts;
   exportFails?: boolean;
   beforeFails?: boolean;
+  malformedExport?: boolean;
+  omitExportTokens?: boolean;
 }
 
 function fakeScript(config: FakeConfig): string {
@@ -38,7 +40,12 @@ if (args[0] === "session" && args[1] === "export") {
     process.stderr.write("session export unavailable\\n");
     process.exit(1);
   }
-  process.stdout.write(JSON.stringify({ info: { tokens: config.exportTokens }, messages: [] }) + "\\n");
+  if (config.malformedExport) {
+    process.stdout.write("{not valid json\\n");
+    process.exit(0);
+  }
+  const info = config.omitExportTokens ? {} : { tokens: config.exportTokens };
+  process.stdout.write(JSON.stringify({ info, messages: [] }) + "\\n");
   process.exit(0);
 }
 process.stdout.write(JSON.stringify({ type: "step_start", sessionID: config.sessionId, part: {} }) + "\\n");
@@ -190,6 +197,86 @@ describe("OpencodeHarness usage accounting", () => {
         cacheWrite5m: 9,
         cacheWrite1h: 0,
         out: 3,
+        reasoningOut: 1,
+        costUsd: 0,
+      });
+    } finally {
+      cleanup();
+    }
+  }, 20_000);
+
+  it("falls back to step usage when the export JSON is malformed", async () => {
+    const { harness, cwd, cleanup } = fakeHarness({
+      sessionId: "ses_bad_export",
+      stepTokens: {
+        input: 11,
+        output: 5,
+        reasoning: 2,
+        cache: { read: 3, write: 4 },
+      },
+      exportTokens: {
+        input: 500,
+        output: 100,
+        reasoning: 50,
+        cache: { read: 200, write: 1375 },
+      },
+      malformedExport: true,
+    });
+    try {
+      const result = await harness.turn({
+        model: MODEL,
+        cwd,
+        prompt: "PONG",
+        timeouts: { idleMs: 5_000, wallMs: 5_000 },
+      });
+      expect(result.stop).toEqual({ kind: "done" });
+      expect(result.transcript).toBeDefined();
+      expect(result.usage).toEqual({
+        in: 11,
+        cacheRead: 3,
+        cacheWrite5m: 4,
+        cacheWrite1h: 0,
+        out: 5,
+        reasoningOut: 2,
+        costUsd: 0,
+      });
+    } finally {
+      cleanup();
+    }
+  }, 20_000);
+
+  it("falls back to step usage when the export has no tokens", async () => {
+    const { harness, cwd, cleanup } = fakeHarness({
+      sessionId: "ses_tokenless_export",
+      stepTokens: {
+        input: 13,
+        output: 6,
+        reasoning: 1,
+        cache: { read: 5, write: 2 },
+      },
+      exportTokens: {
+        input: 500,
+        output: 100,
+        reasoning: 50,
+        cache: { read: 200, write: 1375 },
+      },
+      omitExportTokens: true,
+    });
+    try {
+      const result = await harness.turn({
+        model: MODEL,
+        cwd,
+        prompt: "PONG",
+        timeouts: { idleMs: 5_000, wallMs: 5_000 },
+      });
+      expect(result.stop).toEqual({ kind: "done" });
+      expect(result.transcript).toBeDefined();
+      expect(result.usage).toEqual({
+        in: 13,
+        cacheRead: 5,
+        cacheWrite5m: 2,
+        cacheWrite1h: 0,
+        out: 6,
         reasoningOut: 1,
         costUsd: 0,
       });

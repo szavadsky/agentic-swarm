@@ -1,3 +1,5 @@
+import type { Stop } from "./types.js";
+
 /** Longest crash detail kept; the useful part of a failure is its tail. */
 const MAX_DETAILS_CHARS = 500;
 
@@ -37,6 +39,16 @@ export function stopDetails(
     .replace(/\s+/g, " ");
   if (!collapsed) return undefined;
   return collapsed.length > max ? `…${collapsed.slice(-max)}` : collapsed;
+}
+
+/**
+ * Attaches the scrubbed error text to the stops that carry `details`. Other
+ * stop kinds ignore it, and empty text leaves the stop unchanged.
+ */
+export function withDetails(stop: Stop, text: string | undefined): Stop {
+  if (stop.kind !== "infra" && stop.kind !== "refusal") return stop;
+  const details = stopDetails(text);
+  return details ? { ...stop, details } : stop;
 }
 
 /** Fallback when a process dies without writing stderr. */

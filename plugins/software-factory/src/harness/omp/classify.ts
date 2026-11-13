@@ -1,4 +1,4 @@
-import { exitDetails, stopDetails } from "../details.js";
+import { exitDetails, stopDetails, withDetails } from "../details.js";
 import type { Stop } from "../types.js";
 
 /** Error object omp attaches to `prompt_result.status === "error"`. */
@@ -18,13 +18,6 @@ const ABORTED = /abort|interrupted by user/i;
 const TIMEOUT = /timed out|timeout|deadline exceeded/i;
 const QUOTA = /free[- ]?limit|free usage limit|quota|usage limit|insufficient|billing|exceeded your/i;
 const RATE = /rate[\s_-]?limit|too many requests|overloaded|service unavailable|bad gateway/i;
-
-/** Attaches the scrubbed error text where the Stop shape allows details. */
-function withDetails(stop: Stop, text: string | undefined): Stop {
-  if (stop.kind !== "infra" && stop.kind !== "refusal") return stop;
-  const details = stopDetails(text);
-  return details ? { ...stop, details } : stop;
-}
 
 /**
  * Maps a provider error to the kernel's infra/task-side stop vocabulary.
