@@ -10,7 +10,7 @@ export class TaskFileError extends Error {
 }
 
 /** Slugs are namespaced by epic (`epic.name`), immutable, safe as branch and file name. */
-export const TASK_SLUG_REGEX = /^[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
+const TASK_SLUG_REGEX = /^[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
 
 export function isValidTaskSlug(slug: string): boolean {
   return TASK_SLUG_REGEX.test(slug) && !slug.includes("..") && slug.length <= 120;

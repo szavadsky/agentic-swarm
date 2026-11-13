@@ -13,7 +13,7 @@ export function taskBranchName(runtime: KernelRuntime, slug: string): string {
   return `factory-task/${goal}/${slug}`;
 }
 
-export function taskWorktreePath(runtime: KernelRuntime, slug: string): string {
+function taskWorktreePath(runtime: KernelRuntime, slug: string): string {
   const goal = path.basename(runtime.paths.goalDir);
   return path.join(runtime.paths.worktreeRoot, `${goal}-tasks`, slug);
 }
@@ -23,11 +23,17 @@ export async function integrationHead(runtime: KernelRuntime): Promise<string> {
   return res.stdout.trim();
 }
 
-async function branchExists(runtime: KernelRuntime, branch: string): Promise<boolean> {
+export async function branchExists(runtime: KernelRuntime, branch: string): Promise<boolean> {
   const res = await git(runtime.paths.repoRoot, ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`], {
     allowFail: true,
   });
   return res.code === 0;
+}
+
+/** Tree of HEAD, the no-progress component of a committed step. */
+export async function treeSha(cwd: string): Promise<string> {
+  const res = await git(cwd, ["rev-parse", "HEAD^{tree}"]);
+  return res.stdout.trim();
 }
 
 async function registeredWorktrees(runtime: KernelRuntime): Promise<string[]> {
@@ -83,6 +89,17 @@ export interface EnsuredWorktree {
 }
 
 /**
+ * Setup runs once per worktree, recorded in the worktree's git dir (outside the
+ * tree, so it never enters a commit). A crash between `worktree add` and setup
+ * therefore still runs setup before the first check.
+ */
+async function setupMarker(cwd: string): Promise<string | null> {
+  const res = await git(cwd, ["rev-parse", "--git-dir"], { allowFail: true });
+  if (res.code !== 0) return null;
+  return path.join(path.resolve(cwd, res.stdout.trim()), "factory-setup-done");
+}
+
+/**
  * Branches from the integration head at dispatch time (never at plan time).
  * A task with `base` continues a parked task from its kept branch tip.
  */
@@ -104,19 +121,25 @@ export async function ensureTaskWorktree(runtime: KernelRuntime, task: TaskFile)
   if (!registered.includes(path.resolve(wtPath))) {
     if (fs.existsSync(wtPath)) fs.rmSync(wtPath, { recursive: true, force: true });
     fs.mkdirSync(path.dirname(wtPath), { recursive: true });
-    if (await branchExists(runtime, branch)) {
-      await git(runtime.paths.repoRoot, ["worktree", "add", wtPath, branch]);
-    } else {
-      await git(runtime.paths.repoRoot, ["worktree", "add", "-b", branch, wtPath, startSha]);
-    }
+    await runtime.repo.writeLock.runExclusive(async () => {
+      if (await branchExists(runtime, branch)) {
+        await git(runtime.paths.repoRoot, ["worktree", "add", wtPath, branch]);
+      } else {
+        await git(runtime.paths.repoRoot, ["worktree", "add", "-b", branch, wtPath, startSha]);
+      }
+    });
     created = true;
   }
 
   let setup: SetupResult | undefined;
-  if (created && runtime.configs.repo.setup.length > 0) {
-    setup = await runWorktreeSetup({ commands: runtime.configs.repo.setup, cwd: wtPath });
-    if (!setup.ok) {
-      return { path: wtPath, branch, created, startPoint: startSha, setup, error: setup.error };
+  if (runtime.configs.repo.setup.length > 0) {
+    const marker = await setupMarker(wtPath);
+    if (created || !marker || !fs.existsSync(marker)) {
+      setup = await runWorktreeSetup({ commands: runtime.configs.repo.setup, cwd: wtPath });
+      if (!setup.ok) {
+        return { path: wtPath, branch, created, startPoint: startSha, setup, error: setup.error };
+      }
+      if (marker) fs.writeFileSync(marker, new Date().toISOString(), "utf8");
     }
   }
   return { path: wtPath, branch, created, startPoint: startSha, setup };
@@ -125,4 +148,32 @@ export async function ensureTaskWorktree(runtime: KernelRuntime, task: TaskFile)
 /** Head of the task worktree; also used as the reviewer's diff head. */
 export async function headSha(cwd: string): Promise<string> {
   return (await git(cwd, ["rev-parse", "HEAD"])).stdout.trim();
+}
+
+/**
+ * The merge queue's scratch worktree: detached at the integration head, so a
+ * squash commit can be gated without touching the stable goal checkout.
+ */
+function mergeScratchPath(runtime: KernelRuntime): string {
+  const goal = path.basename(runtime.paths.goalDir);
+  return path.join(runtime.paths.worktreeRoot, `${goal}-merge`);
+}
+
+export async function removeMergeScratch(runtime: KernelRuntime): Promise<void> {
+  const scratch = mergeScratchPath(runtime);
+  await runtime.repo.writeLock.runExclusive(async () => {
+    await git(runtime.paths.repoRoot, ["worktree", "remove", "--force", scratch], { allowFail: true });
+    await git(runtime.paths.repoRoot, ["worktree", "prune"], { allowFail: true });
+  });
+  if (fs.existsSync(scratch)) fs.rmSync(scratch, { recursive: true, force: true });
+}
+
+export async function resetMergeScratch(runtime: KernelRuntime, head: string): Promise<string> {
+  const scratch = mergeScratchPath(runtime);
+  await removeMergeScratch(runtime);
+  fs.mkdirSync(path.dirname(scratch), { recursive: true });
+  await runtime.repo.writeLock.runExclusive(() =>
+    git(runtime.paths.repoRoot, ["worktree", "add", "--detach", scratch, head])
+  );
+  return scratch;
 }

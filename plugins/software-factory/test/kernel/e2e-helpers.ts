@@ -86,7 +86,7 @@ export function writeTask(goalDir: string, text: string): void {
   fs.writeFileSync(path.join(goalDir, "tasks", `${slug}.md`), text, "utf8");
 }
 
-/** The digest scout is required whenever a launch has a previous launch on disk. */
+/** Scripts the optional digest scout: it annotates the table the script already wrote. */
 export function scriptDigest(harness: FakeHarness, goalDir: string, iteration: number): void {
   harness.script((req, ctx) => {
     const digest = path.join(goalDir, `iterations/${iteration}/digest.md`);

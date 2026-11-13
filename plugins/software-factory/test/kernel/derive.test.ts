@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { derive } from "../../src/kernel/derive.js";
-import type { StepRecord, TaskFile } from "../../src/kernel/types.js";
+import type { StepRecord } from "../../src/kernel/types.js";
 import { rec, script, task } from "./helpers.js";
 
 const doneCheck = (seq: number): StepRecord => script(seq, {
@@ -81,7 +81,7 @@ describe("derive", () => {
     expect(red.tasks.a!.round).toBe(1);
   });
 
-  it("advances the round after changes and parks when the round limit is exhausted", () => {
+  it("advances the round after changes and merges when the last round decides", () => {
     const tasks = [task("a")];
     const afterFirst = derive(tasks, [
       implement(1),
@@ -100,23 +100,35 @@ describe("derive", () => {
       doneCheck(5),
       review(6, "changes", 2),
     ]);
-    expect(afterSecond.tasks.a!.round).toBe(3);
+    expect(afterSecond.tasks.a!.round).toBe(2);
+    expect(afterSecond.tasks.a!.phase).toBe("merge");
     expect(afterSecond.tasks.a!.turns).toBe(4);
   });
 
-  it("parks immediately on a reject and keeps the cause", () => {
+  it("derives a park request on a reject and keeps the cause", () => {
     const state = derive([task("a")], [implement(1), doneCheck(2), review(3, "reject")]);
-    expect(state.tasks.a!.status).toBe("parked");
-    expect(state.tasks.a!.cause).toContain("review rejected");
-    expect(state.tasks.a!.phase).toBe("done");
+    expect(state.tasks.a!.status).toBe("ready");
+    expect(state.tasks.a!.park).toContain("review rejected");
+    expect(state.tasks.a!.phase).toBe("parked");
   });
 
-  it("parks on a blocked implement outcome and on a park record", () => {
+  it("derives park requests on blocked, failed and upscope outcomes, and parks on a park record", () => {
     const blocked = derive([task("a")], [
       implement(1, 1, { outcome: { status: "blocked", summary: "missing API", concerns: [], forward: [] } }),
     ]);
-    expect(blocked.tasks.a!.status).toBe("parked");
-    expect(blocked.tasks.a!.cause).toContain("missing API");
+    expect(blocked.tasks.a!.status).toBe("ready");
+    expect(blocked.tasks.a!.park).toContain("missing API");
+
+    const failed = derive([task("a")], [
+      implement(1, 1, { outcome: { status: "failed", summary: "tests red", concerns: [], forward: [] } }),
+    ]);
+    expect(failed.tasks.a!.status).toBe("ready");
+    expect(failed.tasks.a!.park).toContain("tests red");
+
+    const upscope = derive([task("a")], [
+      implement(1, 1, { outcome: { status: "upscope", summary: "needs a second seam", concerns: [], forward: [] } }),
+    ]);
+    expect(upscope.tasks.a!.park).toContain("upscope");
 
     const parked = derive([task("a")], [script(1, { step: "park", ok: true, cause: "setup failed" })]);
     expect(parked.tasks.a!.status).toBe("parked");
@@ -132,6 +144,17 @@ describe("derive", () => {
     expect(state.tasks.a!.turns).toBe(0);
   });
 
+  it("ignores unfinished script records instead of advancing or parking", () => {
+    const state = derive([task("a")], [
+      implement(1),
+      { ...doneCheck(2), endedAt: undefined },
+      { ...script(3, { step: "park", ok: true, cause: "half written" }), endedAt: undefined },
+    ]);
+    expect(state.tasks.a!.status).toBe("ready");
+    expect(state.tasks.a!.phase).toBe("checks");
+    expect(state.tasks.a!.park).toBeUndefined();
+  });
+
   it("never charges an infra stop to the item budget or the round", () => {
     const state = derive([task("a")], [
       implement(1, 1, { stop: { kind: "infra", cause: "quota" }, outcome: undefined }),
@@ -141,12 +164,12 @@ describe("derive", () => {
     expect(state.tasks.a!.phase).toBe("implement");
   });
 
-  it("retries a failed attempt within the same round", () => {
+  it("derives a park request for a failed attempt instead of retrying it", () => {
     const state = derive([task("a")], [
       implement(1, 1, { outcome: { status: "failed", summary: "tests red", concerns: [], forward: [] } }),
     ]);
     expect(state.tasks.a!.status).toBe("ready");
-    expect(state.tasks.a!.phase).toBe("implement");
+    expect(state.tasks.a!.park).toContain("failed");
     expect(state.tasks.a!.turns).toBe(1);
   });
 

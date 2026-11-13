@@ -3,20 +3,19 @@ import path from "node:path";
 import { Repo } from "../core/git/repo.js";
 import { acquireRunLock, type RunLockHandle } from "../cli/lock.js";
 import { derive } from "./derive.js";
-import { next } from "./next.js";
-import { executeTaskAction } from "./flow.js";
+import { runDispatch } from "./dispatch.js";
 import { loadConfigs, resolveGoalPaths, toLimits } from "./config.js";
 import { loadPrompts } from "./prompts.js";
 import { createFolderStore } from "./store.js";
 import { runBoundary } from "./boundary.js";
 import { writeIterationSummary } from "./summary.js";
-import { writeMetrics } from "./metrics.js";
+import { rolesByStep, writeMetrics } from "./metrics.js";
 import { preflight, type ModelCatalog } from "./preflight.js";
 import { recoverLaunch } from "./recovery.js";
 import { createLaunchSessions } from "./sessions.js";
 import { createDrainController, type DrainController, type DrainSignal } from "./signals.js";
 import type { Harness, ModelRef } from "../harness/types.js";
-import type { Action, KernelRuntime, State } from "./types.js";
+import type { KernelRuntime, State } from "./types.js";
 
 export class LaunchError extends Error {
   constructor(message: string) {
@@ -49,7 +48,7 @@ export interface RunGoalOptions {
   baseGates?: boolean;
 }
 
-export type LaunchStop = "done" | "blocked" | "iteration-limit" | "interrupted";
+export type LaunchStop = "done" | "blocked" | "iteration-limit" | "interrupted" | "infra";
 
 export interface LaunchResult {
   goal: string;
@@ -59,48 +58,6 @@ export interface LaunchResult {
   stop: LaunchStop;
   interruptedBy?: DrainSignal;
   recoveredRecords: number;
-}
-
-function workActions(actions: Action[]): Action[] {
-  return actions.filter((a) => a.kind !== "boundary" && a.kind !== "exit");
-}
-
-/** Step id -> role, from every configured flow; metrics use it to name roles. */
-export function roleByStep(configs: KernelRuntime["configs"]): Record<string, string> {
-  const roles: Record<string, string> = {};
-  for (const flow of Object.values(configs.process.flows)) {
-    for (const step of flow.steps) roles[step.id] = step.role;
-  }
-  return roles;
-}
-
-/**
- * Dispatches until `next` reports the boundary. Serial in kernel-0: S2 adds
- * concurrency and the merge queue. A drain request takes effect between
- * actions; the in-flight action is always awaited.
- */
-async function drain(runtime: KernelRuntime, signals: DrainController): Promise<void> {
-  for (;;) {
-    if (signals.shouldStop()) return;
-    const tasks = await runtime.store.listTasks();
-    const records = await runtime.store.listRecords();
-    const state = derive(tasks, records);
-    const action = workActions(next(state, runtime.limits, new Set()))[0];
-    if (!action || action.kind === "boundary" || action.kind === "exit") return;
-    if (!("slug" in action)) return;
-    const task = tasks.find((t) => t.slug === action.slug);
-    if (!task) throw new LaunchError(`action names unknown task "${action.slug}"`);
-    const lastSeq = records.at(-1)?.seq ?? 0;
-    await executeTaskAction(runtime, task, action, state.iteration, state.tasks[action.slug]!);
-    const created = (await runtime.store.listRecords()).filter((r) => r.seq > lastSeq);
-    const infra = created.find((r) => r.stop?.kind === "infra");
-    if (infra) {
-      const label = action.kind === "step" ? action.step : action.kind;
-      throw new LaunchError(
-        `infrastructure stop on ${action.slug} ${label} (${JSON.stringify(infra.stop)}); relaunch to retry`
-      );
-    }
-  }
 }
 
 async function processedSteers(store: KernelRuntime["store"]): Promise<number> {
@@ -116,13 +73,13 @@ async function writeIterationFacts(
   cause?: string
 ): Promise<string> {
   const records = await runtime.store.listRecords();
-  const state = derive(await runtime.store.listTasks(), records);
+  const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
   await writeMetrics(runtime.store, {
     iteration,
     status,
     records,
     state,
-    roleByStep: roleByStep(runtime.configs),
+    roleByStep: rolesByStep(runtime.configs.process.flows),
     humanInterventions,
   });
   return writeIterationSummary(runtime.store, { iteration, state, records, status, cause });
@@ -131,10 +88,11 @@ async function writeIterationFacts(
 async function safeSummary(
   runtime: KernelRuntime,
   iteration: number,
-  humanInterventions: number
+  humanInterventions: number,
+  cause?: string
 ): Promise<void> {
   try {
-    await writeIterationFacts(runtime, iteration, "stopped-with-debt", humanInterventions);
+    await writeIterationFacts(runtime, iteration, "stopped-with-debt", humanInterventions, cause);
   } catch {
     // The launch error is the useful one; a broken store cannot report.
   }
@@ -211,10 +169,11 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
     const relaunch = (await store.listRecords()).some((r) => r.iteration > 0);
     let iterations = 0;
     let lastSummary: string | undefined;
+    let ended: "infra" | "cancelled" | undefined;
 
     for (let i = 0; i < runtime.limits.iterations; i++) {
       if (signals.shouldStop()) break;
-      const before = derive(await store.listTasks(), await store.listRecords());
+      const before = derive(await store.listTasks(), await store.listRecords(), runtime.configs.process.flows);
       if (before.terminal) break;
 
       let iteration = before.iteration + 1;
@@ -225,32 +184,55 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
         iteration = boundary.iteration;
         iterations += 1;
         humanInterventions = Math.max(0, (await processedSteers(store)) - processedBefore);
-        if (boundary.decision === "continue" && !signals.shouldStop()) await drain(runtime, signals);
+        let dispatchCause: string | undefined;
+        if (boundary.decision === "continue" && !signals.shouldStop()) {
+          const dispatched = await runDispatch(runtime, { iteration });
+          dispatchCause = dispatched.cause;
+          if (dispatched.reason === "infra" || dispatched.reason === "cancelled") {
+            ended = dispatched.reason;
+            dispatchCause =
+              dispatched.reason === "infra"
+                ? `infrastructure stop during iteration ${iteration}: ${
+                    dispatched.cause ?? "unknown cause"
+                  }; relaunch to retry`
+                : dispatchCause;
+          }
+        }
+        const dispatchStopped = ended !== undefined;
 
         const status =
           boundary.decision === "done"
             ? "goal-met"
             : boundary.decision === "blocked"
               ? "blocked-by-user"
-              : signals.shouldStop()
+              : signals.shouldStop() || dispatchStopped
                 ? "stopped-with-debt"
                 : "in-progress";
-        lastSummary = await writeIterationFacts(runtime, iteration, status, humanInterventions, boundary.cause);
-        if (boundary.decision !== "continue" || signals.shouldStop()) break;
+        lastSummary = await writeIterationFacts(
+          runtime,
+          iteration,
+          status,
+          humanInterventions,
+          boundary.cause ?? dispatchCause
+        );
+        if (boundary.decision !== "continue" || dispatchStopped || signals.shouldStop()) break;
       } catch (err) {
-        await safeSummary(runtime, Math.max(1, iteration), humanInterventions);
+        await safeSummary(runtime, Math.max(1, iteration), humanInterventions, (err as Error).message);
         throw err;
       }
     }
 
-    const state = derive(await store.listTasks(), await store.listRecords());
-    const stop: LaunchStop = signals.interruptedBy
-      ? "interrupted"
-      : state.goal === "done"
-        ? "done"
-        : state.goal === "blocked"
-          ? "blocked"
-          : "iteration-limit";
+    const state = derive(await store.listTasks(), await store.listRecords(), runtime.configs.process.flows);
+    const stop: LaunchStop =
+      signals.interruptedBy || ended === "cancelled"
+        ? "interrupted"
+        : state.goal === "done"
+          ? "done"
+          : state.goal === "blocked"
+            ? "blocked"
+            : ended === "infra"
+              ? "infra"
+              : "iteration-limit";
     return {
       goal: opts.goal,
       iterations,

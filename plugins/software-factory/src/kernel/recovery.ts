@@ -10,7 +10,7 @@ import type { ArtifactStore, KernelRuntime } from "./types.js";
  * the process dying. Close it as `infra: crash`; `derive` then ignores it and
  * redispatches the same step. Never invent an outcome, usage or commit.
  */
-export async function closeInterruptedRecords(store: ArtifactStore): Promise<number> {
+async function closeInterruptedRecords(store: ArtifactStore): Promise<number> {
   let entries: fs.Dirent[];
   try {
     entries = await fs.promises.readdir(store.recordsDir, { withFileTypes: true });

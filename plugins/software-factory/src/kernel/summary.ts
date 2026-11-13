@@ -1,7 +1,7 @@
 import path from "node:path";
 import type { Usage } from "../harness/types.js";
 import { derive } from "./derive.js";
-import { writeMetrics } from "./metrics.js";
+import { rolesByStep, writeMetrics } from "./metrics.js";
 import type { ArtifactStore, GoalDecision, KernelRuntime, State, StepRecord } from "./types.js";
 
 export type SummaryStatus = "goal-met" | "in-progress" | "blocked-by-user" | "stopped-with-debt";
@@ -191,12 +191,18 @@ export async function writeIterationSummary(
  */
 export async function backfillSummaries(runtime: KernelRuntime): Promise<void> {
   const records = await runtime.store.listRecords();
-  const state = derive(await runtime.store.listTasks(), records);
+  const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
   const status =
     state.goal === "done" ? "goal-met" : state.goal === "blocked" ? "blocked-by-user" : "stopped-with-debt";
   for (let n = 1; n <= state.iteration; n++) {
     if (await runtime.store.readFile(`iterations/${n}/summary.md`)) continue;
     await writeIterationSummary(runtime.store, { iteration: n, state, records, status });
-    await writeMetrics(runtime.store, { iteration: n, status, records, state });
+    await writeMetrics(runtime.store, {
+      iteration: n,
+      status,
+      records,
+      state,
+      roleByStep: rolesByStep(runtime.configs.process.flows),
+    });
   }
 }

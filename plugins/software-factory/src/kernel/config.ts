@@ -36,16 +36,27 @@ export const repoConfigSchema = z
 /** One flow step; `review` marks the step that consumes a review round. */
 export const flowStepSchema = z
   .object({
-    id: z.string().min(1),
+    id: z
+      .string()
+      .min(1)
+      .regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/, "step id must be a simple name (no path separators)"),
     role: z.string().min(1),
     review: z.boolean().default(false),
   })
   .strict();
 
+export const followUpSchema = z
+  .object({
+    mode: z.enum(["same-session", "de-novo", "different-model"]).default("same-session"),
+    role: z.string().min(1).optional(),
+  })
+  .default({ mode: "same-session" });
+
 export const flowSchema = z
   .object({
     steps: z.array(flowStepSchema).min(1),
     reviewRounds: z.number().int().positive().default(2),
+    followUp: followUpSchema,
   })
   .strict();
 
@@ -90,6 +101,9 @@ export const runConfigSchema = z
         concurrency: z.number().int().positive().default(2),
         perHarness: z.record(z.string(), z.number().int().positive()).default({}),
         iterations: z.number().int().positive().default(1),
+        /** Optional drain limits for one iteration. */
+        turns: z.number().int().positive().optional(),
+        wallMinutes: z.number().positive().optional(),
       })
       .strict()
       .default(() => ({ concurrency: 2, perHarness: {}, iterations: 1 })),
@@ -97,7 +111,7 @@ export const runConfigSchema = z
       .object({
         /** Empty resolves to <worktreeRoot>/.sessions, outside the repo. */
         dir: z.string().default(""),
-        keepRuns: z.number().int().positive().default(5),
+        keepRuns: z.number().int().nonnegative().default(5),
       })
       .strict()
       .default(() => ({ dir: "", keepRuns: 5 })),
@@ -217,6 +231,17 @@ export function loadConfigs(repoRoot: string, opts: LoadConfigOptions = {}): Con
     findings
   );
   const run = parseLayer(runConfigSchema, runLayer.data, files.run, findings);
+  if (processData) {
+    for (const [name, flow] of Object.entries(processData.flows)) {
+      if (flow.followUp?.mode === "different-model" && !flow.followUp.role) {
+        findings.push({
+          file: processFileFor(overrideLayer.data, ["flows", name], files),
+          key: `flows.${name}.followUp.role`,
+          message: "follow-up mode different-model needs a role",
+        });
+      }
+    }
+  }
   if (findings.length > 0) throw new ConfigError(findings);
 
   if (opts.iterations !== undefined) run!.limits.iterations = opts.iterations;
@@ -228,7 +253,7 @@ export function loadConfigs(repoRoot: string, opts: LoadConfigOptions = {}): Con
   };
 }
 
-export function expandHome(value: string): string {
+function expandHome(value: string): string {
   if (value === "~") return os.homedir();
   if (value.startsWith("~/") || value.startsWith("~\\")) return path.join(os.homedir(), value.slice(2));
   return value;
@@ -262,7 +287,7 @@ export function resolveGoalPaths(configs: ConfigBundle, repoRoot: string, goal: 
 export function toLimits(configs: ConfigBundle): Limits {
   const flows: Limits["flows"] = {};
   for (const [name, flow] of Object.entries(configs.process.flows)) {
-    flows[name] = { reviewRounds: flow.reviewRounds };
+    flows[name] = flow;
   }
   return {
     itemTurns: configs.process.itemTurns,
@@ -270,6 +295,10 @@ export function toLimits(configs: ConfigBundle): Limits {
     iterations: configs.run.limits.iterations,
     concurrency: configs.run.limits.concurrency,
     perHarness: configs.run.limits.perHarness,
+    iterationTurns: configs.run.limits.turns,
+    iterationWallMs: configs.run.limits.wallMinutes
+      ? Math.round(configs.run.limits.wallMinutes * 60_000)
+      : undefined,
   };
 }
 

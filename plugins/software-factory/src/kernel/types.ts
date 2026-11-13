@@ -3,7 +3,7 @@
  * from task files plus append-only step records; nothing here is stored state.
  */
 import { z } from "zod";
-import type { Harness, ModelRef, SessionRef, Stop, Usage } from "../harness/types.js";
+import type { Harness, ModelRef, SessionRef, Stop, TurnAttempt, Usage } from "../harness/types.js";
 import type { CheckResult } from "../core/checks/types.js";
 import type { Repo } from "../core/git/repo.js";
 import type { PromptLibrary } from "../core/prompts.js";
@@ -45,7 +45,20 @@ export interface TaskFile {
 }
 
 export type TaskStatus = "pending" | "ready" | "running" | "merged" | "finished" | "parked" | "cancelled";
-export type TaskPhase = "implement" | "review" | "merge" | "finish" | "parked" | "done";
+
+/**
+ * The next thing the task needs: a flow step id, or one of the script phases.
+ * Flow step ids are open so a configured flow (not this union) drives dispatch.
+ */
+export type TaskPhase = string;
+
+/** A completed step repeated an earlier fingerprint in the item's history. */
+export interface ProgressRepeat {
+  fingerprint: string;
+  step: string;
+  round: number;
+  firstRound: number;
+}
 
 export interface TaskState {
   status: TaskStatus;
@@ -56,6 +69,12 @@ export interface TaskState {
   round: number;
   kind: TaskKind; flow: string; phase: TaskPhase;
   commit?: string; verdict?: ReviewVerdict;
+  /** A derived terminal outcome that still needs its park record. */
+  park?: string;
+  /** No-progress over the item's history; the next action is the loop park. */
+  loop?: ProgressRepeat;
+  /** The first merged-result gate failure: one implementer fix turn, then merge again. */
+  gateFix?: boolean;
 }
 
 export type GoalStatus = "active" | "done" | "blocked";
@@ -70,6 +89,7 @@ export interface State {
 
 export type Action =
   | { kind: "step"; slug: string; step: string; round: number }
+  | { kind: "checks"; slug: string }
   | { kind: "merge"; slug: string }
   | { kind: "finish"; slug: string }
   | { kind: "park"; slug: string; cause: string }
@@ -83,18 +103,29 @@ export interface FlowStep {
   review?: boolean;
 }
 
+/** How a fix turn follows the turn it repairs. */
+export interface FollowUp {
+  mode: "same-session" | "de-novo" | "different-model";
+  /** Role (and therefore alias/prompt) used when mode is `different-model`. */
+  role?: string;
+}
+
 export interface FlowDefinition {
   steps: FlowStep[];
   reviewRounds: number;
+  followUp?: FollowUp;
 }
 
 /** Limits the pure `next` needs; resolved from the three config layers. */
 export interface Limits {
   itemTurns: number;
-  flows: Record<string, Pick<FlowDefinition, "reviewRounds">>;
+  flows: Record<string, FlowDefinition>;
   iterations: number;
   concurrency: number;
   perHarness: Record<string, number>;
+  /** Optional drain limits for one iteration: new turns and wall clock. */
+  iterationTurns?: number;
+  iterationWallMs?: number;
 }
 
 export type StepActor = "agent" | "script";
@@ -121,6 +152,8 @@ export interface StepRecord {
   /** Agent steps only; `model` is the model actually used when reported. */
   alias?: string;
   model?: ModelRef;
+  /** Every retry/fallback hop the harness made for this turn. */
+  attempts?: TurnAttempt[];
   /** Task hash at dispatch, for the frozen-task check. */
   taskHash?: string;
   /** Integration head (or parked branch tip) the branch started from. */
@@ -129,6 +162,8 @@ export interface StepRecord {
   session?: SessionRef; commit?: string;
   /** Raw stream transcript in the session store, when the harness keeps one. */
   transcript?: string;
+  /** Tree of the resulting worktree, the per-step no-progress component. */
+  tree?: string;
   checks?: CheckResult[]; outcome?: Outcome;
   ok?: boolean; cause?: string;
   startedAt: string; endedAt?: string;
@@ -143,6 +178,8 @@ export interface RecordStart {
   model?: ModelRef;
   taskHash?: string;
   base?: string;
+  /** Merge steps: the planned squash commit, written before the ref moves. */
+  commit?: string;
 }
 
 /** Settled fields written atomically as `end.yaml`. */
@@ -151,7 +188,9 @@ export interface RecordEnd {
   model?: ModelRef;
   stop?: Stop; usage?: Usage; session?: SessionRef;
   transcript?: string;
-  commit?: string; checks?: CheckResult[]; outcome?: Outcome;
+  attempts?: TurnAttempt[];
+  commit?: string; tree?: string;
+  checks?: CheckResult[]; outcome?: Outcome;
   ok?: boolean; cause?: string;
 }
 
@@ -221,7 +260,13 @@ export interface AliasConfig {
 
 export interface RunConfig {
   aliases: Record<string, AliasConfig>;
-  limits: { concurrency: number; perHarness: Record<string, number>; iterations: number };
+  limits: {
+    concurrency: number;
+    perHarness: Record<string, number>;
+    iterations: number;
+    turns?: number;
+    wallMinutes?: number;
+  };
   sessions: { dir: string; keepRuns: number };
   worktreeRoot?: string;
   /** Cheap model pinned for architect subagents. */
