@@ -20,7 +20,7 @@ Code: branch `factory-v3`, worktree `/home/slava/aiexp/agentic-swarm.wt/v3`. The
 ## Rules for the orchestrator
 
 - Delegate anything bigger than a decision: discovery, implementation, transcript analysis go to subagents; give direction, not specifications. Read briefs, not sources.
-- Free models first (OpenCode); a paid tier replaces a free model for a role only on measured failure, recorded in the Journal.
+- Free models first (OpenCode). They are the same models the orchestrator's task subagents run on, billed differently — give them whole slices, not crumbs. A paid tier replaces a free model for a role only on measured failure, recorded in the Journal.
 - State lives on disk. Every decision, intervention and launch result goes to `LOG.md` before the next step starts.
 - The factory runs only from the pinned build; the pin moves only after the no-model E2E suite passes.
 - Sessions, transcripts, raw prompts never enter git.
@@ -38,7 +38,7 @@ Code: branch `factory-v3`, worktree `/home/slava/aiexp/agentic-swarm.wt/v3`. The
 
 ## Build protocol (phase B)
 
-One slice = one foreman subagent that owns named files in the worktree. The foreman tries OpenCode free models for bounded pieces (verified commands: `context/opencode-probe.md`), verifies everything itself, and implements directly after two free-model failures on the same piece. On return: check the acceptance it claims (typecheck, the suite), read its deviations, journal the slice with the free-model attempt table. Parallel slices get their own worktree and branch off `factory-v3` and are merged by the orchestrator.
+One slice = one assignment file in `bootstrap/assignments/` (why, owned files, reading list with line ranges, what to build, acceptance; shared rules in `RULES.md`), executed by the OpenCode CLI on a free model: `bootstrap/dispatch.sh <name> [model]` creates worktree `../<name>` on branch `factory-v3-<name>`, runs the session, keeps the event log outside git and prints exit status, errors and final text. The slice reports into `bootstrap/reports/<name>.md` on its branch. On return the orchestrator runs the acceptance itself (typecheck, the suite), reads the report's deviations and shared-file changes, merges the branch into `factory-v3`, and journals what happened — including quota errors and the model that actually finished the job. On `provider.free-limit` or context trouble re-dispatch with `opencode-go/deepseek-v4.1-flash#max`. Subagents of the orchestrator remain for discovery, review and work that must message back mid-flight.
 
 ## Launch protocol (phases C and D)
 

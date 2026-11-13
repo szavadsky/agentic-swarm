@@ -110,8 +110,6 @@ export async function runAgentTurn(runtime: KernelRuntime, spec: AgentTurnSpec):
   });
   const timeouts = spec.timeouts ?? DEFAULT_TIMEOUTS;
 
-  // `fallbacks` and `TurnResult.model` are the S1 contract additions; passing
-  // them now keeps the kernel free of a second edit when that branch lands.
   const request = {
     model,
     effort,
@@ -120,7 +118,7 @@ export async function runAgentTurn(runtime: KernelRuntime, spec: AgentTurnSpec):
     session: spec.session,
     outcomePath,
     timeouts,
-    fallbacks,
+    fallbacks: fallbacks?.map((id) => ({ id, effort })),
   };
   let result = await harness.turn(request);
   let lastResult = result;

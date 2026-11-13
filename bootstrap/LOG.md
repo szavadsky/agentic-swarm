@@ -58,3 +58,23 @@ Verbatim, newest last; each with what it changed.
 - Benchmark = v2's `omp-workspaces` goal verbatim: target is this repository at `572a6e0` plus the archived INTENT, iteration limit 1; 10 tasks in 3 waves. `modernize` rejected as a benchmark (50 items, 60 h, $13.2, red gates, network downloads).
 - v2 baseline: 13 architect launches of 45; architect share 14.3% ($0.299 of $2.084); $0.417 per merged task (5 of 10 merged). v2 never recorded loop incidents or human interventions — journal proxies only.
 - Reset recipe verified in `/tmp` (archive at `572a6e0`, offline install, typecheck green, v2 suite 664 pass / 160 s). This settles the "Benchmark goal" item under Open for the owner unless overruled.
+
+### 2026-11-12 — slice S1 (harness adapters) — done on `factory-v3-s1`, not merged yet
+- Commits `c45ced1`, `c7ff9ba`, `a74fbde`, `b35a6e6`. omp adapter 1,403 LOC (RPC per turn, explicit compact, overlay, subagent pin), opencode adapter 694 LOC, one retry + fallback policy; 193 tests pass, 2 live smokes opt-in.
+- Live smokes, zero cost: omp 22.6 s (resume, compact, outcome file outside cwd, subagent ran on the pinned model); opencode 36.6 s (resume, export, compact, outcome file outside cwd). Usage shows cache reads on both.
+- Contract: `TurnResult.model` required (model actually used), `TurnResult.attempts` optional (every retry/fallback hop), `TurnRequest.fallbacks` optional.
+- Free-tier evidence: `opencode/longcat-2.5-free` returned `provider.free-limit` 429 three times in a row in the smoke and once mid-task for the foreman's one free-model attempt (discarded); `opencode/beam-free` served the fallback. Free quota is unreliable under load — fallbacks are not optional.
+- Open risks handed to later slices: (1) persisting partial usage on SIGTERM needs a kernel hook; (2) opencode streams nothing during a long tool call, so idle timeouts must be sized for tool duration; (3) omp subagent usage is read from child session files — token counts exclude children provably, cost double-count unverified; (4) opencode has no system-prompt flag: `system` is prepended to the first prompt of a de-novo session.
+
+### 2026-11-12 — first CLI dispatch (D10): assignment `DOC1` (ideology document)
+- `bootstrap/dispatch.sh DOC1` → `opencode run` on `opencode/deepseek-v4.1-flash-free#max` in worktree `../doc1`. Chosen as the first file-assigned task because it needs nothing from the slices still in flight. S2–S4 assignments are written and go out the same way once S0 lands.
+
+### 2026-11-12 — slice S0 (skeleton) — done; S1 merged into `factory-v3`
+- S0 commits `9f841d4` … `8cd6d1a`; merge `2e23d8f`. Kernel 2,742 LOC in 21 files (largest 239 lines) — above the ~1.5k guess in KERNEL0; accepted: each stage is real and files follow the seams of the next slices. Suite after merge: 243 pass / 2 live-skipped / 0 fail in 21 s; typecheck green.
+- Scenario 1 green twice on fresh repos, including "delete everything but `tasks/` and `records/` → same derived state".
+- Deviations accepted: `Action` gains `park` and `finish`; records carry `actor`, `ok`, `cause`, `base`, `taskHash`; `alias`/`model` only on agent records.
+- Merge needed one manual fix (human intervention 1 of the build): `package.json` conflict (ajv dropped by S1, zod added by S0) and `fallbacks: string[]` vs `ModelRef[]` in `kernel/agent.ts`.
+- Free-model attempt inside S0: `opencode/longcat-2.5-free` wrote `store.ts` + its test in 467 s; accepted after fixes (wrong import paths, a wrong assumption about a return value), then hit the free usage limit before it could repair.
+
+### 2026-11-12 — CLI dispatch of S2, S3, S4 (D10)
+- Same model on two billing paths, to compare: S2 and S4 on `opencode/deepseek-v4.1-flash-free#max` (free tier, 200k context), S3 on `alibaba-token-plan/deepseek-v4.1-flash#max` (plan quota, 1M context). DOC1 already running on the free tier.
