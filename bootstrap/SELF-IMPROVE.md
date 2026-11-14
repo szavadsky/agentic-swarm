@@ -82,3 +82,4 @@ Then drop a steer: "Stage C: full intent installed; plan the hierarchy first."
 - Free tiers hit quota walls; the paid fallback carries the run until M6 throttling lands. Watch the cost table in each summary.
 - The goal intent file and the mailbox live under `.factory/artifacts` (gitignored): copy goal intents to `bootstrap/goal-self/intent.md` so they are versioned.
 - A `self` run and a test goal run never overlap until B3 is merged; after that, still prefer serial.
+- Known flake: `test/kernel/scenario7.test.ts` ("plan edit between iterations") fails occasionally in the full suite (architect outcome repair path), passes alone. One promote retry is fine; a second failure is real.
