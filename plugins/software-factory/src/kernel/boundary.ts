@@ -17,6 +17,7 @@ import { writeLaunchDigest } from "./digest.js";
 import { compactSession, resolveRole } from "./flow-context.js";
 import { integrationHead } from "./worktree.js";
 import {
+  expireHold,
   formatSteers,
   markProcessed,
   scanInbox,
@@ -24,6 +25,7 @@ import {
   writeOutbox,
 } from "./mailbox.js";
 import { runPm, type PmRung } from "./pm.js";
+import { scriptMeta } from "./record.js";
 import type { GoalDecision, KernelRuntime, Outcome } from "./types.js";
 
 export interface BoundaryResult {
@@ -61,6 +63,23 @@ function rungTrace(rungs: PmRung[]): string {
 /** Today's infra cause: the classified cause plus the scrubbed error tail. */
 function infraCause(stop: { cause: string; details?: string }): string {
   return stop.details ? `${stop.cause}: ${stop.details}` : stop.cause;
+}
+
+/**
+ * The steer id in a `steer-presented`/`steer-unanswered` cause. JSON keeps an
+ * id containing a quote or backslash unambiguous, and a plain id encodes to
+ * the same quoted text older records carry, so those still read.
+ */
+function recordedSteerId(cause: string): string | undefined {
+  const token = /^unanswered steer ("(?:[^"\\]|\\.)*")/.exec(cause)?.[1];
+  if (!token) return undefined;
+  try {
+    const id: unknown = JSON.parse(token);
+    return typeof id === "string" ? id : undefined;
+  } catch {
+    // A hand-edited cause names no steer; it must not wedge the launch.
+    return undefined;
+  }
 }
 
 async function taskSnapshot(goalDir: string): Promise<Map<string, string>> {
@@ -202,15 +221,56 @@ export async function runBoundary(
   }
 
   const responses = result.outcome ? steerResponses(result.outcome) : new Map<string, string>();
+  // A steer stays pending when the architect does not answer, so every later
+  // boundary presents it again. The first unanswered boundary only records
+  // that fact; the second expires the hold and reports the unanswered steer.
+  const priorRecords = await runtime.store.listRecords();
+  const unansweredAt = (step: string): Set<string> =>
+    new Set(
+      priorRecords
+        .filter((record) => record.step === step && record.cause)
+        .map((record) => recordedSteerId(record.cause!))
+        .filter((id): id is string => Boolean(id))
+    );
+  const presented = unansweredAt("steer-presented");
+  const expired = unansweredAt("steer-unanswered");
   for (const steer of steers) {
     const answer = responses.get(steer.id);
-    if (!answer) continue;
-    await writeOutbox(
-      runtime.store,
-      steer.id,
-      `# Steer ${steer.id}\n\n${answer}\n\nSource: ${steer.relPath}`
-    );
-    await markProcessed(runtime.store, steer);
+    if (answer) {
+      await writeOutbox(
+        runtime.store,
+        steer.id,
+        `# Steer ${steer.id}\n\n${answer}\n\nSource: ${steer.relPath}`
+      );
+      await markProcessed(runtime.store, steer);
+      continue;
+    }
+    if (expired.has(steer.id)) continue;
+    if (!presented.has(steer.id)) {
+      await runtime.store.appendRecord(scriptMeta(iteration, "steer-presented"), {
+        ok: false,
+        cause: `unanswered steer ${JSON.stringify(steer.id)} in ${steer.relPath}; the next boundary presents it again before its hold expires`,
+      });
+      continue;
+    }
+    await expireHold(runtime.store, steer.id);
+    await runtime.store.appendRecord(scriptMeta(iteration, "steer-unanswered"), {
+      ok: false,
+      cause: `unanswered steer ${JSON.stringify(steer.id)} in ${steer.relPath}; hold expired after one boundary`,
+      outcome: {
+        status: "done",
+        summary: `steer ${steer.id} was left unanswered at two boundaries; its hold expired`,
+        concerns: [
+          {
+            kind: "debt",
+            calibration: "architect",
+            text: `steer ${steer.id} is unanswered after a second boundary; its hold expired and held work resumed`,
+            evidence: steer.relPath,
+          },
+        ],
+        forward: [],
+      },
+    });
   }
 
   const touched = snapshotDiff(tasksBefore, await taskSnapshot(runtime.store.goalDir));

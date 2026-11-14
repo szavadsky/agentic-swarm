@@ -5,16 +5,17 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { z } from "zod";
 import yaml from "yaml";
 import { writeTextAtomic } from "../core/records/io.js";
+import { scriptMeta } from "./record.js";
 import type { ArtifactStore, Outcome } from "./types.js";
 
 export interface Steer {
   id: string;
-  /** File name inside mailbox/inbox. */
+  /** File name inside mailbox/inbox; the steer's identity. */
   file: string;
   /** Goal-relative path, for prompts and the context pack. */
   relPath: string;
   text: string;
-  /** Content hash: a replayed drop is the same steer, never a second one. */
+  /** Content hash: archive suffix and settle-change detector, never the identity. */
   hash: string;
 }
 
@@ -57,27 +58,30 @@ function archiveName(file: string, hash: string): string {
   return `${stem}.${hashSuffix(hash)}${ext}`;
 }
 
-async function processedHashes(store: ArtifactStore): Promise<Set<string>> {
+/**
+ * File names already spent. Identity is the file name, not its text: dropping
+ * the same text under a new name is a second steer that must be answered.
+ */
+async function processedNames(store: ArtifactStore): Promise<Set<string>> {
   const dir = path.join(store.mailboxDir, "processed");
-  const hashes = new Set<string>();
-  let names: string[];
+  const names = new Set<string>();
+  let entries: string[];
   try {
-    names = await fs.promises.readdir(dir);
+    entries = await fs.promises.readdir(dir);
   } catch (err) {
-    if (isENOENT(err)) return hashes;
+    if (isENOENT(err)) return names;
     throw err;
   }
-  for (const name of names) {
+  for (const name of entries) {
     if (name.startsWith(".")) continue;
-    const file = path.join(dir, name);
     try {
-      if (!(await fs.promises.stat(file)).isFile()) continue;
-      hashes.add(contentHash(await fs.promises.readFile(file, "utf8")));
+      if (!(await fs.promises.stat(path.join(dir, name))).isFile()) continue;
+      names.add(name);
     } catch (err) {
       if (!isENOENT(err)) throw err;
     }
   }
-  return hashes;
+  return names;
 }
 
 /**
@@ -122,7 +126,7 @@ export async function scanInbox(store: ArtifactStore, opts: ScanOptions = {}): P
   const inbox = path.join(store.mailboxDir, "inbox");
   const names = await stableInboxNames(inbox, opts.settleMs ?? DEFAULT_SETTLE_MS);
   if (names.length === 0) return [];
-  const seen = await processedHashes(store);
+  const seen = await processedNames(store);
   const steers: Steer[] = [];
   for (const file of names) {
     const full = path.join(inbox, file);
@@ -141,12 +145,11 @@ export async function scanInbox(store: ArtifactStore, opts: ScanOptions = {}): P
       text,
       hash,
     };
-    if (seen.has(hash)) {
-      // A duplicate content hash is a replay, not a new steer: archive it silently.
+    if (seen.has(file)) {
+      // The same file name was already processed: a replay, not a new steer.
       await archiveDuplicate(store, steer);
       continue;
     }
-    seen.add(hash);
     steers.push(steer);
   }
   return steers;
@@ -231,9 +234,50 @@ export function holdsDir(store: ArtifactStore): string {
   return path.join(store.mailboxDir, "holds");
 }
 
+/** Where unreadable hold files are parked so they stop deciding dispatch. */
+export function quarantineDir(store: ArtifactStore): string {
+  return path.join(store.mailboxDir, "quarantine");
+}
+
+/** The iteration the store is in: malformed files are found while it runs. */
+async function currentIteration(store: ArtifactStore): Promise<number> {
+  const records = await store.listRecords();
+  return records.reduce((max, record) => Math.max(max, record.iteration), 1);
+}
+
 /**
- * Reads the PM's hold decisions. A malformed hold is script input corruption,
- * not a steer: it fails loudly instead of silently letting held work merge.
+ * Moves a malformed hold out of the holds directory and records why. A hold
+ * that cannot be read decides nothing; leaving it in place would stop every
+ * launch, so the record is the report and dispatch continues.
+ */
+async function quarantineHold(
+  store: ArtifactStore,
+  name: string,
+  text: string,
+  problem: string
+): Promise<void> {
+  const dir = quarantineDir(store);
+  await fs.promises.mkdir(dir, { recursive: true });
+  const preferred = path.join(dir, name);
+  const target = fs.existsSync(preferred)
+    ? path.join(dir, archiveName(name, contentHash(text)))
+    : preferred;
+  try {
+    await fs.promises.rename(path.join(holdsDir(store), name), target);
+  } catch (err) {
+    if (!isENOENT(err)) throw err;
+    return;
+  }
+  const rel = path.relative(store.goalDir, target);
+  await store.appendRecord(scriptMeta(await currentIteration(store), "hold-quarantine"), {
+    ok: false,
+    cause: `malformed hold "${name}" moved to ${rel}: ${problem}`,
+  });
+}
+
+/**
+ * Reads the PM's hold decisions. A malformed hold is quarantined with a record
+ * instead of wedging every launch, and the valid holds beside it still apply.
  * Holds for steers the architect already processed are the caller's to ignore.
  */
 export async function readHolds(store: ArtifactStore): Promise<Hold[]> {
@@ -249,20 +293,57 @@ export async function readHolds(store: ArtifactStore): Promise<Hold[]> {
   for (const name of names.sort()) {
     if (name.startsWith(".") || !YAML_HOLD.test(name)) continue;
     const file = path.join(dir, name);
-    let raw: unknown;
+    let text: string;
     try {
-      raw = yaml.parse(await fs.promises.readFile(file, "utf8"));
+      text = await fs.promises.readFile(file, "utf8");
     } catch (err) {
       if (isENOENT(err)) continue;
-      throw new Error(`hold file "${name}" is not valid YAML: ${(err as Error).message}`);
+      throw err;
     }
-    const parsed = holdFileSchema.safeParse(raw);
-    if (!parsed.success) {
-      throw new Error(`hold file "${name}" must be { slugs: string[], goal: boolean }`);
+    let parsed: Hold | undefined;
+    let problem: string | undefined;
+    try {
+      const valid = holdFileSchema.safeParse(yaml.parse(text));
+      if (valid.success) {
+        parsed = { steer: path.basename(name, path.extname(name)), ...valid.data };
+      } else {
+        problem = "must be { slugs: string[], goal: boolean }";
+      }
+    } catch (err) {
+      problem = `not valid YAML: ${(err as Error).message}`;
     }
-    holds.push({ steer: path.basename(name, path.extname(name)), ...parsed.data });
+    if (parsed) {
+      holds.push(parsed);
+      continue;
+    }
+    await quarantineHold(store, name, text, problem ?? "unreadable");
   }
   return holds;
+}
+
+/**
+ * Removes one steer's hold file. A boundary expires the hold of a steer the
+ * architect left unanswered, so held work resumes instead of waiting for an
+ * answer that may never come.
+ */
+export async function expireHold(store: ArtifactStore, steerId: string): Promise<void> {
+  const dir = holdsDir(store);
+  let names: string[];
+  try {
+    names = await fs.promises.readdir(dir);
+  } catch (err) {
+    if (isENOENT(err)) return;
+    throw err;
+  }
+  for (const name of names) {
+    if (!YAML_HOLD.test(name)) continue;
+    if (path.basename(name, path.extname(name)) !== steerId) continue;
+    try {
+      await fs.promises.rm(path.join(dir, name));
+    } catch (err) {
+      if (!isENOENT(err)) throw err;
+    }
+  }
 }
 
 export async function writeOutbox(store: ArtifactStore, id: string, text: string): Promise<string> {

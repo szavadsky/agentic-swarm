@@ -159,3 +159,14 @@ export function findModel(
     (entry) => entry.providerID === providerID && entry.modelID === modelID
   );
 }
+
+/**
+ * Whether a failed session probe means the record is gone, not that the local
+ * API is unavailable. Only the former justifies a de-novo start.
+ */
+export function isMissingSessionError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /session[^\n]*not found|not found[^\n]*session|unknown session|no such session|\b404\b/i.test(
+    message
+  );
+}

@@ -7,8 +7,10 @@ function number(value: unknown): number {
 }
 
 /**
- * Codex reports token counts on the prompt result with no cost; pi reports no
- * usage at all. Reasoning stays disjoint from text output, as in the omp adapter.
+ * Codex and agy report token counts on the prompt result with no cost; pi
+ * reports no usage at all. Reasoning stays disjoint from text output, as in the
+ * omp adapter. agy spells cache writes `cachedWriteTokens`, codex (ACP) uses
+ * `cacheCreationInputTokens`.
  */
 export function usageFromAcpxResult(raw: unknown): Usage {
   const usage = zeroUsage();
@@ -18,7 +20,7 @@ export function usageFromAcpxResult(raw: unknown): Usage {
   const reasoning = number(source.thoughtTokens);
   usage.in = number(source.inputTokens);
   usage.cacheRead = number(source.cachedReadTokens);
-  usage.cacheWrite5m = number(source.cacheCreationInputTokens);
+  usage.cacheWrite5m = number(source.cachedWriteTokens ?? source.cacheCreationInputTokens);
   usage.out = Math.max(0, output - reasoning);
   usage.reasoningOut = reasoning;
   return usage;

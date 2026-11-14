@@ -1,6 +1,6 @@
 import { runProcess } from "../core/proc.js";
 import { AcpxHarness } from "../harness/acpx/index.js";
-import { resolveAcpxCommand } from "../harness/acpx/command.js";
+import { resolveAcpxCommand, resolveAgyBinary } from "../harness/acpx/command.js";
 import { OpencodeHarness } from "../harness/opencode/index.js";
 import { OpencodeApi } from "../harness/opencode/api.js";
 import { OmpHarness } from "../harness/omp/index.js";
@@ -13,11 +13,15 @@ export function resolveHarnessBinaries(): Record<string, string | undefined> {
   return {
     opencode: process.env.OPENCODE_PATH ?? Bun.which("opencode") ?? undefined,
     omp: process.env.OMP_PATH ?? Bun.which("omp") ?? undefined,
-    // Both agents are served by the same acpx dispatcher; the harness id names
-    // the agent. Without acpx on PATH this is bunx, the executable pre-flight
-    // can check; the dispatcher fetches acpx on demand.
+    // pi and codex are served by the acpx dispatcher; the harness id names the
+    // agent. Without acpx on PATH this is bunx, the executable pre-flight can
+    // check; the dispatcher fetches acpx on demand.
     pi: acpx,
     codex: acpx,
+    // agy is its own CLI: acpx reaches its `agy acp` server through the raw
+    // agent route, so the binary pre-flight checks is the one the adapter
+    // spawns (same resolution as AcpxHarness).
+    agy: resolveAgyBinary(),
   };
 }
 
@@ -28,6 +32,7 @@ export function createRealHarnesses(context: HarnessFactoryContext): Record<stri
     omp: new OmpHarness({ sessionDir: context.sessionDir, subagentModel: context.scouts }),
     pi: new AcpxHarness({ agent: "pi" }),
     codex: new AcpxHarness({ agent: "codex" }),
+    agy: new AcpxHarness({ agent: "agy" }),
   };
 }
 
@@ -58,12 +63,13 @@ async function ompModels(binary: string): Promise<Set<string>> {
 
 /**
  * acpx only advertises models after an ACP session starts, so a pre-flight
- * model check cannot list pi or codex models. Skip it with the reason recorded
- * rather than inventing a list; the turn itself still passes `--model`.
+ * model check cannot list pi, codex or agy models. Skip it with the reason
+ * recorded rather than inventing a list; the turn itself still passes `--model`.
  */
 const ACPX_MODEL_LIST_SKIP: Record<string, string> = {
   pi: "acpx pi exposes its model list only inside an ACP session",
   codex: "acpx codex exposes its model list only inside an ACP session",
+  agy: "acpx agy exposes its model list only inside an ACP session",
 };
 
 /** Real model lists, cached per process; used only by pre-flight. */

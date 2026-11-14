@@ -4,7 +4,16 @@ import {
   registerChildGroup,
   unregisterChildGroup,
 } from "../../core/shutdown.js";
-import type { ModelRef, SessionRef, TurnRequest, TurnResult } from "../types.js";
+import { withDetails } from "../details.js";
+import type {
+  AdapterTurnResult,
+  ModelRef,
+  SessionRef,
+  TurnAttempt,
+  TurnRequest,
+} from "../types.js";
+import { zeroUsage } from "../usage.js";
+import { isMissingSessionError } from "./api.js";
 import { classifyOpencodeTurn } from "./classifier.js";
 import { OpencodeEventParser } from "./events.js";
 import type { OpencodeRuntime } from "./types.js";
@@ -21,7 +30,7 @@ export async function runOpencodeTurn(
   runtime: OpencodeRuntime,
   req: TurnRequest,
   requested: ModelRef
-): Promise<Omit<TurnResult, "attempts">> {
+): Promise<AdapterTurnResult> {
   const model: ModelRef = { ...requested, effort: req.effort ?? requested.effort };
   if (!model.id.includes("/")) {
     throw new Error(`opencode model id must be provider/model (got "${model.id}")`);
@@ -36,11 +45,33 @@ export async function runOpencodeTurn(
     );
   }
   const selector = model.effort ? `${model.id}#${model.effort}` : model.id;
-  const resume =
+  // opencode exposes the session through its local API: a failed probe that
+  // names a missing record is the resume check. A probe failing for another
+  // reason leaves the resume to the turn, so a flaky API never restarts work.
+  const attempts: TurnAttempt[] = [];
+  let priorSession = req.session;
+  let resume =
     req.session && req.session.harness === "opencode" ? req.session.id : undefined;
-  const beforeTokens = resume
-    ? await runtime.api.sessionTokens(resume, req.cwd).catch(() => undefined)
-    : undefined;
+  let beforeTokens: OpencodeSessionTokens | undefined;
+  if (resume) {
+    try {
+      beforeTokens = await runtime.api.sessionTokens(resume, req.cwd);
+    } catch (error) {
+      if (isMissingSessionError(error)) {
+        attempts.push({
+          model,
+          stop: withDetails(
+            { kind: "infra", cause: "crash" },
+            error instanceof Error ? error.message : String(error)
+          ),
+          usage: zeroUsage(),
+        });
+        resume = undefined;
+        // A dead ref must never be handed back if the fresh turn yields none.
+        priorSession = undefined;
+      }
+    }
+  }
   // A resumed turn without a baseline cannot subtract: the export total covers the
   // whole session, not this turn, so the step stream's usage is the safe fallback.
   const sessionUsageKnown = !resume || beforeTokens !== undefined;
@@ -182,9 +213,9 @@ export async function runOpencodeTurn(
         model,
         lastRequestStartedAt: new Date().toISOString(),
         retentionTier: "short",
-        compacted: req.session?.compacted ?? false,
+        compacted: priorSession?.compacted ?? false,
       }
-    : req.session;
+    : priorSession;
 
   return {
     stop,
@@ -193,5 +224,6 @@ export async function runOpencodeTurn(
     session,
     model: session?.model ?? model,
     transcript,
+    attempts,
   };
 }

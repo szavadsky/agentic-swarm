@@ -4,11 +4,17 @@ import path from "node:path";
 import { runProcess } from "../../core/proc.js";
 import { registerChildGroup, unregisterChildGroup } from "../../core/shutdown.js";
 import { exitDetails, stopDetails } from "../details.js";
-import type { ModelRef, Stop, TurnRequest, TurnResult } from "../types.js";
+import type { AdapterTurnResult, ModelRef, Stop, TurnAttempt, TurnRequest } from "../types.js";
 import { zeroUsage } from "../usage.js";
 import { classifyAcpxError, classifyAcpxTurn, isNoSessionError } from "./classify.js";
 import { AcpxTranscriptParser, acpxErrors } from "./transcript.js";
-import { ACPX_EFFORT, type AcpxAgent, type AcpxCommand, type AcpxTurnSummary } from "./types.js";
+import {
+  ACPX_EFFORT,
+  ACPX_EFFORT_MODEL_BASES,
+  type AcpxAgent,
+  type AcpxCommand,
+  type AcpxTurnSummary,
+} from "./types.js";
 
 const SETUP_TIMEOUT_SEC = 120;
 const MAX_STDERR_BYTES = 64 * 1024;
@@ -16,15 +22,53 @@ const MAX_STDERR_BYTES = 64 * 1024;
 export interface AcpxRuntime {
   agent: AcpxAgent;
   command: AcpxCommand;
+  /** agy executable spawned by the raw `--agent` route. */
+  agyBinary: string;
 }
 
 function commandLine(runtime: AcpxRuntime, args: string[]): string[] {
   return [runtime.command.binary, ...runtime.command.prefix, ...args];
 }
 
-function globalArgs(cwd: string): string[] {
+/**
+ * acpx's built-in `antigravity` agent spawns `agy_acp_server.par`, which the
+ * agy CLI does not install; its `<agy> acp` stdio server is reachable through
+ * the raw-agent escape hatch instead. The path is resolved here rather than
+ * left to the spawned process so AGY_PATH reaches it.
+ */
+function agentSelection(runtime: AcpxRuntime): string[] {
+  return runtime.agent === "agy" ? ["--agent", `${runtime.agyBinary} acp`] : [runtime.agent];
+}
+
+function globalArgs(agent: AcpxAgent, cwd: string): string[] {
   // acpx requires global flags before the agent subcommand (probe §0).
-  return ["--format", "json", "--cwd", path.resolve(cwd)];
+  const args = ["--format", "json", "--cwd", path.resolve(cwd)];
+  // agy asks before it runs a shell command and acpx's non-interactive answer
+  // is `deny`, which would fail every gate command. pi and codex emitted no
+  // permission frames in the probe (probe §7).
+  if (agent === "agy") args.push("--approve-all");
+  return args;
+}
+
+/**
+ * agy keeps effort inside the model id (`gemini-3.8-flash-high`), while acpx's
+ * `--model` accepts only the base id its `model` config option lists. A known
+ * suffix moves to the `thought_level` session option; an explicit effort wins.
+ */
+function acpxModel(agent: AcpxAgent, model: ModelRef): { id: string; effort?: string } {
+  let id = model.id;
+  let effort = model.effort;
+  if (agent === "agy") {
+    for (const [base, levels] of Object.entries(ACPX_EFFORT_MODEL_BASES)) {
+      const suffix = id.startsWith(`${base}-`) ? id.slice(base.length + 1) : undefined;
+      if (suffix !== undefined && levels.includes(suffix)) {
+        id = base;
+        effort = effort ?? suffix;
+        break;
+      }
+    }
+  }
+  return effort === undefined ? { id } : { id, effort };
 }
 
 interface SetupFailure {
@@ -172,9 +216,15 @@ export async function runAcpxTurn(
   runtime: AcpxRuntime,
   req: TurnRequest,
   requested: ModelRef
-): Promise<Omit<TurnResult, "attempts">> {
+): Promise<AdapterTurnResult> {
   const agent = runtime.agent;
-  const model: ModelRef = { ...requested, effort: req.effort ?? requested.effort };
+  const requestedModel: ModelRef = { ...requested, effort: req.effort ?? requested.effort };
+  // What acpx receives on --model versus what the session records: agy's effort
+  // suffix is the wire-incompatible part, the alias's model id stays the record.
+  const wire = acpxModel(agent, requestedModel);
+  const model: ModelRef = wire.effort
+    ? { id: requestedModel.id, effort: wire.effort }
+    : { id: requestedModel.id };
   if (
     req.session &&
     req.session.harness === agent &&
@@ -190,13 +240,17 @@ export async function runAcpxTurn(
   const resume = req.session && req.session.harness === agent ? req.session.id : undefined;
   const freshName = () => `${agent}-${randomUUID()}`;
   let name = resume ?? freshName();
-  const base = globalArgs(req.cwd);
+  const globals = globalArgs(agent, req.cwd);
+  const selection = agentSelection(runtime);
+  const base = [...globals, ...selection];
 
   // A resumed record may be gone (TTL, `sessions close`); acpx then answers
   // NO_SESSION. Retry once de novo with a new name so the returned ref is live
   // and the next turn does not resume the same dead record forever. The retry
   // covers both setup commands and the prompt, and attempt 0 is the only
-  // attempt that may resume, so at most one de-novo retry runs per turn.
+  // attempt that may resume, so at most one de-novo retry runs per turn. Each
+  // lost record is kept as an attempt so the restart is never silent.
+  const attempts: TurnAttempt[] = [];
   for (let attempt = 0; ; attempt += 1) {
     const canRetryDeNovo = resume !== undefined && attempt === 0;
     const shouldRetryDeNovo = (failure: SetupFailure) => failure.noSession && canRetryDeNovo;
@@ -204,39 +258,58 @@ export async function runAcpxTurn(
     if (!resume || attempt > 0) {
       const failure = await runSetup(
         runtime,
-        [...base, agent, "sessions", "new", "--name", name],
+        [...base, "sessions", "new", "--name", name],
         req.cwd
       );
       if (failure) {
         if (shouldRetryDeNovo(failure)) {
+          attempts.push({ model, stop: failure.stop, usage: zeroUsage() });
           name = freshName();
           continue;
         }
-        return { stop: failure.stop, text: "", usage: zeroUsage(), model };
+        return { stop: failure.stop, text: "", usage: zeroUsage(), model, attempts };
       }
     }
 
     const effort = model.effort;
     if (effort) {
-      const failure = await runSetup(
-        runtime,
-        [...base, agent, "-s", name, "set", ACPX_EFFORT[agent].configId, effort],
-        req.cwd
-      );
+      // The raw --agent route has no agent command to hang the session flag on,
+      // so `-s` follows the top-level subcommand; pi and codex take it first.
+      const set =
+        agent === "agy"
+          ? [...base, "set", "-s", name, ACPX_EFFORT[agent].configId, effort]
+          : [...base, "-s", name, "set", ACPX_EFFORT[agent].configId, effort];
+      const failure = await runSetup(runtime, set, req.cwd);
       if (failure) {
         if (shouldRetryDeNovo(failure)) {
+          attempts.push({ model, stop: failure.stop, usage: zeroUsage() });
           name = freshName();
           continue;
         }
-        return { stop: failure.stop, text: "", usage: zeroUsage(), model };
+        return { stop: failure.stop, text: "", usage: zeroUsage(), model, attempts };
       }
     }
 
     const startedAt = new Date().toISOString();
     const parser = new AcpxTranscriptParser();
+    // acpx parses the agent subcommand with enablePositionalOptions, so a
+    // global `--model` after pi/codex is `unknown option '--model'` (exit 2).
+    // The raw route has no positional agent, but `--model` must still precede
+    // its `prompt` verb.
+    const promptVerb = agent === "agy" ? ["prompt"] : [];
+    const prompt = [
+      ...globals,
+      "--model",
+      wire.id,
+      ...selection,
+      ...promptVerb,
+      "-s",
+      name,
+      req.prompt,
+    ];
     const processResult = await runPromptProcess(
       runtime,
-      [...base, "--model", model.id, agent, "-s", name, req.prompt],
+      prompt,
       req.cwd,
       req.timeouts,
       parser
@@ -245,6 +318,17 @@ export async function runAcpxTurn(
     const lost = summary.errors.some(isNoSessionError);
 
     if (lost && canRetryDeNovo) {
+      attempts.push({
+        model,
+        stop: classifyAcpxTurn({
+          summary,
+          code: processResult.code,
+          signal: processResult.signal,
+          timedOut: processResult.timedOut,
+          stderr: processResult.stderr,
+        }),
+        usage: summary.usage,
+      });
       name = freshName();
       continue;
     }
@@ -276,6 +360,7 @@ export async function runAcpxTurn(
       usage: summary.usage,
       session,
       model,
+      attempts,
     };
   }
 }

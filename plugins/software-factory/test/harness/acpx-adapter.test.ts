@@ -6,6 +6,7 @@ import { createAcpxStub } from "./acpx-stub.js";
 
 const TIMEOUTS = { idleMs: 10_000, wallMs: 30_000 };
 const CODEX_PRICE = { input: 0.15, cachedInput: 0.003, output: 0.6, reasoning: 0.6 };
+const AGY_BIN = "/opt/agy-test/bin/agy";
 
 function request(cwd: string, prompt: string, extra: Record<string, unknown> = {}) {
   return {
@@ -58,6 +59,9 @@ describe("AcpxHarness", () => {
       expect(set.slice(set.indexOf("set"))).toEqual(["set", "thought_level", "high"]);
       expect(prompt).toContain("--model");
       expect(prompt[prompt.indexOf("--model") + 1]).toBe("opencode-go/beam-free");
+      // acpx parses the positional agent with enablePositionalOptions: a global
+      // --model after `pi` is `unknown option '--model'`, exit 2.
+      expect(prompt.indexOf("--model")).toBeLessThan(prompt.indexOf("pi"));
       expect(prompt[prompt.indexOf("-s") + 1]).toBe(result.session!.id);
     } finally {
       stub.cleanup();
@@ -106,12 +110,24 @@ describe("AcpxHarness", () => {
       expect(second.session?.id).toMatch(/^pi-/);
       expect(second.session?.id).not.toBe(first.session!.id);
 
+      // The lost resume is recorded, not silently replaced.
+      expect(second.attempts?.map((attempt) => attempt.stop)).toEqual([
+        {
+          kind: "infra",
+          cause: "crash",
+          details: expect.stringMatching(/No acpx session found/),
+        },
+        { kind: "done" },
+      ]);
+
       const calls = stub.invocations();
       expect(calls.filter((args) => args.includes("sessions") && args.includes("new"))).toHaveLength(2);
       const prompts = calls.filter((args) => args.at(-1)?.startsWith("second"));
       expect(prompts).toHaveLength(2);
       expect(prompts[0]![prompts[0]!.indexOf("-s") + 1]).toBe(first.session!.id);
       expect(prompts[1]![prompts[1]!.indexOf("-s") + 1]).toBe(second.session!.id);
+      // The de-novo start carries the same task input.
+      expect(prompts[1]!.at(-1)).toBe(prompts[0]!.at(-1));
     } finally {
       stub.cleanup();
     }
@@ -133,6 +149,14 @@ describe("AcpxHarness", () => {
       expect(second.text).toBe("ALPHA");
       expect(second.session?.id).toMatch(/^pi-/);
       expect(second.session?.id).not.toBe(first.session!.id);
+      expect(second.attempts?.map((attempt) => attempt.stop)).toEqual([
+        {
+          kind: "infra",
+          cause: "crash",
+          details: expect.stringMatching(/No acpx session found/),
+        },
+        { kind: "done" },
+      ]);
 
       const calls = stub.invocations();
       const creates = calls.filter((args) => args.includes("sessions") && args.includes("new"));
@@ -165,12 +189,24 @@ describe("AcpxHarness", () => {
         request(cwd, "second [[mode:no_session]]", { session: first.session, effort: "high" })
       );
 
-      expect(second.stop).toMatchObject({
-        kind: "infra",
-        cause: "crash",
-        details: expect.stringMatching(/No acpx session found/),
-      });
+      // Bun's toMatchObject mutates a received object when a matcher is nested,
+      // and the final attempt shares this stop; assert the fields directly.
+      expect(second.stop.kind).toBe("infra");
+      if (second.stop.kind !== "infra") throw new Error("expected an infra stop");
+      expect(second.stop.cause).toBe("crash");
+      expect(second.stop.details).toContain("No acpx session found");
       expect(second.session).toBeUndefined();
+      // The first lost record and the failed de-novo start are both recorded.
+      expect(second.attempts?.map((attempt) => attempt.stop.kind)).toEqual([
+        "infra",
+        "infra",
+      ]);
+      for (const attempt of second.attempts ?? []) {
+        expect(attempt.stop.kind).toBe("infra");
+        if (attempt.stop.kind !== "infra") continue;
+        expect(attempt.stop.cause).toBe("crash");
+        expect(attempt.stop.details).toContain("No acpx session found");
+      }
 
       const calls = stub.invocations();
       // One de-novo retry: the dead-record set, one new session, then the prompt
@@ -236,9 +272,169 @@ describe("AcpxHarness", () => {
       expect(set.slice(set.indexOf("set"))).toEqual(["set", "reasoning_effort", "high"]);
       const prompt = stub.invocations().at(-1)!;
       expect(prompt[prompt.indexOf("--model") + 1]).toBe("deepseek-v4.1-flash");
+      expect(prompt.indexOf("--model")).toBeLessThan(prompt.indexOf("codex"));
     } finally {
       stub.cleanup();
     }
+  });
+
+  it("runs agy through acpx's raw agent route and splits the effort suffix", async () => {
+    const stub = createAcpxStub({
+      agyUsage: {
+        totalTokens: 8883,
+        inputTokens: 8783,
+        cachedReadTokens: 0,
+        cachedWriteTokens: 21,
+        outputTokens: 79,
+        thoughtTokens: 77,
+      },
+    });
+    const harness = new AcpxHarness({ agent: "agy", binary: stub.binary, agyBinary: AGY_BIN });
+    try {
+      const cwd = path.dirname(stub.binary);
+      const result = await harness.turn(
+        request(cwd, "Say [[text:PONG]]", { model: { id: "gemini-3.8-flash-high" } })
+      );
+
+      expect(result.stop).toEqual({ kind: "done" });
+      expect(result.text).toBe("PONG");
+      // The alias's model id is recorded; only acpx's --model gets the base id.
+      expect(result.model).toEqual({ id: "gemini-3.8-flash-high", effort: "high" });
+      expect(result.usage).toEqual({
+        in: 8783,
+        cacheRead: 0,
+        cacheWrite5m: 21,
+        cacheWrite1h: 0,
+        out: 2,
+        reasoningOut: 77,
+      });
+      expect(result.usage.costUsd).toBeUndefined();
+
+      const calls = stub.invocations();
+      const create = calls.find((args) => args.includes("sessions") && args.includes("new"))!;
+      const set = calls.find((args) => args.includes("set"))!;
+      const prompt = calls.find((args) => args.at(-1)?.includes("[[text:PONG]]"))!;
+
+      // agy's built-in acpx route spawns an absent binary, so the resolved agy
+      // executable is the raw ACP agent; it needs approve-all or every shell
+      // command is denied.
+      for (const args of [create, set, prompt]) {
+        expect(args[args.indexOf("--agent") + 1]).toBe(`${AGY_BIN} acp`);
+      }
+      expect(create.indexOf("--approve-all")).toBeLessThan(create.indexOf("sessions"));
+      expect(set.indexOf("--approve-all")).toBeLessThan(set.indexOf("set"));
+      expect(prompt.indexOf("--approve-all")).toBeLessThan(prompt.indexOf("prompt"));
+
+      expect(create).toContain("--name");
+      expect(create).toContain(result.session!.id);
+      expect(set.slice(set.indexOf("set"))).toEqual([
+        "set",
+        "-s",
+        result.session!.id,
+        "thought_level",
+        "high",
+      ]);
+      expect(prompt[prompt.indexOf("--model") + 1]).toBe("gemini-3.8-flash");
+      // The raw route has no positional agent, so --model and --agent are
+      // global flags; both must precede the prompt verb.
+      expect(prompt.indexOf("--model")).toBeLessThan(prompt.indexOf("prompt"));
+      expect(prompt.indexOf("--agent")).toBeLessThan(prompt.indexOf("prompt"));
+      expect(prompt.slice(prompt.indexOf("prompt"))).toEqual([
+        "prompt",
+        "-s",
+        result.session!.id,
+        "Say [[text:PONG]]",
+      ]);
+    } finally {
+      stub.cleanup();
+    }
+  });
+
+  it("resumes an agy session from a second process without creating a new one", async () => {
+    const stub = createAcpxStub();
+    const options = { agent: "agy" as const, binary: stub.binary, agyBinary: AGY_BIN };
+    try {
+      const cwd = path.dirname(stub.binary);
+      const first = await new AcpxHarness(options).turn(
+        request(cwd, "first", { model: { id: "gemini-3.8-flash-high" } })
+      );
+      const second = await new AcpxHarness(options).turn(
+        request(cwd, "second [[text:ALPHA]]", {
+          model: { id: "gemini-3.8-flash-high" },
+          session: first.session,
+        })
+      );
+
+      expect(second.stop).toEqual({ kind: "done" });
+      expect(second.text).toBe("ALPHA");
+      expect(second.session?.id).toBe(first.session!.id);
+      expect(second.model).toEqual({ id: "gemini-3.8-flash-high", effort: "high" });
+
+      const calls = stub.invocations();
+      expect(calls.filter((args) => args.includes("sessions") && args.includes("new"))).toHaveLength(1);
+      const resume = calls.filter((args) => args.at(-1)?.startsWith("second"));
+      expect(resume).toHaveLength(1);
+      expect(resume[0]!.slice(resume[0]!.indexOf("prompt"))).toEqual([
+        "prompt",
+        "-s",
+        first.session!.id,
+        "second [[text:ALPHA]]",
+      ]);
+      expect(resume[0]![resume[0]!.indexOf("--cwd") + 1]).toBe(cwd);
+    } finally {
+      stub.cleanup();
+    }
+  });
+
+  it("keeps an agy model id whose effort word is part of the name", async () => {
+    const stub = createAcpxStub();
+    const harness = new AcpxHarness({ agent: "agy", binary: stub.binary, agyBinary: AGY_BIN });
+    try {
+      const result = await harness.turn(
+        request(path.dirname(stub.binary), "Say [[text:PONG]]", {
+          model: { id: "gpt-oss-120b-medium" },
+        })
+      );
+
+      expect(result.stop).toEqual({ kind: "done" });
+      expect(result.model).toEqual({ id: "gpt-oss-120b-medium" });
+      const calls = stub.invocations();
+      expect(calls.some((args) => args.includes("set"))).toBe(false);
+      const prompt = calls.at(-1)!;
+      expect(prompt[prompt.indexOf("--model") + 1]).toBe("gpt-oss-120b-medium");
+    } finally {
+      stub.cleanup();
+    }
+  });
+
+  it("spawns the agy binary pre-flight resolved from AGY_PATH", async () => {
+    const stub = createAcpxStub();
+    const previous = process.env.AGY_PATH;
+    process.env.AGY_PATH = "/opt/agy-from-env/agy";
+    try {
+      const harness = new AcpxHarness({ agent: "agy", binary: stub.binary });
+      await harness.turn(request(path.dirname(stub.binary), "Say [[text:PONG]]"));
+
+      const prompt = stub.invocations().at(-1)!;
+      expect(prompt[prompt.indexOf("--agent") + 1]).toBe("/opt/agy-from-env/agy acp");
+    } finally {
+      if (previous === undefined) delete process.env.AGY_PATH;
+      else process.env.AGY_PATH = previous;
+      stub.cleanup();
+    }
+  });
+
+  it("advertises agy's session effort levels and cache usage", async () => {
+    const harness = new AcpxHarness({ agent: "agy", binary: "/nonexistent/agy" });
+    expect(await harness.caps({ id: "gemini-3.8-flash-high" })).toEqual({
+      resume: true,
+      compact: "none",
+      fork: false,
+      subagents: "none",
+      structuredOutput: "none",
+      effort: ["low", "medium", "high"],
+      usage: { cache: true, cost: false },
+    });
   });
 
   it("maps NO_SESSION, a bad model, provider quota and a bare exit to scrubbed stops", async () => {

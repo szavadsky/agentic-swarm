@@ -5,7 +5,6 @@ import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 import { dispatch } from "../../src/cli/dispatch.js";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { createDrainController } from "../../src/kernel/signals.js";
-import { createFolderStore } from "../../src/kernel/store.js";
 
 const PLAN = "# Plan\n\n## alpha\nCreate alpha.txt.\n\n## beta\nCreate beta.txt.\n\n## gamma\nCreate gamma.txt.\n\n## delta\nCreate delta.txt.\n";
 const SLUGS = ["alpha", "beta", "gamma", "delta"];
@@ -89,31 +88,13 @@ describe("repro E4: first signal does not stop dispatch admission", () => {
         });
       }
 
-      const code = await dispatch(["run", "--repo", s.repo.dir, "--goal", "demo"], {
+      await dispatch(["run", "--repo", s.repo.dir, "--goal", "demo"], {
         harnesses: { fake: harness },
         signals: controller,
       });
 
-      const store = createFolderStore(s.goalDir);
-      const records = await store.listRecords();
-      const implementsBySlug = new Map<string, number>();
-      for (const r of records) {
-        if (r.step === "implement" && r.slug) {
-          implementsBySlug.set(r.slug, (implementsBySlug.get(r.slug) ?? 0) + 1);
-        }
-      }
       const afterSignal = implementStart.filter((e) => e.turn > signalTurn!);
       const furtherTasks = [...new Set(afterSignal.map((e) => e.slug))];
-
-      fs.writeFileSync("/tmp/review-swarm/ReproE4/diag.json", JSON.stringify({
-        calls: harness.calls.map((c, i) => ({ i: i + 1, cwd: c.cwd, prompt: c.prompt.slice(0, 40).replace(/\n/g, " | ") })),
-        records: records.map((r) => ({ slug: r.slug, step: r.step, outcome: r.outcome?.summary, stop: r.stop?.kind })),
-        exit: code,
-        signalTurn,
-        implementStart,
-        implementsBySlug: Object.fromEntries(implementsBySlug),
-        furtherTasksAfterSignal: furtherTasks,
-      }, null, 2));
 
       expect(controller.draining).toBe(true);
       expect(furtherTasks).toEqual([]);

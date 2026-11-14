@@ -7,11 +7,10 @@ import { isAncestor } from "../core/git/commit.js";
 import { git } from "../core/git/exec.js";
 import type { CheckResult } from "../core/checks/types.js";
 import { resolveGoalPaths } from "./config.js";
-import { gateSignatureKey, gateSignatures, isInfraCheck, UNIDENTIFIED_GATE_FAILURE, type GateInfra } from "./gates.js";
+import { capGateOutput, GATE_OUTPUT_CAP, gateSignatureKey, gateSignatures, isInfraCheck, UNIDENTIFIED_GATE_FAILURE, type GateInfra } from "./gates.js";
 import type { ArtifactStore, ConfigBundle, RecordStart, StepRecord } from "./types.js";
 
 const GATE_TIMEOUT_SEC = 900;
-const OUTPUT_CAP = 4_000;
 
 /** Record step for a baseline that could not run: infra, never a red verdict. */
 const BASELINE_INFRA_STEP = "baseline-infra";
@@ -74,13 +73,25 @@ export function preexistingRed(base: BaseGateState | undefined): Set<string> {
   return inherited;
 }
 
-function result(name: string, ok: boolean, summary: string, output = ""): CheckResult {
+/**
+ * One baseline check. `roots` is the scratch worktree the gate ran from, so the
+ * same failure in a task worktree normalises to the same identity.
+ */
+function result(
+  name: string,
+  ok: boolean,
+  summary: string,
+  output = "",
+  roots: readonly string[] = []
+): CheckResult {
+  const capped = capGateOutput(output);
   return {
     name,
     ok,
     summary,
-    output: output.slice(-OUTPUT_CAP),
+    output: capped.output,
     fingerprint: fingerprintText(`${name}:${ok}:${summary}`, { lowercase: false }),
+    details: { roots: [...roots], truncated: capped.truncated },
   };
 }
 
@@ -148,7 +159,7 @@ async function runBaseGates(
         cmd: gate.command,
         cwd: dir,
         timeoutSec: GATE_TIMEOUT_SEC,
-        maxOutputBytes: OUTPUT_CAP * 4,
+        maxOutputBytes: GATE_OUTPUT_CAP * 4,
       });
       const output = `${res.stdout}\n${res.stderr}`.trim();
       if (res.timedOut) {
@@ -161,7 +172,7 @@ async function runBaseGates(
         checks.push(infra(gate.id, `could not run: exit ${res.code}`, output));
         continue;
       }
-      checks.push(result(gate.id, res.code === 0, `exit ${res.code}`, output));
+      checks.push(result(gate.id, res.code === 0, `exit ${res.code}`, output, [dir]));
     }
     return checks;
   } finally {
