@@ -1,21 +1,19 @@
-# Goal — the factory completes itself
+# Goal — the factory completes itself (stage: Phase 1)
 
 ## Intent
 
-`manifesto.md` at the repository root, whole. Its `## Intent` binds; its `## Notes on implementation` are judgement to shift on evidence. `manifesto.advice.md` is advice: cite line ranges, keep what survives contact with the code.
+`INTENT.md` at the repository root binds, whole; it replaced `manifesto.md`. Its `## Notes on implementation` are judgement to shift on evidence. `manifesto.advice.md` is advice only.
 
-## Where it stands
-
-Kernel-0 (`bootstrap/KERNEL0.md`): the left column of its §2 exists and is held by the no-model suite (§7); the right column does not exist yet. Decisions and evidence so far: `bootstrap/LOG.md`. The code is `plugins/software-factory`; map of the modules kept from v2: `bootstrap/context/kept-modules.md`.
+Current stage: `Phase1.md` — build it, milestones M1 → M6 in order. Nothing outside Phase 1 is planned until Phase 1's "Done when" holds, except fixes Phase 1 itself needs.
 
 ## Particular to this goal
 
-- The factory is editing itself. It runs from a pinned build; the next launch runs what this one merged, after the suite passed. Every task keeps `bun run typecheck` and `bun test` green, and no task weakens a scenario to get there.
-- One iteration per launch. Prefer the plan whose first iteration makes the next launch cheaper or easier to observe: measurement before optimization (usage by role, loop incidents, prompt sizes).
-- Implementers and reviewers are free models. Size tasks for them; a model failing twice on a well-directed task is evidence for the run config, not a reason to thicken the task text.
+- The factory is editing itself. It runs from a pinned build; the next launch runs what this one merged, after the suite passed. Every task keeps `bun run typecheck` and `bun test` green; no task weakens a scenario to get there.
+- One iteration per launch.
+- Implementers and reviewers are cheap models. Size tasks for them; a model failing twice on a well-directed task is evidence for the run config, not a reason to thicken the task text.
 - Small is a requirement. A new schema, launch type, retry counter or config knob carries one line of justification in the plan.
-- Deliverables beyond code: a usage document and an ideology document derived from the manifesto — short, for a new operator — and a table mapping each Intent section to its test or run evidence.
+- The plan predates `INTENT.md`: rewrite it to Phase 1 and keep it short. Rows outside Phase 1 leave the plan (they return in later stages). Task scopes name an area, not files.
 
 ## Done when
 
-Every section of the manifesto's `## Intent` is implemented and has test or run evidence in that table; the fixed benchmark goal has been run and compared with the v2 baseline (`plugins/software-factory/docs/runs`); nothing the manifesto rejects remains in the repository; this goal leaves no open debt.
+Every M1–M6 item of `Phase1.md` is merged with tests, and the live evidence its "Done when" lists exists in records/summaries. The live trivial/task goals (`p1-trivial`, `p1-task`) and the deliberate interrupt-and-relaunch are operator launches; the architect names in `forward` when they can run.

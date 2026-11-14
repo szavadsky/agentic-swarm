@@ -1,5 +1,7 @@
 # How to run factory for self improvement
 
+Campaign (stages, decision rules, pitfalls): `SELF-IMPROVE.md`. Intent: `INTENT.md`; current scope: `Phase1.md`.
+
 Goal `self` in `/home/slava/aiexp/agentic-swarm.wt/v3` (branch `factory-v3`). Product: `plugins/software-factory`. The factory runs from a pin; one iteration per launch.
 
 ## Pre-flight: no run live
@@ -24,8 +26,9 @@ Takes ~2–6 h, ~$2. Exit 3 (`iteration-limit`) is the normal ending. Use absolu
 1. Read `.factory/artifacts/self/iterations/N/summary.md` (outcome, parks, metrics).
 2. `git merge --no-ff factory/self -m "merge self-run iteration N: ..."`
 3. `cd plugins/software-factory && bun run typecheck && bun test`
-4. Journal in `bootstrap/LOG.md`, commit.
-5. Promote + relaunch (above).
+4. Land on main: `git -C /home/slava/aiexp/agentic-swarm merge --no-ff factory-v3`.
+5. Journal in `bootstrap/LOG.md`, commit, land on main again.
+6. Promote + relaunch (above).
 
 ## Steering
 
