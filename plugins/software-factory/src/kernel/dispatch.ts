@@ -6,6 +6,7 @@ import { next } from "./next.js";
 import { runSteerPm } from "./pm.js";
 import { pricedRecord, type PriceTable } from "./pricing.js";
 import { appendPark } from "./record.js";
+import type { DrainController } from "./signals.js";
 import type { Action, KernelRuntime, State, StepRecord, TaskFile, TaskState } from "./types.js";
 import type { MergeResult } from "./integrate.js";
 
@@ -24,6 +25,12 @@ export interface DispatchOptions {
    * it, so it gets a PM steer turn here.
    */
   seenSteers?: string[];
+  /**
+   * The launch's drain controller. A first signal drains through the same
+   * channel as an iteration limit: unstarted tasks are refused while started
+   * ones finish their flow.
+   */
+  signals?: DrainController;
 }
 
 interface Running {
@@ -316,6 +323,11 @@ export async function runDispatch(
     for (const action of candidates) {
       if (runningAtRead.has(action.slug) || running.has(action.slug)) continue;
       if (cancelled || infra.has(action.slug)) continue;
+      // A signal raised while a turn was awaited must refuse the next start.
+      // Draining here, per admission, closes the window a wave-top check misses.
+      if (drain === undefined && opts.signals?.shouldStop()) {
+        drain = "signal: drain requested";
+      }
       const task = tasks.find((t) => t.slug === action.slug);
       if (!task) throw new Error(`action names unknown task "${action.slug}"`);
       const taskState = state.tasks[action.slug]!;
