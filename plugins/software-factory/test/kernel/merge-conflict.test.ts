@@ -5,6 +5,7 @@ import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import type { SessionRef } from "../../src/harness/types.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
+import { ensureTaskWorktree } from "../../src/kernel/worktree.js";
 import type { TmpRepo } from "../helpers/tmp-repo.js";
 import { task } from "./helpers.js";
 import {
@@ -23,19 +24,26 @@ class FailingCompactHarness extends FakeHarness {
   }
 }
 
-function scriptConflict(harness: FakeHarness, repo: TmpRepo, checkout: string): void {
+function scriptConflict(harness: FakeHarness): void {
   harness.script((req, ctx) => {
     fs.writeFileSync(path.join(req.cwd!, "conflict.txt"), "task\n", "utf8");
     ctx.writeOutcome(outcome({ summary: "task side" }));
     return fakeTurnResult(req);
   });
   harness.script((req, ctx) => {
-    fs.writeFileSync(path.join(checkout, "conflict.txt"), "integration\n", "utf8");
-    repo.git(["add", "conflict.txt"], { cwd: checkout });
-    repo.git(["commit", "-m", "concurrent integration change"], { cwd: checkout });
     ctx.writeOutcome(outcome({ summary: "approved", verdict: "approve" }));
     return fakeTurnResult(req);
   });
+}
+
+/**
+ * Another task's merge lands on the integration branch before this task starts,
+ * so the task branch's squash has a conflicting file when the queue reaches it.
+ */
+function landIntegrationChange(repo: TmpRepo, checkout: string): void {
+  fs.writeFileSync(path.join(checkout, "conflict.txt"), "integration\n", "utf8");
+  repo.git(["add", "conflict.txt"], { cwd: checkout });
+  repo.git(["commit", "-m", "concurrent integration change"], { cwd: checkout });
 }
 
 describe("merge conflicts", () => {
@@ -44,7 +52,7 @@ describe("merge conflicts", () => {
     const checkout = goalCheckout(repo, goal);
     try {
       const harness = new FakeHarness({ id: "fake" });
-      scriptConflict(harness, repo, checkout);
+      scriptConflict(harness);
       harness.script((req, ctx) => {
         expect(req.prompt).toContain("Conflicted files: conflict.txt");
         fs.writeFileSync(path.join(req.cwd!, "conflict.txt"), "resolved\n", "utf8");
@@ -53,7 +61,10 @@ describe("merge conflicts", () => {
       });
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await writeTask(runtime, task("task", { scope: ["conflict.txt"] }));
+      const file = task("task", { scope: ["conflict.txt"] });
+      await writeTask(runtime, file);
+      await ensureTaskWorktree(runtime, file);
+      landIntegrationChange(repo, checkout);
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("boundary");
 
@@ -73,7 +84,7 @@ describe("merge conflicts", () => {
     const checkout = goalCheckout(repo, goal);
     try {
       const harness = new FakeHarness({ id: "fake" });
-      scriptConflict(harness, repo, checkout);
+      scriptConflict(harness);
       harness.script((req, ctx) => {
         fs.writeFileSync(path.join(req.cwd!, "conflict.txt"), "resolved\n", "utf8");
         ctx.writeOutcome(outcome({ summary: "conflict resolved" }));
@@ -81,7 +92,10 @@ describe("merge conflicts", () => {
       });
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await writeTask(runtime, task("task", { scope: ["conflict.txt"] }));
+      const file = task("task", { scope: ["conflict.txt"] });
+      await writeTask(runtime, file);
+      await ensureTaskWorktree(runtime, file);
+      landIntegrationChange(repo, checkout);
       expect((await runDispatch(runtime, { iteration: 1 })).reason).toBe("boundary");
 
       const records = await runtime.store.listRecords();
@@ -103,7 +117,7 @@ describe("merge conflicts", () => {
     const checkout = goalCheckout(repo, goal);
     try {
       const harness = new FailingCompactHarness({ id: "fake" });
-      scriptConflict(harness, repo, checkout);
+      scriptConflict(harness);
       harness.script((req, ctx) => {
         fs.writeFileSync(path.join(req.cwd!, "conflict.txt"), "resolved\n", "utf8");
         ctx.writeOutcome(outcome({ summary: "conflict resolved" }));
@@ -111,7 +125,10 @@ describe("merge conflicts", () => {
       });
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await writeTask(runtime, task("task", { scope: ["conflict.txt"] }));
+      const file = task("task", { scope: ["conflict.txt"] });
+      await writeTask(runtime, file);
+      await ensureTaskWorktree(runtime, file);
+      landIntegrationChange(repo, checkout);
       expect((await runDispatch(runtime, { iteration: 1 })).reason).toBe("boundary");
 
       const records = await runtime.store.listRecords();
@@ -130,7 +147,7 @@ describe("merge conflicts", () => {
     const checkout = goalCheckout(repo, goal);
     try {
       const harness = new FakeHarness({ id: "fake" });
-      scriptConflict(harness, repo, checkout);
+      scriptConflict(harness);
       harness.script((req) =>
         fakeTurnResult(req, {
           stop: {
@@ -142,7 +159,10 @@ describe("merge conflicts", () => {
       );
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await writeTask(runtime, task("task", { scope: ["conflict.txt"] }));
+      const file = task("task", { scope: ["conflict.txt"] });
+      await writeTask(runtime, file);
+      await ensureTaskWorktree(runtime, file);
+      landIntegrationChange(repo, checkout);
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("infra");
       expect(result.cause).toBe(
@@ -163,13 +183,16 @@ describe("merge conflicts", () => {
     const checkout = goalCheckout(repo, goal);
     try {
       const harness = new FakeHarness({ id: "fake" });
-      scriptConflict(harness, repo, checkout);
+      scriptConflict(harness);
       harness.script((req) =>
         fakeTurnResult(req, { stop: { kind: "refusal", details: "content policy" } })
       );
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await writeTask(runtime, task("task", { scope: ["conflict.txt"] }));
+      const file = task("task", { scope: ["conflict.txt"] });
+      await writeTask(runtime, file);
+      await ensureTaskWorktree(runtime, file);
+      landIntegrationChange(repo, checkout);
       expect((await runDispatch(runtime, { iteration: 1 })).reason).toBe("boundary");
 
       // Implement and review compacted; the refused merge attempt did not.
@@ -184,14 +207,17 @@ describe("merge conflicts", () => {
     const checkout = goalCheckout(repo, goal);
     try {
       const harness = new FakeHarness({ id: "fake" });
-      scriptConflict(harness, repo, checkout);
+      scriptConflict(harness);
       harness.script((req, ctx) => {
         ctx.writeOutcome(outcome({ summary: "could not resolve" }));
         return fakeTurnResult(req);
       });
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await writeTask(runtime, task("task", { scope: ["conflict.txt"] }));
+      const file = task("task", { scope: ["conflict.txt"] });
+      await writeTask(runtime, file);
+      await ensureTaskWorktree(runtime, file);
+      landIntegrationChange(repo, checkout);
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("boundary");
 
