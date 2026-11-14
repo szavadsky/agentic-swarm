@@ -60,7 +60,9 @@ describe("KERNEL0 scenario 5 — red gates on the merged result", () => {
               name: "always-red",
               ok: false,
               summary: "exit 1",
-              output: "never.txt is missing",
+              // The gate is silent (`test -f` prints nothing); the real base run
+              // records that silence, so the inherited failure has no signature.
+              output: "",
               fingerprint: "red",
             },
           ],

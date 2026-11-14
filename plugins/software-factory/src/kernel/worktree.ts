@@ -1,10 +1,11 @@
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { isAncestor } from "../core/git/commit.js";
 import { git, GitError } from "../core/git/exec.js";
 import { parseWorktreeList } from "../core/git/status.js";
 import { runWorktreeSetup, type SetupResult } from "../core/checks/setup.js";
-import type { KernelRuntime, TaskFile } from "./types.js";
+import type { KernelRuntime, StepRecord, TaskFile } from "./types.js";
 
 /** Task branches and worktrees are goal-scoped and disposable. */
 export function taskBranchName(runtime: KernelRuntime, slug: string): string {
@@ -16,7 +17,16 @@ export function taskBranchName(runtime: KernelRuntime, slug: string): string {
 
 function taskWorktreePath(runtime: KernelRuntime, slug: string): string {
   const goal = path.basename(runtime.paths.goalDir);
-  return path.join(runtime.paths.worktreeRoot, `${goal}-tasks`, slug);
+  return path.join(goalWorktreeRoot(runtime), `${goal}-tasks`, slug);
+}
+
+/**
+ * The directory holding this goal's checkouts and nothing else. It follows the
+ * resolved checkout, so an existing checkout at the pre-repo-id path keeps its
+ * task worktrees and merge scratch beside it.
+ */
+function goalWorktreeRoot(runtime: KernelRuntime): string {
+  return path.dirname(runtime.paths.goalCheckout);
 }
 
 export async function integrationHead(runtime: KernelRuntime): Promise<string> {
@@ -122,13 +132,19 @@ async function followBase(runtime: KernelRuntime): Promise<void> {
  * worktree the merge queue moves; task worktrees are disposable.
  */
 export async function prepareIntegrationCheckout(runtime: KernelRuntime): Promise<void> {
-  const { repoRoot, goalCheckout, integrationBranch, worktreeRoot } = runtime.paths;
-  fs.mkdirSync(worktreeRoot, { recursive: true });
+  const { repoRoot, goalCheckout, integrationBranch } = runtime.paths;
+  const goal = path.basename(runtime.paths.goalDir);
+  const ownTasks = path.join(goalWorktreeRoot(runtime), `${goal}-tasks`);
+  const ownScratch = mergeScratchPath(runtime);
+  fs.mkdirSync(goalWorktreeRoot(runtime), { recursive: true });
 
+  // Recovery owns this goal's worktrees only: a sibling goal's checkout and
+  // task worktrees, and another repo sharing the root, are not ours to remove.
   for (const wt of await registeredWorktrees(runtime)) {
     const resolved = path.resolve(wt);
     if (resolved === path.resolve(goalCheckout) || resolved === path.resolve(repoRoot)) continue;
-    if (!resolved.startsWith(path.resolve(worktreeRoot) + path.sep)) continue;
+    const own = resolved === path.resolve(ownScratch) || resolved.startsWith(path.resolve(ownTasks) + path.sep);
+    if (!own) continue;
     await git(repoRoot, ["worktree", "remove", "--force", resolved], { allowFail: true });
   }
 
@@ -246,39 +262,188 @@ export async function headSha(cwd: string): Promise<string> {
 }
 
 interface WorktreeState {
+  branch: string;
   head: string;
   status: string;
 }
 
 export interface ContainmentSnapshot {
   branch: string;
-  /** The main checkout: only a rogue turn changes it during dispatch. */
+  /** Wall-clock start; a record spanning it may still write goal artifacts. */
+  at: string;
+  /** Record sequences open at the snapshot; their close is not the turn's write. */
+  inFlight: ReadonlySet<number>;
+  /** Every goal artifact except the operator's mailbox channels: path -> hash. */
+  artifacts: ReadonlyMap<string, string>;
+  /** The integration branch ref; the merge queue advances it after a merge record. */
+  integration: string;
+  /** The main checkout: the operator owns it, so a change is an incident, not a breach. */
   root: WorktreeState;
-  /** The integration checkout; a merge moves its HEAD legitimately. */
+  /** The integration checkout; the merge queue moves its HEAD legitimately. */
   checkout: WorktreeState;
 }
 
 async function worktreeState(dir: string): Promise<WorktreeState> {
+  const branch = await git(dir, ["rev-parse", "--abbrev-ref", "HEAD"], { allowFail: true });
   const head = await git(dir, ["rev-parse", "HEAD"], { allowFail: true });
   const status = await git(dir, ["status", "--porcelain"], { allowFail: true });
-  return { head: head.stdout.trim(), status: status.stdout };
+  return { branch: branch.stdout.trim(), head: head.stdout.trim(), status: status.stdout };
+}
+
+/**
+ * The operator's mailbox channels: a steer may arrive, be archived or answered
+ * while a turn runs, and those writes are never the task's.
+ */
+const OPERATOR_CHANNELS = new Set(["mailbox/inbox", "mailbox/processed", "mailbox/outbox"]);
+
+/** Hashes of every goal artifact except the operator's mailbox channels. */
+function artifactState(dir: string): Map<string, string> {
+  const files = new Map<string, string>();
+  const walk = (abs: string, rel: string): void => {
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(abs, { withFileTypes: true });
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return;
+      throw err;
+    }
+    for (const entry of entries) {
+      const childRel = rel === "" ? entry.name : `${rel}/${entry.name}`;
+      if (OPERATOR_CHANNELS.has(childRel)) continue;
+      const childAbs = path.join(abs, entry.name);
+      if (entry.isDirectory()) walk(childAbs, childRel);
+      else if (entry.isFile()) {
+        try {
+          files.set(childRel, createHash("sha256").update(fs.readFileSync(childAbs)).digest("hex"));
+        } catch (err) {
+          // Another writer may remove a file between readdir and read.
+          if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+        }
+      }
+    }
+  };
+  walk(dir, "");
+  return files;
+}
+
+const RECORD_DIR = /^records\/(\d{5})-/;
+
+/** The sequence encoded in a record's goal-relative path, if it names one. */
+function recordSeqOf(rel: string): number | undefined {
+  const match = RECORD_DIR.exec(rel);
+  return match?.[1] ? Number(match[1]) : undefined;
+}
+
+/** Records that started before the snapshot and had not closed when it was taken. */
+function recordsInFlight(records: readonly StepRecord[], at: string): Set<number> {
+  return new Set(
+    records
+      .filter((r) => r.startedAt <= at && (!r.endedAt || r.endedAt >= at))
+      .map((r) => r.seq)
+  );
+}
+
+/**
+ * The PM owns the plan, the task files and the holds, and a steer turn may run
+ * while a task turn is in flight. Its writes are not the task's.
+ */
+function pmWroteDuring(records: readonly StepRecord[], at: string, now: string): boolean {
+  return records.some(
+    (r) =>
+      (r.step === "pm" || r.step === "pm-validate" || r.step === "steer-reconcile") &&
+      r.startedAt <= now &&
+      (!r.endedAt || r.endedAt >= at)
+  );
+}
+
+function pmOwned(rel: string): boolean {
+  return rel === "plan.md" || rel.startsWith("tasks/") || rel.startsWith("mailbox/holds/");
+}
+
+/**
+ * A turn may write only its own outcome file. A record directory that belongs
+ * to a record started during the turn (this turn's own included) or still open
+ * at the snapshot is the script's or another turn's; a directory no record
+ * explains, and a closed record's files, are the turn's write.
+ */
+function artifactBreaches(
+  before: ReadonlyMap<string, string>,
+  after: ReadonlyMap<string, string>,
+  opts: { at: string; inFlight: ReadonlySet<number>; records: readonly StepRecord[]; pmActive: boolean }
+): string[] {
+  const live = new Map<number, StepRecord>();
+  for (const record of opts.records) live.set(record.seq, record);
+  const ignored = (rel: string): boolean => {
+    if (opts.pmActive && pmOwned(rel)) return true;
+    const seq = recordSeqOf(rel);
+    if (seq === undefined) return false;
+    const record = live.get(seq);
+    if (!record) return false;
+    return record.startedAt >= opts.at || opts.inFlight.has(seq);
+  };
+  const changed: string[] = [];
+  for (const [rel, hash] of after) {
+    if (ignored(rel)) continue;
+    const previous = before.get(rel);
+    if (previous === undefined) changed.push(`created ${rel}`);
+    else if (previous !== hash) changed.push(`changed ${rel}`);
+  }
+  for (const rel of before.keys()) {
+    if (!after.has(rel) && !ignored(rel)) changed.push(`removed ${rel}`);
+  }
+  return changed;
+}
+
+function summarizePaths(paths: readonly string[]): string {
+  const shown = paths.slice(0, 5).join(", ");
+  return paths.length > 5 ? `${shown} and ${paths.length - 5} more` : shown;
+}
+
+/** An outside change the task did not make: a visible record, never a park. */
+async function appendContainmentIncident(
+  runtime: KernelRuntime,
+  taskWorktree: string,
+  records: readonly StepRecord[],
+  cause: string
+): Promise<void> {
+  const slug = path.basename(taskWorktree);
+  const own = records.filter((r) => r.slug === slug);
+  const latest = own.at(-1);
+  const iteration = latest?.iteration ?? records.reduce((max, r) => Math.max(max, r.iteration), 0);
+  await runtime.store.appendRecord(
+    { iteration, step: "containment", round: latest?.round ?? 1, actor: "script", slug },
+    { ok: true, cause }
+  );
 }
 
 /**
  * The worktree a turn runs in is the only place it may change (implementer.md).
- * The main checkout and the integration checkout are the shared surfaces a
- * rogue write can damage; sibling task worktrees belong to other live turns and
- * are not attributed here. Taken before the turn; the settle proves them equal.
+ * The goal artifacts and the integration checkout are shared surfaces a rogue
+ * write can damage; sibling task worktrees belong to other live turns and are
+ * not attributed here. The main checkout belongs to the operator and is out of
+ * scope. Taken before the turn; the settle proves the rest equal.
  */
 export async function containmentSnapshot(
   runtime: KernelRuntime,
   taskWorktree: string
 ): Promise<ContainmentSnapshot> {
   const branch = await git(taskWorktree, ["rev-parse", "--abbrev-ref", "HEAD"], { allowFail: true });
+  // Stamped before the artifact walk: a record that opens or closes while the
+  // walk runs is then in flight on one side or the other, never a closed record
+  // whose concurrent write would be blamed on the turn.
+  const at = new Date().toISOString();
+  const artifacts = artifactState(runtime.paths.goalDir);
+  const integration = await integrationHead(runtime);
+  const root = await worktreeState(runtime.paths.repoRoot);
+  const checkout = await worktreeState(runtime.paths.goalCheckout);
   return {
     branch: branch.stdout.trim(),
-    root: await worktreeState(runtime.paths.repoRoot),
-    checkout: await worktreeState(runtime.paths.goalCheckout),
+    at,
+    inFlight: recordsInFlight(await runtime.store.listRecords(), at),
+    artifacts,
+    integration,
+    root,
+    checkout,
   };
 }
 
@@ -295,18 +460,72 @@ export async function containmentViolation(
   if (snapshot.branch !== expectedBranch || now !== expectedBranch) {
     breaches.push(`HEAD is on "${now || "detached"}", not the task branch "${expectedBranch}"`);
   }
-  const root = await worktreeState(runtime.paths.repoRoot);
-  if (root.head !== snapshot.root.head) {
-    breaches.push(`HEAD moved outside the worktree in ${runtime.paths.repoRoot}`);
-  } else if (root.status !== snapshot.root.status) {
-    breaches.push(`files changed outside the worktree in ${runtime.paths.repoRoot}`);
-  }
+
+  // Read the shared surfaces before the records: a merge record or a PM record
+  // is written before its owner moves the ref, resets the checkout or edits the
+  // goal, so records read last explain every move those reads can see.
   const checkout = await worktreeState(runtime.paths.goalCheckout);
-  // The merge queue moves this checkout's HEAD and resets it; a move is a
-  // merge, not an outside write. With HEAD unchanged, dirt is the turn's.
-  if (checkout.head === snapshot.checkout.head && checkout.status !== snapshot.checkout.status) {
+  const integration = await integrationHead(runtime);
+  const artifacts = artifactState(runtime.paths.goalDir);
+  const records = await runtime.store.listRecords();
+  const mergeExplains = (commit: string): boolean =>
+    records.some((r) => r.step === "merge" && r.ok !== false && r.commit === commit);
+
+  const settledAt = new Date().toISOString();
+  const changedArtifacts = artifactBreaches(snapshot.artifacts, artifacts, {
+    at: snapshot.at,
+    inFlight: snapshot.inFlight,
+    records,
+    pmActive: pmWroteDuring(records, snapshot.at, settledAt),
+  });
+  if (changedArtifacts.length > 0) {
+    breaches.push(
+      `goal artifacts changed outside the worktree in ${runtime.paths.goalDir}: ${summarizePaths(changedArtifacts)}`
+    );
+  }
+
+  // The merge queue moves this checkout's HEAD and resets it; a move recorded
+  // as a merge is the queue's, not the turn's. A move no merge record explains
+  // is a commit the turn made there. While a merge is between its ref move and
+  // its checkout reset, the working tree is not the turn's to explain either.
+  if (checkout.branch !== snapshot.checkout.branch) {
+    breaches.push(
+      `HEAD is on "${checkout.branch || "detached"}" in the integration checkout ${runtime.paths.goalCheckout}`
+    );
+  } else if (checkout.head !== snapshot.checkout.head) {
+    if (!mergeExplains(checkout.head)) {
+      if (checkout.status !== snapshot.checkout.status) {
+        breaches.push(
+          `integration branch moved outside the merge queue in ${runtime.paths.goalCheckout}: HEAD is ${checkout.head.slice(0, 10)}`
+        );
+      } else {
+        breaches.push(
+          `commit on the integration checkout ${runtime.paths.goalCheckout}: HEAD moved to ${checkout.head.slice(0, 10)}`
+        );
+      }
+    } else if (integration !== checkout.head && !mergeExplains(integration)) {
+      breaches.push(
+        `integration branch moved outside the merge queue: HEAD is ${integration.slice(0, 10)}`
+      );
+    }
+  } else if (integration !== snapshot.integration) {
+    if (!mergeExplains(integration)) {
+      breaches.push(`integration branch moved outside the merge queue: HEAD is ${integration.slice(0, 10)}`);
+    }
+  } else if (checkout.status !== snapshot.checkout.status) {
     breaches.push(`files changed outside the worktree in ${runtime.paths.goalCheckout}`);
   }
+
+  // The operator may commit or edit in the main checkout while a turn runs. The
+  // task cannot have made that change and must still merge; record it instead.
+  const root = await worktreeState(runtime.paths.repoRoot);
+  const outside: string[] = [];
+  if (root.head !== snapshot.root.head) outside.push(`HEAD moved in ${runtime.paths.repoRoot}`);
+  if (root.status !== snapshot.root.status) outside.push(`files changed in ${runtime.paths.repoRoot}`);
+  if (outside.length > 0) {
+    await appendContainmentIncident(runtime, taskWorktree, records, `outside-change: ${outside.join("; ")}`);
+  }
+
   return breaches.length > 0 ? breaches.join("; ") : undefined;
 }
 
@@ -316,7 +535,7 @@ export async function containmentViolation(
  */
 function mergeScratchPath(runtime: KernelRuntime): string {
   const goal = path.basename(runtime.paths.goalDir);
-  return path.join(runtime.paths.worktreeRoot, `${goal}-merge`);
+  return path.join(goalWorktreeRoot(runtime), `${goal}-merge`);
 }
 
 export async function removeMergeScratch(runtime: KernelRuntime): Promise<void> {

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { git } from "../core/git/exec.js";
+import type { SessionRef } from "../harness/types.js";
 import { resumableSession } from "./architect-session.js";
 import { runAgentTurn } from "./agent.js";
 import { recordedBaseGates } from "./baseline.js";
@@ -22,7 +23,7 @@ import {
   steerResponses,
   writeOutbox,
 } from "./mailbox.js";
-import { runPm, type PmInfraStop, type PmRung } from "./pm.js";
+import { runPm, type PmRung } from "./pm.js";
 import type { GoalDecision, KernelRuntime, Outcome } from "./types.js";
 
 export interface BoundaryResult {
@@ -58,7 +59,7 @@ function rungTrace(rungs: PmRung[]): string {
 }
 
 /** Today's infra cause: the classified cause plus the scrubbed error tail. */
-function infraCause(stop: PmInfraStop): string {
+function infraCause(stop: { cause: string; details?: string }): string {
   return stop.details ? `${stop.cause}: ${stop.details}` : stop.cause;
 }
 
@@ -149,28 +150,56 @@ export async function runBoundary(
   const tasksBefore = await taskSnapshot(runtime.store.goalDir);
   const session = await resumableSession(runtime, records);
 
-  const result = await runAgentTurn(runtime, {
-    target: resolveRole(runtime, "architect"),
-    cwd: runtime.paths.goalCheckout,
-    meta: { iteration, step: "architect", round: 1 },
-    vars: {
-      turn,
-      iteration: String(iteration),
-      intent_path: path.join(runtime.store.goalDir, "intent.md"),
-      plan_path: path.join(runtime.store.goalDir, "plan.md"),
-      checkout: runtime.paths.goalCheckout,
-      pack_path: path.join(runtime.store.goalDir, packRel),
-      digest_path: digestPath ?? "",
-      steers: formatSteers(steers),
-    },
-    expectation: "architect",
-    session,
-    settle: async (_record, outcome, live) => {
-      if (!live || outcome?.decision !== "continue") return {};
-      const compacted = await compactSession(runtime, live);
-      return compacted ? { session: compacted } : {};
-    },
-  });
+  const architectTurn = (resume: SessionRef | undefined) =>
+    runAgentTurn(runtime, {
+      target: resolveRole(runtime, "architect"),
+      cwd: runtime.paths.goalCheckout,
+      meta: { iteration, step: "architect", round: 1 },
+      vars: {
+        turn,
+        iteration: String(iteration),
+        intent_path: path.join(runtime.store.goalDir, "intent.md"),
+        plan_path: path.join(runtime.store.goalDir, "plan.md"),
+        checkout: runtime.paths.goalCheckout,
+        pack_path: path.join(runtime.store.goalDir, packRel),
+        digest_path: digestPath ?? "",
+        steers: formatSteers(steers),
+      },
+      expectation: "architect",
+      session: resume,
+      settle: async (_record, outcome, live) => {
+        if (!live || outcome?.decision !== "continue") return {};
+        const compacted = await compactSession(runtime, live);
+        return compacted ? { session: compacted } : {};
+      },
+    });
+
+  let result = await architectTurn(session);
+  // An infra death is not a goal decision. Retry once de novo: the prompt is
+  // self-contained, and a session that dies on resume must not be resumed
+  // again. A second infra death ends the launch as infra, never blocked-by-user.
+  const infraDied = (turnResult: typeof result): boolean =>
+    turnResult.record.stop?.kind === "infra" && !turnResult.outcome?.decision;
+  // A resumed session that overflowed already spent runAgentTurn's de-novo
+  // retry; a second overflow is terminal because the prompt itself does not fit.
+  const stopBeforeRetry = result.record.stop;
+  const overflowTerminal =
+    session !== undefined &&
+    stopBeforeRetry?.kind === "infra" &&
+    stopBeforeRetry.cause === "overflow";
+  if (!overflowTerminal && infraDied(result)) result = await architectTurn(undefined);
+  const architectStop = result.record.stop;
+  if (architectStop?.kind === "infra" && !result.outcome?.decision) {
+    return {
+      iteration,
+      decision: "blocked",
+      cause: `architect turn stopped on infrastructure: ${infraCause(architectStop)}`,
+      stop: { cause: architectStop.cause, details: architectStop.details },
+      outcome: result.outcome,
+      packPath: packRel,
+      seenSteers,
+    };
+  }
 
   const responses = result.outcome ? steerResponses(result.outcome) : new Map<string, string>();
   for (const steer of steers) {
