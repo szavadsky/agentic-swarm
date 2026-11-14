@@ -1,4 +1,4 @@
-# acpx probe (acpx 0.22.0; pi 1.5.2 / codex-cli 0.167.0 / opencode 2.2.7)
+# acpx probe (acpx 0.22.0; pi 1.5.2 / codex-cli 0.167.0 / opencode 2.2.7 / agy 1.5.9)
 
 Tags: `[V]` ran/read locally; `[D]` help/docs/source only. Probe date 2026-11-13. Scratch dirs `/tmp/acpx-pi-1`, `/tmp/acpx-codex-1`, `/tmp/acpx-oc-1`, `/tmp/acpx-{pi,codex,oc}-{out,deny}`, `/tmp/acpx-pi-compact`.
 
@@ -7,7 +7,7 @@ Tags: `[V]` ran/read locally; `[D]` help/docs/source only. Probe date 2026-11-13
 ## 0. Binary and install routes
 
 - `bunx acpx --help` is a harness dispatcher: global options first, then an agent subcommand (`pi`, `codex`, `opencode`, `claude`, `gemini`, … 30 in total), then `prompt|exec|cancel|set-mode|set|status|sessions`. [V]
-- Global flags **must precede** the agent name: `acpx pi --format json …` -> `error: unknown option '--format'`, exit 2. Correct: `acpx --format json --model M --cwd D pi …`. [V]
+- Global flags **must precede** the agent name: `acpx pi --format json …` -> `error: unknown option '--format'`, exit 2. Correct: `acpx --format json --model M --cwd D pi …`. That includes `--model`: `acpx --format json --cwd D pi --model M -s n hi` -> `error: unknown option '--model'`, exit 2; the same argv with `--model M` before `pi` reaches NO_SESSION, exit 4. [V]
 - `bunx acpx --version` = `0.22.0`, fetched by bunx/npx; no global install was performed. `acpx config show` reports `defaultAgent: codex`, `defaultPermissions: approve-reads`, `nonInteractivePermissions: deny`, `ttl: 300`. [V]
 - Adapters are launched through `npx` on first use (observed with `--verbose` and in `~/.acpx/sessions/<record>.json.agent_command`): [V]
   - pi: `npx --package=pi-acp@^0.0.33 -- pi-acp`; local `pi` 1.5.2 required. Fetched adapter reports `pi-acp 0.0.33`. Works.
@@ -122,7 +122,7 @@ acpx has no outcome-file or schema flag: delivery means the harness's own write/
   - adapter-level failure (pi compact too small): code `-32603`, `data.details:"pi compact failed: …"`, exit 1.
 - A mid-prompt SIGKILL of the agent process was not tested; owner-kill between turns is covered above and shows acpx re-spawns the agent with `session/load|resume`. [V]
 
-## 9. Per-harness summary
+## 9. Per-harness summary (pi / codex / opencode; agy in §12)
 
 | capability | pi | codex | opencode |
 |---|---|---|---|
@@ -173,3 +173,25 @@ Observed: turn 1 replied `STORED`; after the owner was killed, the second CLI pr
 - Usage/cost is not uniform: pi needs the `/session` text command; codex reports tokens with no cost (its `usage_update` is a context gauge only); opencode's `usage_update` is the only one carrying `cost`. If the harness needs a single accounting table, it must normalise three sources. [V]
 - The built-in `acpx opencode` subcommand cannot be used against this machine's existing opencode 2.2.7 database; either use `--agent "opencode acpx"` or pin/upgrade the `opencode-ai` package the adapter fetches. [V]
 - Treat acpx permission flags as advisory for pi/codex/opencode: no permission frames were emitted and all three wrote files under `--deny-all`. Sandboxing must come from the harness or a container, not from acpx flags. [V]
+
+## 12. agy (Antigravity CLI, `agy acp`) — live, 2026-11-14
+
+- `agy` 1.5.9 at `~/.local/bin/agy`; `agy acp` is its ACP stdio server: initialize reports `agentInfo: {name:"Antigravity ACP Server",version:"1.5.9"}`, protocolVersion 1, `loadSession` + `sessionCapabilities.{resume,close,load,list}`. [V]
+- acpx's built-in `antigravity` agent spawns `agy_acp_server.par` (acpx registry), which the CLI does not install. The working route is acpx's raw-agent escape hatch: `--agent "<agy> acp"`. The adapter resolves `<agy>` itself (`AGY_PATH`, then PATH) because the raw command is what acpx spawns; a pre-flight-only lookup would let the two diverge. [V]
+- Raw route shape: no positional agent command, so `-s` follows the top-level subcommand; putting it first is `error: unknown option '-s'` (`enablePositionalOptions`). `--model` is still a global flag, so it precedes `--agent` and the `prompt` verb, as it does for pi/codex. [V]
+
+  ```bash
+  D=/tmp/agy-acpx-1
+  AGY=~/.local/bin/agy
+  bunx acpx --format json --cwd "$D" --agent "$AGY acp" --approve-all sessions new --name agy-1
+  bunx acpx --format json --cwd "$D" --agent "$AGY acp" set -s agy-1 thought_level high
+  bunx acpx --format json --cwd "$D" --approve-all --model gemini-3.8-flash \
+    --agent "$AGY acp" prompt -s agy-1 "Reply exactly PONG"
+  ```
+
+- Model: `--model` validates against the `model` config option, which lists only the base ids `gemini-3.8-flash`, `claude-sonnet-4-6`, `claude-opus-4-6-thinking`, `gpt-oss-120b-medium`. `--model gemini-3.8-flash-high` exits 1 with `Cannot apply --model "gemini-3.8-flash-high": the ACP agent did not advertise that model`, even though `session/resume` advertises the `-low|-medium|-high` ids in `models.availableModels`; `set model gemini-3.8-flash-high` fails with the same message. [V]
+- Effort lives in the model id: the suffixed ids are the base plus `thought_level` (`low|medium|high`, default `high`). `set thought_level high` makes agy request `gemini-3.8-flash-high` (the brain transcript shows `gemini-3.8-flash-medium`/`-low` after those sets). The adapter therefore splits a known suffix into the `thought_level` option and passes the base id to `--model`. [V]
+- Permissions: agy differs from pi/codex/opencode — it emits `session/request_permission` before `run_command`. Under acpx's default `nonInteractivePermissions: deny` the command fails (`tool_call` status `failed`) while the prompt still returns `stopReason:"end_turn"` and the CLI exits 5. `write_file` needs no permission. `--approve-all` makes shell commands run (gate commands depend on it). [V]
+- Usage: the prompt result carries tokens and no cost: `{"usage":{"inputTokens":8783,"outputTokens":79,"cachedReadTokens":0,"cachedWriteTokens":0,"thoughtTokens":77,"totalTokens":8862}}`. `totalTokens = inputTokens + cachedReadTokens + outputTokens`, and `thoughtTokens` is inside `outputTokens` (codex accounting). Cache writes arrive as `cachedWriteTokens`, not ACP's `cacheCreationInputTokens`. No cost field; the acpx record has no `cumulative_cost`. [V]
+- Resume: a second `acpx` CLI process with `prompt -s <name>` in the recorded cwd resumed the same record and recalled the stored word; the adapter's cwd-bound guard applies as for pi/codex. [V]
+- Adapter live evidence through `AcpxHarness({agent:"agy"})` from a scratch cwd (`/tmp/opencode/agy-live-cwd`, 2026-11-14): turn 1 `stop=done`, text `STORED`, in 8798 / cache-read 0 / cache-write 0 / out 2 / reasoning 128, session `agy-3e30ff4f-88b6-4676-9238-d04a6eff1903`; turn 2 from a fresh harness object resumed the same id in the same cwd, `stop=done`, text `CONDOR`, in 2253 / cache-read 6757 / out 2 / reasoning 125. Cost unknown (agy reports none and no price entry exists). [V]

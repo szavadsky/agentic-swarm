@@ -14,6 +14,8 @@ export interface AcpxStub {
 export interface AcpxStubOptions {
   /** Overrides the codex prompt usage frame. */
   codexUsage?: Record<string, number>;
+  /** Overrides the agy prompt usage frame. */
+  agyUsage?: Record<string, number>;
 }
 
 /**
@@ -37,6 +39,17 @@ export function createAcpxStub(opts: AcpxStubOptions = {}): AcpxStub {
       thoughtTokens: 0,
     }
   );
+  // The live agy turn reported exactly this shape and no cost.
+  const agyUsage = JSON.stringify(
+    opts.agyUsage ?? {
+      totalTokens: 8862,
+      inputTokens: 8783,
+      cachedReadTokens: 0,
+      cachedWriteTokens: 0,
+      outputTokens: 79,
+      thoughtTokens: 77,
+    }
+  );
 
   const script = `#!/usr/bin/env bun
 import fs from "node:fs";
@@ -48,7 +61,7 @@ const stateDir = ${JSON.stringify(stateDir)};
 fs.mkdirSync(stateDir, { recursive: true });
 fs.appendFileSync(logPath, JSON.stringify(args) + "\\n");
 
-const agent = args.includes("pi") ? "pi" : "codex";
+const agent = args.includes("--agent") ? "agy" : args.includes("pi") ? "pi" : "codex";
 const emit = (frame) => process.stdout.write(JSON.stringify(frame) + "\\n");
 const flag = (names) => {
   for (const name of names) {
@@ -139,6 +152,8 @@ if (mode === "cancelled") {
 if (agent === "codex") {
   emit({ jsonrpc: "2.0", method: "session/update", params: { sessionId, update: { sessionUpdate: "usage_update", used: 5927, size: 950000 } } });
   emit({ jsonrpc: "2.0", id: 7, result: { stopReason: "end_turn", usage: ${usage} } });
+} else if (agent === "agy") {
+  emit({ jsonrpc: "2.0", id: 7, result: { stopReason: "end_turn", usage: ${agyUsage} } });
 } else {
   emit({ jsonrpc: "2.0", id: 7, result: { stopReason: "end_turn" } });
 }
