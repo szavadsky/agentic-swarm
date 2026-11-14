@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { readText, readYaml, writeTextAtomic, writeYamlAtomic } from "../core/records/io.js";
 import { AsyncMutex } from "../core/mutex.js";
-import { parseTaskFile, renderTaskFile } from "./tasks.js";
+import { parseTaskFile, renderTaskFile, TaskFileError } from "./tasks.js";
 import type {
   ArtifactStore,
   Outcome,
@@ -10,6 +10,7 @@ import type {
   RecordStart,
   StepRecord,
   TaskFile,
+  TaskStatus,
   TurnRecord,
 } from "./types.js";
 
@@ -26,6 +27,29 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 function recordDirName(seq: number, meta: RecordStart): string {
   const slug = meta.slug ? `-${meta.slug}` : "";
   return `${String(seq).padStart(5, "0")}-i${meta.iteration}${slug}-${meta.step}-r${meta.round}`;
+}
+
+/**
+ * The last terminal fact a slug's records carry, read the way `derive` reads
+ * them. A broken file for a merged, finished or cancelled slug is history: it
+ * must stay in `tasks/` so the record keeps the only file it names.
+ */
+function terminalStatus(records: StepRecord[], slug: string): TaskStatus | null {
+  let status: TaskStatus | null = null;
+  for (const record of records) {
+    if (record.slug !== slug || !record.endedAt) continue;
+    if (record.step === "park") status = "parked";
+    else if (record.step === "cancel") status = "cancelled";
+    else if (record.step === "merge" && record.ok === true) status = "merged";
+    else if (record.step === "finish" && record.ok === true) status = "finished";
+  }
+  return status;
+}
+
+function isTerminalHistory(
+  status: TaskStatus | null
+): status is "merged" | "finished" | "cancelled" {
+  return status === "merged" || status === "finished" || status === "cancelled";
 }
 
 class FolderStore implements ArtifactStore {
@@ -104,13 +128,80 @@ class FolderStore implements ArtifactStore {
 
   async listTasks(): Promise<TaskFile[]> {
     const tasks: TaskFile[] = [];
+    let records: StepRecord[] | undefined;
     for (const name of await this.listDir("tasks")) {
       if (!name.endsWith(".md")) continue;
       const slug = name.slice(0, -".md".length);
       const text = await this.readFile(`tasks/${name}`);
-      if (text !== null) tasks.push(parseTaskFile(text, slug));
+      if (text === null) continue;
+      try {
+        tasks.push(parseTaskFile(text, slug));
+      } catch (err) {
+        if (!(err instanceof TaskFileError)) throw err;
+        records ??= await this.listRecords();
+        const terminal = terminalStatus(records, slug);
+        if (isTerminalHistory(terminal)) {
+          await this.reportTerminalHistory(name, terminal, err.message, records);
+        } else {
+          await this.quarantineTask(name, err.message);
+        }
+      }
     }
     return tasks.sort((a, b) => a.slug.localeCompare(b.slug));
+  }
+
+  /**
+   * An unreadable task file is moved out of `tasks/` and reported: one
+   * half-written file must not wedge every launch that lists tasks. The file is
+   * kept under `tasks/quarantine/` for the operator; a name already there gets
+   * a numeric suffix rather than overwriting the earlier casualty.
+   */
+  private async quarantineTask(name: string, reason: string): Promise<void> {
+    const dir = path.join(this.tasksDir, "quarantine");
+    await fs.promises.mkdir(dir, { recursive: true });
+    const stem = name.slice(0, -".md".length);
+    let target = path.join(dir, name);
+    for (let copy = 2; fs.existsSync(target); copy++) {
+      target = path.join(dir, `${stem}-${copy}.md`);
+    }
+    try {
+      await fs.promises.rename(path.join(this.tasksDir, name), target);
+    } catch (err) {
+      // A concurrent listing already quarantined it; nothing left to report.
+      if (isENOENT(err)) return;
+      throw err;
+    }
+    const destination = path.relative(this.goalDir, target);
+    await this.appendRecord(
+      { iteration: 0, step: "task-quarantine", round: 1, actor: "script" },
+      { ok: false, cause: `task file "${name}" quarantined at ${destination}: ${reason}` }
+    );
+  }
+
+  /**
+   * A slug with a merged, finished or cancelled record keeps its broken file:
+   * moving it would leave the terminal record with no file, and a later file
+   * reusing the slug would inherit that record. Report it once so repeated
+   * listings do not pile up records.
+   */
+  private async reportTerminalHistory(
+    name: string,
+    status: TaskStatus,
+    reason: string,
+    records: StepRecord[]
+  ): Promise<void> {
+    const marker = `task file "${name}" is unreadable`;
+    const alreadyReported = records.some(
+      (record) => record.step === "task-quarantine" && record.cause?.startsWith(marker)
+    );
+    if (alreadyReported) return;
+    await this.appendRecord(
+      { iteration: 0, step: "task-quarantine", round: 1, actor: "script" },
+      {
+        ok: false,
+        cause: `${marker}; left in tasks/ because its slug already has a terminal record (${status}): ${reason}`,
+      }
+    );
   }
 
   async readTask(slug: string): Promise<TaskFile | null> {

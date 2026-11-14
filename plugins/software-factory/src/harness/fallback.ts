@@ -27,6 +27,8 @@ export interface AttemptOutput<T> {
   stop: Stop;
   usage: Usage;
   value: T;
+  /** Calls made inside this one (a lost session retried de novo), recorded first. */
+  attempts?: TurnAttempt[];
 }
 
 export interface FallbackResult<T> {
@@ -66,6 +68,7 @@ export async function runWithFallbacks<T>(opts: {
   for (const model of chain) {
     for (;;) {
       const outcome = await opts.run(model);
+      attempts.push(...(outcome.attempts ?? []));
       attempts.push({ model, stop: outcome.stop, usage: outcome.usage });
       last = { outcome, model };
       if (outcome.stop.kind !== "infra") {

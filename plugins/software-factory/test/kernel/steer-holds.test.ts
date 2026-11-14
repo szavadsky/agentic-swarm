@@ -7,7 +7,7 @@ import { FakeHarness, fakeTurnResult, type FakeTurnHandler } from "../../src/har
 import { runBoundary } from "../../src/kernel/boundary.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch, type DispatchResult } from "../../src/kernel/dispatch.js";
-import { holdsDir, postSteer } from "../../src/kernel/mailbox.js";
+import { holdsDir, postSteer, quarantineDir, readHolds } from "../../src/kernel/mailbox.js";
 import { task } from "./helpers.js";
 import {
   cleanupFlowRepo,
@@ -406,7 +406,7 @@ describe("mid-run steer holds", () => {
     }
   }, 60_000);
 
-  it("stops as infra when the steer turn writes a malformed hold", async () => {
+  it("quarantines a malformed hold the steer turn writes and keeps dispatching", async () => {
     const { repo, goal } = setupFlowRepo({ limits: { concurrency: 2 } });
     try {
       const harness = new FakeHarness({ id: "fake" });
@@ -434,20 +434,28 @@ describe("mid-run steer holds", () => {
         ctx.writeOutcome(outcome({ summary: "wrote an invalid hold" }));
         return fakeTurnResult(req);
       });
+      harness.script(approver("alpha is correct"));
+      harness.script(approver("beta is correct"));
 
       const dispatched = await runDispatch(runtime, { iteration: 1, seenSteers: [] });
-      expect(dispatched.reason).toBe("infra");
-      expect(dispatched.cause).toContain("holds");
-      expect(dispatched.cause).toContain("s1.yaml");
+      expect(dispatched.reason).toBe("boundary");
 
+      // The malformed hold is parked where it cannot decide anything, with a record.
+      expect(fs.existsSync(path.join(quarantineDir(runtime.store), "s1.yaml"))).toBe(true);
+      expect(fs.existsSync(path.join(holdsDir(runtime.store), "s1.yaml"))).toBe(false);
       const records = await runtime.store.listRecords();
-      // The turn already in flight settled instead of being abandoned.
+      const quarantined = records.find((record) => record.step === "hold-quarantine");
+      expect(quarantined?.ok).toBe(false);
+      expect(quarantined?.cause).toContain("s1.yaml");
+
+      // The turn already in flight settled, and the launch kept dispatching.
       expect(
         records.find((record) => record.slug === "beta" && record.step === "implement")?.outcome
           ?.status
       ).toBe("done");
-      expect(records.some((record) => record.step === "merge")).toBe(false);
-      expect((await tasks(runtime)).tasks.beta!.status).not.toBe("merged");
+      const state = await tasks(runtime);
+      expect(state.tasks.alpha!.status).toBe("merged");
+      expect(state.tasks.beta!.status).toBe("merged");
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -515,7 +523,7 @@ describe("mid-run steer holds", () => {
     }
   }, 60_000);
 
-  it("stops the iteration as infra on a malformed hold and dispatches nothing", async () => {
+  it("quarantines a malformed hold left in the mailbox and dispatches normally", async () => {
     const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
     try {
       const harness = new FakeHarness({ id: "fake" });
@@ -526,13 +534,181 @@ describe("mid-run steer holds", () => {
       fs.mkdirSync(dir, { recursive: true });
       fs.writeFileSync(path.join(dir, "s1.yaml"), "slugs: alpha\ngoal: maybe\n", "utf8");
 
+      harness.script(implementer("alpha.txt"));
+      harness.script(approver("alpha is correct"));
+      harness.script(implementer("gamma.txt"));
+      harness.script(approver("gamma is correct"));
+
       const dispatched = await runDispatch(runtime, { iteration: 1, seenSteers: [] });
-      expect(dispatched.reason).toBe("infra");
-      expect(dispatched.cause).toContain("s1.yaml");
-      expect(harness.calls).toHaveLength(0);
+      expect(dispatched.reason).toBe("boundary");
+      const state = await tasks(runtime);
+      expect(state.tasks.alpha!.status).toBe("merged");
+      expect(state.tasks.gamma!.status).toBe("merged");
+      expect(fs.existsSync(path.join(quarantineDir(runtime.store), "s1.yaml"))).toBe(true);
+      const record = (await runtime.store.listRecords()).find((r) => r.step === "hold-quarantine");
+      expect(record?.cause).toContain("s1.yaml");
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("re-presents an unanswered steer, then expires its hold with a concern", async () => {
+    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      writePlan(runtime);
+      await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
+      await postSteer(runtime.store, "s1", "Hold alpha until I answer.");
+      writeHold(runtime, "s1", ["alpha"], true);
+
+      const ignoreSteer: FakeTurnHandler = (req, ctx) => {
+        expect(req.prompt).toContain("- s1 (mailbox/inbox/s1.md): Hold alpha until I answer.");
+        ctx.writeOutcome(outcome({ summary: "ignored the steer", decision: "continue" }));
+        return fakeTurnResult(req);
+      };
+      const unchanged: FakeTurnHandler = (req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "tasks unchanged" }));
+        return fakeTurnResult(req);
+      };
+
+      // First unanswered boundary: the steer is recorded, its hold still gates.
+      harness.script(ignoreSteer);
+      harness.script(unchanged);
+      const first = await runBoundary(runtime, { relaunch: false });
+      expect(first.decision).toBe("continue");
+      expect(fs.existsSync(path.join(holdsDir(runtime.store), "s1.yaml"))).toBe(true);
+      const presented = (await runtime.store.listRecords()).find((r) => r.step === "steer-presented");
+      expect(presented?.ok).toBe(false);
+      expect(presented?.cause).toContain('"s1"');
+      expect(
+        (await runtime.store.listRecords()).some((r) => r.step === "steer-unanswered")
+      ).toBe(false);
+
+      // Second unanswered boundary: re-presented again, then the hold expires.
+      harness.script(ignoreSteer);
+      harness.script(unchanged);
+      const second = await runBoundary(runtime, { relaunch: false });
+      expect(second.decision).toBe("continue");
+      expect(fs.existsSync(path.join(runtime.store.goalDir, "mailbox/inbox/s1.md"))).toBe(true);
+      expect(fs.existsSync(path.join(holdsDir(runtime.store), "s1.yaml"))).toBe(false);
+      expect(await readHolds(runtime.store)).toEqual([]);
+      const expired = (await runtime.store.listRecords()).find((r) => r.step === "steer-unanswered");
+      expect(expired?.ok).toBe(false);
+      expect(expired?.cause).toContain('"s1"');
+      expect(expired?.outcome?.concerns[0]?.calibration).toBe("architect");
+      expect(expired?.outcome?.concerns[0]?.text).toContain("s1");
+      expect(expired?.outcome?.concerns[0]?.evidence).toBe("mailbox/inbox/s1.md");
+
+      // Third boundary: the architect finally answers the still-pending steer.
+      harness.script((req, ctx) => {
+        expect(req.prompt).toContain("- s1 (mailbox/inbox/s1.md): Hold alpha until I answer.");
+        ctx.writeOutcome(
+          outcome({
+            summary: "answered it",
+            decision: "continue",
+            forward: ["steer s1: hold is released"],
+          })
+        );
+        return fakeTurnResult(req);
+      });
+      harness.script(unchanged);
+      const third = await runBoundary(runtime, { relaunch: false });
+      expect(third.decision).toBe("continue");
+      expect(fs.existsSync(path.join(runtime.store.goalDir, "mailbox/processed/s1.md"))).toBe(true);
+      expect(
+        fs.readFileSync(path.join(runtime.store.goalDir, "mailbox/outbox/steer-s1.md"), "utf8")
+      ).toContain("hold is released");
       const records = await runtime.store.listRecords();
-      expect(records.filter((record) => record.slug !== undefined)).toEqual([]);
-      expect((await tasks(runtime)).tasks.alpha!.status).toBe("ready");
+      expect(records.filter((r) => r.step === "steer-presented")).toHaveLength(1);
+      expect(records.filter((r) => r.step === "steer-unanswered")).toHaveLength(1);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("expires an unanswered steer whose id contains a quote", async () => {
+    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      writePlan(runtime);
+      await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
+      // A naive writer may drop any file name; the id is the file name, quotes included.
+      const inbox = path.join(runtime.store.goalDir, "mailbox/inbox");
+      fs.mkdirSync(inbox, { recursive: true });
+      fs.writeFileSync(path.join(inbox, 'we"ird.md'), "Hold alpha until I answer.\n", "utf8");
+      writeHold(runtime, 'we"ird', ["alpha"], true);
+
+      const ignoreSteer: FakeTurnHandler = (req, ctx) => {
+        expect(req.prompt).toContain(
+          '- we"ird (mailbox/inbox/we"ird.md): Hold alpha until I answer.'
+        );
+        ctx.writeOutcome(outcome({ summary: "ignored the steer", decision: "continue" }));
+        return fakeTurnResult(req);
+      };
+      const unchanged: FakeTurnHandler = (req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "tasks unchanged" }));
+        return fakeTurnResult(req);
+      };
+
+      harness.script(ignoreSteer);
+      harness.script(unchanged);
+      const first = await runBoundary(runtime, { relaunch: false });
+      expect(first.decision).toBe("continue");
+      expect(fs.existsSync(path.join(holdsDir(runtime.store), 'we"ird.yaml'))).toBe(true);
+
+      harness.script(ignoreSteer);
+      harness.script(unchanged);
+      const second = await runBoundary(runtime, { relaunch: false });
+      expect(second.decision).toBe("continue");
+
+      // The quoted id round-trips, so the second boundary recognizes the first
+      // presentation and expires the hold instead of presenting forever.
+      expect(fs.existsSync(path.join(runtime.store.goalDir, 'mailbox/inbox/we"ird.md'))).toBe(true);
+      expect(fs.existsSync(path.join(holdsDir(runtime.store), 'we"ird.yaml'))).toBe(false);
+      const records = await runtime.store.listRecords();
+      expect(records.filter((r) => r.step === "steer-presented")).toHaveLength(1);
+      const expired = records.filter((r) => r.step === "steer-unanswered");
+      expect(expired).toHaveLength(1);
+      expect(expired[0]?.outcome?.concerns[0]?.evidence).toBe('mailbox/inbox/we"ird.md');
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("answers two different steers that carry identical text", async () => {
+    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      writePlan(runtime);
+      await postSteer(runtime.store, "s1", "Keep the API stable.");
+      await postSteer(runtime.store, "s2", "Keep the API stable.");
+
+      harness.script((req, ctx) => {
+        expect(req.prompt).toContain("- s1 (mailbox/inbox/s1.md): Keep the API stable.");
+        expect(req.prompt).toContain("- s2 (mailbox/inbox/s2.md): Keep the API stable.");
+        ctx.writeOutcome(
+          outcome({
+            summary: "answered both steers",
+            decision: "continue",
+            forward: ["steer s1: names stay", "steer s2: internals only"],
+          })
+        );
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "tasks unchanged" }));
+        return fakeTurnResult(req);
+      });
+
+      const boundary = await runBoundary(runtime, { relaunch: false });
+      expect(boundary.decision).toBe("continue");
+      for (const id of ["s1", "s2"]) {
+        expect(fs.existsSync(path.join(runtime.store.goalDir, `mailbox/processed/${id}.md`))).toBe(true);
+        expect(fs.existsSync(path.join(runtime.store.goalDir, `mailbox/outbox/steer-${id}.md`))).toBe(true);
+      }
     } finally {
       cleanupFlowRepo(repo);
     }

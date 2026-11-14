@@ -56,7 +56,7 @@ export class OpencodeHarness implements Harness {
       retry: this.retry,
       run: async (model) => {
         const value = await runOpencodeTurn(this.runtime, req, model);
-        return { stop: value.stop, usage: value.usage, value };
+        return { stop: value.stop, usage: value.usage, value, attempts: value.attempts };
       },
     });
 

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { zeroUsage } from "../usage.js";
-import type { ModelRef, TurnRequest, TurnResult } from "../types.js";
+import type { AdapterTurnResult, ModelRef, Stop, TurnAttempt, TurnRequest } from "../types.js";
 import { classifyOmpTurn, type OmpTurnFailure } from "./classify.js";
 import { OmpRpc, OmpRpcExit, OmpRpcTimeout } from "./rpc.js";
 import { actualModel, type OmpRuntime } from "./runtime.js";
@@ -20,12 +20,24 @@ function isInside(parent: string, child: string): boolean {
   return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
 }
 
+/** Stop for a failed RPC launch, shared by the retry record and the terminal return. */
+function launchFailure(error: unknown): Stop {
+  return classifyOmpTurn({
+    failure:
+      error instanceof OmpRpcTimeout
+        ? { timedOut: true }
+        : error instanceof OmpRpcExit
+          ? { code: error.code, signal: error.signal, stderr: error.stderr }
+          : { stderr: String(error) },
+  });
+}
+
 /** One omp RPC process for one model from the fallback chain. */
 export async function runOmpTurn(
   runtime: OmpRuntime,
   req: TurnRequest,
   requested: ModelRef
-): Promise<Omit<TurnResult, "attempts">> {
+): Promise<AdapterTurnResult> {
   const opaque = (req.opaque ?? {}) as OmpTurnOpaque;
   const model: ModelRef = { ...requested, effort: req.effort ?? requested.effort };
   const dirs = runtime.dirs();
@@ -91,8 +103,10 @@ export async function runOmpTurn(
 
   // The session lives in its own launch dir; resume against that home, and when
   // it is gone (retention pruned it) retry de novo once instead of crashing.
+  // The failed resume is kept as an attempt record: the restart is never silent.
   let resumeDir = dirs.sessions;
   let resumeId = resume;
+  const attempts: TurnAttempt[] = [];
   if (resume && req.session?.dir && fs.existsSync(req.session.dir)) {
     resumeDir = req.session.dir;
   }
@@ -100,6 +114,7 @@ export async function runOmpTurn(
     rpc = await runtime.launch(model, req.cwd, overlayPath, resumeDir, resumeId, extraArgs);
   } catch (error) {
     if (resumeId && /session .*not found/i.test(error instanceof OmpRpcExit ? error.stderr : String(error))) {
+      attempts.push({ model, stop: launchFailure(error), usage: zeroUsage() });
       resumeId = undefined;
       resumeDir = dirs.sessions;
       try {
@@ -111,17 +126,11 @@ export async function runOmpTurn(
     if (!rpc) {
       clearTimers();
       return {
-        stop: classifyOmpTurn({
-          failure:
-            error instanceof OmpRpcTimeout
-              ? { timedOut: true }
-              : error instanceof OmpRpcExit
-                ? { code: error.code, signal: error.signal, stderr: error.stderr }
-                : { stderr: String(error) },
-        }),
+        stop: launchFailure(error),
         text: "",
         usage: zeroUsage(),
         model,
+        attempts,
       };
     }
   }
@@ -255,5 +264,6 @@ export async function runOmpTurn(
     session,
     model: session?.model ?? model,
     transcript: sessionFile,
+    attempts,
   };
 }

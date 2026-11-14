@@ -8,6 +8,7 @@ import {
   holdsDir,
   markProcessed,
   postSteer,
+  quarantineDir,
   readHolds,
   scanInbox,
   steerResponses,
@@ -52,7 +53,7 @@ describe("mailbox", () => {
     }
   });
 
-  it("is idempotent by content hash across a replay", async () => {
+  it("identifies a steer by file name: identical text under a new name is a new steer", async () => {
     const { root, store } = await setup();
     try {
       await postSteer(store, "s1", "One decision, please.");
@@ -62,13 +63,16 @@ describe("mailbox", () => {
       await markProcessed(store, first!);
       await markProcessed(store, first!); // crash replay: already moved
 
+      // Same text, different file name: a second steer the architect must answer.
       await postSteer(store, "s2", "One decision, please.");
-      expect(await scanInbox(store, { settleMs: 0 })).toEqual([]);
-      expect(fs.existsSync(path.join(store.goalDir, "mailbox/inbox/s2.md"))).toBe(false);
-      const processed = fs.readdirSync(path.join(store.goalDir, "mailbox/processed")).sort();
-      expect(processed).toHaveLength(2);
-      expect(processed[0]).toBe("s1.md");
-      expect(processed[1]).toMatch(/^s2\.[0-9a-f]{8}\.md$/);
+      const steers = await scanInbox(store, { settleMs: 0 });
+      expect(steers.map((s) => s.id)).toEqual(["s2"]);
+      expect(fs.existsSync(path.join(store.goalDir, "mailbox/inbox/s2.md"))).toBe(true);
+
+      // Same file name again: a replay of the processed steer, archived silently.
+      await postSteer(store, "s1", "One decision, please.");
+      expect((await scanInbox(store, { settleMs: 0 })).map((s) => s.id)).toEqual(["s2"]);
+      expect(fs.existsSync(path.join(store.goalDir, "mailbox/inbox/s1.md"))).toBe(false);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
@@ -93,13 +97,30 @@ describe("mailbox", () => {
     }
   });
 
-  it("fails loudly on a malformed hold instead of letting held work run", async () => {
+  it("quarantines a malformed hold with a record instead of wedging the launch", async () => {
     const { root, store } = await setup();
     try {
       const dir = holdsDir(store);
       fs.mkdirSync(dir, { recursive: true });
       fs.writeFileSync(path.join(dir, "s1.yaml"), "slugs: alpha\ngoal: false\n", "utf8");
-      await expect(readHolds(store)).rejects.toThrow('hold file "s1.yaml" must be');
+      fs.writeFileSync(path.join(dir, "s2.yaml"), "slugs: [unclosed\n", "utf8");
+      fs.writeFileSync(path.join(dir, "s3.yaml"), "slugs: []\ngoal: true\n", "utf8");
+
+      expect(await readHolds(store)).toEqual([{ steer: "s3", slugs: [], goal: true }]);
+      const quarantine = quarantineDir(store);
+      expect(fs.readdirSync(quarantine).sort()).toEqual(["s1.yaml", "s2.yaml"]);
+      expect(fs.readFileSync(path.join(quarantine, "s1.yaml"), "utf8")).toContain("slugs: alpha");
+      expect(fs.existsSync(path.join(dir, "s1.yaml"))).toBe(false);
+
+      const records = (await store.listRecords()).filter((r) => r.step === "hold-quarantine");
+      expect(records).toHaveLength(2);
+      expect(records[0]?.ok).toBe(false);
+      expect(records[0]?.cause).toContain('"s1.yaml"');
+      expect(records[1]?.cause).toContain('"s2.yaml"');
+
+      // A later read has nothing left to quarantine and appends no second record.
+      expect(await readHolds(store)).toEqual([{ steer: "s3", slugs: [], goal: true }]);
+      expect((await store.listRecords()).filter((r) => r.step === "hold-quarantine")).toHaveLength(2);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }

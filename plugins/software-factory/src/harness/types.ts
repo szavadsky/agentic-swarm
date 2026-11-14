@@ -71,6 +71,15 @@ export type TurnAttempt = {
   usage: Usage;
 };
 
+/**
+ * One adapter call: a TurnResult without the fallback list. `attempts` holds
+ * calls the adapter made inside this one (a lost session retried de novo), in
+ * order, so the caller can record every restart.
+ */
+export type AdapterTurnResult = Omit<TurnResult, "attempts"> & {
+  attempts: TurnAttempt[];
+};
+
 export interface TurnRequest {
   model: ModelRef;
   effort?: string;

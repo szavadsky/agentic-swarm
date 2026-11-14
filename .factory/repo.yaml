@@ -4,6 +4,6 @@ setup:
   - bun install --cwd plugins/software-factory --frozen-lockfile --silent
 gates:
   - id: typecheck
-    command: bun --cwd=plugins/software-factory run typecheck
+    command: plugins/software-factory/scripts/gates.sh plugins/software-factory typecheck
   - id: tests
-    command: bun --cwd=plugins/software-factory test
+    command: plugins/software-factory/scripts/gates.sh plugins/software-factory tests

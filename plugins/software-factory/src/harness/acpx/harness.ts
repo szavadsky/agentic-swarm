@@ -7,17 +7,18 @@ import type {
   TurnRequest,
   TurnResult,
 } from "../types.js";
-import { resolveAcpxCommand } from "./command.js";
+import { resolveAcpxCommand, resolveAgyBinary } from "./command.js";
 import { runAcpxTurn } from "./turn.js";
 import { ACPX_EFFORT, type AcpxAgent, type AcpxHarnessOptions } from "./types.js";
 
 export type { AcpxAgent, AcpxHarnessOptions } from "./types.js";
 
 /**
- * pi and codex through acpx: one named acpx session per turn chain, model via
- * the global flag, effort via the per-agent session config option. opencode and
- * omp keep native adapters because acpx's built-in opencode route resolves the
- * wrong version (probe §0).
+ * pi, codex and agy through acpx: one named acpx session per turn chain, model
+ * via the global flag, effort via the per-agent session config option (agy
+ * carries it in the model id, which the adapter splits). opencode and omp keep
+ * native adapters because acpx's built-in opencode route resolves the wrong
+ * version (probe §0).
  */
 export class AcpxHarness implements Harness {
   readonly id: AcpxAgent;
@@ -39,7 +40,7 @@ export class AcpxHarness implements Harness {
       subagents: "none",
       structuredOutput: "none",
       effort: [...effort.levels],
-      usage: { cache: this.id === "codex", cost: false },
+      usage: { cache: this.id === "codex" || this.id === "agy", cost: false },
     };
   }
 
@@ -50,7 +51,7 @@ export class AcpxHarness implements Harness {
       retry: this.retry,
       run: async (model) => {
         const value = await runAcpxTurn(this.runtime, req, model);
-        return { stop: value.stop, usage: value.usage, value };
+        return { stop: value.stop, usage: value.usage, value, attempts: value.attempts };
       },
     });
 
@@ -64,5 +65,6 @@ function runtimeOf(opts: AcpxHarnessOptions) {
   return {
     agent: opts.agent,
     command: resolveAcpxCommand(opts.binary),
+    agyBinary: resolveAgyBinary(opts.agyBinary),
   };
 }

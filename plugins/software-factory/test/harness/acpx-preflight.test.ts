@@ -7,7 +7,7 @@ import { preflight, type ModelCatalog } from "../../src/kernel/preflight.js";
 import { FakeHarness } from "../../src/harness/fake/index.js";
 import { AcpxHarness } from "../../src/harness/acpx/harness.js";
 import type { Harness } from "../../src/harness/types.js";
-import { createRealModelCatalog } from "../../src/cli/harnesses.js";
+import { createRealModelCatalog, resolveHarnessBinaries } from "../../src/cli/harnesses.js";
 import { createTmpRepo } from "../helpers/tmp-repo.js";
 import { createAcpxStub } from "./acpx-stub.js";
 
@@ -102,6 +102,81 @@ describe("self-acpx run config", () => {
       console.warn = originalWarn;
       stub.cleanup();
       repo.cleanup();
+    }
+  });
+
+  it("accepts an agy reviewer whose effort lives in the model id and skips its model list", async () => {
+    const repo = createTmpRepo();
+    const stub = createAcpxStub();
+    const warnings: string[] = [];
+    const originalWarn = console.warn;
+    console.warn = (message: string) => warnings.push(message);
+    try {
+      repo.writeFile(
+        ".factory/repo.yaml",
+        "baseBranch: main\nartifactRoot: .factory/artifacts\nsetup: []\ngates: []\n"
+      );
+      repo.commit("factory config");
+      const runConfigPath = path.join(repo.dir, ".factory", "run-agy.yaml");
+      fs.writeFileSync(
+        runConfigPath,
+        RUN_CONFIG_TEXT.replace(
+          "  reviewer: { harness: codex, model: deepseek-v4.1-flash, effort: high }",
+          "  reviewer: { harness: agy, model: gemini-3.8-flash-high }"
+        ),
+        "utf8"
+      );
+      const configs = loadConfigs(repo.dir, { runConfigPath });
+      const base = path.basename(repo.dir);
+      configs.run.sessions.dir = path.join(path.dirname(repo.dir), `${base}-sessions`);
+      configs.run.worktreeRoot = path.join(path.dirname(repo.dir), `${base}-worktrees`);
+
+      const paths = resolveGoalPaths(configs, repo.dir, "self-agy");
+      fs.mkdirSync(paths.goalDir, { recursive: true });
+      fs.writeFileSync(path.join(paths.goalDir, "intent.md"), "# Goal\n", "utf8");
+      const store = createFolderStore(paths.goalDir);
+      await store.ensureLayout();
+
+      const harnesses = new Map<string, Harness>([
+        ["opencode", new FakeHarness({ id: "opencode", caps: { effort: EFFORTS } })],
+        ["omp", new FakeHarness({ id: "omp", caps: { effort: EFFORTS } })],
+        ["pi", new AcpxHarness({ agent: "pi", binary: stub.binary })],
+        ["agy", new AcpxHarness({ agent: "agy", binary: stub.binary })],
+      ]);
+      const acpxCatalog = createRealModelCatalog({ pi: stub.binary, agy: stub.binary });
+      const catalog: ModelCatalog = (harness, model) =>
+        harness === "pi" || harness === "agy" ? acpxCatalog(harness, model) : Promise.resolve(true);
+
+      const result = await preflight({
+        configs,
+        paths,
+        store,
+        harnesses,
+        binaries: { opencode: stub.binary, omp: stub.binary, pi: stub.binary, agy: stub.binary },
+        catalog,
+        baseGates: false,
+      });
+
+      // The suffix is the effort: no separate alias key, nothing to resolve.
+      expect(result.aliases.reviewer).toBeUndefined();
+      expect(warnings.join("\n")).toContain('skipping model check for "agy"');
+    } finally {
+      console.warn = originalWarn;
+      stub.cleanup();
+      repo.cleanup();
+    }
+  });
+});
+
+describe("agy harness registry", () => {
+  it("resolves the agy harness binary from AGY_PATH", () => {
+    const previous = process.env.AGY_PATH;
+    process.env.AGY_PATH = "/opt/agy-test";
+    try {
+      expect(resolveHarnessBinaries().agy).toBe("/opt/agy-test");
+    } finally {
+      if (previous === undefined) delete process.env.AGY_PATH;
+      else process.env.AGY_PATH = previous;
     }
   });
 });
