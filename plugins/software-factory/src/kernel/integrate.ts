@@ -1,4 +1,4 @@
-import { git } from "../core/git/exec.js";
+import { git, GitError } from "../core/git/exec.js";
 import { commitAll, isAncestor } from "../core/git/commit.js";
 import { runWorktreeSetup } from "../core/checks/setup.js";
 import { KeyedMutex } from "../core/mutex.js";
@@ -39,10 +39,36 @@ async function syncCheckout(runtime: KernelRuntime, commit: string): Promise<voi
   });
 }
 
-async function refMove(runtime: KernelRuntime, commit: string): Promise<void> {
-  await runtime.repo.writeLock.runExclusive(() =>
-    git(runtime.paths.repoRoot, ["update-ref", `refs/heads/${runtime.paths.integrationBranch}`, commit])
-  );
+/** An outside commit moved the integration branch while the queue was building a merge. */
+class IntegrationMovedError extends Error {
+  constructor(readonly expected: string, readonly actual: string) {
+    super(
+      `integration moved: expected ${expected.slice(0, 10)}, found ${actual ? actual.slice(0, 10) : "a missing ref"}; ` +
+        "an outside commit is on the integration branch and this merge left it untouched"
+    );
+    this.name = "IntegrationMovedError";
+  }
+}
+
+/**
+ * Moves the integration ref only if it is still where the merge was built from.
+ * An operator or rogue commit after that point must not be overwritten: the
+ * merge fails loudly and the task records it.
+ */
+async function refMove(runtime: KernelRuntime, commit: string, expected: string): Promise<void> {
+  const ref = `refs/heads/${runtime.paths.integrationBranch}`;
+  await runtime.repo.writeLock.runExclusive(async () => {
+    const res = await git(runtime.paths.repoRoot, ["update-ref", ref, commit, expected], { allowFail: true });
+    if (res.code === 0) return;
+    const actual = await git(runtime.paths.repoRoot, ["rev-parse", "--verify", "--quiet", ref], { allowFail: true });
+    const found = actual.stdout.trim();
+    // A refused update that still sees the expected value is a lock or git
+    // failure, not an outside commit; keep git's own reason.
+    if (found === expected) {
+      throw new GitError(`update-ref ${ref} ${commit} ${expected}`, res.code, res.stderr, res.stdout);
+    }
+    throw new IntegrationMovedError(expected, found);
+  });
 }
 
 async function recordMerge(
@@ -91,7 +117,16 @@ async function recoverOpenMerge(
   const parent = await git(runtime.paths.repoRoot, ["rev-parse", `${commit}^`], { allowFail: true });
   const movable = parent.code === 0 && parent.stdout.trim() === head;
   if (!already && !movable) return false;
-  if (movable) await refMove(runtime, commit);
+  if (movable) {
+    try {
+      await refMove(runtime, commit, head);
+    } catch (err) {
+      if (!(err instanceof IntegrationMovedError)) throw err;
+      // A failure record parks the task; the stale open record stays inert.
+      await recordMerge(runtime, task, iteration, round, { ok: false, cause: err.message });
+      return true;
+    }
+  }
   await syncCheckout(runtime, already ? head : commit);
   await recordMerge(runtime, task, iteration, round, {
     ok: true,
@@ -215,7 +250,14 @@ export async function mergeTask(
       ...scriptMeta(iteration, "merge", { slug: task.slug, round }),
       commit,
     });
-    await refMove(runtime, commit);
+    try {
+      await refMove(runtime, commit, head);
+    } catch (err) {
+      if (!(err instanceof IntegrationMovedError)) throw err;
+      await removeMergeScratch(runtime);
+      await turn.finish({ ok: false, cause: err.message });
+      return {};
+    }
     await syncCheckout(runtime, commit);
     await removeMergeScratch(runtime);
     await turn.finish({ ok: true, commit, checks });

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { repositoryId } from "../kernel/config.js";
 
 export interface LockData {
   pid: number;
@@ -32,7 +33,8 @@ export function resolveRuntimeDir(repoRoot: string, worktreeRoot?: string): stri
 
 /**
  * Computes the path to the run lock file for a task (§2).
- * Placed in `{runtimeDir}/locks/{task}.lock` outside the main checkout.
+ * Placed in `{runtimeDir}/locks/{repo id}/{task}.lock` outside the main
+ * checkout, so two repositories sharing a runtime dir never share a lock.
  */
 export function getRunLockPath(
   repoRoot: string,
@@ -40,7 +42,7 @@ export function getRunLockPath(
   opts?: { runtimeDir?: string; worktreeRoot?: string }
 ): string {
   const runtimeDir = opts?.runtimeDir ?? resolveRuntimeDir(repoRoot, opts?.worktreeRoot);
-  return path.join(runtimeDir, "locks", `${task}.lock`);
+  return path.join(runtimeDir, "locks", repositoryId(repoRoot), `${task}.lock`);
 }
 
 /**

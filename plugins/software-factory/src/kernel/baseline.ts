@@ -3,13 +3,18 @@ import path from "node:path";
 import { runProcess } from "../core/proc.js";
 import { runWorktreeSetup } from "../core/checks/setup.js";
 import { fingerprintText } from "../core/fingerprint.js";
+import { isAncestor } from "../core/git/commit.js";
 import { git } from "../core/git/exec.js";
 import type { CheckResult } from "../core/checks/types.js";
 import { resolveGoalPaths } from "./config.js";
+import { gateSignatureKey, gateSignatures, isInfraCheck, UNIDENTIFIED_GATE_FAILURE, type GateInfra } from "./gates.js";
 import type { ArtifactStore, ConfigBundle, RecordStart, StepRecord } from "./types.js";
 
 const GATE_TIMEOUT_SEC = 900;
 const OUTPUT_CAP = 4_000;
+
+/** Record step for a baseline that could not run: infra, never a red verdict. */
+const BASELINE_INFRA_STEP = "baseline-infra";
 
 export interface BaselineResult {
   commit: string;
@@ -17,6 +22,8 @@ export interface BaselineResult {
   checks: CheckResult[];
   /** False when an identical base commit was already checked (reported once). */
   fresh: boolean;
+  /** The baseline could not run; it is journaled as infra, never red, and retried next launch. */
+  infra?: boolean;
 }
 
 /** The last recorded base-gate run; absent before pre-flight has checked a base. */
@@ -28,18 +35,43 @@ export interface BaseGateState {
 
 /**
  * Pre-flight records one base run per commit. Everything that judges a task's
- * gates reads this: a failure already red on the base is not the task's.
+ * gates reads this: a failure already red on the base is not the task's. An
+ * infra run marks the baseline untrustworthy (`baseline-infra`) so an older
+ * red record cannot be inherited into tasks that start from a newer head.
  */
 export function recordedBaseGates(records: StepRecord[]): BaseGateState | undefined {
   const latest = records
-    .filter((r) => r.step === "baseline" && r.actor === "script" && r.endedAt && r.base && r.checks)
+    .filter(
+      (r) =>
+        (r.step === "baseline" || r.step === BASELINE_INFRA_STEP) &&
+        r.actor === "script" &&
+        r.endedAt &&
+        r.base
+    )
     .sort((a, b) => b.seq - a.seq)[0];
-  if (!latest?.base || !latest.checks) return undefined;
+  if (!latest || latest.step !== "baseline" || !latest.base || !latest.checks) return undefined;
   return { commit: latest.base, ok: latest.ok !== false, checks: latest.checks };
 }
 
+/**
+ * Inherited red, one key per failing signature. A gate that was red on baseline
+ * suppresses only the failures it already showed; a silent red gate offers only
+ * its name. Infra checks were never a red verdict and contribute nothing.
+ */
 export function preexistingRed(base: BaseGateState | undefined): Set<string> {
-  return new Set((base?.checks ?? []).filter((c) => !c.ok).map((c) => c.name));
+  const inherited = new Set<string>();
+  for (const check of base?.checks ?? []) {
+    if (check.ok || isInfraCheck(check)) continue;
+    const signatures = gateSignatures(check);
+    if (signatures.size === 0) {
+      inherited.add(gateSignatureKey(check.name, UNIDENTIFIED_GATE_FAILURE));
+      continue;
+    }
+    for (const signature of signatures) {
+      inherited.add(gateSignatureKey(check.name, signature));
+    }
+  }
+  return inherited;
 }
 
 function result(name: string, ok: boolean, summary: string, output = ""): CheckResult {
@@ -49,6 +81,14 @@ function result(name: string, ok: boolean, summary: string, output = ""): CheckR
     summary,
     output: output.slice(-OUTPUT_CAP),
     fingerprint: fingerprintText(`${name}:${ok}:${summary}`, { lowercase: false }),
+  };
+}
+
+/** A check that could not run; `checkBase` refuses to record it as red. */
+function infra(name: string, cause: string, output = ""): CheckResult {
+  return {
+    ...result(name, false, cause, output),
+    details: { kind: "infra", cause } satisfies GateInfra,
   };
 }
 
@@ -74,18 +114,33 @@ function scratchPath(configs: ConfigBundle, repoRoot: string): string {
   return dir;
 }
 
-async function runBaseGates(configs: ConfigBundle, repoRoot: string, commit: string): Promise<CheckResult[]> {
+async function runBaseGates(
+  configs: ConfigBundle,
+  repoRoot: string,
+  commit: string,
+  mergeFrom?: string
+): Promise<CheckResult[]> {
   if (configs.repo.gates.length === 0 && configs.repo.setup.length === 0) return [];
   const dir = scratchPath(configs, repoRoot);
   const root = path.resolve(repoRoot);
   try {
     const added = await git(root, ["worktree", "add", "--detach", dir, commit], { allowFail: true });
     if (added.code !== 0) {
-      return [result("baseline", false, `could not create baseline worktree: ${added.stderr.trim()}`)];
+      return [infra("baseline", `could not create baseline worktree: ${added.stderr.trim()}`)];
+    }
+    if (mergeFrom) {
+      // The followBase merge tasks start from, staged but never committed: the
+      // gates must see the tree the integration head gets after base is merged
+      // in, not the tree either side has on its own.
+      const merge = await git(dir, ["merge", "--no-commit", "--no-ff", mergeFrom], { allowFail: true });
+      if (merge.code !== 0) {
+        const reason = (merge.stderr || merge.stdout).trim();
+        return [infra("baseline", `the base follow would not merge: ${reason}`, reason)];
+      }
     }
     const setup = await runWorktreeSetup({ commands: configs.repo.setup, cwd: dir });
     if (!setup.ok) {
-      return [result("setup", false, setup.error ?? "setup failed")];
+      return [infra("setup", setup.error ?? "setup failed")];
     }
     const checks: CheckResult[] = [];
     for (const gate of configs.repo.gates) {
@@ -95,15 +150,18 @@ async function runBaseGates(configs: ConfigBundle, repoRoot: string, commit: str
         timeoutSec: GATE_TIMEOUT_SEC,
         maxOutputBytes: OUTPUT_CAP * 4,
       });
-      const ok = !res.timedOut && res.code === 0;
-      checks.push(
-        result(
-          gate.id,
-          ok,
-          res.timedOut ? `timed out after ${GATE_TIMEOUT_SEC}s` : `exit ${res.code}`,
-          `${res.stdout}\n${res.stderr}`.trim()
-        )
-      );
+      const output = `${res.stdout}\n${res.stderr}`.trim();
+      if (res.timedOut) {
+        checks.push(infra(gate.id, `timed out after ${GATE_TIMEOUT_SEC}s`, output));
+        continue;
+      }
+      // 126/127 means the command itself could not start: an environment
+      // failure, not a verdict on the tree under test.
+      if (res.code === 126 || res.code === 127) {
+        checks.push(infra(gate.id, `could not run: exit ${res.code}`, output));
+        continue;
+      }
+      checks.push(result(gate.id, res.code === 0, `exit ${res.code}`, output));
     }
     return checks;
   } finally {
@@ -113,9 +171,15 @@ async function runBaseGates(configs: ConfigBundle, repoRoot: string, commit: str
 }
 
 /**
- * Runs the repo's setup + gates once on the base branch in a scratch worktree.
- * A red base is recorded and warned about, never fatal; an existing record for
- * the same commit means the result was already reported and is reused.
+ * Runs the repo's setup + gates once on the head tasks start from, in a scratch
+ * worktree. Tasks branch from the integration head, not from the base branch,
+ * and recovery follows base into that head before dispatching: a fast-forward
+ * when the integration only lags, a merge when it has diverged. The divergent
+ * case is gated with that merge staged, so base's own red is not blamed on the
+ * first task. A red base is recorded and warned about, never fatal; an existing
+ * record for the same state means the result was already reported and is
+ * reused. A run that could not execute is infra: it is warned about and never
+ * cached as base-red.
  */
 export async function checkBase(
   configs: ConfigBundle,
@@ -124,24 +188,61 @@ export async function checkBase(
   baseBranch: string,
   commit: string
 ): Promise<BaselineResult> {
-  const existing = baselineRecord(await store.listRecords(), commit);
-  if (existing) return { commit, ok: existing.ok !== false, checks: existing.checks ?? [], fresh: false };
+  // Same naming as resolveGoalPaths: the goal's stable integration branch.
+  const integrationBranch = `factory/${path.basename(store.goalDir)}`;
+  const integrationCommit = await resolveBaseCommit(repoRoot, integrationBranch);
+  let target = commit;
+  let targetBranch = baseBranch;
+  // Set when the follow merges base into a divergent integration head: what
+  // the follow produces depends on both refs, so gate their merge result.
+  let mergeFrom: string | undefined;
+  if (integrationCommit && !(await isAncestor(repoRoot, integrationCommit, commit))) {
+    // The integration carries commits base lacks; the follow adds base to it,
+    // by fast-forward when the integration only lags (target stays base's tip)
+    // and by a merge otherwise.
+    target = integrationCommit;
+    targetBranch = integrationBranch;
+    if (!(await isAncestor(repoRoot, commit, integrationCommit))) mergeFrom = commit;
+  }
 
-  const checks = await runBaseGates(configs, repoRoot, commit);
+  // A merge preview is a function of base too, so a record keyed by the
+  // integration commit alone may predate the base it was gated with.
+  const existing = mergeFrom ? undefined : baselineRecord(await store.listRecords(), target);
+  if (existing) return { commit: target, ok: existing.ok !== false, checks: existing.checks ?? [], fresh: false };
+
+  const described = mergeFrom
+    ? `base "${targetBranch}" at ${target.slice(0, 8)} with "${baseBranch}" merged`
+    : `base "${targetBranch}" at ${target.slice(0, 8)}`;
+  const checks = await runBaseGates(configs, repoRoot, target, mergeFrom);
+  const infraChecks = checks.filter(isInfraCheck);
+  if (infraChecks.length > 0) {
+    await store.appendRecord(
+      { iteration: 0, step: BASELINE_INFRA_STEP, round: 1, actor: "script", base: target },
+      { ok: false, checks }
+    );
+    console.warn(
+      [
+        `[factory] ${described} could not be checked; not recorded as red, retried next launch.`,
+        ...infraChecks.map((c) => `  ${c.name}: ${c.summary}`),
+      ].join("\n")
+    );
+    return { commit: target, ok: false, checks, fresh: true, infra: true };
+  }
+
   const ok = checks.every((c) => c.ok);
-  const meta: RecordStart = { iteration: 0, step: "baseline", round: 1, actor: "script", base: commit };
+  const meta: RecordStart = { iteration: 0, step: "baseline", round: 1, actor: "script", base: target };
   await store.appendRecord(meta, { ok, checks });
 
   if (!ok) {
     const red = checks.filter((c) => !c.ok);
     console.warn(
       [
-        `[factory] base "${baseBranch}" at ${commit.slice(0, 8)} is red; recorded once, continuing.`,
+        `[factory] ${described} is red; recorded once, continuing.`,
         ...red.map((c) => `  ${c.name}: ${c.summary}`),
       ].join("\n")
     );
   }
-  return { commit, ok, checks, fresh: true };
+  return { commit: target, ok, checks, fresh: true };
 }
 
 export async function resolveBaseCommit(repoRoot: string, baseBranch: string): Promise<string | undefined> {
