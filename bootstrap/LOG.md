@@ -322,3 +322,9 @@ Verbatim, newest last; each with what it changed.
 - `Phase1.md`: single-level factory works as intended before hierarchy — M1 safety (B1–B5), M2 relaunch keeps going, M3 prompts from one source (templating engine, debloat), M4 trivial same-session + standalone upscope, M5 no file fences + end-of-wave steward + plan checker with repeat, M6 cost/measurement/done. Live acceptance includes goals `p1-trivial` and `p1-task`.
 - Campaign order (owner): Phase 1 → a couple of standalone tasks → everything in INTENT.md until complete. Runbook: `bootstrap/SELF-IMPROVE.md`. Every landed iteration merges into `main`.
 - Goal `self` intent switched to the Phase 1 stage (copy: `bootstrap/goal-self/intent.md`). Inbox: verdict steer withdrawn (`bootstrap/context/steer-review-decisions-14.superseded.md`), replaced by `steer-intent-phase1.md` (reverses the iteration-13 de-novo trivial assumption; scopes name areas, not files).
+
+### 2026-11-14 — iteration 14: 0 merged; plan rewrite blocked by stale plan + truncated pack ($0.95)
+- One architect turn, one PM turn, 3 turns total. The architect read the steer, sent 4 scouts, ended with `status: failed` and no plan edit (Friction 5 again; iteration 8 had the same shape). Pack was truncated at 8000 bytes (`packTruncated: true`) while the stale plan was 78 KB / 430 lines. PM derived from the stale plan; nothing dispatched.
+- Facts confirmed: package code unchanged since `b4a2d9f`; `repro-e4` fails (B4 open), `repro-e3` passes (E3 fixed).
+- Operator acts: old plan archived to `bootstrap/context/plan-pre-phase1.md`; `plan.md` replaced by a stub naming M1–M6; steer `steer-plan-first` (write the plan first; no scouts before; mixed repro polarity; M5 gains the post-turn guard + pack-cap items). Phase1.md M5 extended with both items.
+- New tooling note: the campaign uses checkpoint/rewind for post-run triage and subagents for log forensics (owner instruction, multi-day horizon).
