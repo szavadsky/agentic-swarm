@@ -5,7 +5,7 @@ import { runAgentTurn } from "./agent.js";
 import { resolveRole } from "./flow-context.js";
 import { formatSteerTurn, holdsDir, type Steer } from "./mailbox.js";
 import { materialHash, parseTaskFile, validateTaskGraph, TaskFileError } from "./tasks.js";
-import { appendCancel, scriptMeta } from "./record.js";
+import { appendCancel, appendPark, scriptMeta } from "./record.js";
 import type { Stop } from "../harness/types.js";
 import type { AliasConfig, KernelRuntime, Outcome, State, StepRecord, TaskFile, TaskStatus } from "./types.js";
 
@@ -137,9 +137,18 @@ function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/** Position carries no meaning in a task file; the plan's bullet names the slug. */
+/**
+ * Position carries no meaning in a task file; the plan's bullet names the slug.
+ * A bullet that points at the file (`tasks/foo.md`) names the same task as the
+ * bare slug (`foo`). A sentence-ending dot after the name is punctuation, not
+ * part of the slug, so `tasks/foo.md.` still names `foo`; a dot that starts
+ * another word (`foo.bar`) is a longer slug and does not.
+ */
 function planMentionsSlug(plan: string, slug: string): boolean {
-  return new RegExp(`(?<![a-z0-9.-])${escapeRegExp(slug)}(?![a-z0-9.-])`, "i").test(plan);
+  const boundary = "(?![a-z0-9-]|\\.[a-z0-9])";
+  return [slug, `tasks/${slug}.md`].some((name) =>
+    new RegExp(`(?<![a-z0-9.-])${escapeRegExp(name)}${boundary}`, "i").test(plan)
+  );
 }
 
 /**
@@ -216,7 +225,9 @@ async function validate(
 /**
  * A task the architect dropped from the plan becomes cancelled by a record, so
  * its slug stays spent and state needs no memory. A changed task that remains
- * in the plan needs nothing: dispatch re-reads the file.
+ * in the plan needs nothing: dispatch re-reads the file. A dropped task that
+ * already committed on its branch is parked instead: cancelling it would strand
+ * work no record names, and its slug must stay reusable by a `base:` task.
  */
 async function cancelRemovedTasks(
   runtime: KernelRuntime,
@@ -227,6 +238,10 @@ async function cancelRemovedTasks(
   for (const [slug, task] of Object.entries(state.tasks)) {
     if (task.status !== "pending" && task.status !== "ready") continue;
     if (planMentionsSlug(plan, slug)) continue;
+    if (task.commit !== undefined) {
+      await appendPark(runtime.store, { iteration, slug, round: task.round }, "dropped-with-commits");
+      continue;
+    }
     await appendCancel(
       runtime.store,
       { iteration, slug, round: task.round },

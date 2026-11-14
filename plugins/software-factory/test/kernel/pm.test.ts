@@ -238,6 +238,98 @@ describe("PM turn reconciliation", () => {
     }
   });
 
+  it("restores a failed rung's task writes from the pre-PM snapshot", async () => {
+    const { root, runtime, fake, planPath } = await setup();
+    try {
+      await runtime.store.writeTask(parseTaskFile(simpleTask("alpha", "alpha.txt"), "alpha"));
+      fs.writeFileSync(planPath, "# Plan\n\n## alpha\nCreate alpha.\n", "utf8");
+      const before = fs.readFileSync(path.join(runtime.store.tasksDir, "alpha.md"), "utf8");
+
+      fake.script((req, ctx) => {
+        fs.writeFileSync(
+          path.join(runtime.store.tasksDir, "alpha.md"),
+          "---\nslug: alpha\n---\nPM rewrite.\n",
+          "utf8"
+        );
+        fs.writeFileSync(path.join(runtime.store.tasksDir, "b.md"), "no frontmatter\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "rewrote the plan's task" }));
+        return fakeTurnResult(req);
+      });
+      fake.script((req, ctx) => {
+        expect(fs.readFileSync(path.join(runtime.store.tasksDir, "alpha.md"), "utf8")).toBe(before);
+        expect(fs.existsSync(path.join(runtime.store.tasksDir, "b.md"))).toBe(false);
+        expect(req.prompt).toContain('task "b" has no --- frontmatter ---');
+        ctx.writeOutcome(outcome({ summary: "the snapshot is intact" }));
+        return fakeTurnResult(req);
+      });
+
+      const state = derive(await runtime.store.listTasks(), await runtime.store.listRecords());
+      const result = await runPm(runtime, { iteration: 1, state, planPath, cwd: root });
+      expect(result.status).toBe("done");
+      expect(fs.readFileSync(path.join(runtime.store.tasksDir, "alpha.md"), "utf8")).toBe(before);
+      expect(fs.existsSync(path.join(runtime.store.tasksDir, "b.md"))).toBe(false);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("parks a dropped task that has commits and cancels one without, matching plan paths to slugs", async () => {
+    const { root, runtime, fake, planPath } = await setup();
+    try {
+      fs.writeFileSync(
+        planPath,
+        // alpha is named only by its file path, with a sentence dot after it;
+        // beta only by its bare slug. Each alternative must stand alone.
+        "# Plan\n\nKeep tasks/alpha.md.\n\n## beta\nUse beta.\n\n## work\nWork.\n",
+        "utf8"
+      );
+      for (const text of [
+        simpleTask("alpha", "alpha.txt"),
+        simpleTask("beta", "beta.txt"),
+        simpleTask("work", "work.txt"),
+        simpleTask("ghost", "ghost.txt", { deps: ["work"] }),
+        simpleTask("stuck", "stuck.txt", { deps: ["work"] }),
+      ]) {
+        await runtime.store.writeTask(parseTaskFile(text, /^slug:\s*(\S+)/m.exec(text)![1]!));
+      }
+      await runtime.store.appendRecord(
+        { iteration: 1, slug: "ghost", step: "implement", round: 1, actor: "agent" },
+        {
+          ok: true,
+          commit: "c0ffee",
+          tree: "t0",
+          outcome: {
+            status: "done",
+            summary: "committed before the plan changed",
+            concerns: [],
+            forward: [],
+          },
+        }
+      );
+      const state = derive(await runtime.store.listTasks(), await runtime.store.listRecords());
+      expect(state.tasks.ghost!.status).toBe("pending");
+      expect(state.tasks.ghost!.commit).toBe("c0ffee");
+      expect(state.tasks.stuck!.status).toBe("pending");
+
+      fake.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "kept the plan" }));
+        return fakeTurnResult(req);
+      });
+      const result = await runPm(runtime, { iteration: 2, state, planPath, cwd: root });
+      expect(result.status).toBe("done");
+
+      const after = derive(await runtime.store.listTasks(), await runtime.store.listRecords());
+      expect(after.tasks.alpha!.status).not.toBe("cancelled");
+      expect(after.tasks.beta!.status).not.toBe("cancelled");
+      expect(after.tasks.ghost!.status).toBe("parked");
+      expect(after.tasks.ghost!.cause).toBe("dropped-with-commits");
+      expect(after.tasks.stuck!.status).toBe("cancelled");
+      expect(after.tasks.stuck!.cause).toContain("removed from the plan");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("restores a plan the PM edited and rejects the turn", async () => {
     const { root, runtime, fake, planPath } = await setup();
     try {
