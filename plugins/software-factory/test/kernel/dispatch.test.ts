@@ -4,6 +4,7 @@ import path from "node:path";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch, scopesOverlap } from "../../src/kernel/dispatch.js";
+import { createDrainController } from "../../src/kernel/signals.js";
 import { task } from "./helpers.js";
 import {
   cleanupFlowRepo,
@@ -120,6 +121,87 @@ describe("dispatch admission", () => {
       const state = derive(await runtime.store.listTasks(), await runtime.store.listRecords(), runtime.configs.process.flows);
       expect(state.tasks.task!.status).toBe("merged");
     } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("drains on the first signal: the in-flight task finishes its flow and no unstarted task starts", async () => {
+    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const originalWarn = console.warn;
+    console.warn = () => {};
+    try {
+      const controller = createDrainController();
+      const harness = new FakeHarness({ id: "fake" });
+      const starts: string[] = [];
+      for (let i = 0; i < 4; i += 1) {
+        harness.script((req, ctx) => {
+          const slug = path.basename(req.cwd!);
+          if (req.prompt.startsWith("You review")) {
+            ctx.writeOutcome(outcome({ summary: `${slug} approved`, verdict: "approve" }));
+          } else {
+            starts.push(slug);
+            if (slug === "a") controller.handleSignal("SIGINT");
+            fs.writeFileSync(path.join(req.cwd!, `${slug}.txt`), `${slug}\n`, "utf8");
+            ctx.writeOutcome(outcome({ summary: `${slug} implemented` }));
+          }
+          return fakeTurnResult(req);
+        });
+      }
+
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("a", { scope: ["a.txt"] }));
+      await writeTask(runtime, task("b", { scope: ["b.txt"] }));
+
+      const result = await runDispatch(runtime, { iteration: 1, signals: controller });
+
+      expect(result.reason).toBe("drained");
+      expect(result.cause).toBe("signal: drain requested");
+      expect(starts).toEqual(["a"]);
+      expect(harness.calls.length).toBe(2);
+      const records = await runtime.store.listRecords();
+      const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+      expect(state.tasks.a!.status).toBe("merged");
+      expect(state.tasks.b!.status).toBe("ready");
+      expect(state.tasks.b!.turns).toBe(0);
+      expect(records.filter((r) => r.slug === "b")).toEqual([]);
+    } finally {
+      console.warn = originalWarn;
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("keeps the second signal a hard stop: the aborted turn returns cancelled and nothing else starts", async () => {
+    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const originalWarn = console.warn;
+    console.warn = () => {};
+    try {
+      const controller = createDrainController();
+      const harness = new FakeHarness({ id: "fake" });
+      const starts: string[] = [];
+      harness.script((req) => {
+        const slug = path.basename(req.cwd!);
+        starts.push(slug);
+        controller.handleSignal("SIGINT");
+        controller.handleSignal("SIGINT");
+        return fakeTurnResult(req, { stop: { kind: "cancelled" } });
+      });
+
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("a", { scope: ["a.txt"] }));
+      await writeTask(runtime, task("b", { scope: ["b.txt"] }));
+
+      const result = await runDispatch(runtime, { iteration: 1, signals: controller });
+
+      expect(result.reason).toBe("cancelled");
+      expect(starts).toEqual(["a"]);
+      const records = await runtime.store.listRecords();
+      const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+      expect(state.tasks.a!.status).not.toBe("merged");
+      expect(state.tasks.b!.status).toBe("ready");
+      expect(records.filter((r) => r.slug === "b")).toEqual([]);
+      expect(records.find((r) => r.slug === "a" && r.step === "implement")?.stop?.kind).toBe("cancelled");
+    } finally {
+      console.warn = originalWarn;
       cleanupFlowRepo(repo);
     }
   }, 60_000);

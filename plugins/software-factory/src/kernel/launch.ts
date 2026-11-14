@@ -298,7 +298,7 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
         let dispatchCause: string | undefined;
         let dispatched: DispatchResult | undefined;
         if (decision === "continue" && ended === undefined && !signals.shouldStop()) {
-          dispatched = await runDispatch(runtime, { iteration, seenSteers });
+          dispatched = await runDispatch(runtime, { iteration, seenSteers, signals });
           dispatchCause = dispatched.cause;
           if (dispatched.reason === "infra" || dispatched.reason === "cancelled") {
             ended = dispatched.reason;

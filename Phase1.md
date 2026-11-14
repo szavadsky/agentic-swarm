@@ -36,7 +36,7 @@ Milestones run in this order; within a milestone, tasks run in parallel.
 - Plan checker before the architect, with repeat (v1 `plan-completeness-checker` + `goal_flow.py` loop): read-only, evidence per plan item; concerns → follow-up execution (bounded rounds) before the architect turn; residual concerns go into the pack.
 - Post-turn delivery guard for every step (front, architect, implementer, reviewer, PM): a turn that ends without its deliverable gets one in-session repair ask, its text a prompt template from the process config (per-agent shape; variables: role, deliverable, whether `done` is allowed); if the deliverable is still missing, the launch fails with a cause naming it. Evidence: record 00563 — the architect self-suspended on background scouts, wrote no plan and no outcome.
 - Context pack never truncates pointers: remove the 8000-byte cap and the tail cut (`context-pack.ts:43` `DEFAULT_MAX_BYTES`, `capPack`); the pack carries the plan and every pointer by path. If any cap remains it applies only to non-pointer sections, pointers render last and are never truncated; test it.
-- Architect prompt opens with "review what has been done: completeness, quality, correctness".
+- Architect prompt opens with a project-vs-intent evaluation (quality of what exists, not only the last iteration) and plans the remaining road to completion, naming deferrals explicitly.
 - Plan review: after the architect turn a task-tier reviewer writes advisory findings into the next pack; the architect records whether each was helpful.
 - A kept branch that is complete and green lands at the next boundary without a new task.
 
@@ -45,6 +45,7 @@ Milestones run in this order; within a milestone, tasks run in parallel.
 - Concurrency: overall + per provider (+ model) limits in run config; dispatch admits within quota and falls back stickily — no restart at an exhausted tier (B10, W13).
 - Compaction verified: happens at session end inside TTL, its cost recorded, skipped for sessions never resumed; a fix-up or next-iteration resume shows dropped reasoning and fewer input tokens (B20).
 - Done sees open debt; every summary opens with the distance (pending, parks, open debt), parks listed per iteration, status derived from the launch result (B22, B27, W4).
+- agy leg through acpx: one task-level step (implementer or reviewer alias with the usual fallback) runs live; turns/cost recorded like any alias. If acpx cannot drive agy, the deliverable is the failing command and the minimal adapter gap.
 
 ## Done when
 - `bun run typecheck`, lint/format check and `bun test` green on `factory-v3`; merged to `main`.
@@ -54,4 +55,4 @@ Milestones run in this order; within a milestone, tasks run in parallel.
 - Upscope covered by a scenario test (a live upscope is a bonus).
 
 ## Not Phase 1
-Hierarchy (W11), dashboard and status funnel, intent-change agent, OpenCode → acpx, pi/codex/Claude Code/agy legs and rotation (W9), portability graph (W24), tier escalation (W12), artifact backends, human-involvement presets (W23), cleanliness heuristic (W22), isolation/sandbox and operator docs (W10, W17, B16, B25), retention (B23), benchmark (W8), delivery as plugin, more agent types.
+Hierarchy (W11), dashboard and status funnel, intent-change agent, OpenCode → acpx, pi/codex/Claude Code legs and rotation (W9), portability graph (W24), tier escalation (W12), artifact backends, human-involvement presets (W23), cleanliness heuristic (W22), isolation/sandbox and operator docs (W10, W17, B16, B25), retention (B23), benchmark (W8), delivery as plugin, more agent types.
