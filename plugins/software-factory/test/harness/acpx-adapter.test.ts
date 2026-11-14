@@ -110,12 +110,24 @@ describe("AcpxHarness", () => {
       expect(second.session?.id).toMatch(/^pi-/);
       expect(second.session?.id).not.toBe(first.session!.id);
 
+      // The lost resume is recorded, not silently replaced.
+      expect(second.attempts?.map((attempt) => attempt.stop)).toEqual([
+        {
+          kind: "infra",
+          cause: "crash",
+          details: expect.stringMatching(/No acpx session found/),
+        },
+        { kind: "done" },
+      ]);
+
       const calls = stub.invocations();
       expect(calls.filter((args) => args.includes("sessions") && args.includes("new"))).toHaveLength(2);
       const prompts = calls.filter((args) => args.at(-1)?.startsWith("second"));
       expect(prompts).toHaveLength(2);
       expect(prompts[0]![prompts[0]!.indexOf("-s") + 1]).toBe(first.session!.id);
       expect(prompts[1]![prompts[1]!.indexOf("-s") + 1]).toBe(second.session!.id);
+      // The de-novo start carries the same task input.
+      expect(prompts[1]!.at(-1)).toBe(prompts[0]!.at(-1));
     } finally {
       stub.cleanup();
     }
@@ -137,6 +149,14 @@ describe("AcpxHarness", () => {
       expect(second.text).toBe("ALPHA");
       expect(second.session?.id).toMatch(/^pi-/);
       expect(second.session?.id).not.toBe(first.session!.id);
+      expect(second.attempts?.map((attempt) => attempt.stop)).toEqual([
+        {
+          kind: "infra",
+          cause: "crash",
+          details: expect.stringMatching(/No acpx session found/),
+        },
+        { kind: "done" },
+      ]);
 
       const calls = stub.invocations();
       const creates = calls.filter((args) => args.includes("sessions") && args.includes("new"));
@@ -169,12 +189,24 @@ describe("AcpxHarness", () => {
         request(cwd, "second [[mode:no_session]]", { session: first.session, effort: "high" })
       );
 
-      expect(second.stop).toMatchObject({
-        kind: "infra",
-        cause: "crash",
-        details: expect.stringMatching(/No acpx session found/),
-      });
+      // Bun's toMatchObject mutates a received object when a matcher is nested,
+      // and the final attempt shares this stop; assert the fields directly.
+      expect(second.stop.kind).toBe("infra");
+      if (second.stop.kind !== "infra") throw new Error("expected an infra stop");
+      expect(second.stop.cause).toBe("crash");
+      expect(second.stop.details).toContain("No acpx session found");
       expect(second.session).toBeUndefined();
+      // The first lost record and the failed de-novo start are both recorded.
+      expect(second.attempts?.map((attempt) => attempt.stop.kind)).toEqual([
+        "infra",
+        "infra",
+      ]);
+      for (const attempt of second.attempts ?? []) {
+        expect(attempt.stop.kind).toBe("infra");
+        if (attempt.stop.kind !== "infra") continue;
+        expect(attempt.stop.cause).toBe("crash");
+        expect(attempt.stop.details).toContain("No acpx session found");
+      }
 
       const calls = stub.invocations();
       // One de-novo retry: the dead-record set, one new session, then the prompt

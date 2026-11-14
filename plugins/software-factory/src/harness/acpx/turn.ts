@@ -4,7 +4,7 @@ import path from "node:path";
 import { runProcess } from "../../core/proc.js";
 import { registerChildGroup, unregisterChildGroup } from "../../core/shutdown.js";
 import { exitDetails, stopDetails } from "../details.js";
-import type { ModelRef, Stop, TurnRequest, TurnResult } from "../types.js";
+import type { AdapterTurnResult, ModelRef, Stop, TurnAttempt, TurnRequest } from "../types.js";
 import { zeroUsage } from "../usage.js";
 import { classifyAcpxError, classifyAcpxTurn, isNoSessionError } from "./classify.js";
 import { AcpxTranscriptParser, acpxErrors } from "./transcript.js";
@@ -216,7 +216,7 @@ export async function runAcpxTurn(
   runtime: AcpxRuntime,
   req: TurnRequest,
   requested: ModelRef
-): Promise<Omit<TurnResult, "attempts">> {
+): Promise<AdapterTurnResult> {
   const agent = runtime.agent;
   const requestedModel: ModelRef = { ...requested, effort: req.effort ?? requested.effort };
   // What acpx receives on --model versus what the session records: agy's effort
@@ -248,7 +248,9 @@ export async function runAcpxTurn(
   // NO_SESSION. Retry once de novo with a new name so the returned ref is live
   // and the next turn does not resume the same dead record forever. The retry
   // covers both setup commands and the prompt, and attempt 0 is the only
-  // attempt that may resume, so at most one de-novo retry runs per turn.
+  // attempt that may resume, so at most one de-novo retry runs per turn. Each
+  // lost record is kept as an attempt so the restart is never silent.
+  const attempts: TurnAttempt[] = [];
   for (let attempt = 0; ; attempt += 1) {
     const canRetryDeNovo = resume !== undefined && attempt === 0;
     const shouldRetryDeNovo = (failure: SetupFailure) => failure.noSession && canRetryDeNovo;
@@ -261,10 +263,11 @@ export async function runAcpxTurn(
       );
       if (failure) {
         if (shouldRetryDeNovo(failure)) {
+          attempts.push({ model, stop: failure.stop, usage: zeroUsage() });
           name = freshName();
           continue;
         }
-        return { stop: failure.stop, text: "", usage: zeroUsage(), model };
+        return { stop: failure.stop, text: "", usage: zeroUsage(), model, attempts };
       }
     }
 
@@ -279,10 +282,11 @@ export async function runAcpxTurn(
       const failure = await runSetup(runtime, set, req.cwd);
       if (failure) {
         if (shouldRetryDeNovo(failure)) {
+          attempts.push({ model, stop: failure.stop, usage: zeroUsage() });
           name = freshName();
           continue;
         }
-        return { stop: failure.stop, text: "", usage: zeroUsage(), model };
+        return { stop: failure.stop, text: "", usage: zeroUsage(), model, attempts };
       }
     }
 
@@ -314,6 +318,17 @@ export async function runAcpxTurn(
     const lost = summary.errors.some(isNoSessionError);
 
     if (lost && canRetryDeNovo) {
+      attempts.push({
+        model,
+        stop: classifyAcpxTurn({
+          summary,
+          code: processResult.code,
+          signal: processResult.signal,
+          timedOut: processResult.timedOut,
+          stderr: processResult.stderr,
+        }),
+        usage: summary.usage,
+      });
       name = freshName();
       continue;
     }
@@ -345,6 +360,7 @@ export async function runAcpxTurn(
       usage: summary.usage,
       session,
       model,
+      attempts,
     };
   }
 }

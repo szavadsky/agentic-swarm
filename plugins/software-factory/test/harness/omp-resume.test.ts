@@ -4,13 +4,15 @@ import os from "node:os";
 import path from "node:path";
 import { OmpHarness } from "../../src/harness/omp/harness.js";
 import type { SessionRef } from "../../src/harness/types.js";
+import { zeroUsage } from "../../src/harness/usage.js";
 
-function fakeOmpScript(logPath: string): string {
+function fakeOmpScript(logPath: string, promptsPath: string): string {
   return `#!/usr/bin/env bun
 const fs = require("node:fs");
 const readline = require("node:readline");
 const argv = process.argv.slice(2);
 const logPath = ${JSON.stringify(logPath)};
+const promptsPath = ${JSON.stringify(promptsPath)};
 fs.appendFileSync(logPath, JSON.stringify(argv) + "\\n");
 const flag = (name) => {
   const index = argv.indexOf(name);
@@ -57,6 +59,7 @@ rl.on("line", (line) => {
     respond({ sessionId, thinkingLevel: "low", model: { provider: "provider", id: model.split("/")[1] } });
   } else if (frame.type === "prompt") {
     prompted = true;
+    fs.appendFileSync(promptsPath, JSON.stringify(frame.message) + "\\n");
     write({ type: "message_end", message: { role: "assistant", usage: { input: 5, output: 3 }, stopReason: "stop" } });
     write({ type: "prompt_result", id: frame.id, agentInvoked: true, status: "completed", sessionSettled: true });
   }
@@ -68,14 +71,17 @@ interface FakeOmp {
   binary: string;
   /** argv of every launch, in order. */
   invocations(): string[][];
+  /** The message frame each prompted launch carried, in order. */
+  prompts(): string[];
   cleanup(): void;
 }
 
 function createFakeOmp(): FakeOmp {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "omp-resume-"));
   const logPath = path.join(tmp, "invocations.ndjson");
+  const promptsPath = path.join(tmp, "prompts.ndjson");
   const binary = path.join(tmp, "fake-omp.js");
-  fs.writeFileSync(binary, fakeOmpScript(logPath), { mode: 0o755 });
+  fs.writeFileSync(binary, fakeOmpScript(logPath, promptsPath), { mode: 0o755 });
   return {
     binary,
     invocations: () =>
@@ -84,6 +90,12 @@ function createFakeOmp(): FakeOmp {
         .split("\n")
         .filter(Boolean)
         .map((line) => JSON.parse(line) as string[]),
+    prompts: () =>
+      fs
+        .readFileSync(promptsPath, "utf8")
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as string),
     cleanup: () => fs.rmSync(tmp, { recursive: true, force: true }),
   };
 }
@@ -132,6 +144,25 @@ describe("omp resume", () => {
       expect(result.stop).toEqual({ kind: "done" });
       expect(result.session?.id).toBe("fresh-session");
       expect(result.session?.dir).toBe(home);
+
+      // The lost resume is recorded, then the same task input starts de novo.
+      expect(result.attempts).toEqual([
+        {
+          model: { id: "provider/resume-retry" },
+          stop: {
+            kind: "infra",
+            cause: "crash",
+            details: "Session sess-old not found",
+          },
+          usage: zeroUsage(),
+        },
+        {
+          model: { id: "provider/resume-retry" },
+          stop: { kind: "done" },
+          usage: result.usage,
+        },
+      ]);
+      expect(fake.prompts()).toEqual(["go"]);
 
       const calls = fake.invocations();
       expect(calls).toHaveLength(2);
@@ -265,7 +296,19 @@ describe("omp resume", () => {
         cause: "crash",
         details: "de novo launch exploded",
       });
-      expect(result.attempts).toHaveLength(1);
+      // Both calls are recorded: the lost resume and the failed de-novo start.
+      expect(result.attempts?.map((attempt) => attempt.stop)).toEqual([
+        {
+          kind: "infra",
+          cause: "crash",
+          details: "Session sess-gone not found",
+        },
+        {
+          kind: "infra",
+          cause: "crash",
+          details: "de novo launch exploded",
+        },
+      ]);
       expect(fake.invocations()).toHaveLength(2);
     } finally {
       fake.cleanup();
