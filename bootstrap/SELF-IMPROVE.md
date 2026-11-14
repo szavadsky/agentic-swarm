@@ -83,3 +83,6 @@ Then drop a steer: "Stage C: full intent installed; plan the hierarchy first."
 - The goal intent file and the mailbox live under `.factory/artifacts` (gitignored): copy goal intents to `bootstrap/goal-self/intent.md` so they are versioned.
 - A `self` run and a test goal run never overlap until B3 is merged; after that, still prefer serial.
 - Known flake: `test/kernel/scenario7.test.ts` ("plan edit between iterations") fails occasionally in the full suite (architect outcome repair path), passes alone. One promote retry is fine; a second failure is real.
+
+## Owner steers applied (2026-11-14)
+- agy through acpx, sooner than later: one task-level step live during Phase 1 (another subscription to burn). Evidence wanted: the turn record with harness=acpx, model=agy/gemini-flash-3.8, cost/turns; if acpx cannot drive it, the exact failing command and the minimal adapter gap.
