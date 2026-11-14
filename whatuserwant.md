@@ -76,7 +76,7 @@ Next: the pending hierarchy chain ([`epic-consult`](.factory/artifacts/self/plan
 
 > Consulting the architect mid-iteration is the exception: measured, and optimized during bootstrapping. A landed spike does not end the iteration — the iteration still runs to exhaustion.
 
-**Half built, half deviated.** The spike half works: a landed spike satisfies dependents at once and the iteration runs to exhaustion ([dispatch.ts](plugins/software-factory/src/kernel/dispatch.ts), [derive.ts](plugins/software-factory/src/kernel/derive.ts)). The "measured exception" half is not built: there is no mid-iteration consult call site and no consult metric — and the text's "dependents idle until the boundary" is contradicted by the code, which dispatches dependents in the same iteration once a spike lands.
+**Half built, half deviated.** The spike half works: a landed spike satisfies dependents at once and the iteration runs to exhaustion ([dispatch.ts](plugins/software-factory/src/kernel/dispatch.ts), [derive.ts](plugins/software-factory/src/kernel/derive.ts)). The "measured exception" half is not built: there is no mid-iteration consult call site and no consult metric — and where the text says "dependents idle until the boundary", the code dispatches dependents in the same iteration once a spike lands — the code's behavior is the better one.
 
 Next: the code's behavior (dispatch dependents at once) is the better one — no owner decision needed unless you want idling. The missing piece is only the measurement: a consult counter in [metrics](plugins/software-factory/src/kernel/metrics.ts), a small task once the milestone queue clears.
 
