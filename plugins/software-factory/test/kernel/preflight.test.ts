@@ -10,6 +10,7 @@ import {
   type ModelCatalog,
   type PreflightInput,
 } from "../../src/kernel/preflight.js";
+import { recordedBaseGates } from "../../src/kernel/baseline.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import { FakeHarness } from "../../src/harness/fake/index.js";
 import type { Harness } from "../../src/harness/types.js";
@@ -312,6 +313,125 @@ describe("pre-flight", () => {
       expect(baselines[0]!.ok).toBe(false);
       expect(warnings.join("\n")).toContain("is red; recorded once");
       expect(warnings.join("\n")).toContain("never");
+    } finally {
+      console.warn = original;
+      f.repo.cleanup();
+    }
+  });
+
+  it("baselines the integration head tasks start from, not the base branch", async () => {
+    const f = await fixture(
+      undefined,
+      "baseBranch: main\nartifactRoot: .factory/artifacts\ngates:\n  - { id: integration-red, command: test ! -f integration-red.txt }\n"
+    );
+    const warnings: string[] = [];
+    const original = console.warn;
+    console.warn = (msg: string) => warnings.push(msg);
+    try {
+      // Tasks branch from the integration head; main is green, that head is red.
+      f.repo.git(["checkout", "-b", f.paths.integrationBranch]);
+      f.repo.writeFile("integration-red.txt", "red\n");
+      const integrationSha = f.repo.commit("integration red");
+      f.repo.git(["checkout", "main"]);
+      f.repo.writeFile("main-only.txt", "main\n");
+      const mainSha = f.repo.commit("main moves on");
+      expect(integrationSha).not.toBe(mainSha);
+
+      const result = await preflight(f.input);
+      expect(result.base?.commit).toBe(integrationSha);
+      expect(result.base?.ok).toBe(false);
+      const baselines = (await f.input.store.listRecords()).filter((r) => r.step === "baseline");
+      expect(baselines).toHaveLength(1);
+      expect(baselines[0]!.base).toBe(integrationSha);
+      expect(warnings.join("\n")).toContain(f.paths.integrationBranch);
+    } finally {
+      console.warn = original;
+      f.repo.cleanup();
+    }
+  });
+
+  it("baselines the base tip when the integration branch only lags it", async () => {
+    const f = await fixture(
+      undefined,
+      "baseBranch: main\nartifactRoot: .factory/artifacts\ngates:\n  - { id: stale, command: test ! -f broken.txt }\n"
+    );
+    const warnings: string[] = [];
+    const original = console.warn;
+    console.warn = (msg: string) => warnings.push(msg);
+    try {
+      // The integration head is an old red base commit; main has fixed it, so
+      // recovery fast-forwards the integration branch onto the base tip.
+      f.repo.writeFile("broken.txt", "red\n");
+      const redSha = f.repo.commit("base is red here");
+      f.repo.git(["branch", f.paths.integrationBranch, redSha]);
+      fs.rmSync(path.join(f.repo.dir, "broken.txt"));
+      const greenSha = f.repo.commit("base fixed");
+
+      const result = await preflight(f.input);
+      expect(result.base?.commit).toBe(greenSha);
+      expect(result.base?.ok).toBe(true);
+      const baselines = (await f.input.store.listRecords()).filter((r) => r.step === "baseline");
+      expect(baselines).toHaveLength(1);
+      expect(baselines[0]!.base).toBe(greenSha);
+      expect(warnings).toEqual([]);
+    } finally {
+      console.warn = original;
+      f.repo.cleanup();
+    }
+  });
+
+  it("does not record a gate that could not run as base-red", async () => {
+    const f = await fixture(
+      undefined,
+      "baseBranch: main\nartifactRoot: .factory/artifacts\ngates:\n  - { id: missing, command: no-such-factory-gate-command }\n"
+    );
+    const warnings: string[] = [];
+    const original = console.warn;
+    console.warn = (msg: string) => warnings.push(msg);
+    try {
+      // A red record from an older head must not be inherited into this one.
+      const older = f.repo.git(["rev-parse", "HEAD"]).stdout;
+      await f.input.store.appendRecord(
+        { iteration: 0, step: "baseline", round: 1, actor: "script", base: older },
+        {
+          ok: false,
+          checks: [{ name: "missing", ok: false, summary: "exit 1", output: "old red", fingerprint: "old" }],
+        }
+      );
+      f.repo.writeFile("newer.txt", "newer\n");
+      f.repo.commit("head moves past the old baseline");
+
+      const first = await preflight(f.input);
+      expect(first.base?.infra).toBe(true);
+      expect(recordedBaseGates(await f.input.store.listRecords())).toBeUndefined();
+
+      // Nothing was cached as red: the next launch runs the gate again.
+      const second = await preflight(f.input);
+      expect(second.base?.infra).toBe(true);
+      const records = await f.input.store.listRecords();
+      expect(records.filter((r) => r.step === "baseline")).toHaveLength(1);
+      expect(records.filter((r) => r.step === "baseline-infra")).toHaveLength(2);
+      expect(warnings.join("\n")).toContain("could not be checked");
+      expect(warnings.join("\n")).toContain("not recorded as red");
+    } finally {
+      console.warn = original;
+      f.repo.cleanup();
+    }
+  });
+
+  it("does not record a failed baseline setup as base-red", async () => {
+    const f = await fixture(
+      undefined,
+      "baseBranch: main\nartifactRoot: .factory/artifacts\nsetup:\n  - exit 7\ngates: []\n"
+    );
+    const warnings: string[] = [];
+    const original = console.warn;
+    console.warn = (msg: string) => warnings.push(msg);
+    try {
+      const result = await preflight(f.input);
+      expect(result.base?.infra).toBe(true);
+      expect(recordedBaseGates(await f.input.store.listRecords())).toBeUndefined();
+      expect(warnings.join("\n")).toContain("setup");
     } finally {
       console.warn = original;
       f.repo.cleanup();
