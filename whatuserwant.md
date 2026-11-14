@@ -152,11 +152,15 @@ Next: build `plan-review` in the milestone queue. It is cheap insurance on the m
 
 ### The ~50x cost ratio; quota not primary
 
-{Architect-tier costs ~40–80x the cheap capable tier. Optimize overall cost on that ratio (~50x); quota management is not a primary purpose.}
+Architect-tier costs ~40–80x the cheap capable tier. Optimize overall cost on that ratio (~50x); quota management is not a primary purpose.
 
-**The ratio was never measured; the binding constraint turned out to be quota, not price.** The run has per-role usage records with cache fields ([metrics.ts](plugins/software-factory/src/kernel/metrics.ts), [pricing](plugins/software-factory/src/kernel/pricing.ts)), but 162 of 172 records store $0 cost and the implementer/reviewer turns that were supposed to be free hit 432 quota rejections and finished on the paid fallback — see the [review's cost section](bootstrap/reports/review-2026-11-13/REVIEW.md). So the experiment's finding, with the evidence: on the free tier, the quota wall arrives before the price ratio matters. The ~50x number itself is untested either way — no per-model cost comparison was ever run.
+[AI STATUS/ASSESSMENT] **The ratio was never measured; the binding constraint turned out to be quota, not price.** The run has per-role usage records with cache fields ([metrics.ts](plugins/software-factory/src/kernel/metrics.ts), [pricing](plugins/software-factory/src/kernel/pricing.ts)), but 162 of 172 records store $0 cost and the implementer/reviewer turns that were supposed to be free hit 432 quota rejections and finished on the paid fallback — see the [review's cost section](bootstrap/reports/review-2026-11-13/REVIEW.md). So the experiment's finding, with the evidence: on the free tier, the quota wall arrives before the price ratio matters. The ~50x number itself is untested either way — no per-model cost comparison was ever run.
 
-Next: two small things. First, instrument per-model cost on the fallback turns so the ratio can be read off instead of asserted. Second, a free-tier throttle in dispatch (today the dispatcher keeps admitting turns into quota walls). Neither changes the intent — they measure it.
+[END]
+
+Next: two small things. First, instrument per-model cost on the fallback turns so the ratio can be read off instead of asserted. Second, a free-tier throttle in dispatch (today the dispatcher keeps admitting turns into quota walls).
+
+**OWNER** —
 
 ### Escalation to an expensive implementer, architect-called, minimal
 
@@ -698,9 +702,7 @@ Next: drop the diffing clause (one-line text change) or keep it as a standing ru
 
 ### Harness access layer: omp special-cased, acpx generic, portability graph, compaction rules
 
-{omp RPC special-cased; everything else through ACP/acpx; direct layer where native beats ACP. Portability follows the directional graph (one-way into omp from Claude/Codex). Compaction: whole-transcript cost, compact at end inside the TTL, TTL is config (`short` explicit), no warming.}
-
-**Built: omp adapter, acpx adapter, compact-at-end, no-warming. Not built: the graph, TTL-as-config, the Claude/Codex legs.** The omp RPC adapter runs the architect turns ([rpc.ts](plugins/software-factory/src/harness/omp/rpc.ts)); acpx carries pi/codex registration ([harness.ts](plugins/software-factory/src/harness/acpx/harness.ts)); compact-at-end with reload is tested ([session-compact.test.ts](plugins/software-factory/test/kernel/session-compact.test.ts)). But `portable()` is same-harness-only ([harness/types.ts](plugins/software-factory/src/harness/types.ts)) — the "one-way into omp" claim has no code and no Claude/Codex harness ran — retention is hardcoded `short` ([overlay.ts](plugins/software-factory/src/harness/omp/overlay.ts)) with no run-config key, and all outcomes go through files (the native-structured-output direct layer is backlog).
+omp RPC special-cased; everything else through ACP/acpx; direct layer where native beats ACP. Portability follows the directional graph (one-way into omp from Claude/Codex). **Built: omp adapter, acpx adapter, compact-at-end, no-warming. Not built: the graph, TTL-as-config, the Claude/Codex legs.** The omp RPC adapter runs the architect turns ([rpc.ts](plugins/software-factory/src/harness/omp/rpc.ts)); acpx carries pi/codex registration ([harness.ts](plugins/software-factory/src/harness/acpx/harness.ts)); compact-at-end with reload is tested ([session-compact.test.ts](plugins/software-factory/test/kernel/session-compact.test.ts)). But `portable()` is same-harness-only ([harness/types.ts](plugins/software-factory/src/harness/types.ts)) — the "one-way into omp" claim has no code and no Claude/Codex harness ran — retention is hardcoded `short` ([overlay.ts](plugins/software-factory/src/harness/omp/overlay.ts)) with no run-config key, and all outcomes go through files (the native-structured-output direct layer is backlog).
 
 The compaction research held up in practice: cache-read-dominated turns ($15.79 architect bill is overwhelmingly cache re-reads), cold sessions cost what they cost, end-of-session compaction inside the TTL is the rule that runs.
 
