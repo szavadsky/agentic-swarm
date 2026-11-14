@@ -1,0 +1,59 @@
+# Self-run through acpx: implementer on pi, reviewer on codex, one each.
+# They share a task worktree, so each turn gets its own named acpx session.
+aliases:
+  architect:
+    harness: omp
+    model: anthropic/claude-opus-5-5
+    effort: high
+    fallbacks:
+      - opencode-go/deepseek-v4.1-flash
+  pm:
+    harness: opencode
+    model: opencode/beam-free
+    effort: max
+    escalateTo: escalation
+    fallbacks:
+      - opencode-go/deepseek-v4.1-flash
+  digest:
+    harness: opencode
+    model: opencode/beam-free
+    effort: max
+    fallbacks:
+      - opencode-go/deepseek-v4.1-flash
+  implementer:
+    harness: pi
+    model: opencode-go/beam-free
+    effort: max
+  reviewer:
+    harness: codex
+    model: deepseek-v4.1-flash
+    effort: high
+  escalation:
+    harness: omp
+    model: anthropic/claude-sonnet-5-5
+
+scouts:
+  model: opencode-go/deepseek-v4.1-flash
+
+# USD per million tokens. A model absent here is unpriced (unknown), never $0;
+# free models are listed explicitly at 0. Codex reports tokens without cost, so
+# its model is priced here by id as the probe recorded it (no provider prefix).
+prices:
+  anthropic/claude-opus-5-5: { input: 4, cachedInput: 0.2, output: 20, reasoning: 20 }
+  anthropic/claude-sonnet-5-5: { input: 2, cachedInput: 0.1, output: 10, reasoning: 10 }
+  opencode/beam-free: { input: 0, cachedInput: 0, output: 0, reasoning: 0 }
+  opencode/deepseek-v4.1-flash-free: { input: 0, cachedInput: 0, output: 0, reasoning: 0 }
+  opencode/minimax-m3.1-flash-free: { input: 0, cachedInput: 0, output: 0, reasoning: 0 }
+  opencode-go/beam-free: { input: 0, cachedInput: 0, output: 0, reasoning: 0 }
+  opencode-go/deepseek-v4.1-flash: { input: 0.15, cachedInput: 0.003, output: 0.6, reasoning: 0.6 }
+  deepseek-v4.1-flash: { input: 0.15, cachedInput: 0.003, output: 0.6, reasoning: 0.6 }
+
+limits:
+  concurrency: 3
+  iterations: 1
+
+sessions:
+  dir: ~/.local/share/factory/sessions
+  keepRuns: 5
+
+worktreeRoot: ~/.local/share/factory/worktrees

@@ -1,0 +1,30 @@
+# Package-default process config. A repo may override any key in .factory/process.yaml.
+flows:
+  implement-review:
+    reviewRounds: 2
+    steps:
+      - id: implement
+        role: implementer
+      - id: review
+        role: reviewer
+        review: true
+  just-implement:
+    steps:
+      - id: implement
+        role: implementer
+  spike:
+    reviewRounds: 1
+    steps:
+      - id: implement
+        role: implementer
+      - id: review
+        role: reviewer
+        review: true
+roles:
+  architect: { prompt: architect }
+  front: { prompt: front }
+  pm: { prompt: pm }
+  implementer: { prompt: implementer }
+  reviewer: { prompt: reviewer }
+  digest: { prompt: digest }
+itemTurns: 8

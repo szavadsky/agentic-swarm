@@ -1,560 +1,193 @@
-import { describe, it, expect } from "bun:test";
+import { describe, expect, it, beforeEach, afterEach } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
-import { createTmpRepo } from "../helpers/tmp-repo.js";
-import { parseCliArgs, resolveTaskSlug } from "../../src/cli/index.js";
-import { runInit } from "../../src/cli/init.js";
-import { runSteer } from "../../src/cli/steer.js";
-import { runStatus } from "../../src/cli/status.js";
-import { runPreflight } from "../../src/cli/preflight.js";
-import { acquireRunLock, isRunLockFree, getRunLockPath, resolveRuntimeDir } from "../../src/cli/lock.js";
+import yaml from "yaml";
+import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
+import { FakeHarness } from "../../src/harness/fake/index.js";
+import { dispatch, parseCliArgs } from "../../src/cli/dispatch.js";
+import {
+  acquireRunLock,
+  getRunLockPath,
+  isRunLockFree,
+  resolveRuntimeDir,
+} from "../../src/cli/lock.js";
 
-const PLUGIN_ROOT = path.resolve(import.meta.dir, "../..");
+function conflictingBaseRepo(): TmpRepo {
+  const repo = createTmpRepo();
+  const base = path.basename(repo.dir);
+  repo.writeFile(
+    ".factory/repo.yaml",
+    yaml.stringify({ baseBranch: "main", artifactRoot: ".factory/artifacts" })
+  );
+  repo.writeFile(
+    ".factory/run.yaml",
+    [
+      "aliases:",
+      "  architect: { harness: fake, model: fake-architect }",
+      "  pm: { harness: fake, model: fake-pm }",
+      "  implementer: { harness: fake, model: fake-impl }",
+      "  reviewer: { harness: fake, model: fake-review }",
+      "limits: { iterations: 1, concurrency: 1 }",
+      `worktreeRoot: ../${base}-wt`,
+      `sessions: { dir: ../${base}-sessions, keepRuns: 1 }`,
+      "",
+    ].join("\n")
+  );
+  repo.commit("factory config");
 
-describe("CLI Argument Parsing & Slug Resolution", () => {
-  it("resolves task slugs from paths or names", () => {
-    expect(resolveTaskSlug("tasks/feature-alpha/INTENT.md")).toBe("feature-alpha");
-    expect(resolveTaskSlug(".factory/tasks/feature-beta/INTENT.md")).toBe("feature-beta");
-    expect(resolveTaskSlug("feature-gamma")).toBe("feature-gamma");
+  // The integration branch and base diverge on the same file.
+  repo.git(["checkout", "-b", "factory/demo"]);
+  repo.writeFile("shared.txt", "integration\n");
+  repo.commit("factory: merge task");
+  repo.git(["checkout", "main"]);
+  repo.writeFile("shared.txt", "base\n");
+  repo.commit("base edit");
+
+  const goalDir = path.join(repo.dir, ".factory/artifacts", "demo");
+  fs.mkdirSync(goalDir, { recursive: true });
+  fs.writeFileSync(path.join(goalDir, "intent.md"), "# Goal\n\nTest goal.\n", "utf8");
+  return repo;
+}
+
+describe("CLI dispatch", () => {
+  it("parses global flags and the positional command", () => {
+    expect(parseCliArgs(["run", "--repo", "/tmp/x", "--iterations=2", "--goal", "g"])).toEqual({
+      command: "run",
+      repo: "/tmp/x",
+      goal: "g",
+      iterations: 2,
+      runConfig: undefined,
+      help: false,
+      version: false,
+    });
+    expect(parseCliArgs(["--help"]).help).toBe(true);
+    expect(parseCliArgs(["-v"]).version).toBe(true);
   });
 
-  it("parses CLI flags and positional commands", () => {
-    const parsedRun = parseCliArgs([
-      "run",
-      "tasks/feature-1/INTENT.md",
-      "--repo=/tmp/my-repo",
-      "--max-iterations",
-      "10",
-    ]);
-    expect(parsedRun.command).toBe("run");
-    expect(parsedRun.taskOrIntent).toBe("tasks/feature-1/INTENT.md");
-    expect(parsedRun.repo).toBe("/tmp/my-repo");
-    expect(parsedRun.maxIterations).toBe(10);
-
-    const parsedSteer = parseCliArgs(["steer", "my-task", "Proceed with plan B"]);
-    expect(parsedSteer.command).toBe("steer");
-    expect(parsedSteer.taskOrIntent).toBe("my-task");
-    expect(parsedSteer.steerText).toBe("Proceed with plan B");
-
-    const parsedHelp = parseCliArgs(["--help"]);
-    expect(parsedHelp.help).toBe(true);
+  it("documents the run command in help", async () => {
+    const original = console.log;
+    const lines: string[] = [];
+    console.log = (msg: string) => lines.push(msg);
+    try {
+      expect(await dispatch(["run", "--help"])).toBe(0);
+      expect(lines.join("\n")).toContain("factory run --repo <path> --goal <name>");
+    } finally {
+      console.log = original;
+    }
   });
+
+  it("prints help when called without a command", async () => {
+    const original = console.log;
+    const lines: string[] = [];
+    console.log = (msg: string) => lines.push(msg);
+    try {
+      expect(await dispatch([])).toBe(0);
+      expect(lines.join("\n")).toContain("software-factory");
+    } finally {
+      console.log = original;
+    }
+  });
+
+  it("rejects unknown commands", async () => {
+    const originalErr = console.error;
+    const originalLog = console.log;
+    const errors: string[] = [];
+    console.error = (msg: string) => errors.push(msg);
+    console.log = () => {};
+    try {
+      expect(await dispatch(["nope"])).toBe(1);
+      expect(errors.join("\n")).toContain('unknown command "nope"');
+    } finally {
+      console.error = originalErr;
+      console.log = originalLog;
+    }
+  });
+
+  it("prints the launch cause when a base follow stops the run", async () => {
+    const repo = conflictingBaseRepo();
+    try {
+      const originalLog = console.log;
+      const originalWarn = console.warn;
+      const lines: string[] = [];
+      console.log = (...args: unknown[]) => lines.push(args.map(String).join(" "));
+      console.warn = () => {};
+      let code: number;
+      try {
+        code = await dispatch(["run", "--repo", repo.dir, "--goal", "demo"], {
+          harnesses: { fake: new FakeHarness({ id: "fake" }) },
+        });
+      } finally {
+        console.log = originalLog;
+        console.warn = originalWarn;
+      }
+      expect(code!).toBe(1);
+      expect(lines.join("\n")).toContain("stop=infra");
+      expect(lines.join("\n")).toContain('cause: base "main" conflicts');
+      expect(lines.join("\n")).toContain("shared.txt");
+    } finally {
+      repo.cleanup();
+    }
+  }, 60_000);
 });
 
-describe("Run Lock Management", () => {
-  it("manages exclusive lock acquisition and release", () => {
-    const tmp = createTmpRepo();
-    try {
-      const task = "lock-test-task";
-      expect(isRunLockFree(tmp.dir, task).free).toBe(true);
+describe("Run lock", () => {
+  let repo: string;
 
-      const handle1 = acquireRunLock(tmp.dir, task);
-      expect(handle1).not.toBeNull();
-      expect(isRunLockFree(tmp.dir, task).free).toBe(false);
-
-      // Second acquire fails
-      const handle2 = acquireRunLock(tmp.dir, task);
-      expect(handle2).toBeNull();
-
-      // Release frees the lock
-      handle1!.release();
-      expect(isRunLockFree(tmp.dir, task).free).toBe(true);
-    } finally {
-      tmp.cleanup();
-    }
+  beforeEach(() => {
+    repo = fs.mkdtempSync(path.join(os.tmpdir(), "factory-lock-"));
   });
 
-  it("enforces lock exclusivity under concurrent acquisitions", async () => {
-    const tmp = createTmpRepo();
-    try {
-      const task = "concurrent-lock-task";
-      // Simulate two concurrent acquisition attempts
-      const [h1, h2] = await Promise.all([
-        Promise.resolve().then(() => acquireRunLock(tmp.dir, task)),
-        Promise.resolve().then(() => acquireRunLock(tmp.dir, task)),
-      ]);
-
-      // Exactly one must succeed, the other must be null
-      const acquiredCount = (h1 ? 1 : 0) + (h2 ? 1 : 0);
-      expect(acquiredCount).toBe(1);
-
-      const winner = h1 ?? h2;
-      winner!.release();
-      expect(isRunLockFree(tmp.dir, task).free).toBe(true);
-    } finally {
-      tmp.cleanup();
-    }
+  afterEach(() => {
+    fs.rmSync(repo, { recursive: true, force: true });
   });
 
-  it("takes over stale lock from dead PID on same host and journals takeover", () => {
-    const tmp = createTmpRepo();
-    try {
-      const task = "stale-lock-task";
-      const lockPath = getRunLockPath(tmp.dir, task);
-      fs.mkdirSync(path.dirname(lockPath), { recursive: true });
-
-      // Stale lock with dead PID on current host
-      const stalePayload = {
-        pid: 9999999, // Guaranteed dead PID
-        host: os.hostname(),
-        start: new Date(Date.now() - 3600_000).toISOString(),
-      };
-      fs.writeFileSync(lockPath, JSON.stringify(stalePayload), "utf8");
-
-      expect(isRunLockFree(tmp.dir, task).free).toBe(true);
-
-      const taskDir = path.join(tmp.dir, ".factory/tasks", task);
-      let takeoverNotified = false;
-      const handle = acquireRunLock(tmp.dir, task, {
-        taskDir,
-        onTakeover: (info) => {
-          takeoverNotified = true;
-          expect(info.previousLock?.pid).toBe(9999999);
-        },
-      });
-
-      expect(handle).not.toBeNull();
-      expect(takeoverNotified).toBe(true);
-
-      // Verify journal entry written
-      const journalPath = path.join(taskDir, "journal.ndjson");
-      expect(fs.existsSync(journalPath)).toBe(true);
-      const journalContent = fs.readFileSync(journalPath, "utf8");
-      expect(journalContent).toContain("lock_takeover");
-      expect(journalContent).toContain("9999999");
-
-      handle!.release();
-    } finally {
-      tmp.cleanup();
-    }
+  it("resolves the runtime directory outside the checkout", () => {
+    const runtimeDir = resolveRuntimeDir(repo, "../wt-test");
+    expect(runtimeDir).toBe(path.resolve(repo, "../wt-test", ".factory-runtime"));
   });
 
-  it("refuses takeover when lock is held on a different host", () => {
-    const tmp = createTmpRepo();
-    try {
-      const task = "remote-lock-task";
-      const lockPath = getRunLockPath(tmp.dir, task);
-      fs.mkdirSync(path.dirname(lockPath), { recursive: true });
-
-      // Lock written by different host
-      const remotePayload = {
-        pid: 9999999,
-        host: "foreign-host-worker.internal",
-        start: new Date().toISOString(),
-      };
-      fs.writeFileSync(lockPath, JSON.stringify(remotePayload), "utf8");
-
-      expect(isRunLockFree(tmp.dir, task).free).toBe(false);
-
-      const handle = acquireRunLock(tmp.dir, task);
-      expect(handle).toBeNull();
-    } finally {
-      tmp.cleanup();
-    }
+  it("defaults the worktree root to a sibling named for the repository", () => {
+    const runtimeDir = resolveRuntimeDir(repo);
+    expect(runtimeDir).toBe(path.join(path.dirname(repo), `wt-${path.basename(repo)}`, ".factory-runtime"));
+    expect(runtimeDir.startsWith(repo + path.sep)).toBe(false);
   });
 
-  it("refuses takeover when an exclusive takeover marker is already held", () => {
-    const tmp = createTmpRepo();
-    try {
-      const task = "competing-takeover-task";
-      const lockPath = getRunLockPath(tmp.dir, task);
-      const lockDir = path.dirname(lockPath);
-      fs.mkdirSync(lockDir, { recursive: true });
-
-      // Stale lock with dead PID
-      const stalePayload = {
-        pid: 9999999,
-        host: os.hostname(),
-        start: new Date(Date.now() - 3600_000).toISOString(),
-      };
-      fs.writeFileSync(lockPath, JSON.stringify(stalePayload), "utf8");
-
-      // Competitor holds takeover marker
-      const takeoverMarker = path.join(lockDir, `${task}.lock.takeover`);
-      fs.writeFileSync(takeoverMarker, "marker", "utf8");
-
-      const handle = acquireRunLock(tmp.dir, task);
-      expect(handle).toBeNull();
-
-      // Remove marker -> now takeover succeeds
-      fs.unlinkSync(takeoverMarker);
-      const handle2 = acquireRunLock(tmp.dir, task);
-      expect(handle2).not.toBeNull();
-      handle2!.release();
-    } finally {
-      tmp.cleanup();
-    }
+  it("relocates a worktree root inside the checkout beside it", () => {
+    const runtimeDir = resolveRuntimeDir(repo, path.join(repo, "inside"));
+    expect(runtimeDir).toBe(path.join(path.dirname(repo), `wt-${path.basename(repo)}`, ".factory-runtime"));
+    expect(runtimeDir.startsWith(repo + path.sep)).toBe(false);
   });
 
-  it("stale lock takeover journals into task worktree and leaves main checkout clean", async () => {
-    const tmp = createTmpRepo();
-    try {
-      const task = "journal-worktree-task";
-      const lockPath = getRunLockPath(tmp.dir, task);
-      const lockDir = path.dirname(lockPath);
-      fs.mkdirSync(lockDir, { recursive: true });
+  it("is exclusive while held and free after release", () => {
+    const task = "t1";
+    const lockPath = getRunLockPath(repo, task, { runtimeDir: path.join(repo, "rt") });
+    expect(isRunLockFree(repo, task, { runtimeDir: path.join(repo, "rt") }).free).toBe(true);
 
-      const stalePayload = {
-        pid: 9999999,
-        host: os.hostname(),
-        start: new Date(Date.now() - 3600_000).toISOString(),
-      };
-      fs.writeFileSync(lockPath, JSON.stringify(stalePayload), "utf8");
+    const handle = acquireRunLock(repo, task, { runtimeDir: path.join(repo, "rt") });
+    expect(handle).not.toBeNull();
+    expect(fs.existsSync(lockPath)).toBe(true);
+    expect(isRunLockFree(repo, task, { runtimeDir: path.join(repo, "rt") }).free).toBe(false);
+    expect(acquireRunLock(repo, task, { runtimeDir: path.join(repo, "rt") })).toBeNull();
 
-      let takeoverInfo: any;
-      const handle = acquireRunLock(tmp.dir, task, {
-        onTakeover: (info) => {
-          takeoverInfo = info;
-        },
-      });
-      expect(handle).not.toBeNull();
-      expect(takeoverInfo).toBeDefined();
-
-      // Simulate engine run with lockTakeoverEvent
-      const { runTask } = await import("../../src/core/engine.js");
-      const { Repo } = await import("../../src/core/git/repo.js");
-      const { FakeHarness } = await import("../../src/harness/fake/fake-harness.js");
-      const worktreeRoot = path.join(tmp.dir + "-wt");
-      fs.mkdirSync(worktreeRoot, { recursive: true });
-      const repoObj = new Repo({ mainRoot: tmp.dir, worktreeRoot });
-
-      const intentPath = path.join(tmp.dir, ".factory/tasks", task, "INTENT.md");
-      fs.mkdirSync(path.dirname(intentPath), { recursive: true });
-      fs.writeFileSync(intentPath, "Test intent\n");
-      tmp.commit("Add intent for journal test");
-
-      const harness = new FakeHarness();
-      harness.scriptOutcome(`${task}/runs/triage#a1`, {
-        ok: true,
-        data: { kind: "story", rationale: "Stop early", citations: [] },
-      });
-      harness.scriptOutcome(`${task}/runs/infra#a1`, {
-        ok: true,
-        data: { setup: [], gates: [{ id: "t", command: "true" }], testRunner: { command: "true" } },
-      });
-
-      const pipeline = {
-        models: { roles: { workhorse: { model: "m" } } },
-        agents: { triage: { role: "workhorse" }, infra: { role: "workhorse" } },
-        flows: { simple: { steps: [{ id: "develop", agent: "developer", role: "workhorse" }] }, story: {}, spike: {} },
-        limits: {},
-      };
-
-      await runTask(
-        {
-          harness,
-          repo: repoObj,
-          project: { orchestrationFolder: ".factory/tasks", worktreeRoot },
-          pipelineFor: async () => pipeline as any,
-          prompts: { agentDefinition: () => ({ body: "", tools: [] }), render: () => "", placeholders: () => [] } as any,
-        },
-        task,
-        { maxTicks: 1, lockTakeoverEvent: takeoverInfo }
-      );
-
-      // Task worktree journal contains lock_takeover
-      const taskWtPath = path.join(worktreeRoot, `topic_${task}`);
-      const wtJournal = path.join(taskWtPath, ".factory/tasks", task, "journal.ndjson");
-      expect(fs.existsSync(wtJournal)).toBe(true);
-      expect(fs.readFileSync(wtJournal, "utf8")).toContain("lock_takeover");
-
-      // Main checkout MUST NOT contain journal.ndjson
-      const mainJournal = path.join(tmp.dir, ".factory/tasks", task, "journal.ndjson");
-      expect(fs.existsSync(mainJournal)).toBe(false);
-
-      handle!.release();
-    } finally {
-      tmp.cleanup();
-    }
-  });
-});
-
-describe("Runtime Directory & Untracked Files", () => {
-  it("resolves runtime dir outside the main checkout and never writes inside repo", () => {
-    const tmp = createTmpRepo();
-    try {
-      const runtimeDir = resolveRuntimeDir(tmp.dir);
-      // Must be outside the repoRoot
-      expect(runtimeDir.startsWith(tmp.dir)).toBe(false);
-
-      const lockPath = getRunLockPath(tmp.dir, "test-task");
-      expect(lockPath.startsWith(tmp.dir)).toBe(false);
-      expect(lockPath).toContain(".factory-runtime");
-
-      // Acquire lock and verify repo remains clean
-      const handle = acquireRunLock(tmp.dir, "test-task");
-      expect(handle).not.toBeNull();
-
-      // Ensure no .factory-runtime was created inside tmp.dir
-      expect(fs.existsSync(path.join(tmp.dir, ".factory-runtime"))).toBe(false);
-
-      handle!.release();
-    } finally {
-      tmp.cleanup();
-    }
+    handle!.release();
+    expect(fs.existsSync(lockPath)).toBe(false);
+    expect(isRunLockFree(repo, task, { runtimeDir: path.join(repo, "rt") }).free).toBe(true);
   });
 
-  it("factory init leaves no untracked files beyond .factory/project.yaml", async () => {
-    const tmp = createTmpRepo();
-    try {
-      const code = await runInit({
-        repoRoot: tmp.dir,
-        pluginRoot: PLUGIN_ROOT,
-        silent: true,
-      });
-      expect(code).toBe(0);
+  it("takes over a stale lock from a dead pid on this host", () => {
+    const runtimeDir = path.join(repo, "rt");
+    const lockPath = getRunLockPath(repo, "t2", { runtimeDir });
+    fs.mkdirSync(path.dirname(lockPath), { recursive: true });
+    fs.writeFileSync(
+      lockPath,
+      JSON.stringify({ pid: 999_999_999, host: os.hostname(), start: new Date(0).toISOString() })
+    );
 
-      // Verify git status is completely clean (project.yaml committed)
-      const status = execFileSync("git", ["status", "--porcelain", "-uall"], {
-        cwd: tmp.dir,
-        encoding: "utf8",
-      }).trim();
-      expect(status).toBe("");
-
-      // Verify no untracked files
-      const untracked = status.split("\n").filter((l) => l.startsWith("??"));
-      expect(untracked.length).toBe(0);
-    } finally {
-      tmp.cleanup();
-    }
-  });
-});
-
-describe("CLI Commands Integration", () => {
-  it("factory init creates .factory/project.yaml and commits it", async () => {
-    const tmp = createTmpRepo();
-    try {
-      const code = await runInit({
-        repoRoot: tmp.dir,
-        pluginRoot: PLUGIN_ROOT,
-        silent: true,
-      });
-      expect(code).toBe(0);
-
-      const projectPath = path.join(tmp.dir, ".factory", "project.yaml");
-      expect(fs.existsSync(projectPath)).toBe(true);
-
-      // Verify idempotent second run
-      const code2 = await runInit({
-        repoRoot: tmp.dir,
-        pluginRoot: PLUGIN_ROOT,
-        silent: true,
-      });
-      expect(code2).toBe(0);
-    } finally {
-      tmp.cleanup();
-    }
-  });
-
-  it("factory steer writes timestamped markdown file to fromuserpending", async () => {
-    const tmp = createTmpRepo();
-    try {
-      await runInit({ repoRoot: tmp.dir, pluginRoot: PLUGIN_ROOT, silent: true });
-
-      const task = "steer-test-task";
-      const directive = "Please prioritize edge case tests.";
-      const code = await runSteer({
-        repoRoot: tmp.dir,
-        task,
-        text: directive,
-        silent: true,
-      });
-      expect(code).toBe(0);
-
-      // Default orchestrationFolder is .factory/tasks
-      const steerDir = path.join(tmp.dir, ".factory/tasks", task, "steer/fromuserpending");
-      expect(fs.existsSync(steerDir)).toBe(true);
-
-      const files = fs.readdirSync(steerDir);
-      expect(files.length).toBe(1);
-      const file = files[0];
-      expect(file).toBeDefined();
-      expect(file!.endsWith(".md")).toBe(true);
-
-      const content = fs.readFileSync(path.join(steerDir, file!), "utf8");
-      expect(content).toContain(directive);
-    } finally {
-      tmp.cleanup();
-    }
-  });
-
-  it("factory preflight validates cleanliness and configuration", async () => {
-    const tmp = createTmpRepo();
-    try {
-      await runInit({ repoRoot: tmp.dir, pluginRoot: PLUGIN_ROOT, silent: true });
-
-      const task = "preflight-test-task";
-      const intentPath = path.join(tmp.dir, ".factory/tasks", task, "INTENT.md");
-      fs.mkdirSync(path.dirname(intentPath), { recursive: true });
-      fs.writeFileSync(intentPath, "# Intent\nTest goal.", "utf8");
-
-      const res = await runPreflight({
-        repoRoot: tmp.dir,
-        task,
-        pluginRoot: PLUGIN_ROOT,
-        silent: true,
-      });
-
-      expect(res.ok).toBe(true);
-      expect(res.errors).toEqual([]);
-
-      // Introduce an uncommitted dirty file outside INTENT.md
-      tmp.writeFile("dirty-code.ts", "const x = 1;");
-      const dirtyRes = await runPreflight({
-        repoRoot: tmp.dir,
-        task,
-        pluginRoot: PLUGIN_ROOT,
-        silent: true,
-      });
-
-      expect(dirtyRes.ok).toBe(false);
-      expect(dirtyRes.errors.some((e) => e.includes("cleanliness"))).toBe(true);
-    } finally {
-      tmp.cleanup();
-    }
-  });
-
-  it("factory preflight passes for second task when first task has untracked INTENT.md", async () => {
-    const tmp = createTmpRepo();
-    try {
-      await runInit({ repoRoot: tmp.dir, pluginRoot: PLUGIN_ROOT, silent: true });
-
-      // First task's untracked INTENT.md
-      const task1Intent = path.join(tmp.dir, ".factory/tasks", "task-1", "INTENT.md");
-      fs.mkdirSync(path.dirname(task1Intent), { recursive: true });
-      fs.writeFileSync(task1Intent, "# Task 1\nFirst task.", "utf8");
-
-      // Second task's INTENT.md
-      const task2 = "task-2";
-      const task2Intent = path.join(tmp.dir, ".factory/tasks", task2, "INTENT.md");
-      fs.mkdirSync(path.dirname(task2Intent), { recursive: true });
-      fs.writeFileSync(task2Intent, "# Task 2\nSecond task.", "utf8");
-
-      const res = await runPreflight({
-        repoRoot: tmp.dir,
-        task: task2,
-        pluginRoot: PLUGIN_ROOT,
-        silent: true,
-      });
-
-      expect(res.ok).toBe(true);
-      expect(res.errors).toEqual([]);
-    } finally {
-      tmp.cleanup();
-    }
-  });
-  it("factory preflight fails when prompt fragments are missing or fail render", async () => {
-    const tmp = createTmpRepo();
-    try {
-      await runInit({ repoRoot: tmp.dir, pluginRoot: PLUGIN_ROOT, silent: true });
-
-      const task = "bad-prompt-task";
-      const taskDir = path.join(tmp.dir, ".factory/tasks", task);
-      fs.mkdirSync(taskDir, { recursive: true });
-      fs.writeFileSync(path.join(taskDir, "INTENT.md"), "# Intent\nTest goal.", "utf8");
-
-      // Task pipeline references a non-existent step fragment
-      fs.writeFileSync(
-        path.join(taskDir, "pipeline.yaml"),
-        "flows:\n  simple:\n    steps:\n      - id: missing-step\n        agent: developer\n        stepFragment: steps/nonexistent-fragment-xyz\n",
-        "utf8"
-      );
-
-      const res = await runPreflight({
-        repoRoot: tmp.dir,
-        task,
-        pluginRoot: PLUGIN_ROOT,
-        silent: true,
-      });
-
-      expect(res.ok).toBe(false);
-      expect(res.errors.some((e) => e.includes("nonexistent-fragment-xyz"))).toBe(true);
-    } finally {
-      tmp.cleanup();
-    }
-  });
-  it("factory preflight warns (does not fail) when common linter configs do not mention orchestration folder", async () => {
-    const tmp = createTmpRepo();
-    try {
-      await runInit({ repoRoot: tmp.dir, pluginRoot: PLUGIN_ROOT, silent: true });
-
-      const task = "preflight-linter-warn";
-      const taskDir = path.join(tmp.dir, ".factory/tasks", task);
-      fs.mkdirSync(taskDir, { recursive: true });
-      fs.writeFileSync(path.join(taskDir, "INTENT.md"), "# Intent\nTest goal.", "utf8");
-
-      // Add ruff.toml without .factory
-      tmp.writeFile("ruff.toml", "line-length = 88\n");
-      // Add pyproject.toml with [tool.ruff] without .factory
-      tmp.writeFile("pyproject.toml", "[tool.ruff]\nselect = ['E']\n");
-      // Add .eslintrc.json without .factory
-      tmp.writeFile(".eslintrc.json", '{"rules": {}}\n');
-      // Add rumdl.toml without .factory
-      tmp.writeFile("rumdl.toml", "[rules]\n");
-      // Add .markdownlint.json without .factory
-      tmp.writeFile(".markdownlint.json", '{"default": true}\n');
-      // Add .yamllint without .factory
-      tmp.writeFile(".yamllint", "extends: default\n");
-
-      // Commit them so cleanliness check doesn't fail
-      tmp.git(["add", "."]);
-      tmp.git(["commit", "-m", "add linter configs"]);
-
-      const res = await runPreflight({
-        repoRoot: tmp.dir,
-        task,
-        pluginRoot: PLUGIN_ROOT,
-        silent: true,
-      });
-
-      // Warns, does NOT fail!
-      expect(res.ok).toBe(true);
-      expect(res.errors).toEqual([]);
-      expect(res.warnings).toBeDefined();
-      expect(res.warnings?.some((w) => w.includes("ruff.toml"))).toBe(true);
-      expect(res.warnings?.some((w) => w.includes("pyproject.toml"))).toBe(true);
-      expect(res.warnings?.some((w) => w.includes(".eslintrc.json"))).toBe(true);
-      expect(res.warnings?.some((w) => w.includes("rumdl.toml"))).toBe(true);
-      expect(res.warnings?.some((w) => w.includes(".markdownlint.json"))).toBe(true);
-      expect(res.warnings?.some((w) => w.includes(".yamllint"))).toBe(true);
-
-      // Now update ruff.toml to mention .factory
-      tmp.writeFile("ruff.toml", "exclude = ['.factory']\n");
-      tmp.git(["add", "ruff.toml"]);
-      tmp.git(["commit", "-m", "exclude .factory in ruff"]);
-
-      const res2 = await runPreflight({
-        repoRoot: tmp.dir,
-        task,
-        pluginRoot: PLUGIN_ROOT,
-        silent: true,
-      });
-      expect(res2.ok).toBe(true);
-      expect(res2.warnings?.some((w) => w.includes("ruff.toml"))).toBe(false);
-    } finally {
-      tmp.cleanup();
-    }
-  });
-
-  it("factory status outputs derived state", async () => {
-    const tmp = createTmpRepo();
-    try {
-      await runInit({ repoRoot: tmp.dir, pluginRoot: PLUGIN_ROOT, silent: true });
-
-      const task = "status-test-task";
-      const taskDir = path.join(tmp.dir, ".factory/tasks", task);
-      fs.mkdirSync(taskDir, { recursive: true });
-      fs.writeFileSync(path.join(taskDir, "INTENT.md"), "# Intent\nTest goal.", "utf8");
-
-      const code = await runStatus({
-        repoRoot: tmp.dir,
-        task,
-      });
-      expect(code).toBe(0);
-    } finally {
-      tmp.cleanup();
-    }
+    const handle = acquireRunLock(repo, "t2", { runtimeDir });
+    expect(handle).not.toBeNull();
+    const data = JSON.parse(fs.readFileSync(lockPath, "utf8"));
+    expect(data.pid).toBe(process.pid);
+    handle!.release();
   });
 });

@@ -1,131 +1,174 @@
+import fs from "node:fs";
+import path from "node:path";
 import type {
-  AgentOutcome,
-  AgentRun,
+  Caps,
   Harness,
-  JSONSchema,
+  ModelRef,
+  SessionRef,
+  Stop,
+  TurnRequest,
+  TurnResult,
+  Usage,
 } from "../types.js";
 
-export type ScriptedOutcome =
-  | AgentOutcome
-  | AgentOutcome[]
-  | ((run: AgentRun) => Promise<AgentOutcome> | AgentOutcome);
+export const DEFAULT_FAKE_CAPS: Caps = {
+  resume: true,
+  compact: "local",
+  fork: false,
+  subagents: "none",
+  structuredOutput: "none",
+  effort: [],
+  usage: { cache: true, cost: true },
+};
 
-export type ScriptedCompleteHandler = (params: {
-  role: string;
-  models: string[];
-  system: string;
-  prompt: string;
-  schema: JSONSchema;
-}) => Promise<unknown> | unknown;
+export interface FakeHarnessOptions {
+  id?: string;
+  caps?: Partial<Caps>;
+}
 
-export type HarnessCall =
-  | { type: "run"; run: AgentRun }
-  | {
-      type: "complete";
-      complete: {
-        role: string;
-        models: string[];
-        system: string;
-        prompt: string;
-        schema: JSONSchema;
-      };
-    };
+export interface FakeTurnContext {
+  /** 1-based turn number within this harness. */
+  n: number;
+  /** Writes `value` as JSON to `req.outcomePath`; throws when the request has none. */
+  writeOutcome(value: unknown): void;
+}
 
+export type FakeTurnHandler = (
+  req: TurnRequest,
+  ctx: FakeTurnContext
+) => TurnResult | Promise<TurnResult>;
+
+export function emptyUsage(): Usage {
+  return {
+    in: 0,
+    cacheRead: 0,
+    cacheWrite5m: 0,
+    cacheWrite1h: 0,
+    out: 0,
+    reasoningOut: 0,
+  };
+}
+
+/**
+ * Builds a TurnResult for a scripted handler. Missing fields default to a
+ * completed turn with zero usage; the harness fills in the session when the
+ * handler leaves it out.
+ */
+export function fakeTurnResult(
+  req: TurnRequest,
+  patch: Partial<Omit<TurnResult, "usage">> & { usage?: Partial<Usage> } = {}
+): TurnResult {
+  const model = patch.model ?? req.model;
+  const stop = patch.stop ?? { kind: "done" };
+  const usage = { ...emptyUsage(), ...patch.usage };
+  return {
+    stop,
+    text: patch.text ?? "",
+    usage,
+    session: patch.session ?? req.session,
+    model,
+    attempts: patch.attempts ?? [{ model, stop, usage }],
+    transcript: patch.transcript,
+  };
+}
+
+/**
+ * Scripted harness for behavior tests. Each call to `turn` consumes one
+ * handler from a queue; the handler may write files under `req.cwd` and the
+ * outcome file, and returns the TurnResult the harness reports.
+ *
+ * Session ids: a resumed request keeps its SessionRef (including id and cwd),
+ * a fresh request gets a unique id. Usage numbers and every Stop cause
+ * (including each `infra` cause) pass through unchanged.
+ */
 export class FakeHarness implements Harness {
-  private outcomesByLabel = new Map<string, ScriptedOutcome>();
-  private completeHandlers: ScriptedCompleteHandler[] = [];
-  public defaultCompleteHandler?: ScriptedCompleteHandler;
-
-  public readonly calls: HarnessCall[] = [];
-  public readonly knownSessionIds = new Set<string>();
+  public readonly id: string;
+  public readonly calls: TurnRequest[] = [];
+  public readonly compactions: SessionRef[] = [];
+  private readonly capsConfig: Caps;
+  private readonly handlers: FakeTurnHandler[] = [];
+  private readonly sessions = new Map<string, SessionRef>();
   private sessionCounter = 0;
 
-  public scriptOutcome(label: string, outcome: ScriptedOutcome): this {
-    this.outcomesByLabel.set(label, outcome);
+  constructor(opts: FakeHarnessOptions = {}) {
+    this.id = opts.id ?? "fake";
+    this.capsConfig = {
+      ...DEFAULT_FAKE_CAPS,
+      ...opts.caps,
+      usage: { ...DEFAULT_FAKE_CAPS.usage, ...opts.caps?.usage },
+    };
+  }
+
+  /** Queues the next turn's scripted behavior. */
+  script(handler: FakeTurnHandler): this {
+    this.handlers.push(handler);
     return this;
   }
 
-  public scriptComplete(handler: ScriptedCompleteHandler): this {
-    this.completeHandlers.push(handler);
-    return this;
+  /** Queues a turn that only differs from the defaults by `patch`. */
+  scriptResult(
+    patch: Partial<Omit<TurnResult, "usage">> & { usage?: Partial<Usage> }
+  ): this {
+    return this.script((req) => fakeTurnResult(req, patch));
   }
 
-  public invalidateSession(sessionId: string): void {
-    this.knownSessionIds.delete(sessionId);
+  async caps(_model: ModelRef): Promise<Caps> {
+    return this.capsConfig;
   }
 
-  async run(run: AgentRun): Promise<AgentOutcome> {
-    this.calls.push({ type: "run", run });
-
-    // Handle session resume verification
-    if (run.session.resume) {
-      if (!this.knownSessionIds.has(run.session.resume)) {
-        return {
-          ok: false,
-          error: `Session "${run.session.resume}" not found or expired`,
-          sessionLost: true,
-        };
-      }
-    }
-
-    const cleanLabel = run.label.replace(/[^a-zA-Z0-9_-]/g, "_");
-    const sessionId = run.session.resume ?? `fake-sess-${cleanLabel}-${++this.sessionCounter}`;
-    this.knownSessionIds.add(sessionId);
-
-    if (run.onSession) {
-      await run.onSession(sessionId);
-    }
-
-    const scripted = this.outcomesByLabel.get(run.label);
-    if (!scripted) {
-      throw new Error(`FakeHarness: No scripted outcome for label "${run.label}"`);
-    }
-
-    let outcome: AgentOutcome;
-
-    if (typeof scripted === "function") {
-      outcome = await scripted(run);
-    } else if (Array.isArray(scripted)) {
-      const next = scripted.shift();
-      if (!next) {
-        throw new Error(
-          `FakeHarness: Out of scripted outcomes for label "${run.label}"`
-        );
-      }
-      outcome = next;
-    } else {
-      outcome = { ...scripted };
-    }
-
-    // Assign / propagate deterministic session IDs
-    if (!outcome.sessionId) {
-      outcome.sessionId = sessionId;
-    } else {
-      this.knownSessionIds.add(outcome.sessionId);
-    }
-
-    if (run.onUsage && outcome.usage) {
-      await run.onUsage(outcome.usage);
-    }
-
-    return outcome;
-  }
-
-  async complete(c: {
-    role: string;
-    models: string[];
-    system: string;
-    prompt: string;
-    schema: JSONSchema;
-    onModelFallback?: (info: { from: string; to: string; reason: string }) => void | Promise<unknown>;
-  }): Promise<unknown> {
-    this.calls.push({ type: "complete", complete: c });
-
-    const handler = this.completeHandlers.shift() ?? this.defaultCompleteHandler;
+  async turn(req: TurnRequest): Promise<TurnResult> {
+    this.calls.push(req);
+    const handler = this.handlers.shift();
     if (!handler) {
-      throw new Error(`FakeHarness: No scripted handler for complete() call`);
+      throw new Error(
+        `FakeHarness: no scripted turn for request ${this.calls.length}`
+      );
     }
 
-    return handler(c);
+    const n = this.calls.length;
+    const outcome = await handler(req, {
+      n,
+      writeOutcome: (value) => {
+        if (!req.outcomePath) {
+          throw new Error("FakeHarness: request has no outcomePath");
+        }
+        fs.mkdirSync(path.dirname(req.outcomePath), { recursive: true });
+        fs.writeFileSync(req.outcomePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+      },
+    });
+
+    const session = outcome.session ?? req.session ?? this.newSession(req);
+    this.sessions.set(session.id, session);
+
+    return {
+      ...outcome,
+      stop: outcome.stop as Stop,
+      usage: { ...emptyUsage(), ...outcome.usage },
+      session,
+    };
+  }
+
+  async compact(ref: SessionRef): Promise<SessionRef> {
+    this.compactions.push(ref);
+    const compacted = { ...ref, compacted: true };
+    this.sessions.set(compacted.id, compacted);
+    return compacted;
+  }
+
+  /** Sessions the harness has seen, keyed by id. */
+  knownSessions(): ReadonlyMap<string, SessionRef> {
+    return this.sessions;
+  }
+
+  private newSession(req: TurnRequest): SessionRef {
+    return {
+      harness: this.id,
+      id: `fake-session-${++this.sessionCounter}`,
+      cwd: req.cwd,
+      model: req.model,
+      lastRequestStartedAt: new Date().toISOString(),
+      retentionTier: "short",
+      compacted: false,
+    };
   }
 }

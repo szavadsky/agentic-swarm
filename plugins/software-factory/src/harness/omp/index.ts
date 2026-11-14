@@ -1,15 +1,4 @@
-export { OmpHarness, extractAgentBody, extractJsonFromText } from "./harness.js";
-export { OmpNdjsonParser } from "./ndjson.js";
-export { classifyOmpOutcome } from "./classify.js";
-export {
-  generateOmpConfigOverlay,
-  writeOmpConfigOverlay,
-  ensureThinkingSuffix,
-} from "./overlay.js";
-export type {
-  OmpHarnessOptions,
-  OmpParsedResult,
-  OmpRunTurnOptions,
-  OmpRunTurnResult,
-  OmpClassificationResult,
-} from "./types.js";
+export { OmpHarness } from "./harness.js";
+export type { OmpHarnessOptions, OmpTurnOpaque } from "./harness.js";
+export { ompOverlay, writeOmpOverlay } from "./overlay.js";
+export type { OmpOverlayOptions } from "./overlay.js";

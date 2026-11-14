@@ -1,61 +1,34 @@
-import type { PipelineConfig } from "../../core/artifacts.js";
-import type { JSONSchema, Usage } from "../types.js";
+import type { ModelRef } from "../types.js";
+import type { RetryPolicy } from "../fallback.js";
+
+/** Harness configuration carried through `TurnRequest.opaque`. */
+export interface OmpTurnOpaque {
+  tools?: string[];
+  subagentModel?: ModelRef | string;
+  approvalMode?: "always-ask" | "always-ask-cached" | "write" | "yolo";
+  addDirs?: string[];
+  overlayExtra?: Record<string, unknown>;
+}
 
 export interface OmpHarnessOptions {
-  /** Path to omp binary (defaults to process.env.OMP_PATH || Bun.which("omp") || "omp") */
-  ompBinary?: string;
-  /** Path to pre-generated YAML configuration overlay */
-  configOverlayPath?: string;
-  /** Pipeline configuration used to generate the overlay dynamically */
-  pipeline?: PipelineConfig;
-  /** Root directory for runtime state (sessions, prompts, overlay). Defaults to cwd/.factory-runtime */
-  runtimeDir?: string;
-  /** Default execution timeout per turn in milliseconds (defaults to 2_700_000 = 45m) */
-  timeoutMs?: number;
+  binary?: string;
+  /** Caller-given session store; sessions and overlays live here, never in a worktree. */
+  sessionDir: string;
+  /** Cheap model for subagents spawned inside a turn. */
+  subagentModel?: ModelRef | string;
+  retry?: Partial<RetryPolicy>;
+  overlayExtra?: Record<string, unknown>;
+  readyTimeoutMs?: number;
 }
 
-export interface OmpParsedResult {
-  sessionId?: string;
-  sessionTimestamp?: string;
-  cwd?: string;
-  finalAssistantText: string;
-  yieldData?: unknown;
-  usage: Usage;
-  stopReason?: string;
-  rawEvents: unknown[];
-  errors: string[];
-  toolCallCount: number;
-}
+export const OMP_ID = "omp";
 
-export interface OmpRunTurnOptions {
-  cwd: string;
-  prompt: string;
-  model: string;
-  tools?: string[];
-  systemPromptFile?: string;
-  resumeSessionId?: string;
-  sessionDir?: string;
-  configOverlayPath: string;
-  timeoutMs?: number;
-  ompBinary?: string;
-}
+/** Built-ins an unattended factory turn may use; `task` enables pinned subagents. */
+export const DEFAULT_TOOLS = ["read", "bash", "edit", "write", "glob", "grep", "task"];
 
-export interface OmpRunTurnResult {
-  sessionId?: string;
-  sessionTimestamp?: string;
-  transcriptPath?: string;
-  text: string;
-  yieldData?: unknown;
-  usage: Usage;
-  exitCode: number;
-  stderr: string;
-  timedOut?: boolean;
-}
-
-export interface OmpClassificationResult {
-  transient: boolean;
-  sessionLost: boolean;
-  /** omp never ran the agent (bad tools/flags/config) — fail the run fast, burn nothing. */
-  launchError?: boolean;
-  error?: string;
+export function selectorOf(model: ModelRef | string | undefined): string | undefined {
+  if (!model) return undefined;
+  return typeof model === "string"
+    ? model
+    : `${model.id}${model.effort ? `:${model.effort}` : ""}`;
 }

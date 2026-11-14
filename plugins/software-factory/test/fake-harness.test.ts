@@ -1,144 +1,174 @@
-import { describe, it, expect } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
-import path from "node:path";
 import os from "node:os";
-import { FakeHarness } from "../src/harness/fake/fake-harness.js";
-import type { AgentRun } from "../src/harness/types.js";
+import path from "node:path";
+import {
+  FakeHarness,
+  fakeTurnResult,
+} from "../src/harness/fake/fake-harness.js";
+import type { Stop, TurnRequest } from "../src/harness/types.js";
 
-describe("Fake scripted harness (§4)", () => {
-  it("replays scripted outcome by label, assigns session id on keep, and threads resume", async () => {
-    const harness = new FakeHarness();
-    const label = "task-1/runs/architect";
+const model = { id: "test/model", effort: "high" };
 
-    harness.scriptOutcome(label, [
-      {
-        ok: true,
-        data: { plan: "iteration 1 initial plan" },
-        usage: { inputTokens: 100, outputTokens: 50 },
-      },
-      {
-        ok: true,
-        data: { plan: "revised plan" },
-        usage: { inputTokens: 150, outputTokens: 80 },
-      },
-    ]);
+function request(overrides: Partial<TurnRequest> = {}): TurnRequest {
+  return {
+    model,
+    cwd: os.tmpdir(),
+    prompt: "do the thing",
+    timeouts: { idleMs: 1_000, wallMs: 5_000 },
+    ...overrides,
+  };
+}
 
-    const run1: AgentRun = {
-      agent: "architect",
-      definition: "architect prompt",
-      prompt: "generate plan",
-      role: "architect",
-      models: ["claude-opus"],
-      tools: [],
-      cwd: "/mock/cwd",
-      outputSchema: {},
-      label,
-      session: { keep: true },
-    };
+function tempDir(): string {
+  return fs.mkdtempSync(path.join(os.tmpdir(), "fake-harness-"));
+}
 
-    const outcome1 = await harness.run(run1);
-    expect(outcome1.ok).toBe(true);
-    expect(outcome1.sessionId).toBeDefined();
-
-    // Verify call was recorded
-    expect(harness.calls.length).toBe(1);
-    expect(harness.calls[0]?.type).toBe("run");
-
-    // Second turn resumes session
-    const run2: AgentRun = {
-      ...run1,
-      prompt: "revise plan",
-      session: { resume: outcome1.sessionId, keep: true },
-    };
-
-    const outcome2 = await harness.run(run2);
-    expect(outcome2.ok).toBe(true);
-    expect(outcome2.sessionId).toBe(outcome1.sessionId);
-    expect(harness.calls.length).toBe(2);
+describe("FakeHarness (kernel contract)", () => {
+  it("reports its id and configured caps", async () => {
+    const harness = new FakeHarness({
+      id: "fake-test",
+      caps: { compact: "server", effort: ["low", "high"] },
+    });
+    const caps = await harness.caps(model);
+    expect(harness.id).toBe("fake-test");
+    expect(caps.compact).toBe("server");
+    expect(caps.effort).toEqual(["low", "high"]);
+    expect(caps.usage.cache).toBe(true);
   });
 
-  it("returns sessionLost: true when resuming an unknown or lost session", async () => {
+  it("returns a completed TurnResult and creates session ids for fresh turns", async () => {
     const harness = new FakeHarness();
-    const label = "task-1/runs/triage";
+    harness.script((req) =>
+      fakeTurnResult(req, {
+        text: "hello",
+        usage: { in: 10, cacheRead: 4, out: 3, costUsd: 0.02 },
+      })
+    );
 
-    harness.scriptOutcome(label, {
-      ok: true,
-      data: { triage: "done" },
+    const res = await harness.turn(request());
+
+    expect(res.stop).toEqual({ kind: "done" });
+    expect(res.text).toBe("hello");
+    expect(res.usage).toEqual({
+      in: 10,
+      cacheRead: 4,
+      cacheWrite5m: 0,
+      cacheWrite1h: 0,
+      out: 3,
+      reasoningOut: 0,
+      costUsd: 0.02,
+    });
+    expect(res.session?.id).toMatch(/^fake-session-/);
+    expect(res.session?.cwd).toBe(os.tmpdir());
+    expect(res.session?.model).toEqual(model);
+    expect(res.model).toEqual(model);
+    expect(res.attempts).toEqual([
+      { model, stop: { kind: "done" }, usage: res.usage },
+    ]);
+    expect(harness.calls).toHaveLength(1);
+  });
+
+  it("forwards the fallback chain and reports the model actually used", async () => {
+    const fallback = { id: "test/backup" };
+    const harness = new FakeHarness();
+    let seen: TurnRequest["fallbacks"];
+    harness.script((req) => {
+      seen = req.fallbacks;
+      return fakeTurnResult(req, { model: fallback, text: "from backup" });
     });
 
-    const run: AgentRun = {
-      agent: "triage",
-      definition: "triage def",
-      prompt: "triage intent",
-      role: "workhorse",
-      models: ["deepseek"],
-      tools: [],
-      cwd: "/mock/cwd",
-      outputSchema: {},
-      label,
-      session: { resume: "expired-or-unknown-session-id", keep: true },
-    };
+    const res = await harness.turn(request({ fallbacks: [fallback] }));
+    expect(seen).toEqual([fallback]);
+    expect(res.model).toEqual(fallback);
+    expect(res.attempts?.[0]?.model).toEqual(fallback);
+  });
 
-    const outcome = await harness.run(run);
-    expect(outcome.ok).toBe(false);
-    if (!outcome.ok) {
-      expect(outcome.sessionLost).toBe(true);
+  it("keeps a resumed session id and gives distinct fresh ids", async () => {
+    const harness = new FakeHarness();
+    harness.script((req) => fakeTurnResult(req));
+    harness.script((req) => fakeTurnResult(req));
+    harness.script((req) => fakeTurnResult(req));
+
+    const first = await harness.turn(request());
+    const second = await harness.turn(request());
+    expect(first.session?.id).not.toBe(second.session?.id);
+
+    const resumed = await harness.turn(request({ session: first.session }));
+    expect(resumed.session?.id).toBe(first.session?.id);
+    expect(resumed.session?.model).toEqual(model);
+  });
+
+  it("runs file side effects in cwd and writes the outcome file", async () => {
+    const dir = tempDir();
+    const outcomePath = path.join(dir, "outcome.json");
+    const harness = new FakeHarness();
+    harness.script((req, ctx) => {
+      fs.writeFileSync(path.join(req.cwd, "implemented.txt"), "done");
+      ctx.writeOutcome({ status: "done", summary: "implemented" });
+      return fakeTurnResult(req, {
+        text: "wrote files",
+        usage: { in: 1, out: 2 },
+      });
+    });
+
+    try {
+      const res = await harness.turn(request({ cwd: dir, outcomePath }));
+
+      expect(fs.readFileSync(path.join(dir, "implemented.txt"), "utf8")).toBe("done");
+      expect(JSON.parse(fs.readFileSync(outcomePath, "utf8"))).toEqual({
+        status: "done",
+        summary: "implemented",
+      });
+      expect(res.text).toBe("wrote files");
+      expect(res.usage.in).toBe(1);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
     }
   });
 
-  it("allows a script function to inspect AgentRun and modify files in cwd", async () => {
+  it("passes through every scripted stop, including each infra cause", async () => {
+    const stops: Stop[] = [
+      { kind: "cancelled" },
+      { kind: "refusal", details: "policy" },
+      { kind: "truncated", cause: "max-tokens" },
+      { kind: "truncated", cause: "turn-limit" },
+      { kind: "infra", cause: "quota" },
+      { kind: "infra", cause: "rate" },
+      { kind: "infra", cause: "auth" },
+      { kind: "infra", cause: "crash" },
+      { kind: "infra", cause: "overflow" },
+      { kind: "infra", cause: "timeout" },
+    ];
     const harness = new FakeHarness();
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "factory-harness-run-"));
-    const label = "task-1/items/item-1/develop#a1";
+    for (const stop of stops) {
+      harness.scriptResult({ stop, text: stop.kind, usage: { in: 7, out: 5 } });
+    }
 
-    harness.scriptOutcome(label, async (run) => {
-      // Simulate developer writing code in worktree
-      fs.writeFileSync(path.join(run.cwd, "output.txt"), "hello world", "utf8");
-      return {
-        ok: true,
-        data: { status: "ok", summary: "File written" },
-      };
-    });
-
-    const run: AgentRun = {
-      agent: "developer",
-      definition: "dev def",
-      prompt: "create output.txt",
-      role: "workhorse",
-      models: ["deepseek"],
-      tools: ["edit"],
-      cwd: tempDir,
-      outputSchema: {},
-      label,
-      session: { keep: false },
-    };
-
-    const outcome = await harness.run(run);
-    expect(outcome.ok).toBe(true);
-    expect(fs.readFileSync(path.join(tempDir, "output.txt"), "utf8")).toBe("hello world");
-
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    for (const stop of stops) {
+      const res = await harness.turn(request());
+      expect(res.stop).toEqual(stop);
+      expect(res.usage.in).toBe(7);
+      expect(res.usage.out).toBe(5);
+    }
   });
 
-  it("handles complete() calls and records them in calls array", async () => {
+  it("compacts a session when asked", async () => {
     const harness = new FakeHarness();
+    harness.scriptResult({});
+    const res = await harness.turn(request());
+    const compacted = await harness.compact(res.session!);
 
-    harness.scriptComplete(async ({ prompt }) => {
-      return {
-        repaired: true,
-        len: prompt.length,
-      };
-    });
+    expect(compacted.compacted).toBe(true);
+    expect(compacted.id).toBe(res.session!.id);
+    expect(harness.compactions).toHaveLength(1);
+    expect(harness.knownSessions().get(compacted.id)?.compacted).toBe(true);
+  });
 
-    const result = (await harness.complete({
-      role: "simpler",
-      models: ["gemini-flash"],
-      system: "Repair",
-      prompt: "raw output text",
-      schema: {},
-    })) as any;
-
-    expect(result.repaired).toBe(true);
-    expect(harness.calls.some((c) => c.type === "complete")).toBe(true);
+  it("fails loudly when a turn was not scripted", async () => {
+    const harness = new FakeHarness();
+    await expect(harness.turn(request())).rejects.toThrow(
+      "FakeHarness: no scripted turn"
+    );
   });
 });

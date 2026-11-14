@@ -1,0 +1,7 @@
+baseBranch: factory-v3
+artifactRoot: .factory/artifacts
+setup:
+  - bun install --cwd plugins/software-factory --frozen-lockfile --silent
+gates:
+  - id: package
+    command: plugins/software-factory/scripts/gates.sh plugins/software-factory

@@ -1,82 +1,119 @@
 /**
- * software-factory v2 — Harness Adapter Contract (§4)
+ * Harness contract (KERNEL0 §4). Caps/Stop/Usage/SessionRef are verbatim from
+ * `manifesto.advice.md:96-143`; flows branch on Caps, never on harness id.
  */
 
-export type JSONSchema = Record<string, unknown>;
+/** Provider-qualified model id plus the effort level to request from Caps.effort. */
+export interface ModelRef {
+  id: string;
+  effort?: string;
+}
 
-export interface Usage {
-  inputTokens?: number;
-  outputTokens?: number;
+export type Caps = {
+  resume: boolean;
+  compact: "none" | "local" | "server";
+  fork: boolean;
+  subagents: "none" | "spawn" | "steer";
+  structuredOutput: "none" | "native";
+  /** Levels this model accepts on this harness. */
+  effort: string[];
+  usage: { cache: boolean; cost: boolean };
+};
+
+export type Stop =
+  | { kind: "done" }
+  | { kind: "cancelled" }
+  /** Task-side: the model declined. */
+  | { kind: "refusal"; details?: string }
+  /** Task-side: the turn was cut short with a half-written artifact. */
+  | { kind: "truncated"; cause: "max-tokens" | "turn-limit" }
+  /**
+   * Infrastructure trouble must never consume item budget or review rounds.
+   * `details` carries the scrubbed, one-line tail of the harness error text: at
+   * most 500 characters of text, with a leading `…` added when truncated. The
+   * text is a structured error message, stderr, or a synthetic cause, falling
+   * back to the exit code and signal when stderr is empty.
+   */
+  | {
+      kind: "infra";
+      cause: "quota" | "rate" | "auth" | "crash" | "overflow" | "timeout";
+      details?: string;
+    };
+
+export type Usage = {
+  in: number;
+  cacheRead: number;
+  cacheWrite5m: number;
+  cacheWrite1h: number;
+  out: number;
+  reasoningOut: number;
   costUsd?: number;
+};
+
+export type SessionRef = {
+  harness: string;
+  id: string;
+  /** Resume is cwd-bound. */
+  cwd: string;
+  model: ModelRef;
+  /** Cache lifetime runs from the start of the last request, not turn end. */
+  lastRequestStartedAt: string;
+  retentionTier: "short" | "long";
+  compacted: boolean;
+  /** Harness-managed session home; resume resolves against it, not the current launch dir. */
+  dir?: string;
+};
+
+/** One call to the harness, after fallback expansion. */
+export type TurnAttempt = {
+  model: ModelRef;
+  stop: Stop;
+  usage: Usage;
+};
+
+export interface TurnRequest {
+  model: ModelRef;
+  effort?: string;
+  cwd: string;
+  system?: string;
+  prompt: string;
+  session?: SessionRef;
+  /** Same-harness fallback chain, tried in order after the primary. */
+  fallbacks?: ModelRef[];
+  /** Where a harness without native structured output expects the agent to write its outcome. */
+  outcomePath?: string;
+  timeouts: { idleMs: number; wallMs: number };
+  /** Harness configuration passed through untouched. */
+  opaque?: unknown;
 }
 
-export interface ModelFallbackInfo {
-  /** Model argument that failed (e.g. `@simpler`). */
-  from: string;
-  /** Model argument tried next (literal model or @role). */
-  to: string;
-  /** Failure reason for the `from` model. */
-  reason: string;
-}
+export type TurnResult = {
+  stop: Stop;
+  text: string;
+  usage: Usage;
+  session?: SessionRef;
+  /** Model actually used (primary or the last fallback that produced this result). */
+  model: ModelRef;
+  /** Every attempt made for this turn; empty/one entry when no retry or fallback ran. */
+  attempts?: TurnAttempt[];
+  /** Path to the raw stream transcript, when the harness stores one. */
+  transcript?: string;
+};
 
-export type OnModelFallback = (info: ModelFallbackInfo) => void | Promise<unknown>;
+/**
+ * Whether a session recorded by `from` may be resumed by `to`. Portability is
+ * directional and only same-harness edges are proven: any other pair starts de
+ * novo with the rendered prompt.
+ */
+export function portable(from: string, to: string): boolean {
+  return from === to;
+}
 
 export interface Harness {
-  run(l: AgentRun): Promise<AgentOutcome>; // one turn (fresh or resumed)
-  /** Probe which tool names omp accepts; returns the unknown ones. Optional — engines skip when absent. */
-  validateTools?(tools: string[]): Promise<string[]>;
-  complete(c: {
-    role: string;
-    models: string[];
-    system: string;
-    prompt: string;
-    schema: JSONSchema;
-    timeoutSec?: number;
-    timeoutMs?: number;
-    onModelFallback?: OnModelFallback;
-  }): Promise<unknown>;
+  id: string;
+  /** Probed at pre-flight, per model. */
+  caps(model: ModelRef): Promise<Caps>;
+  turn(req: TurnRequest): Promise<TurnResult>;
+  /** Absent capability = missing member, a type error at the call site. */
+  compact?(ref: SessionRef): Promise<SessionRef>;
 }
-
-export interface AgentRun {
-  agent: string;
-  definition: string; // definition = rendered agent md (frontmatter+body)
-  prompt: string;
-  role: string;
-  models: string[];
-  tools: string[];
-  cwd: string;
-  outputSchema: JSONSchema;
-  label: string;
-  session: { resume?: string; keep: boolean }; // resume: session id from prior outcome; keep: leave resumable
-  timeoutSec?: number;
-  onModelFallback?: OnModelFallback;
-  onSession?: (sessionId: string) => void | Promise<void>;
-  onUsage?: (usage: Usage) => void | Promise<void>;
-}
-
-export type AgentOutcome =
-  | {
-      ok: true;
-      data: unknown;
-      sessionId?: string;
-      traceRef?: string;
-      usage?: Usage;
-      transcriptBytes?: number;
-      stdoutBytes?: number;
-      toolCallCount?: number;
-    }
-  | {
-      ok: false;
-      error: string;
-      data?: unknown;
-      sessionId?: string;
-      traceRef?: string;
-      usage?: Usage;
-      transient?: boolean;
-      sessionLost?: boolean;
-      launchError?: boolean;
-      timedOut?: boolean;
-      transcriptBytes?: number;
-      stdoutBytes?: number;
-      toolCallCount?: number;
-    };

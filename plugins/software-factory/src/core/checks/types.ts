@@ -1,34 +1,3 @@
-import type { Repo } from "../git/repo.js";
-import type {
-  ProjectConfig,
-  PipelineConfig,
-  InfraArtifact,
-  GatesBaselineArtifact,
-  DeveloperTarget,
-  PipelineLimits,
-} from "../artifacts.js";
-
-export interface CheckContext {
-  repo: Repo;
-  wt: string;
-  base: string;
-  head?: string;
-  project: ProjectConfig;
-  pipeline: PipelineConfig;
-  infra?: InfraArtifact;
-  baseline?: GatesBaselineArtifact;
-  kind?: string;
-  item?: string;
-  task?: string;
-  taskDir?: string;
-  taskWt?: string;
-  target?: DeveloperTarget;
-  checkTimeoutSec?: number;
-  testFirstCommit?: string;
-  limits: PipelineLimits;
-  outputBytes: number;
-}
-
 export interface CheckResult {
   name: string;
   ok: boolean;

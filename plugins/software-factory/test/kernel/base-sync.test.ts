@@ -1,0 +1,172 @@
+import { describe, expect, it } from "bun:test";
+import fs from "node:fs";
+import path from "node:path";
+import type { TmpRepo } from "../helpers/tmp-repo.js";
+import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
+import { derive } from "../../src/kernel/derive.js";
+import { runDispatch } from "../../src/kernel/dispatch.js";
+import { ensureTaskWorktree } from "../../src/kernel/worktree.js";
+import { task } from "./helpers.js";
+import {
+  cleanupFlowRepo,
+  goalCheckout,
+  makeRuntime,
+  outcome,
+  setupFlowRepo,
+  writeTask,
+} from "./s2-helpers.js";
+
+function head(repo: TmpRepo, dir: string): string {
+  return repo.git(["rev-parse", "HEAD"], { cwd: dir }).stdout.trim();
+}
+
+/** An integration commit, as the merge queue leaves one after a task lands. */
+function commitIn(repo: TmpRepo, dir: string, file: string, content: string, message: string): string {
+  fs.mkdirSync(path.dirname(path.join(dir, file)), { recursive: true });
+  fs.writeFileSync(path.join(dir, file), content, "utf8");
+  repo.git(["add", "-A"], { cwd: dir });
+  repo.git(["commit", "-m", message], { cwd: dir });
+  return head(repo, dir);
+}
+
+/** Scripts one implemented-then-rejected alpha turn, leaving alpha parked. */
+function parkAlpha(harness: FakeHarness, file: string, content: string): void {
+  harness.script((req, ctx) => {
+    fs.writeFileSync(path.join(req.cwd!, file), content, "utf8");
+    ctx.writeOutcome(outcome({ summary: "alpha implemented" }));
+    return fakeTurnResult(req);
+  });
+  harness.script((req, ctx) => {
+    ctx.writeOutcome(outcome({ summary: "alpha is not acceptable", verdict: "reject" }));
+    return fakeTurnResult(req);
+  });
+}
+
+describe("parked continuation syncs to the integration head", () => {
+  it("sees a commit merged after the park and reviews from that head", async () => {
+    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      parkAlpha(harness, "alpha.txt", "alpha\n");
+
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      const checkout = goalCheckout(repo, goal);
+      const alphaStart = head(repo, checkout);
+      await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
+      await runDispatch(runtime, { iteration: 1 });
+      const alphaTip = repo.git(["rev-parse", "factory-task/demo/alpha"]).stdout.trim();
+
+      const integrationSha = commitIn(repo, checkout, "merged-since.txt", "later\n", "factory: merge later task");
+
+      let laterVisible = false;
+      let alphaVisible = false;
+      let carriedDiff: string[] = [];
+      let reviewerSawHead = false;
+      harness.script((req, ctx) => {
+        laterVisible = fs.existsSync(path.join(req.cwd!, "merged-since.txt"));
+        alphaVisible = fs.existsSync(path.join(req.cwd!, "alpha.txt"));
+        carriedDiff = repo
+          .git(["diff", "--name-only", `${integrationSha}..HEAD`], { cwd: req.cwd! })
+          .stdout.split("\n")
+          .map((p) => p.trim())
+          .filter(Boolean);
+        fs.writeFileSync(path.join(req.cwd!, "beta.txt"), "beta\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "beta on the synced head" }));
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        reviewerSawHead = req.prompt.includes(`${integrationSha}..`);
+        ctx.writeOutcome(outcome({ summary: "beta approved", verdict: "approve" }));
+        return fakeTurnResult(req);
+      });
+
+      await writeTask(runtime, task("beta", { base: "alpha", scope: ["beta.txt"] }));
+      const result = await runDispatch(runtime, { iteration: 2 });
+      expect(result.reason).toBe("boundary");
+
+      const records = await runtime.store.listRecords();
+      const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+      const firstAgent = (slug: string) =>
+        records
+          .filter((r) => r.slug === slug && r.step === "implement" && r.actor === "agent")
+          .sort((a, b) => a.seq - b.seq)[0];
+
+      expect(state.tasks.beta!.status).toBe("merged");
+      expect(laterVisible).toBe(true);
+      expect(alphaVisible).toBe(true);
+      expect(carriedDiff).toEqual(["alpha.txt"]);
+      expect(reviewerSawHead).toBe(true);
+      expect(firstAgent("beta")?.base).toBe(integrationSha);
+      // A task without `base` still starts at the integration head of its dispatch.
+      expect(firstAgent("alpha")?.base).toBe(alphaStart);
+      // The parked branch is never rewritten, only the continuation branch moves.
+      expect(repo.git(["rev-parse", "factory-task/demo/alpha"]).stdout.trim()).toBe(alphaTip);
+      expect(repo.git(["show", "factory/demo:merged-since.txt"]).stdout.trim()).toBe("later");
+      expect(repo.git(["show", "factory/demo:beta.txt"]).stdout.trim()).toBe("beta");
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("does not resync a continuation worktree that already exists", async () => {
+    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    try {
+      const runtime = await makeRuntime(repo, goal, { fake: new FakeHarness({ id: "fake" }) });
+      const checkout = goalCheckout(repo, goal);
+      repo.git(["branch", "factory-task/demo/alpha", head(repo, checkout)]);
+
+      const first = await ensureTaskWorktree(runtime, task("beta", { base: "alpha", scope: ["beta.txt"] }));
+      expect(first.created).toBe(true);
+      expect(first.error).toBeUndefined();
+      const synced = head(repo, first.path);
+
+      const laterSha = commitIn(repo, checkout, "after.txt", "after\n", "factory: merge after the worktree");
+      const second = await ensureTaskWorktree(runtime, task("beta", { base: "alpha", scope: ["beta.txt"] }));
+      expect(second.created).toBe(false);
+      // Only creation syncs; the recovered worktree keeps the state it had.
+      expect(head(repo, second.path)).toBe(synced);
+      expect(fs.existsSync(path.join(second.path, "after.txt"))).toBe(false);
+      expect(second.startPoint).toBe(laterSha);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("parks with base-conflict paths and leaves no merge state when the sync conflicts", async () => {
+    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      parkAlpha(harness, "clash.txt", "alpha\n");
+
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      const checkout = goalCheckout(repo, goal);
+      await writeTask(runtime, task("alpha", { scope: ["clash.txt"] }));
+      await runDispatch(runtime, { iteration: 1 });
+      const alphaTip = repo.git(["rev-parse", "factory-task/demo/alpha"]).stdout.trim();
+
+      const integrationSha = commitIn(repo, checkout, "clash.txt", "integration\n", "factory: merge clashing task");
+
+      await writeTask(runtime, task("beta", { base: "alpha", scope: ["beta.txt"] }));
+      await runDispatch(runtime, { iteration: 2 });
+
+      const records = await runtime.store.listRecords();
+      const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+      expect(state.tasks.beta!.status).toBe("parked");
+      expect(state.tasks.beta!.cause).toContain("base-conflict: clash.txt");
+      // The sync fails before the implementer turn can start.
+      expect(records.filter((r) => r.slug === "beta" && r.actor === "agent")).toHaveLength(0);
+
+      const betaWt = path.join(runtime.paths.worktreeRoot, `${goal}-tasks`, "beta");
+      expect(repo.git(["status", "--porcelain"], { cwd: betaWt }).stdout).toBe("");
+      expect(
+        repo.git(["rev-parse", "--verify", "--quiet", "MERGE_HEAD"], { cwd: betaWt, allowFail: true }).code
+      ).not.toBe(0);
+      // The aborted sync leaves the continuation at the parked tip.
+      expect(fs.readFileSync(path.join(betaWt, "clash.txt"), "utf8")).toBe("alpha\n");
+      expect(repo.git(["rev-parse", "factory-task/demo/alpha"]).stdout.trim()).toBe(alphaTip);
+      expect(head(repo, checkout)).toBe(integrationSha);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+});

@@ -1,0 +1,9 @@
+# Rules for every assignment
+
+- You work alone and finish the whole assignment in this session: read, implement, verify, commit, report. Nobody answers questions. On an open point take the reversible choice and name it in the report.
+- Work only in the worktree your assignment names. Never touch `/home/slava/aiexp/agentic-swarm` or another worktree. Never push, never switch branches, never rewrite history.
+- Authority: `manifesto.md` `## Intent` (lines 6-89) > `bootstrap/KERNEL0.md` > your assignment > `manifesto.advice.md` (advisory — read only the cited line ranges).
+- Code: Bun + TypeScript in `plugins/software-factory`. Small files (under ~250 lines), public types apart from implementation, comments only for a non-obvious why. Tests exercise real behavior — temporary git repositories, the fake harness, real files; no tests of wiring, no mocks of our own modules. No stubs, TODOs, compatibility shims or dead code. One retry/budget mechanism, never a counter nested in another. Delete rather than adapt old code that fights the new shape (old code is readable with `git show main:<path>`).
+- Ownership: edit the files your assignment lists. Shared core files change only additively and minimally; list every such change in the report — other slices are built in parallel on other branches and will be merged with yours.
+- Done means: `bun run typecheck` and `bun test` green in `plugins/software-factory`, every acceptance item of the assignment demonstrably met, work committed on your branch in a few meaningful commits.
+- Report: write and commit `bootstrap/reports/<assignment>.md` (40 lines at most): files changed with LOC; what you verified and how (commands, counts, wall time); deviations from KERNEL0 or the assignment, with reasons; every change to a shared file; what should happen next; anything that surprised you.

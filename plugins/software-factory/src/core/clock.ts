@@ -2,34 +2,24 @@
  * Clock abstraction and active monotonic timer for suspend awareness.
  */
 
-export interface Clock {
+interface Clock {
   /** Wall-clock time in milliseconds (e.g. Date.now()). */
   now(): number;
   /** Monotonic time in milliseconds (e.g. performance.now()). */
   monotonic(): number;
 }
 
-export const defaultClock: Clock = {
+const systemClock: Clock = {
   now: () => Date.now(),
   monotonic: () => performance.now(),
 };
 
-let activeClock: Clock = defaultClock;
-
 export function getClock(): Clock {
-  return activeClock;
-}
-
-export function setClock(clock: Clock): void {
-  activeClock = clock;
-}
-
-export function resetClock(): void {
-  activeClock = defaultClock;
+  return systemClock;
 }
 
 /** Default gap between wall-clock delta and monotonic delta indicating system suspend (30s). */
-export const DEFAULT_SUSPEND_THRESHOLD_MS = 30_000;
+const DEFAULT_SUSPEND_THRESHOLD_MS = 30_000;
 
 /**
  * Detects whether a system suspend occurred between start and now.

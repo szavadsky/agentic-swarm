@@ -1,0 +1,38 @@
+# Shakedown while the free tier is exhausted: primaries on opencode-go subsidy (deepseek-v4.1), mechanical on beam-free. No alibaba except qwen-max (D16).
+aliases:
+  architect:
+    harness: opencode
+    model: opencode-go/deepseek-v4.1-flash
+    effort: high
+    fallbacks:
+      - opencode-go/muse-spark-1.3-contributor
+  pm:
+    harness: opencode
+    model: opencode-go/beam-free
+    fallbacks:
+      - opencode-go/deepseek-v4.1-flash
+  digest:
+    harness: opencode
+    model: opencode-go/beam-free
+    fallbacks:
+      - opencode-go/deepseek-v4.1-flash
+  implementer:
+    harness: opencode
+    model: opencode-go/deepseek-v4.1-flash
+    fallbacks:
+      - opencode-go/muse-spark-1.3-contributor
+  reviewer:
+    harness: opencode
+    model: opencode-go/deepseek-v4.1-flash
+    fallbacks:
+      - opencode-go/muse-spark-1.3-contributor
+
+limits:
+  concurrency: 3
+  iterations: 1
+
+sessions:
+  dir: ~/.local/share/factory/sessions
+  keepRuns: 5
+
+worktreeRoot: ~/.local/share/factory/worktrees

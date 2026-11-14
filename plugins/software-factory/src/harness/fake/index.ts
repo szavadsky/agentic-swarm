@@ -1,6 +1,11 @@
-export { FakeHarness } from "./fake-harness.js";
+export {
+  FakeHarness,
+  DEFAULT_FAKE_CAPS,
+  emptyUsage,
+  fakeTurnResult,
+} from "./fake-harness.js";
 export type {
-  ScriptedOutcome,
-  ScriptedCompleteHandler,
-  HarnessCall,
+  FakeHarnessOptions,
+  FakeTurnContext,
+  FakeTurnHandler,
 } from "./fake-harness.js";

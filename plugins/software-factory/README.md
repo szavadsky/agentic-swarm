@@ -1,157 +1,138 @@
-# Software Factory v2
+# Software Factory
 
-Software Factory v2 is an autonomous, deterministic software development orchestrator built on Bun and TypeScript. It coordinates multi-agent workflows (Triage, Architect, PM, Developer, QA, Reviewer) across isolated git worktrees using a strict derive-act-commit loop.
+The factory runs one goal as bounded iterations. Each iteration is one
+architect consult (plan) plus the task dispatch it starts. State is derived from
+task files and append-only records; there is no state file to repair.
 
----
+## Commands
 
-## 1. Prerequisites & Installation
-
-### Requirements
-- **Bun** (≥ 1.2.0)
-- **Git** (≥ 2.40.0)
-- **Oh-My-Pi CLI (`omp`)** (v18.17.0+) installed and authenticated on the system path (or referenced via `OMP_PATH`).
-
-### Installation
-From the plugin directory:
 ```bash
 cd plugins/software-factory
-bun install
+bun bin/factory.ts init   --repo <path> --goal <name> [--intent <file>]
+bun bin/factory.ts run    --repo <path> --goal <name> --run-config <file> [--iterations N]
+bun bin/factory.ts status --repo <path> --goal <name>
+bun bin/factory.ts benchmark --repo <path> --goal <name>
+bun bin/factory.ts steer  --repo <path> --goal <name> <file | ->
 ```
 
----
+`init` writes `.factory/repo.yaml` if missing, creates the goal directory and
+copies the intent (or writes a template). `run` pre-flights, takes the goal
+lock, recovers interrupted work and runs the iteration loop. `status` prints
+derived state and parked causes; `benchmark` prints one goal's benchmark rows;
+`steer` drops a file into the inbox atomically.
 
-## 2. Quick Start
+Exit codes for `run`: `0` goal done, `1` failure, `2` blocked, `3` iteration
+limit, `130`/`143` interrupted by SIGINT/SIGTERM. The first signal drains (no
+new dispatch, in-flight turns finish), the second aborts in-flight turns and
+records their partial usage.
 
-### Step 1: Initialize your repository
-In your target project repository:
-```bash
-bun run --cwd /path/to/plugins/software-factory factory init --repo .
-```
-This generates `.factory/project.yaml` from `config/project.template.yaml` and commits it to git.
+## Configuration
 
-> **Adopting in a repo**: Exclude `{orchestrationFolder}` (by default `.factory/**`) from your project's linters and formatters (e.g. `ruff`, `eslint`, `prettier`, `yamllint`, `markdownlint`). The orchestration folder contains internal harness artifacts, task intent files (`INTENT.md`), and execution records. Linters scanning this folder may fail on internal artifacts and turn baseline quality gates red. Configure tools to exclude `.factory` (e.g. `exclude = [".factory"]` in `ruff.toml` / `pyproject.toml`, or `.factory/**` in ignore files).
+Three layers, all validated with one report naming file and key.
 
-### Step 2: Define a Task Intent
-Create a new task directory with `INTENT.md` under `.factory/tasks/<task-name>/`:
-```markdown
-# modernize-auth
-
-Migrate authentication middleware to use JWT verification with public key caching.
-- Preserve all existing integration test suites.
-- Introduce unit tests for cache eviction and token expiration edge cases.
-```
-
-### Step 3: Run Preflight Checks
-Verify repository cleanliness, disk space, configuration validity, prompt templates, schemas, and harness readiness:
-```bash
-bun run --cwd /path/to/plugins/software-factory factory preflight modernize-auth --repo .
-```
-
-### Step 4: Execute the Factory Run
-Launch the autonomous orchestrator:
-```bash
-bun run --cwd /path/to/plugins/software-factory factory run modernize-auth --repo .
-```
-Exit codes (`factory run` runs preflight first and refuses to start on failure or a live lock holder):
-- `0`: Task completed successfully (`done`).
-- `10`: Execution paused pending operator answer to a `tousertoreview` question (`blocked`, incl. budget/disk stops and operator `stop`).
-- `1`: Failure or unrecoverable error.
-
-### Step 5: Check Status & Steer
-Inspect derived state: waves, item statuses, spend by role/item, running steps with elapsed time, open operator questions, and debt:
-```bash
-bun run --cwd /path/to/plugins/software-factory factory status modernize-auth --repo .
-```
-
-To provide guidance, answers, or directives:
-```bash
-bun run --cwd /path/to/plugins/software-factory factory steer modernize-auth --repo . "Prioritize Redis cache implementation"
-```
-Steering is polled at every engine tick and during waves (between item steps plus every `limits.steerPollSec`, default 60s). `stop` finishes running steps, then exits 10.
-
----
-
-## 3. Configuration Hierarchy
-
-Configuration layers in three tiers:
-1. **Base Pipeline**: `config/pipeline.default.yaml` defines default model roles, story kinds, agent roles, checks, and limits.
-2. **Project Pipeline Overrides**: `<repo>/.factory/pipeline.yaml` (optional project-wide overrides).
-3. **Task-Specific Overrides**: `<repo>/{orchestrationFolder}/{task}/pipeline.yaml` (task-specific overrides; read from the task worktree after the first run, so a cheap per-task `models.roles.architect` override is honored).
-
-Merging semantics:
-- Objects are deeply merged, except `models.roles.<name>` defs which replace atomically per layer.
-- Arrays are replaced.
-- Explicit `null` values delete the corresponding key.
-
-Canonical schemas are located in `config/schemas/` (`pipeline.schema.json`, `project.schema.json`, `state.schema.json`, etc.).
-
-### Runtime State & Child Process TMPDIR
-Runtime state is placed outside the main checkout in `{worktreeRoot}/.factory-runtime/` (run locks, omp sessions/prompts/overlay). Every child process spawned by the factory (`omp` turns, gates, checks, git) runs with `TMPDIR` (and `TMP`/`TEMP`) pointing to `{worktreeRoot}/.factory-runtime/tmp/` on disk to avoid exhausting memory-backed OS `/tmp` tmpfs. The dir is created at run start, entries from prior runs are purged, and the previous env is restored at run end. Disk-space guards enforce minimum free disk space (`limits.minFreeDiskMb`, default 2048 MB) across worktreeRoot, runtime tmp, repoRoot, and OS temp dir in preflight, at engine ticks, and before each step/gate run (raising a `low-disk-space` question and stopping cleanly with exit code 10). Timeouts are suspend-aware (monotonic active timers): machine sleep never burns the budget.
-
----
-
-## 4. CLI Command Reference
-
-| Command | Usage | Description |
-|---|---|---|
-| `init` | `factory init [--repo <path>]` | Initializes `.factory/project.yaml` from template and commits to git. |
-| `preflight` | `factory preflight <task> [--repo <path>]` | Verifies repository cleanliness, disk space, configs (effective pipeline from the task worktree when present), prompt templates, schemas, harness binary, and run lock. |
-| `run` | `factory run <task\|path/INTENT.md> [--repo <path>] [--max-iterations N]` | Preflights, then drives the task derive-act-commit loop to completion (always resumes). |
-| `status` | `factory status <task> [--repo <path>]` | Derived state: kind/iteration/wave, spend by role/item, running steps with elapsed, items, open questions, debt. |
-| `steer` | `factory steer <task> "<text>" [--repo <path>]` | Submits operator directives/answers to the root task mailbox. |
-
----
-
-## 5. Concerns & human involvement
-
-Every agent output may raise structured `concerns[]` and `remarkable[]` decisions. The engine aggregates them into an engine-owned `concerns/` store on the task branch (`c-*.yaml`, `rm-*.yaml`), dedupes by fingerprint, and funnels them through review triage, close-ups and the steer mailbox; the full contract is in ARCHITECTURE §8.11.
-
-`humanInvolvement` selects the noise level (`autonomous`, `principal`, `detailed`). Set it per task in `{orchestrationFolder}/{task}/pipeline.yaml`; task layers are root-only, so epic children do not inherit them. Example overrides:
+**Repo** — `.factory/repo.yaml`, tracked:
 
 ```yaml
-# principal: block on stack/layer, external interfaces and config shapes
-humanInvolvement: principal
-concerns:
-  raiseAllowlist: [developer, fact-finder, architect, qa, reviewer, plan-reviewer, wave-close-up, plan-close-up]
-  minDigestSeverity: low
-  minBlockingSeverity: medium
-
-# detailed: also block external-interface and major internal-interface changes
-humanInvolvement: detailed
-concerns:
-  minDigestSeverity: low
-  minBlockingSeverity: low
+baseBranch: main
+artifactRoot: .factory/artifacts
+setup: [bun install]
+gates:
+  - id: typecheck
+    command: bun run typecheck
 ```
 
-`factory status <task>` prints concern counts and splits the mailbox into blocking and informational entries:
+**Process** — package `config/process.yaml`, optionally overridden by
+`.factory/process.yaml`:
 
-```
-Concerns: open 2 | dismissed 1 | routed 1 | resolved 4
-Blocking Questions:
-  * [q-concern-c-1a2b3c4d5e] ref: item | disposition: human-async
-Digest Questions:
-  * [q-escalated-c-1a2b3c4d5e] ref: c-1a2b3c4d5e | disposition: human-awareness
-```
-
-## 6. Documentation & Architecture
-
-- **Architecture Specification**: `docs/ARCHITECTURE.md` (§0–§14; concerns funnel in §8.11)
-- **Harness Adapter**: `docs/OMP_ADAPTER.md` (CLI templates, overlay keys, NDJSON parsing, error classification, prompt-cache safety)
-- **End-to-End Validation**: `docs/FIRE_TEST.md` (Live verification on sample targets)
-
-## 7. Testing
-
-Run unit tests:
-```bash
-bun test
+```yaml
+itemTurns: 8
+flows:
+  implement-review:
+    reviewRounds: 2
+    steps:
+      - { id: implement, role: implementer }
+      - { id: review, role: reviewer, review: true }
+roles:
+  architect: { prompt: architect }
+  implementer: { prompt: implementer }
 ```
 
-Run opt-in live smoke test against real `omp` binary:
-```bash
-FACTORY_LIVE_OMP=1 bun test test/harness/smoke-live.test.ts
+**Run** — transient, passed with `--run-config`:
+
+```yaml
+aliases:
+  architect: { harness: opencode, model: opencode/minimax-m3.1-flash-free, effort: highest }
+  implementer: { harness: opencode, model: opencode/deepseek-v4.1-flash-free }
+prices:
+  opencode/minimax-m3.1-flash-free: { input: 0, cachedInput: 0, output: 0, reasoning: 0 }
+  opencode/deepseek-v4.1-flash-free: { input: 0, cachedInput: 0, output: 0, reasoning: 0 }
+  opencode-go/deepseek-v4.1-flash: { input: 0.15, cachedInput: 0.003, output: 0.6, reasoning: 0.6 }
+limits: { concurrency: 3, iterations: 1, iterationUsd: 5 }
+sessions: { dir: ~/.local/share/factory/sessions, keepRuns: 5 }
+worktreeRoot: ~/.local/share/factory/worktrees
+scouts: { model: opencode-go/deepseek-v4.1-flash }   # omp architect subagents
 ```
 
-Run TypeScript typecheck:
-```bash
-bun run typecheck
+An alias may carry `escalateTo: <alias>` to name the PM's next rung. A PM turn
+that is not usable gets a fresh retry on the same alias; after two failed turns
+the ladder climbs to `escalateTo`, which carries a broader mandate and may stop
+with one question for the architect. Without `escalateTo` the iteration blocks
+with every rung in the summary. `fallbacks` stay infrastructure-only (same
+harness, quota and crash), so escalation is model routing, not a retry.
+
+`prices` maps a model id to USD per million tokens: `input`, `cachedInput`,
+`output` and `reasoning`, all four required. A turn costs its harness's
+non-zero figure, else the table's price for the model. Counters that are all
+zero mean the harness reported no usage, so the turn stays unpriced even when
+its model has a table entry. A model absent from the table is unpriced —
+unknown, never `$0`; a free model is a known `$0` only through an explicit
+all-zero entry. opencode reports `0` for turns it cannot price, so the table is
+what separates that from free.
+
+`limits.iterationUsd` is an optional brake: once the iteration's priced spend
+reaches it, dispatch drains — no new task starts; tasks already started finish
+their remaining steps and merge, and the summary records the cause and how many
+turns the brake could not price.
+
+Pre-flight resolves every alias (and fallback) through the harness, checks the
+model list, `effort: highest` (highest level the model accepts), binaries, the
+base branch, and that session/worktree roots are writable and outside the repo.
+Gates run once on the base; a red base is recorded and warned once, not fatal.
+
+## Goal directory
+
 ```
+<artifactRoot>/<goal>/
+  intent.md plan.md tasks/
+  records/                  # one directory per settled step and round: started/end/outcome
+  mailbox/{inbox,processed,outbox}/
+  iterations/<n>/{context-pack.md,summary.md,metrics.yaml}
+  metrics.yaml
+```
+
+## Steering
+
+`factory steer --goal demo notes.md` (or `-` for stdin) puts the file in
+`mailbox/inbox` without a partial-file window. The architect reads it at the
+next boundary, marks it processed and writes its answer to
+`mailbox/outbox/steer-<id>.md`.
+
+## Summary and metrics
+
+Each iteration writes exactly one `iterations/<n>/summary.md` (also copied to
+the outbox): status, merged/finished/parked tasks, remarkable concerns,
+assumptions and debt. `metrics.yaml` is rebuilt from the usage records:
+architect launches, architect cost and token share, cost per merged task,
+incident counts (infra retries, fallback hops, outcome-repair turns, merge
+conflicts, merged-gate failures, and round-limit, no-progress, empty-diff,
+overflow and budget parks), loop incidents (no-progress and empty-diff parks; a
+spike's empty finish and overflow parks are not loop incidents), human
+interventions (processed steers), and turns and tokens by role. Costs come
+from the price table, and every retry or fallback call the harness reports in
+`attempts` is priced too, each call once. A turn whose counters are all zero
+carries no usage report and is unpriced even when its model has a table entry. A
+turn neither the harness nor the table priced is counted as unpriced, so a total
+containing one is partial and cost per merged task is unset rather than `$0`. A
+free model prices to a known `$0` through its all-zero table entry, and its
+tokens still carry the signal. `factory benchmark --goal <name>` prints these
+aggregates as rows.

@@ -1,0 +1,19 @@
+# The benchmark target's factory config; reset.sh copies it to
+# <dest>/target/.factory/repo.yaml before `factory init`.
+# baseBranch is the branch reset.sh creates; setup and gates are the archived
+# v2 commands (plugins/software-factory/docs/runs/omp-workspaces/infra.yaml),
+# made offline so the target never needs the network.
+baseBranch: topic/omp-workspaces
+artifactRoot: .factory/artifacts
+identity: { name: Software Factory, email: factory@local }
+setup:
+  - cd plugins/software-factory && bun install --offline --frozen-lockfile
+gates:
+  - id: typecheck
+    command: bun --cwd=plugins/software-factory run typecheck
+  # The v2 suite's tmp-repo helper purges every preflight-probe-* entry in its
+  # TMPDIR. Left in /tmp, that deletes the factory's own base-gate scratch
+  # worktree mid-run and turns this gate red. A dedicated TMPDIR keeps the
+  # target's cleanup away from the factory's scratch path.
+  - id: test
+    command: mkdir -p "${TMPDIR:-/tmp}/factory-bench-gates" && TMPDIR="${TMPDIR:-/tmp}/factory-bench-gates" bun --cwd=plugins/software-factory test

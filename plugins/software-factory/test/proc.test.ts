@@ -1,4 +1,7 @@
 import { describe, it, expect } from "bun:test";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { runProcess } from "../src/core/proc.js";
 
 describe("Process runner & output capping (§5, §9)", () => {
@@ -86,5 +89,27 @@ describe("Process runner & output capping (§5, §9)", () => {
     expect(res.stdout).toContain("TAIL_SENTINEL");
     expect(res.stdout).toContain("... [truncated");
     expect(Buffer.byteLength(res.stdout, "utf8")).toBeLessThan(5000000);
+  });
+
+  it("derives TMP and TEMP from TMPDIR for the child", async () => {
+    const previous = { TMPDIR: process.env.TMPDIR, TMP: process.env.TMP, TEMP: process.env.TEMP };
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "proc-tmp-"));
+    process.env.TMPDIR = tmp;
+    process.env.TMP = path.join(tmp, "ignored-tmp");
+    process.env.TEMP = path.join(tmp, "ignored-temp");
+    try {
+      const res = await runProcess({
+        cmd: ["bash", "-c", "printf '%s %s %s' \"$TMPDIR\" \"$TMP\" \"$TEMP\""],
+        cwd: process.cwd(),
+      });
+      expect(res.code).toBe(0);
+      expect(res.stdout).toBe(`${tmp} ${tmp} ${tmp}`);
+    } finally {
+      for (const key of ["TMPDIR", "TMP", "TEMP"] as const) {
+        if (previous[key] === undefined) delete process.env[key];
+        else process.env[key] = previous[key];
+      }
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
   });
 });

@@ -3,7 +3,7 @@ import { git } from "./exec.js";
 /**
  * One entry of `git status --porcelain -z --untracked-files=all`.
  */
-export interface StatusEntry {
+interface StatusEntry {
   /** Two-letter porcelain code, e.g. " M", "??", "UU", "R ". */
   code: string;
   /** Repo-relative path (rename target for R/C entries). */
@@ -52,13 +52,6 @@ export async function porcelainStatus(
     }
   }
   return entries;
-}
-
-/**
- * Returns true when `statusRes` contains any change (non-empty stdout).
- */
-export function isStatusDirty(stdout: string): boolean {
-  return stdout.length > 0;
 }
 
 /**
