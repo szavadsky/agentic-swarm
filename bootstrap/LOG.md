@@ -345,3 +345,17 @@ Verbatim, newest last; each with what it changed.
 - `Phase1.md` rewritten as requirements R1–R23 plus the evidence wanted; M1–M6, their order and fix directions withdrawn. Goal intent and `SELF-IMPROVE.md` rewritten to match. Earlier operator steers that prescribed how (plan length, scout order, file coverage, prompt sentences, scheduling) withdrawn as prescriptions.
 - `INTENT.md`: steers do not interrupt work (PM handles task-specific/redo/small-task steers; architect for intent amendments and architecture decisions; a steer may stall the run when pending work lost its value or an unplanned priority is asked); delivery guard and context pack reworded to the owner's statements; mechanical checks on agent output named as a loop cause; operator role, architect's concern and build order in the bootstrap notes.
 - Edits were staged outside the repository while iteration 17 ran and applied at its landing.
+
+### 2026-11-14 — iteration 17: 7 merges, exit 1 on quota ($2.48); landed to main
+- 2h36m. Merged on factory/self: m1-gate-export-land, m1-repro-hermetic, agy-acpx-leg, m1-gate-signatures-fix, m2-pm-files, m2-mailbox, m2-session-fallback. m2-turn-failures implement hit provider.go-limit (OpenCode Go weekly); relaunch-safe, task left ready.
+- Operator rewrite (staged during the run, applied at landing e115ef8): INTENT steer/delivery/pack/loop-cause/bootstrap edits; Phase1.md as requirements R1–R23; SELF-IMPROVE runbook narrowed to operator role; goal intent no longer plans. Run config: reviewer on agy first, codex switchable (commit 18e3fb8).
+- Landed to main as 685cc25. Gates 507 pass 0 fail.
+
+### 2026-11-14 — iteration 18: 0 merges, exit 1 on quota, $1.16 spent
+- ~10 min: digest (beam-free, $0), architect (opus) started project-vs-requirements evaluation with 3 scouts on the new Phase1.md; PM died on provider.free-limit 429. Three scouts' findings did not land.
+- factory/self == factory-v3 == 18e3fb8: nothing to merge. Base gates green.
+- Incidents: (1) Go weekly wall (i17) and free-limit wall (i18) both hit — relaunch without a spendable leg burns the architect turn first. (2) Foreign launch provenance (broker 216198): launcher is unauthenticated; consider a launch token if operator-only launches are desired.
+
+### 2026-11-14 — owner intent additions (main b57dcaf, synced to factory-v3)
+- Harness adapters: NO CODE — leverage acpx naming (and opaque config) in config, that is it.
+- Hierarchy (subagent): with omp, subagent context shall also be compacted for the next launch.
