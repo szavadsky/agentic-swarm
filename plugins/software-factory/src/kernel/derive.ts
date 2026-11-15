@@ -43,6 +43,23 @@ function bySeq(a: StepRecord, b: StepRecord): number {
   return a.seq - b.seq || a.startedAt.localeCompare(b.startedAt);
 }
 
+/**
+ * A record recovery sealed after a hard death (SIGKILL, reboot, second signal):
+ * a bare `infra: crash` with nothing the turn itself reported. A harness turn
+ * that reported a crash carries its usage and prompt bytes; a throwing action
+ * recorded by dispatch carries a cause and details. Only the bare seal counts
+ * as an interruption; a reported crash counts against the task and blocks resume.
+ */
+function isRecoveryCrash(rec: StepRecord): boolean {
+  if (rec.stop?.kind !== "infra" || rec.stop?.cause !== "crash") return false;
+  if (rec.ok !== false) return false;
+  if (rec.cause !== undefined) return false;
+  if (rec.stop.details !== undefined) return false;
+  if (rec.usage !== undefined) return false;
+  if (rec.promptBytes !== undefined) return false;
+  return true;
+}
+
 /** The goal decision a completed record carries: the architect's, or the front path's stop. */
 function recordedDecision(rec: StepRecord): GoalDecision | undefined {
   if (!rec.endedAt || !rec.outcome?.decision) return undefined;
@@ -90,11 +107,12 @@ export function derive(
       rec.step === "architect" &&
       rec.outcome?.decision !== undefined,
   );
-  const hasCrashThisIteration = sorted.some(
+  const hasBlockingCrashThisIteration = sorted.some(
     (rec) =>
       rec.iteration === currentIteration &&
       rec.stop?.kind === "infra" &&
-      rec.stop?.cause === "crash",
+      rec.stop?.cause === "crash" &&
+      !isRecoveryCrash(rec),
   );
 
   const statuses = new Map<string, TaskStatus>();
@@ -139,7 +157,7 @@ export function derive(
     goal === "active" &&
     iteration > 0 &&
     hasArchitectDecisionThisIteration &&
-    !hasCrashThisIteration &&
+    !hasBlockingCrashThisIteration &&
     Object.values(taskStates).some((task) => task.status === "ready");
   return {
     goal,
