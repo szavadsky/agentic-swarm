@@ -414,6 +414,8 @@ export interface ContainmentSnapshot {
   at: string;
   /** Record sequences open at the snapshot; their close is not the turn's write. */
   inFlight: ReadonlySet<number>;
+  /** Highest record sequence the snapshot saw; higher ones opened after it did. */
+  maxSeq: number;
   /** Every goal artifact except the operator's mailbox channels: path -> hash. */
   artifacts: ReadonlyMap<string, string>;
   /** The integration branch ref; the merge queue advances it after a merge record. */
@@ -531,15 +533,17 @@ function pmOwned(rel: string): boolean {
 
 /**
  * A turn may write only its own outcome file. A record directory that belongs
- * to a record started during the turn (this turn's own included) or still open
+ * to a record the snapshot never saw (this turn's own included) or still open
  * at the snapshot is the script's or another turn's; a directory no record
- * explains, and a closed record's files, are the turn's write.
+ * explains, and a seen record's files, are the turn's write. Unseen means a
+ * higher sequence, never a later timestamp: a sibling that opens across the
+ * snapshot's record read stamps before it but lands after.
  */
 function artifactBreaches(
   before: ReadonlyMap<string, string>,
   after: ReadonlyMap<string, string>,
   opts: {
-    at: string;
+    maxSeq: number;
     inFlight: ReadonlySet<number>;
     records: readonly StepRecord[];
     pmActive: boolean;
@@ -551,9 +555,12 @@ function artifactBreaches(
     if (opts.pmActive && pmOwned(rel)) return true;
     const seq = recordSeqOf(rel);
     if (seq === undefined) return false;
-    const record = live.get(seq);
-    if (!record) return false;
-    return record.startedAt >= opts.at || opts.inFlight.has(seq);
+    // The store allocates sequences under one lock, so a record the read
+    // missed has a higher sequence than every record it saw. It exists by
+    // check time; a forged directory names no record and still breaches.
+    if (seq > opts.maxSeq) return live.has(seq);
+    if (!live.has(seq)) return false;
+    return opts.inFlight.has(seq);
   };
   const changed: string[] = [];
   for (const [rel, hash] of after) {
@@ -614,9 +621,10 @@ export async function containmentSnapshot(
     ["rev-parse", "--abbrev-ref", "HEAD"],
     { allowFail: true },
   );
-  // Stamped before the artifact walk: a record that opens or closes while the
-  // walk runs is then in flight on one side or the other, never a closed record
-  // whose concurrent write would be blamed on the turn.
+  // Records read before the stamp and the walk: a sibling close whose files
+  // land after the walk then still reads as open (in flight), never as a
+  // closed record whose concurrent write would be blamed on the turn.
+  const records = await runtime.store.listRecords();
   const at = new Date().toISOString();
   const artifacts = artifactState(runtime.paths.goalDir);
   const integration = await integrationHead(runtime);
@@ -625,7 +633,8 @@ export async function containmentSnapshot(
   return {
     branch: branch.stdout.trim(),
     at,
-    inFlight: recordsInFlight(await runtime.store.listRecords(), at),
+    inFlight: recordsInFlight(records, at),
+    maxSeq: records.reduce((max, r) => Math.max(max, r.seq), 0),
     artifacts,
     integration,
     root,
@@ -667,7 +676,7 @@ export async function containmentViolation(
 
   const settledAt = new Date().toISOString();
   const changedArtifacts = artifactBreaches(snapshot.artifacts, artifacts, {
-    at: snapshot.at,
+    maxSeq: snapshot.maxSeq,
     inFlight: snapshot.inFlight,
     records,
     pmActive: pmWroteDuring(records, snapshot.at, settledAt),
