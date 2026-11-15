@@ -359,3 +359,12 @@ Verbatim, newest last; each with what it changed.
 ### 2026-11-14 — owner intent additions (main b57dcaf, synced to factory-v3)
 - Harness adapters: NO CODE — leverage acpx naming (and opaque config) in config, that is it.
 - Hierarchy (subagent): with omp, subagent context shall also be compacted for the next launch.
+
+### 2026-11-15 — iteration 19: 3 merged, exit 0, $0.875
+- 3h05m, stop=iteration-limit, base gates green at 891a610b8e. Merged on factory/self: m2-turn-failures (1a200e0), m2-resume-iteration (6a51409), m3-gate-hygiene (7ab3562). Parked: 13, all historical. Pending: 16 (m3-debloat, M4 x2, M5 x7, M6 x4, doc-drift).
+- m3-liquid implement parked upscope (LiquidJS renders all role prompts; homegrown renderer deletion needs architect authorization — forward carries the two-edit plan). 16 agent + 31 script turns; 0 loop incidents, 0 merge conflicts.
+- All task turns ran the launch-loaded config (beam-free implement, inkling-free review, $0); architect opus $0.875. The stale "implementer-alias-no-fallback / Go wall" owner-attention line in the summary is obsolete (refers to self-acpx.yaml, not the loaded file).
+- Incidents: (1) mid-run rewrite of self-quota.yaml (19:21) to omp-ernie+agy content — harmless to this run (config loads once), superseded at landing by the staged owner-ordered ladder; (2) TEMP REVERT of the m2-resume condition in the launch tree (untraceable origin, matches no commit) — discarded, never committed; (3) repo.yaml +3 new gates leaked into the launch tree but were never merged — reverted here, reported as a wiring gap; (4) foreign launch broker again (295962).
+
+### 2026-11-15 — i19 landing gates (post-merge 22385c3)
+- typecheck + tests: 537 pass, 0 fail. New m3 gates from repo root: format=0 (biome, 206 files, no fixes), lint=0 (840 warnings, 0 errors), schema-validation=0 (395 files valid; .factory/run.yaml absent — expected, no such file in this goal).

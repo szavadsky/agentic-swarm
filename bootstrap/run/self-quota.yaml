@@ -1,0 +1,53 @@
+# Self-run, spendable-legs reroute (iteration 18 forward): everything pinned to
+# the legs proven live — omp `openrouter/baidu/ernie-5.5-flash-preview:free`
+# (ERNIEOK) and agy `gemini-3.8-flash` at high (AGYOK + i17 live turns).
+# No opencode/opencode-go/codex/claude-CLI legs: Go weekly + free-limit 429s
+# (i17/i18), codex exec dead (reconnect loop), no claude-direct harness id.
+# No fallbacks: fallback ids route to walled providers. Scout spawns inherit
+# the cheap ernie pin via the overlay, not the opus parent.
+aliases:
+  architect:
+    harness: omp
+    model: anthropic/claude-opus-5-5
+    effort: high
+  pm:
+    harness: omp
+    model: openrouter/baidu/ernie-5.5-flash-preview:free
+    effort: high
+    escalateTo: escalation
+  digest:
+    harness: omp
+    model: openrouter/baidu/ernie-5.5-flash-preview:free
+    effort: high
+  implementer:
+    harness: omp
+    model: openrouter/baidu/ernie-5.5-flash-preview:free
+    effort: high
+  reviewer:
+    harness: agy
+    model: gemini-3.8-flash
+    effort: high
+  escalation:
+    harness: omp
+    model: anthropic/claude-sonnet-5-5
+
+scouts:
+  model: openrouter/baidu/ernie-5.5-flash-preview:free
+  effort: high
+
+# USD per million tokens. A model absent here is unpriced (unknown), never $0.
+# agy reports no cost: gemini-3.8-flash stays unpriced until real rates exist.
+prices:
+  anthropic/claude-opus-5-5: { input: 4, cachedInput: 0.2, output: 20, reasoning: 20 }
+  anthropic/claude-sonnet-5-5: { input: 2, cachedInput: 0.1, output: 10, reasoning: 10 }
+  openrouter/baidu/ernie-5.5-flash-preview:free: { input: 0, cachedInput: 0, output: 0, reasoning: 0 }
+
+limits:
+  concurrency: 3
+  iterations: 1
+
+sessions:
+  dir: ~/.local/share/factory/sessions
+  keepRuns: 5
+
+worktreeRoot: ~/.local/share/factory/worktrees
