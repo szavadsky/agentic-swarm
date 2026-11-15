@@ -5,6 +5,13 @@ import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
 import { runGoal } from "../../src/kernel/launch.js";
+import {
+  cleanup,
+  makeGoal,
+  simpleTask,
+  writeTask as writeGoalTask,
+  writePlan,
+} from "./e2e-helpers.js";
 import { task } from "./helpers.js";
 import {
   cleanupFlowRepo,
@@ -13,16 +20,10 @@ import {
   setupFlowRepo,
   writeTask,
 } from "./s2-helpers.js";
-import {
-  cleanup,
-  makeGoal,
-  simpleTask,
-  writePlan,
-  writeTask as writeGoalTask,
-} from "./e2e-helpers.js";
 
 /** The scrubbed one-line text an opencode provider.no-route stop carries. */
-const NO_ROUTE = "provider.no-route Model unavailable: opencode/does-not-exist-free";
+const NO_ROUTE =
+  "provider.no-route Model unavailable: opencode/does-not-exist-free";
 
 describe("infra stop details", () => {
   it("shows a no-route stop's details in the dispatch cause and keeps the record verbatim", async () => {
@@ -30,7 +31,9 @@ describe("infra stop details", () => {
     try {
       const harness = new FakeHarness({ id: "fake" });
       harness.script((req) =>
-        fakeTurnResult(req, { stop: { kind: "infra", cause: "auth", details: NO_ROUTE } })
+        fakeTurnResult(req, {
+          stop: { kind: "infra", cause: "auth", details: NO_ROUTE },
+        }),
       );
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
@@ -40,8 +43,14 @@ describe("infra stop details", () => {
       expect(result.reason).toBe("infra");
       expect(result.cause).toBe(`task: auth: ${NO_ROUTE}`);
 
-      const stepRecord = (await runtime.store.listRecords()).find((r) => r.step === "implement");
-      expect(stepRecord?.stop).toEqual({ kind: "infra", cause: "auth", details: NO_ROUTE });
+      const stepRecord = (await runtime.store.listRecords()).find(
+        (r) => r.step === "implement",
+      );
+      expect(stepRecord?.stop).toEqual({
+        kind: "infra",
+        cause: "auth",
+        details: NO_ROUTE,
+      });
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -51,7 +60,9 @@ describe("infra stop details", () => {
     const { repo, goal } = setupFlowRepo();
     try {
       const harness = new FakeHarness({ id: "fake" });
-      harness.script((req) => fakeTurnResult(req, { stop: { kind: "infra", cause: "auth" } }));
+      harness.script((req) =>
+        fakeTurnResult(req, { stop: { kind: "infra", cause: "auth" } }),
+      );
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("task", { scope: ["task.txt"] }));
@@ -69,7 +80,9 @@ describe("infra stop details", () => {
     try {
       const harness = new FakeHarness({ id: "fake" });
       harness.script((req) =>
-        fakeTurnResult(req, { stop: { kind: "refusal", details: "content policy refusal" } })
+        fakeTurnResult(req, {
+          stop: { kind: "refusal", details: "content policy refusal" },
+        }),
       );
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
@@ -80,7 +93,7 @@ describe("infra stop details", () => {
       const state = derive(
         await runtime.store.listTasks(),
         await runtime.store.listRecords(),
-        runtime.configs.process.flows
+        runtime.configs.process.flows,
       );
       expect(state.tasks.task!.status).toBe("parked");
       expect(state.tasks.task!.cause).toBe("refused: content policy refusal");
@@ -94,8 +107,13 @@ describe("infra stop details", () => {
     try {
       const harness = new FakeHarness({ id: "fake" });
       harness.script((req, ctx) => {
-        writePlan(goal.goalDir, "# Milestone 1\n\n## alpha\nCreate alpha.txt.\nDone when: alpha.txt exists.\n");
-        ctx.writeOutcome(outcome({ summary: "planned alpha", decision: "continue" }));
+        writePlan(
+          goal.goalDir,
+          "# Milestone 1\n\n## alpha\nCreate alpha.txt.\nDone when: alpha.txt exists.\n",
+        );
+        ctx.writeOutcome(
+          outcome({ summary: "planned alpha", decision: "continue" }),
+        );
         return fakeTurnResult(req);
       });
       harness.script((req, ctx) => {
@@ -104,7 +122,9 @@ describe("infra stop details", () => {
         return fakeTurnResult(req);
       });
       harness.script((req) =>
-        fakeTurnResult(req, { stop: { kind: "infra", cause: "auth", details: NO_ROUTE } })
+        fakeTurnResult(req, {
+          stop: { kind: "infra", cause: "auth", details: NO_ROUTE },
+        }),
       );
 
       const result = await runGoal({
@@ -117,10 +137,15 @@ describe("infra stop details", () => {
       expect(result.stop).toBe("infra");
       expect(result.cause).toBe(stopText);
 
-      const summary = fs.readFileSync(path.join(goal.goalDir, "iterations/1/summary.md"), "utf8");
+      const summary = fs.readFileSync(
+        path.join(goal.goalDir, "iterations/1/summary.md"),
+        "utf8",
+      );
       expect(summary).toContain("status: stopped-with-debt");
       expect(summary).toContain(`- boundary: ${stopText}`);
-      expect(fs.existsSync(path.join(goal.goalDir, "iterations/2/summary.md"))).toBe(false);
+      expect(
+        fs.existsSync(path.join(goal.goalDir, "iterations/2/summary.md")),
+      ).toBe(false);
     } finally {
       cleanup(goal);
     }

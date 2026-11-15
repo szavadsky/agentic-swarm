@@ -9,10 +9,14 @@ import type { StepRecord, TaskKind } from "./types.js";
 export function stepFingerprint(
   kind: TaskKind,
   record: StepRecord,
-  tree: string | undefined
+  tree: string | undefined,
 ): string | null {
   const outcome = record.outcome;
-  if (record.stop?.kind === "infra" || record.stop?.kind === "truncated" || record.stop?.kind === "cancelled") {
+  if (
+    record.stop?.kind === "infra" ||
+    record.stop?.kind === "truncated" ||
+    record.stop?.kind === "cancelled"
+  ) {
     return null;
   }
   if (!outcome && record.stop?.kind !== "refusal") return null;
@@ -21,11 +25,18 @@ export function stepFingerprint(
   const verdict = outcome?.verdict ?? "-";
   let result: string | undefined;
   if (kind === "spike") {
-    const concerns = (outcome?.concerns ?? []).map((c) => `${c.kind}:${c.text}`).join("\n");
-    result = fingerprintText(`${outcome?.summary ?? ""}\n${concerns}`, { lowercase: false });
+    const concerns = (outcome?.concerns ?? [])
+      .map((c) => `${c.kind}:${c.text}`)
+      .join("\n");
+    result = fingerprintText(`${outcome?.summary ?? ""}\n${concerns}`, {
+      lowercase: false,
+    });
   } else {
     result = record.tree ?? tree ?? record.commit;
   }
   if (!result) return null;
-  return fingerprintText([kind, record.step, status, verdict, result].join("\n"), { lowercase: false });
+  return fingerprintText(
+    [kind, record.step, status, verdict, result].join("\n"),
+    { lowercase: false },
+  );
 }

@@ -19,7 +19,9 @@ describe("crashed iteration", () => {
       writePlan(goal.goalDir, "# Plan\n\n## alpha\nCreate alpha.txt.\n");
       const harness = new FakeHarness({ id: "fake" });
       harness.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "planned alpha", decision: "continue" }));
+        ctx.writeOutcome(
+          outcome({ summary: "planned alpha", decision: "continue" }),
+        );
         return fakeTurnResult(req);
       });
       harness.script((req, ctx) => {
@@ -37,7 +39,11 @@ describe("crashed iteration", () => {
       const summary = fs.readFileSync(summaryPath, "utf8");
       expect(summary).toContain("status: stopped-with-debt");
       expect(summary).toContain("architect: planned alpha");
-      expect(fs.existsSync(path.join(goal.goalDir, "mailbox/outbox/iteration-1-summary.md"))).toBe(true);
+      expect(
+        fs.existsSync(
+          path.join(goal.goalDir, "mailbox/outbox/iteration-1-summary.md"),
+        ),
+      ).toBe(true);
     } finally {
       cleanup(goal);
     }

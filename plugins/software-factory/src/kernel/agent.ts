@@ -2,17 +2,24 @@ import fs from "node:fs";
 import type { ModelRef, SessionRef, Stop } from "../harness/types.js";
 import { addUsage } from "../harness/usage.js";
 import { contextPackRelPath, isPackTruncated } from "./context-pack.js";
-import { renderRolePrompt } from "./prompts.js";
 import type { RoleTarget } from "./flow-context.js";
 import {
-  OutcomeInvalidError,
   failedOutcome,
+  type OutcomeExpectation,
+  OutcomeInvalidError,
   readDeliveredOutcome,
   validateExpectation,
-  type OutcomeExpectation,
 } from "./outcome.js";
+import { renderRolePrompt } from "./prompts.js";
 import { appendPark } from "./record.js";
-import { DEFAULT_TIMEOUTS, type KernelRuntime, type Outcome, type RecordEnd, type RecordStart, type StepRecord } from "./types.js";
+import {
+  DEFAULT_TIMEOUTS,
+  type KernelRuntime,
+  type Outcome,
+  type RecordEnd,
+  type RecordStart,
+  type StepRecord,
+} from "./types.js";
 
 export { DEFAULT_TIMEOUTS } from "./types.js";
 
@@ -33,7 +40,7 @@ export interface AgentTurnSpec {
   settle?: (
     record: StepRecord,
     outcome: Outcome | undefined,
-    session: SessionRef | undefined
+    session: SessionRef | undefined,
   ) => Promise<RecordEnd>;
 }
 
@@ -54,12 +61,17 @@ const PACK_ROLES = new Set(["architect", "pm"]);
  */
 async function measurePack(
   runtime: KernelRuntime,
-  spec: AgentTurnSpec
+  spec: AgentTurnSpec,
 ): Promise<{ bytes: number; truncated: boolean } | undefined> {
   if (!PACK_ROLES.has(spec.target.role)) return undefined;
-  const pack = await runtime.store.readFile(contextPackRelPath(spec.meta.iteration));
+  const pack = await runtime.store.readFile(
+    contextPackRelPath(spec.meta.iteration),
+  );
   if (pack === null) return undefined;
-  return { bytes: Buffer.byteLength(pack, "utf8"), truncated: isPackTruncated(pack) };
+  return {
+    bytes: Buffer.byteLength(pack, "utf8"),
+    truncated: isPackTruncated(pack),
+  };
 }
 
 /** Overflow is the one infra stop a fresh session with the same prompt can cure. */
@@ -92,8 +104,55 @@ function repairPrompt(outcomePath: string, findings: string[]): string {
  * `failed`. The end record is written only after `settle` (mechanical commit),
  * so a crash leaves an orphan that `derive` redispatches.
  */
-export async function runAgentTurn(runtime: KernelRuntime, spec: AgentTurnSpec): Promise<AgentTurnResult> {
-  const { alias, harness, model, effort, fallbacks, timeouts: aliasTimeouts } = spec.target;
+async function turnWithTimeout(
+  harness: import("../harness/types.js").Harness,
+  request: import("../harness/types.js").TurnRequest,
+): Promise<import("../harness/types.js").TurnResult> {
+  const wallMs = request.timeouts.wallMs;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeoutResult: import("../harness/types.js").TurnResult = {
+    stop: {
+      kind: "infra",
+      cause: "timeout",
+      details: `wall clock ${wallMs}ms exceeded`,
+    },
+    text: "",
+    usage: {
+      in: 0,
+      cacheRead: 0,
+      cacheWrite5m: 0,
+      cacheWrite1h: 0,
+      out: 0,
+      reasoningOut: 0,
+    },
+    session: request.session,
+    model: request.model,
+    attempts: [],
+  };
+  const timeoutPromise = new Promise<import("../harness/types.js").TurnResult>(
+    (resolve) => {
+      timer = setTimeout(() => resolve(timeoutResult), wallMs);
+    },
+  );
+  try {
+    return await Promise.race([harness.turn(request), timeoutPromise]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+export async function runAgentTurn(
+  runtime: KernelRuntime,
+  spec: AgentTurnSpec,
+): Promise<AgentTurnResult> {
+  const {
+    alias,
+    harness,
+    model,
+    effort,
+    fallbacks,
+    timeouts: aliasTimeouts,
+  } = spec.target;
   const started = await runtime.store.startRecord({
     ...spec.meta,
     actor: "agent",
@@ -101,10 +160,15 @@ export async function runAgentTurn(runtime: KernelRuntime, spec: AgentTurnSpec):
     model,
   });
   const outcomePath = started.outcomePath;
-  const prompt = renderRolePrompt(runtime.prompts, runtime.configs.process, spec.target.role, {
-    ...spec.vars,
-    outcome_path: outcomePath,
-  });
+  const prompt = renderRolePrompt(
+    runtime.prompts,
+    runtime.configs.process,
+    spec.target.role,
+    {
+      ...spec.vars,
+      outcome_path: outcomePath,
+    },
+  );
   // The rendered role prompt is the cost driver; a repair ask is small and
   // replaces it in the same session, so the record carries the first ask.
   const promptBytes = Buffer.byteLength(prompt, "utf8");
@@ -121,7 +185,7 @@ export async function runAgentTurn(runtime: KernelRuntime, spec: AgentTurnSpec):
     timeouts,
     fallbacks: fallbacks?.map((id) => ({ id, effort })),
   };
-  let result = await harness.turn(request);
+  const result = await turnWithTimeout(harness, request);
   let lastResult = result;
   let attempts = [...(result.attempts ?? [])];
   let stop: Stop = result.stop;
@@ -137,7 +201,10 @@ export async function runAgentTurn(runtime: KernelRuntime, spec: AgentTurnSpec):
   if (spec.session && overflowed(stop)) {
     // A half-delivered outcome from the failed attempt is not the retry's.
     fs.rmSync(outcomePath, { force: true });
-    const retry = await harness.turn({ ...request, session: undefined });
+    const retry = await turnWithTimeout(harness, {
+      ...request,
+      session: undefined,
+    });
     lastResult = retry;
     attempts = [...attempts, ...(retry.attempts ?? [])];
     stop = retry.stop;
@@ -160,12 +227,25 @@ export async function runAgentTurn(runtime: KernelRuntime, spec: AgentTurnSpec):
   };
   collect();
 
-  if (findings.length === 0 && !outcome && stop.kind !== "infra" && stop.kind !== "refusal" && stop.kind !== "cancelled") {
-    findings = ["no outcome written to the outcome path and no fenced YAML block in the final message"];
+  if (
+    findings.length === 0 &&
+    !outcome &&
+    stop.kind !== "infra" &&
+    stop.kind !== "refusal" &&
+    stop.kind !== "cancelled"
+  ) {
+    findings = [
+      "no outcome written to the outcome path and no fenced YAML block in the final message",
+    ];
   }
 
-  if (findings.length > 0 && stop.kind !== "infra" && stop.kind !== "refusal" && stop.kind !== "cancelled") {
-    const repair = await harness.turn({
+  if (
+    findings.length > 0 &&
+    stop.kind !== "infra" &&
+    stop.kind !== "refusal" &&
+    stop.kind !== "cancelled"
+  ) {
+    const repair = await turnWithTimeout(harness, {
       ...request,
       prompt: repairPrompt(outcomePath, findings),
       session,
@@ -179,15 +259,25 @@ export async function runAgentTurn(runtime: KernelRuntime, spec: AgentTurnSpec):
     outcome = null;
     findings = [];
     collect();
-    if (!outcome && (stop.kind === "infra" || stop.kind === "refusal" || stop.kind === "cancelled")) {
+    if (
+      !outcome &&
+      (stop.kind === "infra" ||
+        stop.kind === "refusal" ||
+        stop.kind === "cancelled")
+    ) {
       // An infrastructure interruption of the repair turn consumes no outcome.
     } else if (findings.length > 0 || !outcome) {
-      outcome = failedOutcome(findings.length > 0 ? findings : ["no outcome after repair"]);
+      outcome = failedOutcome(
+        findings.length > 0 ? findings : ["no outcome after repair"],
+      );
     }
   }
 
-  const settled = spec.settle ? await spec.settle(started.meta, outcome ?? undefined, session) : {};
-  const actualModel = (lastResult as typeof lastResult & { model?: ModelRef }).model ?? model;
+  const settled = spec.settle
+    ? await spec.settle(started.meta, outcome ?? undefined, session)
+    : {};
+  const actualModel =
+    (lastResult as typeof lastResult & { model?: ModelRef }).model ?? model;
   const record = await started.finish({
     ...settled,
     promptBytes,
@@ -205,8 +295,12 @@ export async function runAgentTurn(runtime: KernelRuntime, spec: AgentTurnSpec):
   if (overflowed(stop) && spec.meta.slug) {
     await appendPark(
       runtime.store,
-      { iteration: spec.meta.iteration, slug: spec.meta.slug, round: spec.meta.round },
-      "overflow"
+      {
+        iteration: spec.meta.iteration,
+        slug: spec.meta.slug,
+        round: spec.meta.round,
+      },
+      "overflow",
     );
   }
   return { record, outcome: outcome ?? undefined, text };

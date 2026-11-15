@@ -2,10 +2,14 @@ import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { exitDetails, scrubSecrets, stopDetails } from "../../src/harness/details.js";
-import type { Stop } from "../../src/harness/types.js";
+import {
+  exitDetails,
+  scrubSecrets,
+  stopDetails,
+} from "../../src/harness/details.js";
 import { OmpHarness } from "../../src/harness/omp/harness.js";
 import { OpencodeHarness } from "../../src/harness/opencode/harness.js";
+import type { Stop } from "../../src/harness/types.js";
 
 const SECRET = "sk-live-TOPSECRETTOKEN1234567890";
 const TIMEOUTS = { idleMs: 0, wallMs: 5_000 };
@@ -57,12 +61,14 @@ async function opencodeTurn(binary: string, dir: string) {
 
 describe("stop details helper", () => {
   it("masks token-shaped secrets in several common spellings", () => {
-    expect(scrubSecrets(`Authorization: Bearer ${SECRET}`)).not.toContain(SECRET);
+    expect(scrubSecrets(`Authorization: Bearer ${SECRET}`)).not.toContain(
+      SECRET,
+    );
     expect(scrubSecrets(`api_key=${SECRET}`)).not.toContain(SECRET);
     expect(scrubSecrets(`token="${SECRET}"`)).not.toContain(SECRET);
-    expect(scrubSecrets("ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")).not.toContain(
-      "ghp_ABCDEF"
-    );
+    expect(
+      scrubSecrets("ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"),
+    ).not.toContain("ghp_ABCDEF");
   });
 
   it("keeps the tail of a very long message and drops the head", () => {
@@ -99,7 +105,7 @@ describe("OmpHarness crash details", () => {
       const binary = stubBinary(
         dir,
         "boom-omp.js",
-        `process.stderr.write("fatal: worker crashed with key ${SECRET}");\nprocess.exit(3);`
+        `process.stderr.write("fatal: worker crashed with key ${SECRET}");\nprocess.exit(3);`,
       );
       const result = await ompTurn(binary, dir);
       const details = detailsOf(result.stop);
@@ -127,7 +133,10 @@ describe("OpencodeHarness crash details", () => {
   it("carries the errno when the binary is missing", async () => {
     const dir = tempDir("oc-missing-");
     try {
-      const result = await opencodeTurn(path.join(dir, "missing-opencode"), dir);
+      const result = await opencodeTurn(
+        path.join(dir, "missing-opencode"),
+        dir,
+      );
       const details = detailsOf(result.stop);
       expect(details).toContain("ENOENT");
       expect(details).toContain("missing-opencode");
@@ -142,7 +151,7 @@ describe("OpencodeHarness crash details", () => {
       const binary = stubBinary(
         dir,
         "boom-opencode.js",
-        `process.stderr.write("fatal: worker crashed with key ${SECRET}");\nprocess.exit(3);`
+        `process.stderr.write("fatal: worker crashed with key ${SECRET}");\nprocess.exit(3);`,
       );
       const result = await opencodeTurn(binary, dir);
       const details = detailsOf(result.stop);
@@ -171,12 +180,14 @@ describe("OpencodeHarness crash details", () => {
       const binary = stubBinary(
         dir,
         "long-opencode.js",
-        `process.stderr.write("x".repeat(2000) + " end of the real error: token=${SECRET}");\nprocess.exit(1);`
+        `process.stderr.write("x".repeat(2000) + " end of the real error: token=${SECRET}");\nprocess.exit(1);`,
       );
       const result = await opencodeTurn(binary, dir);
       const details = detailsOf(result.stop);
       expect(details.startsWith("…")).toBe(true);
-      expect(details.endsWith("end of the real error: token=[redacted]")).toBe(true);
+      expect(details.endsWith("end of the real error: token=[redacted]")).toBe(
+        true,
+      );
       expect(details).not.toContain(SECRET);
       expect(details.length).toBeLessThanOrEqual(501);
     } finally {

@@ -66,8 +66,15 @@ function fakeHarness(config: FakeConfig): {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "oc-usage-"));
   const binary = path.join(tmp, "fake-opencode.js");
   fs.writeFileSync(binary, fakeScript(config), { mode: 0o755 });
-  const harness = new OpencodeHarness({ binary, sessionDir: path.join(tmp, "sessions") });
-  return { harness, cwd: tmp, cleanup: () => fs.rmSync(tmp, { recursive: true, force: true }) };
+  const harness = new OpencodeHarness({
+    binary,
+    sessionDir: path.join(tmp, "sessions"),
+  });
+  return {
+    harness,
+    cwd: tmp,
+    cleanup: () => fs.rmSync(tmp, { recursive: true, force: true }),
+  };
 }
 
 const MODEL = { id: "opencode-go/deepseek-v4.1-flash" };

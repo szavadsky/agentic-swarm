@@ -35,7 +35,7 @@ export interface FakeTurnContext {
 
 export type FakeTurnHandler = (
   req: TurnRequest,
-  ctx: FakeTurnContext
+  ctx: FakeTurnContext,
 ) => TurnResult | Promise<TurnResult>;
 
 export function emptyUsage(): Usage {
@@ -56,7 +56,7 @@ export function emptyUsage(): Usage {
  */
 export function fakeTurnResult(
   req: TurnRequest,
-  patch: Partial<Omit<TurnResult, "usage">> & { usage?: Partial<Usage> } = {}
+  patch: Partial<Omit<TurnResult, "usage">> & { usage?: Partial<Usage> } = {},
 ): TurnResult {
   const model = patch.model ?? req.model;
   const stop = patch.stop ?? { kind: "done" };
@@ -107,7 +107,7 @@ export class FakeHarness implements Harness {
 
   /** Queues a turn that only differs from the defaults by `patch`. */
   scriptResult(
-    patch: Partial<Omit<TurnResult, "usage">> & { usage?: Partial<Usage> }
+    patch: Partial<Omit<TurnResult, "usage">> & { usage?: Partial<Usage> },
   ): this {
     return this.script((req) => fakeTurnResult(req, patch));
   }
@@ -121,7 +121,7 @@ export class FakeHarness implements Harness {
     const handler = this.handlers.shift();
     if (!handler) {
       throw new Error(
-        `FakeHarness: no scripted turn for request ${this.calls.length}`
+        `FakeHarness: no scripted turn for request ${this.calls.length}`,
       );
     }
 
@@ -133,7 +133,11 @@ export class FakeHarness implements Harness {
           throw new Error("FakeHarness: request has no outcomePath");
         }
         fs.mkdirSync(path.dirname(req.outcomePath), { recursive: true });
-        fs.writeFileSync(req.outcomePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+        fs.writeFileSync(
+          req.outcomePath,
+          `${JSON.stringify(value, null, 2)}\n`,
+          "utf8",
+        );
       },
     });
 

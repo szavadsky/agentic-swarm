@@ -14,7 +14,10 @@ interface Run {
 
 function run(cwd: string, cmd: string, args: string[]): Run {
   const result = spawnSync(cmd, args, { cwd, encoding: "utf8" });
-  return { code: result.status ?? -1, output: `${result.stdout ?? ""}${result.stderr ?? ""}` };
+  return {
+    code: result.status ?? -1,
+    output: `${result.stdout ?? ""}${result.stderr ?? ""}`,
+  };
 }
 
 function gate(fixture: Fixture, id?: string): Run {
@@ -29,9 +32,10 @@ interface Fixture {
 }
 
 /**
- * A fixture package that fails its typecheck in place (a sibling marker
- * exists) and its tests in the export (the export drops that sibling): each
- * gate fails only for the tree it runs on.
+ * A fixture package that fails its typecheck, tests, format, lint and
+ * schema-validation gates in place (a sibling marker exists) and passes them
+ * in the export (the export drops that sibling): each gate fails only for
+ * the tree it runs on.
  */
 let fixture: Fixture;
 
@@ -46,8 +50,14 @@ beforeAll(() => {
     `${JSON.stringify({
       name: "gate-export-fixture",
       private: true,
-      scripts: { typecheck: `test ! -e ../${marker}`, test: "bun test" },
-    })}\n`
+      scripts: {
+        typecheck: `test ! -e ../${marker}`,
+        test: "bun test",
+        format: `test ! -e ../${marker}`,
+        lint: `test ! -e ../${marker}`,
+        "schema-validation": `test ! -e ../${marker}`,
+      },
+    })}\n`,
   );
   fs.writeFileSync(
     path.join(pkg, "test", "outside.test.ts"),
@@ -61,7 +71,7 @@ beforeAll(() => {
       '  expect(fs.readFileSync(outside, "utf8")).toBe("present\\n");',
       "});",
       "",
-    ].join("\n")
+    ].join("\n"),
   );
   fixture = { root, pkg, marker };
 });
@@ -88,15 +98,67 @@ describe("package-only export gate", () => {
     expect(gate(fixture, "tests").code).not.toBe(0);
   });
 
-  it("runs both gates when no gate id is given", () => {
+  it("runs every gate when no gate id is given", () => {
     const all = gate(fixture);
     expect(all.code).not.toBe(0);
     expect(all.output).toContain(fixture.marker);
   });
 
+  it("runs the format, lint and schema-validation gates green in the export and red in place", () => {
+    for (const id of ["format", "lint", "schema-validation"]) {
+      expect(run(fixture.pkg, "bun", ["run", id]).code).not.toBe(0);
+      expect(gate(fixture, id).code).toBe(0);
+    }
+  });
+
+  it("accepts the schema gate as alias of schema-validation", () => {
+    expect(gate(fixture, "schema").code).toBe(0);
+  });
+
   it("rejects an unknown gate id before exporting", () => {
-    const rejected = gate(fixture, "lint");
+    const rejected = gate(fixture, "spot-check");
     expect(rejected.code).toBe(2);
-    expect(rejected.output).toContain("unknown gate 'lint'");
+    expect(rejected.output).toContain("unknown gate 'spot-check'");
+  });
+
+  it("passes a caller-provided FACTORY_REPO_ROOT through to the gate", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gate-repo-root-"));
+    const pkg = path.join(root, "pkg");
+    const elsewhere = path.join(root, "elsewhere");
+    try {
+      fs.mkdirSync(pkg, { recursive: true });
+      fs.mkdirSync(elsewhere, { recursive: true });
+      // Only `elsewhere` carries the marker the gate checks for, so the gate
+      // can see which repo root it was pointed at.
+      fs.writeFileSync(path.join(elsewhere, "schema-marker"), "ok\n");
+      fs.writeFileSync(
+        path.join(pkg, "package.json"),
+        `${JSON.stringify({
+          name: "gate-repo-root",
+          private: true,
+          scripts: {
+            "schema-validation":
+              'test -n "$FACTORY_REPO_ROOT" && test -f "$FACTORY_REPO_ROOT/schema-marker"',
+          },
+        })}\n`,
+      );
+      const baseEnv = { ...process.env };
+      delete baseEnv.FACTORY_REPO_ROOT;
+      const defaulted = spawnSync("bash", [GATES, pkg, "schema-validation"], {
+        cwd: root,
+        encoding: "utf8",
+        env: baseEnv,
+      });
+      // Default: the invoking directory, which carries no marker.
+      expect(defaulted.status).not.toBe(0);
+      const honored = spawnSync("bash", [GATES, pkg, "schema-validation"], {
+        cwd: root,
+        encoding: "utf8",
+        env: { ...baseEnv, FACTORY_REPO_ROOT: elsewhere },
+      });
+      expect(honored.status).toBe(0);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 });

@@ -1,10 +1,8 @@
-import { describe, expect, it, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import yaml from "yaml";
-import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
-import { FakeHarness } from "../../src/harness/fake/index.js";
 import { dispatch, parseCliArgs } from "../../src/cli/dispatch.js";
 import {
   acquireRunLock,
@@ -12,13 +10,15 @@ import {
   isRunLockFree,
   resolveRuntimeDir,
 } from "../../src/cli/lock.js";
+import { FakeHarness } from "../../src/harness/fake/index.js";
+import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 
 function conflictingBaseRepo(): TmpRepo {
   const repo = createTmpRepo();
   const base = path.basename(repo.dir);
   repo.writeFile(
     ".factory/repo.yaml",
-    yaml.stringify({ baseBranch: "main", artifactRoot: ".factory/artifacts" })
+    yaml.stringify({ baseBranch: "main", artifactRoot: ".factory/artifacts" }),
   );
   repo.writeFile(
     ".factory/run.yaml",
@@ -32,7 +32,7 @@ function conflictingBaseRepo(): TmpRepo {
       `worktreeRoot: ../${base}-wt`,
       `sessions: { dir: ../${base}-sessions, keepRuns: 1 }`,
       "",
-    ].join("\n")
+    ].join("\n"),
   );
   repo.commit("factory config");
 
@@ -46,13 +46,26 @@ function conflictingBaseRepo(): TmpRepo {
 
   const goalDir = path.join(repo.dir, ".factory/artifacts", "demo");
   fs.mkdirSync(goalDir, { recursive: true });
-  fs.writeFileSync(path.join(goalDir, "intent.md"), "# Goal\n\nTest goal.\n", "utf8");
+  fs.writeFileSync(
+    path.join(goalDir, "intent.md"),
+    "# Goal\n\nTest goal.\n",
+    "utf8",
+  );
   return repo;
 }
 
 describe("CLI dispatch", () => {
   it("parses global flags and the positional command", () => {
-    expect(parseCliArgs(["run", "--repo", "/tmp/x", "--iterations=2", "--goal", "g"])).toEqual({
+    expect(
+      parseCliArgs([
+        "run",
+        "--repo",
+        "/tmp/x",
+        "--iterations=2",
+        "--goal",
+        "g",
+      ]),
+    ).toEqual({
       command: "run",
       repo: "/tmp/x",
       goal: "g",
@@ -71,7 +84,9 @@ describe("CLI dispatch", () => {
     console.log = (msg: string) => lines.push(msg);
     try {
       expect(await dispatch(["run", "--help"])).toBe(0);
-      expect(lines.join("\n")).toContain("factory run --repo <path> --goal <name>");
+      expect(lines.join("\n")).toContain(
+        "factory run --repo <path> --goal <name>",
+      );
     } finally {
       console.log = original;
     }
@@ -110,7 +125,8 @@ describe("CLI dispatch", () => {
       const originalLog = console.log;
       const originalWarn = console.warn;
       const lines: string[] = [];
-      console.log = (...args: unknown[]) => lines.push(args.map(String).join(" "));
+      console.log = (...args: unknown[]) =>
+        lines.push(args.map(String).join(" "));
       console.warn = () => {};
       let code: number;
       try {
@@ -144,35 +160,61 @@ describe("Run lock", () => {
 
   it("resolves the runtime directory outside the checkout", () => {
     const runtimeDir = resolveRuntimeDir(repo, "../wt-test");
-    expect(runtimeDir).toBe(path.resolve(repo, "../wt-test", ".factory-runtime"));
+    expect(runtimeDir).toBe(
+      path.resolve(repo, "../wt-test", ".factory-runtime"),
+    );
   });
 
   it("defaults the worktree root to a sibling named for the repository", () => {
     const runtimeDir = resolveRuntimeDir(repo);
-    expect(runtimeDir).toBe(path.join(path.dirname(repo), `wt-${path.basename(repo)}`, ".factory-runtime"));
+    expect(runtimeDir).toBe(
+      path.join(
+        path.dirname(repo),
+        `wt-${path.basename(repo)}`,
+        ".factory-runtime",
+      ),
+    );
     expect(runtimeDir.startsWith(repo + path.sep)).toBe(false);
   });
 
   it("relocates a worktree root inside the checkout beside it", () => {
     const runtimeDir = resolveRuntimeDir(repo, path.join(repo, "inside"));
-    expect(runtimeDir).toBe(path.join(path.dirname(repo), `wt-${path.basename(repo)}`, ".factory-runtime"));
+    expect(runtimeDir).toBe(
+      path.join(
+        path.dirname(repo),
+        `wt-${path.basename(repo)}`,
+        ".factory-runtime",
+      ),
+    );
     expect(runtimeDir.startsWith(repo + path.sep)).toBe(false);
   });
 
   it("is exclusive while held and free after release", () => {
     const task = "t1";
-    const lockPath = getRunLockPath(repo, task, { runtimeDir: path.join(repo, "rt") });
-    expect(isRunLockFree(repo, task, { runtimeDir: path.join(repo, "rt") }).free).toBe(true);
+    const lockPath = getRunLockPath(repo, task, {
+      runtimeDir: path.join(repo, "rt"),
+    });
+    expect(
+      isRunLockFree(repo, task, { runtimeDir: path.join(repo, "rt") }).free,
+    ).toBe(true);
 
-    const handle = acquireRunLock(repo, task, { runtimeDir: path.join(repo, "rt") });
+    const handle = acquireRunLock(repo, task, {
+      runtimeDir: path.join(repo, "rt"),
+    });
     expect(handle).not.toBeNull();
     expect(fs.existsSync(lockPath)).toBe(true);
-    expect(isRunLockFree(repo, task, { runtimeDir: path.join(repo, "rt") }).free).toBe(false);
-    expect(acquireRunLock(repo, task, { runtimeDir: path.join(repo, "rt") })).toBeNull();
+    expect(
+      isRunLockFree(repo, task, { runtimeDir: path.join(repo, "rt") }).free,
+    ).toBe(false);
+    expect(
+      acquireRunLock(repo, task, { runtimeDir: path.join(repo, "rt") }),
+    ).toBeNull();
 
     handle!.release();
     expect(fs.existsSync(lockPath)).toBe(false);
-    expect(isRunLockFree(repo, task, { runtimeDir: path.join(repo, "rt") }).free).toBe(true);
+    expect(
+      isRunLockFree(repo, task, { runtimeDir: path.join(repo, "rt") }).free,
+    ).toBe(true);
   });
 
   it("takes over a stale lock from a dead pid on this host", () => {
@@ -181,7 +223,11 @@ describe("Run lock", () => {
     fs.mkdirSync(path.dirname(lockPath), { recursive: true });
     fs.writeFileSync(
       lockPath,
-      JSON.stringify({ pid: 999_999_999, host: os.hostname(), start: new Date(0).toISOString() })
+      JSON.stringify({
+        pid: 999_999_999,
+        host: os.hostname(),
+        start: new Date(0).toISOString(),
+      }),
     );
 
     const handle = acquireRunLock(repo, "t2", { runtimeDir });

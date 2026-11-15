@@ -7,7 +7,10 @@ import { createHash } from "node:crypto";
  * - Collapses consecutive whitespace to a single space
  * - Lowercases by default for robust semantic comparison
  */
-function normalizeText(text: string, options: { lowercase?: boolean } = {}): string {
+function normalizeText(
+  text: string,
+  options: { lowercase?: boolean } = {},
+): string {
   if (!text) return "";
   let norm = text.replace(/\r\n/g, "\n");
   norm = norm.replace(/\s+/g, " ").trim();
@@ -20,7 +23,10 @@ function normalizeText(text: string, options: { lowercase?: boolean } = {}): str
 /**
  * Computes sha1 hex fingerprint of normalized text.
  */
-export function fingerprintText(text: string, options?: { lowercase?: boolean }): string {
+export function fingerprintText(
+  text: string,
+  options?: { lowercase?: boolean },
+): string {
   const norm = normalizeText(text, options);
   return createHash("sha1").update(norm, "utf8").digest("hex");
 }

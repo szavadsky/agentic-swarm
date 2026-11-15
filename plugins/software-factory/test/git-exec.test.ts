@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeAll, afterAll } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import fs from "node:fs";
-import path from "node:path";
 import os from "node:os";
-import { git, GitError } from "../src/core/git/exec.js";
+import path from "node:path";
+import { GitError, git } from "../src/core/git/exec.js";
 import { createTmpRepo, type TmpRepo } from "./helpers/tmp-repo.js";
 
 describe("Hardened git execution (§2, §7)", () => {
@@ -23,9 +23,9 @@ describe("Hardened git execution (§2, §7)", () => {
   });
 
   it("throws GitError on failure unless allowFail: true", async () => {
-    await expect(git(repo.dir, ["checkout", "nonexistent-branch"])).rejects.toThrow(
-      GitError
-    );
+    await expect(
+      git(repo.dir, ["checkout", "nonexistent-branch"]),
+    ).rejects.toThrow(GitError);
 
     const res = await git(repo.dir, ["checkout", "nonexistent-branch"], {
       allowFail: true,
@@ -37,19 +37,31 @@ describe("Hardened git execution (§2, §7)", () => {
   it("commits successfully using factory fallback identity when repo lacks config", async () => {
     // Create bare clone without user.name/email
     const unconfiguredDir = fs.mkdtempSync(
-      path.join(os.tmpdir(), "factory-unconfigured-repo-")
+      path.join(os.tmpdir(), "factory-unconfigured-repo-"),
     );
     try {
       await git(unconfiguredDir, ["init", "-b", "main"]);
 
-      fs.writeFileSync(path.join(unconfiguredDir, "file.txt"), "content\n", "utf8");
+      fs.writeFileSync(
+        path.join(unconfiguredDir, "file.txt"),
+        "content\n",
+        "utf8",
+      );
       await git(unconfiguredDir, ["add", "file.txt"]);
 
       // Must succeed via GIT_AUTHOR_*/GIT_COMMITTER_* env without error
-      const commitRes = await git(unconfiguredDir, ["commit", "-m", "first commit"]);
+      const commitRes = await git(unconfiguredDir, [
+        "commit",
+        "-m",
+        "first commit",
+      ]);
       expect(commitRes.code).toBe(0);
 
-      const logRes = await git(unconfiguredDir, ["log", "-1", "--format=%an <%ae>"]);
+      const logRes = await git(unconfiguredDir, [
+        "log",
+        "-1",
+        "--format=%an <%ae>",
+      ]);
       expect(logRes.stdout).toBe("Software Factory <factory@local>");
     } finally {
       fs.rmSync(unconfiguredDir, { recursive: true, force: true });
@@ -86,7 +98,10 @@ describe("Hardened git execution (§2, §7)", () => {
       GIT_COMMITTER_NAME: "Id Name",
       GIT_COMMITTER_EMAIL: "id@example.test",
     });
-    const withoutIdentity = new Repo({ mainRoot: repo.dir, worktreeRoot: repo.dir });
+    const withoutIdentity = new Repo({
+      mainRoot: repo.dir,
+      worktreeRoot: repo.dir,
+    });
     expect(withoutIdentity.identityEnv()).toBeUndefined();
   });
 });

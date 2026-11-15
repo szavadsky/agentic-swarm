@@ -7,7 +7,13 @@ import { runDispatch } from "../../src/kernel/dispatch.js";
 import { resumeSessionFor } from "../../src/kernel/flow-context.js";
 import { ensureTaskWorktree } from "../../src/kernel/worktree.js";
 import { task } from "./helpers.js";
-import { cleanupFlowRepo, makeRuntime, outcome, setupFlowRepo, writeTask } from "./s2-helpers.js";
+import {
+  cleanupFlowRepo,
+  makeRuntime,
+  outcome,
+  setupFlowRepo,
+  writeTask,
+} from "./s2-helpers.js";
 
 /** Implement, get `changes`, fix, get `approve`: the resume path of a fix round. */
 function scriptFixRound(harness: FakeHarness): void {
@@ -68,17 +74,35 @@ describe("session portability", () => {
       await runDispatch(runtime, { iteration: 1 });
 
       const records = await runtime.store.listRecords();
-      const taskFile = (await runtime.store.listTasks()).find((t) => t.slug === "task")!;
+      const taskFile = (await runtime.store.listTasks()).find(
+        (t) => t.slug === "task",
+      )!;
       const worktree = (await ensureTaskWorktree(runtime, taskFile)).path;
-      const recorded = records.find((r) => r.slug === "task" && r.step === "implement")!.session!;
+      const recorded = records.find(
+        (r) => r.slug === "task" && r.step === "implement",
+      )!.session!;
       expect(recorded.compacted).toBe(true);
 
-      const resumed = await resumeSessionFor(runtime, taskFile, "implementer", records, worktree);
+      const resumed = await resumeSessionFor(
+        runtime,
+        taskFile,
+        "implementer",
+        records,
+        worktree,
+      );
       expect(resumed?.id).toBe(recorded.id);
 
       // Rotation: the same alias now routes to a different harness.
       runtime.configs.run.aliases.implementer!.harness = "other";
-      expect(await resumeSessionFor(runtime, taskFile, "implementer", records, worktree)).toBeUndefined();
+      expect(
+        await resumeSessionFor(
+          runtime,
+          taskFile,
+          "implementer",
+          records,
+          worktree,
+        ),
+      ).toBeUndefined();
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -90,14 +114,20 @@ describe("end-of-turn compaction", () => {
     const { repo, goal } = setupFlowRepo();
     try {
       const harness = new FakeHarness({ id: "fake" });
-      harness.script((req) => fakeTurnResult(req, { stop: { kind: "infra", cause: "timeout" } }));
+      harness.script((req) =>
+        fakeTurnResult(req, { stop: { kind: "infra", cause: "timeout" } }),
+      );
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("task", { scope: ["task.txt"] }));
-      expect((await runDispatch(runtime, { iteration: 1 })).reason).toBe("infra");
+      expect((await runDispatch(runtime, { iteration: 1 })).reason).toBe(
+        "infra",
+      );
 
       expect(harness.compactions).toHaveLength(0);
-      const record = (await runtime.store.listRecords()).find((r) => r.step === "implement")!;
+      const record = (await runtime.store.listRecords()).find(
+        (r) => r.step === "implement",
+      )!;
       expect(record.session?.compacted).toBe(false);
     } finally {
       cleanupFlowRepo(repo);
@@ -109,7 +139,9 @@ describe("end-of-turn compaction", () => {
     try {
       const harness = new FakeHarness({ id: "fake" });
       harness.script((req) =>
-        fakeTurnResult(req, { stop: { kind: "refusal", details: "content policy" } })
+        fakeTurnResult(req, {
+          stop: { kind: "refusal", details: "content policy" },
+        }),
       );
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
@@ -117,7 +149,9 @@ describe("end-of-turn compaction", () => {
       await runDispatch(runtime, { iteration: 1 });
 
       expect(harness.compactions).toHaveLength(0);
-      const record = (await runtime.store.listRecords()).find((r) => r.step === "implement")!;
+      const record = (await runtime.store.listRecords()).find(
+        (r) => r.step === "implement",
+      )!;
       expect(record.session?.compacted).toBe(false);
     } finally {
       cleanupFlowRepo(repo);
@@ -138,7 +172,10 @@ describe("end-of-turn compaction", () => {
       const implement = (await runtime.store.listRecords())
         .filter((r) => r.slug === "task" && r.step === "implement")
         .sort((a, b) => a.seq - b.seq);
-      expect(implement.map((r) => r.session?.compacted)).toEqual([false, false]);
+      expect(implement.map((r) => r.session?.compacted)).toEqual([
+        false,
+        false,
+      ]);
       // The failed compaction cost no session: the fix turn still resumed it.
       expect(harness.calls[2]!.session?.id).toBe(implement[0]!.session?.id);
       expect(harness.calls[2]!.session?.compacted).toBe(false);
@@ -150,7 +187,10 @@ describe("end-of-turn compaction", () => {
   it("does not compact or precondition a resume on a harness that cannot compact", async () => {
     const { repo, goal } = setupFlowRepo();
     try {
-      const harness = new FakeHarness({ id: "fake", caps: { compact: "none" } });
+      const harness = new FakeHarness({
+        id: "fake",
+        caps: { compact: "none" },
+      });
       scriptFixRound(harness);
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
@@ -161,7 +201,10 @@ describe("end-of-turn compaction", () => {
       const implement = (await runtime.store.listRecords())
         .filter((r) => r.slug === "task" && r.step === "implement")
         .sort((a, b) => a.seq - b.seq);
-      expect(implement.map((r) => r.session?.compacted)).toEqual([false, false]);
+      expect(implement.map((r) => r.session?.compacted)).toEqual([
+        false,
+        false,
+      ]);
       expect(harness.calls[2]!.session?.id).toBe(implement[0]!.session?.id);
     } finally {
       cleanupFlowRepo(repo);

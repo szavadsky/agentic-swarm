@@ -4,7 +4,12 @@ import path from "node:path";
 import yaml from "yaml";
 import { git } from "../core/git/exec.js";
 import { writeTextAtomic } from "../core/records/io.js";
-import { configFilePaths, loadConfigs, repoConfigSchema, resolveGoalPaths } from "../kernel/config.js";
+import {
+  configFilePaths,
+  loadConfigs,
+  repoConfigSchema,
+  resolveGoalPaths,
+} from "../kernel/config.js";
 import { summaryRelPath } from "../kernel/context-pack.js";
 import { derive } from "../kernel/derive.js";
 import { createFolderStore } from "../kernel/store.js";
@@ -19,18 +24,30 @@ export interface InitResult {
 }
 
 /** Creates the tracked config when missing, the goal layout and its intent. */
-export async function initGoal(opts: { repo: string; goal: string; intent?: string }): Promise<InitResult> {
+export async function initGoal(opts: {
+  repo: string;
+  goal: string;
+  intent?: string;
+}): Promise<InitResult> {
   const repoRoot = path.resolve(opts.repo);
-  const repoProbe = await git(repoRoot, ["rev-parse", "--git-dir"], { allowFail: true });
-  if (repoProbe.code !== 0) throw new Error(`not a git repository: ${repoRoot}`);
+  const repoProbe = await git(repoRoot, ["rev-parse", "--git-dir"], {
+    allowFail: true,
+  });
+  if (repoProbe.code !== 0)
+    throw new Error(`not a git repository: ${repoRoot}`);
 
   const files = configFilePaths(repoRoot);
   const created = !fs.existsSync(files.repo);
   if (created) {
-    const head = await git(repoRoot, ["rev-parse", "--abbrev-ref", "HEAD"], { allowFail: true });
+    const head = await git(repoRoot, ["rev-parse", "--abbrev-ref", "HEAD"], {
+      allowFail: true,
+    });
     const current = head.code === 0 ? head.stdout.trim() : "";
     const baseBranch = current && current !== "HEAD" ? current : "main";
-    await writeTextAtomic(files.repo, yaml.stringify(repoConfigSchema.parse({ baseBranch })));
+    await writeTextAtomic(
+      files.repo,
+      yaml.stringify(repoConfigSchema.parse({ baseBranch })),
+    );
   }
 
   const configs = loadConfigs(repoRoot);
@@ -47,10 +64,15 @@ export async function initGoal(opts: { repo: string; goal: string; intent?: stri
     await writeTextAtomic(intentPath, text);
     intentCreated = true;
   } else if (opts.intent) {
-    const incoming = await fs.promises.readFile(path.resolve(opts.intent), "utf8");
+    const incoming = await fs.promises.readFile(
+      path.resolve(opts.intent),
+      "utf8",
+    );
     const existing = await fs.promises.readFile(intentPath, "utf8");
     if (incoming !== existing) {
-      throw new Error(`intent already exists at ${intentPath}; edit it instead of overwriting it`);
+      throw new Error(
+        `intent already exists at ${intentPath}; edit it instead of overwriting it`,
+      );
     }
   }
 
@@ -71,13 +93,21 @@ export interface StatusResult {
 }
 
 /** Derived state only: status reads tasks + records and never launches anything. */
-export async function statusGoal(repo: string, goal: string): Promise<StatusResult> {
+export async function statusGoal(
+  repo: string,
+  goal: string,
+): Promise<StatusResult> {
   const repoRoot = path.resolve(repo);
   const configs = loadConfigs(repoRoot);
   const paths = resolveGoalPaths(configs, repoRoot, goal);
-  if (!fs.existsSync(paths.goalDir)) throw new Error(`goal "${goal}" has no directory at ${paths.goalDir}`);
+  if (!fs.existsSync(paths.goalDir))
+    throw new Error(`goal "${goal}" has no directory at ${paths.goalDir}`);
   const store = createFolderStore(paths.goalDir, path.dirname(paths.goalDir));
-  const state = derive(await store.listTasks(), await store.listRecords(), configs.process.flows);
+  const state = derive(
+    await store.listTasks(),
+    await store.listRecords(),
+    configs.process.flows,
+  );
 
   let lastSummary: string | undefined;
   const iterations = (await store.listDir("iterations"))
@@ -97,23 +127,38 @@ export async function statusGoal(repo: string, goal: string): Promise<StatusResu
 export type SteerSource = { text: string; source: string };
 
 export async function readSteerSource(file: string): Promise<SteerSource> {
-  const text = file === "-" ? await Bun.stdin.text() : await fs.promises.readFile(path.resolve(file), "utf8");
+  const text =
+    file === "-"
+      ? await Bun.stdin.text()
+      : await fs.promises.readFile(path.resolve(file), "utf8");
   if (!text.trim()) throw new Error("steer text is empty");
   return { text, source: file === "-" ? "stdin" : path.resolve(file) };
 }
 
 /** Atomic maildir drop: write a hidden temp sibling, then rename into the inbox. */
-export async function steerGoal(repo: string, goal: string, source: SteerSource): Promise<string> {
+export async function steerGoal(
+  repo: string,
+  goal: string,
+  source: SteerSource,
+): Promise<string> {
   const repoRoot = path.resolve(repo);
   const configs = loadConfigs(repoRoot);
   const paths = resolveGoalPaths(configs, repoRoot, goal);
-  if (!fs.existsSync(paths.goalDir)) throw new Error(`goal "${goal}" has no directory at ${paths.goalDir}`);
+  if (!fs.existsSync(paths.goalDir))
+    throw new Error(`goal "${goal}" has no directory at ${paths.goalDir}`);
   const store = createFolderStore(paths.goalDir, path.dirname(paths.goalDir));
   await store.ensureLayout();
 
-  const hash = crypto.createHash("sha256").update(source.text).digest("hex").slice(0, 8);
+  const hash = crypto
+    .createHash("sha256")
+    .update(source.text)
+    .digest("hex")
+    .slice(0, 8);
   const stamp = new Date().toISOString().replace(/[-:.]/g, "");
   const rel = `mailbox/inbox/${stamp}-${hash}.md`;
-  await writeTextAtomic(path.join(paths.goalDir, rel), source.text.endsWith("\n") ? source.text : `${source.text}\n`);
+  await writeTextAtomic(
+    path.join(paths.goalDir, rel),
+    source.text.endsWith("\n") ? source.text : `${source.text}\n`,
+  );
   return path.join(paths.goalDir, rel);
 }

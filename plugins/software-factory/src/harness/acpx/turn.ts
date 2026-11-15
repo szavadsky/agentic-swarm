@@ -2,11 +2,24 @@ import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { runProcess } from "../../core/proc.js";
-import { registerChildGroup, unregisterChildGroup } from "../../core/shutdown.js";
+import {
+  registerChildGroup,
+  unregisterChildGroup,
+} from "../../core/shutdown.js";
 import { exitDetails, stopDetails } from "../details.js";
-import type { AdapterTurnResult, ModelRef, Stop, TurnAttempt, TurnRequest } from "../types.js";
+import type {
+  AdapterTurnResult,
+  ModelRef,
+  Stop,
+  TurnAttempt,
+  TurnRequest,
+} from "../types.js";
 import { zeroUsage } from "../usage.js";
-import { classifyAcpxError, classifyAcpxTurn, isNoSessionError } from "./classify.js";
+import {
+  classifyAcpxError,
+  classifyAcpxTurn,
+  isNoSessionError,
+} from "./classify.js";
 import { AcpxTranscriptParser, acpxErrors } from "./transcript.js";
 import {
   ACPX_EFFORT,
@@ -37,7 +50,9 @@ function commandLine(runtime: AcpxRuntime, args: string[]): string[] {
  * left to the spawned process so AGY_PATH reaches it.
  */
 function agentSelection(runtime: AcpxRuntime): string[] {
-  return runtime.agent === "agy" ? ["--agent", `${runtime.agyBinary} acp`] : [runtime.agent];
+  return runtime.agent === "agy"
+    ? ["--agent", `${runtime.agyBinary} acp`]
+    : [runtime.agent];
 }
 
 function globalArgs(agent: AcpxAgent, cwd: string): string[] {
@@ -55,12 +70,17 @@ function globalArgs(agent: AcpxAgent, cwd: string): string[] {
  * `--model` accepts only the base id its `model` config option lists. A known
  * suffix moves to the `thought_level` session option; an explicit effort wins.
  */
-function acpxModel(agent: AcpxAgent, model: ModelRef): { id: string; effort?: string } {
+function acpxModel(
+  agent: AcpxAgent,
+  model: ModelRef,
+): { id: string; effort?: string } {
   let id = model.id;
   let effort = model.effort;
   if (agent === "agy") {
     for (const [base, levels] of Object.entries(ACPX_EFFORT_MODEL_BASES)) {
-      const suffix = id.startsWith(`${base}-`) ? id.slice(base.length + 1) : undefined;
+      const suffix = id.startsWith(`${base}-`)
+        ? id.slice(base.length + 1)
+        : undefined;
       if (suffix !== undefined && levels.includes(suffix)) {
         id = base;
         effort = effort ?? suffix;
@@ -80,7 +100,7 @@ interface SetupFailure {
 async function runSetup(
   runtime: AcpxRuntime,
   args: string[],
-  cwd: string
+  cwd: string,
 ): Promise<SetupFailure | undefined> {
   const result = await runProcess({
     cmd: commandLine(runtime, args),
@@ -90,10 +110,17 @@ async function runSetup(
   });
   const errors = acpxErrors(result.stdout);
   const error = errors.at(-1);
-  if (error) return { stop: classifyAcpxError(error), noSession: isNoSessionError(error) };
-  if (result.timedOut) return { stop: { kind: "infra", cause: "timeout" }, noSession: false };
+  if (error)
+    return {
+      stop: classifyAcpxError(error),
+      noSession: isNoSessionError(error),
+    };
+  if (result.timedOut)
+    return { stop: { kind: "infra", cause: "timeout" }, noSession: false };
   if (result.code !== 0) {
-    const details = stopDetails(result.stderr) ?? exitDetails(result.code, result.signal ?? null);
+    const details =
+      stopDetails(result.stderr) ??
+      exitDetails(result.code, result.signal ?? null);
     const stop: Stop = details
       ? { kind: "infra", cause: "crash", details }
       : { kind: "infra", cause: "crash" };
@@ -115,7 +142,7 @@ function runPromptProcess(
   args: string[],
   cwd: string,
   timeouts: TurnRequest["timeouts"],
-  parser: AcpxTranscriptParser
+  parser: AcpxTranscriptParser,
 ): Promise<PromptProcessResult> {
   return new Promise((resolve) => {
     let stderr = "";
@@ -157,12 +184,16 @@ function runPromptProcess(
     };
 
     try {
-      child = spawn(runtime.command.binary, [...runtime.command.prefix, ...args], {
-        cwd,
-        detached: true,
-        stdio: ["ignore", "pipe", "pipe"],
-        env: process.env,
-      });
+      child = spawn(
+        runtime.command.binary,
+        [...runtime.command.prefix, ...args],
+        {
+          cwd,
+          detached: true,
+          stdio: ["ignore", "pipe", "pipe"],
+          env: process.env,
+        },
+      );
     } catch (error) {
       resolve({
         code: null,
@@ -186,7 +217,9 @@ function runPromptProcess(
       resetIdle();
       buffer += decoder.decode(chunk, { stream: true });
       let index: number;
-      while ((index = buffer.indexOf("\n")) >= 0) {
+      while (true) {
+        index = buffer.indexOf("\n");
+        if (index < 0) break;
         parser.feedLine(buffer.slice(0, index));
         buffer = buffer.slice(index + 1);
       }
@@ -215,10 +248,13 @@ function runPromptProcess(
 export async function runAcpxTurn(
   runtime: AcpxRuntime,
   req: TurnRequest,
-  requested: ModelRef
+  requested: ModelRef,
 ): Promise<AdapterTurnResult> {
   const agent = runtime.agent;
-  const requestedModel: ModelRef = { ...requested, effort: req.effort ?? requested.effort };
+  const requestedModel: ModelRef = {
+    ...requested,
+    effort: req.effort ?? requested.effort,
+  };
   // What acpx receives on --model versus what the session records: agy's effort
   // suffix is the wire-incompatible part, the alias's model id stays the record.
   const wire = acpxModel(agent, requestedModel);
@@ -231,13 +267,14 @@ export async function runAcpxTurn(
     path.resolve(req.session.cwd) !== path.resolve(req.cwd)
   ) {
     throw new Error(
-      `acpx ${agent} session ${req.session.id} is cwd-bound to ${req.session.cwd}, not ${req.cwd}`
+      `acpx ${agent} session ${req.session.id} is cwd-bound to ${req.session.cwd}, not ${req.cwd}`,
     );
   }
 
   // A named session per turn: acpx records are cwd-keyed, so implementer and
   // reviewer sharing a worktree would otherwise land in one record.
-  const resume = req.session && req.session.harness === agent ? req.session.id : undefined;
+  const resume =
+    req.session && req.session.harness === agent ? req.session.id : undefined;
   const freshName = () => `${agent}-${randomUUID()}`;
   let name = resume ?? freshName();
   const globals = globalArgs(agent, req.cwd);
@@ -253,13 +290,14 @@ export async function runAcpxTurn(
   const attempts: TurnAttempt[] = [];
   for (let attempt = 0; ; attempt += 1) {
     const canRetryDeNovo = resume !== undefined && attempt === 0;
-    const shouldRetryDeNovo = (failure: SetupFailure) => failure.noSession && canRetryDeNovo;
+    const shouldRetryDeNovo = (failure: SetupFailure) =>
+      failure.noSession && canRetryDeNovo;
 
     if (!resume || attempt > 0) {
       const failure = await runSetup(
         runtime,
         [...base, "sessions", "new", "--name", name],
-        req.cwd
+        req.cwd,
       );
       if (failure) {
         if (shouldRetryDeNovo(failure)) {
@@ -267,7 +305,13 @@ export async function runAcpxTurn(
           name = freshName();
           continue;
         }
-        return { stop: failure.stop, text: "", usage: zeroUsage(), model, attempts };
+        return {
+          stop: failure.stop,
+          text: "",
+          usage: zeroUsage(),
+          model,
+          attempts,
+        };
       }
     }
 
@@ -286,7 +330,13 @@ export async function runAcpxTurn(
           name = freshName();
           continue;
         }
-        return { stop: failure.stop, text: "", usage: zeroUsage(), model, attempts };
+        return {
+          stop: failure.stop,
+          text: "",
+          usage: zeroUsage(),
+          model,
+          attempts,
+        };
       }
     }
 
@@ -312,7 +362,7 @@ export async function runAcpxTurn(
       prompt,
       req.cwd,
       req.timeouts,
-      parser
+      parser,
     );
     const summary: AcpxTurnSummary = parser.result();
     const lost = summary.errors.some(isNoSessionError);

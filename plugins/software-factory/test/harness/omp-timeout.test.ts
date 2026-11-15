@@ -41,7 +41,10 @@ function fakeHarness(): { harness: OmpHarness; cleanup: () => void } {
     sessionDir: path.join(tmp, "sessions"),
     readyTimeoutMs: 5_000,
   });
-  return { harness, cleanup: () => fs.rmSync(tmp, { recursive: true, force: true }) };
+  return {
+    harness,
+    cleanup: () => fs.rmSync(tmp, { recursive: true, force: true }),
+  };
 }
 
 describe("OmpHarness fake process", () => {

@@ -1,5 +1,5 @@
-import type { ModelRef } from "../types.js";
 import type { RetryPolicy } from "../fallback.js";
+import type { ModelRef } from "../types.js";
 
 /** Harness configuration carried through `TurnRequest.opaque`. */
 export interface OmpTurnOpaque {
@@ -24,9 +24,19 @@ export interface OmpHarnessOptions {
 export const OMP_ID = "omp";
 
 /** Built-ins an unattended factory turn may use; `task` enables pinned subagents. */
-export const DEFAULT_TOOLS = ["read", "bash", "edit", "write", "glob", "grep", "task"];
+export const DEFAULT_TOOLS = [
+  "read",
+  "bash",
+  "edit",
+  "write",
+  "glob",
+  "grep",
+  "task",
+];
 
-export function selectorOf(model: ModelRef | string | undefined): string | undefined {
+export function selectorOf(
+  model: ModelRef | string | undefined,
+): string | undefined {
   if (!model) return undefined;
   return typeof model === "string"
     ? model

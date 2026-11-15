@@ -49,9 +49,18 @@ export interface AcpxTurnSummary {
  * Effort is a session config option, not a `--model` suffix (probe §3).
  * The lists are the values each adapter advertised during the probe.
  */
-export const ACPX_EFFORT: Record<AcpxAgent, { configId: string; levels: string[] }> = {
-  pi: { configId: "thought_level", levels: ["off", "minimal", "low", "medium", "high", "xhigh"] },
-  codex: { configId: "reasoning_effort", levels: ["low", "medium", "high", "xhigh", "max"] },
+export const ACPX_EFFORT: Record<
+  AcpxAgent,
+  { configId: string; levels: string[] }
+> = {
+  pi: {
+    configId: "thought_level",
+    levels: ["off", "minimal", "low", "medium", "high", "xhigh"],
+  },
+  codex: {
+    configId: "reasoning_effort",
+    levels: ["low", "medium", "high", "xhigh", "max"],
+  },
   agy: { configId: "thought_level", levels: ["low", "medium", "high"] },
 };
 

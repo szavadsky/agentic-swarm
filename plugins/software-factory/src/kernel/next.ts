@@ -9,7 +9,11 @@ function park(slug: string, cause: string): Action {
  * them against concurrency, scope and drain limits and re-derives after every
  * record. `running` guards against dispatching a task twice.
  */
-export function next(state: State, limits: Limits, running: ReadonlySet<string>): Action[] {
+export function next(
+  state: State,
+  limits: Limits,
+  running: ReadonlySet<string>,
+): Action[] {
   if (state.terminal) {
     return [{ kind: "exit", reason: `goal ${state.goal}` }];
   }
@@ -18,7 +22,12 @@ export function next(state: State, limits: Limits, running: ReadonlySet<string>)
   for (const slug of Object.keys(state.tasks).sort()) {
     if (running.has(slug)) continue;
     const task = state.tasks[slug]!;
-    if (task.status === "merged" || task.status === "finished" || task.status === "parked" || task.status === "cancelled") {
+    if (
+      task.status === "merged" ||
+      task.status === "finished" ||
+      task.status === "parked" ||
+      task.status === "cancelled"
+    ) {
       continue;
     }
     if (task.status !== "ready") continue;
@@ -32,8 +41,8 @@ export function next(state: State, limits: Limits, running: ReadonlySet<string>)
       actions.push(
         park(
           slug,
-          `no-progress: ${loop.step} r${loop.round} repeats r${loop.firstRound} (${loop.fingerprint.slice(0, 8)})`
-        )
+          `no-progress: ${loop.step} r${loop.round} repeats r${loop.firstRound} (${loop.fingerprint.slice(0, 8)})`,
+        ),
       );
       continue;
     }
@@ -57,26 +66,32 @@ export function next(state: State, limits: Limits, running: ReadonlySet<string>)
       continue;
     }
     if (task.phase === "done" || task.phase === "parked") {
-      actions.push(park(slug, `stuck: no next action for phase "${task.phase}"`));
+      actions.push(
+        park(slug, `stuck: no next action for phase "${task.phase}"`),
+      );
       continue;
     }
 
     const step = flow.steps.find((s) => s.id === task.phase);
     if (!step) {
-      actions.push(park(slug, `flow "${task.flow}" has no step "${task.phase}"`));
+      actions.push(
+        park(slug, `flow "${task.flow}" has no step "${task.phase}"`),
+      );
       continue;
     }
     if (step.review && task.round > flow.reviewRounds) {
       actions.push(
         park(
           slug,
-          `review round limit reached after verdict "${task.verdict ?? "none"}" (${flow.reviewRounds} rounds)`
-        )
+          `review round limit reached after verdict "${task.verdict ?? "none"}" (${flow.reviewRounds} rounds)`,
+        ),
       );
       continue;
     }
     if (task.turns >= limits.itemTurns) {
-      actions.push(park(slug, `budget: item budget exhausted after ${task.turns} turns`));
+      actions.push(
+        park(slug, `budget: item budget exhausted after ${task.turns} turns`),
+      );
       continue;
     }
     actions.push({ kind: "step", slug, step: step.id, round: task.round });

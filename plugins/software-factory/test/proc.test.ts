@@ -1,4 +1,4 @@
-import { describe, it, expect } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -50,7 +50,11 @@ describe("Process runner & output capping (§5, §9)", () => {
 
   it("caps large output via maxOutputBytes retaining head and tail with truncation marker", async () => {
     const res = await runProcess({
-      cmd: ["bash", "-lc", 'printf "HEAD_START_"; head -c 1000 /dev/zero | tr "\\0" "x"; printf "_TAIL_END"'],
+      cmd: [
+        "bash",
+        "-lc",
+        'printf "HEAD_START_"; head -c 1000 /dev/zero | tr "\\0" "x"; printf "_TAIL_END"',
+      ],
       cwd: process.cwd(),
       maxOutputBytes: 50,
     });
@@ -80,7 +84,11 @@ describe("Process runner & output capping (§5, §9)", () => {
     // 5 MiB of stdout exceeds the 1 MiB per-stream ring: the runner must
     // finish with capped output whose tail survives.
     const res = await runProcess({
-      cmd: ["bash", "-lc", 'head -c 5000000 /dev/zero | tr "\\0" "x"; echo; echo TAIL_SENTINEL'],
+      cmd: [
+        "bash",
+        "-lc",
+        'head -c 5000000 /dev/zero | tr "\\0" "x"; echo; echo TAIL_SENTINEL',
+      ],
       cwd: process.cwd(),
       timeoutSec: 15,
     });
@@ -92,14 +100,18 @@ describe("Process runner & output capping (§5, §9)", () => {
   });
 
   it("derives TMP and TEMP from TMPDIR for the child", async () => {
-    const previous = { TMPDIR: process.env.TMPDIR, TMP: process.env.TMP, TEMP: process.env.TEMP };
+    const previous = {
+      TMPDIR: process.env.TMPDIR,
+      TMP: process.env.TMP,
+      TEMP: process.env.TEMP,
+    };
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "proc-tmp-"));
     process.env.TMPDIR = tmp;
     process.env.TMP = path.join(tmp, "ignored-tmp");
     process.env.TEMP = path.join(tmp, "ignored-temp");
     try {
       const res = await runProcess({
-        cmd: ["bash", "-c", "printf '%s %s %s' \"$TMPDIR\" \"$TMP\" \"$TEMP\""],
+        cmd: ["bash", "-c", 'printf \'%s %s %s\' "$TMPDIR" "$TMP" "$TEMP"'],
         cwd: process.cwd(),
       });
       expect(res.code).toBe(0);

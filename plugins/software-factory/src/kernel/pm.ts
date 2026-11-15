@@ -1,19 +1,34 @@
 import fs from "node:fs";
 import path from "node:path";
 import { writeTextAtomic } from "../core/records/io.js";
+import type { Stop } from "../harness/types.js";
 import { runAgentTurn } from "./agent.js";
 import { resolveRole } from "./flow-context.js";
 import { formatSteerTurn, holdsDir, type Steer } from "./mailbox.js";
-import { materialHash, parseTaskFile, validateTaskGraph, TaskFileError } from "./tasks.js";
 import { appendCancel, appendPark, scriptMeta } from "./record.js";
-import type { Stop } from "../harness/types.js";
-import type { AliasConfig, KernelRuntime, Outcome, State, StepRecord, TaskFile, TaskStatus } from "./types.js";
+import {
+  materialHash,
+  parseTaskFile,
+  TaskFileError,
+  validateTaskGraph,
+} from "./tasks.js";
+import type {
+  AliasConfig,
+  KernelRuntime,
+  Outcome,
+  State,
+  StepRecord,
+  TaskFile,
+  TaskStatus,
+} from "./types.js";
 
 function taskPath(runtime: KernelRuntime, slug: string): string {
   return path.join(runtime.store.tasksDir, `${slug}.md`);
 }
 
-async function readTaskTexts(runtime: KernelRuntime): Promise<Map<string, string>> {
+async function readTaskTexts(
+  runtime: KernelRuntime,
+): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   for (const name of await runtime.store.listDir("tasks")) {
     if (!name.endsWith(".md")) continue;
@@ -32,7 +47,10 @@ interface TurnSnapshot {
   tasks: Map<string, string>;
 }
 
-async function snapshotTurn(runtime: KernelRuntime, planPath: string): Promise<TurnSnapshot> {
+async function snapshotTurn(
+  runtime: KernelRuntime,
+  planPath: string,
+): Promise<TurnSnapshot> {
   const planExists = fs.existsSync(planPath);
   return {
     planPath,
@@ -49,10 +67,12 @@ async function snapshotTurn(runtime: KernelRuntime, planPath: string): Promise<T
  */
 async function restoreTurn(
   runtime: KernelRuntime,
-  snapshot: TurnSnapshot
+  snapshot: TurnSnapshot,
 ): Promise<{ plan: boolean; tasks: string[] }> {
   const planExistsNow = fs.existsSync(snapshot.planPath);
-  const planNow = planExistsNow ? fs.readFileSync(snapshot.planPath, "utf8") : "";
+  const planNow = planExistsNow
+    ? fs.readFileSync(snapshot.planPath, "utf8")
+    : "";
   let planChanged = false;
   if (!snapshot.planExists) {
     // A plan the turn created would send the next front to the boundary; it
@@ -83,14 +103,23 @@ async function restoreTurn(
   return { plan: planChanged, tasks: [...changed].sort() };
 }
 
-function parseTasks(texts: Map<string, string>): { tasks: TaskFile[]; findings: string[] } {
+function parseTasks(texts: Map<string, string>): {
+  tasks: TaskFile[];
+  findings: string[];
+} {
   const tasks: TaskFile[] = [];
   const findings: string[] = [];
-  for (const [slug, text] of [...texts.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+  for (const [slug, text] of [...texts.entries()].sort((a, b) =>
+    a[0].localeCompare(b[0]),
+  )) {
     try {
       tasks.push(parseTaskFile(text, slug));
     } catch (err) {
-      findings.push(err instanceof TaskFileError ? err.message : `task "${slug}" is unreadable`);
+      findings.push(
+        err instanceof TaskFileError
+          ? err.message
+          : `task "${slug}" is unreadable`,
+      );
     }
   }
   return { tasks, findings };
@@ -147,7 +176,9 @@ function escapeRegExp(text: string): string {
 function planMentionsSlug(plan: string, slug: string): boolean {
   const boundary = "(?![a-z0-9-]|\\.[a-z0-9])";
   return [slug, `tasks/${slug}.md`].some((name) =>
-    new RegExp(`(?<![a-z0-9.-])${escapeRegExp(name)}${boundary}`, "i").test(plan)
+    new RegExp(`(?<![a-z0-9.-])${escapeRegExp(name)}${boundary}`, "i").test(
+      plan,
+    ),
   );
 }
 
@@ -160,7 +191,7 @@ async function reconcile(
   runtime: KernelRuntime,
   opts: { iteration: number; state: State; planPath: string; round: number },
   planBefore: string,
-  taskSnapshot: Map<string, string>
+  taskSnapshot: Map<string, string>,
 ): Promise<string[]> {
   const findings: string[] = [];
   const planNow = fs.existsSync(opts.planPath)
@@ -168,7 +199,9 @@ async function reconcile(
     : "";
   if (planNow !== planBefore) {
     await writeTextAtomic(opts.planPath, planBefore);
-    findings.push("plan.md changed during the PM turn; restored: only the architect edits the plan");
+    findings.push(
+      "plan.md changed during the PM turn; restored: only the architect edits the plan",
+    );
   }
 
   const texts = await readTaskTexts(runtime);
@@ -177,14 +210,16 @@ async function reconcile(
     const now = texts.get(slug);
     if (original === undefined) {
       if (now !== undefined) {
-        findings.push(`frozen task "${slug}" appeared; frozen slugs are immutable`);
+        findings.push(
+          `frozen task "${slug}" appeared; frozen slugs are immutable`,
+        );
       }
       continue;
     }
     if (now !== original) {
       await writeTextAtomic(taskPath(runtime, slug), original);
       findings.push(
-        `frozen task "${slug}" was edited; restored: merged work is history, rework needs a new slug`
+        `frozen task "${slug}" was edited; restored: merged work is history, rework needs a new slug`,
       );
     }
   }
@@ -193,14 +228,16 @@ async function reconcile(
     if (original === undefined) continue;
     if (texts.get(slug) !== original) {
       await writeTextAtomic(taskPath(runtime, slug), original);
-      findings.push(`cancelled task "${slug}" was edited; restored: a spent slug cannot be reused`);
+      findings.push(
+        `cancelled task "${slug}" was edited; restored: a spent slug cannot be reused`,
+      );
     }
   }
 
   if (findings.length > 0) {
     await runtime.store.appendRecord(
       scriptMeta(opts.iteration, "pm-reconcile", { round: opts.round }),
-      { ok: false, cause: findings.join("; ") }
+      { ok: false, cause: findings.join("; ") },
     );
   }
   return findings;
@@ -210,13 +247,17 @@ async function validate(
   runtime: KernelRuntime,
   opts: { iteration: number; state: State; planPath: string; round: number },
   planBefore: string,
-  taskSnapshot: Map<string, string>
+  taskSnapshot: Map<string, string>,
 ): Promise<string[]> {
   const findings = await reconcile(runtime, opts, planBefore, taskSnapshot);
-  const { tasks, findings: parseFindings } = parseTasks(await readTaskTexts(runtime));
+  const { tasks, findings: parseFindings } = parseTasks(
+    await readTaskTexts(runtime),
+  );
   findings.push(...parseFindings);
   const parked = new Set(
-    Object.keys(opts.state.tasks).filter((slug) => opts.state.tasks[slug]!.status === "parked")
+    Object.keys(opts.state.tasks).filter(
+      (slug) => opts.state.tasks[slug]!.status === "parked",
+    ),
   );
   findings.push(...validateTaskGraph(tasks, { parked }));
   return [...new Set(findings)];
@@ -233,24 +274,32 @@ async function cancelRemovedTasks(
   runtime: KernelRuntime,
   state: State,
   plan: string,
-  iteration: number
+  iteration: number,
 ): Promise<void> {
   for (const [slug, task] of Object.entries(state.tasks)) {
     if (task.status !== "pending" && task.status !== "ready") continue;
     if (planMentionsSlug(plan, slug)) continue;
     if (task.commit !== undefined) {
-      await appendPark(runtime.store, { iteration, slug, round: task.round }, "dropped-with-commits");
+      await appendPark(
+        runtime.store,
+        { iteration, slug, round: task.round },
+        "dropped-with-commits",
+      );
       continue;
     }
     await appendCancel(
       runtime.store,
       { iteration, slug, round: task.round },
-      `removed from the plan at iteration ${iteration}`
+      `removed from the plan at iteration ${iteration}`,
     );
   }
 }
 
-export type PmMandate = "first" | "retry" | "escalated-first" | "escalated-retry";
+export type PmMandate =
+  | "first"
+  | "retry"
+  | "escalated-first"
+  | "escalated-retry";
 
 /** One attempted PM turn; the round is its 1-based position in the ladder. */
 export interface PmRung {
@@ -292,7 +341,10 @@ function rungSteps(runtime: KernelRuntime): RungStep[] {
     }
     seen.add(name);
     const alias: AliasConfig | undefined = runtime.configs.run.aliases[name];
-    if (!alias) throw new Error(`run config has no alias "${name}" (needed by role "pm")`);
+    if (!alias)
+      throw new Error(
+        `run config has no alias "${name}" (needed by role "pm")`,
+      );
     chain.push(name);
     name = alias.escalateTo;
   }
@@ -314,7 +366,7 @@ function stopText(stop: StepRecord["stop"]): string {
 function failureReasons(
   outcome: Outcome | undefined,
   findings: string[],
-  record: StepRecord
+  record: StepRecord,
 ): string[] {
   const reasons: string[] = [];
   if (outcome && outcome.status !== "done") {
@@ -331,23 +383,24 @@ function failureReasons(
 function ladderNote(
   rung: { alias: string; mandate: PmMandate },
   target: ReturnType<typeof resolveRole>,
-  failure: string[]
+  failure: string[],
 ): string {
   const notes: string[] = [];
   if (rung.mandate.startsWith("escalated")) {
     notes.push(
-      `The PM ladder escalated to alias "${target.alias}" (model "${target.model.id}"). You hold a broader mandate: derive the task files from the plan again, and if the plan itself cannot be turned into tasks, answer "blocked" with one question for the architect in the summary.`
+      `The PM ladder escalated to alias "${target.alias}" (model "${target.model.id}"). You hold a broader mandate: derive the task files from the plan again, and if the plan itself cannot be turned into tasks, answer "blocked" with one question for the architect in the summary.`,
     );
   }
   if (rung.mandate.endsWith("retry")) {
     notes.push(
-      `This is a fresh retry on alias "${target.alias}"; the previous turn's plan and task-file writes were rolled back to the pre-PM snapshot.`
+      `This is a fresh retry on alias "${target.alias}"; the previous turn's plan and task-file writes were rolled back to the pre-PM snapshot.`,
     );
   }
   notes.push(
-    "Restated PM contract: you are the PM — never edit the plan, never plan, never implement, never invent intent. Write task files under the tasks directory, then the outcome."
+    "Restated PM contract: you are the PM — never edit the plan, never plan, never implement, never invent intent. Write task files under the tasks directory, then the outcome.",
   );
-  if (failure.length > 0) notes.push("", "Findings:", ...failure.map((reason) => `- ${reason}`));
+  if (failure.length > 0)
+    notes.push("", "Findings:", ...failure.map((reason) => `- ${reason}`));
   return notes.join("\n");
 }
 
@@ -361,7 +414,7 @@ function ladderNote(
  */
 export async function runPm(
   runtime: KernelRuntime,
-  opts: { iteration: number; state: State; planPath: string; cwd: string }
+  opts: { iteration: number; state: State; planPath: string; cwd: string },
 ): Promise<PmRun> {
   const snapshot = await snapshotTurn(runtime, opts.planPath);
   const planBefore = snapshot.plan;
@@ -389,7 +442,12 @@ export async function runPm(
       },
       expectation: "any",
     });
-    const findings = await validate(runtime, { ...opts, round }, planBefore, taskSnapshot);
+    const findings = await validate(
+      runtime,
+      { ...opts, round },
+      planBefore,
+      taskSnapshot,
+    );
     const outcome = result.outcome;
     const stop = result.record.stop;
 
@@ -406,10 +464,13 @@ export async function runPm(
       model: target.model.id,
       failure: failureText,
     });
-    await runtime.store.appendRecord(scriptMeta(opts.iteration, "pm-validate", { round }), {
-      ok: false,
-      cause: failureText,
-    });
+    await runtime.store.appendRecord(
+      scriptMeta(opts.iteration, "pm-validate", { round }),
+      {
+        ok: false,
+        cause: failureText,
+      },
+    );
     await restoreTurn(runtime, snapshot);
 
     // Refusal and missing or invalid outcomes climb; an infra stop does not,
@@ -441,7 +502,13 @@ export async function runPm(
  */
 export async function runSteerPm(
   runtime: KernelRuntime,
-  opts: { iteration: number; state: State; tasks: TaskFile[]; steers: Steer[]; cwd: string }
+  opts: {
+    iteration: number;
+    state: State;
+    tasks: TaskFile[];
+    steers: Steer[];
+    cwd: string;
+  },
 ): Promise<void> {
   const planPath = path.join(runtime.store.goalDir, "plan.md");
   const snapshot = await snapshotTurn(runtime, planPath);
@@ -467,9 +534,12 @@ export async function runSteerPm(
     ...restored.tasks.map((slug) => `tasks/${slug}.md`),
   ];
   if (files.length > 0) {
-    await runtime.store.appendRecord(scriptMeta(opts.iteration, "steer-reconcile"), {
-      ok: false,
-      cause: `steer turn changed ${files.join(", ")}; restored: a steer structures holds and writes no task file or plan`,
-    });
+    await runtime.store.appendRecord(
+      scriptMeta(opts.iteration, "steer-reconcile"),
+      {
+        ok: false,
+        cause: `steer turn changed ${files.join(", ")}; restored: a steer structures holds and writes no task file or plan`,
+      },
+    );
   }
 }

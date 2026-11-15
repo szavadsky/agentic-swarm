@@ -359,3 +359,18 @@ Verbatim, newest last; each with what it changed.
 ### 2026-11-14 — owner intent additions (main b57dcaf, synced to factory-v3)
 - Harness adapters: NO CODE — leverage acpx naming (and opaque config) in config, that is it.
 - Hierarchy (subagent): with omp, subagent context shall also be compacted for the next launch.
+
+### 2026-11-15 — iteration 19: 3 merged, exit 0, $0.875
+- 3h05m, stop=iteration-limit, base gates green at 891a610b8e. Merged on factory/self: m2-turn-failures (1a200e0), m2-resume-iteration (6a51409), m3-gate-hygiene (7ab3562). Parked: 13, all historical. Pending: 16 (m3-debloat, M4 x2, M5 x7, M6 x4, doc-drift).
+- m3-liquid implement parked upscope (LiquidJS renders all role prompts; homegrown renderer deletion needs architect authorization — forward carries the two-edit plan). 16 agent + 31 script turns; 0 loop incidents, 0 merge conflicts.
+- All task turns ran the launch-loaded config (beam-free implement, inkling-free review, $0); architect opus $0.875. The stale "implementer-alias-no-fallback / Go wall" owner-attention line in the summary is obsolete (refers to self-acpx.yaml, not the loaded file).
+- Incidents: (1) mid-run rewrite of self-quota.yaml (19:21) to omp-ernie+agy content — harmless to this run (config loads once), superseded at landing by the staged owner-ordered ladder; (2) TEMP REVERT of the m2-resume condition in the launch tree (untraceable origin, matches no commit) — discarded, never committed; (3) repo.yaml +3 new gates leaked into the launch tree but were never merged — reverted here, reported as a wiring gap; (4) foreign launch broker again (295962).
+
+### 2026-11-15 — i19 landing gates (post-merge 22385c3)
+- typecheck + tests: 537 pass, 0 fail. New m3 gates from repo root: format=0 (biome, 206 files, no fixes), lint=0 (840 warnings, 0 errors), schema-validation=0 (395 files valid; .factory/run.yaml absent — expected, no such file in this goal).
+
+### 2026-11-15 — run config: owner-ordered task ladder (applies at next launch)
+- Task work strongest→weakest per owner: omp/muse (`opencode-go/muse-spark-1.3-contributor`) → agy/gemini (`gemini-3.8-flash`, high) → omp/deepseek (`opencode-go/deepseek-v4.1-flash`) → omp/ernie 5.5 (`openrouter/baidu/ernie-5.5-flash-preview:free`).
+- Same-harness fallback rule forced the split: omp implementer/reviewer carry muse → deepseek → ernie in one chain; agy holds a switchable `reviewer-agy` alias (cross-harness fallback needs the kernel change already in the plan).
+- Beam and inkling are mechanical tiers only (digest in this file). Reviewer is task-grade (muse same-family review; different context and focus: dev vs review) per the new INTENT line.
+- Replaces the whole prior `self-quota.yaml` content. omp route proven spendable: owner confirms this session runs muse max in omp, with multiple keys auto-rotating as fallbacks. The Go weekly wall hit the opencode CLI route, not omp.

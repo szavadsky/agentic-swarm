@@ -22,14 +22,20 @@ function frames(file: string): any[] {
 }
 
 /** A parent session file whose sibling `parent/` dir holds one child transcript. */
-function withChildSession(fixture: string, run: (sessionFile: string) => void): void {
+function withChildSession(
+  fixture: string,
+  run: (sessionFile: string) => void,
+): void {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "omp-turn-usage-"));
   try {
     const parent = path.join(tmp, "parent.jsonl");
     fs.writeFileSync(parent, "");
     const childDir = path.join(tmp, "parent");
     fs.mkdirSync(childDir);
-    fs.copyFileSync(path.join(FIXTURES, fixture), path.join(childDir, "Scout.jsonl"));
+    fs.copyFileSync(
+      path.join(FIXTURES, fixture),
+      path.join(childDir, "Scout.jsonl"),
+    );
     run(parent);
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
@@ -50,7 +56,7 @@ describe("omp usage", () => {
         cacheWrite: 3,
         reasoningTokens: 17,
         cost: { total: 0.5 },
-      })
+      }),
     ).toEqual({
       in: 159,
       cacheRead: 9984,
@@ -82,7 +88,9 @@ describe("omp usage", () => {
     const stats = recorded.find((frame) => frame.id === "s1")?.data;
     expect(summary.usage.in).toBe(stats.tokens.input);
     expect(summary.usage.cacheRead).toBe(stats.tokens.cacheRead);
-    expect(summary.usage.out + summary.usage.reasoningOut).toBe(stats.tokens.output);
+    expect(summary.usage.out + summary.usage.reasoningOut).toBe(
+      stats.tokens.output,
+    );
     expect(summary.usage.reasoningOut).toBe(stats.tokens.reasoning);
   });
 
@@ -90,7 +98,11 @@ describe("omp usage", () => {
     const summary = summarizeOmpFrames([
       {
         type: "message_end",
-        message: { role: "assistant", content: "plain text", usage: { input: 1, output: 2 } },
+        message: {
+          role: "assistant",
+          content: "plain text",
+          usage: { input: 1, output: 2 },
+        },
       },
     ]);
     expect(summary.assistantText).toBe("plain text");
@@ -114,8 +126,26 @@ describe("omp usage", () => {
 
   it("clamps a stats reset (compaction) to zero instead of going negative", () => {
     const usage = statsDelta(
-      { tokens: { input: 100, output: 50, reasoning: 10, cacheRead: 20, cacheWrite: 0 }, cost: 1 },
-      { tokens: { input: 10, output: 5, reasoning: 1, cacheRead: 0, cacheWrite: 0 }, cost: 0 }
+      {
+        tokens: {
+          input: 100,
+          output: 50,
+          reasoning: 10,
+          cacheRead: 20,
+          cacheWrite: 0,
+        },
+        cost: 1,
+      },
+      {
+        tokens: {
+          input: 10,
+          output: 5,
+          reasoning: 1,
+          cacheRead: 0,
+          cacheWrite: 0,
+        },
+        cost: 0,
+      },
     );
     expect(usage).toEqual({
       in: 0,
@@ -137,7 +167,7 @@ describe("omp usage", () => {
       fs.mkdirSync(childDir);
       fs.copyFileSync(
         path.join(FIXTURES, "child-session.jsonl"),
-        path.join(childDir, "ScoutReply.jsonl")
+        path.join(childDir, "ScoutReply.jsonl"),
       );
 
       expect(subagentUsage(parent, 0)).toEqual({

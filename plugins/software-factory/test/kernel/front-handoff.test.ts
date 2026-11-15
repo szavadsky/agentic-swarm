@@ -11,16 +11,28 @@ describe("front prompt handoff", () => {
   it("leaves front_pack empty and the implementer target unchanged without class.yaml", async () => {
     const { repo, goal } = setupFlowRepo();
     try {
-      const runtime = await makeRuntime(repo, goal, { fake: new FakeHarness({ id: "fake" }) });
+      const runtime = await makeRuntime(repo, goal, {
+        fake: new FakeHarness({ id: "fake" }),
+      });
       const taskFile = task("task", { scope: ["task.txt"] });
       const flow = runtime.configs.process.flows["implement-review"]!;
-      const state = derive([taskFile], [], runtime.configs.process.flows).tasks.task!;
+      const state = derive([taskFile], [], runtime.configs.process.flows).tasks
+        .task!;
       const records = await runtime.store.listRecords();
 
-      const vars = promptVars(runtime, taskFile, "/worktrees/demo-tasks/task", records, 1, flow);
+      const vars = promptVars(
+        runtime,
+        taskFile,
+        "/worktrees/demo-tasks/task",
+        records,
+        1,
+        flow,
+      );
 
       expect(vars.front_pack).toBe("");
-      expect(stepTarget(runtime, taskFile, state, "implement").alias).toBe("implementer");
+      expect(stepTarget(runtime, taskFile, state, "implement").alias).toBe(
+        "implementer",
+      );
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -36,21 +48,49 @@ describe("front prompt handoff", () => {
     };
     const { repo, goalDir } = setupFlowRepo({ aliases });
     try {
-      const runtime = await makeRuntime(repo, "demo", { fake: new FakeHarness({ id: "fake" }) });
-      fs.writeFileSync(path.join(goalDir, "class.yaml"), "class: trivial\nslug: tiny\n", "utf8");
+      const runtime = await makeRuntime(repo, "demo", {
+        fake: new FakeHarness({ id: "fake" }),
+      });
+      fs.writeFileSync(
+        path.join(goalDir, "class.yaml"),
+        "class: trivial\nslug: tiny\n",
+        "utf8",
+      );
       await runtime.store.appendRecord(
-        { iteration: 3, step: "front", round: 1, actor: "agent", alias: "front", model: { id: "fake-front" } },
-        {}
+        {
+          iteration: 3,
+          step: "front",
+          round: 1,
+          actor: "agent",
+          alias: "front",
+          model: { id: "fake-front" },
+        },
+        {},
       );
       const taskFile = task("tiny", { flow: "just-implement" });
       const flow = runtime.configs.process.flows["just-implement"]!;
-      const state = derive([taskFile], [], runtime.configs.process.flows).tasks.tiny!;
+      const state = derive([taskFile], [], runtime.configs.process.flows).tasks
+        .tiny!;
       const records = await runtime.store.listRecords();
 
-      const vars = promptVars(runtime, taskFile, "/worktrees/demo-tasks/tiny", records, 2, flow);
-      const fixTarget = stepTarget(runtime, taskFile, { ...state, round: 2 }, "implement");
+      const vars = promptVars(
+        runtime,
+        taskFile,
+        "/worktrees/demo-tasks/tiny",
+        records,
+        2,
+        flow,
+      );
+      const fixTarget = stepTarget(
+        runtime,
+        taskFile,
+        { ...state, round: 2 },
+        "implement",
+      );
 
-      expect(vars.front_pack).toBe(path.join(goalDir, "iterations/3/context-pack.md"));
+      expect(vars.front_pack).toBe(
+        path.join(goalDir, "iterations/3/context-pack.md"),
+      );
       expect(fixTarget.alias).toBe("front");
       expect(fixTarget.model.id).toBe("fake-front");
     } finally {

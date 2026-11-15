@@ -1,11 +1,18 @@
-import { git, GitError } from "../core/git/exec.js";
-import { commitAll, isAncestor } from "../core/git/commit.js";
 import { runWorktreeSetup } from "../core/checks/setup.js";
+import { commitAll, isAncestor } from "../core/git/commit.js";
+import { GitError, git } from "../core/git/exec.js";
 import { KeyedMutex } from "../core/mutex.js";
 import { preexistingRed, recordedBaseGates } from "./baseline.js";
 import { newGateFailures, runGates } from "./gates.js";
 import { attemptConflictMerge } from "./merge-attempt.js";
 import { appendChecks, scriptMeta } from "./record.js";
+import type {
+  KernelRuntime,
+  RecordEnd,
+  StepRecord,
+  TaskFile,
+  TaskState,
+} from "./types.js";
 import {
   branchExists,
   headSha,
@@ -14,7 +21,6 @@ import {
   resetMergeScratch,
   taskBranchName,
 } from "./worktree.js";
-import type { KernelRuntime, RecordEnd, StepRecord, TaskFile, TaskState } from "./types.js";
 
 export interface MergeResult {
   infra?: { kind: "infra"; cause: string };
@@ -32,19 +38,27 @@ function causeOf(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-async function syncCheckout(runtime: KernelRuntime, commit: string): Promise<void> {
+async function syncCheckout(
+  runtime: KernelRuntime,
+  commit: string,
+): Promise<void> {
   await runtime.repo.writeLock.runExclusive(async () => {
     await git(runtime.paths.goalCheckout, ["reset", "--hard", commit]);
-    await git(runtime.paths.goalCheckout, ["clean", "-fd"], { allowFail: true });
+    await git(runtime.paths.goalCheckout, ["clean", "-fd"], {
+      allowFail: true,
+    });
   });
 }
 
 /** An outside commit moved the integration branch while the queue was building a merge. */
 class IntegrationMovedError extends Error {
-  constructor(readonly expected: string, readonly actual: string) {
+  constructor(
+    readonly expected: string,
+    readonly actual: string,
+  ) {
     super(
       `integration moved: expected ${expected.slice(0, 10)}, found ${actual ? actual.slice(0, 10) : "a missing ref"}; ` +
-        "an outside commit is on the integration branch and this merge left it untouched"
+        "an outside commit is on the integration branch and this merge left it untouched",
     );
     this.name = "IntegrationMovedError";
   }
@@ -55,17 +69,34 @@ class IntegrationMovedError extends Error {
  * An operator or rogue commit after that point must not be overwritten: the
  * merge fails loudly and the task records it.
  */
-async function refMove(runtime: KernelRuntime, commit: string, expected: string): Promise<void> {
+async function refMove(
+  runtime: KernelRuntime,
+  commit: string,
+  expected: string,
+): Promise<void> {
   const ref = `refs/heads/${runtime.paths.integrationBranch}`;
   await runtime.repo.writeLock.runExclusive(async () => {
-    const res = await git(runtime.paths.repoRoot, ["update-ref", ref, commit, expected], { allowFail: true });
+    const res = await git(
+      runtime.paths.repoRoot,
+      ["update-ref", ref, commit, expected],
+      { allowFail: true },
+    );
     if (res.code === 0) return;
-    const actual = await git(runtime.paths.repoRoot, ["rev-parse", "--verify", "--quiet", ref], { allowFail: true });
+    const actual = await git(
+      runtime.paths.repoRoot,
+      ["rev-parse", "--verify", "--quiet", ref],
+      { allowFail: true },
+    );
     const found = actual.stdout.trim();
     // A refused update that still sees the expected value is a lock or git
     // failure, not an outside commit; keep git's own reason.
     if (found === expected) {
-      throw new GitError(`update-ref ${ref} ${commit} ${expected}`, res.code, res.stderr, res.stdout);
+      throw new GitError(
+        `update-ref ${ref} ${commit} ${expected}`,
+        res.code,
+        res.stderr,
+        res.stdout,
+      );
     }
     throw new IntegrationMovedError(expected, found);
   });
@@ -76,9 +107,12 @@ async function recordMerge(
   task: TaskFile,
   iteration: number,
   round: number,
-  end: RecordEnd
+  end: RecordEnd,
 ): Promise<void> {
-  await runtime.store.appendRecord(scriptMeta(iteration, "merge", { slug: task.slug, round }), end);
+  await runtime.store.appendRecord(
+    scriptMeta(iteration, "merge", { slug: task.slug, round }),
+    end,
+  );
 }
 
 /**
@@ -102,19 +136,31 @@ async function recoverOpenMerge(
   task: TaskFile,
   records: StepRecord[],
   iteration: number,
-  round: number
+  round: number,
 ): Promise<boolean> {
   const open = records
-    .filter((r) => r.slug === task.slug && r.step === "merge" && recoverableMergeStart(r))
+    .filter(
+      (r) =>
+        r.slug === task.slug && r.step === "merge" && recoverableMergeStart(r),
+    )
     .sort(bySeq)
     .at(-1);
   if (!open?.commit) return false;
   const commit = open.commit;
-  const exists = await git(runtime.paths.repoRoot, ["cat-file", "-e", `${commit}^{commit}`], { allowFail: true });
+  const exists = await git(
+    runtime.paths.repoRoot,
+    ["cat-file", "-e", `${commit}^{commit}`],
+    { allowFail: true },
+  );
   if (exists.code !== 0) return false;
   const head = await integrationHead(runtime);
-  const already = commit === head || (await isAncestor(runtime.paths.repoRoot, commit, head));
-  const parent = await git(runtime.paths.repoRoot, ["rev-parse", `${commit}^`], { allowFail: true });
+  const already =
+    commit === head || (await isAncestor(runtime.paths.repoRoot, commit, head));
+  const parent = await git(
+    runtime.paths.repoRoot,
+    ["rev-parse", `${commit}^`],
+    { allowFail: true },
+  );
   const movable = parent.code === 0 && parent.stdout.trim() === head;
   if (!already && !movable) return false;
   if (movable) {
@@ -123,7 +169,10 @@ async function recoverOpenMerge(
     } catch (err) {
       if (!(err instanceof IntegrationMovedError)) throw err;
       // A failure record parks the task; the stale open record stays inert.
-      await recordMerge(runtime, task, iteration, round, { ok: false, cause: err.message });
+      await recordMerge(runtime, task, iteration, round, {
+        ok: false,
+        cause: err.message,
+      });
       return true;
     }
   }
@@ -145,13 +194,19 @@ export async function mergeTask(
   runtime: KernelRuntime,
   task: TaskFile,
   iteration: number,
-  state: TaskState
+  state: TaskState,
 ): Promise<MergeResult> {
   return mergeQueue.runExclusive(runtime.paths.goalDir, async () => {
     const round = state.round;
     const records = await runtime.store.listRecords();
-    if (records.some((r) => r.slug === task.slug && r.step === "merge" && r.ok === true)) return {};
-    if (await recoverOpenMerge(runtime, task, records, iteration, round)) return {};
+    if (
+      records.some(
+        (r) => r.slug === task.slug && r.step === "merge" && r.ok === true,
+      )
+    )
+      return {};
+    if (await recoverOpenMerge(runtime, task, records, iteration, round))
+      return {};
 
     const branch = taskBranchName(runtime, task.slug);
     if (!(await branchExists(runtime, branch))) {
@@ -164,10 +219,18 @@ export async function mergeTask(
 
     let head = await integrationHead(runtime);
     let scratch = await resetMergeScratch(runtime, head);
-    let squash = await git(scratch, ["merge", "--squash", branch], { allowFail: true });
+    let squash = await git(scratch, ["merge", "--squash", branch], {
+      allowFail: true,
+    });
     if (squash.code !== 0) {
       await removeMergeScratch(runtime);
-      const attempt = await attemptConflictMerge(runtime, task, records, iteration, state);
+      const attempt = await attemptConflictMerge(
+        runtime,
+        task,
+        records,
+        iteration,
+        state,
+      );
       if (attempt.infra) return { infra: attempt.infra };
       if (attempt.cancelled) return { cancelled: true };
       if (!attempt.ok) {
@@ -179,18 +242,23 @@ export async function mergeTask(
       }
       head = await integrationHead(runtime);
       scratch = await resetMergeScratch(runtime, head);
-      squash = await git(scratch, ["merge", "--squash", branch], { allowFail: true });
+      squash = await git(scratch, ["merge", "--squash", branch], {
+        allowFail: true,
+      });
       if (squash.code !== 0) {
         await removeMergeScratch(runtime);
         await recordMerge(runtime, task, iteration, round, {
           ok: false,
-          cause: "conflict: squash merge still conflicts after one implementer attempt",
+          cause:
+            "conflict: squash merge still conflicts after one implementer attempt",
         });
         return {};
       }
     }
 
-    const staged = await git(scratch, ["diff", "--cached", "--quiet"], { allowFail: true });
+    const staged = await git(scratch, ["diff", "--cached", "--quiet"], {
+      allowFail: true,
+    });
     if (staged.code === 0) {
       await removeMergeScratch(runtime);
       await recordMerge(runtime, task, iteration, round, {
@@ -201,7 +269,11 @@ export async function mergeTask(
     }
 
     try {
-      const mergeCommit = await commitAll(runtime.repo, scratch, `factory: merge ${task.slug}`);
+      const mergeCommit = await commitAll(
+        runtime.repo,
+        scratch,
+        `factory: merge ${task.slug}`,
+      );
       if (!mergeCommit) {
         await removeMergeScratch(runtime);
         await recordMerge(runtime, task, iteration, round, {
@@ -219,7 +291,10 @@ export async function mergeTask(
       return {};
     }
 
-    const setup = await runWorktreeSetup({ commands: runtime.configs.repo.setup, cwd: scratch });
+    const setup = await runWorktreeSetup({
+      commands: runtime.configs.repo.setup,
+      cwd: scratch,
+    });
     if (!setup.ok) {
       await removeMergeScratch(runtime);
       await recordMerge(runtime, task, iteration, round, {
@@ -230,10 +305,15 @@ export async function mergeTask(
     }
     const checks = await runGates(runtime, scratch);
     const preexisting = preexistingRed(recordedBaseGates(records));
-    await appendChecks(runtime.store, { iteration, slug: task.slug, round }, checks, {
-      step: "merge-checks",
-      preexisting,
-    });
+    await appendChecks(
+      runtime.store,
+      { iteration, slug: task.slug, round },
+      checks,
+      {
+        step: "merge-checks",
+        preexisting,
+      },
+    );
     const red = newGateFailures(checks, preexisting);
     if (red.length > 0) {
       await removeMergeScratch(runtime);

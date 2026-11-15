@@ -10,7 +10,14 @@ import {
   ensureTaskWorktree,
 } from "../../src/kernel/worktree.js";
 import { task } from "./helpers.js";
-import { cleanupFlowRepo, goalCheckout, makeRuntime, outcome, setupFlowRepo, writeTask } from "./s2-helpers.js";
+import {
+  cleanupFlowRepo,
+  goalCheckout,
+  makeRuntime,
+  outcome,
+  setupFlowRepo,
+  writeTask,
+} from "./s2-helpers.js";
 
 describe("agent containment", () => {
   it("parks a turn that writes outside its worktree and switches branch", async () => {
@@ -32,11 +39,19 @@ describe("agent containment", () => {
       expect(result.reason).toBe("boundary");
 
       const records = await runtime.store.listRecords();
-      const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
       expect(state.tasks.task!.status).toBe("parked");
       expect(state.tasks.task!.cause).toContain("containment:");
-      expect(state.tasks.task!.cause).toContain('not the task branch "factory-task/demo/task"');
-      expect(state.tasks.task!.cause).toContain("files changed outside the worktree");
+      expect(state.tasks.task!.cause).toContain(
+        'not the task branch "factory-task/demo/task"',
+      );
+      expect(state.tasks.task!.cause).toContain(
+        "files changed outside the worktree",
+      );
       expect(harness.calls.length).toBe(1);
       expect(records.filter((r) => r.step === "merge")).toHaveLength(0);
       expect(fs.existsSync(path.join(checkout, "OUTSIDE.txt"))).toBe(true);
@@ -65,9 +80,15 @@ describe("agent containment", () => {
       expect(result.reason).toBe("boundary");
 
       const records = await runtime.store.listRecords();
-      const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
       expect(state.tasks.task!.status).toBe("merged");
-      expect(records.filter((r) => r.slug === "task" && r.step === "park")).toHaveLength(0);
+      expect(
+        records.filter((r) => r.slug === "task" && r.step === "park"),
+      ).toHaveLength(0);
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -95,10 +116,18 @@ describe("agent containment", () => {
       expect(result.reason).toBe("boundary");
 
       const records = await runtime.store.listRecords();
-      const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
       expect(state.tasks.task!.status).toBe("merged");
-      expect(records.filter((r) => r.slug === "task" && r.step === "park")).toHaveLength(0);
-      const incidents = records.filter((r) => r.slug === "task" && r.step === "containment");
+      expect(
+        records.filter((r) => r.slug === "task" && r.step === "park"),
+      ).toHaveLength(0);
+      const incidents = records.filter(
+        (r) => r.slug === "task" && r.step === "containment",
+      );
       expect(incidents).toHaveLength(1);
       expect(incidents[0]!.cause).toContain("HEAD moved in");
     } finally {
@@ -111,7 +140,11 @@ describe("agent containment", () => {
     try {
       const harness = new FakeHarness({ id: "fake" });
       harness.script((req, ctx) => {
-        fs.writeFileSync(path.join(goalDir, "plan.md"), "# Forged plan\n\n## intruder\n", "utf8");
+        fs.writeFileSync(
+          path.join(goalDir, "plan.md"),
+          "# Forged plan\n\n## intruder\n",
+          "utf8",
+        );
         fs.writeFileSync(path.join(req.cwd!, "task.txt"), "task\n", "utf8");
         ctx.writeOutcome(outcome({ summary: "implemented" }));
         return fakeTurnResult(req);
@@ -122,11 +155,19 @@ describe("agent containment", () => {
       await runDispatch(runtime, { iteration: 1 });
 
       const records = await runtime.store.listRecords();
-      const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
       expect(state.tasks.task!.status).toBe("parked");
-      expect(state.tasks.task!.cause).toContain("goal artifacts changed outside the worktree");
+      expect(state.tasks.task!.cause).toContain(
+        "goal artifacts changed outside the worktree",
+      );
       expect(state.tasks.task!.cause).toContain("created plan.md");
-      expect(records.filter((r) => r.slug === "task" && r.step === "park")).toHaveLength(1);
+      expect(
+        records.filter((r) => r.slug === "task" && r.step === "park"),
+      ).toHaveLength(1);
       expect(records.filter((r) => r.step === "merge")).toHaveLength(0);
     } finally {
       cleanupFlowRepo(repo);
@@ -139,8 +180,14 @@ describe("agent containment", () => {
       const harness = new FakeHarness({ id: "fake" });
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await runtime.store.appendRecord(
-        { iteration: 1, step: "checks", round: 1, actor: "script", slug: "task" },
-        { ok: true }
+        {
+          iteration: 1,
+          step: "checks",
+          round: 1,
+          actor: "script",
+          slug: "task",
+        },
+        { ok: true },
       );
       const recordsDir = path.join(runtime.store.goalDir, "records");
       const recordDir = fs.readdirSync(recordsDir)[0]!;
@@ -157,10 +204,18 @@ describe("agent containment", () => {
       await runDispatch(runtime, { iteration: 1 });
 
       const records = await runtime.store.listRecords();
-      const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
       expect(state.tasks.task!.status).toBe("parked");
-      expect(state.tasks.task!.cause).toContain("goal artifacts changed outside the worktree");
-      expect(state.tasks.task!.cause).toContain(`changed records/${recordDir}/end.yaml`);
+      expect(state.tasks.task!.cause).toContain(
+        "goal artifacts changed outside the worktree",
+      );
+      expect(state.tasks.task!.cause).toContain(
+        `changed records/${recordDir}/end.yaml`,
+      );
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -184,10 +239,18 @@ describe("agent containment", () => {
       await runDispatch(runtime, { iteration: 1 });
 
       const records = await runtime.store.listRecords();
-      const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
       expect(state.tasks.task!.status).toBe("parked");
-      expect(state.tasks.task!.cause).toContain("goal artifacts changed outside the worktree");
-      expect(state.tasks.task!.cause).toContain("created records/00099-i1-task-merge-r1/end.yaml");
+      expect(state.tasks.task!.cause).toContain(
+        "goal artifacts changed outside the worktree",
+      );
+      expect(state.tasks.task!.cause).toContain(
+        "created records/00099-i1-task-merge-r1/end.yaml",
+      );
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -210,12 +273,20 @@ describe("agent containment", () => {
       await runDispatch(runtime, { iteration: 1 });
 
       const records = await runtime.store.listRecords();
-      const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
       expect(state.tasks.task!.status).toBe("parked");
-      expect(state.tasks.task!.cause).toContain("commit on the integration checkout");
+      expect(state.tasks.task!.cause).toContain(
+        "commit on the integration checkout",
+      );
       expect(state.tasks.task!.cause).toContain(checkout);
       expect(records.filter((r) => r.step === "merge")).toHaveLength(0);
-      expect(repo.git(["log", "-1", "--format=%s", "factory/demo"]).stdout.trim()).toBe("rogue");
+      expect(
+        repo.git(["log", "-1", "--format=%s", "factory/demo"]).stdout.trim(),
+      ).toBe("rogue");
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -239,9 +310,15 @@ describe("agent containment", () => {
       await runDispatch(runtime, { iteration: 1 });
 
       const records = await runtime.store.listRecords();
-      const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
       expect(state.tasks.task!.status).toBe("parked");
-      expect(state.tasks.task!.cause).toContain("integration branch moved outside the merge queue");
+      expect(state.tasks.task!.cause).toContain(
+        "integration branch moved outside the merge queue",
+      );
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -256,7 +333,9 @@ describe("agent containment", () => {
       const harness = new FakeHarness({ id: "fake" });
       harness.script(async (req, ctx) => {
         for (let i = 0; i < 500 && observed === initial; i += 1) {
-          const head = repo.git(["rev-parse", "HEAD"], { cwd: checkout }).stdout.trim();
+          const head = repo
+            .git(["rev-parse", "HEAD"], { cwd: checkout })
+            .stdout.trim();
           if (head !== initial) observed = head;
           else await new Promise((resolve) => setTimeout(resolve, 10));
         }
@@ -270,16 +349,22 @@ describe("agent containment", () => {
         return fakeTurnResult(req);
       });
       harness.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "beta approved", verdict: "approve" }));
+        ctx.writeOutcome(
+          outcome({ summary: "beta approved", verdict: "approve" }),
+        );
         return fakeTurnResult(req);
       });
       harness.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "alpha approved", verdict: "approve" }));
+        ctx.writeOutcome(
+          outcome({ summary: "alpha approved", verdict: "approve" }),
+        );
         return fakeTurnResult(req);
       });
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
-      initial = repo.git(["rev-parse", "HEAD"], { cwd: checkout }).stdout.trim();
+      initial = repo
+        .git(["rev-parse", "HEAD"], { cwd: checkout })
+        .stdout.trim();
       observed = initial;
       await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
       await writeTask(runtime, task("beta", { scope: ["beta.txt"] }));
@@ -287,7 +372,11 @@ describe("agent containment", () => {
       expect(result.reason).toBe("boundary");
 
       const records = await runtime.store.listRecords();
-      const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
       expect(observed).not.toBe(initial);
       expect(state.tasks.alpha!.status).toBe("merged");
       expect(state.tasks.beta!.status).toBe("merged");
@@ -309,18 +398,43 @@ describe("agent containment", () => {
 
       // A steer arrives while the turn runs and a PM turn structures it before
       // the turn settles. The plan, task file and hold are the PM's writes.
-      fs.writeFileSync(path.join(goalDir, "mailbox/inbox/s1.md"), "steer\n", "utf8");
+      fs.writeFileSync(
+        path.join(goalDir, "mailbox/inbox/s1.md"),
+        "steer\n",
+        "utf8",
+      );
       await runtime.store.appendRecord(
         { iteration: 1, step: "pm", round: 1, actor: "agent" },
-        { ok: true }
+        { ok: true },
       );
-      fs.writeFileSync(path.join(goalDir, "plan.md"), "# Plan\n\n## other\n", "utf8");
-      fs.writeFileSync(path.join(runtime.store.tasksDir, "task.md"), "# the PM rewrote this\n", "utf8");
+      fs.writeFileSync(
+        path.join(goalDir, "plan.md"),
+        "# Plan\n\n## other\n",
+        "utf8",
+      );
+      fs.writeFileSync(
+        path.join(runtime.store.tasksDir, "task.md"),
+        "# the PM rewrote this\n",
+        "utf8",
+      );
       fs.mkdirSync(path.join(goalDir, "mailbox/holds"), { recursive: true });
-      fs.writeFileSync(path.join(goalDir, "mailbox/holds/s1.yaml"), "slugs: []\n", "utf8");
+      fs.writeFileSync(
+        path.join(goalDir, "mailbox/holds/s1.yaml"),
+        "slugs: []\n",
+        "utf8",
+      );
 
-      expect(await containmentViolation(runtime, ensured.path, ensured.branch, snapshot)).toBeUndefined();
-      expect(fs.existsSync(path.join(goalDir, "mailbox/inbox/s1.md"))).toBe(true);
+      expect(
+        await containmentViolation(
+          runtime,
+          ensured.path,
+          ensured.branch,
+          snapshot,
+        ),
+      ).toBeUndefined();
+      expect(fs.existsSync(path.join(goalDir, "mailbox/inbox/s1.md"))).toBe(
+        true,
+      );
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -345,7 +459,14 @@ describe("agent containment", () => {
       const snapshot = await containmentSnapshot(runtime, ensured.path);
       await open.finish({ ok: true });
 
-      expect(await containmentViolation(runtime, ensured.path, ensured.branch, snapshot)).toBeUndefined();
+      expect(
+        await containmentViolation(
+          runtime,
+          ensured.path,
+          ensured.branch,
+          snapshot,
+        ),
+      ).toBeUndefined();
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -355,7 +476,9 @@ describe("agent containment", () => {
     const gate =
       'if [ "$(git rev-parse --abbrev-ref HEAD)" = "HEAD" ]; then ' +
       "git -C ../demo commit --allow-empty -m outside; fi";
-    const { repo, goal } = setupFlowRepo({ gates: [{ id: "detached", command: gate }] });
+    const { repo, goal } = setupFlowRepo({
+      gates: [{ id: "detached", command: gate }],
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       harness.script((req, ctx) => {
@@ -373,13 +496,21 @@ describe("agent containment", () => {
       await runDispatch(runtime, { iteration: 1 });
 
       const records = await runtime.store.listRecords();
-      const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
       expect(state.tasks.task!.status).toBe("parked");
       expect(state.tasks.task!.cause).toContain("integration moved");
-      const failed = records.filter((r) => r.slug === "task" && r.step === "merge" && r.ok === false);
+      const failed = records.filter(
+        (r) => r.slug === "task" && r.step === "merge" && r.ok === false,
+      );
       expect(failed).toHaveLength(1);
       expect(failed[0]!.cause).toContain("integration moved");
-      expect(repo.git(["log", "-1", "--format=%s", "factory/demo"]).stdout.trim()).toBe("outside");
+      expect(
+        repo.git(["log", "-1", "--format=%s", "factory/demo"]).stdout.trim(),
+      ).toBe("outside");
     } finally {
       cleanupFlowRepo(repo);
     }

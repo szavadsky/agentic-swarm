@@ -1,4 +1,4 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import {
   registerChildGroup,
   unregisterChildGroup,
@@ -80,24 +80,33 @@ export class OmpRpc {
             `omp RPC exited (code ${code ?? "null"}, signal ${signal ?? "none"})`,
             code,
             signal,
-            this.stderr()
-          )
+            this.stderr(),
+          ),
         );
         resolve({ code, signal });
       };
       this.child.on("close", (code, signal) => finish(code, signal));
       this.child.on("error", (error) => {
-        this.stderrText = `${this.stderrText}\n${error.message}`.slice(-this.maxStderrBytes);
+        this.stderrText = `${this.stderrText}\n${error.message}`.slice(
+          -this.maxStderrBytes,
+        );
         finish(null, null);
       });
     });
   }
 
   /** Waits for the protocol ready frame; a launch failure surfaces stderr. */
-  static async launch(opts: OmpRpcOptions, readyTimeoutMs = 30_000): Promise<OmpRpc> {
+  static async launch(
+    opts: OmpRpcOptions,
+    readyTimeoutMs = 30_000,
+  ): Promise<OmpRpc> {
     const rpc = new OmpRpc(opts);
     try {
-      await rpc.awaitFrame((frame) => frame.type === "ready", readyTimeoutMs, "ready");
+      await rpc.awaitFrame(
+        (frame) => frame.type === "ready",
+        readyTimeoutMs,
+        "ready",
+      );
       return rpc;
     } catch (error) {
       await rpc.close(500);
@@ -109,7 +118,9 @@ export class OmpRpc {
     return this.stderrText;
   }
 
-  private exitInfo(): { code: number | null; signal: string | null } | undefined {
+  private exitInfo():
+    | { code: number | null; signal: string | null }
+    | undefined {
     return this.exitResult;
   }
 
@@ -124,7 +135,7 @@ export class OmpRpc {
         "omp RPC already exited",
         this.exitResult.code,
         this.exitResult.signal,
-        this.stderr()
+        this.stderr(),
       );
     }
     const id = payload.id ?? `r${++this.nextId}`;
@@ -137,7 +148,7 @@ export class OmpRpc {
         `omp RPC stdin write failed: ${(error as Error).message}`,
         exited?.code ?? null,
         exited?.signal ?? null,
-        this.stderr()
+        this.stderr(),
       );
     }
     return String(id);
@@ -147,13 +158,13 @@ export class OmpRpc {
   async request(
     command: string,
     payload: Record<string, unknown> = {},
-    timeoutMs = 60_000
+    timeoutMs = 60_000,
   ): Promise<any> {
     const id = this.send(command, payload);
     return this.awaitFrame(
       (frame) => frame.type === "response" && frame.id === id,
       timeoutMs,
-      command
+      command,
     );
   }
 
@@ -185,13 +196,17 @@ export class OmpRpc {
     } catch {}
     const closed = await Promise.race([
       this.exited.then(() => true),
-      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), graceMs)),
+      new Promise<boolean>((resolve) =>
+        setTimeout(() => resolve(false), graceMs),
+      ),
     ]);
     if (closed) return;
     this.kill("SIGTERM");
     const graceful = await Promise.race([
       this.exited.then(() => true),
-      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 1_000)),
+      new Promise<boolean>((resolve) =>
+        setTimeout(() => resolve(false), 1_000),
+      ),
     ]);
     if (!graceful) {
       this.kill("SIGKILL");
@@ -205,7 +220,9 @@ export class OmpRpc {
   private onStdout(chunk: string): void {
     this.buffer += chunk;
     let index: number;
-    while ((index = this.buffer.indexOf("\n")) >= 0) {
+    while (true) {
+      index = this.buffer.indexOf("\n");
+      if (index < 0) break;
       const line = this.buffer.slice(0, index).trim();
       this.buffer = this.buffer.slice(index + 1);
       if (!line) continue;
@@ -236,18 +253,19 @@ export class OmpRpc {
   awaitFrame(
     match: (frame: any) => boolean,
     timeoutMs: number,
-    label: string
+    label: string,
   ): Promise<any> {
     const existing = this.retained.findIndex(match);
-    if (existing >= 0) return Promise.resolve(this.retained.splice(existing, 1)[0]);
+    if (existing >= 0)
+      return Promise.resolve(this.retained.splice(existing, 1)[0]);
     if (this.exitResult) {
       return Promise.reject(
         new OmpRpcExit(
           `omp RPC exited before ${label}`,
           this.exitResult.code,
           this.exitResult.signal,
-          this.stderr()
-        )
+          this.stderr(),
+        ),
       );
     }
     return new Promise((resolve, reject) => {

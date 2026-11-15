@@ -81,7 +81,9 @@ function createFakeOmp(): FakeOmp {
   const logPath = path.join(tmp, "invocations.ndjson");
   const promptsPath = path.join(tmp, "prompts.ndjson");
   const binary = path.join(tmp, "fake-omp.js");
-  fs.writeFileSync(binary, fakeOmpScript(logPath, promptsPath), { mode: 0o755 });
+  fs.writeFileSync(binary, fakeOmpScript(logPath, promptsPath), {
+    mode: 0o755,
+  });
   return {
     binary,
     invocations: () =>
@@ -121,7 +123,11 @@ describe("omp resume", () => {
     const storedDir = path.join(root, "stored-home");
     fs.mkdirSync(storedDir, { recursive: true });
     try {
-      const harness = new OmpHarness({ binary: fake.binary, sessionDir, readyTimeoutMs: 5_000 });
+      const harness = new OmpHarness({
+        binary: fake.binary,
+        sessionDir,
+        readyTimeoutMs: 5_000,
+      });
       const session: SessionRef = {
         harness: "omp",
         id: "sess-old",
@@ -226,7 +232,11 @@ describe("omp resume", () => {
     const sessionDir = path.join(root, "sessions");
     const home = defaultHome(sessionDir);
     try {
-      const harness = new OmpHarness({ binary: fake.binary, sessionDir, readyTimeoutMs: 5_000 });
+      const harness = new OmpHarness({
+        binary: fake.binary,
+        sessionDir,
+        readyTimeoutMs: 5_000,
+      });
       const first = await harness.turn({
         model: { id: "provider/resume-ok" },
         cwd: root,
@@ -237,7 +247,9 @@ describe("omp resume", () => {
       expect(first.stop).toEqual({ kind: "done" });
       expect(first.session?.id).toBe("live-1");
       expect(first.session?.dir).toBe(home);
-      expect(flag(fake.invocations()[0]!, "--session-dir")).toBe(first.session?.dir);
+      expect(flag(fake.invocations()[0]!, "--session-dir")).toBe(
+        first.session?.dir,
+      );
 
       const second = await harness.turn({
         model: { id: "provider/resume-ok" },

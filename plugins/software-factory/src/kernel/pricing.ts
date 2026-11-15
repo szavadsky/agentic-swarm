@@ -1,5 +1,5 @@
-import { addUsage, zeroUsage } from "../harness/usage.js";
 import type { ModelRef, TurnAttempt, Usage } from "../harness/types.js";
+import { addUsage, zeroUsage } from "../harness/usage.js";
 
 /** USD per million tokens for one model. All four rates are required. */
 export interface ModelPrice {
@@ -35,7 +35,10 @@ function tokenTotal(usage: Usage): number {
  * is silent, and a literal harness `0` cost is its unreported marker too.
  */
 function reportsUsage(usage: Usage): boolean {
-  return tokenTotal(usage) > 0 || (usage.costUsd !== undefined && usage.costUsd !== 0);
+  return (
+    tokenTotal(usage) > 0 ||
+    (usage.costUsd !== undefined && usage.costUsd !== 0)
+  );
 }
 
 /**
@@ -49,7 +52,11 @@ function reportsUsage(usage: Usage): boolean {
  * Cache writes have no rate of their own in the table, so they are priced at
  * the input rate; harnesses report no distinct write rate here.
  */
-export function priceUsage(usage: Usage, model: string, table: PriceTable): number | undefined {
+export function priceUsage(
+  usage: Usage,
+  model: string,
+  table: PriceTable,
+): number | undefined {
   if (usage.costUsd !== undefined && usage.costUsd !== 0) return usage.costUsd;
   if (tokenTotal(usage) === 0) return undefined;
   const price = table[model];
@@ -77,7 +84,7 @@ export interface PricedUsage {
 export function pricedUsage(
   usage: Usage | undefined,
   model: string | undefined,
-  table: PriceTable
+  table: PriceTable,
 ): PricedUsage {
   if (!usage) return { usage: zeroUsage(), costKnown: false };
   const costUsd = priceUsage(usage, model ?? "", table);
@@ -107,8 +114,11 @@ export interface UsageRecord {
  * harness without per-call usage leaves behind.
  */
 export function pricedRecord(rec: UsageRecord, table: PriceTable): PricedUsage {
-  const reported = (rec.attempts ?? []).filter((attempt) => reportsUsage(attempt.usage));
-  if (reported.length === 0) return pricedUsage(rec.usage, rec.model?.id, table);
+  const reported = (rec.attempts ?? []).filter((attempt) =>
+    reportsUsage(attempt.usage),
+  );
+  if (reported.length === 0)
+    return pricedUsage(rec.usage, rec.model?.id, table);
   let usage = zeroUsage();
   let costKnown = true;
   for (const attempt of reported) {

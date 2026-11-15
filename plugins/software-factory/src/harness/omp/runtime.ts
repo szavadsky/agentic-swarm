@@ -4,7 +4,11 @@ import { runProcess } from "../../core/proc.js";
 import type { ModelRef } from "../types.js";
 import { writeOmpOverlay } from "./overlay.js";
 import { OmpRpc } from "./rpc.js";
-import { selectorOf, type OmpHarnessOptions, type OmpTurnOpaque } from "./types.js";
+import {
+  type OmpHarnessOptions,
+  type OmpTurnOpaque,
+  selectorOf,
+} from "./types.js";
 
 export interface OmpDirs {
   base: string;
@@ -22,7 +26,8 @@ export class OmpRuntime {
   private modelsCache?: Promise<any[]>;
 
   constructor(opts: OmpHarnessOptions) {
-    this.binary = opts.binary ?? process.env.OMP_PATH ?? Bun.which("omp") ?? "omp";
+    this.binary =
+      opts.binary ?? process.env.OMP_PATH ?? Bun.which("omp") ?? "omp";
     this.sessionDir = path.resolve(opts.sessionDir);
     this.subagentModel = selectorOf(opts.subagentModel);
     this.overlayExtra = opts.overlayExtra;
@@ -40,7 +45,7 @@ export class OmpRuntime {
         });
         if (result.code !== 0) {
           throw new Error(
-            `omp models --json failed (exit ${result.code}): ${result.stderr.slice(0, 500)}`
+            `omp models --json failed (exit ${result.code}): ${result.stderr.slice(0, 500)}`,
           );
         }
         const parsed = JSON.parse(result.stdout);
@@ -70,7 +75,7 @@ export class OmpRuntime {
         approvalMode: opaque?.approvalMode,
         extra: { ...this.overlayExtra, ...opaque?.overlayExtra },
       },
-      this.dirs().base
+      this.dirs().base,
     );
   }
 
@@ -80,7 +85,7 @@ export class OmpRuntime {
     overlayPath: string,
     sessionsDir: string,
     resumeId: string | undefined,
-    extraArgs: string[]
+    extraArgs: string[],
   ): Promise<OmpRpc> {
     const args = [
       "--mode",
@@ -99,7 +104,10 @@ export class OmpRuntime {
     ];
     if (model.effort) args.push("--thinking", model.effort);
     if (resumeId) args.push("--resume", resumeId);
-    return OmpRpc.launch({ binary: this.binary, args, cwd }, this.readyTimeoutMs);
+    return OmpRpc.launch(
+      { binary: this.binary, args, cwd },
+      this.readyTimeoutMs,
+    );
   }
 }
 
@@ -109,7 +117,10 @@ export function actualModel(state: any, requested: ModelRef): ModelRef {
   if (resolved?.provider && resolved?.id) {
     return {
       id: `${resolved.provider}/${resolved.id}`,
-      effort: typeof state?.thinkingLevel === "string" ? state.thinkingLevel : undefined,
+      effort:
+        typeof state?.thinkingLevel === "string"
+          ? state.thinkingLevel
+          : undefined,
     };
   }
   return requested;

@@ -1,13 +1,18 @@
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { commitAll } from "../../src/core/git/commit.js";
+import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
 import { ensureTaskWorktree, treeSha } from "../../src/kernel/worktree.js";
 import { recordStart, task } from "./helpers.js";
-import { cleanupFlowRepo, makeRuntime, outcome, setupFlowRepo } from "./s2-helpers.js";
+import {
+  cleanupFlowRepo,
+  makeRuntime,
+  outcome,
+  setupFlowRepo,
+} from "./s2-helpers.js";
 
 describe("script-step recovery", () => {
   it("re-runs branch checks when an implement turn ended without a checks record", async () => {
@@ -27,22 +32,34 @@ describe("script-step recovery", () => {
       const commit = await commitAll(runtime.repo, ensured.path, "task work");
       if (!commit) throw new Error("no commit");
       await runtime.store.appendRecord(
-        recordStart({ slug: "task", step: "implement", base: ensured.startPoint }),
+        recordStart({
+          slug: "task",
+          step: "implement",
+          base: ensured.startPoint,
+        }),
         {
           commit,
           tree: await treeSha(ensured.path),
           outcome: outcome({ summary: "implemented" }),
-        }
+        },
       );
 
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("boundary");
 
       const records = await runtime.store.listRecords();
-      const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
       expect(state.tasks.task!.status).toBe("merged");
-      expect(records.filter((r) => r.slug === "task" && r.step === "checks").length).toBe(1);
-      expect(repo.git(["show", "factory/demo:task.txt"]).stdout.trim()).toBe("task");
+      expect(
+        records.filter((r) => r.slug === "task" && r.step === "checks").length,
+      ).toBe(1);
+      expect(repo.git(["show", "factory/demo:task.txt"]).stdout.trim()).toBe(
+        "task",
+      );
     } finally {
       cleanupFlowRepo(repo);
     }

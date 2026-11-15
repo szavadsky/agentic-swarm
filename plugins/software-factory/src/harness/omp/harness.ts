@@ -33,7 +33,9 @@ export class OmpHarness implements Harness {
   async caps(model: ModelRef): Promise<Caps> {
     const models = await this.runtime.models();
     const found = models.find(
-      (entry) => entry.selector === model.id || `${entry.provider}/${entry.id}` === model.id
+      (entry) =>
+        entry.selector === model.id ||
+        `${entry.provider}/${entry.id}` === model.id,
     );
     return {
       resume: true,
@@ -53,7 +55,12 @@ export class OmpHarness implements Harness {
       retry: this.retry,
       run: async (model) => {
         const value = await runOmpTurn(this.runtime, req, model);
-        return { stop: value.stop, usage: value.usage, value, attempts: value.attempts };
+        return {
+          stop: value.stop,
+          usage: value.usage,
+          value,
+          attempts: value.attempts,
+        };
       },
     });
 
@@ -75,7 +82,7 @@ export class OmpHarness implements Harness {
       overlayPath,
       home,
       ref.id,
-      []
+      [],
     );
     try {
       const response = await rpc.request("compact", {}, 180_000);
@@ -84,7 +91,9 @@ export class OmpHarness implements Harness {
         if (/nothing to compact/i.test(message)) return ref;
         throw new Error(`omp compact failed: ${message}`);
       }
-      const state = await rpc.request("get_state", {}, 10_000).catch(() => undefined);
+      const state = await rpc
+        .request("get_state", {}, 10_000)
+        .catch(() => undefined);
       return {
         ...ref,
         lastRequestStartedAt: new Date().toISOString(),

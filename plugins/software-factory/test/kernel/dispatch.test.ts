@@ -29,7 +29,11 @@ async function runPair(opts: {
     await writeTask(runtime, task("alpha", { scope: opts.scopeA }));
     await writeTask(runtime, task("beta", { scope: opts.scopeB }));
     const result = await runDispatch(runtime, { iteration: 1 });
-    const state = derive(await runtime.store.listTasks(), await runtime.store.listRecords(), runtime.configs.process.flows);
+    const state = derive(
+      await runtime.store.listTasks(),
+      await runtime.store.listRecords(),
+      runtime.configs.process.flows,
+    );
     expect(state.tasks.alpha!.status).toBe("merged");
     expect(state.tasks.beta!.status).toBe("merged");
     return { max: counter.max, reason: result.reason };
@@ -103,22 +107,51 @@ describe("dispatch admission", () => {
       await writeTask(runtime, task("task", { scope: ["task.txt"] }));
       const model = { id: "fake" };
       await runtime.store.appendRecord(
-        { iteration: 1, step: "architect", round: 1, actor: "agent", alias: "architect", model },
-        { stop: { kind: "done" }, outcome: outcome({ summary: "go", decision: "continue" }) }
+        {
+          iteration: 1,
+          step: "architect",
+          round: 1,
+          actor: "agent",
+          alias: "architect",
+          model,
+        },
+        {
+          stop: { kind: "done" },
+          outcome: outcome({ summary: "go", decision: "continue" }),
+        },
       );
       await runtime.store.appendRecord(
-        { iteration: 1, step: "pm", round: 1, actor: "agent", alias: "pm", model },
-        { stop: { kind: "done" }, outcome: outcome({ summary: "filed" }) }
+        {
+          iteration: 1,
+          step: "pm",
+          round: 1,
+          actor: "agent",
+          alias: "pm",
+          model,
+        },
+        { stop: { kind: "done" }, outcome: outcome({ summary: "filed" }) },
       );
       await runtime.store.appendRecord(
-        { iteration: 1, slug: "task", step: "implement", round: 1, actor: "agent", alias: "implementer", model },
-        { stop: { kind: "infra", cause: "rate" } }
+        {
+          iteration: 1,
+          slug: "task",
+          step: "implement",
+          round: 1,
+          actor: "agent",
+          alias: "implementer",
+          model,
+        },
+        { stop: { kind: "infra", cause: "rate" } },
       );
 
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("drained");
       expect(result.turns).toBe(2);
-      const state = derive(await runtime.store.listTasks(), await runtime.store.listRecords(), runtime.configs.process.flows);
+      const state = derive(
+        await runtime.store.listTasks(),
+        await runtime.store.listRecords(),
+        runtime.configs.process.flows,
+      );
       expect(state.tasks.task!.status).toBe("merged");
     } finally {
       cleanupFlowRepo(repo);
@@ -137,11 +170,17 @@ describe("dispatch admission", () => {
         harness.script((req, ctx) => {
           const slug = path.basename(req.cwd!);
           if (req.prompt.startsWith("You review")) {
-            ctx.writeOutcome(outcome({ summary: `${slug} approved`, verdict: "approve" }));
+            ctx.writeOutcome(
+              outcome({ summary: `${slug} approved`, verdict: "approve" }),
+            );
           } else {
             starts.push(slug);
             if (slug === "a") controller.handleSignal("SIGINT");
-            fs.writeFileSync(path.join(req.cwd!, `${slug}.txt`), `${slug}\n`, "utf8");
+            fs.writeFileSync(
+              path.join(req.cwd!, `${slug}.txt`),
+              `${slug}\n`,
+              "utf8",
+            );
             ctx.writeOutcome(outcome({ summary: `${slug} implemented` }));
           }
           return fakeTurnResult(req);
@@ -152,14 +191,21 @@ describe("dispatch admission", () => {
       await writeTask(runtime, task("a", { scope: ["a.txt"] }));
       await writeTask(runtime, task("b", { scope: ["b.txt"] }));
 
-      const result = await runDispatch(runtime, { iteration: 1, signals: controller });
+      const result = await runDispatch(runtime, {
+        iteration: 1,
+        signals: controller,
+      });
 
       expect(result.reason).toBe("drained");
       expect(result.cause).toBe("signal: drain requested");
       expect(starts).toEqual(["a"]);
       expect(harness.calls.length).toBe(2);
       const records = await runtime.store.listRecords();
-      const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
       expect(state.tasks.a!.status).toBe("merged");
       expect(state.tasks.b!.status).toBe("ready");
       expect(state.tasks.b!.turns).toBe(0);
@@ -190,16 +236,26 @@ describe("dispatch admission", () => {
       await writeTask(runtime, task("a", { scope: ["a.txt"] }));
       await writeTask(runtime, task("b", { scope: ["b.txt"] }));
 
-      const result = await runDispatch(runtime, { iteration: 1, signals: controller });
+      const result = await runDispatch(runtime, {
+        iteration: 1,
+        signals: controller,
+      });
 
       expect(result.reason).toBe("cancelled");
       expect(starts).toEqual(["a"]);
       const records = await runtime.store.listRecords();
-      const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
       expect(state.tasks.a!.status).not.toBe("merged");
       expect(state.tasks.b!.status).toBe("ready");
       expect(records.filter((r) => r.slug === "b")).toEqual([]);
-      expect(records.find((r) => r.slug === "a" && r.step === "implement")?.stop?.kind).toBe("cancelled");
+      expect(
+        records.find((r) => r.slug === "a" && r.step === "implement")?.stop
+          ?.kind,
+      ).toBe("cancelled");
     } finally {
       console.warn = originalWarn;
       cleanupFlowRepo(repo);

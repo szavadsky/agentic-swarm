@@ -10,7 +10,7 @@ import type { KernelRuntime, StepRecord } from "./types.js";
  */
 export async function resumableSession(
   runtime: KernelRuntime,
-  records: StepRecord[]
+  records: StepRecord[],
 ): Promise<SessionRef | undefined> {
   const last = records
     .filter((r) => r.step === "architect" && r.session && r.endedAt)
@@ -27,7 +27,8 @@ export async function resumableSession(
   if (!resume) return undefined;
   const session = last.session;
   if (session.harness !== harness.id) return undefined;
-  if (path.resolve(session.cwd) !== path.resolve(runtime.paths.goalCheckout)) return undefined;
+  if (path.resolve(session.cwd) !== path.resolve(runtime.paths.goalCheckout))
+    return undefined;
   if (session.model.id !== model.id) return undefined;
   return session;
 }

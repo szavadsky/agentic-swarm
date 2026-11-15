@@ -168,7 +168,7 @@ Write only \`class.yaml\`, the one task file, the pack and the outcome. Never ch
 - goal checkout: \`/worktrees/demo\`
 - setup: \`bun install\`
 - gates:
-- test: bun test
+  - test: bun test
 - outcome path: \`/goal/records/00041-i3-front-r1/outcome.yaml\`
 
 # Concerns, remarkables, autonomy

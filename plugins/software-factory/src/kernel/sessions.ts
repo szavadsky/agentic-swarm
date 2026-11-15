@@ -35,7 +35,7 @@ export async function createLaunchSessions(
   sessionsRoot: string,
   goal: string,
   keepRuns: number,
-  meta: { repo: string; now?: Date }
+  meta: { repo: string; now?: Date },
 ): Promise<LaunchSessions> {
   const now = meta.now ?? new Date();
   const launchId = newLaunchId(now);
@@ -52,7 +52,10 @@ export async function createLaunchSessions(
 
   const names = (await directories(goalRoot)).sort().reverse();
   for (const name of names.slice(Math.max(1, keepRuns))) {
-    await fs.promises.rm(path.join(goalRoot, name), { recursive: true, force: true });
+    await fs.promises.rm(path.join(goalRoot, name), {
+      recursive: true,
+      force: true,
+    });
   }
   return { launchId, dir };
 }

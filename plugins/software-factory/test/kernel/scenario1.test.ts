@@ -1,12 +1,12 @@
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 import { dispatch } from "../../src/cli/dispatch.js";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
-import { createFolderStore } from "../../src/kernel/store.js";
+import { loadConfigs, resolveGoalPaths } from "../../src/kernel/config.js";
 import { derive } from "../../src/kernel/derive.js";
-import { resolveGoalPaths, loadConfigs } from "../../src/kernel/config.js";
+import { createFolderStore } from "../../src/kernel/store.js";
+import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 
 const ARCHITECT_PLAN = `# Milestone 1 — files
 
@@ -53,7 +53,12 @@ function outcome(value: Record<string, unknown>) {
   return { status: "done", summary: "ok", concerns: [], forward: [], ...value };
 }
 
-function setupRepo(): { repo: TmpRepo; goalDir: string; planPath: string; newHarness: () => FakeHarness } {
+function setupRepo(): {
+  repo: TmpRepo;
+  goalDir: string;
+  planPath: string;
+  newHarness: () => FakeHarness;
+} {
   const repo = createTmpRepo();
   repo.writeFile(
     ".factory/repo.yaml",
@@ -65,7 +70,7 @@ function setupRepo(): { repo: TmpRepo; goalDir: string; planPath: string; newHar
       "  - id: alpha-exists",
       "    command: test -f alpha.txt",
       "",
-    ].join("\n")
+    ].join("\n"),
   );
   repo.writeFile(
     ".factory/run.yaml",
@@ -78,12 +83,16 @@ function setupRepo(): { repo: TmpRepo; goalDir: string; planPath: string; newHar
       "  digest: { harness: fake, model: fake-digest }",
       "limits: { iterations: 1, concurrency: 1 }",
       "",
-    ].join("\n")
+    ].join("\n"),
   );
   repo.commit("factory config");
   const goalDir = path.join(repo.dir, ".factory/artifacts/demo");
   fs.mkdirSync(goalDir, { recursive: true });
-  fs.writeFileSync(path.join(goalDir, "intent.md"), "# Goal\n\nCreate alpha then beta.\n", "utf8");
+  fs.writeFileSync(
+    path.join(goalDir, "intent.md"),
+    "# Goal\n\nCreate alpha then beta.\n",
+    "utf8",
+  );
   fs.writeFileSync(path.join(goalDir, "class.yaml"), "class: bigger\n", "utf8");
   return {
     repo,
@@ -93,10 +102,16 @@ function setupRepo(): { repo: TmpRepo; goalDir: string; planPath: string; newHar
   };
 }
 
-function scriptPlanning(harness: FakeHarness, goalDir: string, taskDir: string): void {
+function scriptPlanning(
+  harness: FakeHarness,
+  goalDir: string,
+  taskDir: string,
+): void {
   harness.script((req, ctx) => {
     fs.writeFileSync(path.join(goalDir, "plan.md"), ARCHITECT_PLAN, "utf8");
-    ctx.writeOutcome(outcome({ summary: "planned alpha then beta", decision: "continue" }));
+    ctx.writeOutcome(
+      outcome({ summary: "planned alpha then beta", decision: "continue" }),
+    );
     return fakeTurnResult(req);
   });
   harness.script((req, ctx) => {
@@ -111,7 +126,9 @@ function scriptPlanning(harness: FakeHarness, goalDir: string, taskDir: string):
     return fakeTurnResult(req);
   });
   harness.script((req, ctx) => {
-    ctx.writeOutcome(outcome({ summary: "alpha is correct", verdict: "approve" }));
+    ctx.writeOutcome(
+      outcome({ summary: "alpha is correct", verdict: "approve" }),
+    );
     return fakeTurnResult(req);
   });
   harness.script((req, ctx) => {
@@ -121,15 +138,21 @@ function scriptPlanning(harness: FakeHarness, goalDir: string, taskDir: string):
     return fakeTurnResult(req);
   });
   harness.script((req, ctx) => {
-    ctx.writeOutcome(outcome({ summary: "beta is correct", verdict: "approve" }));
+    ctx.writeOutcome(
+      outcome({ summary: "beta is correct", verdict: "approve" }),
+    );
     return fakeTurnResult(req);
   });
 }
 
-async function launch(repo: TmpRepo, harness: FakeHarness, expectedCode: number): Promise<void> {
+async function launch(
+  repo: TmpRepo,
+  harness: FakeHarness,
+  expectedCode: number,
+): Promise<void> {
   const code = await dispatch(
     ["run", "--repo", repo.dir, "--goal", "demo", "--iterations", "1"],
-    { harnesses: { fake: harness } }
+    { harnesses: { fake: harness } },
   );
   expect(code).toBe(expectedCode);
 }
@@ -142,18 +165,30 @@ async function runScenario(): Promise<void> {
     await launch(repo, first, 3);
 
     let store = createFolderStore(goalDir);
-    let state = derive(await store.listTasks(), await store.listRecords());
+    const state = derive(await store.listTasks(), await store.listRecords());
     expect(state.goal).toBe("active");
     expect(state.tasks.alpha!.status).toBe("merged");
     expect(state.tasks.beta!.status).toBe("merged");
     expect(state.iteration).toBe(1);
 
-    expect(repo.git(["show", "factory/demo:alpha.txt"]).stdout.trim()).toBe("alpha");
-    expect(repo.git(["show", "factory/demo:beta.txt"]).stdout.trim()).toBe("beta");
-    expect(fs.existsSync(path.join(goalDir, "iterations/1/summary.md"))).toBe(true);
-    expect(fs.existsSync(path.join(goalDir, "mailbox/outbox/iteration-1-summary.md"))).toBe(true);
+    expect(repo.git(["show", "factory/demo:alpha.txt"]).stdout.trim()).toBe(
+      "alpha",
+    );
+    expect(repo.git(["show", "factory/demo:beta.txt"]).stdout.trim()).toBe(
+      "beta",
+    );
+    expect(fs.existsSync(path.join(goalDir, "iterations/1/summary.md"))).toBe(
+      true,
+    );
+    expect(
+      fs.existsSync(
+        path.join(goalDir, "mailbox/outbox/iteration-1-summary.md"),
+      ),
+    ).toBe(true);
     expect(fs.existsSync(path.join(goalDir, "metrics.yaml"))).toBe(true);
-    const mergeRecords = (await store.listRecords()).filter((r) => r.step === "merge");
+    const mergeRecords = (await store.listRecords()).filter(
+      (r) => r.step === "merge",
+    );
     expect(mergeRecords.map((r) => [r.slug, r.ok])).toEqual([
       ["alpha", true],
       ["beta", true],
@@ -177,8 +212,12 @@ async function runScenario(): Promise<void> {
     const after = derive(await store.listTasks(), await store.listRecords());
     expect(after.goal).toBe("done");
     expect(after.iteration).toBe(2);
-    expect(fs.existsSync(path.join(goalDir, "iterations/2/summary.md"))).toBe(true);
-    expect(fs.readFileSync(path.join(goalDir, "iterations/2/digest.md"), "utf8")).toContain("Loops");
+    expect(fs.existsSync(path.join(goalDir, "iterations/2/summary.md"))).toBe(
+      true,
+    );
+    expect(
+      fs.readFileSync(path.join(goalDir, "iterations/2/digest.md"), "utf8"),
+    ).toContain("Loops");
 
     // State is only derived: deleting everything but tasks/ and records/ loses nothing.
     const configs = loadConfigs(repo.dir);
@@ -189,10 +228,18 @@ async function runScenario(): Promise<void> {
       fs.rmSync(path.join(goalDir, entry), { recursive: true, force: true });
     }
     const stripped = createFolderStore(goalDir);
-    const derivedAgain = derive(await stripped.listTasks(), await stripped.listRecords());
+    const derivedAgain = derive(
+      await stripped.listTasks(),
+      await stripped.listRecords(),
+    );
     expect(derivedAgain).toEqual(after);
   } finally {
-    const worktreeRoot = path.resolve(repo.dir, "..", ".factory-worktrees", path.basename(repo.dir));
+    const worktreeRoot = path.resolve(
+      repo.dir,
+      "..",
+      ".factory-worktrees",
+      path.basename(repo.dir),
+    );
     repo.cleanup();
     fs.rmSync(worktreeRoot, { recursive: true, force: true });
   }

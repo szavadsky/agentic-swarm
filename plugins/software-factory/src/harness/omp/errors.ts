@@ -3,7 +3,7 @@ export class OmpRpcExit extends Error {
     message: string,
     readonly code: number | null,
     readonly signal: string | null,
-    readonly stderr: string
+    readonly stderr: string,
   ) {
     super(message);
     this.name = "OmpRpcExit";

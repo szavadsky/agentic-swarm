@@ -2,8 +2,14 @@
  * Formats a JSON schema into a compact, human- and LLM-friendly ## Output section
  * stating field names, types, enums, required/optional status, descriptions, and nested structures.
  */
-export function formatOutputSchemaSection(schema: Record<string, unknown>): string {
-  if (!schema || typeof schema !== "object" || Object.keys(schema).length === 0) {
+export function formatOutputSchemaSection(
+  schema: Record<string, unknown>,
+): string {
+  if (
+    !schema ||
+    typeof schema !== "object" ||
+    Object.keys(schema).length === 0
+  ) {
     return "## Output\n\nYield a valid JSON object.";
   }
 
@@ -26,7 +32,11 @@ export function formatOutputSchemaSection(schema: Record<string, unknown>): stri
     return s;
   }
 
-  const lines: string[] = ["## Output", "", "Yield a structured JSON object matching this schema:"];
+  const lines: string[] = [
+    "## Output",
+    "",
+    "Yield a structured JSON object matching this schema:",
+  ];
 
   function getTypeString(s: any): string {
     if (!s) return "any";
@@ -50,7 +60,7 @@ export function formatOutputSchemaSection(schema: Record<string, unknown>): stri
     name: string,
     propSchemaRaw: any,
     isRequired: boolean,
-    indent: string
+    indent: string,
   ) {
     const propSchema = resolveRef(propSchemaRaw);
     const typeStr = getTypeString(propSchema);
@@ -95,7 +105,10 @@ export function formatOutputSchemaSection(schema: Record<string, unknown>): stri
       const itemSchema = resolveRef(propSchema.items);
       if (itemSchema.type === "object" && itemSchema.properties) {
         formatProperties(itemSchema, `${indent}  `);
-      } else if (Array.isArray(itemSchema.oneOf) || Array.isArray(itemSchema.anyOf)) {
+      } else if (
+        Array.isArray(itemSchema.oneOf) ||
+        Array.isArray(itemSchema.anyOf)
+      ) {
         const variants = itemSchema.oneOf ?? itemSchema.anyOf;
         for (let i = 0; i < variants.length; i++) {
           const v = resolveRef(variants[i]);

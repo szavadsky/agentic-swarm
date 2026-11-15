@@ -59,7 +59,8 @@ export class OpencodeEventParser {
   }
 
   private feed(event: any): void {
-    if (typeof event?.sessionID === "string") this.summary.sessionId = event.sessionID;
+    if (typeof event?.sessionID === "string")
+      this.summary.sessionId = event.sessionID;
 
     if (event?.type === "text" && typeof event.part?.text === "string") {
       const messageId = event.part.messageID;
@@ -74,7 +75,8 @@ export class OpencodeEventParser {
     if (event?.type === "step_finish") {
       this.summary.sawStepFinish = true;
       const part = event.part ?? {};
-      if (typeof part.reason === "string") this.summary.lastStepReason = part.reason;
+      if (typeof part.reason === "string")
+        this.summary.lastStepReason = part.reason;
       const tokens = part.tokens ?? {};
       const output = Number(tokens.output ?? 0);
       const reasoning = Number(tokens.reasoning ?? 0);

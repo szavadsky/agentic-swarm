@@ -40,7 +40,10 @@ write({
 `;
 }
 
-function fakeHarness(probe: Probe, failRun = false): {
+function fakeHarness(
+  probe: Probe,
+  failRun = false,
+): {
   harness: OpencodeHarness;
   cwd: string;
   invocations: () => string[][];
@@ -49,7 +52,9 @@ function fakeHarness(probe: Probe, failRun = false): {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "oc-resume-"));
   const logPath = path.join(tmp, "invocations.ndjson");
   const binary = path.join(tmp, "fake-opencode.js");
-  fs.writeFileSync(binary, fakeScript(probe, logPath, failRun), { mode: 0o755 });
+  fs.writeFileSync(binary, fakeScript(probe, logPath, failRun), {
+    mode: 0o755,
+  });
   const harness = new OpencodeHarness({
     binary,
     sessionDir: path.join(tmp, "sessions"),
