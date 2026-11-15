@@ -38,6 +38,56 @@ export type FakeTurnHandler = (
   ctx: FakeTurnContext,
 ) => TurnResult | Promise<TurnResult>;
 
+export interface FakeScriptOptions {
+  /**
++   * Binds the handler to the requests it serves. The first queued handler
++   * whose `when` matches serves the turn; handlers without `when` match any
++   * request, so tests that never bind keep positional FIFO order.
++   */
+  when?: (req: TurnRequest) => boolean;
+}
+
+/** A scripted turn's identity, recovered from the request's record path. */
+export interface FakeTurnIdentity {
+  /**
++   * Record directory name, e.g. `00007-i1-beta-implement-r1`. Empty when the
++   * request carries no outcomePath.
++   */
+  record: string;
+  /** Task slug, when the record names one. */
+  slug?: string;
+  /** Step id, when the record names one. */
+  step?: string;
+}
+
+/**
++ * Recovers the turn's identity from `req.outcomePath`. Record directories are
++ * `NNNNN-i<iteration>[-<slug>]-<step>-r<round>`; agent steps are single
++ * tokens, so the step is the last segment and the slug is the rest. Script
++ * steps never reach the harness, so their dashed ids never appear here.
++ */
+export function fakeTurnIdentity(req: TurnRequest): FakeTurnIdentity {
+  if (!req.outcomePath) return { record: "" };
+  const record = path.basename(path.dirname(req.outcomePath));
+  const middle = record.replace(/^\d{5}-i\d+/, "").replace(/-r\d+$/, "");
+  const parts = middle.split("-").filter((part) => part.length > 0);
+  if (parts.length === 0) return { record };
+  const step = parts[parts.length - 1];
+  const slug = parts.length > 1 ? parts.slice(0, -1).join("-") : undefined;
+  return { record, slug, step };
+}
+
+/** Names the request an unmatched turn carried, for the failure message. */
+function describeRequest(req: TurnRequest): string {
+  const { record, slug, step } = fakeTurnIdentity(req);
+  if (!record) return "";
+  const named = [
+    slug === undefined ? "no slug" : `slug "${slug}"`,
+    step === undefined ? "no step" : `step "${step}"`,
+  ].join(", ");
+  return ` (${record}: ${named})`;
+}
+
 export function emptyUsage(): Usage {
   return {
     in: 0,
@@ -73,9 +123,10 @@ export function fakeTurnResult(
 }
 
 /**
- * Scripted harness for behavior tests. Each call to `turn` consumes one
- * handler from a queue; the handler may write files under `req.cwd` and the
- * outcome file, and returns the TurnResult the harness reports.
+ * Scripted harness for behavior tests. Each call to `turn` consumes the first
+ * queued handler whose `when` matches (or the head of the queue when nothing
+ * is bound); the handler may write files under `req.cwd` and the outcome
+ * file, and returns the TurnResult the harness reports.
  *
  * Session ids: a resumed request keeps its SessionRef (including id and cwd),
  * a fresh request gets a unique id. Usage numbers and every Stop cause
@@ -86,7 +137,10 @@ export class FakeHarness implements Harness {
   public readonly calls: TurnRequest[] = [];
   public readonly compactions: SessionRef[] = [];
   private readonly capsConfig: Caps;
-  private readonly handlers: FakeTurnHandler[] = [];
+  private readonly handlers: {
+    handler: FakeTurnHandler;
+    when?: (req: TurnRequest) => boolean;
+  }[] = [];
   private readonly sessions = new Map<string, SessionRef>();
   private sessionCounter = 0;
 
@@ -99,17 +153,22 @@ export class FakeHarness implements Harness {
     };
   }
 
-  /** Queues the next turn's scripted behavior. */
-  script(handler: FakeTurnHandler): this {
-    this.handlers.push(handler);
+  /**
++   * Queues a turn's scripted behavior. With `when`, the handler serves the
++   * first matching request no matter which turn calls first; without it, the
++   * handler serves the next unmatched request in queue order.
++   */
+  script(handler: FakeTurnHandler, opts: FakeScriptOptions = {}): this {
+    this.handlers.push({ handler, when: opts.when });
     return this;
   }
 
   /** Queues a turn that only differs from the defaults by `patch`. */
   scriptResult(
     patch: Partial<Omit<TurnResult, "usage">> & { usage?: Partial<Usage> },
+    opts: FakeScriptOptions = {},
   ): this {
-    return this.script((req) => fakeTurnResult(req, patch));
+    return this.script((req) => fakeTurnResult(req, patch), opts);
   }
 
   async caps(_model: ModelRef): Promise<Caps> {
@@ -118,15 +177,20 @@ export class FakeHarness implements Harness {
 
   async turn(req: TurnRequest): Promise<TurnResult> {
     this.calls.push(req);
-    const handler = this.handlers.shift();
-    if (!handler) {
+    const n = this.calls.length;
+    // The match runs synchronously at call time, so concurrent turns cannot
+    // interleave between the scan and the splice.
+    const index = this.handlers.findIndex(
+      (entry) => !entry.when || entry.when(req),
+    );
+    if (index < 0) {
       throw new Error(
-        `FakeHarness: no scripted turn for request ${this.calls.length}`,
+        `FakeHarness: no scripted turn for request ${n}${describeRequest(req)}`,
       );
     }
+    const entry = this.handlers.splice(index, 1)[0]!;
 
-    const n = this.calls.length;
-    const outcome = await handler(req, {
+    const outcome = await entry.handler(req, {
       n,
       writeOutcome: (value) => {
         if (!req.outcomePath) {

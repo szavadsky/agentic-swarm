@@ -11,6 +11,7 @@ import {
   makeRuntime,
   outcome,
   setupFlowRepo,
+  whenTurn,
   writeTask,
 } from "./s2-helpers.js";
 
@@ -21,17 +22,23 @@ describe("KERNEL0 scenario 8 — drain", () => {
     });
     try {
       const harness = new FakeHarness({ id: "fake" });
-      harness.script((req, ctx) => {
-        fs.writeFileSync(path.join(req.cwd!, "a.txt"), "a\n", "utf8");
-        ctx.writeOutcome(outcome({ summary: "a implemented" }));
-        return fakeTurnResult(req);
-      });
-      harness.script((req, ctx) => {
-        ctx.writeOutcome(
-          outcome({ summary: "a approved", verdict: "approve" }),
-        );
-        return fakeTurnResult(req);
-      });
+      harness.script(
+        (req, ctx) => {
+          fs.writeFileSync(path.join(req.cwd!, "a.txt"), "a\n", "utf8");
+          ctx.writeOutcome(outcome({ summary: "a implemented" }));
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ slug: "a", step: "implement" }) },
+      );
+      harness.script(
+        (req, ctx) => {
+          ctx.writeOutcome(
+            outcome({ summary: "a approved", verdict: "approve" }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ slug: "a", step: "review" }) },
+      );
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("a", { scope: ["a.txt"] }));

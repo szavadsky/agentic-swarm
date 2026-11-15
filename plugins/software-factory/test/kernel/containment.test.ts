@@ -16,6 +16,7 @@ import {
   makeRuntime,
   outcome,
   setupFlowRepo,
+  whenTurn,
   writeTask,
 } from "./s2-helpers.js";
 
@@ -331,35 +332,51 @@ describe("agent containment", () => {
       let initial = "";
       let observed = "";
       const harness = new FakeHarness({ id: "fake" });
-      harness.script(async (req, ctx) => {
-        for (let i = 0; i < 500 && observed === initial; i += 1) {
-          const head = repo
-            .git(["rev-parse", "HEAD"], { cwd: checkout })
-            .stdout.trim();
-          if (head !== initial) observed = head;
-          else await new Promise((resolve) => setTimeout(resolve, 10));
-        }
-        fs.writeFileSync(path.join(req.cwd!, "alpha.txt"), "alpha\n", "utf8");
-        ctx.writeOutcome(outcome({ summary: "alpha implemented" }));
-        return fakeTurnResult(req);
-      });
-      harness.script((req, ctx) => {
-        fs.writeFileSync(path.join(req.cwd!, "beta.txt"), "beta\n", "utf8");
-        ctx.writeOutcome(outcome({ summary: "beta implemented" }));
-        return fakeTurnResult(req);
-      });
-      harness.script((req, ctx) => {
-        ctx.writeOutcome(
-          outcome({ summary: "beta approved", verdict: "approve" }),
-        );
-        return fakeTurnResult(req);
-      });
-      harness.script((req, ctx) => {
-        ctx.writeOutcome(
-          outcome({ summary: "alpha approved", verdict: "approve" }),
-        );
-        return fakeTurnResult(req);
-      });
+      // Each turn is bound to its slug and step: alpha's implement waits on
+      // beta's merge of the shared checkout, so a swapped handler would
+      // write alpha.txt into the wrong worktree. The poll below is a latch
+      // on that real merge, not turn ordering.
+      harness.script(
+        async (req, ctx) => {
+          for (let i = 0; i < 500 && observed === initial; i += 1) {
+            const head = repo
+              .git(["rev-parse", "HEAD"], { cwd: checkout })
+              .stdout.trim();
+            if (head !== initial) observed = head;
+            else await new Promise((resolve) => setTimeout(resolve, 10));
+          }
+          fs.writeFileSync(path.join(req.cwd!, "alpha.txt"), "alpha\n", "utf8");
+          ctx.writeOutcome(outcome({ summary: "alpha implemented" }));
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ slug: "alpha", step: "implement" }) },
+      );
+      harness.script(
+        (req, ctx) => {
+          fs.writeFileSync(path.join(req.cwd!, "beta.txt"), "beta\n", "utf8");
+          ctx.writeOutcome(outcome({ summary: "beta implemented" }));
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ slug: "beta", step: "implement" }) },
+      );
+      harness.script(
+        (req, ctx) => {
+          ctx.writeOutcome(
+            outcome({ summary: "beta approved", verdict: "approve" }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ slug: "beta", step: "review" }) },
+      );
+      harness.script(
+        (req, ctx) => {
+          ctx.writeOutcome(
+            outcome({ summary: "alpha approved", verdict: "approve" }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ slug: "alpha", step: "review" }) },
+      );
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       initial = repo

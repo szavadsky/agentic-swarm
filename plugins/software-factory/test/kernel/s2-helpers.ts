@@ -4,8 +4,10 @@ import yaml from "yaml";
 import { Repo } from "../../src/core/git/repo.js";
 import {
   type FakeHarness,
+  fakeTurnIdentity,
   fakeTurnResult,
 } from "../../src/harness/fake/index.js";
+import type { TurnRequest } from "../../src/harness/types.js";
 import {
   loadConfigs,
   resolveGoalPaths,
@@ -59,6 +61,24 @@ export function outcome(patch: Record<string, unknown> = {}): Outcome {
     forward: [],
     ...patch,
   } as Outcome;
+}
+
+/**
+ * Binds a scripted fake turn to the request it serves. The slug and step are
+ * derived from the request's record path on every call; omitted fields match
+ * anything. Concurrent tests bind every turn this way so call order under
+ * load cannot hand a turn the wrong handler.
+ */
+export function whenTurn(want: {
+  slug?: string;
+  step?: string;
+}): (req: TurnRequest) => boolean {
+  return (req) => {
+    const identity = fakeTurnIdentity(req);
+    if (want.slug !== undefined && identity.slug !== want.slug) return false;
+    if (want.step !== undefined && identity.step !== want.step) return false;
+    return true;
+  };
 }
 
 export function setupFlowRepo(opts: FlowRepoOptions = {}): FlowRepo {
@@ -154,10 +174,34 @@ export function cleanupFlowRepo(repo: TmpRepo): void {
   }
 }
 
+/**
+ * A two-party rendezvous for concurrency assertions. Each of the two
+ * concurrent turns awaits the returned gate after recording itself active;
+ * the first arrival blocks until the peer arrives (or the timeout fires), so
+ * the overlap the max-concurrency assertion measures no longer depends on
+ * scheduling luck under load. Late arrivals pass straight through.
+ */
+export function twoPartyBarrier(timeoutMs = 10_000): () => Promise<void> {
+  const shared = { arrived: 0 };
+  return async () => {
+    shared.arrived += 1;
+    const start = Date.now();
+    while (shared.arrived < 2) {
+      if (Date.now() - start > timeoutMs) {
+        throw new Error(
+          `two-party barrier timed out with ${shared.arrived}/2 turns arrived`,
+        );
+      }
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+  };
+}
+
 /** A handler that writes one file per task and approves its review. */
 export function filePerTaskHandler(
   counter: { active: number; max: number },
   delayMs = 20,
+  barrier?: () => Promise<void>,
 ) {
   return async (
     req: Parameters<FakeHarness["turn"]>[0],
@@ -166,7 +210,8 @@ export function filePerTaskHandler(
     counter.active += 1;
     counter.max = Math.max(counter.max, counter.active);
     try {
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      if (barrier) await barrier();
+      else await new Promise((resolve) => setTimeout(resolve, delayMs));
       const slug = path.basename(req.cwd!);
       if (req.prompt.startsWith("You review")) {
         ctx.writeOutcome(

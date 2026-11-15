@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import yaml from "yaml";
-import { dispatch } from "../../src/cli/dispatch.js";
+import { expectDispatch } from "./e2e-helpers.js";
 import type { FakeTurnContext } from "../../src/harness/fake/index.js";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import type { TurnRequest } from "../../src/harness/types.js";
@@ -117,14 +117,14 @@ describe("signal policy", () => {
         return fakeTurnResult(req);
       });
 
-      const code = await dispatch(
+      await expectDispatch(
+        130,
         ["run", "--repo", s.repo.dir, "--goal", "demo"],
         {
           harnesses: { fake: harness },
           signals: controller,
         },
       );
-      expect(code).toBe(130);
       expect(harness.calls).toHaveLength(2);
 
       const store = createFolderStore(s.goalDir);
@@ -157,14 +157,14 @@ describe("signal policy", () => {
         });
       });
 
-      const code = await dispatch(
+      await expectDispatch(
+        143,
         ["run", "--repo", s.repo.dir, "--goal", "demo"],
         {
           harnesses: { fake: harness },
           signals: controller,
         },
       );
-      expect(code).toBe(143);
 
       const store = createFolderStore(s.goalDir);
       const records = await store.listRecords();
