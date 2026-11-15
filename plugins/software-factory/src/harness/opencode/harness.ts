@@ -45,7 +45,6 @@ export class OpencodeHarness implements Harness {
     return {
       resume: true,
       compact: "server",
-      fork: true,
       subagents: "spawn",
       structuredOutput: "none",
       effort: Array.isArray(entry?.variants) ? [...entry.variants] : [],

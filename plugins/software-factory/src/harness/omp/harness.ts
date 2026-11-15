@@ -41,7 +41,6 @@ export class OmpHarness implements Harness {
     return {
       resume: true,
       compact: "server",
-      fork: true,
       subagents: "spawn",
       structuredOutput: "none",
       effort: Array.isArray(found?.thinking) ? [...found.thinking] : [],

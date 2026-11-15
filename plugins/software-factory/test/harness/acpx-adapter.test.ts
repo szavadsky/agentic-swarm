@@ -599,7 +599,6 @@ describe("AcpxHarness", () => {
     expect(await harness.caps({ id: "gemini-3.8-flash-high" })).toEqual({
       resume: true,
       compact: "none",
-      fork: false,
       subagents: "none",
       structuredOutput: "none",
       effort: ["low", "medium", "high"],

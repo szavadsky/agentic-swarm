@@ -41,7 +41,6 @@ export class AcpxHarness implements Harness {
     return {
       resume: true,
       compact: "none",
-      fork: false,
       subagents: "none",
       structuredOutput: "none",
       effort: [...(this.runtime.acpx.effort?.levels ?? [])],

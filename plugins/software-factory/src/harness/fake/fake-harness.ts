@@ -15,7 +15,6 @@ import type {
 export const DEFAULT_FAKE_CAPS: Caps = {
   resume: true,
   compact: "local",
-  fork: false,
   subagents: "none",
   structuredOutput: "none",
   effort: [],
