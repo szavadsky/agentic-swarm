@@ -12,13 +12,6 @@ import { runAcpxTurn } from "./turn.js";
 import type { AcpxHarnessOptions } from "./types.js";
 
 export type { AcpxHarnessOptions } from "./types.js";
-export type {
-  AcpxConfig,
-  AcpxEffortConfig,
-  AcpxTurnOpaque,
-  AcpxUsageConfig,
-  AcpxUsageFields,
-} from "./config.js";
 
 /**
  * One named acpx session per turn chain, model via the global flag, effort via

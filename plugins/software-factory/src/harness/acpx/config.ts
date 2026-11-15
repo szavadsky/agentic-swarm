@@ -46,9 +46,7 @@ export const acpxConfigSchema = z
   })
   .strict();
 
-export type AcpxEffortConfig = z.infer<typeof acpxEffortSchema>;
 export type AcpxUsageFields = z.infer<typeof acpxUsageFieldsSchema>;
-export type AcpxUsageConfig = z.infer<typeof acpxUsageSchema>;
 export type AcpxConfig = z.infer<typeof acpxConfigSchema>;
 
 /** Harness configuration carried through `TurnRequest.opaque`. */

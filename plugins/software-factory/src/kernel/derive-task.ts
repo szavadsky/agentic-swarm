@@ -1,4 +1,3 @@
-import type { Stop } from "../harness/types.js";
 import type { CheckResult } from "../core/checks/types.js";
 import { isInfraCheck } from "./gates.js";
 import { countOutcomeRepairs } from "./metrics.js";
@@ -57,6 +56,13 @@ export interface TaskReduction {
 interface PendingChecks {
   nextIndex: number;
   mergeAfter: boolean;
+  /**
+   * An empty gate-fix turn whose park awaits these checks: green carries on,
+   * an identical red parks, a changed set loops the fix. Riding pendingChecks
+   * keeps the deferral with the turn it settles: a review, merge or newer
+   * turn clears both together, so a stale deferral can never mis-park.
+   */
+  emptyFix?: { step: string; round: number };
 }
 
 /**
@@ -128,18 +134,26 @@ function committedNothing(
 }
 
 /**
- * The red checks a merge gate failure names, as `name (summary)`. The cause
- * lists only the new failures; the record's checks also carry inherited reds,
- * so read the names from the cause. Records without checks keep the plain cause.
+ * The merge-gate names the cause lists that the record's checks carry. The
+ * cause lists only the new failures; the record's checks also carry inherited
+ * reds, so read the names from the cause.
  */
-function redChecksText(rec: StepRecord): string | undefined {
+function mergeGateNames(rec: StepRecord): string[] {
   const names = (rec.cause ?? "")
     .slice("gates:".length)
     .split(",")
     .map((name) => name.trim())
     .filter(Boolean);
+  return names.filter((name) => rec.checks?.some((c) => c.name === name));
+}
+
+/**
+ * The red checks a merge gate failure names, as `name (summary)`. Records
+ * without checks keep the plain cause.
+ */
+function redChecksText(rec: StepRecord): string | undefined {
   const red: string[] = [];
-  for (const name of names) {
+  for (const name of mergeGateNames(rec)) {
     const check = rec.checks?.find((c) => c.name === name);
     if (check) red.push(`${check.name} (${check.summary})`);
   }
@@ -154,6 +168,25 @@ function failingChecksText(red: readonly CheckResult[]): string | undefined {
   const actionable = red.filter((c) => !isInfraCheck(c));
   if (actionable.length === 0) return undefined;
   return actionable.map((c) => `${c.name} (${c.summary})`).join(", ");
+}
+
+/** Sorted actionable failing names for the deferred empty-fix comparison. */
+function failingNames(red: readonly CheckResult[]): string[] {
+  return red
+    .filter((c) => !isInfraCheck(c))
+    .map((c) => c.name)
+    .sort();
+}
+
+/** Whether the follow-up red names the same actionable set as the red that sent the fix. */
+function sameFailingSet(
+  red: readonly CheckResult[],
+  prior: readonly string[],
+): boolean {
+  const names = failingNames(red);
+  return (
+    names.length === prior.length && names.every((name, i) => name === prior[i])
+  );
 }
 
 /**
@@ -197,6 +230,8 @@ export function reduceTask(
   let loop: ProgressRepeat | undefined;
   let gateFix = false;
   let gateFailure: string | undefined;
+  /** Sorted actionable failing names behind the current gate fix; the deferred empty-fix comparison. */
+  let gateRed: string[] | undefined;
   /** The gate fix came from merged-result gates: green checks merge, skipping review. */
   let mergeFix = false;
   /** The last review's `changes` still awaits its answer; an empty answer goes back for a verdict. */
@@ -250,12 +285,29 @@ export function reduceTask(
           park = `infra: gate could not start: ${red.map((c) => c.name).join(", ")}`;
           phase = "parked";
         } else if (rec.ok === false) {
-          gateFix = true;
-          gateFailure = failingChecksText(red);
-          // A task-checks reroute ends the merge-fix: this fix goes back to review.
-          mergeFix = false;
-          stepIndex = 0;
-          phase = firstStep;
+          const deferred = pendingChecks.emptyFix;
+          if (
+            deferred &&
+            (gateRed === undefined || sameFailingSet(red, gateRed))
+          ) {
+            // The fix changed nothing and the same checks still fail: a
+            // deterministic red the fix did not address. A red without a
+            // comparable baseline (merge gates with no recorded checks)
+            // parks the same way; green and changed reds move on below.
+            park =
+              gateFailure !== undefined
+                ? `empty-diff: ${deferred.step} r${deferred.round} committed no changes after red checks: ${gateFailure}`
+                : `empty-diff: ${deferred.step} r${deferred.round} committed no changes`;
+            phase = "parked";
+          } else {
+            gateFix = true;
+            gateFailure = failingChecksText(red);
+            gateRed = failingNames(red);
+            // A task-checks reroute ends the merge-fix: this fix goes back to review.
+            mergeFix = false;
+            stepIndex = 0;
+            phase = firstStep;
+          }
         } else {
           stepIndex = pendingChecks.nextIndex;
           phase = pendingChecks.mergeAfter
@@ -291,6 +343,10 @@ export function reduceTask(
             gateFix = true;
             mergeFix = true;
             gateFailure = redChecksText(rec);
+            // No matched names (old records without checks) leaves no
+            // baseline: the deferred comparison then parks on any red.
+            const names = [...mergeGateNames(rec)].sort();
+            gateRed = names.length > 0 ? names : undefined;
             // The fix answers the red gates, not the last review: no verdict awaits it.
             changesPending = false;
             stepIndex = 0;
@@ -406,6 +462,9 @@ export function reduceTask(
     // A fix round that answers a `changes` review with dispositions but no diff
     // repeats its tree by design; the fingerprint owns non-empty repeats, so it
     // skips the deferred answer and the round budget bounds the loop instead.
+    // An empty gate-fix turn repeats its tree by design too: the checks that
+    // follow own the verdict, so a deferred turn must not loop-park a fix the
+    // checks would clear. The item budget still bounds repeated deferrals.
     const answeredIndex = flowIndex.get(rec.step);
     const answeredStep =
       answeredIndex === undefined ? undefined : flow.steps[answeredIndex];
@@ -414,9 +473,17 @@ export function reduceTask(
       answeredStep !== undefined &&
       !answeredStep.review &&
       committedNothing(task.kind, rec, priorTree);
-    const fp = answeredReview
-      ? null
-      : stepFingerprint(task.kind, rec, lastTree);
+    const emptyGateFix =
+      gateFix &&
+      !changesPending &&
+      carriedWork !== true &&
+      answeredStep !== undefined &&
+      !answeredStep.review &&
+      committedNothing(task.kind, rec, priorTree);
+    const fp =
+      answeredReview || emptyGateFix
+        ? null
+        : stepFingerprint(task.kind, rec, lastTree);
     if (fp) {
       const prior = seen.get(fp);
       if (prior && !loop) {
@@ -458,24 +525,31 @@ export function reduceTask(
     // An empty commit is its own no-progress signal — unless it answers a
     // `changes` review, whose dispositions still need a verdict, or carries
     // a continuation's kept work. With no review awaiting, skip the reviewer
-    // and park now instead of spending review rounds. A gate-fix turn names
-    // the red checks that sent it back, so the cause says why a task that
-    // already committed looks empty.
+    // and park now instead of spending review rounds — except after red
+    // checks, where the checks that run next decide: the branch may already
+    // be done and only a repeated identical red proves the fix empty.
+    let deferredEmpty: { step: string; round: number } | null = null;
     if (!step.review && committedNothing(task.kind, rec, priorTree)) {
       if (carriedWork !== true && !changesPending) {
-        park =
-          carriedWork === false
-            ? `empty-diff: ${rec.step} r${rec.round} kept work is already on the head`
-            : gateFix && gateFailure
-              ? `empty-diff: ${rec.step} r${rec.round} committed no changes after red checks: ${gateFailure}`
-              : `empty-diff: ${rec.step} r${rec.round} committed no changes`;
-        phase = "parked";
-        continue;
+        if (carriedWork === false) {
+          park = `empty-diff: ${rec.step} r${rec.round} kept work is already on the head`;
+          phase = "parked";
+          continue;
+        }
+        if (gateFix) {
+          // The fix answered red checks with no diff; the turn takes the
+          // normal productive path below so the following checks settle it.
+          deferredEmpty = { step: rec.step, round: rec.round };
+        } else {
+          park = `empty-diff: ${rec.step} r${rec.round} committed no changes`;
+          phase = "parked";
+          continue;
+        }
       }
       // Deferred: the fix round goes back for a verdict with its outcome's
       // dispositions — or the turn carries a continuation's kept work, which
-      // is progress, not an empty diff. Review rounds and the item budget
-      // still bound the loop.
+      // is progress, not an empty diff — or the following checks settle an
+      // empty gate fix. Review rounds and the item budget still bound the loop.
     }
     if (step.review) {
       // Standalone escalation (and any review upscope answer): parks with the
@@ -525,7 +599,11 @@ export function reduceTask(
     stepIndex = idx + 1;
     const nextStep = flow.steps[stepIndex];
     if (!nextStep || nextStep.review) {
-      pendingChecks = { nextIndex: stepIndex, mergeAfter: mergeFix };
+      pendingChecks = {
+        nextIndex: stepIndex,
+        mergeAfter: mergeFix,
+        ...(deferredEmpty ? { emptyFix: deferredEmpty } : {}),
+      };
       phase = "checks";
     } else {
       pendingChecks = null;
@@ -553,22 +631,4 @@ export function reduceTask(
     loop,
     gateFix: terminal ? undefined : gateFix || undefined,
   };
-}
-
-export type StopClassification =
-  | "ok"
-  | "infra"
-  | "cancelled"
-  | "timeout"
-  | "crash";
-
-export function classifyStop(stop: Stop | undefined): StopClassification {
-  if (!stop || stop.kind === "done") return "ok";
-  if (stop.kind === "cancelled") return "cancelled";
-  if (stop.kind === "infra") {
-    if (stop.cause === "timeout") return "timeout";
-    if (stop.cause === "crash") return "crash";
-    return "infra";
-  }
-  return "ok";
 }
