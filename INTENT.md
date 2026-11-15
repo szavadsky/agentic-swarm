@@ -30,8 +30,9 @@ Modern harnesses deliver a decent story (several hundred lines of code). The age
     - eg, smaller model can perfectly plan or define architecture. It will degrade if it needs to simutaneously consider callgraphs and edge cases.
     - same model, small or large, can perfectly review results even of a larger model. At the end of the day, the job of smarter actor is to make sure results AND motivation are understandable to small actors.
 
+
 ### Role of agents/models - that coceptual section shall help to interpret anything below
-- Architect-tier models: 
+- Architect agent preferrably to run with large frontier level models (Opus, Fable, Astra, Kimi). The job of architect is to decide what needs to 
 
 ### Escalation ladder
 - One cheap-but-capable agent classifies the goal: trivial / task / bigger (epic, saga). For a task it defines the scope. It is not smart enough to decide how big "bigger" is — that is the architect's call.
