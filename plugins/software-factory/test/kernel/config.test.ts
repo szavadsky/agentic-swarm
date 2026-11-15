@@ -88,6 +88,22 @@ describe("three config layers", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
+  it("maps the optional turn/iteration minute knobs into the limits", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    const runYaml = path.join(root, ".factory/run.yaml");
+    fs.writeFileSync(runYaml, "limits: { iterations: 1, turnMinutes: 5, iterationMinutes: 7 }\n");
+    const limits = toLimits(loadConfigs(root));
+    expect(limits.turnMinutes).toBe(5);
+    expect(limits.iterationWallMs).toBe(7 * 60_000);
+    // The minutes knob wins over wallMinutes when both are set.
+    fs.writeFileSync(runYaml, "limits: { iterations: 1, wallMinutes: 3, iterationMinutes: 7 }\n");
+    expect(toLimits(loadConfigs(root)).iterationWallMs).toBe(7 * 60_000);
+    fs.writeFileSync(runYaml, "limits: { iterations: 1, turnMinutes: 0 }\n");
+    expect(() => loadConfigs(root)).toThrow(/turnMinutes/);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
   it("rejects an unsafe goal name", () => {
     const root = tmpRepo();
     const configs = loadConfigs(root);

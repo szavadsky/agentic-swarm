@@ -5,7 +5,7 @@ import { readHolds, scanInbox, type Hold, type Steer } from "./mailbox.js";
 import { next } from "./next.js";
 import { runSteerPm } from "./pm.js";
 import { pricedRecord, type PriceTable } from "./pricing.js";
-import { appendPark } from "./record.js";
+import { appendPark, scriptMeta } from "./record.js";
 import type { DrainController } from "./signals.js";
 import type { Action, KernelRuntime, State, StepRecord, TaskFile, TaskState } from "./types.js";
 import type { MergeResult } from "./integrate.js";
@@ -117,6 +117,38 @@ function agentStop(result: TaskActionResult | MergeResult): { reason: "infra" | 
   if ("infra" in result && result.infra) return { reason: "infra", cause: result.infra.cause };
   if ("cancelled" in result && result.cancelled) return { reason: "cancelled" };
   return undefined;
+}
+
+function crashMessage(err: unknown): string {
+  return err instanceof Error && err.message ? err.message : String(err);
+}
+
+/**
+ * A throwing action records the crash as an infra stop and names the task; the
+ * launch and its siblings keep going. Recording failure must not mask the
+ * original crash.
+ */
+async function recordCrash(
+  runtime: KernelRuntime,
+  iteration: number,
+  action: Action & { slug: string },
+  taskState: TaskState,
+  err: unknown
+): Promise<string> {
+  const message = crashMessage(err);
+  const cause = `crash: ${message}`;
+  try {
+    await runtime.store.appendRecord(
+      scriptMeta(iteration, action.kind === "step" ? action.step : action.kind, {
+        slug: action.slug,
+        round: taskState.round,
+      }),
+      { ok: false, cause, stop: { kind: "infra", cause: "crash", details: message } }
+    );
+  } catch {
+    // Recording failure must not mask the original crash.
+  }
+  return cause;
 }
 
 interface ActiveHolds {
@@ -255,10 +287,14 @@ export async function runDispatch(
 
   const start = (action: Action & { slug: string }, taskState: TaskState, task: TaskFile, agent: boolean, harnessId?: string): void => {
     const promise = (async () => {
-      const result = await executeTaskAction(runtime, task, action, iteration, taskState);
-      const ended = agentStop(result);
-      if (ended?.reason === "infra") infra.set(action.slug, ended.cause);
-      else if (ended?.reason === "cancelled") cancelled = true;
+      try {
+        const result = await executeTaskAction(runtime, task, action, iteration, taskState);
+        const ended = agentStop(result);
+        if (ended?.reason === "infra") infra.set(action.slug, ended.cause);
+        else if (ended?.reason === "cancelled") cancelled = true;
+      } catch (err) {
+        infra.set(action.slug, await recordCrash(runtime, iteration, action, taskState, err));
+      }
     })().finally(() => {
       running.delete(action.slug);
     });
@@ -296,6 +332,7 @@ export async function runDispatch(
 
     const agentCount = (): number => [...running.values()].filter((r) => r.agent).length;
     const elapsedMs = Date.now() - iterationStart(records, iteration);
+    const iterationWallMs = runtime.limits.iterationWallMs;
     if (!drain && !cancelled) {
       if (hold.goal !== undefined) {
         // A goal hold is a drain with a name: in-flight steps settle unmerged,
@@ -303,11 +340,8 @@ export async function runDispatch(
         drain = `steer: ${hold.goal} goal hold`;
       } else if (runtime.limits.iterationTurns !== undefined && turnsUsed >= runtime.limits.iterationTurns) {
         drain = `iteration turn limit ${runtime.limits.iterationTurns} reached`;
-      } else if (
-        runtime.limits.iterationWallMs !== undefined &&
-        elapsedMs >= runtime.limits.iterationWallMs
-      ) {
-        drain = `iteration wall limit ${runtime.limits.iterationWallMs}ms reached`;
+      } else if (iterationWallMs !== undefined && elapsedMs >= iterationWallMs) {
+        drain = `iteration wall limit ${iterationWallMs}ms reached`;
       } else if (usdLimit !== undefined) {
         const spent = iterationSpend(records, iteration, runtime.configs.run.prices ?? {});
         if (spent >= usdLimit) {
@@ -376,10 +410,14 @@ export async function runDispatch(
 
       // Park and finish are terminal script steps of an item; they never
       // start work, so they are allowed even while draining.
-      const result = await executeTaskAction(runtime, task, action, iteration, taskState);
-      const ended = agentStop(result);
-      if (ended?.reason === "infra") infra.set(action.slug, ended.cause);
-      else if (ended?.reason === "cancelled") cancelled = true;
+      try {
+        const result = await executeTaskAction(runtime, task, action, iteration, taskState);
+        const ended = agentStop(result);
+        if (ended?.reason === "infra") infra.set(action.slug, ended.cause);
+        else if (ended?.reason === "cancelled") cancelled = true;
+      } catch (err) {
+        infra.set(action.slug, await recordCrash(runtime, iteration, action, taskState, err));
+      }
     }
 
     if (running.size === 0) {

@@ -109,24 +109,29 @@ export const aliasSchema = z
   })
   .strict();
 
+/** Run-config drain limits, shared by the schema and `toLimits`. */
+const limitsSchema = z
+  .object({
+    concurrency: z.number().int().positive().default(2),
+    perHarness: z.record(z.string(), z.number().int().positive()).default({}),
+    iterations: z.number().int().positive().default(1),
+    /** Optional drain limits for one iteration. */
+    turns: z.number().int().positive().optional(),
+    wallMinutes: z.number().positive().optional(),
+    /** Optional USD brake: crossing it drains the iteration. */
+    iterationUsd: z.number().positive().optional(),
+    turnMinutes: z.number().positive().optional(),
+    iterationMinutes: z.number().positive().optional(),
+  })
+  .strict()
+  .default(() => ({ concurrency: 2, perHarness: {}, iterations: 1 }));
+
 export const runConfigSchema = z
   .object({
     aliases: z.record(z.string(), aliasSchema).default({}),
     /** Model id -> USD per Mtok; harnesses that report no cost are priced from here. */
     prices: z.record(z.string(), modelPriceSchema).default({}),
-    limits: z
-      .object({
-        concurrency: z.number().int().positive().default(2),
-        perHarness: z.record(z.string(), z.number().int().positive()).default({}),
-        iterations: z.number().int().positive().default(1),
-        /** Optional drain limits for one iteration. */
-        turns: z.number().int().positive().optional(),
-        wallMinutes: z.number().positive().optional(),
-        /** Optional USD brake: crossing it drains the iteration. */
-        iterationUsd: z.number().positive().optional(),
-      })
-      .strict()
-      .default(() => ({ concurrency: 2, perHarness: {}, iterations: 1 })),
+    limits: limitsSchema,
     sessions: z
       .object({
         /** Empty resolves to <worktreeRoot>/.sessions, outside the repo. */
@@ -378,7 +383,8 @@ export function resolveGoalPaths(configs: ConfigBundle, repoRoot: string, goal: 
  * Everything `next` and dispatch need from the three layers. The drain limits
  * are carried here, so no caller has to reach back into the config for them.
  */
-export function toLimits(configs: ConfigBundle): Limits {
+export function toLimits(configs: ConfigBundle): Limits & { turnMinutes?: number; iterationMinutes?: number } {
+  const runLimits: z.infer<typeof limitsSchema> = configs.run.limits;
   const flows: Limits["flows"] = {};
   for (const [name, flow] of Object.entries(configs.process.flows)) {
     flows[name] = flow;
@@ -386,14 +392,19 @@ export function toLimits(configs: ConfigBundle): Limits {
   return {
     itemTurns: configs.process.itemTurns,
     flows,
-    iterations: configs.run.limits.iterations,
-    concurrency: configs.run.limits.concurrency,
-    perHarness: configs.run.limits.perHarness,
-    iterationTurns: configs.run.limits.turns,
-    iterationWallMs: configs.run.limits.wallMinutes
-      ? Math.round(configs.run.limits.wallMinutes * 60_000)
-      : undefined,
-    iterationUsd: configs.run.limits.iterationUsd,
+    iterations: runLimits.iterations,
+    concurrency: runLimits.concurrency,
+    perHarness: runLimits.perHarness,
+    iterationTurns: runLimits.turns,
+    iterationWallMs:
+      runLimits.iterationMinutes !== undefined
+        ? Math.round(runLimits.iterationMinutes * 60_000)
+        : runLimits.wallMinutes
+          ? Math.round(runLimits.wallMinutes * 60_000)
+          : undefined,
+    iterationUsd: runLimits.iterationUsd,
+    ...(runLimits.turnMinutes !== undefined ? { turnMinutes: runLimits.turnMinutes } : {}),
+    ...(runLimits.iterationMinutes !== undefined ? { iterationMinutes: runLimits.iterationMinutes } : {}),
   };
 }
 

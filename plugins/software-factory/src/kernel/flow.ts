@@ -1,5 +1,7 @@
 import { commitAll } from "../core/git/commit.js";
 import { runAgentTurn } from "./agent.js";
+import { DEFAULT_TIMEOUTS } from "./agent.js";
+import { git, GitError } from "../core/git/exec.js";
 import { preexistingRed, recordedBaseGates } from "./baseline.js";
 import { runGates } from "./gates.js";
 import { mergeTask, type MergeResult } from "./integrate.js";
@@ -17,6 +19,7 @@ import {
   containmentViolation,
   ensureTaskWorktree,
   headSha,
+  integrationHead,
   treeSha,
 } from "./worktree.js";
 import {
@@ -64,6 +67,52 @@ function parkCause(status: string, summary: string | undefined): string {
   return `${status}: ${summary ?? "no summary"}`;
 }
 
+/**
+ * Infra gate evidence the kernel itself owns: the gate's own wall timeout and
+ * the shell's cannot-execute codes. Gate output is not evidence — a failing
+ * task may print anything, so output is never consulted.
+ */
+function isInfraGate(check: { ok: boolean; summary: string; details?: unknown }): boolean {
+  if (check.ok) return false;
+  const summary = check.summary.toLowerCase();
+  if (summary.includes("timed out")) return true;
+  if (/exit 12[67]/.test(summary)) return true;
+  if (typeof check.details === "object" && check.details !== null && (check.details as { kind?: unknown }).kind === "infra") return true;
+  return false;
+}
+
+/** A tree with no tracked edits and no merge in flight; untracked files count as dirty. */
+async function worktreeClean(cwd: string): Promise<boolean> {
+  const status = await git(cwd, ["status", "--porcelain"], { allowFail: true });
+  return status.code === 0 && status.stdout.trim() === "";
+}
+
+/**
+ * Mirrors `mergeRef` in worktree.ts (outside this task's scope): a conflict
+ * aborts the merge and reports the unmerged paths; any other refusal leaves no
+ * merge state and is thrown.
+ */
+async function mergeIntegrationHead(
+  cwd: string,
+  ref: string,
+  env: Record<string, string> | undefined
+): Promise<{ ok: true } | { ok: false; paths: string[] }> {
+  const merge = await git(cwd, ["merge", "--no-edit", ref], { allowFail: true, env });
+  if (merge.code === 0) return { ok: true };
+  const unmerged = await git(cwd, ["diff", "--name-only", "--diff-filter=U"], { allowFail: true });
+  const paths = unmerged.stdout
+    .split("\n")
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .sort();
+  const head = await git(cwd, ["rev-parse", "--verify", "--quiet", "MERGE_HEAD"], { allowFail: true });
+  if (head.code === 0) await git(cwd, ["merge", "--abort"]);
+  if (head.code !== 0 && paths.length === 0) {
+    throw new GitError(`merge --no-edit ${ref}`, merge.code, merge.stderr, merge.stdout);
+  }
+  return { ok: false, paths };
+}
+
 async function handleStepResult(
   runtime: KernelRuntime,
   task: TaskFile,
@@ -76,23 +125,32 @@ async function handleStepResult(
   stop: StepRecord["stop"],
   outcome: StepRecord["outcome"]
 ): Promise<TaskActionResult> {
-  if (stop?.kind === "infra") {
-    // The classifier already scrubbed and capped `details`; append it verbatim
-    // so the operator sees the provider error behind a bare cause like "auth".
-    const cause = stop.details ? `${stop.cause}: ${stop.details}` : stop.cause;
-    return { infra: { kind: "infra", cause } };
-  }
-  if (stop?.kind === "cancelled") return { cancelled: true };
-  if (stop?.kind === "truncated") return {};
   const meta = { iteration, slug: task.slug, round: state.round };
+  const infraResult =
+    stop?.kind === "infra"
+      ? {
+          infra: {
+            kind: "infra" as const,
+            cause: stop.details ? `${stop.cause}: ${stop.details}` : stop.cause,
+          },
+        }
+      : undefined;
+  const cancelledResult = stop?.kind === "cancelled" ? { cancelled: true } : undefined;
+
+  // A valid outcome is kept even when the turn stopped on infra or was
+  // cancelled: the record still carries the outcome and derive advances on it.
+  // Only a turn with no outcome is a pure infra/cancelled stop.
+  if (infraResult && !outcome) return infraResult;
+  if (cancelledResult && !outcome) return cancelledResult;
+  if (stop?.kind === "truncated") return {};
   if (stop?.kind === "refusal") {
     await appendPark(runtime.store, meta, `refused: ${stop.details ?? "no details"}`);
-    return {};
+    return infraResult ?? cancelledResult ?? {};
   }
   const status = outcome?.status;
   if (status === "blocked" || status === "failed" || status === "upscope") {
     await appendPark(runtime.store, meta, parkCause(status, outcome?.summary));
-    return {};
+    return infraResult ?? cancelledResult ?? {};
   }
   if (step.review) {
     const lastRound = state.round >= flow.reviewRounds;
@@ -105,13 +163,18 @@ async function handleStepResult(
     } else if (!outcome?.verdict) {
       await appendPark(runtime.store, meta, `review produced no verdict: ${outcome?.summary ?? "no summary"}`);
     }
-    return {};
+    return infraResult ?? cancelledResult ?? {};
   }
   if (checksDue(flow, step.id)) {
-    const checks = await runGates(runtime, worktree);
+    let checks = await runGates(runtime, worktree);
+    for (const check of checks) {
+      if (!check.ok && isInfraGate(check)) {
+        check.details = { ...(typeof check.details === "object" && check.details ? check.details : {}), kind: "infra" };
+      }
+    }
     await appendChecks(runtime.store, meta, checks, { preexisting });
   }
-  return {};
+  return infraResult ?? cancelledResult ?? {};
 }
 
 interface StepDeps {
@@ -142,6 +205,21 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
   }
 
   const meta = { iteration, slug: task.slug, round: state.round };
+  // A reused `base:` worktree advances to the current integration head before
+  // the turn, the same advance a created one gets (B6); a created worktree
+  // moved inside ensureTaskWorktree. A clean tree merges the head with the
+  // creation conflict path; a dirty tree keeps the state the last turn left.
+  let startPoint = ensured.startPoint;
+  if (task.base && !ensured.created && !step.review && (await worktreeClean(ensured.path))) {
+    const head = await integrationHead(runtime);
+    const attempt = await mergeIntegrationHead(ensured.path, head, runtime.repo.identityEnv());
+    if (!attempt.ok) {
+      const named = attempt.paths.join(", ") || "git reported no unmerged paths";
+      await appendPark(runtime.store, meta, `base-conflict: ${named}`);
+      return {};
+    }
+    startPoint = head;
+  }
   const preexisting = preexistingRed(recordedBaseGates(records));
   const target = stepTarget(runtime, task, state, step.id);
   // A fix turn resumes the implement session in this worktree; a first turn is
@@ -150,24 +228,35 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
     ? await followUpSession(runtime, task, target, records, ensured.path)
     : undefined;
   const vars = promptVars(runtime, task, ensured.path, records, state.round, flow);
-  vars.base_hash = firstBase(records, task.slug) ?? ensured.startPoint;
+  vars.base_hash = firstBase(records, task.slug) ?? startPoint;
   vars.head_hash = await headSha(ensured.path);
   // A turn may only change its own worktree (implementer.md). Snapshot the
   // shared checkouts now; the settle below refuses the commit on any breach.
   const contained = await containmentSnapshot(runtime, ensured.path);
   let breach: string | undefined;
+  const aliasTimeouts = target.timeouts;
+  const turnMinutes = (runtime.limits as { turnMinutes?: number }).turnMinutes;
+  const turnMinutesMs = turnMinutes !== undefined ? Math.round(turnMinutes * 60_000) : undefined;
+  const timeouts =
+    turnMinutesMs !== undefined
+      ? {
+          idleMs: aliasTimeouts?.idleMs ?? DEFAULT_TIMEOUTS.idleMs,
+          wallMs: Math.min(aliasTimeouts?.wallMs ?? DEFAULT_TIMEOUTS.wallMs, turnMinutesMs),
+        }
+      : aliasTimeouts ?? DEFAULT_TIMEOUTS;
   const result = await runAgentTurn(runtime, {
     target,
     cwd: ensured.path,
     meta: {
       ...meta,
       step: step.id,
-      base: firstBase(records, task.slug) ?? ensured.startPoint,
+      base: firstBase(records, task.slug) ?? startPoint,
       taskHash: materialHash(task),
     },
     vars,
     expectation: step.review ? "review" : "any",
     session,
+    timeouts,
     settle: async (_record, outcome, live) => {
       breach = await containmentViolation(runtime, ensured.path, ensured.branch, contained);
       if (breach) return { ok: false, cause: `containment: ${breach}` };
@@ -218,7 +307,12 @@ async function runChecks(
     await appendPark(runtime.store, { iteration, slug: task.slug, round: state.round }, cause);
     return {};
   }
-  const checks = await runGates(runtime, ensured.path);
+  let checks = await runGates(runtime, ensured.path);
+  for (const check of checks) {
+    if (!check.ok && isInfraGate(check)) {
+      check.details = { ...(typeof check.details === "object" && check.details ? check.details : {}), kind: "infra" };
+    }
+  }
   const preexisting = preexistingRed(recordedBaseGates(await runtime.store.listRecords()));
   await appendChecks(runtime.store, { iteration, slug: task.slug, round: state.round }, checks, {
     preexisting,

@@ -1,4 +1,6 @@
 import { stepFingerprint } from "./progress.js";
+import { isInfraCheck } from "./gates.js";
+import type { Stop } from "../harness/types.js";
 import type {
   FlowDefinition,
   ProgressRepeat,
@@ -134,6 +136,8 @@ export function reduceTask(task: TaskFile, records: StepRecord[], flow: FlowDefi
   let countedTree: string | undefined;
   let turns = 0;
   const seen = new Map<string, { step: string; round: number }>();
+  let lastInfraStep: string | undefined;
+  let infraRepeatCount = 0;
 
   for (const rec of records) {
     if (!rec.endedAt) continue;
@@ -143,7 +147,13 @@ export function reduceTask(task: TaskFile, records: StepRecord[], flow: FlowDefi
     }
     if (rec.step === "checks") {
       if (pendingChecks) {
-        if (rec.ok === false) {
+        const red = rec.checks?.filter((c) => !c.ok) ?? [];
+        if (rec.ok === false && red.length > 0 && red.every(isInfraCheck)) {
+          // A gate that could not start is not a red verdict on the task:
+          // looping the implementer ends in an empty-diff park (B6).
+          park = `infra: gate could not start: ${red.map((c) => c.name).join(", ")}`;
+          phase = "parked";
+        } else if (rec.ok === false) {
           stepIndex = 0;
           phase = firstStep;
         } else {
@@ -190,9 +200,41 @@ export function reduceTask(task: TaskFile, records: StepRecord[], flow: FlowDefi
       continue;
     }
     if (rec.actor !== "agent" || !rec.endedAt) continue;
-    if (rec.stop?.kind === "infra") continue;
+    const stop = rec.stop;
+    const outcome = rec.outcome;
+    const status = outcome?.status;
+    const hasOutcome = !!outcome && !!status;
+    const isInfra = stop?.kind === "infra";
+    const isCancelled = stop?.kind === "cancelled";
+    const isTruncated = stop?.kind === "truncated";
+    const isTimeoutOrCrash = isInfra && (stop.cause === "timeout" || stop.cause === "crash");
+
+    // Infra without a valid outcome: timeout/crash consume the turn budget and
+    // park after two repeats on the same step; other infra (quota, auth, ...)
+    // stays free and resumable.
+    if (isInfra && !hasOutcome) {
+      if (isTimeoutOrCrash) {
+        if (lastInfraStep === rec.step) infraRepeatCount += 1;
+        else {
+          lastInfraStep = rec.step;
+          infraRepeatCount = 1;
+        }
+        turns += 1;
+        if (infraRepeatCount >= 2) {
+          park = `infra-repeat: ${stop.cause}${stop.details ? `: ${stop.details}` : ""}`;
+          phase = "parked";
+        }
+      }
+      continue;
+    }
+
+    // A valid outcome is kept whatever the stop; reset repeat tracking.
+    lastInfraStep = undefined;
+    infraRepeatCount = 0;
+
     turns += 1;
-    if (rec.stop?.kind === "truncated" || rec.stop?.kind === "cancelled") continue;
+    if (isTruncated) continue;
+    if (isCancelled && !hasOutcome) continue;
 
     // The empty-diff baseline is the tree the last counted turn left. A commit
     // written by a turn derive ignores (crash recovery, truncation) is not work
@@ -216,13 +258,11 @@ export function reduceTask(task: TaskFile, records: StepRecord[], flow: FlowDefi
 
     round = Math.max(round, rec.round);
     commit = rec.commit ?? commit;
-    const outcome = rec.outcome;
     if (rec.stop?.kind === "refusal") {
       park = `refused: ${rec.stop.details ?? "no details"}`;
       phase = "parked";
       continue;
     }
-    const status = outcome?.status;
     if (status === "blocked" || status === "failed") {
       park = `${status}: ${outcome?.summary ?? "no summary"}`;
       phase = "parked";
@@ -308,4 +348,17 @@ export function reduceTask(task: TaskFile, records: StepRecord[], flow: FlowDefi
     loop,
     gateFix: terminal ? undefined : gateFix || undefined,
   };
+}
+
+export type StopClassification = "ok" | "infra" | "cancelled" | "timeout" | "crash";
+
+export function classifyStop(stop: Stop | undefined): StopClassification {
+  if (!stop || stop.kind === "done") return "ok";
+  if (stop.kind === "cancelled") return "cancelled";
+  if (stop.kind === "infra") {
+    if (stop.cause === "timeout") return "timeout";
+    if (stop.cause === "crash") return "crash";
+    return "infra";
+  }
+  return "ok";
 }

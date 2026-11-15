@@ -253,7 +253,7 @@ describe("derive", () => {
 
   it("does not read a commit from a turn derive ignores as the next turn's empty diff", () => {
     const ignored = [
-      { kind: "infra", cause: "crash" },
+      { kind: "infra", cause: "quota" },
       { kind: "truncated", cause: "turn-limit" },
     ] as const;
     for (const stop of ignored) {
@@ -265,7 +265,7 @@ describe("derive", () => {
       ]);
       expect(state.tasks.a!.park).toBeUndefined();
       expect(state.tasks.a!.phase).toBe("review");
-      // Truncated turns consume budget; infra turns never do.
+      // Truncated turns consume budget; timeout/crash infra stops always do.
       expect(state.tasks.a!.turns).toBe(stop.kind === "infra" ? 1 : 2);
     }
   });
@@ -349,5 +349,55 @@ describe("derive", () => {
       },
     ]);
     expect(state.goal).toBe("active");
+  });
+
+  const infraRedCheck = (seq: number): StepRecord =>
+    script(seq, {
+      step: "checks",
+      ok: false,
+      checks: [
+        {
+          name: "typecheck",
+          ok: false,
+          summary: "exit 127",
+          output: "bash: factory-missing-command-xyz: command not found",
+          fingerprint: "infra1",
+          details: { kind: "infra", cause: "exit 127" },
+        },
+      ],
+    });
+
+  it("parks a task as infra when every red check on it could not start, instead of looping into an empty-diff park", () => {
+    const state = derive([task("a")], [
+      implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
+      script(2, { step: "commit", ok: true, commit: "c1", tree: "tree-1" }),
+      infraRedCheck(3),
+    ]);
+    expect(state.tasks.a!.phase).toBe("parked");
+    expect(state.tasks.a!.park).toContain("infra: gate could not start: typecheck");
+  });
+
+  it("still loops the implementer when a red check is not infra, even beside an unstartable one", () => {
+    const state = derive([task("a")], [
+      implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
+      script(2, { step: "commit", ok: true, commit: "c1", tree: "tree-1" }),
+      script(3, {
+        step: "checks",
+        ok: false,
+        checks: [
+          {
+            name: "typecheck",
+            ok: false,
+            summary: "exit 127",
+            output: "bash: factory-missing-command-xyz: command not found",
+            fingerprint: "infra1",
+            details: { kind: "infra", cause: "exit 127" },
+          },
+          { name: "unit", ok: false, summary: "exit 1", output: "boom", fingerprint: "real1" },
+        ],
+      }),
+    ]);
+    expect(state.tasks.a!.phase).toBe("implement");
+    expect(state.tasks.a!.park).toBeUndefined();
   });
 });

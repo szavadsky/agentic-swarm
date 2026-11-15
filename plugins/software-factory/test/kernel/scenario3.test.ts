@@ -134,7 +134,6 @@ function taskShape(state: State) {
         {
           status: task.status,
           cause: task.cause,
-          turns: task.turns,
           round: task.round,
           kind: task.kind,
           flow: task.flow,
@@ -222,6 +221,8 @@ describe("KERNEL0 scenario 3 — kill mid-task, relaunch", () => {
       expect(crashed.state.tasks.alpha!.phase).toBe("done");
       expect(crashed.state.tasks.alpha!.verdict).toBe("approve");
       expect(crashed.content).toBe("alpha");
+      // The crash-sealed attempt consumes the turn budget; the clean run does not pay it.
+      expect(crashed.state.tasks.alpha!.turns).toBe(clean.tasks.alpha!.turns + 1);
       expect(taskShape(crashed.state)).toEqual(taskShape(clean));
 
       const merges = crashed.records.filter((r) => r.slug === "alpha" && r.step === "merge" && r.ok === true);

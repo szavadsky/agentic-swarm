@@ -92,6 +92,27 @@ function repairPrompt(outcomePath: string, findings: string[]): string {
  * `failed`. The end record is written only after `settle` (mechanical commit),
  * so a crash leaves an orphan that `derive` redispatches.
  */
+async function turnWithTimeout(harness: import("../harness/types.js").Harness, request: import("../harness/types.js").TurnRequest): Promise<import("../harness/types.js").TurnResult> {
+  const wallMs = request.timeouts.wallMs;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeoutResult: import("../harness/types.js").TurnResult = {
+    stop: { kind: "infra", cause: "timeout", details: `wall clock ${wallMs}ms exceeded` },
+    text: "",
+    usage: { in: 0, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0, out: 0, reasoningOut: 0 },
+    session: request.session,
+    model: request.model,
+    attempts: [],
+  };
+  const timeoutPromise = new Promise<import("../harness/types.js").TurnResult>((resolve) => {
+    timer = setTimeout(() => resolve(timeoutResult), wallMs);
+  });
+  try {
+    return await Promise.race([harness.turn(request), timeoutPromise]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 export async function runAgentTurn(runtime: KernelRuntime, spec: AgentTurnSpec): Promise<AgentTurnResult> {
   const { alias, harness, model, effort, fallbacks, timeouts: aliasTimeouts } = spec.target;
   const started = await runtime.store.startRecord({
@@ -121,7 +142,7 @@ export async function runAgentTurn(runtime: KernelRuntime, spec: AgentTurnSpec):
     timeouts,
     fallbacks: fallbacks?.map((id) => ({ id, effort })),
   };
-  let result = await harness.turn(request);
+  let result = await turnWithTimeout(harness, request);
   let lastResult = result;
   let attempts = [...(result.attempts ?? [])];
   let stop: Stop = result.stop;
@@ -137,7 +158,7 @@ export async function runAgentTurn(runtime: KernelRuntime, spec: AgentTurnSpec):
   if (spec.session && overflowed(stop)) {
     // A half-delivered outcome from the failed attempt is not the retry's.
     fs.rmSync(outcomePath, { force: true });
-    const retry = await harness.turn({ ...request, session: undefined });
+    const retry = await turnWithTimeout(harness, { ...request, session: undefined });
     lastResult = retry;
     attempts = [...attempts, ...(retry.attempts ?? [])];
     stop = retry.stop;
@@ -165,7 +186,7 @@ export async function runAgentTurn(runtime: KernelRuntime, spec: AgentTurnSpec):
   }
 
   if (findings.length > 0 && stop.kind !== "infra" && stop.kind !== "refusal" && stop.kind !== "cancelled") {
-    const repair = await harness.turn({
+    const repair = await turnWithTimeout(harness, {
       ...request,
       prompt: repairPrompt(outcomePath, findings),
       session,
