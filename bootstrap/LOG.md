@@ -434,3 +434,14 @@ Verbatim, newest last; each with what it changed.
 - OMP ladder green, 0 fallbacks, 0 quota. Costs: architect $1.3757, implementer $0.0754, reviewer $0.0178. Steer-i26-zeromerge processed.
 - Notable parks: checks-prune failed; acpx-config-only empty-diff-after-red (i23 incidents still open). Debt: doc-drift retirement loop (plan names the slug so PM cancel reads it as carried — third request).
 - Merge 1c2a97c. Gates 620/0. Stop-watch reset.
+
+### 2026-11-15 — iteration 27: 1 merged (continuation-carry), exit 3, $0.77
+- 32 min, stop=iteration-limit, base gates green at fdb1d1b. Merged on factory/self: continuation-carry (e9f035e: derive-task +44, flow +10, types +4, 423 lines of tests) — creation base-advance records now carry the head tree; the remover for the continuation empty-diff park.
+- Parked 28; new notable: fake-script-keyed-final empty-diff (implement 01020 no code change needed, foreground stress 660/0 in 257s, checks 01023 green; parked on continuation-first-turn vs post-advance comparison — the shape continuation-carry removes; Debt opened names it the kernel's 4th park-that-discards-finished-work pattern) and fake-script-keyed-review base-conflict (resume-iteration.test.ts).
+- Repair machinery live but untriggered: incidents show 1 outcome-repair turn, no multi-attempt implement. REPAIR_TURNS=3 stands ready, unproven.
+- Legs: implement+review omp muse (task-grade, same-family); PM ernie :free; digest beam $0 worked. 0 fallbacks, 0 quota. Costs: architect $0.7388, implementer $0.0207, reviewer $0.0059.
+- Merge 7a2505d. Gates 638/0.
+
+### 2026-11-15 — owner INTENT.md update synced (main, uncommitted text carried)
+- Sections changed (owner's words, carried verbatim): preamble (dropped "Authoritative owner intent; replaces manifesto.md"); Intent line (added observable; "no size ceiling"); Model economics moved up under Intent; new "Context and focus is as important as model tier/diveristy" (smaller-model degradation on complex/contradictory context, focus over tier; same-model review incl. smaller-reviewing-larger; smarter actor must make results AND motivation understandable to small actors); new "Role of agents/models" stub (one line, owner still editing).
+- Sync: cp main→v3, blob 17bbf30d verified equal both sides. Owner text on MAIN left uncommitted (standing instruction still open). Intent-change steer names the sections for the architect.

@@ -8,6 +8,7 @@ import { writeIterationSummary } from "../../src/kernel/summary.js";
 import { task } from "./helpers.js";
 import {
   cleanupFlowRepo,
+  goalCheckout,
   makeRuntime,
   outcome,
   setupFlowRepo,
@@ -459,6 +460,217 @@ describe("empty diff", () => {
           (r) => r.slug === "probe" && r.step === "finish" && r.ok === true,
         ),
       ).toHaveLength(1);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+});
+
+describe("continuation carry", () => {
+  it("lands a no-change first turn carrying kept work past checks to review", async () => {
+    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script((req, ctx) => {
+        fs.writeFileSync(path.join(req.cwd!, "alpha.txt"), "alpha\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "alpha implemented" }));
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(
+          outcome({ summary: "alpha rejected", verdict: "reject" }),
+        );
+        return fakeTurnResult(req);
+      });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
+      await runDispatch(runtime, { iteration: 1 });
+
+      let sawAlpha = false;
+      harness.script((req, ctx) => {
+        sawAlpha = fs.existsSync(path.join(req.cwd!, "alpha.txt"));
+        ctx.writeOutcome(
+          outcome({ summary: "kept branch already meets done-when" }),
+        );
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(
+          outcome({ summary: "beta approved", verdict: "approve" }),
+        );
+        return fakeTurnResult(req);
+      });
+      await writeTask(
+        runtime,
+        task("beta", { base: "alpha", scope: ["alpha.txt"] }),
+      );
+      const result = await runDispatch(runtime, { iteration: 2 });
+      expect(result.reason).toBe("boundary");
+      expect(sawAlpha).toBe(true);
+
+      const records = await runtime.store.listRecords();
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
+      expect(state.tasks.beta!.status).toBe("merged");
+      expect(
+        records.filter((r) => r.slug === "beta" && r.step === "park"),
+      ).toEqual([]);
+      expect(
+        records.filter((r) => r.slug === "beta" && r.step === "checks"),
+      ).toHaveLength(1);
+      expect(
+        records.filter((r) => r.slug === "beta" && r.step === "review"),
+      ).toHaveLength(1);
+      const advance = records.find(
+        (r) => r.slug === "beta" && r.step === "base-advance",
+      );
+      expect(advance?.headTree).toBeDefined();
+      expect(advance?.tree).not.toBe(advance?.headTree);
+      const firstImplement = records
+        .filter(
+          (r) =>
+            r.slug === "beta" && r.step === "implement" && r.actor === "agent",
+        )
+        .sort((a, b) => a.seq - b.seq)[0];
+      expect(firstImplement?.tree).toBe(advance?.tree);
+      expect(repo.git(["show", "factory/demo:alpha.txt"]).stdout.trim()).toBe(
+        "alpha",
+      );
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("lands a no-change first turn carrying kept work past checks to merge on just-implement", async () => {
+    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script((req, ctx) => {
+        fs.writeFileSync(path.join(req.cwd!, "alpha.txt"), "alpha\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "alpha implemented" }));
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(
+          outcome({ summary: "alpha rejected", verdict: "reject" }),
+        );
+        return fakeTurnResult(req);
+      });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
+      await runDispatch(runtime, { iteration: 1 });
+
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(
+          outcome({ summary: "kept branch already meets done-when" }),
+        );
+        return fakeTurnResult(req);
+      });
+      await writeTask(
+        runtime,
+        task("beta", {
+          base: "alpha",
+          flow: "just-implement",
+          scope: ["alpha.txt"],
+        }),
+      );
+      const result = await runDispatch(runtime, { iteration: 2 });
+      expect(result.reason).toBe("boundary");
+
+      const records = await runtime.store.listRecords();
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
+      expect(state.tasks.beta!.status).toBe("merged");
+      expect(
+        records.filter((r) => r.slug === "beta" && r.step === "park"),
+      ).toEqual([]);
+      expect(
+        records.filter((r) => r.slug === "beta" && r.step === "checks"),
+      ).toHaveLength(1);
+      expect(
+        records.filter((r) => r.slug === "beta" && r.step === "review"),
+      ).toEqual([]);
+      const advance = records.find(
+        (r) => r.slug === "beta" && r.step === "base-advance",
+      );
+      expect(advance?.headTree).toBeDefined();
+      expect(advance?.tree).not.toBe(advance?.headTree);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("parks empty-diff when the kept work is already on the head", async () => {
+    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script((req, ctx) => {
+        fs.writeFileSync(path.join(req.cwd!, "alpha.txt"), "alpha\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "alpha implemented" }));
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(
+          outcome({ summary: "alpha rejected", verdict: "reject" }),
+        );
+        return fakeTurnResult(req);
+      });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      const checkout = goalCheckout(repo, goal);
+      await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
+      await runDispatch(runtime, { iteration: 1 });
+
+      // Another landing puts the same tree on the head: the kept branch
+      // carries nothing beyond it.
+      fs.writeFileSync(path.join(checkout, "alpha.txt"), "alpha\n", "utf8");
+      repo.git(["add", "-A"], { cwd: checkout });
+      repo.git(["commit", "-m", "factory: land same alpha"], { cwd: checkout });
+
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "nothing to do" }));
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(
+          outcome({ summary: "should never review", verdict: "approve" }),
+        );
+        return fakeTurnResult(req);
+      });
+      await writeTask(
+        runtime,
+        task("beta", { base: "alpha", scope: ["alpha.txt"] }),
+      );
+      const result = await runDispatch(runtime, { iteration: 2 });
+      expect(result.reason).toBe("boundary");
+
+      const records = await runtime.store.listRecords();
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
+      expect(state.tasks.beta!.status).toBe("parked");
+      expect(state.tasks.beta!.cause).toStartWith("empty-diff:");
+      expect(state.tasks.beta!.cause).toContain("already on the head");
+      expect(
+        records.filter((r) => r.slug === "beta" && r.step === "review"),
+      ).toEqual([]);
+      expect(
+        records.filter(
+          (r) => r.slug === "beta" && r.step === "merge" && r.ok === true,
+        ),
+      ).toEqual([]);
+      const advance = records.find(
+        (r) => r.slug === "beta" && r.step === "base-advance",
+      );
+      expect(advance?.headTree).toBeDefined();
+      expect(advance?.tree).toBe(advance?.headTree);
     } finally {
       cleanupFlowRepo(repo);
     }

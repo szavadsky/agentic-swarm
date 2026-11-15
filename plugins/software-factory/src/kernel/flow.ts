@@ -305,14 +305,22 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
     // agent; derive needs the post-advance tree as the empty-diff baseline.
     // Written even when the merge was a no-op: the parked tip alone already
     // differs from the integration head the commit==base check would use.
+    // headTree lets derive tell kept work beyond the head from work already
+    // on it when the first turn commits nothing.
     const commit = await headSha(ensured.path);
     const tree = await treeSha(ensured.path);
+    const headTree = (
+      await git(runtime.paths.repoRoot, [
+        "rev-parse",
+        `${ensured.startPoint}^{tree}`,
+      ])
+    ).stdout.trim();
     await runtime.store.appendRecord(
       scriptMeta(iteration, "base-advance", {
         slug: task.slug,
         round: state.round,
       }),
-      { ok: true, commit, tree },
+      { ok: true, commit, tree, headTree },
     );
   }
   // A reused `base:` worktree advances to the current integration head before
