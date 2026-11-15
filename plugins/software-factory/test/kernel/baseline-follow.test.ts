@@ -1,12 +1,21 @@
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
+import type { CheckResult } from "../../src/core/checks/types.js";
 import { FakeHarness } from "../../src/harness/fake/index.js";
 import {
+  checkBase,
   preexistingRed,
   recordedBaseGates,
 } from "../../src/kernel/baseline.js";
-import { newGateFailures, runGates } from "../../src/kernel/gates.js";
+import {
+  capGateOutput,
+  GATE_OUTPUT_CAP,
+  gateSignatures,
+  isStaleGateCheck,
+  newGateFailures,
+  runGates,
+} from "../../src/kernel/gates.js";
 import { preflight } from "../../src/kernel/preflight.js";
 import { prepareIntegrationCheckout } from "../../src/kernel/worktree.js";
 import { cleanupFlowRepo, makeRuntime, setupFlowRepo } from "./s2-helpers.js";
@@ -191,3 +200,143 @@ describe("baseline on the head after the base follow", () => {
     }
   }, 60_000);
 });
+
+describe("inherited-red baseline debt", () => {
+  it("matches two red runs differing only in root length past the cap", () => {
+    // The baseline scratch root is ~30 chars longer than a task worktree root;
+    // capping the raw text would push the cut later for the baseline and drop
+    // head names the task keeps. Roots are normalised before cutting, so the
+    // same failures share one window.
+    const baselineRoot = "/tmp/wk/repo/.factory-runtime/preflight-probe-abcdef";
+    const taskRoot = "/tmp/wk/repo/demo";
+    const COUNT = 150;
+    const rawFor = (root: string): string => {
+      const lines: string[] = [];
+      for (let i = 0; i < COUNT; i++) {
+        lines.push(`cannot read ${root}/src/dir/file${i}.txt`);
+        lines.push(`(fail) suite > case ${i} [0.10ms]`);
+      }
+      return lines.join("\n");
+    };
+    const rawBaseline = rawFor(baselineRoot);
+    const rawTask = rawFor(taskRoot);
+    expect(rawBaseline.length).toBeGreaterThan(GATE_OUTPUT_CAP);
+    expect(rawTask.length).toBeGreaterThan(GATE_OUTPUT_CAP);
+    const cappedBaseline = capGateOutput(rawBaseline, [baselineRoot]);
+    const cappedTask = capGateOutput(rawTask, [taskRoot]);
+    expect(cappedBaseline.truncated).toBe(true);
+    expect(cappedTask.truncated).toBe(true);
+    const baseCheck: CheckResult = {
+      name: "tests",
+      ok: false,
+      summary: "exit 1",
+      output: cappedBaseline.output,
+      fingerprint: "base",
+      details: { roots: [baselineRoot], truncated: cappedBaseline.truncated },
+    };
+    const taskCheck: CheckResult = {
+      name: "tests",
+      ok: false,
+      summary: "exit 1",
+      output: cappedTask.output,
+      fingerprint: "task",
+      details: { roots: [taskRoot], truncated: cappedTask.truncated },
+    };
+    const baseSignatures = [...gateSignatures(baseCheck)];
+    expect(baseSignatures.length).toBeGreaterThan(0);
+    expect([...gateSignatures(taskCheck)]).toEqual(baseSignatures);
+    const inherited = preexistingRed({
+      commit: "base",
+      ok: false,
+      checks: [baseCheck],
+    });
+    expect(newGateFailures([taskCheck], inherited)).toEqual([]);
+  });
+
+  it("never inherits red from a baseline record without details", () => {
+    const stale: CheckResult = {
+      name: "package",
+      ok: false,
+      summary: "exit 1",
+      output: "cannot read /old/root/src/a/notes.txt",
+      fingerprint: "stale",
+    };
+    expect(isStaleGateCheck(stale)).toBe(true);
+    // A collapsed basename identity would suppress any task failure sharing
+    // the basename; a stale check contributes nothing instead.
+    expect(preexistingRed({ commit: "c", ok: false, checks: [stale] }).size).toBe(
+      0,
+    );
+    const task: CheckResult = {
+      name: "package",
+      ok: false,
+      summary: "exit 1",
+      output: "cannot read /tmp/factory-gates.abc123/notes.txt",
+      fingerprint: "task",
+      details: { roots: ["/task/root"], truncated: false },
+    };
+    expect([...gateSignatures(task)]).toEqual([
+      "line: cannot read <root>/notes.txt",
+    ]);
+    expect(
+      newGateFailures(
+        [task],
+        preexistingRed({ commit: "c", ok: false, checks: [stale] }),
+      ).map((c) => c.name),
+    ).toEqual(["package"]);
+  });
+
+  it("re-runs a stale baseline record instead of reusing it", async () => {
+    const { repo, goal } = setupFlowRepo({
+      gates: [
+        {
+          id: "package",
+          command: 'echo "cannot read $(pwd)/src/x.txt"; exit 1',
+        },
+      ],
+    });
+    try {
+      const runtime = await makeRuntime(repo, goal, {});
+      const commit = repo.git(["rev-parse", "HEAD"]).stdout.trim();
+      await runtime.store.appendRecord(
+        { iteration: 0, step: "baseline", round: 1, actor: "script", base: commit },
+        {
+          ok: false,
+          checks: [
+            {
+              name: "package",
+              ok: false,
+              summary: "exit 1",
+              output: "cannot read /old/root/src/x.txt",
+              fingerprint: "old",
+            },
+          ],
+        },
+      );
+      const original = console.warn;
+      console.warn = () => {};
+      let result;
+      try {
+        result = await checkBase(
+          runtime.configs,
+          runtime.store,
+          repo.dir,
+          "main",
+          commit,
+        );
+      } finally {
+        console.warn = original;
+      }
+      expect(result.fresh).toBe(true);
+      expect(result.ok).toBe(false);
+      const recorded = recordedBaseGates(await runtime.store.listRecords())!;
+      expect(isStaleGateCheck(recorded.checks[0]!)).toBe(false);
+      expect([...gateSignatures(recorded.checks[0]!)]).toEqual([
+        "line: cannot read <root>/src/x.txt",
+      ]);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+});
+
