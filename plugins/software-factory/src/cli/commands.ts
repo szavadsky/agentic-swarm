@@ -1,18 +1,25 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import type { ZodType } from "zod";
 import yaml from "yaml";
 import { git } from "../core/git/exec.js";
 import { writeTextAtomic } from "../core/records/io.js";
 import {
   configFilePaths,
   loadConfigs,
+  processConfigSchema,
   repoConfigSchema,
   resolveGoalPaths,
+  runConfigSchema,
 } from "../kernel/config.js";
 import { summaryRelPath } from "../kernel/context-pack.js";
 import { derive } from "../kernel/derive.js";
+import { classSchema } from "../kernel/flow-context.js";
+import { holdFileSchema } from "../kernel/mailbox.js";
+import { parseOutcome } from "../kernel/outcome.js";
 import { createFolderStore } from "../kernel/store.js";
+import { parseTaskFile, validateTaskGraph } from "../kernel/tasks.js";
 import type { State } from "../kernel/types.js";
 
 export interface InitResult {
@@ -161,4 +168,140 @@ export async function steerGoal(
     source.text.endsWith("\n") ? source.text : `${source.text}\n`,
   );
   return path.join(paths.goalDir, rel);
+}
+
+/** One schema-enforced file kind `factory validate` recognizes, by path. */
+type ValidateKind =
+  | "task"
+  | "class"
+  | "outcome"
+  | "hold"
+  | "repo"
+  | "run"
+  | "process";
+
+const KNOWN_VALIDATE_KINDS =
+  "tasks/*.md, holds/*.yaml, class.yaml, outcome.yaml, repo.yaml, run.yaml, process.yaml";
+
+function inferValidateKind(absPath: string): ValidateKind | null {
+  const base = path.basename(absPath);
+  if (base === "class.yaml" || base === "class.yml") return "class";
+  if (base === "outcome.yaml" || base === "outcome.yml") return "outcome";
+  if (base === "repo.yaml" || base === "repo.yml") return "repo";
+  if (base === "run.yaml" || base === "run.yml") return "run";
+  if (base === "process.yaml" || base === "process.yml") return "process";
+  const segments = absPath.split(path.sep);
+  if (segments.includes("holds") && /\.ya?ml$/i.test(base)) return "hold";
+  if (segments.includes("tasks") && base.endsWith(".md")) return "task";
+  return null;
+}
+
+/** Same report shape as the schema-validation gate: `file: key: message`. */
+function zodFindings(
+  text: string,
+  file: string,
+  schema: ZodType<unknown>,
+): string[] {
+  let raw: unknown;
+  try {
+    raw = yaml.parse(text);
+  } catch (err) {
+    return [`${file}: invalid YAML: ${(err as Error).message}`];
+  }
+  const result = schema.safeParse(raw ?? {});
+  if (!result.success) {
+    return result.error.issues.map(
+      (issue) =>
+        `${file}: ${issue.path.join(".") || "(root)"}: ${issue.message}`,
+    );
+  }
+  return [];
+}
+
+/**
+ * One hold file with the kernel's exported hold schema: same verdicts and
+ * messages as `readHolds` (`must be ...` / `not valid YAML: ...`).
+ */
+function holdFindings(text: string, file: string): string[] {
+  let raw: unknown;
+  try {
+    raw = yaml.parse(text);
+  } catch (err) {
+    return [`${file}: not valid YAML: ${(err as Error).message}`];
+  }
+  const result = holdFileSchema.safeParse(raw);
+  return result.success
+    ? []
+    : [`${file}: must be { slugs: string[], goal: boolean }`];
+}
+
+/**
++ * One task file plus its directory's graph, as the gate groups them: sibling
++ * tasks load together so a missing dependency reads as a finding, not a crash.
++ */
+async function taskFindings(absPath: string): Promise<string[]> {
+  const dir = path.dirname(absPath);
+  const names = (await fs.promises.readdir(dir))
+    .filter((name) => name.endsWith(".md"))
+    .sort();
+  const tasks: Parameters<typeof validateTaskGraph>[0] = [];
+  const findings: string[] = [];
+  for (const name of names) {
+    const file = path.join(dir, name);
+    try {
+      tasks.push(
+        parseTaskFile(
+          await fs.promises.readFile(file, "utf8"),
+          path.basename(name, ".md"),
+        ),
+      );
+    } catch (err) {
+      findings.push(`${file}: ${(err as Error).message}`);
+    }
+  }
+  for (const finding of validateTaskGraph(tasks)) {
+    findings.push(`${dir}: ${finding}`);
+  }
+  return findings;
+}
+
+/**
++ * Validates one schema-enforced file with the same validators as the
++ * schema-validation gate. Findings, empty when valid; unknown kinds and
++ * missing files throw.
++ */
+export async function validateFile(file: string): Promise<string[]> {
+  const abs = path.resolve(file);
+  const stat = await fs.promises.stat(abs).catch(() => null);
+  if (!stat) throw new Error(`no such file: ${file}`);
+  if (!stat.isFile()) throw new Error(`not a file: ${file}`);
+  const kind = inferValidateKind(abs);
+  if (!kind) {
+    throw new Error(
+      `unknown file kind: ${file} (expected ${KNOWN_VALIDATE_KINDS})`,
+    );
+  }
+  const text = await fs.promises.readFile(abs, "utf8");
+  switch (kind) {
+    case "task":
+      return taskFindings(abs);
+    case "class":
+      return zodFindings(text, abs, classSchema);
+    case "outcome": {
+      try {
+        parseOutcome(text);
+        return [];
+      } catch (err) {
+        return [`${abs}: ${(err as Error).message}`];
+      }
+    }
+    case "hold":
+      return holdFindings(text, abs);
+    case "repo":
+      return zodFindings(text, abs, repoConfigSchema);
+    case "run":
+      return zodFindings(text, abs, runConfigSchema);
+    case "process":
+      return zodFindings(text, abs, processConfigSchema);
+  }
 }

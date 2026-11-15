@@ -12,6 +12,7 @@ import {
   readSteerSource,
   statusGoal,
   steerGoal,
+  validateFile,
 } from "./commands.js";
 import {
   createRealHarnesses,
@@ -49,6 +50,7 @@ Commands:
   status                   Show derived state, parked causes and the last summary
   benchmark                Print the benchmark rows for one goal's artifacts
   steer                    Drop a steering file into the goal inbox
+  validate                 Validate one schema-enforced file with the gate's validators
 
 Options:
   --repo <path>            Repository root (defaults to the current directory)
@@ -98,12 +100,22 @@ Atomically drops the file (or stdin) into mailbox/inbox. The architect reads it
 at the next iteration boundary and answers in mailbox/outbox.
 `;
 
+const VALIDATE_USAGE = `
+factory validate <file>
+
+Validates one schema-enforced file with the same validators as the
+schema-validation gate: tasks/*.md (with its directory's dependency graph),
+class.yaml, outcome.yaml, mailbox/holds/*.yaml, repo.yaml, run.yaml and
+process.yaml. Exit: 0 valid, 1 invalid or unknown kind.
+`;
+
 function usageFor(command: string | undefined): string {
   if (command === "init") return INIT_USAGE;
   if (command === "run") return RUN_USAGE;
   if (command === "status") return STATUS_USAGE;
   if (command === "benchmark") return BENCHMARK_USAGE;
   if (command === "steer") return STEER_USAGE;
+  if (command === "validate") return VALIDATE_USAGE;
   return ROOT_USAGE;
 }
 
@@ -244,7 +256,7 @@ export async function dispatch(
   }
 
   if (parsed.help) {
-    const known = ["init", "run", "status", "benchmark", "steer"];
+    const known = ["init", "run", "status", "benchmark", "steer", "validate"];
     if (!parsed.command || known.includes(parsed.command)) {
       console.log(usageFor(parsed.command));
       return 0;
@@ -299,6 +311,14 @@ export async function dispatch(
         await readSteerSource(parsed.file),
       );
       console.log(`steer: ${path}`);
+      return 0;
+    }
+    if (parsed.command === "validate") {
+      if (!parsed.file) throw new Error("validate requires a file path");
+      const findings = await validateFile(parsed.file);
+      for (const finding of findings) console.error(finding);
+      if (findings.length > 0) return 1;
+      console.log(`${parsed.file}: valid`);
       return 0;
     }
     console.error(`Error: unknown command "${parsed.command}"`);
