@@ -50,6 +50,8 @@ export interface HarnessFactoryContext {
   scouts?: ModelRef;
   /** Run-config harness entries; each acpx entry binds one harness id. */
   harnesses?: Record<string, HarnessConfig>;
+  /** Provider cache window from `sessions.retention`; omp overlay and session stamp share it. */
+  retention?: "short" | "long";
 }
 
 export type HarnessFactory = (
@@ -259,6 +261,7 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
           }
         : undefined,
       harnesses: configs.run.harnesses,
+      retention: configs.run.sessions.retention,
     });
   }
 

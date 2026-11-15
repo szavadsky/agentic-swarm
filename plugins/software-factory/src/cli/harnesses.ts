@@ -41,6 +41,7 @@ export function createRealHarnesses(
     omp: new OmpHarness({
       sessionDir: context.sessionDir,
       subagentModel: context.scouts,
+      retention: context.retention,
     }),
   };
   for (const [id, entry] of Object.entries(context.harnesses ?? {})) {

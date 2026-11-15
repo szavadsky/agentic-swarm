@@ -73,7 +73,7 @@ prices:
   opencode/deepseek-v4.1-flash-free: { input: 0, cachedInput: 0, output: 0, reasoning: 0 }
   opencode-go/deepseek-v4.1-flash: { input: 0.15, cachedInput: 0.003, output: 0.6, reasoning: 0.6 }
 limits: { concurrency: 3, iterations: 1, iterationUsd: 5 }
-sessions: { dir: ~/.local/share/factory/sessions, keepRuns: 5 }
+sessions: { dir: ~/.local/share/factory/sessions, keepRuns: 5, retention: short }
 worktreeRoot: ~/.local/share/factory/worktrees
 scouts: { model: opencode-go/deepseek-v4.1-flash }   # omp architect subagents
 ```

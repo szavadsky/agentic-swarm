@@ -155,9 +155,11 @@ export const runConfigSchema = z
         /** Empty resolves to <worktreeRoot>/.sessions, outside the repo. */
         dir: z.string().default(""),
         keepRuns: z.number().int().nonnegative().default(5),
+        /** Provider cache window for omp sessions: 5 minutes, or 1 hour when long. */
+        retention: z.enum(["short", "long"]).default("short"),
       })
       .strict()
-      .default(() => ({ dir: "", keepRuns: 5 })),
+      .default(() => ({ dir: "", keepRuns: 5, retention: "short" as const })),
     worktreeRoot: z.string().min(1).optional(),
     scouts: z
       .object({
