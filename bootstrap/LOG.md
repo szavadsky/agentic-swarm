@@ -407,3 +407,10 @@ Verbatim, newest last; each with what it changed.
 - Debt closed: over-cap test + packTruncated flag; format baseline debts. i22 flake incident closed by e2e-flake.
 - New incidents steered: acpx-config-only (empty-diff r1 after red checks); checks-prune (full-suite-only red after green targeted suites — third flake-shape case).
 - Merge 4448ace. Gates 580/0.
+
+### 2026-11-15 — iteration 24: 0 merged, exit 3, $1.76 (first 0-merge since i18; watch, not stop)
+- 35 min, stop=iteration-limit, base gates green at e3c7641. factory/self == factory-v3: nothing to merge. 6 records: digest $0 (beam leg worked this time), architect $1.7125, PM $0 (ernie), fake-script-keyed implement/commit/park.
+- fake-script-keyed parked FAILED: per-file + 1 full suite green (622/0), but the turn-timeout budget cut the turn before the done-when's rerun-each-20 stress + 5x full-suite + gates evidence finished. Plan gates acpx-config-land and checks-prune-land behind it; park ended the dispatchable set honestly.
+- i23 incidents still open: acpx-config-only (empty-diff after red), checks-prune (full-suite-only failure). Parked: 25. Pending: 17 (M4x2, M5x3, M6x4, gate-flake-rerun, acpx-config-land, checks-prune-land, pm-store-debt, resume-repair, steer-pm-routing, retired doc-drift).
+- Assumption recorded: gate-flake-rerun adds bounded gate re-run (evidence records 00990/00992/00996/00997) — planning, no INTENT contradiction. Forward: fake-script-keyed first, then checks-prune-land, acpx-config-land, gate-flake-rerun; PM cancel retired doc-drift; p1 goals not ready (R7/R8 wait on acpx-config-land via m4-trivial-session).
+- OMP ladder green (muse:max, ernie), 0 fallbacks, 0 quota hits. Inbox empty (steer-i24 processed).
