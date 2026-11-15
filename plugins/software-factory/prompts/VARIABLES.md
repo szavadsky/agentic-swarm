@@ -80,19 +80,20 @@ The shared definitions exist once as partials: `scope` (the predicted-area rule)
 
 ## reviewer.md
 
-| variable           | meaning                                                                                                            |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------ |
-| `task_path`        | path to the task file the diff is judged against                                                                   |
-| `worktree`         | path to the task worktree holding the diff                                                                         |
-| `base_hash`        | commit hash before this task's first turn; the range spans every round                                             |
-| `head_hash`        | commit hash after the latest implementer turn                                                                      |
-| `round`            | 1-based review round                                                                                               |
-| `max_rounds`       | configured review round limit for this flow                                                                        |
-| `baseline_checks`  | gate failures recorded on the base before any task; pre-existing, not findings against this diff                   |
-| `prior_findings`   | previous round's summary, concerns and forward (summary first); empty string in round 1                            |
-| `fix_dispositions` | the current fix round's per-finding disposition claims from its outcome; empty string in round 1; renderer default |
-| `outcome_path`     | path where the outcome file must be written when the harness asks for a file                                       |
-| `validate_cmd`     | absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default                                   |
+| variable           | meaning                                                                                                                                                |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `task_path`        | path to the task file the diff is judged against                                                                                                       |
+| `worktree`         | path to the task worktree holding the diff                                                                                                             |
+| `base_hash`        | commit hash before this task's first turn; the range spans every round                                                                                 |
+| `head_hash`        | commit hash after the latest implementer turn                                                                                                          |
+| `round`            | 1-based review round                                                                                                                                   |
+| `max_rounds`       | configured review round limit for this flow                                                                                                            |
+| `baseline_checks`  | gate failures recorded on the base before any task; pre-existing, not findings against this diff                                                       |
+| `prior_findings`   | previous round's summary, concerns and forward (summary first); empty string in round 1                                                                |
+| `upscope_ask`      | escalation ask for a standalone task review, answered as `upscope: yes\|no` with the verdict; empty string when this task is part of an architect plan |
+| `fix_dispositions` | the current fix round's per-finding disposition claims from its outcome; empty string in round 1; renderer default                                     |
+| `outcome_path`     | path where the outcome file must be written when the harness asks for a file                                                                           |
+| `validate_cmd`     | absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default                                                                       |
 
 ## digest.md
 

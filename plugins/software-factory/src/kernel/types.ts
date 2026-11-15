@@ -31,6 +31,10 @@ export const outcomeSchema = z.object({
   forward: z.array(z.string()).default([]),
   verdict: z.enum(["approve", "changes", "reject"]).optional(),
   decision: z.enum(["continue", "done", "blocked"]).optional(),
+  // Standalone review escalation: the reviewer answers the upscope ask alongside
+  // its verdict. `yes` parks with cause upscope and (standalone only) rewrites
+  // the front class to bigger; `no` and absent keep the normal verdict path.
+  upscope: z.enum(["yes", "no"]).optional(),
 });
 
 export type Concern = z.infer<typeof concernSchema>;

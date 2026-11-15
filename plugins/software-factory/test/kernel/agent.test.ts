@@ -468,6 +468,7 @@ describe("delivery guard", () => {
     max_rounds: "2",
     baseline_checks: "none",
     prior_findings: "",
+    upscope_ask: "",
   };
 
   const frontVars = {

@@ -6,6 +6,7 @@ import type { Harness, ModelRef } from "../harness/types.js";
 import { type BoundaryResult, runBoundary } from "./boundary.js";
 import { loadConfigs, resolveGoalPaths, toLimits } from "./config.js";
 import { derive, FRONT_STOP_STEP } from "./derive.js";
+import { readFrontClass } from "./flow-context.js";
 import {
   type DispatchResult,
   iterationSpend,
@@ -484,23 +485,33 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
           front.action === "dispatch" &&
           dispatched?.reason === "boundary";
         if (frontFinished) {
-          const afterDispatch = derive(
-            await store.listTasks(),
-            await store.listRecords(),
-            runtime.configs.process.flows,
-          );
-          const unfinished = unfinishedTasks(afterDispatch);
-          const landed =
-            Object.keys(afterDispatch.tasks).length > 0 &&
-            unfinished.length === 0;
-          await recordFrontStop(
-            store,
-            iteration,
-            landed ? "done" : "blocked",
-            landed
-              ? `front path landed every task in iteration ${iteration}`
-              : `front path stopped with ${unfinished.join(", ")} in iteration ${iteration}`,
-          );
+          let escalated = false;
+          try {
+            escalated = readFrontClass(runtime)?.class === "bigger";
+          } catch {
+            escalated = false;
+          }
+          // An upscope escalation rewrote the class mid-dispatch: the goal stays
+          // active so the next launch runs the architect instead of stopping here.
+          if (!escalated) {
+            const afterDispatch = derive(
+              await store.listTasks(),
+              await store.listRecords(),
+              runtime.configs.process.flows,
+            );
+            const unfinished = unfinishedTasks(afterDispatch);
+            const landed =
+              Object.keys(afterDispatch.tasks).length > 0 &&
+              unfinished.length === 0;
+            await recordFrontStop(
+              store,
+              iteration,
+              landed ? "done" : "blocked",
+              landed
+                ? `front path landed every task in iteration ${iteration}`
+                : `front path stopped with ${unfinished.join(", ")} in iteration ${iteration}`,
+            );
+          }
         }
         const afterStop = derive(
           await store.listTasks(),

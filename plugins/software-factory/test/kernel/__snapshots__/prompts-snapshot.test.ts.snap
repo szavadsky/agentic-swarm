@@ -490,6 +490,7 @@ verdict: approve | changes | reject; decision: continue | done | blocked
 - round: \`1\` of \`2\`
 - pre-existing base gate failures: \`- test: 2 failing\` — red before this diff; not findings against it
 - prior findings: \`\` — empty in round 1
+- standalone upscope: \`\` — the escalation ask for a standalone task; empty when this task is part of an architect plan (then give no upscope field)
 - fix dispositions: \`\` — the fix round's per-finding disposition claims; empty in round 1. Verify each claim against the diff: a claim the diff does not evidence is still a finding.
 - outcome path: \`/worktrees/demo-tasks/alpha/outcome.yaml\`
 "

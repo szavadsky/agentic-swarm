@@ -8,11 +8,13 @@ import { preexistingRed, recordedBaseGates } from "./baseline.js";
 import {
   checksDue,
   compactSession,
+  escalateFrontClassToBigger,
   findStep,
   firstBase,
   flowOf,
   followUpSession,
   isFixTurn,
+  isStandaloneTask,
   isTrivialImplementTurn,
   promptVars,
   stepTarget,
@@ -323,6 +325,20 @@ async function handleStepResult(
     return infraResult ?? cancelledResult ?? {};
   }
   if (step.review) {
+    // Standalone escalation: the reviewer answered the upscope ask with yes.
+    // Parks with the same cause shape as a status upscope, whatever the
+    // verdict says; a standalone task also rewrites the front class to bigger
+    // so the next launch runs the architect. Architect-plan tasks park without
+    // the rewrite and never take the escalation path.
+    if (outcome?.upscope === "yes") {
+      await appendPark(
+        runtime.store,
+        meta,
+        parkCause("upscope", outcome?.summary),
+      );
+      if (isStandaloneTask(runtime, task)) escalateFrontClassToBigger(runtime);
+      return infraResult ?? cancelledResult ?? {};
+    }
     const lastRound = state.round >= flow.reviewRounds;
     if (outcome?.verdict === "reject") {
       await appendPark(

@@ -468,6 +468,15 @@ export function reduceTask(
       // still bound the loop.
     }
     if (step.review) {
+      // Standalone escalation (and any review upscope answer): parks with the
+      // same cause shape as a status upscope, whatever the verdict says. The
+      // class rewrite is flow's side effect; derive only parks. Non-review
+      // steps ignore the field.
+      if (outcome?.upscope === "yes") {
+        park = `upscope: ${outcome?.summary ?? "no summary"}`;
+        phase = "parked";
+        continue;
+      }
       verdict = outcome?.verdict;
       if (verdict === "approve") {
         stepIndex = idx + 1;

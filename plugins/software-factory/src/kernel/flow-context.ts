@@ -306,6 +306,39 @@ function frontTaskClass(
   return cls.class;
 }
 
+/** A task the front classified without an architect: class.yaml names its slug. */
+export function isStandaloneTask(
+  runtime: KernelRuntime,
+  task: TaskFile,
+): boolean {
+  return frontTaskClass(runtime, task) !== undefined;
+}
+
+/**
+ * The escalation ask for a standalone review, empty for architect-plan tasks.
+ * Rendered as the reviewer's `upscope_ask` variable; the reviewer answers it
+ * as `upscope: yes|no` alongside its verdict.
+ */
+export function standaloneUpscopeAsk(
+  runtime: KernelRuntime,
+  task: TaskFile,
+): string {
+  if (!isStandaloneTask(runtime, task)) return "";
+  return (
+    "This is a standalone task: no architect planned it. Is the real scope " +
+    "substantially higher than the front's predicted area above, and does the " +
+    "result require architecture input? Answer `upscope: yes` to park and " +
+    "escalate the goal to bigger, or `upscope: no` to judge normally. Always " +
+    "include your verdict; an upscope yes parks regardless of it."
+  );
+}
+
+/** Rewrites the front class to bigger so the next launch runs the architect. */
+export function escalateFrontClassToBigger(runtime: KernelRuntime): void {
+  const file = path.join(runtime.store.goalDir, CLASS_FILE);
+  fs.writeFileSync(file, yaml.stringify({ class: "bigger" }), "utf8");
+}
+
 /**
  * The front's record proves the front ran and names the iteration whose pack is
  * the task's briefing.
@@ -555,6 +588,9 @@ export function promptVars(
     prior_findings: review?.outcome ? formatReviewFindings(review.outcome) : "",
     fix_dispositions: fixDispositions(records, task.slug, flow, round),
     front_pack: frontPack(runtime, task, records) ?? "",
+    // The standalone escalation ask for the reviewer; empty when this task is
+    // part of an architect plan. The implementer template ignores it.
+    upscope_ask: standaloneUpscopeAsk(runtime, task),
     // A de-novo turn carries no follow-up notice; the trivial path overrides
     // this with `trivialResumeNote` before rendering the implement prompt.
     resume_note: "",

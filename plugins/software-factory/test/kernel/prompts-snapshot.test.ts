@@ -73,6 +73,7 @@ const ROLES: Record<string, Record<string, string>> = {
     max_rounds: "2",
     baseline_checks: "- test: 2 failing",
     prior_findings: "",
+    upscope_ask: "",
     fix_dispositions: "",
     outcome_path: "/worktrees/demo-tasks/alpha/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
