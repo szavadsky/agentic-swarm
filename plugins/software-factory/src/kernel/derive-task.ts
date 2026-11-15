@@ -180,6 +180,9 @@ export function reduceTask(
   let lastTree: string | undefined;
   /** Tree of the last counted turn; ignored turns leave the branch baseline here. */
   let countedTree: string | undefined;
+  /** Creation advance before the first counted turn; its tree vs headTree decides the carry. */
+  let creationAdvance: { tree: string; headTree: string } | null = null;
+  let seenCountedTurn = false;
   let turns = 0;
   const seen = new Map<string, { step: string; round: number }>();
   let lastInfraStep: string | undefined;
@@ -198,6 +201,18 @@ export function reduceTask(
       // turn's. No existing record carries it — commit records only follow
       // turns — so this script record is the baseline. Free: no budget.
       if (rec.tree !== undefined) countedTree = rec.tree;
+      // Only the creation advance carries, and only for the first counted
+      // turn: a reused-worktree sync or merge-checks recreation either lacks
+      // headTree or lands after a counted turn. Old records without headTree
+      // derive as today.
+      if (
+        !seenCountedTurn &&
+        creationAdvance === null &&
+        rec.tree !== undefined &&
+        rec.headTree !== undefined
+      ) {
+        creationAdvance = { tree: rec.tree, headTree: rec.headTree };
+      }
       continue;
     }
     if (rec.step === "checks") {
@@ -341,7 +356,18 @@ export function reduceTask(
     // the next turn produced, so it must not stand in for a diff from base.
     const priorTree = countedTree;
     if (rec.tree !== undefined) countedTree = rec.tree;
-
+    // A base continuation whose kept branch already meets its done-when
+    // commits nothing on its first turn: when the creation advance carried
+    // work beyond the head, that no-change turn is progress, not an empty
+    // diff. Consumed by the first counted turn whatever its step.
+    let carriedWork: boolean | null = null;
+    if (!seenCountedTurn) {
+      if (creationAdvance !== null && priorTree === creationAdvance.tree) {
+        carriedWork = creationAdvance.tree !== creationAdvance.headTree;
+      }
+      seenCountedTurn = true;
+      creationAdvance = null;
+    }
     const fp = stepFingerprint(task.kind, rec, lastTree);
     if (fp) {
       const prior = seen.get(fp);
@@ -386,12 +412,16 @@ export function reduceTask(
     // gate-fix turn names the red checks that sent it back, so the cause says
     // why a task that already committed looks empty.
     if (!step.review && committedNothing(task.kind, rec, priorTree)) {
-      park =
-        gateFix && gateFailure
-          ? `empty-diff: ${rec.step} r${rec.round} committed no changes after red checks: ${gateFailure}`
-          : `empty-diff: ${rec.step} r${rec.round} committed no changes`;
-      phase = "parked";
-      continue;
+      if (carriedWork !== true) {
+        park =
+          carriedWork === false
+            ? `empty-diff: ${rec.step} r${rec.round} kept work is already on the head`
+            : gateFix && gateFailure
+              ? `empty-diff: ${rec.step} r${rec.round} committed no changes after red checks: ${gateFailure}`
+              : `empty-diff: ${rec.step} r${rec.round} committed no changes`;
+        phase = "parked";
+        continue;
+      }
     }
     if (step.review) {
       verdict = outcome?.verdict;
