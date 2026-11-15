@@ -1,6 +1,5 @@
 import { describe, expect, it } from "bun:test";
 import {
-  capPack,
   forwardedConcerns,
   renderContextPack,
   shallowCodeMap,
@@ -78,33 +77,11 @@ describe("context pack", () => {
     expect(first).toContain("lint: exit 1");
   });
 
-  it("caps the pack by bytes and says it truncated", () => {
-    const big = renderContextPack({
-      goal: "demo",
-      iteration: 1,
-      intentPath: "i",
-      planPath: "p",
-      checkout: "c",
-      integrationBranch: "factory/demo",
-      headHash: "abcdef",
-      recordsDir: "r",
-      tasksDir: "t",
-      tasks,
-      state: derive(tasks, []),
-      steers: [],
-      setup: [],
-      gates: [],
-      forwarded: [],
-      maxBytes: 300,
-    });
-    expect(Buffer.byteLength(big, "utf8")).toBeLessThanOrEqual(300);
-    expect(big).toContain("truncated");
-    expect(capPack("x".repeat(1000), 100)).toContain("truncated");
-  });
-
-  it("stays under the default cap with 50 tasks", () => {
-    const many = Array.from({ length: 50 }, (_, i) =>
-      task(`t${String(i).padStart(2, "0")}`),
+  it("names every pointer and never cuts the status table with many tasks", () => {
+    const many = Array.from({ length: 120 }, (_, i) =>
+      task(`bulk-${String(i).padStart(3, "0")}`, {
+        deps: i === 0 ? [] : [`bulk-${String(i - 1).padStart(3, "0")}`],
+      }),
     );
     const pack = renderContextPack({
       goal: "demo",
@@ -116,18 +93,59 @@ describe("context pack", () => {
       headHash: "abcdef1234567890",
       recordsDir: "/goal/records",
       tasksDir: "/goal/tasks",
+      previousSummary: "/goal/iterations/3/summary.md",
+      digestPath: "/goal/iterations/4/digest.md",
+      runConfigPath: "/repo/bootstrap/run/self-quota.yaml",
+      openRecords: [
+        "/goal/records/00007-i4-bulk-003-implement-r1",
+        "/goal/records/00008-i4-bulk-004-implement-r1",
+      ],
       tasks: many,
       state: derive(many, []),
       codeMap: shallowCodeMap(
         Array.from({ length: 200 }, (_, i) => `src/mod${i % 12}/file${i}.ts`),
       ),
-      steers: [],
+      steers: [
+        {
+          id: "steer-i20-wiring-gap",
+          file: "steer-i20-wiring-gap.md",
+          relPath: "mailbox/inbox/steer-i20-wiring-gap.md",
+          text: "name the run config",
+          hash: "abc123",
+        },
+      ],
       setup: ["bun install"],
       gates: [{ id: "test", command: "bun test" }],
-      forwarded: [],
+      forwarded: [
+        {
+          source: "bulk-003 review r1",
+          calibration: "architect",
+          kind: "debt",
+          text: "retry window drops head names",
+          evidence: "src/kernel/baseline.ts:175",
+        },
+        {
+          source: "bulk-004 review r1",
+          calibration: "architect",
+          kind: "risk",
+          text: "flaky gate on macOS",
+        },
+      ],
     });
-    expect(Buffer.byteLength(pack, "utf8")).toBeLessThanOrEqual(8000);
-    expect(pack).toContain("t00");
+    // Past the old 8000-byte cap: the retired tail cut would have eaten the table.
+    expect(Buffer.byteLength(pack, "utf8")).toBeGreaterThan(8000);
+    expect(pack).toContain("- plan (architect edits this): /goal/plan.md");
+    expect(pack).toContain("- intent: /goal/intent.md");
+    expect(pack).toContain("iterations/4/digest.md");
+    expect(pack).toContain("## Debt register");
+    expect(pack).toContain("retry window drops head names");
+    expect(pack).toContain("## Open records");
+    expect(pack).toContain("00007-i4-bulk-003-implement-r1");
+    expect(pack).toContain("/wt/demo (branch factory/demo");
+    expect(pack).toContain("run config: /repo/bootstrap/run/self-quota.yaml");
+    expect(pack).toContain("steer-i20-wiring-gap");
+    for (const t of many) expect(pack).toContain(`| ${t.slug} |`);
+    expect(pack).toContain("| bulk-119 |");
     expect(pack).toContain("src/mod0/ — 17 files");
   });
 

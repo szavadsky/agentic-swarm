@@ -470,7 +470,7 @@ const implementerVars = {
   findings: "",
 };
 
-function packFixture(maxBytes?: number): string {
+function packFixture(): string {
   const tasks = [task("a"), task("b", { deps: ["a"] })];
   return renderContextPack({
     goal: "demo",
@@ -488,7 +488,6 @@ function packFixture(maxBytes?: number): string {
     setup: [],
     gates: [{ id: "test", command: "bun test" }],
     forwarded: [],
-    ...(maxBytes === undefined ? {} : { maxBytes }),
   });
 }
 
@@ -516,17 +515,15 @@ describe("agent turn prompt size", () => {
     );
     expect(result.record.promptBytes).toBeGreaterThan(0);
     expect(result.record.packBytes).toBeUndefined();
-    expect(result.record.packTruncated).toBeUndefined();
     fs.rmSync(root, { recursive: true, force: true });
   });
 
-  it("records an over-cap pack as truncated on architect and PM records", async () => {
+  it("records pack bytes on architect and PM records", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-agent-"));
     const fake = new FakeHarness({ id: "fake" });
     const runtime = runtimeFor(fake, root);
     await runtime.store.ensureLayout();
-    const pack = packFixture(300);
-    expect(pack).toContain("truncated");
+    const pack = packFixture();
     await runtime.store.writeFile("iterations/1/context-pack.md", pack);
 
     fake.script((req, ctx) => {
@@ -545,7 +542,6 @@ describe("agent turn prompt size", () => {
       expectation: "architect",
     });
     expect(architect.record.packBytes).toBe(Buffer.byteLength(pack, "utf8"));
-    expect(architect.record.packTruncated).toBe(true);
 
     fake.script((req, ctx) => {
       ctx.writeOutcome({ status: "done", summary: "tasks" });
@@ -559,36 +555,6 @@ describe("agent turn prompt size", () => {
       expectation: "any",
     });
     expect(pm.record.packBytes).toBe(Buffer.byteLength(pack, "utf8"));
-    expect(pm.record.packTruncated).toBe(true);
-    fs.rmSync(root, { recursive: true, force: true });
-  });
-
-  it("records an under-cap pack as not truncated", async () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-agent-"));
-    const fake = new FakeHarness({ id: "fake" });
-    const runtime = runtimeFor(fake, root);
-    await runtime.store.ensureLayout();
-    const pack = packFixture();
-    await runtime.store.writeFile("iterations/1/context-pack.md", pack);
-    fake.script((req, ctx) => {
-      ctx.writeOutcome({
-        status: "done",
-        summary: "plan",
-        decision: "continue",
-      });
-      return fakeTurnResult(req);
-    });
-
-    const result = await runAgentTurn(runtime, {
-      target: resolveRole(runtime, "architect"),
-      cwd: root,
-      meta: { iteration: 1, step: "architect", round: 1 },
-      vars,
-      expectation: "architect",
-    });
-
-    expect(result.record.packBytes).toBe(Buffer.byteLength(pack, "utf8"));
-    expect(result.record.packTruncated).toBe(false);
     fs.rmSync(root, { recursive: true, force: true });
   });
 });
