@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
+import { validateFile } from "../../src/cli/commands.js";
 import { dispatch } from "../../src/cli/dispatch.js";
 import {
   FakeHarness,
@@ -13,7 +14,6 @@ import {
   cleanup,
   type E2EGoal,
   expectLaunch,
-  implementerTurn,
   makeGoal,
   outcome,
   scriptDigest,
@@ -69,6 +69,30 @@ function taskFront(goal: E2EGoal, slug: string): FakeTurnHandler {
   };
 }
 
+/** The absolute worktree the implement prompt names in its `- worktree:` line. */
+function promptWorktree(prompt: string): string {
+  const match = /- worktree: `([^`]+)`/.exec(prompt);
+  if (!match?.[1]) throw new Error("implement prompt names no worktree");
+  return match[1];
+}
+
+/**
+ * A trivial implement turn: the session stays in the front's cwd, so the work
+ * goes to the absolute worktree from the prompt, never to the turn cwd.
+ */
+function trivialImplementerTurn(file: string): FakeTurnHandler {
+  return (req, ctx) => {
+    expect(req.session).toBeDefined();
+    expect(req.cwd).toBe(req.session!.cwd);
+    const worktree = promptWorktree(req.prompt);
+    expect(path.isAbsolute(worktree)).toBe(true);
+    expect(worktree).not.toBe(req.cwd);
+    fs.writeFileSync(path.join(worktree, file), `${file}\n`, "utf8");
+    ctx.writeOutcome(outcome({ summary: `${file} created` }));
+    return fakeTurnResult(req);
+  };
+}
+
 async function recordsOf(goal: E2EGoal) {
   return createFolderStore(goal.goalDir).listRecords();
 }
@@ -89,7 +113,7 @@ async function statusLine(goal: E2EGoal): Promise<string> {
 }
 
 describe("front ladder", () => {
-  it("classifies a trivial goal, merges one just-implement task, and never reaches architect or PM", async () => {
+  it("implements a trivial goal in the front's own session and merges without architect or reviewer", async () => {
     const goal = makeGoal({ classYaml: null });
     try {
       const harness = new FakeHarness({ id: "fake" });
@@ -100,10 +124,18 @@ describe("front ladder", () => {
         expect(fs.readFileSync(taskPath!, "utf8")).toContain(
           "flow: just-implement",
         );
-        // The front ran in the goal checkout; the task runs in its own
-        // worktree, so the turn starts de novo with the pack as a prompt
-        // variable.
-        expect(req.session).toBeUndefined();
+        // The follow-up prompt resumes the front's session with its recorded
+        // cwd and names the absolute worktree and branch; the pack stays a
+        // prompt variable for the briefing.
+        expect(req.session).toBeDefined();
+        expect(req.cwd).toBe(req.session!.cwd);
+        const worktree = promptWorktree(req.prompt);
+        expect(path.isAbsolute(worktree)).toBe(true);
+        expect(worktree).not.toBe(req.cwd);
+        expect(req.prompt).toContain("- branch: `factory-task/demo/tiny`");
+        expect(req.prompt).toContain(
+          `Do all work under the absolute worktree path \`${worktree}\``,
+        );
         expect(req.prompt).toContain(
           `- front pack: \`${path.join(goal.goalDir, contextPackRelPath(1))}\``,
         );
@@ -113,7 +145,7 @@ describe("front ladder", () => {
             "utf8",
           ),
         ).toContain("one file");
-        fs.writeFileSync(path.join(req.cwd!, "tiny.txt"), "tiny\n", "utf8");
+        fs.writeFileSync(path.join(worktree, "tiny.txt"), "tiny\n", "utf8");
         ctx.writeOutcome(outcome({ summary: "tiny.txt created" }));
         return fakeTurnResult(req);
       });
@@ -129,9 +161,17 @@ describe("front ladder", () => {
       const implement = records.find(
         (r) => r.slug === "tiny" && r.step === "implement",
       );
-      // The ladder's "same agent": the fallback front alias is the implement target.
+      // The ladder's "same agent, same session": the fallback front alias is
+      // the implement target, and the implement record carries the front's
+      // session id — a de-novo retry would mint a new one.
       expect(implement?.alias).toBe(front?.alias);
       expect(implement?.model?.id).toBe(front?.model?.id);
+      expect(implement?.session?.id).toBe(front?.session?.id);
+      expect(implement?.session?.cwd).toBe(front?.session?.cwd);
+      // The follow-up turn inherits the front's tool grant: same model and
+      // same harness passthrough on both calls.
+      expect(harness.calls[1]?.model).toEqual(harness.calls[0]?.model);
+      expect(harness.calls[1]?.opaque).toEqual(harness.calls[0]?.opaque);
       expect(records.filter((r) => r.step === "architect")).toEqual([]);
       expect(records.filter((r) => r.step === "pm")).toEqual([]);
       expect(records.filter((r) => r.step === "review")).toEqual([]);
@@ -144,9 +184,9 @@ describe("front ladder", () => {
         ),
       ).toBe(true);
       expect(harness.calls).toHaveLength(2);
-      expect(
-        fs.readFileSync(path.join(goal.goalDir, "class.yaml"), "utf8"),
-      ).toContain("class: trivial");
+      const classPath = path.join(goal.goalDir, "class.yaml");
+      expect(fs.readFileSync(classPath, "utf8")).toContain("class: trivial");
+      expect(await validateFile(classPath)).toEqual([]);
       expect(
         fs.readFileSync(
           path.join(goal.goalDir, "iterations/1/summary.md"),
@@ -158,7 +198,7 @@ describe("front ladder", () => {
     }
   }, 90_000);
 
-  it("runs a trivial task's implement turn on the front's target, de novo, with the pack variable", async () => {
+  it("runs a trivial task's implement turn in the front's session, on the front alias, with the pack variable", async () => {
     const goal = makeGoal({
       classYaml: null,
       runYaml: [
@@ -178,12 +218,15 @@ describe("front ladder", () => {
       const harness = new FakeHarness({ id: "fake" });
       harness.script(trivialFront(goal, "tiny"));
       harness.script((req, ctx) => {
-        // The front ran in the goal checkout; its session is cwd-bound there,
-        // so the task worktree starts de novo and reads the pack by variable.
-        expect(req.session).toBeUndefined();
+        // The follow-up prompt resumes the front's session with its recorded
+        // cwd; the work goes to the absolute worktree from the prompt.
+        expect(req.session).toBeDefined();
+        expect(req.cwd).toBe(req.session!.cwd);
         expect(req.prompt).toContain(`- front pack: \`${packPath}\``);
+        expect(req.prompt).toContain("- branch: `factory-task/demo/tiny`");
         expect(req.model.id).toBe("fake-front");
-        fs.writeFileSync(path.join(req.cwd!, "tiny.txt"), "tiny\n", "utf8");
+        const worktree = promptWorktree(req.prompt);
+        fs.writeFileSync(path.join(worktree, "tiny.txt"), "tiny\n", "utf8");
         ctx.writeOutcome(outcome({ summary: "tiny.txt created" }));
         return fakeTurnResult(req);
       });
@@ -199,7 +242,7 @@ describe("front ladder", () => {
       expect(implement?.alias).toBe("front");
       expect(implement?.model?.id).toBe("fake-front");
       expect(implement?.session?.harness).toBe("fake");
-      expect(implement?.session?.id).not.toBe(front?.session?.id);
+      expect(implement?.session?.id).toBe(front?.session?.id);
       expect(
         records.some(
           (r) => r.slug === "tiny" && r.step === "merge" && r.ok === true,
@@ -215,7 +258,7 @@ describe("front ladder", () => {
     try {
       const harness = new FakeHarness({ id: "fake" });
       harness.script(trivialFront(goal, "tiny"));
-      harness.script(implementerTurn("tiny.txt"));
+      harness.script(trivialImplementerTurn("tiny.txt"));
 
       await expectLaunch(0, goal.repo, harness, 3);
 
@@ -508,7 +551,7 @@ describe("front ladder", () => {
     }
   }, 90_000);
 
-  it("skips the front turn when class.yaml already exists and dispatches a trivial class", async () => {
+  it("parks a trivial class without a front session instead of implementing de novo", async () => {
     const goal = makeGoal({ classYaml: null });
     try {
       writeClass(goal, "class: trivial\nslug: tiny\n");
@@ -516,24 +559,95 @@ describe("front ladder", () => {
         goal.goalDir,
         simpleTask("tiny", "tiny.txt", { flow: "just-implement" }),
       );
+      // No scripted turns: the front is skipped for an existing class, and the
+      // implement turn must never run without a front session to resume.
       const harness = new FakeHarness({ id: "fake" });
-      harness.script((req, ctx) => {
-        fs.writeFileSync(path.join(req.cwd!, "tiny.txt"), "tiny\n", "utf8");
-        ctx.writeOutcome(outcome({ summary: "tiny.txt created" }));
-        return fakeTurnResult(req);
-      });
 
-      await expectLaunch(0, goal.repo, harness, 3);
+      await expectLaunch(2, goal.repo, harness, 3);
 
       const records = await recordsOf(goal);
       expect(records.filter((r) => r.step === "front")).toEqual([]);
       expect(records.filter((r) => r.step === "architect")).toEqual([]);
       expect(
+        records.filter((r) => r.slug === "tiny" && r.step === "implement"),
+      ).toEqual([]);
+      const parks = records.filter(
+        (r) => r.slug === "tiny" && r.step === "park",
+      );
+      expect(parks).toHaveLength(1);
+      expect(parks[0]?.cause).toContain("no front session to resume");
+      expect(
         records.some(
           (r) => r.slug === "tiny" && r.step === "merge" && r.ok === true,
         ),
-      ).toBe(true);
+      ).toBe(false);
+      expect(harness.calls).toHaveLength(0);
+      expect((await stateOf(goal.goalDir)).goal).toBe("blocked");
+    } finally {
+      cleanup(goal);
+    }
+  }, 90_000);
+
+  it("stops a trivial goal with a recorded cause when the harness cannot resume", async () => {
+    const goal = makeGoal({ classYaml: null });
+    try {
+      const harness = new FakeHarness({ id: "fake", caps: { resume: false } });
+      harness.script(trivialFront(goal, "tiny"));
+      // No implement script: the follow-up turn must never run de novo when
+      // the probe reports no resume capability.
+
+      await expectLaunch(2, goal.repo, harness, 3);
+
+      const records = await recordsOf(goal);
+      expect(records.filter((r) => r.step === "front")).toHaveLength(1);
+      expect(
+        records.filter((r) => r.slug === "tiny" && r.step === "implement"),
+      ).toEqual([]);
+      const parks = records.filter(
+        (r) => r.slug === "tiny" && r.step === "park",
+      );
+      expect(parks).toHaveLength(1);
+      expect(parks[0]?.cause).toContain("cannot resume sessions");
+      expect(
+        records.some(
+          (r) => r.slug === "tiny" && r.step === "merge" && r.ok === true,
+        ),
+      ).toBe(false);
       expect(harness.calls).toHaveLength(1);
+      expect((await stateOf(goal.goalDir)).goal).toBe("blocked");
+    } finally {
+      cleanup(goal);
+    }
+  }, 90_000);
+
+  it("parks a trivial turn that writes the goal checkout as a containment incident", async () => {
+    const goal = makeGoal({ classYaml: null });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script(trivialFront(goal, "tiny"));
+      harness.script((req, ctx) => {
+        expect(req.session).toBeDefined();
+        // A relative write lands in the session cwd — the goal checkout —
+        // not in the absolute worktree the prompt names.
+        fs.writeFileSync(path.join(req.cwd!, "oops.txt"), "oops\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "wrote to the wrong tree" }));
+        return fakeTurnResult(req);
+      });
+
+      await expectLaunch(2, goal.repo, harness, 3);
+
+      const records = await recordsOf(goal);
+      const parks = records.filter(
+        (r) => r.slug === "tiny" && r.step === "park",
+      );
+      expect(parks).toHaveLength(1);
+      expect(parks[0]?.cause).toContain("containment:");
+      expect(
+        records.some(
+          (r) => r.slug === "tiny" && r.step === "merge" && r.ok === true,
+        ),
+      ).toBe(false);
+      expect((await stateOf(goal.goalDir)).goal).toBe("blocked");
     } finally {
       cleanup(goal);
     }

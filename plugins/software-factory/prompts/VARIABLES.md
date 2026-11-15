@@ -65,6 +65,7 @@ The shared definitions exist once as partials: `scope` (the predicted-area rule)
 | `task_path`       | path to this task's file: frontmatter plus brief                                                                                                                              |
 | `front_pack`      | path to the front's context pack for a front-classified trivial or task goal; empty string when no front classified this task                                                 |
 | `worktree`        | path to the task worktree to edit                                                                                                                                             |
+| `resume_note`     | follow-up notice for a turn resumed in the front's session: the task branch plus the absolute-path rules; empty string on a de-novo turn                                      |
 | `setup_command`   | worktree bootstrap command (dependencies etc.); `none` when not needed                                                                                                        |
 | `gate_commands`   | configured compile/lint/test commands as `- id: command` lines; `none` when empty                                                                                             |
 | `baseline_checks` | gate failures recorded before this turn, same format; `none` when the baseline is green                                                                                       |

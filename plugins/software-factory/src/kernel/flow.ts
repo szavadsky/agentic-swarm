@@ -13,8 +13,11 @@ import {
   flowOf,
   followUpSession,
   isFixTurn,
+  isTrivialImplementTurn,
   promptVars,
   stepTarget,
+  trivialResumeNote,
+  trivialResumeSession,
 } from "./flow-context.js";
 import {
   gateFlakeTests,
@@ -507,11 +510,27 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
   }
   const preexisting = preexistingRed(recordedBaseGates(records));
   const target = stepTarget(runtime, task, state, step.id);
-  // A fix turn resumes the implement session in this worktree; a first turn is
-  // always de novo — the front's session is cwd-bound to the goal checkout.
-  const session = isFixTurn(flow, state, step.id)
-    ? await followUpSession(runtime, task, target, records, ensured.path)
-    : undefined;
+  const fix = isFixTurn(flow, state, step.id);
+  // A trivial goal implements in the front's own session: the turn resumes it
+  // with the session's recorded cwd, and the prompt names the absolute
+  // worktree and branch. No session, or a harness that cannot resume, parks
+  // with a cause — never a silent de-novo run. Other first turns are de novo;
+  // other fix turns resume the implement session in this worktree.
+  const trivial = isTrivialImplementTurn(runtime, task, state, step.id);
+  let session =
+    fix && !trivial
+      ? await followUpSession(runtime, task, target, records, ensured.path)
+      : undefined;
+  let turnCwd = ensured.path;
+  if (trivial) {
+    const resumed = await trivialResumeSession(runtime, task, records, fix);
+    if ("cause" in resumed) {
+      await appendPark(runtime.store, meta, resumed.cause);
+      return {};
+    }
+    session = resumed.session;
+    turnCwd = session.cwd;
+  }
   const vars = promptVars(
     runtime,
     task,
@@ -522,6 +541,13 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
   );
   vars.base_hash = firstBase(records, task.slug) ?? startPoint;
   vars.head_hash = await headSha(ensured.path);
+  if (trivial && session) {
+    vars.resume_note = trivialResumeNote(
+      session.cwd,
+      ensured.path,
+      ensured.branch,
+    );
+  }
   if (pendingResolve) {
     const ask = mergeConflictAsk(pendingResolve.head, pendingResolve.paths);
     vars.findings = vars.findings ? `${ask}\n\n${vars.findings}` : ask;
@@ -549,7 +575,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
   const tracked = trackHarnessTimeouts(target.harness);
   const result = await runAgentTurn(runtime, {
     target: { ...target, harness: tracked.harness },
-    cwd: ensured.path,
+    cwd: turnCwd,
     meta: {
       ...meta,
       step: step.id,
@@ -689,6 +715,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
     result.outcome,
   );
 }
+
 async function runChecks(
   runtime: KernelRuntime,
   task: TaskFile,

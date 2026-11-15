@@ -558,6 +558,7 @@ describe("record cost truth", () => {
           task_path: "tasks/a.md",
           front_pack: "none",
           worktree: root,
+          resume_note: "",
           setup_command: "true",
           gate_commands: "true",
           baseline_checks: "none",

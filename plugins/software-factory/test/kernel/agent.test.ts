@@ -884,6 +884,7 @@ const implementerVars = {
   task_path: "/g/tasks/a.md",
   front_pack: "",
   worktree: "/wt/a",
+  resume_note: "",
   setup_command: "none",
   gate_commands: "none",
   baseline_checks: "none",

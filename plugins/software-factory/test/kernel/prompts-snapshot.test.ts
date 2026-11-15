@@ -53,6 +53,7 @@ const ROLES: Record<string, Record<string, string>> = {
     task_path: "/goal/tasks/alpha.md",
     front_pack: "/goal/iterations/3/context-pack.md",
     worktree: "/worktrees/demo-tasks/alpha",
+    resume_note: "",
     setup_command: "bun install",
     gate_commands: "- test: bun test\n- typecheck: bun run typecheck",
     baseline_checks: "- test: 2 failing",
