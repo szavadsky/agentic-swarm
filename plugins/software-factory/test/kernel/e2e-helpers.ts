@@ -81,20 +81,66 @@ export async function launch(
   harness: FakeHarness,
   iterations = 1,
 ): Promise<number> {
-  return dispatch(
-    [
-      "run",
-      "--repo",
-      repo.dir,
-      "--goal",
-      "demo",
-      "--iterations",
-      String(iterations),
-    ],
-    {
-      harnesses: { fake: harness },
-    },
-  );
+  return dispatch(launchArgs(repo, iterations), {
+    harnesses: { fake: harness },
+  });
+}
+
+function launchArgs(repo: TmpRepo, iterations: number): string[] {
+  return [
+    "run",
+    "--repo",
+    repo.dir,
+    "--goal",
+    "demo",
+    "--iterations",
+    String(iterations),
+  ];
+}
+
+/**
+ * Runs the CLI and fails with the launch's own output (stop, cause, summary,
+ * errors) when the exit code differs, so a mismatch names its cause.
+ */
+export async function expectDispatch(
+  expected: number,
+  argv: string[],
+  deps: Parameters<typeof dispatch>[1],
+): Promise<void> {
+  const lines: string[] = [];
+  const realLog = console.log;
+  const realError = console.error;
+  console.log = (...args: unknown[]) => {
+    lines.push(args.map(String).join(" "));
+    realLog(...args);
+  };
+  console.error = (...args: unknown[]) => {
+    lines.push(args.map(String).join(" "));
+    realError(...args);
+  };
+  let code: number;
+  try {
+    code = await dispatch(argv, deps);
+  } finally {
+    console.log = realLog;
+    console.error = realError;
+  }
+  if (code !== expected) {
+    throw new Error(
+      `launch exit code ${code}, expected ${expected}; launch output:\n${lines.join("\n") || "(none)"}`,
+    );
+  }
+}
+
+export async function expectLaunch(
+  expected: number,
+  repo: TmpRepo,
+  harness: FakeHarness,
+  iterations = 1,
+): Promise<void> {
+  await expectDispatch(expected, launchArgs(repo, iterations), {
+    harnesses: { fake: harness },
+  });
 }
 
 export function cleanup(goal: E2EGoal): void {

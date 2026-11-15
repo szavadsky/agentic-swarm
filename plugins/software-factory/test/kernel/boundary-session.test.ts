@@ -5,7 +5,7 @@ import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import {
   cleanup,
-  launch,
+  expectLaunch,
   makeGoal,
   outcome,
   scriptDigest,
@@ -37,7 +37,7 @@ describe("architect session continuity", () => {
         return fakeTurnResult(req);
       });
 
-      expect(await launch(goal.repo, first)).toBe(3);
+      await expectLaunch(3, goal.repo, first);
       const store = createFolderStore(goal.goalDir);
       const records = await store.listRecords();
       const architect = records.find((r) => r.step === "architect");
@@ -64,7 +64,7 @@ describe("architect session continuity", () => {
         return fakeTurnResult(req);
       });
 
-      expect(await launch(goal.repo, second)).toBe(0);
+      await expectLaunch(0, goal.repo, second);
       expect(seenSession).toBe(sessionId);
 
       const state = await stateOf(goal.goalDir);
@@ -103,7 +103,7 @@ describe("architect session continuity", () => {
         ctx.writeOutcome(outcome({ summary: "nothing to file" }));
         return fakeTurnResult(req);
       });
-      expect(await launch(goal.repo, first)).toBe(3);
+      await expectLaunch(3, goal.repo, first);
 
       const second = new FakeHarness({ id: "fake", caps: { resume: false } });
       scriptDigest(second, goal.goalDir, 2);
@@ -112,7 +112,7 @@ describe("architect session continuity", () => {
         ctx.writeOutcome(outcome({ summary: "de novo", decision: "done" }));
         return fakeTurnResult(req);
       });
-      expect(await launch(goal.repo, second)).toBe(0);
+      await expectLaunch(0, goal.repo, second);
     } finally {
       cleanup(goal);
     }
@@ -135,7 +135,7 @@ describe("delivery guard", () => {
         return fakeTurnResult(req);
       });
 
-      expect(await launch(goal.repo, harness)).toBe(3);
+      await expectLaunch(3, goal.repo, harness);
       expect(harness.calls).toHaveLength(2);
       expect(harness.calls[1]!.prompt).toContain("plan edit or stop decision");
       const summary = fs.readFileSync(
@@ -167,7 +167,7 @@ describe("delivery guard", () => {
         return fakeTurnResult(req);
       });
 
-      expect(await launch(goal.repo, harness)).toBe(3);
+      await expectLaunch(3, goal.repo, harness);
       expect(harness.calls).toHaveLength(2);
       expect(harness.calls[1]!.prompt).toContain("plan edit or stop decision");
       expect(harness.calls[1]!.prompt).toContain(
@@ -193,7 +193,7 @@ describe("delivery guard", () => {
       harness.script((req) => fakeTurnResult(req, { text: "nothing" }));
       harness.script((req) => fakeTurnResult(req, { text: "still nothing" }));
 
-      expect(await launch(goal.repo, harness)).toBe(1);
+      await expectLaunch(1, goal.repo, harness);
       expect(harness.calls).toHaveLength(2);
       expect(harness.calls[1]!.prompt).toContain(
         "You are the front. Your turn did not deliver its class, task, and pack.",

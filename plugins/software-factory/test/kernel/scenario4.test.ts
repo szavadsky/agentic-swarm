@@ -6,7 +6,7 @@ import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
 import {
   cleanup,
-  launch,
+  expectLaunch,
   makeGoal,
   simpleTask,
   stateOf,
@@ -149,7 +149,7 @@ describe("KERNEL0 scenario 4 — infra stops and the item budget", () => {
         fakeTurnResult(req, { stop: { kind: "infra", cause: "quota" } }),
       );
 
-      expect(await launch(goal.repo, harness, 2)).toBe(1);
+      await expectLaunch(1, goal.repo, harness, 2);
 
       const state = await stateOf(goal.goalDir);
       expect(state.tasks.alpha!.status).toBe("ready");

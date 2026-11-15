@@ -12,8 +12,8 @@ import { createFolderStore } from "../../src/kernel/store.js";
 import {
   cleanup,
   type E2EGoal,
+  expectLaunch,
   implementerTurn,
-  launch,
   makeGoal,
   outcome,
   scriptDigest,
@@ -118,7 +118,7 @@ describe("front ladder", () => {
         return fakeTurnResult(req);
       });
 
-      expect(await launch(goal.repo, harness, 3)).toBe(0);
+      await expectLaunch(0, goal.repo, harness, 3);
 
       const records = await recordsOf(goal);
       expect(records.filter((r) => r.step === "front")).toHaveLength(1);
@@ -188,7 +188,7 @@ describe("front ladder", () => {
         return fakeTurnResult(req);
       });
 
-      expect(await launch(goal.repo, harness, 3)).toBe(0);
+      await expectLaunch(0, goal.repo, harness, 3);
 
       const records = await recordsOf(goal);
       const front = records.find((r) => r.step === "front");
@@ -217,7 +217,7 @@ describe("front ladder", () => {
       harness.script(trivialFront(goal, "tiny"));
       harness.script(implementerTurn("tiny.txt"));
 
-      expect(await launch(goal.repo, harness, 3)).toBe(0);
+      await expectLaunch(0, goal.repo, harness, 3);
 
       const state = await stateOf(goal.goalDir);
       expect(state.goal).toBe("done");
@@ -245,7 +245,7 @@ describe("front ladder", () => {
         return fakeTurnResult(req);
       });
 
-      expect(await launch(goal.repo, harness, 3)).toBe(2);
+      await expectLaunch(2, goal.repo, harness, 3);
 
       const state = await stateOf(goal.goalDir);
       expect(state.goal).toBe("blocked");
@@ -275,7 +275,7 @@ describe("front ladder", () => {
         return fakeTurnResult(req);
       });
 
-      expect(await launch(goal.repo, harness, 3)).toBe(2);
+      await expectLaunch(2, goal.repo, harness, 3);
       expect((await stateOf(goal.goalDir)).goal).toBe("blocked");
 
       const inbox = path.join(goal.goalDir, "mailbox/inbox");
@@ -302,7 +302,7 @@ describe("front ladder", () => {
         return fakeTurnResult(req);
       });
 
-      expect(await launch(goal.repo, harness, 3)).toBe(0);
+      await expectLaunch(0, goal.repo, harness, 3);
 
       const state = await stateOf(goal.goalDir);
       expect(state.goal).toBe("done");
@@ -368,7 +368,7 @@ describe("front ladder", () => {
         return fakeTurnResult(req);
       });
 
-      expect(await launch(goal.repo, harness, 3)).toBe(0);
+      await expectLaunch(0, goal.repo, harness, 3);
 
       const records = await recordsOf(goal);
       expect(records.filter((r) => r.step === "front")).toHaveLength(1);
@@ -427,7 +427,7 @@ describe("front ladder", () => {
         return fakeTurnResult(req);
       });
 
-      expect(await launch(goal.repo, harness, 3)).toBe(0);
+      await expectLaunch(0, goal.repo, harness, 3);
 
       const implement = (await recordsOf(goal)).filter(
         (r) => r.slug === "alpha" && r.step === "implement",
@@ -469,7 +469,7 @@ describe("front ladder", () => {
         return fakeTurnResult(req);
       });
 
-      expect(await launch(goal.repo, harness, 3)).toBe(0);
+      await expectLaunch(0, goal.repo, harness, 3);
 
       const records = await recordsOf(goal);
       expect(records.filter((r) => r.step === "front")).toHaveLength(1);
@@ -497,7 +497,7 @@ describe("front ladder", () => {
         return fakeTurnResult(req);
       });
 
-      expect(await launch(goal.repo, harness)).toBe(0);
+      await expectLaunch(0, goal.repo, harness);
 
       const records = await recordsOf(goal);
       expect(records.filter((r) => r.step === "front")).toEqual([]);
@@ -523,7 +523,7 @@ describe("front ladder", () => {
         return fakeTurnResult(req);
       });
 
-      expect(await launch(goal.repo, harness, 3)).toBe(0);
+      await expectLaunch(0, goal.repo, harness, 3);
 
       const records = await recordsOf(goal);
       expect(records.filter((r) => r.step === "front")).toEqual([]);
@@ -571,7 +571,7 @@ describe("front ladder", () => {
         return fakeTurnResult(req);
       });
 
-      expect(await launch(goal.repo, harness, 3)).toBe(0);
+      await expectLaunch(0, goal.repo, harness, 3);
 
       const records = await recordsOf(goal);
       expect(records.filter((r) => r.step === "front")).toEqual([]);
@@ -608,7 +608,7 @@ describe("front ladder", () => {
         return fakeTurnResult(req);
       });
 
-      expect(await launch(goal.repo, harness, 3)).toBe(2);
+      await expectLaunch(2, goal.repo, harness, 3);
 
       const records = await recordsOf(goal);
       expect(records.filter((r) => r.step === "architect")).toEqual([]);
@@ -640,7 +640,7 @@ describe("front ladder", () => {
         return fakeTurnResult(req);
       });
 
-      expect(await launch(goal.repo, harness, 3)).toBe(2);
+      await expectLaunch(2, goal.repo, harness, 3);
 
       const records = await recordsOf(goal);
       expect(records.filter((r) => r.step === "architect")).toEqual([]);
@@ -665,7 +665,7 @@ describe("front ladder", () => {
         fakeTurnResult(req, { stop: { kind: "infra", cause: "auth" } }),
       );
 
-      expect(await launch(goal.repo, harness, 3)).toBe(1);
+      await expectLaunch(1, goal.repo, harness, 3);
 
       const records = await recordsOf(goal);
       expect(records.filter((r) => r.step === "front")).toHaveLength(1);
@@ -699,7 +699,7 @@ describe("front ladder", () => {
         return fakeTurnResult(req);
       });
 
-      expect(await launch(goal.repo, harness, 3)).toBe(1);
+      await expectLaunch(1, goal.repo, harness, 3);
 
       const records = await recordsOf(goal);
       expect(records.filter((r) => r.step === "front")).toHaveLength(1);
@@ -729,7 +729,7 @@ describe("front ladder", () => {
         return fakeTurnResult(req);
       });
 
-      expect(await launch(goal.repo, harness, 3)).toBe(1);
+      await expectLaunch(1, goal.repo, harness, 3);
 
       const records = await recordsOf(goal);
       expect(records.filter((r) => r.step === "implement")).toEqual([]);
@@ -755,7 +755,7 @@ describe("front ladder", () => {
         return fakeTurnResult(req);
       });
 
-      expect(await launch(goal.repo, harness, 3)).toBe(1);
+      await expectLaunch(1, goal.repo, harness, 3);
 
       const records = await recordsOf(goal);
       expect(records.filter((r) => r.step === "architect")).toEqual([]);
@@ -782,7 +782,7 @@ describe("front ladder", () => {
         return fakeTurnResult(req);
       });
 
-      expect(await launch(goal.repo, harness, 3)).toBe(1);
+      await expectLaunch(1, goal.repo, harness, 3);
 
       const records = await recordsOf(goal);
       expect(records.filter((r) => r.step === "implement")).toEqual([]);

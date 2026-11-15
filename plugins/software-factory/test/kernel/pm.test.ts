@@ -19,7 +19,7 @@ import type {
 } from "../../src/kernel/types.js";
 import {
   cleanup,
-  launch,
+  expectLaunch,
   makeGoal,
   outcome,
   simpleTask,
@@ -591,7 +591,7 @@ describe("PM turn reconciliation", () => {
         return fakeTurnResult(req);
       });
 
-      expect(await launch(goal.repo, harness)).toBe(3);
+      await expectLaunch(3, goal.repo, harness);
       const summary = fs.readFileSync(
         path.join(goal.goalDir, "iterations/1/summary.md"),
         "utf8",
@@ -861,7 +861,7 @@ describe("PM turn reconciliation", () => {
         });
       }
 
-      expect(await launch(goal.repo, harness)).toBe(3);
+      await expectLaunch(3, goal.repo, harness);
       const summary = fs.readFileSync(
         path.join(goal.goalDir, "iterations/1/summary.md"),
         "utf8",
@@ -931,7 +931,7 @@ describe("PM turn reconciliation", () => {
         return fakeTurnResult(req);
       });
 
-      expect(await launch(goal.repo, harness)).toBe(3);
+      await expectLaunch(3, goal.repo, harness);
       const summary = fs.readFileSync(
         path.join(goal.goalDir, "iterations/1/summary.md"),
         "utf8",

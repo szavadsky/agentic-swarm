@@ -12,7 +12,7 @@ import { createFolderStore } from "../../src/kernel/store.js";
 import {
   cleanup,
   type E2EGoal,
-  launch,
+  expectLaunch,
   makeGoal,
   outcome,
   scriptDigest,
@@ -65,7 +65,7 @@ async function seedResumableSession(goal: E2EGoal): Promise<SessionRef> {
     ctx.writeOutcome(outcome({ summary: "no tasks to file" }));
     return fakeTurnResult(req);
   });
-  expect(await launch(goal.repo, harness)).toBe(3);
+  await expectLaunch(3, goal.repo, harness);
   const architect = (await createFolderStore(goal.goalDir).listRecords())
     .filter((record) => record.step === "architect")
     .at(-1);
@@ -125,8 +125,7 @@ describe("E6 inverted: an architect infra death is infra, not blocked-by-user", 
       const harness = new FakeHarness({ id: "fake" });
       harness.script(diesOn("crash", "session not found"));
       harness.script(diesOn("crash", "session not found"));
-      const code = await launch(goal.repo, harness);
-      expect(code).toBe(1);
+      await expectLaunch(1, goal.repo, harness);
       expect(harness.calls).toHaveLength(2);
     } finally {
       cleanup(goal);
