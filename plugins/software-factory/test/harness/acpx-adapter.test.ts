@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import fs from "node:fs";
 import path from "node:path";
 import { AcpxHarness } from "../../src/harness/acpx/harness.js";
 import { priceUsage } from "../../src/kernel/pricing.js";
@@ -25,6 +26,23 @@ function request(
     timeouts: TIMEOUTS,
     ...extra,
   };
+}
+
+/** Pids the stub reports through ACPX_STUB_PID_FILE. */
+async function waitForPid(pidFile: string): Promise<number> {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    try {
+      const pid = Number.parseInt(fs.readFileSync(pidFile, "utf8").trim(), 10);
+      if (Number.isInteger(pid) && pid > 0) return pid;
+    } catch {}
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`timed out waiting for pid file ${pidFile}`);
+}
+
+function expectDead(pid: number): void {
+  expect(() => process.kill(pid, 0)).toThrow();
 }
 
 describe("AcpxHarness", () => {
@@ -629,6 +647,76 @@ describe("AcpxHarness", () => {
           }),
         ),
       ).rejects.toThrow(/cwd-bound/);
+    } finally {
+      stub.cleanup();
+    }
+  });
+
+  it("abort kills the prompt child and reports cancelled", async () => {
+    const stub = createAcpxStub();
+    const harness = new AcpxHarness({ agent: "pi", binary: stub.binary });
+    const cwd = path.dirname(stub.binary);
+    const pidFile = path.join(cwd, "child.pid");
+    process.env.ACPX_STUB_PID_FILE = pidFile;
+    try {
+      const controller = new AbortController();
+      const pending = harness.turn(
+        request(cwd, "[[mode:hang]]", {
+          timeouts: { idleMs: 0, wallMs: 60_000 },
+          signal: controller.signal,
+        }),
+      );
+      const pid = await waitForPid(pidFile);
+      controller.abort();
+      const result = await pending;
+      expect(result.stop).toEqual({ kind: "cancelled" });
+      expect(result.attempts).toHaveLength(1);
+      expectDead(pid);
+    } finally {
+      delete process.env.ACPX_STUB_PID_FILE;
+      stub.cleanup();
+    }
+  });
+
+  it("abort after resolve is a no-op", async () => {
+    const stub = createAcpxStub();
+    const harness = new AcpxHarness({ agent: "pi", binary: stub.binary });
+    const cwd = path.dirname(stub.binary);
+    const pidFile = path.join(cwd, "child.pid");
+    process.env.ACPX_STUB_PID_FILE = pidFile;
+    try {
+      const controller = new AbortController();
+      const result = await harness.turn(
+        request(cwd, "hello", {
+          timeouts: { idleMs: 0, wallMs: 60_000 },
+          signal: controller.signal,
+        }),
+      );
+      expect(result.stop).toEqual({ kind: "done" });
+      const pid = Number.parseInt(fs.readFileSync(pidFile, "utf8").trim(), 10);
+      // The turn reaped its own child; the abort below has nothing to kill.
+      expectDead(pid);
+      controller.abort();
+      expect(result.stop).toEqual({ kind: "done" });
+    } finally {
+      delete process.env.ACPX_STUB_PID_FILE;
+      stub.cleanup();
+    }
+  });
+
+  it("a pre-aborted signal reports cancelled without spawning", async () => {
+    const stub = createAcpxStub();
+    const harness = new AcpxHarness({ agent: "pi", binary: stub.binary });
+    try {
+      const controller = new AbortController();
+      controller.abort();
+      const result = await harness.turn(
+        request(path.dirname(stub.binary), "hello", {
+          signal: controller.signal,
+        }),
+      );
+      expect(result.stop).toEqual({ kind: "cancelled" });
+      expect(stub.invocations()).toHaveLength(0);
     } finally {
       stub.cleanup();
     }

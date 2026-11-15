@@ -4,7 +4,7 @@ import path from "node:path";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { postSteer } from "../../src/kernel/mailbox.js";
 import { createFolderStore } from "../../src/kernel/store.js";
-import { cleanup, launch, makeGoal, outcome } from "./e2e-helpers.js";
+import { cleanup, expectLaunch, makeGoal, outcome } from "./e2e-helpers.js";
 
 describe("KERNEL0 scenario 6 — steer reaches the architect and is answered", () => {
   it("puts the steer in the pack and prompt, then processed + outbox", async () => {
@@ -38,7 +38,7 @@ describe("KERNEL0 scenario 6 — steer reaches the architect and is answered", (
         return fakeTurnResult(req);
       });
 
-      expect(await launch(goal.repo, harness)).toBe(0);
+      await expectLaunch(0, goal.repo, harness);
 
       expect(fs.readdirSync(path.join(goal.goalDir, "mailbox/inbox"))).toEqual(
         [],
@@ -78,7 +78,7 @@ describe("KERNEL0 scenario 6 — steer reaches the architect and is answered", (
         return fakeTurnResult(req);
       });
 
-      expect(await launch(goal.repo, harness)).toBe(0);
+      await expectLaunch(0, goal.repo, harness);
       expect(
         fs.existsSync(path.join(goal.goalDir, "mailbox/inbox/s2.md")),
       ).toBe(true);

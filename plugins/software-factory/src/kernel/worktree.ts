@@ -94,7 +94,7 @@ async function abortInFlightMerge(cwd: string): Promise<boolean> {
   return true;
 }
 
-type MergeAttempt = { ok: true } | { ok: false; paths: string[] };
+export type MergeAttempt = { ok: true } | { ok: false; paths: string[] };
 
 /**
  * Merges `ref` into the checkout at `cwd`. A conflict aborts the merge so no
@@ -102,7 +102,7 @@ type MergeAttempt = { ok: true } | { ok: false; paths: string[] };
  * (merge.ff=only, unrelated histories) leaves no merge state either, and git's
  * own reason is the only diagnosis, so it is thrown.
  */
-async function mergeRef(
+export async function mergeRef(
   cwd: string,
   ref: string,
   env: Record<string, string> | undefined,
@@ -130,6 +130,20 @@ async function mergeRef(
     );
   }
   return { ok: false, paths };
+}
+
+/**
+ * Restores the worktree at `cwd` to `commit`: any merge is aborted, tracked
+ * files reset and untracked ones removed. The caller stops the timed-out
+ * orphan first, so no live writer can land after the reset.
+ */
+export async function resetWorktreeToCommit(
+  cwd: string,
+  commit: string,
+): Promise<void> {
+  await abortInFlightMerge(cwd);
+  await git(cwd, ["reset", "--hard", commit]);
+  await git(cwd, ["clean", "-fd"]);
 }
 
 /**

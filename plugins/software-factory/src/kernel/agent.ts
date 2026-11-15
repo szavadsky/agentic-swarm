@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import type { ModelRef, SessionRef, Stop } from "../harness/types.js";
 import { addUsage } from "../harness/usage.js";
+import { missingPlanFinding, snapshotPlan } from "./architect-session.js";
 import { contextPackRelPath } from "./context-pack.js";
 import type { RoleTarget } from "./flow-context.js";
 import {
@@ -78,23 +79,36 @@ function overflowed(stop: Stop): boolean {
   return stop.kind === "infra" && stop.cause === "overflow";
 }
 
-function repairPrompt(outcomePath: string, findings: string[]): string {
-  return [
-    "Your outcome was not accepted.",
-    "",
-    ...findings.map((f) => `- ${f}`),
-    "",
-    `Write a corrected outcome to ${outcomePath} (YAML or JSON).`,
-    "Required shape:",
-    "status: done | blocked | failed | upscope",
-    "summary: one paragraph",
-    "concerns: []  # optional entries {kind, calibration, text, evidence}",
-    "forward: []",
-    "verdict: approve | changes | reject  # review steps only",
-    "decision: continue | done | blocked  # architect steps only",
-    "",
-    "Correct only the outcome. Do not do other work.",
-  ].join("\n");
+/**
+ * The product each role's turn must deliver, named in the repair ask and the
+ * failure cause. The PM ladder and the front post-checks own file validity;
+ * the guard names their deliverable when the outcome itself goes missing.
+ */
+function deliverableFor(role: string): string {
+  switch (role) {
+    case "architect":
+      return "plan edit or stop decision";
+    case "reviewer":
+      return "verdict";
+    case "pm":
+      return "task files";
+    case "front":
+      return "class, task, and pack";
+    default:
+      return "outcome";
+  }
+}
+
+function missingOutcomeFinding(
+  deliverable: string,
+  afterRepair: boolean,
+): string {
+  const base = afterRepair
+    ? "no outcome after repair"
+    : "no outcome written to the outcome path and no fenced YAML block in the final message";
+  return deliverable === "outcome"
+    ? base
+    : `${base} (missing deliverable: ${deliverable})`;
 }
 
 /**
@@ -108,6 +122,11 @@ async function turnWithTimeout(
   request: import("../harness/types.js").TurnRequest,
 ): Promise<import("../harness/types.js").TurnResult> {
   const wallMs = request.timeouts.wallMs;
+  // The kernel owns the wall bound: when it fires, the harness child is
+  // aborted so it cannot write past the bound, and the race resolves with the
+  // synthesized timeout. A turn that resolves first is never aborted.
+  const controller = new AbortController();
+  const req = { ...request, signal: controller.signal };
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeoutResult: import("../harness/types.js").TurnResult = {
     stop: {
@@ -130,11 +149,14 @@ async function turnWithTimeout(
   };
   const timeoutPromise = new Promise<import("../harness/types.js").TurnResult>(
     (resolve) => {
-      timer = setTimeout(() => resolve(timeoutResult), wallMs);
+      timer = setTimeout(() => {
+        controller.abort();
+        resolve(timeoutResult);
+      }, wallMs);
     },
   );
   try {
-    return await Promise.race([harness.turn(request), timeoutPromise]);
+    return await Promise.race([harness.turn(req), timeoutPromise]);
   } finally {
     if (timer) clearTimeout(timer);
   }
@@ -184,6 +206,10 @@ export async function runAgentTurn(
     timeouts,
     fallbacks: fallbacks?.map((id) => ({ id, effort })),
   };
+  // The plan snapshot is taken once before the first attempt, so the repair
+  // turn compares against the pre-turn plan, not the first attempt's.
+  const planBefore =
+    spec.target.role === "architect" ? snapshotPlan(spec.vars.plan_path) : null;
   const result = await turnWithTimeout(harness, request);
   let lastResult = result;
   let attempts = [...(result.attempts ?? [])];
@@ -212,7 +238,11 @@ export async function runAgentTurn(
     text = retry.text;
   }
 
-  const collect = (): void => {
+  const deliverable = deliverableFor(spec.target.role);
+
+  const assess = (afterRepair: boolean): void => {
+    outcome = null;
+    findings = [];
     try {
       const delivered = readDeliveredOutcome(outcomePath, text);
       if (delivered) {
@@ -223,20 +253,23 @@ export async function runAgentTurn(
       if (!(err instanceof OutcomeInvalidError)) throw err;
       findings = err.findings;
     }
+    const halted =
+      stop.kind === "infra" ||
+      stop.kind === "refusal" ||
+      stop.kind === "cancelled";
+    if (findings.length === 0 && !outcome && !halted) {
+      findings = [missingOutcomeFinding(deliverable, afterRepair)];
+    }
+    if (!halted && spec.target.role === "architect") {
+      const planFinding = missingPlanFinding(
+        spec.vars.plan_path,
+        outcome?.decision,
+        planBefore,
+      );
+      if (planFinding) findings.push(planFinding);
+    }
   };
-  collect();
-
-  if (
-    findings.length === 0 &&
-    !outcome &&
-    stop.kind !== "infra" &&
-    stop.kind !== "refusal" &&
-    stop.kind !== "cancelled"
-  ) {
-    findings = [
-      "no outcome written to the outcome path and no fenced YAML block in the final message",
-    ];
-  }
+  assess(false);
 
   if (
     findings.length > 0 &&
@@ -246,7 +279,16 @@ export async function runAgentTurn(
   ) {
     const repair = await turnWithTimeout(harness, {
       ...request,
-      prompt: repairPrompt(outcomePath, findings),
+      // One in-session repair ask, rendered from the process-config prompt
+      // template so repos can reword it; a bare status:done only delivers
+      // when no verdict or decision is required.
+      prompt: runtime.prompts.render("delivery-repair", {
+        role: spec.target.role,
+        deliverable,
+        done_allowed: spec.expectation === "any" ? "true" : "false",
+        findings: findings.map((f) => `- ${f}`).join("\n"),
+        outcome_path: outcomePath,
+      }),
       session,
     });
     lastResult = repair;
@@ -255,9 +297,7 @@ export async function runAgentTurn(
     usage = addUsage(usage, repair.usage);
     session = repair.session ?? session;
     text = repair.text;
-    outcome = null;
-    findings = [];
-    collect();
+    assess(true);
     if (
       !outcome &&
       (stop.kind === "infra" ||

@@ -30,8 +30,8 @@ slugs: [alpha, beta]
 goal: false
 ```
 
-- `slugs` — the tasks the steer blocks. A pending task in this list is not dispatched; a task already in flight finishes its current step and parks unmerged. A task not listed keeps running to exhaustion.
-- `goal` — `true` when the steer blocks the whole goal: in-flight work parks and nothing new starts.
+- `slugs` — the tasks the steer blocks. A pending task in this list is not dispatched; a task already in flight runs its flow to the end (checks, review, merge) and is never parked by the hold. A task not listed keeps running to exhaustion.
+- `goal` — `true` when the steer blocks the whole goal: in-flight work runs to the end and nothing new starts.
 - A steer that blocks nothing now still gets a hold file, with `slugs: []` and `goal: false`; it changes no dispatch.
 
 ## Rules

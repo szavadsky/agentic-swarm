@@ -1,12 +1,12 @@
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import { dispatch } from "../../src/cli/dispatch.js";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { derive } from "../../src/kernel/derive.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import type { State, StepRecord } from "../../src/kernel/types.js";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
+import { expectLaunch } from "./e2e-helpers.js";
 
 const PLAN = `# Milestone 1 — alpha
 
@@ -81,7 +81,12 @@ function setupRepo(): Scenario {
 
 function plan(harness: FakeHarness, goalDir: string): FakeHarness {
   return harness.script((req, ctx) => {
-    fs.writeFileSync(path.join(goalDir, "plan.md"), PLAN, "utf8");
+    const planPath = path.join(goalDir, "plan.md");
+    if (fs.existsSync(planPath)) {
+      fs.appendFileSync(planPath, "\n## architect edit on relaunch\n", "utf8");
+    } else {
+      fs.writeFileSync(planPath, PLAN, "utf8");
+    }
     ctx.writeOutcome(
       outcome({ summary: "planned alpha", decision: "continue" }),
     );
@@ -122,15 +127,6 @@ function done(harness: FakeHarness): FakeHarness {
     ctx.writeOutcome(outcome({ summary: "goal met", decision: "done" }));
     return fakeTurnResult(req);
   });
-}
-
-async function launch(repo: TmpRepo, harness: FakeHarness): Promise<number> {
-  return dispatch(
-    ["run", "--repo", repo.dir, "--goal", "demo", "--iterations", "1"],
-    {
-      harnesses: { fake: harness },
-    },
-  );
 }
 
 async function stateOf(
@@ -176,8 +172,8 @@ function firstLaunch(s: Scenario, crashAt?: CrashPoint): FakeHarness {
 async function cleanRun(): Promise<State> {
   const s = setupRepo();
   try {
-    expect(await launch(s.repo, firstLaunch(s))).toBe(3);
-    expect(await launch(s.repo, done(s.harness()))).toBe(0);
+    await expectLaunch(3, s.repo, firstLaunch(s));
+    await expectLaunch(0, s.repo, done(s.harness()));
     return (await stateOf(s.goalDir)).state;
   } finally {
     s.repo.cleanup();
@@ -194,7 +190,7 @@ async function crashedRun(crashAt: CrashPoint): Promise<{
 }> {
   const s = setupRepo();
   try {
-    expect(await launch(s.repo, firstLaunch(s, crashAt))).toBe(1);
+    await expectLaunch(1, s.repo, firstLaunch(s, crashAt));
 
     const before = await stateOf(s.goalDir);
     const orphan = before.records.find((r) => r.startedAt && !r.endedAt);
@@ -206,7 +202,7 @@ async function crashedRun(crashAt: CrashPoint): Promise<{
     pm(second, s.taskDir);
     if (crashAt === "implement") implement(second);
     review(second);
-    expect(await launch(s.repo, second)).toBe(3);
+    await expectLaunch(3, s.repo, second);
 
     const recovered = (await stateOf(s.goalDir)).records.find(
       (r) => r.seq === orphan!.seq,
@@ -215,7 +211,7 @@ async function crashedRun(crashAt: CrashPoint): Promise<{
     expect(recovered?.stop).toEqual({ kind: "infra", cause: "crash" });
     expect(recovered?.ok).toBe(false);
 
-    expect(await launch(s.repo, done(s.harness()))).toBe(0);
+    await expectLaunch(0, s.repo, done(s.harness()));
     const final = await stateOf(s.goalDir);
     return {
       state: final.state,

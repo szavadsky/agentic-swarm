@@ -124,4 +124,31 @@ describe("Process runner & output capping (§5, §9)", () => {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
   });
+
+  it("kills the child and reports aborted when the signal fires", async () => {
+    const controller = new AbortController();
+    const pending = runProcess({
+      cmd: "sleep 30",
+      cwd: process.cwd(),
+      signal: controller.signal,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    controller.abort();
+    const res = await pending;
+    expect(res.aborted).toBe(true);
+    expect(res.timedOut).toBe(false);
+    expect(res.signal).toBe("SIGTERM");
+  });
+
+  it("a pre-aborted signal resolves without spawning", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const res = await runProcess({
+      cmd: "sleep 30",
+      cwd: process.cwd(),
+      signal: controller.signal,
+    });
+    expect(res.aborted).toBe(true);
+    expect(res.code).toBeNull();
+  });
 });

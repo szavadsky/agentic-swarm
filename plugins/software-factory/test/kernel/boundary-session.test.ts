@@ -5,7 +5,7 @@ import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import {
   cleanup,
-  launch,
+  expectLaunch,
   makeGoal,
   outcome,
   scriptDigest,
@@ -37,7 +37,7 @@ describe("architect session continuity", () => {
         return fakeTurnResult(req);
       });
 
-      expect(await launch(goal.repo, first)).toBe(3);
+      await expectLaunch(3, goal.repo, first);
       const store = createFolderStore(goal.goalDir);
       const records = await store.listRecords();
       const architect = records.find((r) => r.step === "architect");
@@ -64,7 +64,7 @@ describe("architect session continuity", () => {
         return fakeTurnResult(req);
       });
 
-      expect(await launch(goal.repo, second)).toBe(0);
+      await expectLaunch(0, goal.repo, second);
       expect(seenSession).toBe(sessionId);
 
       const state = await stateOf(goal.goalDir);
@@ -103,7 +103,7 @@ describe("architect session continuity", () => {
         ctx.writeOutcome(outcome({ summary: "nothing to file" }));
         return fakeTurnResult(req);
       });
-      expect(await launch(goal.repo, first)).toBe(3);
+      await expectLaunch(3, goal.repo, first);
 
       const second = new FakeHarness({ id: "fake", caps: { resume: false } });
       scriptDigest(second, goal.goalDir, 2);
@@ -112,7 +112,100 @@ describe("architect session continuity", () => {
         ctx.writeOutcome(outcome({ summary: "de novo", decision: "done" }));
         return fakeTurnResult(req);
       });
-      expect(await launch(goal.repo, second)).toBe(0);
+      await expectLaunch(0, goal.repo, second);
+    } finally {
+      cleanup(goal);
+    }
+  }, 60_000);
+});
+
+describe("delivery guard", () => {
+  it("repairs an architect continue with no plan, then blocks naming the plan", async () => {
+    const goal = makeGoal();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "go", decision: "continue" }));
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(
+          outcome({ summary: "still going", decision: "continue" }),
+        );
+        return fakeTurnResult(req);
+      });
+
+      await expectLaunch(3, goal.repo, harness);
+      expect(harness.calls).toHaveLength(2);
+      expect(harness.calls[1]!.prompt).toContain("plan edit or stop decision");
+      const summary = fs.readFileSync(
+        path.join(goal.goalDir, "iterations/1/summary.md"),
+        "utf8",
+      );
+      expect(summary).toContain("status: blocked-by-user");
+      expect(summary).toContain("plan.md does not exist");
+      const records = await createFolderStore(goal.goalDir).listRecords();
+      expect(records.some((r) => r.step === "pm")).toBe(false);
+    } finally {
+      cleanup(goal);
+    }
+  }, 60_000);
+
+  it("repairs an architect continue over an untouched plan, then blocks naming the plan edit", async () => {
+    const goal = makeGoal();
+    try {
+      writePlan(goal.goalDir, PLAN);
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "go", decision: "continue" }));
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(
+          outcome({ summary: "still going", decision: "continue" }),
+        );
+        return fakeTurnResult(req);
+      });
+
+      await expectLaunch(3, goal.repo, harness);
+      expect(harness.calls).toHaveLength(2);
+      expect(harness.calls[1]!.prompt).toContain("plan edit or stop decision");
+      expect(harness.calls[1]!.prompt).toContain(
+        "is unchanged since the turn started",
+      );
+      const summary = fs.readFileSync(
+        path.join(goal.goalDir, "iterations/1/summary.md"),
+        "utf8",
+      );
+      expect(summary).toContain("status: blocked-by-user");
+      expect(summary).toContain("is unchanged since the turn started");
+      const records = await createFolderStore(goal.goalDir).listRecords();
+      expect(records.some((r) => r.step === "pm")).toBe(false);
+    } finally {
+      cleanup(goal);
+    }
+  }, 60_000);
+
+  it("repairs a front turn with no outcome, then fails the launch naming the deliverable", async () => {
+    const goal = makeGoal({ classYaml: null });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script((req) => fakeTurnResult(req, { text: "nothing" }));
+      harness.script((req) => fakeTurnResult(req, { text: "still nothing" }));
+
+      await expectLaunch(1, goal.repo, harness);
+      expect(harness.calls).toHaveLength(2);
+      expect(harness.calls[1]!.prompt).toContain(
+        "You are the front. Your turn did not deliver its class, task, and pack.",
+      );
+      const records = await createFolderStore(goal.goalDir).listRecords();
+      expect(records.filter((r) => r.step === "architect")).toEqual([]);
+      const summary = fs.readFileSync(
+        path.join(goal.goalDir, "iterations/1/summary.md"),
+        "utf8",
+      );
+      expect(summary).toContain("front turn ended the launch as infra");
+      expect(summary).toContain("missing deliverable: class, task, and pack");
     } finally {
       cleanup(goal);
     }

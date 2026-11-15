@@ -1,5 +1,6 @@
 import { commitAll } from "../core/git/commit.js";
-import { GitError, git } from "../core/git/exec.js";
+import { git } from "../core/git/exec.js";
+import type { Harness, TurnRequest, TurnResult } from "../harness/types.js";
 import { DEFAULT_TIMEOUTS, runAgentTurn } from "./agent.js";
 import { preexistingRed, recordedBaseGates } from "./baseline.js";
 import {
@@ -40,6 +41,8 @@ import {
   ensureTaskWorktree,
   headSha,
   integrationHead,
+  mergeRef,
+  resetWorktreeToCommit,
   treeSha,
 } from "./worktree.js";
 
@@ -96,43 +99,80 @@ async function worktreeClean(cwd: string): Promise<boolean> {
 }
 
 /**
- * Mirrors `mergeRef` in worktree.ts (outside this task's scope): a conflict
- * aborts the merge and reports the unmerged paths; any other refusal leaves no
- * merge state and is thrown.
+ * A harness turn that outlives the wall bound keeps running after the agent's
+ * race synthesizes its timeout result. The tracker sees the orphan the agent
+ * abandoned: still pending at settle, or finished past the bound. An adapter
+ * that reports timeout promptly (elapsed under the bound) is not an orphan;
+ * its writes are final and settle commits them through the kept-outcome rule.
  */
-async function mergeIntegrationHead(
-  cwd: string,
-  ref: string,
-  env: Record<string, string> | undefined,
-): Promise<{ ok: true } | { ok: false; paths: string[] }> {
-  const merge = await git(cwd, ["merge", "--no-edit", ref], {
-    allowFail: true,
-    env,
-  });
-  if (merge.code === 0) return { ok: true };
-  const unmerged = await git(cwd, ["diff", "--name-only", "--diff-filter=U"], {
-    allowFail: true,
-  });
-  const paths = unmerged.stdout
-    .split("\n")
-    .map((p) => p.trim())
-    .filter(Boolean)
-    .sort();
-  const head = await git(
-    cwd,
-    ["rev-parse", "--verify", "--quiet", "MERGE_HEAD"],
-    { allowFail: true },
-  );
-  if (head.code === 0) await git(cwd, ["merge", "--abort"]);
-  if (head.code !== 0 && paths.length === 0) {
-    throw new GitError(
-      `merge --no-edit ${ref}`,
-      merge.code,
-      merge.stderr,
-      merge.stdout,
-    );
-  }
-  return { ok: false, paths };
+interface TimeoutTracker {
+  harness: Harness;
+  timedOut: () => boolean;
+  waitSettled: () => Promise<void>;
+}
+
+/**
+ * Bound on settling orphaned turns after the wall bound fired: the agent
+ * already aborted the harness child, so a cooperative orphan is gone long
+ * before this; a hung one must not hang the launch. A constant, not a knob.
+ */
+export const TIMEOUT_SETTLE_GRACE_MS = 5_000;
+
+function trackHarnessTimeouts(inner: Harness): TimeoutTracker {
+  let sawTimeout = false;
+  let pending = 0;
+  const orphans = new Set<Promise<TurnResult>>();
+  const harness: Harness = {
+    id: inner.id,
+    caps: (model) => inner.caps(model),
+    turn: (req: TurnRequest): Promise<TurnResult> => {
+      const wallMs = req.timeouts.wallMs;
+      const start = Date.now();
+      pending += 1;
+      let tracked: Promise<TurnResult>;
+      try {
+        tracked = inner.turn(req).then(
+          (result) => {
+            pending -= 1;
+            orphans.delete(tracked);
+            if (wallMs > 0 && Date.now() - start >= wallMs) sawTimeout = true;
+            return result;
+          },
+          (err: unknown) => {
+            pending -= 1;
+            orphans.delete(tracked);
+            if (wallMs > 0 && Date.now() - start >= wallMs) sawTimeout = true;
+            throw err;
+          },
+        );
+      } catch (err) {
+        pending -= 1;
+        throw err;
+      }
+      orphans.add(tracked);
+      return tracked;
+    },
+    ...(inner.compact ? { compact: (ref) => inner.compact!(ref) } : {}),
+  };
+  return {
+    harness,
+    timedOut: () => sawTimeout || pending > 0,
+    waitSettled: async () => {
+      const pendingTurns = [...orphans];
+      if (pendingTurns.length === 0) return;
+      let grace: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          Promise.allSettled(pendingTurns),
+          new Promise<void>((resolve) => {
+            grace = setTimeout(resolve, TIMEOUT_SETTLE_GRACE_MS);
+          }),
+        ]);
+      } finally {
+        if (grace) clearTimeout(grace);
+      }
+    },
+  };
 }
 
 async function handleStepResult(
@@ -288,7 +328,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
   ) {
     const head = await integrationHead(runtime);
     const before = await headSha(ensured.path);
-    const attempt = await mergeIntegrationHead(
+    const attempt = await mergeRef(
       ensured.path,
       head,
       runtime.repo.identityEnv(),
@@ -336,7 +376,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
   const contained = await containmentSnapshot(runtime, ensured.path);
   let breach: string | undefined;
   const aliasTimeouts = target.timeouts;
-  const turnMinutes = (runtime.limits as { turnMinutes?: number }).turnMinutes;
+  const turnMinutes = runtime.limits.turnMinutes;
   const turnMinutesMs =
     turnMinutes !== undefined ? Math.round(turnMinutes * 60_000) : undefined;
   const timeouts =
@@ -349,8 +389,11 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
           ),
         }
       : (aliasTimeouts ?? DEFAULT_TIMEOUTS);
+  // The commit the turn starts from; a timed-out turn returns the worktree here.
+  const startHead = await headSha(ensured.path);
+  const tracked = trackHarnessTimeouts(target.harness);
   const result = await runAgentTurn(runtime, {
-    target,
+    target: { ...target, harness: tracked.harness },
     cwd: ensured.path,
     meta: {
       ...meta,
@@ -363,6 +406,11 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
     session,
     timeouts,
     settle: async (_record, outcome, live) => {
+      // A timeout commits nothing: the orphan still owns the tree, and `git add
+      // -A` would sweep its half-written files into an attributed commit. The
+      // timeout itself is recorded by the agent's stop; a valid outcome written
+      // before the bound stays on the record through the kept-outcome rule.
+      if (tracked.timedOut()) return {};
       breach = await containmentViolation(
         runtime,
         ensured.path,
@@ -384,6 +432,19 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
       return compacted ? { ...settled, session: compacted } : settled;
     },
   });
+  if (tracked.timedOut()) {
+    // The agent aborted the orphan at the bound; the grace gives a cooperative
+    // adapter time to reap its child before the tree is reset, and a hung one
+    // cannot hold the launch past it.
+    await tracked.waitSettled();
+    await resetWorktreeToCommit(ensured.path, startHead);
+    breach = await containmentViolation(
+      runtime,
+      ensured.path,
+      ensured.branch,
+      contained,
+    );
+  }
   if (breach) {
     await appendPark(runtime.store, meta, `containment: ${breach}`);
     return {};

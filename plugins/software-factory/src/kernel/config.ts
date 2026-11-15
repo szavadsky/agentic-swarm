@@ -473,9 +473,7 @@ export function resolveGoalPaths(
  * Everything `next` and dispatch need from the three layers. The drain limits
  * are carried here, so no caller has to reach back into the config for them.
  */
-export function toLimits(
-  configs: ConfigBundle,
-): Limits & { turnMinutes?: number; iterationMinutes?: number } {
+export function toLimits(configs: ConfigBundle): Limits {
   const runLimits: z.infer<typeof limitsSchema> = configs.run.limits;
   const flows: Limits["flows"] = {};
   for (const [name, flow] of Object.entries(configs.process.flows)) {

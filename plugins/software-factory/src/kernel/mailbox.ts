@@ -30,6 +30,13 @@ export interface Hold {
   slugs: string[];
   goal: boolean;
 }
+/** Options for reading hold files: explicit iteration and known task slugs. */
+export interface ReadHoldsOptions {
+  /** Iteration the caller runs in; quarantine records land here, not on the max record. */
+  iteration?: number;
+  /** Task slugs the caller knows; a hold naming anything else is quarantined. */
+  knownSlugs?: ReadonlySet<string> | readonly string[];
+}
 
 const DEFAULT_SETTLE_MS = 50;
 const TMP_DIR = ".tmp";
@@ -271,7 +278,7 @@ async function currentIteration(store: ArtifactStore): Promise<number> {
 }
 
 /**
- * Moves a malformed hold out of the holds directory and records why. A hold
+ * Moves an unreadable hold out of the holds directory and records why. A hold
  * that cannot be read decides nothing; leaving it in place would stop every
  * launch, so the record is the report and dispatch continues.
  */
@@ -280,6 +287,7 @@ async function quarantineHold(
   name: string,
   text: string,
   problem: string,
+  iteration: number,
 ): Promise<void> {
   const dir = quarantineDir(store);
   await fs.promises.mkdir(dir, { recursive: true });
@@ -294,21 +302,23 @@ async function quarantineHold(
     return;
   }
   const rel = path.relative(store.goalDir, target);
-  await store.appendRecord(
-    scriptMeta(await currentIteration(store), "hold-quarantine"),
-    {
-      ok: false,
-      cause: `malformed hold "${name}" moved to ${rel}: ${problem}`,
-    },
-  );
+  await store.appendRecord(scriptMeta(iteration, "hold-quarantine"), {
+    ok: false,
+    cause: `malformed hold "${name}" moved to ${rel}: ${problem}`,
+  });
 }
 
 /**
  * Reads the PM's hold decisions. A malformed hold is quarantined with a record
  * instead of wedging every launch, and the valid holds beside it still apply.
- * Holds for steers the architect already processed are the caller's to ignore.
+ * A hold naming an unknown slug is quarantined the same way when the caller
+ * passes its task slugs. Holds for steers the architect already processed are
+ * the caller's to ignore.
  */
-export async function readHolds(store: ArtifactStore): Promise<Hold[]> {
+export async function readHolds(
+  store: ArtifactStore,
+  opts: ReadHoldsOptions = {},
+): Promise<Hold[]> {
   const dir = holdsDir(store);
   let names: string[];
   try {
@@ -317,6 +327,9 @@ export async function readHolds(store: ArtifactStore): Promise<Hold[]> {
     if (isENOENT(err)) return [];
     throw err;
   }
+  const iteration = opts.iteration ?? (await currentIteration(store));
+  const known =
+    opts.knownSlugs === undefined ? undefined : new Set(opts.knownSlugs);
   const holds: Hold[] = [];
   for (const name of names.sort()) {
     if (name.startsWith(".") || !YAML_HOLD.test(name)) continue;
@@ -344,10 +357,23 @@ export async function readHolds(store: ArtifactStore): Promise<Hold[]> {
       problem = `not valid YAML: ${(err as Error).message}`;
     }
     if (parsed) {
+      if (known !== undefined) {
+        const unknown = parsed.slugs.filter((slug) => !known.has(slug));
+        if (unknown.length > 0) {
+          await quarantineHold(
+            store,
+            name,
+            text,
+            `unknown slug(s): ${unknown.join(", ")}`,
+            iteration,
+          );
+          continue;
+        }
+      }
       holds.push(parsed);
       continue;
     }
-    await quarantineHold(store, name, text, problem ?? "unreadable");
+    await quarantineHold(store, name, text, problem ?? "unreadable", iteration);
   }
   return holds;
 }
@@ -393,12 +419,36 @@ export async function writeOutbox(
   return rel;
 }
 
-/** `steer <id>: answer` entries in the architect's forward list. */
-export function steerResponses(outcome: Outcome): Map<string, string> {
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * `steer <id>: answer` entries in the architect's forward list, matched against
+ * the pending steer ids. The id travels as data (the known list), never parsed
+ * from text, so an id containing spaces, colons or quotes still answers.
+ */
+export function steerResponses(
+  outcome: Outcome,
+  knownIds: Iterable<string>,
+): Map<string, string> {
+  const ids = [...knownIds].sort((a, b) => b.length - a.length);
+  const patterns = ids.map((id) => ({
+    id,
+    regex: new RegExp(
+      `^[Ss][Tt][Ee][Ee][Rr]\\s+${escapeRegExp(id)}\\s*:\\s*([\\s\\S]+)$`,
+    ),
+  }));
   const responses = new Map<string, string>();
   for (const item of outcome.forward) {
-    const match = /^steer\s+([^:\s]+):\s*([\s\S]+)$/i.exec(item.trim());
-    if (match?.[1] && match[2]) responses.set(match[1].trim(), match[2].trim());
+    const trimmed = item.trim();
+    for (const { id, regex } of patterns) {
+      const match = regex.exec(trimmed);
+      if (match?.[1]) {
+        responses.set(id, match[1].trim());
+        break;
+      }
+    }
   }
   return responses;
 }

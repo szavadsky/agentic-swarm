@@ -7,7 +7,13 @@ import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import type { GoalMetrics } from "../../src/kernel/metrics.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import { createTmpRepo } from "../helpers/tmp-repo.js";
-import { cleanup, outcome, scriptDigest, stateOf } from "./e2e-helpers.js";
+import {
+  cleanup,
+  expectDispatch,
+  outcome,
+  scriptDigest,
+  stateOf,
+} from "./e2e-helpers.js";
 
 const PLAN_1 = `# Milestone 1
 
@@ -205,11 +211,9 @@ describe("cross-slice E2E — init, steer and three launches through S2/S3/S4", 
         return fakeTurnResult(req);
       });
 
-      expect(
-        await dispatch(["run", "--repo", repo.dir, "--goal", "demo"], {
-          harnesses: { fake: first },
-        }),
-      ).toBe(3);
+      await expectDispatch(3, ["run", "--repo", repo.dir, "--goal", "demo"], {
+        harnesses: { fake: first },
+      });
 
       let state = await stateOf(goalDir);
       expect(state.tasks.alpha!.status).toBe("merged");
@@ -310,11 +314,9 @@ describe("cross-slice E2E — init, steer and three launches through S2/S3/S4", 
       const integrationBefore = repo
         .git(["rev-parse", "factory/demo"])
         .stdout.trim();
-      expect(
-        await dispatch(["run", "--repo", repo.dir, "--goal", "demo"], {
-          harnesses: { fake: second },
-        }),
-      ).toBe(3);
+      await expectDispatch(3, ["run", "--repo", repo.dir, "--goal", "demo"], {
+        harnesses: { fake: second },
+      });
 
       state = await stateOf(goalDir);
       expect(state.tasks.alpha!.status).toBe("merged");
@@ -375,11 +377,9 @@ describe("cross-slice E2E — init, steer and three launches through S2/S3/S4", 
         return fakeTurnResult(req);
       });
 
-      expect(
-        await dispatch(["run", "--repo", repo.dir, "--goal", "demo"], {
-          harnesses: { fake: third },
-        }),
-      ).toBe(0);
+      await expectDispatch(0, ["run", "--repo", repo.dir, "--goal", "demo"], {
+        harnesses: { fake: third },
+      });
 
       state = await stateOf(goalDir);
       expect(state.goal).toBe("done");
