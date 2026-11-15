@@ -16,7 +16,9 @@ import {
   isFixTurn,
   isStandaloneTask,
   isTrivialImplementTurn,
+  priorStepCommit,
   promptVars,
+  reviewSession,
   stepTarget,
   trivialResumeNote,
   trivialResumeSession,
@@ -527,10 +529,12 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
   // with the session's recorded cwd, and the prompt names the absolute
   // worktree and branch. No session, or a harness that cannot resume, parks
   // with a cause — never a silent de-novo run. Other first turns are de novo;
-  // other fix turns resume the implement session in this worktree.
+  // other fix turns resume the implement session in this worktree, and later
+  // review rounds resume the review session on its own step.
   const trivial = isTrivialImplementTurn(runtime, task, state, step.id);
-  let session =
-    fix && !trivial
+  let session = step.review
+    ? await reviewSession(runtime, task, target, step.id, records, ensured.path)
+    : fix && !trivial
       ? await followUpSession(runtime, task, target, records, ensured.path)
       : undefined;
   let turnCwd = ensured.path;
@@ -553,6 +557,12 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
   );
   vars.base_hash = firstBase(records, task.slug) ?? startPoint;
   vars.head_hash = await headSha(ensured.path);
+  if (step.review && session) {
+    // A resumed review already holds the prior rounds: the range carries the
+    // delta since the last turn of this step, with the fix dispositions.
+    const delta = priorStepCommit(records, task.slug, step.id);
+    if (delta) vars.base_hash = delta;
+  }
   if (trivial && session) {
     vars.resume_note = trivialResumeNote(
       session.cwd,
@@ -629,10 +639,10 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
         `factory: ${task.slug} ${step.id} r${state.round}`,
       );
       // Compact where the session ends, so the stored ref is already compacted
-      // when a later fix turn resumes it. An infra/refusal stop delivers no
-      // outcome; that session is not kept. Review sessions are never resumed,
-      // so compacting them would burn a summarization call for no reader.
-      if (!outcome || !live || step.review) return settled;
+      // when a later turn resumes it: a fix turn resumes the implement
+      // session, a later review round resumes the review session. An
+      // infra/refusal stop delivers no outcome; that session is not kept.
+      if (!outcome || !live) return settled;
       const compacted = await compactSession(runtime, live);
       if (!compacted) return settled;
       return {

@@ -337,7 +337,7 @@ describe("derive", () => {
     expect(state.tasks.a!.park).toBeUndefined();
   });
 
-  it("sets gateFix on red task checks and names them when the fix commits nothing", () => {
+  it("sets gateFix on red task checks and names them when the repeated checks still fail", () => {
     const tasks = [task("a")];
     const prefix = [
       implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
@@ -348,9 +348,19 @@ describe("derive", () => {
     expect(looped.tasks.a!.round).toBe(1);
     expect(looped.tasks.a!.gateFix).toBe(true);
 
+    // The empty fix waits for the checks that run next instead of parking.
+    const deferred = derive(tasks, [
+      ...prefix,
+      implement(3, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
+    ]);
+    expect(deferred.tasks.a!.phase).toBe("checks");
+    expect(deferred.tasks.a!.park).toBeUndefined();
+    expect(deferred.tasks.a!.loop).toBeUndefined();
+
     const state = derive(tasks, [
       ...prefix,
       implement(3, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
+      redCheck(4),
     ]);
     expect(state.tasks.a!.phase).toBe("parked");
     expect(state.tasks.a!.park).toBe(
@@ -408,34 +418,37 @@ describe("derive", () => {
   });
 
   it("parks an empty fix after last-round changes followed by a merge-gates failure", () => {
-    const state = derive(
-      [task("a")],
-      [
-        implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
-        script(2, { step: "commit", ok: true, commit: "c1", tree: "tree-1" }),
-        doneCheck(3),
-        review(4, "changes", 1),
-        implement(5, 2, { tree: "tree-2", commit: "c2", base: "c0" }),
-        script(6, { step: "commit", ok: true, commit: "c2", tree: "tree-2" }),
-        doneCheck(7),
-        review(8, "changes", 2),
-        script(9, {
-          step: "merge",
-          ok: false,
-          cause: "gates: unit",
-          checks: [
-            {
-              name: "unit",
-              ok: false,
-              summary: "exit 1",
-              output: "boom",
-              fingerprint: "x",
-            },
-          ],
-        }),
-        implement(10, 2, { tree: "tree-2", commit: "c2", base: "c0" }),
-      ],
-    );
+    const tasks = [task("a")];
+    const prefix = [
+      implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
+      script(2, { step: "commit", ok: true, commit: "c1", tree: "tree-1" }),
+      doneCheck(3),
+      review(4, "changes", 1),
+      implement(5, 2, { tree: "tree-2", commit: "c2", base: "c0" }),
+      script(6, { step: "commit", ok: true, commit: "c2", tree: "tree-2" }),
+      doneCheck(7),
+      review(8, "changes", 2),
+      script(9, {
+        step: "merge",
+        ok: false,
+        cause: "gates: unit",
+        checks: [
+          {
+            name: "unit",
+            ok: false,
+            summary: "exit 1",
+            output: "boom",
+            fingerprint: "x",
+          },
+        ],
+      }),
+      implement(10, 2, { tree: "tree-2", commit: "c2", base: "c0" }),
+    ];
+    const deferred = derive(tasks, prefix);
+    expect(deferred.tasks.a!.phase).toBe("checks");
+    expect(deferred.tasks.a!.park).toBeUndefined();
+
+    const state = derive(tasks, [...prefix, redCheck(11)]);
     expect(state.tasks.a!.phase).toBe("parked");
     expect(state.tasks.a!.park).toBe(
       "empty-diff: implement r2 committed no changes after red checks: unit (exit 1)",
@@ -462,38 +475,42 @@ describe("derive", () => {
     });
   });
 
-  it("names the red merge checks when a gate-fix turn commits nothing", () => {
-    const state = derive(
-      [task("a", { flow: "just-implement" })],
-      [
-        implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
-        script(2, { step: "commit", ok: true, commit: "c1", tree: "tree-1" }),
-        doneCheck(3),
-        script(4, {
-          step: "merge",
-          ok: false,
-          cause: "gates: unit",
-          checks: [
-            {
-              name: "unit",
-              ok: false,
-              summary: "exit 1",
-              output: "boom",
-              fingerprint: "x",
-            },
-            // Inherited red: not in the merge cause, so not part of the fix turn.
-            {
-              name: "docs",
-              ok: false,
-              summary: "exit 2",
-              output: "stale",
-              fingerprint: "y",
-            },
-          ],
-        }),
-        implement(5, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
-      ],
-    );
+  it("names the red merge checks when the repeated checks still fail after an empty gate fix", () => {
+    const tasks = [task("a", { flow: "just-implement" })];
+    const prefix = [
+      implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
+      script(2, { step: "commit", ok: true, commit: "c1", tree: "tree-1" }),
+      doneCheck(3),
+      script(4, {
+        step: "merge",
+        ok: false,
+        cause: "gates: unit",
+        checks: [
+          {
+            name: "unit",
+            ok: false,
+            summary: "exit 1",
+            output: "boom",
+            fingerprint: "x",
+          },
+          // Inherited red: not in the merge cause, so not part of the fix turn.
+          {
+            name: "docs",
+            ok: false,
+            summary: "exit 2",
+            output: "stale",
+            fingerprint: "y",
+          },
+        ],
+      }),
+      implement(5, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
+    ];
+    const deferred = derive(tasks, prefix);
+    expect(deferred.tasks.a!.phase).toBe("checks");
+    expect(deferred.tasks.a!.park).toBeUndefined();
+    expect(deferred.tasks.a!.loop).toBeUndefined();
+
+    const state = derive(tasks, [...prefix, redCheck(6)]);
     expect(state.tasks.a!.phase).toBe("parked");
     expect(state.tasks.a!.park).toBe(
       "empty-diff: implement r1 committed no changes after red checks: unit (exit 1)",
@@ -780,11 +797,39 @@ describe("derive", () => {
     expect(state.tasks.a!.park).toBeUndefined();
     expect(state.tasks.a!.gateFix).toBe(true);
 
-    // An empty fix names only the actionable red: the unstartable gate is not
-    // a verdict on the task.
+    // An empty fix waits for the following checks; an identical red then names
+    // only the actionable red: the unstartable gate is not a verdict on the task.
+    const deferred = derive(tasks, [
+      ...prefix,
+      implement(4, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
+    ]);
+    expect(deferred.tasks.a!.phase).toBe("checks");
+    expect(deferred.tasks.a!.park).toBeUndefined();
+
     const parked = derive(tasks, [
       ...prefix,
       implement(4, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
+      script(5, {
+        step: "checks",
+        ok: false,
+        checks: [
+          {
+            name: "typecheck",
+            ok: false,
+            summary: "exit 127",
+            output: "bash: factory-missing-command-xyz: command not found",
+            fingerprint: "infra2",
+            details: { kind: "infra", cause: "exit 127" },
+          },
+          {
+            name: "unit",
+            ok: false,
+            summary: "exit 1",
+            output: "boom",
+            fingerprint: "real2",
+          },
+        ],
+      }),
     ]);
     expect(parked.tasks.a!.phase).toBe("parked");
     expect(parked.tasks.a!.park).toBe(

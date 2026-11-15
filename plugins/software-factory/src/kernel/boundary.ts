@@ -19,6 +19,7 @@ import {
 import { derive } from "./derive.js";
 import { writeLaunchDigest } from "./digest.js";
 import { compactSession, resolveRole } from "./flow-context.js";
+import { runKeptLand } from "./integrate.js";
 import {
   collectSteerRoutes,
   expireHold,
@@ -188,9 +189,14 @@ export async function runBoundary(
   opts: BoundaryOptions,
 ): Promise<BoundaryResult> {
   const tasks = await runtime.store.listTasks();
-  const records = await runtime.store.listRecords();
-  const state = derive(tasks, records, runtime.configs.process.flows);
+  let records = await runtime.store.listRecords();
+  let state = derive(tasks, records, runtime.configs.process.flows);
   const iteration = opts.iteration ?? state.iteration + 1;
+  // R10: kept green branches land before the pack renders, so the pack shows
+  // the result and the PM plans from landed state. No new task, no agent turn.
+  await runKeptLand(runtime, iteration);
+  records = await runtime.store.listRecords();
+  state = derive(tasks, records, runtime.configs.process.flows);
   // Script records (baseline, checks) may exist before the first architect turn;
   // "first" means no architect turn has run yet, not an empty record store.
   const firstTurn = !records.some((r) => r.step === "architect");

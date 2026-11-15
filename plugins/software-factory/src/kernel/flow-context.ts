@@ -455,6 +455,87 @@ export async function followUpSession(
   if (followUp.mode !== "same-session") return undefined;
   return resumeSessionFor(runtime, task, target.alias, records, worktree);
 }
+/**
+ * Resume the last review session for this review step on this alias. Keyed on
+ * the step, as `followUpSession` is keyed on the implement alias: the reviewer
+ * resumes only its own session, never the implementer's, even when both roles
+ * share one alias. A first round has no prior and starts de novo silently; a
+ * prior that cannot be resumed (alias change, harness rotation, cwd mismatch,
+ * a harness that cannot resume) starts de novo with the reason logged (R2).
+ */
+export async function reviewSession(
+  runtime: KernelRuntime,
+  task: TaskFile,
+  target: RoleTarget,
+  stepId: string,
+  records: StepRecord[],
+  worktree: string,
+): Promise<SessionRef | undefined> {
+  const priors = records
+    .filter(
+      (r) =>
+        r.slug === task.slug &&
+        r.actor === "agent" &&
+        r.endedAt &&
+        r.session &&
+        r.step === stepId,
+    )
+    .sort(bySeq);
+  if (priors.length === 0) return undefined;
+  const onAlias = priors.filter((r) => r.alias === target.alias).at(-1);
+  if (!onAlias?.session) {
+    const priorAlias = priors.at(-1)?.alias ?? "unknown";
+    console.warn(
+      `[factory] review "${task.slug}" step "${stepId}" starts de novo: ` +
+        `alias changed from "${priorAlias}" to "${target.alias}"`,
+    );
+    return undefined;
+  }
+  const prior = onAlias.session;
+  let resumable = false;
+  try {
+    resumable = (await target.harness.caps(target.model)).resume;
+  } catch {
+    resumable = false;
+  }
+  if (!resumable) {
+    console.warn(
+      `[factory] review "${task.slug}" step "${stepId}" starts de novo: ` +
+        `harness "${target.harness.id}" cannot resume sessions`,
+    );
+    return undefined;
+  }
+  if (path.resolve(prior.cwd) !== path.resolve(worktree)) {
+    console.warn(
+      `[factory] review "${task.slug}" step "${stepId}" starts de novo: ` +
+        `session cwd "${prior.cwd}" does not match worktree "${worktree}"`,
+    );
+    return undefined;
+  }
+  const current = aliasHarness(runtime, target.alias);
+  if (!portable(prior.harness, current)) {
+    console.warn(
+      `[factory] review "${task.slug}" step "${stepId}" starts de novo: ` +
+        `harness "${prior.harness}" is not portable to alias harness "${current}"`,
+    );
+    return undefined;
+  }
+  return prior;
+}
+
+/** The head the last turn of this step left; a resumed review diffs since it. */
+export function priorStepCommit(
+  records: StepRecord[],
+  slug: string,
+  stepId: string,
+): string | undefined {
+  return records
+    .filter(
+      (r) => r.slug === slug && r.step === stepId && r.endedAt && r.commit,
+    )
+    .sort(bySeq)
+    .at(-1)?.commit;
+}
 
 /** The session a trivial implement turn resumes, or why the task parks instead. */
 export type TrivialResume = { session: SessionRef } | { cause: string };

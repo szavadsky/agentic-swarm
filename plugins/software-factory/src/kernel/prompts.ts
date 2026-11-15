@@ -1,8 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import yaml from "yaml";
 import { Liquid, type FS } from "liquidjs";
-import { formatOutputSchemaSection } from "../core/records/schema-format.js";
 import { packageRoot } from "./config.js";
 import type { ProcessConfig } from "./types.js";
 
@@ -14,20 +12,7 @@ import type { ProcessConfig } from "./types.js";
  */
 
 export interface PromptLibrary {
-  agentDefinition(agent: string): {
-    body: string;
-    // undefined when the definition carries no tools list (frontmatter.tools
-    // absent); [] only when explicitly empty (yield-only). Lets `??` in
-    // callers distinguish "missing" (→ pipeline.tools.defaults) from "none".
-    tools?: string[];
-    description: string;
-  };
   render(fragment: string, vars: Record<string, string>): string;
-  renderStepPrompt(
-    fragment: string,
-    vars: Record<string, string>,
-    schema?: Record<string, unknown>,
-  ): string;
   placeholders(fragment: string): string[];
 }
 
@@ -142,62 +127,6 @@ export function loadPromptLibrary(opts: {
   };
 
   return {
-    agentDefinition(agent: string): {
-      body: string;
-      tools?: string[];
-      description: string;
-    } {
-      let content: string;
-      let filepath: string;
-      try {
-        const loaded = loadFragment(layers, roots, agent);
-        content = loaded.text;
-        filepath = loaded.filepath;
-      } catch (error) {
-        if ((error as Error).message.includes("not found")) {
-          throw new Error(`Agent definition "${agent}" not found`);
-        }
-        throw error;
-      }
-
-      const fmMatch = content.match(
-        /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/,
-      );
-      let frontmatter: Record<string, unknown> = {};
-      let rawBody = content;
-      if (fmMatch) {
-        try {
-          frontmatter =
-            (yaml.parse(fmMatch[1] ?? "") as Record<string, unknown>) ?? {};
-        } catch {
-          // A frontmatter that is not YAML leaves the defaults.
-          frontmatter = {};
-        }
-        rawBody = fmMatch[2] ?? "";
-      }
-
-      // Resolve includes but keep {{variable}} placeholders for the render call.
-      const escaped = rawBody.replace(
-        /\{\{[\s\S]*?\}\}/g,
-        (m) => `{% raw %}${m}{% endraw %}`,
-      );
-      const body = engine
-        .renderSync(engine.parse(escaped, filepath), {})
-        .trim();
-
-      const tools = Array.isArray(frontmatter.tools)
-        ? (frontmatter.tools as string[])
-        : undefined;
-      const description =
-        typeof frontmatter.description === "string"
-          ? frontmatter.description
-          : "";
-
-      return tools === undefined
-        ? { body, description }
-        : { body, tools, description };
-    },
-
     placeholders(fragment: string): string[] {
       return requiredVariables(fragment);
     },
@@ -215,23 +144,6 @@ export function loadPromptLibrary(opts: {
         }
         throw error;
       }
-    },
-
-    renderStepPrompt(
-      fragment: string,
-      vars: Record<string, string>,
-      schema?: Record<string, unknown>,
-    ): string {
-      const basePrompt = this.render(fragment, vars);
-      if (
-        !schema ||
-        typeof schema !== "object" ||
-        Object.keys(schema).length === 0
-      ) {
-        return basePrompt;
-      }
-      const outputSection = formatOutputSchemaSection(schema);
-      return `${basePrompt.trimEnd()}\n\n${outputSection}\n`;
     },
   };
 }

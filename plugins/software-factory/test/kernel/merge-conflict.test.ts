@@ -135,10 +135,16 @@ describe("merge conflicts", () => {
         (r) => r.slug === "task" && r.step === "merge-attempt",
       )!;
       // The merge attempt resumed the implementer's session and compacted it.
-      // The review in between compacted nothing: its session is never resumed.
+      // The review in between compacted its own session for a later round.
+      const review = records.find(
+        (r) => r.slug === "task" && r.step === "review",
+      )!;
       expect(harness.calls[2]!.session?.id).toBe(implement.session!.id);
-      expect(harness.compactions).toHaveLength(2);
-      expect(harness.compactions[1]!.id).toBe(implement.session!.id);
+      expect(harness.compactions.map((c) => c.id)).toEqual([
+        implement.session!.id,
+        review.session!.id,
+        implement.session!.id,
+      ]);
       expect(attempt.session?.compacted).toBe(true);
     } finally {
       cleanupFlowRepo(repo);
@@ -220,9 +226,8 @@ describe("merge conflicts", () => {
         await runtime.store.listRecords(),
         runtime.configs.process.flows,
       );
-      // Implement compacted; the review never compacts and the infra-stopped
-      // merge attempt did not.
-      expect(harness.compactions).toHaveLength(1);
+      // Implement and review compacted; the infra-stopped merge attempt did not.
+      expect(harness.compactions).toHaveLength(2);
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -248,9 +253,8 @@ describe("merge conflicts", () => {
       expect((await runDispatch(runtime, { iteration: 1 })).reason).toBe(
         "boundary",
       );
-      // Implement compacted; the review never compacts and the refused merge
-      // attempt did not.
-      expect(harness.compactions).toHaveLength(1);
+      // Implement and review compacted; the refused merge attempt did not.
+      expect(harness.compactions).toHaveLength(2);
     } finally {
       cleanupFlowRepo(repo);
     }

@@ -1,11 +1,25 @@
+import type { CheckResult } from "../core/checks/types.js";
 import { runWorktreeSetup } from "../core/checks/setup.js";
 import { commitAll, isAncestor } from "../core/git/commit.js";
 import { GitError, git } from "../core/git/exec.js";
+import { unmergedFiles } from "../core/git/merge.js";
 import { KeyedMutex } from "../core/mutex.js";
 import { preexistingRed, recordedBaseGates } from "./baseline.js";
-import { newGateFailures, runGates } from "./gates.js";
+import { derive } from "./derive.js";
+import { DEFAULT_FLOWS } from "./derive-task.js";
+import {
+  gateFlakeTests,
+  isInfraCheck,
+  newGateFailures,
+  runGates,
+} from "./gates.js";
 import { attemptConflictMerge } from "./merge-attempt.js";
-import { finishChecks, scriptMeta, startChecks } from "./record.js";
+import {
+  appendGateFlake,
+  finishChecks,
+  scriptMeta,
+  startChecks,
+} from "./record.js";
 import type {
   KernelRuntime,
   RecordEnd,
@@ -20,11 +34,20 @@ import {
   removeMergeScratch,
   resetMergeScratch,
   taskBranchName,
+  treeSha,
 } from "./worktree.js";
 
 export interface MergeResult {
   infra?: { kind: "infra"; cause: string };
   cancelled?: boolean;
+}
+
+export interface MergeOptions {
+  /**
+   * Kept-land mode: no implementer conflict attempt (a conflict parks the
+   * branch) and one flake re-run on red merge gates.
+   */
+  keptLand?: boolean;
 }
 
 /** One serial queue per goal; multiple tasks may ask, they never merge at once. */
@@ -195,6 +218,7 @@ export async function mergeTask(
   task: TaskFile,
   iteration: number,
   state: TaskState,
+  opts: MergeOptions = {},
 ): Promise<MergeResult> {
   return mergeQueue.runExclusive(runtime.paths.goalDir, async () => {
     const round = state.round;
@@ -223,6 +247,17 @@ export async function mergeTask(
       allowFail: true,
     });
     if (squash.code !== 0) {
+      if (opts.keptLand) {
+        // No agent turn at the boundary: a conflict leaves the kept branch
+        // parked for the next boundary (or a continuation) to retry.
+        const paths = await unmergedFiles(scratch);
+        await removeMergeScratch(runtime);
+        await recordMerge(runtime, task, iteration, round, {
+          ok: false,
+          cause: `conflict: ${paths.join(", ") || "squash merge conflicts with the integration head"}`,
+        });
+        return {};
+      }
       await removeMergeScratch(runtime);
       const attempt = await attemptConflictMerge(
         runtime,
@@ -308,8 +343,17 @@ export async function mergeTask(
       { iteration, slug: task.slug, round },
       { step: "merge-checks" },
     );
-    const checks = await runGates(runtime, scratch);
+    let checks = await runGates(runtime, scratch);
     const preexisting = preexistingRed(recordedBaseGates(records));
+    if (opts.keptLand) {
+      checks = await rerunRedKeptGates(
+        runtime,
+        { iteration, slug: task.slug, round },
+        scratch,
+        checks,
+        preexisting,
+      );
+    }
     await finishChecks(gate, checks, { preexisting });
     const red = newGateFailures(checks, preexisting);
     if (red.length > 0) {
@@ -340,4 +384,213 @@ export async function mergeTask(
     await turn.finish({ ok: true, commit, checks });
     return {};
   });
+}
+
+/**
+ * One flake re-run for kept-land merge gates, mirroring the task-gate path: a
+ * red gate re-runs once on the same tree, a flip to green lands with a
+ * `gate-flake` record, and a repeat red leaves the branch parked. An infra
+ * re-run is inconclusive: the red run stands.
+ */
+async function rerunRedKeptGates(
+  runtime: KernelRuntime,
+  meta: { iteration: number; slug: string; round: number },
+  scratch: string,
+  checks: CheckResult[],
+  preexisting: ReadonlySet<string>,
+): Promise<CheckResult[]> {
+  const red = newGateFailures(checks, preexisting).filter(
+    (check) => !isInfraCheck(check),
+  );
+  if (red.length === 0) return checks;
+  const rerun = await runGates(runtime, scratch, {
+    only: new Set(red.map((check) => check.name)),
+  });
+  const fresh = new Map(rerun.map((check) => [check.name, check]));
+  const flipped = red.filter((check) => fresh.get(check.name)?.ok === true);
+  if (flipped.length > 0) {
+    await appendGateFlake(runtime.store, meta, {
+      tree: await treeSha(scratch),
+      flakes: flipped.map((check) => ({
+        gate: check.name,
+        tests: gateFlakeTests(check),
+      })),
+      checks: flipped,
+    });
+  }
+  return checks.map((check) => {
+    const next = fresh.get(check.name);
+    if (!next || (!next.ok && isInfraCheck(next))) return check;
+    return next;
+  });
+}
+
+/**
+ * A red that already proved itself deterministic on this exact branch tip:
+ * two merge-gate runs since the tip commit failed the same gates. Head moves
+ * and flake re-runs cannot cure it, so kept-land never attempts it.
+ */
+function deterministicRed(
+  records: StepRecord[],
+  slug: string,
+  tip: string,
+): boolean {
+  const tipSeq = records
+    .filter(
+      (r) =>
+        r.slug === slug && r.actor === "agent" && r.endedAt && r.commit === tip,
+    )
+    .sort(bySeq)
+    .at(-1)?.seq;
+  if (tipSeq === undefined) return false;
+  const reds = records
+    .filter(
+      (r) =>
+        r.slug === slug &&
+        r.step === "merge-checks" &&
+        r.endedAt &&
+        r.ok === false &&
+        r.seq > tipSeq,
+    )
+    .sort(bySeq);
+  if (reds.length < 2) return false;
+  const names = (record: StepRecord): string =>
+    (record.checks ?? [])
+      .filter((check) => !check.ok)
+      .map((check) => check.name)
+      .sort()
+      .join("\0");
+  const previous = names(reds.at(-2)!);
+  return previous !== "" && previous === names(reds.at(-1)!);
+}
+
+/**
+ * Whether the parked kept branch still carries reviewable work: an approve
+ * covering the branch's current head commit (a later commit voids it), or
+ * green branch checks on the current tree under a review-less flow. Review
+ * rejections and deterministic reds never qualify.
+ */
+async function qualifiesForKeptLand(
+  runtime: KernelRuntime,
+  task: TaskFile,
+  records: StepRecord[],
+  tip: string,
+): Promise<boolean> {
+  const flows = runtime.configs.process.flows;
+  const flow =
+    flows[task.flow] ??
+    DEFAULT_FLOWS[task.flow] ??
+    DEFAULT_FLOWS["implement-review"]!;
+  const ended = records.filter((r) => r.slug === task.slug && r.endedAt);
+  const reviewId = flow.steps.find((step) => step.review)?.id;
+  if (reviewId) {
+    const latest = ended
+      .filter((r) => r.actor === "agent" && r.step === reviewId)
+      .sort(bySeq)
+      .at(-1);
+    if (!latest || latest.outcome?.verdict !== "approve") return false;
+    if (latest.commit !== tip) return false;
+  } else {
+    const tipTree = (
+      await git(runtime.paths.repoRoot, ["rev-parse", `${tip}^{tree}`])
+    ).stdout.trim();
+    const agents = ended.filter((r) => r.actor === "agent").sort(bySeq);
+    if (agents.at(-1)?.commit !== tip) return false;
+    const green = ended.some(
+      (r) =>
+        r.step === "checks" &&
+        r.ok === true &&
+        r.tree !== undefined &&
+        r.tree === tipTree,
+    );
+    if (!green) return false;
+  }
+  return !deterministicRed(records, task.slug, tip);
+}
+
+export interface KeptLandResult {
+  /** Parked slugs whose kept branch landed on the integration head. */
+  landed: string[];
+  /** Parked slugs attempted this boundary, landed or still parked. */
+  attempted: string[];
+}
+
+/**
+ * R10: a kept green branch lands without a new task and without an agent
+ * turn. Every parked task whose kept branch still carries its approve (or
+ * green checks under a review-less flow) gets one end-of-wave merge attempt;
+ * a conflict or a repeated red leaves it parked. A landing writes a
+ * `kept-land` record: the landing has no task flow records of its own, and
+ * the evidence needs one. Spikes never land (their product is the finding,
+ * not a merge), and neither does a `base` another task continues: the
+ * continuation already carries the work, and PM validation reads a landed
+ * base as a broken continuation.
+ */
+export async function runKeptLand(
+  runtime: KernelRuntime,
+  iteration: number,
+): Promise<KeptLandResult> {
+  const landed: string[] = [];
+  const attempted: string[] = [];
+  const tasks = await runtime.store.listTasks();
+  const continued = new Set(
+    tasks.map((task) => task.base).filter((base): base is string => !!base),
+  );
+  for (const task of [...tasks].sort((a, b) => a.slug.localeCompare(b.slug))) {
+    const records = await runtime.store.listRecords();
+    const taskState = derive(tasks, records, runtime.configs.process.flows)
+      .tasks[task.slug];
+    if (!taskState || taskState.status !== "parked") continue;
+    if (task.kind !== "task") continue;
+    if (continued.has(task.slug)) continue;
+    // One attempt per branch per boundary; the merge record is the ledger.
+    if (
+      records.some(
+        (r) =>
+          r.slug === task.slug &&
+          r.iteration === iteration &&
+          (r.step === "merge" || r.step === "kept-land") &&
+          r.endedAt,
+      )
+    )
+      continue;
+    const branch = taskBranchName(runtime, task.slug);
+    if (!(await branchExists(runtime, branch))) continue;
+    const tip = (
+      await git(runtime.paths.repoRoot, ["rev-parse", branch])
+    ).stdout.trim();
+    if (!(await qualifiesForKeptLand(runtime, task, records, tip))) continue;
+    attempted.push(task.slug);
+    try {
+      await mergeTask(runtime, task, iteration, taskState, { keptLand: true });
+    } catch (err) {
+      await runtime.store.appendRecord(
+        scriptMeta(iteration, "kept-land", {
+          slug: task.slug,
+          round: taskState.round,
+        }),
+        { ok: false, cause: `kept-land failed: ${causeOf(err)}` },
+      );
+      continue;
+    }
+    const merge = (await runtime.store.listRecords())
+      .filter((r) => r.slug === task.slug && r.step === "merge" && r.endedAt)
+      .sort(bySeq)
+      .at(-1);
+    if (merge?.ok === true && merge.iteration === iteration) {
+      landed.push(task.slug);
+      await runtime.store.appendRecord(
+        scriptMeta(iteration, "kept-land", {
+          slug: task.slug,
+          round: taskState.round,
+        }),
+        {
+          ok: true,
+          commit: merge.commit,
+          cause: `approved ${tip} landed as ${merge.commit}`,
+        },
+      );
+    }
+  }
+  return { landed, attempted };
 }

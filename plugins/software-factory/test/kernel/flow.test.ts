@@ -272,15 +272,18 @@ describe("fix-round follow-up modes", () => {
       const review = records
         .filter((r) => r.slug === "task" && r.step === "review")
         .sort((a, b) => a.seq - b.seq);
-      // Each implement turn compacts its own session; reviews compact nothing
-      // because no turn ever resumes them. The fix turn's resume adds none
-      // because the ref it resumes is already compacted.
+      // Each turn compacts its own session at its end; the fix turn resumes the
+      // compacted implement session and the second review resumes the
+      // compacted first review. A resume adds no compaction because the ref it
+      // resumes is already compacted.
       expect(harness.compactions.map((c) => c.id)).toEqual([
         implement[0]!.session!.id,
+        review[0]!.session!.id,
         implement[1]!.session!.id,
+        review[1]!.session!.id,
       ]);
       expect(implement.map((r) => r.session?.compacted)).toEqual([true, true]);
-      expect(review.map((r) => r.session?.compacted)).toEqual([false, false]);
+      expect(review.map((r) => r.session?.compacted)).toEqual([true, true]);
 
       const fix = harness.calls[2]!;
       expect(fix.session?.id).toBe(implement[0]?.session?.id);
@@ -437,6 +440,77 @@ describe("empty diff", () => {
       ).not.toBe(0);
     } finally {
       cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+  it("carries an empty gate fix to review when the following checks go green", async () => {
+    // m5-kept-land (i30): the fix turn verified the work and committed nothing
+    // while the red was a twice-red flake; the checks on the same tree came
+    // back green. The task must reach review instead of parking empty-diff.
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "factory-gatefix-"));
+    const count = path.join(dir, "count");
+    const quote = (value: string): string => `'${value}'`;
+    // Red on the first two runs (initial + the flake re-run), then green: no
+    // gate-flake record, one red checks record, and the fix turn runs.
+    const twiceRed =
+      `echo run >> ${quote(count)}; ` +
+      `if [ "$(grep -c . ${quote(count)})" -ge 3 ]; then exit 0; ` +
+      `else printf 'src/t.test.ts:\\n(fail) suite > broken test\\n'; exit 1; fi`;
+    const { repo, goal } = setupFlowRepo({
+      gates: [{ id: "unit", command: twiceRed }],
+    });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script((req, ctx) => {
+        fs.writeFileSync(path.join(req.cwd!, "task.txt"), "v1\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "v1" }));
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        // Writes nothing: the failure did not reproduce.
+        ctx.writeOutcome(
+          outcome({ summary: "verified done; no change needed" }),
+        );
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "approved", verdict: "approve" }));
+        return fakeTurnResult(req);
+      });
+
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("task", { scope: ["task.txt"] }));
+      const result = await runDispatch(runtime, { iteration: 1 });
+      expect(result.reason).toBe("boundary");
+
+      const records = await runtime.store.listRecords();
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
+      expect(state.tasks.task!.status).toBe("merged");
+      expect(harness.calls).toHaveLength(3);
+
+      const checks = records.filter(
+        (r) => r.slug === "task" && r.step === "checks",
+      );
+      expect(checks).toHaveLength(2);
+      expect(checks[0]!.ok).toBe(false);
+      expect(checks[1]!.ok).toBe(true);
+      expect(checks[0]!.tree).toBe(checks[1]!.tree);
+      expect(
+        records.filter((r) => r.slug === "task" && r.step === "gate-flake"),
+      ).toHaveLength(0);
+      expect(
+        records.filter((r) => r.slug === "task" && r.step === "park"),
+      ).toHaveLength(0);
+      // Initial + re-run (both red), the post-fix checks, merge-checks: the
+      // deferral itself runs no extra gate.
+      const runs = fs.readFileSync(count, "utf8").trim().split("\n").length;
+      expect(runs).toBe(4);
+    } finally {
+      cleanupFlowRepo(repo);
+      fs.rmSync(dir, { recursive: true, force: true });
     }
   }, 60_000);
 

@@ -1,7 +1,5 @@
 import { DEFAULT_FLOWS, reduceTask } from "./derive-task.js";
 
-export { classifyStop, type StopClassification } from "./derive-task.js";
-
 import type {
   FlowDefinition,
   GoalDecision,
