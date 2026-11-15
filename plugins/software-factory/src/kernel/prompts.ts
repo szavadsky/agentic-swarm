@@ -1,12 +1,239 @@
+import fs from "node:fs";
 import path from "node:path";
-import { loadPromptLibrary, type PromptLibrary } from "../core/prompts.js";
+import yaml from "yaml";
+import { Liquid, type FS } from "liquidjs";
+import { formatOutputSchemaSection } from "../core/records/schema-format.js";
 import { packageRoot } from "./config.js";
 import type { ProcessConfig } from "./types.js";
 
 /**
- * Prompt templates live in the package `prompts/` dir; a repo may shadow any
+ * Prompt templates render through LiquidJS in strict mode: an unknown variable
+ * or filter is a render error. Templates live in the package `prompts/` dir; a
+ * repo may shadow any template under `.factory/prompts/` and replace the
+ * calibration partial with process-config text.
+ */
+
+export interface PromptLibrary {
+  agentDefinition(agent: string): {
+    body: string;
+    // undefined when the definition carries no tools list (frontmatter.tools
+    // absent); [] only when explicitly empty (yield-only). Lets `??` in
+    // callers distinguish "missing" (→ pipeline.tools.defaults) from "none".
+    tools?: string[];
+    description: string;
+  };
+  render(fragment: string, vars: Record<string, string>): string;
+  renderStepPrompt(
+    fragment: string,
+    vars: Record<string, string>,
+    schema?: Record<string, unknown>,
+  ): string;
+  placeholders(fragment: string): string[];
+}
+
+function resolveWithExt(dir: string, file: string, ext: string): string {
+  return path.resolve(dir, path.extname(file) ? file : file + ext);
+}
+
+function layeredFs(roots: string[], overrides: Record<string, string>): FS {
+  // In-memory partials shadow every root; one candidate path per root keeps
+  // the loader from ever falling through to disk for an overridden fragment.
+  const overrideFiles = new Map<string, string>();
+  for (const [name, content] of Object.entries(overrides)) {
+    for (const root of roots)
+      overrideFiles.set(resolveWithExt(root, name, ".md"), content);
+  }
+  const exists = (file: string) =>
+    overrideFiles.has(file) || fs.existsSync(file);
+  const contains = (root: string, file: string): boolean => {
+    if (overrideFiles.has(file)) return true;
+    try {
+      const rel = path.relative(fs.realpathSync(root), fs.realpathSync(file));
+      return rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel);
+    } catch {
+      return false;
+    }
+  };
+  return {
+    sep: path.sep,
+    dirname: (file) => path.dirname(file),
+    resolve: resolveWithExt,
+    existsSync: exists,
+    readFileSync: (file) =>
+      overrideFiles.get(file) ?? fs.readFileSync(file, "utf8"),
+    exists: async (file) => exists(file),
+    readFile: async (file) =>
+      overrideFiles.get(file) ?? fs.promises.readFile(file, "utf8"),
+    containsSync: contains,
+    contains: async (root, file) => contains(root, file),
+  };
+}
+
+function createEngine(
+  roots: string[],
+  overrides: Record<string, string>,
+): { engine: Liquid; fs: FS } {
+  const layered = layeredFs(roots, overrides);
+  const engine = new Liquid({
+    root: roots,
+    extname: ".md",
+    strictVariables: true,
+    strictFilters: true,
+    fs: layered,
+  });
+  return { engine, fs: layered };
+}
+
+function loadFragment(
+  layers: FS,
+  roots: string[],
+  fragment: string,
+): { text: string; filepath: string } {
+  for (const root of roots) {
+    const filepath = resolveWithExt(root, fragment, ".md");
+    if (layers.existsSync(filepath)) {
+      return { text: layers.readFileSync(filepath), filepath };
+    }
+  }
+  throw new Error(`Prompt fragment "${fragment}" not found`);
+}
+
+/**
+ * Loads and renders prompt templates through LiquidJS. Lookup order (shadowing):
+ * 1. In-memory `overrides`
+ * 2. `overrideDirs` in order
+ * 3. `builtinDir`
+ */
+export function loadPromptLibrary(opts: {
+  builtinDir: string;
+  overrideDirs?: string[];
+  overrides?: Record<string, string>;
+}): PromptLibrary {
+  const overrideDirs = opts.overrideDirs ?? [];
+  const roots = [...overrideDirs, opts.builtinDir];
+  const overrides = opts.overrides ?? {};
+  for (const [name, content] of Object.entries(overrides)) {
+    if (typeof content !== "string") {
+      throw new TypeError(`prompt override "${name}" must be a string`);
+    }
+  }
+  const { engine, fs: layers } = createEngine(roots, overrides);
+
+  const requiredVariables = (fragment: string): string[] => {
+    const { text, filepath } = loadFragment(layers, roots, fragment);
+    const analysis = engine.parseAndAnalyzeSync(text, filepath);
+    return Object.keys(analysis.variables);
+  };
+
+  const requireVars = (fragment: string, vars: Record<string, string>) => {
+    const missing = requiredVariables(fragment).filter((v) => !(v in vars));
+    if (missing.length > 0) {
+      throw new Error(
+        `Missing required prompt variables for "${fragment}": ${missing.join(
+          ", ",
+        )}`,
+      );
+    }
+  };
+
+  return {
+    agentDefinition(agent: string): {
+      body: string;
+      tools?: string[];
+      description: string;
+    } {
+      let content: string;
+      let filepath: string;
+      try {
+        const loaded = loadFragment(layers, roots, agent);
+        content = loaded.text;
+        filepath = loaded.filepath;
+      } catch (error) {
+        if ((error as Error).message.includes("not found")) {
+          throw new Error(`Agent definition "${agent}" not found`);
+        }
+        throw error;
+      }
+
+      const fmMatch = content.match(
+        /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/,
+      );
+      let frontmatter: Record<string, unknown> = {};
+      let rawBody = content;
+      if (fmMatch) {
+        try {
+          frontmatter =
+            (yaml.parse(fmMatch[1] ?? "") as Record<string, unknown>) ?? {};
+        } catch {
+          // A frontmatter that is not YAML leaves the defaults.
+          frontmatter = {};
+        }
+        rawBody = fmMatch[2] ?? "";
+      }
+
+      // Resolve includes but keep {{variable}} placeholders for the render call.
+      const escaped = rawBody.replace(
+        /\{\{[\s\S]*?\}\}/g,
+        (m) => `{% raw %}${m}{% endraw %}`,
+      );
+      const body = engine
+        .renderSync(engine.parse(escaped, filepath), {})
+        .trim();
+
+      const tools = Array.isArray(frontmatter.tools)
+        ? (frontmatter.tools as string[])
+        : undefined;
+      const description =
+        typeof frontmatter.description === "string"
+          ? frontmatter.description
+          : "";
+
+      return tools === undefined
+        ? { body, description }
+        : { body, tools, description };
+    },
+
+    placeholders(fragment: string): string[] {
+      return requiredVariables(fragment);
+    },
+
+    render(fragment: string, vars: Record<string, string>): string {
+      loadFragment(layers, roots, fragment);
+      requireVars(fragment, vars);
+      try {
+        return engine.renderFileSync(fragment, vars);
+      } catch (error) {
+        const message = (error as Error).message ?? "";
+        if (message.includes("ENOENT")) {
+          throw new Error(`Prompt fragment "${fragment}" not found`);
+        }
+        throw error;
+      }
+    },
+
+    renderStepPrompt(
+      fragment: string,
+      vars: Record<string, string>,
+      schema?: Record<string, unknown>,
+    ): string {
+      const basePrompt = this.render(fragment, vars);
+      if (
+        !schema ||
+        typeof schema !== "object" ||
+        Object.keys(schema).length === 0
+      ) {
+        return basePrompt;
+      }
+      const outputSection = formatOutputSchemaSection(schema);
+      return `${basePrompt.trimEnd()}\n\n${outputSection}\n`;
+    },
+  };
+}
+
+/**
+ * Templates live in the package `prompts/` dir; a repo may shadow any
  * template under `.factory/prompts/` and replace the calibration partial with
- * process-config text. Undefined variables are render errors.
+ * process-config text.
  */
 export function loadPrompts(
   process: ProcessConfig,
@@ -18,7 +245,7 @@ export function loadPrompts(
   overrideDirs.push(path.join(repoRoot, ".factory", "prompts"));
   const overrides: Record<string, string> = {};
   if (process.calibration !== undefined)
-    overrides._calibration = process.calibration;
+    overrides.calibration = process.calibration;
   return loadPromptLibrary({
     builtinDir: path.join(packageRoot, "prompts"),
     overrideDirs,

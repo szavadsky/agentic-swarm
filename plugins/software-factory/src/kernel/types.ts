@@ -5,7 +5,7 @@
 import { z } from "zod";
 import type { CheckResult } from "../core/checks/types.js";
 import type { Repo } from "../core/git/repo.js";
-import type { PromptLibrary } from "../core/prompts.js";
+import type { PromptLibrary } from "./prompts.js";
 import type {
   Harness,
   ModelRef,

@@ -39,6 +39,6 @@ Write only `class.yaml`, the one task file, the pack and the outcome. Never chan
   {{gate_commands}}
 - outcome path: `{{outcome_path}}`
 
-{{> _calibration}}
+{% include 'calibration' %}
 
-{{> _outcome}}
+{% include 'outcome' %}
