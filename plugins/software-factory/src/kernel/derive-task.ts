@@ -59,13 +59,23 @@ interface PendingChecks {
   mergeAfter: boolean;
 }
 
-function terminalFromRecords(
-  task: TaskFile,
+/**
+ * The last terminal fact a slug's records carry. The single source for
+ * terminal rules: `reduceTask` and the store's unreadable-file check both
+ * read through here, so a change to what counts as terminal lands once.
+ * Records are filtered by slug; callers may pass the whole store.
+ * An unreadable file cannot supply `kind`, so the default is `task`:
+ * a spike merge then reads as `merged`, but spike flows finish rather than
+ * merge, so the default holds in practice.
+ */
+export function terminalFactFromRecords(
   records: StepRecord[],
+  slug: string,
+  kind: TaskKind = "task",
 ): TerminalFact | null {
   let out: TerminalFact | null = null;
   for (const rec of records) {
-    if (!rec.endedAt) continue;
+    if (rec.slug !== slug || !rec.endedAt) continue;
     if (rec.step === "park") {
       out = {
         status: "parked",
@@ -78,7 +88,7 @@ function terminalFromRecords(
       };
     } else if (rec.step === "merge" && rec.ok === true) {
       out = {
-        status: task.kind === "spike" ? "finished" : "merged",
+        status: kind === "spike" ? "finished" : "merged",
         commit: rec.commit,
       };
     } else if (rec.step === "finish" && rec.ok === true) {
@@ -175,7 +185,7 @@ export function reduceTask(
   flow: FlowDefinition,
 ): TaskReduction {
   const flowIndex = new Map(flow.steps.map((step, i) => [step.id, i]));
-  const terminal = terminalFromRecords(task, records);
+  const terminal = terminalFactFromRecords(records, task.slug, task.kind);
   const firstStep = flow.steps[0]?.id ?? "done";
 
   let phase: TaskPhase = firstStep;

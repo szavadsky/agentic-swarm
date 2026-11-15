@@ -300,7 +300,9 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
         recoveredRecords: interrupted,
       };
     }
-    const relaunch = (await store.listRecords()).some((r) => r.iteration > 0);
+    const relaunch = (await store.listRecords()).some(
+      (r) => r.iteration > 0 && r.step !== "task-quarantine",
+    );
     let iterations = 0;
     let lastSummary: string | undefined;
     let ended: "infra" | "cancelled" | undefined;

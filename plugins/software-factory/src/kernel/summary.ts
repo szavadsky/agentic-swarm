@@ -202,6 +202,7 @@ export async function writeIterationSummary(
   const {
     usage,
     unpricedTurns,
+    quarantined,
     roles: roleCosts,
     aliases,
     models,
@@ -265,6 +266,7 @@ export async function writeIterationSummary(
     `- spikes finished: ${finished.length ? finished.join(", ") : "none"}`,
     `- pending: ${pending.length ? pending.join(", ") : "none"}`,
     `- cancelled: ${cancelled.length ? cancelled.join(", ") : "none"}`,
+    `- quarantined: ${quarantined.length ? quarantined.join(", ") : "none"}`,
     "",
     "## Base gates",
     ...baseLines,

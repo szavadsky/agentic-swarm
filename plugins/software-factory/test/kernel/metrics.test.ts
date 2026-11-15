@@ -277,6 +277,46 @@ describe("iteration metrics", () => {
       repo.cleanup();
     }
   });
+  it("lists quarantined task files per iteration and in totals", async () => {
+    const repo = createTmpRepo();
+    try {
+      const store = createFolderStore(path.join(repo.dir, "goals", "demo"));
+      await store.ensureLayout();
+      const records = [
+        script(1, {
+          iteration: 1,
+          slug: "broken",
+          step: "task-quarantine",
+          ok: false,
+          cause:
+            'task file "broken.md" quarantined at tasks/quarantine/broken.md: no frontmatter',
+        }),
+        script(2, {
+          iteration: 2,
+          slug: "torn",
+          step: "task-quarantine",
+          ok: false,
+          cause:
+            'task file "torn.md" is unreadable; left in tasks/ because its slug already has a terminal record (merged): torn',
+        }),
+      ];
+      await writeMetrics(store, {
+        iteration: 2,
+        status: "in-progress",
+        records,
+      });
+      const metrics = yaml.parse(
+        (await store.readFile("metrics.yaml"))!,
+      ) as GoalMetrics;
+      expect(metrics.iterations.map((i) => [i.n, i.quarantined])).toEqual([
+        [1, ["broken"]],
+        [2, ["torn"]],
+      ]);
+      expect(metrics.totals.quarantined).toEqual(["broken", "torn"]);
+    } finally {
+      repo.cleanup();
+    }
+  });
 });
 
 const PRICES: PriceTable = {

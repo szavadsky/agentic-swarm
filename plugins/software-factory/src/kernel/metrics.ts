@@ -81,6 +81,8 @@ export interface IterationMetrics {
   turns: number;
   merged: string[];
   parked: string[];
+  /** Slugs whose task files were quarantined (or reported unreadable) this iteration. */
+  quarantined: string[];
   usage: Usage;
   tokens: number;
   /**
@@ -391,6 +393,10 @@ export function iterationMetrics(
     .filter((r) => r.step === "park" && r.endedAt)
     .map((r) => r.slug!)
     .sort();
+  const quarantined = all
+    .filter((r) => r.step === "task-quarantine" && r.endedAt)
+    .map((r) => r.slug!)
+    .sort();
   const incidents = emptyIncidents();
   attemptIncidents(recs, incidents);
   parkIncidents(all, incidents);
@@ -456,6 +462,7 @@ export function iterationMetrics(
     turns: recs.length,
     merged,
     parked,
+    quarantined,
     usage,
     tokens,
     costPerMergedTask:
@@ -576,6 +583,7 @@ function totalsOf(iterations: IterationMetrics[]): MetricsTotals {
     turns,
     merged: mergedList(iterations),
     parked: parkedList(iterations),
+    quarantined: quarantinedList(iterations),
     usage,
     tokens,
     costPerMergedTask:
@@ -609,6 +617,10 @@ function mergedList(iterations: IterationMetrics[]): string[] {
 
 function parkedList(iterations: IterationMetrics[]): string[] {
   return iterations.flatMap((i) => i.parked).sort();
+}
+
+function quarantinedList(iterations: IterationMetrics[]): string[] {
+  return iterations.flatMap((i) => i.quarantined).sort();
 }
 
 export interface MetricsInput {

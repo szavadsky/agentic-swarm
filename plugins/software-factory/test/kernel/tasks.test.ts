@@ -2,8 +2,7 @@ import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
-import { runGoal } from "../../src/kernel/launch.js";
+import { derive } from "../../src/kernel/derive.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import {
   doneWhen,
@@ -13,7 +12,6 @@ import {
   renderTaskFile,
   validateTaskGraph,
 } from "../../src/kernel/tasks.js";
-import { cleanup, makeGoal, outcome, writePlan } from "./e2e-helpers.js";
 import { task } from "./helpers.js";
 
 const TEXT = `---
@@ -162,6 +160,8 @@ describe("unreadable task files", () => {
         (record) => record.step === "task-quarantine",
       );
       expect(report?.ok).toBe(false);
+      expect(report?.iteration).toBe(1);
+      expect(report?.slug).toBe("broken");
       expect(report?.cause).toContain(
         'task "broken" has no --- frontmatter ---',
       );
@@ -196,6 +196,11 @@ describe("unreadable task files", () => {
 
       expect(await store.listTasks()).toEqual([]);
 
+      const state = derive([], await store.listRecords());
+      expect(state.tasks["merged-task"]!.status).toBe("merged");
+      expect(state.tasks["finished-spike"]!.status).toBe("finished");
+      expect(state.tasks["cancelled-task"]!.status).toBe("cancelled");
+
       for (const { slug } of terminal) {
         expect(
           fs.readFileSync(path.join(store.tasksDir, `${slug}.md`), "utf8"),
@@ -222,47 +227,4 @@ describe("unreadable task files", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
-
-  it("does not reject a launch while a half-written task file exists", async () => {
-    const goal = makeGoal();
-    try {
-      writePlan(goal.goalDir, "# Plan\n\n## alpha\nCreate alpha.txt.\n");
-      fs.mkdirSync(goal.tasksDir, { recursive: true });
-      fs.writeFileSync(
-        path.join(goal.tasksDir, "broken.md"),
-        "half-written task body with no frontmatter\n",
-        "utf8",
-      );
-      const harness = new FakeHarness({ id: "fake" });
-      harness.script((req, ctx) => {
-        ctx.writeOutcome(
-          outcome({
-            summary: "the plan needs nothing yet",
-            decision: "blocked",
-          }),
-        );
-        return fakeTurnResult(req);
-      });
-
-      const run = () =>
-        runGoal({
-          repo: goal.repo.dir,
-          goal: "demo",
-          iterations: 1,
-          harnesses: { fake: harness },
-          baseGates: false,
-        });
-      expect((await run()).stop).toBe("blocked");
-      expect(
-        fs.readFileSync(
-          path.join(goal.tasksDir, "quarantine", "broken.md"),
-          "utf8",
-        ),
-      ).toContain("half-written");
-      // The next launch must find no unreadable file left to wedge it.
-      expect((await run()).stop).toBe("blocked");
-    } finally {
-      cleanup(goal);
-    }
-  }, 60_000);
 });

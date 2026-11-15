@@ -88,7 +88,12 @@ export function derive(
   let iteration = 0;
   let goal: GoalStatus = "active";
   for (const rec of sorted) {
-    iteration = Math.max(iteration, rec.iteration);
+    // A quarantine report rides on the current iteration but starts none:
+    // the first launch's preflight quarantine must not number the first
+    // real iteration as 2 or mark the launch a relaunch.
+    if (rec.step !== "task-quarantine") {
+      iteration = Math.max(iteration, rec.iteration);
+    }
     const decision = recordedDecision(rec);
     if (decision) {
       goal =
@@ -128,6 +133,46 @@ export function derive(
     // Terminal facts are order-independent; readiness is resolved below.
     if (reduction.terminal) statuses.set(task.slug, reduction.terminal.status);
   }
+  // A terminal slug whose file is unreadable (or deleted) keeps its status:
+  // the store lists no task for it, so without this the slug would vanish
+  // from derived state, reconcile would stop freezing it, and a later file
+  // reusing the slug would inherit the terminal record. Only
+  // merged/finished/cancelled persist here; a parked slug without a file is
+  // gone (its quarantine record is the report). The stand-in kind is `task`,
+  // so a spike merge would read as `merged`; spike flows finish rather than
+  // merge, so the default holds in practice.
+  const knownSlugs = new Set(tasks.map((task) => task.slug));
+  const orphanSlugs = new Set<string>();
+  for (const rec of sorted) {
+    if (rec.slug && !knownSlugs.has(rec.slug)) orphanSlugs.add(rec.slug);
+  }
+  const orphanReductions = new Map<string, ReturnType<typeof reduceTask>>();
+  for (const slug of orphanSlugs) {
+    const recs = sorted.filter((r) => r.slug === slug);
+    const standin: TaskFile = {
+      slug,
+      title: slug,
+      kind: "task",
+      flow: "implement-review",
+      deps: [],
+      scope: [],
+      source: "orphan terminal record",
+      body: "",
+    };
+    const flow =
+      flows[standin.flow] ??
+      DEFAULT_FLOWS[standin.flow] ??
+      DEFAULT_FLOWS["implement-review"]!;
+    const reduction = reduceTask(standin, recs, flow);
+    orphanReductions.set(slug, reduction);
+    if (
+      reduction.terminal?.status === "merged" ||
+      reduction.terminal?.status === "finished" ||
+      reduction.terminal?.status === "cancelled"
+    ) {
+      statuses.set(slug, reduction.terminal.status);
+    }
+  }
 
   const taskStates: Record<string, TaskState> = {};
   for (const task of tasks) {
@@ -150,6 +195,30 @@ export function derive(
       park: terminal ? undefined : reduction.park,
       loop: terminal ? undefined : reduction.loop,
       gateFix: terminal ? undefined : reduction.gateFix,
+    };
+  }
+  for (const slug of [...orphanSlugs].sort()) {
+    const reduction = orphanReductions.get(slug)!;
+    const terminal = reduction.terminal;
+    if (
+      terminal?.status !== "merged" &&
+      terminal?.status !== "finished" &&
+      terminal?.status !== "cancelled"
+    )
+      continue;
+    taskStates[slug] = {
+      status: terminal.status,
+      cause: terminal.cause,
+      turns: reduction.turns,
+      round: reduction.round,
+      kind: "task",
+      flow: "implement-review",
+      phase: "done",
+      commit: terminal.commit,
+      verdict: reduction.verdict,
+      park: undefined,
+      loop: undefined,
+      gateFix: undefined,
     };
   }
 

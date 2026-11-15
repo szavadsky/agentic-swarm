@@ -106,4 +106,38 @@ describe("iteration summary", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+  it("names a quarantined task file in the outcome and remarkable", async () => {
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), "factory-summary-quarantine-"),
+    );
+    const store = createFolderStore(path.join(root, "goal"));
+    try {
+      await store.ensureLayout();
+      const tasks = [task("alpha")];
+      const records = [
+        script(1, {
+          iteration: 1,
+          slug: "broken",
+          step: "task-quarantine",
+          ok: false,
+          cause:
+            'task file "broken.md" quarantined at tasks/quarantine/broken.md: no frontmatter',
+        }),
+      ];
+      const state = derive(tasks, records);
+      const rel = await writeIterationSummary(store, {
+        iteration: 1,
+        state,
+        records,
+        decision: "continue",
+      });
+      const text = fs.readFileSync(path.join(store.goalDir, rel), "utf8");
+      expect(text).toContain("- quarantined: broken");
+      expect(text).toContain(
+        'task-quarantine: task file "broken.md" quarantined at',
+      );
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
 });
