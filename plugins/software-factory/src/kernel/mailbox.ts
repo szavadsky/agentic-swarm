@@ -35,7 +35,8 @@ const DEFAULT_SETTLE_MS = 50;
 const TMP_DIR = ".tmp";
 const YAML_HOLD = /\.ya?ml$/i;
 
-const holdFileSchema = z.object({
+/** Hold-file shape the PM writes: `{ slugs: string[], goal: boolean }`, extras ignored. */
+export const holdFileSchema = z.object({
   slugs: z.array(z.string()),
   goal: z.boolean(),
 });

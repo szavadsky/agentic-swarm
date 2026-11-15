@@ -13,13 +13,18 @@ bun bin/factory.ts run    --repo <path> --goal <name> --run-config <file> [--ite
 bun bin/factory.ts status --repo <path> --goal <name>
 bun bin/factory.ts benchmark --repo <path> --goal <name>
 bun bin/factory.ts steer  --repo <path> --goal <name> <file | ->
+bun bin/factory.ts validate <file>
 ```
 
 `init` writes `.factory/repo.yaml` if missing, creates the goal directory and
 copies the intent (or writes a template). `run` pre-flights, takes the goal
 lock, recovers interrupted work and runs the iteration loop. `status` prints
 derived state and parked causes; `benchmark` prints one goal's benchmark rows;
-`steer` drops a file into the inbox atomically.
+`steer` drops a file into the inbox atomically. `validate` checks one
+schema-enforced file with the gate's validators (tasks/*.md with its
+directory's dependency graph, class.yaml, outcome.yaml,
+mailbox/holds/*.yaml, repo.yaml, run.yaml, process.yaml); exit 0 valid, 1
+invalid or unknown kind.
 
 Exit codes for `run`: `0` goal done, `1` failure, `2` blocked, `3` iteration
 limit, `130`/`143` interrupted by SIGINT/SIGTERM. The first signal drains (no

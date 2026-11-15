@@ -380,3 +380,15 @@ Verbatim, newest last; each with what it changed.
 - OMP ladder first spend: 19/19 implement+review turns on omp muse-spark-1.3-contributor:max, 0 fallback hops, 0 quota hits. Costs: architect $1.9874, implementer $0.3587, reviewer $0.0594, pm $0, digest unknown (beam-free 429'd, iteration proceeded).
 - Debt closed: plan restructured to real deps (R1–R23 rows tasked, incl. R6/R23/acpx NO CODE/cross-harness); i19 wiring incident resolved by gates-wire. Forward: interrupt-and-relaunch test unblocked (resume-hard-death merged); p1 goals not ready (R7/R8 pending).
 - Merge c4eaf11 into factory-v3. Gates 550/0 (first red was a missing bun install in the landing checkout — environment, fixed by install).
+
+### 2026-11-15 — operator interrupt-and-relaunch test: R1 PROVEN
+- Interrupt: SIGINT mid-dispatch (derive-budget-land implement r2 running, queue non-empty) → drain → exit 130, stop=interrupted, summary iterations/21/summary.md written.
+- Relaunch, identical command (/tmp/self-i21b.log): first records are 00860 (m3-debloat-land implement r1) and 00861 (pack-plan-land implement r1), both iteration: 21, base 1d58e69, on the omp muse ladder. No new digest or architect records (only 00848/00849 from the first launch). Resume of the interrupted iteration confirmed.
+- Base red at 1d58e696 (format + lint exit 1) recorded once by the run as pre-existing; journaled here as an incident for the architect.
+
+### 2026-11-15 — iteration 21: 1 merged (m3-debloat-land), exit 3, $1.58
+- First segment 31.5 min, exit 130 interrupted (operator SIGINT); resumed segment 15 min, exit 3. R1 proven: relaunch resumed iteration 21 with no new digest/architect (records 00860/00861, iteration 21, base 1d58e69).
+- Merged: m3-debloat-land (ac5fa11). Parked new: derive-budget-land (empty-diff r2); pack-plan-land upscope — 8K cap removal built (capPack/maxBytes deleted, uncapped), parked on the over-cap test case outside scope (agent.test.ts); follow-up named in debt.
+- Architect $1.4320 single turn; digest unpriced (beam 429). Base red format+lint at 1d58e696 pre-existing, not attributed. File-fence root cause verified in running prompts (m5-scope-area planned).
+- Operator error: journaled R1 proof mid-run; containment flagged twice (00862, 00866, ok=true, tasks continued). Rule restated: no writes mid-run, journal included.
+- Merge 37ff1e2. Gates 567/0 (first red: empty node_modules in landing checkout — environment, fixed by bun install, second time).
