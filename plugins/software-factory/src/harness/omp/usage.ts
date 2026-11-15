@@ -54,7 +54,10 @@ export function usageFromMessage(raw: OmpMessageUsage | undefined): Usage {
 }
 
 /** Session-stats counters are cumulative; the turn owns their non-negative delta. */
-export function statsDelta(before: OmpStats | undefined, after: OmpStats | undefined): Usage {
+export function statsDelta(
+  before: OmpStats | undefined,
+  after: OmpStats | undefined,
+): Usage {
   const b = before?.tokens;
   const a = after?.tokens;
   const delta = (x: number | undefined, y: number | undefined) =>
@@ -74,7 +77,9 @@ export function textOfContent(content: unknown): string {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";
   return content
-    .filter((part: any) => part?.type === "text" && typeof part.text === "string")
+    .filter(
+      (part: any) => part?.type === "text" && typeof part.text === "string",
+    )
     .map((part: any) => part.text)
     .join("");
 }
@@ -125,7 +130,10 @@ function jsonlFiles(dir: string): string[] {
  * file (without `.jsonl`); the parent's `get_session_stats` excludes them.
  * Sum assistant messages that started at or after `sinceMs`.
  */
-export function subagentUsage(sessionFile: string | undefined, sinceMs: number): Usage {
+export function subagentUsage(
+  sessionFile: string | undefined,
+  sinceMs: number,
+): Usage {
   if (!sessionFile) return zeroUsage();
   const artifacts = sessionFile.replace(/\.jsonl$/, "");
   let total = zeroUsage();
@@ -147,7 +155,8 @@ export function subagentUsage(sessionFile: string | undefined, sinceMs: number):
       if (entry?.type !== "message") continue;
       const message = entry.message;
       if (message?.role !== "assistant") continue;
-      const timestamp = typeof message.timestamp === "number" ? message.timestamp : 0;
+      const timestamp =
+        typeof message.timestamp === "number" ? message.timestamp : 0;
       if (timestamp < sinceMs) continue;
       total = addUsage(total, usageFromMessage(message.usage));
     }

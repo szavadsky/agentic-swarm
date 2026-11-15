@@ -65,10 +65,14 @@ live("opencode harness live smoke", () => {
         JSON.stringify({
           wallMs: Date.now() - started,
           caps: caps.effort,
-          turn1: { model: first.model, usage: first.usage, attempts: first.attempts?.length },
+          turn1: {
+            model: first.model,
+            usage: first.usage,
+            attempts: first.attempts?.length,
+          },
           turn2: { model: second.model, usage: second.usage },
           transcript: first.transcript,
-        })
+        }),
       );
     } finally {
       fs.rmSync(root, { recursive: true, force: true });

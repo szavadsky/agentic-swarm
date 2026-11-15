@@ -24,7 +24,9 @@ describe("parked continuation", () => {
         return fakeTurnResult(req);
       });
       harness.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "alpha is not acceptable", verdict: "reject" }));
+        ctx.writeOutcome(
+          outcome({ summary: "alpha is not acceptable", verdict: "reject" }),
+        );
         return fakeTurnResult(req);
       });
       harness.script((req, ctx) => {
@@ -34,20 +36,31 @@ describe("parked continuation", () => {
         return fakeTurnResult(req);
       });
       harness.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "beta approved", verdict: "approve" }));
+        ctx.writeOutcome(
+          outcome({ summary: "beta approved", verdict: "approve" }),
+        );
         return fakeTurnResult(req);
       });
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
-      const integrationHead = repo.git(["rev-parse", "factory/demo"]).stdout.trim();
+      const integrationHead = repo
+        .git(["rev-parse", "factory/demo"])
+        .stdout.trim();
       await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
-      await writeTask(runtime, task("beta", { base: "alpha", scope: ["beta.txt"] }));
+      await writeTask(
+        runtime,
+        task("beta", { base: "alpha", scope: ["beta.txt"] }),
+      );
 
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("boundary");
 
       const records = await runtime.store.listRecords();
-      const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
       expect(state.tasks.alpha!.status).toBe("parked");
       expect(state.tasks.beta!.status).toBe("merged");
 
@@ -58,9 +71,19 @@ describe("parked continuation", () => {
         .sort((a, b) => a.seq - b.seq)[0];
       expect(betaFirst?.base).toBe(integrationHead);
 
-      expect(repo.git(["show", "factory/demo:alpha.txt"]).stdout.trim()).toBe("alpha");
-      expect(repo.git(["show", "factory/demo:beta.txt"]).stdout.trim()).toBe("beta");
-      expect(repo.git(["rev-parse", "--verify", "refs/heads/factory-task/demo/alpha"]).code).toBe(0);
+      expect(repo.git(["show", "factory/demo:alpha.txt"]).stdout.trim()).toBe(
+        "alpha",
+      );
+      expect(repo.git(["show", "factory/demo:beta.txt"]).stdout.trim()).toBe(
+        "beta",
+      );
+      expect(
+        repo.git([
+          "rev-parse",
+          "--verify",
+          "refs/heads/factory-task/demo/alpha",
+        ]).code,
+      ).toBe(0);
     } finally {
       cleanupFlowRepo(repo);
     }

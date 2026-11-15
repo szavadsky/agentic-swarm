@@ -2,8 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { writeYamlAtomic } from "../core/records/io.js";
 import { backfillSummaries } from "./summary.js";
-import { prepareIntegrationCheckout } from "./worktree.js";
 import type { ArtifactStore, KernelRuntime } from "./types.js";
+import { prepareIntegrationCheckout } from "./worktree.js";
 
 /**
  * A record directory with `started.yaml` and no `end.yaml` is a turn cut off by
@@ -13,7 +13,9 @@ import type { ArtifactStore, KernelRuntime } from "./types.js";
 async function closeInterruptedRecords(store: ArtifactStore): Promise<number> {
   let entries: fs.Dirent[];
   try {
-    entries = await fs.promises.readdir(store.recordsDir, { withFileTypes: true });
+    entries = await fs.promises.readdir(store.recordsDir, {
+      withFileTypes: true,
+    });
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return 0;
     throw err;
@@ -43,6 +45,9 @@ export async function recoverLaunch(runtime: KernelRuntime): Promise<number> {
   const closed = await closeInterruptedRecords(runtime.store);
   await prepareIntegrationCheckout(runtime);
   await backfillSummaries(runtime);
-  if (closed > 0) console.warn(`[factory] recovery closed ${closed} interrupted record(s) as infra: crash`);
+  if (closed > 0)
+    console.warn(
+      `[factory] recovery closed ${closed} interrupted record(s) as infra: crash`,
+    );
   return closed;
 }

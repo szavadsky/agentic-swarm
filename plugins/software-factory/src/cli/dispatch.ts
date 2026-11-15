@@ -1,10 +1,23 @@
-import { runGoal, type HarnessFactory, type LaunchResult } from "../kernel/launch.js";
-import type { DrainController } from "../kernel/signals.js";
-import type { ModelCatalog } from "../kernel/preflight.js";
 import type { Harness } from "../harness/types.js";
-import { createRealHarnesses, createRealModelCatalog, resolveHarnessBinaries } from "./harnesses.js";
-import { initGoal, readSteerSource, statusGoal, steerGoal } from "./commands.js";
+import {
+  type HarnessFactory,
+  type LaunchResult,
+  runGoal,
+} from "../kernel/launch.js";
+import type { ModelCatalog } from "../kernel/preflight.js";
+import type { DrainController } from "../kernel/signals.js";
 import { benchmarkGoal, formatBenchmark } from "./benchmark.js";
+import {
+  initGoal,
+  readSteerSource,
+  statusGoal,
+  steerGoal,
+} from "./commands.js";
+import {
+  createRealHarnesses,
+  createRealModelCatalog,
+  resolveHarnessBinaries,
+} from "./harnesses.js";
 
 export interface ParsedArgs {
   command?: string;
@@ -97,18 +110,30 @@ function usageFor(command: string | undefined): string {
 function parsePositiveInt(flag: string, value: string | undefined): number {
   const n = Number(value);
   if (!Number.isInteger(n) || n <= 0) {
-    throw new Error(`${flag} requires a positive integer, got "${value ?? ""}"`);
+    throw new Error(
+      `${flag} requires a positive integer, got "${value ?? ""}"`,
+    );
   }
   return n;
 }
 
-function valueOf(arg: string, flag: string, args: string[], index: number): { value: string; next: number } {
-  if (arg.startsWith(`${flag}=`)) return { value: arg.slice(flag.length + 1), next: index };
+function flagValue(
+  arg: string,
+  flag: string,
+  args: string[],
+  index: number,
+): { value: string; next: number } {
+  if (arg.startsWith(`${flag}=`))
+    return { value: arg.slice(flag.length + 1), next: index };
   return { value: args[index + 1] ?? "", next: index + 1 };
 }
 
 export function parseCliArgs(args: string[]): ParsedArgs {
-  const result: ParsedArgs = { repo: process.cwd(), help: false, version: false };
+  const result: ParsedArgs = {
+    repo: process.cwd(),
+    help: false,
+    version: false,
+  };
   const positional: string[] = [];
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -118,26 +143,26 @@ export function parseCliArgs(args: string[]): ParsedArgs {
     } else if (arg === "--version" || arg === "-v") {
       result.version = true;
     } else if (arg === "--repo" || arg.startsWith("--repo=")) {
-      const parsed = valueOf(arg, "--repo", args, i);
+      const parsed = flagValue(arg, "--repo", args, i);
       result.repo = parsed.value;
       i = parsed.next;
       if (!result.repo) throw new Error("--repo requires a path");
     } else if (arg === "--goal" || arg.startsWith("--goal=")) {
-      const parsed = valueOf(arg, "--goal", args, i);
+      const parsed = flagValue(arg, "--goal", args, i);
       result.goal = parsed.value;
       i = parsed.next;
       if (!result.goal) throw new Error("--goal requires a name");
     } else if (arg === "--iterations" || arg.startsWith("--iterations=")) {
-      const parsed = valueOf(arg, "--iterations", args, i);
+      const parsed = flagValue(arg, "--iterations", args, i);
       result.iterations = parsePositiveInt("--iterations", parsed.value);
       i = parsed.next;
     } else if (arg === "--run-config" || arg.startsWith("--run-config=")) {
-      const parsed = valueOf(arg, "--run-config", args, i);
+      const parsed = flagValue(arg, "--run-config", args, i);
       result.runConfig = parsed.value;
       i = parsed.next;
       if (!result.runConfig) throw new Error("--run-config requires a path");
     } else if (arg === "--intent" || arg.startsWith("--intent=")) {
-      const parsed = valueOf(arg, "--intent", args, i);
+      const parsed = flagValue(arg, "--intent", args, i);
       result.intent = parsed.value;
       i = parsed.next;
       if (!result.intent) throw new Error("--intent requires a file");
@@ -151,7 +176,8 @@ export function parseCliArgs(args: string[]): ParsedArgs {
 }
 
 function exitCode(result: LaunchResult): number {
-  if (result.stop === "interrupted") return result.interruptedBy === "SIGTERM" ? 143 : 130;
+  if (result.stop === "interrupted")
+    return result.interruptedBy === "SIGTERM" ? 143 : 130;
   if (result.stop === "done") return 0;
   if (result.stop === "blocked") return 2;
   if (result.stop === "infra") return 1;
@@ -159,7 +185,9 @@ function exitCode(result: LaunchResult): number {
 }
 
 function printStatus(out: Awaited<ReturnType<typeof statusGoal>>): void {
-  console.log(`goal ${out.goal}: ${out.state.goal} (iteration ${out.state.iteration})`);
+  console.log(
+    `goal ${out.goal}: ${out.state.goal} (iteration ${out.state.iteration})`,
+  );
   for (const slug of Object.keys(out.state.tasks).sort()) {
     const task = out.state.tasks[slug]!;
     const commit = task.commit ? ` (commit ${task.commit.slice(0, 8)})` : "";
@@ -171,16 +199,20 @@ function printStatus(out: Awaited<ReturnType<typeof statusGoal>>): void {
 
 async function runCommand(parsed: ParsedArgs, deps: CliDeps): Promise<number> {
   if (!parsed.goal) throw new Error("run requires --goal <name>");
-  const injected = deps.harnesses !== undefined || deps.harnessFactory !== undefined;
+  const injected =
+    deps.harnesses !== undefined || deps.harnessFactory !== undefined;
   const result = await runGoal({
     repo: parsed.repo,
     goal: parsed.goal,
     iterations: parsed.iterations,
     runConfigPath: parsed.runConfig,
     harnesses: deps.harnesses,
-    harnessFactory: deps.harnessFactory ?? (injected ? undefined : createRealHarnesses),
-    modelCatalog: deps.modelCatalog ?? (injected ? undefined : createRealModelCatalog()),
-    binaries: deps.binaries ?? (injected ? undefined : resolveHarnessBinaries()),
+    harnessFactory:
+      deps.harnessFactory ?? (injected ? undefined : createRealHarnesses),
+    modelCatalog:
+      deps.modelCatalog ?? (injected ? undefined : createRealModelCatalog()),
+    binaries:
+      deps.binaries ?? (injected ? undefined : resolveHarnessBinaries()),
     signals: deps.signals,
   });
   console.log(
@@ -188,16 +220,21 @@ async function runCommand(parsed: ParsedArgs, deps: CliDeps): Promise<number> {
       `goal ${result.goal}: ${result.state.goal}, ${result.iterations} iteration(s), stop=${result.stop}`,
       result.cause ? `cause: ${result.cause}` : undefined,
       `summary: ${result.lastSummary ? `${result.lastSummary}` : "none"}`,
-      result.recoveredRecords > 0 ? `recovered: ${result.recoveredRecords} interrupted record(s)` : undefined,
+      result.recoveredRecords > 0
+        ? `recovered: ${result.recoveredRecords} interrupted record(s)`
+        : undefined,
     ]
       .filter(Boolean)
-      .join("\n")
+      .join("\n"),
   );
   return exitCode(result);
 }
 
 /** Main dispatch entrypoint; each command maps to one kernel or mailbox call. */
-export async function dispatch(args: string[], deps: CliDeps = {}): Promise<number> {
+export async function dispatch(
+  args: string[],
+  deps: CliDeps = {},
+): Promise<number> {
   let parsed: ParsedArgs;
   try {
     parsed = parseCliArgs(args);
@@ -226,10 +263,18 @@ export async function dispatch(args: string[], deps: CliDeps = {}): Promise<numb
     if (parsed.command === "run") return await runCommand(parsed, deps);
     if (parsed.command === "init") {
       if (!parsed.goal) throw new Error("init requires --goal <name>");
-      const result = await initGoal({ repo: parsed.repo, goal: parsed.goal, intent: parsed.intent });
+      const result = await initGoal({
+        repo: parsed.repo,
+        goal: parsed.goal,
+        intent: parsed.intent,
+      });
       console.log(`goal: ${result.goalDir}`);
-      console.log(`repo config: ${result.repoConfig} (${result.repoConfigCreated ? "created" : "existing"})`);
-      console.log(`intent: ${result.intentPath} (${result.intentCreated ? "created" : "existing"})`);
+      console.log(
+        `repo config: ${result.repoConfig} (${result.repoConfigCreated ? "created" : "existing"})`,
+      );
+      console.log(
+        `intent: ${result.intentPath} (${result.intentCreated ? "created" : "existing"})`,
+      );
       return 0;
     }
     if (parsed.command === "status") {
@@ -239,13 +284,20 @@ export async function dispatch(args: string[], deps: CliDeps = {}): Promise<numb
     }
     if (parsed.command === "benchmark") {
       if (!parsed.goal) throw new Error("benchmark requires --goal <name>");
-      console.log(formatBenchmark(await benchmarkGoal(parsed.repo, parsed.goal)));
+      console.log(
+        formatBenchmark(await benchmarkGoal(parsed.repo, parsed.goal)),
+      );
       return 0;
     }
     if (parsed.command === "steer") {
       if (!parsed.goal) throw new Error("steer requires --goal <name>");
-      if (!parsed.file) throw new Error("steer requires a file path or - for stdin");
-      const path = await steerGoal(parsed.repo, parsed.goal, await readSteerSource(parsed.file));
+      if (!parsed.file)
+        throw new Error("steer requires a file path or - for stdin");
+      const path = await steerGoal(
+        parsed.repo,
+        parsed.goal,
+        await readSteerSource(parsed.file),
+      );
       console.log(`steer: ${path}`);
       return 0;
     }

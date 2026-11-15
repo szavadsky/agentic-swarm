@@ -2,7 +2,12 @@ import fs from "node:fs";
 import path from "node:path";
 import yaml from "yaml";
 import { z } from "zod";
-import { portable, type Harness, type ModelRef, type SessionRef } from "../harness/types.js";
+import {
+  type Harness,
+  type ModelRef,
+  portable,
+  type SessionRef,
+} from "../harness/types.js";
 import { preexistingRed, recordedBaseGates } from "./baseline.js";
 import { contextPackRelPath } from "./context-pack.js";
 import { formatFailingChecks, newGateFailures } from "./gates.js";
@@ -34,7 +39,7 @@ function bySeq(a: StepRecord, b: StepRecord): number {
 
 const CLASS_FILE = "class.yaml";
 
-const classSchema = z
+export const classSchema = z
   .object({
     class: z.enum(["trivial", "task", "bigger"]),
     slug: z.string().min(1).optional(),
@@ -59,39 +64,66 @@ export function readFrontClass(runtime: KernelRuntime): FrontClass | null {
   try {
     raw = yaml.parse(fs.readFileSync(file, "utf8"));
   } catch (err) {
-    throw new FrontClassError(`class.yaml is not valid YAML: ${(err as Error).message}`);
+    throw new FrontClassError(
+      `class.yaml is not valid YAML: ${(err as Error).message}`,
+    );
   }
   const parsed = classSchema.safeParse(raw);
   if (!parsed.success) {
     const findings = parsed.error.issues.map(
-      (issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`
+      (issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`,
     );
     throw new FrontClassError(`class.yaml is invalid: ${findings.join("; ")}`);
   }
   if (parsed.data.class !== "bigger" && !parsed.data.slug) {
-    throw new FrontClassError(`class.yaml class "${parsed.data.class}" needs a task slug`);
+    throw new FrontClassError(
+      `class.yaml class "${parsed.data.class}" needs a task slug`,
+    );
   }
   return parsed.data;
 }
 
-function lastReview(records: StepRecord[], slug: string, flow: FlowDefinition): StepRecord | undefined {
-  const reviewIds = new Set(flow.steps.filter((s) => s.review).map((s) => s.id));
+function lastReview(
+  records: StepRecord[],
+  slug: string,
+  flow: FlowDefinition,
+): StepRecord | undefined {
+  const reviewIds = new Set(
+    flow.steps.filter((s) => s.review).map((s) => s.id),
+  );
   return records
     .filter((r) => r.slug === slug && reviewIds.has(r.step) && r.outcome)
     .sort(bySeq)
     .at(-1);
 }
 
-function lastChecks(records: StepRecord[], slug: string): StepRecord | undefined {
-  return records.filter((r) => r.slug === slug && r.step === "checks").sort(bySeq).at(-1);
+function lastChecks(
+  records: StepRecord[],
+  slug: string,
+): StepRecord | undefined {
+  return records
+    .filter((r) => r.slug === slug && r.step === "checks")
+    .sort(bySeq)
+    .at(-1);
 }
 
-function lastMergeChecks(records: StepRecord[], slug: string): StepRecord | undefined {
-  return records.filter((r) => r.slug === slug && r.step === "merge-checks").sort(bySeq).at(-1);
+function lastMergeChecks(
+  records: StepRecord[],
+  slug: string,
+): StepRecord | undefined {
+  return records
+    .filter((r) => r.slug === slug && r.step === "merge-checks")
+    .sort(bySeq)
+    .at(-1);
 }
 
-export function firstBase(records: StepRecord[], slug: string): string | undefined {
-  return records.filter((r) => r.slug === slug && r.actor === "agent" && r.base).sort(bySeq)[0]?.base;
+export function firstBase(
+  records: StepRecord[],
+  slug: string,
+): string | undefined {
+  return records
+    .filter((r) => r.slug === slug && r.actor === "agent" && r.base)
+    .sort(bySeq)[0]?.base;
 }
 
 export function flowOf(runtime: KernelRuntime, task: TaskFile): FlowDefinition {
@@ -116,8 +148,14 @@ export function checksDue(flow: FlowDefinition, id: string): boolean {
   return !next || next.review === true;
 }
 
-export function isFixTurn(flow: FlowDefinition, state: TaskState, stepId: string): boolean {
-  return flow.steps[0]?.id === stepId && (state.round > 1 || state.gateFix === true);
+export function isFixTurn(
+  flow: FlowDefinition,
+  state: TaskState,
+  stepId: string,
+): boolean {
+  return (
+    flow.steps[0]?.id === stepId && (state.round > 1 || state.gateFix === true)
+  );
 }
 
 /**
@@ -125,20 +163,33 @@ export function isFixTurn(flow: FlowDefinition, state: TaskState, stepId: string
  * directly (`default` and absent mean no override); flows branch on this,
  * never on a harness id.
  */
-export function resolveRole(runtime: KernelRuntime, role: string, tier?: string): RoleTarget {
+export function resolveRole(
+  runtime: KernelRuntime,
+  role: string,
+  tier?: string,
+): RoleTarget {
   const roleConfig = runtime.configs.process.roles[role];
   if (!roleConfig) throw new Error(`process config has no role "${role}"`);
   const override = tier && tier !== "default" ? tier : undefined;
   const aliasName = override ?? roleConfig.alias ?? role;
   const alias = runtime.configs.run.aliases[aliasName];
-  if (!alias) throw new Error(`run config has no alias "${aliasName}" (needed by role "${role}")`);
+  if (!alias)
+    throw new Error(
+      `run config has no alias "${aliasName}" (needed by role "${role}")`,
+    );
   const harness = runtime.harnesses.get(alias.harness);
-  if (!harness) throw new Error(`no harness "${alias.harness}" registered for alias "${aliasName}"`);
+  if (!harness)
+    throw new Error(
+      `no harness "${alias.harness}" registered for alias "${aliasName}"`,
+    );
   return {
     role,
     alias: aliasName,
     harness,
-    model: { id: alias.model, ...(alias.effort ? { effort: alias.effort } : {}) },
+    model: {
+      id: alias.model,
+      ...(alias.effort ? { effort: alias.effort } : {}),
+    },
     effort: alias.effort,
     fallbacks: alias.fallbacks,
     timeouts: alias.timeouts,
@@ -146,13 +197,20 @@ export function resolveRole(runtime: KernelRuntime, role: string, tier?: string)
 }
 
 /** The role that actually runs this step: a `different-model` fix turn overrides it. */
-function stepRole(runtime: KernelRuntime, task: TaskFile, state: TaskState, stepId: string): string {
+function stepRole(
+  runtime: KernelRuntime,
+  task: TaskFile,
+  state: TaskState,
+  stepId: string,
+): string {
   const flow = flowOf(runtime, task);
   const step = findStep(flow, stepId);
   const followUp = flow.followUp ?? { mode: "same-session" as const };
   if (followUp.mode === "different-model" && isFixTurn(flow, state, stepId)) {
     if (!followUp.role) {
-      throw new Error(`flow "${task.flow}": follow-up mode different-model needs a role`);
+      throw new Error(
+        `flow "${task.flow}": follow-up mode different-model needs a role`,
+      );
     }
     return followUp.role;
   }
@@ -167,12 +225,13 @@ export function frontTarget(runtime: KernelRuntime): RoleTarget {
   const configured = runtime.configs.process.roles.front;
   if (!configured) throw new Error('process config has no role "front"');
   const aliasName = configured.alias ?? "front";
-  if (runtime.configs.run.aliases[aliasName]) return resolveRole(runtime, "front");
+  if (runtime.configs.run.aliases[aliasName])
+    return resolveRole(runtime, "front");
   if (aliasName === "front" && runtime.configs.run.aliases.pm) {
     return resolveRole(runtime, "front", "pm");
   }
   throw new Error(
-    `run config has no alias "${aliasName}" (needed by role "front") and no "pm" fallback`
+    `run config has no alias "${aliasName}" (needed by role "front") and no "pm" fallback`,
   );
 }
 
@@ -184,9 +243,13 @@ function lastFrontRecord(records: StepRecord[]): StepRecord | undefined {
 }
 
 /** The class.yaml names this task when its class is not bigger and the slug matches. */
-function frontTaskClass(runtime: KernelRuntime, task: TaskFile): "trivial" | "task" | undefined {
+function frontTaskClass(
+  runtime: KernelRuntime,
+  task: TaskFile,
+): "trivial" | "task" | undefined {
   const cls = readFrontClass(runtime);
-  if (!cls || cls.class === "bigger" || cls.slug !== task.slug) return undefined;
+  if (!cls || cls.class === "bigger" || cls.slug !== task.slug)
+    return undefined;
   return cls.class;
 }
 
@@ -194,20 +257,33 @@ function frontTaskClass(runtime: KernelRuntime, task: TaskFile): "trivial" | "ta
  * The front's record proves the front ran and names the iteration whose pack is
  * the task's briefing.
  */
-function frontPack(runtime: KernelRuntime, task: TaskFile, records: StepRecord[]): string | undefined {
+function frontPack(
+  runtime: KernelRuntime,
+  task: TaskFile,
+  records: StepRecord[],
+): string | undefined {
   if (!frontTaskClass(runtime, task)) return undefined;
   const front = lastFrontRecord(records);
   if (!front) return undefined;
   return path.join(runtime.store.goalDir, contextPackRelPath(front.iteration));
 }
 
-export function stepTarget(runtime: KernelRuntime, task: TaskFile, state: TaskState, stepId: string): RoleTarget {
+export function stepTarget(
+  runtime: KernelRuntime,
+  task: TaskFile,
+  state: TaskState,
+  stepId: string,
+): RoleTarget {
   const step = findStep(flowOf(runtime, task), stepId);
   const role = stepRole(runtime, task, state, stepId);
   // The ladder's "same agent": a trivial task runs its implement step on the
   // front's target, de novo in the task worktree. Fix turns keep that target,
   // so they resume the implement session by alias.
-  if (!step.review && role === "implementer" && frontTaskClass(runtime, task) === "trivial") {
+  if (
+    !step.review &&
+    role === "implementer" &&
+    frontTaskClass(runtime, task) === "trivial"
+  ) {
     // The front's alias and model run the turn, but the prompt stays the
     // implementer's: the role names the prompt, not the agent's history.
     return { ...frontTarget(runtime), role };
@@ -222,10 +298,17 @@ export async function resumeSessionFor(
   task: TaskFile,
   alias: string,
   records: StepRecord[],
-  worktree: string
+  worktree: string,
 ): Promise<SessionRef | undefined> {
   const prior = records
-    .filter((r) => r.slug === task.slug && r.actor === "agent" && r.endedAt && r.session && r.alias === alias)
+    .filter(
+      (r) =>
+        r.slug === task.slug &&
+        r.actor === "agent" &&
+        r.endedAt &&
+        r.session &&
+        r.alias === alias,
+    )
     .sort(bySeq)
     .at(-1)?.session;
   if (!prior) return undefined;
@@ -244,7 +327,10 @@ function aliasHarness(runtime: KernelRuntime, alias: string): string {
 }
 
 /** Compaction is cache hygiene, not a gate; a failure keeps the uncompacted ref. */
-export async function compactSession(runtime: KernelRuntime, session: SessionRef): Promise<SessionRef | undefined> {
+export async function compactSession(
+  runtime: KernelRuntime,
+  session: SessionRef,
+): Promise<SessionRef | undefined> {
   const harness = runtime.harnesses.get(session.harness);
   if (!harness?.compact) return undefined;
   try {
@@ -261,7 +347,7 @@ export async function followUpSession(
   task: TaskFile,
   target: RoleTarget,
   records: StepRecord[],
-  worktree: string
+  worktree: string,
 ): Promise<SessionRef | undefined> {
   const flow = flowOf(runtime, task);
   const followUp = flow.followUp ?? { mode: "same-session" as const };
@@ -276,7 +362,7 @@ export function promptVars(
   worktree: string,
   records: StepRecord[],
   round: number,
-  flow: FlowDefinition
+  flow: FlowDefinition,
 ): Record<string, string> {
   const review = lastReview(records, task.slug, flow);
   const checks = lastChecks(records, task.slug);
@@ -288,13 +374,18 @@ export function promptVars(
   const base = recordedBaseGates(records);
   const preexisting = preexistingRed(base);
   let findings = "";
-  if (latest === review && review?.outcome) findings = formatConcerns(review.outcome);
-  else if (latest?.checks) findings = formatFailingChecks(newGateFailures(latest.checks, preexisting));
+  if (latest === review && review?.outcome)
+    findings = formatConcerns(review.outcome);
+  else if (latest?.checks)
+    findings = formatFailingChecks(newGateFailures(latest.checks, preexisting));
   return {
     task_path: `${runtime.store.tasksDir}/${task.slug}.md`,
     worktree,
     setup_command: runtime.configs.repo.setup.join(" && ") || "none",
-    gate_commands: runtime.configs.repo.gates.map((g) => `- ${g.id}: ${g.command}`).join("\n") || "none",
+    gate_commands:
+      runtime.configs.repo.gates
+        .map((g) => `- ${g.id}: ${g.command}`)
+        .join("\n") || "none",
     baseline_checks: base ? formatFailingChecks(base.checks) || "none" : "none",
     findings,
     round: String(round),

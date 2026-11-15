@@ -43,7 +43,7 @@ describe("FakeHarness (kernel contract)", () => {
       fakeTurnResult(req, {
         text: "hello",
         usage: { in: 10, cacheRead: 4, out: 3, costUsd: 0.02 },
-      })
+      }),
     );
 
     const res = await harness.turn(request());
@@ -115,7 +115,9 @@ describe("FakeHarness (kernel contract)", () => {
     try {
       const res = await harness.turn(request({ cwd: dir, outcomePath }));
 
-      expect(fs.readFileSync(path.join(dir, "implemented.txt"), "utf8")).toBe("done");
+      expect(fs.readFileSync(path.join(dir, "implemented.txt"), "utf8")).toBe(
+        "done",
+      );
       expect(JSON.parse(fs.readFileSync(outcomePath, "utf8"))).toEqual({
         status: "done",
         summary: "implemented",
@@ -168,7 +170,7 @@ describe("FakeHarness (kernel contract)", () => {
   it("fails loudly when a turn was not scripted", async () => {
     const harness = new FakeHarness();
     await expect(harness.turn(request())).rejects.toThrow(
-      "FakeHarness: no scripted turn"
+      "FakeHarness: no scripted turn",
     );
   });
 });

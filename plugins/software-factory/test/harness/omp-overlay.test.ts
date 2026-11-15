@@ -6,16 +6,26 @@ import { ompOverlay, writeOmpOverlay } from "../../src/harness/omp/overlay.js";
 
 describe("omp overlay", () => {
   it("pins cache retention, unattended switches and pinned subagent models", () => {
-    const overlay = ompOverlay({ subagentModel: "opencode-go/longcat-2.5-free" });
+    const overlay = ompOverlay({
+      subagentModel: "opencode-go/longcat-2.5-free",
+    });
     expect(overlay.providers).toEqual({ cacheRetention: "short" });
     expect(overlay.memory).toEqual({ backend: "off" });
     expect(overlay.autolearn).toEqual({ enabled: false });
     expect(overlay.features).toEqual({ unexpectedStopDetection: false });
     expect(overlay.retry).toEqual({ enabled: false, modelFallback: false });
-    expect(overlay.modelRoles).toEqual({ task: "opencode-go/longcat-2.5-free" });
+    expect(overlay.modelRoles).toEqual({
+      task: "opencode-go/longcat-2.5-free",
+    });
 
     const overrides = (overlay.task as any).agentModelOverrides;
-    for (const agent of ["task", "scout", "reviewer", "sonic", "security-reviewer"]) {
+    for (const agent of [
+      "task",
+      "scout",
+      "reviewer",
+      "sonic",
+      "security-reviewer",
+    ]) {
       expect(overrides[agent]).toBe("opencode-go/longcat-2.5-free");
     }
   });
@@ -32,7 +42,10 @@ describe("omp overlay", () => {
       extra: { compaction: { keepRecentTokens: 1, reserveTokens: 1 } },
     });
     expect(overlay.providers).toEqual({ cacheRetention: "long" });
-    expect(overlay.compaction).toEqual({ keepRecentTokens: 1, reserveTokens: 1 });
+    expect(overlay.compaction).toEqual({
+      keepRecentTokens: 1,
+      reserveTokens: 1,
+    });
   });
 
   it("writes a content-addressed overlay under the session store", async () => {

@@ -1,4 +1,4 @@
-import { describe, it, expect } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { AsyncMutex, KeyedMutex } from "../src/core/mutex.js";
 
 describe("Async synchronization primitives (§2)", () => {

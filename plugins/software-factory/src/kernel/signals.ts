@@ -30,13 +30,17 @@ export function createDrainController(): DrainController {
     interruptedBy ??= signal;
     if (count === 1) {
       draining = true;
-      console.warn("[factory] signal received: draining (no new dispatch; signal again to abort in-flight turns)");
+      console.warn(
+        "[factory] signal received: draining (no new dispatch; signal again to abort in-flight turns)",
+      );
       return;
     }
     if (count === 2) {
       draining = true;
       aborted = true;
-      console.warn("[factory] second signal: aborting in-flight turns; partial usage will be recorded");
+      console.warn(
+        "[factory] second signal: aborting in-flight turns; partial usage will be recorded",
+      );
       void terminateAllChildGroups(500);
       return;
     }

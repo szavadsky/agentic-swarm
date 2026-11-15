@@ -1,15 +1,26 @@
 import fs from "node:fs";
 import path from "node:path";
 import yaml from "yaml";
-import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
-import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { Repo } from "../../src/core/git/repo.js";
-import { loadConfigs, resolveGoalPaths, toLimits } from "../../src/kernel/config.js";
+import {
+  type FakeHarness,
+  fakeTurnResult,
+} from "../../src/harness/fake/index.js";
+import {
+  loadConfigs,
+  resolveGoalPaths,
+  toLimits,
+} from "../../src/kernel/config.js";
 import type { ModelPrice } from "../../src/kernel/pricing.js";
 import { loadPrompts } from "../../src/kernel/prompts.js";
 import { createFolderStore } from "../../src/kernel/store.js";
+import type {
+  KernelRuntime,
+  Outcome,
+  TaskFile,
+} from "../../src/kernel/types.js";
 import { prepareIntegrationCheckout } from "../../src/kernel/worktree.js";
-import type { KernelRuntime, Outcome, TaskFile } from "../../src/kernel/types.js";
+import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 
 export interface FlowRepoOptions {
   gates?: { id: string; command: string }[];
@@ -62,7 +73,7 @@ export function setupFlowRepo(opts: FlowRepoOptions = {}): FlowRepo {
       setup: opts.setup ?? [],
       gates,
       ...(opts.identity ? { identity: opts.identity } : {}),
-    })
+    }),
   );
   const aliases = opts.aliases ?? {
     architect: { harness: "fake", model: "fake-architect" },
@@ -76,7 +87,7 @@ export function setupFlowRepo(opts: FlowRepoOptions = {}): FlowRepo {
       aliases,
       ...(opts.prices ? { prices: opts.prices } : {}),
       limits: { iterations: 1, concurrency: 1, ...(opts.limits ?? {}) },
-    })
+    }),
   );
   if (opts.process) {
     repo.writeFile(".factory/process.yaml", yaml.stringify(opts.process));
@@ -84,14 +95,18 @@ export function setupFlowRepo(opts: FlowRepoOptions = {}): FlowRepo {
   repo.commit("factory config");
   const goalDir = path.join(repo.dir, ".factory/artifacts", goal);
   fs.mkdirSync(goalDir, { recursive: true });
-  fs.writeFileSync(path.join(goalDir, "intent.md"), "# Goal\n\nTest goal.\n", "utf8");
+  fs.writeFileSync(
+    path.join(goalDir, "intent.md"),
+    "# Goal\n\nTest goal.\n",
+    "utf8",
+  );
   return { repo, goalDir, goal };
 }
 
 export async function makeRuntime(
   repo: TmpRepo,
   goal: string,
-  harnesses: Record<string, FakeHarness>
+  harnesses: Record<string, FakeHarness>,
 ): Promise<KernelRuntime> {
   const configs = loadConfigs(repo.dir);
   const paths = resolveGoalPaths(configs, repo.dir, goal);
@@ -114,7 +129,10 @@ export async function makeRuntime(
   return runtime;
 }
 
-export async function writeTask(runtime: KernelRuntime, task: TaskFile): Promise<void> {
+export async function writeTask(
+  runtime: KernelRuntime,
+  task: TaskFile,
+): Promise<void> {
   await runtime.store.writeTask(task);
 }
 
@@ -123,7 +141,12 @@ export function goalCheckout(repo: TmpRepo, goal: string): string {
 }
 
 export function cleanupFlowRepo(repo: TmpRepo): void {
-  const worktreeRoot = path.resolve(repo.dir, "..", ".factory-worktrees", path.basename(repo.dir));
+  const worktreeRoot = path.resolve(
+    repo.dir,
+    "..",
+    ".factory-worktrees",
+    path.basename(repo.dir),
+  );
   try {
     repo.cleanup();
   } finally {
@@ -132,17 +155,29 @@ export function cleanupFlowRepo(repo: TmpRepo): void {
 }
 
 /** A handler that writes one file per task and approves its review. */
-export function filePerTaskHandler(counter: { active: number; max: number }, delayMs = 20) {
-  return async (req: Parameters<FakeHarness["turn"]>[0], ctx: { writeOutcome(value: unknown): void }) => {
+export function filePerTaskHandler(
+  counter: { active: number; max: number },
+  delayMs = 20,
+) {
+  return async (
+    req: Parameters<FakeHarness["turn"]>[0],
+    ctx: { writeOutcome(value: unknown): void },
+  ) => {
     counter.active += 1;
     counter.max = Math.max(counter.max, counter.active);
     try {
       await new Promise((resolve) => setTimeout(resolve, delayMs));
       const slug = path.basename(req.cwd!);
       if (req.prompt.startsWith("You review")) {
-        ctx.writeOutcome(outcome({ summary: `${slug} review`, verdict: "approve" }));
+        ctx.writeOutcome(
+          outcome({ summary: `${slug} review`, verdict: "approve" }),
+        );
       } else {
-        fs.writeFileSync(path.join(req.cwd!, `${slug}.txt`), `${slug}\n`, "utf8");
+        fs.writeFileSync(
+          path.join(req.cwd!, `${slug}.txt`),
+          `${slug}\n`,
+          "utf8",
+        );
         ctx.writeOutcome(outcome({ summary: `${slug} implemented` }));
       }
       return fakeTurnResult(req);

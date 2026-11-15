@@ -24,11 +24,15 @@ describe("classifyOmpError", () => {
     expect(error.httpStatus).toBe(429);
     const stop = classifyOmpError(error);
     expect(stop).toMatchObject({ kind: "infra", cause: "quota" });
-    expect((stop as { details?: string }).details).toContain("Free usage limit reached");
+    expect((stop as { details?: string }).details).toContain(
+      "Free usage limit reached",
+    );
   });
 
   it("classifies auth, overflow, refusal, timeout and provider saturation", () => {
-    expect(classifyOmpError({ httpStatus: 401, message: "unauthorized" })).toEqual({
+    expect(
+      classifyOmpError({ httpStatus: 401, message: "unauthorized" }),
+    ).toEqual({
       kind: "infra",
       cause: "auth",
       details: "unauthorized",
@@ -38,7 +42,9 @@ describe("classifyOmpError", () => {
       cause: "overflow",
       details: "context length exceeded",
     });
-    expect(classifyOmpError({ message: "The model declined: safety policy" })).toEqual({
+    expect(
+      classifyOmpError({ message: "The model declined: safety policy" }),
+    ).toEqual({
       kind: "refusal",
       details: "The model declined: safety policy",
     });
@@ -47,7 +53,9 @@ describe("classifyOmpError", () => {
       cause: "timeout",
       details: "Request timed out",
     });
-    expect(classifyOmpError({ httpStatus: 503, message: "provider overloaded" })).toEqual({
+    expect(
+      classifyOmpError({ httpStatus: 503, message: "provider overloaded" }),
+    ).toEqual({
       kind: "infra",
       cause: "rate",
       details: "provider overloaded",
@@ -71,14 +79,17 @@ describe("classifyOmpError", () => {
   it("carries scrubbed details on auth and overflow stops", () => {
     const secret = "sk-live-TOPSECRETTOKEN1234567890";
     expect(
-      classifyOmpError({ httpStatus: 401, message: `unauthorized api_key=${secret}` })
+      classifyOmpError({
+        httpStatus: 401,
+        message: `unauthorized api_key=${secret}`,
+      }),
     ).toEqual({
       kind: "infra",
       cause: "auth",
       details: "unauthorized api_key=[redacted]",
     });
     expect(
-      classifyOmpError({ message: `context length exceeded token=${secret}` })
+      classifyOmpError({ message: `context length exceeded token=${secret}` }),
     ).toEqual({
       kind: "infra",
       cause: "overflow",
@@ -107,7 +118,7 @@ describe("classifyOmpLaunchFailure", () => {
   it("classifies the recorded model-not-found stderr as auth", () => {
     const stderr = fs.readFileSync(
       path.join(FIXTURES, "turn-error-model-not-found.txt"),
-      "utf8"
+      "utf8",
     );
     const stop = classifyOmpLaunchFailure(stderr);
     expect(stop.kind).toBe("infra");
@@ -116,6 +127,10 @@ describe("classifyOmpLaunchFailure", () => {
   });
 
   it("classifies other launch stderr as crash", () => {
-    expect(classifyOmpLaunchFailure("boom")).toEqual({ kind: "infra", cause: "crash", details: "boom" });
+    expect(classifyOmpLaunchFailure("boom")).toEqual({
+      kind: "infra",
+      cause: "crash",
+      details: "boom",
+    });
   });
 });

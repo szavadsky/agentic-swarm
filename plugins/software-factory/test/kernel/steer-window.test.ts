@@ -36,7 +36,9 @@ describe("steer dropped between the boundary read and dispatch start", () => {
         // The boundary scanned the inbox before this turn; the drop is after
         // its read and must still be structured before tasks run.
         await postSteer(store, "s1", steer);
-        ctx.writeOutcome(outcome({ summary: "planned alpha", decision: "continue" }));
+        ctx.writeOutcome(
+          outcome({ summary: "planned alpha", decision: "continue" }),
+        );
         return fakeTurnResult(req);
       });
       harness.script(async (req, ctx) => {
@@ -52,14 +54,18 @@ describe("steer dropped between the boundary read and dispatch start", () => {
       });
       harness.script(implementerTurn("alpha.txt"));
       harness.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "alpha is correct", verdict: "approve" }));
+        ctx.writeOutcome(
+          outcome({ summary: "alpha is correct", verdict: "approve" }),
+        );
         return fakeTurnResult(req);
       });
 
       await launch(goal.repo, harness, 1);
 
       expect((await stateOf(goal.goalDir)).tasks.alpha!.status).toBe("merged");
-      expect(harness.calls.filter((call) => call.prompt.includes(steer))).toHaveLength(1);
+      expect(
+        harness.calls.filter((call) => call.prompt.includes(steer)),
+      ).toHaveLength(1);
       const records = await store.listRecords();
       expect(records.filter((record) => record.step === "pm")).toHaveLength(2);
     } finally {
@@ -81,7 +87,9 @@ describe("steer read by the boundary", () => {
       harness.script((req, ctx) => {
         expect(req.prompt).toContain(steer);
         writePlan(goal.goalDir, PLAN);
-        ctx.writeOutcome(outcome({ summary: "planned alpha", decision: "continue" }));
+        ctx.writeOutcome(
+          outcome({ summary: "planned alpha", decision: "continue" }),
+        );
         return fakeTurnResult(req);
       });
       harness.script((req, ctx) => {
@@ -91,7 +99,9 @@ describe("steer read by the boundary", () => {
       });
       harness.script(implementerTurn("alpha.txt"));
       harness.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "alpha is correct", verdict: "approve" }));
+        ctx.writeOutcome(
+          outcome({ summary: "alpha is correct", verdict: "approve" }),
+        );
         return fakeTurnResult(req);
       });
 
@@ -100,8 +110,12 @@ describe("steer read by the boundary", () => {
       expect((await stateOf(goal.goalDir)).tasks.alpha!.status).toBe("merged");
       // The architect saw the steer; dispatch handed the same id back and ran
       // no second PM turn over it.
-      expect((await store.listRecords()).filter((record) => record.step === "pm")).toHaveLength(1);
-      expect(harness.calls.filter((call) => call.prompt.includes(steer))).toHaveLength(1);
+      expect(
+        (await store.listRecords()).filter((record) => record.step === "pm"),
+      ).toHaveLength(1);
+      expect(
+        harness.calls.filter((call) => call.prompt.includes(steer)),
+      ).toHaveLength(1);
     } finally {
       cleanup(goal);
     }

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import { parseArchitectRegister, type RegisterContext } from "../../src/kernel/register.js";
+import {
+  parseArchitectRegister,
+  type RegisterContext,
+} from "../../src/kernel/register.js";
 
 const EXAMPLE = `# Plan
 
@@ -15,7 +18,16 @@ const EXAMPLE = `# Plan
 `;
 
 function register(...rows: string[]): string {
-  return ["# Plan", "", "## Architect register", "", ...rows, "", "## Next", ""].join("\n");
+  return [
+    "# Plan",
+    "",
+    "## Architect register",
+    "",
+    ...rows,
+    "",
+    "## Next",
+    "",
+  ].join("\n");
 }
 
 function ctx(patch: Partial<RegisterContext> = {}): RegisterContext {
@@ -55,18 +67,23 @@ describe("architect register", () => {
   it("returns no rows and no findings when the plan has no register heading", () => {
     const parsed = parseArchitectRegister(
       "# Plan\n\n## Milestones\n\n- a task\n- another\n",
-      ctx({ tasks: [{ slug: "auth.login", epic: "auth" }] })
+      ctx({ tasks: [{ slug: "auth.login", epic: "auth" }] }),
     );
     expect(parsed).toEqual({ epics: [], findings: [] });
   });
 
   it("keeps closed rows as history", () => {
     const parsed = parseArchitectRegister(
-      register("- epic `old` | architect `main` | plan `plan.md` | scope `src/old/**` | opened i1 | closed i3: served its purpose"),
-      ctx({ exists: () => false })
+      register(
+        "- epic `old` | architect `main` | plan `plan.md` | scope `src/old/**` | opened i1 | closed i3: served its purpose",
+      ),
+      ctx({ exists: () => false }),
     );
     expect(parsed.findings).toEqual([]);
-    expect(parsed.epics[0]?.closed).toEqual({ iteration: 3, reason: "served its purpose" });
+    expect(parsed.epics[0]?.closed).toEqual({
+      iteration: 3,
+      reason: "served its purpose",
+    });
   });
 
   it("finds an active subarchitect row at depth 1", () => {
@@ -80,9 +97,9 @@ describe("architect register", () => {
     const parsed = parseArchitectRegister(
       register(
         "- epic `billing` | architect `main` | plan `plan.md` | scope `src/billing/**` | opened i8 | active",
-        "- epic `search` | architect `subarchitect` | plan `epics/search.md` | scope `src/search/**` | opened i4 | closed i6: folded into `auth`"
+        "- epic `search` | architect `subarchitect` | plan `epics/search.md` | scope `src/search/**` | opened i4 | closed i6: folded into `auth`",
       ),
-      ctx({ depth: 1, exists: () => false })
+      ctx({ depth: 1, exists: () => false }),
     );
     expect(parsed.findings).toEqual([]);
   });
@@ -92,9 +109,9 @@ describe("architect register", () => {
       register(
         "- epic `auth` | architect `subarchitect` | plan `epics/auth.md` | scope `src/auth/**` | opened i7 | active",
         "- epic auth, architect subarchitect, plan epics/auth.md",
-        "- epic `billing` | architect `main` | plan `plan.md` | scope `src/billing/**` | opened i8 | active"
+        "- epic `billing` | architect `main` | plan `plan.md` | scope `src/billing/**` | opened i8 | active",
       ),
-      ctx()
+      ctx(),
     );
     expect(parsed.epics.map((row) => row.epic)).toEqual(["auth", "billing"]);
     expect(parsed.findings).toHaveLength(1);
@@ -106,13 +123,15 @@ describe("architect register", () => {
       register(
         "- epic `auth` | architect `boss` | plan `epics/auth.md` | scope `src/auth/**` | opened i7 | active",
         "- epic `auth` | architect `subarchitect` | plan `plan.md` | scope `src/auth/**` | opened i7 | active",
-        "- epic `auth` | architect `subarchitect` | plan `epics/auth.md` | scope `src/auth/**` | opened i7 | closed i6:"
+        "- epic `auth` | architect `subarchitect` | plan `epics/auth.md` | scope `src/auth/**` | opened i7 | closed i6:",
       ),
-      ctx()
+      ctx(),
     );
     expect(parsed.epics.map((row) => row.plan)).toEqual(["plan.md"]);
     expect(parsed.findings.join("\n")).toMatch(/architect "boss"/);
-    expect(parsed.findings.join("\n")).toMatch(/must be "epics\/auth\.md", not "plan.md"/);
+    expect(parsed.findings.join("\n")).toMatch(
+      /must be "epics\/auth\.md", not "plan.md"/,
+    );
     expect(parsed.findings.join("\n")).toMatch(/cannot be parsed/);
   });
 
@@ -120,17 +139,17 @@ describe("architect register", () => {
     const parsed = parseArchitectRegister(
       register(
         "- epic `auth` | architect `subarchitect` | plan `epics/other.md` | scope `src/auth/**` | opened i7 | active",
-        "- epic `billing` | architect `subarchitect` | plan `src/billing/billing.ts` | scope `src/billing/**` | opened i8 | active"
+        "- epic `billing` | architect `subarchitect` | plan `src/billing/billing.ts` | scope `src/billing/**` | opened i8 | active",
       ),
-      ctx()
+      ctx(),
     );
     expect(parsed.epics).toHaveLength(2);
     expect(parsed.findings).toHaveLength(2);
     expect(parsed.findings.join("\n")).toMatch(
-      /epic "auth" is owned by a subarchitect; its plan must be "epics\/auth\.md", not "epics\/other\.md"/
+      /epic "auth" is owned by a subarchitect; its plan must be "epics\/auth\.md", not "epics\/other\.md"/,
     );
     expect(parsed.findings.join("\n")).toMatch(
-      /epic "billing" is owned by a subarchitect; its plan must be "epics\/billing\.md", not "src\/billing\/billing\.ts"/
+      /epic "billing" is owned by a subarchitect; its plan must be "epics\/billing\.md", not "src\/billing\/billing\.ts"/,
     );
   });
 
@@ -138,17 +157,17 @@ describe("architect register", () => {
     const parsed = parseArchitectRegister(
       register(
         "- epic `billing` | architect `main` | plan `epics/billing.md` | scope `src/billing/**` | opened i8 | active",
-        "- epic `search` | architect `main` | plan `src/search/search.ts` | scope `src/search/**` | opened i9 | active"
+        "- epic `search` | architect `main` | plan `src/search/search.ts` | scope `src/search/**` | opened i9 | active",
       ),
-      ctx()
+      ctx(),
     );
     expect(parsed.epics).toHaveLength(2);
     expect(parsed.findings).toHaveLength(2);
     expect(parsed.findings.join("\n")).toMatch(
-      /epic "billing" is owned by the main architect; its plan must be "plan\.md", not "epics\/billing\.md"/
+      /epic "billing" is owned by the main architect; its plan must be "plan\.md", not "epics\/billing\.md"/,
     );
     expect(parsed.findings.join("\n")).toMatch(
-      /epic "search" is owned by the main architect; its plan must be "plan\.md", not "src\/search\/search\.ts"/
+      /epic "search" is owned by the main architect; its plan must be "plan\.md", not "src\/search\/search\.ts"/,
     );
   });
 
@@ -175,7 +194,7 @@ describe("architect register", () => {
       register(
         "- epic `auth` | architect `subarchitect` | plan `/srv/plans/auth.md` | scope `src/auth/**` | opened i7 | active",
         "- epic `billing` | architect `main` | plan `../billing.md` | scope `src/billing/**` | opened i8 | active",
-        "- epic `search` | architect `subarchitect` | plan `epics/search.md` | scope `src/search/**` | opened i4 | active"
+        "- epic `search` | architect `subarchitect` | plan `epics/search.md` | scope `src/search/**` | opened i4 | active",
       ),
       {
         depth: 2,
@@ -184,7 +203,7 @@ describe("architect register", () => {
           seen.push(rel);
           return true;
         },
-      }
+      },
     );
     expect(seen).toEqual(["epics/search.md"]);
     expect(parsed.findings.join("\n")).toMatch(/absolute/);
@@ -195,9 +214,9 @@ describe("architect register", () => {
     const parsed = parseArchitectRegister(
       register(
         "- epic `auth` | architect `subarchitect` | plan `epics/auth.md` | scope `/src/auth/**` | opened i7 | active",
-        "- epic `billing` | architect `main` | plan `plan.md` | scope `../billing/**` | opened i8 | active"
+        "- epic `billing` | architect `main` | plan `plan.md` | scope `../billing/**` | opened i8 | active",
       ),
-      ctx()
+      ctx(),
     );
     expect(parsed.findings).toHaveLength(2);
     expect(parsed.findings.join("\n")).toMatch(/scope/);
@@ -207,9 +226,9 @@ describe("architect register", () => {
     const parsed = parseArchitectRegister(
       register(
         "- epic `auth` | architect `subarchitect` | plan `epics/auth.md` | scope `src/auth/**` | opened i7 | active",
-        "- epic `auth` | architect `main` | plan `plan.md` | scope `src/auth/**` | opened i8 | active"
+        "- epic `auth` | architect `main` | plan `plan.md` | scope `src/auth/**` | opened i8 | active",
       ),
-      ctx()
+      ctx(),
     );
     expect(parsed.findings).toHaveLength(1);
     expect(parsed.findings[0]).toMatch(/duplicate active epic "auth"/);
@@ -219,9 +238,9 @@ describe("architect register", () => {
     const parsed = parseArchitectRegister(
       register(
         "- epic `auth` | architect `subarchitect` | plan `epics/auth.md` | scope `src/auth/**` | opened i2 | closed i4: served its purpose",
-        "- epic `auth` | architect `subarchitect` | plan `epics/auth.md` | scope `src/auth/**` | opened i7 | active"
+        "- epic `auth` | architect `subarchitect` | plan `epics/auth.md` | scope `src/auth/**` | opened i7 | active",
       ),
-      ctx()
+      ctx(),
     );
     expect(parsed.findings).toHaveLength(1);
     expect(parsed.findings[0]).toMatch(/appears in 2 rows/);
@@ -232,9 +251,9 @@ describe("architect register", () => {
     const parsed = parseArchitectRegister(
       register(
         "- epic `auth` | architect `main` | plan `plan.md` | scope `src/auth/**` | opened i2 | closed i4: served its purpose",
-        "- epic `auth` | architect `main` | plan `plan.md` | scope `src/auth/**` | opened i5 | closed i6: again"
+        "- epic `auth` | architect `main` | plan `plan.md` | scope `src/auth/**` | opened i5 | closed i6: again",
       ),
-      ctx()
+      ctx(),
     );
     expect(parsed.epics).toHaveLength(2);
     expect(parsed.findings).toHaveLength(1);
@@ -242,12 +261,17 @@ describe("architect register", () => {
   });
 
   it("resolves a task against the active row regardless of row order", () => {
-    const active = "- epic `auth` | architect `subarchitect` | plan `epics/auth.md` | scope `src/auth/**` | opened i7 | active";
-    const closed = "- epic `auth` | architect `subarchitect` | plan `epics/auth.md` | scope `src/auth/**` | opened i2 | closed i4: served its purpose";
-    for (const rows of [[active, closed], [closed, active]]) {
+    const active =
+      "- epic `auth` | architect `subarchitect` | plan `epics/auth.md` | scope `src/auth/**` | opened i7 | active";
+    const closed =
+      "- epic `auth` | architect `subarchitect` | plan `epics/auth.md` | scope `src/auth/**` | opened i2 | closed i4: served its purpose";
+    for (const rows of [
+      [active, closed],
+      [closed, active],
+    ]) {
       const parsed = parseArchitectRegister(
         register(...rows),
-        ctx({ tasks: [{ slug: "auth.login", epic: "auth" }] })
+        ctx({ tasks: [{ slug: "auth.login", epic: "auth" }] }),
       );
       expect(parsed.findings).toHaveLength(1);
       expect(parsed.findings[0]).toMatch(/a closed name is never reopened/);
@@ -255,18 +279,25 @@ describe("architect register", () => {
   });
 
   it("reports tasks naming an unknown or closed epic", () => {
-    const parsed = parseArchitectRegister(EXAMPLE, ctx({
-      tasks: [
-        { slug: "auth.login", epic: "auth" },
-        { slug: "billing.invoice", epic: "billing" },
-        { slug: "ghost.haunt", epic: "ghost" },
-        { slug: "search.reindex", epic: "search" },
-        { slug: "goal-only" },
-      ],
-    }));
+    const parsed = parseArchitectRegister(
+      EXAMPLE,
+      ctx({
+        tasks: [
+          { slug: "auth.login", epic: "auth" },
+          { slug: "billing.invoice", epic: "billing" },
+          { slug: "ghost.haunt", epic: "ghost" },
+          { slug: "search.reindex", epic: "search" },
+          { slug: "goal-only" },
+        ],
+      }),
+    );
     expect(parsed.findings).toHaveLength(2);
-    expect(parsed.findings.join("\n")).toMatch(/task "ghost.haunt" names unknown epic "ghost"/);
-    expect(parsed.findings.join("\n")).toMatch(/task "search.reindex" names closed epic "search"/);
+    expect(parsed.findings.join("\n")).toMatch(
+      /task "ghost.haunt" names unknown epic "ghost"/,
+    );
+    expect(parsed.findings.join("\n")).toMatch(
+      /task "search.reindex" names closed epic "search"/,
+    );
   });
 
   it("ignores prose and comments under the heading", () => {
@@ -280,7 +311,7 @@ describe("architect register", () => {
         "- epic `auth` | architect `subarchitect` | plan `epics/auth.md` | scope `src/auth/**` | opened i7 | active",
         "",
       ].join("\n"),
-      ctx()
+      ctx(),
     );
     expect(parsed.findings).toEqual([]);
     expect(parsed.epics).toHaveLength(1);
@@ -300,7 +331,7 @@ describe("architect register", () => {
         "## Next",
         "",
       ].join("\n"),
-      ctx()
+      ctx(),
     );
     expect(parsed.epics.map((row) => row.epic)).toEqual(["auth"]);
     expect(parsed.findings).toEqual([]);
@@ -317,9 +348,12 @@ describe("architect register", () => {
         "- epic `auth` | architect `subarchitect` | plan `epics/auth.md` | scope `src/auth/**` | opened i7 | active",
         "",
       ].join("\n"),
-      ctx()
+      ctx(),
     );
-    const absent = parseArchitectRegister("# Plan\n\n## Milestones\n\n- a task\n", ctx());
+    const absent = parseArchitectRegister(
+      "# Plan\n\n## Milestones\n\n- a task\n",
+      ctx(),
+    );
     expect(absent).toEqual({ epics: [], findings: [] });
     expect(unclosed.epics).toEqual([]);
     expect(unclosed.findings).toHaveLength(1);
@@ -336,7 +370,7 @@ describe("architect register", () => {
         "```markdown",
         "no closing fence",
       ].join("\n"),
-      ctx()
+      ctx(),
     );
     expect(parsed.epics.map((row) => row.epic)).toEqual(["auth"]);
     expect(parsed.findings).toHaveLength(1);
@@ -357,15 +391,20 @@ describe("architect register", () => {
         "## Next",
         "",
       ].join("\n"),
-      ctx({ exists: () => false })
+      ctx({ exists: () => false }),
     );
     expect(parsed.epics.map((row) => row.epic)).toEqual(["auth", "old"]);
     expect(parsed.findings).toHaveLength(1);
-    expect(parsed.findings[0]).toMatch(/epic "auth" plan "plan.md" does not exist/);
+    expect(parsed.findings[0]).toMatch(
+      /epic "auth" plan "plan.md" does not exist/,
+    );
   });
 
   it("parses CRLF plans", () => {
-    const parsed = parseArchitectRegister(EXAMPLE.replace(/\n/g, "\r\n"), ctx());
+    const parsed = parseArchitectRegister(
+      EXAMPLE.replace(/\n/g, "\r\n"),
+      ctx(),
+    );
     expect(parsed.findings).toEqual([]);
     expect(parsed.epics).toHaveLength(3);
   });

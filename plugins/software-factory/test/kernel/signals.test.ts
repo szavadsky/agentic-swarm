@@ -2,13 +2,13 @@ import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import yaml from "yaml";
-import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 import { dispatch } from "../../src/cli/dispatch.js";
+import type { FakeTurnContext } from "../../src/harness/fake/index.js";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
+import type { TurnRequest } from "../../src/harness/types.js";
 import { createDrainController } from "../../src/kernel/signals.js";
 import { createFolderStore } from "../../src/kernel/store.js";
-import type { TurnRequest } from "../../src/harness/types.js";
-import type { FakeTurnContext } from "../../src/harness/fake/index.js";
+import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 
 const PLAN = "# Plan\n\n## alpha\nCreate alpha.txt.\n";
 
@@ -18,7 +18,10 @@ function outcome(value: Record<string, unknown>) {
 
 function setupRepo(): { repo: TmpRepo; goalDir: string; taskDir: string } {
   const repo = createTmpRepo();
-  repo.writeFile(".factory/repo.yaml", "baseBranch: main\nartifactRoot: .factory/artifacts\nsetup: []\ngates: []\n");
+  repo.writeFile(
+    ".factory/repo.yaml",
+    "baseBranch: main\nartifactRoot: .factory/artifacts\nsetup: []\ngates: []\n",
+  );
   const base = path.basename(repo.dir);
   repo.writeFile(
     ".factory/run.yaml",
@@ -32,12 +35,16 @@ function setupRepo(): { repo: TmpRepo; goalDir: string; taskDir: string } {
       `worktreeRoot: ../${base}-wt`,
       `sessions: { dir: ../${base}-sessions, keepRuns: 2 }`,
       "",
-    ].join("\n")
+    ].join("\n"),
   );
   repo.commit("factory config");
   const goalDir = path.join(repo.dir, ".factory/artifacts/demo");
   fs.mkdirSync(path.join(goalDir, "tasks"), { recursive: true });
-  fs.writeFileSync(path.join(goalDir, "intent.md"), "# Goal\n\nCreate alpha.\n", "utf8");
+  fs.writeFileSync(
+    path.join(goalDir, "intent.md"),
+    "# Goal\n\nCreate alpha.\n",
+    "utf8",
+  );
   fs.writeFileSync(path.join(goalDir, "class.yaml"), "class: bigger\n", "utf8");
   return { repo, goalDir, taskDir: path.join(goalDir, "tasks") };
 }
@@ -45,7 +52,7 @@ function setupRepo(): { repo: TmpRepo; goalDir: string; taskDir: string } {
 function architect(
   harness: FakeHarness,
   goalDir: string,
-  effect: (req: TurnRequest, ctx: FakeTurnContext) => void
+  effect: (req: TurnRequest, ctx: FakeTurnContext) => void,
 ): FakeHarness {
   return harness.script((req, ctx) => {
     fs.writeFileSync(path.join(goalDir, "plan.md"), PLAN, "utf8");
@@ -101,15 +108,22 @@ describe("signal policy", () => {
         ctx.writeOutcome(outcome({ summary: "planned", decision: "continue" }));
       });
       harness.script((req, ctx) => {
-        fs.writeFileSync(path.join(s.taskDir, "alpha.md"), "---\nslug: alpha\ntitle: A\nscope: [alpha.txt]\n---\nBody.\n", "utf8");
+        fs.writeFileSync(
+          path.join(s.taskDir, "alpha.md"),
+          "---\nslug: alpha\ntitle: A\nscope: [alpha.txt]\n---\nBody.\n",
+          "utf8",
+        );
         ctx.writeOutcome(outcome({ summary: "filed" }));
         return fakeTurnResult(req);
       });
 
-      const code = await dispatch(["run", "--repo", s.repo.dir, "--goal", "demo"], {
-        harnesses: { fake: harness },
-        signals: controller,
-      });
+      const code = await dispatch(
+        ["run", "--repo", s.repo.dir, "--goal", "demo"],
+        {
+          harnesses: { fake: harness },
+          signals: controller,
+        },
+      );
       expect(code).toBe(130);
       expect(harness.calls).toHaveLength(2);
 
@@ -118,7 +132,9 @@ describe("signal policy", () => {
         iterations: Array<{ status: string }>;
       };
       expect(metrics.iterations[0]!.status).toBe("stopped-with-debt");
-      expect(await store.readFile("iterations/1/summary.md")).toContain("status: stopped-with-debt");
+      expect(await store.readFile("iterations/1/summary.md")).toContain(
+        "status: stopped-with-debt",
+      );
     } finally {
       warning.restore();
       s.repo.cleanup();
@@ -141,17 +157,24 @@ describe("signal policy", () => {
         });
       });
 
-      const code = await dispatch(["run", "--repo", s.repo.dir, "--goal", "demo"], {
-        harnesses: { fake: harness },
-        signals: controller,
-      });
+      const code = await dispatch(
+        ["run", "--repo", s.repo.dir, "--goal", "demo"],
+        {
+          harnesses: { fake: harness },
+          signals: controller,
+        },
+      );
       expect(code).toBe(143);
 
       const store = createFolderStore(s.goalDir);
       const records = await store.listRecords();
       const interrupted = records.find((r) => r.step === "architect");
       expect(interrupted?.stop?.kind).toBe("cancelled");
-      expect(interrupted?.usage).toMatchObject({ in: 7, out: 3, costUsd: 0.01 });
+      expect(interrupted?.usage).toMatchObject({
+        in: 7,
+        out: 3,
+        costUsd: 0.01,
+      });
 
       const metrics = yaml.parse((await store.readFile("metrics.yaml"))!) as {
         iterations: Array<{ tokens: number; usage: { costUsd: number } }>;

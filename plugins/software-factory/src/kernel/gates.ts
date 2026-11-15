@@ -1,14 +1,14 @@
-import { runProcess } from "../core/proc.js";
+import type { CheckResult } from "../core/checks/types.js";
 import { fingerprintText } from "../core/fingerprint.js";
 import { KeyedMutex } from "../core/mutex.js";
-import type { CheckResult } from "../core/checks/types.js";
+import { runProcess } from "../core/proc.js";
 import type { KernelRuntime } from "./types.js";
 
 const GATE_TIMEOUT_SEC = 900;
 /** Characters of gate output a fix turn gets to read. */
 export const GATE_OUTPUT_CAP = 4000;
 
-const ANSI = /\u001b\[[0-9;]*m/g;
+const ANSI = new RegExp("\\u001b\\[[0-9;]*m", "g");
 /** `bun test v1.4.4 (38afee6c8)`: names the runner, not the failure. */
 const BUN_BANNER = /^bun test v\d[^\s(]*(?: \([0-9a-f]+\))?$/;
 /** `src/a.ts(12,3): error TS2322:` — tsc's default format, the one a piped gate gets. */
@@ -24,7 +24,8 @@ const BUN_FILE = /^(.+?\.(?:test|spec)\.[cm]?[jt]sx?):$/;
 /** A file-level failure bun reports instead of a test result. */
 const BUN_UNHANDLED = "# Unhandled error between tests";
 /** Bun's tally; it ends the per-file reporter block. */
-const BUN_SUMMARY = /^(?:\d+ (?:pass|fail|skip|todo|errors?)|\d+ expect\(\) calls|Ran \d+ tests? across .*)$/;
+const BUN_SUMMARY =
+  /^(?:\d+ (?:pass|fail|skip|todo|errors?)|\d+ expect\(\) calls|Ran \d+ tests? across .*)$/;
 /** tsc's tally; it carries no diagnostic identity. */
 const TSC_SUMMARY = /^Found \d+ errors?(?: in \d+ files?)?\.$/;
 const SEPARATOR = /^-{3,}$/;
@@ -52,11 +53,17 @@ function normaliseRoots(line: string, roots: readonly string[]): string {
   for (const root of [...roots].sort((a, b) => b.length - a.length)) {
     const prefix = root.replace(/\/+$/, "");
     if (!prefix) continue;
-    const pattern = new RegExp(`(?<![\\w:/])${escapeRegExp(prefix)}(?=/|$)`, "g");
+    const pattern = new RegExp(
+      `(?<![\\w:/])${escapeRegExp(prefix)}(?=/|$)`,
+      "g",
+    );
     normalised = normalised.replace(pattern, rootToken);
   }
   return normalised
-    .replace(ABSOLUTE_PATH, (match) => `<root>/${match.slice(match.lastIndexOf("/") + 1)}`)
+    .replace(
+      ABSOLUTE_PATH,
+      (match) => `<root>/${match.slice(match.lastIndexOf("/") + 1)}`,
+    )
     .replaceAll(rootToken, "<root>");
 }
 
@@ -70,10 +77,13 @@ interface GateCheckMeta {
 
 function gateCheckMeta(check: CheckResult): GateCheckMeta {
   const details = check.details;
-  if (typeof details !== "object" || details === null) return { roots: [], truncated: false };
+  if (typeof details !== "object" || details === null)
+    return { roots: [], truncated: false };
   const meta = details as { roots?: unknown; truncated?: unknown };
   return {
-    roots: Array.isArray(meta.roots) ? meta.roots.filter((root): root is string => typeof root === "string") : [],
+    roots: Array.isArray(meta.roots)
+      ? meta.roots.filter((root): root is string => typeof root === "string")
+      : [],
     truncated: meta.truncated === true,
   };
 }
@@ -91,7 +101,8 @@ export interface CappedGateOutput {
  */
 export function capGateOutput(text: string): CappedGateOutput {
   const trimmed = text.trim();
-  if (trimmed.length <= GATE_OUTPUT_CAP) return { output: trimmed, truncated: false };
+  if (trimmed.length <= GATE_OUTPUT_CAP)
+    return { output: trimmed, truncated: false };
   const boundary = trimmed.indexOf("\n", trimmed.length - GATE_OUTPUT_CAP);
   // A single line longer than the cap has no complete line left to keep.
   return boundary === -1
@@ -107,7 +118,11 @@ export interface GateInfra {
 
 export function isInfraCheck(check: CheckResult): boolean {
   const details = check.details;
-  return typeof details === "object" && details !== null && (details as { kind?: unknown }).kind === "infra";
+  return (
+    typeof details === "object" &&
+    details !== null &&
+    (details as { kind?: unknown }).kind === "infra"
+  );
 }
 
 /**
@@ -128,7 +143,9 @@ export function isInfraCheck(check: CheckResult): boolean {
  */
 export function gateSignatures(check: CheckResult): Set<string> {
   const { roots, truncated } = gateCheckMeta(check);
-  const lines = check.output.split("\n").map((line) => normaliseRoots(line.replace(ANSI, "").trim(), roots));
+  const lines = check.output
+    .split("\n")
+    .map((line) => normaliseRoots(line.replace(ANSI, "").trim(), roots));
   const signatures = new Set<string>();
   let file = "";
   // Inside a bun file report. Its detail lines only repeat the failure the
@@ -207,7 +224,8 @@ export function gateSignatures(check: CheckResult): Set<string> {
     if (head) {
       // The marker for an unhandled block was cut; its error line still names
       // the failure and is stable across runs.
-      if (headErrorBlock && line.startsWith("error:")) signatures.add(`test: ${line}`);
+      if (headErrorBlock && line.startsWith("error:"))
+        signatures.add(`test: ${line}`);
       continue;
     }
     if (!reporting) signatures.add(`line: ${line}`);
@@ -239,11 +257,19 @@ const gateRuns = new KeyedMutex();
  * pipeline: kernel-0 only needs a red/green signal and the output a fix turn
  * must read.
  */
-export async function runGates(runtime: KernelRuntime, cwd: string): Promise<CheckResult[]> {
-  return gateRuns.runExclusive(runtime.paths.repoRoot, () => runGatesUnlocked(runtime, cwd));
+export async function runGates(
+  runtime: KernelRuntime,
+  cwd: string,
+): Promise<CheckResult[]> {
+  return gateRuns.runExclusive(runtime.paths.repoRoot, () =>
+    runGatesUnlocked(runtime, cwd),
+  );
 }
 
-async function runGatesUnlocked(runtime: KernelRuntime, cwd: string): Promise<CheckResult[]> {
+async function runGatesUnlocked(
+  runtime: KernelRuntime,
+  cwd: string,
+): Promise<CheckResult[]> {
   const results: CheckResult[] = [];
   for (const gate of runtime.configs.repo.gates) {
     const res = await runProcess({
@@ -257,9 +283,15 @@ async function runGatesUnlocked(runtime: KernelRuntime, cwd: string): Promise<Ch
     results.push({
       name: gate.id,
       ok,
-      summary: ok ? "pass" : res.timedOut ? `timed out after ${GATE_TIMEOUT_SEC}s` : `exit ${res.code}`,
+      summary: ok
+        ? "pass"
+        : res.timedOut
+          ? `timed out after ${GATE_TIMEOUT_SEC}s`
+          : `exit ${res.code}`,
       output: capped.output,
-      fingerprint: fingerprintText(`${gate.id}:${capped.output}`, { lowercase: false }),
+      fingerprint: fingerprintText(`${gate.id}:${capped.output}`, {
+        lowercase: false,
+      }),
       details: { roots: [cwd], truncated: capped.truncated },
     });
   }
@@ -271,7 +303,9 @@ export function failingChecks(checks: readonly CheckResult[]): CheckResult[] {
 }
 
 /** Compact red-gate text for an implementer's next turn; empty when green. */
-export function formatFailingChecks(checks: readonly CheckResult[] | undefined): string {
+export function formatFailingChecks(
+  checks: readonly CheckResult[] | undefined,
+): string {
   if (!checks || checks.length === 0) return "";
   return failingChecks(checks)
     .map((c) => `### ${c.name}: ${c.summary}\n${c.output}`)
@@ -286,17 +320,20 @@ export function formatFailingChecks(checks: readonly CheckResult[] | undefined):
  */
 export function newGateFailures(
   checks: readonly CheckResult[],
-  preexisting: ReadonlySet<string>
+  preexisting: ReadonlySet<string>,
 ): CheckResult[] {
   return failingChecks(checks).filter((check) => {
     const signatures = gateSignatures(check);
     // A silent red gate offers only its name, exactly as before signature
     // matching: there is no evidence that this run's failure is a new one.
     if (signatures.size === 0) {
-      return !preexisting.has(gateSignatureKey(check.name, UNIDENTIFIED_GATE_FAILURE));
+      return !preexisting.has(
+        gateSignatureKey(check.name, UNIDENTIFIED_GATE_FAILURE),
+      );
     }
     for (const signature of signatures) {
-      if (!preexisting.has(gateSignatureKey(check.name, signature))) return true;
+      if (!preexisting.has(gateSignatureKey(check.name, signature)))
+        return true;
     }
     return false;
   });

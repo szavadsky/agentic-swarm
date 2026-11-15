@@ -21,7 +21,9 @@ export interface OmpOverlayOptions {
   extra?: Record<string, unknown>;
 }
 
-export function ompOverlay(opts: OmpOverlayOptions = {}): Record<string, unknown> {
+export function ompOverlay(
+  opts: OmpOverlayOptions = {},
+): Record<string, unknown> {
   const overlay: Record<string, unknown> = {
     providers: { cacheRetention: opts.retention ?? "short" },
     memory: { backend: "off" },
@@ -48,7 +50,7 @@ export function ompOverlay(opts: OmpOverlayOptions = {}): Record<string, unknown
   if (opts.subagentModel) {
     overlay.task = {
       agentModelOverrides: Object.fromEntries(
-        BUNDLED_SUBAGENTS.map((name) => [name, opts.subagentModel])
+        BUNDLED_SUBAGENTS.map((name) => [name, opts.subagentModel]),
       ),
     };
     overlay.modelRoles = { task: opts.subagentModel };
@@ -60,7 +62,7 @@ export function ompOverlay(opts: OmpOverlayOptions = {}): Record<string, unknown
 /** Writes the overlay under `dir`, keyed by content so concurrent turns never share one. */
 export async function writeOmpOverlay(
   opts: OmpOverlayOptions,
-  dir: string
+  dir: string,
 ): Promise<string> {
   const content = ompOverlay(opts);
   const hash = createHash("sha1")

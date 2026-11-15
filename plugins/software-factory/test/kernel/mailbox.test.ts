@@ -16,7 +16,10 @@ import {
 } from "../../src/kernel/mailbox.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 
-async function setup(): Promise<{ root: string; store: ReturnType<typeof createFolderStore> }> {
+async function setup(): Promise<{
+  root: string;
+  store: ReturnType<typeof createFolderStore>;
+}> {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-mailbox-"));
   const store = createFolderStore(path.join(root, "goal"));
   await store.ensureLayout();
@@ -29,8 +32,12 @@ describe("mailbox", () => {
     try {
       const rel = await postSteer(store, "s1", "Please keep the API stable.");
       expect(rel).toBe("mailbox/inbox/s1.md");
-      expect(fs.readFileSync(path.join(store.goalDir, rel), "utf8")).toBe("Please keep the API stable.\n");
-      expect(fs.readdirSync(path.join(store.goalDir, "mailbox/.tmp"))).toEqual([]);
+      expect(fs.readFileSync(path.join(store.goalDir, rel), "utf8")).toBe(
+        "Please keep the API stable.\n",
+      );
+      expect(fs.readdirSync(path.join(store.goalDir, "mailbox/.tmp"))).toEqual(
+        [],
+      );
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
@@ -41,7 +48,10 @@ describe("mailbox", () => {
     const file = path.join(store.goalDir, "mailbox/inbox/growing.md");
     try {
       fs.writeFileSync(file, "first\n", "utf8");
-      const timer = setInterval(() => fs.appendFileSync(file, "more\n", "utf8"), 10);
+      const timer = setInterval(
+        () => fs.appendFileSync(file, "more\n", "utf8"),
+        10,
+      );
       const during = await scanInbox(store, { settleMs: 60 });
       clearInterval(timer);
       expect(during).toEqual([]);
@@ -67,12 +77,18 @@ describe("mailbox", () => {
       await postSteer(store, "s2", "One decision, please.");
       const steers = await scanInbox(store, { settleMs: 0 });
       expect(steers.map((s) => s.id)).toEqual(["s2"]);
-      expect(fs.existsSync(path.join(store.goalDir, "mailbox/inbox/s2.md"))).toBe(true);
+      expect(
+        fs.existsSync(path.join(store.goalDir, "mailbox/inbox/s2.md")),
+      ).toBe(true);
 
       // Same file name again: a replay of the processed steer, archived silently.
       await postSteer(store, "s1", "One decision, please.");
-      expect((await scanInbox(store, { settleMs: 0 })).map((s) => s.id)).toEqual(["s2"]);
-      expect(fs.existsSync(path.join(store.goalDir, "mailbox/inbox/s1.md"))).toBe(false);
+      expect(
+        (await scanInbox(store, { settleMs: 0 })).map((s) => s.id),
+      ).toEqual(["s2"]);
+      expect(
+        fs.existsSync(path.join(store.goalDir, "mailbox/inbox/s1.md")),
+      ).toBe(false);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
@@ -83,10 +99,22 @@ describe("mailbox", () => {
     try {
       const dir = holdsDir(store);
       fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(path.join(dir, "s1.yaml"), "slugs: [alpha, beta]\ngoal: false\n", "utf8");
-      fs.writeFileSync(path.join(dir, "s2.yaml"), "slugs: []\ngoal: true\n", "utf8");
+      fs.writeFileSync(
+        path.join(dir, "s1.yaml"),
+        "slugs: [alpha, beta]\ngoal: false\n",
+        "utf8",
+      );
+      fs.writeFileSync(
+        path.join(dir, "s2.yaml"),
+        "slugs: []\ngoal: true\n",
+        "utf8",
+      );
       fs.writeFileSync(path.join(dir, "notes.txt"), "not a hold\n", "utf8");
-      fs.writeFileSync(path.join(dir, ".draft.yaml"), "slugs: [ghost]\ngoal: false\n", "utf8");
+      fs.writeFileSync(
+        path.join(dir, ".draft.yaml"),
+        "slugs: [ghost]\ngoal: false\n",
+        "utf8",
+      );
 
       expect(await readHolds(store)).toEqual([
         { steer: "s1", slugs: ["alpha", "beta"], goal: false },
@@ -102,25 +130,43 @@ describe("mailbox", () => {
     try {
       const dir = holdsDir(store);
       fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(path.join(dir, "s1.yaml"), "slugs: alpha\ngoal: false\n", "utf8");
+      fs.writeFileSync(
+        path.join(dir, "s1.yaml"),
+        "slugs: alpha\ngoal: false\n",
+        "utf8",
+      );
       fs.writeFileSync(path.join(dir, "s2.yaml"), "slugs: [unclosed\n", "utf8");
-      fs.writeFileSync(path.join(dir, "s3.yaml"), "slugs: []\ngoal: true\n", "utf8");
+      fs.writeFileSync(
+        path.join(dir, "s3.yaml"),
+        "slugs: []\ngoal: true\n",
+        "utf8",
+      );
 
-      expect(await readHolds(store)).toEqual([{ steer: "s3", slugs: [], goal: true }]);
+      expect(await readHolds(store)).toEqual([
+        { steer: "s3", slugs: [], goal: true },
+      ]);
       const quarantine = quarantineDir(store);
       expect(fs.readdirSync(quarantine).sort()).toEqual(["s1.yaml", "s2.yaml"]);
-      expect(fs.readFileSync(path.join(quarantine, "s1.yaml"), "utf8")).toContain("slugs: alpha");
+      expect(
+        fs.readFileSync(path.join(quarantine, "s1.yaml"), "utf8"),
+      ).toContain("slugs: alpha");
       expect(fs.existsSync(path.join(dir, "s1.yaml"))).toBe(false);
 
-      const records = (await store.listRecords()).filter((r) => r.step === "hold-quarantine");
+      const records = (await store.listRecords()).filter(
+        (r) => r.step === "hold-quarantine",
+      );
       expect(records).toHaveLength(2);
       expect(records[0]?.ok).toBe(false);
       expect(records[0]?.cause).toContain('"s1.yaml"');
       expect(records[1]?.cause).toContain('"s2.yaml"');
 
       // A later read has nothing left to quarantine and appends no second record.
-      expect(await readHolds(store)).toEqual([{ steer: "s3", slugs: [], goal: true }]);
-      expect((await store.listRecords()).filter((r) => r.step === "hold-quarantine")).toHaveLength(2);
+      expect(await readHolds(store)).toEqual([
+        { steer: "s3", slugs: [], goal: true },
+      ]);
+      expect(
+        (await store.listRecords()).filter((r) => r.step === "hold-quarantine"),
+      ).toHaveLength(2);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
@@ -131,7 +177,11 @@ describe("mailbox", () => {
       status: "done",
       summary: "s",
       concerns: [],
-      forward: ["steer s1: keep names", "unrelated remark", "steer plan.x: split it"],
+      forward: [
+        "steer s1: keep names",
+        "unrelated remark",
+        "steer plan.x: split it",
+      ],
     });
     expect([...responses.entries()]).toEqual([
       ["s1", "keep names"],
@@ -143,7 +193,9 @@ describe("mailbox", () => {
       await postSteer(store, "s3", "line one\nline two");
       const steers = await scanInbox(store, { settleMs: 0 });
       expect(formatSteers(steers)).toBe("- s3 (mailbox/inbox/s3.md): line one");
-      expect(formatSteerTurn(steers)).toBe("- s3 (mailbox/inbox/s3.md):\n  line one\n  line two");
+      expect(formatSteerTurn(steers)).toBe(
+        "- s3 (mailbox/inbox/s3.md):\n  line one\n  line two",
+      );
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }

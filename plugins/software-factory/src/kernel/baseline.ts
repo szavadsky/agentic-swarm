@@ -1,14 +1,27 @@
 import fs from "node:fs";
 import path from "node:path";
-import { runProcess } from "../core/proc.js";
 import { runWorktreeSetup } from "../core/checks/setup.js";
+import type { CheckResult } from "../core/checks/types.js";
 import { fingerprintText } from "../core/fingerprint.js";
 import { isAncestor } from "../core/git/commit.js";
 import { git } from "../core/git/exec.js";
-import type { CheckResult } from "../core/checks/types.js";
+import { runProcess } from "../core/proc.js";
 import { resolveGoalPaths } from "./config.js";
-import { capGateOutput, GATE_OUTPUT_CAP, gateSignatureKey, gateSignatures, isInfraCheck, UNIDENTIFIED_GATE_FAILURE, type GateInfra } from "./gates.js";
-import type { ArtifactStore, ConfigBundle, RecordStart, StepRecord } from "./types.js";
+import {
+  capGateOutput,
+  GATE_OUTPUT_CAP,
+  type GateInfra,
+  gateSignatureKey,
+  gateSignatures,
+  isInfraCheck,
+  UNIDENTIFIED_GATE_FAILURE,
+} from "./gates.js";
+import type {
+  ArtifactStore,
+  ConfigBundle,
+  RecordStart,
+  StepRecord,
+} from "./types.js";
 
 const GATE_TIMEOUT_SEC = 900;
 
@@ -38,18 +51,25 @@ export interface BaseGateState {
  * infra run marks the baseline untrustworthy (`baseline-infra`) so an older
  * red record cannot be inherited into tasks that start from a newer head.
  */
-export function recordedBaseGates(records: StepRecord[]): BaseGateState | undefined {
+export function recordedBaseGates(
+  records: StepRecord[],
+): BaseGateState | undefined {
   const latest = records
     .filter(
       (r) =>
         (r.step === "baseline" || r.step === BASELINE_INFRA_STEP) &&
         r.actor === "script" &&
         r.endedAt &&
-        r.base
+        r.base,
     )
     .sort((a, b) => b.seq - a.seq)[0];
-  if (!latest || latest.step !== "baseline" || !latest.base || !latest.checks) return undefined;
-  return { commit: latest.base, ok: latest.ok !== false, checks: latest.checks };
+  if (!latest || latest.step !== "baseline" || !latest.base || !latest.checks)
+    return undefined;
+  return {
+    commit: latest.base,
+    ok: latest.ok !== false,
+    checks: latest.checks,
+  };
 }
 
 /**
@@ -82,7 +102,7 @@ function result(
   ok: boolean,
   summary: string,
   output = "",
-  roots: readonly string[] = []
+  roots: readonly string[] = [],
 ): CheckResult {
   const capped = capGateOutput(output);
   return {
@@ -90,7 +110,9 @@ function result(
     ok,
     summary,
     output: capped.output,
-    fingerprint: fingerprintText(`${name}:${ok}:${summary}`, { lowercase: false }),
+    fingerprint: fingerprintText(`${name}:${ok}:${summary}`, {
+      lowercase: false,
+    }),
     details: { roots: [...roots], truncated: capped.truncated },
   };
 }
@@ -103,9 +125,18 @@ function infra(name: string, cause: string, output = ""): CheckResult {
   };
 }
 
-function baselineRecord(records: StepRecord[], commit: string): StepRecord | undefined {
+function baselineRecord(
+  records: StepRecord[],
+  commit: string,
+): StepRecord | undefined {
   return records
-    .filter((r) => r.step === "baseline" && r.actor === "script" && r.base === commit && r.endedAt)
+    .filter(
+      (r) =>
+        r.step === "baseline" &&
+        r.actor === "script" &&
+        r.base === commit &&
+        r.endedAt,
+    )
     .sort((a, b) => b.seq - a.seq)[0];
 }
 
@@ -117,7 +148,11 @@ function baselineRecord(records: StepRecord[], commit: string): StepRecord | und
  * worktree root is goal-independent.
  */
 function scratchPath(configs: ConfigBundle, repoRoot: string): string {
-  const worktreeRoot = resolveGoalPaths(configs, repoRoot, "preflight").worktreeRoot;
+  const worktreeRoot = resolveGoalPaths(
+    configs,
+    repoRoot,
+    "preflight",
+  ).worktreeRoot;
   const runtimeDir = path.join(worktreeRoot, ".factory-runtime");
   fs.mkdirSync(runtimeDir, { recursive: true });
   const dir = fs.mkdtempSync(path.join(runtimeDir, "preflight-probe-"));
@@ -129,27 +164,50 @@ async function runBaseGates(
   configs: ConfigBundle,
   repoRoot: string,
   commit: string,
-  mergeFrom?: string
+  mergeFrom?: string,
 ): Promise<CheckResult[]> {
-  if (configs.repo.gates.length === 0 && configs.repo.setup.length === 0) return [];
+  if (configs.repo.gates.length === 0 && configs.repo.setup.length === 0)
+    return [];
   const dir = scratchPath(configs, repoRoot);
   const root = path.resolve(repoRoot);
   try {
-    const added = await git(root, ["worktree", "add", "--detach", dir, commit], { allowFail: true });
+    const added = await git(
+      root,
+      ["worktree", "add", "--detach", dir, commit],
+      { allowFail: true },
+    );
     if (added.code !== 0) {
-      return [infra("baseline", `could not create baseline worktree: ${added.stderr.trim()}`)];
+      return [
+        infra(
+          "baseline",
+          `could not create baseline worktree: ${added.stderr.trim()}`,
+        ),
+      ];
     }
     if (mergeFrom) {
       // The followBase merge tasks start from, staged but never committed: the
       // gates must see the tree the integration head gets after base is merged
       // in, not the tree either side has on its own.
-      const merge = await git(dir, ["merge", "--no-commit", "--no-ff", mergeFrom], { allowFail: true });
+      const merge = await git(
+        dir,
+        ["merge", "--no-commit", "--no-ff", mergeFrom],
+        { allowFail: true },
+      );
       if (merge.code !== 0) {
         const reason = (merge.stderr || merge.stdout).trim();
-        return [infra("baseline", `the base follow would not merge: ${reason}`, reason)];
+        return [
+          infra(
+            "baseline",
+            `the base follow would not merge: ${reason}`,
+            reason,
+          ),
+        ];
       }
     }
-    const setup = await runWorktreeSetup({ commands: configs.repo.setup, cwd: dir });
+    const setup = await runWorktreeSetup({
+      commands: configs.repo.setup,
+      cwd: dir,
+    });
     if (!setup.ok) {
       return [infra("setup", setup.error ?? "setup failed")];
     }
@@ -163,7 +221,9 @@ async function runBaseGates(
       });
       const output = `${res.stdout}\n${res.stderr}`.trim();
       if (res.timedOut) {
-        checks.push(infra(gate.id, `timed out after ${GATE_TIMEOUT_SEC}s`, output));
+        checks.push(
+          infra(gate.id, `timed out after ${GATE_TIMEOUT_SEC}s`, output),
+        );
         continue;
       }
       // 126/127 means the command itself could not start: an environment
@@ -172,11 +232,15 @@ async function runBaseGates(
         checks.push(infra(gate.id, `could not run: exit ${res.code}`, output));
         continue;
       }
-      checks.push(result(gate.id, res.code === 0, `exit ${res.code}`, output, [dir]));
+      checks.push(
+        result(gate.id, res.code === 0, `exit ${res.code}`, output, [dir]),
+      );
     }
     return checks;
   } finally {
-    await git(root, ["worktree", "remove", "--force", dir], { allowFail: true });
+    await git(root, ["worktree", "remove", "--force", dir], {
+      allowFail: true,
+    });
     fs.rmSync(dir, { recursive: true, force: true });
   }
 }
@@ -197,29 +261,44 @@ export async function checkBase(
   store: ArtifactStore,
   repoRoot: string,
   baseBranch: string,
-  commit: string
+  commit: string,
 ): Promise<BaselineResult> {
   // Same naming as resolveGoalPaths: the goal's stable integration branch.
   const integrationBranch = `factory/${path.basename(store.goalDir)}`;
-  const integrationCommit = await resolveBaseCommit(repoRoot, integrationBranch);
+  const integrationCommit = await resolveBaseCommit(
+    repoRoot,
+    integrationBranch,
+  );
   let target = commit;
   let targetBranch = baseBranch;
   // Set when the follow merges base into a divergent integration head: what
   // the follow produces depends on both refs, so gate their merge result.
   let mergeFrom: string | undefined;
-  if (integrationCommit && !(await isAncestor(repoRoot, integrationCommit, commit))) {
+  if (
+    integrationCommit &&
+    !(await isAncestor(repoRoot, integrationCommit, commit))
+  ) {
     // The integration carries commits base lacks; the follow adds base to it,
     // by fast-forward when the integration only lags (target stays base's tip)
     // and by a merge otherwise.
     target = integrationCommit;
     targetBranch = integrationBranch;
-    if (!(await isAncestor(repoRoot, commit, integrationCommit))) mergeFrom = commit;
+    if (!(await isAncestor(repoRoot, commit, integrationCommit)))
+      mergeFrom = commit;
   }
 
   // A merge preview is a function of base too, so a record keyed by the
   // integration commit alone may predate the base it was gated with.
-  const existing = mergeFrom ? undefined : baselineRecord(await store.listRecords(), target);
-  if (existing) return { commit: target, ok: existing.ok !== false, checks: existing.checks ?? [], fresh: false };
+  const existing = mergeFrom
+    ? undefined
+    : baselineRecord(await store.listRecords(), target);
+  if (existing)
+    return {
+      commit: target,
+      ok: existing.ok !== false,
+      checks: existing.checks ?? [],
+      fresh: false,
+    };
 
   const described = mergeFrom
     ? `base "${targetBranch}" at ${target.slice(0, 8)} with "${baseBranch}" merged`
@@ -228,20 +307,32 @@ export async function checkBase(
   const infraChecks = checks.filter(isInfraCheck);
   if (infraChecks.length > 0) {
     await store.appendRecord(
-      { iteration: 0, step: BASELINE_INFRA_STEP, round: 1, actor: "script", base: target },
-      { ok: false, checks }
+      {
+        iteration: 0,
+        step: BASELINE_INFRA_STEP,
+        round: 1,
+        actor: "script",
+        base: target,
+      },
+      { ok: false, checks },
     );
     console.warn(
       [
         `[factory] ${described} could not be checked; not recorded as red, retried next launch.`,
         ...infraChecks.map((c) => `  ${c.name}: ${c.summary}`),
-      ].join("\n")
+      ].join("\n"),
     );
     return { commit: target, ok: false, checks, fresh: true, infra: true };
   }
 
   const ok = checks.every((c) => c.ok);
-  const meta: RecordStart = { iteration: 0, step: "baseline", round: 1, actor: "script", base: target };
+  const meta: RecordStart = {
+    iteration: 0,
+    step: "baseline",
+    round: 1,
+    actor: "script",
+    base: target,
+  };
   await store.appendRecord(meta, { ok, checks });
 
   if (!ok) {
@@ -250,15 +341,22 @@ export async function checkBase(
       [
         `[factory] ${described} is red; recorded once, continuing.`,
         ...red.map((c) => `  ${c.name}: ${c.summary}`),
-      ].join("\n")
+      ].join("\n"),
     );
   }
   return { commit: target, ok, checks, fresh: true };
 }
 
-export async function resolveBaseCommit(repoRoot: string, baseBranch: string): Promise<string | undefined> {
-  const res = await git(repoRoot, ["rev-parse", "--verify", "--quiet", `refs/heads/${baseBranch}`], {
-    allowFail: true,
-  });
+export async function resolveBaseCommit(
+  repoRoot: string,
+  baseBranch: string,
+): Promise<string | undefined> {
+  const res = await git(
+    repoRoot,
+    ["rev-parse", "--verify", "--quiet", `refs/heads/${baseBranch}`],
+    {
+      allowFail: true,
+    },
+  );
   return res.code === 0 ? res.stdout.trim() : undefined;
 }

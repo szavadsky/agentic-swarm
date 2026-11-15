@@ -30,8 +30,14 @@ describe("KERNEL0 scenario 2 — last-round review decisions", () => {
           outcome({
             summary: "alpha needs work",
             verdict: "changes",
-            concerns: [{ kind: "risk", calibration: "architect", text: "alpha is shaky" }],
-          })
+            concerns: [
+              {
+                kind: "risk",
+                calibration: "architect",
+                text: "alpha is shaky",
+              },
+            ],
+          }),
         );
         return fakeTurnResult(req);
       });
@@ -41,7 +47,9 @@ describe("KERNEL0 scenario 2 — last-round review decisions", () => {
         return fakeTurnResult(req);
       });
       harness.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "not salvageable", verdict: "reject" }));
+        ctx.writeOutcome(
+          outcome({ summary: "not salvageable", verdict: "reject" }),
+        );
         return fakeTurnResult(req);
       });
       harness.script((req, ctx) => {
@@ -50,33 +58,52 @@ describe("KERNEL0 scenario 2 — last-round review decisions", () => {
         return fakeTurnResult(req);
       });
       harness.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "beta approved", verdict: "approve" }));
+        ctx.writeOutcome(
+          outcome({ summary: "beta approved", verdict: "approve" }),
+        );
         return fakeTurnResult(req);
       });
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
       await writeTask(runtime, task("beta", { scope: ["beta.txt"] }));
-      await writeTask(runtime, task("gamma", { deps: ["alpha"], scope: ["gamma.txt"] }));
+      await writeTask(
+        runtime,
+        task("gamma", { deps: ["alpha"], scope: ["gamma.txt"] }),
+      );
 
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("boundary");
 
-      const state = derive(await runtime.store.listTasks(), await runtime.store.listRecords(), runtime.configs.process.flows);
+      const state = derive(
+        await runtime.store.listTasks(),
+        await runtime.store.listRecords(),
+        runtime.configs.process.flows,
+      );
       expect(state.tasks.alpha!.status).toBe("parked");
       expect(state.tasks.alpha!.cause).toContain("review rejected");
       expect(state.tasks.beta!.status).toBe("merged");
       expect(state.tasks.gamma!.status).toBe("pending");
       expect(state.tasks.gamma!.phase).toBe("implement");
-      expect(next(state, runtime.limits, new Set())).toEqual([{ kind: "boundary" }]);
+      expect(next(state, runtime.limits, new Set())).toEqual([
+        { kind: "boundary" },
+      ]);
 
-      const park = (await runtime.store.listRecords()).find((r) => r.slug === "alpha" && r.step === "park");
+      const park = (await runtime.store.listRecords()).find(
+        (r) => r.slug === "alpha" && r.step === "park",
+      );
       expect(park?.cause).toContain("review rejected");
-      const commits = (await runtime.store.listRecords()).filter((r) => r.slug === "alpha" && r.step === "commit");
+      const commits = (await runtime.store.listRecords()).filter(
+        (r) => r.slug === "alpha" && r.step === "commit",
+      );
       expect(commits.length).toBe(4);
       expect(commits.every((r) => r.commit && r.tree)).toBe(true);
-      expect(repo.git(["show", "factory/demo:beta.txt"]).stdout.trim()).toBe("beta");
-      expect(repo.git(["show", "factory/demo:alpha.txt"], { allowFail: true }).code).not.toBe(0);
+      expect(repo.git(["show", "factory/demo:beta.txt"]).stdout.trim()).toBe(
+        "beta",
+      );
+      expect(
+        repo.git(["show", "factory/demo:alpha.txt"], { allowFail: true }).code,
+      ).not.toBe(0);
 
       await writeIterationSummary(runtime.store, {
         iteration: 1,
@@ -84,7 +111,10 @@ describe("KERNEL0 scenario 2 — last-round review decisions", () => {
         records: await runtime.store.listRecords(),
         status: "in-progress",
       });
-      const summary = fs.readFileSync(path.join(runtime.store.goalDir, "iterations/1/summary.md"), "utf8");
+      const summary = fs.readFileSync(
+        path.join(runtime.store.goalDir, "iterations/1/summary.md"),
+        "utf8",
+      );
       expect(summary).toContain("## Parked by root cause");
       expect(summary).toMatch(/review rejected: not salvageable\n {2}- alpha/);
     } finally {
@@ -106,8 +136,10 @@ describe("KERNEL0 scenario 2 — last-round review decisions", () => {
           outcome({
             summary: "first pass needs work",
             verdict: "changes",
-            concerns: [{ kind: "risk", calibration: "architect", text: "first concern" }],
-          })
+            concerns: [
+              { kind: "risk", calibration: "architect", text: "first concern" },
+            ],
+          }),
         );
         return fakeTurnResult(req);
       });
@@ -121,8 +153,14 @@ describe("KERNEL0 scenario 2 — last-round review decisions", () => {
           outcome({
             summary: "still incomplete but not worth discarding",
             verdict: "changes",
-            concerns: [{ kind: "uncertainty", calibration: "architect", text: "last concern" }],
-          })
+            concerns: [
+              {
+                kind: "uncertainty",
+                calibration: "architect",
+                text: "last concern",
+              },
+            ],
+          }),
         );
         return fakeTurnResult(req);
       });
@@ -133,14 +171,26 @@ describe("KERNEL0 scenario 2 — last-round review decisions", () => {
       expect(result.reason).toBe("boundary");
 
       const records = await runtime.store.listRecords();
-      const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
       expect(state.tasks.task!.status).toBe("merged");
       const debt = records.find((r) => r.slug === "task" && r.step === "debt");
       expect(debt?.outcome?.concerns[0]?.kind).toBe("debt");
       expect(debt?.outcome?.concerns[0]?.text).toBe("last concern");
 
-      await writeIterationSummary(runtime.store, { iteration: 1, state, records, status: "in-progress" });
-      const summary = fs.readFileSync(path.join(runtime.store.goalDir, "iterations/1/summary.md"), "utf8");
+      await writeIterationSummary(runtime.store, {
+        iteration: 1,
+        state,
+        records,
+        status: "in-progress",
+      });
+      const summary = fs.readFileSync(
+        path.join(runtime.store.goalDir, "iterations/1/summary.md"),
+        "utf8",
+      );
       expect(summary).toContain("last concern");
     } finally {
       cleanupFlowRepo(repo);

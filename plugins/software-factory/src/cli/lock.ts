@@ -20,13 +20,23 @@ export interface RunLockHandle {
  * to the sibling `wt-<repository name>`; a root at or inside the checkout is
  * relocated to that sibling. The result is `<worktree root>/.factory-runtime`.
  */
-export function resolveRuntimeDir(repoRoot: string, worktreeRoot?: string): string {
+export function resolveRuntimeDir(
+  repoRoot: string,
+  worktreeRoot?: string,
+): string {
   let resolvedWorktreeRoot = path.resolve(
     repoRoot,
-    worktreeRoot ?? `../wt-${path.basename(repoRoot)}`
+    worktreeRoot ?? `../wt-${path.basename(repoRoot)}`,
   );
-  if (resolvedWorktreeRoot === repoRoot || resolvedWorktreeRoot.startsWith(repoRoot + path.sep)) {
-    resolvedWorktreeRoot = path.resolve(repoRoot, "..", `wt-${path.basename(repoRoot)}`);
+  if (
+    resolvedWorktreeRoot === repoRoot ||
+    resolvedWorktreeRoot.startsWith(repoRoot + path.sep)
+  ) {
+    resolvedWorktreeRoot = path.resolve(
+      repoRoot,
+      "..",
+      `wt-${path.basename(repoRoot)}`,
+    );
   }
   return path.join(resolvedWorktreeRoot, ".factory-runtime");
 }
@@ -39,9 +49,10 @@ export function resolveRuntimeDir(repoRoot: string, worktreeRoot?: string): stri
 export function getRunLockPath(
   repoRoot: string,
   task: string,
-  opts?: { runtimeDir?: string; worktreeRoot?: string }
+  opts?: { runtimeDir?: string; worktreeRoot?: string },
 ): string {
-  const runtimeDir = opts?.runtimeDir ?? resolveRuntimeDir(repoRoot, opts?.worktreeRoot);
+  const runtimeDir =
+    opts?.runtimeDir ?? resolveRuntimeDir(repoRoot, opts?.worktreeRoot);
   return path.join(runtimeDir, "locks", repositoryId(repoRoot), `${task}.lock`);
 }
 
@@ -63,7 +74,7 @@ export function isProcessAlive(pid: number): boolean {
 export function isRunLockFree(
   repoRoot: string,
   task: string,
-  opts?: { runtimeDir?: string; worktreeRoot?: string }
+  opts?: { runtimeDir?: string; worktreeRoot?: string },
 ): { free: boolean; lockInfo?: LockData } {
   const lockPath = getRunLockPath(repoRoot, task, opts);
   if (!fs.existsSync(lockPath)) {
@@ -103,7 +114,7 @@ export interface AcquireRunLockOptions {
 export function acquireRunLock(
   repoRoot: string,
   task: string,
-  opts?: AcquireRunLockOptions
+  opts?: AcquireRunLockOptions,
 ): RunLockHandle | null {
   const lockPath = getRunLockPath(repoRoot, task, opts);
   const lockDir = path.dirname(lockPath);
@@ -175,7 +186,7 @@ export function acquireRunLock(
   try {
     const tmpLockPath = path.join(
       lockDir,
-      `${task}.lock.takeover.${process.pid}.${Date.now()}`
+      `${task}.lock.takeover.${process.pid}.${Date.now()}`,
     );
     try {
       fs.writeFileSync(tmpLockPath, payloadStr, "utf8");
@@ -189,7 +200,9 @@ export function acquireRunLock(
 
     // Verify after rename that our payload holds the lock
     try {
-      const verified = JSON.parse(fs.readFileSync(lockPath, "utf8")) as LockData;
+      const verified = JSON.parse(
+        fs.readFileSync(lockPath, "utf8"),
+      ) as LockData;
       if (verified.pid !== payload.pid || verified.host !== payload.host) {
         return null;
       }
@@ -207,7 +220,7 @@ export function acquireRunLock(
 
   // 6. Log takeover notice (§2)
   console.warn(
-    `[factory lock] Stale run lock for task "${task}" (PID ${existingLock?.pid ?? "unknown"} on host ${existingLock?.host ?? "unknown"}) taken over by PID ${process.pid}`
+    `[factory lock] Stale run lock for task "${task}" (PID ${existingLock?.pid ?? "unknown"} on host ${existingLock?.host ?? "unknown"}) taken over by PID ${process.pid}`,
   );
 
   if (opts?.onTakeover) {

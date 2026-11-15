@@ -1,5 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import { capPack, forwardedConcerns, renderContextPack, shallowCodeMap } from "../../src/kernel/context-pack.js";
+import {
+  capPack,
+  forwardedConcerns,
+  renderContextPack,
+  shallowCodeMap,
+} from "../../src/kernel/context-pack.js";
 import { derive } from "../../src/kernel/derive.js";
 import { rec, script, task } from "./helpers.js";
 
@@ -8,7 +13,16 @@ const tasks = [task("a"), task("b", { deps: ["a"] })];
 describe("context pack", () => {
   it("renders identical bytes for identical derived state", () => {
     const records = [
-      rec(1, { step: "review", outcome: { status: "done", summary: "r", concerns: [], forward: ["watch it"], verdict: "approve" } }),
+      rec(1, {
+        step: "review",
+        outcome: {
+          status: "done",
+          summary: "r",
+          concerns: [],
+          forward: ["watch it"],
+          verdict: "approve",
+        },
+      }),
       script(2, { step: "park", ok: true, cause: "round limit", slug: "b" }),
     ];
     const input = {
@@ -32,9 +46,24 @@ describe("context pack", () => {
       baseGates: {
         commit: "feedfacecafebeef",
         ok: false,
-        checks: [{ name: "lint", ok: false, summary: "exit 1", output: "2 errors", fingerprint: "f" }],
+        checks: [
+          {
+            name: "lint",
+            ok: false,
+            summary: "exit 1",
+            output: "2 errors",
+            fingerprint: "f",
+          },
+        ],
       },
-      forwarded: [{ source: "a review r1", calibration: "architect", kind: "risk", text: "watch it" }],
+      forwarded: [
+        {
+          source: "a review r1",
+          calibration: "architect",
+          kind: "risk",
+          text: "watch it",
+        },
+      ],
     };
     const first = renderContextPack(input);
     const second = renderContextPack(input);
@@ -74,7 +103,9 @@ describe("context pack", () => {
   });
 
   it("stays under the default cap with 50 tasks", () => {
-    const many = Array.from({ length: 50 }, (_, i) => task(`t${String(i).padStart(2, "0")}`));
+    const many = Array.from({ length: 50 }, (_, i) =>
+      task(`t${String(i).padStart(2, "0")}`),
+    );
     const pack = renderContextPack({
       goal: "demo",
       iteration: 4,
@@ -87,7 +118,9 @@ describe("context pack", () => {
       tasksDir: "/goal/tasks",
       tasks: many,
       state: derive(many, []),
-      codeMap: shallowCodeMap(Array.from({ length: 200 }, (_, i) => `src/mod${i % 12}/file${i}.ts`)),
+      codeMap: shallowCodeMap(
+        Array.from({ length: 200 }, (_, i) => `src/mod${i % 12}/file${i}.ts`),
+      ),
       steers: [],
       setup: ["bun install"],
       gates: [{ id: "test", command: "bun test" }],
@@ -99,7 +132,10 @@ describe("context pack", () => {
   });
 
   it("deduplicates forwarded concerns by fingerprint and drops fyi", () => {
-    const concern = (calibration: "fyi" | "architect" | "owner", text: string) => ({
+    const concern = (
+      calibration: "fyi" | "architect" | "owner",
+      text: string,
+    ) => ({
       kind: "risk" as const,
       calibration,
       text,
@@ -111,7 +147,10 @@ describe("context pack", () => {
         outcome: {
           status: "done",
           summary: "r1",
-          concerns: [concern("architect", "The migration can lose writes"), concern("fyi", "naming nit")],
+          concerns: [
+            concern("architect", "The migration can lose writes"),
+            concern("fyi", "naming nit"),
+          ],
           forward: ["Do the small thing first"],
         },
       }),
@@ -121,7 +160,10 @@ describe("context pack", () => {
         outcome: {
           status: "done",
           summary: "r2",
-          concerns: [concern("architect", "The migration can lose writes"), concern("owner", "The migration can lose writes")],
+          concerns: [
+            concern("architect", "The migration can lose writes"),
+            concern("owner", "The migration can lose writes"),
+          ],
           forward: [],
         },
       }),
@@ -131,7 +173,9 @@ describe("context pack", () => {
     expect(risk?.calibration).toBe("owner");
     expect(risk?.occurrences).toBe(3);
     expect(forwarded.some((c) => c.text === "naming nit")).toBe(false);
-    expect(forwarded.find((c) => c.kind === "forward")?.text).toBe("Do the small thing first");
+    expect(forwarded.find((c) => c.kind === "forward")?.text).toBe(
+      "Do the small thing first",
+    );
   });
 
   it("groups a repository listing into a shallow path index", () => {
@@ -143,7 +187,7 @@ describe("context pack", () => {
         "package.json",
         ".gitignore",
         "node_modules/x/index.js",
-      ])
+      ]),
     ).toEqual([
       "(root) — 2 files",
       "src/harness/ — 1 file",

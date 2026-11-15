@@ -1,18 +1,24 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import type {
+  AdapterTurnResult,
+  ModelRef,
+  Stop,
+  TurnAttempt,
+  TurnRequest,
+} from "../types.js";
 import { zeroUsage } from "../usage.js";
-import type { AdapterTurnResult, ModelRef, Stop, TurnAttempt, TurnRequest } from "../types.js";
 import { classifyOmpTurn, type OmpTurnFailure } from "./classify.js";
-import { OmpRpc, OmpRpcExit, OmpRpcTimeout } from "./rpc.js";
+import { type OmpRpc, OmpRpcExit, OmpRpcTimeout } from "./rpc.js";
 import { actualModel, type OmpRuntime } from "./runtime.js";
 import { DEFAULT_TOOLS, OMP_ID, type OmpTurnOpaque } from "./types.js";
 import {
   isSessionCompacted,
+  type OmpStats,
   summarizeOmpFrames,
   textOfContent,
   turnUsage,
-  type OmpStats,
 } from "./usage.js";
 
 function isInside(parent: string, child: string): boolean {
@@ -36,10 +42,13 @@ function launchFailure(error: unknown): Stop {
 export async function runOmpTurn(
   runtime: OmpRuntime,
   req: TurnRequest,
-  requested: ModelRef
+  requested: ModelRef,
 ): Promise<AdapterTurnResult> {
   const opaque = (req.opaque ?? {}) as OmpTurnOpaque;
-  const model: ModelRef = { ...requested, effort: req.effort ?? requested.effort };
+  const model: ModelRef = {
+    ...requested,
+    effort: req.effort ?? requested.effort,
+  };
   const dirs = runtime.dirs();
   const overlayPath = await runtime.overlay(opaque);
 
@@ -52,9 +61,13 @@ export async function runOmpTurn(
 
   const extraArgs = [`--tools=${tools.join(",")}`];
   if (req.system) {
-    const hash = createHash("sha1").update(req.system).digest("hex").slice(0, 12);
+    const hash = createHash("sha1")
+      .update(req.system)
+      .digest("hex")
+      .slice(0, 12);
     const systemFile = path.join(dirs.prompts, `system-${hash}.txt`);
-    if (!fs.existsSync(systemFile)) fs.writeFileSync(systemFile, req.system, "utf8");
+    if (!fs.existsSync(systemFile))
+      fs.writeFileSync(systemFile, req.system, "utf8");
     extraArgs.push("--append-system-prompt", systemFile);
   }
   for (const dir of addDirs) extraArgs.push("--add-dir", dir);
@@ -65,10 +78,11 @@ export async function runOmpTurn(
     path.resolve(req.session.cwd) !== path.resolve(req.cwd)
   ) {
     throw new Error(
-      `omp session ${req.session.id} is cwd-bound to ${req.session.cwd}, not ${req.cwd}`
+      `omp session ${req.session.id} is cwd-bound to ${req.session.cwd}, not ${req.cwd}`,
     );
   }
-  const resume = req.session && req.session.harness === OMP_ID ? req.session.id : undefined;
+  const resume =
+    req.session && req.session.harness === OMP_ID ? req.session.id : undefined;
   const retainedFrames: any[] = [];
   let idleTimer: ReturnType<typeof setTimeout> | undefined;
   let wallTimer: ReturnType<typeof setTimeout> | undefined;
@@ -111,14 +125,33 @@ export async function runOmpTurn(
     resumeDir = req.session.dir;
   }
   try {
-    rpc = await runtime.launch(model, req.cwd, overlayPath, resumeDir, resumeId, extraArgs);
+    rpc = await runtime.launch(
+      model,
+      req.cwd,
+      overlayPath,
+      resumeDir,
+      resumeId,
+      extraArgs,
+    );
   } catch (error) {
-    if (resumeId && /session .*not found/i.test(error instanceof OmpRpcExit ? error.stderr : String(error))) {
+    if (
+      resumeId &&
+      /session .*not found/i.test(
+        error instanceof OmpRpcExit ? error.stderr : String(error),
+      )
+    ) {
       attempts.push({ model, stop: launchFailure(error), usage: zeroUsage() });
       resumeId = undefined;
       resumeDir = dirs.sessions;
       try {
-        rpc = await runtime.launch(model, req.cwd, overlayPath, resumeDir, undefined, extraArgs);
+        rpc = await runtime.launch(
+          model,
+          req.cwd,
+          overlayPath,
+          resumeDir,
+          undefined,
+          extraArgs,
+        );
       } catch (retryError) {
         error = retryError;
       }
@@ -172,7 +205,7 @@ export async function runOmpTurn(
   const promptPromise = rpc.awaitFrame(
     (frame) => frame.type === "prompt_result" && frame.id === promptId,
     0,
-    "prompt_result"
+    "prompt_result",
   );
   promptPromise.catch(() => {});
 
@@ -182,7 +215,10 @@ export async function runOmpTurn(
     promptResult = await Promise.race([
       promptPromise,
       abortSignal.then(
-        () => new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 2_500))
+        () =>
+          new Promise<undefined>((resolve) =>
+            setTimeout(() => resolve(undefined), 2_500),
+          ),
       ),
     ]);
   } catch (error) {
@@ -191,7 +227,11 @@ export async function runOmpTurn(
 
   if (promptResult?.sessionSettled === false) {
     await rpc
-      .awaitFrame((frame) => frame.type === "session_settled", 60_000, "session_settled")
+      .awaitFrame(
+        (frame) => frame.type === "session_settled",
+        60_000,
+        "session_settled",
+      )
       .catch(() => undefined);
   }
   finished = true;
@@ -213,7 +253,8 @@ export async function runOmpTurn(
   const summary = summarizeOmpFrames(retainedFrames);
   const postStats = statsFrame?.data as OmpStats | undefined;
   const state = stateFrame?.data;
-  const sessionFile: string | undefined = state?.sessionFile ?? postStats?.sessionFile;
+  const sessionFile: string | undefined =
+    state?.sessionFile ?? postStats?.sessionFile;
   const usage = turnUsage({
     before: baseline,
     after: postStats,
@@ -253,7 +294,9 @@ export async function runOmpTurn(
         model: actualModel(state, model),
         lastRequestStartedAt: startedAt,
         retentionTier: "short" as const,
-        compacted: isSessionCompacted(sessionFile) || (!sessionFile && req.session?.compacted === true),
+        compacted:
+          isSessionCompacted(sessionFile) ||
+          (!sessionFile && req.session?.compacted === true),
       }
     : req.session;
 

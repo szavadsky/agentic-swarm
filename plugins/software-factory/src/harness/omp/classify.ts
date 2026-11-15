@@ -11,13 +11,17 @@ export interface OmpPromptError {
   code?: string;
 }
 
-const AUTH = /unauthori[sz]ed|forbidden|invalid api key|no api key|missing api key|credential|model .*not found|no-route|model unavailable/i;
-const OVERFLOW = /context (length|window)|maximum context|too many tokens|token limit|prompt is too long|overflow/i;
+const AUTH =
+  /unauthori[sz]ed|forbidden|invalid api key|no api key|missing api key|credential|model .*not found|no-route|model unavailable/i;
+const OVERFLOW =
+  /context (length|window)|maximum context|too many tokens|token limit|prompt is too long|overflow/i;
 const REFUSAL = /refus|safety|content policy|blocked by|declined/i;
 const ABORTED = /abort|interrupted by user/i;
 const TIMEOUT = /timed out|timeout|deadline exceeded/i;
-const QUOTA = /free[- ]?limit|free usage limit|quota|usage limit|insufficient|billing|exceeded your/i;
-const RATE = /rate[\s_-]?limit|too many requests|overloaded|service unavailable|bad gateway/i;
+const QUOTA =
+  /free[- ]?limit|free usage limit|quota|usage limit|insufficient|billing|exceeded your/i;
+const RATE =
+  /rate[\s_-]?limit|too many requests|overloaded|service unavailable|bad gateway/i;
 
 /**
  * Maps a provider error to the kernel's infra/task-side stop vocabulary.
@@ -53,7 +57,9 @@ export function classifyOmpError(error: OmpPromptError | undefined): Stop {
 }
 
 /** Assistant `stopReason` values that override a "completed" prompt result. */
-export function classifyOmpStopReason(stopReason: string | undefined): Stop | undefined {
+export function classifyOmpStopReason(
+  stopReason: string | undefined,
+): Stop | undefined {
   switch (stopReason) {
     case "max_tokens":
     case "max-tokens":
@@ -111,19 +117,25 @@ export function classifyOmpTurn(input: OmpTurnOutcomeInput): Stop {
   if (input.promptResult?.status === "completed") {
     return classifyOmpStopReason(input.lastStopReason) ?? { kind: "done" };
   }
-  if (input.failure?.signal === "SIGTERM" || input.failure?.signal === "SIGINT") {
+  if (
+    input.failure?.signal === "SIGTERM" ||
+    input.failure?.signal === "SIGINT"
+  ) {
     return { kind: "cancelled" };
   }
   if (input.failure) {
     const stop = classifyOmpLaunchFailure(input.failure.stderr ?? "");
     if (stop.kind === "infra" && !stop.details) {
-      const exit = exitDetails(input.failure.code ?? null, input.failure.signal ?? null);
+      const exit = exitDetails(
+        input.failure.code ?? null,
+        input.failure.signal ?? null,
+      );
       if (exit) return { ...stop, details: exit };
     }
     return stop;
   }
   return withDetails(
     { kind: "infra", cause: "crash" },
-    "no prompt_result and no failure captured"
+    "no prompt_result and no failure captured",
   );
 }

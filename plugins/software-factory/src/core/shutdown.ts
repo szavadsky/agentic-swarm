@@ -24,7 +24,10 @@ export function unregisterChildGroup(pid: number): void {
  * Terminates a single child process group by PID (SIGTERM then SIGKILL).
  * Ensures it NEVER kills the factory's own process group (requires pid > 0).
  */
-function terminateChildGroup(pid: number, signal: "SIGTERM" | "SIGKILL" = "SIGTERM"): void {
+function terminateChildGroup(
+  pid: number,
+  signal: "SIGTERM" | "SIGKILL" = "SIGTERM",
+): void {
   if (pid <= 0) return;
   try {
     process.kill(-pid, signal);

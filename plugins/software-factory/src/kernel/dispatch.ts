@@ -1,14 +1,21 @@
 import { derive } from "./derive.js";
 import { executeTaskAction, type TaskActionResult } from "./flow.js";
 import { stepTarget } from "./flow-context.js";
-import { readHolds, scanInbox, type Hold, type Steer } from "./mailbox.js";
+import type { MergeResult } from "./integrate.js";
+import { type Hold, readHolds, type Steer, scanInbox } from "./mailbox.js";
 import { next } from "./next.js";
 import { runSteerPm } from "./pm.js";
-import { pricedRecord, type PriceTable } from "./pricing.js";
-import { appendPark } from "./record.js";
+import { type PriceTable, pricedRecord } from "./pricing.js";
+import { appendPark, scriptMeta } from "./record.js";
 import type { DrainController } from "./signals.js";
-import type { Action, KernelRuntime, State, StepRecord, TaskFile, TaskState } from "./types.js";
-import type { MergeResult } from "./integrate.js";
+import type {
+  Action,
+  KernelRuntime,
+  State,
+  StepRecord,
+  TaskFile,
+  TaskState,
+} from "./types.js";
 
 export interface DispatchResult {
   reason: "boundary" | "drained" | "terminal" | "infra" | "cancelled";
@@ -54,7 +61,10 @@ function prefixContains(outer: string, inner: string): boolean {
 }
 
 /** Conservative glob-glob overlap: `src/**` overlaps `src/a.ts`, never `src/ab.ts`. */
-export function scopesOverlap(a: readonly string[], b: readonly string[]): boolean {
+export function scopesOverlap(
+  a: readonly string[],
+  b: readonly string[],
+): boolean {
   for (const left of a) {
     for (const right of b) {
       const la = literalPrefix(left);
@@ -66,7 +76,10 @@ export function scopesOverlap(a: readonly string[], b: readonly string[]): boole
   return false;
 }
 
-function overlapsRunning(scope: readonly string[], running: ReadonlyMap<string, Running>): boolean {
+function overlapsRunning(
+  scope: readonly string[],
+  running: ReadonlyMap<string, Running>,
+): boolean {
   if (scope.length === 0) return false;
   for (const entry of running.values()) {
     if (scopesOverlap(scope, entry.scope)) return true;
@@ -75,7 +88,7 @@ function overlapsRunning(scope: readonly string[], running: ReadonlyMap<string, 
 }
 
 /** Agent turns charged to the item budget; boundary roles and infra stops are free. */
-function settledTurns(records: StepRecord[], iteration: number): number {
+export function settledTurns(records: StepRecord[], iteration: number): number {
   return records.filter(
     (r) =>
       r.iteration === iteration &&
@@ -84,11 +97,14 @@ function settledTurns(records: StepRecord[], iteration: number): number {
       r.slug !== undefined &&
       r.step !== "architect" &&
       r.step !== "pm" &&
-      r.stop?.kind !== "infra"
+      r.stop?.kind !== "infra",
   ).length;
 }
 
-function iterationStart(records: StepRecord[], iteration: number): number {
+export function iterationStart(
+  records: StepRecord[],
+  iteration: number,
+): number {
   const times = records
     .filter((r) => r.iteration === iteration)
     .map((r) => Date.parse(r.startedAt))
@@ -103,20 +119,68 @@ function iterationStart(records: StepRecord[], iteration: number): number {
  * cost is unknown adds $0 — the brake treats it as free because it has nothing
  * better to go on, and the summary reports how many turns were blind.
  */
-function iterationSpend(records: StepRecord[], iteration: number, prices: PriceTable): number {
+export function iterationSpend(
+  records: StepRecord[],
+  iteration: number,
+  prices: PriceTable,
+): number {
   let usd = 0;
   for (const rec of records) {
-    if (rec.iteration !== iteration || rec.actor !== "agent" || !rec.endedAt) continue;
+    if (rec.iteration !== iteration || rec.actor !== "agent" || !rec.endedAt)
+      continue;
     const cost = pricedRecord(rec, prices).usage.costUsd;
     if (cost !== undefined) usd += cost;
   }
   return usd;
 }
 
-function agentStop(result: TaskActionResult | MergeResult): { reason: "infra" | "cancelled"; cause?: string } | undefined {
-  if ("infra" in result && result.infra) return { reason: "infra", cause: result.infra.cause };
+function agentStop(
+  result: TaskActionResult | MergeResult,
+): { reason: "infra" | "cancelled"; cause?: string } | undefined {
+  if ("infra" in result && result.infra)
+    return { reason: "infra", cause: result.infra.cause };
   if ("cancelled" in result && result.cancelled) return { reason: "cancelled" };
   return undefined;
+}
+
+function crashMessage(err: unknown): string {
+  return err instanceof Error && err.message ? err.message : String(err);
+}
+
+/**
+ * A throwing action records the crash as an infra stop and names the task; the
+ * launch and its siblings keep going. Recording failure must not mask the
+ * original crash.
+ */
+async function recordCrash(
+  runtime: KernelRuntime,
+  iteration: number,
+  action: Action & { slug: string },
+  taskState: TaskState,
+  err: unknown,
+): Promise<string> {
+  const message = crashMessage(err);
+  const cause = `crash: ${message}`;
+  try {
+    await runtime.store.appendRecord(
+      scriptMeta(
+        iteration,
+        action.kind === "step" ? action.step : action.kind,
+        {
+          slug: action.slug,
+          round: taskState.round,
+        },
+      ),
+      {
+        ok: false,
+        cause,
+        stop: { kind: "infra", cause: "crash", details: message },
+      },
+    );
+  } catch {
+    // Recording failure must not mask the original crash.
+  }
+  return cause;
 }
 
 interface ActiveHolds {
@@ -154,17 +218,21 @@ function activeHolds(holds: Hold[], pending: ReadonlySet<string>): ActiveHolds {
  */
 export async function runDispatch(
   runtime: KernelRuntime,
-  opts: DispatchOptions = {}
+  opts: DispatchOptions = {},
 ): Promise<DispatchResult> {
   const initialTasks = await runtime.store.listTasks();
   const initialRecords = await runtime.store.listRecords();
-  const initial = derive(initialTasks, initialRecords, runtime.configs.process.flows);
+  const initial = derive(
+    initialTasks,
+    initialRecords,
+    runtime.configs.process.flows,
+  );
   const iteration = opts.iteration ?? Math.max(1, initial.iteration);
   const running = new Map<string, Running>();
   const started = new Set(
     initialRecords
       .filter((r) => r.iteration === iteration && r.actor === "agent" && r.slug)
-      .map((r) => r.slug!)
+      .map((r) => r.slug!),
   );
   // Infra stops are per slug for this iteration: the faulted task waits for the
   // next launch, independent work keeps going, and only an iteration where
@@ -204,20 +272,21 @@ export async function runDispatch(
    */
   const pollSteers = async (
     state: State,
-    tasks: TaskFile[]
+    tasks: TaskFile[],
   ): Promise<{ hold: ActiveHolds; steerTurn: boolean; holdError?: string }> => {
     const steers = await scanInbox(runtime.store, { settleMs: 0 });
     const pending = new Set(steers.map((steer) => steer.id));
-    if (cancelled) return { hold: activeHolds(holds, pending), steerTurn: false };
+    if (cancelled)
+      return { hold: activeHolds(holds, pending), steerTurn: false };
 
     const claim: Steer[] = [];
     const firstSight = steers.filter(
-      (steer) => !seenSteers.has(steer.id) && !settling.has(steer.id)
+      (steer) => !seenSteers.has(steer.id) && !settling.has(steer.id),
     );
     const firstIds = new Set(firstSight.map((steer) => steer.id));
     if (firstSight.length > 0) {
       const settled = new Map(
-        (await scanInbox(runtime.store)).map((steer) => [steer.id, steer])
+        (await scanInbox(runtime.store)).map((steer) => [steer.id, steer]),
       );
       for (const steer of firstSight) {
         const stable = settled.get(steer.id);
@@ -240,7 +309,13 @@ export async function runDispatch(
       return { hold: activeHolds(holds, pending), steerTurn: false };
     }
 
-    await runSteerPm(runtime, { iteration, state, tasks, steers: claim, cwd: runtime.paths.goalCheckout });
+    await runSteerPm(runtime, {
+      iteration,
+      state,
+      tasks,
+      steers: claim,
+      cwd: runtime.paths.goalCheckout,
+    });
     try {
       holds = await readHolds(runtime.store);
     } catch (err) {
@@ -253,12 +328,31 @@ export async function runDispatch(
     return { hold: activeHolds(holds, pending), steerTurn: true };
   };
 
-  const start = (action: Action & { slug: string }, taskState: TaskState, task: TaskFile, agent: boolean, harnessId?: string): void => {
+  const start = (
+    action: Action & { slug: string },
+    taskState: TaskState,
+    task: TaskFile,
+    agent: boolean,
+    harnessId?: string,
+  ): void => {
     const promise = (async () => {
-      const result = await executeTaskAction(runtime, task, action, iteration, taskState);
-      const ended = agentStop(result);
-      if (ended?.reason === "infra") infra.set(action.slug, ended.cause);
-      else if (ended?.reason === "cancelled") cancelled = true;
+      try {
+        const result = await executeTaskAction(
+          runtime,
+          task,
+          action,
+          iteration,
+          taskState,
+        );
+        const ended = agentStop(result);
+        if (ended?.reason === "infra") infra.set(action.slug, ended.cause);
+        else if (ended?.reason === "cancelled") cancelled = true;
+      } catch (err) {
+        infra.set(
+          action.slug,
+          await recordCrash(runtime, iteration, action, taskState, err),
+        );
+      }
     })().finally(() => {
       running.delete(action.slug);
     });
@@ -291,25 +385,36 @@ export async function runDispatch(
     const hold = polled.hold;
     // A steer PM turn is an agent record written after the first read; re-read
     // so it prices into this iteration's brake like every other PM turn.
-    const records = polled.steerTurn ? await runtime.store.listRecords() : recordsBefore;
+    const records = polled.steerTurn
+      ? await runtime.store.listRecords()
+      : recordsBefore;
     const turnsUsed = settledTurns(records, iteration);
 
-    const agentCount = (): number => [...running.values()].filter((r) => r.agent).length;
+    const agentCount = (): number =>
+      [...running.values()].filter((r) => r.agent).length;
     const elapsedMs = Date.now() - iterationStart(records, iteration);
+    const iterationWallMs = runtime.limits.iterationWallMs;
     if (!drain && !cancelled) {
       if (hold.goal !== undefined) {
         // A goal hold is a drain with a name: in-flight steps settle unmerged,
         // nothing new starts, and the architect sees the remainder.
         drain = `steer: ${hold.goal} goal hold`;
-      } else if (runtime.limits.iterationTurns !== undefined && turnsUsed >= runtime.limits.iterationTurns) {
+      } else if (
+        runtime.limits.iterationTurns !== undefined &&
+        turnsUsed >= runtime.limits.iterationTurns
+      ) {
         drain = `iteration turn limit ${runtime.limits.iterationTurns} reached`;
       } else if (
-        runtime.limits.iterationWallMs !== undefined &&
-        elapsedMs >= runtime.limits.iterationWallMs
+        iterationWallMs !== undefined &&
+        elapsedMs >= iterationWallMs
       ) {
-        drain = `iteration wall limit ${runtime.limits.iterationWallMs}ms reached`;
+        drain = `iteration wall limit ${iterationWallMs}ms reached`;
       } else if (usdLimit !== undefined) {
-        const spent = iterationSpend(records, iteration, runtime.configs.run.prices ?? {});
+        const spent = iterationSpend(
+          records,
+          iteration,
+          runtime.configs.run.prices ?? {},
+        );
         if (spent >= usdLimit) {
           drain = `budget: iteration USD limit $${usdLimit.toFixed(4)} reached (spent $${spent.toFixed(4)})`;
         }
@@ -317,7 +422,8 @@ export async function runDispatch(
     }
 
     const candidates = next(state, runtime.limits, runningAtRead).filter(
-      (a): a is Action & { slug: string } => a.kind !== "boundary" && a.kind !== "exit"
+      (a): a is Action & { slug: string } =>
+        a.kind !== "boundary" && a.kind !== "exit",
     );
 
     for (const action of candidates) {
@@ -332,25 +438,36 @@ export async function runDispatch(
       if (!task) throw new Error(`action names unknown task "${action.slug}"`);
       const taskState = state.tasks[action.slug]!;
 
-      // A held task that has not run this iteration waits for the architect;
-      // one that has finishes its in-flight step first, then parks unmerged.
-      // A park the task earned itself runs with its own cause: the steer did
-      // not stop it, and the architect needs the reason the task stopped.
-      const heldBySteer = hold.goal ?? hold.slugs.get(action.slug);
-      if (heldBySteer !== undefined && action.kind !== "park") {
+      // A per-slug hold parks that task (started or not, once its in-flight
+      // step finishes). A goal hold is a drain: it never parks — started tasks
+      // settle in their current phase and stay resumable for the next iteration.
+      const heldBySlug = hold.slugs.get(action.slug);
+      if (heldBySlug !== undefined && action.kind !== "park") {
         if (started.has(action.slug)) {
           await appendPark(
             runtime.store,
             { iteration, slug: action.slug, round: taskState.round },
-            `steer: ${heldBySteer}`
+            `steer: ${heldBySlug}`,
           );
         }
+        continue;
+      }
+      if (
+        hold.goal !== undefined &&
+        !hold.slugs.has(action.slug) &&
+        action.kind !== "park"
+      ) {
+        // Block further steps of started tasks without parking them.
         continue;
       }
 
       if (action.kind === "step") {
         if (drain && !started.has(action.slug)) continue;
-        if (!drain && runtime.limits.iterationTurns !== undefined && turnsUsed + agentCount() >= runtime.limits.iterationTurns) {
+        if (
+          !drain &&
+          runtime.limits.iterationTurns !== undefined &&
+          turnsUsed + agentCount() >= runtime.limits.iterationTurns
+        ) {
           continue;
         }
         if (agentCount() >= runtime.limits.concurrency) continue;
@@ -358,7 +475,7 @@ export async function runDispatch(
         const limit = runtime.limits.perHarness[target.harness.id];
         if (limit !== undefined) {
           const onHarness = [...running.values()].filter(
-            (r) => r.agent && r.harnessId === target.harness.id
+            (r) => r.agent && r.harnessId === target.harness.id,
           ).length;
           if (onHarness >= limit) continue;
         }
@@ -368,7 +485,8 @@ export async function runDispatch(
       }
 
       if (action.kind === "checks" || action.kind === "merge") {
-        if (drain && !started.has(action.slug) && taskState.turns === 0) continue;
+        if (drain && !started.has(action.slug) && taskState.turns === 0)
+          continue;
         if (overlapsRunning(task.scope, running)) continue;
         start(action, taskState, task, false);
         continue;
@@ -376,10 +494,23 @@ export async function runDispatch(
 
       // Park and finish are terminal script steps of an item; they never
       // start work, so they are allowed even while draining.
-      const result = await executeTaskAction(runtime, task, action, iteration, taskState);
-      const ended = agentStop(result);
-      if (ended?.reason === "infra") infra.set(action.slug, ended.cause);
-      else if (ended?.reason === "cancelled") cancelled = true;
+      try {
+        const result = await executeTaskAction(
+          runtime,
+          task,
+          action,
+          iteration,
+          taskState,
+        );
+        const ended = agentStop(result);
+        if (ended?.reason === "infra") infra.set(action.slug, ended.cause);
+        else if (ended?.reason === "cancelled") cancelled = true;
+      } catch (err) {
+        infra.set(
+          action.slug,
+          await recordCrash(runtime, iteration, action, taskState, err),
+        );
+      }
     }
 
     if (running.size === 0) {
@@ -389,7 +520,9 @@ export async function runDispatch(
       if (runningAtRead.size > 0) continue;
       if (cancelled) return { reason: "cancelled", turns: turnsUsed };
       if (infra.size > 0) {
-        const causes = [...infra.entries()].map(([slug, cause]) => (cause ? `${slug}: ${cause}` : slug));
+        const causes = [...infra.entries()].map(([slug, cause]) =>
+          cause ? `${slug}: ${cause}` : slug,
+        );
         return { reason: "infra", cause: causes.join("; "), turns: turnsUsed };
       }
       if (drain) return { reason: "drained", cause: drain, turns: turnsUsed };

@@ -1,9 +1,14 @@
 import yaml from "yaml";
-import { addUsage, zeroUsage } from "../harness/usage.js";
 import type { Usage } from "../harness/types.js";
-import { pricedRecord, type PriceTable } from "./pricing.js";
-import type { ArtifactStore, FlowDefinition, State, StepRecord } from "./types.js";
+import { addUsage, zeroUsage } from "../harness/usage.js";
+import { type PriceTable, pricedRecord } from "./pricing.js";
 import type { SummaryStatus } from "./summary.js";
+import type {
+  ArtifactStore,
+  FlowDefinition,
+  State,
+  StepRecord,
+} from "./types.js";
 
 /** Spend one role or alias accumulated over an iteration. */
 export interface GroupMetrics {
@@ -89,7 +94,9 @@ export interface GoalMetrics {
 }
 
 /** Step id -> role across every configured flow; metrics name roles, not steps. */
-export function rolesByStep(flows: Record<string, FlowDefinition>): Record<string, string> {
+export function rolesByStep(
+  flows: Record<string, FlowDefinition>,
+): Record<string, string> {
   const roles: Record<string, string> = {};
   for (const flow of Object.values(flows)) {
     for (const step of flow.steps) roles[step.id] = step.role;
@@ -106,7 +113,10 @@ export const DEFAULT_ROLE_BY_STEP: Record<string, string> = {
 };
 
 /** Known zero stays $0.0000; unknown never does; a partial sum says so. */
-export function costText(costUsd: number | undefined, unpricedTurns: number): string {
+export function costText(
+  costUsd: number | undefined,
+  unpricedTurns: number,
+): string {
   const unknown = `${unpricedTurns} unpriced ${unpricedTurns === 1 ? "turn" : "turns"}`;
   if (unpricedTurns === 0) return `$${(costUsd ?? 0).toFixed(4)}`;
   if (costUsd === undefined) return `unknown (${unknown})`;
@@ -125,7 +135,14 @@ function tokenTotal(usage: Usage): number {
 }
 
 function emptyArchitect(): ArchitectMetrics {
-  return { launches: 0, usage: zeroUsage(), tokens: 0, costShare: 0, tokenShare: 0, unpricedTurns: 0 };
+  return {
+    launches: 0,
+    usage: zeroUsage(),
+    tokens: 0,
+    costShare: 0,
+    tokenShare: 0,
+    unpricedTurns: 0,
+  };
 }
 
 function emptyIncidents(): IncidentCounts {
@@ -147,7 +164,10 @@ function width(part: number, total: number): number {
   return total > 0 ? part / total : 0;
 }
 
-function sameModel(left: { id: string; effort?: string }, right: { id: string; effort?: string }): boolean {
+function sameModel(
+  left: { id: string; effort?: string },
+  right: { id: string; effort?: string },
+): boolean {
   return left.id === right.id && (left.effort ?? "") === (right.effort ?? "");
 }
 
@@ -155,7 +175,7 @@ function addTurn<T extends GroupMetrics>(
   entry: T,
   part: Usage,
   unpriced: number,
-  promptBytes: number
+  promptBytes: number,
 ): void {
   entry.turns += 1;
   entry.unpricedTurns += unpriced;
@@ -194,7 +214,8 @@ function parkIncidents(all: StepRecord[], incidents: IncidentCounts): void {
       incidents.mergedGateFailures += 1;
     } else if (rec.step === "park" && rec.endedAt) {
       const cause = rec.cause ?? "";
-      if (/^review round limit reached/i.test(cause)) incidents.roundLimitParks += 1;
+      if (/^review round limit reached/i.test(cause))
+        incidents.roundLimitParks += 1;
       else if (/no[- ]progress/i.test(cause)) incidents.noProgressParks += 1;
       // An empty-diff park is a loop signal: the turn consumed budget without
       // producing work. A spike's empty turn is a normal `finish` record, not a
@@ -213,9 +234,11 @@ export function iterationMetrics(
   records: StepRecord[],
   roleByStep: Record<string, string>,
   humanInterventions: number,
-  prices: PriceTable
+  prices: PriceTable,
 ): IterationMetrics {
-  const recs = records.filter((r) => r.iteration === n && r.endedAt && r.actor === "agent");
+  const recs = records.filter(
+    (r) => r.iteration === n && r.endedAt && r.actor === "agent",
+  );
   let usage = zeroUsage();
   let unpricedTurns = 0;
   const roles: Record<string, RoleMetrics> = {};
@@ -230,7 +253,8 @@ export function iterationMetrics(
     usage = addUsage(usage, part);
     unpricedTurns += unpriced;
 
-    const role = roleByStep[rec.step] ?? DEFAULT_ROLE_BY_STEP[rec.step] ?? rec.step;
+    const role =
+      roleByStep[rec.step] ?? DEFAULT_ROLE_BY_STEP[rec.step] ?? rec.step;
     const roleEntry = roles[role] ?? {
       role,
       turns: 0,
@@ -265,8 +289,14 @@ export function iterationMetrics(
   }
 
   const all = records.filter((r) => r.iteration === n);
-  const merged = all.filter((r) => r.step === "merge" && r.ok === true).map((r) => r.slug!).sort();
-  const parked = all.filter((r) => r.step === "park" && r.endedAt).map((r) => r.slug!).sort();
+  const merged = all
+    .filter((r) => r.step === "merge" && r.ok === true)
+    .map((r) => r.slug!)
+    .sort();
+  const parked = all
+    .filter((r) => r.step === "park" && r.endedAt)
+    .map((r) => r.slug!)
+    .sort();
   const incidents = emptyIncidents();
   attemptIncidents(recs, incidents);
   parkIncidents(all, incidents);
@@ -408,7 +438,10 @@ export interface MetricsInput {
  * only facts records cannot carry for past iterations, so they are preserved).
  * Writes `iterations/<n>/metrics.yaml`, root `metrics.yaml` and the outbox copy.
  */
-export async function writeMetrics(store: ArtifactStore, input: MetricsInput): Promise<void> {
+export async function writeMetrics(
+  store: ArtifactStore,
+  input: MetricsInput,
+): Promise<void> {
   const existingText = await store.readFile("metrics.yaml");
   let existing: GoalMetrics | undefined;
   if (existingText) {
@@ -421,20 +454,37 @@ export async function writeMetrics(store: ArtifactStore, input: MetricsInput): P
   const old = new Map((existing?.iterations ?? []).map((i) => [i.n, i]));
   const roleByStep = { ...DEFAULT_ROLE_BY_STEP, ...(input.roleByStep ?? {}) };
   const numbers = new Set<number>([input.iteration]);
-  for (const rec of input.records) if (rec.iteration > 0) numbers.add(rec.iteration);
+  for (const rec of input.records)
+    if (rec.iteration > 0) numbers.add(rec.iteration);
 
   const iterations = [...numbers]
     .sort((a, b) => a - b)
     .map((n) => {
       const previous = old.get(n);
-      const status = n === input.iteration ? input.status : (previous?.status ?? "in-progress");
-      const human = n === input.iteration ? (input.humanInterventions ?? 0) : (previous?.humanInterventions ?? 0);
-      return iterationMetrics(n, status, input.records, roleByStep, human, input.prices ?? {});
+      const status =
+        n === input.iteration
+          ? input.status
+          : (previous?.status ?? "in-progress");
+      const human =
+        n === input.iteration
+          ? (input.humanInterventions ?? 0)
+          : (previous?.humanInterventions ?? 0);
+      return iterationMetrics(
+        n,
+        status,
+        input.records,
+        roleByStep,
+        human,
+        input.prices ?? {},
+      );
     });
   const metrics: GoalMetrics = { iterations, totals: totalsOf(iterations) };
 
   for (const iteration of iterations) {
-    await store.writeFile(`iterations/${iteration.n}/metrics.yaml`, yaml.stringify(iteration));
+    await store.writeFile(
+      `iterations/${iteration.n}/metrics.yaml`,
+      yaml.stringify(iteration),
+    );
   }
   const text = yaml.stringify(metrics);
   await store.writeFile("metrics.yaml", text);

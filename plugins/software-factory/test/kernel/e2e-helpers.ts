@@ -1,10 +1,14 @@
+import { expect } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import { expect } from "bun:test";
 import { dispatch } from "../../src/cli/dispatch.js";
-import { FakeHarness, fakeTurnResult, type FakeTurnHandler } from "../../src/harness/fake/index.js";
-import { createFolderStore } from "../../src/kernel/store.js";
+import {
+  type FakeHarness,
+  type FakeTurnHandler,
+  fakeTurnResult,
+} from "../../src/harness/fake/index.js";
 import { derive } from "../../src/kernel/derive.js";
+import { createFolderStore } from "../../src/kernel/store.js";
 import type { State } from "../../src/kernel/types.js";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 
@@ -52,25 +56,54 @@ export function makeGoal(opts: GoalOptions = {}): E2EGoal {
   repo.commit("factory config");
   const goalDir = path.join(repo.dir, ".factory/artifacts/demo");
   fs.mkdirSync(goalDir, { recursive: true });
-  fs.writeFileSync(path.join(goalDir, "intent.md"), "# Goal\n\nBuild the demo.\n", "utf8");
+  fs.writeFileSync(
+    path.join(goalDir, "intent.md"),
+    "# Goal\n\nBuild the demo.\n",
+    "utf8",
+  );
   if (opts.classYaml !== null) {
-    fs.writeFileSync(path.join(goalDir, "class.yaml"), opts.classYaml ?? "class: bigger\n", "utf8");
+    fs.writeFileSync(
+      path.join(goalDir, "class.yaml"),
+      opts.classYaml ?? "class: bigger\n",
+      "utf8",
+    );
   }
-  return { repo, goalDir, planPath: path.join(goalDir, "plan.md"), tasksDir: path.join(goalDir, "tasks") };
+  return {
+    repo,
+    goalDir,
+    planPath: path.join(goalDir, "plan.md"),
+    tasksDir: path.join(goalDir, "tasks"),
+  };
 }
 
 export async function launch(
   repo: TmpRepo,
   harness: FakeHarness,
-  iterations = 1
+  iterations = 1,
 ): Promise<number> {
-  return dispatch(["run", "--repo", repo.dir, "--goal", "demo", "--iterations", String(iterations)], {
-    harnesses: { fake: harness },
-  });
+  return dispatch(
+    [
+      "run",
+      "--repo",
+      repo.dir,
+      "--goal",
+      "demo",
+      "--iterations",
+      String(iterations),
+    ],
+    {
+      harnesses: { fake: harness },
+    },
+  );
 }
 
 export function cleanup(goal: E2EGoal): void {
-  const worktreeRoot = path.resolve(goal.repo.dir, "..", ".factory-worktrees", path.basename(goal.repo.dir));
+  const worktreeRoot = path.resolve(
+    goal.repo.dir,
+    "..",
+    ".factory-worktrees",
+    path.basename(goal.repo.dir),
+  );
   goal.repo.cleanup();
   fs.rmSync(worktreeRoot, { recursive: true, force: true });
 }
@@ -92,7 +125,11 @@ export function writeTask(goalDir: string, text: string): void {
 }
 
 /** Scripts the optional digest scout: it annotates the table the script already wrote. */
-export function scriptDigest(harness: FakeHarness, goalDir: string, iteration: number): void {
+export function scriptDigest(
+  harness: FakeHarness,
+  goalDir: string,
+  iteration: number,
+): void {
   harness.script((req, ctx) => {
     const digest = path.join(goalDir, `iterations/${iteration}/digest.md`);
     expect(fs.existsSync(digest)).toBe(true);
@@ -106,7 +143,13 @@ export function scriptDigest(harness: FakeHarness, goalDir: string, iteration: n
 export function simpleTask(
   slug: string,
   file: string,
-  opts: { deps?: string[]; title?: string; body?: string; flow?: string; kind?: string } = {}
+  opts: {
+    deps?: string[];
+    title?: string;
+    body?: string;
+    flow?: string;
+    kind?: string;
+  } = {},
 ): string {
   return [
     "---",
@@ -126,7 +169,10 @@ export function simpleTask(
   ].join("\n");
 }
 
-export function implementerTurn(file: string, extra?: (cwd: string) => void): FakeTurnHandler {
+export function implementerTurn(
+  file: string,
+  extra?: (cwd: string) => void,
+): FakeTurnHandler {
   return (req, ctx) => {
     fs.writeFileSync(path.join(req.cwd!, file), `${file}\n`, "utf8");
     extra?.(req.cwd!);

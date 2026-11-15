@@ -1,4 +1,4 @@
-import { runWithFallbacks, type RetryPolicy } from "../fallback.js";
+import { type RetryPolicy, runWithFallbacks } from "../fallback.js";
 import type {
   Caps,
   Harness,
@@ -9,7 +9,11 @@ import type {
 } from "../types.js";
 import { resolveAcpxCommand, resolveAgyBinary } from "./command.js";
 import { runAcpxTurn } from "./turn.js";
-import { ACPX_EFFORT, type AcpxAgent, type AcpxHarnessOptions } from "./types.js";
+import {
+  ACPX_EFFORT,
+  type AcpxAgent,
+  type AcpxHarnessOptions,
+} from "./types.js";
 
 export type { AcpxAgent, AcpxHarnessOptions } from "./types.js";
 
@@ -51,7 +55,12 @@ export class AcpxHarness implements Harness {
       retry: this.retry,
       run: async (model) => {
         const value = await runAcpxTurn(this.runtime, req, model);
-        return { stop: value.stop, usage: value.usage, value, attempts: value.attempts };
+        return {
+          stop: value.stop,
+          usage: value.usage,
+          value,
+          attempts: value.attempts,
+        };
       },
     });
 

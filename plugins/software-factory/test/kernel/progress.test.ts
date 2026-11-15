@@ -2,13 +2,24 @@ import { describe, expect, it } from "bun:test";
 import { stepFingerprint } from "../../src/kernel/progress.js";
 import { rec } from "./helpers.js";
 
-function step(seq: number, tree: string, round = 1, verdict?: "approve" | "changes") {
+function step(
+  seq: number,
+  tree: string,
+  round = 1,
+  verdict?: "approve" | "changes",
+) {
   return rec(seq, {
     slug: "task",
     step: "implement",
     round,
     tree,
-    outcome: { status: "done", summary: "step", concerns: [], forward: [], ...(verdict ? { verdict } : {}) },
+    outcome: {
+      status: "done",
+      summary: "step",
+      concerns: [],
+      forward: [],
+      ...(verdict ? { verdict } : {}),
+    },
   });
 }
 
@@ -22,13 +33,25 @@ describe("no-progress fingerprints", () => {
     expect(b1).toBe(b2);
     expect(a1).not.toBe(b1);
 
-    const changedVerdict = stepFingerprint("task", step(5, "tree-a", 1, "changes"), undefined);
+    const changedVerdict = stepFingerprint(
+      "task",
+      step(5, "tree-a", 1, "changes"),
+      undefined,
+    );
     expect(changedVerdict).not.toBe(a1);
 
     const failed = stepFingerprint(
       "task",
-      { ...step(6, "tree-a"), outcome: { status: "failed", summary: "step", concerns: [], forward: [] } },
-      undefined
+      {
+        ...step(6, "tree-a"),
+        outcome: {
+          status: "failed",
+          summary: "step",
+          concerns: [],
+          forward: [],
+        },
+      },
+      undefined,
     );
     expect(failed).not.toBe(a1);
   });

@@ -62,7 +62,9 @@ const DELTA = simpleTask("delta", "delta.txt");
 function scriptFirstIteration(harness: FakeHarness, goalDir: string): void {
   harness.script((req, ctx) => {
     writePlan(goalDir, PLAN_1);
-    ctx.writeOutcome(outcome({ summary: "planned four tasks", decision: "continue" }));
+    ctx.writeOutcome(
+      outcome({ summary: "planned four tasks", decision: "continue" }),
+    );
     return fakeTurnResult(req);
   });
   harness.script((req, ctx) => {
@@ -73,11 +75,15 @@ function scriptFirstIteration(harness: FakeHarness, goalDir: string): void {
   });
   harness.script(implementerTurn("alpha.txt"));
   harness.script((req, ctx) => {
-    ctx.writeOutcome(outcome({ summary: "alpha is correct", verdict: "approve" }));
+    ctx.writeOutcome(
+      outcome({ summary: "alpha is correct", verdict: "approve" }),
+    );
     return fakeTurnResult(req);
   });
   harness.script((req, ctx) => {
-    ctx.writeOutcome(outcome({ status: "blocked", summary: "p needs an owner decision" }));
+    ctx.writeOutcome(
+      outcome({ status: "blocked", summary: "p needs an owner decision" }),
+    );
     return fakeTurnResult(req);
   });
 }
@@ -87,19 +93,30 @@ function scriptSecondIteration(harness: FakeHarness, goalDir: string): void {
   harness.script((req, ctx) => {
     expect(req.prompt).toContain("- turn: `relaunch`");
     writePlan(goalDir, PLAN_2);
-    ctx.writeOutcome(outcome({ summary: "changed beta, dropped gamma, added delta", decision: "continue" }));
+    ctx.writeOutcome(
+      outcome({
+        summary: "changed beta, dropped gamma, added delta",
+        decision: "continue",
+      }),
+    );
     return fakeTurnResult(req);
   });
   harness.script((req, ctx) => {
     writeTask(goalDir, BETA_2);
     writeTask(goalDir, DELTA);
-    fs.appendFileSync(path.join(goalDir, "tasks/alpha.md"), "\nEdited by the PM.\n", "utf8");
+    fs.appendFileSync(
+      path.join(goalDir, "tasks/alpha.md"),
+      "\nEdited by the PM.\n",
+      "utf8",
+    );
     ctx.writeOutcome(outcome({ summary: "filed the plan change" }));
     return fakeTurnResult(req);
   });
   harness.script((req, ctx) => {
     expect(req.prompt).toContain('frozen task "alpha" was edited; restored');
-    expect(fs.readFileSync(path.join(goalDir, "tasks/alpha.md"), "utf8")).toBe(ALPHA);
+    expect(fs.readFileSync(path.join(goalDir, "tasks/alpha.md"), "utf8")).toBe(
+      ALPHA,
+    );
     // The failed rung's task writes were rolled back; the retry re-derives them.
     writeTask(goalDir, BETA_2);
     writeTask(goalDir, DELTA);
@@ -107,18 +124,26 @@ function scriptSecondIteration(harness: FakeHarness, goalDir: string): void {
     return fakeTurnResult(req);
   });
   harness.script((req, ctx) => {
-    expect(fs.readFileSync(path.join(goalDir, "tasks/beta.md"), "utf8")).toContain("beta2.txt");
+    expect(
+      fs.readFileSync(path.join(goalDir, "tasks/beta.md"), "utf8"),
+    ).toContain("beta2.txt");
     fs.writeFileSync(path.join(req.cwd!, "beta2.txt"), "beta2\n", "utf8");
-    ctx.writeOutcome(outcome({ summary: "beta2 created from the changed task" }));
+    ctx.writeOutcome(
+      outcome({ summary: "beta2 created from the changed task" }),
+    );
     return fakeTurnResult(req);
   });
   harness.script((req, ctx) => {
-    ctx.writeOutcome(outcome({ summary: "beta2 is correct", verdict: "approve" }));
+    ctx.writeOutcome(
+      outcome({ summary: "beta2 is correct", verdict: "approve" }),
+    );
     return fakeTurnResult(req);
   });
   harness.script(implementerTurn("delta.txt"));
   harness.script((req, ctx) => {
-    ctx.writeOutcome(outcome({ summary: "delta is correct", verdict: "approve" }));
+    ctx.writeOutcome(
+      outcome({ summary: "delta is correct", verdict: "approve" }),
+    );
     return fakeTurnResult(req);
   });
   harness.script((req, ctx) => {
@@ -152,19 +177,32 @@ describe("KERNEL0 scenario 7 — plan edit between iterations", () => {
       expect(state.tasks.delta!.status).toBe("merged");
       expect(state.tasks.gamma!.status).toBe("cancelled");
       expect(state.tasks.p!.status).toBe("parked");
-      expect(fs.readFileSync(path.join(goal.goalDir, "tasks/alpha.md"), "utf8")).toBe(ALPHA);
+      expect(
+        fs.readFileSync(path.join(goal.goalDir, "tasks/alpha.md"), "utf8"),
+      ).toBe(ALPHA);
 
       const store = createFolderStore(goal.goalDir);
       const records = await store.listRecords();
-      const cancel = records.find((r) => r.step === "cancel" && r.slug === "gamma");
+      const cancel = records.find(
+        (r) => r.step === "cancel" && r.slug === "gamma",
+      );
       expect(cancel?.cause).toContain("removed from the plan");
       const reconcile = records.find((r) => r.step === "pm-reconcile");
-      expect(reconcile?.cause).toContain('frozen task "alpha" was edited; restored');
-      const summary = fs.readFileSync(path.join(goal.goalDir, "iterations/2/summary.md"), "utf8");
+      expect(reconcile?.cause).toContain(
+        'frozen task "alpha" was edited; restored',
+      );
+      const summary = fs.readFileSync(
+        path.join(goal.goalDir, "iterations/2/summary.md"),
+        "utf8",
+      );
       expect(summary).toContain("pm-reconcile");
       expect(summary).toContain("cancelled");
-      expect(fs.existsSync(path.join(goal.goalDir, "iterations/2/digest.md"))).toBe(true);
-      expect(goal.repo.git(["show", "factory/demo:beta2.txt"]).stdout.trim()).toBe("beta2");
+      expect(
+        fs.existsSync(path.join(goal.goalDir, "iterations/2/digest.md")),
+      ).toBe(true);
+      expect(
+        goal.repo.git(["show", "factory/demo:beta2.txt"]).stdout.trim(),
+      ).toBe("beta2");
     } finally {
       cleanup(goal);
     }

@@ -14,7 +14,10 @@ const SECRET_PATTERNS: ReadonlyArray<readonly [RegExp, string]> = [
   [/\bgithub_pat_[A-Za-z0-9_]{20,}/g, "[redacted]"],
   [/\bxox[abposr]-[A-Za-z0-9-]{10,}/g, "[redacted]"],
   [/\bAKIA[0-9A-Z]{16}\b/g, "[redacted]"],
-  [/\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g, "[redacted]"],
+  [
+    /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g,
+    "[redacted]",
+  ],
 ];
 
 /** Masks token-shaped values: API keys, bearer headers, and key=value secrets. */
@@ -32,7 +35,7 @@ export function scrubSecrets(text: string): string {
  */
 export function stopDetails(
   text: string | undefined,
-  max = MAX_DETAILS_CHARS
+  max = MAX_DETAILS_CHARS,
 ): string | undefined {
   const collapsed = scrubSecrets(text ?? "")
     .trim()
@@ -54,7 +57,7 @@ export function withDetails(stop: Stop, text: string | undefined): Stop {
 /** Fallback when a process dies without writing stderr. */
 export function exitDetails(
   code: number | null,
-  signal: string | null
+  signal: string | null,
 ): string | undefined {
   if (code === null && signal === null) return undefined;
   return `exit ${code ?? "none"}, signal ${signal ?? "none"}`;

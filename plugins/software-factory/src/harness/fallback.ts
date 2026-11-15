@@ -20,7 +20,9 @@ export const DEFAULT_RETRY_POLICY: RetryPolicy = {
 
 /** Quota and rate are worth retrying; auth, overflow, timeout and crash are not. */
 export function isRetryableInfra(stop: Stop): boolean {
-  return stop.kind === "infra" && (stop.cause === "quota" || stop.cause === "rate");
+  return (
+    stop.kind === "infra" && (stop.cause === "quota" || stop.cause === "rate")
+  );
 }
 
 export interface AttemptOutput<T> {
@@ -37,7 +39,10 @@ export interface FallbackResult<T> {
 }
 
 /** Primary first, then fallbacks, deduplicated by model id and effort. */
-export function modelChain(primary: ModelRef, fallbacks?: ModelRef[]): ModelRef[] {
+export function modelChain(
+  primary: ModelRef,
+  fallbacks?: ModelRef[],
+): ModelRef[] {
   const seen = new Set<string>();
   const chain: ModelRef[] = [];
   for (const model of [primary, ...(fallbacks ?? [])]) {
@@ -58,7 +63,8 @@ export async function runWithFallbacks<T>(opts: {
 }): Promise<FallbackResult<T>> {
   const policy = { ...DEFAULT_RETRY_POLICY, ...opts.retry };
   const sleep =
-    opts.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+    opts.sleep ??
+    ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   const chain = modelChain(opts.primary, opts.fallbacks);
   const attempts: TurnAttempt[] = [];
   let retriesLeft = Math.max(0, policy.retries);
@@ -77,7 +83,7 @@ export async function runWithFallbacks<T>(opts: {
       if (retriesLeft > 0 && isRetryableInfra(outcome.stop)) {
         const delay = Math.min(
           policy.baseDelayMs * 2 ** retryIndex,
-          policy.maxDelayMs
+          policy.maxDelayMs,
         );
         retriesLeft -= 1;
         retryIndex += 1;

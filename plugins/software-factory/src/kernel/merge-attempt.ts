@@ -1,10 +1,22 @@
-import { git } from "../core/git/exec.js";
 import { commitAll } from "../core/git/commit.js";
+import { git } from "../core/git/exec.js";
 import { hasConflictMarkers, unmergedFiles } from "../core/git/merge.js";
 import { runAgentTurn } from "./agent.js";
-import { compactSession, promptVars, resolveRole, resumeSessionFor } from "./flow-context.js";
+import {
+  compactSession,
+  promptVars,
+  resolveRole,
+  resumeSessionFor,
+} from "./flow-context.js";
 import { scriptMeta } from "./record.js";
 import { materialHash } from "./tasks.js";
+import type {
+  KernelRuntime,
+  RecordEnd,
+  StepRecord,
+  TaskFile,
+  TaskState,
+} from "./types.js";
 import {
   containmentSnapshot,
   containmentViolation,
@@ -13,7 +25,6 @@ import {
   integrationHead,
   treeSha,
 } from "./worktree.js";
-import type { KernelRuntime, RecordEnd, StepRecord, TaskFile, TaskState } from "./types.js";
 
 export interface AttemptResult {
   ok: boolean;
@@ -26,9 +37,17 @@ async function abortMerge(cwd: string): Promise<void> {
   await git(cwd, ["merge", "--abort"], { allowFail: true });
 }
 
-async function concludeAutoMerge(runtime: KernelRuntime, task: TaskFile, cwd: string): Promise<boolean> {
+async function concludeAutoMerge(
+  runtime: KernelRuntime,
+  task: TaskFile,
+  cwd: string,
+): Promise<boolean> {
   try {
-    const commit = await commitAll(runtime.repo, cwd, `factory: ${task.slug} merge integration head`);
+    const commit = await commitAll(
+      runtime.repo,
+      cwd,
+      `factory: ${task.slug} merge integration head`,
+    );
     return Boolean(commit);
   } catch {
     return false;
@@ -39,7 +58,7 @@ async function settleMergeAttempt(
   runtime: KernelRuntime,
   meta: { iteration: number; slug: string; round: number },
   cwd: string,
-  message: string
+  message: string,
 ): Promise<RecordEnd> {
   await git(cwd, ["add", "-A"]);
   const flagged = await hasConflictMarkers(cwd);
@@ -64,7 +83,7 @@ export async function attemptConflictMerge(
   task: TaskFile,
   records: StepRecord[],
   iteration: number,
-  state: TaskState
+  state: TaskState,
 ): Promise<AttemptResult> {
   const ensured = await ensureTaskWorktree(runtime, task);
   if (ensured.error) return { ok: false, cause: ensured.error };
@@ -73,25 +92,40 @@ export async function attemptConflictMerge(
   }
   const head = await integrationHead(runtime);
   const before = await headSha(ensured.path);
-  const merge = await git(ensured.path, ["merge", "--no-ff", "--no-commit", head], { allowFail: true });
+  const merge = await git(
+    ensured.path,
+    ["merge", "--no-ff", "--no-commit", head],
+    { allowFail: true },
+  );
   if (merge.code === 0) {
-    if (await concludeAutoMerge(runtime, task, ensured.path)) return { ok: true };
+    if (await concludeAutoMerge(runtime, task, ensured.path))
+      return { ok: true };
     await abortMerge(ensured.path);
     return { ok: false, cause: "merge produced no commit" };
   }
   const conflicts = await unmergedFiles(ensured.path);
   if (conflicts.length === 0) {
     await abortMerge(ensured.path);
-    return { ok: false, cause: merge.stderr.trim().slice(-500) || "merge failed without conflicts" };
+    return {
+      ok: false,
+      cause:
+        merge.stderr.trim().slice(-500) || "merge failed without conflicts",
+    };
   }
 
   const flow = runtime.configs.process.flows[task.flow];
   const roleName = flow?.steps.find((s) => !s.review)?.role ?? "implementer";
   const target = resolveRole(runtime, roleName, task.tier);
-  const base = records.filter((r) => r.slug === task.slug && r.actor === "agent" && r.base).sort((a, b) => a.seq - b.seq)[0]?.base;
+  const base = records
+    .filter((r) => r.slug === task.slug && r.actor === "agent" && r.base)
+    .sort((a, b) => a.seq - b.seq)[0]?.base;
   const vars = flow
     ? promptVars(runtime, task, ensured.path, records, state.round, flow)
-    : { task_path: `${runtime.store.tasksDir}/${task.slug}.md`, worktree: ensured.path, round: String(state.round) };
+    : {
+        task_path: `${runtime.store.tasksDir}/${task.slug}.md`,
+        worktree: ensured.path,
+        round: String(state.round),
+      };
   vars.findings = [
     `The integration head ${head.slice(0, 10)} conflicts with this task branch.`,
     `Conflicted files: ${conflicts.join(", ")}.`,
@@ -115,15 +149,26 @@ export async function attemptConflictMerge(
     },
     vars,
     expectation: "any",
-    session: await resumeSessionFor(runtime, task, target.alias, records, ensured.path),
+    session: await resumeSessionFor(
+      runtime,
+      task,
+      target.alias,
+      records,
+      ensured.path,
+    ),
     settle: async (_record, outcome, live) => {
-      breach = await containmentViolation(runtime, ensured.path, ensured.branch, contained);
+      breach = await containmentViolation(
+        runtime,
+        ensured.path,
+        ensured.branch,
+        contained,
+      );
       if (breach) return { ok: false, cause: `containment: ${breach}` };
       const settled = await settleMergeAttempt(
         runtime,
         { iteration, slug: task.slug, round: state.round },
         ensured.path,
-        `factory: ${task.slug} merge integration head`
+        `factory: ${task.slug} merge integration head`,
       );
       // Compact where this session ends, as the task-turn settle does: a later
       // fix turn resumes the stored ref. A stop with no accepted outcome keeps
@@ -152,12 +197,22 @@ export async function attemptConflictMerge(
   const after = await headSha(ensured.path);
   if (after === before) {
     await abortMerge(ensured.path);
-    return { ok: false, cause: result.outcome?.summary ?? "implementer made no merge commit" };
+    return {
+      ok: false,
+      cause: result.outcome?.summary ?? "implementer made no merge commit",
+    };
   }
-  const mergeHead = await git(ensured.path, ["rev-parse", "-q", "--verify", "MERGE_HEAD"], { allowFail: true });
+  const mergeHead = await git(
+    ensured.path,
+    ["rev-parse", "-q", "--verify", "MERGE_HEAD"],
+    { allowFail: true },
+  );
   if (mergeHead.code === 0) {
     await abortMerge(ensured.path);
-    return { ok: false, cause: "merge still in progress after the implementer attempt" };
+    return {
+      ok: false,
+      cause: "merge still in progress after the implementer attempt",
+    };
   }
   return { ok: true };
 }

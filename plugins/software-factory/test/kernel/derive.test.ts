@@ -3,33 +3,62 @@ import { derive } from "../../src/kernel/derive.js";
 import type { StepRecord } from "../../src/kernel/types.js";
 import { rec, script, task } from "./helpers.js";
 
-const doneCheck = (seq: number): StepRecord => script(seq, {
-  step: "checks",
-  ok: true,
-  checks: [],
-  startedAt: new Date(seq).toISOString(),
-});
+const doneCheck = (seq: number): StepRecord =>
+  script(seq, {
+    step: "checks",
+    ok: true,
+    checks: [],
+    startedAt: new Date(seq).toISOString(),
+  });
 
-const redCheck = (seq: number): StepRecord => script(seq, {
-  step: "checks",
-  ok: false,
-  checks: [{ name: "unit", ok: false, summary: "exit 1", output: "boom", fingerprint: "x" }],
-});
+const redCheck = (seq: number): StepRecord =>
+  script(seq, {
+    step: "checks",
+    ok: false,
+    checks: [
+      {
+        name: "unit",
+        ok: false,
+        summary: "exit 1",
+        output: "boom",
+        fingerprint: "x",
+      },
+    ],
+  });
 
-const review = (seq: number, verdict: "approve" | "changes" | "reject", round = 1): StepRecord =>
+const review = (
+  seq: number,
+  verdict: "approve" | "changes" | "reject",
+  round = 1,
+): StepRecord =>
   rec(seq, {
     step: "review",
     round,
     startedAt: new Date(seq).toISOString(),
-    outcome: { status: "done", summary: `review r${round}`, concerns: [], forward: [], verdict },
+    outcome: {
+      status: "done",
+      summary: `review r${round}`,
+      concerns: [],
+      forward: [],
+      verdict,
+    },
   });
 
-const implement = (seq: number, round = 1, patch: Partial<StepRecord> = {}): StepRecord =>
+const implement = (
+  seq: number,
+  round = 1,
+  patch: Partial<StepRecord> = {},
+): StepRecord =>
   rec(seq, {
     step: "implement",
     round,
     startedAt: new Date(seq).toISOString(),
-    outcome: { status: "done", summary: "implemented", concerns: [], forward: [] },
+    outcome: {
+      status: "done",
+      summary: "implemented",
+      concerns: [],
+      forward: [],
+    },
     ...patch,
   });
 
@@ -60,13 +89,19 @@ describe("derive", () => {
   });
 
   it("treats a finished spike as satisfying a dependency", () => {
-    const tasks = [task("probe", { kind: "spike", flow: "spike" }), task("work", { deps: ["probe"] })];
-    const state = derive(tasks, [
-      implement(1, 1, { slug: "probe" }),
-      { ...doneCheck(2), slug: "probe" },
-      review(3, "approve"),
-      script(4, { slug: "probe", step: "finish", ok: true }),
-    ].map((r, i) => (i === 2 ? { ...r, slug: "probe" } : r)));
+    const tasks = [
+      task("probe", { kind: "spike", flow: "spike" }),
+      task("work", { deps: ["probe"] }),
+    ];
+    const state = derive(
+      tasks,
+      [
+        implement(1, 1, { slug: "probe" }),
+        { ...doneCheck(2), slug: "probe" },
+        review(3, "approve"),
+        script(4, { slug: "probe", step: "finish", ok: true }),
+      ].map((r, i) => (i === 2 ? { ...r, slug: "probe" } : r)),
+    );
     expect(state.tasks.probe!.status).toBe("finished");
     expect(state.tasks.work!.status).toBe("ready");
   });
@@ -106,59 +141,116 @@ describe("derive", () => {
   });
 
   it("derives a park request on a reject and keeps the cause", () => {
-    const state = derive([task("a")], [implement(1), doneCheck(2), review(3, "reject")]);
+    const state = derive(
+      [task("a")],
+      [implement(1), doneCheck(2), review(3, "reject")],
+    );
     expect(state.tasks.a!.status).toBe("ready");
     expect(state.tasks.a!.park).toContain("review rejected");
     expect(state.tasks.a!.phase).toBe("parked");
   });
 
   it("derives park requests on blocked, failed and upscope outcomes, and parks on a park record", () => {
-    const blocked = derive([task("a")], [
-      implement(1, 1, { outcome: { status: "blocked", summary: "missing API", concerns: [], forward: [] } }),
-    ]);
+    const blocked = derive(
+      [task("a")],
+      [
+        implement(1, 1, {
+          outcome: {
+            status: "blocked",
+            summary: "missing API",
+            concerns: [],
+            forward: [],
+          },
+        }),
+      ],
+    );
     expect(blocked.tasks.a!.status).toBe("ready");
     expect(blocked.tasks.a!.park).toContain("missing API");
 
-    const failed = derive([task("a")], [
-      implement(1, 1, { outcome: { status: "failed", summary: "tests red", concerns: [], forward: [] } }),
-    ]);
+    const failed = derive(
+      [task("a")],
+      [
+        implement(1, 1, {
+          outcome: {
+            status: "failed",
+            summary: "tests red",
+            concerns: [],
+            forward: [],
+          },
+        }),
+      ],
+    );
     expect(failed.tasks.a!.status).toBe("ready");
     expect(failed.tasks.a!.park).toContain("tests red");
 
-    const upscope = derive([task("a")], [
-      implement(1, 1, { outcome: { status: "upscope", summary: "needs a second seam", concerns: [], forward: [] } }),
-    ]);
+    const upscope = derive(
+      [task("a")],
+      [
+        implement(1, 1, {
+          outcome: {
+            status: "upscope",
+            summary: "needs a second seam",
+            concerns: [],
+            forward: [],
+          },
+        }),
+      ],
+    );
     expect(upscope.tasks.a!.park).toContain("upscope");
 
-    const parked = derive([task("a")], [script(1, { step: "park", ok: true, cause: "setup failed" })]);
+    const parked = derive(
+      [task("a")],
+      [script(1, { step: "park", ok: true, cause: "setup failed" })],
+    );
     expect(parked.tasks.a!.status).toBe("parked");
     expect(parked.tasks.a!.cause).toBe("setup failed");
   });
 
   it("ignores unfinished records as orphans so the step is redispatched", () => {
-    const state = derive([task("a")], [
-      { ...rec(1), endedAt: undefined, outcome: undefined, usage: undefined, stop: undefined },
-    ]);
+    const state = derive(
+      [task("a")],
+      [
+        {
+          ...rec(1),
+          endedAt: undefined,
+          outcome: undefined,
+          usage: undefined,
+          stop: undefined,
+        },
+      ],
+    );
     expect(state.tasks.a!.status).toBe("ready");
     expect(state.tasks.a!.phase).toBe("implement");
     expect(state.tasks.a!.turns).toBe(0);
   });
 
   it("ignores unfinished script records instead of advancing or parking", () => {
-    const state = derive([task("a")], [
-      implement(1),
-      { ...doneCheck(2), endedAt: undefined },
-      { ...script(3, { step: "park", ok: true, cause: "half written" }), endedAt: undefined },
-    ]);
+    const state = derive(
+      [task("a")],
+      [
+        implement(1),
+        { ...doneCheck(2), endedAt: undefined },
+        {
+          ...script(3, { step: "park", ok: true, cause: "half written" }),
+          endedAt: undefined,
+        },
+      ],
+    );
     expect(state.tasks.a!.status).toBe("ready");
     expect(state.tasks.a!.phase).toBe("checks");
     expect(state.tasks.a!.park).toBeUndefined();
   });
 
   it("never charges an infra stop to the item budget or the round", () => {
-    const state = derive([task("a")], [
-      implement(1, 1, { stop: { kind: "infra", cause: "quota" }, outcome: undefined }),
-    ]);
+    const state = derive(
+      [task("a")],
+      [
+        implement(1, 1, {
+          stop: { kind: "infra", cause: "quota" },
+          outcome: undefined,
+        }),
+      ],
+    );
     expect(state.tasks.a!.turns).toBe(0);
     expect(state.tasks.a!.round).toBe(1);
     expect(state.tasks.a!.phase).toBe("implement");
@@ -193,59 +285,85 @@ describe("derive", () => {
   });
 
   it("parks a productive turn that commits nothing before the reviewer runs", () => {
-    const state = derive([task("a")], [
-      implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
-      script(2, { step: "commit", ok: true, commit: "c1", tree: "tree-1" }),
-      doneCheck(3),
-      review(4, "changes", 1),
-      script(5, { step: "commit", ok: true, commit: "c1", tree: "tree-1" }),
-      implement(6, 2, { tree: "tree-1", commit: "c1", base: "c0" }),
-    ]);
+    const state = derive(
+      [task("a")],
+      [
+        implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
+        script(2, { step: "commit", ok: true, commit: "c1", tree: "tree-1" }),
+        doneCheck(3),
+        review(4, "changes", 1),
+        script(5, { step: "commit", ok: true, commit: "c1", tree: "tree-1" }),
+        implement(6, 2, { tree: "tree-1", commit: "c1", base: "c0" }),
+      ],
+    );
     expect(state.tasks.a!.phase).toBe("parked");
-    expect(state.tasks.a!.park).toBe("empty-diff: implement r2 committed no changes");
+    expect(state.tasks.a!.park).toBe(
+      "empty-diff: implement r2 committed no changes",
+    );
   });
 
   it("names the red merge checks when a gate-fix turn commits nothing", () => {
-    const state = derive([task("a", { flow: "just-implement" })], [
-      implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
-      script(2, { step: "commit", ok: true, commit: "c1", tree: "tree-1" }),
-      doneCheck(3),
-      script(4, {
-        step: "merge",
-        ok: false,
-        cause: "gates: unit",
-        checks: [
-          { name: "unit", ok: false, summary: "exit 1", output: "boom", fingerprint: "x" },
-          // Inherited red: not in the merge cause, so not part of the fix turn.
-          { name: "docs", ok: false, summary: "exit 2", output: "stale", fingerprint: "y" },
-        ],
-      }),
-      implement(5, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
-    ]);
+    const state = derive(
+      [task("a", { flow: "just-implement" })],
+      [
+        implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
+        script(2, { step: "commit", ok: true, commit: "c1", tree: "tree-1" }),
+        doneCheck(3),
+        script(4, {
+          step: "merge",
+          ok: false,
+          cause: "gates: unit",
+          checks: [
+            {
+              name: "unit",
+              ok: false,
+              summary: "exit 1",
+              output: "boom",
+              fingerprint: "x",
+            },
+            // Inherited red: not in the merge cause, so not part of the fix turn.
+            {
+              name: "docs",
+              ok: false,
+              summary: "exit 2",
+              output: "stale",
+              fingerprint: "y",
+            },
+          ],
+        }),
+        implement(5, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
+      ],
+    );
     expect(state.tasks.a!.phase).toBe("parked");
     expect(state.tasks.a!.park).toBe(
-      "empty-diff: implement r1 committed no changes after red checks: unit (exit 1)"
+      "empty-diff: implement r1 committed no changes after red checks: unit (exit 1)",
     );
   });
 
   it("keeps the plain empty-diff cause for a first turn with no commit", () => {
-    const state = derive([task("a")], [
-      implement(1, 1, { tree: "tree-0", commit: "c0", base: "c0" }),
-    ]);
+    const state = derive(
+      [task("a")],
+      [implement(1, 1, { tree: "tree-0", commit: "c0", base: "c0" })],
+    );
     expect(state.tasks.a!.phase).toBe("parked");
-    expect(state.tasks.a!.park).toBe("empty-diff: implement r1 committed no changes");
+    expect(state.tasks.a!.park).toBe(
+      "empty-diff: implement r1 committed no changes",
+    );
   });
 
   it("does not park a productive turn that changed the tree", () => {
-    const state = derive([task("a")], [
-      implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
-      script(2, { step: "commit", ok: true, commit: "c1", tree: "tree-1" }),
-      doneCheck(3),
-      review(4, "changes", 1),
-      script(5, { step: "commit", ok: true, commit: "c1", tree: "tree-1" }),
-      implement(6, 2, { tree: "tree-2", commit: "c2", base: "c0" }),
-      doneCheck(7),
-    ]);
+    const state = derive(
+      [task("a")],
+      [
+        implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
+        script(2, { step: "commit", ok: true, commit: "c1", tree: "tree-1" }),
+        doneCheck(3),
+        review(4, "changes", 1),
+        script(5, { step: "commit", ok: true, commit: "c1", tree: "tree-1" }),
+        implement(6, 2, { tree: "tree-2", commit: "c2", base: "c0" }),
+        doneCheck(7),
+      ],
+    );
     expect(state.tasks.a!.phase).toBe("review");
     expect(state.tasks.a!.round).toBe(2);
     expect(state.tasks.a!.park).toBeUndefined();
@@ -253,27 +371,40 @@ describe("derive", () => {
 
   it("does not read a commit from a turn derive ignores as the next turn's empty diff", () => {
     const ignored = [
-      { kind: "infra", cause: "crash" },
+      { kind: "infra", cause: "quota" },
       { kind: "truncated", cause: "turn-limit" },
     ] as const;
     for (const stop of ignored) {
-      const state = derive([task("a")], [
-        implement(1, 1, { base: "c0", stop, outcome: undefined }),
-        script(2, { step: "commit", ok: true, commit: "c1", tree: "tree-1" }),
-        implement(3, 1, { base: "c0", commit: "c1", tree: "tree-1" }),
-        doneCheck(4),
-      ]);
+      const state = derive(
+        [task("a")],
+        [
+          implement(1, 1, { base: "c0", stop, outcome: undefined }),
+          script(2, { step: "commit", ok: true, commit: "c1", tree: "tree-1" }),
+          implement(3, 1, { base: "c0", commit: "c1", tree: "tree-1" }),
+          doneCheck(4),
+        ],
+      );
       expect(state.tasks.a!.park).toBeUndefined();
       expect(state.tasks.a!.phase).toBe("review");
-      // Truncated turns consume budget; infra turns never do.
+      // Truncated turns consume budget; timeout/crash infra stops always do.
       expect(state.tasks.a!.turns).toBe(stop.kind === "infra" ? 1 : 2);
     }
   });
 
   it("derives a park request for a failed attempt instead of retrying it", () => {
-    const state = derive([task("a")], [
-      implement(1, 1, { outcome: { status: "failed", summary: "tests red", concerns: [], forward: [] } }),
-    ]);
+    const state = derive(
+      [task("a")],
+      [
+        implement(1, 1, {
+          outcome: {
+            status: "failed",
+            summary: "tests red",
+            concerns: [],
+            forward: [],
+          },
+        }),
+      ],
+    );
     expect(state.tasks.a!.status).toBe("ready");
     expect(state.tasks.a!.park).toContain("failed");
     expect(state.tasks.a!.turns).toBe(1);
@@ -284,13 +415,25 @@ describe("derive", () => {
       rec(1, {
         slug: undefined,
         step: "architect",
-        outcome: { status: "done", summary: "plan", concerns: [], forward: [], decision: "continue" },
+        outcome: {
+          status: "done",
+          summary: "plan",
+          concerns: [],
+          forward: [],
+          decision: "continue",
+        },
       }),
       rec(2, {
         slug: undefined,
         step: "architect",
         iteration: 2,
-        outcome: { status: "done", summary: "finished", concerns: [], forward: [], decision: "done" },
+        outcome: {
+          status: "done",
+          summary: "finished",
+          concerns: [],
+          forward: [],
+          decision: "done",
+        },
       }),
     ];
     const state = derive([task("a")], records);
@@ -304,7 +447,13 @@ describe("derive", () => {
       script(seq, {
         slug: undefined,
         step: "front-stop",
-        outcome: { status: "done", summary: `front ${decision}`, concerns: [], forward: [], decision },
+        outcome: {
+          status: "done",
+          summary: `front ${decision}`,
+          concerns: [],
+          forward: [],
+          decision,
+        },
       });
 
     const landed = derive([task("a")], [stop(1, "done")]);
@@ -322,32 +471,126 @@ describe("derive", () => {
     const frontBlocked = script(1, {
       slug: undefined,
       step: "front-stop",
-      outcome: { status: "done", summary: "front blocked", concerns: [], forward: [], decision: "blocked" as const },
+      outcome: {
+        status: "done",
+        summary: "front blocked",
+        concerns: [],
+        forward: [],
+        decision: "blocked" as const,
+      },
     });
-    const architect = (seq: number, decision: "continue" | "done" | "blocked"): StepRecord =>
+    const architect = (
+      seq: number,
+      decision: "continue" | "done" | "blocked",
+    ): StepRecord =>
       rec(seq, {
         slug: undefined,
         step: "architect",
         iteration: 2,
-        outcome: { status: "done", summary: `architect ${decision}`, concerns: [], forward: [], decision },
+        outcome: {
+          status: "done",
+          summary: `architect ${decision}`,
+          concerns: [],
+          forward: [],
+          decision,
+        },
       });
 
-    expect(derive([task("a")], [frontBlocked, architect(2, "continue")]).goal).toBe("active");
-    expect(derive([task("a")], [frontBlocked, architect(2, "done")]).goal).toBe("done");
-    expect(derive([task("a")], [frontBlocked, architect(2, "blocked")]).goal).toBe("blocked");
+    expect(
+      derive([task("a")], [frontBlocked, architect(2, "continue")]).goal,
+    ).toBe("active");
+    expect(derive([task("a")], [frontBlocked, architect(2, "done")]).goal).toBe(
+      "done",
+    );
+    expect(
+      derive([task("a")], [frontBlocked, architect(2, "blocked")]).goal,
+    ).toBe("blocked");
   });
 
   it("ignores a front-stop record without an end, like any orphan", () => {
-    const state = derive([task("a")], [
-      {
-        ...script(1, {
-          slug: undefined,
-          step: "front-stop",
-          outcome: { status: "done", summary: "front done", concerns: [], forward: [], decision: "done" },
-        }),
-        endedAt: undefined,
-      },
-    ]);
+    const state = derive(
+      [task("a")],
+      [
+        {
+          ...script(1, {
+            slug: undefined,
+            step: "front-stop",
+            outcome: {
+              status: "done",
+              summary: "front done",
+              concerns: [],
+              forward: [],
+              decision: "done",
+            },
+          }),
+          endedAt: undefined,
+        },
+      ],
+    );
     expect(state.goal).toBe("active");
+  });
+
+  const infraRedCheck = (seq: number): StepRecord =>
+    script(seq, {
+      step: "checks",
+      ok: false,
+      checks: [
+        {
+          name: "typecheck",
+          ok: false,
+          summary: "exit 127",
+          output: "bash: factory-missing-command-xyz: command not found",
+          fingerprint: "infra1",
+          details: { kind: "infra", cause: "exit 127" },
+        },
+      ],
+    });
+
+  it("parks a task as infra when every red check on it could not start, instead of looping into an empty-diff park", () => {
+    const state = derive(
+      [task("a")],
+      [
+        implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
+        script(2, { step: "commit", ok: true, commit: "c1", tree: "tree-1" }),
+        infraRedCheck(3),
+      ],
+    );
+    expect(state.tasks.a!.phase).toBe("parked");
+    expect(state.tasks.a!.park).toContain(
+      "infra: gate could not start: typecheck",
+    );
+  });
+
+  it("still loops the implementer when a red check is not infra, even beside an unstartable one", () => {
+    const state = derive(
+      [task("a")],
+      [
+        implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
+        script(2, { step: "commit", ok: true, commit: "c1", tree: "tree-1" }),
+        script(3, {
+          step: "checks",
+          ok: false,
+          checks: [
+            {
+              name: "typecheck",
+              ok: false,
+              summary: "exit 127",
+              output: "bash: factory-missing-command-xyz: command not found",
+              fingerprint: "infra1",
+              details: { kind: "infra", cause: "exit 127" },
+            },
+            {
+              name: "unit",
+              ok: false,
+              summary: "exit 1",
+              output: "boom",
+              fingerprint: "real1",
+            },
+          ],
+        }),
+      ],
+    );
+    expect(state.tasks.a!.phase).toBe("implement");
+    expect(state.tasks.a!.park).toBeUndefined();
   });
 });

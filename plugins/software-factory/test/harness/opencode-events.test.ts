@@ -33,7 +33,7 @@ describe("OpencodeEventParser on recorded streams", () => {
       costUsd: 0,
     });
     expect(
-      classifyOpencodeTurn({ summary, code: 0, signal: null, timedOut: false })
+      classifyOpencodeTurn({ summary, code: 0, signal: null, timedOut: false }),
     ).toEqual({ kind: "done" });
   });
 
@@ -42,11 +42,12 @@ describe("OpencodeEventParser on recorded streams", () => {
     expect(summary.errors).toHaveLength(1);
     expect(summary.errors[0]?.type).toBe("provider.no-route");
     expect(
-      classifyOpencodeTurn({ summary, code: 1, signal: null, timedOut: false })
+      classifyOpencodeTurn({ summary, code: 1, signal: null, timedOut: false }),
     ).toEqual({
       kind: "infra",
       cause: "auth",
-      details: "provider.no-route Model unavailable: opencode/does-not-exist-free",
+      details:
+        "provider.no-route Model unavailable: opencode/does-not-exist-free",
     });
   });
 
@@ -69,7 +70,7 @@ describe("OpencodeEventParser on recorded streams", () => {
           sessionID: "ses_x",
           part: { messageID: "m2", text: "answer" },
         }),
-      ].join("\n")
+      ].join("\n"),
     );
     expect(parser.result().text).toBe("final answer");
   });
@@ -82,17 +83,19 @@ describe("classifyOpencodeError", () => {
         type: "provider.free-limit",
         message: "Free usage limit reached",
         status: 429,
-      })
+      }),
     ).toEqual({
       kind: "infra",
       cause: "quota",
       details: "provider.free-limit Free usage limit reached 429",
     });
-    expect(classifyOpencodeError({ message: "429 Too Many Requests" })).toEqual({
-      kind: "infra",
-      cause: "quota",
-      details: "429 Too Many Requests",
-    });
+    expect(classifyOpencodeError({ message: "429 Too Many Requests" })).toEqual(
+      {
+        kind: "infra",
+        cause: "quota",
+        details: "429 Too Many Requests",
+      },
+    );
   });
 
   it("maps auth, overflow, refusal and server errors", () => {
@@ -101,12 +104,16 @@ describe("classifyOpencodeError", () => {
       cause: "auth",
       details: "401",
     });
-    expect(classifyOpencodeError({ message: "context window exceeded" })).toEqual({
+    expect(
+      classifyOpencodeError({ message: "context window exceeded" }),
+    ).toEqual({
       kind: "infra",
       cause: "overflow",
       details: "context window exceeded",
     });
-    expect(classifyOpencodeError({ message: "content policy refusal" })).toEqual({
+    expect(
+      classifyOpencodeError({ message: "content policy refusal" }),
+    ).toEqual({
       kind: "refusal",
       details: "content policy refusal",
     });
@@ -141,7 +148,12 @@ describe("classifyOpencodeTurn", () => {
 
   it("prefers the timeout flag over a clean exit", () => {
     expect(
-      classifyOpencodeTurn({ summary: empty, code: 0, signal: null, timedOut: true })
+      classifyOpencodeTurn({
+        summary: empty,
+        code: 0,
+        signal: null,
+        timedOut: true,
+      }),
     ).toEqual({ kind: "infra", cause: "timeout" });
   });
 
@@ -152,16 +164,26 @@ describe("classifyOpencodeTurn", () => {
         code: 0,
         signal: null,
         timedOut: false,
-      })
+      }),
     ).toEqual({ kind: "truncated", cause: "max-tokens" });
   });
 
   it("reports a factory SIGTERM as cancelled and a hard kill as crash", () => {
     expect(
-      classifyOpencodeTurn({ summary: empty, code: null, signal: "SIGTERM", timedOut: false })
+      classifyOpencodeTurn({
+        summary: empty,
+        code: null,
+        signal: "SIGTERM",
+        timedOut: false,
+      }),
     ).toEqual({ kind: "cancelled" });
     expect(
-      classifyOpencodeTurn({ summary: empty, code: null, signal: "SIGKILL", timedOut: false })
+      classifyOpencodeTurn({
+        summary: empty,
+        code: null,
+        signal: "SIGKILL",
+        timedOut: false,
+      }),
     ).toEqual({
       kind: "infra",
       cause: "crash",
@@ -177,10 +199,19 @@ describe("classifyOpencodeTurn", () => {
         signal: null,
         timedOut: false,
         stderr: "fatal: boom",
-      })
+      }),
     ).toEqual({ kind: "infra", cause: "crash", details: "fatal: boom" });
     expect(
-      classifyOpencodeTurn({ summary: empty, code: 2, signal: null, timedOut: false })
-    ).toEqual({ kind: "infra", cause: "crash", details: "exit 2, signal none" });
+      classifyOpencodeTurn({
+        summary: empty,
+        code: 2,
+        signal: null,
+        timedOut: false,
+      }),
+    ).toEqual({
+      kind: "infra",
+      cause: "crash",
+      details: "exit 2, signal none",
+    });
   });
 });

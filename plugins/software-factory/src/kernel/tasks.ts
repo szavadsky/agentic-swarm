@@ -13,7 +13,9 @@ export class TaskFileError extends Error {
 const TASK_SLUG_REGEX = /^[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
 
 export function isValidTaskSlug(slug: string): boolean {
-  return TASK_SLUG_REGEX.test(slug) && !slug.includes("..") && slug.length <= 120;
+  return (
+    TASK_SLUG_REGEX.test(slug) && !slug.includes("..") && slug.length <= 120
+  );
 }
 
 function stringList(value: unknown, field: string): string[] {
@@ -39,13 +41,13 @@ export function parseTaskFile(text: string, fileSlug: string): TaskFile {
     meta = (yaml.parse(match[1] ?? "") as Record<string, unknown>) ?? {};
   } catch (err) {
     throw new TaskFileError(
-      `task "${fileSlug}" frontmatter is not valid YAML: ${(err as Error).message}`
+      `task "${fileSlug}" frontmatter is not valid YAML: ${(err as Error).message}`,
     );
   }
   const slug = typeof meta.slug === "string" ? meta.slug : fileSlug;
   if (slug !== fileSlug) {
     throw new TaskFileError(
-      `task file "${fileSlug}" declares slug "${slug}": slugs are immutable and file names authoritative`
+      `task file "${fileSlug}" declares slug "${slug}": slugs are immutable and file names authoritative`,
     );
   }
   const kind: TaskKind = meta.kind === "spike" ? "spike" : "task";
@@ -55,7 +57,10 @@ export function parseTaskFile(text: string, fileSlug: string): TaskFile {
     slug,
     title,
     kind,
-    flow: typeof meta.flow === "string" && meta.flow ? meta.flow : "implement-review",
+    flow:
+      typeof meta.flow === "string" && meta.flow
+        ? meta.flow
+        : "implement-review",
     deps: stringList(meta.deps ?? meta.after, "deps"),
     scope: stringList(meta.scope, "scope"),
     tier: typeof meta.tier === "string" ? meta.tier : undefined,
@@ -107,16 +112,20 @@ export function materialHash(task: TaskFile): string {
 /** Script-checkable plan properties; returns human-readable findings, empty when valid. */
 export function validateTaskGraph(
   tasks: TaskFile[],
-  opts: { parked?: ReadonlySet<string> } = {}
+  opts: { parked?: ReadonlySet<string> } = {},
 ): string[] {
   const findings: string[] = [];
   const bySlug = new Map<string, TaskFile>();
   for (const task of tasks) {
     if (!isValidTaskSlug(task.slug)) {
-      findings.push(`slug "${task.slug}" is not namespaced kebab-case (example: auth.token-refresh)`);
+      findings.push(
+        `slug "${task.slug}" is not namespaced kebab-case (example: auth.token-refresh)`,
+      );
     }
     if (task.scope.length === 0) {
-      findings.push(`task "${task.slug}" has no scope: list the files or globs it may touch`);
+      findings.push(
+        `task "${task.slug}" has no scope: list the files or globs it may touch`,
+      );
     }
     if (bySlug.has(task.slug)) {
       findings.push(`slug "${task.slug}" is declared twice`);
@@ -134,9 +143,13 @@ export function validateTaskGraph(
     }
     if (task.base !== undefined) {
       if (!bySlug.has(task.base)) {
-        findings.push(`task "${task.slug}" continues missing task "${task.base}"`);
+        findings.push(
+          `task "${task.slug}" continues missing task "${task.base}"`,
+        );
       } else if (opts.parked && !opts.parked.has(task.base)) {
-        findings.push(`task "${task.slug}" continues "${task.base}", which is not parked`);
+        findings.push(
+          `task "${task.slug}" continues "${task.base}", which is not parked`,
+        );
       }
     }
   }

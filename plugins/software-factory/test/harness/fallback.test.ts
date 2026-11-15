@@ -1,11 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import {
+  type AttemptOutput,
   modelChain,
   runWithFallbacks,
-  type AttemptOutput,
 } from "../../src/harness/fallback.js";
-import { zeroUsage } from "../../src/harness/usage.js";
 import type { ModelRef, Stop } from "../../src/harness/types.js";
+import { zeroUsage } from "../../src/harness/usage.js";
 
 const A: ModelRef = { id: "provider/a" };
 const B: ModelRef = { id: "provider/b" };
@@ -95,7 +95,8 @@ describe("runWithFallbacks", () => {
       primary: A,
       fallbacks: [B],
       retry: { retries: 0 },
-      run: async (model) => output(model.id === A.id ? quota : { kind: "infra", cause: "rate" }),
+      run: async (model) =>
+        output(model.id === A.id ? quota : { kind: "infra", cause: "rate" }),
     });
     expect(result.outcome.stop).toEqual({ kind: "infra", cause: "rate" });
     expect(result.attempts).toHaveLength(2);

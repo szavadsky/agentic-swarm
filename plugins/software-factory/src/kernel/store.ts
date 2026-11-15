@@ -1,7 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
-import { readText, readYaml, writeTextAtomic, writeYamlAtomic } from "../core/records/io.js";
 import { AsyncMutex } from "../core/mutex.js";
+import {
+  readText,
+  readYaml,
+  writeTextAtomic,
+  writeYamlAtomic,
+} from "../core/records/io.js";
 import { parseTaskFile, renderTaskFile, TaskFileError } from "./tasks.js";
 import type {
   ArtifactStore,
@@ -34,20 +39,24 @@ function recordDirName(seq: number, meta: RecordStart): string {
  * them. A broken file for a merged, finished or cancelled slug is history: it
  * must stay in `tasks/` so the record keeps the only file it names.
  */
-function terminalStatus(records: StepRecord[], slug: string): TaskStatus | null {
+function terminalStatus(
+  records: StepRecord[],
+  slug: string,
+): TaskStatus | null {
   let status: TaskStatus | null = null;
   for (const record of records) {
     if (record.slug !== slug || !record.endedAt) continue;
     if (record.step === "park") status = "parked";
     else if (record.step === "cancel") status = "cancelled";
     else if (record.step === "merge" && record.ok === true) status = "merged";
-    else if (record.step === "finish" && record.ok === true) status = "finished";
+    else if (record.step === "finish" && record.ok === true)
+      status = "finished";
   }
   return status;
 }
 
 function isTerminalHistory(
-  status: TaskStatus | null
+  status: TaskStatus | null,
 ): status is "merged" | "finished" | "cancelled" {
   return status === "merged" || status === "finished" || status === "cancelled";
 }
@@ -76,9 +85,15 @@ class FolderStore implements ArtifactStore {
     await Promise.all([
       fs.promises.mkdir(this.tasksDir, { recursive: true }),
       fs.promises.mkdir(this.recordsDir, { recursive: true }),
-      fs.promises.mkdir(path.join(this.mailboxDir, "inbox"), { recursive: true }),
-      fs.promises.mkdir(path.join(this.mailboxDir, "processed"), { recursive: true }),
-      fs.promises.mkdir(path.join(this.mailboxDir, "outbox"), { recursive: true }),
+      fs.promises.mkdir(path.join(this.mailboxDir, "inbox"), {
+        recursive: true,
+      }),
+      fs.promises.mkdir(path.join(this.mailboxDir, "processed"), {
+        recursive: true,
+      }),
+      fs.promises.mkdir(path.join(this.mailboxDir, "outbox"), {
+        recursive: true,
+      }),
       fs.promises.mkdir(this.iterationsDir, { recursive: true }),
     ]);
     await this.ensureArtifactIgnore();
@@ -99,7 +114,7 @@ class FolderStore implements ArtifactStore {
     await fs.promises.writeFile(
       ignore,
       "# Factory goal records live here; keep them out of the repository.\n*\n",
-      "utf8"
+      "utf8",
     );
   }
 
@@ -141,7 +156,12 @@ class FolderStore implements ArtifactStore {
         records ??= await this.listRecords();
         const terminal = terminalStatus(records, slug);
         if (isTerminalHistory(terminal)) {
-          await this.reportTerminalHistory(name, terminal, err.message, records);
+          await this.reportTerminalHistory(
+            name,
+            terminal,
+            err.message,
+            records,
+          );
         } else {
           await this.quarantineTask(name, err.message);
         }
@@ -174,7 +194,10 @@ class FolderStore implements ArtifactStore {
     const destination = path.relative(this.goalDir, target);
     await this.appendRecord(
       { iteration: 0, step: "task-quarantine", round: 1, actor: "script" },
-      { ok: false, cause: `task file "${name}" quarantined at ${destination}: ${reason}` }
+      {
+        ok: false,
+        cause: `task file "${name}" quarantined at ${destination}: ${reason}`,
+      },
     );
   }
 
@@ -188,11 +211,12 @@ class FolderStore implements ArtifactStore {
     name: string,
     status: TaskStatus,
     reason: string,
-    records: StepRecord[]
+    records: StepRecord[],
   ): Promise<void> {
     const marker = `task file "${name}" is unreadable`;
     const alreadyReported = records.some(
-      (record) => record.step === "task-quarantine" && record.cause?.startsWith(marker)
+      (record) =>
+        record.step === "task-quarantine" && record.cause?.startsWith(marker),
     );
     if (alreadyReported) return;
     await this.appendRecord(
@@ -200,7 +224,7 @@ class FolderStore implements ArtifactStore {
       {
         ok: false,
         cause: `${marker}; left in tasks/ because its slug already has a terminal record (${status}): ${reason}`,
-      }
+      },
     );
   }
 
@@ -210,13 +234,18 @@ class FolderStore implements ArtifactStore {
   }
 
   async writeTask(task: TaskFile): Promise<void> {
-    await writeTextAtomic(path.join(this.tasksDir, `${task.slug}.md`), renderTaskFile(task));
+    await writeTextAtomic(
+      path.join(this.tasksDir, `${task.slug}.md`),
+      renderTaskFile(task),
+    );
   }
 
   private async nextSeq(): Promise<number> {
     let entries: fs.Dirent[];
     try {
-      entries = await fs.promises.readdir(this.recordsDir, { withFileTypes: true });
+      entries = await fs.promises.readdir(this.recordsDir, {
+        withFileTypes: true,
+      });
     } catch (err) {
       if (isENOENT(err)) return 0;
       throw err;
@@ -234,7 +263,11 @@ class FolderStore implements ArtifactStore {
     await fs.promises.mkdir(this.recordsDir, { recursive: true });
     const { dir, started } = await this.seqLock.runExclusive(async () => {
       const seq = (await this.nextSeq()) + 1;
-      const record: StepRecord = { ...meta, seq, startedAt: new Date().toISOString() };
+      const record: StepRecord = {
+        ...meta,
+        seq,
+        startedAt: new Date().toISOString(),
+      };
       const recordDir = path.join(this.recordsDir, recordDirName(seq, meta));
       await fs.promises.mkdir(recordDir, { recursive: true });
       await writeYamlAtomic(path.join(recordDir, "started.yaml"), record);
@@ -258,7 +291,9 @@ class FolderStore implements ArtifactStore {
   async listRecords(): Promise<StepRecord[]> {
     let entries: fs.Dirent[];
     try {
-      entries = await fs.promises.readdir(this.recordsDir, { withFileTypes: true });
+      entries = await fs.promises.readdir(this.recordsDir, {
+        withFileTypes: true,
+      });
     } catch (err) {
       if (isENOENT(err)) return [];
       throw err;
@@ -272,7 +307,11 @@ class FolderStore implements ArtifactStore {
         started = await readYaml(path.join(dir, "started.yaml"));
       } catch (err) {
         // A directory without a usable started.yaml is not a record.
-        if (isENOENT(err) || (err instanceof Error && err.name === "YAMLParseError")) continue;
+        if (
+          isENOENT(err) ||
+          (err instanceof Error && err.name === "YAMLParseError")
+        )
+          continue;
         throw err;
       }
       if (!isPlainObject(started) || typeof started.seq !== "number") continue;
@@ -282,15 +321,25 @@ class FolderStore implements ArtifactStore {
       // truncated or malformed — the turn's repair flow owns that, not rehydration.
       let end: RecordEnd & { endedAt?: string } = {};
       try {
-        end = (await readYaml(path.join(dir, "end.yaml"))) as RecordEnd & { endedAt?: string };
+        end = (await readYaml(path.join(dir, "end.yaml"))) as RecordEnd & {
+          endedAt?: string;
+        };
       } catch (err) {
-        if (!isENOENT(err) && !(err instanceof Error && err.name === "YAMLParseError")) throw err;
+        if (
+          !isENOENT(err) &&
+          !(err instanceof Error && err.name === "YAMLParseError")
+        )
+          throw err;
       }
       let outcome: Outcome | undefined;
       try {
         outcome = (await readYaml(path.join(dir, "outcome.yaml"))) as Outcome;
       } catch (err) {
-        if (!isENOENT(err) && !(err instanceof Error && err.name === "YAMLParseError")) throw err;
+        if (
+          !isENOENT(err) &&
+          !(err instanceof Error && err.name === "YAMLParseError")
+        )
+          throw err;
       }
       records.push({ ...base, ...end, ...(outcome ? { outcome } : {}) });
     }
@@ -299,6 +348,9 @@ class FolderStore implements ArtifactStore {
 }
 
 /** `artifactRoot` (the goal's parent) receives a `.gitignore` so records stay out of git. */
-export function createFolderStore(goalDir: string, artifactRoot?: string): ArtifactStore {
+export function createFolderStore(
+  goalDir: string,
+  artifactRoot?: string,
+): ArtifactStore {
   return new FolderStore(goalDir, artifactRoot);
 }

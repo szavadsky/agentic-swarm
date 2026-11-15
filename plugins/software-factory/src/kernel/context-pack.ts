@@ -1,8 +1,8 @@
-import { concernFingerprint } from "../core/concerns.js";
 import type { ConcernKind } from "../core/concern-types.js";
+import { concernFingerprint } from "../core/concerns.js";
 import type { BaseGateState } from "./baseline.js";
-import type { State, StepRecord, TaskFile } from "./types.js";
 import type { Steer } from "./mailbox.js";
+import type { State, StepRecord, TaskFile } from "./types.js";
 
 export interface ForwardedConcern {
   source: string;
@@ -42,7 +42,8 @@ export interface ContextPackInput {
 
 const DEFAULT_MAX_BYTES = 8000;
 const CODE_MAP_ENTRIES = 40;
-const TRUNCATION_SUFFIX = "\n[pack truncated: size cap reached; drill into the paths above]\n";
+const TRUNCATION_SUFFIX =
+  "\n[pack truncated: size cap reached; drill into the paths above]\n";
 
 /** Goal-relative path the boundary renders an iteration's pack to. */
 export function contextPackRelPath(iteration: number): string {
@@ -79,21 +80,33 @@ export function renderContextPack(input: ContextPackInput): string {
     "| slug | status | kind | round | turns | deps | commit |",
     "|---|---|---|---|---|---|---|",
   ];
-  for (const task of [...input.tasks].sort((a, b) => a.slug.localeCompare(b.slug))) {
+  for (const task of [...input.tasks].sort((a, b) =>
+    a.slug.localeCompare(b.slug),
+  )) {
     const state = input.state.tasks[task.slug];
-    const status = input.running?.includes(task.slug) ? "running" : (state?.status ?? "unknown");
+    const status = input.running?.includes(task.slug)
+      ? "running"
+      : (state?.status ?? "unknown");
     lines.push(
       `| ${task.slug} | ${status} | ${task.kind} | ${state?.round ?? 1} | ${state?.turns ?? 0} | ${
         task.deps.join(",") || "-"
-      } | ${short(state?.commit)} |`
+      } | ${short(state?.commit)} |`,
     );
   }
   if (input.tasks.length === 0) lines.push("| (none yet) | | | | | | |");
 
   const parked = input.tasks
     .filter((t) => input.state.tasks[t.slug]?.status === "parked")
-    .map((t) => `- ${t.slug}: ${input.state.tasks[t.slug]?.cause ?? "no recorded cause"}`);
-  if (parked.length > 0) lines.push("", "## Parked by cause (terminal; continue via a new slug)", ...parked);
+    .map(
+      (t) =>
+        `- ${t.slug}: ${input.state.tasks[t.slug]?.cause ?? "no recorded cause"}`,
+    );
+  if (parked.length > 0)
+    lines.push(
+      "",
+      "## Parked by cause (terminal; continue via a new slug)",
+      ...parked,
+    );
 
   const pending = input.tasks
     .filter((t) => {
@@ -112,11 +125,14 @@ export function renderContextPack(input: ContextPackInput): string {
   if (input.forwarded.length > 0) {
     lines.push("", "## Forwarded concerns (architect/owner)");
     for (const concern of input.forwarded) {
-      const repeats = concern.occurrences && concern.occurrences > 1 ? ` x${concern.occurrences}` : "";
+      const repeats =
+        concern.occurrences && concern.occurrences > 1
+          ? ` x${concern.occurrences}`
+          : "";
       lines.push(
         `- [${concern.calibration}/${concern.kind}]${repeats} ${concern.text}${
           concern.evidence ? ` (${concern.evidence})` : ""
-        } — ${concern.source}`
+        } — ${concern.source}`,
       );
     }
   }
@@ -127,8 +143,11 @@ export function renderContextPack(input: ContextPackInput): string {
   }
 
   lines.push("", "## Infra");
-  lines.push(`- setup: ${input.setup.length ? input.setup.join(" && ") : "none"}`);
-  for (const gate of input.gates) lines.push(`- gate ${gate.id}: ${gate.command}`);
+  lines.push(
+    `- setup: ${input.setup.length ? input.setup.join(" && ") : "none"}`,
+  );
+  for (const gate of input.gates)
+    lines.push(`- gate ${gate.id}: ${gate.command}`);
 
   lines.push("", "## Base gates");
   if (!input.baseGates) {
@@ -137,7 +156,7 @@ export function renderContextPack(input: ContextPackInput): string {
     lines.push(`- base ${short(input.baseGates.commit)}: green`);
   } else {
     lines.push(
-      `- base ${short(input.baseGates.commit)} was red before any task (pre-existing; not a task finding):`
+      `- base ${short(input.baseGates.commit)} was red before any task (pre-existing; not a task finding):`,
     );
     for (const check of input.baseGates.checks.filter((c) => !c.ok)) {
       lines.push(`  - ${check.name}: ${check.summary}`);
@@ -148,11 +167,13 @@ export function renderContextPack(input: ContextPackInput): string {
   lines.push(
     input.steers.length > 0
       ? input.steers.map((s) => `- ${s.id}: ${s.relPath}`).join("\n")
-      : "- none"
+      : "- none",
   );
 
   lines.push("", "## Task files");
-  for (const task of [...input.tasks].sort((a, b) => a.slug.localeCompare(b.slug))) {
+  for (const task of [...input.tasks].sort((a, b) =>
+    a.slug.localeCompare(b.slug),
+  )) {
     lines.push(`- ${task.slug}: ${input.tasksDir}/${task.slug}.md`);
   }
 
@@ -163,7 +184,12 @@ export function capPack(text: string, maxBytes: number): string {
   const buf = Buffer.from(text, "utf8");
   if (buf.length <= maxBytes) return text;
   const keep = Math.max(0, maxBytes - Buffer.byteLength(TRUNCATION_SUFFIX));
-  return buf.subarray(0, keep).toString("utf8").replace(/\uFFFD+$/g, "") + TRUNCATION_SUFFIX;
+  return (
+    buf
+      .subarray(0, keep)
+      .toString("utf8")
+      .replace(/\uFFFD+$/g, "") + TRUNCATION_SUFFIX
+  );
 }
 
 /** True when `capPack` clipped this pack to its size cap. */
@@ -175,7 +201,10 @@ export function isPackTruncated(text: string): boolean {
  * Groups repository-relative paths into a shallow directory index. The
  * architect gets shapes and paths, never file bodies; scouting reads them.
  */
-export function shallowCodeMap(paths: string[], maxEntries = CODE_MAP_ENTRIES): string[] {
+export function shallowCodeMap(
+  paths: string[],
+  maxEntries = CODE_MAP_ENTRIES,
+): string[] {
   const counts = new Map<string, number>();
   for (const raw of paths) {
     const clean = raw.replace(/\\/g, "/").replace(/^\.\//, "");
@@ -185,9 +214,14 @@ export function shallowCodeMap(paths: string[], maxEntries = CODE_MAP_ENTRIES): 
     const key = parts.length === 1 ? "(root)" : `${parts[0]}/${parts[1]}/`;
     counts.set(key, (counts.get(key) ?? 0) + 1);
   }
-  const entries = [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-  const kept = entries.slice(0, maxEntries).map(([key, n]) => `${key} — ${n} file${n === 1 ? "" : "s"}`);
-  if (entries.length > maxEntries) kept.push(`… ${entries.length - maxEntries} more groups`);
+  const entries = [...counts.entries()].sort((a, b) =>
+    a[0].localeCompare(b[0]),
+  );
+  const kept = entries
+    .slice(0, maxEntries)
+    .map(([key, n]) => `${key} — ${n} file${n === 1 ? "" : "s"}`);
+  if (entries.length > maxEntries)
+    kept.push(`… ${entries.length - maxEntries} more groups`);
   return kept;
 }
 
@@ -222,7 +256,10 @@ export function forwardedConcerns(records: StepRecord[]): ForwardedConcern[] {
       return;
     }
     existing.occurrences = (existing.occurrences ?? 1) + 1;
-    if (calibrationRank(concern.calibration) >= calibrationRank(existing.calibration)) {
+    if (
+      calibrationRank(concern.calibration) >=
+      calibrationRank(existing.calibration)
+    ) {
       existing.calibration = concern.calibration;
       existing.kind = concern.kind;
       existing.text = concern.text;
@@ -236,7 +273,11 @@ export function forwardedConcerns(records: StepRecord[]): ForwardedConcern[] {
     for (const concern of rec.outcome.concerns) {
       if (concern.calibration === "fyi") continue;
       const source = `${rec.slug ?? "goal"} ${rec.step} r${rec.round}`;
-      const fingerprint = fingerprintOf(concern.kind, concern.text, concern.evidence);
+      const fingerprint = fingerprintOf(
+        concern.kind,
+        concern.text,
+        concern.evidence,
+      );
       add(
         {
           source,
@@ -245,13 +286,16 @@ export function forwardedConcerns(records: StepRecord[]): ForwardedConcern[] {
           text: concern.text,
           evidence: concern.evidence,
         },
-        fingerprint
+        fingerprint,
       );
     }
     for (const forwarded of rec.outcome.forward) {
       const source = `${rec.slug ?? "goal"} ${rec.step} r${rec.round}`;
       const fingerprint = fingerprintOf("forward", forwarded);
-      add({ source, calibration: "architect", kind: "forward", text: forwarded }, fingerprint);
+      add(
+        { source, calibration: "architect", kind: "forward", text: forwarded },
+        fingerprint,
+      );
     }
   }
   return [...byFingerprint.values()].slice(-20);

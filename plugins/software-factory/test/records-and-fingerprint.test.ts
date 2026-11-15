@@ -1,10 +1,10 @@
-import { describe, it, expect, beforeAll, afterAll } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import fs from "node:fs";
-import path from "node:path";
 import os from "node:os";
+import path from "node:path";
 import yaml from "yaml";
+import { type ConcernInput, concernFingerprint } from "../src/core/concerns.js";
 import { fingerprintText } from "../src/core/fingerprint.js";
-import { concernFingerprint, type ConcernInput } from "../src/core/concerns.js";
 import {
   readText,
   readYaml,
@@ -35,7 +35,7 @@ describe("fingerprint", () => {
     };
     expect(concernFingerprint(a)).toBe(concernFingerprint(b));
     expect(concernFingerprint(a)).not.toBe(
-      concernFingerprint({ kind: "risk", summary: "race in lock" })
+      concernFingerprint({ kind: "risk", summary: "race in lock" }),
     );
   });
 });
@@ -67,10 +67,14 @@ describe("record IO", () => {
   });
 
   it("surfaces ENOENT for missing files", async () => {
-    await expect(readText(path.join(dir, "missing.txt"))).rejects.toMatchObject({
-      code: "ENOENT",
-    });
-    await expect(readYaml(path.join(dir, "missing.yaml"))).rejects.toMatchObject({
+    await expect(readText(path.join(dir, "missing.txt"))).rejects.toMatchObject(
+      {
+        code: "ENOENT",
+      },
+    );
+    await expect(
+      readYaml(path.join(dir, "missing.yaml")),
+    ).rejects.toMatchObject({
       code: "ENOENT",
     });
   });

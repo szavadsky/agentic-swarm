@@ -1,4 +1,8 @@
-import type { RecordStart, StepRecord, TaskFile } from "../../src/kernel/types.js";
+import type {
+  RecordStart,
+  StepRecord,
+  TaskFile,
+} from "../../src/kernel/types.js";
 
 export function task(slug: string, patch: Partial<TaskFile> = {}): TaskFile {
   return {
@@ -30,8 +34,16 @@ export function rec(seq: number, patch: Partial<StepRecord> = {}): StepRecord {
   };
 }
 
-export function script(seq: number, patch: Partial<StepRecord> = {}): StepRecord {
-  return rec(seq, { actor: "script", alias: undefined, model: undefined, ...patch });
+export function script(
+  seq: number,
+  patch: Partial<StepRecord> = {},
+): StepRecord {
+  return rec(seq, {
+    actor: "script",
+    alias: undefined,
+    model: undefined,
+    ...patch,
+  });
 }
 
 export function recordStart(patch: Partial<RecordStart> = {}): RecordStart {

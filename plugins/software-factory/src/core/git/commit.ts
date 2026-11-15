@@ -1,4 +1,4 @@
-import { git, GitError } from "./exec.js";
+import { GitError, git } from "./exec.js";
 import type { Repo } from "./repo.js";
 
 /**
@@ -10,7 +10,7 @@ export async function commitAll(
   repo: Repo,
   wt: string,
   message: string,
-  opts?: { allowEmpty?: boolean; paths?: string[] }
+  opts?: { allowEmpty?: boolean; paths?: string[] },
 ): Promise<string | null> {
   return repo.writeLock.runExclusive(async () => {
     const env = repo.identityEnv();
@@ -44,12 +44,20 @@ export async function commitAll(
 /**
  * Checks whether commit `a` is an ancestor of commit `b`.
  */
-export async function isAncestor(wt: string, a: string, b: string): Promise<boolean> {
+export async function isAncestor(
+  wt: string,
+  a: string,
+  b: string,
+): Promise<boolean> {
   const res = await git(wt, ["merge-base", "--is-ancestor", a, b], {
     allowFail: true,
   });
   if (res.code === 0) return true;
   if (res.code === 1) return false;
-  throw new GitError(`merge-base --is-ancestor ${a} ${b}`, res.code, res.stderr, res.stdout);
+  throw new GitError(
+    `merge-base --is-ancestor ${a} ${b}`,
+    res.code,
+    res.stderr,
+    res.stdout,
+  );
 }
-

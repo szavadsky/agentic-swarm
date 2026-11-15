@@ -2,7 +2,10 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { runProcess } from "../../core/proc.js";
-import { registerChildGroup, unregisterChildGroup } from "../../core/shutdown.js";
+import {
+  registerChildGroup,
+  unregisterChildGroup,
+} from "../../core/shutdown.js";
 import type { OpencodeSessionTokens } from "./usage.js";
 
 export interface OpencodeModelInfo {
@@ -37,27 +40,35 @@ export class OpencodeApi {
    */
   async sessionTokens(
     sessionId: string,
-    cwd: string
+    cwd: string,
   ): Promise<OpencodeSessionTokens | undefined> {
-    const raw = await this.run(["api", "GET", `/api/session/${sessionId}`], cwd, 30);
+    const raw = await this.run(
+      ["api", "GET", `/api/session/${sessionId}`],
+      cwd,
+      30,
+    );
     const parsed = JSON.parse(raw);
     return parsed?.data?.tokens;
   }
 
   /** POST compact, then wait for the completed compaction message (API returns admission only). */
-  async compact(sessionId: string, cwd: string, timeoutMs = 120_000): Promise<void> {
+  async compact(
+    sessionId: string,
+    cwd: string,
+    timeoutMs = 120_000,
+  ): Promise<void> {
     const startedAt = Date.now();
     await this.run(
       ["api", "POST", `/api/session/${sessionId}/compact`, "-d", "{}"],
       cwd,
-      60
+      60,
     );
     const deadline = startedAt + timeoutMs;
     while (Date.now() < deadline) {
       const raw = await this.run(
         ["api", "GET", `/api/session/${sessionId}/message`],
         cwd,
-        60
+        60,
       );
       const parsed = JSON.parse(raw);
       const rows: MessageRow[] = Array.isArray(parsed.data) ? parsed.data : [];
@@ -65,7 +76,7 @@ export class OpencodeApi {
         (row) =>
           row.type === "compaction" &&
           row.status === "completed" &&
-          (row.time?.created ?? 0) >= startedAt
+          (row.time?.created ?? 0) >= startedAt,
       );
       if (done) return;
       await new Promise((resolve) => setTimeout(resolve, 500));
@@ -78,7 +89,12 @@ export class OpencodeApi {
    * A zero exit proves only that the file was written: it may still be malformed
    * or lack tokens, and the usage reader rejects both before use.
    */
-  async export(sessionId: string, outPath: string, cwd: string, timeoutMs = 120_000): Promise<string> {
+  async export(
+    sessionId: string,
+    outPath: string,
+    cwd: string,
+    timeoutMs = 120_000,
+  ): Promise<string> {
     fs.mkdirSync(path.dirname(outPath), { recursive: true });
     const temp = `${outPath}.tmp`;
     const fd = fs.openSync(temp, "w");
@@ -99,7 +115,9 @@ export class OpencodeApi {
           try {
             if (child.pid) process.kill(-child.pid, "SIGKILL");
           } catch {}
-          reject(new Error(`opencode session export timed out for ${sessionId}`));
+          reject(
+            new Error(`opencode session export timed out for ${sessionId}`),
+          );
         }, timeoutMs);
         child.on("error", (error) => {
           clearTimeout(timer);
@@ -112,8 +130,8 @@ export class OpencodeApi {
           else
             reject(
               new Error(
-                `opencode session export failed (code ${code}, signal ${signal}): ${stderr}`
-              )
+                `opencode session export failed (code ${code}, signal ${signal}): ${stderr}`,
+              ),
             );
         });
       });
@@ -131,7 +149,11 @@ export class OpencodeApi {
     }
   }
 
-  private async run(args: string[], cwd: string, timeoutSec: number): Promise<string> {
+  private async run(
+    args: string[],
+    cwd: string,
+    timeoutSec: number,
+  ): Promise<string> {
     const result = await runProcess({
       cmd: [this.binary, ...args],
       cwd,
@@ -140,7 +162,7 @@ export class OpencodeApi {
     });
     if (result.code !== 0) {
       throw new Error(
-        `opencode ${args.slice(0, 3).join(" ")} failed (exit ${result.code}): ${result.stderr.slice(0, 500)}`
+        `opencode ${args.slice(0, 3).join(" ")} failed (exit ${result.code}): ${result.stderr.slice(0, 500)}`,
       );
     }
     return result.stdout;
@@ -149,14 +171,14 @@ export class OpencodeApi {
 
 export function findModel(
   models: OpencodeModelInfo[],
-  id: string
+  id: string,
 ): OpencodeModelInfo | undefined {
   const slash = id.indexOf("/");
   if (slash <= 0) return undefined;
   const providerID = id.slice(0, slash);
   const modelID = id.slice(slash + 1);
   return models.find(
-    (entry) => entry.providerID === providerID && entry.modelID === modelID
+    (entry) => entry.providerID === providerID && entry.modelID === modelID,
   );
 }
 
@@ -167,6 +189,6 @@ export function findModel(
 export function isMissingSessionError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return /session[^\n]*not found|not found[^\n]*session|unknown session|no such session|\b404\b/i.test(
-    message
+    message,
   );
 }

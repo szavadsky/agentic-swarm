@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -13,17 +13,20 @@ describe("prompts: PromptLibrary", () => {
     fs.mkdirSync(path.join(dir, "steps"), { recursive: true });
     fs.writeFileSync(
       path.join(dir, "_shared", "containment.md"),
-      "Workspace Containment: stay inside the worktree."
+      "Workspace Containment: stay inside the worktree.",
     );
     fs.writeFileSync(
       path.join(dir, "steps", "develop.md"),
-      "# Develop\nTask: {{task}}\n{{> _shared/containment}}\n"
+      "# Develop\nTask: {{task}}\n{{> _shared/containment}}\n",
     );
     fs.writeFileSync(
       path.join(dir, "developer.md"),
-      "---\ndescription: implements tasks\ntools: [read, edit]\n---\nImplement {{task}}.\n"
+      "---\ndescription: implements tasks\ntools: [read, edit]\n---\nImplement {{task}}.\n",
     );
-    fs.writeFileSync(path.join(dir, "yield-only.md"), "---\ntools: []\n---\nPM only.\n");
+    fs.writeFileSync(
+      path.join(dir, "yield-only.md"),
+      "---\ntools: []\n---\nPM only.\n",
+    );
   });
 
   afterEach(() => {
@@ -33,10 +36,10 @@ describe("prompts: PromptLibrary", () => {
   it("renders includes and leaves no unresolved variables", () => {
     const lib = loadPromptLibrary({ builtinDir: dir });
     expect(lib.render("steps/develop", { task: "add auth" })).toContain(
-      "Task: add auth"
+      "Task: add auth",
     );
     expect(lib.render("steps/develop", { task: "add auth" })).toContain(
-      "Workspace Containment"
+      "Workspace Containment",
     );
   });
 
@@ -44,7 +47,7 @@ describe("prompts: PromptLibrary", () => {
     const lib = loadPromptLibrary({ builtinDir: dir });
     expect(lib.placeholders("steps/develop")).toEqual(["task"]);
     expect(() => lib.render("steps/develop", {})).toThrow(
-      "Missing required prompt variables"
+      "Missing required prompt variables",
     );
     expect(() => lib.render("steps/missing", {})).toThrow("not found");
   });
@@ -60,11 +63,19 @@ describe("prompts: PromptLibrary", () => {
   });
 
   it("lets an override directory shadow the built-in fragment", () => {
-    const overrideDir = fs.mkdtempSync(path.join(os.tmpdir(), "prompts-override-"));
+    const overrideDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "prompts-override-"),
+    );
     try {
       fs.mkdirSync(path.join(overrideDir, "steps"), { recursive: true });
-      fs.writeFileSync(path.join(overrideDir, "steps", "develop.md"), "override {{task}}");
-      const lib = loadPromptLibrary({ builtinDir: dir, overrideDirs: [overrideDir] });
+      fs.writeFileSync(
+        path.join(overrideDir, "steps", "develop.md"),
+        "override {{task}}",
+      );
+      const lib = loadPromptLibrary({
+        builtinDir: dir,
+        overrideDirs: [overrideDir],
+      });
       expect(lib.render("steps/develop", { task: "x" })).toBe("override x");
     } finally {
       fs.rmSync(overrideDir, { recursive: true, force: true });
@@ -74,12 +85,16 @@ describe("prompts: PromptLibrary", () => {
   it("appends a formatted output-schema section only when a schema is given", () => {
     const lib = loadPromptLibrary({ builtinDir: dir });
     expect(lib.renderStepPrompt("steps/develop", { task: "x" })).toContain(
-      "Task: x"
+      "Task: x",
     );
-    const withSchema = lib.renderStepPrompt("steps/develop", { task: "x" }, {
-      type: "object",
-      properties: { status: { const: "done" } },
-    });
+    const withSchema = lib.renderStepPrompt(
+      "steps/develop",
+      { task: "x" },
+      {
+        type: "object",
+        properties: { status: { const: "done" } },
+      },
+    );
     expect(withSchema).toContain("## Output");
     expect(withSchema).toContain("status");
   });

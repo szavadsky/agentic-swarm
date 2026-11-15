@@ -1,5 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import { AcpxTranscriptParser, usageFromAcpxResult } from "../../src/harness/acpx/transcript.js";
+import {
+  AcpxTranscriptParser,
+  usageFromAcpxResult,
+} from "../../src/harness/acpx/transcript.js";
 
 function feed(lines: unknown[]): ReturnType<AcpxTranscriptParser["result"]> {
   const parser = new AcpxTranscriptParser();
@@ -14,17 +17,32 @@ describe("acpx transcript", () => {
       {
         jsonrpc: "2.0",
         method: "session/update",
-        params: { sessionId: "s", update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "pi v1.5.2" } } },
+        params: {
+          sessionId: "s",
+          update: {
+            sessionUpdate: "agent_message_chunk",
+            content: { type: "text", text: "pi v1.5.2" },
+          },
+        },
       },
       {
         jsonrpc: "2.0",
         method: "session/update",
-        params: { sessionId: "s", update: { sessionUpdate: "available_commands_update" } },
+        params: {
+          sessionId: "s",
+          update: { sessionUpdate: "available_commands_update" },
+        },
       },
       {
         jsonrpc: "2.0",
         method: "session/update",
-        params: { sessionId: "s", update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "PONG" } } },
+        params: {
+          sessionId: "s",
+          update: {
+            sessionUpdate: "agent_message_chunk",
+            content: { type: "text", text: "PONG" },
+          },
+        },
       },
       { jsonrpc: "2.0", id: 7, result: { stopReason: "end_turn" } },
     ]);
@@ -41,7 +59,11 @@ describe("acpx transcript", () => {
         method: "session/update",
         params: {
           sessionId: "s",
-          update: { sessionUpdate: "agent_message_chunk", messageId: "m", content: { type: "text", text: "P" } },
+          update: {
+            sessionUpdate: "agent_message_chunk",
+            messageId: "m",
+            content: { type: "text", text: "P" },
+          },
         },
       },
       {
@@ -49,7 +71,11 @@ describe("acpx transcript", () => {
         method: "session/update",
         params: {
           sessionId: "s",
-          update: { sessionUpdate: "agent_message_chunk", messageId: "m", content: { type: "text", text: "ONG" } },
+          update: {
+            sessionUpdate: "agent_message_chunk",
+            messageId: "m",
+            content: { type: "text", text: "ONG" },
+          },
         },
       },
       { jsonrpc: "2.0", id: 7, result: { stopReason: "end_turn" } },
@@ -65,7 +91,7 @@ describe("acpx transcript", () => {
         cachedReadTokens: 12,
         outputTokens: 8,
         thoughtTokens: 5,
-      })
+      }),
     ).toEqual({
       in: 80,
       cacheRead: 12,

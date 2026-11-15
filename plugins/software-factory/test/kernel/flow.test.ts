@@ -70,20 +70,32 @@ describe("flow data drives the steps", () => {
       });
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await writeTask(runtime, task("task", { flow: "draft-polish", scope: ["task.txt"] }));
+      await writeTask(
+        runtime,
+        task("task", { flow: "draft-polish", scope: ["task.txt"] }),
+      );
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("boundary");
 
       const records = await runtime.store.listRecords();
       const steps = records
-        .filter((r) => r.slug === "task" && r.actor === "agent" && r.step !== "merge-attempt")
+        .filter(
+          (r) =>
+            r.slug === "task" &&
+            r.actor === "agent" &&
+            r.step !== "merge-attempt",
+        )
         .sort((a, b) => a.seq - b.seq);
       expect(steps.map((r) => r.step)).toEqual(["draft", "polish", "critique"]);
-      const checks = records.filter((r) => r.slug === "task" && r.step === "checks");
+      const checks = records.filter(
+        (r) => r.slug === "task" && r.step === "checks",
+      );
       expect(checks.length).toBe(1);
       expect(checks[0]!.seq).toBeGreaterThan(steps[1]!.seq);
       expect(checks[0]!.seq).toBeLessThan(steps[2]!.seq);
-      expect(repo.git(["show", "factory/demo:task.txt"]).stdout.trim()).toBe("polished");
+      expect(repo.git(["show", "factory/demo:task.txt"]).stdout.trim()).toBe(
+        "polished",
+      );
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -100,27 +112,53 @@ describe("just-implement", () => {
         ctx.writeOutcome(
           outcome({
             summary: "implemented directly",
-            concerns: [{ kind: "debt", calibration: "architect", text: "retry policy is untested" }],
-          })
+            concerns: [
+              {
+                kind: "debt",
+                calibration: "architect",
+                text: "retry policy is untested",
+              },
+            ],
+          }),
         );
         return fakeTurnResult(req);
       });
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await writeTask(runtime, task("task", { flow: "just-implement", scope: ["task.txt"] }));
+      await writeTask(
+        runtime,
+        task("task", { flow: "just-implement", scope: ["task.txt"] }),
+      );
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("boundary");
 
       const records = await runtime.store.listRecords();
-      const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
       expect(state.tasks.task!.status).toBe("merged");
       expect(state.tasks.task!.phase).toBe("done");
       expect(harness.calls.length).toBe(1);
-      expect(records.filter((r) => r.slug === "task" && r.step === "review")).toEqual([]);
-      expect(records.some((r) => r.slug === "task" && r.step === "debt")).toBe(false);
-      expect(records.filter((r) => r.slug === "task" && r.step === "checks").length).toBe(1);
-      expect(records.filter((r) => r.slug === "task" && r.step === "merge-checks").length).toBe(1);
-      expect(records.filter((r) => r.slug === "task" && r.step === "merge" && r.ok === true).length).toBe(1);
+      expect(
+        records.filter((r) => r.slug === "task" && r.step === "review"),
+      ).toEqual([]);
+      expect(records.some((r) => r.slug === "task" && r.step === "debt")).toBe(
+        false,
+      );
+      expect(
+        records.filter((r) => r.slug === "task" && r.step === "checks").length,
+      ).toBe(1);
+      expect(
+        records.filter((r) => r.slug === "task" && r.step === "merge-checks")
+          .length,
+      ).toBe(1);
+      expect(
+        records.filter(
+          (r) => r.slug === "task" && r.step === "merge" && r.ok === true,
+        ).length,
+      ).toBe(1);
 
       await writeIterationSummary(runtime.store, {
         iteration: 1,
@@ -128,8 +166,13 @@ describe("just-implement", () => {
         records,
         status: "in-progress",
       });
-      const summary = fs.readFileSync(path.join(runtime.store.goalDir, "iterations/1/summary.md"), "utf8");
-      expect(summary).toMatch(/## Debt opened\n- task: retry policy is untested/);
+      const summary = fs.readFileSync(
+        path.join(runtime.store.goalDir, "iterations/1/summary.md"),
+        "utf8",
+      );
+      expect(summary).toMatch(
+        /## Debt opened\n- task: retry policy is untested/,
+      );
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -139,7 +182,9 @@ describe("just-implement", () => {
     const { repo, goal } = setupFlowRepo({
       // Passes on the task branch, fails on the detached merge scratch: the
       // task's own gates are green while the merged-result gate is red.
-      gates: [{ id: "branch-only", command: "git symbolic-ref -q --short HEAD" }],
+      gates: [
+        { id: "branch-only", command: "git symbolic-ref -q --short HEAD" },
+      ],
     });
     try {
       const harness = new FakeHarness({ id: "fake" });
@@ -155,18 +200,31 @@ describe("just-implement", () => {
       });
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await writeTask(runtime, task("task", { flow: "just-implement", scope: ["task.txt"] }));
+      await writeTask(
+        runtime,
+        task("task", { flow: "just-implement", scope: ["task.txt"] }),
+      );
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("boundary");
 
       const records = await runtime.store.listRecords();
-      const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
       expect(state.tasks.task!.status).toBe("parked");
       expect(state.tasks.task!.cause).toContain("gates: branch-only");
       expect(state.tasks.task!.round).toBe(1);
       expect(harness.calls.length).toBe(2);
-      expect(records.filter((r) => r.slug === "task" && r.step === "merge" && r.ok === false).length).toBe(2);
-      expect(records.filter((r) => r.slug === "task" && r.step === "review")).toEqual([]);
+      expect(
+        records.filter(
+          (r) => r.slug === "task" && r.step === "merge" && r.ok === false,
+        ).length,
+      ).toBe(2);
+      expect(
+        records.filter((r) => r.slug === "task" && r.step === "review"),
+      ).toEqual([]);
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -204,7 +262,10 @@ describe("fix-round follow-up modes", () => {
       const fix = harness.calls[2]!;
       expect(fix.session?.id).toBe(implement[0]?.session?.id);
       expect(fix.session?.compacted).toBe(true);
-      expect(implement.map((r) => r.alias)).toEqual(["implementer", "implementer"]);
+      expect(implement.map((r) => r.alias)).toEqual([
+        "implementer",
+        "implementer",
+      ]);
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -212,7 +273,9 @@ describe("fix-round follow-up modes", () => {
 
   it("de-novo starts the fix turn without the previous session", async () => {
     const { repo, goal } = setupFlowRepo({
-      process: { flows: { "implement-review": { followUp: { mode: "de-novo" } } } },
+      process: {
+        flows: { "implement-review": { followUp: { mode: "de-novo" } } },
+      },
     });
     try {
       const harness = new FakeHarness({ id: "fake" });
@@ -229,9 +292,16 @@ describe("fix-round follow-up modes", () => {
   it("different-model runs the fix turn on another alias", async () => {
     const { repo, goal } = setupFlowRepo({
       process: {
-        flows: { "implement-review": { followUp: { mode: "different-model", role: "implementer-strong" } } },
+        flows: {
+          "implement-review": {
+            followUp: { mode: "different-model", role: "implementer-strong" },
+          },
+        },
         roles: {
-          "implementer-strong": { prompt: "implementer", alias: "implementer-strong" },
+          "implementer-strong": {
+            prompt: "implementer",
+            alias: "implementer-strong",
+          },
         },
       },
       aliases: {
@@ -252,8 +322,13 @@ describe("fix-round follow-up modes", () => {
       expect(harness.calls[2]!.model.id).toBe("fake-strong");
       expect(harness.calls[2]!.session).toBeUndefined();
       const records = await runtime.store.listRecords();
-      const implementRecords = records.filter((r) => r.slug === "task" && r.step === "implement");
-      expect(implementRecords.map((r) => r.alias)).toEqual(["implementer", "implementer-strong"]);
+      const implementRecords = records.filter(
+        (r) => r.slug === "task" && r.step === "implement",
+      );
+      expect(implementRecords.map((r) => r.alias)).toEqual([
+        "implementer",
+        "implementer-strong",
+      ]);
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -284,7 +359,11 @@ describe("worktree setup", () => {
       await writeTask(runtime, task("task", { scope: ["task.txt"] }));
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("boundary");
-      const state = derive(await runtime.store.listTasks(), await runtime.store.listRecords(), runtime.configs.process.flows);
+      const state = derive(
+        await runtime.store.listTasks(),
+        await runtime.store.listRecords(),
+        runtime.configs.process.flows,
+      );
       expect(state.tasks.task!.status).toBe("merged");
       expect(harness.calls.length).toBe(2);
     } finally {
@@ -299,7 +378,9 @@ describe("empty diff", () => {
     try {
       const harness = new FakeHarness({ id: "fake" });
       harness.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "reported done without a change" }));
+        ctx.writeOutcome(
+          outcome({ summary: "reported done without a change" }),
+        );
         return fakeTurnResult(req);
       });
 
@@ -309,15 +390,28 @@ describe("empty diff", () => {
       expect(result.reason).toBe("boundary");
 
       const records = await runtime.store.listRecords();
-      const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
       expect(state.tasks.task!.status).toBe("parked");
       expect(state.tasks.task!.cause!.startsWith("empty-diff:")).toBe(true);
       expect(harness.calls.length).toBe(1);
-      expect(records.filter((r) => r.slug === "task" && r.step === "review")).toEqual([]);
       expect(
-        records.filter((r) => r.slug === "task" && r.step === "park" && r.cause?.startsWith("empty-diff:"))
+        records.filter((r) => r.slug === "task" && r.step === "review"),
+      ).toEqual([]);
+      expect(
+        records.filter(
+          (r) =>
+            r.slug === "task" &&
+            r.step === "park" &&
+            r.cause?.startsWith("empty-diff:"),
+        ),
       ).toHaveLength(1);
-      expect(repo.git(["show", "factory/demo:task.txt"], { allowFail: true }).code).not.toBe(0);
+      expect(
+        repo.git(["show", "factory/demo:task.txt"], { allowFail: true }).code,
+      ).not.toBe(0);
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -328,27 +422,42 @@ describe("empty diff", () => {
     try {
       const harness = new FakeHarness({ id: "fake" });
       harness.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "the cache approach holds; no artifact needed" }));
+        ctx.writeOutcome(
+          outcome({ summary: "the cache approach holds; no artifact needed" }),
+        );
         return fakeTurnResult(req);
       });
       harness.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "finding is sound", verdict: "approve" }));
+        ctx.writeOutcome(
+          outcome({ summary: "finding is sound", verdict: "approve" }),
+        );
         return fakeTurnResult(req);
       });
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await writeTask(runtime, task("probe", { kind: "spike", flow: "spike", scope: ["finding.md"] }));
+      await writeTask(
+        runtime,
+        task("probe", { kind: "spike", flow: "spike", scope: ["finding.md"] }),
+      );
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("boundary");
 
       const records = await runtime.store.listRecords();
-      const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
       expect(state.tasks.probe!.status).toBe("finished");
       expect(state.tasks.probe!.cause).toBeUndefined();
       expect(harness.calls.length).toBe(2);
-      expect(records.filter((r) => r.slug === "probe" && r.step === "park")).toEqual([]);
       expect(
-        records.filter((r) => r.slug === "probe" && r.step === "finish" && r.ok === true)
+        records.filter((r) => r.slug === "probe" && r.step === "park"),
+      ).toEqual([]);
+      expect(
+        records.filter(
+          (r) => r.slug === "probe" && r.step === "finish" && r.ok === true,
+        ),
       ).toHaveLength(1);
     } finally {
       cleanupFlowRepo(repo);
@@ -362,27 +471,54 @@ describe("spikes", () => {
     try {
       const harness = new FakeHarness({ id: "fake" });
       harness.script((req, ctx) => {
-        fs.writeFileSync(path.join(req.cwd!, "finding.md"), "# Finding\n\nUse the cache.\n", "utf8");
+        fs.writeFileSync(
+          path.join(req.cwd!, "finding.md"),
+          "# Finding\n\nUse the cache.\n",
+          "utf8",
+        );
         ctx.writeOutcome(outcome({ summary: "finding written" }));
         return fakeTurnResult(req);
       });
       harness.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "finding is sound", verdict: "approve" }));
+        ctx.writeOutcome(
+          outcome({ summary: "finding is sound", verdict: "approve" }),
+        );
         return fakeTurnResult(req);
       });
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await writeTask(runtime, task("probe", { kind: "spike", flow: "spike", scope: ["finding.md"] }));
+      await writeTask(
+        runtime,
+        task("probe", { kind: "spike", flow: "spike", scope: ["finding.md"] }),
+      );
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("boundary");
 
       const records = await runtime.store.listRecords();
-      const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
       expect(state.tasks.probe!.status).toBe("finished");
-      expect(records.filter((r) => r.slug === "probe" && r.step === "merge").length).toBe(0);
-      expect(records.filter((r) => r.slug === "probe" && r.step === "finish" && r.ok === true).length).toBe(1);
-      expect(repo.git(["rev-parse", "--verify", "refs/heads/factory-task/demo/probe"]).code).toBe(0);
-      expect(repo.git(["show", "factory/demo:finding.md"], { allowFail: true }).code).not.toBe(0);
+      expect(
+        records.filter((r) => r.slug === "probe" && r.step === "merge").length,
+      ).toBe(0);
+      expect(
+        records.filter(
+          (r) => r.slug === "probe" && r.step === "finish" && r.ok === true,
+        ).length,
+      ).toBe(1);
+      expect(
+        repo.git([
+          "rev-parse",
+          "--verify",
+          "refs/heads/factory-task/demo/probe",
+        ]).code,
+      ).toBe(0);
+      expect(
+        repo.git(["show", "factory/demo:finding.md"], { allowFail: true }).code,
+      ).not.toBe(0);
     } finally {
       cleanupFlowRepo(repo);
     }

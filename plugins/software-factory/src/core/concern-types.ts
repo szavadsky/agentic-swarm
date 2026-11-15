@@ -1,6 +1,11 @@
 /** Concern-kind domain types (persisted storage is v3 records). */
 
-export type ConcernKind = "tech-debt" | "assumption" | "blocker" | "risk" | "question";
+export type ConcernKind =
+  | "tech-debt"
+  | "assumption"
+  | "blocker"
+  | "risk"
+  | "question";
 
 type ConcernSeverity = "low" | "medium" | "high";
 
