@@ -481,3 +481,9 @@ Verbatim, newest last; each with what it changed.
 ### 2026-11-15 — p1-trivial first launch died on quota (config, not the goal)
 - exit 1 infra, 0 iterations, $0: front turn (record 00002, pm alias, ernie :free:high via omp) hit 429 free-models-per-day-high-balance (retry-after ~3h) on all attempts, 0 tokens, no outcome. No classification happened.
 - Root cause: pm alias had no fallbacks — a single point of quota failure for every goal start (front turns use the pm alias). Fix in operator territory: fallbacks [deepseek-v4.1-flash, muse-spark-1.3-contributor] added to the pm alias; loader-validated (effort inherited per alias, muse+deepseek list high). Relaunching p1-trivial on the fixed config.
+
+### 2026-11-15 — p1-trivial DONE (R7 proven live), $0.034
+- exit 0, done, 18 min. Class trivial; front (00004) and implement (00005) share omp session 01a1e101-3851-73b8-83a8-5f2bf247ac9e; no architect, no reviewer. Front hit ernie 429s, pm fallbacks fired to deepseek (fix verified live).
+- Merged caps-fork-prune (f856fa0): Caps.fork 0 occurrences in src/harness (type + 4 adapters + 1 test line). 6 files, +1/-7.
+- Debt opened (correct): INTENT.md:255 "Caps advertises fork" now stale — task did not touch owner file; owner's call to reword.
+- First launch died on quota (pm alias fallback-less); fixed (5661911), relaunched, done. Merge c929f42. Gates 722/0.
