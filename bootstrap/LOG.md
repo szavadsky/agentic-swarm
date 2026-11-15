@@ -487,3 +487,13 @@ Verbatim, newest last; each with what it changed.
 - Merged caps-fork-prune (f856fa0): Caps.fork 0 occurrences in src/harness (type + 4 adapters + 1 test line). 6 files, +1/-7.
 - Debt opened (correct): INTENT.md:255 "Caps advertises fork" now stale — task did not touch owner file; owner's call to reword.
 - First launch died on quota (pm alias fallback-less); fixed (5661911), relaunched, done. Merge c929f42. Gates 722/0.
+
+### 2026-11-16 — p1-task DONE (standalone path proven live), $0.037
+- exit 0, done, 19 min. Class task (omp-cache-retention); front→implement→commit→checks→review→commit→merge-checks→merge→front-stop (10 records), no architect. Implement+review omp muse:max (task-grade, same-family); front deepseek via pm fallbacks.
+- Merged omp-cache-retention (8536b12): TTL as run-config key (sessions.retention short/long, default short) through overlay/runtime/turn + tests (overlay, resume, config, live-run-configs). 17 files, +117/-10. No parks, no debt.
+- Merge 0a30c65. Gates 722/0.
+
+### 2026-11-16 — owner INTENT.md updates synced (2 commits)
+- 2a7f2b9 (361d26ca): consolidation pass — header/path/wording fixes; "Roles of agents and models" retitle; architect-reviewer→plan-reviewer; Haiku "limited use"; plan checker "checks/net positive gain"; standalone review "repeats the shared definition"; iteration/relaunch rewords; top architect; task reviewer task-tier; behavior spelling; decision-vs-block config-driven reword; config-layer, stack and glossary changes (+Front agent, Boundary, Park/kept branch, Operator, Pin; .sh pruning).
+- 195157e (4aed788, edited mid-landing): specify-every-specifiable-task-now (+saga down-to-epics); Merge agent→Steward (merge agent) with Iteration cross-ref; trivial/task iteration definition (front classification + implementation, no architect); compaction reload scoped to same agent's next turn; new-iteration vs interrupt-resume split (resume doesn't involve the architect); architect-involvement rule (decision-needed only; intent amendments carried first, PM marks precluded tasks blocked/mooted, may end iteration early; urgent mid-iteration pull is the exception); next-iteration (not next-launch) architect view.
+- Both synced byte-for-byte, hashes verified. Intent-change steer names the sections for the architect.
