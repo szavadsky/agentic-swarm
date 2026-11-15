@@ -368,3 +368,9 @@ Verbatim, newest last; each with what it changed.
 
 ### 2026-11-15 — i19 landing gates (post-merge 22385c3)
 - typecheck + tests: 537 pass, 0 fail. New m3 gates from repo root: format=0 (biome, 206 files, no fixes), lint=0 (840 warnings, 0 errors), schema-validation=0 (395 files valid; .factory/run.yaml absent — expected, no such file in this goal).
+
+### 2026-11-15 — run config: owner-ordered task ladder (applies at next launch)
+- Task work strongest→weakest per owner: omp/muse (`opencode-go/muse-spark-1.3-contributor`) → agy/gemini (`gemini-3.8-flash`, high) → omp/deepseek (`opencode-go/deepseek-v4.1-flash`) → omp/ernie 5.5 (`openrouter/baidu/ernie-5.5-flash-preview:free`).
+- Same-harness fallback rule forced the split: omp implementer/reviewer carry muse → deepseek → ernie in one chain; agy holds a switchable `reviewer-agy` alias (cross-harness fallback needs the kernel change already in the plan).
+- Beam and inkling are mechanical tiers only (digest in this file). Reviewer is task-grade (muse same-family review; different context and focus: dev vs review) per the new INTENT line.
+- Replaces the whole prior `self-quota.yaml` content. omp route proven spendable: owner confirms this session runs muse max in omp, with multiple keys auto-rotating as fallbacks. The Go weekly wall hit the opencode CLI route, not omp.
