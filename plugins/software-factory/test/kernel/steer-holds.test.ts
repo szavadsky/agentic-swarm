@@ -46,6 +46,15 @@ function writePlan(runtime: KernelRuntime): void {
   fs.writeFileSync(path.join(runtime.store.goalDir, "plan.md"), PLAN, "utf8");
 }
 
+/** The delivery guard needs a plan edit behind every architect continue. */
+function editPlan(runtime: KernelRuntime): void {
+  fs.appendFileSync(
+    path.join(runtime.store.goalDir, "plan.md"),
+    "\n## architect edit\n",
+    "utf8",
+  );
+}
+
 function writeHold(
   runtime: KernelRuntime,
   steer: string,
@@ -166,6 +175,7 @@ describe("mid-run steer holds", () => {
         expect(req.prompt).toContain(
           "- s1 (mailbox/inbox/s1.md): Keep alpha unmerged until I answer.",
         );
+        editPlan(runtime);
         ctx.writeOutcome(
           outcome({
             summary: "answered the steer",
@@ -691,6 +701,7 @@ describe("mid-run steer holds", () => {
         expect(req.prompt).toContain(
           "- s1 (mailbox/inbox/s1.md): Hold alpha until I answer.",
         );
+        editPlan(runtime);
         ctx.writeOutcome(
           outcome({ summary: "ignored the steer", decision: "continue" }),
         );
@@ -748,6 +759,7 @@ describe("mid-run steer holds", () => {
         expect(req.prompt).toContain(
           "- s1 (mailbox/inbox/s1.md): Hold alpha until I answer.",
         );
+        editPlan(runtime);
         ctx.writeOutcome(
           outcome({
             summary: "answered it",
@@ -804,6 +816,7 @@ describe("mid-run steer holds", () => {
         expect(req.prompt).toContain(
           '- we"ird (mailbox/inbox/we"ird.md): Hold alpha until I answer.',
         );
+        editPlan(runtime);
         ctx.writeOutcome(
           outcome({ summary: "ignored the steer", decision: "continue" }),
         );
@@ -867,6 +880,7 @@ describe("mid-run steer holds", () => {
         expect(req.prompt).toContain(
           "- s2 (mailbox/inbox/s2.md): Keep the API stable.",
         );
+        editPlan(runtime);
         ctx.writeOutcome(
           outcome({
             summary: "answered both steers",

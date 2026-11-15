@@ -3,7 +3,11 @@ import path from "node:path";
 import { git } from "../core/git/exec.js";
 import type { SessionRef } from "../harness/types.js";
 import { runAgentTurn } from "./agent.js";
-import { resumableSession } from "./architect-session.js";
+import {
+  missingPlanFinding,
+  resumableSession,
+  snapshotPlan,
+} from "./architect-session.js";
 import { recordedBaseGates } from "./baseline.js";
 import {
   contextPackRelPath,
@@ -203,6 +207,11 @@ export async function runBoundary(
 
   const tasksBefore = await taskSnapshot(runtime.store.goalDir);
   const session = await resumableSession(runtime, records);
+  const planPath = path.join(runtime.store.goalDir, "plan.md");
+  // The guard inside the turn owns the plan-edit rule and its repair ask; the
+  // post-turn check below is the same rule as a backstop for a halted turn
+  // that kept its continue decision, so both compare against these pre-turn bytes.
+  const planBefore = snapshotPlan(planPath);
 
   const architectTurn = (resume: SessionRef | undefined) =>
     runAgentTurn(runtime, {
@@ -355,12 +364,12 @@ export async function runBoundary(
     };
   }
 
-  const planPath = path.join(runtime.store.goalDir, "plan.md");
-  if (!fs.existsSync(planPath)) {
+  const planFinding = missingPlanFinding(planPath, decision, planBefore);
+  if (planFinding) {
     return {
       iteration,
       decision: "blocked",
-      cause: `architect continued but ${planPath} does not exist`,
+      cause: planFinding,
       outcome: result.outcome,
       packPath: packRel,
       seenSteers,

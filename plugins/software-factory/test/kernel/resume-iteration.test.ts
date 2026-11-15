@@ -516,6 +516,11 @@ describe("resume guards", () => {
 
       const second = new FakeHarness({ id: "fake" });
       second.script((req, ctx) => {
+        fs.appendFileSync(
+          path.join(goalDir, "plan.md"),
+          "\n## architect edit on relaunch\n",
+          "utf8",
+        );
         ctx.writeOutcome(
           outcome({ summary: "still going", decision: "continue" }),
         );
@@ -600,6 +605,11 @@ describe("resume guards", () => {
 
       const second = new FakeHarness({ id: "fake" });
       second.script((req, ctx) => {
+        fs.appendFileSync(
+          path.join(s.goalDir, "plan.md"),
+          "\n## architect edit on relaunch\n",
+          "utf8",
+        );
         ctx.writeOutcome(
           outcome({ summary: "still going", decision: "continue" }),
         );
@@ -742,6 +752,11 @@ describe("resume guards", () => {
 
       const second = new FakeHarness({ id: "fake" });
       second.script((req, ctx) => {
+        fs.appendFileSync(
+          path.join(goalDir, "plan.md"),
+          "\n## architect edit on relaunch\n",
+          "utf8",
+        );
         ctx.writeOutcome(
           outcome({ summary: "still going", decision: "continue" }),
         );

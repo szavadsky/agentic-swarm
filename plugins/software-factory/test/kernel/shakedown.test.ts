@@ -90,6 +90,11 @@ describe("hostile shakedown", () => {
       );
       const harness = new FakeHarness({ id: "fake" });
       harness.script((req, ctx) => {
+        fs.appendFileSync(
+          path.join(crashes.store.goalDir, "plan.md"),
+          "\n## architect edit on relaunch\n",
+          "utf8",
+        );
         ctx.writeOutcome(
           outcome({ summary: "continue with beta", decision: "continue" }),
         );

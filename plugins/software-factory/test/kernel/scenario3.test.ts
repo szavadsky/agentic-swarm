@@ -81,7 +81,12 @@ function setupRepo(): Scenario {
 
 function plan(harness: FakeHarness, goalDir: string): FakeHarness {
   return harness.script((req, ctx) => {
-    fs.writeFileSync(path.join(goalDir, "plan.md"), PLAN, "utf8");
+    const planPath = path.join(goalDir, "plan.md");
+    if (fs.existsSync(planPath)) {
+      fs.appendFileSync(planPath, "\n## architect edit on relaunch\n", "utf8");
+    } else {
+      fs.writeFileSync(planPath, PLAN, "utf8");
+    }
     ctx.writeOutcome(
       outcome({ summary: "planned alpha", decision: "continue" }),
     );

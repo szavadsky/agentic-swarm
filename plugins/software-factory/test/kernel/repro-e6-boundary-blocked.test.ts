@@ -141,7 +141,11 @@ describe("E6 inverted: an architect infra death is infra, not blocked-by-user", 
       scriptDigest(harness, goal.goalDir, 2);
       harness.script(diesOn("quota", "quota exceeded for fake-architect"));
       harness.script((req, ctx) => {
-        writePlan(goal.goalDir, PLAN);
+        fs.appendFileSync(
+          goal.planPath,
+          "\n## architect edit after retry\n",
+          "utf8",
+        );
         ctx.writeOutcome(
           outcome({ summary: "planned alpha", decision: "continue" }),
         );

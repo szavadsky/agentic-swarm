@@ -148,6 +148,11 @@ describe("boundary context pack", () => {
         actor: "agent",
       });
       harness.script((req, ctx) => {
+        fs.appendFileSync(
+          path.join(runtime.store.goalDir, "plan.md"),
+          "\n## architect edit\n",
+          "utf8",
+        );
         ctx.writeOutcome(
           outcome({ summary: "planned nothing yet", decision: "continue" }),
         );

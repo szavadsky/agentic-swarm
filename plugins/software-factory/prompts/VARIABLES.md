@@ -97,3 +97,15 @@ The shared definitions exist once as partials: `scope` (the predicted-area rule)
 | `outcome_path`    | path where the outcome file must be written when the harness asks for a file                        |
 
 The digest scout appends loops, failures and interventions; it does not restate the script table.
+
+## delivery-repair.md
+
+The one in-session repair ask, rendered by the kernel when a turn delivers no outcome, no verdict or decision, or (architect) no plan. A repo may shadow it like any template. It is not a role prompt: it is rendered directly, never included.
+
+| variable       | meaning                                                                                                      |
+| -------------- | ------------------------------------------------------------------------------------------------------------ |
+| `role`         | the role whose turn missed its deliverable                                                                   |
+| `deliverable`  | the product the turn must deliver: plan edit or stop decision, outcome, verdict, task files, class/task/pack |
+| `done_allowed` | `true` when a bare `status: done` delivers (no verdict or decision required), else `false`                   |
+| `findings`     | the missing or invalid findings as `- ` bullet lines                                                         |
+| `outcome_path` | path where the corrected outcome must be written                                                             |

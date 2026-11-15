@@ -1,7 +1,54 @@
+import { createHash } from "node:crypto";
+import fs from "node:fs";
 import path from "node:path";
 import type { SessionRef } from "../harness/types.js";
 import { resolveRole } from "./flow-context.js";
-import type { KernelRuntime, StepRecord } from "./types.js";
+import type { KernelRuntime, Outcome, StepRecord } from "./types.js";
+
+/**
+ * The pre-turn plan bytes, hashed. Null when the plan is missing or unreadable
+ * before the turn, so a turn that creates it counts as an edit.
+ */
+export function snapshotPlan(planPath: string | undefined): string | null {
+  if (!planPath) return null;
+  try {
+    return createHash("sha256").update(fs.readFileSync(planPath)).digest("hex");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The boundary blocks a continue with no plan edit on disk; the delivery guard
+ * moves that failure into the turn so one repair ask can still deliver it.
+ * Done and blocked stop the goal and need no plan. The snapshot is taken once
+ * before the first attempt, so the repair turn compares against the pre-turn
+ * plan: an edit or a newly created plan delivers, a byte-identical plan fails.
+ * The boundary's post-turn check calls this same rule as a backstop for a
+ * halted turn that kept its continue decision.
+ */
+export function missingPlanFinding(
+  planPath: string | undefined,
+  decision: Outcome["decision"],
+  beforeHash: string | null,
+): string | null {
+  if (decision !== "continue") return null;
+  if (!planPath) return null;
+  const afterHash = snapshotPlan(planPath);
+  if (afterHash === null) {
+    return (
+      `architect continued but ${planPath} does not exist; ` +
+      "the deliverable is a plan edit or a stop decision"
+    );
+  }
+  if (afterHash === beforeHash) {
+    return (
+      `architect continued but ${planPath} is unchanged since the turn started; ` +
+      "the deliverable is a plan edit or a stop decision"
+    );
+  }
+  return null;
+}
 
 /**
  * The session ref is re-derived from the last architect record, never kept in

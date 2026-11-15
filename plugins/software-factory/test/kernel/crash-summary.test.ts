@@ -19,6 +19,7 @@ describe("crashed iteration", () => {
       writePlan(goal.goalDir, "# Plan\n\n## alpha\nCreate alpha.txt.\n");
       const harness = new FakeHarness({ id: "fake" });
       harness.script((req, ctx) => {
+        fs.appendFileSync(goal.planPath, "\n## architect edit\n", "utf8");
         ctx.writeOutcome(
           outcome({ summary: "planned alpha", decision: "continue" }),
         );
