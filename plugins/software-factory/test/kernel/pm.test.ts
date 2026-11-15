@@ -1190,7 +1190,7 @@ describe("PM turn reconciliation", () => {
   it("fails every rung naming task files when PM turns deliver no outcome", async () => {
     const { root, runtime, fake, planPath } = await setup();
     try {
-      for (let i = 0; i < 4; i++) {
+      for (let i = 0; i < 8; i++) {
         fake.script((req) => fakeTurnResult(req, { text: "nothing" }));
       }
 
@@ -1202,7 +1202,7 @@ describe("PM turn reconciliation", () => {
       });
       expect(result.status).toBe("exhausted");
       expect(result.rungs).toHaveLength(2);
-      expect(fake.calls).toHaveLength(4);
+      expect(fake.calls).toHaveLength(8);
       expect(fake.calls[1]!.prompt).toContain(
         "You are the pm. Your turn did not deliver its task files.",
       );

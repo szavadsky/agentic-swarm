@@ -101,7 +101,7 @@ export function validateExpectation(
   return findings;
 }
 
-/** The synthetic outcome after a failed repair; a second invalid outcome is failed (KERNEL0 §4). */
+/** The synthetic outcome after failed repairs; an invalid outcome past repair is failed (KERNEL0 §4). */
 export function failedOutcome(findings: string[]): Outcome {
   return {
     status: "failed",

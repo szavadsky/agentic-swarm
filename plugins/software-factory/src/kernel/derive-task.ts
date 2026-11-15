@@ -1,5 +1,6 @@
 import type { Stop } from "../harness/types.js";
 import { isInfraCheck } from "./gates.js";
+import { countOutcomeRepairs } from "./metrics.js";
 import { stepFingerprint } from "./progress.js";
 import type {
   FlowDefinition,
@@ -329,7 +330,9 @@ export function reduceTask(
     lastInfraStep = undefined;
     infraRepeatCount = 0;
 
-    turns += 1;
+    // Outcome repairs are harness turns on the same record; each one spends the
+    // item budget like the turn that needed it.
+    turns += 1 + countOutcomeRepairs(rec.attempts);
     if (isTruncated) continue;
     if (isCancelled && !hasOutcome) continue;
 

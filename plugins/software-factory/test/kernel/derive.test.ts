@@ -593,4 +593,53 @@ describe("derive", () => {
     expect(state.tasks.a!.phase).toBe("implement");
     expect(state.tasks.a!.park).toBeUndefined();
   });
+
+  it("charges each outcome repair to the item budget", () => {
+    const done = { kind: "done" } as const;
+    const usage = {
+      in: 0,
+      cacheRead: 0,
+      cacheWrite5m: 0,
+      cacheWrite1h: 0,
+      out: 0,
+      reasoningOut: 0,
+    };
+    const attempt = { model: { id: "fake" }, stop: done, usage };
+    const state = derive(
+      [task("a")],
+      [implement(1, 1, { attempts: [attempt, attempt, attempt] })],
+    );
+    expect(state.tasks.a!.turns).toBe(3);
+  });
+
+  it("leaves infra retries outside the item budget", () => {
+    const usage = {
+      in: 0,
+      cacheRead: 0,
+      cacheWrite5m: 0,
+      cacheWrite1h: 0,
+      out: 0,
+      reasoningOut: 0,
+    };
+    const state = derive(
+      [task("a")],
+      [
+        implement(1, 1, {
+          attempts: [
+            {
+              model: { id: "fake" },
+              stop: { kind: "infra", cause: "quota" },
+              usage,
+            },
+            {
+              model: { id: "fake" },
+              stop: { kind: "done" },
+              usage,
+            },
+          ],
+        }),
+      ],
+    );
+    expect(state.tasks.a!.turns).toBe(1);
+  });
 });
