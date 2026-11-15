@@ -264,9 +264,9 @@ describe("inherited-red baseline debt", () => {
     expect(isStaleGateCheck(stale)).toBe(true);
     // A collapsed basename identity would suppress any task failure sharing
     // the basename; a stale check contributes nothing instead.
-    expect(preexistingRed({ commit: "c", ok: false, checks: [stale] }).size).toBe(
-      0,
-    );
+    expect(
+      preexistingRed({ commit: "c", ok: false, checks: [stale] }).size,
+    ).toBe(0);
     const task: CheckResult = {
       name: "package",
       ok: false,
@@ -299,7 +299,13 @@ describe("inherited-red baseline debt", () => {
       const runtime = await makeRuntime(repo, goal, {});
       const commit = repo.git(["rev-parse", "HEAD"]).stdout.trim();
       await runtime.store.appendRecord(
-        { iteration: 0, step: "baseline", round: 1, actor: "script", base: commit },
+        {
+          iteration: 0,
+          step: "baseline",
+          round: 1,
+          actor: "script",
+          base: commit,
+        },
         {
           ok: false,
           checks: [
@@ -315,7 +321,7 @@ describe("inherited-red baseline debt", () => {
       );
       const original = console.warn;
       console.warn = () => {};
-      let result;
+      let result: Awaited<ReturnType<typeof checkBase>>;
       try {
         result = await checkBase(
           runtime.configs,
@@ -339,4 +345,3 @@ describe("inherited-red baseline debt", () => {
     }
   }, 60_000);
 });
-
