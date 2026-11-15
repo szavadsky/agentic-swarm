@@ -23,6 +23,7 @@ export class OmpRuntime {
   readonly subagentModel?: string;
   readonly overlayExtra?: Record<string, unknown>;
   readonly readyTimeoutMs: number;
+  readonly retention: "short" | "long";
   private modelsCache?: Promise<any[]>;
 
   constructor(opts: OmpHarnessOptions) {
@@ -32,6 +33,7 @@ export class OmpRuntime {
     this.subagentModel = selectorOf(opts.subagentModel);
     this.overlayExtra = opts.overlayExtra;
     this.readyTimeoutMs = opts.readyTimeoutMs ?? 30_000;
+    this.retention = opts.retention ?? "short";
   }
 
   models(): Promise<any[]> {
@@ -71,7 +73,7 @@ export class OmpRuntime {
     return writeOmpOverlay(
       {
         subagentModel: selectorOf(opaque?.subagentModel) ?? this.subagentModel,
-        retention: "short",
+        retention: this.retention,
         approvalMode: opaque?.approvalMode,
         extra: { ...this.overlayExtra, ...opaque?.overlayExtra },
       },

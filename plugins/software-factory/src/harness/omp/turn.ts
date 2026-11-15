@@ -345,7 +345,7 @@ export async function runOmpTurn(
         dir: resumeDir,
         model: actualModel(state, model),
         lastRequestStartedAt: startedAt,
-        retentionTier: "short" as const,
+        retentionTier: runtime.retention,
         compacted:
           isSessionCompacted(sessionFile) ||
           (!sessionFile && req.session?.compacted === true),

@@ -48,7 +48,7 @@ function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
       front: { harness: "fake", model: "fake-front" },
     },
     limits: { concurrency: 1, perHarness: {}, iterations: 1 },
-    sessions: { dir: "", keepRuns: 1 },
+    sessions: { dir: "", keepRuns: 1, retention: "short" },
   };
   return {
     paths: {

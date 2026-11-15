@@ -2,7 +2,9 @@ import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { readYaml } from "../../src/core/records/io.js";
 import { ompOverlay, writeOmpOverlay } from "../../src/harness/omp/overlay.js";
+import { OmpRuntime } from "../../src/harness/omp/runtime.js";
 
 describe("omp overlay", () => {
   it("pins cache retention, unattended switches and pinned subagent models", () => {
@@ -57,6 +59,34 @@ describe("omp overlay", () => {
       expect(first).toBe(second);
       expect(first.startsWith(tmp)).toBe(true);
       expect(fs.readFileSync(first, "utf8")).toContain("agentModelOverrides");
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it("writes cacheRetention short from a runtime built without a retention", async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "omp-overlay-"));
+    try {
+      const runtime = new OmpRuntime({ sessionDir: tmp });
+      const overlayPath = await runtime.overlay();
+      const written = await readYaml<{
+        providers: { cacheRetention: string };
+      }>(overlayPath);
+      expect(written.providers).toEqual({ cacheRetention: "short" });
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it("writes cacheRetention long from a runtime built with long", async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "omp-overlay-"));
+    try {
+      const runtime = new OmpRuntime({ sessionDir: tmp, retention: "long" });
+      const overlayPath = await runtime.overlay();
+      const written = await readYaml<{
+        providers: { cacheRetention: string };
+      }>(overlayPath);
+      expect(written.providers).toEqual({ cacheRetention: "long" });
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }

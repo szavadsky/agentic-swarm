@@ -326,4 +326,28 @@ describe("omp resume", () => {
       fake.cleanup();
     }
   }, 20_000);
+
+  it("stamps the configured long retention tier on the returned session", async () => {
+    const fake = createFakeOmp();
+    const root = path.dirname(fake.binary);
+    const sessionDir = path.join(root, "sessions");
+    try {
+      const harness = new OmpHarness({
+        binary: fake.binary,
+        sessionDir,
+        retention: "long",
+        readyTimeoutMs: 5_000,
+      });
+      const result = await harness.turn({
+        model: { id: "provider/resume-ok" },
+        cwd: root,
+        prompt: "go",
+        timeouts: silent,
+      });
+      expect(result.stop).toEqual({ kind: "done" });
+      expect(result.session?.retentionTier).toBe("long");
+    } finally {
+      fake.cleanup();
+    }
+  }, 20_000);
 });

@@ -43,7 +43,7 @@ function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
   const run: RunConfig = {
     aliases: { pm: { harness: "fake", model: "fake-pm" } },
     limits: { concurrency: 1, perHarness: {}, iterations: 1 },
-    sessions: { dir: "", keepRuns: 1 },
+    sessions: { dir: "", keepRuns: 1, retention: "short" },
   };
   return {
     paths: {

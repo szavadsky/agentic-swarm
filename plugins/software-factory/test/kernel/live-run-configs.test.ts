@@ -41,6 +41,7 @@ describe.skipIf(!LIVE)("bootstrap run configs against the real CLIs", () => {
         expect(configs.run.sessions).toEqual({
           dir: "~/.local/share/factory/sessions",
           keepRuns: 5,
+          retention: "short",
         });
         expect(configs.run.worktreeRoot).toBe(
           "~/.local/share/factory/worktrees",

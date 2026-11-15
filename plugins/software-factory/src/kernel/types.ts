@@ -386,7 +386,7 @@ export interface RunConfig {
     /** Per-iteration wall bound in minutes; folds into `iterationWallMs`. */
     iterationMinutes?: number;
   };
-  sessions: { dir: string; keepRuns: number };
+  sessions: { dir: string; keepRuns: number; retention: "short" | "long" };
   worktreeRoot?: string;
   /** Cheap model pinned for architect subagents. */
   scouts?: { model: string; effort?: string };

@@ -562,7 +562,7 @@ describe("record cost truth", () => {
       aliases: { implementer: { harness: "fake", model: "paid/one" } },
       prices: PRICES,
       limits: { concurrency: 1, perHarness: {}, iterations: 1 },
-      sessions: { dir: "", keepRuns: 1 },
+      sessions: { dir: "", keepRuns: 1, retention: "short" },
     };
     const runtime: KernelRuntime = {
       paths: {

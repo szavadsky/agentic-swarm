@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
+  ConfigError,
   loadConfigs,
   resolveGoalPaths,
   toLimits,
@@ -123,6 +124,47 @@ describe("three config layers", () => {
     expect(() => resolveGoalPaths(configs, root, "../escape")).toThrow(
       /kebab-case/,
     );
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("defaults sessions.retention to short with no run file", () => {
+    const root = tmpRepo();
+    const configs = loadConfigs(root);
+    expect(configs.run.sessions.retention).toBe("short");
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("parses an explicit sessions.retention of long", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, ".factory/run.yaml"),
+      "sessions: { retention: long }\n",
+    );
+    const configs = loadConfigs(root);
+    expect(configs.run.sessions.retention).toBe("long");
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("reports an invalid sessions.retention as a finding", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, ".factory/run.yaml"),
+      "sessions: { retention: forever }\n",
+    );
+    let error: unknown;
+    try {
+      loadConfigs(root);
+    } catch (err) {
+      error = err;
+    }
+    expect(error).toBeInstanceOf(ConfigError);
+    expect(
+      (error as ConfigError).findings.some(
+        (finding) => finding.key === "sessions.retention",
+      ),
+    ).toBe(true);
     fs.rmSync(root, { recursive: true, force: true });
   });
 });
