@@ -262,3 +262,148 @@ describe("dispatch admission", () => {
     }
   }, 60_000);
 });
+
+describe("script crash budget", () => {
+  it("parks a deterministically throwing step after the same budget as a harness crash, across relaunches", async () => {
+    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const throwing = () => {
+        throw new Error("simulated pre-harness throw");
+      };
+      harness.script(throwing);
+      harness.script(throwing);
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
+
+      const first = await runDispatch(runtime, { iteration: 1 });
+      expect(first.reason).toBe("infra");
+      expect(first.cause).toContain(
+        "alpha: crash: simulated pre-harness throw",
+      );
+      // Script crashes spend the item budget but never the iteration turn
+      // budget: the drain still sees an unstarted task as free.
+      expect(first.turns).toBe(0);
+      let records = await runtime.store.listRecords();
+      let state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
+      expect(state.tasks.alpha!.turns).toBe(1);
+      expect(state.tasks.alpha!.phase).toBe("implement");
+      expect(state.tasks.alpha!.park).toBeUndefined();
+
+      const second = await runDispatch(runtime, { iteration: 2 });
+      expect(second.reason).toBe("infra");
+      expect(second.turns).toBe(0);
+      records = await runtime.store.listRecords();
+      state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
+      expect(state.tasks.alpha!.turns).toBe(2);
+      expect(state.tasks.alpha!.phase).toBe("parked");
+      expect(state.tasks.alpha!.park).toContain("infra-repeat: crash");
+      expect(state.tasks.alpha!.park).toContain("simulated pre-harness throw");
+
+      // The parked step is not re-dispatched by a third launch.
+      const third = await runDispatch(runtime, { iteration: 3 });
+      expect(third.reason).toBe("boundary");
+      expect(harness.calls).toHaveLength(2);
+      records = await runtime.store.listRecords();
+      const scriptCrashes = records.filter(
+        (r) =>
+          r.slug === "alpha" &&
+          r.actor === "script" &&
+          r.step === "implement" &&
+          r.stop?.kind === "infra" &&
+          r.stop.cause === "crash",
+      );
+      expect(scriptCrashes).toHaveLength(2);
+      const settledAgentTurns = records.filter(
+        (r) => r.slug === "alpha" && r.actor === "agent" && r.endedAt,
+      );
+      expect(settledAgentTurns).toHaveLength(0);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("logs a store failure from recordCrash instead of swallowing it", async () => {
+    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const originalWarn = console.warn;
+    const warnings: string[] = [];
+    console.warn = (...args: unknown[]) => {
+      warnings.push(args.map((a) => String(a)).join(" "));
+    };
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script(() => {
+        throw new Error("simulated kill");
+      });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("a", { scope: ["a.txt"] }));
+      let crashRecords = 0;
+      runtime.store.appendRecord = (async (
+        ...args: [
+          Parameters<typeof runtime.store.appendRecord>[0],
+          Parameters<typeof runtime.store.appendRecord>[1],
+        ]
+      ) => {
+        crashRecords += 1;
+        throw new Error("store boom");
+      }) as typeof runtime.store.appendRecord;
+
+      const result = await runDispatch(runtime, { iteration: 1 });
+      expect(result.reason).toBe("infra");
+      expect(result.cause).toContain("a: crash: simulated kill");
+      expect(result.cause).not.toContain("store boom");
+      expect(crashRecords).toBe(1);
+      expect(
+        warnings.some(
+          (w) =>
+            w.includes("recordCrash") &&
+            w.includes("store boom") &&
+            w.includes("simulated kill"),
+        ),
+      ).toBe(true);
+    } finally {
+      console.warn = originalWarn;
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("logs a non-Error store failure with its text, never undefined", async () => {
+    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const originalWarn = console.warn;
+    const warnings: string[] = [];
+    console.warn = (...args: unknown[]) => {
+      warnings.push(args.map((a) => String(a)).join(" "));
+    };
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script(() => {
+        throw new Error("simulated kill");
+      });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("a", { scope: ["a.txt"] }));
+      runtime.store.appendRecord = (async () => {
+        const failure: unknown = "store string boom";
+        throw failure;
+      }) as typeof runtime.store.appendRecord;
+
+      const result = await runDispatch(runtime, { iteration: 1 });
+      expect(result.reason).toBe("infra");
+      expect(result.cause).toContain("a: crash: simulated kill");
+      const logged = warnings.find((w) => w.includes("recordCrash"));
+      expect(logged).toBeDefined();
+      expect(logged).toContain("store string boom");
+      expect(logged).not.toContain("undefined");
+    } finally {
+      console.warn = originalWarn;
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+});

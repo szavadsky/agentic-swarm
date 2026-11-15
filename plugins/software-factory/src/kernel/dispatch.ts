@@ -150,7 +150,7 @@ function crashMessage(err: unknown): string {
 /**
  * A throwing action records the crash as an infra stop and names the task; the
  * launch and its siblings keep going. Recording failure must not mask the
- * original crash.
+ * original crash, so it is logged and the crash cause is still returned.
  */
 async function recordCrash(
   runtime: KernelRuntime,
@@ -177,8 +177,10 @@ async function recordCrash(
         stop: { kind: "infra", cause: "crash", details: message },
       },
     );
-  } catch {
-    // Recording failure must not mask the original crash.
+  } catch (storeErr) {
+    console.warn(
+      `[factory] recordCrash: failed to record crash for "${action.slug}": ${crashMessage(storeErr)}; original crash: ${message}`,
+    );
   }
   return cause;
 }

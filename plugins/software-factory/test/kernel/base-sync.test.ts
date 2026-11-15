@@ -317,4 +317,109 @@ describe("parked continuation syncs to the integration head", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+
+  it("parks empty-diff when a fix turn after a base-advance writes nothing, never merges", async () => {
+    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      parkAlpha(harness, "alpha.txt", "alpha\n");
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      const checkout = goalCheckout(repo, goal);
+      await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
+      await runDispatch(runtime, { iteration: 1 });
+
+      // Beta's first tree: one file on top of the parked branch.
+      harness.script((req, ctx) => {
+        fs.writeFileSync(path.join(req.cwd!, "beta.txt"), "beta\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "beta implemented" }));
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(
+          outcome({ summary: "beta needs changes", verdict: "changes" }),
+        );
+        return fakeTurnResult(req);
+      });
+      await writeTask(
+        runtime,
+        task("beta", { base: "alpha", scope: ["beta.txt"] }),
+      );
+      await runDispatch(runtime, { iteration: 2 });
+
+      // Integration moves after beta's worktree was created.
+      commitIn(
+        repo,
+        checkout,
+        "merged-since.txt",
+        "later\n",
+        "factory: merge later task",
+      );
+
+      let sawSince = false;
+      harness.script((req, ctx) => {
+        sawSince = fs.existsSync(path.join(req.cwd!, "merged-since.txt"));
+        // Writes nothing: the tree stays at the post-advance head.
+        ctx.writeOutcome(outcome({ summary: "beta fixed" }));
+        return fakeTurnResult(req);
+      });
+      // Scripted so a missed park would merge instead of crashing; a fixed
+      // run never reaches review.
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(
+          outcome({ summary: "beta approved", verdict: "approve" }),
+        );
+        return fakeTurnResult(req);
+      });
+      await runDispatch(runtime, { iteration: 3 });
+
+      expect(sawSince).toBe(true);
+      const records = await runtime.store.listRecords();
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
+      expect(state.tasks.beta!.status).toBe("parked");
+      expect(state.tasks.beta!.cause).toContain("empty-diff");
+      // The fix turn never reached review, so no merge ran.
+      expect(
+        records.filter((r) => r.slug === "beta" && r.step === "review"),
+      ).toHaveLength(1);
+      expect(
+        records.filter(
+          (r) => r.slug === "beta" && r.step === "merge" && r.ok === true,
+        ),
+      ).toHaveLength(0);
+      expect(
+        repo.git(["show", "factory/demo:beta.txt"], { allowFail: true }).code,
+      ).not.toBe(0);
+
+      // The advance hides the no-change turn from a last-turn comparison:
+      // first tree != post-advance tree == fix tree.
+      const betaImplements = records
+        .filter(
+          (r) =>
+            r.slug === "beta" &&
+            r.step === "implement" &&
+            r.actor === "agent" &&
+            r.endedAt,
+        )
+        .sort((a, b) => a.seq - b.seq);
+      const advances = records
+        .filter((r) => r.slug === "beta" && r.step === "base-advance")
+        .sort((a, b) => a.seq - b.seq);
+      expect(betaImplements).toHaveLength(2);
+      expect(advances.length).toBeGreaterThanOrEqual(2);
+      const firstTree = betaImplements[0]!.tree;
+      const fixTree = betaImplements[1]!.tree;
+      const postAdvance = advances[advances.length - 1]!.tree;
+      expect(firstTree).toBeDefined();
+      expect(fixTree).toBeDefined();
+      expect(postAdvance).toBeDefined();
+      expect(fixTree).toBe(postAdvance);
+      expect(firstTree).not.toBe(postAdvance);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
 });
