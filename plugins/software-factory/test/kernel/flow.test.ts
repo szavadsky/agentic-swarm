@@ -272,15 +272,18 @@ describe("fix-round follow-up modes", () => {
       const review = records
         .filter((r) => r.slug === "task" && r.step === "review")
         .sort((a, b) => a.seq - b.seq);
-      // Each implement turn compacts its own session; reviews compact nothing
-      // because no turn ever resumes them. The fix turn's resume adds none
-      // because the ref it resumes is already compacted.
+      // Each turn compacts its own session at its end; the fix turn resumes the
+      // compacted implement session and the second review resumes the
+      // compacted first review. A resume adds no compaction because the ref it
+      // resumes is already compacted.
       expect(harness.compactions.map((c) => c.id)).toEqual([
         implement[0]!.session!.id,
+        review[0]!.session!.id,
         implement[1]!.session!.id,
+        review[1]!.session!.id,
       ]);
       expect(implement.map((r) => r.session?.compacted)).toEqual([true, true]);
-      expect(review.map((r) => r.session?.compacted)).toEqual([false, false]);
+      expect(review.map((r) => r.session?.compacted)).toEqual([true, true]);
 
       const fix = harness.calls[2]!;
       expect(fix.session?.id).toBe(implement[0]?.session?.id);
