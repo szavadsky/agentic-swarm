@@ -1,12 +1,12 @@
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import { dispatch } from "../../src/cli/dispatch.js";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { loadConfigs, resolveGoalPaths } from "../../src/kernel/config.js";
 import { derive } from "../../src/kernel/derive.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
+import { expectLaunch } from "./e2e-helpers.js";
 
 const ARCHITECT_PLAN = `# Milestone 1 — files
 
@@ -145,24 +145,12 @@ function scriptPlanning(
   });
 }
 
-async function launch(
-  repo: TmpRepo,
-  harness: FakeHarness,
-  expectedCode: number,
-): Promise<void> {
-  const code = await dispatch(
-    ["run", "--repo", repo.dir, "--goal", "demo", "--iterations", "1"],
-    { harnesses: { fake: harness } },
-  );
-  expect(code).toBe(expectedCode);
-}
-
 async function runScenario(): Promise<void> {
   const { repo, goalDir, planPath, newHarness } = setupRepo();
   try {
     const first = newHarness();
     scriptPlanning(first, goalDir, path.join(goalDir, "tasks"));
-    await launch(repo, first, 3);
+    await expectLaunch(3, repo, first);
 
     let store = createFolderStore(goalDir);
     const state = derive(await store.listTasks(), await store.listRecords());
@@ -206,7 +194,7 @@ async function runScenario(): Promise<void> {
       ctx.writeOutcome(outcome({ summary: "goal met", decision: "done" }));
       return fakeTurnResult(req);
     });
-    await launch(repo, second, 0);
+    await expectLaunch(0, repo, second);
 
     store = createFolderStore(goalDir);
     const after = derive(await store.listTasks(), await store.listRecords());

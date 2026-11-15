@@ -4,7 +4,7 @@ import path from "node:path";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import {
   cleanup,
-  launch,
+  expectLaunch,
   makeGoal,
   outcome,
   simpleTask,
@@ -19,6 +19,7 @@ describe("crashed iteration", () => {
       writePlan(goal.goalDir, "# Plan\n\n## alpha\nCreate alpha.txt.\n");
       const harness = new FakeHarness({ id: "fake" });
       harness.script((req, ctx) => {
+        fs.appendFileSync(goal.planPath, "\n## architect edit\n", "utf8");
         ctx.writeOutcome(
           outcome({ summary: "planned alpha", decision: "continue" }),
         );
@@ -33,7 +34,7 @@ describe("crashed iteration", () => {
         throw new Error("harness process died mid-turn");
       });
 
-      expect(await launch(goal.repo, harness)).toBe(1);
+      await expectLaunch(1, goal.repo, harness);
       const summaryPath = path.join(goal.goalDir, "iterations/1/summary.md");
       expect(fs.existsSync(summaryPath)).toBe(true);
       const summary = fs.readFileSync(summaryPath, "utf8");

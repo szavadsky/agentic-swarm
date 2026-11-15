@@ -9,7 +9,7 @@ import {
   taskBranchName,
   treeSha,
 } from "../../src/kernel/worktree.js";
-import { launch, stateOf, writePlan } from "./e2e-helpers.js";
+import { expectLaunch, stateOf, writePlan } from "./e2e-helpers.js";
 import { recordStart, task as taskFile } from "./helpers.js";
 import {
   cleanupFlowRepo,
@@ -90,6 +90,11 @@ describe("hostile shakedown", () => {
       );
       const harness = new FakeHarness({ id: "fake" });
       harness.script((req, ctx) => {
+        fs.appendFileSync(
+          path.join(crashes.store.goalDir, "plan.md"),
+          "\n## architect edit on relaunch\n",
+          "utf8",
+        );
         ctx.writeOutcome(
           outcome({ summary: "continue with beta", decision: "continue" }),
         );
@@ -111,7 +116,7 @@ describe("hostile shakedown", () => {
         return fakeTurnResult(req);
       });
 
-      expect(await launch(repo, harness, 1)).toBe(3);
+      await expectLaunch(3, repo, harness, 1);
 
       const state = await stateOf(crashes.store.goalDir);
       expect(state.tasks.alpha!.status).toBe("merged");

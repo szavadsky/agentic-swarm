@@ -9,6 +9,7 @@ import type {
   AdapterTurnResult,
   ModelRef,
   SessionRef,
+  Stop,
   TurnAttempt,
   TurnRequest,
 } from "../types.js";
@@ -35,6 +36,16 @@ export async function runOpencodeTurn(
     ...requested,
     effort: req.effort ?? requested.effort,
   };
+  if (req.signal?.aborted) {
+    return {
+      stop: { kind: "cancelled" },
+      text: "",
+      usage: zeroUsage(),
+      session: req.session,
+      model,
+      attempts: [],
+    };
+  }
   if (!model.id.includes("/")) {
     throw new Error(
       `opencode model id must be provider/model (got "${model.id}")`,
@@ -101,6 +112,9 @@ export async function runOpencodeTurn(
   let idleTimer: ReturnType<typeof setTimeout> | undefined;
   let wallTimer: ReturnType<typeof setTimeout> | undefined;
   let timeoutCause: "idle" | "wall" | undefined;
+  // Set by the kernel's AbortSignal (the wall bound fired): the child is
+  // killed and the turn reports `cancelled`, never `timeout`.
+  let aborted = false;
   let child: ReturnType<typeof spawn> | undefined;
   let pid = 0;
   let closed = false;
@@ -123,11 +137,20 @@ export async function runOpencodeTurn(
     wallTimer = undefined;
   };
   const timeout = (cause: "idle" | "wall") => {
-    if (timeoutCause) return;
+    if (timeoutCause || aborted) return;
     timeoutCause = cause;
     killGroup("SIGTERM");
     setTimeout(() => killGroup("SIGKILL"), 2_000).unref?.();
   };
+  const externalAbort = () => {
+    if (aborted || closed) return;
+    aborted = true;
+    killGroup("SIGTERM");
+    setTimeout(() => killGroup("SIGKILL"), 2_000).unref?.();
+  };
+  req.signal?.addEventListener("abort", externalAbort, { once: true });
+  const clearSignal = () =>
+    req.signal?.removeEventListener("abort", externalAbort);
   const resetIdle = () => {
     if (!req.timeouts.idleMs || req.timeouts.idleMs <= 0) return;
     if (idleTimer) clearTimeout(idleTimer);
@@ -179,12 +202,14 @@ export async function runOpencodeTurn(
       stderr = `${stderr}\n${error.message}`.slice(-MAX_STDERR_BYTES);
       closed = true;
       clearTimers();
+      clearSignal();
       resolve({ code: null, signal: null });
     });
     child.on("close", (code, signal) => {
       closed = true;
       if (buffer.trim()) parser.feedLine(buffer);
       clearTimers();
+      clearSignal();
       if (pid > 0) unregisterChildGroup(pid);
       resolve({ code, signal });
     });
@@ -224,13 +249,15 @@ export async function runOpencodeTurn(
     usage.costUsd = summary.usage.costUsd;
   }
 
-  const stop = classifyOpencodeTurn({
-    summary,
-    code: exit.code,
-    signal: exit.signal,
-    timedOut: timeoutCause !== undefined,
-    stderr,
-  });
+  const stop: Stop = aborted
+    ? { kind: "cancelled" }
+    : classifyOpencodeTurn({
+        summary,
+        code: exit.code,
+        signal: exit.signal,
+        timedOut: timeoutCause !== undefined,
+        stderr,
+      });
 
   const session: SessionRef | undefined = summary.sessionId
     ? {

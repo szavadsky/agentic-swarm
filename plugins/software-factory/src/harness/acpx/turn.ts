@@ -101,13 +101,16 @@ async function runSetup(
   runtime: AcpxRuntime,
   args: string[],
   cwd: string,
+  signal?: AbortSignal,
 ): Promise<SetupFailure | undefined> {
   const result = await runProcess({
     cmd: commandLine(runtime, args),
     cwd,
     timeoutSec: SETUP_TIMEOUT_SEC,
     maxOutputBytes: 4 * 1024 * 1024,
+    signal,
   });
+  if (result.aborted) return { stop: { kind: "cancelled" }, noSession: false };
   const errors = acpxErrors(result.stdout);
   const error = errors.at(-1);
   if (error)
@@ -134,6 +137,8 @@ interface PromptProcessResult {
   signal: string | null;
   stderr: string;
   timedOut: boolean;
+  /** The kernel's AbortSignal fired; the child was killed, not reaped. */
+  aborted: boolean;
 }
 
 /** One prompt process: stream stdout into the parser, enforce idle and wall bounds. */
@@ -143,12 +148,23 @@ function runPromptProcess(
   cwd: string,
   timeouts: TurnRequest["timeouts"],
   parser: AcpxTranscriptParser,
+  signal?: AbortSignal,
 ): Promise<PromptProcessResult> {
+  if (signal?.aborted) {
+    return Promise.resolve({
+      code: null,
+      signal: null,
+      stderr: "",
+      timedOut: false,
+      aborted: true,
+    });
+  }
   return new Promise((resolve) => {
     let stderr = "";
     let idleTimer: ReturnType<typeof setTimeout> | undefined;
     let wallTimer: ReturnType<typeof setTimeout> | undefined;
     let timedOut = false;
+    let aborted = false;
     let closed = false;
     let child: ReturnType<typeof spawn> | undefined;
     let pid = 0;
@@ -171,11 +187,20 @@ function runPromptProcess(
       wallTimer = undefined;
     };
     const timeout = () => {
-      if (timedOut) return;
+      if (timedOut || aborted) return;
       timedOut = true;
       killGroup("SIGTERM");
       setTimeout(() => killGroup("SIGKILL"), 2_000).unref?.();
     };
+    const externalAbort = () => {
+      if (aborted || closed) return;
+      aborted = true;
+      killGroup("SIGTERM");
+      setTimeout(() => killGroup("SIGKILL"), 2_000).unref?.();
+    };
+    signal?.addEventListener("abort", externalAbort, { once: true });
+    const clearSignal = () =>
+      signal?.removeEventListener("abort", externalAbort);
     const resetIdle = () => {
       if (!timeouts.idleMs || timeouts.idleMs <= 0) return;
       if (idleTimer) clearTimeout(idleTimer);
@@ -200,6 +225,7 @@ function runPromptProcess(
         signal: null,
         stderr: (error as Error).message,
         timedOut: false,
+        aborted,
       });
       return;
     }
@@ -231,15 +257,17 @@ function runPromptProcess(
       stderr = `${stderr}\n${error.message}`.slice(-MAX_STDERR_BYTES);
       closed = true;
       clearTimers();
+      clearSignal();
       if (pid > 0) unregisterChildGroup(pid);
-      resolve({ code: null, signal: null, stderr, timedOut });
+      resolve({ code: null, signal: null, stderr, timedOut, aborted });
     });
     child.on("close", (code, signal) => {
       closed = true;
       if (buffer.trim()) parser.feedLine(buffer);
       clearTimers();
+      clearSignal();
       if (pid > 0) unregisterChildGroup(pid);
-      resolve({ code, signal, stderr, timedOut });
+      resolve({ code, signal, stderr, timedOut, aborted });
     });
   });
 }
@@ -298,6 +326,7 @@ export async function runAcpxTurn(
         runtime,
         [...base, "sessions", "new", "--name", name],
         req.cwd,
+        req.signal,
       );
       if (failure) {
         if (shouldRetryDeNovo(failure)) {
@@ -323,7 +352,7 @@ export async function runAcpxTurn(
         agent === "agy"
           ? [...base, "set", "-s", name, ACPX_EFFORT[agent].configId, effort]
           : [...base, "-s", name, "set", ACPX_EFFORT[agent].configId, effort];
-      const failure = await runSetup(runtime, set, req.cwd);
+      const failure = await runSetup(runtime, set, req.cwd, req.signal);
       if (failure) {
         if (shouldRetryDeNovo(failure)) {
           attempts.push({ model, stop: failure.stop, usage: zeroUsage() });
@@ -363,11 +392,14 @@ export async function runAcpxTurn(
       req.cwd,
       req.timeouts,
       parser,
+      req.signal,
     );
     const summary: AcpxTurnSummary = parser.result();
     const lost = summary.errors.some(isNoSessionError);
 
-    if (lost && canRetryDeNovo) {
+    // An aborted turn never retries de novo: the caller stopped the turn, so no
+    // new child may spawn after the abort.
+    if (lost && canRetryDeNovo && !processResult.aborted) {
       attempts.push({
         model,
         stop: classifyAcpxTurn({
@@ -383,13 +415,15 @@ export async function runAcpxTurn(
       continue;
     }
 
-    const stop = classifyAcpxTurn({
-      summary,
-      code: processResult.code,
-      signal: processResult.signal,
-      timedOut: processResult.timedOut,
-      stderr: processResult.stderr,
-    });
+    const stop: Stop = processResult.aborted
+      ? { kind: "cancelled" }
+      : classifyAcpxTurn({
+          summary,
+          code: processResult.code,
+          signal: processResult.signal,
+          timedOut: processResult.timedOut,
+          stderr: processResult.stderr,
+        });
 
     // A session that acpx says is gone must not be handed back to the kernel.
     const session = lost

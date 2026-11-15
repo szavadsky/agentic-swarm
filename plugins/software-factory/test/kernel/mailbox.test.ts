@@ -173,16 +173,20 @@ describe("mailbox", () => {
   });
 
   it("parses steer answers only from steer <id>: lines", async () => {
-    const responses = steerResponses({
-      status: "done",
-      summary: "s",
-      concerns: [],
-      forward: [
-        "steer s1: keep names",
-        "unrelated remark",
-        "steer plan.x: split it",
-      ],
-    });
+    const responses = steerResponses(
+      {
+        status: "done",
+        summary: "s",
+        concerns: [],
+        forward: [
+          "steer s1: keep names",
+          "unrelated remark",
+          "steer plan.x: split it",
+          "steer unknown: ignored without a pending steer",
+        ],
+      },
+      ["s1", "plan.x"],
+    );
     expect([...responses.entries()]).toEqual([
       ["s1", "keep names"],
       ["plan.x", "split it"],
@@ -196,6 +200,80 @@ describe("mailbox", () => {
       expect(formatSteerTurn(steers)).toBe(
         "- s3 (mailbox/inbox/s3.md):\n  line one\n  line two",
       );
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("answers steer ids containing spaces, colons and quotes", async () => {
+    const responses = steerResponses(
+      {
+        status: "done",
+        summary: "s",
+        concerns: [],
+        forward: [
+          "steer my steer: keep names",
+          "steer a:b: split it",
+          'steer we"ird: quoted too',
+          "steer a: wrong split for a:b must not win",
+        ],
+      },
+      ["my steer", "a:b", 'we"ird', "a"],
+    );
+    expect(responses.get("my steer")).toBe("keep names");
+    expect(responses.get("a:b")).toBe("split it");
+    expect(responses.get('we"ird')).toBe("quoted too");
+    // The longest id wins: "a:b: split it" answers a:b, not a.
+    expect(responses.get("a")).toBe("wrong split for a:b must not win");
+  });
+
+  it("quarantines a hold naming an unknown slug", async () => {
+    const { root, store } = await setup();
+    try {
+      const dir = holdsDir(store);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(
+        path.join(dir, "s1.yaml"),
+        "slugs: [alpha, ghost]\ngoal: false\n",
+        "utf8",
+      );
+      fs.writeFileSync(
+        path.join(dir, "s2.yaml"),
+        "slugs: [alpha]\ngoal: false\n",
+        "utf8",
+      );
+      expect(
+        await readHolds(store, { iteration: 3, knownSlugs: ["alpha"] }),
+      ).toEqual([{ steer: "s2", slugs: ["alpha"], goal: false }]);
+      expect(fs.readdirSync(quarantineDir(store))).toEqual(["s1.yaml"]);
+      const records = (await store.listRecords()).filter(
+        (r) => r.step === "hold-quarantine",
+      );
+      expect(records).toHaveLength(1);
+      expect(records[0]?.iteration).toBe(3);
+      expect(records[0]?.cause).toContain('"s1.yaml"');
+      expect(records[0]?.cause).toContain("ghost");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("records quarantines in the caller's iteration, not the max record", async () => {
+    const { root, store } = await setup();
+    try {
+      await store.appendRecord(
+        { iteration: 5, step: "architect", round: 1, actor: "agent" },
+        { ok: true },
+      );
+      const dir = holdsDir(store);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, "s9.yaml"), "slugs: [oops\n", "utf8");
+      expect(await readHolds(store, { iteration: 9 })).toEqual([]);
+      const records = (await store.listRecords()).filter(
+        (r) => r.step === "hold-quarantine",
+      );
+      expect(records).toHaveLength(1);
+      expect(records[0]?.iteration).toBe(9);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }

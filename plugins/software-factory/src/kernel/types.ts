@@ -104,6 +104,8 @@ export interface State {
   /** Highest iteration seen in records; 0 before the first boundary turn. */
   iteration: number;
   terminal: boolean;
+  /** The current iteration was interrupted with ready work left; a relaunch resumes it. */
+  interrupted: boolean;
   tasks: Record<string, TaskState>;
 }
 
@@ -147,6 +149,10 @@ export interface Limits {
   iterationTurns?: number;
   iterationWallMs?: number;
   iterationUsd?: number;
+  /** Per-turn wall bound in minutes; caps the alias wall timeout. */
+  turnMinutes?: number;
+  /** Per-iteration wall bound in minutes; folds into `iterationWallMs`. */
+  iterationMinutes?: number;
 }
 
 export type StepActor = "agent" | "script";
@@ -317,6 +323,10 @@ export interface RunConfig {
     wallMinutes?: number;
     /** Optional USD brake: crossing it drains the iteration. */
     iterationUsd?: number;
+    /** Per-turn wall bound in minutes; caps the alias wall timeout. */
+    turnMinutes?: number;
+    /** Per-iteration wall bound in minutes; folds into `iterationWallMs`. */
+    iterationMinutes?: number;
   };
   sessions: { dir: string; keepRuns: number };
   worktreeRoot?: string;

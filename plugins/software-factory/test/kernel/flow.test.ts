@@ -524,3 +524,80 @@ describe("spikes", () => {
     }
   }, 60_000);
 });
+
+describe("delivery guard", () => {
+  it("parks an implement turn that delivers no outcome, naming the outcome", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script((req) => {
+        fs.writeFileSync(path.join(req.cwd!, "task.txt"), "work\n", "utf8");
+        return fakeTurnResult(req, { text: "nothing" });
+      });
+      harness.script((req) => fakeTurnResult(req, { text: "still nothing" }));
+
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("task", { scope: ["task.txt"] }));
+      const result = await runDispatch(runtime, { iteration: 1 });
+      expect(result.reason).toBe("boundary");
+
+      const records = await runtime.store.listRecords();
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
+      expect(state.tasks.task!.status).toBe("parked");
+      expect(state.tasks.task!.cause).toContain("no outcome after repair");
+      expect(harness.calls).toHaveLength(2);
+      expect(harness.calls[1]!.prompt).toContain(
+        "You are the implementer. Your turn did not deliver its outcome.",
+      );
+      expect(
+        records.filter((r) => r.slug === "task" && r.step === "review"),
+      ).toEqual([]);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("parks a review that delivers no verdict, naming the verdict", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script((req, ctx) => {
+        fs.writeFileSync(path.join(req.cwd!, "task.txt"), "v1\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "v1" }));
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "no verdict yet" }));
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "still no verdict" }));
+        return fakeTurnResult(req);
+      });
+
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("task", { scope: ["task.txt"] }));
+      const result = await runDispatch(runtime, { iteration: 1 });
+      expect(result.reason).toBe("boundary");
+
+      const records = await runtime.store.listRecords();
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
+      expect(state.tasks.task!.status).toBe("parked");
+      expect(state.tasks.task!.cause).toContain("verdict is required");
+      expect(harness.calls).toHaveLength(3);
+      expect(harness.calls[2]!.prompt).toContain(
+        "You are the reviewer. Your turn did not deliver its verdict.",
+      );
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+});

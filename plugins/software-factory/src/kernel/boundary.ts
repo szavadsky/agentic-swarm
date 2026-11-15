@@ -3,7 +3,11 @@ import path from "node:path";
 import { git } from "../core/git/exec.js";
 import type { SessionRef } from "../harness/types.js";
 import { runAgentTurn } from "./agent.js";
-import { resumableSession } from "./architect-session.js";
+import {
+  missingPlanFinding,
+  resumableSession,
+  snapshotPlan,
+} from "./architect-session.js";
 import { recordedBaseGates } from "./baseline.js";
 import {
   contextPackRelPath,
@@ -73,23 +77,6 @@ function rungTrace(rungs: PmRung[]): string {
 /** Today's infra cause: the classified cause plus the scrubbed error tail. */
 function infraCause(stop: { cause: string; details?: string }): string {
   return stop.details ? `${stop.cause}: ${stop.details}` : stop.cause;
-}
-
-/**
- * The steer id in a `steer-presented`/`steer-unanswered` cause. JSON keeps an
- * id containing a quote or backslash unambiguous, and a plain id encodes to
- * the same quoted text older records carry, so those still read.
- */
-function recordedSteerId(cause: string): string | undefined {
-  const token = /^unanswered steer ("(?:[^"\\]|\\.)*")/.exec(cause)?.[1];
-  if (!token) return undefined;
-  try {
-    const id: unknown = JSON.parse(token);
-    return typeof id === "string" ? id : undefined;
-  } catch {
-    // A hand-edited cause names no steer; it must not wedge the launch.
-    return undefined;
-  }
 }
 
 async function taskSnapshot(goalDir: string): Promise<Map<string, string>> {
@@ -203,6 +190,11 @@ export async function runBoundary(
 
   const tasksBefore = await taskSnapshot(runtime.store.goalDir);
   const session = await resumableSession(runtime, records);
+  const planPath = path.join(runtime.store.goalDir, "plan.md");
+  // The guard inside the turn owns the plan-edit rule and its repair ask; the
+  // post-turn check below is the same rule as a backstop for a halted turn
+  // that kept its continue decision, so both compare against these pre-turn bytes.
+  const planBefore = snapshotPlan(planPath);
 
   const architectTurn = (resume: SessionRef | undefined) =>
     runAgentTurn(runtime, {
@@ -257,18 +249,21 @@ export async function runBoundary(
   }
 
   const responses = result.outcome
-    ? steerResponses(result.outcome)
+    ? steerResponses(
+        result.outcome,
+        steers.map((steer) => steer.id),
+      )
     : new Map<string, string>();
   // A steer stays pending when the architect does not answer, so every later
   // boundary presents it again. The first unanswered boundary only records
   // that fact; the second expires the hold and reports the unanswered steer.
+  // The steer id travels on the record's slug, never parsed from cause text.
   const priorRecords = await runtime.store.listRecords();
   const unansweredAt = (step: string): Set<string> =>
     new Set(
       priorRecords
-        .filter((record) => record.step === step && record.cause)
-        .map((record) => recordedSteerId(record.cause!))
-        .filter((id): id is string => Boolean(id)),
+        .filter((record) => record.step === step && record.slug)
+        .map((record) => record.slug as string),
     );
   const presented = unansweredAt("steer-presented");
   const expired = unansweredAt("steer-unanswered");
@@ -281,12 +276,13 @@ export async function runBoundary(
         `# Steer ${steer.id}\n\n${answer}\n\nSource: ${steer.relPath}`,
       );
       await markProcessed(runtime.store, steer);
+      await expireHold(runtime.store, steer.id);
       continue;
     }
     if (expired.has(steer.id)) continue;
     if (!presented.has(steer.id)) {
       await runtime.store.appendRecord(
-        scriptMeta(iteration, "steer-presented"),
+        scriptMeta(iteration, "steer-presented", { slug: steer.id }),
         {
           ok: false,
           cause: `unanswered steer ${JSON.stringify(steer.id)} in ${steer.relPath}; the next boundary presents it again before its hold expires`,
@@ -296,7 +292,7 @@ export async function runBoundary(
     }
     await expireHold(runtime.store, steer.id);
     await runtime.store.appendRecord(
-      scriptMeta(iteration, "steer-unanswered"),
+      scriptMeta(iteration, "steer-unanswered", { slug: steer.id }),
       {
         ok: false,
         cause: `unanswered steer ${JSON.stringify(steer.id)} in ${steer.relPath}; hold expired after one boundary`,
@@ -355,12 +351,12 @@ export async function runBoundary(
     };
   }
 
-  const planPath = path.join(runtime.store.goalDir, "plan.md");
-  if (!fs.existsSync(planPath)) {
+  const planFinding = missingPlanFinding(planPath, decision, planBefore);
+  if (planFinding) {
     return {
       iteration,
       decision: "blocked",
-      cause: `architect continued but ${planPath} does not exist`,
+      cause: planFinding,
       outcome: result.outcome,
       packPath: packRel,
       seenSteers,

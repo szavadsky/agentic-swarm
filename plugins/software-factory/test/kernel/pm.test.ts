@@ -19,7 +19,7 @@ import type {
 } from "../../src/kernel/types.js";
 import {
   cleanup,
-  launch,
+  expectLaunch,
   makeGoal,
   outcome,
   simpleTask,
@@ -565,6 +565,7 @@ describe("PM turn reconciliation", () => {
       writePlan(goal.goalDir, "# Plan\n\n## alpha\nCreate alpha.txt.\n");
       const harness = new FakeHarness({ id: "fake" });
       harness.script((req, ctx) => {
+        fs.appendFileSync(goal.planPath, "\n## architect edit\n", "utf8");
         ctx.writeOutcome(
           outcome({ summary: "planned alpha", decision: "continue" }),
         );
@@ -590,7 +591,7 @@ describe("PM turn reconciliation", () => {
         return fakeTurnResult(req);
       });
 
-      expect(await launch(goal.repo, harness)).toBe(3);
+      await expectLaunch(3, goal.repo, harness);
       const summary = fs.readFileSync(
         path.join(goal.goalDir, "iterations/1/summary.md"),
         "utf8",
@@ -842,6 +843,7 @@ describe("PM turn reconciliation", () => {
       writePlan(goal.goalDir, "# Plan\n\n## alpha\nCreate alpha.txt.\n");
       const harness = new FakeHarness({ id: "fake" });
       harness.script((req, ctx) => {
+        fs.appendFileSync(goal.planPath, "\n## architect edit\n", "utf8");
         ctx.writeOutcome(
           outcome({ summary: "planned alpha", decision: "continue" }),
         );
@@ -859,7 +861,7 @@ describe("PM turn reconciliation", () => {
         });
       }
 
-      expect(await launch(goal.repo, harness)).toBe(3);
+      await expectLaunch(3, goal.repo, harness);
       const summary = fs.readFileSync(
         path.join(goal.goalDir, "iterations/1/summary.md"),
         "utf8",
@@ -904,6 +906,7 @@ describe("PM turn reconciliation", () => {
       writePlan(goal.goalDir, "# Plan\n\n## alpha\nCreate alpha.txt.\n");
       const harness = new FakeHarness({ id: "fake" });
       harness.script((req, ctx) => {
+        fs.appendFileSync(goal.planPath, "\n## architect edit\n", "utf8");
         ctx.writeOutcome(
           outcome({ summary: "planned alpha", decision: "continue" }),
         );
@@ -928,7 +931,7 @@ describe("PM turn reconciliation", () => {
         return fakeTurnResult(req);
       });
 
-      expect(await launch(goal.repo, harness)).toBe(3);
+      await expectLaunch(3, goal.repo, harness);
       const summary = fs.readFileSync(
         path.join(goal.goalDir, "iterations/1/summary.md"),
         "utf8",
@@ -1093,6 +1096,11 @@ describe("PM turn reconciliation", () => {
         "utf8",
       );
       harness.script((req, ctx) => {
+        fs.appendFileSync(
+          path.join(runtime.store.goalDir, "plan.md"),
+          "\n## architect edit\n",
+          "utf8",
+        );
         ctx.writeOutcome(
           outcome({ summary: "planned alpha", decision: "continue" }),
         );
@@ -1178,4 +1186,34 @@ describe("PM turn reconciliation", () => {
       cleanup(goal);
     }
   }, 60_000);
+
+  it("fails every rung naming task files when PM turns deliver no outcome", async () => {
+    const { root, runtime, fake, planPath } = await setup();
+    try {
+      for (let i = 0; i < 4; i++) {
+        fake.script((req) => fakeTurnResult(req, { text: "nothing" }));
+      }
+
+      const result = await runPm(runtime, {
+        iteration: 1,
+        state: derive([], []),
+        planPath,
+        cwd: root,
+      });
+      expect(result.status).toBe("exhausted");
+      expect(result.rungs).toHaveLength(2);
+      expect(fake.calls).toHaveLength(4);
+      expect(fake.calls[1]!.prompt).toContain(
+        "You are the pm. Your turn did not deliver its task files.",
+      );
+      expect(result.rungs[0]!.failure).toContain(
+        "missing deliverable: task files",
+      );
+      expect(result.rungs[1]!.failure).toContain(
+        "missing deliverable: task files",
+      );
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
 });

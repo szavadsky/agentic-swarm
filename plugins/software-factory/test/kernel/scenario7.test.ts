@@ -5,8 +5,8 @@ import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import {
   cleanup,
+  expectLaunch,
   implementerTurn,
-  launch,
   makeGoal,
   outcome,
   scriptDigest,
@@ -159,7 +159,7 @@ describe("KERNEL0 scenario 7 — plan edit between iterations", () => {
     try {
       const first = new FakeHarness({ id: "fake" });
       scriptFirstIteration(first, goal.goalDir);
-      expect(await launch(goal.repo, first)).toBe(3);
+      await expectLaunch(3, goal.repo, first);
 
       let state = await stateOf(goal.goalDir);
       expect(state.tasks.alpha!.status).toBe("merged");
@@ -169,7 +169,7 @@ describe("KERNEL0 scenario 7 — plan edit between iterations", () => {
 
       const second = new FakeHarness({ id: "fake" });
       scriptSecondIteration(second, goal.goalDir);
-      expect(await launch(goal.repo, second, 2)).toBe(0);
+      await expectLaunch(0, goal.repo, second, 2);
 
       state = await stateOf(goal.goalDir);
       expect(state.tasks.alpha!.status).toBe("merged");

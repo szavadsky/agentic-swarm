@@ -399,3 +399,11 @@ Verbatim, newest last; each with what it changed.
 - OMP ladder green: 17/17 task turns on omp (muse/ernie), 0 fallback hops; only the digest died on beam-free 429 (mechanical tier, iteration proceeded).
 - Notable parks: turn-timeout-land (base conflict flow.ts); steer-hold-nopark on an order/load-dependent E2E flake (584/1 full vs 58 pass isolated) — steered as an incident.
 - Base-green verified at landing: format=0 (208 files), lint=0 (887 warnings, 0 errors). Merge 44bad3e. Gates 567/0.
+
+### 2026-11-15 — iteration 23: 5 merged, exit 3, $4.05
+- 2h04m, stop=iteration-limit, base gates green at 775f9a9. Merged on factory/self: delivery-guard-land (f654239), e2e-flake (08867c3), steer-hold-land (a45c415), m5-architect-horizon (e0f7da9), turn-timeout-cancel (1470416). Pending: 14 (M4x2, M5x3, M6x4, +5).
+- OMP ladder green: 10/10 implement turns on omp, 0 fallback hops; digest died on beam-free 429 again (mechanical tier, iteration proceeded).
+- Costs: architect $3.2482 (highest single-turn spend of the campaign — flag, under the $5 stop line), implementer $0.7356 (incl escalation $0.3540), reviewer $0.0652, pm $0.
+- Debt closed: over-cap test + packTruncated flag; format baseline debts. i22 flake incident closed by e2e-flake.
+- New incidents steered: acpx-config-only (empty-diff r1 after red checks); checks-prune (full-suite-only red after green targeted suites — third flake-shape case).
+- Merge 4448ace. Gates 580/0.

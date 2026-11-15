@@ -107,6 +107,9 @@ if (args.includes("set")) {
   process.exit(0);
 }
 
+// Only prompt-phase invocations reach here; setup commands exited above.
+if (process.env.ACPX_STUB_PID_FILE) fs.writeFileSync(process.env.ACPX_STUB_PID_FILE, String(process.pid));
+
 if (mode === "no_session" || !session || !fs.existsSync(sessionFile(session))) {
   noSession();
   process.exit(4);
@@ -122,6 +125,9 @@ if (mode === "quota") {
 if (mode === "bare") {
   process.stderr.write("boom api_key=supersecretvalue\\n");
   process.exit(3);
+}
+if (mode === "hang") {
+  await new Promise(() => {});
 }
 
 const sessionId = "sess-" + session;
@@ -166,11 +172,13 @@ if (agent === "codex") {
     cleanup: () => fs.rmSync(dir, { recursive: true, force: true }),
     closeSession: (name: string) =>
       fs.rmSync(path.join(stateDir, `session-${name}`), { force: true }),
-    invocations: () =>
-      fs
+    invocations: () => {
+      if (!fs.existsSync(logPath)) return [];
+      return fs
         .readFileSync(logPath, "utf8")
         .split("\n")
         .filter(Boolean)
-        .map((line) => JSON.parse(line) as string[]),
+        .map((line) => JSON.parse(line) as string[]);
+    },
   };
 }

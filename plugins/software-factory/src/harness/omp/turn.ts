@@ -49,6 +49,16 @@ export async function runOmpTurn(
     ...requested,
     effort: req.effort ?? requested.effort,
   };
+  if (req.signal?.aborted) {
+    return {
+      stop: { kind: "cancelled" },
+      text: "",
+      usage: zeroUsage(),
+      session: req.session,
+      model,
+      attempts: [],
+    };
+  }
   const dirs = runtime.dirs();
   const overlayPath = await runtime.overlay(opaque);
 
@@ -91,6 +101,9 @@ export async function runOmpTurn(
     abortResolve = resolve;
   });
   let abortReason: "idle" | "wall" | undefined;
+  // Set by the kernel's AbortSignal (the wall bound fired): the child is
+  // stopped and the turn reports `cancelled`, never `timeout`.
+  let aborted = false;
   let rpc: OmpRpc | undefined;
   let finished = false;
 
@@ -100,14 +113,26 @@ export async function runOmpTurn(
     idleTimer = undefined;
     wallTimer = undefined;
   };
-  const abort = (reason: "idle" | "wall") => {
-    if (abortReason || finished) return;
-    abortReason = reason;
-    abortResolve?.();
+  const clearSignal = () =>
+    req.signal?.removeEventListener("abort", externalAbort);
+  const killRpc = () => {
     rpc?.abort();
     setTimeout(() => rpc?.kill("SIGTERM"), 2_000).unref?.();
     setTimeout(() => rpc?.kill("SIGKILL"), 4_000).unref?.();
   };
+  const abort = (reason: "idle" | "wall") => {
+    if (abortReason || finished || aborted) return;
+    abortReason = reason;
+    abortResolve?.();
+    killRpc();
+  };
+  const externalAbort = () => {
+    if (aborted || finished) return;
+    aborted = true;
+    abortResolve?.();
+    killRpc();
+  };
+  req.signal?.addEventListener("abort", externalAbort, { once: true });
   const resetIdle = () => {
     if (!req.timeouts.idleMs || req.timeouts.idleMs <= 0) return;
     if (idleTimer) clearTimeout(idleTimer);
@@ -158,6 +183,7 @@ export async function runOmpTurn(
     }
     if (!rpc) {
       clearTimers();
+      clearSignal();
       return {
         stop: launchFailure(error),
         text: "",
@@ -167,6 +193,22 @@ export async function runOmpTurn(
       };
     }
   }
+  const cancelBeforePrompt = async (): Promise<AdapterTurnResult> => {
+    clearTimers();
+    clearSignal();
+    await rpc?.close(500);
+    return {
+      stop: { kind: "cancelled" },
+      text: "",
+      usage: zeroUsage(),
+      session: req.session,
+      model,
+      attempts,
+    };
+  };
+  // The signal may have fired while the child was launching, when `rpc` was
+  // still undefined: stop it now instead of running the turn.
+  if (aborted) return cancelBeforePrompt();
   // Idle resets on every frame, including streamed deltas the RPC discards.
   rpc.setOnFrame((frame: any) => {
     if (finished) return;
@@ -197,6 +239,10 @@ export async function runOmpTurn(
     .request("get_session_stats", {}, 10_000)
     .then((frame) => frame.data as OmpStats)
     .catch(() => undefined);
+
+  // The signal may have fired during the baseline stats request; the prompt
+  // was never sent, so there is no result to keep.
+  if (aborted) return cancelBeforePrompt();
 
   // Cache lifetime runs from the start of the model request, not from launch.
   const startedAtMs = Date.now();
@@ -236,8 +282,9 @@ export async function runOmpTurn(
   }
   finished = true;
   clearTimers();
+  clearSignal();
 
-  const queryTimeout = abortReason ? 2_000 : 10_000;
+  const queryTimeout = abortReason || aborted ? 2_000 : 10_000;
   const textFrame = await rpc
     .request("get_last_assistant_text", {}, queryTimeout)
     .catch(() => undefined);
@@ -276,12 +323,17 @@ export async function runOmpTurn(
           ? { stderr: String(promptFailed) }
           : undefined;
 
-  const stop = classifyOmpTurn({
-    abortReason,
-    failure,
-    promptResult,
-    lastStopReason: summary.lastAssistantStopReason,
-  });
+  // An aborted turn whose prompt never answered was cancelled; a prompt_result
+  // that arrived first keeps its own classification.
+  const stop: Stop =
+    aborted && !promptResult
+      ? { kind: "cancelled" }
+      : classifyOmpTurn({
+          abortReason,
+          failure,
+          promptResult,
+          lastStopReason: summary.lastAssistantStopReason,
+        });
 
   const sessionId: string | undefined =
     state?.sessionId ?? postStats?.sessionId ?? (resume as string | undefined);

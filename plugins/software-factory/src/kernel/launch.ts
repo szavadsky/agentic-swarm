@@ -105,21 +105,6 @@ function unfinishedTasks(state: State): string[] {
 }
 
 /**
- * The steer id in a `steer-presented`/`steer-unanswered` cause, mirroring the
- * boundary's parser: JSON keeps an id with a quote or backslash unambiguous.
- */
-function recordedSteerId(cause: string): string | undefined {
-  const token = /^unanswered steer ("(?:[^"\\]|\\.)*")/.exec(cause)?.[1];
-  if (!token) return undefined;
-  try {
-    const id: unknown = JSON.parse(token);
-    return typeof id === "string" ? id : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-/**
  * A front trivial/task goal has no architect turn, so the front path's stop is
  * the recorded goal decision: `derive` reads it as the one source of truth.
  */
@@ -335,7 +320,10 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
       let resumeHolds: Hold[] = [];
       if (resume) {
         try {
-          resumeHolds = await readHolds(store);
+          resumeHolds = await readHolds(store, {
+            iteration: Math.max(1, before.iteration),
+            knownSlugs: Object.keys(before.tasks),
+          });
         } catch {
           // A hold file that cannot be read decides what may run, so the
           // boundary (and dispatch's infra stop) owns it — never a silent resume.
@@ -424,10 +412,9 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
             if (
               (rec.step === "steer-presented" ||
                 rec.step === "steer-unanswered") &&
-              rec.cause
+              rec.slug
             ) {
-              const id = recordedSteerId(rec.cause);
-              if (id) presented.add(id);
+              presented.add(rec.slug);
             }
           }
           seenSteers = inbox
