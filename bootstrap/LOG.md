@@ -427,3 +427,10 @@ Verbatim, newest last; each with what it changed.
 - Verified in code before acting: timeouts are a per-alias run-config knob (config.ts:117, defaults 60m wall/20m idle, types.ts:167-170), no preflight value check; repairs hardcoded to exactly 1 (agent.ts:273-303); the repair prompt already embeds the full validator message with line/col (outcome.ts parseOutcome → delivery-repair findings); task schema has no timeout/retry fields and the PM prompt has no budget authority (architect work).
 - Correction to the i24 triage: turn 01004 ended stop=done after 14m52s — the agent stopped itself and declared its done-when unproven, not a wall-clock kill. The 1 h wall stands as genuinely restrictive for 20x-rerun tasks regardless.
 - bootstrap/run/self-quota.yaml: wallMs 14400000 (4 h) on architect/implementer/reviewer/escalation; validated through the kernel loader (idle 1200000 default retained). Takes effect on the relaunch.
+
+### 2026-11-15 — iteration 26: 1 merged (repair-turns), exit 3, $1.47 — 0-merge streak broken
+- 52 min, stop=iteration-limit, base gates green at 945a9e8. Merged on factory/self: repair-turns (7dc3631, 696 lines + 388-line agent.test.ts). Pending: 18 (fake-script-keyed-final, pm-stall-resolve, acpx-config-land, checks-prune-land, M4x2, M5x3, M6x4, +4).
+- Owner ruling part 1 BUILT and verified at landing: REPAIR_TURNS=3 (agent.ts:67), task-file repairTurns override, loop capped by item budget, exact verification message kept. Part 2 (PM auto-resolve) planned as pm-stall-resolve; budget accounting recorded (whole-item = itemTurns, repairs charged to it).
+- OMP ladder green, 0 fallbacks, 0 quota. Costs: architect $1.3757, implementer $0.0754, reviewer $0.0178. Steer-i26-zeromerge processed.
+- Notable parks: checks-prune failed; acpx-config-only empty-diff-after-red (i23 incidents still open). Debt: doc-drift retirement loop (plan names the slug so PM cancel reads it as carried — third request).
+- Merge 1c2a97c. Gates 620/0. Stop-watch reset.
