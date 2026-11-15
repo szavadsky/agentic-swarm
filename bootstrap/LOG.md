@@ -392,3 +392,10 @@ Verbatim, newest last; each with what it changed.
 - Architect $1.4320 single turn; digest unpriced (beam 429). Base red format+lint at 1d58e696 pre-existing, not attributed. File-fence root cause verified in running prompts (m5-scope-area planned).
 - Operator error: journaled R1 proof mid-run; containment flagged twice (00862, 00866, ok=true, tasks continued). Rule restated: no writes mid-run, journal included.
 - Merge 37ff1e2. Gates 567/0 (first red: empty node_modules in landing checkout — environment, fixed by bun install, second time).
+
+### 2026-11-15 — iteration 22: 5 merged, exit 3, $1.80 — 8K cap dead, file fence removed
+- 80 min, stop=iteration-limit, base red format+lint at a48ec00 pre-existing. Merged on factory/self: base-green (4217086), review-findings-carry (9b7ba7d), derive-budget-finish (fc1173e), pack-uncap (239c4b8), m5-scope-area (40a9a6b). Pending: 17 (M4x2, M5x3, M6x4, +8).
+- pack-uncap verified at landing: 0 occurrences of capPack/maxBytes/MAX_BYTES in src/kernel/context-pack.ts.
+- OMP ladder green: 17/17 task turns on omp (muse/ernie), 0 fallback hops; only the digest died on beam-free 429 (mechanical tier, iteration proceeded).
+- Notable parks: turn-timeout-land (base conflict flow.ts); steer-hold-nopark on an order/load-dependent E2E flake (584/1 full vs 58 pass isolated) — steered as an incident.
+- Base-green verified at landing: format=0 (208 files), lint=0 (887 warnings, 0 errors). Merge 44bad3e. Gates 567/0.

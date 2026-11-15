@@ -22,7 +22,7 @@ title: Refresh tokens
 kind: task
 flow: implement-review
 deps: [auth.session-store]
-scope: [src/auth/**]
+scope: [auth]
 tier: default
 source: Milestone auth / refresh
 ---
@@ -36,7 +36,7 @@ describe("task files", () => {
     const parsed = parseTaskFile(TEXT, "auth.token-refresh");
     expect(parsed.slug).toBe("auth.token-refresh");
     expect(parsed.deps).toEqual(["auth.session-store"]);
-    expect(parsed.scope).toEqual(["src/auth/**"]);
+    expect(parsed.scope).toEqual(["auth"]);
     expect(doneWhen(parsed.body)).toBe("Done when: refresh rotates the token.");
     const round = parseTaskFile(renderTaskFile(parsed), parsed.slug);
     expect(round).toEqual(parsed);
@@ -90,8 +90,8 @@ describe("task files", () => {
 
   it("requires a base to name a parked task when a parked set is supplied", () => {
     const tasks = [
-      task("old", { scope: ["old.txt"] }),
-      task("new", { base: "old", scope: ["new.txt"] }),
+      task("old", { scope: ["old-area"] }),
+      task("new", { base: "old", scope: ["new-area"] }),
     ];
     expect(validateTaskGraph(tasks, { parked: new Set() })).toContain(
       'task "new" continues "old", which is not parked',
@@ -102,7 +102,7 @@ describe("task files", () => {
   it("rejects a task with no scope", () => {
     const findings = validateTaskGraph([task("narrow", { scope: [] })]);
     expect(findings).toContain(
-      'task "narrow" has no scope: list the files or globs it may touch',
+      'task "narrow" has no scope: declare the predicted area it works in',
     );
   });
 });

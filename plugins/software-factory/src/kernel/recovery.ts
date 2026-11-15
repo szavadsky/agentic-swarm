@@ -7,8 +7,14 @@ import { prepareIntegrationCheckout } from "./worktree.js";
 
 /**
  * A record directory with `started.yaml` and no `end.yaml` is a turn cut off by
- * the process dying. Close it as `infra: crash`; `derive` then ignores it and
- * redispatches the same step. Never invent an outcome, usage or commit.
+ * the process dying. Close it as a bare `infra: crash` with no cause, details,
+ * usage, prompt bytes or outcome. Budget rule: the bare seal is a free
+ * interruption, redispatched like an orphan — the item budget is by step, not
+ * by actor, so only a crash the turn itself reported (cause, details, usage or
+ * prompt bytes, from harness or script) spends one turn and parks
+ * `infra-repeat` after two repeats on the same step. Never invent an outcome,
+ * usage or commit. Still free: quota/rate/auth/overflow stops and drain
+ * (tasks never started).
  */
 async function closeInterruptedRecords(store: ArtifactStore): Promise<number> {
   let entries: fs.Dirent[];

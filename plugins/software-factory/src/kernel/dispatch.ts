@@ -47,33 +47,16 @@ interface Running {
   harnessId?: string;
 }
 
-/** The literal path prefix of a glob; two scopes can only collide inside theirs. */
-function literalPrefix(pattern: string): string {
-  const normalized = pattern.replace(/\\/g, "/").replace(/^\.\//, "");
-  const wildcard = normalized.search(/[*?[{]/);
-  return wildcard === -1 ? normalized : normalized.slice(0, wildcard);
-}
-
-function prefixContains(outer: string, inner: string): boolean {
-  if (outer === inner) return true;
-  const dir = outer.endsWith("/") ? outer : `${outer}/`;
-  return inner.startsWith(dir);
-}
-
-/** Conservative glob-glob overlap: `src/**` overlaps `src/a.ts`, never `src/ab.ts`. */
-export function scopesOverlap(
+/** Declared-area overlap: two tasks collide only when they name the same area. */
+export function areasOverlap(
   a: readonly string[],
   b: readonly string[],
 ): boolean {
-  for (const left of a) {
-    for (const right of b) {
-      const la = literalPrefix(left);
-      const lb = literalPrefix(right);
-      if (la === "" || lb === "") return true;
-      if (prefixContains(la, lb) || prefixContains(lb, la)) return true;
-    }
-  }
-  return false;
+  const areas = new Set(
+    a.map((entry) => entry.trim()).filter((entry) => entry !== ""),
+  );
+  if (areas.size === 0) return false;
+  return b.some((entry) => areas.has(entry.trim()));
 }
 
 function overlapsRunning(
@@ -82,7 +65,7 @@ function overlapsRunning(
 ): boolean {
   if (scope.length === 0) return false;
   for (const entry of running.values()) {
-    if (scopesOverlap(scope, entry.scope)) return true;
+    if (areasOverlap(scope, entry.scope)) return true;
   }
   return false;
 }
@@ -150,7 +133,7 @@ function crashMessage(err: unknown): string {
 /**
  * A throwing action records the crash as an infra stop and names the task; the
  * launch and its siblings keep going. Recording failure must not mask the
- * original crash.
+ * original crash, so it is logged and the crash cause is still returned.
  */
 async function recordCrash(
   runtime: KernelRuntime,
@@ -177,8 +160,10 @@ async function recordCrash(
         stop: { kind: "infra", cause: "crash", details: message },
       },
     );
-  } catch {
-    // Recording failure must not mask the original crash.
+  } catch (storeErr) {
+    console.warn(
+      `[factory] recordCrash: failed to record crash for "${action.slug}": ${crashMessage(storeErr)}; original crash: ${message}`,
+    );
   }
   return cause;
 }
@@ -210,8 +195,8 @@ function activeHolds(holds: Hold[], pending: ReadonlySet<string>): ActiveHolds {
 
 /**
  * The dispatch loop: `next` proposes, this loop admits. Admission holds the
- * absolute and per-harness turn limits and never starts two tasks whose scopes
- * touch. On an optional iteration limit — turns, wall clock or dollars — the
+ * absolute and per-harness turn limits and never starts two tasks whose declared
+ * areas overlap. On an optional iteration limit — turns, wall clock or dollars — the
  * loop drains: a task that has not started this iteration gets no turn, tasks
  * already started finish their flow, in-flight work settles, then the caller
  * ends the iteration normally.

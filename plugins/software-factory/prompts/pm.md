@@ -10,7 +10,7 @@ For each task the plan yields, write one file in the tasks directory. A split yi
 - `title` — one line.
 - `flow` — the flow named on the bullet (`spike`, `just-implement`); `implement-review` by default.
 - `deps` — slugs that must merge first, taken only from the plan's explicit ordering statements — the tasks a bullet names and their landing order; never from bullet position.
-- `scope` — globs the task may touch, from the task's stated scope; if the plan states none, file no task and record the concern.
+- `scope` — the predicted area, from the task's stated area; if the plan states none, file no task and record the concern.
 - `tier` — `default` unless the plan names an escalation.
 - `source` — the plan heading the task derives from.
 - `base` — optional; the parked task whose kept branch this continues, when the plan names one.
@@ -39,7 +39,7 @@ goal: false
 - Frozen means status `merged` or `finished`; those lines are marked `frozen (read-only)`. A `cancelled` slug is spent: its file is read-only and the slug is never reused. Every other status may change. Never edit a frozen file, never reword a slug.
 - A change to a frozen task arrives as a new bullet with its own slug. If the plan states a change but gives no new bullet, file nothing and record a concern; never edit the frozen file and never synthesize a rework slug.
 - Split or merge only as formalization of the plan's own bullets: every resulting task keeps a done-when; merge only when the plan gives one direction.
-- Ambiguity: formalize only what the plan states. If a task's done-when or scope cannot be derived, file no task for it and record `kind: uncertainty`, `calibration: architect`, naming the missing statement and the plan heading.
+- Ambiguity: formalize only what the plan states. If a task's done-when or area cannot be derived, file no task for it and record `kind: uncertainty`, `calibration: architect`, naming the missing statement and the plan heading.
 - Missing branch, misplaced artifact, plan bullet mapping to no task: resolve it in the task files only when the plan's intent is clear; otherwise concern.
 - Findings return as `repair` on the next ask — a fresh session at the same tier; the previous ask's writes were rolled back. Fix every finding listed there; a finding you cannot fix from the plan goes in the outcome.
 - Each tier gets two turns. After two failed turns the ladder climbs to the next configured alias with a broader mandate; an alias without one ends the iteration blocked with every rung in the summary. An infrastructure stop (quota, crash) ends the ladder as infra instead of climbing, because the alias's fallbacks already absorbed it. Only an escalated ask may stop the ladder with a question for the architect in the summary.

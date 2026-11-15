@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { derive } from "../../src/kernel/derive.js";
-import { runDispatch, scopesOverlap } from "../../src/kernel/dispatch.js";
+import { areasOverlap, runDispatch } from "../../src/kernel/dispatch.js";
 import { createDrainController } from "../../src/kernel/signals.js";
 import { task } from "./helpers.js";
 import {
@@ -43,38 +43,89 @@ async function runPair(opts: {
 }
 
 describe("dispatch admission", () => {
-  it("knows which scope globs overlap", () => {
-    expect(scopesOverlap(["src/a.ts"], ["src/a.ts"])).toBe(true);
-    expect(scopesOverlap(["src/**"], ["src/kernel/a.ts"])).toBe(true);
-    expect(scopesOverlap(["src/a/*.ts"], ["src/a/b.ts"])).toBe(true);
-    expect(scopesOverlap(["src/a/*.ts"], ["src/ab/b.ts"])).toBe(false);
-    expect(scopesOverlap(["src/a.ts"], ["src/b.ts"])).toBe(false);
-    expect(scopesOverlap([], ["src/b.ts"])).toBe(false);
+  it("knows which declared areas overlap", () => {
+    expect(areasOverlap(["dispatch"], ["dispatch"])).toBe(true);
+    expect(areasOverlap(["auth", "billing"], ["billing"])).toBe(true);
+    expect(areasOverlap(["auth"], ["billing"])).toBe(false);
+    expect(areasOverlap(["shared/file.ts"], ["shared/**"])).toBe(false);
+    expect(areasOverlap([], ["billing"])).toBe(false);
+    expect(areasOverlap(["auth"], [])).toBe(false);
   });
 
-  it("runs disjoint scopes concurrently up to the absolute limit", async () => {
+  it("runs disjoint areas concurrently up to the absolute limit", async () => {
     const run = await runPair({
-      scopeA: ["a.txt"],
-      scopeB: ["b.txt"],
+      scopeA: ["alpha-area"],
+      scopeB: ["beta-area"],
       limits: { concurrency: 2 },
     });
     expect(run.reason).toBe("boundary");
     expect(run.max).toBe(2);
   }, 60_000);
 
-  it("never runs two tasks with overlapping scopes at once", async () => {
+  it("never runs two tasks with the same area at once", async () => {
     const run = await runPair({
-      scopeA: ["shared/**"],
-      scopeB: ["shared/file.ts"],
+      scopeA: ["shared-area"],
+      scopeB: ["shared-area"],
       limits: { concurrency: 2 },
     });
     expect(run.max).toBe(1);
   }, 60_000);
 
+  it("runs disjoint areas concurrently even when their diffs touch the same file", async () => {
+    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 2 } });
+    try {
+      const counter = { active: 0, max: 0 };
+      const harness = new FakeHarness({ id: "fake" });
+      for (let i = 0; i < 4; i += 1) {
+        harness.script(async (req, ctx) => {
+          counter.active += 1;
+          counter.max = Math.max(counter.max, counter.active);
+          try {
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            const slug = path.basename(req.cwd!);
+            if (req.prompt.startsWith("You review")) {
+              ctx.writeOutcome(
+                outcome({ summary: `${slug} approved`, verdict: "approve" }),
+              );
+            } else {
+              fs.writeFileSync(
+                path.join(req.cwd!, "shared.txt"),
+                "shared\n",
+                "utf8",
+              );
+              ctx.writeOutcome(outcome({ summary: `${slug} implemented` }));
+            }
+            return fakeTurnResult(req);
+          } finally {
+            counter.active -= 1;
+          }
+        });
+      }
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("alpha", { scope: ["alpha-area"] }));
+      await writeTask(runtime, task("beta", { scope: ["beta-area"] }));
+      const result = await runDispatch(runtime, { iteration: 1 });
+      expect(result.reason).toBe("boundary");
+      expect(counter.max).toBe(2);
+      // Admission is about areas, not files: both implement turns ran even
+      // though both diffs touch shared.txt. The second merge parks as a
+      // no-progress empty diff; that is the merge queue's verdict, not dispatch.
+      const records = await runtime.store.listRecords();
+      expect(
+        records.some((r) => r.slug === "alpha" && r.step === "implement"),
+      ).toBe(true);
+      expect(
+        records.some((r) => r.slug === "beta" && r.step === "implement"),
+      ).toBe(true);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
   it("honours the per-harness limit even when the absolute limit allows more", async () => {
     const run = await runPair({
-      scopeA: ["a.txt"],
-      scopeB: ["b.txt"],
+      scopeA: ["alpha-area"],
+      scopeB: ["beta-area"],
       limits: { concurrency: 2, perHarness: { fake: 1 } },
     });
     expect(run.max).toBe(1);
@@ -82,8 +133,8 @@ describe("dispatch admission", () => {
 
   it("honours the absolute limit", async () => {
     const run = await runPair({
-      scopeA: ["a.txt"],
-      scopeB: ["b.txt"],
+      scopeA: ["alpha-area"],
+      scopeB: ["beta-area"],
       limits: { concurrency: 1 },
     });
     expect(run.max).toBe(1);
@@ -104,7 +155,7 @@ describe("dispatch admission", () => {
       });
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await writeTask(runtime, task("task", { scope: ["task.txt"] }));
+      await writeTask(runtime, task("task", { scope: ["task-area"] }));
       const model = { id: "fake" };
       await runtime.store.appendRecord(
         {
@@ -188,8 +239,8 @@ describe("dispatch admission", () => {
       }
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await writeTask(runtime, task("a", { scope: ["a.txt"] }));
-      await writeTask(runtime, task("b", { scope: ["b.txt"] }));
+      await writeTask(runtime, task("a", { scope: ["a-area"] }));
+      await writeTask(runtime, task("b", { scope: ["b-area"] }));
 
       const result = await runDispatch(runtime, {
         iteration: 1,
@@ -233,8 +284,8 @@ describe("dispatch admission", () => {
       });
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await writeTask(runtime, task("a", { scope: ["a.txt"] }));
-      await writeTask(runtime, task("b", { scope: ["b.txt"] }));
+      await writeTask(runtime, task("a", { scope: ["a-area"] }));
+      await writeTask(runtime, task("b", { scope: ["b-area"] }));
 
       const result = await runDispatch(runtime, {
         iteration: 1,
@@ -256,6 +307,151 @@ describe("dispatch admission", () => {
         records.find((r) => r.slug === "a" && r.step === "implement")?.stop
           ?.kind,
       ).toBe("cancelled");
+    } finally {
+      console.warn = originalWarn;
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+});
+
+describe("script crash budget", () => {
+  it("parks a deterministically throwing step after the same budget as a harness crash, across relaunches", async () => {
+    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const throwing = () => {
+        throw new Error("simulated pre-harness throw");
+      };
+      harness.script(throwing);
+      harness.script(throwing);
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("alpha", { scope: ["alpha-area"] }));
+
+      const first = await runDispatch(runtime, { iteration: 1 });
+      expect(first.reason).toBe("infra");
+      expect(first.cause).toContain(
+        "alpha: crash: simulated pre-harness throw",
+      );
+      // Script crashes spend the item budget but never the iteration turn
+      // budget: the drain still sees an unstarted task as free.
+      expect(first.turns).toBe(0);
+      let records = await runtime.store.listRecords();
+      let state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
+      expect(state.tasks.alpha!.turns).toBe(1);
+      expect(state.tasks.alpha!.phase).toBe("implement");
+      expect(state.tasks.alpha!.park).toBeUndefined();
+
+      const second = await runDispatch(runtime, { iteration: 2 });
+      expect(second.reason).toBe("infra");
+      expect(second.turns).toBe(0);
+      records = await runtime.store.listRecords();
+      state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
+      expect(state.tasks.alpha!.turns).toBe(2);
+      expect(state.tasks.alpha!.phase).toBe("parked");
+      expect(state.tasks.alpha!.park).toContain("infra-repeat: crash");
+      expect(state.tasks.alpha!.park).toContain("simulated pre-harness throw");
+
+      // The parked step is not re-dispatched by a third launch.
+      const third = await runDispatch(runtime, { iteration: 3 });
+      expect(third.reason).toBe("boundary");
+      expect(harness.calls).toHaveLength(2);
+      records = await runtime.store.listRecords();
+      const scriptCrashes = records.filter(
+        (r) =>
+          r.slug === "alpha" &&
+          r.actor === "script" &&
+          r.step === "implement" &&
+          r.stop?.kind === "infra" &&
+          r.stop.cause === "crash",
+      );
+      expect(scriptCrashes).toHaveLength(2);
+      const settledAgentTurns = records.filter(
+        (r) => r.slug === "alpha" && r.actor === "agent" && r.endedAt,
+      );
+      expect(settledAgentTurns).toHaveLength(0);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("logs a store failure from recordCrash instead of swallowing it", async () => {
+    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const originalWarn = console.warn;
+    const warnings: string[] = [];
+    console.warn = (...args: unknown[]) => {
+      warnings.push(args.map((a) => String(a)).join(" "));
+    };
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script(() => {
+        throw new Error("simulated kill");
+      });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("a", { scope: ["a-area"] }));
+      let crashRecords = 0;
+      runtime.store.appendRecord = (async (
+        ...args: [
+          Parameters<typeof runtime.store.appendRecord>[0],
+          Parameters<typeof runtime.store.appendRecord>[1],
+        ]
+      ) => {
+        crashRecords += 1;
+        throw new Error("store boom");
+      }) as typeof runtime.store.appendRecord;
+
+      const result = await runDispatch(runtime, { iteration: 1 });
+      expect(result.reason).toBe("infra");
+      expect(result.cause).toContain("a: crash: simulated kill");
+      expect(result.cause).not.toContain("store boom");
+      expect(crashRecords).toBe(1);
+      expect(
+        warnings.some(
+          (w) =>
+            w.includes("recordCrash") &&
+            w.includes("store boom") &&
+            w.includes("simulated kill"),
+        ),
+      ).toBe(true);
+    } finally {
+      console.warn = originalWarn;
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("logs a non-Error store failure with its text, never undefined", async () => {
+    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const originalWarn = console.warn;
+    const warnings: string[] = [];
+    console.warn = (...args: unknown[]) => {
+      warnings.push(args.map((a) => String(a)).join(" "));
+    };
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script(() => {
+        throw new Error("simulated kill");
+      });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("a", { scope: ["a-area"] }));
+      runtime.store.appendRecord = (async () => {
+        const failure: unknown = "store string boom";
+        throw failure;
+      }) as typeof runtime.store.appendRecord;
+
+      const result = await runDispatch(runtime, { iteration: 1 });
+      expect(result.reason).toBe("infra");
+      expect(result.cause).toContain("a: crash: simulated kill");
+      const logged = warnings.find((w) => w.includes("recordCrash"));
+      expect(logged).toBeDefined();
+      expect(logged).toContain("store string boom");
+      expect(logged).not.toContain("undefined");
     } finally {
       console.warn = originalWarn;
       cleanupFlowRepo(repo);

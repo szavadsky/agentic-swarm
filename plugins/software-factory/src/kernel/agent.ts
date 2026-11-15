@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import type { ModelRef, SessionRef, Stop } from "../harness/types.js";
 import { addUsage } from "../harness/usage.js";
-import { contextPackRelPath, isPackTruncated } from "./context-pack.js";
+import { contextPackRelPath } from "./context-pack.js";
 import type { RoleTarget } from "./flow-context.js";
 import {
   failedOutcome,
@@ -57,12 +57,12 @@ const PACK_ROLES = new Set(["architect", "pm"]);
 /**
  * The pack is the boundary consult's shared context: the architect reads it,
  * the PM derives tasks from the plan it produced in the same iteration. The
- * measurement is the rendered artifact, so a cap clip is visible.
+ * measurement is the rendered artifact's byte size.
  */
 async function measurePack(
   runtime: KernelRuntime,
   spec: AgentTurnSpec,
-): Promise<{ bytes: number; truncated: boolean } | undefined> {
+): Promise<{ bytes: number } | undefined> {
   if (!PACK_ROLES.has(spec.target.role)) return undefined;
   const pack = await runtime.store.readFile(
     contextPackRelPath(spec.meta.iteration),
@@ -70,7 +70,6 @@ async function measurePack(
   if (pack === null) return undefined;
   return {
     bytes: Buffer.byteLength(pack, "utf8"),
-    truncated: isPackTruncated(pack),
   };
 }
 
@@ -281,7 +280,7 @@ export async function runAgentTurn(
   const record = await started.finish({
     ...settled,
     promptBytes,
-    ...(pack ? { packBytes: pack.bytes, packTruncated: pack.truncated } : {}),
+    ...(pack ? { packBytes: pack.bytes } : {}),
     ...(actualModel ? { model: actualModel } : {}),
     stop,
     usage,
