@@ -204,6 +204,8 @@ export interface StepRecord {
   transcript?: string;
   /** Tree of the resulting worktree, the per-step no-progress component. */
   tree?: string;
+  /** base-advance only: integration head tree at the creation advance. */
+  headTree?: string;
   checks?: CheckResult[];
   outcome?: Outcome;
   ok?: boolean;
@@ -241,6 +243,8 @@ export interface RecordEnd {
   attempts?: TurnAttempt[];
   commit?: string;
   tree?: string;
+  /** base-advance only: integration head tree at the creation advance. */
+  headTree?: string;
   checks?: CheckResult[];
   outcome?: Outcome;
   ok?: boolean;
