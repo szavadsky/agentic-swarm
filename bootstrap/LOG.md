@@ -374,3 +374,9 @@ Verbatim, newest last; each with what it changed.
 - Same-harness fallback rule forced the split: omp implementer/reviewer carry muse → deepseek → ernie in one chain; agy holds a switchable `reviewer-agy` alias (cross-harness fallback needs the kernel change already in the plan).
 - Beam and inkling are mechanical tiers only (digest in this file). Reviewer is task-grade (muse same-family review; different context and focus: dev vs review) per the new INTENT line.
 - Replaces the whole prior `self-quota.yaml` content. omp route proven spendable: owner confirms this session runs muse max in omp, with multiple keys auto-rotating as fallbacks. The Go weekly wall hit the opencode CLI route, not omp.
+
+### 2026-11-15 — iteration 20: 4 merged, exit 3, $2.41
+- 80 min, stop=iteration-limit, base gates green at b217254. Merged on factory/self: m3-liquid-land (5edf562), gates-wire (b6e8b01), gates-baseline-debt (42decf4), resume-hard-death (988ebb4). Spike checks-audit finished (R6 evidence). Parked: 17 (3 empty-diff on completed green work — m5-pack-plan, m3-debloat, turn-timeout-settle; 1 upscope derive-budget-gaps; rest historical).
+- OMP ladder first spend: 19/19 implement+review turns on omp muse-spark-1.3-contributor:max, 0 fallback hops, 0 quota hits. Costs: architect $1.9874, implementer $0.3587, reviewer $0.0594, pm $0, digest unknown (beam-free 429'd, iteration proceeded).
+- Debt closed: plan restructured to real deps (R1–R23 rows tasked, incl. R6/R23/acpx NO CODE/cross-harness); i19 wiring incident resolved by gates-wire. Forward: interrupt-and-relaunch test unblocked (resume-hard-death merged); p1 goals not ready (R7/R8 pending).
+- Merge c4eaf11 into factory-v3. Gates 550/0 (first red was a missing bun install in the landing checkout — environment, fixed by install).

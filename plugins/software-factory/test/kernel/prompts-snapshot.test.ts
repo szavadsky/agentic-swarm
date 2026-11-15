@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import path from "node:path";
-import { loadPromptLibrary } from "../../src/core/prompts.js";
+import { loadPromptLibrary } from "../../src/kernel/prompts.js";
 import { packageRoot } from "../../src/kernel/config.js";
 import type { ProcessConfig } from "../../src/kernel/types.js";
 

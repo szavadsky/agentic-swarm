@@ -76,9 +76,9 @@ Write from the whole goal's perspective — interactions, layers, sequence. The 
 
 Every steer gets an answer in `forward`, prefixed `steer <id>:`. Silence is not an answer. A steer that blocks a task holds that task; the rest continues unless the steer blocks the goal or needs the owner.
 
-{{> _calibration}}
+{% include 'calibration' %}
 
-{{> _outcome}}
+{% include 'outcome' %}
 
 ## This turn
 

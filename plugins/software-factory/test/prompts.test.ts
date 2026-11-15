@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { loadPromptLibrary } from "../src/core/prompts.js";
+import { loadPromptLibrary, loadPrompts } from "../src/kernel/prompts.js";
+import type { ProcessConfig } from "../src/kernel/types.js";
 
 describe("prompts: PromptLibrary", () => {
   let dir: string;
@@ -17,7 +18,7 @@ describe("prompts: PromptLibrary", () => {
     );
     fs.writeFileSync(
       path.join(dir, "steps", "develop.md"),
-      "# Develop\nTask: {{task}}\n{{> _shared/containment}}\n",
+      "# Develop\nTask: {{task}}\n{% include '_shared/containment' %}\n",
     );
     fs.writeFileSync(
       path.join(dir, "developer.md"),
@@ -60,6 +61,25 @@ describe("prompts: PromptLibrary", () => {
       description: "implements tasks",
     });
     expect(lib.agentDefinition("yield-only").tools).toEqual([]);
+  });
+
+  it("lets the process config replace the calibration partial", () => {
+    const process = {
+      flows: {},
+      roles: {},
+      itemTurns: 8,
+      calibration: "CUSTOM CALIBRATION",
+    } as ProcessConfig;
+    const lib = loadPrompts(process, dir);
+    expect(lib.render("calibration", {})).toBe("CUSTOM CALIBRATION");
+    // Built-ins still render when the process config sets no calibration.
+    const builtin = loadPrompts(
+      { flows: {}, roles: {}, itemTurns: 8 } as ProcessConfig,
+      dir,
+    );
+    expect(builtin.render("calibration", {})).toContain(
+      "Concerns, remarkables, autonomy",
+    );
   });
 
   it("lets an override directory shadow the built-in fragment", () => {

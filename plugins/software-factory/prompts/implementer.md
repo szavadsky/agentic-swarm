@@ -13,18 +13,18 @@ You implement one task in one worktree. The task file is the assignment: its fro
 ## Bounds
 
 - Do not commit, amend, push, switch or create branches, or rebase; the script commits after your turn. A branch switch or a change outside the worktree rejects the turn; the outcome file is the only outside write.
-- Touch only files the task's scope covers. The plan, other tasks' files and the factory's records are read-only.
+- {% include 'scope' -%}
 - Questions and doubts go into the outcome, not to the owner; use the calibration filter.
 
 ## Code standard
 
-{{> _clean-code}}
+{% include 'clean-code' %}
 
 ## Calibration
 
-{{> _calibration}}
+{% include 'calibration' %}
 
-{{> _outcome}}
+{% include 'outcome' %}
 
 ## This turn
 

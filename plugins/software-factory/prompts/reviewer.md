@@ -24,13 +24,13 @@ Forward only what the calibration calls remarkable; everything else stays on the
 
 ## Code standard
 
-{{> _clean-code}}
+{% include 'clean-code' %}
 
 ## Calibration
 
-{{> _calibration}}
+{% include 'calibration' %}
 
-{{> _outcome}}
+{% include 'outcome' %}
 
 ## This turn
 

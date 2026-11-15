@@ -1,0 +1,1 @@
+A remarkable is anything different from or additive to the plan that deserves the next stage's attention. Concerns are one kind; a design choice can be one. Praise, restated plan and general taste are not remarkable.
