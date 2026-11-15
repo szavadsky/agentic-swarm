@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import {
+  createRealHarnesses,
   createRealModelCatalog,
   resolveHarnessBinaries,
 } from "../../src/cli/harnesses.js";
@@ -23,6 +24,27 @@ const RUN_CONFIG_TEXT = `aliases:
   implementer: { harness: pi, model: opencode-go/beam-free, effort: high }
   reviewer: { harness: codex, model: deepseek-v4.1-flash, effort: high }
   escalation: { harness: omp, model: anthropic/claude-sonnet-5-5 }
+harnesses:
+  pi:
+    acpx:
+      agent: pi
+      effort: { configId: thought_level, levels: [off, minimal, low, medium, high, xhigh] }
+      usage: { cache: false }
+  codex:
+    acpx:
+      agent: codex
+      effort: { configId: reasoning_effort, levels: [low, medium, high, xhigh, max] }
+      usage: { cache: true }
+  agy:
+    acpx:
+      agent: agy acp
+      raw: true
+      args: [--approve-all]
+      effort:
+        configId: thought_level
+        levels: [low, medium, high]
+        modelBases: { gemini-3.8-flash: [low, medium, high] }
+      usage: { cache: true }
 scouts: { model: opencode-go/deepseek-v4.1-flash }
 prices:
   anthropic/claude-opus-5-5: { input: 4, cachedInput: 0.2, output: 20, reasoning: 20 }
@@ -91,13 +113,30 @@ describe("self-acpx run config", () => {
           new FakeHarness({ id: "opencode", caps: { effort: EFFORTS } }),
         ],
         ["omp", new FakeHarness({ id: "omp", caps: { effort: EFFORTS } })],
-        ["pi", new AcpxHarness({ agent: "pi", binary: stub.binary })],
-        ["codex", new AcpxHarness({ agent: "codex", binary: stub.binary })],
+        [
+          "pi",
+          new AcpxHarness({
+            id: "pi",
+            binary: stub.binary,
+            acpx: configs.run.harnesses!.pi!.acpx,
+          }),
+        ],
+        [
+          "codex",
+          new AcpxHarness({
+            id: "codex",
+            binary: stub.binary,
+            acpx: configs.run.harnesses!.codex!.acpx,
+          }),
+        ],
       ]);
-      const acpxCatalog = createRealModelCatalog({
-        pi: stub.binary,
-        codex: stub.binary,
-      });
+      const acpxCatalog = createRealModelCatalog(
+        {
+          pi: stub.binary,
+          codex: stub.binary,
+        },
+        configs.run.harnesses,
+      );
       const catalog: ModelCatalog = (harness, model) =>
         harness === "pi" || harness === "codex"
           ? acpxCatalog(harness, model)
@@ -177,13 +216,30 @@ describe("self-acpx run config", () => {
           new FakeHarness({ id: "opencode", caps: { effort: EFFORTS } }),
         ],
         ["omp", new FakeHarness({ id: "omp", caps: { effort: EFFORTS } })],
-        ["pi", new AcpxHarness({ agent: "pi", binary: stub.binary })],
-        ["agy", new AcpxHarness({ agent: "agy", binary: stub.binary })],
+        [
+          "pi",
+          new AcpxHarness({
+            id: "pi",
+            binary: stub.binary,
+            acpx: configs.run.harnesses!.pi!.acpx,
+          }),
+        ],
+        [
+          "agy",
+          new AcpxHarness({
+            id: "agy",
+            binary: stub.binary,
+            acpx: configs.run.harnesses!.agy!.acpx,
+          }),
+        ],
       ]);
-      const acpxCatalog = createRealModelCatalog({
-        pi: stub.binary,
-        agy: stub.binary,
-      });
+      const acpxCatalog = createRealModelCatalog(
+        {
+          pi: stub.binary,
+          agy: stub.binary,
+        },
+        configs.run.harnesses,
+      );
       const catalog: ModelCatalog = (harness, model) =>
         harness === "pi" || harness === "agy"
           ? acpxCatalog(harness, model)
@@ -213,17 +269,160 @@ describe("self-acpx run config", () => {
       repo.cleanup();
     }
   });
+
+  it("adds a new acpx agent from the run config with no code", async () => {
+    const repo = createTmpRepo();
+    const stub = createAcpxStub();
+    const warnings: string[] = [];
+    const originalWarn = console.warn;
+    console.warn = (message: string) => warnings.push(message);
+    try {
+      repo.writeFile(
+        ".factory/repo.yaml",
+        "baseBranch: main\nartifactRoot: .factory/artifacts\nsetup: []\ngates: []\n",
+      );
+      repo.commit("factory config");
+      const runConfigPath = path.join(repo.dir, ".factory", "run-nova.yaml");
+      // The nova binding lives in the run config text, not in code.
+      fs.writeFileSync(
+        runConfigPath,
+        RUN_CONFIG_TEXT.replace(
+          "  reviewer: { harness: codex, model: deepseek-v4.1-flash, effort: high }",
+          "  reviewer: { harness: nova, model: nova-model, effort: high }",
+        ).replace(
+          "  agy:\n",
+          "  nova:\n    acpx:\n      agent: nova\n      effort: { configId: nova_level, levels: [low, high] }\n      usage: { cache: false }\n  agy:\n",
+        ),
+        "utf8",
+      );
+      const novaConfigs = loadConfigs(repo.dir, { runConfigPath });
+      const base = path.basename(repo.dir);
+      novaConfigs.run.sessions.dir = path.join(
+        path.dirname(repo.dir),
+        `${base}-sessions`,
+      );
+      novaConfigs.run.worktreeRoot = path.join(
+        path.dirname(repo.dir),
+        `${base}-worktrees`,
+      );
+
+      expect(novaConfigs.run.harnesses!.nova).toMatchObject({
+        acpx: { agent: "nova" },
+      });
+
+      const paths = resolveGoalPaths(novaConfigs, repo.dir, "self-nova");
+      fs.mkdirSync(paths.goalDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(paths.goalDir, "intent.md"),
+        "# Goal\n",
+        "utf8",
+      );
+      const store = createFolderStore(paths.goalDir);
+      await store.ensureLayout();
+
+      const harnesses = new Map<string, Harness>([
+        [
+          "opencode",
+          new FakeHarness({ id: "opencode", caps: { effort: EFFORTS } }),
+        ],
+        ["omp", new FakeHarness({ id: "omp", caps: { effort: EFFORTS } })],
+        [
+          "pi",
+          new AcpxHarness({
+            id: "pi",
+            binary: stub.binary,
+            acpx: novaConfigs.run.harnesses!.pi!.acpx,
+          }),
+        ],
+        [
+          "nova",
+          new AcpxHarness({
+            id: "nova",
+            binary: stub.binary,
+            acpx: novaConfigs.run.harnesses!.nova!.acpx,
+          }),
+        ],
+      ]);
+      const acpxCatalog = createRealModelCatalog(
+        { pi: stub.binary, nova: stub.binary },
+        novaConfigs.run.harnesses,
+      );
+      const catalog: ModelCatalog = (harness, model) =>
+        harness === "pi" || harness === "nova"
+          ? acpxCatalog(harness, model)
+          : Promise.resolve(true);
+
+      const result = await preflight({
+        configs: novaConfigs,
+        paths,
+        store,
+        harnesses,
+        binaries: {
+          opencode: stub.binary,
+          omp: stub.binary,
+          pi: stub.binary,
+          nova: stub.binary,
+        },
+        catalog,
+        baseGates: false,
+      });
+
+      expect(result.aliases.reviewer).toBe("high");
+      expect(warnings.join("\n")).toContain('skipping model check for "nova"');
+
+      // And it turns: the effort level from config reaches the session set.
+      const nova = harnesses.get("nova")!;
+      const turn = await nova.turn({
+        model: { id: "nova-model" },
+        effort: "high",
+        cwd: path.dirname(stub.binary),
+        prompt: "Say [[text:PONG]]",
+        timeouts: { idleMs: 10_000, wallMs: 30_000 },
+        opaque: novaConfigs.run.harnesses!.nova!.acpx,
+      });
+      expect(turn.stop).toEqual({ kind: "done" });
+      expect(turn.text).toBe("PONG");
+      const set = stub.invocations().find((args) => args.includes("set"))!;
+      expect(set.slice(set.indexOf("set"))).toEqual([
+        "set",
+        "nova_level",
+        "high",
+      ]);
+    } finally {
+      console.warn = originalWarn;
+      stub.cleanup();
+      repo.cleanup();
+    }
+  });
 });
 
-describe("agy harness registry", () => {
-  it("resolves the agy harness binary from AGY_PATH", () => {
-    const previous = process.env.AGY_PATH;
-    process.env.AGY_PATH = "/opt/agy-test";
-    try {
-      expect(resolveHarnessBinaries().agy).toBe("/opt/agy-test");
-    } finally {
-      if (previous === undefined) delete process.env.AGY_PATH;
-      else process.env.AGY_PATH = previous;
-    }
+describe("acpx harness registry", () => {
+  it("binds harness ids from run config with no code", () => {
+    const harnesses = createRealHarnesses({
+      sessionDir: "/tmp/sessions",
+      harnesses: {
+        nova: {
+          acpx: {
+            agent: "nova",
+            effort: { configId: "nova_level", levels: ["low", "high"] },
+          },
+        },
+      },
+    });
+    expect(harnesses.nova).toBeInstanceOf(AcpxHarness);
+    expect(harnesses.nova!.id).toBe("nova");
+    expect(harnesses.opencode).toBeDefined();
+    expect(harnesses.omp).toBeDefined();
+  });
+
+  it("resolves a raw harness binary from its configured command", () => {
+    const binaries = resolveHarnessBinaries({
+      nova: { acpx: { agent: "/opt/nova-test/bin/nova acp", raw: true } },
+      plain: { acpx: { agent: "plain" } },
+    });
+    expect(binaries.nova).toBe("/opt/nova-test/bin/nova");
+    // A positional agent is served by the acpx dispatcher, whatever it is here.
+    expect(typeof binaries.plain).toBe("string");
+    expect(binaries.plain!.length).toBeGreaterThan(0);
   });
 });

@@ -193,6 +193,7 @@ export async function runAgentTurn(
     effort,
     fallbacks,
     timeouts: aliasTimeouts,
+    opaque,
   } = spec.target;
   const started = await runtime.store.startRecord({
     ...spec.meta,
@@ -225,6 +226,7 @@ export async function runAgentTurn(
     outcomePath,
     timeouts,
     fallbacks: fallbacks?.map((id) => ({ id, effort })),
+    opaque,
   };
   // The plan snapshot is taken once before the first attempt, so the repair
   // turn compares against the pre-turn plan, not the first attempt's.

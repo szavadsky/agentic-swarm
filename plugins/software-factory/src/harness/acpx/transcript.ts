@@ -1,5 +1,6 @@
 import type { Usage } from "../types.js";
 import { zeroUsage } from "../usage.js";
+import type { AcpxUsageFields } from "./config.js";
 import type { AcpxError, AcpxTurnSummary } from "./types.js";
 
 function number(value: unknown): number {
@@ -8,23 +9,40 @@ function number(value: unknown): number {
     : 0;
 }
 
+const DEFAULT_USAGE_FIELDS: Required<AcpxUsageFields> = {
+  input: ["inputTokens"],
+  cacheRead: ["cachedReadTokens"],
+  cacheWrite: ["cachedWriteTokens", "cacheCreationInputTokens"],
+  output: ["outputTokens"],
+  thought: ["thoughtTokens"],
+};
+
+function first(source: Record<string, unknown>, names: string[]): number {
+  for (const name of names) {
+    const value = source[name];
+    if (typeof value === "number") return number(value);
+  }
+  return 0;
+}
+
 /**
- * Codex and agy report token counts on the prompt result with no cost; pi
- * reports no usage at all. Reasoning stays disjoint from text output, as in the
- * omp adapter. agy spells cache writes `cachedWriteTokens`, codex (ACP) uses
- * `cacheCreationInputTokens`.
+ * Token counts come from the prompt result with no cost; an absent usage stays
+ * unknown. Reasoning stays disjoint from text output, as in the omp adapter.
+ * Field names come from config; the defaults cover the probed agents.
  */
-export function usageFromAcpxResult(raw: unknown): Usage {
+export function usageFromAcpxResult(
+  raw: unknown,
+  fields?: AcpxUsageFields,
+): Usage {
   const usage = zeroUsage();
   if (!raw || typeof raw !== "object") return usage;
   const source = raw as Record<string, unknown>;
-  const output = number(source.outputTokens);
-  const reasoning = number(source.thoughtTokens);
-  usage.in = number(source.inputTokens);
-  usage.cacheRead = number(source.cachedReadTokens);
-  usage.cacheWrite5m = number(
-    source.cachedWriteTokens ?? source.cacheCreationInputTokens,
-  );
+  const names = { ...DEFAULT_USAGE_FIELDS, ...fields };
+  const output = first(source, names.output);
+  const reasoning = first(source, names.thought);
+  usage.in = first(source, names.input);
+  usage.cacheRead = first(source, names.cacheRead);
+  usage.cacheWrite5m = first(source, names.cacheWrite);
   usage.out = Math.max(0, output - reasoning);
   usage.reasoningOut = reasoning;
   return usage;
@@ -53,6 +71,11 @@ export class AcpxTranscriptParser {
   private currentText = "";
   private lastText = "";
   private messageId?: string;
+  private readonly fields?: AcpxUsageFields;
+
+  constructor(fields?: AcpxUsageFields) {
+    this.fields = fields;
+  }
 
   feedLine(line: string): void {
     const trimmed = line.trim();
@@ -70,7 +93,7 @@ export class AcpxTranscriptParser {
     this.flush();
     return {
       text: this.lastText,
-      usage: usageFromAcpxResult(this.promptResult?.usage),
+      usage: usageFromAcpxResult(this.promptResult?.usage, this.fields),
       ...(this.promptResult?.stopReason
         ? { stopReason: this.promptResult.stopReason }
         : {}),

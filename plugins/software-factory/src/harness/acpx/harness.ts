@@ -7,44 +7,45 @@ import type {
   TurnRequest,
   TurnResult,
 } from "../types.js";
-import { resolveAcpxCommand, resolveAgyBinary } from "./command.js";
+import { resolveAcpxCommand } from "./command.js";
 import { runAcpxTurn } from "./turn.js";
-import {
-  ACPX_EFFORT,
-  type AcpxAgent,
-  type AcpxHarnessOptions,
-} from "./types.js";
+import type { AcpxHarnessOptions } from "./types.js";
 
-export type { AcpxAgent, AcpxHarnessOptions } from "./types.js";
+export type { AcpxHarnessOptions } from "./types.js";
+export type {
+  AcpxConfig,
+  AcpxEffortConfig,
+  AcpxTurnOpaque,
+  AcpxUsageConfig,
+  AcpxUsageFields,
+} from "./config.js";
 
 /**
- * pi, codex and agy through acpx: one named acpx session per turn chain, model
- * via the global flag, effort via the per-agent session config option (agy
- * carries it in the model id, which the adapter splits). opencode and omp keep
- * native adapters because acpx's built-in opencode route resolves the wrong
- * version (probe §0).
+ * One named acpx session per turn chain, model via the global flag, effort via
+ * the session config option; a run-config suffix map splits effort out of the
+ * model id. opencode and omp keep native adapters because acpx's built-in
+ * opencode route resolves the wrong version (probe §0).
  */
 export class AcpxHarness implements Harness {
-  readonly id: AcpxAgent;
+  readonly id: string;
   private readonly runtime: ReturnType<typeof runtimeOf>;
   private readonly retry: Partial<RetryPolicy>;
 
   constructor(opts: AcpxHarnessOptions) {
-    this.id = opts.agent;
+    this.id = opts.id;
     this.runtime = runtimeOf(opts);
     this.retry = opts.retry ?? {};
   }
 
   async caps(_model: ModelRef): Promise<Caps> {
-    const effort = ACPX_EFFORT[this.id];
     return {
       resume: true,
       compact: "none",
       fork: false,
       subagents: "none",
       structuredOutput: "none",
-      effort: [...effort.levels],
-      usage: { cache: this.id === "codex" || this.id === "agy", cost: false },
+      effort: [...(this.runtime.acpx.effort?.levels ?? [])],
+      usage: { cache: this.runtime.acpx.usage?.cache ?? false, cost: false },
     };
   }
 
@@ -72,8 +73,8 @@ export class AcpxHarness implements Harness {
 
 function runtimeOf(opts: AcpxHarnessOptions) {
   return {
-    agent: opts.agent,
+    id: opts.id,
     command: resolveAcpxCommand(opts.binary),
-    agyBinary: resolveAgyBinary(opts.agyBinary),
+    acpx: opts.acpx,
   };
 }

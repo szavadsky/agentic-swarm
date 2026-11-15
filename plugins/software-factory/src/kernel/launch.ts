@@ -28,7 +28,12 @@ import {
 } from "./signals.js";
 import { createFolderStore } from "./store.js";
 import { writeIterationSummary } from "./summary.js";
-import type { GoalDecision, KernelRuntime, State } from "./types.js";
+import type {
+  GoalDecision,
+  HarnessConfig,
+  KernelRuntime,
+  State,
+} from "./types.js";
 import { BaseFollowConflictError } from "./worktree.js";
 
 export class LaunchError extends Error {
@@ -42,6 +47,8 @@ export interface HarnessFactoryContext {
   /** Per-launch store: `<sessions.dir>/<goal>/<launch-id>/`. */
   sessionDir: string;
   scouts?: ModelRef;
+  /** Run-config harness entries; each acpx entry binds one harness id. */
+  harnesses?: Record<string, HarnessConfig>;
 }
 
 export type HarnessFactory = (
@@ -226,6 +233,7 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
               : {}),
           }
         : undefined,
+      harnesses: configs.run.harnesses,
     });
   }
 

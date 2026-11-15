@@ -337,8 +337,15 @@ export interface AliasConfig {
   timeouts?: Timeouts;
 }
 
+/** One run-config harness entry: a config name bound to an adapter. */
+export interface HarnessConfig {
+  acpx: import("../harness/acpx/config.js").AcpxConfig;
+}
+
 export interface RunConfig {
   aliases: Record<string, AliasConfig>;
+  /** Harness id -> adapter binding; native harnesses need no entry. */
+  harnesses?: Record<string, HarnessConfig>;
   /** Model id -> USD per Mtok; absent model means unpriced, not free. */
   prices?: PriceTable;
   limits: {

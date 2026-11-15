@@ -31,6 +31,8 @@ export interface RoleTarget {
   effort?: string;
   fallbacks?: string[];
   timeouts?: Timeouts;
+  /** Harness configuration passed through `TurnRequest.opaque`. */
+  opaque?: unknown;
 }
 
 function bySeq(a: StepRecord, b: StepRecord): number {
@@ -193,6 +195,7 @@ export function resolveRole(
     effort: alias.effort,
     fallbacks: alias.fallbacks,
     timeouts: alias.timeouts,
+    opaque: runtime.configs.run.harnesses?.[alias.harness]?.acpx,
   };
 }
 
