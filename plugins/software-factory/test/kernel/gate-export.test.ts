@@ -91,6 +91,12 @@ describe("package-only export gate", () => {
     const exported = gate(fixture, "tests");
     expect(exported.code).not.toBe(0);
     expect(exported.output).toContain(fixture.marker);
+    // The marker alone also matches the typecheck echo (`$ test ! -e ...`),
+    // so pin bun's failure line for the outside read: a gates.sh that ran
+    // typecheck in place instead of the export would exit non-zero with the
+    // marker but without this line.
+    expect(exported.output).toContain("(fail) reads a file beside the package");
+    expect(exported.output).not.toContain("test ! -e");
   });
 
   it("keeps the gates separate: red tests do not fail the typecheck gate", () => {

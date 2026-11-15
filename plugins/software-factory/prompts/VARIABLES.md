@@ -1,17 +1,19 @@
 # Prompt variables
 
-Template syntax: `{{name}}` interpolates one value; `{{> partial-name}}` inlines a partial. Undefined variable = render error. Every prompt is stable text up to its final `## This turn` block; all variables live there so providers can cache the prefix. Partials carry no variables.
+Template syntax: [LiquidJS](https://liquidjs.com), strict mode (unknown variable = render error; unknown filter = render error). `{{ name }}` interpolates one value; `{% include 'partial-name' %}` inlines `prompts/partial-name.md`. Every prompt is stable text up to its final `## This turn` block; all variables live there so providers can cache the prefix. Partials carry no variables.
 
-| prompt      | partials                                  |
-| ----------- | ----------------------------------------- |
-| architect   | `_calibration`, `_outcome`                |
-| front       | `_calibration`, `_outcome`                |
-| pm          | `_calibration`, `_outcome`                |
-| implementer | `_clean-code`, `_calibration`, `_outcome` |
-| reviewer    | `_clean-code`, `_calibration`, `_outcome` |
-| digest      | `_outcome`                                |
+| prompt      | partials                                        |
+| ----------- | ----------------------------------------------- |
+| architect   | `calibration`, `outcome`                        |
+| front       | `calibration`, `outcome`                        |
+| pm          | `calibration`, `outcome`                        |
+| implementer | `clean-code`, `scope`, `calibration`, `outcome` |
+| reviewer    | `clean-code`, `calibration`, `outcome`          |
+| digest      | `outcome`                                       |
 
-`_calibration` is the default calibration text. The process config may replace its content per repo; the prompt template does not change.
+The shared definitions exist once as partials: `scope` (the task-scope rule), `calibration` (concerns and calibration, with `remarkable` inside it), `outcome` (the outcome contract), `clean-code` (the code standard) and `remarkable` (the remarkable definition).
+
+`calibration` is the default calibration partial. The process config may replace its content per repo; the prompt template does not change.
 
 ## architect.md
 

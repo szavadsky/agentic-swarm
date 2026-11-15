@@ -31,6 +31,8 @@ const TSC_SUMMARY = /^Found \d+ errors?(?: in \d+ files?)?\.$/;
 const SEPARATOR = /^-{3,}$/;
 /** An absolute path; its prefix is a run root, never part of the failure. */
 const ABSOLUTE_PATH = /(?<![\w:/])\/(?:[^\s:'"()/]+\/)+[^\s:'"()/]+/g;
+/** Stateless membership test for the pattern above (`/g` makes `.test` stateful). */
+const ABSOLUTE_PATH_TEST = new RegExp(ABSOLUTE_PATH.source);
 
 function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -49,7 +51,10 @@ function normaliseRoots(line: string, roots: readonly string[]): string {
   // Ends in a word character so the basename fallback below cannot re-match the
   // path that follows the token.
   const rootToken = "\u0000root";
-  let normalised = line;
+  // Already-normalised output is stored capped, so the signature reader meets
+  // `<root>` again: protect it first, or the fallback below would re-match the
+  // `/dir/file` tail as a new absolute path.
+  let normalised = line.replaceAll("<root>", rootToken);
   for (const root of [...roots].sort((a, b) => b.length - a.length)) {
     const prefix = root.replace(/\/+$/, "");
     if (!prefix) continue;
@@ -98,16 +103,32 @@ export interface CappedGateOutput {
  * Caps gate output for the prompt on a line boundary: a half line at the cut
  * cannot become a failure identity, and the `truncated` flag lets signature
  * matching resume at a report block instead of at an arbitrary detail line.
+ *
+ * When the run roots are known they are normalised before cutting: the window
+ * is the last `GATE_OUTPUT_CAP` characters, so a longer root would otherwise
+ * push the cut later and drop head names a shorter root keeps, reading an
+ * unchanged red as new. The stored tail is the normalised text, which is what
+ * the signatures read.
  */
-export function capGateOutput(text: string): CappedGateOutput {
+export function capGateOutput(
+  text: string,
+  roots: readonly string[] = [],
+): CappedGateOutput {
   const trimmed = text.trim();
-  if (trimmed.length <= GATE_OUTPUT_CAP)
-    return { output: trimmed, truncated: false };
-  const boundary = trimmed.indexOf("\n", trimmed.length - GATE_OUTPUT_CAP);
+  const normalised =
+    roots.length === 0
+      ? trimmed
+      : trimmed
+          .split("\n")
+          .map((line) => normaliseRoots(line, roots))
+          .join("\n");
+  if (normalised.length <= GATE_OUTPUT_CAP)
+    return { output: normalised, truncated: false };
+  const boundary = normalised.indexOf("\n", normalised.length - GATE_OUTPUT_CAP);
   // A single line longer than the cap has no complete line left to keep.
   return boundary === -1
     ? { output: "", truncated: true }
-    : { output: trimmed.slice(boundary + 1), truncated: true };
+    : { output: normalised.slice(boundary + 1), truncated: true };
 }
 
 /** A check that could not run; the baseline never records one as red. */
@@ -123,6 +144,26 @@ export function isInfraCheck(check: CheckResult): boolean {
     details !== null &&
     (details as { kind?: unknown }).kind === "infra"
   );
+}
+
+/**
+ * A red check recorded before run roots were stored whose output prints an
+ * absolute path: without roots its paths collapse to basenames while current
+ * runs keep the tail below their known root, so it must never contribute
+ * inherited red. `checkBase` re-runs a baseline containing one instead of
+ * reusing it. Outputs without absolute paths (reason lines, relative
+ * diagnostics, silent) match the same with or without roots and stay usable.
+ */
+export function isStaleGateCheck(check: CheckResult): boolean {
+  if (check.ok || isInfraCheck(check)) return false;
+  const details = check.details;
+  if (
+    typeof details === "object" &&
+    details !== null &&
+    Array.isArray((details as { roots?: unknown }).roots)
+  )
+    return false;
+  return ABSOLUTE_PATH_TEST.test(check.output);
 }
 
 /**
@@ -279,7 +320,7 @@ async function runGatesUnlocked(
       maxOutputBytes: GATE_OUTPUT_CAP * 4,
     });
     const ok = !res.timedOut && res.code === 0;
-    const capped = capGateOutput(`${res.stdout}\n${res.stderr}`);
+    const capped = capGateOutput(`${res.stdout}\n${res.stderr}`, [cwd]);
     results.push({
       name: gate.id,
       ok,

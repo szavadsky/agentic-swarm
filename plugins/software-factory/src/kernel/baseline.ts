@@ -14,6 +14,7 @@ import {
   gateSignatureKey,
   gateSignatures,
   isInfraCheck,
+  isStaleGateCheck,
   UNIDENTIFIED_GATE_FAILURE,
 } from "./gates.js";
 import type {
@@ -75,12 +76,15 @@ export function recordedBaseGates(
 /**
  * Inherited red, one key per failing signature. A gate that was red on baseline
  * suppresses only the failures it already showed; a silent red gate offers only
- * its name. Infra checks were never a red verdict and contribute nothing.
+ * its name. Infra checks were never a red verdict and contribute nothing, and
+ * stale checks (recorded before run roots were stored) contribute nothing:
+ * their basename-collapsed paths must never match a current run's below-root
+ * tail.
  */
 export function preexistingRed(base: BaseGateState | undefined): Set<string> {
   const inherited = new Set<string>();
   for (const check of base?.checks ?? []) {
-    if (check.ok || isInfraCheck(check)) continue;
+    if (check.ok || isInfraCheck(check) || isStaleGateCheck(check)) continue;
     const signatures = gateSignatures(check);
     if (signatures.size === 0) {
       inherited.add(gateSignatureKey(check.name, UNIDENTIFIED_GATE_FAILURE));
@@ -104,7 +108,7 @@ function result(
   output = "",
   roots: readonly string[] = [],
 ): CheckResult {
-  const capped = capGateOutput(output);
+  const capped = capGateOutput(output, roots);
   return {
     name,
     ok,
@@ -288,10 +292,14 @@ export async function checkBase(
   }
 
   // A merge preview is a function of base too, so a record keyed by the
-  // integration commit alone may predate the base it was gated with.
-  const existing = mergeFrom
+  // integration commit alone may predate the base it was gated with. A record
+  // from before run roots were stored is stale: reusing it would collapse its
+  // basename-only paths into current runs, so it is re-gated instead.
+  const found = mergeFrom
     ? undefined
     : baselineRecord(await store.listRecords(), target);
+  const existing =
+    found && (found.checks ?? []).some(isStaleGateCheck) ? undefined : found;
   if (existing)
     return {
       commit: target,

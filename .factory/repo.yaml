@@ -7,3 +7,9 @@ gates:
     command: plugins/software-factory/scripts/gates.sh plugins/software-factory typecheck
   - id: tests
     command: plugins/software-factory/scripts/gates.sh plugins/software-factory tests
+  - id: format
+    command: plugins/software-factory/scripts/gates.sh plugins/software-factory format
+  - id: lint
+    command: plugins/software-factory/scripts/gates.sh plugins/software-factory lint
+  - id: schema-validation
+    command: plugins/software-factory/scripts/gates.sh plugins/software-factory schema-validation

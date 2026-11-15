@@ -14,7 +14,7 @@ import {
   settledTurns,
 } from "./dispatch.js";
 import { runFront } from "./front.js";
-import { readHolds, scanInbox } from "./mailbox.js";
+import { type Hold, readHolds, scanInbox } from "./mailbox.js";
 import { rolesByStep, writeMetrics } from "./metrics.js";
 import { type ModelCatalog, preflight } from "./preflight.js";
 import { loadPrompts } from "./prompts.js";
@@ -102,6 +102,21 @@ function unfinishedTasks(state: State): string[] {
       ([, task]) => task.status !== "merged" && task.status !== "finished",
     )
     .map(([slug, task]) => `${slug} ${task.status}`);
+}
+
+/**
+ * The steer id in a `steer-presented`/`steer-unanswered` cause, mirroring the
+ * boundary's parser: JSON keeps an id with a quote or backslash unambiguous.
+ */
+function recordedSteerId(cause: string): string | undefined {
+  const token = /^unanswered steer ("(?:[^"\\]|\\.)*")/.exec(cause)?.[1];
+  if (!token) return undefined;
+  try {
+    const id: unknown = JSON.parse(token);
+    return typeof id === "string" ? id : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -317,12 +332,21 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
       // resolver, so resuming would dispatch nothing and loop forever.
       const recordsBefore = await store.listRecords();
       let resume = before.interrupted && i === 0;
+      let resumeHolds: Hold[] = [];
       if (resume) {
-        const holds = await readHolds(store).catch(() => []);
+        try {
+          resumeHolds = await readHolds(store);
+        } catch {
+          // A hold file that cannot be read decides what may run, so the
+          // boundary (and dispatch's infra stop) owns it — never a silent resume.
+          resume = false;
+        }
+      }
+      if (resume) {
         const pendingSteers = new Set(
           (await scanInbox(store)).map((s) => s.id),
         );
-        const goalHoldActive = holds.some(
+        const goalHoldActive = resumeHolds.some(
           (h) => h.goal === true && pendingSteers.has(h.steer),
         );
         if (goalHoldActive) resume = false;
@@ -389,7 +413,26 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
         let decision: GoalDecision = "continue";
         let seenSteers: string[] = [];
         if (resume) {
-          seenSteers = (await scanInbox(store)).map((s) => s.id);
+          // Only steers the dying pass already claimed stay seen: architect-seen
+          // (a presented/unanswered record) or PM-claimed (a hold file). Anything
+          // else in the inbox never reached either consumer, so dispatch must
+          // give it its PM steer turn instead of dropping it as already read.
+          const inbox = await scanInbox(store);
+          const holdSteers = new Set(resumeHolds.map((h) => h.steer));
+          const presented = new Set<string>();
+          for (const rec of recordsBefore) {
+            if (
+              (rec.step === "steer-presented" ||
+                rec.step === "steer-unanswered") &&
+              rec.cause
+            ) {
+              const id = recordedSteerId(rec.cause);
+              if (id) presented.add(id);
+            }
+          }
+          seenSteers = inbox
+            .filter((s) => holdSteers.has(s.id) || presented.has(s.id))
+            .map((s) => s.id);
         }
         if (front.action === "boundary") {
           boundary = await runBoundary(runtime, {
