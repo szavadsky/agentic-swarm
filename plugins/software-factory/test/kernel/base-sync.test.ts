@@ -184,20 +184,15 @@ describe("parked continuation syncs to the integration head", () => {
     }
   }, 60_000);
 
-  it("parks with base-conflict paths and leaves no merge state when the sync conflicts", async () => {
+  it("resolves a first-turn creation conflict in the turn and proceeds to review", async () => {
     const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
     try {
       const harness = new FakeHarness({ id: "fake" });
       parkAlpha(harness, "clash.txt", "alpha\n");
-
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       const checkout = goalCheckout(repo, goal);
       await writeTask(runtime, task("alpha", { scope: ["clash.txt"] }));
       await runDispatch(runtime, { iteration: 1 });
-      const alphaTip = repo
-        .git(["rev-parse", "factory-task/demo/alpha"])
-        .stdout.trim();
-
       const integrationSha = commitIn(
         repo,
         checkout,
@@ -205,26 +200,146 @@ describe("parked continuation syncs to the integration head", () => {
         "integration\n",
         "factory: merge clashing task",
       );
-
+      let sawAsk = false;
+      let sawMergeHead = false;
+      harness.script((req, ctx) => {
+        sawAsk =
+          req.prompt.includes("Conflicted files: clash.txt") &&
+          req.prompt.includes("Resolve the conflict");
+        sawMergeHead =
+          repo.git(["rev-parse", "--verify", "--quiet", "MERGE_HEAD"], {
+            cwd: req.cwd!,
+            allowFail: true,
+          }).code === 0;
+        fs.writeFileSync(
+          path.join(req.cwd!, "clash.txt"),
+          "alpha\nintegration\n",
+          "utf8",
+        );
+        fs.writeFileSync(path.join(req.cwd!, "beta.txt"), "beta\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "beta resolved and implemented" }));
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(
+          outcome({ summary: "beta approved", verdict: "approve" }),
+        );
+        return fakeTurnResult(req);
+      });
       await writeTask(
         runtime,
         task("beta", { base: "alpha", scope: ["beta.txt"] }),
       );
       await runDispatch(runtime, { iteration: 2 });
-
       const records = await runtime.store.listRecords();
       const state = derive(
         await runtime.store.listTasks(),
         records,
         runtime.configs.process.flows,
       );
+      expect(state.tasks.beta!.status).toBe("merged");
+      expect(sawAsk).toBe(true);
+      expect(sawMergeHead).toBe(true);
+      const betaAgents = records.filter(
+        (r) => r.slug === "beta" && r.actor === "agent" && r.endedAt,
+      );
+      expect(betaAgents).toHaveLength(2);
+      expect(
+        records.filter((r) => r.slug === "beta" && r.step === "merge-attempt"),
+      ).toHaveLength(0);
+      expect(state.tasks.beta!.turns).toBe(2);
+      const betaTip = repo
+        .git(["rev-parse", "factory-task/demo/beta"])
+        .stdout.trim();
+      const parents = repo
+        .git(["log", "--format=%P", "-1", betaTip])
+        .stdout.trim()
+        .split(" ");
+      expect(parents).toHaveLength(2);
+      expect(
+        repo.git(["merge-base", "--is-ancestor", integrationSha, betaTip], {
+          allowFail: true,
+        }).code,
+      ).toBe(0);
+      const betaWt = path.join(
+        runtime.paths.worktreeRoot,
+        `${goal}-tasks`,
+        "beta",
+      );
+      expect(fs.readFileSync(path.join(betaWt, "clash.txt"), "utf8")).toBe(
+        "alpha\nintegration\n",
+      );
+      const impl = records
+        .filter(
+          (r) =>
+            r.slug === "beta" && r.step === "implement" && r.actor === "agent",
+        )
+        .sort((a, b) => a.seq - b.seq)[0]!;
+      const advance = records
+        .filter((r) => r.slug === "beta" && r.step === "base-advance")
+        .sort((a, b) => a.seq - b.seq)[0]!;
+      expect(advance.tree).toBe(impl.tree);
+      const headTree = repo
+        .git(["rev-parse", `${integrationSha}^{tree}`])
+        .stdout.trim();
+      expect(advance.headTree).toBe(headTree);
+      expect(impl.base).toBe(integrationSha);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("parks base-conflict when markers remain after the first resolve turn", async () => {
+    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      parkAlpha(harness, "clash.txt", "alpha\n");
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      const checkout = goalCheckout(repo, goal);
+      await writeTask(runtime, task("alpha", { scope: ["clash.txt"] }));
+      await runDispatch(runtime, { iteration: 1 });
+      const alphaTip = repo
+        .git(["rev-parse", "factory-task/demo/alpha"])
+        .stdout.trim();
+      const integrationSha = commitIn(
+        repo,
+        checkout,
+        "clash.txt",
+        "integration\n",
+        "factory: merge clashing task",
+      );
+      let sawAsk = false;
+      harness.script((req, ctx) => {
+        sawAsk = req.prompt.includes("Conflicted files: clash.txt");
+        fs.writeFileSync(
+          path.join(req.cwd!, "clash.txt"),
+          "<<<<<<< HEAD\nalpha\n=======\nintegration\n>>>>>>> head\n",
+          "utf8",
+        );
+        fs.writeFileSync(path.join(req.cwd!, "beta.txt"), "beta\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "beta tried" }));
+        return fakeTurnResult(req);
+      });
+      await writeTask(
+        runtime,
+        task("beta", { base: "alpha", scope: ["beta.txt"] }),
+      );
+      await runDispatch(runtime, { iteration: 2 });
+      const records = await runtime.store.listRecords();
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
+      expect(sawAsk).toBe(true);
       expect(state.tasks.beta!.status).toBe("parked");
       expect(state.tasks.beta!.cause).toContain("base-conflict: clash.txt");
-      // The sync fails before the implementer turn can start.
       expect(
         records.filter((r) => r.slug === "beta" && r.actor === "agent"),
+      ).toHaveLength(1);
+      expect(
+        records.filter((r) => r.slug === "beta" && r.step === "review"),
       ).toHaveLength(0);
-
       const betaWt = path.join(
         runtime.paths.worktreeRoot,
         `${goal}-tasks`,
@@ -239,14 +354,247 @@ describe("parked continuation syncs to the integration head", () => {
           allowFail: true,
         }).code,
       ).not.toBe(0);
-      // The aborted sync leaves the continuation at the parked tip.
       expect(fs.readFileSync(path.join(betaWt, "clash.txt"), "utf8")).toBe(
         "alpha\n",
       );
       expect(
-        repo.git(["rev-parse", "factory-task/demo/alpha"]).stdout.trim(),
+        repo.git(["rev-parse", "factory-task/demo/beta"]).stdout.trim(),
       ).toBe(alphaTip);
       expect(head(repo, checkout)).toBe(integrationSha);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("parks base-conflict when the first resolve turn leaves the conflict unmerged", async () => {
+    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      parkAlpha(harness, "clash.txt", "alpha\n");
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      const checkout = goalCheckout(repo, goal);
+      await writeTask(runtime, task("alpha", { scope: ["clash.txt"] }));
+      await runDispatch(runtime, { iteration: 1 });
+      commitIn(
+        repo,
+        checkout,
+        "clash.txt",
+        "integration\n",
+        "factory: merge clashing task",
+      );
+      harness.script((req, ctx) => {
+        fs.writeFileSync(path.join(req.cwd!, "beta.txt"), "beta\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "beta ignored the conflict" }));
+        return fakeTurnResult(req);
+      });
+      await writeTask(
+        runtime,
+        task("beta", { base: "alpha", scope: ["beta.txt"] }),
+      );
+      await runDispatch(runtime, { iteration: 2 });
+      const records = await runtime.store.listRecords();
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
+      expect(state.tasks.beta!.status).toBe("parked");
+      expect(state.tasks.beta!.cause).toContain("base-conflict: clash.txt");
+      const betaWt = path.join(
+        runtime.paths.worktreeRoot,
+        `${goal}-tasks`,
+        "beta",
+      );
+      expect(
+        repo.git(["rev-parse", "--verify", "--quiet", "MERGE_HEAD"], {
+          cwd: betaWt,
+          allowFail: true,
+        }).code,
+      ).not.toBe(0);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("resolves a reused-worktree first-turn conflict in the turn", async () => {
+    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      parkAlpha(harness, "clash.txt", "alpha\n");
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      const checkout = goalCheckout(repo, goal);
+      await writeTask(runtime, task("alpha", { scope: ["clash.txt"] }));
+      await runDispatch(runtime, { iteration: 1 });
+      const early = await ensureTaskWorktree(
+        runtime,
+        task("beta", { base: "alpha", scope: ["beta.txt"] }),
+      );
+      expect(early.created).toBe(true);
+      expect(early.mergeConflict).toBeUndefined();
+      commitIn(
+        repo,
+        checkout,
+        "clash.txt",
+        "integration\n",
+        "factory: merge clashing task",
+      );
+      let sawAsk = false;
+      harness.script((req, ctx) => {
+        sawAsk = req.prompt.includes("Conflicted files: clash.txt");
+        fs.writeFileSync(
+          path.join(req.cwd!, "clash.txt"),
+          "alpha\nintegration\n",
+          "utf8",
+        );
+        fs.writeFileSync(path.join(req.cwd!, "beta.txt"), "beta\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "beta resolved on reuse" }));
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(
+          outcome({ summary: "beta approved", verdict: "approve" }),
+        );
+        return fakeTurnResult(req);
+      });
+      await writeTask(
+        runtime,
+        task("beta", { base: "alpha", scope: ["beta.txt"] }),
+      );
+      await runDispatch(runtime, { iteration: 2 });
+      const state = derive(
+        await runtime.store.listTasks(),
+        await runtime.store.listRecords(),
+        runtime.configs.process.flows,
+      );
+      expect(sawAsk).toBe(true);
+      expect(state.tasks.beta!.status).toBe("merged");
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("resumes a first-turn resolve after a crash without committing markers", async () => {
+    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      parkAlpha(harness, "clash.txt", "alpha\n");
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      const checkout = goalCheckout(repo, goal);
+      await writeTask(runtime, task("alpha", { scope: ["clash.txt"] }));
+      await runDispatch(runtime, { iteration: 1 });
+      const alphaTip = repo
+        .git(["rev-parse", "factory-task/demo/alpha"])
+        .stdout.trim();
+      commitIn(
+        repo,
+        checkout,
+        "clash.txt",
+        "integration\n",
+        "factory: merge clashing task",
+      );
+      harness.script((req, _ctx) => {
+        return fakeTurnResult(req, { stop: { kind: "infra", cause: "crash" } });
+      });
+      await writeTask(
+        runtime,
+        task("beta", { base: "alpha", scope: ["beta.txt"] }),
+      );
+      await runDispatch(runtime, { iteration: 2 });
+      const betaWt = path.join(
+        runtime.paths.worktreeRoot,
+        `${goal}-tasks`,
+        "beta",
+      );
+      expect(
+        repo.git(["rev-parse", "--verify", "--quiet", "MERGE_HEAD"], {
+          cwd: betaWt,
+          allowFail: true,
+        }).code,
+      ).toBe(0);
+      expect(
+        repo.git(["rev-parse", "factory-task/demo/beta"]).stdout.trim(),
+      ).toBe(alphaTip);
+      let sawAsk = false;
+      harness.script((req, ctx) => {
+        sawAsk = req.prompt.includes("Conflicted files: clash.txt");
+        fs.writeFileSync(
+          path.join(req.cwd!, "clash.txt"),
+          "alpha\nintegration\n",
+          "utf8",
+        );
+        fs.writeFileSync(path.join(req.cwd!, "beta.txt"), "beta\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "beta resolved after crash" }));
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(
+          outcome({ summary: "beta approved", verdict: "approve" }),
+        );
+        return fakeTurnResult(req);
+      });
+      await runDispatch(runtime, { iteration: 3 });
+      const state = derive(
+        await runtime.store.listTasks(),
+        await runtime.store.listRecords(),
+        runtime.configs.process.flows,
+      );
+      expect(sawAsk).toBe(true);
+      expect(state.tasks.beta!.status).toBe("merged");
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("still parks a fix-turn conflict instead of resolving", async () => {
+    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      parkAlpha(harness, "alpha.txt", "alpha\n");
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      const checkout = goalCheckout(repo, goal);
+      await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
+      await runDispatch(runtime, { iteration: 1 });
+      harness.script((req, ctx) => {
+        fs.writeFileSync(path.join(req.cwd!, "beta.txt"), "beta\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "beta implemented" }));
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(
+          outcome({ summary: "beta needs changes", verdict: "changes" }),
+        );
+        return fakeTurnResult(req);
+      });
+      await writeTask(
+        runtime,
+        task("beta", { base: "alpha", scope: ["beta.txt"] }),
+      );
+      await runDispatch(runtime, { iteration: 2 });
+      commitIn(
+        repo,
+        checkout,
+        "beta.txt",
+        "integration owns beta\n",
+        "factory: merge beta clash",
+      );
+      await runDispatch(runtime, { iteration: 3 });
+      const records = await runtime.store.listRecords();
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
+      expect(state.tasks.beta!.status).toBe("parked");
+      expect(state.tasks.beta!.cause).toContain("base-conflict: beta.txt");
+      expect(
+        records.filter(
+          (r) =>
+            r.slug === "beta" &&
+            r.step === "implement" &&
+            r.actor === "agent" &&
+            r.endedAt,
+        ),
+      ).toHaveLength(1);
     } finally {
       cleanupFlowRepo(repo);
     }

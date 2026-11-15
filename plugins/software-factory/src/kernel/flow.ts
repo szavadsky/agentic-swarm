@@ -1,6 +1,7 @@
 import type { CheckResult } from "../core/checks/types.js";
-import { commitAll } from "../core/git/commit.js";
+import { commitAll, isAncestor } from "../core/git/commit.js";
 import { git } from "../core/git/exec.js";
+import { hasConflictMarkers, unmergedFiles } from "../core/git/merge.js";
 import type { Harness, TurnRequest, TurnResult } from "../harness/types.js";
 import { DEFAULT_TIMEOUTS, runAgentTurn } from "./agent.js";
 import { preexistingRed, recordedBaseGates } from "./baseline.js";
@@ -22,6 +23,11 @@ import {
   runGates,
 } from "./gates.js";
 import { type MergeResult, mergeTask } from "./integrate.js";
+import {
+  abortMerge,
+  mergeConflictAsk,
+  mergeHeadSha,
+} from "./merge-conflict.js";
 import {
   appendDebt,
   appendFinish,
@@ -383,7 +389,27 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
   }
 
   const meta = { iteration, slug: task.slug, round: state.round };
-  if (task.base && ensured.created) {
+  // A first-turn `base:` conflict resolves in the turn instead of parking: the
+  // merge stays in progress and the ask rides the counted turn. Fix turns and
+  // reviews keep the park; a resumed MERGE_HEAD (crash mid-resolve) always
+  // resumes so partial work is not lost.
+  let pendingResolve: { head: string; paths: string[] } | null = null;
+  let resolveIsCreation = false;
+  if (ensured.mergeConflict) {
+    if (step.review || isFixTurn(flow, state, step.id)) {
+      const named =
+        ensured.mergeConflict.paths.join(", ") ||
+        "git reported no unmerged paths";
+      await abortMerge(ensured.path);
+      await appendPark(runtime.store, meta, `base-conflict: ${named}`);
+      return {};
+    }
+    pendingResolve = {
+      head: ensured.mergeConflict.head,
+      paths: ensured.mergeConflict.paths,
+    };
+    resolveIsCreation = true;
+  } else if (task.base && ensured.created) {
     // The creation merge in ensureTaskWorktree moved the branch without the
     // agent; derive needs the post-advance tree as the empty-diff baseline.
     // Written even when the merge was a no-op: the parked tip alone already
@@ -412,6 +438,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
   // creation conflict path; a dirty tree keeps the state the last turn left.
   let startPoint = ensured.startPoint;
   if (
+    !pendingResolve &&
     task.base &&
     !ensured.created &&
     !step.review &&
@@ -423,27 +450,60 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
       ensured.path,
       head,
       runtime.repo.identityEnv(),
+      { leaveConflict: true },
     );
     if (!attempt.ok) {
-      const named =
-        attempt.paths.join(", ") || "git reported no unmerged paths";
-      await appendPark(runtime.store, meta, `base-conflict: ${named}`);
-      return {};
+      if (isFixTurn(flow, state, step.id)) {
+        const named =
+          attempt.paths.join(", ") || "git reported no unmerged paths";
+        await abortMerge(ensured.path);
+        await appendPark(runtime.store, meta, `base-conflict: ${named}`);
+        return {};
+      }
+      pendingResolve = { head, paths: attempt.paths };
+      startPoint = head;
+    } else {
+      startPoint = head;
+      if ((await headSha(ensured.path)) !== before) {
+        // The branch moved without the agent; the fix turn's tree must compare
+        // against this post-advance tree, not the last counted turn's.
+        const commit = await headSha(ensured.path);
+        const tree = await treeSha(ensured.path);
+        await runtime.store.appendRecord(
+          scriptMeta(iteration, "base-advance", {
+            slug: task.slug,
+            round: state.round,
+          }),
+          { ok: true, commit, tree },
+        );
+      }
     }
-    startPoint = head;
-    if ((await headSha(ensured.path)) !== before) {
-      // The branch moved without the agent; the fix turn's tree must compare
-      // against this post-advance tree, not the last counted turn's.
-      const commit = await headSha(ensured.path);
-      const tree = await treeSha(ensured.path);
-      await runtime.store.appendRecord(
-        scriptMeta(iteration, "base-advance", {
-          slug: task.slug,
-          round: state.round,
-        }),
-        { ok: true, commit, tree },
-      );
+  }
+  if (!pendingResolve && task.base && !step.review) {
+    const inFlight = await mergeHeadSha(ensured.path);
+    if (inFlight) {
+      let paths = await unmergedFiles(ensured.path);
+      if (paths.length === 0) {
+        const diff = await git(
+          ensured.path,
+          ["diff", "--name-only", "HEAD", inFlight],
+          { allowFail: true },
+        );
+        paths = diff.stdout
+          .split("\n")
+          .map((p) => p.trim())
+          .filter(Boolean)
+          .sort();
+      }
+      pendingResolve = { head: inFlight, paths };
     }
+  }
+  if (task.base && step.review && (await mergeHeadSha(ensured.path))) {
+    const paths = await unmergedFiles(ensured.path);
+    const named = paths.join(", ") || "git reported no unmerged paths";
+    await abortMerge(ensured.path);
+    await appendPark(runtime.store, meta, `base-conflict: ${named}`);
+    return {};
   }
   const preexisting = preexistingRed(recordedBaseGates(records));
   const target = stepTarget(runtime, task, state, step.id);
@@ -462,6 +522,10 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
   );
   vars.base_hash = firstBase(records, task.slug) ?? startPoint;
   vars.head_hash = await headSha(ensured.path);
+  if (pendingResolve) {
+    const ask = mergeConflictAsk(pendingResolve.head, pendingResolve.paths);
+    vars.findings = vars.findings ? `${ask}\n\n${vars.findings}` : ask;
+  }
   // A turn may only change its own worktree (implementer.md). Snapshot the
   // shared checkouts now; the settle below refuses the commit on any breach.
   const contained = await containmentSnapshot(runtime, ensured.path);
@@ -513,6 +577,13 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
         contained,
       );
       if (breach) return { ok: false, cause: `containment: ${breach}` };
+      if (pendingResolve) {
+        // Stage first so edited files leave the unmerged set; markers in the
+        // content still flag below and never reach a commit.
+        await git(ensured.path, ["add", "-A"], { allowFail: true });
+        const flagged = await hasConflictMarkers(ensured.path);
+        if (flagged.length > 0) return {};
+      }
       const settled = await commitStep(
         runtime,
         meta,
@@ -541,8 +612,68 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
     );
   }
   if (breach) {
+    if (pendingResolve) await abortMerge(ensured.path);
     await appendPark(runtime.store, meta, `containment: ${breach}`);
     return {};
+  }
+  if (pendingResolve && !tracked.timedOut()) {
+    const stop = result.record.stop;
+    const hasOutcome = Boolean(result.outcome?.status);
+    const resumable =
+      !hasOutcome &&
+      (stop?.kind === "infra" ||
+        stop?.kind === "cancelled" ||
+        stop?.kind === "truncated");
+    if (!resumable) {
+      const flagged = await hasConflictMarkers(ensured.path);
+      const stillInFlight = await mergeHeadSha(ensured.path);
+      const newHead = await headSha(ensured.path);
+      let contains = false;
+      try {
+        contains = await isAncestor(ensured.path, pendingResolve.head, newHead);
+      } catch {
+        contains = false;
+      }
+      if (flagged.length > 0 || stillInFlight || !contains) {
+        const files = flagged.length > 0 ? flagged : pendingResolve.paths;
+        const named = files.join(", ") || "git reported no unmerged paths";
+        await abortMerge(ensured.path);
+        await appendPark(runtime.store, meta, `base-conflict: ${named}`);
+        return {};
+      }
+      // The merge committed with the turn; the empty-diff baseline is this
+      // post-merge tree, the same tree a clean creation advance would record.
+      const commit = newHead;
+      const tree = await treeSha(ensured.path);
+      const needsHeadTree =
+        resolveIsCreation ||
+        !records.some(
+          (r) => r.slug === task.slug && r.step === "base-advance" && r.endedAt,
+        );
+      if (needsHeadTree) {
+        const headTree = (
+          await git(runtime.paths.repoRoot, [
+            "rev-parse",
+            `${pendingResolve.head}^{tree}`,
+          ])
+        ).stdout.trim();
+        await runtime.store.appendRecord(
+          scriptMeta(iteration, "base-advance", {
+            slug: task.slug,
+            round: state.round,
+          }),
+          { ok: true, commit, tree, headTree },
+        );
+      } else {
+        await runtime.store.appendRecord(
+          scriptMeta(iteration, "base-advance", {
+            slug: task.slug,
+            round: state.round,
+          }),
+          { ok: true, commit, tree },
+        );
+      }
+    }
   }
   return handleStepResult(
     runtime,
@@ -558,7 +689,6 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
     result.outcome,
   );
 }
-
 async function runChecks(
   runtime: KernelRuntime,
   task: TaskFile,
@@ -587,6 +717,29 @@ async function runChecks(
       runtime.store,
       { iteration, slug: task.slug, round: state.round },
       cause,
+    );
+    return {};
+  }
+  if (ensured.mergeConflict) {
+    const named =
+      ensured.mergeConflict.paths.join(", ") ||
+      "git reported no unmerged paths";
+    await abortMerge(ensured.path);
+    await appendPark(
+      runtime.store,
+      { iteration, slug: task.slug, round: state.round },
+      `base-conflict: ${named}`,
+    );
+    return {};
+  }
+  if (task.base && (await mergeHeadSha(ensured.path))) {
+    const paths = await unmergedFiles(ensured.path);
+    const named = paths.join(", ") || "git reported no unmerged paths";
+    await abortMerge(ensured.path);
+    await appendPark(
+      runtime.store,
+      { iteration, slug: task.slug, round: state.round },
+      `base-conflict: ${named}`,
     );
     return {};
   }

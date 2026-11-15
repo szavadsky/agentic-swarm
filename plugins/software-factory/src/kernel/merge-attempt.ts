@@ -8,6 +8,7 @@ import {
   resolveRole,
   resumeSessionFor,
 } from "./flow-context.js";
+import { abortMerge, mergeConflictAsk } from "./merge-conflict.js";
 import { commitEdits, scriptMeta } from "./record.js";
 import { materialHash } from "./tasks.js";
 import type {
@@ -31,10 +32,6 @@ export interface AttemptResult {
   cause?: string;
   infra?: { kind: "infra"; cause: string };
   cancelled?: boolean;
-}
-
-async function abortMerge(cwd: string): Promise<void> {
-  await git(cwd, ["merge", "--abort"], { allowFail: true });
 }
 
 async function concludeAutoMerge(
@@ -94,6 +91,13 @@ export async function attemptConflictMerge(
   if (ensured.setup && !ensured.setup.ok) {
     return { ok: false, cause: `setup: ${ensured.setup.error ?? "unknown"}` };
   }
+  if (ensured.mergeConflict) {
+    const named =
+      ensured.mergeConflict.paths.join(", ") ||
+      "git reported no unmerged paths";
+    await abortMerge(ensured.path);
+    return { ok: false, cause: `base-conflict: ${named}` };
+  }
   const head = await integrationHead(runtime);
   const before = await headSha(ensured.path);
   const merge = await git(
@@ -130,11 +134,7 @@ export async function attemptConflictMerge(
         worktree: ensured.path,
         round: String(state.round),
       };
-  vars.findings = [
-    `The integration head ${head.slice(0, 10)} conflicts with this task branch.`,
-    `Conflicted files: ${conflicts.join(", ")}.`,
-    "Resolve the conflict in the worktree, keeping both sides' intent. Do not rebase, do not switch branches; the script commits the merge.",
-  ].join("\n");
+  vars.findings = mergeConflictAsk(head, conflicts);
   vars.base_hash = head;
   vars.head_hash = before;
 

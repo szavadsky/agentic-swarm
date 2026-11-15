@@ -100,12 +100,15 @@ export type MergeAttempt = { ok: true } | { ok: false; paths: string[] };
  * Merges `ref` into the checkout at `cwd`. A conflict aborts the merge so no
  * state is left behind and returns the unmerged paths; any other refusal
  * (merge.ff=only, unrelated histories) leaves no merge state either, and git's
- * own reason is the only diagnosis, so it is thrown.
+ * own reason is the only diagnosis, so it is thrown. With `leaveConflict` a
+ * conflict stays in progress (MERGE_HEAD plus unmerged paths) for the caller's
+ * turn to resolve; only a non-conflict refusal still throws.
  */
 export async function mergeRef(
   cwd: string,
   ref: string,
   env: Record<string, string> | undefined,
+  opts?: { leaveConflict?: boolean },
 ): Promise<MergeAttempt> {
   const merge = await git(cwd, ["merge", "--no-edit", ref], {
     allowFail: true,
@@ -120,6 +123,22 @@ export async function mergeRef(
     .map((p) => p.trim())
     .filter(Boolean)
     .sort();
+  if (opts?.leaveConflict) {
+    const head = await git(
+      cwd,
+      ["rev-parse", "--verify", "--quiet", "MERGE_HEAD"],
+      { allowFail: true },
+    );
+    if (head.code !== 0 && paths.length === 0) {
+      throw new GitError(
+        `merge --no-edit ${ref}`,
+        merge.code,
+        merge.stderr,
+        merge.stdout,
+      );
+    }
+    return { ok: false, paths };
+  }
   const inFlight = await abortInFlightMerge(cwd);
   if (!inFlight && paths.length === 0) {
     throw new GitError(
@@ -258,6 +277,11 @@ export interface EnsuredWorktree {
   startPoint: string;
   setup?: SetupResult;
   error?: string;
+  /**
+   * Creation merge conflicted and stays in progress (MERGE_HEAD) for the
+   * first turn to resolve. `head` is the integration head the merge attempted.
+   */
+  mergeConflict?: { paths: string[]; head: string };
 }
 
 /**
@@ -307,7 +331,7 @@ export async function ensureTaskWorktree(
     path.resolve(p),
   );
   let created = false;
-  let conflict: string[] | undefined;
+  let conflict: { paths: string[]; head: string } | undefined;
   if (!registered.includes(path.resolve(wtPath))) {
     if (fs.existsSync(wtPath))
       fs.rmSync(wtPath, { recursive: true, force: true });
@@ -327,28 +351,18 @@ export async function ensureTaskWorktree(
       }
       if (!task.base) return;
       // The parked branch is never rewritten: only this continuation branch moves.
+      // A conflict stays in progress for the first turn to resolve instead of
+      // parking before it; the caller decides (first turn resolves, later parks).
       startPoint = await integrationHead(runtime);
       const attempt = await mergeRef(
         wtPath,
         startPoint,
         runtime.repo.identityEnv(),
+        { leaveConflict: true },
       );
-      if (!attempt.ok) conflict = attempt.paths;
+      if (!attempt.ok) conflict = { paths: attempt.paths, head: startPoint };
     });
     created = true;
-  }
-  if (conflict) {
-    const named =
-      conflict.length > 0
-        ? conflict.join(", ")
-        : "git reported no unmerged paths";
-    return {
-      path: wtPath,
-      branch,
-      created,
-      startPoint,
-      error: `base-conflict: ${named}`,
-    };
   }
 
   let setup: SetupResult | undefined;
@@ -360,6 +374,7 @@ export async function ensureTaskWorktree(
         cwd: wtPath,
       });
       if (!setup.ok) {
+        if (conflict) await abortInFlightMerge(wtPath);
         return {
           path: wtPath,
           branch,
@@ -372,7 +387,14 @@ export async function ensureTaskWorktree(
       if (marker) fs.writeFileSync(marker, new Date().toISOString(), "utf8");
     }
   }
-  return { path: wtPath, branch, created, startPoint, setup };
+  return {
+    path: wtPath,
+    branch,
+    created,
+    startPoint,
+    setup,
+    ...(conflict ? { mergeConflict: conflict } : {}),
+  };
 }
 
 /** Head of the task worktree; also used as the reviewer's diff head. */
