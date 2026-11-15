@@ -414,3 +414,10 @@ Verbatim, newest last; each with what it changed.
 - i23 incidents still open: acpx-config-only (empty-diff after red), checks-prune (full-suite-only failure). Parked: 25. Pending: 17 (M4x2, M5x3, M6x4, gate-flake-rerun, acpx-config-land, checks-prune-land, pm-store-debt, resume-repair, steer-pm-routing, retired doc-drift).
 - Assumption recorded: gate-flake-rerun adds bounded gate re-run (evidence records 00990/00992/00996/00997) — planning, no INTENT contradiction. Forward: fake-script-keyed first, then checks-prune-land, acpx-config-land, gate-flake-rerun; PM cancel retired doc-drift; p1 goals not ready (R7/R8 wait on acpx-config-land via m4-trivial-session).
 - OMP ladder green (muse:max, ernie), 0 fallbacks, 0 quota hits. Inbox empty (steer-i24 processed).
+
+### 2026-11-15 — iteration 25: 0 merged, exit 3, $0.53 — STOP RULE (2nd consecutive 0-merge)
+- 16 min, stop=iteration-limit, base gates green at f1516c0. factory/self == factory-v3: nothing to merge. 7 records: digest $0 (beam worked), architect $0.5190, PM $0 (ernie), fake-script-keyed-land base-advance/commit/implement/park.
+- fake-script-keyed-land parked FAILED: implement r1's outcome was invalid YAML (agent emitted a nested `summary:` inside the `summary: >` block; "Nested mappings are not allowed in compact mappings, line 2 col 10"); 1 outcome-repair turn did not save it. Kept branch work survives (f20fce0 + land branch).
+- Kept-work note: i24 parked the 13-file f20fce0 tip on budget; i25 parked its -land continuation on a malformed outcome. Two parks, same gate task, different causes — neither is a code defect in the work itself.
+- Ladder green (muse/ernie), 0 fallbacks, 0 quota. Assumptions: none. Owner attention: none. Inbox was empty.
+- STOP: 0-merge count = 2 (i24 budget-cut park, i25 malformed-outcome park). Journal + steer + pin refresh only; NO relaunch until owner decides.
