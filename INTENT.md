@@ -30,6 +30,8 @@ Modern harnesses deliver a decent story (several hundred lines of code). The age
     - eg, smaller model can perfectly plan or define architecture. It will degrade if it needs to simutaneously consider callgraphs and edge cases.
     - same model, small or large, can perfectly review results even of a larger model. At the end of the day, the job of smarter actor is to make sure results AND motivation are understandable to small actors.
 
+## Model diveristy level
+  - if multiple suitable models are available (and we have a lot for task and mechanical levels),  different steps in the same flow need to be assigned to different models. Flow shall config specificy, eg task implementer: switch model on retry, especially if in same multimodel harness that can reuse comapcted transcript
 
 ### Role of agents/models - that coceptual section shall help to interpret anything below
 - Architect agent preferrably to run with large frontier level models (Opus, Fable, Astra, Kimi). The job of architect is to decide what needs to what to do to bring project to state specified by the intent (=can be either build from scratch or evolve an existing codebase) w/o intoducing new technical debt, breaking existing functionlity. In case of saga hiearchical process, architect relies on subarchitects to handle sub layers - so, architect does not need to look at entire codabase. Architect (same context) double up as code reviewer = look at net changes since the project start. At each iteration, job of achitect it 
@@ -145,6 +147,7 @@ Task types below are propagated from config from relevant prompts and schemas.
 - Works through any acp-compatible harness with opaque config passed at launch (command-line args, env, or config files depending on the harness). omp is a special case that simplifies things, not a dependency; extra tools exposable through ACP. Supported and tested: omp, OpenCode, codex, pi, Claude Code, agy (Antigravity CLI) — with harness rotation across iterations so no harness-specific assumption survives untested.
 - The build is harness agnostic. Which harness does which role best is discovered during bootstrapping and recorded in run configs (default/exemplary config), never in code. Starting hypotheses: pi is the task-flow implementer (minimal, great at the single task); omp and OpenCode fit spikes better out of the shelf, where subagent expansion matters.
 - Harness adapters: a custom adapter only when the harness offers substantially more than ACP exposes (omp is that case: RPC, yield, compaction, overlays). Otherwise drive the harness through acpx (OpenCode included), or at worst plain ACP — never a bespoke CLI wrapper for what the protocol already covers; NO CODE, shall leverage acpx naming (and opaque config) in config, that is it 
+- acpx is enabler for agnostism, expectation that acpx compatible harness could be just added to configuration with no code change
 
 ### Operating assumptions
 - The entire factory is assumed to run inside a sandbox (e.g. bubblewrap); documented. Factory sandox is out of the scope now. Sandboxing individual harnesses can come later.
@@ -208,6 +211,9 @@ Task types below are propagated from config from relevant prompts and schemas.
 
 - Implementers / task reviewers at the highest supported effort, resolved at pre-flight (syntax differs per harness: muse takes `:max` on omp, `#xhigh` on OpenCode, the bare id on codex).
 - Several model configs, alternated across iterations to test harness combinations; pi is one of the rotated harnesses.
+
+- omp supports auto rotation (open code go have 2 keys) and auto fallback (alieases can be used with config fallbacxks), while others -> do not. Perfect to test kernel level fallbacks, eg from PI as task implemented to agy
+
 
 ## Stack
  - typescript.- linted, autofrmatted, code complexity./file size enforced, separate interface from implementation enforced. .sh - minimize; ZERO real logic in sh. 
