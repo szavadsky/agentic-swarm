@@ -299,23 +299,30 @@ const gateRuns = new KeyedMutex();
 /**
  * Runs the repo-config gates in `cwd`. Gates are commands, not the v2 check
  * pipeline: kernel-0 only needs a red/green signal and the output a fix turn
- * must read.
+ * must read. `only` re-runs a subset after a red run; the mutex still covers
+ * the subset, so a re-run never overlaps another gate run on the same repo.
  */
 export async function runGates(
   runtime: KernelRuntime,
   cwd: string,
+  opts: { only?: ReadonlySet<string> } = {},
 ): Promise<CheckResult[]> {
   return gateRuns.runExclusive(runtime.paths.repoRoot, () =>
-    runGatesUnlocked(runtime, cwd),
+    runGatesUnlocked(runtime, cwd, opts.only),
   );
 }
 
 async function runGatesUnlocked(
   runtime: KernelRuntime,
   cwd: string,
+  only?: ReadonlySet<string>,
 ): Promise<CheckResult[]> {
   const results: CheckResult[] = [];
-  for (const gate of runtime.configs.repo.gates) {
+  const gates =
+    only === undefined
+      ? runtime.configs.repo.gates
+      : runtime.configs.repo.gates.filter((gate) => only.has(gate.id));
+  for (const gate of gates) {
     const res = await runProcess({
       cmd: gate.command,
       cwd,
@@ -381,4 +388,15 @@ export function newGateFailures(
     }
     return false;
   });
+}
+
+/**
+ * Failing test names of one red gate for its `gate-flake` record: the sorted
+ * failure identities of the red run. A silent red gate offers only its name,
+ * recorded as the unidentified failure its checks record matches on.
+ */
+export function gateFlakeTests(check: CheckResult): string[] {
+  const signatures = gateSignatures(check);
+  if (signatures.size === 0) return [UNIDENTIFIED_GATE_FAILURE];
+  return [...signatures].sort();
 }

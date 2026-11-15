@@ -36,14 +36,17 @@ export async function startChecks(
   );
 }
 
-/** Closes a record opened by `startChecks` with the gate results and wall time. */
+/**
+ * Closes a record opened by `startChecks` with the gate results and wall time.
+ * `tree` stamps the gated tree so the flake re-run keys once per tree.
+ */
 export async function finishChecks(
   turn: {
     meta: { startedAt: string };
     finish(end: RecordEnd): Promise<StepRecord>;
   },
   checks: CheckResult[],
-  opts: { preexisting?: ReadonlySet<string> } = {},
+  opts: { preexisting?: ReadonlySet<string>; tree?: string } = {},
 ): Promise<StepRecord> {
   const started = Date.parse(turn.meta.startedAt);
   const wallMs = Number.isFinite(started)
@@ -54,6 +57,34 @@ export async function finishChecks(
     checks,
     testRuns: checks.length,
     wallMs,
+    ...(opts.tree !== undefined ? { tree: opts.tree } : {}),
+  });
+}
+
+/** One gate that went red, then green on the same tree: its red-run failures. */
+export interface GateFlake {
+  gate: string;
+  tests: string[];
+}
+
+/**
+ * A gate that proved itself flaky: red, then green on the same tree. The cause
+ * names each gate with its red-run failing tests; the red checks stay on the
+ * record so the flake's own fix has the output the green checks record drops.
+ */
+export async function appendGateFlake(
+  store: ArtifactStore,
+  meta: { iteration: number; slug: string; round: number },
+  flake: { tree?: string; flakes: GateFlake[]; checks: CheckResult[] },
+): Promise<void> {
+  const cause = flake.flakes
+    .map((entry) => `${entry.gate}: ${entry.tests.join(", ")}`)
+    .join("; ");
+  await store.appendRecord(scriptMeta(meta.iteration, "gate-flake", meta), {
+    ok: true,
+    cause,
+    checks: flake.checks,
+    ...(flake.tree !== undefined ? { tree: flake.tree } : {}),
   });
 }
 

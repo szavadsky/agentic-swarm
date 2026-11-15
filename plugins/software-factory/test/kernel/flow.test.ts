@@ -1,10 +1,22 @@
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
+import yaml from "yaml";
+import { commitAll } from "../../src/core/git/commit.js";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
+import { executeTaskAction } from "../../src/kernel/flow.js";
+import { type GoalMetrics, writeMetrics } from "../../src/kernel/metrics.js";
 import { writeIterationSummary } from "../../src/kernel/summary.js";
+import type {
+  Action,
+  KernelRuntime,
+  TaskFile,
+  TaskState,
+} from "../../src/kernel/types.js";
+import { ensureTaskWorktree } from "../../src/kernel/worktree.js";
 import { task } from "./helpers.js";
 import {
   cleanupFlowRepo,
@@ -892,6 +904,293 @@ describe("delivery guard", () => {
       expect(state.tasks.task!.cause).toContain("no outcome");
     } finally {
       cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+});
+
+describe("gate flake re-run", () => {
+  interface GateProbe {
+    dir: string;
+    count: string;
+    marker: string;
+  }
+
+  function makeProbe(): GateProbe {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "factory-flake-"));
+    return {
+      dir,
+      count: path.join(dir, "count"),
+      marker: path.join(dir, "marker"),
+    };
+  }
+
+  function runs(probe: GateProbe): number {
+    try {
+      const text = fs.readFileSync(probe.count, "utf8").trim();
+      return text === "" ? 0 : text.split("\n").length;
+    } catch {
+      return 0;
+    }
+  }
+
+  function cleanupProbe(probe: GateProbe): void {
+    fs.rmSync(probe.dir, { recursive: true, force: true });
+  }
+
+  const quote = (value: string): string => `'${value}'`;
+
+  /** Always green; its count proves green gates never re-run. */
+  function greenCommand(probe: GateProbe): string {
+    return `echo run >> ${quote(probe.count)}`;
+  }
+
+  /** Red once with a bun-style failure, then green on the same tree. */
+  function flakyCommand(probe: GateProbe): string {
+    return (
+      `echo run >> ${quote(probe.count)}; ` +
+      `if [ -f ${quote(probe.marker)} ]; then exit 0; ` +
+      `else touch ${quote(probe.marker)}; ` +
+      `printf 'src/a.test.ts:\\n(fail) suite > flaky test\\n'; exit 1; fi`
+    );
+  }
+
+  function redCommand(probe: GateProbe): string {
+    return (
+      `echo run >> ${quote(probe.count)}; ` +
+      `printf 'src/b.test.ts:\\n(fail) suite > broken test\\n'; exit 1`
+    );
+  }
+
+  function infraCommand(probe: GateProbe): string {
+    return `echo run >> ${quote(probe.count)}; exit 127`;
+  }
+
+  /** Drives one real action and returns the freshly derived state. */
+  async function driveAction(
+    runtime: KernelRuntime,
+    file: TaskFile,
+    action: Action,
+  ): Promise<TaskState> {
+    const state = derive(
+      await runtime.store.listTasks(),
+      await runtime.store.listRecords(),
+      runtime.configs.process.flows,
+    );
+    await executeTaskAction(runtime, file, action, 1, state.tasks[file.slug]!);
+    const after = derive(
+      await runtime.store.listTasks(),
+      await runtime.store.listRecords(),
+      runtime.configs.process.flows,
+    );
+    return after.tasks[file.slug]!;
+  }
+
+  it("re-runs a red gate once and merges with a gate-flake record when the re-run is green", async () => {
+    const green = makeProbe();
+    const flaky = makeProbe();
+    const { repo, goal } = setupFlowRepo({
+      gates: [
+        { id: "green", command: greenCommand(green) },
+        { id: "flaky", command: flakyCommand(flaky) },
+      ],
+    });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script((req, ctx) => {
+        fs.writeFileSync(path.join(req.cwd!, "task.txt"), "v1\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "v1" }));
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "approved", verdict: "approve" }));
+        return fakeTurnResult(req);
+      });
+
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("task", { scope: ["task.txt"] }));
+      const result = await runDispatch(runtime, { iteration: 1 });
+      expect(result.reason).toBe("boundary");
+
+      const records = await runtime.store.listRecords();
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
+      expect(state.tasks.task!.status).toBe("merged");
+      // No fix turn: one implement turn plus its review.
+      expect(harness.calls).toHaveLength(2);
+
+      const checks = records.filter(
+        (r) => r.slug === "task" && r.step === "checks",
+      );
+      expect(checks).toHaveLength(1);
+      expect(checks[0]!.ok).toBe(true);
+      expect(typeof checks[0]!.tree).toBe("string");
+
+      const flakes = records.filter(
+        (r) => r.slug === "task" && r.step === "gate-flake",
+      );
+      expect(flakes).toHaveLength(1);
+      expect(flakes[0]!.cause).toContain("flaky");
+      expect(flakes[0]!.cause).toContain("src/a.test.ts");
+      expect(flakes[0]!.cause).toContain("flaky test");
+
+      // Only the red gate re-ran: flaky ran first + re-run + merge-checks,
+      // green ran checks + merge-checks.
+      expect(runs(flaky)).toBe(3);
+      expect(runs(green)).toBe(2);
+
+      await writeMetrics(runtime.store, {
+        iteration: 1,
+        status: "in-progress",
+        records,
+      });
+      const metrics = yaml.parse(
+        (await runtime.store.readFile("metrics.yaml"))!,
+      ) as GoalMetrics;
+      expect(metrics.iterations[0]!.incidents.gateFlakes).toBe(1);
+      expect(metrics.totals.incidents.gateFlakes).toBe(1);
+
+      await writeIterationSummary(runtime.store, {
+        iteration: 1,
+        state,
+        records,
+        status: "in-progress",
+      });
+      const summary = fs.readFileSync(
+        path.join(runtime.store.goalDir, "iterations/1/summary.md"),
+        "utf8",
+      );
+      expect(summary).toContain("- gate flakes: 1");
+    } finally {
+      cleanupFlowRepo(repo);
+      cleanupProbe(green);
+      cleanupProbe(flaky);
+    }
+  }, 60_000);
+
+  it("sends a still-red gate to the existing fix route with no gate-flake record", async () => {
+    const green = makeProbe();
+    const red = makeProbe();
+    const { repo, goal } = setupFlowRepo({
+      gates: [
+        { id: "green", command: greenCommand(green) },
+        { id: "unit", command: redCommand(red) },
+      ],
+    });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script((req, ctx) => {
+        fs.writeFileSync(path.join(req.cwd!, "task.txt"), "v1\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "v1" }));
+        return fakeTurnResult(req);
+      });
+
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      const file = task("task", { scope: ["task.txt"] });
+      await writeTask(runtime, file);
+      const after = await driveAction(runtime, file, {
+        kind: "step",
+        slug: "task",
+        step: "implement",
+        round: 1,
+      });
+      expect(after.phase).toBe("implement");
+      expect(after.round).toBe(1);
+
+      const records = await runtime.store.listRecords();
+      const checks = records.filter(
+        (r) => r.slug === "task" && r.step === "checks",
+      );
+      expect(checks).toHaveLength(1);
+      expect(checks[0]!.ok).toBe(false);
+      expect(typeof checks[0]!.tree).toBe("string");
+      expect(
+        records.filter((r) => r.slug === "task" && r.step === "gate-flake"),
+      ).toHaveLength(0);
+      expect(runs(red)).toBe(2);
+      expect(runs(green)).toBe(1);
+    } finally {
+      cleanupFlowRepo(repo);
+      cleanupProbe(green);
+      cleanupProbe(red);
+    }
+  }, 60_000);
+
+  it("keeps infra reds on their own path without a re-run", async () => {
+    const probe = makeProbe();
+    const { repo, goal } = setupFlowRepo({
+      gates: [{ id: "typecheck", command: infraCommand(probe) }],
+    });
+    try {
+      const runtime = await makeRuntime(repo, goal, {});
+      const file = task("a", { scope: ["a.txt"] });
+      await writeTask(runtime, file);
+      await driveAction(runtime, file, { kind: "checks", slug: "a" });
+
+      const records = await runtime.store.listRecords();
+      const checks = records.filter(
+        (r) => r.slug === "a" && r.step === "checks",
+      );
+      expect(checks).toHaveLength(1);
+      expect(checks[0]!.ok).toBe(false);
+      expect(checks[0]!.checks?.[0]?.details).toMatchObject({ kind: "infra" });
+      expect(
+        records.filter((r) => r.slug === "a" && r.step === "gate-flake"),
+      ).toHaveLength(0);
+      expect(runs(probe)).toBe(1);
+    } finally {
+      cleanupFlowRepo(repo);
+      cleanupProbe(probe);
+    }
+  }, 60_000);
+
+  it("re-runs once per tree: a repeat checks on the same tree skips it, a new commit re-arms it", async () => {
+    const green = makeProbe();
+    const red = makeProbe();
+    const { repo, goal } = setupFlowRepo({
+      gates: [
+        { id: "green", command: greenCommand(green) },
+        { id: "unit", command: redCommand(red) },
+      ],
+    });
+    try {
+      const runtime = await makeRuntime(repo, goal, {});
+      const file = task("a", { scope: ["a.txt"] });
+      await writeTask(runtime, file);
+
+      await driveAction(runtime, file, { kind: "checks", slug: "a" });
+      expect(runs(red)).toBe(2);
+      expect(runs(green)).toBe(1);
+
+      await driveAction(runtime, file, { kind: "checks", slug: "a" });
+      expect(runs(red)).toBe(3);
+      expect(runs(green)).toBe(2);
+
+      const ensured = await ensureTaskWorktree(runtime, file);
+      expect(ensured.error).toBeUndefined();
+      fs.writeFileSync(path.join(ensured.path!, "a.txt"), "a\n", "utf8");
+      await commitAll(runtime.repo, ensured.path!, "factory: test change");
+
+      await driveAction(runtime, file, { kind: "checks", slug: "a" });
+      expect(runs(red)).toBe(5);
+      expect(runs(green)).toBe(3);
+
+      const records = await runtime.store.listRecords();
+      const checks = records.filter(
+        (r) => r.slug === "a" && r.step === "checks",
+      );
+      expect(checks).toHaveLength(3);
+      expect(checks[0]!.tree).toBe(checks[1]!.tree);
+      expect(checks[2]!.tree).not.toBe(checks[0]!.tree);
+      expect(
+        records.filter((r) => r.slug === "a" && r.step === "gate-flake"),
+      ).toHaveLength(0);
+    } finally {
+      cleanupFlowRepo(repo);
+      cleanupProbe(green);
+      cleanupProbe(red);
     }
   }, 60_000);
 });

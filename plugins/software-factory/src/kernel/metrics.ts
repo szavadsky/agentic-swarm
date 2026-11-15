@@ -42,7 +42,7 @@ export interface ModelMetrics extends GroupMetrics {
 /**
  * Incidents that consume turns and money without producing a flow step:
  * harness retries and fallback hops, outcome repairs, conflicts, failed
- * merged-result gates, and the park causes that are not task failures.
+ * merged-result gates, gate flakes, and the park causes that are not task failures.
  */
 export interface IncidentCounts {
   /** Extra calls on the same model after an infra stop. */
@@ -54,6 +54,8 @@ export interface IncidentCounts {
   mergeConflicts: number;
   /** `merge-checks` that went red without a recorded cause. */
   mergedGateFailures: number;
+  /** Gates that went red, then green on the same tree after one re-run. */
+  gateFlakes: number;
   roundLimitParks: number;
   noProgressParks: number;
   /** Parks whose cause names a turn that committed no changes. */
@@ -188,6 +190,7 @@ function emptyIncidents(): IncidentCounts {
     outcomeRepairs: 0,
     mergeConflicts: 0,
     mergedGateFailures: 0,
+    gateFlakes: 0,
     roundLimitParks: 0,
     noProgressParks: 0,
     emptyDiffParks: 0,
@@ -298,6 +301,8 @@ function parkIncidents(all: StepRecord[], incidents: IncidentCounts): void {
       incidents.mergeConflicts += 1;
     } else if (rec.step === "merge-checks" && rec.ok === false && !rec.cause) {
       incidents.mergedGateFailures += 1;
+    } else if (rec.step === "gate-flake" && rec.endedAt) {
+      incidents.gateFlakes += 1;
     } else if (rec.step === "park" && rec.endedAt) {
       const cause = rec.cause ?? "";
       if (/^review round limit reached/i.test(cause))
