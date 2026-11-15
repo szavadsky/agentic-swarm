@@ -197,9 +197,15 @@ Task types below are propagated from config from relevant prompts and schemas.
 #### Bootstrap models/harness (one run config, not a factory assumption)
 - Architect: Claude Opus 5.5 at high (omp, Claude Code). Escalation implementer: Sonnet 5.5 — minimize use.
 - Subscriptions: omp, OpenCode, codex and pi on OpenCode Go; omp also on the Claude subscription (Opus/Sonnet); agy (Antigravity CLI) with gemini flash 3.8 at high through acpx, task level. Self-improvement runs cover every leg.
-- OpenCode Go: beam-free (least capable; steer ingestion, schema fixes, commits); capable implementers deepseek-v4.1-flash and muse-spark-1.3-contributor — through omp, codex, OpenCode.
-- OpenCode-only free models: glm-5.3-flash-free, deepseek-v4.1-flash-free (most capable), minimax-m3.1-flash-free, mimo-v2.6-flash-free, inkling-2-small-free.
-- Assigne correct tier from approved models (front, review, PM structuring, digests); promote a step to a paid tier on measured failure, not by default.
+- overall during build use the following subscriptions/harnesses 
+   - agy (Antigravity CLI) with gemini flash 3.8 at high through acpx, - preferred task level model when subscription available. 
+   - Open Code Go Subscription - omp (2 keys, auto rotation), open code (muse limited to xhigh), codex, pi - most of task level spent will be there. Only allowed models are deepseek v41 (defaults to 1017): max and muse conttributor 1.3:max 
+   - Open Code Go beam-free:max - (through same 4 harnesses) - use as mechanical level 
+   - claude : usable in omp and claude code. Only use for architect (OPus) and escalation tier (Sonnet). Multi architect (saga) shall be tested both with omp (same session, IRC, architect prompt launches subarchitects, subarchitects compacted before second launch, architect prompt reminds them they already launched, subarchitects still need to develop written status reports) and claude code (only writtent report), automatic launch -> first review if subarchitect created plan in previous iteration; and then to create subplan if assigned by master archutect
+
+- OpenCode-only free models: glm-5.3-flash-free, deepseek-v4.1-flash-free (most capable), minimax-m3.1-flash-free, mimo-v2.6-flash-free - use when available. 
+- as soon as we believe combination is supported, config shall be shifted, and next launch shall test new combination
+
 - Implementers / task reviewers at the highest supported effort, resolved at pre-flight (syntax differs per harness: muse takes `:max` on omp, `#xhigh` on OpenCode, the bare id on codex).
 - Several model configs, alternated across iterations to test harness combinations; pi is one of the rotated harnesses.
 
