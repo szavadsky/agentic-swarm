@@ -60,16 +60,16 @@ The shared definitions exist once as partials: `scope` (the task-scope rule), `c
 
 ## implementer.md
 
-| variable          | meaning                                                                                                                       |
-| ----------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `task_path`       | path to this task's file: frontmatter plus brief                                                                              |
-| `front_pack`      | path to the front's context pack for a front-classified trivial or task goal; empty string when no front classified this task |
-| `worktree`        | path to the task worktree to edit                                                                                             |
-| `setup_command`   | worktree bootstrap command (dependencies etc.); `none` when not needed                                                        |
-| `gate_commands`   | configured compile/lint/test commands as `- id: command` lines; `none` when empty                                             |
-| `baseline_checks` | gate failures recorded before this turn, same format; `none` when the baseline is green                                       |
-| `findings`        | previous review round's findings for this task; empty string on the first turn                                                |
-| `outcome_path`    | path where the outcome file must be written when the harness asks for a file                                                  |
+| variable          | meaning                                                                                                                                                                       |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `task_path`       | path to this task's file: frontmatter plus brief                                                                                                                              |
+| `front_pack`      | path to the front's context pack for a front-classified trivial or task goal; empty string when no front classified this task                                                 |
+| `worktree`        | path to the task worktree to edit                                                                                                                                             |
+| `setup_command`   | worktree bootstrap command (dependencies etc.); `none` when not needed                                                                                                        |
+| `gate_commands`   | configured compile/lint/test commands as `- id: command` lines; `none` when empty                                                                                             |
+| `baseline_checks` | gate failures recorded before this turn, same format; `none` when the baseline is green                                                                                       |
+| `findings`        | previous review round's summary, concerns and forward for this task (summary first); gate failures when the latest record is red checks; empty string before the first review |
+| `outcome_path`    | path where the outcome file must be written when the harness asks for a file                                                                                                  |
 
 ## reviewer.md
 
@@ -82,7 +82,7 @@ The shared definitions exist once as partials: `scope` (the task-scope rule), `c
 | `round`           | 1-based review round                                                                             |
 | `max_rounds`      | configured review round limit for this flow                                                      |
 | `baseline_checks` | gate failures recorded on the base before any task; pre-existing, not findings against this diff |
-| `prior_findings`  | previous round's findings; empty string in round 1                                               |
+| `prior_findings`  | previous round's summary, concerns and forward (summary first); empty string in round 1          |
 | `outcome_path`    | path where the outcome file must be written when the harness asks for a file                     |
 
 ## digest.md

@@ -34,5 +34,5 @@ You implement one task in one worktree. The task file is the assignment: frontma
 - setup command: `{{setup_command}}`
 - gate commands: `{{gate_commands}}`
 - gate baseline before your turn: `{{baseline_checks}}` — failures here are pre-existing
-- previous review findings: `{{findings}}` — empty on the first turn
+- previous review findings: `{{findings}}` — review summary, then concerns and forward; empty string before the first review
 - outcome path: `{{outcome_path}}`

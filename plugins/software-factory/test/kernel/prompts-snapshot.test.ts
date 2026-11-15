@@ -1,8 +1,18 @@
 import { describe, expect, it } from "bun:test";
 import path from "node:path";
-import { loadPromptLibrary } from "../../src/kernel/prompts.js";
+import { FakeHarness } from "../../src/harness/fake/index.js";
 import { packageRoot } from "../../src/kernel/config.js";
+import { promptVars } from "../../src/kernel/flow-context.js";
+import { loadPromptLibrary } from "../../src/kernel/prompts.js";
+import { formatReviewFindings } from "../../src/kernel/record.js";
 import type { ProcessConfig } from "../../src/kernel/types.js";
+import { rec, task } from "./helpers.js";
+import {
+  cleanupFlowRepo,
+  makeRuntime,
+  outcome,
+  setupFlowRepo,
+} from "./s2-helpers.js";
 
 const ROLES: Record<string, Record<string, string>> = {
   architect: {
@@ -115,5 +125,132 @@ describe("role prompts", () => {
       ROLES.architect!,
     );
     expect(rendered.startsWith("You are the architect")).toBe(true);
+  });
+});
+
+describe("review findings carry", () => {
+  it("formats the review outcome whole: summary first, then concerns and forward", () => {
+    const summary =
+      "1. src/x.ts:41 needs a null check\n2. test/y.ts:9 asserts nothing";
+    const text = formatReviewFindings(
+      outcome({
+        summary,
+        concerns: [
+          {
+            kind: "debt",
+            calibration: "architect",
+            text: "retry helper duplicates backoff",
+            evidence: "src/z.ts:3",
+          },
+        ],
+        forward: ["split the helper next iteration"],
+      }),
+    );
+    expect(text).toContain(summary);
+    const summaryAt = text.indexOf("1. src/x.ts:41");
+    const concernAt = text.indexOf("retry helper duplicates backoff");
+    const forwardAt = text.indexOf("split the helper next iteration");
+    expect(summaryAt).toBeGreaterThanOrEqual(0);
+    expect(concernAt).toBeGreaterThan(summaryAt);
+    expect(forwardAt).toBeGreaterThan(concernAt);
+  });
+
+  it("carries a summary-only changes review into findings and prior_findings", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const runtime = await makeRuntime(repo, goal, {
+        fake: new FakeHarness({ id: "fake" }),
+      });
+      const taskFile = task("alpha", { scope: ["src/x.ts"] });
+      const flow = runtime.configs.process.flows["implement-review"]!;
+      const summary = "1. src/x.ts:41 needs a null check";
+      const records = [
+        rec(1, { slug: "alpha", step: "implement", round: 1 }),
+        rec(2, {
+          slug: "alpha",
+          step: "review",
+          round: 1,
+          outcome: outcome({ summary, verdict: "changes" }),
+        }),
+      ];
+      const vars = promptVars(
+        runtime,
+        taskFile,
+        "/worktrees/demo-tasks/alpha",
+        records,
+        2,
+        flow,
+      );
+      expect(vars.findings).toContain(summary);
+      expect(vars.prior_findings).toContain(summary);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("keeps gate-failure findings when red checks are the latest record", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const runtime = await makeRuntime(repo, goal, {
+        fake: new FakeHarness({ id: "fake" }),
+      });
+      const taskFile = task("alpha", { scope: ["src/x.ts"] });
+      const flow = runtime.configs.process.flows["implement-review"]!;
+      const summary = "1. src/x.ts:41 needs a null check";
+      const records = [
+        rec(1, { slug: "alpha", step: "implement", round: 1 }),
+        rec(2, {
+          slug: "alpha",
+          step: "review",
+          round: 1,
+          outcome: outcome({ summary, verdict: "changes" }),
+        }),
+        rec(3, {
+          slug: "alpha",
+          step: "checks",
+          round: 1,
+          actor: "script",
+          alias: undefined,
+          model: undefined,
+          ok: false,
+          checks: [
+            {
+              name: "test",
+              ok: false,
+              summary: "exit 1",
+              output: "(fail) alpha > one",
+              fingerprint: "test:(fail) alpha > one",
+            },
+          ],
+        }),
+      ];
+      const vars = promptVars(
+        runtime,
+        taskFile,
+        "/worktrees/demo-tasks/alpha",
+        records,
+        2,
+        flow,
+      );
+      expect(vars.findings).toContain("### test: exit 1");
+      expect(vars.findings).not.toContain(summary);
+      expect(vars.prior_findings).toContain(summary);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("tells the reviewer its summary carries the implementer's findings", () => {
+    const rendered = library().render("reviewer", ROLES.reviewer!);
+    expect(rendered).toContain("numbered list in your outcome `summary`");
+    expect(rendered).toContain(
+      "receives that summary as its findings, followed by your concerns and forward",
+    );
+  });
+
+  it("no longer calls fix-round findings empty on the first turn", () => {
+    const rendered = library().render("implementer", ROLES.implementer!);
+    expect(rendered).not.toContain("empty on the first turn");
+    expect(rendered).toContain("review summary, then concerns and forward");
   });
 });

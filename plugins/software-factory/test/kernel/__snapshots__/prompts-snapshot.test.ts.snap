@@ -393,7 +393,7 @@ verdict: approve | changes | reject; decision: continue | done | blocked
 - gate commands: \`- test: bun test
 - typecheck: bun run typecheck\`
 - gate baseline before your turn: \`- test: 2 failing\` — failures here are pre-existing
-- previous review findings: \`- src/x.ts:41 needs a null check\` — empty on the first turn
+- previous review findings: \`- src/x.ts:41 needs a null check\` — review summary, then concerns and forward; empty string before the first review
 - outcome path: \`/worktrees/demo-tasks/alpha/outcome.yaml\`
 "
 `;
@@ -411,7 +411,7 @@ exports[`role prompts renders reviewer from exactly its documented variables: re
 6. Edge cases and security: the task's edges, input validation, failure propagation, secrets, injection-prone interpolation, resource leaks.
 7. The interface dependents rely on: unchanged where the task said it must be.
 
-Findings are actionable: \`file:line\`, why it fails, what would satisfy. No praise, no restating the diff, no taste without a rule or an observable consequence. In a fix round, check the prior findings against the current diff; a finding the diff resolves is closed, a re-raise cites what remains. A defect outside this task's scope is not a finding against this diff: forward it as a task for the architect with the smallest next step.
+Findings are actionable: \`file:line\`, why it fails, what would satisfy. Write them as a numbered list in your outcome \`summary\`: the next implementer receives that summary as its findings, followed by your concerns and forward. No praise, no restating the diff, no taste without a rule or an observable consequence. In a fix round, check the prior findings against the current diff; a finding the diff resolves is closed, a re-raise cites what remains. A defect outside this task's scope is not a finding against this diff: forward it as a task for the architect with the smallest next step.
 
 ## Decision
 
