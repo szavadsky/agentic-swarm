@@ -11,6 +11,14 @@ import type {
   TaskStatus,
 } from "./types.js";
 
+// Augment the shared State shape with the derived "interrupted" flag so the
+// interface file stays untouched; the flag is computed in `derive`.
+declare module "./types.js" {
+  interface State {
+    interrupted: boolean;
+  }
+}
+
 /**
  * The script record the launch appends when the front path stops: a front
  * trivial/task goal has no architect turn, so this record carries its goal
@@ -62,6 +70,17 @@ export function derive(
       goal = decision === "done" ? "done" : decision === "blocked" ? "blocked" : "active";
     }
   }
+  const currentIteration = iteration;
+  const hasArchitectDecisionThisIteration = sorted.some(
+    (rec) =>
+      rec.iteration === currentIteration &&
+      rec.actor === "agent" &&
+      rec.step === "architect" &&
+      rec.outcome?.decision !== undefined
+  );
+  const hasCrashThisIteration = sorted.some(
+    (rec) => rec.iteration === currentIteration && rec.stop?.kind === "infra" && rec.stop?.cause === "crash"
+  );
 
   const statuses = new Map<string, TaskStatus>();
   const reductions = new Map<string, ReturnType<typeof reduceTask>>();
@@ -97,10 +116,17 @@ export function derive(
     };
   }
 
+  const interrupted =
+    goal === "active" &&
+    iteration > 0 &&
+    hasArchitectDecisionThisIteration &&
+    !hasCrashThisIteration &&
+    Object.values(taskStates).some((task) => task.status === "ready");
   return {
     goal,
     iteration,
     terminal: goal !== "active",
+    interrupted,
     tasks: taskStates,
   };
 }

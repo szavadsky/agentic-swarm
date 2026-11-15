@@ -75,7 +75,7 @@ function overlapsRunning(scope: readonly string[], running: ReadonlyMap<string, 
 }
 
 /** Agent turns charged to the item budget; boundary roles and infra stops are free. */
-function settledTurns(records: StepRecord[], iteration: number): number {
+export function settledTurns(records: StepRecord[], iteration: number): number {
   return records.filter(
     (r) =>
       r.iteration === iteration &&
@@ -88,7 +88,7 @@ function settledTurns(records: StepRecord[], iteration: number): number {
   ).length;
 }
 
-function iterationStart(records: StepRecord[], iteration: number): number {
+export function iterationStart(records: StepRecord[], iteration: number): number {
   const times = records
     .filter((r) => r.iteration === iteration)
     .map((r) => Date.parse(r.startedAt))
@@ -103,7 +103,7 @@ function iterationStart(records: StepRecord[], iteration: number): number {
  * cost is unknown adds $0 — the brake treats it as free because it has nothing
  * better to go on, and the summary reports how many turns were blind.
  */
-function iterationSpend(records: StepRecord[], iteration: number, prices: PriceTable): number {
+export function iterationSpend(records: StepRecord[], iteration: number, prices: PriceTable): number {
   let usd = 0;
   for (const rec of records) {
     if (rec.iteration !== iteration || rec.actor !== "agent" || !rec.endedAt) continue;
@@ -366,19 +366,22 @@ export async function runDispatch(
       if (!task) throw new Error(`action names unknown task "${action.slug}"`);
       const taskState = state.tasks[action.slug]!;
 
-      // A held task that has not run this iteration waits for the architect;
-      // one that has finishes its in-flight step first, then parks unmerged.
-      // A park the task earned itself runs with its own cause: the steer did
-      // not stop it, and the architect needs the reason the task stopped.
-      const heldBySteer = hold.goal ?? hold.slugs.get(action.slug);
-      if (heldBySteer !== undefined && action.kind !== "park") {
+      // A per-slug hold parks that task (started or not, once its in-flight
+      // step finishes). A goal hold is a drain: it never parks — started tasks
+      // settle in their current phase and stay resumable for the next iteration.
+      const heldBySlug = hold.slugs.get(action.slug);
+      if (heldBySlug !== undefined && action.kind !== "park") {
         if (started.has(action.slug)) {
           await appendPark(
             runtime.store,
             { iteration, slug: action.slug, round: taskState.round },
-            `steer: ${heldBySteer}`
+            `steer: ${heldBySlug}`
           );
         }
+        continue;
+      }
+      if (hold.goal !== undefined && !hold.slugs.has(action.slug) && action.kind !== "park") {
+        // Block further steps of started tasks without parking them.
         continue;
       }
 

@@ -264,7 +264,7 @@ describe("mid-run steer holds", () => {
     }
   }, 60_000);
 
-  it("a goal hold drains dispatch and parks the in-flight task", async () => {
+  it("a goal hold drains dispatch and leaves started tasks resumable, never parked", async () => {
     const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
     try {
       const harness = new FakeHarness({ id: "fake" });
@@ -287,8 +287,8 @@ describe("mid-run steer holds", () => {
       expect(dispatched.reason).toBe("drained");
       expect(dispatched.cause).toBe("steer: s1 goal hold");
       const state = await tasks(runtime);
-      expect(state.tasks.alpha!.status).toBe("parked");
-      expect(state.tasks.alpha!.cause).toBe("steer: s1");
+      expect(state.tasks.alpha!.status).toBe("ready");
+      expect(state.tasks.alpha!.park).toBeUndefined();
       expect(state.tasks.gamma!.status).toBe("ready");
       expect((await runtime.store.listRecords()).some((r) => r.slug === "gamma")).toBe(false);
       expect(harness.calls).toHaveLength(2);

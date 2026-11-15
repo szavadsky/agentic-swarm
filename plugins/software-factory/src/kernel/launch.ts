@@ -3,13 +3,13 @@ import path from "node:path";
 import { Repo } from "../core/git/repo.js";
 import { acquireRunLock, type RunLockHandle } from "../cli/lock.js";
 import { derive, FRONT_STOP_STEP } from "./derive.js";
-import { runDispatch, type DispatchResult } from "./dispatch.js";
+import { runDispatch, settledTurns, iterationStart, iterationSpend, type DispatchResult } from "./dispatch.js";
 import { loadConfigs, resolveGoalPaths, toLimits } from "./config.js";
 import { loadPrompts } from "./prompts.js";
 import { createFolderStore } from "./store.js";
 import { runBoundary, type BoundaryResult } from "./boundary.js";
 import { runFront } from "./front.js";
-import { scanInbox } from "./mailbox.js";
+import { scanInbox, readHolds } from "./mailbox.js";
 import { scriptMeta } from "./record.js";
 import { writeIterationSummary } from "./summary.js";
 import { rolesByStep, writeMetrics } from "./metrics.js";
@@ -252,33 +252,67 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
       const before = derive(await store.listTasks(), await store.listRecords(), runtime.configs.process.flows);
       if (before.terminal && !(before.goal === "blocked" && (await steersWaiting(store)))) break;
 
-      let iteration = before.iteration + 1;
+      // A relaunch that lands in an interrupted iteration finishes that
+      // iteration: same iteration number, no front turn, no architect record.
+      // Resume only applies on the first launch iteration, and only when the
+      // drain that stopped the previous run is gone: a persistent drain (goal
+      // hold, exhausted turn/budget/wall budget) has the boundary as its only
+      // resolver, so resuming would dispatch nothing and loop forever.
+      const recordsBefore = await store.listRecords();
+      let resume = before.interrupted && i === 0;
+      if (resume) {
+        const holds = await readHolds(store).catch(() => []);
+        const pendingSteers = new Set((await scanInbox(store)).map((s) => s.id));
+        const goalHoldActive = holds.some((h) => h.goal === true && pendingSteers.has(h.steer));
+        if (goalHoldActive) resume = false;
+        if (runtime.limits.iterationTurns !== undefined) {
+          const used = settledTurns(recordsBefore, before.iteration);
+          if (used >= runtime.limits.iterationTurns) resume = false;
+        }
+        if (runtime.limits.iterationUsd !== undefined) {
+          const spent = iterationSpend(recordsBefore, before.iteration, runtime.configs.run.prices ?? {});
+          if (spent >= runtime.limits.iterationUsd) resume = false;
+        }
+        if (runtime.limits.iterationWallMs !== undefined) {
+          const elapsed = Date.now() - iterationStart(recordsBefore, before.iteration);
+          if (elapsed >= runtime.limits.iterationWallMs) resume = false;
+        }
+      }
+      let iteration = resume ? before.iteration : before.iteration + 1;
       let humanInterventions = 0;
       try {
         const processedBefore = await processedSteers(store);
-        const front = await runFront(runtime, { iteration });
-        if (front.action === "blocked") {
-          const cause = `front turn ended the launch as blocked: ${
-            front.cause ?? "unknown cause"
-          }`;
-          await recordFrontStop(store, iteration, "blocked", cause);
-          lastSummary = await writeIterationFacts(runtime, iteration, "blocked-by-user", 0, cause);
-          stopCause = cause;
-          break;
-        }
-        if (front.action === "infra") {
-          const cause = `front turn ended the launch as infra: ${
-            front.cause ?? "unknown cause"
-          }; relaunch to retry`;
-          lastSummary = await writeIterationFacts(runtime, iteration, "stopped-with-debt", 0, cause);
-          ended = "infra";
-          stopCause = cause;
-          break;
+        let front: Awaited<ReturnType<typeof runFront>>;
+        if (resume) {
+          front = { action: "dispatch" };
+        } else {
+          front = await runFront(runtime, { iteration });
+          if (front.action === "blocked") {
+            const cause = `front turn ended the launch as blocked: ${
+              front.cause ?? "unknown cause"
+            }`;
+            await recordFrontStop(store, iteration, "blocked", cause);
+            lastSummary = await writeIterationFacts(runtime, iteration, "blocked-by-user", 0, cause);
+            stopCause = cause;
+            break;
+          }
+          if (front.action === "infra") {
+            const cause = `front turn ended the launch as infra: ${
+              front.cause ?? "unknown cause"
+            }; relaunch to retry`;
+            lastSummary = await writeIterationFacts(runtime, iteration, "stopped-with-debt", 0, cause);
+            ended = "infra";
+            stopCause = cause;
+            break;
+          }
         }
 
         let boundary: BoundaryResult | undefined;
         let decision: GoalDecision = "continue";
         let seenSteers: string[] = [];
+        if (resume) {
+          seenSteers = (await scanInbox(store)).map((s) => s.id);
+        }
         if (front.action === "boundary") {
           boundary = await runBoundary(runtime, {
             relaunch: relaunch && i === 0,
@@ -313,7 +347,7 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
         const stopped = ended !== undefined;
         humanInterventions = Math.max(0, (await processedSteers(store)) - processedBefore);
 
-        const frontFinished = front.action === "dispatch" && dispatched?.reason === "boundary";
+        const frontFinished = !resume && front.action === "dispatch" && dispatched?.reason === "boundary";
         if (frontFinished) {
           const afterDispatch = derive(
             await store.listTasks(),
