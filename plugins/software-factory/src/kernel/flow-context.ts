@@ -11,7 +11,7 @@ import {
 import { preexistingRed, recordedBaseGates } from "./baseline.js";
 import { contextPackRelPath } from "./context-pack.js";
 import { formatFailingChecks, newGateFailures } from "./gates.js";
-import { formatConcerns } from "./record.js";
+import { formatReviewFindings } from "./record.js";
 import type {
   FlowDefinition,
   FlowStep,
@@ -375,7 +375,7 @@ export function promptVars(
   const preexisting = preexistingRed(base);
   let findings = "";
   if (latest === review && review?.outcome)
-    findings = formatConcerns(review.outcome);
+    findings = formatReviewFindings(review.outcome);
   else if (latest?.checks)
     findings = formatFailingChecks(newGateFailures(latest.checks, preexisting));
   return {
@@ -392,7 +392,7 @@ export function promptVars(
     base_hash: "",
     head_hash: "",
     max_rounds: String(flow.reviewRounds),
-    prior_findings: review?.outcome ? formatConcerns(review.outcome) : "",
+    prior_findings: review?.outcome ? formatReviewFindings(review.outcome) : "",
     front_pack: frontPack(runtime, task, records) ?? "",
   };
 }

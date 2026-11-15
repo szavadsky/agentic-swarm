@@ -124,7 +124,7 @@ export function validateTaskGraph(
     }
     if (task.scope.length === 0) {
       findings.push(
-        `task "${task.slug}" has no scope: list the files or globs it may touch`,
+        `task "${task.slug}" has no scope: declare the predicted area it works in`,
       );
     }
     if (bySlug.has(task.slug)) {

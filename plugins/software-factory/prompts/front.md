@@ -19,9 +19,9 @@ When in doubt, choose `bigger`. A class changes only by escalation.
    slug: the task slug   # trivial and task only
    ```
 
-2. For `trivial` or `task`, one task file in the tasks directory. Frontmatter: `slug` (namespaced kebab-case, unique), `title`, `kind: task`, `flow` (`just-implement` for trivial, `implement-review` for task), `deps: []`, `scope` (the globs the task may touch), `source: front`. Body: the brief with a `Done when:` line. It needs a valid slug, a non-empty scope, no missing dependency, and a `tier` naming a configured alias or `default`. The brief need not name the pack.
+2. For `trivial` or `task`, one task file in the tasks directory. Frontmatter: `slug` (namespaced kebab-case, unique), `title`, `kind: task`, `flow` (`just-implement` for trivial, `implement-review` for task), `deps: []`, `scope` (the predicted area), `source: front`. Body: the brief with a `Done when:` line. It needs a valid slug, a non-empty scope, no missing dependency, and a `tier` naming a configured alias or `default`. The brief need not name the pack.
 
-3. The context pack at the pack path, for every class: a deterministic index — paths, risks, open questions; never paste file bodies. For `bigger` it replaces the scripted pack; for `trivial` or `task` it briefs the implementer, so it must carry the scope and risks the task file leaves implicit.
+3. The context pack at the pack path, for every class: a deterministic index — paths, risks, open questions; never paste file bodies. For `bigger` it replaces the scripted pack; for `trivial` or `task` it briefs the implementer, so it must carry the area and risks the task file leaves implicit.
 
 Write only `class.yaml`, the one task file, the pack and the outcome. Never change the checkout. Validate `class.yaml` and the task file before ending the turn: `factory validate <file>`.
 

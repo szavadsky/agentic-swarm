@@ -46,6 +46,8 @@ export interface BoundaryOptions {
   iteration?: number;
   /** Goal-relative pack the front prepared; the scripted pack is not rendered. */
   frontPack?: string;
+  /** Absolute path of the run config the launch loaded; the pack names it. */
+  runConfigPath?: string;
 }
 
 function previousSummary(
@@ -123,6 +125,23 @@ async function codeMap(checkout: string): Promise<string[]> {
 }
 
 /**
+ * Record directories with `started.yaml` and no `end.yaml`: turns cut off
+ * before they committed, as absolute paths the architect can drill into.
+ */
+async function openRecords(store: KernelRuntime["store"]): Promise<string[]> {
+  const open: string[] = [];
+  for (const name of await store.listDir("records")) {
+    const dir = path.join(store.recordsDir, name);
+    if (
+      fs.existsSync(path.join(dir, "started.yaml")) &&
+      !fs.existsSync(path.join(dir, "end.yaml"))
+    )
+      open.push(dir);
+  }
+  return open;
+}
+
+/**
  * One architect consult: digest on a relaunch, inbox, deterministic pack,
  * architect turn (plan edited in place), steer answers, then the PM turn and
  * its validation. Called at every iteration start, never mid-iteration.
@@ -176,6 +195,8 @@ export async function runBoundary(
       gates: runtime.configs.repo.gates,
       baseGates: recordedBaseGates(records),
       forwarded: forwardedConcerns(records),
+      runConfigPath: opts.runConfigPath,
+      openRecords: await openRecords(runtime.store),
     });
     await runtime.store.writeFile(packRel, pack);
   }

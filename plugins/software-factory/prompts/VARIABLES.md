@@ -8,10 +8,10 @@ Template syntax: [LiquidJS](https://liquidjs.com), strict mode (unknown variable
 | front       | `calibration`, `outcome`                        |
 | pm          | `calibration`, `outcome`                        |
 | implementer | `clean-code`, `scope`, `calibration`, `outcome` |
-| reviewer    | `clean-code`, `calibration`, `outcome`          |
+| reviewer    | `clean-code`, `scope`, `calibration`, `outcome` |
 | digest      | `outcome`                                       |
 
-The shared definitions exist once as partials: `scope` (the task-scope rule), `calibration` (concerns and calibration, with `remarkable` inside it), `outcome` (the outcome contract), `clean-code` (the code standard) and `remarkable` (the remarkable definition).
+The shared definitions exist once as partials: `scope` (the predicted-area rule), `calibration` (concerns and calibration, with `remarkable` inside it), `outcome` (the outcome contract), `clean-code` (the code standard) and `remarkable` (the remarkable definition).
 
 `calibration` is the default calibration partial. The process config may replace its content per repo; the prompt template does not change.
 
@@ -24,7 +24,7 @@ The shared definitions exist once as partials: `scope` (the task-scope rule), `c
 | `intent_path`  | path to the goal's `intent.md`                                                                                        |
 | `plan_path`    | path to the goal's single markdown plan; the file to edit                                                             |
 | `checkout`     | path to the stable goal checkout (integration worktree)                                                               |
-| `pack_path`    | path to the iteration context pack (index: status, short hashes, per-task rounds, infra, code facts, paths) |
+| `pack_path`    | path to the iteration context pack (index: status, short hashes, per-task rounds, infra, code facts, paths)           |
 | `digest_path`  | path to the previous launch's digest; empty string on a first launch                                                  |
 | `steers`       | formatted pending steers: id, first line, file path; `none` when empty                                                |
 | `outcome_path` | path where the outcome file must be written when the harness asks for a file                                          |
@@ -41,35 +41,35 @@ The shared definitions exist once as partials: `scope` (the task-scope rule), `c
 | `pack_path`     | path to the iteration context pack the front writes: the architect's input on `bigger`, the implementer's briefing on `trivial`/`task` |
 | `checkout`      | path to the stable goal checkout the front reads                                                                                       |
 | `setup_command` | repository setup command; `none` when not needed                                                                                       |
-| `gate_commands` | configured gate commands as `- id: command` lines; `none` when empty |
+| `gate_commands` | configured gate commands as `- id: command` lines; `none` when empty                                                                   |
 | `outcome_path`  | path where the outcome file must be written when the harness asks for a file                                                           |
 
 ## pm.md
 
-| variable         | meaning                                                                                                     |
-| ---------------- | ----------------------------------------------------------------------------------------------------------- |
-| `iteration`      | 1-based iteration number of this launch                                                                     |
-| `intent_path`    | path to the goal's `intent.md`, for resolving wording only                                                  |
-| `plan_path`      | path to the plan to derive from; read-only to the PM                                                        |
-| `tasks_dir`      | directory where task files are written, one `<slug>.md` per task                                            |
+| variable         | meaning                                                                                                                                                                 |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `iteration`      | 1-based iteration number of this launch                                                                                                                                 |
+| `intent_path`    | path to the goal's `intent.md`, for resolving wording only                                                                                                              |
+| `plan_path`      | path to the plan to derive from; read-only to the PM                                                                                                                    |
+| `tasks_dir`      | directory where task files are written, one `<slug>.md` per task                                                                                                        |
 | `existing_tasks` | existing task files as `- slug \| status \| hash \| deps: a,b` lines (`none` when empty); merged/finished lines end `frozen (read-only)`, cancelled `read-only (spent)` |
-| `repair` | the script validator's findings from the previous ask; empty string on the first ask and on steer turns |
-| `steers` | pending steers as `- id (file):` plus indented full text; `none` on a derive turn |
-| `holds_dir` | directory for one `<steer-id>.yaml` hold file per structured steer |
-| `outcome_path`   | path where the outcome file must be written when the harness asks for a file                                |
+| `repair`         | the script validator's findings from the previous ask; empty string on the first ask and on steer turns                                                                 |
+| `steers`         | pending steers as `- id (file):` plus indented full text; `none` on a derive turn                                                                                       |
+| `holds_dir`      | directory for one `<steer-id>.yaml` hold file per structured steer                                                                                                      |
+| `outcome_path`   | path where the outcome file must be written when the harness asks for a file                                                                                            |
 
 ## implementer.md
 
-| variable          | meaning                                                                                                                       |
-| ----------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `task_path`       | path to this task's file: frontmatter plus brief                                                                              |
-| `front_pack`      | path to the front's context pack for a front-classified trivial or task goal; empty string when no front classified this task |
-| `worktree`        | path to the task worktree to edit                                                                                             |
-| `setup_command`   | worktree bootstrap command (dependencies etc.); `none` when not needed                                                        |
-| `gate_commands`   | configured compile/lint/test commands as `- id: command` lines; `none` when empty |
-| `baseline_checks` | gate failures recorded before this turn, same format; `none` when the baseline is green                                       |
-| `findings`        | previous review round's findings for this task; empty string on the first turn                                                |
-| `outcome_path`    | path where the outcome file must be written when the harness asks for a file                                                  |
+| variable          | meaning                                                                                                                                                                       |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `task_path`       | path to this task's file: frontmatter plus brief                                                                                                                              |
+| `front_pack`      | path to the front's context pack for a front-classified trivial or task goal; empty string when no front classified this task                                                 |
+| `worktree`        | path to the task worktree to edit                                                                                                                                             |
+| `setup_command`   | worktree bootstrap command (dependencies etc.); `none` when not needed                                                                                                        |
+| `gate_commands`   | configured compile/lint/test commands as `- id: command` lines; `none` when empty                                                                                             |
+| `baseline_checks` | gate failures recorded before this turn, same format; `none` when the baseline is green                                                                                       |
+| `findings`        | previous review round's summary, concerns and forward for this task (summary first); gate failures when the latest record is red checks; empty string before the first review |
+| `outcome_path`    | path where the outcome file must be written when the harness asks for a file                                                                                                  |
 
 ## reviewer.md
 
@@ -82,7 +82,7 @@ The shared definitions exist once as partials: `scope` (the task-scope rule), `c
 | `round`           | 1-based review round                                                                             |
 | `max_rounds`      | configured review round limit for this flow                                                      |
 | `baseline_checks` | gate failures recorded on the base before any task; pre-existing, not findings against this diff |
-| `prior_findings`  | previous round's findings; empty string in round 1                                               |
+| `prior_findings`  | previous round's summary, concerns and forward (summary first); empty string in round 1          |
 | `outcome_path`    | path where the outcome file must be written when the harness asks for a file                     |
 
 ## digest.md

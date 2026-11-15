@@ -12,7 +12,7 @@ verdict: approve | changes | reject; decision: continue | done | blocked
 
 - `kind`: `debt | risk | uncertainty | choice`; `calibration`: `fyi | architect | owner`.
 - `verdict` is used on review steps, `decision` on the architect step.
-- `done`: the requested work is complete. `blocked`: an input you cannot obtain is missing; name it and the stage that owns it. `failed`: attempted and did not complete; cite evidence. `upscope`: real scope exceeds the task definition.
+- `done`: the requested work is complete. `blocked`: an input you cannot obtain is missing; name it and the stage that owns it. `failed`: attempted and did not complete; cite evidence. `upscope`: the done-when needs a different seam or a missing dependency.
 - Summary says what changed or was found, not what you intended or how. No restating the assignment.
 - Report only verified facts; mark inference `[INFERENCE]` or drop it.
 - No files beyond those the step asks for; no extra narration.

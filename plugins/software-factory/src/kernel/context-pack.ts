@@ -37,13 +37,13 @@ export interface ContextPackInput {
   /** Last recorded pre-flight base run; absent when it was skipped. */
   baseGates?: BaseGateState;
   forwarded: ForwardedConcern[];
-  maxBytes?: number;
+  /** Absolute path of the run config the launch loaded; absent when not recorded. */
+  runConfigPath?: string;
+  /** Records with started.yaml but no end.yaml, as paths the architect can drill into. */
+  openRecords?: string[];
 }
 
-const DEFAULT_MAX_BYTES = 8000;
 const CODE_MAP_ENTRIES = 40;
-const TRUNCATION_SUFFIX =
-  "\n[pack truncated: size cap reached; drill into the paths above]\n";
 
 /** Goal-relative path the boundary renders an iteration's pack to. */
 export function contextPackRelPath(iteration: number): string {
@@ -59,10 +59,21 @@ function short(hash: string | undefined): string {
   return hash ? hash.slice(0, 10) : "-";
 }
 
+function formatForwarded(concern: ForwardedConcern): string {
+  const repeats =
+    concern.occurrences && concern.occurrences > 1
+      ? ` x${concern.occurrences}`
+      : "";
+  return `- [${concern.calibration}/${concern.kind}]${repeats} ${concern.text}${
+    concern.evidence ? ` (${concern.evidence})` : ""
+  } — ${concern.source}`;
+}
+
 /**
  * Deterministic index, never pasted content (KERNEL0 §5): status, hashes,
  * rounds, infra commands and paths the architect can drill into. No clock,
- * no timestamps, so the same derived state renders the same pack.
+ * no timestamps, so the same derived state renders the same pack. Uncapped:
+ * the status table and every pointer section render whole on every pack.
  */
 export function renderContextPack(input: ContextPackInput): string {
   const lines: string[] = [
@@ -75,6 +86,7 @@ export function renderContextPack(input: ContextPackInput): string {
     `- records: ${input.recordsDir}`,
     `- previous iteration summary: ${input.previousSummary ?? "none"}`,
     `- previous-launch digest: ${input.digestPath ?? "none"}`,
+    `- run config: ${input.runConfigPath ?? "none"}`,
     "",
     "## Task status",
     "| slug | status | kind | round | turns | deps | commit |",
@@ -124,18 +136,21 @@ export function renderContextPack(input: ContextPackInput): string {
 
   if (input.forwarded.length > 0) {
     lines.push("", "## Forwarded concerns (architect/owner)");
-    for (const concern of input.forwarded) {
-      const repeats =
-        concern.occurrences && concern.occurrences > 1
-          ? ` x${concern.occurrences}`
-          : "";
-      lines.push(
-        `- [${concern.calibration}/${concern.kind}]${repeats} ${concern.text}${
-          concern.evidence ? ` (${concern.evidence})` : ""
-        } — ${concern.source}`,
-      );
-    }
+    for (const concern of input.forwarded) lines.push(formatForwarded(concern));
   }
+
+  lines.push(
+    "",
+    "## Debt register (debt-kind concerns; drill into the source records)",
+  );
+  const debts = input.forwarded.filter((c) => c.kind === "debt");
+  if (debts.length === 0) lines.push("- none recorded");
+  else for (const concern of debts) lines.push(formatForwarded(concern));
+
+  lines.push("", "## Open records (started, no end)");
+  if (!input.openRecords || input.openRecords.length === 0)
+    lines.push("- none");
+  else for (const record of input.openRecords) lines.push(`- ${record}`);
 
   if (input.codeMap && input.codeMap.length > 0) {
     lines.push("", "## Code map (shallow; read paths directly)");
@@ -177,24 +192,7 @@ export function renderContextPack(input: ContextPackInput): string {
     lines.push(`- ${task.slug}: ${input.tasksDir}/${task.slug}.md`);
   }
 
-  return capPack(lines.join("\n") + "\n", input.maxBytes ?? DEFAULT_MAX_BYTES);
-}
-
-export function capPack(text: string, maxBytes: number): string {
-  const buf = Buffer.from(text, "utf8");
-  if (buf.length <= maxBytes) return text;
-  const keep = Math.max(0, maxBytes - Buffer.byteLength(TRUNCATION_SUFFIX));
-  return (
-    buf
-      .subarray(0, keep)
-      .toString("utf8")
-      .replace(/\uFFFD+$/g, "") + TRUNCATION_SUFFIX
-  );
-}
-
-/** True when `capPack` clipped this pack to its size cap. */
-export function isPackTruncated(text: string): boolean {
-  return text.endsWith(TRUNCATION_SUFFIX);
+  return lines.join("\n") + "\n";
 }
 
 /**

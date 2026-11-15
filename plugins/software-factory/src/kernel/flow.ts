@@ -260,6 +260,21 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
   }
 
   const meta = { iteration, slug: task.slug, round: state.round };
+  if (task.base && ensured.created) {
+    // The creation merge in ensureTaskWorktree moved the branch without the
+    // agent; derive needs the post-advance tree as the empty-diff baseline.
+    // Written even when the merge was a no-op: the parked tip alone already
+    // differs from the integration head the commit==base check would use.
+    const commit = await headSha(ensured.path);
+    const tree = await treeSha(ensured.path);
+    await runtime.store.appendRecord(
+      scriptMeta(iteration, "base-advance", {
+        slug: task.slug,
+        round: state.round,
+      }),
+      { ok: true, commit, tree },
+    );
+  }
   // A reused `base:` worktree advances to the current integration head before
   // the turn, the same advance a created one gets (B6); a created worktree
   // moved inside ensureTaskWorktree. A clean tree merges the head with the
@@ -272,6 +287,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
     (await worktreeClean(ensured.path))
   ) {
     const head = await integrationHead(runtime);
+    const before = await headSha(ensured.path);
     const attempt = await mergeIntegrationHead(
       ensured.path,
       head,
@@ -284,6 +300,19 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
       return {};
     }
     startPoint = head;
+    if ((await headSha(ensured.path)) !== before) {
+      // The branch moved without the agent; the fix turn's tree must compare
+      // against this post-advance tree, not the last counted turn's.
+      const commit = await headSha(ensured.path);
+      const tree = await treeSha(ensured.path);
+      await runtime.store.appendRecord(
+        scriptMeta(iteration, "base-advance", {
+          slug: task.slug,
+          round: state.round,
+        }),
+        { ok: true, commit, tree },
+      );
+    }
   }
   const preexisting = preexistingRed(recordedBaseGates(records));
   const target = stepTarget(runtime, task, state, step.id);
@@ -403,6 +432,19 @@ async function runChecks(
       cause,
     );
     return {};
+  }
+  if (task.base && ensured.created) {
+    // A recreated continuation worktree re-merged the head (see runStep);
+    // the next fix turn still needs the post-advance baseline.
+    const commit = await headSha(ensured.path);
+    const tree = await treeSha(ensured.path);
+    await runtime.store.appendRecord(
+      scriptMeta(iteration, "base-advance", {
+        slug: task.slug,
+        round: state.round,
+      }),
+      { ok: true, commit, tree },
+    );
   }
   const checks = await runGates(runtime, ensured.path);
   for (const check of checks) {

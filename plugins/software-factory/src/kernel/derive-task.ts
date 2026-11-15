@@ -133,6 +133,22 @@ function redChecksText(rec: StepRecord): string | undefined {
   }
   return red.length > 0 ? red.join(", ") : undefined;
 }
+/**
+ * A record recovery sealed after a hard death: a bare `infra: crash` with
+ * nothing the turn itself reported. Mirrors `isRecoveryCrash` in derive.ts —
+ * resume and budget share the seal. Bare seals are free interruptions,
+ * redispatched; a crash the turn reported (cause, details, usage or prompt
+ * bytes) spends the budget. Recovery only seals crash, never timeout.
+ */
+function isBareRecoverySeal(rec: StepRecord): boolean {
+  if (rec.stop?.kind !== "infra" || rec.stop?.cause !== "crash") return false;
+  if (rec.ok !== false) return false;
+  if (rec.cause !== undefined) return false;
+  if (rec.stop.details !== undefined) return false;
+  if (rec.usage !== undefined) return false;
+  if (rec.promptBytes !== undefined) return false;
+  return true;
+}
 
 /**
  * One task's phase machine. It reads records, never config side effects: the
@@ -172,6 +188,15 @@ export function reduceTask(
     if (!rec.endedAt) continue;
     if (rec.step === "commit") {
       lastTree = rec.tree ?? lastTree;
+      continue;
+    }
+    if (rec.step === "base-advance") {
+      // A continuation worktree advanced to the integration head without the
+      // agent (creation merge or reused-worktree sync): the next turn's
+      // empty-diff baseline is the post-advance tree, not the last counted
+      // turn's. No existing record carries it — commit records only follow
+      // turns — so this script record is the baseline. Free: no budget.
+      if (rec.tree !== undefined) countedTree = rec.tree;
       continue;
     }
     if (rec.step === "checks") {
@@ -240,6 +265,36 @@ export function reduceTask(
       }
       continue;
     }
+    // A crash the script reports (dispatch `recordCrash`) budgets like a harness
+    // crash on the same step: a throwing pre-harness step parks after two
+    // repeats instead of redispatching forever. Only reported crashes on flow
+    // steps consume; bare recovery seals, script phases (checks, merge, park,
+    // finish), quota/rate/auth/overflow and drain (tasks never started) stay free.
+    if (rec.actor === "script") {
+      const scriptStop = rec.stop;
+      const scriptHasOutcome = !!rec.outcome?.status;
+      const scriptTimeoutOrCrash =
+        scriptStop?.kind === "infra" &&
+        (scriptStop.cause === "timeout" || scriptStop.cause === "crash");
+      if (
+        scriptTimeoutOrCrash &&
+        !scriptHasOutcome &&
+        flowIndex.has(rec.step) &&
+        !isBareRecoverySeal(rec)
+      ) {
+        if (lastInfraStep === rec.step) infraRepeatCount += 1;
+        else {
+          lastInfraStep = rec.step;
+          infraRepeatCount = 1;
+        }
+        turns += 1;
+        if (infraRepeatCount >= 2) {
+          park = `infra-repeat: ${scriptStop.cause}${scriptStop.details ? `: ${scriptStop.details}` : ""}`;
+          phase = "parked";
+        }
+      }
+      continue;
+    }
     if (rec.actor !== "agent" || !rec.endedAt) continue;
     const stop = rec.stop;
     const outcome = rec.outcome;
@@ -251,11 +306,11 @@ export function reduceTask(
     const isTimeoutOrCrash =
       isInfra && (stop.cause === "timeout" || stop.cause === "crash");
 
-    // Infra without a valid outcome: timeout/crash consume the turn budget and
-    // park after two repeats on the same step; other infra (quota, auth, ...)
-    // stays free and resumable.
+    // Infra without a valid outcome: a reported timeout/crash consumes the turn
+    // budget and parks after two repeats on the same step; bare recovery seals
+    // (free interruptions) and other infra (quota, auth, ...) stay free and resumable.
     if (isInfra && !hasOutcome) {
-      if (isTimeoutOrCrash) {
+      if (isTimeoutOrCrash && !isBareRecoverySeal(rec)) {
         if (lastInfraStep === rec.step) infraRepeatCount += 1;
         else {
           lastInfraStep = rec.step;

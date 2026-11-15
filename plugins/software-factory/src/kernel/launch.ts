@@ -439,6 +439,7 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
             relaunch: relaunch && i === 0,
             iteration,
             frontPack: front.packPath,
+            runConfigPath: runtime.configs.files?.run,
           });
           iteration = boundary.iteration;
           decision = boundary.decision;

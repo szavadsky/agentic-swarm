@@ -192,8 +192,6 @@ export interface StepRecord {
   promptBytes?: number;
   /** Boundary roles only: UTF-8 bytes of the iteration context pack. */
   packBytes?: number;
-  /** Boundary roles only: the pack was clipped by its size cap. */
-  packTruncated?: boolean;
   /** Raw stream transcript in the session store, when the harness keeps one. */
   transcript?: string;
   /** Tree of the resulting worktree, the per-step no-progress component. */
@@ -231,7 +229,6 @@ export interface RecordEnd {
   /** Rendered prompt and, for the boundary roles, context-pack size. */
   promptBytes?: number;
   packBytes?: number;
-  packTruncated?: boolean;
   transcript?: string;
   attempts?: TurnAttempt[];
   commit?: string;

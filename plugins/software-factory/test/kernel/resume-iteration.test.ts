@@ -390,9 +390,9 @@ describe("resume iteration — hard death", () => {
           (r) => r.actor === "agent" && r.step === "pm" && r.iteration === 1,
         ).length,
       ).toBe(2);
-      expect(
-        fs.existsSync(path.join(goalDir, "mailbox/holds/s1.yaml")),
-      ).toBe(true);
+      expect(fs.existsSync(path.join(goalDir, "mailbox/holds/s1.yaml"))).toBe(
+        true,
+      );
     } finally {
       restoreWarn();
       repo.cleanup();
@@ -471,7 +471,9 @@ describe("resume guards", () => {
 
       const second = new FakeHarness({ id: "fake" });
       second.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "still going", decision: "continue" }));
+        ctx.writeOutcome(
+          outcome({ summary: "still going", decision: "continue" }),
+        );
         return fakeTurnResult(req);
       });
       second.script((req, ctx) => {
@@ -486,7 +488,10 @@ describe("resume guards", () => {
       ).toBe(3);
 
       const records = await createFolderStore(goalDir).listRecords();
-      const state = derive(await createFolderStore(goalDir).listTasks(), records);
+      const state = derive(
+        await createFolderStore(goalDir).listTasks(),
+        records,
+      );
       // Boundary ran for iteration 2; the hold drained dispatch, so beta
       // stayed ready instead of resuming in iteration 1.
       expect(
@@ -511,7 +516,9 @@ describe("resume guards", () => {
 
       const second = new FakeHarness({ id: "fake" });
       second.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "still going", decision: "continue" }));
+        ctx.writeOutcome(
+          outcome({ summary: "still going", decision: "continue" }),
+        );
         return fakeTurnResult(req);
       });
       second.script((req, ctx) => {
@@ -593,7 +600,9 @@ describe("resume guards", () => {
 
       const second = new FakeHarness({ id: "fake" });
       second.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "still going", decision: "continue" }));
+        ctx.writeOutcome(
+          outcome({ summary: "still going", decision: "continue" }),
+        );
         return fakeTurnResult(req);
       });
       second.script((req, ctx) => {
@@ -643,7 +652,9 @@ describe("resume guards", () => {
 
       const second = new FakeHarness({ id: "fake" });
       second.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "still going", decision: "continue" }));
+        ctx.writeOutcome(
+          outcome({ summary: "still going", decision: "continue" }),
+        );
         return fakeTurnResult(req);
       });
       second.script((req, ctx) => {
@@ -731,7 +742,9 @@ describe("resume guards", () => {
 
       const second = new FakeHarness({ id: "fake" });
       second.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "still going", decision: "continue" }));
+        ctx.writeOutcome(
+          outcome({ summary: "still going", decision: "continue" }),
+        );
         return fakeTurnResult(req);
       });
       second.script((req, ctx) => {

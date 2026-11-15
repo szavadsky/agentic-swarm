@@ -124,7 +124,10 @@ export function capGateOutput(
           .join("\n");
   if (normalised.length <= GATE_OUTPUT_CAP)
     return { output: normalised, truncated: false };
-  const boundary = normalised.indexOf("\n", normalised.length - GATE_OUTPUT_CAP);
+  const boundary = normalised.indexOf(
+    "\n",
+    normalised.length - GATE_OUTPUT_CAP,
+  );
   // A single line longer than the cap has no complete line left to keep.
   return boundary === -1
     ? { output: "", truncated: true }
