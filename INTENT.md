@@ -30,11 +30,32 @@ Modern harnesses deliver a decent story (several hundred lines of code). The age
     - eg, smaller model can perfectly plan or define architecture. It will degrade if it needs to simutaneously consider callgraphs and edge cases.
     - same model, small or large, can perfectly review results even of a larger model. At the end of the day, the job of smarter actor is to make sure results AND motivation are understandable to small actors.
 
+## Model diveristy level
+  - if multiple suitable models are available (and we have a lot for task and mechanical levels),  different steps in the same flow need to be assigned to different models. Flow shall config specificy, eg task implementer: switch model on retry, especially if in same multimodel harness that can reuse comapcted transcript
 
 ### Role of agents/models - that coceptual section shall help to interpret anything below
-- Architect agent preferrably to run with large frontier level models (Opus, Fable, Astra, Kimi). The job of architect is to decide what needs to 
+- Architect agent preferrably to run with large frontier level models (Opus, Fable, Astra, Kimi). The job of architect is to decide what needs to what to do to bring project to state specified by the intent (=can be either build from scratch or evolve an existing codebase) w/o intoducing new technical debt, breaking existing functionlity. In case of saga hiearchical process, architect relies on subarchitects to handle sub layers - so, architect does not need to look at entire codabase. Architect (same context) double up as code reviewer = look at net changes since the project start. At each iteration, job of achitect it 
+    - speficy entire set of tasks arranged in DAG/Milestones needed to complete project
+    - call out specific uncertainties that can be removed by spikes or foundational tasks, and plan up to resolution of uncertainties
+- Architect reviwer can be equally frontier model, or task level model. Fresh context.. Architect can improve based on feedback, sometimes by providing more grounding/explanation in the plan.
+- task level model includes DeepSeek v41 1017, Muse/Ember, Luna, Haiku (currrently limited sense due to 100k context price increase), Gemini Flash/Hydrogen, etc. 
+- PM own implementation of the plan, moving task around, repairing artifacts, providing enviromental steering addendums, injesting user steer. Not technical - he owns artefacts, DAG, splits/changes beyond what mechanical orchestration handles.
+- Various task level agents are arranged to config driven flow depending on the type of the tasks= list of tasks types, agents, and prompts are config driven, not hardcoded in kernel. Kernel knows spike (no code change expected) /vs development. Each task flow is a DAG , bounded retriablle. Examples of task types
+ - spike
+   - fact-finding - figure something out (can be universal or split as separate type: library/codebase/webresearch/computer-use-test/specialized review)
+   - PoC
+ - development
+   - normal dev
+   - documentation only
+   - eg: backend dev vs dev with computer use (separate task type required eg for dashboard to test - extra qa agent in the flow that test integration)
+Task types below are propagated from config from relevant prompts and schemas. 
 
-### Escalation ladder
+- Merge agent involved when conflict/test regression occurs as result of merge
+- Plan checker is specialized agent to see if current plan (architect outoput) can be meaningfully  progressed as net positive gain before architect involmement. task level architect gate keeper
+- triage - see below
+
+
+### Escalation ladder (triage)
 - One cheap-but-capable agent classifies the goal: trivial / task / bigger (epic, saga). For a task it defines the scope. It is not smart enough to decide how big "bigger" is — that is the architect's call.
 - Trivial: the same agent implements, in the same session (reusing the context it already built): after receiving the classification, the kernel sends a follow-up prompt with the location/branch.
 - Standalone task: does not reach the architect. Its review re-prompts the task scope (the shared scope definition used by triage/planner — a single include) and asks whether the real scope is substantially higher than planned and the result requires architecture input; if so it auto-escalates to "bigger". Everyone can make a mistake; escalation corrects it. A task that is part of an epic is not a standalone task.
@@ -45,25 +66,25 @@ Modern harnesses deliver a decent story (several hundred lines of code). The age
 - The architect plans the road to completion, not one iteration's slice: as much work as makes sense given the uncertainties. Where a detail cannot be settled yet he says so explicitly — deferring a feature until a named spike or foundational task lands — and plans the unblocked work in parallel.
 - Every consult starts by evaluating the project against the intent — completeness, quality, correctness of the implementation so far — not merely the previous iteration's work. Is the work truly blocked or does it make sense to continue; what is incomplete or must be redone. In a saga, the architect defers to subarchitects for details in their domains; sub-epics get their own completeness check. Two in one: the same context serves evaluation and planning.
 - Before the architect: a plan checker verifies the plan's status against the repo, with repeat — its findings go back to execution before the architect is consulted (see v1: `plugins/software-builder/agents/plan-completeness-checker.md`, loop in `plugins/software-builder/skills/software-builder-asset/goal_flow.py`).
-- Consulting the architect mid-iteration is the exception: measured, and optimized during bootstrapping. A landed spike does not end the iteration — the iteration still runs to exhaustion.
 - A launch after an interrupt (mid-iteration stop, quota, computer reboot) is a script relaunch: no architect, no digest. If the resumed state is problematic, the script repairs it with an agentic PM turn and/or the plan completeness checker, with a budget for extra retry.
 - Scope: the architect predicts a reasonable, non-overlapping scope per task. He does not name files — a waste of tokens. Tasks may touch the same files; nothing enforces which files a task touches. Normal development.
 - End-of-wave steward (v1 wave checker; omitted when there are no conflicts): merge, resolve conflicts, run CI/CD, fix the obvious, record concerns for the non-obvious, decide what to hold. DoD: branch state ready for the next wave; task status revised if unmerged. Tasks that did not merge are relaunched to port on top of the new branch state. Conflicts are normal during development, sometimes logical (test failures). The steward is compacted at the end and relaunched as needed. Merge ladder: a workhorse-class merger resolves trivial conflicts → unresolvable goes to the architect with a pointer to the overall status plus the worktree and branch of the problematic item.
 - Why: too-tight scopes, no end-of-wave merging with repeat, and no plan status check before the architect cause rework and conflicts.
 - The kernel ensures every agent delivers. An agent that ends its turn without delivering is asked again — e.g. the architect: "You need to deliver. Specify actions, including spikes if needed to plan more, in the plan; or declare the build done [if allowed by config], or blocked till done." The ask is a prompt template from config; its exact shape depends on the agent.
-
+- iteration progressing up to bounded repeats with plan checker - plan checker may say things to do before involve architect.
 
 ### Context economy
 - Same context: same agent. Different context: different agent.
 - Reuse stored agent sessions within one harness. Across harnesses portability is directional and not always feasible: a graph records which way a session can move. Portable → continue from the pre-compacted session. Not portable → de novo, with the context pack and links to artifacts. Any session that cannot be resumed → logged as error, started de novo.
 - Compact at the end of a session; reload the compacted session for consult, review, or next iteration. Compaction is both cost saving (fewer tokens on restart) and context management (drops previous reasoning on a fix-up launch of a task or on the architect's next iteration). Compaction is transcript trimming — even server-side — not a handoff summary; the two serve different reuses and must not be confused. No tree/branch summaries.
+    - compaction kills 2 birds in one stone: on cold retry no need to pay for entire transcript; and adjust context so concerns/sugegstion can get a decent consideration. However, by re-using compacting sessions we save on not revuilding entire context from scratch. On re-use, agent would reread.  
 - Plans are the architect's markdown, edited in place — never in flight; the architect owns them. A cheap PM turns the plan into tasks and lines: it identifies task files, owns the DAG and the dispatch sets, and resolves whatever cannot be derived deterministically (missing branches, misplaced artifacts). The PM is a paper-pusher, not a peer: it converts the architect's bullet-point vision into actual tasks, interpreting intent into more formal shape — splitting and merging tasks as the formalization requires. There is no PM/architect disagreement to resolve; the architect's intent governs. Tasks are named by short immutable slugs. Never force whole-plan re-issue through a strict schema. Diffing serves only to inform the (compacted) PM of plan changes on subsequent iterations.
 - Status is aggregated by the script from structured outputs / YAML artifacts, idempotently; the context pack is prepared from it.
 - The context pack is an index: derived status, infra commands and code facts as paths — links, not content. No artificial caps; even when capped, the pack includes the files the architect needs to read agentically.
 
 ### Saga and hierarchy
 - Hierarchy depth is bounded by config: 1 architect level is the norm, 2 the expected maximum. A subarchitect is split off only when the size/complexity of architecture context demands focused context; the architect owns all planning and review down to that level. Untouched levels are not invoked.
-- Strict chain: task-level consults go to the architect responsible for that epic (epic→architect may be many-to-one). The subarchitect filters and consolidates escalations into one brief upward; implementers/reviewers never reach past their architect. The hierarchy build defines the "top architect".
+- Strict chain: task-level concerns  go to the architect responsible for that epic (epic→architect may be many-to-one). The subarchitect filters and consolidates escalations into one brief upward; implementers/reviewers never reach past their architect. The hierarchy build defines the "top architect".
 - Each subarchitect owns the status summary of his iteration. Task dispatch stays in the single script. On each iteration the main architect decides the subarchitect set and may leave out an architect whose job is done; the architect register is maintained as part of the saga plan.
 - One orchestration script owns everything down to task level — through a harness abstraction that knows each harness's capabilities and orchestrates the chain of architects accordingly. It does not drive every harness directly and uniformly.
 
@@ -89,7 +110,7 @@ Modern harnesses deliver a decent story (several hundred lines of code). The age
 - Bounds: a launch limits the number of iterations; review cycles are bounded; optional limits on $ / subscription use / time per iteration. On a per-iteration budget hit: drain — no new dispatch, in-flight work finishes within its own bound.
 
 ### Steering and autonomy
-- Config-driven. Under the current calibration the architect records a reversible assumption, notes it as remarkable, and continues; the user steers/overrides. The process-config prompt defines what the architect may decide alone vs what blocks on user input. Human-involvement presets (autonomous / principal / detailed) select the calibration.
+- Config-driven (=criteria are part of the config, assempled into prompt by template system). Under the current calibration the architect records a reversible assumption, notes it as remarkable, and continues; the user steers/overrides. The process-config prompt defines what the architect may decide alone vs what blocks on user input. Human-involvement presets (autonomous / principal / detailed) select the calibration.
 - Mailbox, not ACK protocol: the user drops files to steer; the user sees remarkable notes (iteration summary, concerns, open questions) — at least one remarkable entity per iteration (the iteration summary is the guaranteed one), never spam.
 - The script monitors the mailbox at startup and during a run. Steers do not interrupt work: running tasks finish and pending work keeps dispatching.
 - A cheap PM handles what needs no architect: a task-specific steer, or one that requires a redo or change, is handled by the PM; a small task or spike to report back to the owner is dispatched by the PM.
@@ -114,7 +135,7 @@ Modern harnesses deliver a decent story (several hundred lines of code). The age
 - All prompts follow the prompt-debloat principles (`/home/slava/aiexp/software-builder.dev/plugins/prompt-engineering/skills/prompt-debloat`).
 
 ### Config-driven flows
-- Three config layers: repo config (locations, paths, gates), factory process config (flows, agents, schemas, calibration), transient run config (harnesses, models, aliases).
+- Three config layers: repo config (locations, paths, gates), factory process config (flows, agents, schemas, calibration,  task tuoes - use model aliases), local config : available harnesses/models/fallback chains : for "special harnesses" like omp ->transiuent run config. 
 - Flows are data: e.g. "just implement", "implement/review", "TDD: ingest → record known problems → stubs → implement/QA/review/security review". Adding an agent/schema to ingestion, a task-type flow, or the PM flow is a config edit; agent types and task flows can be added or commented out. More spike/agent types are configurable — e.g. for a dashboard: computer-use tests, design/usability review. Templating serves the architect flow too. The script surface schema is fixed: agent produces, script reads.
 - Prompts are assembled from shared fragments and single-definition templates — never copy-pasted. Use a well-established templating engine, not DIY: LiquidJS (strict TypeScript, `{{ var | filter }}`, CLI `npx liquidjs`, custom filters, async tags), Eta (TypeScript-native, ~3.5 KB, partials, plugins) or Nunjucks (Jinja2-like macros, block inheritance).
 - Review retries configurable, with follow-up options: same agent on compacted context, different model, or de novo.
@@ -126,9 +147,10 @@ Modern harnesses deliver a decent story (several hundred lines of code). The age
 - Works through any acp-compatible harness with opaque config passed at launch (command-line args, env, or config files depending on the harness). omp is a special case that simplifies things, not a dependency; extra tools exposable through ACP. Supported and tested: omp, OpenCode, codex, pi, Claude Code, agy (Antigravity CLI) — with harness rotation across iterations so no harness-specific assumption survives untested.
 - The build is harness agnostic. Which harness does which role best is discovered during bootstrapping and recorded in run configs (default/exemplary config), never in code. Starting hypotheses: pi is the task-flow implementer (minimal, great at the single task); omp and OpenCode fit spikes better out of the shelf, where subagent expansion matters.
 - Harness adapters: a custom adapter only when the harness offers substantially more than ACP exposes (omp is that case: RPC, yield, compaction, overlays). Otherwise drive the harness through acpx (OpenCode included), or at worst plain ACP — never a bespoke CLI wrapper for what the protocol already covers; NO CODE, shall leverage acpx naming (and opaque config) in config, that is it 
+- acpx is enabler for agnostism, expectation that acpx compatible harness could be just added to configuration with no code change
 
 ### Operating assumptions
-- The entire factory is assumed to run inside a sandbox (e.g. bubblewrap); this is documented, not enforced. Sandboxing individual harnesses can come later.
+- The entire factory is assumed to run inside a sandbox (e.g. bubblewrap); documented. Factory sandox is out of the scope now. Sandboxing individual harnesses can come later.
 - Which models see which code (training/retention policy) is the owner's run config, not a factory deliverable.
 
 ### Delivery
@@ -136,21 +158,14 @@ Modern harnesses deliver a decent story (several hundred lines of code). The age
 
 ## Notes on implementation
 
-### Reuse from v2 (`plugins/software-factory`)
-- Keep: worktree/commit/head-guard mechanics, record discipline, concern fingerprinting, mailbox, harness adapter, budget/limits, checks runner, derived state, templated prompts, slug task ids, execution state apart from the plan, status derived from on-disk records, human-involvement presets.
-- Reject: 21 schemas, separate triage/context-pack/infra steps, ADR-on-everything, code-line-oriented plans, strict-schema plan re-issue. v2's ADRs (`docs/adr`) bind nothing.
+
 
 ### Loop causes designed out
-- Nested retry budgets compound (attempts × fix rounds × consults × plan reviews × amendments). Budget the whole item, not each nest.
-- No-progress detection compares history, not only the last fingerprint (alternation loops).
-- No whole-plan bounce: editable plan + diff.
-- No "keep going until complete" without a debt gate: stop incentive, spike-deferred milestones, subepics, debt review — while keeping the economy rules (direction-not-spec, telegraphic, adversarial grounding, V&V inside dev tasks).
-- Architect-role launches are the biggest single cost; no ceremony launches. Usage records carry cache fields.
 - Over-prescription and mechanical checks on agent output (e.g. which files changed) create loops and no value. A turn is judged by what the agent delivers, the gates and the review; a check on agent output stays only on evidence that it prevents real defects.
 
 ### Structured output
 - Strict schema (tool/yield) only for small, simple outputs. The plan is markdown; the PM derives task files from it.
-- Every agent that produces a schema-controlled file (PM, task reviewers, QA) is LSP-enabled or has a validation command in its prompt (bun/npx, whatever).
+- Every agent that produces a schema-controlled file (PM, task reviewers, QA)   has a validation command in its prompt (bun/npx, whatever) and if harness supported, lsp. The factory artefact folder must have preferrably harness agnostyic config file to enable lsp for artefacts schemas. Test at least for omp
 
 ### Architect plan → PM task files
 - The architect writes one markdown plan; the PM derives task files, the DAG and the dispatch sets. The architect never maintains schema-consistent files.
@@ -185,11 +200,23 @@ Modern harnesses deliver a decent story (several hundred lines of code). The age
 #### Bootstrap models/harness (one run config, not a factory assumption)
 - Architect: Claude Opus 5.5 at high (omp, Claude Code). Escalation implementer: Sonnet 5.5 — minimize use.
 - Subscriptions: omp, OpenCode, codex and pi on OpenCode Go; omp also on the Claude subscription (Opus/Sonnet); agy (Antigravity CLI) with gemini flash 3.8 at high through acpx, task level. Self-improvement runs cover every leg.
-- OpenCode Go: beam-free (least capable; steer ingestion, schema fixes, commits); capable implementers deepseek-v4.1-flash and muse-spark-1.3-contributor — through omp, codex, OpenCode.
-- OpenCode-only free models: glm-5.3-flash-free, deepseek-v4.1-flash-free (most capable), minimax-m3.1-flash-free, mimo-v2.6-flash-free, inkling-2-small-free.
-- Free models first (front, review, PM structuring, digests); promote a step to a paid tier on measured failure, not by default.
+- overall during build use the following subscriptions/harnesses 
+   - agy (Antigravity CLI) with gemini flash 3.8 at high through acpx, - preferred task level model when subscription available. 
+   - Open Code Go Subscription - omp (2 keys, auto rotation), open code (muse limited to xhigh), codex, pi - most of task level spent will be there. Only allowed models are deepseek v41 (defaults to 1017): max and muse conttributor 1.3:max 
+   - Open Code Go beam-free:max - (through same 4 harnesses) - use as mechanical level 
+   - claude : usable in omp and claude code. Only use for architect (OPus) and escalation tier (Sonnet). Multi architect (saga) shall be tested both with omp (same session, IRC, architect prompt launches subarchitects, subarchitects compacted before second launch, architect prompt reminds them they already launched, subarchitects still need to develop written status reports) and claude code (only writtent report), automatic launch -> first review if subarchitect created plan in previous iteration; and then to create subplan if assigned by master archutect
+
+- OpenCode-only free models: glm-5.3-flash-free, deepseek-v4.1-flash-free (most capable), minimax-m3.1-flash-free, mimo-v2.6-flash-free - use when available. 
+- as soon as we believe combination is supported, config shall be shifted, and next launch shall test new combination
+
 - Implementers / task reviewers at the highest supported effort, resolved at pre-flight (syntax differs per harness: muse takes `:max` on omp, `#xhigh` on OpenCode, the bare id on codex).
 - Several model configs, alternated across iterations to test harness combinations; pi is one of the rotated harnesses.
+
+- omp supports auto rotation (open code go have 2 keys) and auto fallback (alieases can be used with config fallbacxks), while others -> do not. Perfect to test kernel level fallbacks, eg from PI as task implemented to agy
+
+
+## Stack
+ - typescript.- linted, autofrmatted, code complexity./file size enforced, separate interface from implementation enforced. .sh - minimize; ZERO real logic in sh. 
 
 ## Glossary
 - **Goal**: one intent, one directory; relaunching the same directory is "the same goal".
