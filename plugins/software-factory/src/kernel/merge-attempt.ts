@@ -149,6 +149,10 @@ export async function attemptConflictMerge(
     },
     vars,
     expectation: "any",
+    ...(task.repairTurns !== undefined
+      ? { repairTurns: task.repairTurns }
+      : {}),
+    itemBudget: { used: state.turns, limit: runtime.limits.itemTurns },
     session: await resumeSessionFor(
       runtime,
       task,

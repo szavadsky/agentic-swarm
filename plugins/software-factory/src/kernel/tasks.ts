@@ -53,6 +53,18 @@ export function parseTaskFile(text: string, fileSlug: string): TaskFile {
   const kind: TaskKind = meta.kind === "spike" ? "spike" : "task";
   const title = typeof meta.title === "string" ? meta.title.trim() : "";
   if (!title) throw new TaskFileError(`task "${slug}" has no title`);
+  const repairTurns =
+    meta.repairTurns === undefined
+      ? undefined
+      : typeof meta.repairTurns === "number" &&
+          Number.isInteger(meta.repairTurns) &&
+          meta.repairTurns >= 0
+        ? meta.repairTurns
+        : null;
+  if (repairTurns === null)
+    throw new TaskFileError(
+      `task "${slug}" frontmatter "repairTurns" must be a non-negative integer`,
+    );
   return {
     slug,
     title,
@@ -67,6 +79,7 @@ export function parseTaskFile(text: string, fileSlug: string): TaskFile {
     base: typeof meta.base === "string" && meta.base ? meta.base : undefined,
     source: typeof meta.source === "string" ? meta.source : "",
     body: (match[2] ?? "").trim(),
+    ...(repairTurns !== undefined ? { repairTurns } : {}),
   };
 }
 
@@ -82,6 +95,7 @@ export function renderTaskFile(task: TaskFile): string {
   if (task.tier) front.tier = task.tier;
   if (task.base) front.base = task.base;
   if (task.source) front.source = task.source;
+  if (task.repairTurns !== undefined) front.repairTurns = task.repairTurns;
   return `---\n${yaml.stringify(front).trimEnd()}\n---\n\n${task.body.trim()}\n`;
 }
 

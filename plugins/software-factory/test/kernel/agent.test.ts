@@ -5,9 +5,10 @@ import path from "node:path";
 import { Repo } from "../../src/core/git/repo.js";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import type { SessionRef } from "../../src/harness/types.js";
-import { runAgentTurn } from "../../src/kernel/agent.js";
+import { REPAIR_TURNS, runAgentTurn } from "../../src/kernel/agent.js";
 import { renderContextPack } from "../../src/kernel/context-pack.js";
 import { derive } from "../../src/kernel/derive.js";
+import { countOutcomeRepairs } from "../../src/kernel/metrics.js";
 import { resolveRole } from "../../src/kernel/flow-context.js";
 import { loadPrompts } from "../../src/kernel/prompts.js";
 import { createFolderStore } from "../../src/kernel/store.js";
@@ -125,12 +126,14 @@ describe("agent turn outcome delivery", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
-  it("turns a second invalid outcome into failed", async () => {
+  it("turns a fourth invalid outcome into failed after three repairs", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-agent-"));
     const fake = new FakeHarness({ id: "fake" });
     const runtime = runtimeFor(fake, root);
     await runtime.store.ensureLayout();
     fake.script((req) => fakeTurnResult(req, { text: "nothing" }));
+    fake.script((req) => fakeTurnResult(req, { text: "still nothing" }));
+    fake.script((req) => fakeTurnResult(req, { text: "still nothing" }));
     fake.script((req) => fakeTurnResult(req, { text: "still nothing" }));
 
     const result = await runAgentTurn(runtime, {
@@ -141,7 +144,7 @@ describe("agent turn outcome delivery", () => {
       expectation: "architect",
     });
 
-    expect(fake.calls).toHaveLength(2);
+    expect(fake.calls).toHaveLength(4);
     expect(result.outcome?.status).toBe("failed");
     expect(result.outcome?.summary).toContain("invalid outcome");
     expect(derive([], await runtime.store.listRecords()).iteration).toBe(1);
@@ -498,6 +501,14 @@ describe("delivery guard", () => {
         ctx.writeOutcome({ status: "done", summary: "still no verdict" });
         return fakeTurnResult(req);
       });
+      fake.script((req, ctx) => {
+        ctx.writeOutcome({ status: "done", summary: "still no verdict" });
+        return fakeTurnResult(req);
+      });
+      fake.script((req, ctx) => {
+        ctx.writeOutcome({ status: "done", summary: "still no verdict" });
+        return fakeTurnResult(req);
+      });
 
       const result = await runAgentTurn(runtime, {
         target: resolveRole(runtime, "reviewer"),
@@ -507,7 +518,7 @@ describe("delivery guard", () => {
         expectation: "review",
       });
 
-      expect(fake.calls).toHaveLength(2);
+      expect(fake.calls).toHaveLength(4);
       const repair = fake.calls[1]!.prompt;
       expect(repair).toContain(
         "You are the reviewer. Your turn did not deliver its verdict.",
@@ -556,6 +567,8 @@ describe("delivery guard", () => {
     try {
       fake.script((req) => fakeTurnResult(req, { text: "nothing" }));
       fake.script((req) => fakeTurnResult(req, { text: "still nothing" }));
+      fake.script((req) => fakeTurnResult(req, { text: "still nothing" }));
+      fake.script((req) => fakeTurnResult(req, { text: "still nothing" }));
 
       const result = await runAgentTurn(runtime, {
         target: resolveRole(runtime, "pm"),
@@ -565,7 +578,7 @@ describe("delivery guard", () => {
         expectation: "any",
       });
 
-      expect(fake.calls).toHaveLength(2);
+      expect(fake.calls).toHaveLength(4);
       expect(fake.calls[1]!.prompt).toContain(
         "You are the pm. Your turn did not deliver its task files.",
       );
@@ -583,6 +596,8 @@ describe("delivery guard", () => {
     try {
       fake.script((req) => fakeTurnResult(req, { text: "nothing" }));
       fake.script((req) => fakeTurnResult(req, { text: "still nothing" }));
+      fake.script((req) => fakeTurnResult(req, { text: "still nothing" }));
+      fake.script((req) => fakeTurnResult(req, { text: "still nothing" }));
 
       const result = await runAgentTurn(runtime, {
         target: resolveRole(runtime, "front"),
@@ -592,7 +607,7 @@ describe("delivery guard", () => {
         expectation: "any",
       });
 
-      expect(fake.calls).toHaveLength(2);
+      expect(fake.calls).toHaveLength(4);
       expect(fake.calls[1]!.prompt).toContain(
         "You are the front. Your turn did not deliver its class, task, and pack.",
       );
@@ -633,10 +648,26 @@ describe("delivery guard", () => {
         });
         return fakeTurnResult(req);
       });
+      fake.script((req, ctx) => {
+        ctx.writeOutcome({
+          status: "done",
+          summary: "still going",
+          decision: "continue",
+        });
+        return fakeTurnResult(req);
+      });
+      fake.script((req, ctx) => {
+        ctx.writeOutcome({
+          status: "done",
+          summary: "still going",
+          decision: "continue",
+        });
+        return fakeTurnResult(req);
+      });
 
       const result = await turn();
 
-      expect(fake.calls).toHaveLength(2);
+      expect(fake.calls).toHaveLength(4);
       const repair = fake.calls[1]!.prompt;
       expect(repair).toContain("plan edit or stop decision");
       expect(repair).toContain(`${planPath} does not exist`);
@@ -677,10 +708,26 @@ describe("delivery guard", () => {
         });
         return fakeTurnResult(req);
       });
+      fake.script((req, ctx) => {
+        ctx.writeOutcome({
+          status: "done",
+          summary: "still going",
+          decision: "continue",
+        });
+        return fakeTurnResult(req);
+      });
+      fake.script((req, ctx) => {
+        ctx.writeOutcome({
+          status: "done",
+          summary: "still going",
+          decision: "continue",
+        });
+        return fakeTurnResult(req);
+      });
 
       const result = await turn();
 
-      expect(fake.calls).toHaveLength(2);
+      expect(fake.calls).toHaveLength(4);
       const repair = fake.calls[1]!.prompt;
       expect(repair).toContain("plan edit or stop decision");
       expect(repair).toContain(
@@ -929,5 +976,330 @@ describe("agent turn prompt size", () => {
     });
     expect(pm.record.packBytes).toBe(Buffer.byteLength(pack, "utf8"));
     fs.rmSync(root, { recursive: true, force: true });
+  });
+});
+
+describe("bounded repairs", () => {
+  async function setup() {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-repair-"));
+    const fake = new FakeHarness({ id: "fake" });
+    const runtime = runtimeFor(fake, root);
+    await runtime.store.ensureLayout();
+    return { root, fake, runtime };
+  }
+
+  function invalidYaml(line: string): string {
+    return `status: [unclosed ${line}\nsummary: x\n`;
+  }
+
+  it("defaults to three repair turns", () => {
+    expect(REPAIR_TURNS).toBe(3);
+  });
+
+  it("delivers when the second repair fixes the outcome", async () => {
+    const { root, fake, runtime } = await setup();
+    try {
+      fake.script((req) => fakeTurnResult(req, { text: "nothing" }));
+      fake.script((req) => fakeTurnResult(req, { text: "still nothing" }));
+      fake.script((req, ctx) => {
+        ctx.writeOutcome({ status: "done", summary: "recovered on repair 2" });
+        return fakeTurnResult(req);
+      });
+
+      const result = await runAgentTurn(runtime, {
+        target: resolveRole(runtime, "implementer"),
+        cwd: root,
+        meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
+        vars: implementerVars,
+        expectation: "any",
+      });
+
+      expect(fake.calls).toHaveLength(3);
+      expect(result.outcome?.status).toBe("done");
+      expect(result.outcome?.summary).toBe("recovered on repair 2");
+      expect(result.record.attempts).toHaveLength(3);
+      expect(countOutcomeRepairs(result.record.attempts)).toBe(2);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("delivers when the third repair fixes the outcome", async () => {
+    const { root, fake, runtime } = await setup();
+    try {
+      fake.script((req) => fakeTurnResult(req, { text: "nothing" }));
+      fake.script((req) => fakeTurnResult(req, { text: "still nothing" }));
+      fake.script((req) => fakeTurnResult(req, { text: "still nothing" }));
+      fake.script((req, ctx) => {
+        ctx.writeOutcome({ status: "done", summary: "recovered on repair 3" });
+        return fakeTurnResult(req);
+      });
+
+      const result = await runAgentTurn(runtime, {
+        target: resolveRole(runtime, "implementer"),
+        cwd: root,
+        meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
+        vars: implementerVars,
+        expectation: "any",
+      });
+
+      expect(fake.calls).toHaveLength(4);
+      expect(result.outcome?.status).toBe("done");
+      expect(result.outcome?.summary).toBe("recovered on repair 3");
+      expect(result.record.attempts).toHaveLength(4);
+      expect(countOutcomeRepairs(result.record.attempts)).toBe(3);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("stops at once on a valid outcome", async () => {
+    const { root, fake, runtime } = await setup();
+    try {
+      fake.script((req, ctx) => {
+        ctx.writeOutcome({ status: "done", summary: "clean" });
+        return fakeTurnResult(req);
+      });
+
+      const result = await runAgentTurn(runtime, {
+        target: resolveRole(runtime, "implementer"),
+        cwd: root,
+        meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
+        vars: implementerVars,
+        expectation: "any",
+      });
+
+      expect(fake.calls).toHaveLength(1);
+      expect(result.outcome?.summary).toBe("clean");
+      expect(countOutcomeRepairs(result.record.attempts)).toBe(0);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("carries each repair latest YAML finding verbatim with line and column", async () => {
+    const { root, fake, runtime } = await setup();
+    try {
+      const firstBad = invalidYaml("one");
+      const secondBad = `status: done\nsummary: [bad\n: oops\n`;
+      fake.script((req) => {
+        fs.writeFileSync(req.outcomePath!, firstBad, "utf8");
+        return fakeTurnResult(req);
+      });
+      fake.script((req) => {
+        fs.writeFileSync(req.outcomePath!, secondBad, "utf8");
+        return fakeTurnResult(req);
+      });
+      fake.script((req, ctx) => {
+        ctx.writeOutcome({ status: "done", summary: "recovered" });
+        return fakeTurnResult(req);
+      });
+
+      const result = await runAgentTurn(runtime, {
+        target: resolveRole(runtime, "implementer"),
+        cwd: root,
+        meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
+        vars: implementerVars,
+        expectation: "any",
+      });
+
+      expect(fake.calls).toHaveLength(3);
+      expect(result.outcome?.summary).toBe("recovered");
+      const firstAsk = fake.calls[1]!.prompt;
+      const secondAsk = fake.calls[2]!.prompt;
+      expect(firstAsk).toContain("not valid YAML");
+      expect(firstAsk).toMatch(/line \d+, column \d+/);
+      expect(secondAsk).toContain("not valid YAML");
+      expect(secondAsk).toMatch(/line \d+, column \d+/);
+      expect(secondAsk).not.toContain(firstBad.trim());
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("fails without a repair when the item budget has no turn left", async () => {
+    const { root, fake, runtime } = await setup();
+    try {
+      fake.script((req) => fakeTurnResult(req, { text: "nothing" }));
+
+      const result = await runAgentTurn(runtime, {
+        target: resolveRole(runtime, "implementer"),
+        cwd: root,
+        meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
+        vars: implementerVars,
+        expectation: "any",
+        itemBudget: { used: 7, limit: 8 },
+      });
+
+      expect(fake.calls).toHaveLength(1);
+      expect(result.outcome?.status).toBe("failed");
+      expect(result.outcome?.summary).toContain("no outcome");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("caps repairs at the remaining item budget", async () => {
+    const { root, fake, runtime } = await setup();
+    try {
+      fake.script((req) => fakeTurnResult(req, { text: "nothing" }));
+      fake.script((req) => fakeTurnResult(req, { text: "still nothing" }));
+
+      const result = await runAgentTurn(runtime, {
+        target: resolveRole(runtime, "implementer"),
+        cwd: root,
+        meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
+        vars: implementerVars,
+        expectation: "any",
+        itemBudget: { used: 6, limit: 8 },
+      });
+
+      expect(fake.calls).toHaveLength(2);
+      expect(result.outcome?.status).toBe("failed");
+      expect(countOutcomeRepairs(result.record.attempts)).toBe(1);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("lets a task repairTurns override shrink the loop", async () => {
+    const { root, fake, runtime } = await setup();
+    try {
+      fake.script((req) => fakeTurnResult(req, { text: "nothing" }));
+      const zero = await runAgentTurn(runtime, {
+        target: resolveRole(runtime, "implementer"),
+        cwd: root,
+        meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
+        vars: implementerVars,
+        expectation: "any",
+        repairTurns: 0,
+      });
+      expect(fake.calls).toHaveLength(1);
+      expect(zero.outcome?.status).toBe("failed");
+
+      fake.script((req) => fakeTurnResult(req, { text: "nothing" }));
+      fake.script((req) => fakeTurnResult(req, { text: "still nothing" }));
+      const one = await runAgentTurn(runtime, {
+        target: resolveRole(runtime, "implementer"),
+        cwd: root,
+        meta: { iteration: 1, slug: "b", step: "implement", round: 1 },
+        vars: implementerVars,
+        expectation: "any",
+        repairTurns: 1,
+      });
+      expect(fake.calls).toHaveLength(3);
+      expect(one.outcome?.status).toBe("failed");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("spends no repair on refusal or cancelled stops", async () => {
+    const { root, fake, runtime } = await setup();
+    try {
+      fake.script((req) =>
+        fakeTurnResult(req, { stop: { kind: "refusal", details: "no" } }),
+      );
+      const refused = await runAgentTurn(runtime, {
+        target: resolveRole(runtime, "implementer"),
+        cwd: root,
+        meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
+        vars: implementerVars,
+        expectation: "any",
+      });
+      expect(fake.calls).toHaveLength(1);
+      expect(refused.outcome).toBeUndefined();
+
+      fake.script((req) =>
+        fakeTurnResult(req, { stop: { kind: "cancelled" } }),
+      );
+      const cancelled = await runAgentTurn(runtime, {
+        target: resolveRole(runtime, "implementer"),
+        cwd: root,
+        meta: { iteration: 1, slug: "a", step: "implement", round: 2 },
+        vars: implementerVars,
+        expectation: "any",
+      });
+      expect(fake.calls).toHaveLength(2);
+      expect(cancelled.outcome).toBeUndefined();
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("ends the loop when a repair is interrupted without an outcome", async () => {
+    const { root, fake, runtime } = await setup();
+    try {
+      fake.script((req) => fakeTurnResult(req, { text: "nothing" }));
+      fake.script((req) =>
+        fakeTurnResult(req, { stop: { kind: "infra", cause: "quota" } }),
+      );
+
+      const result = await runAgentTurn(runtime, {
+        target: resolveRole(runtime, "implementer"),
+        cwd: root,
+        meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
+        vars: implementerVars,
+        expectation: "any",
+      });
+
+      expect(fake.calls).toHaveLength(2);
+      expect(result.outcome).toBeUndefined();
+      expect(result.record.stop).toEqual({ kind: "infra", cause: "quota" });
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("checks the architect plan finding on every repair round", async () => {
+    const { root, fake, runtime } = await setup();
+    try {
+      const planPath = path.join(runtime.store.goalDir, "plan.md");
+      fs.writeFileSync(planPath, "# Plan\n", "utf8");
+      fake.script((req, ctx) => {
+        ctx.writeOutcome({
+          status: "done",
+          summary: "go",
+          decision: "continue",
+        });
+        return fakeTurnResult(req);
+      });
+      fake.script((req, ctx) => {
+        ctx.writeOutcome({
+          status: "done",
+          summary: "still going",
+          decision: "continue",
+        });
+        return fakeTurnResult(req);
+      });
+      fake.script((req, ctx) => {
+        fs.writeFileSync(planPath, "# Plan\n\n## alpha\n", "utf8");
+        ctx.writeOutcome({
+          status: "done",
+          summary: "fixed",
+          decision: "continue",
+        });
+        return fakeTurnResult(req);
+      });
+
+      const result = await runAgentTurn(runtime, {
+        target: resolveRole(runtime, "architect"),
+        cwd: root,
+        meta: { iteration: 1, step: "architect", round: 1 },
+        vars: { ...vars, plan_path: planPath },
+        expectation: "architect",
+      });
+
+      expect(fake.calls).toHaveLength(3);
+      expect(result.outcome?.decision).toBe("continue");
+      expect(fake.calls[1]!.prompt).toContain(
+        "is unchanged since the turn started",
+      );
+      expect(fake.calls[2]!.prompt).toContain(
+        "is unchanged since the turn started",
+      );
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 });

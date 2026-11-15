@@ -405,6 +405,10 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
     expectation: step.review ? "review" : "any",
     session,
     timeouts,
+    ...(task.repairTurns !== undefined
+      ? { repairTurns: task.repairTurns }
+      : {}),
+    itemBudget: { used: state.turns, limit: runtime.limits.itemTurns },
     settle: async (_record, outcome, live) => {
       // A timeout commits nothing: the orphan still owns the tree, and `git add
       // -A` would sweep its half-written files into an attributed commit. The

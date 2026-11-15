@@ -535,6 +535,8 @@ describe("delivery guard", () => {
         return fakeTurnResult(req, { text: "nothing" });
       });
       harness.script((req) => fakeTurnResult(req, { text: "still nothing" }));
+      harness.script((req) => fakeTurnResult(req, { text: "still nothing" }));
+      harness.script((req) => fakeTurnResult(req, { text: "still nothing" }));
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("task", { scope: ["task.txt"] }));
@@ -549,7 +551,7 @@ describe("delivery guard", () => {
       );
       expect(state.tasks.task!.status).toBe("parked");
       expect(state.tasks.task!.cause).toContain("no outcome after repair");
-      expect(harness.calls).toHaveLength(2);
+      expect(harness.calls).toHaveLength(4);
       expect(harness.calls[1]!.prompt).toContain(
         "You are the implementer. Your turn did not deliver its outcome.",
       );
@@ -578,6 +580,14 @@ describe("delivery guard", () => {
         ctx.writeOutcome(outcome({ summary: "still no verdict" }));
         return fakeTurnResult(req);
       });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "still no verdict" }));
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "still no verdict" }));
+        return fakeTurnResult(req);
+      });
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("task", { scope: ["task.txt"] }));
@@ -592,10 +602,82 @@ describe("delivery guard", () => {
       );
       expect(state.tasks.task!.status).toBe("parked");
       expect(state.tasks.task!.cause).toContain("verdict is required");
-      expect(harness.calls).toHaveLength(3);
+      expect(harness.calls).toHaveLength(5);
       expect(harness.calls[2]!.prompt).toContain(
         "You are the reviewer. Your turn did not deliver its verdict.",
       );
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("merges after the second repair delivers the implement outcome", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script((req) => {
+        fs.writeFileSync(path.join(req.cwd!, "task.txt"), "v1\n", "utf8");
+        return fakeTurnResult(req, { text: "nothing" });
+      });
+      harness.script((req) => fakeTurnResult(req, { text: "still nothing" }));
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "v1 recovered" }));
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "approved", verdict: "approve" }));
+        return fakeTurnResult(req);
+      });
+
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("task", { scope: ["task.txt"] }));
+      const result = await runDispatch(runtime, { iteration: 1 });
+      expect(result.reason).toBe("boundary");
+      expect(harness.calls).toHaveLength(4);
+
+      const records = await runtime.store.listRecords();
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
+      expect(state.tasks.task!.status).toBe("merged");
+      const implement = records.find(
+        (r) => r.slug === "task" && r.step === "implement",
+      )!;
+      expect(implement.attempts).toHaveLength(3);
+      expect(state.tasks.task!.turns).toBe(4);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("honours a task repairTurns override of zero", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script((req) => {
+        fs.writeFileSync(path.join(req.cwd!, "task.txt"), "work\n", "utf8");
+        return fakeTurnResult(req, { text: "nothing" });
+      });
+
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(
+        runtime,
+        task("task", { scope: ["task.txt"], repairTurns: 0 }),
+      );
+      const result = await runDispatch(runtime, { iteration: 1 });
+      expect(result.reason).toBe("boundary");
+      expect(harness.calls).toHaveLength(1);
+
+      const records = await runtime.store.listRecords();
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
+      expect(state.tasks.task!.status).toBe("parked");
+      expect(state.tasks.task!.cause).toContain("no outcome");
     } finally {
       cleanupFlowRepo(repo);
     }
