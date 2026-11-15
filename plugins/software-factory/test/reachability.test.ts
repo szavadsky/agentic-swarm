@@ -119,3 +119,118 @@ describe("source reachability from bin/factory.ts", () => {
     }
   });
 });
+
+/**
+ * Prompt files that are documentation, not renderable fragments. One reason
+ * per entry; an entry that becomes rendered or included is stale and this
+ * test fails so the file is renamed to a fragment or removed from the list.
+ */
+const PROMPT_DOCS: Record<string, string> = {
+  "VARIABLES.md": "prompt variable reference for authors, never rendered",
+};
+
+/** Matches Liquid includes: `{% include 'name' %}` (either quote, `-` trims allowed). */
+const INCLUDE_SPECIFIER = /\{%\s*include\s*['"]([^'"]+)['"]/g;
+/** Matches direct fragment renders in src: `.render("name"` and `.placeholders("name"`. */
+const RENDER_SPECIFIER = /\.(?:render|placeholders)\(\s*["']([^"']+)["']/g;
+/** Matches role prompt entries in config/process.yaml: `prompt: fragment`. */
+const ROLE_PROMPT_SPECIFIER = /prompt:\s*([A-Za-z0-9_][A-Za-z0-9_/.-]*)/g;
+
+/** Renderable prompt fragments: every .md under prompts without its extension, minus docs. */
+function promptFragments(): string[] {
+  const fragments: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of fs.readdirSync(path.join(PACKAGE_ROOT, dir), {
+      withFileTypes: true,
+    })) {
+      const child = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(child);
+      else if (entry.name.endsWith(".md")) {
+        const rel = path.relative("prompts", child);
+        if (!(rel in PROMPT_DOCS)) fragments.push(rel.slice(0, -".md".length));
+      }
+    }
+  };
+  walk("prompts");
+  return fragments.sort();
+}
+
+/** Fragments another template pulls in via `{% include %}` (docs excluded: they quote syntax). */
+function includedFragments(): Set<string> {
+  const included = new Set<string>();
+  const walk = (dir: string) => {
+    for (const entry of fs.readdirSync(path.join(PACKAGE_ROOT, dir), {
+      withFileTypes: true,
+    })) {
+      const child = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(child);
+      else if (entry.name.endsWith(".md")) {
+        if (path.relative("prompts", child) in PROMPT_DOCS) continue;
+        const source = fs.readFileSync(path.join(PACKAGE_ROOT, child), "utf8");
+        for (const match of source.matchAll(INCLUDE_SPECIFIER)) {
+          const name = match[1]!;
+          included.add(
+            name.endsWith(".md") ? name.slice(0, -".md".length) : name,
+          );
+        }
+      }
+    }
+  };
+  walk("prompts");
+  return included;
+}
+
+/** Fragments production renders directly: role prompts plus `.render`/`.placeholders` literals in src. */
+function entryFragments(): Set<string> {
+  const entries = new Set<string>();
+  const config = fs.readFileSync(
+    path.join(PACKAGE_ROOT, "config", "process.yaml"),
+    "utf8",
+  );
+  for (const match of config.matchAll(ROLE_PROMPT_SPECIFIER)) {
+    entries.add(match[1]!);
+  }
+  const walk = (dir: string) => {
+    for (const entry of fs.readdirSync(path.join(PACKAGE_ROOT, dir), {
+      withFileTypes: true,
+    })) {
+      const child = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(child);
+      else if (entry.name.endsWith(".ts")) {
+        const source = fs.readFileSync(path.join(PACKAGE_ROOT, child), "utf8");
+        for (const match of source.matchAll(RENDER_SPECIFIER)) {
+          entries.add(match[1]!);
+        }
+      }
+    }
+  };
+  walk("src");
+  return entries;
+}
+
+describe("prompt fragment reachability", () => {
+  const fragments = promptFragments();
+  const used = new Set([...includedFragments(), ...entryFragments()]);
+  const dead = fragments.filter((fragment) => !used.has(fragment));
+
+  it("fails on a prompt fragment no template includes and no entrypoint renders", () => {
+    expect(dead).toEqual([]);
+  });
+
+  it("keeps every prompt doc unrendered and present", () => {
+    for (const [file, reason] of Object.entries(PROMPT_DOCS)) {
+      expect(
+        reason.trim().length,
+        `prompt doc ${file} has no reason`,
+      ).toBeGreaterThan(0);
+      expect(
+        fs.existsSync(path.join(PACKAGE_ROOT, "prompts", file)),
+        `prompt doc ${file} no longer exists`,
+      ).toBe(true);
+      expect(
+        used.has(file.slice(0, -".md".length)),
+        `stale prompt doc ${file} is now rendered or included (${reason}); remove it from the docs`,
+      ).toBe(false);
+    }
+  });
+});

@@ -10,7 +10,7 @@
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "format": "biome format .",
-    "lint": "biome lint .",
+    "lint": "biome lint . && knip",
     "schema-validation": "bun src/schema-check.ts"
   },
   "dependencies": {
@@ -21,6 +21,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.6.7",
     "@types/bun": "^1.2.0",
+    "knip": "^6.45.1",
     "typescript": "^5.8.3"
   }
 }

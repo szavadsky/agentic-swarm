@@ -15,7 +15,7 @@ import { actualModel, OmpRuntime } from "./runtime.js";
 import { runOmpTurn } from "./turn.js";
 import { OMP_ID, type OmpHarnessOptions } from "./types.js";
 
-export type { OmpHarnessOptions, OmpTurnOpaque } from "./types.js";
+export type { OmpHarnessOptions } from "./types.js";
 
 /**
  * omp adapter (LOG D7): one RPC process per turn, explicit `compact`, resume by

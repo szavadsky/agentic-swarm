@@ -1,4 +1,3 @@
-import type { Stop } from "../harness/types.js";
 import type { CheckResult } from "../core/checks/types.js";
 import { isInfraCheck } from "./gates.js";
 import { countOutcomeRepairs } from "./metrics.js";
@@ -632,22 +631,4 @@ export function reduceTask(
     loop,
     gateFix: terminal ? undefined : gateFix || undefined,
   };
-}
-
-export type StopClassification =
-  | "ok"
-  | "infra"
-  | "cancelled"
-  | "timeout"
-  | "crash";
-
-export function classifyStop(stop: Stop | undefined): StopClassification {
-  if (!stop || stop.kind === "done") return "ok";
-  if (stop.kind === "cancelled") return "cancelled";
-  if (stop.kind === "infra") {
-    if (stop.cause === "timeout") return "timeout";
-    if (stop.cause === "crash") return "crash";
-    return "infra";
-  }
-  return "ok";
 }

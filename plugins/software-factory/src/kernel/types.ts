@@ -33,7 +33,6 @@ export const steerRouteEntrySchema = z.object({
   /** The PM's answer for a `task` steer; absent for every other route. */
   answer: z.string().optional(),
 });
-export type SteerRouteEntry = z.infer<typeof steerRouteEntrySchema>;
 
 /** The only agent ↔ script surface; one schema for every step. */
 export const outcomeSchema = z.object({

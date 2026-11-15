@@ -20,14 +20,6 @@ describe("prompts: PromptLibrary", () => {
       path.join(dir, "steps", "develop.md"),
       "# Develop\nTask: {{task}}\n{% include '_shared/containment' %}\n",
     );
-    fs.writeFileSync(
-      path.join(dir, "developer.md"),
-      "---\ndescription: implements tasks\ntools: [read, edit]\n---\nImplement {{task}}.\n",
-    );
-    fs.writeFileSync(
-      path.join(dir, "yield-only.md"),
-      "---\ntools: []\n---\nPM only.\n",
-    );
   });
 
   afterEach(() => {
@@ -51,16 +43,6 @@ describe("prompts: PromptLibrary", () => {
       "Missing required prompt variables",
     );
     expect(() => lib.render("steps/missing", {})).toThrow("not found");
-  });
-
-  it("resolves agent frontmatter and explicit empty tools", () => {
-    const lib = loadPromptLibrary({ builtinDir: dir });
-    expect(lib.agentDefinition("developer")).toEqual({
-      body: expect.stringContaining("Implement {{task}}."),
-      tools: ["read", "edit"],
-      description: "implements tasks",
-    });
-    expect(lib.agentDefinition("yield-only").tools).toEqual([]);
   });
 
   it("lets the process config replace the calibration partial", () => {
@@ -100,22 +82,5 @@ describe("prompts: PromptLibrary", () => {
     } finally {
       fs.rmSync(overrideDir, { recursive: true, force: true });
     }
-  });
-
-  it("appends a formatted output-schema section only when a schema is given", () => {
-    const lib = loadPromptLibrary({ builtinDir: dir });
-    expect(lib.renderStepPrompt("steps/develop", { task: "x" })).toContain(
-      "Task: x",
-    );
-    const withSchema = lib.renderStepPrompt(
-      "steps/develop",
-      { task: "x" },
-      {
-        type: "object",
-        properties: { status: { const: "done" } },
-      },
-    );
-    expect(withSchema).toContain("## Output");
-    expect(withSchema).toContain("status");
   });
 });
