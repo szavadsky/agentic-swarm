@@ -1,6 +1,15 @@
 import type { CheckResult } from "../core/checks/types.js";
+import { git } from "../core/git/exec.js";
 import { newGateFailures } from "./gates.js";
-import type { ArtifactStore, Concern, Outcome, RecordStart } from "./types.js";
+import type {
+  ArtifactStore,
+  Concern,
+  Outcome,
+  RecordEnd,
+  RecordStart,
+  StepRecord,
+  WorkEdits,
+} from "./types.js";
 
 export function scriptMeta(
   iteration: number,
@@ -16,38 +25,59 @@ export function scriptMeta(
   };
 }
 
-/**
- * Script step that records a gate run; `ok` is the phase signal `derive` reads.
- * Merge-result gates use step `merge-checks` so the branch-check reducer ignores
- * them: the merge record that follows owns that failure.
- */
-export async function appendChecks(
+/** Opens a checks record before the gate run; `finishChecks` closes it after. */
+export async function startChecks(
   store: ArtifactStore,
   meta: { iteration: number; slug: string; round: number },
-  checks: CheckResult[],
-  opts: { step?: string; preexisting?: ReadonlySet<string> } = {},
-): Promise<void> {
-  await store.appendRecord(
+  opts: { step?: string } = {},
+) {
+  return store.startRecord(
     scriptMeta(meta.iteration, opts.step ?? "checks", meta),
-    {
-      ok: newGateFailures(checks, opts.preexisting ?? new Set()).length === 0,
-      checks,
-    },
   );
 }
 
-/** Mechanical commit record: the resulting tree feeds no-progress fingerprints. */
-export async function appendCommit(
-  store: ArtifactStore,
-  meta: { iteration: number; slug: string; round: number },
-  commit: string,
-  tree: string,
-): Promise<void> {
-  await store.appendRecord(scriptMeta(meta.iteration, "commit", meta), {
-    ok: true,
-    commit,
-    tree,
+/** Closes a record opened by `startChecks` with the gate results and wall time. */
+export async function finishChecks(
+  turn: {
+    meta: { startedAt: string };
+    finish(end: RecordEnd): Promise<StepRecord>;
+  },
+  checks: CheckResult[],
+  opts: { preexisting?: ReadonlySet<string> } = {},
+): Promise<StepRecord> {
+  const started = Date.parse(turn.meta.startedAt);
+  const wallMs = Number.isFinite(started)
+    ? Math.max(0, Date.now() - started)
+    : 0;
+  return turn.finish({
+    ok: newGateFailures(checks, opts.preexisting ?? new Set()).length === 0,
+    checks,
+    testRuns: checks.length,
+    wallMs,
   });
+}
+
+/** Files and lines one commit changed, parsed from `git show --numstat`. */
+export async function commitEdits(
+  cwd: string,
+  commit: string | null,
+): Promise<WorkEdits> {
+  if (!commit) return { files: 0, added: 0, removed: 0 };
+  const shown = await git(cwd, ["show", "--numstat", "--format=", commit], {
+    allowFail: true,
+  });
+  if (shown.code !== 0) return { files: 0, added: 0, removed: 0 };
+  let files = 0;
+  let added = 0;
+  let removed = 0;
+  for (const line of shown.stdout.split("\n")) {
+    const match = /^(\d+|-)\t(\d+|-)\t/.exec(line);
+    if (!match) continue;
+    files += 1;
+    if (match[1] !== "-") added += Number(match[1]);
+    if (match[2] !== "-") removed += Number(match[2]);
+  }
+  return { files, added, removed };
 }
 
 /** The last-round reviewer concerns, recorded as debt once the item merges. */

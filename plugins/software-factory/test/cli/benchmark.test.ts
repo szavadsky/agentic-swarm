@@ -324,7 +324,7 @@ describe("benchmark command", () => {
         "| architect share | 100.0% (partial) | % of cost |",
       );
       expect(out).toContain(
-        "| cost per merged | unknown (1 unpriced turn) | USD/merged task |",
+        "| cost per merged | $1.0000 (partial) | USD/merged task |",
       );
       expect(out).toContain("| wall | 30 m | h m |");
       expect(out).toContain("| merged/parked | 1 / 0 | tasks |");

@@ -5,7 +5,7 @@ import { KeyedMutex } from "../core/mutex.js";
 import { preexistingRed, recordedBaseGates } from "./baseline.js";
 import { newGateFailures, runGates } from "./gates.js";
 import { attemptConflictMerge } from "./merge-attempt.js";
-import { appendChecks, scriptMeta } from "./record.js";
+import { finishChecks, scriptMeta, startChecks } from "./record.js";
 import type {
   KernelRuntime,
   RecordEnd,
@@ -303,17 +303,14 @@ export async function mergeTask(
       });
       return {};
     }
-    const checks = await runGates(runtime, scratch);
-    const preexisting = preexistingRed(recordedBaseGates(records));
-    await appendChecks(
+    const gate = await startChecks(
       runtime.store,
       { iteration, slug: task.slug, round },
-      checks,
-      {
-        step: "merge-checks",
-        preexisting,
-      },
+      { step: "merge-checks" },
     );
+    const checks = await runGates(runtime, scratch);
+    const preexisting = preexistingRed(recordedBaseGates(records));
+    await finishChecks(gate, checks, { preexisting });
     const red = newGateFailures(checks, preexisting);
     if (red.length > 0) {
       await removeMergeScratch(runtime);

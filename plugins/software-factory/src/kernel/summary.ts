@@ -39,6 +39,8 @@ export interface SummaryInput {
   roleByStep?: Record<string, string>;
   /** Model id -> USD per Mtok, from the run config. */
   prices?: PriceTable;
+  /** Steers moved to processed; feeds the operator-act counter. */
+  humanInterventions?: number;
 }
 
 function defaultStatus(decision: GoalDecision | undefined): SummaryStatus {
@@ -193,7 +195,7 @@ export async function writeIterationSummary(
     status,
     input.records,
     roleByStep,
-    0,
+    input.humanInterventions ?? 0,
     input.prices ?? {},
   );
   const {
@@ -201,14 +203,29 @@ export async function writeIterationSummary(
     unpricedTurns,
     roles: roleCosts,
     aliases,
+    models,
     incidents,
     loopIncidents,
+    costPerMergedTask,
+    listCostPerMergedTask,
+    gateWallMs,
+    commitWallMs,
+    gateRuns,
+    testRuns,
+    edits,
+    addedLines,
+    removedLines,
+    operatorActs,
+    humanInterventions,
   } = computed;
   const roleNames = Object.values(roleCosts)
     .map((entry) => ({ name: entry.role, ...entry }))
     .sort((a, b) => a.name.localeCompare(b.name));
   const aliasNames = Object.values(aliases)
     .map((entry) => ({ name: entry.alias, ...entry }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const modelNames = Object.values(models)
+    .map((entry) => ({ name: entry.model, ...entry }))
     .sort((a, b) => a.name.localeCompare(b.name));
   const agentTurns = recs.filter(
     (r) => r.actor === "agent" && r.endedAt,
@@ -277,6 +294,7 @@ export async function writeIterationSummary(
     `- turns: ${agentTurns} agent, ${scriptTurns} script`,
     `- tokens: input ${usage.in}, cached ${usage.cacheRead}, output ${usage.out}, reasoning ${usage.reasoningOut}`,
     `- cost: ${costText(usage.costUsd, unpricedTurns)}`,
+    `- list cost: ${costText(usage.listCostUsd, unpricedTurns)}`,
     `- cost by role: ${
       roleNames.length
         ? roleNames
@@ -287,6 +305,18 @@ export async function writeIterationSummary(
             .join("; ")
         : "none"
     }`,
+    `- cost per merged task: ${
+      costPerMergedTask === null
+        ? "n/a"
+        : `$${costPerMergedTask.toFixed(4)}${unpricedTurns > 0 ? " (partial)" : ""}`
+    }; list ${
+      listCostPerMergedTask === null
+        ? "n/a"
+        : `$${listCostPerMergedTask.toFixed(4)}${unpricedTurns > 0 ? " (partial)" : ""}`
+    }`,
+    `- work: ${edits} files (+${addedLines}/-${removedLines}), ${testRuns} test runs in ${gateRuns} gate runs`,
+    `- gate wall: ${(gateWallMs / 1000).toFixed(1)}s gates, ${(commitWallMs / 1000).toFixed(1)}s commits`,
+    `- operator acts: ${operatorActs} (${humanInterventions} steers)`,
     ...(budgetStop
       ? [
           `- budget: ${budgetStop}; brake blind for ${unpricedTurns} unpriced ${
@@ -304,6 +334,9 @@ export async function writeIterationSummary(
     "",
     "## Spend by alias",
     ...spendTable("alias", aliasNames),
+    "",
+    "## Spend by model",
+    ...spendTable("model", modelNames),
     "",
   ];
   const rel = summaryRelPath(iteration);

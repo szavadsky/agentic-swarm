@@ -87,12 +87,16 @@ harness, quota and crash), so escalation is model routing, not a retry.
 
 `prices` maps a model id to USD per million tokens: `input`, `cachedInput`,
 `output` and `reasoning`, all four required. A turn costs its harness's
-non-zero figure, else the table's price for the model. Counters that are all
-zero mean the harness reported no usage, so the turn stays unpriced even when
-its model has a table entry. A model absent from the table is unpriced —
-unknown, never `$0`; a free model is a known `$0` only through an explicit
-all-zero entry. opencode reports `0` for turns it cannot price, so the table is
-what separates that from free.
+non-zero figure, else the table's price for the model. Every agent record
+carries that priced cost plus the table-only list-price equivalent (for
+subscriptions that under-report) and the original harness figure. Counters
+that are all zero mean the harness reported no usage, so the turn stays
+unpriced even when its model has a table entry. A model absent from the table
+is unpriced — unknown, never `$0`; a free model is a known `$0` only through
+an explicit all-zero entry. opencode reports `0` for turns it cannot price,
+so the table is what separates that from free. A resumed turn whose harness
+did not split the cache prices its input at the cached rate: the unreported
+split is the cached prefix.
 
 `limits.iterationUsd` is an optional brake: once the iteration's priced spend
 reaches it, dispatch drains — no new task starts; tasks already started finish
@@ -127,17 +131,21 @@ next boundary, marks it processed and writes its answer to
 Each iteration writes exactly one `iterations/<n>/summary.md` (also copied to
 the outbox): status, merged/finished/parked tasks, remarkable concerns,
 assumptions and debt. `metrics.yaml` is rebuilt from the usage records:
-architect launches, architect cost and token share, cost per merged task,
-incident counts (infra retries, fallback hops, outcome-repair turns, merge
-conflicts, merged-gate failures, and round-limit, no-progress, empty-diff,
-overflow and budget parks), loop incidents (no-progress and empty-diff parks; a
-spike's empty finish and overflow parks are not loop incidents), human
-interventions (processed steers), and turns and tokens by role. Costs come
-from the price table, and every retry or fallback call the harness reports in
-`attempts` is priced too, each call once. A turn whose counters are all zero
-carries no usage report and is unpriced even when its model has a table entry. A
-turn neither the harness nor the table priced is counted as unpriced, so a total
-containing one is partial and cost per merged task is unset rather than `$0`. A
-free model prices to a known `$0` through its all-zero table entry, and its
-tokens still carry the signal. `factory benchmark --goal <name>` prints these
+architect launches, architect cost and token share, cost and list cost per
+merged task, incident counts (infra retries, fallback hops, outcome-repair
+turns, merge conflicts, merged-gate failures, and round-limit, no-progress,
+empty-diff, overflow and budget parks), loop incidents (no-progress and
+empty-diff parks; a spike's empty finish and overflow parks are not loop
+incidents), human interventions (processed steers) and the observable
+operator-act counter (steers plus containment outside-changes and
+integration-moved merges), gate and commit wall time, and turns, tokens, cost
+and work (committed files/lines, attributed gate runs) by role, alias and
+model. Costs come from the price table, and every retry or fallback call the
+harness reports in `attempts` is priced too, each call once. A turn whose
+counters are all zero carries no usage report and is unpriced even when its
+model has a table entry. A turn neither the harness nor the table priced is
+counted as unpriced, so a total containing one is partial; cost per merged
+task is unset only when nothing merged or no turn had a known cost. A free
+model prices to a known `$0` through its all-zero table entry, and its tokens
+still carry the signal. `factory benchmark --goal <name>` prints these
 aggregates as rows.
