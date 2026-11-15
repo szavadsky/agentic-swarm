@@ -99,6 +99,43 @@ function lastReview(
     .at(-1);
 }
 
+/** The latest productive agent turn: the fix whose dispositions a deferred review judges. */
+function lastProductiveTurn(
+  records: StepRecord[],
+  slug: string,
+  flow: FlowDefinition,
+): StepRecord | undefined {
+  const productiveIds = new Set(
+    flow.steps.filter((s) => !s.review).map((s) => s.id),
+  );
+  return records
+    .filter(
+      (r) =>
+        r.slug === slug &&
+        r.actor === "agent" &&
+        r.outcome &&
+        productiveIds.has(r.step),
+    )
+    .sort(bySeq)
+    .at(-1);
+}
+
+/**
+ * The current fix round's per-finding dispositions for the deferred review.
+ * Round 1 has no fix to judge, and a stale turn must never speak for this one.
+ */
+function fixDispositions(
+  records: StepRecord[],
+  slug: string,
+  flow: FlowDefinition,
+  round: number,
+): string {
+  if (round < 2) return "";
+  const fix = lastProductiveTurn(records, slug, flow);
+  if (!fix || fix.round !== round || !fix.outcome) return "";
+  return fix.outcome.summary.trim();
+}
+
 function lastChecks(
   records: StepRecord[],
   slug: string,
@@ -516,6 +553,7 @@ export function promptVars(
     head_hash: "",
     max_rounds: String(flow.reviewRounds),
     prior_findings: review?.outcome ? formatReviewFindings(review.outcome) : "",
+    fix_dispositions: fixDispositions(records, task.slug, flow, round),
     front_pack: frontPack(runtime, task, records) ?? "",
     // A de-novo turn carries no follow-up notice; the trivial path overrides
     // this with `trivialResumeNote` before rendering the implement prompt.

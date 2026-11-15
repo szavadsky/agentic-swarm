@@ -1,4 +1,5 @@
 import type { Stop } from "../harness/types.js";
+import type { CheckResult } from "../core/checks/types.js";
 import { isInfraCheck } from "./gates.js";
 import { countOutcomeRepairs } from "./metrics.js";
 import { stepFingerprint } from "./progress.js";
@@ -134,6 +135,17 @@ function redChecksText(rec: StepRecord): string | undefined {
   }
   return red.length > 0 ? red.join(", ") : undefined;
 }
+
+/**
+ * The actionable red task checks as `name (summary)`. Unstartable gates are
+ * not a verdict on the task, so they never name the fix turn's cause.
+ */
+function failingChecksText(red: readonly CheckResult[]): string | undefined {
+  const actionable = red.filter((c) => !isInfraCheck(c));
+  if (actionable.length === 0) return undefined;
+  return actionable.map((c) => `${c.name} (${c.summary})`).join(", ");
+}
+
 /**
  * A record recovery sealed after a hard death: a bare `infra: crash` with
  * nothing the turn itself reported. Mirrors `isRecoveryCrash` in derive.ts —
@@ -175,6 +187,10 @@ export function reduceTask(
   let loop: ProgressRepeat | undefined;
   let gateFix = false;
   let gateFailure: string | undefined;
+  /** The gate fix came from merged-result gates: green checks merge, skipping review. */
+  let mergeFix = false;
+  /** The last review's `changes` still awaits its answer; an empty answer goes back for a verdict. */
+  let changesPending = false;
   let gatesFailures = 0;
   let pendingChecks: PendingChecks | null = null;
   let lastTree: string | undefined;
@@ -224,6 +240,10 @@ export function reduceTask(
           park = `infra: gate could not start: ${red.map((c) => c.name).join(", ")}`;
           phase = "parked";
         } else if (rec.ok === false) {
+          gateFix = true;
+          gateFailure = failingChecksText(red);
+          // A task-checks reroute ends the merge-fix: this fix goes back to review.
+          mergeFix = false;
           stepIndex = 0;
           phase = firstStep;
         } else {
@@ -250,6 +270,7 @@ export function reduceTask(
       if (rec.stop?.kind === "infra") continue;
       if (rec.ok === true) {
         gateFix = false;
+        mergeFix = false;
         pendingChecks = null;
         phase = "done";
       } else if (rec.ok === false) {
@@ -258,7 +279,10 @@ export function reduceTask(
           gatesFailures += 1;
           if (gatesFailures === 1) {
             gateFix = true;
+            mergeFix = true;
             gateFailure = redChecksText(rec);
+            // The fix answers the red gates, not the last review: no verdict awaits it.
+            changesPending = false;
             stepIndex = 0;
             phase = firstStep;
             pendingChecks = null;
@@ -368,7 +392,21 @@ export function reduceTask(
       seenCountedTurn = true;
       creationAdvance = null;
     }
-    const fp = stepFingerprint(task.kind, rec, lastTree);
+
+    // A fix round that answers a `changes` review with dispositions but no diff
+    // repeats its tree by design; the fingerprint owns non-empty repeats, so it
+    // skips the deferred answer and the round budget bounds the loop instead.
+    const answeredIndex = flowIndex.get(rec.step);
+    const answeredStep =
+      answeredIndex === undefined ? undefined : flow.steps[answeredIndex];
+    const answeredReview =
+      changesPending &&
+      answeredStep !== undefined &&
+      !answeredStep.review &&
+      committedNothing(task.kind, rec, priorTree);
+    const fp = answeredReview
+      ? null
+      : stepFingerprint(task.kind, rec, lastTree);
     if (fp) {
       const prior = seen.get(fp);
       if (prior && !loop) {
@@ -407,12 +445,14 @@ export function reduceTask(
 
     const idx = flowIndex.get(rec.step)!;
     const step = flow.steps[idx]!;
-    // An empty commit is its own no-progress signal: skip the reviewer and park
-    // now, instead of spending review rounds until the fingerprint repeats. A
-    // gate-fix turn names the red checks that sent it back, so the cause says
-    // why a task that already committed looks empty.
+    // An empty commit is its own no-progress signal — unless it answers a
+    // `changes` review, whose dispositions still need a verdict, or carries
+    // a continuation's kept work. With no review awaiting, skip the reviewer
+    // and park now instead of spending review rounds. A gate-fix turn names
+    // the red checks that sent it back, so the cause says why a task that
+    // already committed looks empty.
     if (!step.review && committedNothing(task.kind, rec, priorTree)) {
-      if (carriedWork !== true) {
+      if (carriedWork !== true && !changesPending) {
         park =
           carriedWork === false
             ? `empty-diff: ${rec.step} r${rec.round} kept work is already on the head`
@@ -422,12 +462,18 @@ export function reduceTask(
         phase = "parked";
         continue;
       }
+      // Deferred: the fix round goes back for a verdict with its outcome's
+      // dispositions — or the turn carries a continuation's kept work, which
+      // is progress, not an empty diff. Review rounds and the item budget
+      // still bound the loop.
     }
     if (step.review) {
       verdict = outcome?.verdict;
       if (verdict === "approve") {
         stepIndex = idx + 1;
         gateFix = false;
+        mergeFix = false;
+        changesPending = false;
         pendingChecks = null;
         phase = phaseAfter(flow, stepIndex, task.kind);
       } else if (verdict === "changes") {
@@ -435,28 +481,32 @@ export function reduceTask(
           round = rec.round + 1;
           stepIndex = 0;
           gateFix = false;
+          mergeFix = false;
           phase = firstStep;
         } else {
           // The last round decides: changes merge with the concerns as debt.
           stepIndex = flow.steps.length;
           gateFix = false;
+          mergeFix = false;
           phase = phaseAfter(flow, stepIndex, task.kind);
         }
+        changesPending = true;
         pendingChecks = null;
       } else if (verdict === "reject") {
         park = `review rejected: ${outcome?.summary ?? "no summary"}`;
         phase = "parked";
-      } else {
-        park = `review produced no verdict: ${outcome?.summary ?? "no summary"}`;
-        phase = "parked";
       }
+      // No `else`: a done review always carries a verdict — outcome repair
+      // fails the turn otherwise — so a missing verdict never reaches derive.
       continue;
     }
 
+    // This turn answers the awaited review, with work or with dispositions.
+    changesPending = false;
     stepIndex = idx + 1;
     const nextStep = flow.steps[stepIndex];
     if (!nextStep || nextStep.review) {
-      pendingChecks = { nextIndex: stepIndex, mergeAfter: gateFix };
+      pendingChecks = { nextIndex: stepIndex, mergeAfter: mergeFix };
       phase = "checks";
     } else {
       pendingChecks = null;

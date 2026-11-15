@@ -338,12 +338,8 @@ async function handleStepResult(
       outcome.concerns.length > 0
     ) {
       await appendDebt(runtime.store, meta, outcome.concerns, outcome.summary);
-    } else if (!outcome?.verdict) {
-      await appendPark(
-        runtime.store,
-        meta,
-        `review produced no verdict: ${outcome?.summary ?? "no summary"}`,
-      );
+      // No `else`: a done review always carries a verdict — outcome repair
+      // fails the turn otherwise — so a missing verdict never reaches settle.
     }
     return infraResult ?? cancelledResult ?? {};
   }

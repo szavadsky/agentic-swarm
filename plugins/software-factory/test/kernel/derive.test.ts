@@ -284,7 +284,40 @@ describe("derive", () => {
     expect(parked.tasks.a!.round).toBe(1);
   });
 
-  it("parks a productive turn that commits nothing before the reviewer runs", () => {
+  it("sends an empty fix round after changes back to review instead of parking", () => {
+    const answered = [
+      implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
+      script(2, { step: "commit", ok: true, commit: "c1", tree: "tree-1" }),
+      doneCheck(3),
+      review(4, "changes", 1),
+      script(5, { step: "commit", ok: true, commit: "c1", tree: "tree-1" }),
+      implement(6, 2, {
+        tree: "tree-1",
+        commit: "c1",
+        base: "c0",
+        outcome: {
+          status: "done",
+          summary: "declined F1: out of scope per done-when; F2 already fixed",
+          concerns: [],
+          forward: [],
+        },
+      }),
+    ];
+    const state = derive([task("a")], answered);
+    expect(state.tasks.a!.phase).toBe("checks");
+    expect(state.tasks.a!.park).toBeUndefined();
+    expect(state.tasks.a!.loop).toBeUndefined();
+    expect(state.tasks.a!.verdict).toBe("changes");
+    expect(state.tasks.a!.gateFix).toBeUndefined();
+
+    const reviewed = derive([task("a")], [...answered, doneCheck(7)]);
+    expect(reviewed.tasks.a!.phase).toBe("review");
+    expect(reviewed.tasks.a!.round).toBe(2);
+    expect(reviewed.tasks.a!.park).toBeUndefined();
+    expect(reviewed.tasks.a!.loop).toBeUndefined();
+  });
+
+  it("bounds a deferred empty fix round by review rounds", () => {
     const state = derive(
       [task("a")],
       [
@@ -292,14 +325,141 @@ describe("derive", () => {
         script(2, { step: "commit", ok: true, commit: "c1", tree: "tree-1" }),
         doneCheck(3),
         review(4, "changes", 1),
-        script(5, { step: "commit", ok: true, commit: "c1", tree: "tree-1" }),
-        implement(6, 2, { tree: "tree-1", commit: "c1", base: "c0" }),
+        implement(5, 2, { tree: "tree-1", commit: "c1", base: "c0" }),
+        doneCheck(6),
+        review(7, "changes", 2),
+      ],
+    );
+    // Last-round `changes` merges with the concerns as debt: the deferred
+    // empty round cannot loop forever.
+    expect(state.tasks.a!.phase).toBe("merge");
+    expect(state.tasks.a!.round).toBe(2);
+    expect(state.tasks.a!.park).toBeUndefined();
+  });
+
+  it("sets gateFix on red task checks and names them when the fix commits nothing", () => {
+    const tasks = [task("a")];
+    const prefix = [
+      implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
+      redCheck(2),
+    ];
+    const looped = derive(tasks, prefix);
+    expect(looped.tasks.a!.phase).toBe("implement");
+    expect(looped.tasks.a!.round).toBe(1);
+    expect(looped.tasks.a!.gateFix).toBe(true);
+
+    const state = derive(tasks, [
+      ...prefix,
+      implement(3, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
+    ]);
+    expect(state.tasks.a!.phase).toBe("parked");
+    expect(state.tasks.a!.park).toBe(
+      "empty-diff: implement r1 committed no changes after red checks: unit (exit 1)",
+    );
+  });
+
+  it("routes a task-checks fix turn to review on green, never skipping to merge", () => {
+    const state = derive(
+      [task("a")],
+      [
+        implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
+        redCheck(2),
+        implement(3, 1, { tree: "tree-2", commit: "c2", base: "c0" }),
+        doneCheck(4),
+      ],
+    );
+    expect(state.tasks.a!.phase).toBe("review");
+    expect(state.tasks.a!.round).toBe(1);
+    expect(state.tasks.a!.park).toBeUndefined();
+  });
+
+  it("routes a task-checks reroute after a merged-result failure back to review", () => {
+    const mergeFail = (seq: number): StepRecord =>
+      script(seq, {
+        step: "merge",
+        ok: false,
+        cause: "gates: unit",
+        checks: [
+          {
+            name: "unit",
+            ok: false,
+            summary: "exit 1",
+            output: "boom",
+            fingerprint: "x",
+          },
+        ],
+      });
+    const state = derive(
+      [task("a")],
+      [
+        implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
+        doneCheck(2),
+        review(3, "approve", 1),
+        mergeFail(4),
+        implement(5, 1, { tree: "tree-2", commit: "c2", base: "c0" }),
+        redCheck(6),
+        implement(7, 1, { tree: "tree-3", commit: "c3", base: "c0" }),
+        doneCheck(8),
+      ],
+    );
+    expect(state.tasks.a!.phase).toBe("review");
+    expect(state.tasks.a!.round).toBe(1);
+    expect(state.tasks.a!.park).toBeUndefined();
+  });
+
+  it("parks an empty fix after last-round changes followed by a merge-gates failure", () => {
+    const state = derive(
+      [task("a")],
+      [
+        implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
+        script(2, { step: "commit", ok: true, commit: "c1", tree: "tree-1" }),
+        doneCheck(3),
+        review(4, "changes", 1),
+        implement(5, 2, { tree: "tree-2", commit: "c2", base: "c0" }),
+        script(6, { step: "commit", ok: true, commit: "c2", tree: "tree-2" }),
+        doneCheck(7),
+        review(8, "changes", 2),
+        script(9, {
+          step: "merge",
+          ok: false,
+          cause: "gates: unit",
+          checks: [
+            {
+              name: "unit",
+              ok: false,
+              summary: "exit 1",
+              output: "boom",
+              fingerprint: "x",
+            },
+          ],
+        }),
+        implement(10, 2, { tree: "tree-2", commit: "c2", base: "c0" }),
       ],
     );
     expect(state.tasks.a!.phase).toBe("parked");
     expect(state.tasks.a!.park).toBe(
-      "empty-diff: implement r2 committed no changes",
+      "empty-diff: implement r2 committed no changes after red checks: unit (exit 1)",
     );
+  });
+
+  it("still sets the no-progress fingerprint for a non-empty repeat", () => {
+    const state = derive(
+      [task("a", { flow: "just-implement" })],
+      [
+        implement(1, 1, { tree: "tree-A", commit: "cA", base: "c0" }),
+        redCheck(2),
+        implement(3, 1, { tree: "tree-B", commit: "cB", base: "c0" }),
+        redCheck(4),
+        implement(5, 1, { tree: "tree-A", commit: "cA2", base: "c0" }),
+      ],
+    );
+    expect(state.tasks.a!.phase).toBe("checks");
+    expect(state.tasks.a!.park).toBeUndefined();
+    expect(state.tasks.a!.loop).toMatchObject({
+      step: "implement",
+      round: 1,
+      firstRound: 1,
+    });
   });
 
   it("names the red merge checks when a gate-fix turn commits nothing", () => {
@@ -561,7 +721,7 @@ describe("derive", () => {
     );
   });
 
-  it("still loops the implementer when a red check is not infra, even beside an unstartable one", () => {
+  it("classifies a missing gate runner without details as infra in the derive path", () => {
     const state = derive(
       [task("a")],
       [
@@ -575,23 +735,61 @@ describe("derive", () => {
               name: "typecheck",
               ok: false,
               summary: "exit 127",
-              output: "bash: factory-missing-command-xyz: command not found",
+              output: "bash: line 1: gates.sh: No such file or directory",
               fingerprint: "infra1",
-              details: { kind: "infra", cause: "exit 127" },
-            },
-            {
-              name: "unit",
-              ok: false,
-              summary: "exit 1",
-              output: "boom",
-              fingerprint: "real1",
             },
           ],
         }),
       ],
     );
+    expect(state.tasks.a!.phase).toBe("parked");
+    expect(state.tasks.a!.park).toContain(
+      "infra: gate could not start: typecheck",
+    );
+  });
+
+  it("still loops the implementer when a red check is not infra, even beside an unstartable one", () => {
+    const tasks = [task("a")];
+    const prefix = [
+      implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
+      script(2, { step: "commit", ok: true, commit: "c1", tree: "tree-1" }),
+      script(3, {
+        step: "checks",
+        ok: false,
+        checks: [
+          {
+            name: "typecheck",
+            ok: false,
+            summary: "exit 127",
+            output: "bash: factory-missing-command-xyz: command not found",
+            fingerprint: "infra1",
+            details: { kind: "infra", cause: "exit 127" },
+          },
+          {
+            name: "unit",
+            ok: false,
+            summary: "exit 1",
+            output: "boom",
+            fingerprint: "real1",
+          },
+        ],
+      }),
+    ];
+    const state = derive(tasks, prefix);
     expect(state.tasks.a!.phase).toBe("implement");
     expect(state.tasks.a!.park).toBeUndefined();
+    expect(state.tasks.a!.gateFix).toBe(true);
+
+    // An empty fix names only the actionable red: the unstartable gate is not
+    // a verdict on the task.
+    const parked = derive(tasks, [
+      ...prefix,
+      implement(4, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
+    ]);
+    expect(parked.tasks.a!.phase).toBe("parked");
+    expect(parked.tasks.a!.park).toBe(
+      "empty-diff: implement r1 committed no changes after red checks: unit (exit 1)",
+    );
   });
 
   it("charges each outcome repair to the item budget", () => {

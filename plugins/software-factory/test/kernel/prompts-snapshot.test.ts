@@ -73,6 +73,7 @@ const ROLES: Record<string, Record<string, string>> = {
     max_rounds: "2",
     baseline_checks: "- test: 2 failing",
     prior_findings: "",
+    fix_dispositions: "",
     outcome_path: "/worktrees/demo-tasks/alpha/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
   },
@@ -259,6 +260,98 @@ describe("review findings carry", () => {
     const rendered = library().render("implementer", ROLES.implementer!);
     expect(rendered).not.toContain("empty on the first turn");
     expect(rendered).toContain("review summary, then concerns and forward");
+  });
+});
+
+describe("fix dispositions carry", () => {
+  it("carries the current fix round's dispositions into fix_dispositions", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const runtime = await makeRuntime(repo, goal, {
+        fake: new FakeHarness({ id: "fake" }),
+      });
+      const taskFile = task("alpha", { scope: ["alpha-area"] });
+      const flow = runtime.configs.process.flows["implement-review"]!;
+      const dispositions =
+        "F1 fixed in src/x.ts:41; F2 out of scope per done-when";
+      const records = [
+        rec(1, { slug: "alpha", step: "implement", round: 1 }),
+        rec(2, {
+          slug: "alpha",
+          step: "review",
+          round: 1,
+          outcome: outcome({
+            summary: "1. src/x.ts:41 needs a null check",
+            verdict: "changes",
+          }),
+        }),
+        rec(3, {
+          slug: "alpha",
+          step: "implement",
+          round: 2,
+          outcome: outcome({ summary: dispositions }),
+        }),
+      ];
+      const vars = promptVars(
+        runtime,
+        taskFile,
+        "/worktrees/demo-tasks/alpha",
+        records,
+        2,
+        flow,
+      );
+      expect(vars.fix_dispositions).toBe(dispositions);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("leaves fix_dispositions empty without a current-round fix", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const runtime = await makeRuntime(repo, goal, {
+        fake: new FakeHarness({ id: "fake" }),
+      });
+      const taskFile = task("alpha", { scope: ["alpha-area"] });
+      const flow = runtime.configs.process.flows["implement-review"]!;
+      const first = [
+        rec(1, {
+          slug: "alpha",
+          step: "implement",
+          round: 1,
+          outcome: outcome({ summary: "implemented" }),
+        }),
+      ];
+      const round1 = promptVars(
+        runtime,
+        taskFile,
+        "/worktrees/demo-tasks/alpha",
+        first,
+        1,
+        flow,
+      );
+      expect(round1.fix_dispositions).toBe("");
+      const stale = promptVars(
+        runtime,
+        taskFile,
+        "/worktrees/demo-tasks/alpha",
+        first,
+        2,
+        flow,
+      );
+      expect(stale.fix_dispositions).toBe("");
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("renders the fix-dispositions line in the reviewer prompt", () => {
+    const rendered = library().render("reviewer", {
+      ...ROLES.reviewer!,
+      fix_dispositions: "F1 fixed",
+    });
+    expect(rendered).toContain("F1 fixed");
+    expect(rendered).toContain("Verify each claim against the diff");
   });
 });
 

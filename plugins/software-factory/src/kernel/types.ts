@@ -95,7 +95,7 @@ export interface TaskState {
   park?: string;
   /** No-progress over the item's history; the next action is the loop park. */
   loop?: ProgressRepeat;
-  /** The first merged-result gate failure: one implementer fix turn, then merge again. */
+  /** A red gate run sent the task back to implement: the fix turn resumes its session, and only a merged-result fix skips the next review. */
   gateFix?: boolean;
 }
 

@@ -666,8 +666,13 @@ describe("parked continuation syncs to the integration head", () => {
     }
   }, 60_000);
 
-  it("parks empty-diff when a fix turn after a base-advance writes nothing, never merges", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+  it("parks empty-diff when a red-checks fix turn after a base-advance writes nothing, never merges", async () => {
+    // No review awaits an answer here: the fix turn loops on red task checks,
+    // so an empty fix still parks instead of deferring to a reviewer.
+    const { repo, goal } = setupFlowRepo({
+      gates: [{ id: "no-beta", command: "test ! -f beta.txt" }],
+      limits: { concurrency: 1 },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       parkAlpha(harness, "alpha.txt", "alpha\n");
@@ -682,12 +687,8 @@ describe("parked continuation syncs to the integration head", () => {
         ctx.writeOutcome(outcome({ summary: "beta implemented" }));
         return fakeTurnResult(req);
       });
-      harness.script((req, ctx) => {
-        ctx.writeOutcome(
-          outcome({ summary: "beta needs changes", verdict: "changes" }),
-        );
-        return fakeTurnResult(req);
-      });
+      // No review scripted: beta's checks stay red, so the fix turn loops on
+      // the implement step in the same round.
       await writeTask(
         runtime,
         task("beta", { base: "alpha", scope: ["beta.txt"] }),
@@ -710,14 +711,8 @@ describe("parked continuation syncs to the integration head", () => {
         ctx.writeOutcome(outcome({ summary: "beta fixed" }));
         return fakeTurnResult(req);
       });
-      // Scripted so a missed park would merge instead of crashing; a fixed
-      // run never reaches review.
-      harness.script((req, ctx) => {
-        ctx.writeOutcome(
-          outcome({ summary: "beta approved", verdict: "approve" }),
-        );
-        return fakeTurnResult(req);
-      });
+      // A missed park would loop the implementer into an exhausted-harness
+      // crash instead of parking; the assertions below catch that.
       await runDispatch(runtime, { iteration: 3 });
 
       expect(sawSince).toBe(true);
@@ -729,10 +724,13 @@ describe("parked continuation syncs to the integration head", () => {
       );
       expect(state.tasks.beta!.status).toBe("parked");
       expect(state.tasks.beta!.cause).toContain("empty-diff");
+      expect(state.tasks.beta!.cause).toContain(
+        "after red checks: no-beta (exit 1)",
+      );
       // The fix turn never reached review, so no merge ran.
       expect(
         records.filter((r) => r.slug === "beta" && r.step === "review"),
-      ).toHaveLength(1);
+      ).toHaveLength(0);
       expect(
         records.filter(
           (r) => r.slug === "beta" && r.step === "merge" && r.ok === true,

@@ -277,7 +277,9 @@ export function loadPrompts(
     builtinDir: path.join(packageRoot, "prompts"),
     overrideDirs,
     overrides,
-    defaults: { validate_cmd: validateCmd() },
+    // Round 1 has no fix to judge; promptVars overrides this with the current
+    // fix round's dispositions wherever they exist.
+    defaults: { validate_cmd: validateCmd(), fix_dispositions: "" },
   });
 }
 
