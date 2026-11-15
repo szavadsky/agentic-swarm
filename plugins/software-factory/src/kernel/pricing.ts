@@ -42,32 +42,58 @@ function reportsUsage(usage: Usage): boolean {
 }
 
 /**
+ * Table price for one usage in USD, ignoring any harness figure. When
+ * `cachedPrefix` is set and the harness did not split the cache (input only,
+ * no cache counters), the input is priced at the cached rate: a resumed
+ * turn's prefix is cached, and an unreported split on a resumed turn is that
+ * prefix, not fresh input. Fresh turns and split caches always price input
+ * at the full rate.
+ *
+ * Cache writes have no rate of their own in the table, so they are priced at
+ * the input rate; harnesses report no distinct write rate here.
+ */
+export function priceTableOnly(
+  usage: Usage,
+  model: string,
+  table: PriceTable,
+  opts: { cachedPrefix?: boolean } = {},
+): number | undefined {
+  if (tokenTotal(usage) === 0) return undefined;
+  const price = table[model];
+  if (!price) return undefined;
+  const cacheUnsplit =
+    usage.in > 0 &&
+    usage.cacheRead === 0 &&
+    usage.cacheWrite5m === 0 &&
+    usage.cacheWrite1h === 0;
+  const inputRate =
+    opts.cachedPrefix && cacheUnsplit ? price.cachedInput : price.input;
+  return (
+    ((usage.in + usage.cacheWrite5m + usage.cacheWrite1h) * inputRate +
+      usage.cacheRead * price.cachedInput +
+      usage.out * price.output +
+      usage.reasoningOut * price.reasoning) /
+    PER_MTOK
+  );
+}
+
+/**
  * Cost of one turn in USD: a non-zero harness figure wins, otherwise the table
  * price for the model. A harness `0` is unreported, because harnesses such as
  * opencode report 0 for turns they cannot price; free models stay a known $0
  * through an explicit zero entry in the table. `undefined` means unknown — the
  * model is not in the table, the harness was silent, or no usage was reported
  * at all — and never means $0.
- *
- * Cache writes have no rate of their own in the table, so they are priced at
- * the input rate; harnesses report no distinct write rate here.
  */
 export function priceUsage(
   usage: Usage,
   model: string,
   table: PriceTable,
+  opts: { cachedPrefix?: boolean } = {},
 ): number | undefined {
-  if (usage.costUsd !== undefined && usage.costUsd !== 0) return usage.costUsd;
-  if (tokenTotal(usage) === 0) return undefined;
-  const price = table[model];
-  if (!price) return undefined;
-  return (
-    ((usage.in + usage.cacheWrite5m + usage.cacheWrite1h) * price.input +
-      usage.cacheRead * price.cachedInput +
-      usage.out * price.output +
-      usage.reasoningOut * price.reasoning) /
-    PER_MTOK
-  );
+  const harness = usage.harnessCostUsd ?? usage.costUsd;
+  if (harness !== undefined && harness !== 0) return harness;
+  return priceTableOnly(usage, model, table, opts);
 }
 
 export interface PricedUsage {
@@ -77,32 +103,52 @@ export interface PricedUsage {
 }
 
 /**
- * A turn's raw usage with its cost attached, leaving records themselves
- * untouched. A crash-sealed record has no usage at all; nothing priced it, so
- * it stays unknown instead of becoming a false $0 from empty counters.
+ * A turn's usage with its costs attached: `costUsd` is the priced cost (a
+ * non-zero harness figure wins, otherwise the table), `listCostUsd` is the
+ * table-only list-price equivalent for subscriptions that under-report, and
+ * `harnessCostUsd` preserves the harness figure when pricing filled the cost
+ * from the table. Idempotent: repricing an already-priced usage keeps the
+ * original harness figure and recomputes both prices from the same tokens. A
+ * crash-sealed record has no usage at all; nothing priced it, so it stays
+ * unknown instead of becoming a false $0 from empty counters.
  */
 export function pricedUsage(
   usage: Usage | undefined,
   model: string | undefined,
   table: PriceTable,
+  opts: { cachedPrefix?: boolean } = {},
 ): PricedUsage {
   if (!usage) return { usage: zeroUsage(), costKnown: false };
-  const costUsd = priceUsage(usage, model ?? "", table);
+  const harness = usage.harnessCostUsd ?? usage.costUsd;
+  const costUsd = priceUsage(usage, model ?? "", table, opts);
+  const listCostUsd = priceTableOnly(usage, model ?? "", table, opts);
   if (costUsd === undefined) {
     // Drop the harness's unpriced figure: a raw `0` must not sum into a total
-    // as if it were a known zero.
-    const unpriced = { ...usage };
+    // as if it were a known zero. The original figure stays visible as
+    // `harnessCostUsd`, and the list price stays when the table has the model.
+    const unpriced: Usage = { ...usage };
     delete unpriced.costUsd;
+    if (harness !== undefined) unpriced.harnessCostUsd = harness;
+    else delete unpriced.harnessCostUsd;
+    if (listCostUsd !== undefined) unpriced.listCostUsd = listCostUsd;
+    else delete unpriced.listCostUsd;
     return { usage: unpriced, costKnown: false };
   }
-  return { usage: { ...usage, costUsd }, costKnown: true };
+  const priced: Usage = { ...usage, costUsd };
+  if (harness !== undefined) priced.harnessCostUsd = harness;
+  else delete priced.harnessCostUsd;
+  if (listCostUsd !== undefined) priced.listCostUsd = listCostUsd;
+  else delete priced.listCostUsd;
+  return { usage: priced, costKnown: true };
 }
 
-/** The record fields pricing reads; a settled agent step carries all three. */
+/** The record fields pricing reads; a settled agent step carries all four. */
 export interface UsageRecord {
   usage?: Usage;
   model?: ModelRef;
   attempts?: TurnAttempt[];
+  /** Resumed turn whose unsplit input is the cached prefix, set at record time. */
+  cachedPrefix?: boolean;
 }
 
 /**
@@ -114,15 +160,16 @@ export interface UsageRecord {
  * harness without per-call usage leaves behind.
  */
 export function pricedRecord(rec: UsageRecord, table: PriceTable): PricedUsage {
+  const opts = { cachedPrefix: rec.cachedPrefix };
   const reported = (rec.attempts ?? []).filter((attempt) =>
     reportsUsage(attempt.usage),
   );
   if (reported.length === 0)
-    return pricedUsage(rec.usage, rec.model?.id, table);
+    return pricedUsage(rec.usage, rec.model?.id, table, opts);
   let usage = zeroUsage();
   let costKnown = true;
   for (const attempt of reported) {
-    const priced = pricedUsage(attempt.usage, attempt.model.id, table);
+    const priced = pricedUsage(attempt.usage, attempt.model.id, table, opts);
     usage = addUsage(usage, priced.usage);
     costKnown = costKnown && priced.costKnown;
   }

@@ -10,7 +10,7 @@ import type {
   StepRecord,
 } from "./types.js";
 
-/** Spend one role or alias accumulated over an iteration. */
+/** Spend and work one role, alias or model accumulated over an iteration. */
 export interface GroupMetrics {
   turns: number;
   usage: Usage;
@@ -19,6 +19,12 @@ export interface GroupMetrics {
   promptBytes: number;
   /** Turns whose model the harness did not price and the table does not carry. */
   unpricedTurns: number;
+  /** Files changed by these turns' commits. */
+  edits: number;
+  addedLines: number;
+  removedLines: number;
+  /** Gates run by checks records attributed to these turns. */
+  testRuns: number;
 }
 
 export interface RoleMetrics extends GroupMetrics {
@@ -27,6 +33,10 @@ export interface RoleMetrics extends GroupMetrics {
 
 export interface AliasMetrics extends GroupMetrics {
   alias: string;
+}
+
+export interface ModelMetrics extends GroupMetrics {
+  model: string;
 }
 
 /**
@@ -71,10 +81,17 @@ export interface IterationMetrics {
   parked: string[];
   usage: Usage;
   tokens: number;
-  /** null when the iteration merged nothing or its cost is not fully known. */
+  /**
+   * Priced cost per merged task, null only when nothing merged or no turn had
+   * a known cost. Partial when `unpricedTurns > 0`: the numerator covers
+   * priced turns only.
+   */
   costPerMergedTask: number | null;
+  /** List-price equivalent per merged task; same partial rule as the priced one. */
+  listCostPerMergedTask: number | null;
   roles: Record<string, RoleMetrics>;
   aliases: Record<string, AliasMetrics>;
+  models: Record<string, ModelMetrics>;
   architect: ArchitectMetrics;
   unpricedTurns: number;
   incidents: IncidentCounts;
@@ -82,6 +99,25 @@ export interface IterationMetrics {
   loopIncidents: number;
   /** Steers moved from inbox to processed during this iteration. */
   humanInterventions: number;
+  /**
+   * Observable operator acts: processed steers plus containment
+   * outside-changes and integration-moved merges. Hand fixes, promotions,
+   * merges, verifications, relaunches and config edits outside the factory
+   * artifacts stay in the journal; this is the lower bound the records show.
+   */
+  operatorActs: number;
+  /** Wall ms in checks/merge-checks records; wallMs falls back to timestamps. */
+  gateWallMs: number;
+  /** Wall ms in commit records. */
+  commitWallMs: number;
+  /** Checks/merge-checks records in this iteration. */
+  gateRuns: number;
+  /** Gates run across those records. */
+  testRuns: number;
+  /** Files changed by agent-turn commits in this iteration. */
+  edits: number;
+  addedLines: number;
+  removedLines: number;
 }
 
 export interface MetricsTotals extends Omit<IterationMetrics, "n" | "status"> {
@@ -176,12 +212,51 @@ function addTurn<T extends GroupMetrics>(
   part: Usage,
   unpriced: number,
   promptBytes: number,
+  work: { edits: number; added: number; removed: number } = {
+    edits: 0,
+    added: 0,
+    removed: 0,
+  },
 ): void {
   entry.turns += 1;
   entry.unpricedTurns += unpriced;
   entry.usage = addUsage(entry.usage, part);
   entry.tokens += tokenTotal(part);
   entry.promptBytes += promptBytes;
+  entry.edits += work.edits;
+  entry.addedLines += work.added;
+  entry.removedLines += work.removed;
+}
+
+function emptyGroup(): Omit<GroupMetrics, "turns"> & { turns: number } {
+  return {
+    turns: 0,
+    usage: zeroUsage(),
+    tokens: 0,
+    promptBytes: 0,
+    unpricedTurns: 0,
+    edits: 0,
+    addedLines: 0,
+    removedLines: 0,
+    testRuns: 0,
+  };
+}
+
+function wallMsOf(rec: StepRecord): number {
+  if (rec.wallMs !== undefined) return Math.max(0, rec.wallMs);
+  if (!rec.endedAt) return 0;
+  const start = Date.parse(rec.startedAt);
+  const end = Date.parse(rec.endedAt);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return 0;
+  return Math.max(0, end - start);
+}
+
+function isOutsideAct(rec: StepRecord): boolean {
+  if (rec.step === "containment" && rec.cause?.startsWith("outside-change:"))
+    return true;
+  if (rec.step === "merge" && rec.cause?.startsWith("integration moved:"))
+    return true;
+  return false;
 }
 
 /**
@@ -252,8 +327,12 @@ export function iterationMetrics(
   );
   let usage = zeroUsage();
   let unpricedTurns = 0;
+  let edits = 0;
+  let addedLines = 0;
+  let removedLines = 0;
   const roles: Record<string, RoleMetrics> = {};
   const aliases: Record<string, AliasMetrics> = {};
+  const models: Record<string, ModelMetrics> = {};
   const architect: ArchitectMetrics = emptyArchitect();
 
   for (const rec of recs) {
@@ -261,35 +340,34 @@ export function iterationMetrics(
     const part = priced.usage;
     const unpriced = priced.costKnown ? 0 : 1;
     const promptBytes = rec.promptBytes ?? 0;
+    const work = {
+      edits: rec.edits?.files ?? 0,
+      added: rec.edits?.added ?? 0,
+      removed: rec.edits?.removed ?? 0,
+    };
     usage = addUsage(usage, part);
     unpricedTurns += unpriced;
+    edits += work.edits;
+    addedLines += work.added;
+    removedLines += work.removed;
 
     const role =
       roleByStep[rec.step] ?? DEFAULT_ROLE_BY_STEP[rec.step] ?? rec.step;
-    const roleEntry = roles[role] ?? {
-      role,
-      turns: 0,
-      usage: zeroUsage(),
-      tokens: 0,
-      promptBytes: 0,
-      unpricedTurns: 0,
-    };
-    addTurn(roleEntry, part, unpriced, promptBytes);
+    const roleEntry = roles[role] ?? { role, ...emptyGroup() };
+    addTurn(roleEntry, part, unpriced, promptBytes, work);
     roles[role] = roleEntry;
 
     // Records written before aliases existed fall back to the role name, so a
     // spend row always names a grouping the run config can resolve.
     const alias = rec.alias ?? role;
-    const aliasEntry = aliases[alias] ?? {
-      alias,
-      turns: 0,
-      usage: zeroUsage(),
-      tokens: 0,
-      promptBytes: 0,
-      unpricedTurns: 0,
-    };
-    addTurn(aliasEntry, part, unpriced, promptBytes);
+    const aliasEntry = aliases[alias] ?? { alias, ...emptyGroup() };
+    addTurn(aliasEntry, part, unpriced, promptBytes, work);
     aliases[alias] = aliasEntry;
+
+    const model = rec.model?.id ?? "unknown";
+    const modelEntry = models[model] ?? { model, ...emptyGroup() };
+    addTurn(modelEntry, part, unpriced, promptBytes, work);
+    models[model] = modelEntry;
 
     if (role === "architect" || rec.step === "architect") {
       architect.launches += 1;
@@ -313,6 +391,58 @@ export function iterationMetrics(
   parkIncidents(all, incidents);
   const tokens = tokenTotal(usage);
 
+  // Gate/commit wall and test runs come from the script records' own stamps;
+  // test runs attribute to the latest preceding agent turn for the same slug.
+  let gateWallMs = 0;
+  let commitWallMs = 0;
+  let gateRuns = 0;
+  let testRuns = 0;
+  const bySlug = new Map<string, StepRecord[]>();
+  for (const rec of recs) {
+    if (!rec.slug) continue;
+    const list = bySlug.get(rec.slug) ?? [];
+    list.push(rec);
+    bySlug.set(rec.slug, list);
+  }
+  for (const list of bySlug.values()) list.sort((a, b) => a.seq - b.seq);
+  const agentBySeq = [...recs].sort((a, b) => a.seq - b.seq);
+  const attributeTestRuns = (gate: StepRecord, runs: number): void => {
+    const pool = gate.slug ? (bySlug.get(gate.slug) ?? []) : agentBySeq;
+    let owner: StepRecord | undefined;
+    for (const candidate of pool) {
+      if (candidate.seq < gate.seq) owner = candidate;
+      else break;
+    }
+    owner ??= agentBySeq.filter((r) => r.seq < gate.seq).at(-1);
+    const key = owner?.model?.id ?? "unknown";
+    const entry = models[key] ?? { model: key, ...emptyGroup() };
+    entry.testRuns += runs;
+    models[key] = entry;
+    if (owner) {
+      const role =
+        roleByStep[owner.step] ??
+        DEFAULT_ROLE_BY_STEP[owner.step] ??
+        owner.step;
+      const roleEntry = roles[role];
+      if (roleEntry) roleEntry.testRuns += runs;
+      const aliasEntry = aliases[owner.alias ?? role];
+      if (aliasEntry) aliasEntry.testRuns += runs;
+    }
+  };
+  for (const rec of all) {
+    if (!rec.endedAt) continue;
+    if (rec.step === "checks" || rec.step === "merge-checks") {
+      gateWallMs += wallMsOf(rec);
+      gateRuns += 1;
+      const runs = rec.testRuns ?? rec.checks?.length ?? 0;
+      testRuns += runs;
+      attributeTestRuns(rec, runs);
+    } else if (rec.step === "commit") {
+      commitWallMs += wallMsOf(rec);
+    }
+  }
+  const operatorActs = humanInterventions + all.filter(isOutsideAct).length;
+
   architect.costShare = width(architect.usage.costUsd ?? 0, usage.costUsd ?? 0);
   architect.tokenShare = width(architect.tokens, tokens);
   return {
@@ -324,16 +454,29 @@ export function iterationMetrics(
     usage,
     tokens,
     costPerMergedTask:
-      merged.length > 0 && usage.costUsd !== undefined && unpricedTurns === 0
+      merged.length > 0 && usage.costUsd !== undefined
         ? usage.costUsd / merged.length
+        : null,
+    listCostPerMergedTask:
+      merged.length > 0 && usage.listCostUsd !== undefined
+        ? usage.listCostUsd / merged.length
         : null,
     roles,
     aliases,
+    models,
     architect,
     unpricedTurns,
     incidents,
     loopIncidents: incidents.noProgressParks + incidents.emptyDiffParks,
     humanInterventions,
+    operatorActs,
+    gateWallMs,
+    commitWallMs,
+    gateRuns,
+    testRuns,
+    edits,
+    addedLines,
+    removedLines,
   };
 }
 
@@ -345,12 +488,35 @@ function totalsOf(iterations: IterationMetrics[]): MetricsTotals {
   let parked = 0;
   let loopIncidents = 0;
   let humanInterventions = 0;
+  let operatorActs = 0;
+  let gateWallMs = 0;
+  let commitWallMs = 0;
+  let gateRuns = 0;
+  let testRuns = 0;
+  let edits = 0;
+  let addedLines = 0;
+  let removedLines = 0;
   let unpricedTurns = 0;
   const roles: Record<string, RoleMetrics> = {};
   const aliases: Record<string, AliasMetrics> = {};
+  const models: Record<string, ModelMetrics> = {};
   const incidents = emptyIncidents();
   const architect = emptyArchitect();
 
+  const sumGroup = <T extends GroupMetrics>(
+    total: T,
+    entry: GroupMetrics,
+  ): void => {
+    total.turns += entry.turns;
+    total.usage = addUsage(total.usage, entry.usage);
+    total.tokens += entry.tokens;
+    total.promptBytes += entry.promptBytes;
+    total.unpricedTurns += entry.unpricedTurns;
+    total.edits += entry.edits;
+    total.addedLines += entry.addedLines;
+    total.removedLines += entry.removedLines;
+    total.testRuns += entry.testRuns;
+  };
   for (const iteration of iterations) {
     usage = addUsage(usage, iteration.usage);
     tokens += iteration.tokens;
@@ -359,38 +525,35 @@ function totalsOf(iterations: IterationMetrics[]): MetricsTotals {
     parked += iteration.parked.length;
     loopIncidents += iteration.loopIncidents;
     humanInterventions += iteration.humanInterventions;
+    operatorActs += iteration.operatorActs;
+    gateWallMs += iteration.gateWallMs;
+    commitWallMs += iteration.commitWallMs;
+    gateRuns += iteration.gateRuns;
+    testRuns += iteration.testRuns;
+    edits += iteration.edits;
+    addedLines += iteration.addedLines;
+    removedLines += iteration.removedLines;
     unpricedTurns += iteration.unpricedTurns;
     for (const entry of Object.values(iteration.roles)) {
-      const total = roles[entry.role] ?? {
-        role: entry.role,
-        turns: 0,
-        usage: zeroUsage(),
-        tokens: 0,
-        promptBytes: 0,
-        unpricedTurns: 0,
-      };
-      total.turns += entry.turns;
-      total.usage = addUsage(total.usage, entry.usage);
-      total.tokens += entry.tokens;
-      total.promptBytes += entry.promptBytes;
-      total.unpricedTurns += entry.unpricedTurns;
+      const total = roles[entry.role] ?? { role: entry.role, ...emptyGroup() };
+      sumGroup(total, entry);
       roles[entry.role] = total;
     }
     for (const entry of Object.values(iteration.aliases)) {
       const total = aliases[entry.alias] ?? {
         alias: entry.alias,
-        turns: 0,
-        usage: zeroUsage(),
-        tokens: 0,
-        promptBytes: 0,
-        unpricedTurns: 0,
+        ...emptyGroup(),
       };
-      total.turns += entry.turns;
-      total.usage = addUsage(total.usage, entry.usage);
-      total.tokens += entry.tokens;
-      total.promptBytes += entry.promptBytes;
-      total.unpricedTurns += entry.unpricedTurns;
+      sumGroup(total, entry);
       aliases[entry.alias] = total;
+    }
+    for (const entry of Object.values(iteration.models ?? {})) {
+      const total = models[entry.model] ?? {
+        model: entry.model,
+        ...emptyGroup(),
+      };
+      sumGroup(total, entry);
+      models[entry.model] = total;
     }
     for (const key of Object.keys(incidents) as (keyof IncidentCounts)[]) {
       incidents[key] += iteration.incidents[key];
@@ -411,16 +574,27 @@ function totalsOf(iterations: IterationMetrics[]): MetricsTotals {
     usage,
     tokens,
     costPerMergedTask:
-      merged > 0 && usage.costUsd !== undefined && unpricedTurns === 0
-        ? usage.costUsd / merged
+      merged > 0 && usage.costUsd !== undefined ? usage.costUsd / merged : null,
+    listCostPerMergedTask:
+      merged > 0 && usage.listCostUsd !== undefined
+        ? usage.listCostUsd / merged
         : null,
     roles,
     aliases,
+    models,
     architect,
     unpricedTurns,
     incidents,
     loopIncidents,
     humanInterventions,
+    operatorActs,
+    gateWallMs,
+    commitWallMs,
+    gateRuns,
+    testRuns,
+    edits,
+    addedLines,
+    removedLines,
   };
 }
 

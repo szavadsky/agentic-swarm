@@ -1,6 +1,12 @@
 import fs from "node:fs";
-import type { ModelRef, SessionRef, Stop } from "../harness/types.js";
+import type {
+  ModelRef,
+  SessionRef,
+  Stop,
+  TurnAttempt,
+} from "../harness/types.js";
 import { addUsage } from "../harness/usage.js";
+import { pricedUsage } from "./pricing.js";
 import { missingPlanFinding, snapshotPlan } from "./architect-session.js";
 import { contextPackRelPath } from "./context-pack.js";
 import type { RoleTarget } from "./flow-context.js";
@@ -339,14 +345,29 @@ export async function runAgentTurn(
     : {};
   const actualModel =
     (lastResult as typeof lastResult & { model?: ModelRef }).model ?? model;
+  // Price at record time so every turn carries its priced cost and the
+  // list-price equivalent; aggregation reprices idempotently for old records.
+  // A resumed turn whose harness did not split the cache priced its prefix.
+  const cachedPrefix = spec.session ? true : undefined;
+  const prices = runtime.configs.run.prices ?? {};
+  const pricedAttempts: TurnAttempt[] = attempts.map((attempt) => ({
+    ...attempt,
+    usage: pricedUsage(attempt.usage, attempt.model.id, prices, {
+      cachedPrefix,
+    }).usage,
+  }));
+  const pricedTop = pricedUsage(usage, actualModel?.id, prices, {
+    cachedPrefix,
+  }).usage;
   const record = await started.finish({
     ...settled,
     promptBytes,
     ...(pack ? { packBytes: pack.bytes } : {}),
     ...(actualModel ? { model: actualModel } : {}),
+    ...(cachedPrefix ? { cachedPrefix } : {}),
     stop,
-    usage,
-    ...(attempts.length > 0 ? { attempts } : {}),
+    usage: pricedTop,
+    ...(pricedAttempts.length > 0 ? { attempts: pricedAttempts } : {}),
     ...(lastResult.transcript ? { transcript: lastResult.transcript } : {}),
     session: settled.session ?? session,
     outcome: outcome ?? undefined,

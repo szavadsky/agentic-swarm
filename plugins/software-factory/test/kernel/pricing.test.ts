@@ -160,7 +160,9 @@ describe("priced metrics and summary", () => {
       expect(one.roles.digest!.usage.costUsd).toBeCloseTo(0.05, 10);
       expect(one.unpricedTurns).toBe(1);
       expect(one.usage.costUsd).toBeCloseTo(8.05, 10);
-      expect(one.costPerMergedTask).toBeNull();
+      // Partial: one unpriced turn does not null the per-merged cost.
+      expect(one.costPerMergedTask).toBeCloseTo(8.05, 10);
+      expect(one.listCostPerMergedTask).toBeCloseTo(8, 10);
       expect(one.architect.costShare).toBeCloseTo(4 / 8.05, 10);
       expect(metrics.totals.unpricedTurns).toBe(1);
       expect(metrics.totals.usage.costUsd).toBeCloseTo(8.05, 10);
@@ -231,7 +233,8 @@ describe("priced metrics and summary", () => {
       expect(one.roles.digest!.usage.costUsd).toBeCloseTo(0.05, 10);
       expect(one.unpricedTurns).toBe(2);
       expect(one.usage.costUsd).toBeCloseTo(4.05, 10);
-      expect(one.costPerMergedTask).toBeNull();
+      expect(one.costPerMergedTask).toBeCloseTo(4.05, 10);
+      expect(one.listCostPerMergedTask).toBeCloseTo(4, 10);
       expect(metrics.totals.unpricedTurns).toBe(2);
 
       // Aggregation prices copies; the records themselves stay raw.

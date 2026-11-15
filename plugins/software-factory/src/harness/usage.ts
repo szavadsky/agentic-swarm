@@ -12,15 +12,19 @@ export function zeroUsage(): Usage {
 }
 
 /**
- * Field-wise sum; the token counters stay disjoint. Cost stays known when
- * either side knows it, so an explicit $0 never degrades to unknown and
- * unknown plus unknown stays unknown.
+ * Field-wise sum; the token counters stay disjoint. Each cost column stays
+ * known when either side knows it, so an explicit $0 never degrades to
+ * unknown and unknown plus unknown stays unknown.
  */
 export function addUsage(a: Usage, b: Usage): Usage {
-  const costUsd =
-    a.costUsd === undefined && b.costUsd === undefined
-      ? undefined
-      : (a.costUsd ?? 0) + (b.costUsd ?? 0);
+  const sumKnown = (
+    x: number | undefined,
+    y: number | undefined,
+  ): number | undefined =>
+    x === undefined && y === undefined ? undefined : (x ?? 0) + (y ?? 0);
+  const costUsd = sumKnown(a.costUsd, b.costUsd);
+  const listCostUsd = sumKnown(a.listCostUsd, b.listCostUsd);
+  const harnessCostUsd = sumKnown(a.harnessCostUsd, b.harnessCostUsd);
   return {
     in: a.in + b.in,
     cacheRead: a.cacheRead + b.cacheRead,
@@ -29,5 +33,7 @@ export function addUsage(a: Usage, b: Usage): Usage {
     out: a.out + b.out,
     reasoningOut: a.reasoningOut + b.reasoningOut,
     ...(costUsd !== undefined ? { costUsd } : {}),
+    ...(listCostUsd !== undefined ? { listCostUsd } : {}),
+    ...(harnessCostUsd !== undefined ? { harnessCostUsd } : {}),
   };
 }
