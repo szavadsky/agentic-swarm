@@ -1,3 +1,4 @@
+import type { CheckResult } from "../core/checks/types.js";
 import { commitAll } from "../core/git/commit.js";
 import { git } from "../core/git/exec.js";
 import type { Harness, TurnRequest, TurnResult } from "../harness/types.js";
@@ -14,11 +15,17 @@ import {
   promptVars,
   stepTarget,
 } from "./flow-context.js";
-import { runGates } from "./gates.js";
+import {
+  gateFlakeTests,
+  isInfraCheck,
+  newGateFailures,
+  runGates,
+} from "./gates.js";
 import { type MergeResult, mergeTask } from "./integrate.js";
 import {
   appendDebt,
   appendFinish,
+  appendGateFlake,
   appendPark,
   commitEdits,
   finishChecks,
@@ -103,6 +110,79 @@ function isInfraGate(check: {
   )
     return true;
   return false;
+}
+
+/** Stamps gates that could not start so derive parks infra instead of looping the task. */
+function markInfraGates(checks: CheckResult[]): void {
+  for (const check of checks) {
+    if (!check.ok && isInfraGate(check)) {
+      check.details = {
+        ...(typeof check.details === "object" && check.details
+          ? check.details
+          : {}),
+        kind: "infra",
+      };
+    }
+  }
+}
+
+/**
+ * Task gates with one flake re-run: a red gate re-runs once on the same tree
+ * before any fix turn. Green on re-run closes the checks record green with a
+ * `gate-flake` record naming the gate and its red-run failing tests; red again
+ * keeps the existing fix route. Only red gates with the task's own failures
+ * re-run — infra reds keep their own path and inherited reds need no re-run.
+ * The re-run keys on the tree: one per red gate per tree, a new commit gets a
+ * fresh re-run, and it consumes no round. Baseline and merge-checks runs never
+ * reach this helper.
+ */
+async function runTaskGates(
+  runtime: KernelRuntime,
+  meta: { iteration: number; slug: string; round: number },
+  worktree: string,
+  preexisting: ReadonlySet<string>,
+  prior: readonly StepRecord[],
+): Promise<void> {
+  const tree = await treeSha(worktree);
+  const gate = await startChecks(runtime.store, meta);
+  let checks = await runGates(runtime, worktree);
+  markInfraGates(checks);
+  const red = newGateFailures(checks, preexisting).filter(
+    (check) => !isInfraCheck(check),
+  );
+  const reran = prior.some(
+    (rec) =>
+      rec.slug === meta.slug &&
+      rec.step === "checks" &&
+      rec.endedAt &&
+      rec.tree === tree,
+  );
+  if (red.length > 0 && !reran) {
+    const rerun = await runGates(runtime, worktree, {
+      only: new Set(red.map((check) => check.name)),
+    });
+    markInfraGates(rerun);
+    const fresh = new Map(rerun.map((check) => [check.name, check]));
+    const flipped = red.filter((check) => fresh.get(check.name)?.ok === true);
+    if (flipped.length > 0) {
+      await appendGateFlake(runtime.store, meta, {
+        tree,
+        flakes: flipped.map((check) => ({
+          gate: check.name,
+          tests: gateFlakeTests(check),
+        })),
+        checks: flipped,
+      });
+    }
+    checks = checks.map((check) => {
+      const next = fresh.get(check.name);
+      // An infra re-run is inconclusive, not a verdict: the fix turn still
+      // reads the red run, and a test red never becomes an infra park.
+      if (!next || (!next.ok && isInfraCheck(next))) return check;
+      return next;
+    });
+  }
+  await finishChecks(gate, checks, { preexisting, tree });
 }
 
 /** A tree with no tracked edits and no merge in flight; untracked files count as dirty. */
@@ -197,6 +277,7 @@ async function handleStepResult(
   iteration: number,
   worktree: string,
   preexisting: ReadonlySet<string>,
+  prior: readonly StepRecord[],
   stop: StepRecord["stop"],
   outcome: StepRecord["outcome"],
 ): Promise<TaskActionResult> {
@@ -258,19 +339,7 @@ async function handleStepResult(
     return infraResult ?? cancelledResult ?? {};
   }
   if (checksDue(flow, step.id)) {
-    const gate = await startChecks(runtime.store, meta);
-    const checks = await runGates(runtime, worktree);
-    for (const check of checks) {
-      if (!check.ok && isInfraGate(check)) {
-        check.details = {
-          ...(typeof check.details === "object" && check.details
-            ? check.details
-            : {}),
-          kind: "infra",
-        };
-      }
-    }
-    await finishChecks(gate, checks, { preexisting });
+    await runTaskGates(runtime, meta, worktree, preexisting, prior);
   }
   return infraResult ?? cancelledResult ?? {};
 }
@@ -484,6 +553,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
     iteration,
     ensured.path,
     preexisting,
+    records,
     result.record.stop,
     result.outcome,
   );
@@ -533,26 +603,15 @@ async function runChecks(
       { ok: true, commit, tree },
     );
   }
-  const gate = await startChecks(runtime.store, {
-    iteration,
-    slug: task.slug,
-    round: state.round,
-  });
-  const checks = await runGates(runtime, ensured.path);
-  for (const check of checks) {
-    if (!check.ok && isInfraGate(check)) {
-      check.details = {
-        ...(typeof check.details === "object" && check.details
-          ? check.details
-          : {}),
-        kind: "infra",
-      };
-    }
-  }
-  const preexisting = preexistingRed(
-    recordedBaseGates(await runtime.store.listRecords()),
+  const prior = await runtime.store.listRecords();
+  const preexisting = preexistingRed(recordedBaseGates(prior));
+  await runTaskGates(
+    runtime,
+    { iteration, slug: task.slug, round: state.round },
+    ensured.path,
+    preexisting,
+    prior,
   );
-  await finishChecks(gate, checks, { preexisting });
   return {};
 }
 
