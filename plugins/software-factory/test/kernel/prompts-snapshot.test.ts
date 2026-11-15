@@ -25,6 +25,7 @@ const ROLES: Record<string, Record<string, string>> = {
     digest_path: "/goal/iterations/3/digest.md",
     steers: "- s1 (mailbox/inbox/s1.md): keep the API stable",
     outcome_path: "/goal/records/00042-i3-architect-r1/outcome.yaml",
+    validate_cmd: "bun /factory/bin/factory.ts validate",
   },
   front: {
     iteration: "3",
@@ -37,6 +38,7 @@ const ROLES: Record<string, Record<string, string>> = {
     setup_command: "bun install",
     gate_commands: "- test: bun test",
     outcome_path: "/goal/records/00041-i3-front-r1/outcome.yaml",
+    validate_cmd: "bun /factory/bin/factory.ts validate",
   },
   pm: {
     iteration: "3",
@@ -48,16 +50,19 @@ const ROLES: Record<string, Record<string, string>> = {
     steers: "- s1 (mailbox/inbox/s1.md):\n  keep the API stable",
     holds_dir: "/goal/mailbox/holds",
     outcome_path: "/goal/records/00043-i3-pm-r1/outcome.yaml",
+    validate_cmd: "bun /factory/bin/factory.ts validate",
   },
   implementer: {
     task_path: "/goal/tasks/alpha.md",
     front_pack: "/goal/iterations/3/context-pack.md",
     worktree: "/worktrees/demo-tasks/alpha",
+    resume_note: "",
     setup_command: "bun install",
     gate_commands: "- test: bun test\n- typecheck: bun run typecheck",
     baseline_checks: "- test: 2 failing",
     findings: "- src/x.ts:41 needs a null check",
     outcome_path: "/worktrees/demo-tasks/alpha/outcome.yaml",
+    validate_cmd: "bun /factory/bin/factory.ts validate",
   },
   reviewer: {
     task_path: "/goal/tasks/alpha.md",
@@ -68,7 +73,10 @@ const ROLES: Record<string, Record<string, string>> = {
     max_rounds: "2",
     baseline_checks: "- test: 2 failing",
     prior_findings: "",
+    upscope_ask: "",
+    fix_dispositions: "",
     outcome_path: "/worktrees/demo-tasks/alpha/outcome.yaml",
+    validate_cmd: "bun /factory/bin/factory.ts validate",
   },
   digest: {
     launch_id: "previous-launch-before-3",
@@ -77,6 +85,7 @@ const ROLES: Record<string, Record<string, string>> = {
     transcripts_dir: "/sessions/demo/launch-2",
     digest_path: "/goal/iterations/3/digest.md",
     outcome_path: "/goal/records/00044-i3-digest-r1/outcome.yaml",
+    validate_cmd: "bun /factory/bin/factory.ts validate",
   },
 };
 
@@ -252,6 +261,98 @@ describe("review findings carry", () => {
     const rendered = library().render("implementer", ROLES.implementer!);
     expect(rendered).not.toContain("empty on the first turn");
     expect(rendered).toContain("review summary, then concerns and forward");
+  });
+});
+
+describe("fix dispositions carry", () => {
+  it("carries the current fix round's dispositions into fix_dispositions", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const runtime = await makeRuntime(repo, goal, {
+        fake: new FakeHarness({ id: "fake" }),
+      });
+      const taskFile = task("alpha", { scope: ["alpha-area"] });
+      const flow = runtime.configs.process.flows["implement-review"]!;
+      const dispositions =
+        "F1 fixed in src/x.ts:41; F2 out of scope per done-when";
+      const records = [
+        rec(1, { slug: "alpha", step: "implement", round: 1 }),
+        rec(2, {
+          slug: "alpha",
+          step: "review",
+          round: 1,
+          outcome: outcome({
+            summary: "1. src/x.ts:41 needs a null check",
+            verdict: "changes",
+          }),
+        }),
+        rec(3, {
+          slug: "alpha",
+          step: "implement",
+          round: 2,
+          outcome: outcome({ summary: dispositions }),
+        }),
+      ];
+      const vars = promptVars(
+        runtime,
+        taskFile,
+        "/worktrees/demo-tasks/alpha",
+        records,
+        2,
+        flow,
+      );
+      expect(vars.fix_dispositions).toBe(dispositions);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("leaves fix_dispositions empty without a current-round fix", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const runtime = await makeRuntime(repo, goal, {
+        fake: new FakeHarness({ id: "fake" }),
+      });
+      const taskFile = task("alpha", { scope: ["alpha-area"] });
+      const flow = runtime.configs.process.flows["implement-review"]!;
+      const first = [
+        rec(1, {
+          slug: "alpha",
+          step: "implement",
+          round: 1,
+          outcome: outcome({ summary: "implemented" }),
+        }),
+      ];
+      const round1 = promptVars(
+        runtime,
+        taskFile,
+        "/worktrees/demo-tasks/alpha",
+        first,
+        1,
+        flow,
+      );
+      expect(round1.fix_dispositions).toBe("");
+      const stale = promptVars(
+        runtime,
+        taskFile,
+        "/worktrees/demo-tasks/alpha",
+        first,
+        2,
+        flow,
+      );
+      expect(stale.fix_dispositions).toBe("");
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("renders the fix-dispositions line in the reviewer prompt", () => {
+    const rendered = library().render("reviewer", {
+      ...ROLES.reviewer!,
+      fix_dispositions: "F1 fixed",
+    });
+    expect(rendered).toContain("F1 fixed");
+    expect(rendered).toContain("Verify each claim against the diff");
   });
 });
 

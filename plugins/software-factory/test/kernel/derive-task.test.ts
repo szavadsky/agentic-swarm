@@ -130,7 +130,7 @@ describe("continuation carry", () => {
     expect(reduction.park).toContain("already on the head");
   });
 
-  it("parks a no-change fix turn in a later round exactly as today", () => {
+  it("defers a no-change fix turn in a later round to review instead of parking", () => {
     const t = task("beta", { base: "alpha" });
     const flow = DEFAULT_FLOWS["implement-review"]!;
     const reduction = reduceTask(
@@ -144,13 +144,12 @@ describe("continuation carry", () => {
       ],
       flow,
     );
-    expect(reduction.phase).toBe("parked");
-    expect(reduction.park).toBe(
-      "empty-diff: implement r2 committed no changes",
-    );
+    expect(reduction.phase).toBe("checks");
+    expect(reduction.park).toBeUndefined();
+    expect(reduction.verdict).toBe("changes");
   });
 
-  it("parks a no-change turn after a reused-worktree sync exactly as today", () => {
+  it("defers a no-change turn after a reused-worktree sync to review instead of parking", () => {
     const t = task("beta", { base: "alpha" });
     const flow = DEFAULT_FLOWS["implement-review"]!;
     const reduction = reduceTask(
@@ -165,10 +164,9 @@ describe("continuation carry", () => {
       ],
       flow,
     );
-    expect(reduction.phase).toBe("parked");
-    expect(reduction.park).toBe(
-      "empty-diff: implement r2 committed no changes",
-    );
+    expect(reduction.phase).toBe("checks");
+    expect(reduction.park).toBeUndefined();
+    expect(reduction.verdict).toBe("changes");
   });
 
   it("derives old base-advance records without headTree as today", () => {
@@ -188,7 +186,7 @@ describe("continuation carry", () => {
     );
   });
 
-  it("does not let a later advance reset the first-turn carry", () => {
+  it("defers after a later advance without resetting the first-turn carry", () => {
     const t = task("beta", { base: "alpha" });
     const flow = DEFAULT_FLOWS["implement-review"]!;
     const reduction = reduceTask(
@@ -203,9 +201,8 @@ describe("continuation carry", () => {
       ],
       flow,
     );
-    expect(reduction.phase).toBe("parked");
-    expect(reduction.park).toBe(
-      "empty-diff: implement r2 committed no changes",
-    );
+    expect(reduction.phase).toBe("checks");
+    expect(reduction.park).toBeUndefined();
+    expect(reduction.verdict).toBe("changes");
   });
 });

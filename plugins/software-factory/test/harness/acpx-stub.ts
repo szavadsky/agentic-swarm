@@ -12,10 +12,10 @@ export interface AcpxStub {
 }
 
 export interface AcpxStubOptions {
-  /** Overrides the codex prompt usage frame. */
-  codexUsage?: Record<string, number>;
-  /** Overrides the agy prompt usage frame. */
-  agyUsage?: Record<string, number>;
+  /** Prompt result usage frame; absent means the result carries none. */
+  usage?: Record<string, number>;
+  /** Banner text emitted as an earlier agent message before the reply. */
+  banner?: string;
 }
 
 /**
@@ -30,26 +30,8 @@ export function createAcpxStub(opts: AcpxStubOptions = {}): AcpxStub {
   const logPath = path.join(dir, "invocations.ndjson");
   const stateDir = path.join(dir, "state");
   const binary = path.join(dir, "acpx-stub.js");
-  const usage = JSON.stringify(
-    opts.codexUsage ?? {
-      totalTokens: 5927,
-      inputTokens: 5923,
-      cachedReadTokens: 0,
-      outputTokens: 4,
-      thoughtTokens: 0,
-    },
-  );
-  // The live agy turn reported exactly this shape and no cost.
-  const agyUsage = JSON.stringify(
-    opts.agyUsage ?? {
-      totalTokens: 8862,
-      inputTokens: 8783,
-      cachedReadTokens: 0,
-      cachedWriteTokens: 0,
-      outputTokens: 79,
-      thoughtTokens: 77,
-    },
-  );
+  const usageJs = JSON.stringify(opts.usage ?? null);
+  const bannerJs = JSON.stringify(opts.banner ?? null);
 
   const script = `#!/usr/bin/env bun
 import fs from "node:fs";
@@ -61,7 +43,6 @@ const stateDir = ${JSON.stringify(stateDir)};
 fs.mkdirSync(stateDir, { recursive: true });
 fs.appendFileSync(logPath, JSON.stringify(args) + "\\n");
 
-const agent = args.includes("--agent") ? "agy" : args.includes("pi") ? "pi" : "codex";
 const emit = (frame) => process.stdout.write(JSON.stringify(frame) + "\\n");
 const flag = (names) => {
   for (const name of names) {
@@ -78,6 +59,8 @@ const marker = (name) => {
 };
 const mode = marker("mode");
 const reply = marker("text") ?? "PONG";
+const usage = ${usageJs};
+const banner = ${bannerJs};
 const sessionFile = (name) => path.join(stateDir, "session-" + name);
 const noSession = () =>
   emit({
@@ -85,7 +68,7 @@ const noSession = () =>
     id: null,
     error: {
       code: -32002,
-      message: "⚠ No acpx session found (searched up to " + process.cwd() + ").\\nCreate one: acpx " + agent + " sessions new --name " + session,
+      message: "⚠ No acpx session found (searched up to " + process.cwd() + ").\\nCreate one: acpx sessions new --name " + session,
       data: { acpxCode: "NO_SESSION", origin: "cli", sessionId: "unknown" },
     },
   });
@@ -102,8 +85,11 @@ if (args.includes("set")) {
     process.exit(4);
   }
   const at = args.indexOf("set");
-  fs.writeFileSync(path.join(stateDir, "config-" + session), args[at + 1] + "=" + args[at + 2]);
-  emit({ action: "config_set", configId: args[at + 1], value: args[at + 2] });
+  // The raw route places -s <name> between set and the pair; a positional
+  // agent places it before set.
+  const pair = args[at + 1] === "-s" ? args.slice(at + 3, at + 5) : args.slice(at + 1, at + 3);
+  fs.writeFileSync(path.join(stateDir, "config-" + session), pair[0] + "=" + pair[1]);
+  emit({ action: "config_set", configId: pair[0], value: pair[1] });
   process.exit(0);
 }
 
@@ -141,25 +127,21 @@ const chunk = (text, messageId) => {
   emit({ jsonrpc: "2.0", method: "session/update", params: { sessionId, update } });
 };
 
-if (agent === "pi") {
-  chunk("pi v1.5.2\\n---\\n\\n## Skills\\n", undefined);
+if (banner) {
+  chunk(banner, undefined);
   emit({ jsonrpc: "2.0", method: "session/update", params: { sessionId, update: { sessionUpdate: "available_commands_update", availableCommands: [] } } });
-  chunk(reply, undefined);
-} else {
-  chunk(reply.slice(0, 1), "msg_stub");
-  chunk(reply.slice(1), "msg_stub");
 }
+chunk(reply.slice(0, 1), "msg_stub");
+chunk(reply.slice(1), "msg_stub");
 
 if (mode === "cancelled") {
   emit({ jsonrpc: "2.0", id: 7, result: { stopReason: "cancelled", usage: null } });
   process.exit(0);
 }
 
-if (agent === "codex") {
+if (usage) {
   emit({ jsonrpc: "2.0", method: "session/update", params: { sessionId, update: { sessionUpdate: "usage_update", used: 5927, size: 950000 } } });
-  emit({ jsonrpc: "2.0", id: 7, result: { stopReason: "end_turn", usage: ${usage} } });
-} else if (agent === "agy") {
-  emit({ jsonrpc: "2.0", id: 7, result: { stopReason: "end_turn", usage: ${agyUsage} } });
+  emit({ jsonrpc: "2.0", id: 7, result: { stopReason: "end_turn", usage } });
 } else {
   emit({ jsonrpc: "2.0", id: 7, result: { stopReason: "end_turn" } });
 }

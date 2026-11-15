@@ -15,10 +15,21 @@ export function resolveAcpxCommand(binary?: string): AcpxCommand {
 }
 
 /**
- * agy is spawned by acpx from its raw `--agent` command, so the adapter has to
- * resolve it itself; pre-flight's AGY_PATH would otherwise never reach the
- * spawned process. Same precedence as OPENCODE_PATH and OMP_PATH.
+ * The raw `--agent` command is what acpx spawns, so the adapter resolves its
+ * binary itself; a pre-flight-only lookup would let the two diverge. A slash
+ * stays as is (an explicit path from config); a bare name resolves via PATH.
  */
-export function resolveAgyBinary(binary?: string): string {
-  return binary ?? process.env.AGY_PATH ?? Bun.which("agy") ?? "agy";
+export function resolveRawAgentCommand(agent: string): string {
+  const parts = agent.split(/\s+/).filter(Boolean);
+  const head = parts[0];
+  if (!head) return agent;
+  if (head.includes("/")) return [head, ...parts.slice(1)].join(" ");
+  return [Bun.which(head) ?? head, ...parts.slice(1)].join(" ");
+}
+
+/** Binary pre-flight probes for a raw `--agent` command: its resolved head. */
+export function resolveRawAgentBinary(agent: string): string {
+  const head = agent.split(/\s+/).filter(Boolean)[0] ?? agent;
+  if (head.includes("/")) return head;
+  return Bun.which(head) ?? head;
 }

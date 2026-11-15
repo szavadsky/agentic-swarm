@@ -1,11 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import {
-  FakeHarness,
-  type FakeTurnHandler,
-  fakeTurnResult,
-} from "../../src/harness/fake/index.js";
+import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import type { TurnResult } from "../../src/harness/types.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
@@ -17,6 +13,7 @@ import {
   makeRuntime,
   outcome,
   setupFlowRepo,
+  whenTurn,
   writeTask,
 } from "./s2-helpers.js";
 
@@ -220,23 +217,32 @@ describe("turn failures — outcome, crash and wall-clock handling", () => {
   it("records a throwing task as an infra crash and the sibling continues", async () => {
     const { repo, goal } = setupFlowRepo({ limits: { concurrency: 2 } });
     try {
-      const implement: FakeTurnHandler = (req, ctx) => {
-        const slug = path.basename(req.cwd!);
-        if (slug === "a") throw new Error("simulated kill in a");
-        fs.writeFileSync(path.join(req.cwd!, "b.txt"), "b\n", "utf8");
-        ctx.writeOutcome(outcome({ summary: "b implemented" }));
-        return fakeTurnResult(req);
-      };
       const harness = new FakeHarness({ id: "fake" });
-      // Whichever task shifts which handle, both slugs are served.
-      harness.script(implement);
-      harness.script(implement);
-      harness.script((req, ctx) => {
-        ctx.writeOutcome(
-          outcome({ summary: "b approved", verdict: "approve" }),
-        );
-        return fakeTurnResult(req);
-      });
+      // Each turn is bound to its slug and step, so the thrower can never be
+      // consumed by the sibling's turn (or vice versa) under load.
+      harness.script(
+        (): TurnResult => {
+          throw new Error("simulated kill in a");
+        },
+        { when: whenTurn({ slug: "a", step: "implement" }) },
+      );
+      harness.script(
+        (req, ctx) => {
+          fs.writeFileSync(path.join(req.cwd!, "b.txt"), "b\n", "utf8");
+          ctx.writeOutcome(outcome({ summary: "b implemented" }));
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ slug: "b", step: "implement" }) },
+      );
+      harness.script(
+        (req, ctx) => {
+          ctx.writeOutcome(
+            outcome({ summary: "b approved", verdict: "approve" }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ slug: "b", step: "review" }) },
+      );
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("a", { scope: ["a.txt"] }));
       await writeTask(runtime, task("b", { scope: ["b.txt"] }));

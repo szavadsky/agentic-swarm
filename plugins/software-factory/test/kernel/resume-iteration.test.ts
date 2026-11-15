@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { dispatch } from "../../src/cli/dispatch.js";
+import { expectDispatch } from "./e2e-helpers.js";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { derive, FRONT_STOP_STEP } from "../../src/kernel/derive.js";
 import { postSteer } from "../../src/kernel/mailbox.js";
@@ -120,14 +121,10 @@ describe("resume iteration — SIGINT mid-dispatch", () => {
         return fakeTurnResult(req);
       });
 
-      const code1 = await dispatch(
-        ["run", "--repo", repo.dir, "--goal", "demo"],
-        {
-          harnesses: { fake: first },
-          signals: controller,
-        },
-      );
-      expect(code1).toBe(130);
+      await expectDispatch(130, ["run", "--repo", repo.dir, "--goal", "demo"], {
+        harnesses: { fake: first },
+        signals: controller,
+      });
 
       const store1 = createFolderStore(goalDir);
       const state1 = derive(
@@ -161,13 +158,13 @@ describe("resume iteration — SIGINT mid-dispatch", () => {
         return fakeTurnResult(req);
       });
 
-      const code2 = await dispatch(
+      await expectDispatch(
+        0,
         ["run", "--repo", repo.dir, "--goal", "demo", "--iterations", "3"],
         {
           harnesses: { fake: second },
         },
       );
-      expect(code2).toBe(0);
 
       const store2 = createFolderStore(goalDir);
       const records2 = await store2.listRecords();
@@ -220,12 +217,10 @@ describe("resume iteration — hard death", () => {
         );
         return fakeTurnResult(req);
       });
-      expect(
-        await dispatch(["run", "--repo", repo.dir, "--goal", "demo"], {
-          harnesses: { fake: first },
-          signals: controller,
-        }),
-      ).toBe(130);
+      await expectDispatch(130, ["run", "--repo", repo.dir, "--goal", "demo"], {
+        harnesses: { fake: first },
+        signals: controller,
+      });
 
       // A hard death mid-iteration: beta's turn started but the process died
       // before it finished, leaving an orphan with no end record.
@@ -258,12 +253,11 @@ describe("resume iteration — hard death", () => {
         ctx.writeOutcome(outcome({ summary: "goal met", decision: "done" }));
         return fakeTurnResult(req);
       });
-      expect(
-        await dispatch(
-          ["run", "--repo", repo.dir, "--goal", "demo", "--iterations", "3"],
-          { harnesses: { fake: second } },
-        ),
-      ).toBe(0);
+      await expectDispatch(
+        0,
+        ["run", "--repo", repo.dir, "--goal", "demo", "--iterations", "3"],
+        { harnesses: { fake: second } },
+      );
 
       const store2 = createFolderStore(goalDir);
       const records2 = await store2.listRecords();
@@ -334,12 +328,10 @@ describe("resume iteration — hard death", () => {
         );
         return fakeTurnResult(req);
       });
-      expect(
-        await dispatch(["run", "--repo", repo.dir, "--goal", "demo"], {
-          harnesses: { fake: first },
-          signals: controller,
-        }),
-      ).toBe(130);
+      await expectDispatch(130, ["run", "--repo", repo.dir, "--goal", "demo"], {
+        harnesses: { fake: first },
+        signals: controller,
+      });
 
       // Dropped after the dying pass boundary read it: never claimed by the
       // architect, never given a PM steer turn.
@@ -372,12 +364,11 @@ describe("resume iteration — hard death", () => {
         );
         return fakeTurnResult(req);
       });
-      expect(
-        await dispatch(
-          ["run", "--repo", repo.dir, "--goal", "demo", "--iterations", "1"],
-          { harnesses: { fake: second } },
-        ),
-      ).toBe(3);
+      await expectDispatch(
+        3,
+        ["run", "--repo", repo.dir, "--goal", "demo", "--iterations", "1"],
+        { harnesses: { fake: second } },
+      );
 
       const store2 = createFolderStore(goalDir);
       const records2 = await store2.listRecords();
@@ -434,12 +425,14 @@ describe("resume guards", () => {
         );
         return fakeTurnResult(req);
       });
-      expect(
-        await dispatch(["run", "--repo", s.repo.dir, "--goal", "demo"], {
+      await expectDispatch(
+        130,
+        ["run", "--repo", s.repo.dir, "--goal", "demo"],
+        {
           harnesses: { fake: first },
           signals: controller,
-        }),
-      ).toBe(130);
+        },
+      );
     } finally {
       restoreWarn();
     }
@@ -484,12 +477,11 @@ describe("resume guards", () => {
           return fakeTurnResult(req);
         });
       }
-      expect(
-        await dispatch(
-          ["run", "--repo", repo.dir, "--goal", "demo", "--iterations", "1"],
-          { harnesses: { fake: second } },
-        ),
-      ).toBe(3);
+      await expectDispatch(
+        3,
+        ["run", "--repo", repo.dir, "--goal", "demo", "--iterations", "1"],
+        { harnesses: { fake: second } },
+      );
 
       const records = await createFolderStore(goalDir).listRecords();
       const state = derive(
@@ -545,12 +537,11 @@ describe("resume guards", () => {
         );
         return fakeTurnResult(req);
       });
-      expect(
-        await dispatch(
-          ["run", "--repo", repo.dir, "--goal", "demo", "--iterations", "1"],
-          { harnesses: { fake: second } },
-        ),
-      ).toBe(3);
+      await expectDispatch(
+        3,
+        ["run", "--repo", repo.dir, "--goal", "demo", "--iterations", "1"],
+        { harnesses: { fake: second } },
+      );
 
       const store = createFolderStore(goalDir);
       const records = await store.listRecords();
@@ -597,12 +588,14 @@ describe("resume guards", () => {
         );
         return fakeTurnResult(req, { usage: { costUsd: 1 } });
       });
-      expect(
-        await dispatch(["run", "--repo", s.repo.dir, "--goal", "demo"], {
+      await expectDispatch(
+        130,
+        ["run", "--repo", s.repo.dir, "--goal", "demo"],
+        {
           harnesses: { fake: first },
           signals: controller,
-        }),
-      ).toBe(130);
+        },
+      );
 
       // Iteration 1 spent $4 across architect, PM, implement and review.
       setLimits(s.repo, "iterationUsd: 1");
@@ -634,12 +627,11 @@ describe("resume guards", () => {
         );
         return fakeTurnResult(req);
       });
-      expect(
-        await dispatch(
-          ["run", "--repo", s.repo.dir, "--goal", "demo", "--iterations", "1"],
-          { harnesses: { fake: second } },
-        ),
-      ).toBe(3);
+      await expectDispatch(
+        3,
+        ["run", "--repo", s.repo.dir, "--goal", "demo", "--iterations", "1"],
+        { harnesses: { fake: second } },
+      );
 
       const store = createFolderStore(s.goalDir);
       const records = await store.listRecords();
@@ -726,12 +718,11 @@ describe("resume guards", () => {
         );
         return fakeTurnResult(req);
       });
-      expect(
-        await dispatch(
-          ["run", "--repo", repo.dir, "--goal", "demo", "--iterations", "1"],
-          { harnesses: { fake: second } },
-        ),
-      ).toBe(3);
+      await expectDispatch(
+        3,
+        ["run", "--repo", repo.dir, "--goal", "demo", "--iterations", "1"],
+        { harnesses: { fake: second } },
+      );
 
       const store = createFolderStore(goalDir);
       const records = await store.listRecords();
@@ -770,12 +761,11 @@ describe("resume guards", () => {
         ctx.writeOutcome(outcome({ summary: "no changes" }));
         return fakeTurnResult(req);
       });
-      expect(
-        await dispatch(
-          ["run", "--repo", repo.dir, "--goal", "demo", "--iterations", "1"],
-          { harnesses: { fake: second } },
-        ),
-      ).toBe(1);
+      await expectDispatch(
+        1,
+        ["run", "--repo", repo.dir, "--goal", "demo", "--iterations", "1"],
+        { harnesses: { fake: second } },
+      );
 
       const records = await createFolderStore(goalDir).listRecords();
       expect(
@@ -827,12 +817,11 @@ describe("resume guards", () => {
         );
         return fakeTurnResult(req);
       });
-      expect(
-        await dispatch(
-          ["run", "--repo", s.repo.dir, "--goal", "demo", "--iterations", "1"],
-          { harnesses: { fake: first } },
-        ),
-      ).toBe(3);
+      await expectDispatch(
+        3,
+        ["run", "--repo", s.repo.dir, "--goal", "demo", "--iterations", "1"],
+        { harnesses: { fake: first } },
+      );
 
       const mid = createFolderStore(s.goalDir);
       const midState = derive(await mid.listTasks(), await mid.listRecords());
@@ -845,12 +834,11 @@ describe("resume guards", () => {
         ctx.writeOutcome(outcome({ summary: "goal met", decision: "done" }));
         return fakeTurnResult(req);
       });
-      expect(
-        await dispatch(
-          ["run", "--repo", s.repo.dir, "--goal", "demo", "--iterations", "1"],
-          { harnesses: { fake: second } },
-        ),
-      ).toBe(0);
+      await expectDispatch(
+        0,
+        ["run", "--repo", s.repo.dir, "--goal", "demo", "--iterations", "1"],
+        { harnesses: { fake: second } },
+      );
 
       const store = createFolderStore(s.goalDir);
       const records = await store.listRecords();

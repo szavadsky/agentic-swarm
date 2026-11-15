@@ -1,7 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
+import {
+  FakeHarness,
+  type FakeTurnHandler,
+  fakeTurnResult,
+} from "../../src/harness/fake/index.js";
 import { derive } from "../../src/kernel/derive.js";
 import { areasOverlap, runDispatch } from "../../src/kernel/dispatch.js";
 import { createDrainController } from "../../src/kernel/signals.js";
@@ -12,6 +16,8 @@ import {
   makeRuntime,
   outcome,
   setupFlowRepo,
+  twoPartyBarrier,
+  whenTurn,
   writeTask,
 } from "./s2-helpers.js";
 
@@ -19,12 +25,26 @@ async function runPair(opts: {
   scopeA: string[];
   scopeB: string[];
   limits: Record<string, unknown>;
+  rendezvous?: boolean;
 }): Promise<{ max: number; reason: string }> {
   const { repo, goal } = setupFlowRepo({ limits: opts.limits });
   try {
     const counter = { active: 0, max: 0 };
+    const barrier = opts.rendezvous ? twoPartyBarrier() : undefined;
     const harness = new FakeHarness({ id: "fake" });
-    for (let i = 0; i < 4; i += 1) harness.script(filePerTaskHandler(counter));
+    // Bound by step so either task's turn takes an implement or review
+    // handler no matter which calls first; the handler itself keys off the
+    // worktree it runs in. Concurrent pairs rendezvous instead of sleeping
+    // so the overlap assertion cannot miss under load; serialized pairs
+    // keep the sleep (a barrier would deadlock them).
+    for (let i = 0; i < 2; i += 1) {
+      harness.script(filePerTaskHandler(counter, 20, barrier), {
+        when: whenTurn({ step: "implement" }),
+      });
+      harness.script(filePerTaskHandler(counter, 20, barrier), {
+        when: whenTurn({ step: "review" }),
+      });
+    }
     const runtime = await makeRuntime(repo, goal, { fake: harness });
     await writeTask(runtime, task("alpha", { scope: opts.scopeA }));
     await writeTask(runtime, task("beta", { scope: opts.scopeB }));
@@ -57,6 +77,7 @@ describe("dispatch admission", () => {
       scopeA: ["alpha-area"],
       scopeB: ["beta-area"],
       limits: { concurrency: 2 },
+      rendezvous: true,
     });
     expect(run.reason).toBe("boundary");
     expect(run.max).toBe(2);
@@ -75,31 +96,37 @@ describe("dispatch admission", () => {
     const { repo, goal } = setupFlowRepo({ limits: { concurrency: 2 } });
     try {
       const counter = { active: 0, max: 0 };
+      const arrive = twoPartyBarrier();
       const harness = new FakeHarness({ id: "fake" });
-      for (let i = 0; i < 4; i += 1) {
-        harness.script(async (req, ctx) => {
-          counter.active += 1;
-          counter.max = Math.max(counter.max, counter.active);
-          try {
-            await new Promise((resolve) => setTimeout(resolve, 20));
-            const slug = path.basename(req.cwd!);
-            if (req.prompt.startsWith("You review")) {
-              ctx.writeOutcome(
-                outcome({ summary: `${slug} approved`, verdict: "approve" }),
-              );
-            } else {
-              fs.writeFileSync(
-                path.join(req.cwd!, "shared.txt"),
-                "shared\n",
-                "utf8",
-              );
-              ctx.writeOutcome(outcome({ summary: `${slug} implemented` }));
-            }
-            return fakeTurnResult(req);
-          } finally {
-            counter.active -= 1;
+      const handler: FakeTurnHandler = async (req, ctx) => {
+        counter.active += 1;
+        counter.max = Math.max(counter.max, counter.active);
+        try {
+          await arrive();
+          const slug = path.basename(req.cwd!);
+          if (req.prompt.startsWith("You review")) {
+            ctx.writeOutcome(
+              outcome({ summary: `${slug} approved`, verdict: "approve" }),
+            );
+          } else {
+            fs.writeFileSync(
+              path.join(req.cwd!, "shared.txt"),
+              "shared\n",
+              "utf8",
+            );
+            ctx.writeOutcome(outcome({ summary: `${slug} implemented` }));
           }
-        });
+          return fakeTurnResult(req);
+        } finally {
+          counter.active -= 1;
+        }
+      };
+      // Bound by step so either task's turn takes the matching handler no
+      // matter which calls first; the rendezvous (not a sleep) is what the
+      // max-concurrency assertion measures.
+      for (let i = 0; i < 2; i += 1) {
+        harness.script(handler, { when: whenTurn({ step: "implement" }) });
+        harness.script(handler, { when: whenTurn({ step: "review" }) });
       }
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("alpha", { scope: ["alpha-area"] }));

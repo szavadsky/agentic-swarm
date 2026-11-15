@@ -2,6 +2,7 @@ import path from "node:path";
 import { type RetryPolicy, runWithFallbacks } from "../fallback.js";
 import type {
   Caps,
+  CompactResult,
   Harness,
   ModelRef,
   SessionRef,
@@ -73,17 +74,20 @@ export class OpencodeHarness implements Harness {
     return { ...value, attempts };
   }
 
-  async compact(ref: SessionRef): Promise<SessionRef> {
+  async compact(ref: SessionRef): Promise<CompactResult> {
     if (ref.harness !== this.id) {
       throw new Error(
         `OpencodeHarness cannot compact a ${ref.harness} session`,
       );
     }
     await this.runtime.api.compact(ref.id, ref.cwd);
+    // No usage: the local API reports no tokens or cost for the call.
     return {
-      ...ref,
-      compacted: true,
-      lastRequestStartedAt: new Date().toISOString(),
+      session: {
+        ...ref,
+        compacted: true,
+        lastRequestStartedAt: new Date().toISOString(),
+      },
     };
   }
 

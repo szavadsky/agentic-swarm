@@ -100,12 +100,15 @@ export type MergeAttempt = { ok: true } | { ok: false; paths: string[] };
  * Merges `ref` into the checkout at `cwd`. A conflict aborts the merge so no
  * state is left behind and returns the unmerged paths; any other refusal
  * (merge.ff=only, unrelated histories) leaves no merge state either, and git's
- * own reason is the only diagnosis, so it is thrown.
+ * own reason is the only diagnosis, so it is thrown. With `leaveConflict` a
+ * conflict stays in progress (MERGE_HEAD plus unmerged paths) for the caller's
+ * turn to resolve; only a non-conflict refusal still throws.
  */
 export async function mergeRef(
   cwd: string,
   ref: string,
   env: Record<string, string> | undefined,
+  opts?: { leaveConflict?: boolean },
 ): Promise<MergeAttempt> {
   const merge = await git(cwd, ["merge", "--no-edit", ref], {
     allowFail: true,
@@ -120,6 +123,22 @@ export async function mergeRef(
     .map((p) => p.trim())
     .filter(Boolean)
     .sort();
+  if (opts?.leaveConflict) {
+    const head = await git(
+      cwd,
+      ["rev-parse", "--verify", "--quiet", "MERGE_HEAD"],
+      { allowFail: true },
+    );
+    if (head.code !== 0 && paths.length === 0) {
+      throw new GitError(
+        `merge --no-edit ${ref}`,
+        merge.code,
+        merge.stderr,
+        merge.stdout,
+      );
+    }
+    return { ok: false, paths };
+  }
   const inFlight = await abortInFlightMerge(cwd);
   if (!inFlight && paths.length === 0) {
     throw new GitError(
@@ -258,6 +277,11 @@ export interface EnsuredWorktree {
   startPoint: string;
   setup?: SetupResult;
   error?: string;
+  /**
+   * Creation merge conflicted and stays in progress (MERGE_HEAD) for the
+   * first turn to resolve. `head` is the integration head the merge attempted.
+   */
+  mergeConflict?: { paths: string[]; head: string };
 }
 
 /**
@@ -307,7 +331,7 @@ export async function ensureTaskWorktree(
     path.resolve(p),
   );
   let created = false;
-  let conflict: string[] | undefined;
+  let conflict: { paths: string[]; head: string } | undefined;
   if (!registered.includes(path.resolve(wtPath))) {
     if (fs.existsSync(wtPath))
       fs.rmSync(wtPath, { recursive: true, force: true });
@@ -327,28 +351,18 @@ export async function ensureTaskWorktree(
       }
       if (!task.base) return;
       // The parked branch is never rewritten: only this continuation branch moves.
+      // A conflict stays in progress for the first turn to resolve instead of
+      // parking before it; the caller decides (first turn resolves, later parks).
       startPoint = await integrationHead(runtime);
       const attempt = await mergeRef(
         wtPath,
         startPoint,
         runtime.repo.identityEnv(),
+        { leaveConflict: true },
       );
-      if (!attempt.ok) conflict = attempt.paths;
+      if (!attempt.ok) conflict = { paths: attempt.paths, head: startPoint };
     });
     created = true;
-  }
-  if (conflict) {
-    const named =
-      conflict.length > 0
-        ? conflict.join(", ")
-        : "git reported no unmerged paths";
-    return {
-      path: wtPath,
-      branch,
-      created,
-      startPoint,
-      error: `base-conflict: ${named}`,
-    };
   }
 
   let setup: SetupResult | undefined;
@@ -360,6 +374,7 @@ export async function ensureTaskWorktree(
         cwd: wtPath,
       });
       if (!setup.ok) {
+        if (conflict) await abortInFlightMerge(wtPath);
         return {
           path: wtPath,
           branch,
@@ -372,7 +387,14 @@ export async function ensureTaskWorktree(
       if (marker) fs.writeFileSync(marker, new Date().toISOString(), "utf8");
     }
   }
-  return { path: wtPath, branch, created, startPoint, setup };
+  return {
+    path: wtPath,
+    branch,
+    created,
+    startPoint,
+    setup,
+    ...(conflict ? { mergeConflict: conflict } : {}),
+  };
 }
 
 /** Head of the task worktree; also used as the reviewer's diff head. */
@@ -392,6 +414,8 @@ export interface ContainmentSnapshot {
   at: string;
   /** Record sequences open at the snapshot; their close is not the turn's write. */
   inFlight: ReadonlySet<number>;
+  /** Highest record sequence the snapshot saw; higher ones opened after it did. */
+  maxSeq: number;
   /** Every goal artifact except the operator's mailbox channels: path -> hash. */
   artifacts: ReadonlyMap<string, string>;
   /** The integration branch ref; the merge queue advances it after a merge record. */
@@ -509,15 +533,17 @@ function pmOwned(rel: string): boolean {
 
 /**
  * A turn may write only its own outcome file. A record directory that belongs
- * to a record started during the turn (this turn's own included) or still open
+ * to a record the snapshot never saw (this turn's own included) or still open
  * at the snapshot is the script's or another turn's; a directory no record
- * explains, and a closed record's files, are the turn's write.
+ * explains, and a seen record's files, are the turn's write. Unseen means a
+ * higher sequence, never a later timestamp: a sibling that opens across the
+ * snapshot's record read stamps before it but lands after.
  */
 function artifactBreaches(
   before: ReadonlyMap<string, string>,
   after: ReadonlyMap<string, string>,
   opts: {
-    at: string;
+    maxSeq: number;
     inFlight: ReadonlySet<number>;
     records: readonly StepRecord[];
     pmActive: boolean;
@@ -529,9 +555,12 @@ function artifactBreaches(
     if (opts.pmActive && pmOwned(rel)) return true;
     const seq = recordSeqOf(rel);
     if (seq === undefined) return false;
-    const record = live.get(seq);
-    if (!record) return false;
-    return record.startedAt >= opts.at || opts.inFlight.has(seq);
+    // The store allocates sequences under one lock, so a record the read
+    // missed has a higher sequence than every record it saw. It exists by
+    // check time; a forged directory names no record and still breaches.
+    if (seq > opts.maxSeq) return live.has(seq);
+    if (!live.has(seq)) return false;
+    return opts.inFlight.has(seq);
   };
   const changed: string[] = [];
   for (const [rel, hash] of after) {
@@ -592,9 +621,10 @@ export async function containmentSnapshot(
     ["rev-parse", "--abbrev-ref", "HEAD"],
     { allowFail: true },
   );
-  // Stamped before the artifact walk: a record that opens or closes while the
-  // walk runs is then in flight on one side or the other, never a closed record
-  // whose concurrent write would be blamed on the turn.
+  // Records read before the stamp and the walk: a sibling close whose files
+  // land after the walk then still reads as open (in flight), never as a
+  // closed record whose concurrent write would be blamed on the turn.
+  const records = await runtime.store.listRecords();
   const at = new Date().toISOString();
   const artifacts = artifactState(runtime.paths.goalDir);
   const integration = await integrationHead(runtime);
@@ -603,7 +633,8 @@ export async function containmentSnapshot(
   return {
     branch: branch.stdout.trim(),
     at,
-    inFlight: recordsInFlight(await runtime.store.listRecords(), at),
+    inFlight: recordsInFlight(records, at),
+    maxSeq: records.reduce((max, r) => Math.max(max, r.seq), 0),
     artifacts,
     integration,
     root,
@@ -645,7 +676,7 @@ export async function containmentViolation(
 
   const settledAt = new Date().toISOString();
   const changedArtifacts = artifactBreaches(snapshot.artifacts, artifacts, {
-    at: snapshot.at,
+    maxSeq: snapshot.maxSeq,
     inFlight: snapshot.inFlight,
     records,
     pmActive: pmWroteDuring(records, snapshot.at, settledAt),

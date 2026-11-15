@@ -23,6 +23,18 @@ export const concernSchema = z.object({
   evidence: z.string().optional(),
 });
 
+/** Where the PM's steer turn sends one steer: handled now, a new task, the architect, or drain-then-architect. */
+export const steerRouteSchema = z.enum(["task", "spike", "architect", "stall"]);
+export type SteerRoute = z.infer<typeof steerRouteSchema>;
+
+export const steerRouteEntrySchema = z.object({
+  steer: z.string().min(1),
+  route: steerRouteSchema,
+  /** The PM's answer for a `task` steer; absent for every other route. */
+  answer: z.string().optional(),
+});
+export type SteerRouteEntry = z.infer<typeof steerRouteEntrySchema>;
+
 /** The only agent ↔ script surface; one schema for every step. */
 export const outcomeSchema = z.object({
   status: z.enum(["done", "blocked", "failed", "upscope"]),
@@ -31,6 +43,13 @@ export const outcomeSchema = z.object({
   forward: z.array(z.string()).default([]),
   verdict: z.enum(["approve", "changes", "reject"]).optional(),
   decision: z.enum(["continue", "done", "blocked"]).optional(),
+  // Standalone review escalation: the reviewer answers the upscope ask alongside
+  // its verdict. `yes` parks with cause upscope and (standalone only) rewrites
+  // the front class to bigger; `no` and absent keep the normal verdict path.
+  upscope: z.enum(["yes", "no"]).optional(),
+  // PM steer turns only: one route per claimed steer. Absent on every other
+  // step; absent on a legacy steer turn means every steer goes to the architect.
+  steerRoutes: z.array(steerRouteEntrySchema).optional(),
 });
 
 export type Concern = z.infer<typeof concernSchema>;
@@ -95,7 +114,7 @@ export interface TaskState {
   park?: string;
   /** No-progress over the item's history; the next action is the loop park. */
   loop?: ProgressRepeat;
-  /** The first merged-result gate failure: one implementer fix turn, then merge again. */
+  /** A red gate run sent the task back to implement: the fix turn resumes its session, and only a merged-result fix skips the next review. */
   gateFix?: boolean;
 }
 
@@ -174,7 +193,9 @@ export const DEFAULT_TIMEOUTS: Timeouts = {
 /**
  * One append-only record, materialized from `records/<dir>/`: `started.yaml`
  * exists before a turn, `end.yaml` commits it, `outcome.yaml` holds the agent's
- * accepted outcome. Script steps have actor `script` and no outcome.
+ * accepted outcome. Script steps have actor `script` and no outcome, except
+ * `steer-routes`: it stores the accepted steer-route map so the boundary never
+ * reads a failed rung's routes.
  */
 export interface StepRecord {
   seq: number;
@@ -196,6 +217,8 @@ export interface StepRecord {
   base?: string;
   stop?: Stop;
   usage?: Usage;
+  /** Priced tokens of this turn's session-end compaction, when the harness reported them. */
+  compactUsage?: Usage;
   session?: SessionRef;
   commit?: string;
   /** UTF-8 bytes of the rendered prompt sent to the harness (agent steps only). */
@@ -250,6 +273,8 @@ export interface RecordEnd {
   model?: ModelRef;
   stop?: Stop;
   usage?: Usage;
+  /** Raw session-end compaction tokens from the settle; the agent turn prices them. */
+  compactUsage?: Usage;
   session?: SessionRef;
   /** Resumed turn: unsplit input is priced as the cached prefix. */
   cachedPrefix?: boolean;
@@ -337,8 +362,15 @@ export interface AliasConfig {
   timeouts?: Timeouts;
 }
 
+/** One run-config harness entry: a config name bound to an adapter. */
+export interface HarnessConfig {
+  acpx: import("../harness/acpx/config.js").AcpxConfig;
+}
+
 export interface RunConfig {
   aliases: Record<string, AliasConfig>;
+  /** Harness id -> adapter binding; native harnesses need no entry. */
+  harnesses?: Record<string, HarnessConfig>;
   /** Model id -> USD per Mtok; absent model means unpriced, not free. */
   prices?: PriceTable;
   limits: {

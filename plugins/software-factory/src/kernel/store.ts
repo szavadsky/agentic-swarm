@@ -7,6 +7,7 @@ import {
   writeTextAtomic,
   writeYamlAtomic,
 } from "../core/records/io.js";
+import { terminalFactFromRecords } from "./derive-task.js";
 import { parseTaskFile, renderTaskFile, TaskFileError } from "./tasks.js";
 import type {
   ArtifactStore,
@@ -35,25 +36,10 @@ function recordDirName(seq: number, meta: RecordStart): string {
 }
 
 /**
- * The last terminal fact a slug's records carry, read the way `derive` reads
- * them. A broken file for a merged, finished or cancelled slug is history: it
+ * A broken file for a merged, finished or cancelled slug is history: it
  * must stay in `tasks/` so the record keeps the only file it names.
+ * Terminal facts come from `derive-task`, the single source.
  */
-function terminalStatus(
-  records: StepRecord[],
-  slug: string,
-): TaskStatus | null {
-  let status: TaskStatus | null = null;
-  for (const record of records) {
-    if (record.slug !== slug || !record.endedAt) continue;
-    if (record.step === "park") status = "parked";
-    else if (record.step === "cancel") status = "cancelled";
-    else if (record.step === "merge" && record.ok === true) status = "merged";
-    else if (record.step === "finish" && record.ok === true)
-      status = "finished";
-  }
-  return status;
-}
 
 function isTerminalHistory(
   status: TaskStatus | null,
@@ -154,16 +140,25 @@ class FolderStore implements ArtifactStore {
       } catch (err) {
         if (!(err instanceof TaskFileError)) throw err;
         records ??= await this.listRecords();
-        const terminal = terminalStatus(records, slug);
+        const terminal = terminalFactFromRecords(records, slug)?.status ?? null;
+        // Quarantine reports land on the current iteration so the summary
+        // and metrics for this launch name the vanished task; iteration 0
+        // is invisible to every operator surface.
+        const iteration = records.reduce(
+          (max, record) => Math.max(max, record.iteration),
+          1,
+        );
         if (isTerminalHistory(terminal)) {
           await this.reportTerminalHistory(
             name,
+            slug,
             terminal,
             err.message,
             records,
+            iteration,
           );
         } else {
-          await this.quarantineTask(name, err.message);
+          await this.quarantineTask(name, slug, err.message, iteration);
         }
       }
     }
@@ -176,7 +171,12 @@ class FolderStore implements ArtifactStore {
    * kept under `tasks/quarantine/` for the operator; a name already there gets
    * a numeric suffix rather than overwriting the earlier casualty.
    */
-  private async quarantineTask(name: string, reason: string): Promise<void> {
+  private async quarantineTask(
+    name: string,
+    slug: string,
+    reason: string,
+    iteration: number,
+  ): Promise<void> {
     const dir = path.join(this.tasksDir, "quarantine");
     await fs.promises.mkdir(dir, { recursive: true });
     const stem = name.slice(0, -".md".length);
@@ -193,7 +193,13 @@ class FolderStore implements ArtifactStore {
     }
     const destination = path.relative(this.goalDir, target);
     await this.appendRecord(
-      { iteration: 0, step: "task-quarantine", round: 1, actor: "script" },
+      {
+        iteration,
+        slug,
+        step: "task-quarantine",
+        round: 1,
+        actor: "script",
+      },
       {
         ok: false,
         cause: `task file "${name}" quarantined at ${destination}: ${reason}`,
@@ -209,9 +215,11 @@ class FolderStore implements ArtifactStore {
    */
   private async reportTerminalHistory(
     name: string,
+    slug: string,
     status: TaskStatus,
     reason: string,
     records: StepRecord[],
+    iteration: number,
   ): Promise<void> {
     const marker = `task file "${name}" is unreadable`;
     const alreadyReported = records.some(
@@ -220,7 +228,13 @@ class FolderStore implements ArtifactStore {
     );
     if (alreadyReported) return;
     await this.appendRecord(
-      { iteration: 0, step: "task-quarantine", round: 1, actor: "script" },
+      {
+        iteration,
+        slug,
+        step: "task-quarantine",
+        round: 1,
+        actor: "script",
+      },
       {
         ok: false,
         cause: `${marker}; left in tasks/ because its slug already has a terminal record (${status}): ${reason}`,

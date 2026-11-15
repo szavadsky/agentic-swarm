@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import yaml from "yaml";
-import { dispatch } from "../../src/cli/dispatch.js";
+import { expectDispatch } from "./e2e-helpers.js";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import type { Usage } from "../../src/harness/types.js";
 import { addUsage, zeroUsage } from "../../src/harness/usage.js";
@@ -582,13 +582,13 @@ describe("pricing in a launch", () => {
         });
       });
 
-      const code = await dispatch(
+      await expectDispatch(
+        0,
         ["run", "--repo", repo.dir, "--goal", "demo", "--iterations", "1"],
         {
           harnesses: { fake: harness },
         },
       );
-      expect(code).toBe(0);
 
       const store = createFolderStore(goalDir);
       const metrics = yaml.parse(

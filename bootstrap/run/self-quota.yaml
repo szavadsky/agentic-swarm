@@ -47,6 +47,18 @@ aliases:
     timeouts:
       wallMs: 14400000 # 4 h: fix turns run suites too
 
+harnesses:
+  agy:
+    acpx:
+      agent: agy acp
+      raw: true
+      args: [--approve-all]
+      effort:
+        configId: thought_level
+        levels: [low, medium, high]
+        modelBases: { gemini-3.8-flash: [low, medium, high] }
+      usage: { cache: true }
+
 scouts:
   model: openrouter/baidu/ernie-5.5-flash-preview:free
   effort: high

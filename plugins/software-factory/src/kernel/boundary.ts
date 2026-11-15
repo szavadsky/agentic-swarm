@@ -20,16 +20,27 @@ import { derive } from "./derive.js";
 import { writeLaunchDigest } from "./digest.js";
 import { compactSession, resolveRole } from "./flow-context.js";
 import {
+  collectSteerRoutes,
   expireHold,
+  formatPmAnswers,
   formatSteers,
   markProcessed,
   scanInbox,
+  steerProvenance,
   steerResponses,
   writeOutbox,
+  type Steer,
 } from "./mailbox.js";
 import { type PmRung, runPm } from "./pm.js";
 import { scriptMeta } from "./record.js";
-import type { GoalDecision, KernelRuntime, Outcome } from "./types.js";
+import type {
+  GoalDecision,
+  KernelRuntime,
+  Outcome,
+  State,
+  StepRecord,
+  TaskFile,
+} from "./types.js";
 import { integrationHead } from "./worktree.js";
 
 export interface BoundaryResult {
@@ -128,6 +139,45 @@ async function openRecords(store: KernelRuntime["store"]): Promise<string[]> {
   return open;
 }
 
+function spikeLinkedTasks(tasks: TaskFile[], steerId: string): TaskFile[] {
+  return tasks.filter((task) => steerProvenance(task.source) === steerId);
+}
+
+function spikeTerminal(state: State, linked: TaskFile[]): boolean {
+  if (linked.length === 0) return false;
+  return linked.every((task) => {
+    const status = state.tasks[task.slug]?.status;
+    return (
+      status === "merged" ||
+      status === "finished" ||
+      status === "parked" ||
+      status === "cancelled"
+    );
+  });
+}
+
+function spikeAnswer(
+  records: StepRecord[],
+  state: State,
+  linked: TaskFile[],
+): string {
+  const sorted = [...records].sort((a, b) => b.seq - a.seq);
+  const parts = linked.map((task) => {
+    const own = sorted.filter(
+      (record) => record.slug === task.slug && record.outcome,
+    );
+    const outcome =
+      own.find((record) => record.step === "implement")?.outcome ??
+      own[0]?.outcome;
+    if (outcome?.summary) return `${task.slug}: ${outcome.summary}`;
+    const cause = state.tasks[task.slug]?.cause;
+    return cause
+      ? `${task.slug}: ${cause}`
+      : `${task.slug}: no outcome recorded`;
+  });
+  return parts.join("; ");
+}
+
 /**
  * One architect consult: digest on a relaunch, inbox, deterministic pack,
  * architect turn (plan edited in place), steer answers, then the PM turn and
@@ -158,6 +208,50 @@ export async function runBoundary(
   const steers = await scanInbox(runtime.store);
   const seenSteers = steers.map((steer) => steer.id);
   const packRel = opts.frontPack ?? contextPackRelPath(iteration);
+  const pmRoutes = collectSteerRoutes(records);
+
+  // PM-handled steers never reach the architect. A `task` steer still in the
+  // inbox is a crash between the PM's answer and its mark-processed: answer it
+  // from the stored route now. A `spike` steer whose standalone tasks all
+  // landed is answered from their outcomes; a spike still in flight stays
+  // pending but out of the pack. Only architect, stall and unrouted (legacy or
+  // idle-arrival) steers are presented.
+  const forArchitect: Steer[] = [];
+  for (const steer of steers) {
+    const routed = pmRoutes.get(steer.id);
+    if (routed?.route === "task") {
+      if (routed.answer) {
+        await writeOutbox(
+          runtime.store,
+          steer.id,
+          `# Steer ${steer.id}\n\n${routed.answer}\n\nSource: ${steer.relPath}`,
+        );
+        await markProcessed(runtime.store, steer);
+        await expireHold(runtime.store, steer.id);
+        continue;
+      }
+      forArchitect.push(steer);
+      continue;
+    }
+    if (routed?.route === "spike") {
+      const linked = spikeLinkedTasks(tasks, steer.id);
+      if (linked.length > 0 && spikeTerminal(state, linked)) {
+        await writeOutbox(
+          runtime.store,
+          steer.id,
+          `# Steer ${steer.id}\n\n${spikeAnswer(records, state, linked)}\n\nSource: ${steer.relPath}`,
+        );
+        await markProcessed(runtime.store, steer);
+        await expireHold(runtime.store, steer.id);
+        continue;
+      }
+      if (linked.length > 0) continue;
+      forArchitect.push(steer);
+      continue;
+    }
+    forArchitect.push(steer);
+  }
+  const pmAnswers = formatPmAnswers(pmRoutes);
 
   if (!opts.frontPack) {
     const head = await integrationHead(runtime);
@@ -177,7 +271,8 @@ export async function runBoundary(
       tasks,
       state,
       codeMap: await codeMap(runtime.paths.goalCheckout),
-      steers,
+      steers: forArchitect,
+      pmAnswers,
       setup: runtime.configs.repo.setup,
       gates: runtime.configs.repo.gates,
       baseGates: recordedBaseGates(records),
@@ -209,14 +304,18 @@ export async function runBoundary(
         checkout: runtime.paths.goalCheckout,
         pack_path: path.join(runtime.store.goalDir, packRel),
         digest_path: digestPath ?? "",
-        steers: formatSteers(steers),
+        steers: formatSteers(forArchitect),
       },
       expectation: "architect",
       session: resume,
       settle: async (_record, outcome, live) => {
         if (!live || outcome?.decision !== "continue") return {};
         const compacted = await compactSession(runtime, live);
-        return compacted ? { session: compacted } : {};
+        if (!compacted) return {};
+        return {
+          session: compacted.session,
+          ...(compacted.usage ? { compactUsage: compacted.usage } : {}),
+        };
       },
     });
 
@@ -251,7 +350,7 @@ export async function runBoundary(
   const responses = result.outcome
     ? steerResponses(
         result.outcome,
-        steers.map((steer) => steer.id),
+        forArchitect.map((steer) => steer.id),
       )
     : new Map<string, string>();
   // A steer stays pending when the architect does not answer, so every later
@@ -267,7 +366,7 @@ export async function runBoundary(
     );
   const presented = unansweredAt("steer-presented");
   const expired = unansweredAt("steer-unanswered");
-  for (const steer of steers) {
+  for (const steer of forArchitect) {
     const answer = responses.get(steer.id);
     if (answer) {
       await writeOutbox(

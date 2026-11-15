@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
+import type { AcpxConfig } from "../../src/harness/acpx/config.js";
 import { AcpxHarness } from "../../src/harness/acpx/harness.js";
 import { priceUsage } from "../../src/kernel/pricing.js";
 import { createAcpxStub } from "./acpx-stub.js";
@@ -13,6 +14,35 @@ const CODEX_PRICE = {
   reasoning: 0.6,
 };
 const AGY_BIN = "/opt/agy-test/bin/agy";
+const PI_BANNER = "pi v1.5.2\n---\n\n## Skills\n";
+
+const PI_ACPX: AcpxConfig = {
+  agent: "pi",
+  effort: {
+    configId: "thought_level",
+    levels: ["off", "minimal", "low", "medium", "high", "xhigh"],
+  },
+  usage: { cache: false },
+};
+const CODEX_ACPX: AcpxConfig = {
+  agent: "codex",
+  effort: {
+    configId: "reasoning_effort",
+    levels: ["low", "medium", "high", "xhigh", "max"],
+  },
+  usage: { cache: true },
+};
+const agyAcpx = (agent: string): AcpxConfig => ({
+  agent,
+  raw: true,
+  args: ["--approve-all"],
+  effort: {
+    configId: "thought_level",
+    levels: ["low", "medium", "high"],
+    modelBases: { "gemini-3.8-flash": ["low", "medium", "high"] },
+  },
+  usage: { cache: true },
+});
 
 function request(
   cwd: string,
@@ -47,8 +77,12 @@ function expectDead(pid: number): void {
 
 describe("AcpxHarness", () => {
   it("creates a named pi session, passes model and effort, and returns the last agent text", async () => {
-    const stub = createAcpxStub();
-    const harness = new AcpxHarness({ agent: "pi", binary: stub.binary });
+    const stub = createAcpxStub({ banner: PI_BANNER });
+    const harness = new AcpxHarness({
+      id: "pi",
+      binary: stub.binary,
+      acpx: PI_ACPX,
+    });
     try {
       const cwd = path.dirname(stub.binary);
       const outcomePath = path.join(cwd, "outbox", "outcome.yaml");
@@ -114,7 +148,7 @@ describe("AcpxHarness", () => {
 
   it("resumes the same named session from a second process without creating a new one", async () => {
     const stub = createAcpxStub();
-    const options = { agent: "pi" as const, binary: stub.binary };
+    const options = { id: "pi", binary: stub.binary, acpx: PI_ACPX };
     const harness = new AcpxHarness(options);
     try {
       const cwd = path.dirname(stub.binary);
@@ -145,7 +179,11 @@ describe("AcpxHarness", () => {
 
   it("retries de novo with a new name when the resumed session is gone", async () => {
     const stub = createAcpxStub();
-    const harness = new AcpxHarness({ agent: "pi", binary: stub.binary });
+    const harness = new AcpxHarness({
+      id: "pi",
+      binary: stub.binary,
+      acpx: PI_ACPX,
+    });
     try {
       const cwd = path.dirname(stub.binary);
       const first = await harness.turn(request(cwd, "first"));
@@ -193,7 +231,11 @@ describe("AcpxHarness", () => {
 
   it("retries de novo when the resumed session's effort set answers NO_SESSION", async () => {
     const stub = createAcpxStub();
-    const harness = new AcpxHarness({ agent: "pi", binary: stub.binary });
+    const harness = new AcpxHarness({
+      id: "pi",
+      binary: stub.binary,
+      acpx: PI_ACPX,
+    });
     try {
       const cwd = path.dirname(stub.binary);
       const first = await harness.turn(
@@ -250,7 +292,11 @@ describe("AcpxHarness", () => {
 
   it("stops with infra details and no session when the retry also answers NO_SESSION", async () => {
     const stub = createAcpxStub();
-    const harness = new AcpxHarness({ agent: "pi", binary: stub.binary });
+    const harness = new AcpxHarness({
+      id: "pi",
+      binary: stub.binary,
+      acpx: PI_ACPX,
+    });
     try {
       const cwd = path.dirname(stub.binary);
       const first = await harness.turn(
@@ -307,7 +353,11 @@ describe("AcpxHarness", () => {
 
   it("gives two fresh sessions in the same worktree distinct names", async () => {
     const stub = createAcpxStub();
-    const harness = new AcpxHarness({ agent: "pi", binary: stub.binary });
+    const harness = new AcpxHarness({
+      id: "pi",
+      binary: stub.binary,
+      acpx: PI_ACPX,
+    });
     try {
       const cwd = path.dirname(stub.binary);
       const first = await harness.turn(request(cwd, "implementer"));
@@ -329,7 +379,7 @@ describe("AcpxHarness", () => {
   it("maps codex usage into Usage and leaves cost to the price table", async () => {
     // The live codex probe reported in 556 / cache-read 5760 / out 4.
     const stub = createAcpxStub({
-      codexUsage: {
+      usage: {
         totalTokens: 6320,
         inputTokens: 556,
         cachedReadTokens: 5760,
@@ -337,7 +387,11 @@ describe("AcpxHarness", () => {
         thoughtTokens: 0,
       },
     });
-    const harness = new AcpxHarness({ agent: "codex", binary: stub.binary });
+    const harness = new AcpxHarness({
+      id: "codex",
+      binary: stub.binary,
+      acpx: CODEX_ACPX,
+    });
     try {
       const result = await harness.turn({
         ...request(path.dirname(stub.binary), "Say [[text:PONG]]"),
@@ -378,7 +432,7 @@ describe("AcpxHarness", () => {
 
   it("runs agy through acpx's raw agent route and splits the effort suffix", async () => {
     const stub = createAcpxStub({
-      agyUsage: {
+      usage: {
         totalTokens: 8883,
         inputTokens: 8783,
         cachedReadTokens: 0,
@@ -388,9 +442,9 @@ describe("AcpxHarness", () => {
       },
     });
     const harness = new AcpxHarness({
-      agent: "agy",
+      id: "agy",
       binary: stub.binary,
-      agyBinary: AGY_BIN,
+      acpx: agyAcpx(`${AGY_BIN} acp`),
     });
     try {
       const cwd = path.dirname(stub.binary);
@@ -426,9 +480,8 @@ describe("AcpxHarness", () => {
         args.at(-1)?.includes("[[text:PONG]]"),
       )!;
 
-      // agy's built-in acpx route spawns an absent binary, so the resolved agy
-      // executable is the raw ACP agent; it needs approve-all or every shell
-      // command is denied.
+      // The raw ACP agent is the resolved executable; it needs approve-all or
+      // every shell command is denied.
       for (const args of [create, set, prompt]) {
         expect(args[args.indexOf("--agent") + 1]).toBe(`${AGY_BIN} acp`);
       }
@@ -468,9 +521,9 @@ describe("AcpxHarness", () => {
   it("resumes an agy session from a second process without creating a new one", async () => {
     const stub = createAcpxStub();
     const options = {
-      agent: "agy" as const,
+      id: "agy",
       binary: stub.binary,
-      agyBinary: AGY_BIN,
+      acpx: agyAcpx(`${AGY_BIN} acp`),
     };
     try {
       const cwd = path.dirname(stub.binary);
@@ -515,9 +568,9 @@ describe("AcpxHarness", () => {
   it("keeps an agy model id whose effort word is part of the name", async () => {
     const stub = createAcpxStub();
     const harness = new AcpxHarness({
-      agent: "agy",
+      id: "agy",
       binary: stub.binary,
-      agyBinary: AGY_BIN,
+      acpx: agyAcpx(`${AGY_BIN} acp`),
     });
     try {
       const result = await harness.turn(
@@ -537,31 +590,11 @@ describe("AcpxHarness", () => {
     }
   });
 
-  it("spawns the agy binary pre-flight resolved from AGY_PATH", async () => {
-    const stub = createAcpxStub();
-    const previous = process.env.AGY_PATH;
-    process.env.AGY_PATH = "/opt/agy-from-env/agy";
-    try {
-      const harness = new AcpxHarness({ agent: "agy", binary: stub.binary });
-      await harness.turn(
-        request(path.dirname(stub.binary), "Say [[text:PONG]]"),
-      );
-
-      const prompt = stub.invocations().at(-1)!;
-      expect(prompt[prompt.indexOf("--agent") + 1]).toBe(
-        "/opt/agy-from-env/agy acp",
-      );
-    } finally {
-      if (previous === undefined) delete process.env.AGY_PATH;
-      else process.env.AGY_PATH = previous;
-      stub.cleanup();
-    }
-  });
-
   it("advertises agy's session effort levels and cache usage", async () => {
     const harness = new AcpxHarness({
-      agent: "agy",
+      id: "agy",
       binary: "/nonexistent/agy",
+      acpx: agyAcpx("/nonexistent/agy acp"),
     });
     expect(await harness.caps({ id: "gemini-3.8-flash-high" })).toEqual({
       resume: true,
@@ -572,6 +605,84 @@ describe("AcpxHarness", () => {
       effort: ["low", "medium", "high"],
       usage: { cache: true, cost: false },
     });
+  });
+
+  it("takes the turn config from opaque when the kernel passes one", async () => {
+    const stub = createAcpxStub();
+    const harness = new AcpxHarness({
+      id: "pi",
+      binary: stub.binary,
+      acpx: PI_ACPX,
+    });
+    try {
+      const cwd = path.dirname(stub.binary);
+      const result = await harness.turn(
+        request(cwd, "Say [[text:PONG]]", {
+          effort: "high",
+          opaque: {
+            ...CODEX_ACPX,
+            effort: { configId: "reasoning_effort", levels: ["high"] },
+          } satisfies AcpxConfig,
+        }),
+      );
+      expect(result.stop).toEqual({ kind: "done" });
+      // The opaque wins over the instance config: the codex agent ran.
+      const prompt = stub
+        .invocations()
+        .find((args) => args.at(-1)?.includes("[[text:PONG]]"))!;
+      expect(prompt).toContain("codex");
+      expect(prompt).not.toContain("pi");
+      const set = stub.invocations().find((args) => args.includes("set"))!;
+      expect(set.slice(set.indexOf("set"))).toEqual([
+        "set",
+        "reasoning_effort",
+        "high",
+      ]);
+    } finally {
+      stub.cleanup();
+    }
+  });
+
+  it("runs a new agent from config with no code", async () => {
+    const stub = createAcpxStub();
+    const harness = new AcpxHarness({
+      id: "nova",
+      binary: stub.binary,
+      acpx: {
+        agent: "nova",
+        effort: { configId: "nova_level", levels: ["low", "high"] },
+        usage: { cache: false },
+      },
+    });
+    try {
+      const cwd = path.dirname(stub.binary);
+      const result = await harness.turn(
+        request(cwd, "Say [[text:PONG]]", { effort: "high" }),
+      );
+      expect(result.stop).toEqual({ kind: "done" });
+      expect(result.text).toBe("PONG");
+      expect(result.session?.harness).toBe("nova");
+      expect(result.session?.id).toMatch(/^nova-/);
+      const prompt = stub
+        .invocations()
+        .find((args) => args.at(-1)?.includes("[[text:PONG]]"))!;
+      expect(prompt[prompt.indexOf("--model") + 1]).toBe(
+        "opencode-go/beam-free",
+      );
+      expect(prompt.indexOf("--model")).toBeLessThan(prompt.indexOf("nova"));
+      const set = stub.invocations().find((args) => args.includes("set"))!;
+      expect(set.slice(set.indexOf("set"))).toEqual([
+        "set",
+        "nova_level",
+        "high",
+      ]);
+      expect(await harness.caps({ id: "nova-model" })).toMatchObject({
+        effort: ["low", "high"],
+        usage: { cache: false, cost: false },
+      });
+    } finally {
+      stub.cleanup();
+    }
   });
 
   it("maps NO_SESSION, a bad model, provider quota and a bare exit to scrubbed stops", async () => {
@@ -609,7 +720,11 @@ describe("AcpxHarness", () => {
 
     for (const testCase of cases) {
       const stub = createAcpxStub();
-      const harness = new AcpxHarness({ agent: "pi", binary: stub.binary });
+      const harness = new AcpxHarness({
+        id: "pi",
+        binary: stub.binary,
+        acpx: PI_ACPX,
+      });
       try {
         const result = await harness.turn(
           request(path.dirname(stub.binary), `[[mode:${testCase.mode}]]`),
@@ -623,7 +738,11 @@ describe("AcpxHarness", () => {
 
   it("maps a cancelled stop reason to cancelled even though acpx exits 0", async () => {
     const stub = createAcpxStub();
-    const harness = new AcpxHarness({ agent: "codex", binary: stub.binary });
+    const harness = new AcpxHarness({
+      id: "codex",
+      binary: stub.binary,
+      acpx: CODEX_ACPX,
+    });
     try {
       const result = await harness.turn(
         request(path.dirname(stub.binary), "[[mode:cancelled]]"),
@@ -634,19 +753,27 @@ describe("AcpxHarness", () => {
     }
   });
 
-  it("rejects a session bound to another cwd instead of reusing its acpx record", async () => {
+  it("starts de novo instead of reusing a session bound to another cwd", async () => {
     const stub = createAcpxStub();
-    const harness = new AcpxHarness({ agent: "pi", binary: stub.binary });
+    const harness = new AcpxHarness({
+      id: "pi",
+      binary: stub.binary,
+      acpx: PI_ACPX,
+    });
     try {
       const cwd = path.dirname(stub.binary);
       const first = await harness.turn(request(cwd, "first"));
-      await expect(
-        harness.turn(
-          request(path.join(cwd, "elsewhere"), "second", {
-            session: first.session,
-          }),
-        ),
-      ).rejects.toThrow(/cwd-bound/);
+      const elsewhere = path.join(cwd, "elsewhere");
+      fs.mkdirSync(elsewhere, { recursive: true });
+      const second = await harness.turn(
+        request(elsewhere, "second [[text:ALPHA]]", {
+          session: first.session,
+        }),
+      );
+      expect(second.stop).toEqual({ kind: "done" });
+      expect(second.text).toBe("ALPHA");
+      expect(second.session?.id).not.toBe(first.session!.id);
+      expect(second.session?.cwd).toBe(elsewhere);
     } finally {
       stub.cleanup();
     }
@@ -654,7 +781,11 @@ describe("AcpxHarness", () => {
 
   it("abort kills the prompt child and reports cancelled", async () => {
     const stub = createAcpxStub();
-    const harness = new AcpxHarness({ agent: "pi", binary: stub.binary });
+    const harness = new AcpxHarness({
+      id: "pi",
+      binary: stub.binary,
+      acpx: PI_ACPX,
+    });
     const cwd = path.dirname(stub.binary);
     const pidFile = path.join(cwd, "child.pid");
     process.env.ACPX_STUB_PID_FILE = pidFile;
@@ -680,7 +811,11 @@ describe("AcpxHarness", () => {
 
   it("abort after resolve is a no-op", async () => {
     const stub = createAcpxStub();
-    const harness = new AcpxHarness({ agent: "pi", binary: stub.binary });
+    const harness = new AcpxHarness({
+      id: "pi",
+      binary: stub.binary,
+      acpx: PI_ACPX,
+    });
     const cwd = path.dirname(stub.binary);
     const pidFile = path.join(cwd, "child.pid");
     process.env.ACPX_STUB_PID_FILE = pidFile;
@@ -706,7 +841,11 @@ describe("AcpxHarness", () => {
 
   it("a pre-aborted signal reports cancelled without spawning", async () => {
     const stub = createAcpxStub();
-    const harness = new AcpxHarness({ agent: "pi", binary: stub.binary });
+    const harness = new AcpxHarness({
+      id: "pi",
+      binary: stub.binary,
+      acpx: PI_ACPX,
+    });
     try {
       const controller = new AbortController();
       controller.abort();

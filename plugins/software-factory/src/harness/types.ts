@@ -127,11 +127,21 @@ export function portable(from: string, to: string): boolean {
   return from === to;
 }
 
+/**
+ * What a session-end compaction produced: the stored ref plus the tokens the
+ * summarization call consumed. `usage` is absent when the harness cannot
+ * measure it (no adapter reports compaction usage yet except the fake).
+ */
+export interface CompactResult {
+  session: SessionRef;
+  usage?: Usage;
+}
+
 export interface Harness {
   id: string;
   /** Probed at pre-flight, per model. */
   caps(model: ModelRef): Promise<Caps>;
   turn(req: TurnRequest): Promise<TurnResult>;
   /** Absent capability = missing member, a type error at the call site. */
-  compact?(ref: SessionRef): Promise<SessionRef>;
+  compact?(ref: SessionRef): Promise<CompactResult>;
 }

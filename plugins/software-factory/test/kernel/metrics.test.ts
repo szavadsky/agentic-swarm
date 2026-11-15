@@ -3,8 +3,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import yaml from "yaml";
-import { dispatch } from "../../src/cli/dispatch.js";
 import { Repo } from "../../src/core/git/repo.js";
+import { expectDispatch } from "./e2e-helpers.js";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import type { Usage } from "../../src/harness/types.js";
 import { runAgentTurn } from "../../src/kernel/agent.js";
@@ -138,13 +138,13 @@ describe("iteration metrics", () => {
         );
       });
 
-      const code = await dispatch(
+      await expectDispatch(
+        3,
         ["run", "--repo", repo.dir, "--goal", "demo", "--iterations", "1"],
         {
           harnesses: { fake: harness },
         },
       );
-      expect(code).toBe(3);
 
       const store = createFolderStore(goalDir);
       const records = await store.listRecords();
@@ -152,12 +152,22 @@ describe("iteration metrics", () => {
         (r) => r.iteration === 1 && r.endedAt && r.actor === "agent",
       );
       expect(turns).toHaveLength(4);
+      const part = (u: Usage | undefined): number =>
+        (u?.in ?? 0) +
+        (u?.cacheRead ?? 0) +
+        (u?.cacheWrite5m ?? 0) +
+        (u?.cacheWrite1h ?? 0) +
+        (u?.out ?? 0) +
+        (u?.reasoningOut ?? 0);
+      // Metrics sum each attempt plus the turn's compaction; the fake's single
+      // attempt mirrors the turn counters, so usage plus compaction matches it.
       const fromRecords = turns.reduce(
-        (sum, r) => sum + (r.usage?.in ?? 0) + (r.usage?.out ?? 0),
+        (sum, r) => sum + part(r.usage) + part(r.compactUsage),
         0,
       );
       const costFromRecords = turns.reduce(
-        (sum, r) => sum + (r.usage?.costUsd ?? 0),
+        (sum, r) =>
+          sum + (r.usage?.costUsd ?? 0) + (r.compactUsage?.costUsd ?? 0),
         0,
       );
 
@@ -167,9 +177,9 @@ describe("iteration metrics", () => {
       expect(metrics.iterations).toHaveLength(1);
       const one = metrics.iterations[0]!;
       expect(one.n).toBe(1);
-      expect(one.turns).toBe(4);
       expect(one.tokens).toBe(fromRecords);
-      expect(one.tokens).toBe(473);
+      // 473 turn tokens plus two recorded compactions (architect, implement).
+      expect(one.tokens).toBe(17_273);
       expect(one.usage.costUsd).toBeCloseTo(costFromRecords, 10);
       expect(one.usage.costUsd).toBeCloseTo(0.43, 10);
       expect(one.merged).toEqual(["alpha"]);
@@ -186,19 +196,19 @@ describe("iteration metrics", () => {
       expect(one.edits).toBeGreaterThanOrEqual(1);
       expect(one.roles.implementer!.edits).toBeGreaterThanOrEqual(1);
       expect(one.commitWallMs).toBeGreaterThan(0);
-      expect(one.roles.architect).toMatchObject({ turns: 1, tokens: 110 });
+      expect(one.roles.architect).toMatchObject({ turns: 1, tokens: 8_510 });
       expect(one.roles.pm).toMatchObject({ turns: 1, tokens: 55 });
-      expect(one.roles.implementer).toMatchObject({ turns: 1, tokens: 220 });
+      expect(one.roles.implementer).toMatchObject({ turns: 1, tokens: 8_620 });
       expect(one.roles.reviewer).toMatchObject({ turns: 1, tokens: 88 });
 
       expect(one.architect.launches).toBe(1);
-      expect(one.architect.tokens).toBe(110);
+      expect(one.architect.tokens).toBe(8_510);
       expect(one.architect.costShare).toBeCloseTo(0.1 / 0.43, 10);
-      expect(one.architect.tokenShare).toBeCloseTo(110 / 473, 10);
+      expect(one.architect.tokenShare).toBeCloseTo(8_510 / 17_273, 10);
 
       expect(metrics.totals.iterations).toBe(1);
       expect(metrics.totals.turns).toBe(4);
-      expect(metrics.totals.tokens).toBe(473);
+      expect(metrics.totals.tokens).toBe(17_273);
       expect(metrics.totals.merged).toEqual(["alpha"]);
       expect(metrics.totals.usage.costUsd).toBeCloseTo(0.43, 10);
 
@@ -273,6 +283,46 @@ describe("iteration metrics", () => {
       expect(metrics.totals.humanInterventions).toBe(3);
       expect(metrics.totals.loopIncidents).toBe(1);
       expect(metrics.totals.iterations).toBe(2);
+    } finally {
+      repo.cleanup();
+    }
+  });
+  it("lists quarantined task files per iteration and in totals", async () => {
+    const repo = createTmpRepo();
+    try {
+      const store = createFolderStore(path.join(repo.dir, "goals", "demo"));
+      await store.ensureLayout();
+      const records = [
+        script(1, {
+          iteration: 1,
+          slug: "broken",
+          step: "task-quarantine",
+          ok: false,
+          cause:
+            'task file "broken.md" quarantined at tasks/quarantine/broken.md: no frontmatter',
+        }),
+        script(2, {
+          iteration: 2,
+          slug: "torn",
+          step: "task-quarantine",
+          ok: false,
+          cause:
+            'task file "torn.md" is unreadable; left in tasks/ because its slug already has a terminal record (merged): torn',
+        }),
+      ];
+      await writeMetrics(store, {
+        iteration: 2,
+        status: "in-progress",
+        records,
+      });
+      const metrics = yaml.parse(
+        (await store.readFile("metrics.yaml"))!,
+      ) as GoalMetrics;
+      expect(metrics.iterations.map((i) => [i.n, i.quarantined])).toEqual([
+        [1, ["broken"]],
+        [2, ["torn"]],
+      ]);
+      expect(metrics.totals.quarantined).toEqual(["broken", "torn"]);
     } finally {
       repo.cleanup();
     }
@@ -558,6 +608,7 @@ describe("record cost truth", () => {
           task_path: "tasks/a.md",
           front_pack: "none",
           worktree: root,
+          resume_note: "",
           setup_command: "true",
           gate_commands: "true",
           baseline_checks: "none",

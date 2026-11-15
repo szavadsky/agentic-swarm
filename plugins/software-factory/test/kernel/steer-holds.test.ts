@@ -1,7 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import { setTimeout as sleep } from "node:timers/promises";
 import yaml from "yaml";
 import {
   FakeHarness,
@@ -24,6 +23,7 @@ import {
   makeRuntime,
   outcome,
   setupFlowRepo,
+  whenTurn,
   writeTask,
 } from "./s2-helpers.js";
 
@@ -526,13 +526,11 @@ describe("mid-run steer holds", () => {
       await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
       await writeTask(runtime, task("beta", { scope: ["beta.txt"] }));
 
-      // Both implement turns start before the first poll; the handler keys off
-      // the worktree so their start order does not decide the script order.
+      // Every turn is bound to its slug and step, so no sleep orders the
+      // scripts: whichever turn calls first takes its own handler, and the
+      // steer PM turn can never consume a review (or vice versa) under load.
       const implementOnce: FakeTurnHandler = async (req, ctx) => {
         const slug = path.basename(req.cwd!);
-        if (slug === "beta") {
-          await sleep(100);
-        }
         fs.writeFileSync(
           path.join(req.cwd!, `${slug}.txt`),
           `${slug}\n`,
@@ -543,20 +541,31 @@ describe("mid-run steer holds", () => {
         ctx.writeOutcome(outcome({ summary: `${slug} implemented` }));
         return fakeTurnResult(req);
       };
-      harness.script(implementOnce);
-      harness.script(implementOnce);
-      harness.script((req, ctx) => {
-        fs.mkdirSync(holdsDir(runtime.store), { recursive: true });
-        fs.writeFileSync(
-          path.join(holdsDir(runtime.store), "s1.yaml"),
-          "slugs: alpha\ngoal: maybe\n",
-          "utf8",
-        );
-        ctx.writeOutcome(outcome({ summary: "wrote an invalid hold" }));
-        return fakeTurnResult(req);
+      harness.script(implementOnce, {
+        when: whenTurn({ slug: "alpha", step: "implement" }),
       });
-      harness.script(approver("alpha is correct"));
-      harness.script(approver("beta is correct"));
+      harness.script(implementOnce, {
+        when: whenTurn({ slug: "beta", step: "implement" }),
+      });
+      harness.script(
+        (req, ctx) => {
+          fs.mkdirSync(holdsDir(runtime.store), { recursive: true });
+          fs.writeFileSync(
+            path.join(holdsDir(runtime.store), "s1.yaml"),
+            "slugs: alpha\ngoal: maybe\n",
+            "utf8",
+          );
+          ctx.writeOutcome(outcome({ summary: "wrote an invalid hold" }));
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: "pm" }) },
+      );
+      harness.script(approver("alpha is correct"), {
+        when: whenTurn({ slug: "alpha", step: "review" }),
+      });
+      harness.script(approver("beta is correct"), {
+        when: whenTurn({ slug: "beta", step: "review" }),
+      });
 
       const dispatched = await runDispatch(runtime, {
         iteration: 1,

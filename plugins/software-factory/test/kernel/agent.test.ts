@@ -468,6 +468,7 @@ describe("delivery guard", () => {
     max_rounds: "2",
     baseline_checks: "none",
     prior_findings: "",
+    upscope_ask: "",
   };
 
   const frontVars = {
@@ -884,6 +885,7 @@ const implementerVars = {
   task_path: "/g/tasks/a.md",
   front_pack: "",
   worktree: "/wt/a",
+  resume_note: "",
   setup_command: "none",
   gate_commands: "none",
   baseline_checks: "none",

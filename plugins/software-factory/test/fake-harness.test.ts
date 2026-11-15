@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import {
   FakeHarness,
+  fakeTurnIdentity,
   fakeTurnResult,
 } from "../src/harness/fake/fake-harness.js";
 import type { Stop, TurnRequest } from "../src/harness/types.js";
@@ -161,10 +162,13 @@ describe("FakeHarness (kernel contract)", () => {
     const res = await harness.turn(request());
     const compacted = await harness.compact(res.session!);
 
-    expect(compacted.compacted).toBe(true);
-    expect(compacted.id).toBe(res.session!.id);
+    expect(compacted.session.compacted).toBe(true);
+    expect(compacted.session.id).toBe(res.session!.id);
+    expect(compacted.usage?.cacheRead).toBeGreaterThan(0);
     expect(harness.compactions).toHaveLength(1);
-    expect(harness.knownSessions().get(compacted.id)?.compacted).toBe(true);
+    expect(harness.knownSessions().get(compacted.session.id)?.compacted).toBe(
+      true,
+    );
   });
 
   it("fails loudly when a turn was not scripted", async () => {
@@ -172,5 +176,64 @@ describe("FakeHarness (kernel contract)", () => {
     await expect(harness.turn(request())).rejects.toThrow(
       "FakeHarness: no scripted turn",
     );
+  });
+
+  it("routes bound handlers by request identity no matter which turn calls first", async () => {
+    const dir = tempDir();
+    try {
+      const harness = new FakeHarness();
+      harness.script(
+        (req) => fakeTurnResult(req, { text: "alpha implement" }),
+        { when: (req) => fakeTurnIdentity(req).slug === "alpha" },
+      );
+      harness.script((req) => fakeTurnResult(req, { text: "beta implement" }), {
+        when: (req) => fakeTurnIdentity(req).slug === "beta",
+      });
+      const alphaReq = request({
+        cwd: dir,
+        outcomePath: path.join(
+          dir,
+          "records/00001-i1-alpha-implement-r1/outcome.yaml",
+        ),
+      });
+      const betaReq = request({
+        cwd: dir,
+        outcomePath: path.join(
+          dir,
+          "records/00002-i1-beta-implement-r1/outcome.yaml",
+        ),
+      });
+
+      // Beta calls first: alpha's bound handler must not be consumed by it.
+      const [beta, alpha] = await Promise.all([
+        harness.turn(betaReq),
+        harness.turn(alphaReq),
+      ]);
+      expect(beta.text).toBe("beta implement");
+      expect(alpha.text).toBe("alpha implement");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("fails an unmatched request naming its slug and step", async () => {
+    const harness = new FakeHarness();
+    harness.script((req) => fakeTurnResult(req), {
+      when: (req) => fakeTurnIdentity(req).slug === "alpha",
+    });
+    const err = await harness
+      .turn(
+        request({
+          outcomePath: "/tmp/records/00009-i1-beta-review-r2/outcome.yaml",
+        }),
+      )
+      .then(
+        () => null,
+        (thrown: unknown) => thrown as Error,
+      );
+    expect(err?.message).toContain("FakeHarness: no scripted turn");
+    expect(err?.message).toContain("00009-i1-beta-review-r2");
+    expect(err?.message).toContain('slug "beta"');
+    expect(err?.message).toContain('step "review"');
   });
 });

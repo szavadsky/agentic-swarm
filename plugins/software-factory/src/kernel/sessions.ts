@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import type { SessionRef } from "../harness/types.js";
 import { writeYamlAtomic } from "../core/records/io.js";
 
 export interface LaunchSessions {
@@ -15,6 +16,26 @@ function stamp(now: Date): string {
 /** Sortable launch id; the random suffix separates two launches in one millisecond. */
 export function newLaunchId(now = new Date()): string {
   return `${stamp(now)}-${crypto.randomBytes(3).toString("hex")}`;
+}
+/** Cache lifetime per retention tier: the 5-minute provider window, or 1 hour when long. */
+export const SESSION_CACHE_TTLS_MS = {
+  short: 5 * 60_000,
+  long: 60 * 60_000,
+} as const;
+
+/**
+ * True while the session's cached prefix is still hot: a compaction now reads
+ * the transcript at cache-read price. A cold compaction costs full input
+ * price — as much as the cold resume it was meant to avoid — so the kernel
+ * skips it and keeps the uncompacted ref.
+ */
+export function sessionCacheHot(
+  session: Pick<SessionRef, "lastRequestStartedAt" | "retentionTier">,
+  now: Date = new Date(),
+): boolean {
+  const started = Date.parse(session.lastRequestStartedAt);
+  if (!Number.isFinite(started)) return false;
+  return now.getTime() - started < SESSION_CACHE_TTLS_MS[session.retentionTier];
 }
 
 async function directories(dir: string): Promise<string[]> {
