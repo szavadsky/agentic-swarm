@@ -16,3 +16,4 @@ verdict: approve | changes | reject; decision: continue | done | blocked
 - Summary says what changed or was found, not what you intended or how. No restating the assignment.
 - Report only verified facts; mark inference `[INFERENCE]` or drop it.
 - No files beyond those the step asks for; no extra narration.
+- When the outcome is a file, validate it before ending the turn: `factory validate <file>`.
