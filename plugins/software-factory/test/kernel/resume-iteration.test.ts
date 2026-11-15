@@ -476,10 +476,14 @@ describe("resume guards", () => {
         );
         return fakeTurnResult(req);
       });
-      second.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "no changes" }));
-        return fakeTurnResult(req);
-      });
+      for (let i = 0; i < 3; i++) {
+        second.script((req, ctx) => {
+          ctx.writeOutcome(
+            outcome({ summary: "still going", decision: "continue" }),
+          );
+          return fakeTurnResult(req);
+        });
+      }
       expect(
         await dispatch(
           ["run", "--repo", repo.dir, "--goal", "demo", "--iterations", "1"],

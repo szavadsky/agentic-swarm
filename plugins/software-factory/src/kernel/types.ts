@@ -52,6 +52,8 @@ export interface TaskFile {
   /** Plan heading this task derives from. */
   source: string;
   body: string;
+  /** Outcome-repair turns for this task's turns; defaults to REPAIR_TURNS. */
+  repairTurns?: number;
 }
 
 export type TaskStatus =

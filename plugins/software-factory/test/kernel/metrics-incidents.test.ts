@@ -338,4 +338,39 @@ describe("iteration metrics incidents and spend tables", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+
+  it("counts each outcome repair on one record", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-incidents-"));
+    const store = createFolderStore(path.join(root, "goal"));
+    try {
+      await store.ensureLayout();
+      const records = [
+        rec(1, {
+          slug: "a",
+          usage: usage(0.02, 20, 2),
+          attempts: [
+            attempt("model-a", OK, usage(0.01, 10, 1)),
+            attempt("model-a", OK, usage(0.01, 10, 1)),
+            attempt("model-a", OK, usage(0.01, 10, 1)),
+            attempt("model-a", OK, usage(0.01, 10, 1)),
+          ],
+        }),
+      ];
+
+      await writeMetrics(store, {
+        iteration: 1,
+        status: "in-progress",
+        records,
+      });
+      const metrics = yaml.parse(
+        (await store.readFile("metrics.yaml"))!,
+      ) as GoalMetrics;
+      expect(metrics.iterations[0]!.incidents.outcomeRepairs).toBe(3);
+      expect(metrics.totals.incidents.outcomeRepairs).toBe(3);
+      expect(metrics.iterations[0]!.incidents.infraRetries).toBe(0);
+      expect(metrics.iterations[0]!.incidents.fallbackHops).toBe(0);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
 });

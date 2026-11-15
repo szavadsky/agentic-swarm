@@ -48,6 +48,33 @@ describe("task files", () => {
     );
   });
 
+  it("parses an optional repairTurns override and round-trips it", () => {
+    const withOverride = TEXT.replace(
+      "source: Milestone auth / refresh",
+      "source: Milestone auth / refresh\nrepairTurns: 1",
+    );
+    const parsed = parseTaskFile(withOverride, "auth.token-refresh");
+    expect(parsed.repairTurns).toBe(1);
+    const round = parseTaskFile(renderTaskFile(parsed), parsed.slug);
+    expect(round.repairTurns).toBe(1);
+    expect(
+      parseTaskFile(TEXT, "auth.token-refresh").repairTurns,
+    ).toBeUndefined();
+    expect(materialHash({ ...parsed, repairTurns: 5 })).toBe(
+      materialHash(parsed),
+    );
+  });
+
+  it("rejects a non-integer repairTurns override", () => {
+    const bad = TEXT.replace(
+      "source: Milestone auth / refresh",
+      "source: Milestone auth / refresh\nrepairTurns: many",
+    );
+    expect(() => parseTaskFile(bad, "auth.token-refresh")).toThrow(
+      /repairTurns/,
+    );
+  });
+
   it("hashes material fields, not cosmetic body prose", () => {
     const base = parseTaskFile(TEXT, "auth.token-refresh");
     const cosmetic = {

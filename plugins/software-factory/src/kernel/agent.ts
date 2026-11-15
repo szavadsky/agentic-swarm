@@ -33,6 +33,14 @@ export interface AgentTurnSpec {
   expectation: OutcomeExpectation;
   session?: SessionRef;
   timeouts?: { idleMs: number; wallMs: number };
+  /** Outcome-repair turns after the first attempt; defaults to REPAIR_TURNS. */
+  repairTurns?: number;
+  /**
+   * Item budget before this turn. The first attempt spends one turn, so the
+   * loop caps repairs at `limit - used - 1`. Steps without an item leave it
+   * unset and repair up to `repairTurns`.
+   */
+  itemBudget?: { used: number; limit: number };
   /**
    * Runs after the turn and before the end record commits. `settle` sees the
    * accepted outcome and the live session, so it can compact and return the
@@ -51,6 +59,12 @@ export interface AgentTurnResult {
   outcome?: Outcome;
   text: string;
 }
+
+/**
+ * Outcome-repair turns after the first attempt. A constant, not a config knob;
+ * a task file's `repairTurns` overrides it for that task's turns only.
+ */
+export const REPAIR_TURNS = 3;
 
 /** Roles that run the boundary consult; only they see the iteration's pack. */
 const PACK_ROLES = new Set(["architect", "pm"]);
@@ -113,9 +127,9 @@ function missingOutcomeFinding(
 
 /**
  * One agent step: outcome path in the prompt (LOG D6), file first, fenced-block
- * fallback, one same-session repair turn, then a second invalid outcome is
- * `failed`. The end record is written only after `settle` (mechanical commit),
- * so a crash leaves an orphan that `derive` redispatches.
+ * fallback, up to REPAIR_TURNS same-session repair turns, then an invalid
+ * outcome is `failed`. The end record is written only after `settle`
+ * (mechanical commit), so a crash leaves an orphan that `derive` redispatches.
  */
 async function turnWithTimeout(
   harness: import("../harness/types.js").Harness,
@@ -271,12 +285,22 @@ export async function runAgentTurn(
   };
   assess(false);
 
-  if (
-    findings.length > 0 &&
-    stop.kind !== "infra" &&
-    stop.kind !== "refusal" &&
-    stop.kind !== "cancelled"
-  ) {
+  const haltedNow = (): boolean =>
+    stop.kind === "infra" ||
+    stop.kind === "refusal" ||
+    stop.kind === "cancelled";
+  // The first attempt spent one turn of the item budget; repairs spend the rest.
+  const requestedRepairs = spec.repairTurns ?? REPAIR_TURNS;
+  const budgetRepairs = spec.itemBudget
+    ? Math.max(0, spec.itemBudget.limit - spec.itemBudget.used - 1)
+    : requestedRepairs;
+  const maxRepairs = Math.min(
+    Math.max(0, Math.floor(requestedRepairs)),
+    Math.max(0, Math.floor(budgetRepairs)),
+  );
+  const needsRepair = findings.length > 0 && !haltedNow();
+  let repairs = 0;
+  while (findings.length > 0 && !haltedNow() && repairs < maxRepairs) {
     const repair = await turnWithTimeout(harness, {
       ...request,
       // One in-session repair ask, rendered from the process-config prompt
@@ -291,6 +315,7 @@ export async function runAgentTurn(
       }),
       session,
     });
+    repairs += 1;
     lastResult = repair;
     attempts = [...attempts, ...(repair.attempts ?? [])];
     stop = repair.stop;
@@ -298,12 +323,9 @@ export async function runAgentTurn(
     session = repair.session ?? session;
     text = repair.text;
     assess(true);
-    if (
-      !outcome &&
-      (stop.kind === "infra" ||
-        stop.kind === "refusal" ||
-        stop.kind === "cancelled")
-    ) {
+  }
+  if (needsRepair) {
+    if (!outcome && haltedNow()) {
       // An infrastructure interruption of the repair turn consumes no outcome.
     } else if (findings.length > 0 || !outcome) {
       outcome = failedOutcome(
