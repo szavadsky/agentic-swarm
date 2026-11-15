@@ -305,9 +305,12 @@ export async function runDispatch(
       cwd: runtime.paths.goalCheckout,
     });
     try {
+      // The steer turn may have created tasks; validate holds against the files
+      // on disk now, not the pre-turn list, so a hold naming a new task stands.
+      const after = await runtime.store.listTasks();
       holds = await readHolds(runtime.store, {
         iteration,
-        knownSlugs: tasks.map((task) => task.slug),
+        knownSlugs: after.map((task) => task.slug),
       });
     } catch (err) {
       return {

@@ -23,6 +23,18 @@ export const concernSchema = z.object({
   evidence: z.string().optional(),
 });
 
+/** Where the PM's steer turn sends one steer: handled now, a new task, the architect, or drain-then-architect. */
+export const steerRouteSchema = z.enum(["task", "spike", "architect", "stall"]);
+export type SteerRoute = z.infer<typeof steerRouteSchema>;
+
+export const steerRouteEntrySchema = z.object({
+  steer: z.string().min(1),
+  route: steerRouteSchema,
+  /** The PM's answer for a `task` steer; absent for every other route. */
+  answer: z.string().optional(),
+});
+export type SteerRouteEntry = z.infer<typeof steerRouteEntrySchema>;
+
 /** The only agent ↔ script surface; one schema for every step. */
 export const outcomeSchema = z.object({
   status: z.enum(["done", "blocked", "failed", "upscope"]),
@@ -35,6 +47,9 @@ export const outcomeSchema = z.object({
   // its verdict. `yes` parks with cause upscope and (standalone only) rewrites
   // the front class to bigger; `no` and absent keep the normal verdict path.
   upscope: z.enum(["yes", "no"]).optional(),
+  // PM steer turns only: one route per claimed steer. Absent on every other
+  // step; absent on a legacy steer turn means every steer goes to the architect.
+  steerRoutes: z.array(steerRouteEntrySchema).optional(),
 });
 
 export type Concern = z.infer<typeof concernSchema>;
@@ -178,7 +193,9 @@ export const DEFAULT_TIMEOUTS: Timeouts = {
 /**
  * One append-only record, materialized from `records/<dir>/`: `started.yaml`
  * exists before a turn, `end.yaml` commits it, `outcome.yaml` holds the agent's
- * accepted outcome. Script steps have actor `script` and no outcome.
+ * accepted outcome. Script steps have actor `script` and no outcome, except
+ * `steer-routes`: it stores the accepted steer-route map so the boundary never
+ * reads a failed rung's routes.
  */
 export interface StepRecord {
   seq: number;
