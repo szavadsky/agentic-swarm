@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import yaml from "yaml";
-import { outcomeSchema, type Outcome } from "./types.js";
+import { type Outcome, outcomeSchema } from "./types.js";
 
 export type OutcomeExpectation = "any" | "review" | "architect";
 
@@ -12,9 +12,13 @@ export class OutcomeInvalidError extends Error {
 }
 
 function zodFindings(error: unknown): string[] {
-  const issues = (error as { issues?: { path: (string | number)[]; message: string }[] }).issues;
+  const issues = (
+    error as { issues?: { path: (string | number)[]; message: string }[] }
+  ).issues;
   if (!issues) return [(error as Error).message];
-  return issues.map((issue) => `${issue.path.join(".") || "outcome"}: ${issue.message}`);
+  return issues.map(
+    (issue) => `${issue.path.join(".") || "outcome"}: ${issue.message}`,
+  );
 }
 
 /** Parses one YAML/JSON outcome body; zod is the only validator. */
@@ -23,7 +27,9 @@ export function parseOutcome(text: string): Outcome {
   try {
     raw = yaml.parse(text);
   } catch (err) {
-    throw new OutcomeInvalidError([`not valid YAML: ${(err as Error).message}`]);
+    throw new OutcomeInvalidError([
+      `not valid YAML: ${(err as Error).message}`,
+    ]);
   }
   try {
     return outcomeSchema.parse(raw);
@@ -51,7 +57,10 @@ export interface OutcomeSource {
  * invalid; missing output is an empty finding list the caller turns into a
  * repair turn.
  */
-export function readDeliveredOutcome(outcomePath: string, message: string): OutcomeSource | null {
+export function readDeliveredOutcome(
+  outcomePath: string,
+  message: string,
+): OutcomeSource | null {
   if (fs.existsSync(outcomePath)) {
     const text = fs.readFileSync(outcomePath, "utf8");
     try {
@@ -60,7 +69,8 @@ export function readDeliveredOutcome(outcomePath: string, message: string): Outc
       if (!(err instanceof OutcomeInvalidError)) throw err;
       // A malformed file still gets the fenced fallback.
       const fenced = fencedOutcome(message);
-      if (fenced !== null) return { outcome: parseOutcome(fenced), source: "fenced" };
+      if (fenced !== null)
+        return { outcome: parseOutcome(fenced), source: "fenced" };
       throw err;
     }
   }
@@ -70,7 +80,10 @@ export function readDeliveredOutcome(outcomePath: string, message: string): Outc
 }
 
 /** Per-step contract the schema alone cannot express. */
-export function validateExpectation(outcome: Outcome, expectation: OutcomeExpectation): string[] {
+export function validateExpectation(
+  outcome: Outcome,
+  expectation: OutcomeExpectation,
+): string[] {
   const findings: string[] = [];
   if (expectation === "architect" && !outcome.decision) {
     findings.push("decision is required: continue | done | blocked");
@@ -81,7 +94,9 @@ export function validateExpectation(outcome: Outcome, expectation: OutcomeExpect
     outcome.status !== "failed" &&
     outcome.status !== "blocked"
   ) {
-    findings.push("verdict is required on a completed review: approve | changes | reject");
+    findings.push(
+      "verdict is required on a completed review: approve | changes | reject",
+    );
   }
   return findings;
 }

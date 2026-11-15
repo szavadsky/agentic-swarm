@@ -1,5 +1,5 @@
 import path from "node:path";
-import { runWithFallbacks, type RetryPolicy } from "../fallback.js";
+import { type RetryPolicy, runWithFallbacks } from "../fallback.js";
 import type {
   Caps,
   Harness,
@@ -27,7 +27,10 @@ export class OpencodeHarness implements Harness {
 
   constructor(opts: OpencodeHarnessOptions) {
     const binary =
-      opts.binary ?? process.env.OPENCODE_PATH ?? Bun.which("opencode") ?? "opencode";
+      opts.binary ??
+      process.env.OPENCODE_PATH ??
+      Bun.which("opencode") ??
+      "opencode";
     this.runtime = {
       binary,
       sessionDir: path.resolve(opts.sessionDir),
@@ -56,7 +59,12 @@ export class OpencodeHarness implements Harness {
       retry: this.retry,
       run: async (model) => {
         const value = await runOpencodeTurn(this.runtime, req, model);
-        return { stop: value.stop, usage: value.usage, value, attempts: value.attempts };
+        return {
+          stop: value.stop,
+          usage: value.usage,
+          value,
+          attempts: value.attempts,
+        };
       },
     });
 
@@ -67,7 +75,9 @@ export class OpencodeHarness implements Harness {
 
   async compact(ref: SessionRef): Promise<SessionRef> {
     if (ref.harness !== this.id) {
-      throw new Error(`OpencodeHarness cannot compact a ${ref.harness} session`);
+      throw new Error(
+        `OpencodeHarness cannot compact a ${ref.harness} session`,
+      );
     }
     await this.runtime.api.compact(ref.id, ref.cwd);
     return {

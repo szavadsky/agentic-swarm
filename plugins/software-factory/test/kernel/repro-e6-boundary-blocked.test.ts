@@ -1,28 +1,40 @@
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import { FakeHarness, fakeTurnResult, type FakeTurnHandler } from "../../src/harness/fake/index.js";
+import {
+  FakeHarness,
+  type FakeTurnHandler,
+  fakeTurnResult,
+} from "../../src/harness/fake/index.js";
 import type { SessionRef } from "../../src/harness/types.js";
-import { createFolderStore } from "../../src/kernel/store.js";
 import { runGoal } from "../../src/kernel/launch.js";
+import { createFolderStore } from "../../src/kernel/store.js";
 import {
   cleanup,
+  type E2EGoal,
   launch,
   makeGoal,
   outcome,
   scriptDigest,
   writePlan,
-  type E2EGoal,
 } from "./e2e-helpers.js";
 
-const PLAN = "# Milestone 1\n\n## alpha\nCreate alpha.txt.\nDone when: alpha.txt exists.\n";
+const PLAN =
+  "# Milestone 1\n\n## alpha\nCreate alpha.txt.\nDone when: alpha.txt exists.\n";
 
 /** The status line plus the boundary remark; enough to see what the summary says. */
 function facts(goalDir: string, iteration: number): string {
-  const summary = fs.readFileSync(path.join(goalDir, `iterations/${iteration}/summary.md`), "utf8");
+  const summary = fs.readFileSync(
+    path.join(goalDir, `iterations/${iteration}/summary.md`),
+    "utf8",
+  );
   return summary
     .split("\n")
-    .filter((line) => /^status: |^- boundary: |^- no architect outcome|^## Architect/.test(line))
+    .filter((line) =>
+      /^status: |^- boundary: |^- no architect outcome|^## Architect/.test(
+        line,
+      ),
+    )
     .map((line) => line.trim())
     .join("\n");
 }
@@ -30,9 +42,10 @@ function facts(goalDir: string, iteration: number): string {
 /** An architect turn that dies before it can write a decision. */
 function diesOn(
   cause: "quota" | "crash" | "auth" | "overflow",
-  details: string
+  details: string,
 ): FakeTurnHandler {
-  return (req) => fakeTurnResult(req, { stop: { kind: "infra", cause, details } });
+  return (req) =>
+    fakeTurnResult(req, { stop: { kind: "infra", cause, details } });
 }
 
 /**
@@ -43,7 +56,9 @@ async function seedResumableSession(goal: E2EGoal): Promise<SessionRef> {
   const harness = new FakeHarness({ id: "fake" });
   harness.script((req, ctx) => {
     writePlan(goal.goalDir, PLAN);
-    ctx.writeOutcome(outcome({ summary: "planned alpha", decision: "continue" }));
+    ctx.writeOutcome(
+      outcome({ summary: "planned alpha", decision: "continue" }),
+    );
     return fakeTurnResult(req);
   });
   harness.script((req, ctx) => {
@@ -54,7 +69,8 @@ async function seedResumableSession(goal: E2EGoal): Promise<SessionRef> {
   const architect = (await createFolderStore(goal.goalDir).listRecords())
     .filter((record) => record.step === "architect")
     .at(-1);
-  if (!architect?.session) throw new Error("first launch left no architect session");
+  if (!architect?.session)
+    throw new Error("first launch left no architect session");
   return architect.session;
 }
 
@@ -92,9 +108,11 @@ describe("E6 inverted: an architect infra death is infra, not blocked-by-user", 
       expect(summary).toContain("status: stopped-with-debt");
       expect(summary).not.toContain("blocked-by-user");
       expect(summary).toContain(
-        "architect turn stopped on infrastructure: quota: quota exceeded for fake-architect"
+        "architect turn stopped on infrastructure: quota: quota exceeded for fake-architect",
       );
-      expect(fs.existsSync(path.join(goal.goalDir, "iterations/2/summary.md"))).toBe(false);
+      expect(
+        fs.existsSync(path.join(goal.goalDir, "iterations/2/summary.md")),
+      ).toBe(false);
       expect(harness.calls).toHaveLength(2);
     } finally {
       cleanup(goal);
@@ -124,7 +142,9 @@ describe("E6 inverted: an architect infra death is infra, not blocked-by-user", 
       harness.script(diesOn("quota", "quota exceeded for fake-architect"));
       harness.script((req, ctx) => {
         writePlan(goal.goalDir, PLAN);
-        ctx.writeOutcome(outcome({ summary: "planned alpha", decision: "continue" }));
+        ctx.writeOutcome(
+          outcome({ summary: "planned alpha", decision: "continue" }),
+        );
         return fakeTurnResult(req);
       });
       harness.script((req, ctx) => {
@@ -143,9 +163,9 @@ describe("E6 inverted: an architect infra death is infra, not blocked-by-user", 
       expect(result.stop).toBe("iteration-limit");
       expect(summary).not.toContain("blocked-by-user");
       expect(summary).not.toContain("stopped-with-debt");
-      const architect = (await createFolderStore(goal.goalDir).listRecords()).filter(
-        (record) => record.step === "architect"
-      );
+      const architect = (
+        await createFolderStore(goal.goalDir).listRecords()
+      ).filter((record) => record.step === "architect");
       expect(architect).toHaveLength(3);
       expect(architect.at(-1)?.outcome?.decision).toBe("continue");
     } finally {
@@ -190,13 +210,25 @@ describe("E6 inverted: an architect infra death is infra, not blocked-by-user", 
       const harness = new FakeHarness({ id: "fake" });
       harness.script((req, ctx) => {
         writePlan(goal.goalDir, PLAN);
-        ctx.writeOutcome(outcome({ summary: "planned alpha", decision: "continue" }));
+        ctx.writeOutcome(
+          outcome({ summary: "planned alpha", decision: "continue" }),
+        );
         return fakeTurnResult(req);
       });
-      harness.script((req) => fakeTurnResult(req, { stop: { kind: "refusal", details: "cannot derive" } }));
-      harness.script((req) => fakeTurnResult(req, { stop: { kind: "refusal", details: "cannot derive" } }));
+      harness.script((req) =>
+        fakeTurnResult(req, {
+          stop: { kind: "refusal", details: "cannot derive" },
+        }),
+      );
+      harness.script((req) =>
+        fakeTurnResult(req, {
+          stop: { kind: "refusal", details: "cannot derive" },
+        }),
+      );
       harness.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ status: "blocked", summary: "which alpha did you mean?" }));
+        ctx.writeOutcome(
+          outcome({ status: "blocked", summary: "which alpha did you mean?" }),
+        );
         return fakeTurnResult(req);
       });
       const result = await runGoal({
@@ -209,7 +241,9 @@ describe("E6 inverted: an architect infra death is infra, not blocked-by-user", 
       expect(result.stop).toBe("iteration-limit");
       expect(result.cause).toBeUndefined();
       expect(summary).toContain("status: blocked-by-user");
-      expect(summary).toContain("boundary: PM escalated and asked: which alpha did you mean?");
+      expect(summary).toContain(
+        "boundary: PM escalated and asked: which alpha did you mean?",
+      );
       expect(harness.calls).toHaveLength(4);
     } finally {
       cleanup(goal);

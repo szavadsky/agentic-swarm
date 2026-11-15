@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
+import { createActiveTimer, detectSuspend, getClock } from "./clock.js";
 import { registerChildGroup, unregisterChildGroup } from "./shutdown.js";
-import { getClock, createActiveTimer, detectSuspend } from "./clock.js";
 
 interface RunProcessOptions {
   cmd: string | string[];
@@ -82,10 +82,16 @@ class HeadTailBuffer {
     if (this.totalBytes === 0) return "";
     if (this.totalBytes <= this.maxBytes) {
       const allChunks = [...this.headChunks, ...this.tailChunks];
-      return Buffer.concat(allChunks, this.headBytes + this.tailBytes).toString("utf8");
+      return Buffer.concat(allChunks, this.headBytes + this.tailBytes).toString(
+        "utf8",
+      );
     }
-    const headStr = Buffer.concat(this.headChunks, this.headBytes).toString("utf8");
-    const tailStr = Buffer.concat(this.tailChunks, this.tailBytes).toString("utf8");
+    const headStr = Buffer.concat(this.headChunks, this.headBytes).toString(
+      "utf8",
+    );
+    const tailStr = Buffer.concat(this.tailChunks, this.tailBytes).toString(
+      "utf8",
+    );
     const dropped = this.totalBytes - this.headBytes - this.tailBytes;
     return `${headStr}\n... [truncated ${dropped} bytes] ...\n${tailStr}`;
   }
@@ -186,7 +192,11 @@ export function runProcess(options: RunProcessOptions): Promise<ProcessResult> {
       }
       if (activeTimer) activeTimer.cancel();
       if (graceTimer) clearTimeout(graceTimer);
-      const { suspendDetected, gapMs } = detectSuspend(startWall, startMono, clock);
+      const { suspendDetected, gapMs } = detectSuspend(
+        startWall,
+        startMono,
+        clock,
+      );
       resolve({
         code: exitCode,
         signal: exitSignal,
@@ -259,7 +269,7 @@ export function runProcess(options: RunProcessOptions): Promise<ProcessResult> {
           }
           scheduleGraceFinish();
         },
-        clock
+        clock,
       );
     }
 
@@ -278,7 +288,11 @@ export function runProcess(options: RunProcessOptions): Promise<ProcessResult> {
       settled = true;
       if (activeTimer) activeTimer.cancel();
       if (graceTimer) clearTimeout(graceTimer);
-      const { suspendDetected, gapMs } = detectSuspend(startWall, startMono, clock);
+      const { suspendDetected, gapMs } = detectSuspend(
+        startWall,
+        startMono,
+        clock,
+      );
       resolve({
         code: 1,
         stdout: finalizeStream(stdoutRing),

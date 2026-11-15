@@ -16,7 +16,7 @@ export interface PromptLibrary {
   renderStepPrompt(
     fragment: string,
     vars: Record<string, string>,
-    schema?: Record<string, unknown>
+    schema?: Record<string, unknown>,
   ): string;
   placeholders(fragment: string): string[];
 }
@@ -24,10 +24,7 @@ export interface PromptLibrary {
 /**
  * Searches directories for a prompt fragment or agent definition file.
  */
-function resolveFragmentPath(
-  fragment: string,
-  dirs: string[]
-): string | null {
+function resolveFragmentPath(fragment: string, dirs: string[]): string | null {
   const cleanFrag = fragment.replace(/\\/g, "/");
 
   const candidateSuffixes: string[] = [
@@ -45,13 +42,13 @@ function resolveFragmentPath(
       `_shared/${cleanFrag}`,
       `_shared/${cleanFrag}.md`,
       `criteria/${cleanFrag}`,
-      `criteria/${cleanFrag}.md`
+      `criteria/${cleanFrag}.md`,
     );
   } else if (cleanFrag.startsWith("agents/")) {
     const stripped = cleanFrag.slice("agents/".length);
     candidateSuffixes.push(
       stripped,
-      stripped.endsWith(".md") ? stripped : `${stripped}.md`
+      stripped.endsWith(".md") ? stripped : `${stripped}.md`,
     );
   }
 
@@ -76,7 +73,7 @@ function loadAndResolveIncludes(
   fragment: string,
   dirs: string[],
   inMemoryOverrides: Record<string, unknown> | undefined,
-  seen = new Set<string>()
+  seen = new Set<string>(),
 ): string {
   if (seen.has(fragment)) {
     throw new Error(`Circular include detected for "${fragment}"`);
@@ -92,7 +89,9 @@ function loadAndResolveIncludes(
       fragment.endsWith(".md") ? fragment : `${fragment}.md`,
       fragment.replace(/\.md$/, ""),
       fragment.startsWith("steps/") ? fragment.slice(6) : `steps/${fragment}`,
-      (fragment.startsWith("steps/") ? fragment.slice(6) : `steps/${fragment}`) + ".md",
+      (fragment.startsWith("steps/")
+        ? fragment.slice(6)
+        : `steps/${fragment}`) + ".md",
     ];
     for (const key of candidates) {
       if (key in inMemoryOverrides) {
@@ -128,7 +127,7 @@ function loadAndResolveIncludes(
       includeTarget,
       dirs,
       inMemoryOverrides,
-      new Set(seen)
+      new Set(seen),
     );
   });
 
@@ -162,7 +161,10 @@ export function loadPromptLibrary(opts: {
       const filePath = resolveFragmentPath(targetFrag, searchDirs);
 
       let content: string;
-      if (inMemoryOverrides && (agent in inMemoryOverrides || targetFrag in inMemoryOverrides)) {
+      if (
+        inMemoryOverrides &&
+        (agent in inMemoryOverrides || targetFrag in inMemoryOverrides)
+      ) {
         const val = inMemoryOverrides[agent] ?? inMemoryOverrides[targetFrag];
         if (typeof val === "string") {
           content = val;
@@ -176,9 +178,12 @@ export function loadPromptLibrary(opts: {
             typeof record.description === "string" ? record.description : "";
           const resolvedBody = body.replace(
             /\{\{>\s*([a-zA-Z0-9_./-]+)\s*\}\}/g,
-            (_m, inc) => loadAndResolveIncludes(inc, searchDirs, inMemoryOverrides)
+            (_m, inc) =>
+              loadAndResolveIncludes(inc, searchDirs, inMemoryOverrides),
           );
-          return tools === undefined ? { body: resolvedBody.trim(), description } : { body: resolvedBody.trim(), tools, description };
+          return tools === undefined
+            ? { body: resolvedBody.trim(), description }
+            : { body: resolvedBody.trim(), tools, description };
         } else {
           content = "";
         }
@@ -189,11 +194,14 @@ export function loadPromptLibrary(opts: {
       }
 
       // Parse frontmatter
-      const fmMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
+      const fmMatch = content.match(
+        /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/,
+      );
       if (fmMatch) {
         let frontmatter: Record<string, unknown> = {};
         try {
-          frontmatter = (yaml.parse(fmMatch[1] ?? "") as Record<string, unknown>) ?? {};
+          frontmatter =
+            (yaml.parse(fmMatch[1] ?? "") as Record<string, unknown>) ?? {};
         } catch {
           // Fall back to empty frontmatter
         }
@@ -201,12 +209,17 @@ export function loadPromptLibrary(opts: {
         const rawBody = fmMatch[2] ?? "";
         const resolvedBody = rawBody.replace(
           /\{\{>\s*([a-zA-Z0-9_./-]+)\s*\}\}/g,
-          (_m, inc) => loadAndResolveIncludes(inc, searchDirs, inMemoryOverrides)
+          (_m, inc) =>
+            loadAndResolveIncludes(inc, searchDirs, inMemoryOverrides),
         );
         let finalBody = resolvedBody.trim();
         if (!finalBody.includes("Workspace Containment")) {
           try {
-            const containment = loadAndResolveIncludes("_shared/containment", searchDirs, inMemoryOverrides);
+            const containment = loadAndResolveIncludes(
+              "_shared/containment",
+              searchDirs,
+              inMemoryOverrides,
+            );
             if (containment) {
               finalBody = `${finalBody}\n\n${containment.trim()}`;
             }
@@ -233,12 +246,16 @@ export function loadPromptLibrary(opts: {
       // Without frontmatter
       const resolvedBody = content.replace(
         /\{\{>\s*([a-zA-Z0-9_./-]+)\s*\}\}/g,
-        (_m, inc) => loadAndResolveIncludes(inc, searchDirs, inMemoryOverrides)
+        (_m, inc) => loadAndResolveIncludes(inc, searchDirs, inMemoryOverrides),
       );
       let finalBody = resolvedBody.trim();
       if (!finalBody.includes("Workspace Containment")) {
         try {
-          const containment = loadAndResolveIncludes("_shared/containment", searchDirs, inMemoryOverrides);
+          const containment = loadAndResolveIncludes(
+            "_shared/containment",
+            searchDirs,
+            inMemoryOverrides,
+          );
           if (containment) {
             finalBody = `${finalBody}\n\n${containment.trim()}`;
           }
@@ -255,7 +272,7 @@ export function loadPromptLibrary(opts: {
       const resolved = loadAndResolveIncludes(
         fragment,
         searchDirs,
-        inMemoryOverrides
+        inMemoryOverrides,
       );
 
       // Match {{var}}, excluding include markers {{> ...}}
@@ -263,7 +280,9 @@ export function loadPromptLibrary(opts: {
       const matches: string[] = [];
       let match: RegExpExecArray | null;
 
-      while ((match = varRegex.exec(resolved)) !== null) {
+      while (true) {
+        match = varRegex.exec(resolved);
+        if (match === null) break;
         const varName = match[1];
         if (varName && !matches.includes(varName)) {
           matches.push(varName);
@@ -277,7 +296,7 @@ export function loadPromptLibrary(opts: {
       const resolved = loadAndResolveIncludes(
         fragment,
         searchDirs,
-        inMemoryOverrides
+        inMemoryOverrides,
       );
 
       // Check for missing variables
@@ -285,9 +304,15 @@ export function loadPromptLibrary(opts: {
       const missingVars: string[] = [];
       let match: RegExpExecArray | null;
 
-      while ((match = varRegex.exec(resolved)) !== null) {
+      while (true) {
+        match = varRegex.exec(resolved);
+        if (match === null) break;
         const varName = match[1];
-        if (varName && vars[varName] === undefined && !missingVars.includes(varName)) {
+        if (
+          varName &&
+          vars[varName] === undefined &&
+          !missingVars.includes(varName)
+        ) {
           missingVars.push(varName);
         }
       }
@@ -295,24 +320,27 @@ export function loadPromptLibrary(opts: {
       if (missingVars.length > 0) {
         throw new Error(
           `Missing required prompt variables for "${fragment}": ${missingVars.join(
-            ", "
-          )}`
+            ", ",
+          )}`,
         );
       }
 
-      return resolved.replace(
-        /\{\{([a-zA-Z0-9_.-]+)\}\}/g,
-        (_m, varName) => (varName in vars ? vars[varName] ?? "" : "")
+      return resolved.replace(/\{\{([a-zA-Z0-9_.-]+)\}\}/g, (_m, varName) =>
+        varName in vars ? (vars[varName] ?? "") : "",
       );
     },
 
     renderStepPrompt(
       fragment: string,
       vars: Record<string, string>,
-      schema?: Record<string, unknown>
+      schema?: Record<string, unknown>,
     ): string {
       const basePrompt = this.render(fragment, vars);
-      if (!schema || typeof schema !== "object" || Object.keys(schema).length === 0) {
+      if (
+        !schema ||
+        typeof schema !== "object" ||
+        Object.keys(schema).length === 0
+      ) {
         return basePrompt;
       }
       const outputSection = formatOutputSchemaSection(schema);
@@ -320,4 +348,3 @@ export function loadPromptLibrary(opts: {
     },
   };
 }
-

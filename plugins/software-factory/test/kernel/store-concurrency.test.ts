@@ -6,7 +6,9 @@ import { createFolderStore } from "../../src/kernel/store.js";
 
 describe("record store under concurrent dispatch", () => {
   it("allocates unique sequence numbers for concurrent turns", async () => {
-    const goalDir = fs.mkdtempSync(path.join(os.tmpdir(), "factory-store-race-"));
+    const goalDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "factory-store-race-"),
+    );
     try {
       const store = createFolderStore(goalDir);
       await store.ensureLayout();
@@ -20,8 +22,8 @@ describe("record store under concurrent dispatch", () => {
             actor: "agent",
             alias: "implementer",
             model: { id: "fake" },
-          })
-        )
+          }),
+        ),
       );
       const seqs = turns.map((t) => t.meta.seq);
       expect(new Set(seqs).size).toBe(20);

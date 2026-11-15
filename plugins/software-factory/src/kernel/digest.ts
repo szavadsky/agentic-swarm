@@ -1,8 +1,8 @@
 import path from "node:path";
 import { runAgentTurn } from "./agent.js";
-import { resolveRole, type RoleTarget } from "./flow-context.js";
-import { DEFAULT_ROLE_BY_STEP, costText, rolesByStep } from "./metrics.js";
-import { pricedRecord, type PriceTable } from "./pricing.js";
+import { type RoleTarget, resolveRole } from "./flow-context.js";
+import { costText, DEFAULT_ROLE_BY_STEP, rolesByStep } from "./metrics.js";
+import { type PriceTable, pricedRecord } from "./pricing.js";
 import type { KernelRuntime, StepRecord } from "./types.js";
 
 interface RoleRow {
@@ -29,7 +29,7 @@ function renderDigestFacts(
   records: StepRecord[],
   iteration: number,
   roleByStep: Record<string, string>,
-  prices: PriceTable
+  prices: PriceTable,
 ): string {
   const rows = new Map<string, RoleRow>();
   let turns = 0;
@@ -76,7 +76,15 @@ function renderDigestFacts(
       costKnown: sum.costKnown || row.costKnown,
       unpricedTurns: sum.unpricedTurns + row.unpricedTurns,
     }),
-    { turns: 0, in: 0, cacheRead: 0, out: 0, costUsd: 0, costKnown: false, unpricedTurns: 0 }
+    {
+      turns: 0,
+      in: 0,
+      cacheRead: 0,
+      out: 0,
+      costUsd: 0,
+      costKnown: false,
+      unpricedTurns: 0,
+    },
   );
 
   const lines = [
@@ -90,13 +98,13 @@ function renderDigestFacts(
     "|---|---|---|---|---|---|---|",
   ];
   for (const row of [...rows.values()].sort(
-    (a, b) => a.role.localeCompare(b.role) || a.alias.localeCompare(b.alias)
+    (a, b) => a.role.localeCompare(b.role) || a.alias.localeCompare(b.alias),
   )) {
     lines.push(
       `| ${row.role} | ${row.alias} | ${row.turns} | ${row.in} | ${row.cacheRead} | ${row.out} | ${costText(
         row.costKnown ? row.costUsd : undefined,
-        row.unpricedTurns
-      )} |`
+        row.unpricedTurns,
+      )} |`,
     );
   }
   if (rows.size === 0) lines.push("| (none) | | | | | | |");
@@ -108,21 +116,31 @@ function renderDigestFacts(
     `- cost: ${
       rows.size === 0
         ? "not reported by the harness"
-        : costText(totals.costKnown ? totals.costUsd : undefined, totals.unpricedTurns)
+        : costText(
+            totals.costKnown ? totals.costUsd : undefined,
+            totals.unpricedTurns,
+          )
     }`,
-    ""
+    "",
   );
 
   const transcripts = [
-    ...new Set(records.map((r) => r.transcript).filter((t): t is string => Boolean(t))),
+    ...new Set(
+      records.map((r) => r.transcript).filter((t): t is string => Boolean(t)),
+    ),
   ];
   lines.push("## Transcripts");
   if (transcripts.length === 0) lines.push("- none recorded");
   else {
-    for (const transcript of transcripts.slice(0, 20)) lines.push(`- ${transcript}`);
-    if (transcripts.length > 20) lines.push(`- … ${transcripts.length - 20} more`);
+    for (const transcript of transcripts.slice(0, 20))
+      lines.push(`- ${transcript}`);
+    if (transcripts.length > 20)
+      lines.push(`- … ${transcripts.length - 20} more`);
   }
-  lines.push("", "<!-- The scout appends loops, failures and interventions from these sources. -->");
+  lines.push(
+    "",
+    "<!-- The scout appends loops, failures and interventions from these sources. -->",
+  );
   return lines.join("\n") + "\n";
 }
 
@@ -135,7 +153,7 @@ function renderDigestFacts(
 export async function writeLaunchDigest(
   runtime: KernelRuntime,
   iteration: number,
-  records: StepRecord[]
+  records: StepRecord[],
 ): Promise<string | null> {
   const previous = records.filter((r) => r.iteration < iteration);
   if (previous.length === 0) return null;
@@ -160,8 +178,8 @@ export async function writeLaunchDigest(
         ...DEFAULT_ROLE_BY_STEP,
         ...rolesByStep(runtime.configs.process.flows),
       },
-      runtime.configs.run.prices ?? {}
-    )
+      runtime.configs.run.prices ?? {},
+    ),
   );
 
   if (scoutTarget) {

@@ -16,15 +16,23 @@ import {
 describe("KERNEL0 scenario 9 — no progress over the item history", () => {
   it("parks on an A, B, A sequence that only a history comparison catches", async () => {
     const { repo, goal } = setupFlowRepo({
-      process: { itemTurns: 10, flows: { "implement-review": { reviewRounds: 4 } } },
+      process: {
+        itemTurns: 10,
+        flows: { "implement-review": { reviewRounds: 4 } },
+      },
     });
     try {
       const harness = new FakeHarness({ id: "fake" });
-      const implement = (content: string, label: string) => (req: any, ctx: any) => {
-        fs.writeFileSync(path.join(req.cwd!, "task.txt"), `${content}\n`, "utf8");
-        ctx.writeOutcome(outcome({ summary: label }));
-        return fakeTurnResult(req);
-      };
+      const implement =
+        (content: string, label: string) => (req: any, ctx: any) => {
+          fs.writeFileSync(
+            path.join(req.cwd!, "task.txt"),
+            `${content}\n`,
+            "utf8",
+          );
+          ctx.writeOutcome(outcome({ summary: label }));
+          return fakeTurnResult(req);
+        };
       const changes = (label: string) => (req: any, ctx: any) => {
         ctx.writeOutcome(outcome({ summary: label, verdict: "changes" }));
         return fakeTurnResult(req);
@@ -41,7 +49,11 @@ describe("KERNEL0 scenario 9 — no progress over the item history", () => {
       expect(result.reason).toBe("boundary");
 
       const records = await runtime.store.listRecords();
-      const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
       expect(state.tasks.task!.status).toBe("parked");
       expect(state.tasks.task!.cause!.startsWith("no-progress:")).toBe(true);
       expect(state.tasks.task!.cause).toContain("implement r3");
@@ -49,10 +61,15 @@ describe("KERNEL0 scenario 9 — no progress over the item history", () => {
       expect(harness.calls.length).toBe(5);
 
       const incidents = records.filter(
-        (r) => r.slug === "task" && r.step === "park" && r.cause?.startsWith("no-progress:")
+        (r) =>
+          r.slug === "task" &&
+          r.step === "park" &&
+          r.cause?.startsWith("no-progress:"),
       );
       expect(incidents.length).toBe(1);
-      expect(repo.git(["show", "factory/demo:task.txt"], { allowFail: true }).code).not.toBe(0);
+      expect(
+        repo.git(["show", "factory/demo:task.txt"], { allowFail: true }).code,
+      ).not.toBe(0);
     } finally {
       cleanupFlowRepo(repo);
     }

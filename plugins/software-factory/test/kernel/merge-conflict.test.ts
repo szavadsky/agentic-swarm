@@ -41,9 +41,15 @@ function scriptConflict(harness: FakeHarness): void {
  * so the task branch's squash has a conflicting file when the queue reaches it.
  */
 function landIntegrationChange(repo: TmpRepo, checkout: string): void {
-  fs.writeFileSync(path.join(checkout, "conflict.txt"), "integration\n", "utf8");
+  fs.writeFileSync(
+    path.join(checkout, "conflict.txt"),
+    "integration\n",
+    "utf8",
+  );
   repo.git(["add", "conflict.txt"], { cwd: checkout });
-  repo.git(["commit", "-m", "concurrent integration change"], { cwd: checkout });
+  repo.git(["commit", "-m", "concurrent integration change"], {
+    cwd: checkout,
+  });
 }
 
 describe("merge conflicts", () => {
@@ -55,7 +61,11 @@ describe("merge conflicts", () => {
       scriptConflict(harness);
       harness.script((req, ctx) => {
         expect(req.prompt).toContain("Conflicted files: conflict.txt");
-        fs.writeFileSync(path.join(req.cwd!, "conflict.txt"), "resolved\n", "utf8");
+        fs.writeFileSync(
+          path.join(req.cwd!, "conflict.txt"),
+          "resolved\n",
+          "utf8",
+        );
         ctx.writeOutcome(outcome({ summary: "conflict resolved" }));
         return fakeTurnResult(req);
       });
@@ -69,11 +79,24 @@ describe("merge conflicts", () => {
       expect(result.reason).toBe("boundary");
 
       const records = await runtime.store.listRecords();
-      const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
       expect(state.tasks.task!.status).toBe("merged");
-      expect(repo.git(["show", "factory/demo:conflict.txt"]).stdout.trim()).toBe("resolved");
-      expect(records.filter((r) => r.slug === "task" && r.step === "merge-attempt").length).toBe(1);
-      expect(records.filter((r) => r.slug === "task" && r.step === "merge" && r.ok === true).length).toBe(1);
+      expect(
+        repo.git(["show", "factory/demo:conflict.txt"]).stdout.trim(),
+      ).toBe("resolved");
+      expect(
+        records.filter((r) => r.slug === "task" && r.step === "merge-attempt")
+          .length,
+      ).toBe(1);
+      expect(
+        records.filter(
+          (r) => r.slug === "task" && r.step === "merge" && r.ok === true,
+        ).length,
+      ).toBe(1);
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -86,7 +109,11 @@ describe("merge conflicts", () => {
       const harness = new FakeHarness({ id: "fake" });
       scriptConflict(harness);
       harness.script((req, ctx) => {
-        fs.writeFileSync(path.join(req.cwd!, "conflict.txt"), "resolved\n", "utf8");
+        fs.writeFileSync(
+          path.join(req.cwd!, "conflict.txt"),
+          "resolved\n",
+          "utf8",
+        );
         ctx.writeOutcome(outcome({ summary: "conflict resolved" }));
         return fakeTurnResult(req);
       });
@@ -96,11 +123,17 @@ describe("merge conflicts", () => {
       await writeTask(runtime, file);
       await ensureTaskWorktree(runtime, file);
       landIntegrationChange(repo, checkout);
-      expect((await runDispatch(runtime, { iteration: 1 })).reason).toBe("boundary");
+      expect((await runDispatch(runtime, { iteration: 1 })).reason).toBe(
+        "boundary",
+      );
 
       const records = await runtime.store.listRecords();
-      const implement = records.find((r) => r.slug === "task" && r.step === "implement")!;
-      const attempt = records.find((r) => r.slug === "task" && r.step === "merge-attempt")!;
+      const implement = records.find(
+        (r) => r.slug === "task" && r.step === "implement",
+      )!;
+      const attempt = records.find(
+        (r) => r.slug === "task" && r.step === "merge-attempt",
+      )!;
       // The merge attempt resumed the implementer's session and compacted it.
       expect(harness.calls[2]!.session?.id).toBe(implement.session!.id);
       expect(harness.compactions).toHaveLength(3);
@@ -119,7 +152,11 @@ describe("merge conflicts", () => {
       const harness = new FailingCompactHarness({ id: "fake" });
       scriptConflict(harness);
       harness.script((req, ctx) => {
-        fs.writeFileSync(path.join(req.cwd!, "conflict.txt"), "resolved\n", "utf8");
+        fs.writeFileSync(
+          path.join(req.cwd!, "conflict.txt"),
+          "resolved\n",
+          "utf8",
+        );
         ctx.writeOutcome(outcome({ summary: "conflict resolved" }));
         return fakeTurnResult(req);
       });
@@ -129,11 +166,19 @@ describe("merge conflicts", () => {
       await writeTask(runtime, file);
       await ensureTaskWorktree(runtime, file);
       landIntegrationChange(repo, checkout);
-      expect((await runDispatch(runtime, { iteration: 1 })).reason).toBe("boundary");
+      expect((await runDispatch(runtime, { iteration: 1 })).reason).toBe(
+        "boundary",
+      );
 
       const records = await runtime.store.listRecords();
-      const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
-      const attempt = records.find((r) => r.slug === "task" && r.step === "merge-attempt")!;
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
+      const attempt = records.find(
+        (r) => r.slug === "task" && r.step === "merge-attempt",
+      )!;
       expect(state.tasks.task!.status).toBe("merged");
       expect(attempt.session?.compacted).toBe(false);
       expect(harness.calls[2]!.session?.id).toBe(attempt.session!.id);
@@ -153,9 +198,10 @@ describe("merge conflicts", () => {
           stop: {
             kind: "infra",
             cause: "auth",
-            details: "provider.no-route Model unavailable: opencode/does-not-exist-free",
+            details:
+              "provider.no-route Model unavailable: opencode/does-not-exist-free",
           },
-        })
+        }),
       );
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
@@ -166,10 +212,14 @@ describe("merge conflicts", () => {
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("infra");
       expect(result.cause).toBe(
-        "task: auth: provider.no-route Model unavailable: opencode/does-not-exist-free"
+        "task: auth: provider.no-route Model unavailable: opencode/does-not-exist-free",
       );
 
-      const state = derive(await runtime.store.listTasks(), await runtime.store.listRecords(), runtime.configs.process.flows);
+      const state = derive(
+        await runtime.store.listTasks(),
+        await runtime.store.listRecords(),
+        runtime.configs.process.flows,
+      );
       expect(state.tasks.task!.status).toBe("ready");
       // Implement and review compacted; the infra-stopped merge attempt did not.
       expect(harness.compactions).toHaveLength(2);
@@ -185,7 +235,9 @@ describe("merge conflicts", () => {
       const harness = new FakeHarness({ id: "fake" });
       scriptConflict(harness);
       harness.script((req) =>
-        fakeTurnResult(req, { stop: { kind: "refusal", details: "content policy" } })
+        fakeTurnResult(req, {
+          stop: { kind: "refusal", details: "content policy" },
+        }),
       );
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
@@ -193,7 +245,9 @@ describe("merge conflicts", () => {
       await writeTask(runtime, file);
       await ensureTaskWorktree(runtime, file);
       landIntegrationChange(repo, checkout);
-      expect((await runDispatch(runtime, { iteration: 1 })).reason).toBe("boundary");
+      expect((await runDispatch(runtime, { iteration: 1 })).reason).toBe(
+        "boundary",
+      );
 
       // Implement and review compacted; the refused merge attempt did not.
       expect(harness.compactions).toHaveLength(2);
@@ -222,11 +276,21 @@ describe("merge conflicts", () => {
       expect(result.reason).toBe("boundary");
 
       const records = await runtime.store.listRecords();
-      const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
       expect(state.tasks.task!.status).toBe("parked");
       expect(state.tasks.task!.cause!.startsWith("conflict:")).toBe(true);
-      expect(records.filter((r) => r.slug === "task" && r.step === "merge" && r.ok === true).length).toBe(0);
-      expect(repo.git(["show", "factory/demo:conflict.txt"]).stdout.trim()).toBe("integration");
+      expect(
+        records.filter(
+          (r) => r.slug === "task" && r.step === "merge" && r.ok === true,
+        ).length,
+      ).toBe(0);
+      expect(
+        repo.git(["show", "factory/demo:conflict.txt"]).stdout.trim(),
+      ).toBe("integration");
     } finally {
       cleanupFlowRepo(repo);
     }

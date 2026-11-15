@@ -3,11 +3,18 @@
  * from task files plus append-only step records; nothing here is stored state.
  */
 import { z } from "zod";
-import type { Harness, ModelRef, SessionRef, Stop, TurnAttempt, Usage } from "../harness/types.js";
-import type { PriceTable } from "./pricing.js";
 import type { CheckResult } from "../core/checks/types.js";
 import type { Repo } from "../core/git/repo.js";
 import type { PromptLibrary } from "../core/prompts.js";
+import type {
+  Harness,
+  ModelRef,
+  SessionRef,
+  Stop,
+  TurnAttempt,
+  Usage,
+} from "../harness/types.js";
+import type { PriceTable } from "./pricing.js";
 
 export const concernSchema = z.object({
   kind: z.enum(["debt", "risk", "uncertainty", "choice"]),
@@ -37,7 +44,9 @@ export interface TaskFile {
   title: string;
   kind: TaskKind;
   flow: string;
-  deps: string[]; scope: string[]; tier?: string;
+  deps: string[];
+  scope: string[];
+  tier?: string;
   /** A parked task whose kept branch this task continues from. */
   base?: string;
   /** Plan heading this task derives from. */
@@ -45,7 +54,14 @@ export interface TaskFile {
   body: string;
 }
 
-export type TaskStatus = "pending" | "ready" | "running" | "merged" | "finished" | "parked" | "cancelled";
+export type TaskStatus =
+  | "pending"
+  | "ready"
+  | "running"
+  | "merged"
+  | "finished"
+  | "parked"
+  | "cancelled";
 
 /**
  * The next thing the task needs: a flow step id, or one of the script phases.
@@ -68,8 +84,11 @@ export interface TaskState {
   turns: number;
   /** Current implementation/review round, 1-based. */
   round: number;
-  kind: TaskKind; flow: string; phase: TaskPhase;
-  commit?: string; verdict?: ReviewVerdict;
+  kind: TaskKind;
+  flow: string;
+  phase: TaskPhase;
+  commit?: string;
+  verdict?: ReviewVerdict;
   /** A derived terminal outcome that still needs its park record. */
   park?: string;
   /** No-progress over the item's history; the next action is the loop park. */
@@ -139,7 +158,10 @@ export interface Timeouts {
 }
 
 /** A full test-suite run can stream nothing for many minutes. */
-export const DEFAULT_TIMEOUTS: Timeouts = { idleMs: 20 * 60_000, wallMs: 60 * 60_000 };
+export const DEFAULT_TIMEOUTS: Timeouts = {
+  idleMs: 20 * 60_000,
+  wallMs: 60 * 60_000,
+};
 
 /**
  * One append-only record, materialized from `records/<dir>/`: `started.yaml`
@@ -149,8 +171,10 @@ export const DEFAULT_TIMEOUTS: Timeouts = { idleMs: 20 * 60_000, wallMs: 60 * 60
 export interface StepRecord {
   seq: number;
   iteration: number;
-  slug?: string; step: string;
-  round: number; actor: StepActor;
+  slug?: string;
+  step: string;
+  round: number;
+  actor: StepActor;
   /** Agent steps only; `model` is the model actually used when reported. */
   alias?: string;
   model?: ModelRef;
@@ -160,8 +184,10 @@ export interface StepRecord {
   taskHash?: string;
   /** Integration head (or parked branch tip) the branch started from. */
   base?: string;
-  stop?: Stop; usage?: Usage;
-  session?: SessionRef; commit?: string;
+  stop?: Stop;
+  usage?: Usage;
+  session?: SessionRef;
+  commit?: string;
   /** UTF-8 bytes of the rendered prompt sent to the harness (agent steps only). */
   promptBytes?: number;
   /** Boundary roles only: UTF-8 bytes of the iteration context pack. */
@@ -172,16 +198,21 @@ export interface StepRecord {
   transcript?: string;
   /** Tree of the resulting worktree, the per-step no-progress component. */
   tree?: string;
-  checks?: CheckResult[]; outcome?: Outcome;
-  ok?: boolean; cause?: string;
-  startedAt: string; endedAt?: string;
+  checks?: CheckResult[];
+  outcome?: Outcome;
+  ok?: boolean;
+  cause?: string;
+  startedAt: string;
+  endedAt?: string;
 }
 
 /** Input of one turn/script step, written before the turn starts. */
 export interface RecordStart {
   iteration: number;
-  slug?: string; step: string;
-  round: number; actor: StepActor;
+  slug?: string;
+  step: string;
+  round: number;
+  actor: StepActor;
   alias?: string;
   model?: ModelRef;
   taskHash?: string;
@@ -194,14 +225,21 @@ export interface RecordStart {
 export interface RecordEnd {
   /** Set when the harness reports the model actually used (S1 contract). */
   model?: ModelRef;
-  stop?: Stop; usage?: Usage; session?: SessionRef;
+  stop?: Stop;
+  usage?: Usage;
+  session?: SessionRef;
   /** Rendered prompt and, for the boundary roles, context-pack size. */
-  promptBytes?: number; packBytes?: number; packTruncated?: boolean;
+  promptBytes?: number;
+  packBytes?: number;
+  packTruncated?: boolean;
   transcript?: string;
   attempts?: TurnAttempt[];
-  commit?: string; tree?: string;
-  checks?: CheckResult[]; outcome?: Outcome;
-  ok?: boolean; cause?: string;
+  commit?: string;
+  tree?: string;
+  checks?: CheckResult[];
+  outcome?: Outcome;
+  ok?: boolean;
+  cause?: string;
 }
 
 /** Handle for an in-flight turn; the directory exists but has no end. */

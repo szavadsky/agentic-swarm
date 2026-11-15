@@ -3,7 +3,15 @@ import fs from "node:fs";
 import path from "node:path";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { createFolderStore } from "../../src/kernel/store.js";
-import { cleanup, launch, makeGoal, outcome, scriptDigest, stateOf, writePlan } from "./e2e-helpers.js";
+import {
+  cleanup,
+  launch,
+  makeGoal,
+  outcome,
+  scriptDigest,
+  stateOf,
+  writePlan,
+} from "./e2e-helpers.js";
 
 const PLAN = `# Milestone 1
 
@@ -19,7 +27,9 @@ describe("architect session continuity", () => {
       first.script((req, ctx) => {
         expect(req.prompt).toContain("- turn: `first`");
         writePlan(goal.goalDir, PLAN);
-        ctx.writeOutcome(outcome({ summary: "planned nothing yet", decision: "continue" }));
+        ctx.writeOutcome(
+          outcome({ summary: "planned nothing yet", decision: "continue" }),
+        );
         return fakeTurnResult(req);
       });
       first.script((req, ctx) => {
@@ -45,7 +55,10 @@ describe("architect session continuity", () => {
         seenSession = req.session?.id;
         expect(req.session?.compacted).toBe(true);
         expect(req.prompt).toContain("- turn: `relaunch`");
-        const pack = fs.readFileSync(path.join(goal.goalDir, "iterations/2/context-pack.md"), "utf8");
+        const pack = fs.readFileSync(
+          path.join(goal.goalDir, "iterations/2/context-pack.md"),
+          "utf8",
+        );
         expect(pack).toContain("iterations/2/digest.md");
         ctx.writeOutcome(outcome({ summary: "goal met", decision: "done" }));
         return fakeTurnResult(req);
@@ -56,11 +69,19 @@ describe("architect session continuity", () => {
 
       const state = await stateOf(goal.goalDir);
       expect(state.goal).toBe("done");
-      expect(fs.existsSync(path.join(goal.goalDir, "iterations/1/summary.md"))).toBe(true);
-      expect(fs.readFileSync(path.join(goal.goalDir, "iterations/1/summary.md"), "utf8")).toContain(
-        "stopped-with-debt"
+      expect(
+        fs.existsSync(path.join(goal.goalDir, "iterations/1/summary.md")),
+      ).toBe(true);
+      expect(
+        fs.readFileSync(
+          path.join(goal.goalDir, "iterations/1/summary.md"),
+          "utf8",
+        ),
+      ).toContain("stopped-with-debt");
+      const digest = fs.readFileSync(
+        path.join(goal.goalDir, "iterations/2/digest.md"),
+        "utf8",
       );
-      const digest = fs.readFileSync(path.join(goal.goalDir, "iterations/2/digest.md"), "utf8");
       expect(digest).toContain("## Cost and turns by role");
       expect(digest).toContain("architect");
       expect(digest).toContain("## Loops");

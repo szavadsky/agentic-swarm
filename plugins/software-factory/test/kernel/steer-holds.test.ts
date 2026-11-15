@@ -3,11 +3,21 @@ import fs from "node:fs";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import yaml from "yaml";
-import { FakeHarness, fakeTurnResult, type FakeTurnHandler } from "../../src/harness/fake/index.js";
+import {
+  FakeHarness,
+  type FakeTurnHandler,
+  fakeTurnResult,
+} from "../../src/harness/fake/index.js";
 import { runBoundary } from "../../src/kernel/boundary.js";
 import { derive } from "../../src/kernel/derive.js";
-import { runDispatch, type DispatchResult } from "../../src/kernel/dispatch.js";
-import { holdsDir, postSteer, quarantineDir, readHolds } from "../../src/kernel/mailbox.js";
+import { type DispatchResult, runDispatch } from "../../src/kernel/dispatch.js";
+import {
+  holdsDir,
+  postSteer,
+  quarantineDir,
+  readHolds,
+} from "../../src/kernel/mailbox.js";
+import type { KernelRuntime } from "../../src/kernel/types.js";
 import { task } from "./helpers.js";
 import {
   cleanupFlowRepo,
@@ -16,7 +26,6 @@ import {
   setupFlowRepo,
   writeTask,
 } from "./s2-helpers.js";
-import type { KernelRuntime } from "../../src/kernel/types.js";
 
 const PLAN = `# Milestone 1 — files
 
@@ -37,21 +46,33 @@ function writePlan(runtime: KernelRuntime): void {
   fs.writeFileSync(path.join(runtime.store.goalDir, "plan.md"), PLAN, "utf8");
 }
 
-function writeHold(runtime: KernelRuntime, steer: string, slugs: string[], goal = false): void {
+function writeHold(
+  runtime: KernelRuntime,
+  steer: string,
+  slugs: string[],
+  goal = false,
+): void {
   const dir = holdsDir(runtime.store);
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, `${steer}.yaml`), yaml.stringify({ slugs, goal }), "utf8");
+  fs.writeFileSync(
+    path.join(dir, `${steer}.yaml`),
+    yaml.stringify({ slugs, goal }),
+    "utf8",
+  );
 }
 
 async function tasks(runtime: KernelRuntime) {
   return derive(
     await runtime.store.listTasks(),
     await runtime.store.listRecords(),
-    runtime.configs.process.flows
+    runtime.configs.process.flows,
   );
 }
 
-function implementer(file: string, before?: (cwd: string) => Promise<void> | void): FakeTurnHandler {
+function implementer(
+  file: string,
+  before?: (cwd: string) => Promise<void> | void,
+): FakeTurnHandler {
   return async (req, ctx) => {
     await before?.(req.cwd!);
     fs.writeFileSync(path.join(req.cwd!, file), `${file}\n`, "utf8");
@@ -75,7 +96,10 @@ describe("mid-run steer holds", () => {
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       writePlan(runtime);
       await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
-      await writeTask(runtime, task("beta", { scope: ["beta.txt"], deps: ["alpha"] }));
+      await writeTask(
+        runtime,
+        task("beta", { scope: ["beta.txt"], deps: ["alpha"] }),
+      );
       await writeTask(runtime, task("delta", { scope: ["delta.txt"] }));
       await writeTask(runtime, task("gamma", { scope: ["gamma.txt"] }));
 
@@ -84,12 +108,14 @@ describe("mid-run steer holds", () => {
           await postSteer(
             runtime.store,
             "s1",
-            "Keep alpha unmerged until I answer.\nSecond line with details."
+            "Keep alpha unmerged until I answer.\nSecond line with details.",
           );
-        })
+        }),
       );
       harness.script((req, ctx) => {
-        expect(req.prompt).toContain("- s1 (mailbox/inbox/s1.md):\n  Keep alpha unmerged");
+        expect(req.prompt).toContain(
+          "- s1 (mailbox/inbox/s1.md):\n  Keep alpha unmerged",
+        );
         expect(req.prompt).toContain("Second line with details.");
         writeHold(runtime, "s1", ["alpha", "beta", "delta"]);
         ctx.writeOutcome(outcome({ summary: "structured s1" }));
@@ -111,27 +137,41 @@ describe("mid-run steer holds", () => {
       const records = await runtime.store.listRecords();
       expect(records.filter((r) => r.step === "pm")).toHaveLength(1);
       expect(
-        records.find((r) => r.slug === "alpha" && r.actor === "agent" && r.step === "implement")?.outcome
-          ?.status
+        records.find(
+          (r) =>
+            r.slug === "alpha" && r.actor === "agent" && r.step === "implement",
+        )?.outcome?.status,
       ).toBe("done");
-      expect(records.find((r) => r.slug === "alpha" && r.step === "park")?.cause).toBe("steer: s1");
-      expect(records.some((r) => r.slug === "alpha" && r.step === "merge")).toBe(false);
-      expect(records.some((r) => r.slug === "beta" && r.actor === "agent")).toBe(false);
+      expect(
+        records.find((r) => r.slug === "alpha" && r.step === "park")?.cause,
+      ).toBe("steer: s1");
+      expect(
+        records.some((r) => r.slug === "alpha" && r.step === "merge"),
+      ).toBe(false);
+      expect(
+        records.some((r) => r.slug === "beta" && r.actor === "agent"),
+      ).toBe(false);
       expect(records.some((r) => r.slug === "delta")).toBe(false);
       const steerTurns = (): number =>
-        harness.calls.filter((call) => call.prompt.includes("Second line with details.")).length;
+        harness.calls.filter((call) =>
+          call.prompt.includes("Second line with details."),
+        ).length;
       expect(steerTurns()).toBe(1);
-      expect(fs.existsSync(path.join(runtime.store.goalDir, "mailbox/inbox/s1.md"))).toBe(true);
+      expect(
+        fs.existsSync(path.join(runtime.store.goalDir, "mailbox/inbox/s1.md")),
+      ).toBe(true);
 
       // The steer then takes the boundary path: only the architect answers it.
       harness.script((req, ctx) => {
-        expect(req.prompt).toContain("- s1 (mailbox/inbox/s1.md): Keep alpha unmerged until I answer.");
+        expect(req.prompt).toContain(
+          "- s1 (mailbox/inbox/s1.md): Keep alpha unmerged until I answer.",
+        );
         ctx.writeOutcome(
           outcome({
             summary: "answered the steer",
             decision: "continue",
             forward: ["steer s1: hold alpha; I will review the branch"],
-          })
+          }),
         );
         return fakeTurnResult(req);
       });
@@ -142,10 +182,17 @@ describe("mid-run steer holds", () => {
 
       const boundary = await runBoundary(runtime, { relaunch: false });
       expect(boundary.decision).toBe("continue");
-      expect(fs.readdirSync(path.join(runtime.store.goalDir, "mailbox/inbox"))).not.toContain("s1.md");
-      expect(fs.readdirSync(path.join(runtime.store.goalDir, "mailbox/processed"))).toContain("s1.md");
       expect(
-        fs.readFileSync(path.join(runtime.store.goalDir, "mailbox/outbox/steer-s1.md"), "utf8")
+        fs.readdirSync(path.join(runtime.store.goalDir, "mailbox/inbox")),
+      ).not.toContain("s1.md");
+      expect(
+        fs.readdirSync(path.join(runtime.store.goalDir, "mailbox/processed")),
+      ).toContain("s1.md");
+      expect(
+        fs.readFileSync(
+          path.join(runtime.store.goalDir, "mailbox/outbox/steer-s1.md"),
+          "utf8",
+        ),
       ).toContain("hold alpha; I will review the branch");
 
       const after = await tasks(runtime);
@@ -192,13 +239,19 @@ describe("mid-run steer holds", () => {
       expect(dispatched.reason).toBe("boundary");
       const state = await tasks(runtime);
       expect(state.tasks.alpha!.status).toBe("parked");
-      expect(state.tasks.alpha!.cause).toBe("empty-diff: implement r1 committed no changes");
-      const records = await runtime.store.listRecords();
-      expect(records.filter((r) => r.slug === "alpha" && r.step === "park")).toHaveLength(1);
-      expect(records.find((r) => r.slug === "alpha" && r.step === "park")?.cause).toBe(
-        "empty-diff: implement r1 committed no changes"
+      expect(state.tasks.alpha!.cause).toBe(
+        "empty-diff: implement r1 committed no changes",
       );
-      expect(records.some((r) => r.slug === "alpha" && r.step === "merge")).toBe(false);
+      const records = await runtime.store.listRecords();
+      expect(
+        records.filter((r) => r.slug === "alpha" && r.step === "park"),
+      ).toHaveLength(1);
+      expect(
+        records.find((r) => r.slug === "alpha" && r.step === "park")?.cause,
+      ).toBe("empty-diff: implement r1 committed no changes");
+      expect(
+        records.some((r) => r.slug === "alpha" && r.step === "merge"),
+      ).toBe(false);
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -215,12 +268,19 @@ describe("mid-run steer holds", () => {
       harness.script(implementer("alpha.txt"));
       harness.script(approver("alpha is correct"));
 
-      const dispatched = await runDispatch(runtime, { iteration: 1, seenSteers: ["s1"] });
+      const dispatched = await runDispatch(runtime, {
+        iteration: 1,
+        seenSteers: ["s1"],
+      });
       expect(dispatched.reason).toBe("boundary");
       expect(harness.calls).toHaveLength(2);
-      expect((await runtime.store.listRecords()).filter((r) => r.step === "pm")).toEqual([]);
+      expect(
+        (await runtime.store.listRecords()).filter((r) => r.step === "pm"),
+      ).toEqual([]);
       expect((await tasks(runtime)).tasks.alpha!.status).toBe("merged");
-      expect(fs.existsSync(path.join(runtime.store.goalDir, "mailbox/inbox/s1.md"))).toBe(true);
+      expect(
+        fs.existsSync(path.join(runtime.store.goalDir, "mailbox/inbox/s1.md")),
+      ).toBe(true);
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -237,7 +297,7 @@ describe("mid-run steer holds", () => {
       harness.script(
         implementer("alpha.txt", async () => {
           await postSteer(runtime.store, "s1", "No tasks wait.");
-        })
+        }),
       );
       harness.script((req, ctx) => {
         writeHold(runtime, "s1", []);
@@ -253,12 +313,16 @@ describe("mid-run steer holds", () => {
       const state = await tasks(runtime);
       expect(state.tasks.alpha!.status).toBe("merged");
       expect(state.tasks.gamma!.status).toBe("merged");
-      expect((await runtime.store.listRecords()).filter((r) => r.step === "pm")).toHaveLength(1);
+      expect(
+        (await runtime.store.listRecords()).filter((r) => r.step === "pm"),
+      ).toHaveLength(1);
       const hold = yaml.parse(
-        fs.readFileSync(path.join(holdsDir(runtime.store), "s1.yaml"), "utf8")
+        fs.readFileSync(path.join(holdsDir(runtime.store), "s1.yaml"), "utf8"),
       );
       expect(hold).toEqual({ slugs: [], goal: false });
-      expect(fs.existsSync(path.join(runtime.store.goalDir, "mailbox/inbox/s1.md"))).toBe(true);
+      expect(
+        fs.existsSync(path.join(runtime.store.goalDir, "mailbox/inbox/s1.md")),
+      ).toBe(true);
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -275,7 +339,7 @@ describe("mid-run steer holds", () => {
       harness.script(
         implementer("alpha.txt", async () => {
           await postSteer(runtime.store, "s1", "Stop the goal.");
-        })
+        }),
       );
       harness.script((req, ctx) => {
         writeHold(runtime, "s1", [], true);
@@ -290,7 +354,9 @@ describe("mid-run steer holds", () => {
       expect(state.tasks.alpha!.status).toBe("ready");
       expect(state.tasks.alpha!.park).toBeUndefined();
       expect(state.tasks.gamma!.status).toBe("ready");
-      expect((await runtime.store.listRecords()).some((r) => r.slug === "gamma")).toBe(false);
+      expect(
+        (await runtime.store.listRecords()).some((r) => r.slug === "gamma"),
+      ).toBe(false);
       expect(harness.calls).toHaveLength(2);
     } finally {
       cleanupFlowRepo(repo);
@@ -298,7 +364,9 @@ describe("mid-run steer holds", () => {
   }, 60_000);
 
   it("charges the steer PM turn to the iteration dollar brake", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1, iterationUsd: 5 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: 1, iterationUsd: 5 },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       const runtime = await makeRuntime(repo, goal, { fake: harness });
@@ -322,11 +390,15 @@ describe("mid-run steer holds", () => {
 
       const dispatched = await runDispatch(runtime, { iteration: 1 });
       expect(dispatched.reason).toBe("drained");
-      expect(dispatched.cause).toContain("budget: iteration USD limit $5.0000 reached");
+      expect(dispatched.cause).toContain(
+        "budget: iteration USD limit $5.0000 reached",
+      );
       const state = await tasks(runtime);
       expect(state.tasks.alpha!.status).toBe("parked");
       expect(state.tasks.gamma!.status).toBe("ready");
-      expect((await runtime.store.listRecords()).some((r) => r.slug === "gamma")).toBe(false);
+      expect(
+        (await runtime.store.listRecords()).some((r) => r.slug === "gamma"),
+      ).toBe(false);
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -343,8 +415,12 @@ describe("mid-run steer holds", () => {
 
       harness.script(
         implementer("alpha.txt", async () => {
-          await postSteer(runtime.store, "s1", "Structure me; write no task file.");
-        })
+          await postSteer(
+            runtime.store,
+            "s1",
+            "Structure me; write no task file.",
+          );
+        }),
       );
       harness.script((req, ctx) => {
         // A malformed file would throw out of the next derive without the guard.
@@ -354,7 +430,10 @@ describe("mid-run steer holds", () => {
       });
       harness.script(approver("alpha is correct"));
 
-      const dispatched = await runDispatch(runtime, { iteration: 1, seenSteers: [] });
+      const dispatched = await runDispatch(runtime, {
+        iteration: 1,
+        seenSteers: [],
+      });
       expect(dispatched.reason).toBe("boundary");
       expect(fs.readFileSync(taskFile, "utf8")).toBe(original);
       expect((await tasks(runtime)).tasks.alpha!.status).toBe("merged");
@@ -380,24 +459,31 @@ describe("mid-run steer holds", () => {
       harness.script(
         implementer("alpha.txt", async () => {
           await postSteer(runtime.store, "s1", "Structure me; do not plan.");
-        })
+        }),
       );
       harness.script((req, ctx) => {
         // An empty plan.md would send the next front to the boundary instead of
         // dispatching the tasks that already exist.
-        fs.writeFileSync(planPath, "# Plan\n\n## smuggled\nPM-authored direction.\n", "utf8");
+        fs.writeFileSync(
+          planPath,
+          "# Plan\n\n## smuggled\nPM-authored direction.\n",
+          "utf8",
+        );
         ctx.writeOutcome(outcome({ summary: "tried to write a plan" }));
         return fakeTurnResult(req);
       });
       harness.script(approver("alpha is correct"));
 
-      const dispatched = await runDispatch(runtime, { iteration: 1, seenSteers: [] });
+      const dispatched = await runDispatch(runtime, {
+        iteration: 1,
+        seenSteers: [],
+      });
       expect(dispatched.reason).toBe("boundary");
       expect(fs.existsSync(planPath)).toBe(false);
       expect((await tasks(runtime)).tasks.alpha!.status).toBe("merged");
 
       const guard = (await runtime.store.listRecords()).find(
-        (record) => record.step === "steer-reconcile"
+        (record) => record.step === "steer-reconcile",
       );
       expect(guard?.ok).toBe(false);
       expect(guard?.cause).toContain("plan.md");
@@ -421,8 +507,13 @@ describe("mid-run steer holds", () => {
         if (slug === "beta") {
           await sleep(100);
         }
-        fs.writeFileSync(path.join(req.cwd!, `${slug}.txt`), `${slug}\n`, "utf8");
-        if (slug === "alpha") await postSteer(runtime.store, "s1", "Structure me.");
+        fs.writeFileSync(
+          path.join(req.cwd!, `${slug}.txt`),
+          `${slug}\n`,
+          "utf8",
+        );
+        if (slug === "alpha")
+          await postSteer(runtime.store, "s1", "Structure me.");
         ctx.writeOutcome(outcome({ summary: `${slug} implemented` }));
         return fakeTurnResult(req);
       };
@@ -430,28 +521,42 @@ describe("mid-run steer holds", () => {
       harness.script(implementOnce);
       harness.script((req, ctx) => {
         fs.mkdirSync(holdsDir(runtime.store), { recursive: true });
-        fs.writeFileSync(path.join(holdsDir(runtime.store), "s1.yaml"), "slugs: alpha\ngoal: maybe\n", "utf8");
+        fs.writeFileSync(
+          path.join(holdsDir(runtime.store), "s1.yaml"),
+          "slugs: alpha\ngoal: maybe\n",
+          "utf8",
+        );
         ctx.writeOutcome(outcome({ summary: "wrote an invalid hold" }));
         return fakeTurnResult(req);
       });
       harness.script(approver("alpha is correct"));
       harness.script(approver("beta is correct"));
 
-      const dispatched = await runDispatch(runtime, { iteration: 1, seenSteers: [] });
+      const dispatched = await runDispatch(runtime, {
+        iteration: 1,
+        seenSteers: [],
+      });
       expect(dispatched.reason).toBe("boundary");
 
       // The malformed hold is parked where it cannot decide anything, with a record.
-      expect(fs.existsSync(path.join(quarantineDir(runtime.store), "s1.yaml"))).toBe(true);
-      expect(fs.existsSync(path.join(holdsDir(runtime.store), "s1.yaml"))).toBe(false);
+      expect(
+        fs.existsSync(path.join(quarantineDir(runtime.store), "s1.yaml")),
+      ).toBe(true);
+      expect(fs.existsSync(path.join(holdsDir(runtime.store), "s1.yaml"))).toBe(
+        false,
+      );
       const records = await runtime.store.listRecords();
-      const quarantined = records.find((record) => record.step === "hold-quarantine");
+      const quarantined = records.find(
+        (record) => record.step === "hold-quarantine",
+      );
       expect(quarantined?.ok).toBe(false);
       expect(quarantined?.cause).toContain("s1.yaml");
 
       // The turn already in flight settled, and the launch kept dispatching.
       expect(
-        records.find((record) => record.slug === "beta" && record.step === "implement")?.outcome
-          ?.status
+        records.find(
+          (record) => record.slug === "beta" && record.step === "implement",
+        )?.outcome?.status,
       ).toBe("done");
       const state = await tasks(runtime);
       expect(state.tasks.alpha!.status).toBe("merged");
@@ -484,7 +589,7 @@ describe("mid-run steer holds", () => {
         implementer("alpha.txt", () => {
           fs.mkdirSync(inbox, { recursive: true });
           fs.writeFileSync(file, "Keep alpha", "utf8");
-        })
+        }),
       );
       harness.script(approver("alpha is correct"));
 
@@ -498,7 +603,9 @@ describe("mid-run steer holds", () => {
       // The half-written steer is not claimed on that pass: no PM turn yet and
       // the drop stays in the inbox for a later reader.
       expect(
-        (await runtime.store.listRecords()).filter((record) => record.step === "pm")
+        (await runtime.store.listRecords()).filter(
+          (record) => record.step === "pm",
+        ),
       ).toHaveLength(0);
       expect(fs.existsSync(file)).toBe(true);
       expect(appends).toBeGreaterThan(0);
@@ -511,12 +618,19 @@ describe("mid-run steer holds", () => {
         return fakeTurnResult(req);
       });
 
-      const second = await runDispatch(runtime, { iteration: 2, seenSteers: [] });
+      const second = await runDispatch(runtime, {
+        iteration: 2,
+        seenSteers: [],
+      });
       expect(second.reason).toBe("boundary");
       expect(
-        (await runtime.store.listRecords()).filter((record) => record.step === "pm")
+        (await runtime.store.listRecords()).filter(
+          (record) => record.step === "pm",
+        ),
       ).toHaveLength(1);
-      expect(harness.calls.filter((call) => call.prompt.includes("Keep alpha"))).toHaveLength(1);
+      expect(
+        harness.calls.filter((call) => call.prompt.includes("Keep alpha")),
+      ).toHaveLength(1);
     } finally {
       if (writer) clearInterval(writer);
       cleanupFlowRepo(repo);
@@ -532,20 +646,31 @@ describe("mid-run steer holds", () => {
       await writeTask(runtime, task("gamma", { scope: ["gamma.txt"] }));
       const dir = holdsDir(runtime.store);
       fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(path.join(dir, "s1.yaml"), "slugs: alpha\ngoal: maybe\n", "utf8");
+      fs.writeFileSync(
+        path.join(dir, "s1.yaml"),
+        "slugs: alpha\ngoal: maybe\n",
+        "utf8",
+      );
 
       harness.script(implementer("alpha.txt"));
       harness.script(approver("alpha is correct"));
       harness.script(implementer("gamma.txt"));
       harness.script(approver("gamma is correct"));
 
-      const dispatched = await runDispatch(runtime, { iteration: 1, seenSteers: [] });
+      const dispatched = await runDispatch(runtime, {
+        iteration: 1,
+        seenSteers: [],
+      });
       expect(dispatched.reason).toBe("boundary");
       const state = await tasks(runtime);
       expect(state.tasks.alpha!.status).toBe("merged");
       expect(state.tasks.gamma!.status).toBe("merged");
-      expect(fs.existsSync(path.join(quarantineDir(runtime.store), "s1.yaml"))).toBe(true);
-      const record = (await runtime.store.listRecords()).find((r) => r.step === "hold-quarantine");
+      expect(
+        fs.existsSync(path.join(quarantineDir(runtime.store), "s1.yaml")),
+      ).toBe(true);
+      const record = (await runtime.store.listRecords()).find(
+        (r) => r.step === "hold-quarantine",
+      );
       expect(record?.cause).toContain("s1.yaml");
     } finally {
       cleanupFlowRepo(repo);
@@ -563,8 +688,12 @@ describe("mid-run steer holds", () => {
       writeHold(runtime, "s1", ["alpha"], true);
 
       const ignoreSteer: FakeTurnHandler = (req, ctx) => {
-        expect(req.prompt).toContain("- s1 (mailbox/inbox/s1.md): Hold alpha until I answer.");
-        ctx.writeOutcome(outcome({ summary: "ignored the steer", decision: "continue" }));
+        expect(req.prompt).toContain(
+          "- s1 (mailbox/inbox/s1.md): Hold alpha until I answer.",
+        );
+        ctx.writeOutcome(
+          outcome({ summary: "ignored the steer", decision: "continue" }),
+        );
         return fakeTurnResult(req);
       };
       const unchanged: FakeTurnHandler = (req, ctx) => {
@@ -577,12 +706,18 @@ describe("mid-run steer holds", () => {
       harness.script(unchanged);
       const first = await runBoundary(runtime, { relaunch: false });
       expect(first.decision).toBe("continue");
-      expect(fs.existsSync(path.join(holdsDir(runtime.store), "s1.yaml"))).toBe(true);
-      const presented = (await runtime.store.listRecords()).find((r) => r.step === "steer-presented");
+      expect(fs.existsSync(path.join(holdsDir(runtime.store), "s1.yaml"))).toBe(
+        true,
+      );
+      const presented = (await runtime.store.listRecords()).find(
+        (r) => r.step === "steer-presented",
+      );
       expect(presented?.ok).toBe(false);
       expect(presented?.cause).toContain('"s1"');
       expect(
-        (await runtime.store.listRecords()).some((r) => r.step === "steer-unanswered")
+        (await runtime.store.listRecords()).some(
+          (r) => r.step === "steer-unanswered",
+        ),
       ).toBe(false);
 
       // Second unanswered boundary: re-presented again, then the hold expires.
@@ -590,38 +725,59 @@ describe("mid-run steer holds", () => {
       harness.script(unchanged);
       const second = await runBoundary(runtime, { relaunch: false });
       expect(second.decision).toBe("continue");
-      expect(fs.existsSync(path.join(runtime.store.goalDir, "mailbox/inbox/s1.md"))).toBe(true);
-      expect(fs.existsSync(path.join(holdsDir(runtime.store), "s1.yaml"))).toBe(false);
+      expect(
+        fs.existsSync(path.join(runtime.store.goalDir, "mailbox/inbox/s1.md")),
+      ).toBe(true);
+      expect(fs.existsSync(path.join(holdsDir(runtime.store), "s1.yaml"))).toBe(
+        false,
+      );
       expect(await readHolds(runtime.store)).toEqual([]);
-      const expired = (await runtime.store.listRecords()).find((r) => r.step === "steer-unanswered");
+      const expired = (await runtime.store.listRecords()).find(
+        (r) => r.step === "steer-unanswered",
+      );
       expect(expired?.ok).toBe(false);
       expect(expired?.cause).toContain('"s1"');
       expect(expired?.outcome?.concerns[0]?.calibration).toBe("architect");
       expect(expired?.outcome?.concerns[0]?.text).toContain("s1");
-      expect(expired?.outcome?.concerns[0]?.evidence).toBe("mailbox/inbox/s1.md");
+      expect(expired?.outcome?.concerns[0]?.evidence).toBe(
+        "mailbox/inbox/s1.md",
+      );
 
       // Third boundary: the architect finally answers the still-pending steer.
       harness.script((req, ctx) => {
-        expect(req.prompt).toContain("- s1 (mailbox/inbox/s1.md): Hold alpha until I answer.");
+        expect(req.prompt).toContain(
+          "- s1 (mailbox/inbox/s1.md): Hold alpha until I answer.",
+        );
         ctx.writeOutcome(
           outcome({
             summary: "answered it",
             decision: "continue",
             forward: ["steer s1: hold is released"],
-          })
+          }),
         );
         return fakeTurnResult(req);
       });
       harness.script(unchanged);
       const third = await runBoundary(runtime, { relaunch: false });
       expect(third.decision).toBe("continue");
-      expect(fs.existsSync(path.join(runtime.store.goalDir, "mailbox/processed/s1.md"))).toBe(true);
       expect(
-        fs.readFileSync(path.join(runtime.store.goalDir, "mailbox/outbox/steer-s1.md"), "utf8")
+        fs.existsSync(
+          path.join(runtime.store.goalDir, "mailbox/processed/s1.md"),
+        ),
+      ).toBe(true);
+      expect(
+        fs.readFileSync(
+          path.join(runtime.store.goalDir, "mailbox/outbox/steer-s1.md"),
+          "utf8",
+        ),
       ).toContain("hold is released");
       const records = await runtime.store.listRecords();
-      expect(records.filter((r) => r.step === "steer-presented")).toHaveLength(1);
-      expect(records.filter((r) => r.step === "steer-unanswered")).toHaveLength(1);
+      expect(records.filter((r) => r.step === "steer-presented")).toHaveLength(
+        1,
+      );
+      expect(records.filter((r) => r.step === "steer-unanswered")).toHaveLength(
+        1,
+      );
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -637,14 +793,20 @@ describe("mid-run steer holds", () => {
       // A naive writer may drop any file name; the id is the file name, quotes included.
       const inbox = path.join(runtime.store.goalDir, "mailbox/inbox");
       fs.mkdirSync(inbox, { recursive: true });
-      fs.writeFileSync(path.join(inbox, 'we"ird.md'), "Hold alpha until I answer.\n", "utf8");
+      fs.writeFileSync(
+        path.join(inbox, 'we"ird.md'),
+        "Hold alpha until I answer.\n",
+        "utf8",
+      );
       writeHold(runtime, 'we"ird', ["alpha"], true);
 
       const ignoreSteer: FakeTurnHandler = (req, ctx) => {
         expect(req.prompt).toContain(
-          '- we"ird (mailbox/inbox/we"ird.md): Hold alpha until I answer.'
+          '- we"ird (mailbox/inbox/we"ird.md): Hold alpha until I answer.',
         );
-        ctx.writeOutcome(outcome({ summary: "ignored the steer", decision: "continue" }));
+        ctx.writeOutcome(
+          outcome({ summary: "ignored the steer", decision: "continue" }),
+        );
         return fakeTurnResult(req);
       };
       const unchanged: FakeTurnHandler = (req, ctx) => {
@@ -656,7 +818,9 @@ describe("mid-run steer holds", () => {
       harness.script(unchanged);
       const first = await runBoundary(runtime, { relaunch: false });
       expect(first.decision).toBe("continue");
-      expect(fs.existsSync(path.join(holdsDir(runtime.store), 'we"ird.yaml'))).toBe(true);
+      expect(
+        fs.existsSync(path.join(holdsDir(runtime.store), 'we"ird.yaml')),
+      ).toBe(true);
 
       harness.script(ignoreSteer);
       harness.script(unchanged);
@@ -665,13 +829,23 @@ describe("mid-run steer holds", () => {
 
       // The quoted id round-trips, so the second boundary recognizes the first
       // presentation and expires the hold instead of presenting forever.
-      expect(fs.existsSync(path.join(runtime.store.goalDir, 'mailbox/inbox/we"ird.md'))).toBe(true);
-      expect(fs.existsSync(path.join(holdsDir(runtime.store), 'we"ird.yaml'))).toBe(false);
+      expect(
+        fs.existsSync(
+          path.join(runtime.store.goalDir, 'mailbox/inbox/we"ird.md'),
+        ),
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(holdsDir(runtime.store), 'we"ird.yaml')),
+      ).toBe(false);
       const records = await runtime.store.listRecords();
-      expect(records.filter((r) => r.step === "steer-presented")).toHaveLength(1);
+      expect(records.filter((r) => r.step === "steer-presented")).toHaveLength(
+        1,
+      );
       const expired = records.filter((r) => r.step === "steer-unanswered");
       expect(expired).toHaveLength(1);
-      expect(expired[0]?.outcome?.concerns[0]?.evidence).toBe('mailbox/inbox/we"ird.md');
+      expect(expired[0]?.outcome?.concerns[0]?.evidence).toBe(
+        'mailbox/inbox/we"ird.md',
+      );
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -687,14 +861,18 @@ describe("mid-run steer holds", () => {
       await postSteer(runtime.store, "s2", "Keep the API stable.");
 
       harness.script((req, ctx) => {
-        expect(req.prompt).toContain("- s1 (mailbox/inbox/s1.md): Keep the API stable.");
-        expect(req.prompt).toContain("- s2 (mailbox/inbox/s2.md): Keep the API stable.");
+        expect(req.prompt).toContain(
+          "- s1 (mailbox/inbox/s1.md): Keep the API stable.",
+        );
+        expect(req.prompt).toContain(
+          "- s2 (mailbox/inbox/s2.md): Keep the API stable.",
+        );
         ctx.writeOutcome(
           outcome({
             summary: "answered both steers",
             decision: "continue",
             forward: ["steer s1: names stay", "steer s2: internals only"],
-          })
+          }),
         );
         return fakeTurnResult(req);
       });
@@ -706,8 +884,16 @@ describe("mid-run steer holds", () => {
       const boundary = await runBoundary(runtime, { relaunch: false });
       expect(boundary.decision).toBe("continue");
       for (const id of ["s1", "s2"]) {
-        expect(fs.existsSync(path.join(runtime.store.goalDir, `mailbox/processed/${id}.md`))).toBe(true);
-        expect(fs.existsSync(path.join(runtime.store.goalDir, `mailbox/outbox/steer-${id}.md`))).toBe(true);
+        expect(
+          fs.existsSync(
+            path.join(runtime.store.goalDir, `mailbox/processed/${id}.md`),
+          ),
+        ).toBe(true);
+        expect(
+          fs.existsSync(
+            path.join(runtime.store.goalDir, `mailbox/outbox/steer-${id}.md`),
+          ),
+        ).toBe(true);
       }
     } finally {
       cleanupFlowRepo(repo);

@@ -37,7 +37,7 @@ export function createAcpxStub(opts: AcpxStubOptions = {}): AcpxStub {
       cachedReadTokens: 0,
       outputTokens: 4,
       thoughtTokens: 0,
-    }
+    },
   );
   // The live agy turn reported exactly this shape and no cost.
   const agyUsage = JSON.stringify(
@@ -48,7 +48,7 @@ export function createAcpxStub(opts: AcpxStubOptions = {}): AcpxStub {
       cachedWriteTokens: 0,
       outputTokens: 79,
       thoughtTokens: 77,
-    }
+    },
   );
 
   const script = `#!/usr/bin/env bun
@@ -164,7 +164,8 @@ if (agent === "codex") {
   return {
     binary,
     cleanup: () => fs.rmSync(dir, { recursive: true, force: true }),
-    closeSession: (name: string) => fs.rmSync(path.join(stateDir, `session-${name}`), { force: true }),
+    closeSession: (name: string) =>
+      fs.rmSync(path.join(stateDir, `session-${name}`), { force: true }),
     invocations: () =>
       fs
         .readFileSync(logPath, "utf8")

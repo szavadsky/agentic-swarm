@@ -1,13 +1,16 @@
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import { createFolderStore } from "../../src/kernel/store.js";
-import { loadConfigs, resolveGoalPaths } from "../../src/kernel/config.js";
-import { preflight, type ModelCatalog } from "../../src/kernel/preflight.js";
-import { FakeHarness } from "../../src/harness/fake/index.js";
+import {
+  createRealModelCatalog,
+  resolveHarnessBinaries,
+} from "../../src/cli/harnesses.js";
 import { AcpxHarness } from "../../src/harness/acpx/harness.js";
+import { FakeHarness } from "../../src/harness/fake/index.js";
 import type { Harness } from "../../src/harness/types.js";
-import { createRealModelCatalog, resolveHarnessBinaries } from "../../src/cli/harnesses.js";
+import { loadConfigs, resolveGoalPaths } from "../../src/kernel/config.js";
+import { type ModelCatalog, preflight } from "../../src/kernel/preflight.js";
+import { createFolderStore } from "../../src/kernel/store.js";
 import { createTmpRepo } from "../helpers/tmp-repo.js";
 import { createAcpxStub } from "./acpx-stub.js";
 
@@ -44,15 +47,21 @@ describe("self-acpx run config", () => {
     try {
       repo.writeFile(
         ".factory/repo.yaml",
-        "baseBranch: main\nartifactRoot: .factory/artifacts\nsetup: []\ngates: []\n"
+        "baseBranch: main\nartifactRoot: .factory/artifacts\nsetup: []\ngates: []\n",
       );
       repo.commit("factory config");
       const runConfigPath = path.join(repo.dir, ".factory", "run-acpx.yaml");
       fs.writeFileSync(runConfigPath, RUN_CONFIG_TEXT, "utf8");
       const configs = loadConfigs(repo.dir, { runConfigPath });
       const base = path.basename(repo.dir);
-      configs.run.sessions.dir = path.join(path.dirname(repo.dir), `${base}-sessions`);
-      configs.run.worktreeRoot = path.join(path.dirname(repo.dir), `${base}-worktrees`);
+      configs.run.sessions.dir = path.join(
+        path.dirname(repo.dir),
+        `${base}-sessions`,
+      );
+      configs.run.worktreeRoot = path.join(
+        path.dirname(repo.dir),
+        `${base}-worktrees`,
+      );
 
       expect(configs.run.aliases.implementer).toMatchObject({
         harness: "pi",
@@ -68,17 +77,27 @@ describe("self-acpx run config", () => {
 
       const paths = resolveGoalPaths(configs, repo.dir, "self-acpx");
       fs.mkdirSync(paths.goalDir, { recursive: true });
-      fs.writeFileSync(path.join(paths.goalDir, "intent.md"), "# Goal\n", "utf8");
+      fs.writeFileSync(
+        path.join(paths.goalDir, "intent.md"),
+        "# Goal\n",
+        "utf8",
+      );
       const store = createFolderStore(paths.goalDir);
       await store.ensureLayout();
 
       const harnesses = new Map<string, Harness>([
-        ["opencode", new FakeHarness({ id: "opencode", caps: { effort: EFFORTS } })],
+        [
+          "opencode",
+          new FakeHarness({ id: "opencode", caps: { effort: EFFORTS } }),
+        ],
         ["omp", new FakeHarness({ id: "omp", caps: { effort: EFFORTS } })],
         ["pi", new AcpxHarness({ agent: "pi", binary: stub.binary })],
         ["codex", new AcpxHarness({ agent: "codex", binary: stub.binary })],
       ]);
-      const acpxCatalog = createRealModelCatalog({ pi: stub.binary, codex: stub.binary });
+      const acpxCatalog = createRealModelCatalog({
+        pi: stub.binary,
+        codex: stub.binary,
+      });
       const catalog: ModelCatalog = (harness, model) =>
         harness === "pi" || harness === "codex"
           ? acpxCatalog(harness, model)
@@ -89,7 +108,12 @@ describe("self-acpx run config", () => {
         paths,
         store,
         harnesses,
-        binaries: { opencode: stub.binary, omp: stub.binary, pi: stub.binary, codex: stub.binary },
+        binaries: {
+          opencode: stub.binary,
+          omp: stub.binary,
+          pi: stub.binary,
+          codex: stub.binary,
+        },
         catalog,
         baseGates: false,
       });
@@ -114,7 +138,7 @@ describe("self-acpx run config", () => {
     try {
       repo.writeFile(
         ".factory/repo.yaml",
-        "baseBranch: main\nartifactRoot: .factory/artifacts\nsetup: []\ngates: []\n"
+        "baseBranch: main\nartifactRoot: .factory/artifacts\nsetup: []\ngates: []\n",
       );
       repo.commit("factory config");
       const runConfigPath = path.join(repo.dir, ".factory", "run-agy.yaml");
@@ -122,37 +146,60 @@ describe("self-acpx run config", () => {
         runConfigPath,
         RUN_CONFIG_TEXT.replace(
           "  reviewer: { harness: codex, model: deepseek-v4.1-flash, effort: high }",
-          "  reviewer: { harness: agy, model: gemini-3.8-flash-high }"
+          "  reviewer: { harness: agy, model: gemini-3.8-flash-high }",
         ),
-        "utf8"
+        "utf8",
       );
       const configs = loadConfigs(repo.dir, { runConfigPath });
       const base = path.basename(repo.dir);
-      configs.run.sessions.dir = path.join(path.dirname(repo.dir), `${base}-sessions`);
-      configs.run.worktreeRoot = path.join(path.dirname(repo.dir), `${base}-worktrees`);
+      configs.run.sessions.dir = path.join(
+        path.dirname(repo.dir),
+        `${base}-sessions`,
+      );
+      configs.run.worktreeRoot = path.join(
+        path.dirname(repo.dir),
+        `${base}-worktrees`,
+      );
 
       const paths = resolveGoalPaths(configs, repo.dir, "self-agy");
       fs.mkdirSync(paths.goalDir, { recursive: true });
-      fs.writeFileSync(path.join(paths.goalDir, "intent.md"), "# Goal\n", "utf8");
+      fs.writeFileSync(
+        path.join(paths.goalDir, "intent.md"),
+        "# Goal\n",
+        "utf8",
+      );
       const store = createFolderStore(paths.goalDir);
       await store.ensureLayout();
 
       const harnesses = new Map<string, Harness>([
-        ["opencode", new FakeHarness({ id: "opencode", caps: { effort: EFFORTS } })],
+        [
+          "opencode",
+          new FakeHarness({ id: "opencode", caps: { effort: EFFORTS } }),
+        ],
         ["omp", new FakeHarness({ id: "omp", caps: { effort: EFFORTS } })],
         ["pi", new AcpxHarness({ agent: "pi", binary: stub.binary })],
         ["agy", new AcpxHarness({ agent: "agy", binary: stub.binary })],
       ]);
-      const acpxCatalog = createRealModelCatalog({ pi: stub.binary, agy: stub.binary });
+      const acpxCatalog = createRealModelCatalog({
+        pi: stub.binary,
+        agy: stub.binary,
+      });
       const catalog: ModelCatalog = (harness, model) =>
-        harness === "pi" || harness === "agy" ? acpxCatalog(harness, model) : Promise.resolve(true);
+        harness === "pi" || harness === "agy"
+          ? acpxCatalog(harness, model)
+          : Promise.resolve(true);
 
       const result = await preflight({
         configs,
         paths,
         store,
         harnesses,
-        binaries: { opencode: stub.binary, omp: stub.binary, pi: stub.binary, agy: stub.binary },
+        binaries: {
+          opencode: stub.binary,
+          omp: stub.binary,
+          pi: stub.binary,
+          agy: stub.binary,
+        },
         catalog,
         baseGates: false,
       });

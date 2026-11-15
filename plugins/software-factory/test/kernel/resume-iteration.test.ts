@@ -1,12 +1,12 @@
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 import { dispatch } from "../../src/cli/dispatch.js";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
+import { derive } from "../../src/kernel/derive.js";
 import { createDrainController } from "../../src/kernel/signals.js";
 import { createFolderStore } from "../../src/kernel/store.js";
-import { derive } from "../../src/kernel/derive.js";
+import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 
 const PLAN = `# Milestone 1 — files
 
@@ -48,7 +48,10 @@ function outcome(value: Record<string, unknown>) {
 
 function setupRepo(): { repo: TmpRepo; goalDir: string; taskDir: string } {
   const repo = createTmpRepo();
-  repo.writeFile(".factory/repo.yaml", "baseBranch: main\nartifactRoot: .factory/artifacts\nsetup: []\ngates: []\n");
+  repo.writeFile(
+    ".factory/repo.yaml",
+    "baseBranch: main\nartifactRoot: .factory/artifacts\nsetup: []\ngates: []\n",
+  );
   const base = path.basename(repo.dir);
   repo.writeFile(
     ".factory/run.yaml",
@@ -62,12 +65,16 @@ function setupRepo(): { repo: TmpRepo; goalDir: string; taskDir: string } {
       `worktreeRoot: ../${base}-wt`,
       `sessions: { dir: ../${base}-sessions, keepRuns: 2 }`,
       "",
-    ].join("\n")
+    ].join("\n"),
   );
   repo.commit("factory config");
   const goalDir = path.join(repo.dir, ".factory/artifacts/demo");
   fs.mkdirSync(path.join(goalDir, "tasks"), { recursive: true });
-  fs.writeFileSync(path.join(goalDir, "intent.md"), "# Goal\n\nCreate alpha then beta.\n", "utf8");
+  fs.writeFileSync(
+    path.join(goalDir, "intent.md"),
+    "# Goal\n\nCreate alpha then beta.\n",
+    "utf8",
+  );
   fs.writeFileSync(path.join(goalDir, "class.yaml"), "class: bigger\n", "utf8");
   return { repo, goalDir, taskDir: path.join(goalDir, "tasks") };
 }
@@ -99,22 +106,31 @@ describe("resume iteration — SIGINT mid-dispatch", () => {
       });
       first.script((req, ctx) => {
         controller.handleSignal("SIGINT");
-        ctx.writeOutcome(outcome({ summary: "alpha approved", verdict: "approve" }));
+        ctx.writeOutcome(
+          outcome({ summary: "alpha approved", verdict: "approve" }),
+        );
         return fakeTurnResult(req);
       });
 
-      const code1 = await dispatch(["run", "--repo", repo.dir, "--goal", "demo"], {
-        harnesses: { fake: first },
-        signals: controller,
-      });
+      const code1 = await dispatch(
+        ["run", "--repo", repo.dir, "--goal", "demo"],
+        {
+          harnesses: { fake: first },
+          signals: controller,
+        },
+      );
       expect(code1).toBe(130);
 
       const store1 = createFolderStore(goalDir);
-      const state1 = derive(await store1.listTasks(), await store1.listRecords());
+      const state1 = derive(
+        await store1.listTasks(),
+        await store1.listRecords(),
+      );
       expect(state1.tasks.alpha!.status).toBe("merged");
       expect(state1.tasks.beta!.status).toBe("ready");
       const architectIter1Before = (await store1.listRecords()).filter(
-        (r) => r.actor === "agent" && r.step === "architect" && r.iteration === 1
+        (r) =>
+          r.actor === "agent" && r.step === "architect" && r.iteration === 1,
       ).length;
       expect(architectIter1Before).toBe(1);
 
@@ -127,7 +143,9 @@ describe("resume iteration — SIGINT mid-dispatch", () => {
         return fakeTurnResult(req);
       });
       second.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "beta approved", verdict: "approve" }));
+        ctx.writeOutcome(
+          outcome({ summary: "beta approved", verdict: "approve" }),
+        );
         return fakeTurnResult(req);
       });
       second.script((req, ctx) => {
@@ -135,9 +153,12 @@ describe("resume iteration — SIGINT mid-dispatch", () => {
         return fakeTurnResult(req);
       });
 
-      const code2 = await dispatch(["run", "--repo", repo.dir, "--goal", "demo", "--iterations", "3"], {
-        harnesses: { fake: second },
-      });
+      const code2 = await dispatch(
+        ["run", "--repo", repo.dir, "--goal", "demo", "--iterations", "3"],
+        {
+          harnesses: { fake: second },
+        },
+      );
       expect(code2).toBe(0);
 
       const store2 = createFolderStore(goalDir);
@@ -147,7 +168,8 @@ describe("resume iteration — SIGINT mid-dispatch", () => {
       expect(state2.tasks.beta!.status).toBe("merged");
 
       const architectIter1After = records2.filter(
-        (r) => r.actor === "agent" && r.step === "architect" && r.iteration === 1
+        (r) =>
+          r.actor === "agent" && r.step === "architect" && r.iteration === 1,
       ).length;
       expect(architectIter1After).toBe(1);
       // beta's records land in iteration 1 (same iteration resumed).

@@ -11,8 +11,12 @@ import {
 
 describe("outcome delivery", () => {
   it("parses YAML and JSON with zod defaults", () => {
-    expect(parseOutcome("status: done\nsummary: landed\n").concerns).toEqual([]);
-    const json = parseOutcome('{"status":"blocked","summary":"missing key","forward":["ask owner"]}');
+    expect(parseOutcome("status: done\nsummary: landed\n").concerns).toEqual(
+      [],
+    );
+    const json = parseOutcome(
+      '{"status":"blocked","summary":"missing key","forward":["ask owner"]}',
+    );
     expect(json.status).toBe("blocked");
     expect(json.forward).toEqual(["ask owner"]);
   });
@@ -25,7 +29,10 @@ describe("outcome delivery", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "factory-outcome-"));
     const file = path.join(dir, "outcome.yaml");
     fs.writeFileSync(file, "status: done\nsummary: file\n");
-    const delivered = readDeliveredOutcome(file, "```yaml\nstatus: done\nsummary: message\n```");
+    const delivered = readDeliveredOutcome(
+      file,
+      "```yaml\nstatus: done\nsummary: message\n```",
+    );
     expect(delivered?.source).toBe("file");
     expect(delivered?.outcome.summary).toBe("file");
     fs.rmSync(dir, { recursive: true, force: true });
@@ -46,6 +53,11 @@ describe("outcome delivery", () => {
     const done = parseOutcome("status: done\nsummary: x\n");
     expect(validateExpectation(done, "architect")).toHaveLength(1);
     expect(validateExpectation(done, "review")).toHaveLength(1);
-    expect(validateExpectation(parseOutcome("status: failed\nsummary: x\n"), "review")).toEqual([]);
+    expect(
+      validateExpectation(
+        parseOutcome("status: failed\nsummary: x\n"),
+        "review",
+      ),
+    ).toEqual([]);
   });
 });

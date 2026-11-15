@@ -1,10 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import fs from "node:fs";
-import path from "node:path";
 import os from "node:os";
-import { Repo } from "../../src/core/git/repo.js";
+import path from "node:path";
 import { commitAll, isAncestor } from "../../src/core/git/commit.js";
 import { git } from "../../src/core/git/exec.js";
+import { Repo } from "../../src/core/git/repo.js";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 
 describe("Git commit and revision inspection (§7)", () => {
@@ -53,7 +53,11 @@ describe("Git commit and revision inspection (§7)", () => {
     const head1 = (await git(tmpRepo.dir, ["rev-parse", "HEAD"])).stdout.trim();
     expect(head1.length).toBe(40);
 
-    fs.writeFileSync(path.join(tmpRepo.dir, "ancestor-test.txt"), "data\n", "utf8");
+    fs.writeFileSync(
+      path.join(tmpRepo.dir, "ancestor-test.txt"),
+      "data\n",
+      "utf8",
+    );
     const sha2 = (await commitAll(repo, tmpRepo.dir, "feat: next commit"))!;
 
     expect(await isAncestor(tmpRepo.dir, head1, sha2)).toBe(true);

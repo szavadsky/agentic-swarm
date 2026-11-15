@@ -1,5 +1,7 @@
 import { DEFAULT_FLOWS, reduceTask } from "./derive-task.js";
+
 export { classifyStop, type StopClassification } from "./derive-task.js";
+
 import type {
   FlowDefinition,
   GoalDecision,
@@ -27,7 +29,10 @@ declare module "./types.js" {
 export const FRONT_STOP_STEP = "front-stop";
 
 /** Dependency edges are satisfied by merged work and by landed spike findings. */
-function depsSatisfied(task: TaskFile, statuses: ReadonlyMap<string, TaskStatus>): boolean {
+function depsSatisfied(
+  task: TaskFile,
+  statuses: ReadonlyMap<string, TaskStatus>,
+): boolean {
   return task.deps.every((dep) => {
     const status = statuses.get(dep);
     return status === "merged" || status === "finished";
@@ -41,8 +46,10 @@ function bySeq(a: StepRecord, b: StepRecord): number {
 /** The goal decision a completed record carries: the architect's, or the front path's stop. */
 function recordedDecision(rec: StepRecord): GoalDecision | undefined {
   if (!rec.endedAt || !rec.outcome?.decision) return undefined;
-  if (rec.actor === "agent" && rec.step === "architect") return rec.outcome.decision;
-  if (rec.actor === "script" && rec.step === FRONT_STOP_STEP) return rec.outcome.decision;
+  if (rec.actor === "agent" && rec.step === "architect")
+    return rec.outcome.decision;
+  if (rec.actor === "script" && rec.step === FRONT_STOP_STEP)
+    return rec.outcome.decision;
   return undefined;
 }
 
@@ -58,7 +65,7 @@ function recordedDecision(rec: StepRecord): GoalDecision | undefined {
 export function derive(
   tasks: TaskFile[],
   records: StepRecord[],
-  flows: Record<string, FlowDefinition> = DEFAULT_FLOWS
+  flows: Record<string, FlowDefinition> = DEFAULT_FLOWS,
 ): State {
   const sorted = [...records].sort(bySeq);
   let iteration = 0;
@@ -67,7 +74,12 @@ export function derive(
     iteration = Math.max(iteration, rec.iteration);
     const decision = recordedDecision(rec);
     if (decision) {
-      goal = decision === "done" ? "done" : decision === "blocked" ? "blocked" : "active";
+      goal =
+        decision === "done"
+          ? "done"
+          : decision === "blocked"
+            ? "blocked"
+            : "active";
     }
   }
   const currentIteration = iteration;
@@ -76,17 +88,23 @@ export function derive(
       rec.iteration === currentIteration &&
       rec.actor === "agent" &&
       rec.step === "architect" &&
-      rec.outcome?.decision !== undefined
+      rec.outcome?.decision !== undefined,
   );
   const hasCrashThisIteration = sorted.some(
-    (rec) => rec.iteration === currentIteration && rec.stop?.kind === "infra" && rec.stop?.cause === "crash"
+    (rec) =>
+      rec.iteration === currentIteration &&
+      rec.stop?.kind === "infra" &&
+      rec.stop?.cause === "crash",
   );
 
   const statuses = new Map<string, TaskStatus>();
   const reductions = new Map<string, ReturnType<typeof reduceTask>>();
   for (const task of tasks) {
     const recs = sorted.filter((r) => r.slug === task.slug);
-    const flow = flows[task.flow] ?? DEFAULT_FLOWS[task.flow] ?? DEFAULT_FLOWS["implement-review"]!;
+    const flow =
+      flows[task.flow] ??
+      DEFAULT_FLOWS[task.flow] ??
+      DEFAULT_FLOWS["implement-review"]!;
     const reduction = reduceTask(task, recs, flow);
     reductions.set(task.slug, reduction);
     // Terminal facts are order-independent; readiness is resolved below.
@@ -98,7 +116,8 @@ export function derive(
     const reduction = reductions.get(task.slug)!;
     const terminal = reduction.terminal;
     const status: TaskStatus =
-      statuses.get(task.slug) ?? (depsSatisfied(task, statuses) ? "ready" : "pending");
+      statuses.get(task.slug) ??
+      (depsSatisfied(task, statuses) ? "ready" : "pending");
     statuses.set(task.slug, status);
     taskStates[task.slug] = {
       status,

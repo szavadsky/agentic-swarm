@@ -7,7 +7,10 @@ export interface Finding {
 }
 
 /** Renders every violation as one report, so an operator repairs them in one pass. */
-export function formatFindings(title: string, findings: readonly Finding[]): string {
+export function formatFindings(
+  title: string,
+  findings: readonly Finding[],
+): string {
   const lines = [title];
   for (const finding of findings) {
     lines.push(`  ${finding.file}: ${finding.key}: ${finding.message}`);

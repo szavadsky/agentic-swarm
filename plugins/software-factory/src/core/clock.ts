@@ -30,7 +30,7 @@ export function detectSuspend(
   startWall: number,
   startMono: number,
   clock: Clock = getClock(),
-  thresholdMs: number = DEFAULT_SUSPEND_THRESHOLD_MS
+  thresholdMs: number = DEFAULT_SUSPEND_THRESHOLD_MS,
 ): { suspendDetected: boolean; gapMs: number } {
   const wallDelta = clock.now() - startWall;
   const monoDelta = clock.monotonic() - startMono;
@@ -49,23 +49,26 @@ export function detectSuspend(
 export function createActiveTimer(
   timeoutMs: number,
   onTimeout: () => void,
-  clock: Clock = getClock()
+  clock: Clock = getClock(),
 ): { cancel: () => void } {
   const startMono = clock.monotonic();
-  let timer: any = undefined;
+  let timer: any;
   let cancelled = false;
 
   const schedule = (remainingMs: number) => {
-    timer = setTimeout(() => {
-      if (cancelled) return;
-      const elapsedActive = clock.monotonic() - startMono;
-      if (elapsedActive >= timeoutMs) {
-        onTimeout();
-      } else {
-        // Suspend or early wake: reschedule for remaining active time
-        schedule(timeoutMs - elapsedActive);
-      }
-    }, Math.max(0, remainingMs));
+    timer = setTimeout(
+      () => {
+        if (cancelled) return;
+        const elapsedActive = clock.monotonic() - startMono;
+        if (elapsedActive >= timeoutMs) {
+          onTimeout();
+        } else {
+          // Suspend or early wake: reschedule for remaining active time
+          schedule(timeoutMs - elapsedActive);
+        }
+      },
+      Math.max(0, remainingMs),
+    );
   };
 
   schedule(timeoutMs);

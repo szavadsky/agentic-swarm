@@ -47,11 +47,18 @@ export async function hasConflictMarkers(wt: string): Promise<string[]> {
     allowFail: true,
   });
   if (mhRes.code === 0) {
-    const diffRes = await git(wt, ["diff", "--name-only", "HEAD", "MERGE_HEAD"], {
-      allowFail: true,
-    });
+    const diffRes = await git(
+      wt,
+      ["diff", "--name-only", "HEAD", "MERGE_HEAD"],
+      {
+        allowFail: true,
+      },
+    );
     if (diffRes.code === 0) {
-      for (const f of diffRes.stdout.split("\n").map((s) => s.trim()).filter(Boolean)) {
+      for (const f of diffRes.stdout
+        .split("\n")
+        .map((s) => s.trim())
+        .filter(Boolean)) {
         conflictedFiles.add(f);
       }
     }
@@ -59,7 +66,7 @@ export async function hasConflictMarkers(wt: string): Promise<string[]> {
 
   const entries = await porcelainStatus(wt);
   const stillUnmerged = new Set(
-    entries.filter((e) => UNMERGED_CODES.has(e.code)).map((e) => e.path)
+    entries.filter((e) => UNMERGED_CODES.has(e.code)).map((e) => e.path),
   );
 
   // Scan only that candidate set for real marker pairs in the worktree files.

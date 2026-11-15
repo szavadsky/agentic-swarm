@@ -1,11 +1,26 @@
 import fs from "node:fs";
 import path from "node:path";
-import { formatFindings, type Finding } from "./findings.js";
-import { checkBase, resolveBaseCommit, type BaselineResult } from "./baseline.js";
-import { configFilePaths } from "./config.js";
-import { checkAlias, checkScouts, type AliasContext, type ModelCatalog } from "./preflight-aliases.js";
-import type { AliasConfig, ArtifactStore, ConfigBundle, GoalPaths, ProcessConfig } from "./types.js";
 import type { Harness } from "../harness/types.js";
+import {
+  type BaselineResult,
+  checkBase,
+  resolveBaseCommit,
+} from "./baseline.js";
+import { configFilePaths } from "./config.js";
+import { type Finding, formatFindings } from "./findings.js";
+import {
+  type AliasContext,
+  checkAlias,
+  checkScouts,
+  type ModelCatalog,
+} from "./preflight-aliases.js";
+import type {
+  AliasConfig,
+  ArtifactStore,
+  ConfigBundle,
+  GoalPaths,
+  ProcessConfig,
+} from "./types.js";
 
 export type { ModelCatalog } from "./preflight-aliases.js";
 
@@ -31,7 +46,10 @@ export class PreflightError extends Error {
   readonly report: string;
 
   constructor(findings: Finding[]) {
-    const report = formatFindings(`pre-flight refused this launch (${findings.length} violation(s)):`, findings);
+    const report = formatFindings(
+      `pre-flight refused this launch (${findings.length} violation(s)):`,
+      findings,
+    );
     super(report);
     this.name = "PreflightError";
     this.findings = findings;
@@ -50,7 +68,7 @@ function roleAlias(process: ProcessConfig, role: string): string | undefined {
  */
 function escalationFindings(
   aliases: Record<string, AliasConfig>,
-  file: string
+  file: string,
 ): Finding[] {
   const findings: Finding[] = [];
   for (const [name, alias] of Object.entries(aliases)) {
@@ -94,7 +112,8 @@ function requiredRoles(process: ProcessConfig): Set<string> {
   const roles = new Set(["architect", "pm"]);
   for (const flow of Object.values(process.flows)) {
     for (const step of flow.steps) roles.add(step.role);
-    if (flow.followUp?.mode === "different-model" && flow.followUp.role) roles.add(flow.followUp.role);
+    if (flow.followUp?.mode === "different-model" && flow.followUp.role)
+      roles.add(flow.followUp.role);
   }
   return roles;
 }
@@ -140,12 +159,20 @@ function rootFinding(
   key: string,
   dir: string,
   repoRoot: string,
-  problem?: string
+  problem?: string,
 ): void {
   if (inside(dir, repoRoot)) {
-    findings.push({ file, key, message: `${key} "${dir}" must be outside the repository (${repoRoot})` });
+    findings.push({
+      file,
+      key,
+      message: `${key} "${dir}" must be outside the repository (${repoRoot})`,
+    });
   } else if (problem) {
-    findings.push({ file, key, message: `${key} "${dir}" is not writable: ${problem}` });
+    findings.push({
+      file,
+      key,
+      message: `${key} "${dir}" is not writable: ${problem}`,
+    });
   }
 }
 
@@ -154,7 +181,9 @@ function rootFinding(
  * roots and the base branch — collecting every violation into one report. A red
  * base is recorded and warned once; it never aborts.
  */
-export async function preflight(input: PreflightInput): Promise<PreflightResult> {
+export async function preflight(
+  input: PreflightInput,
+): Promise<PreflightResult> {
   const { configs, paths, store, harnesses } = input;
   const files = configs.files ?? configFilePaths(paths.repoRoot);
   const findings: Finding[] = [];
@@ -163,7 +192,9 @@ export async function preflight(input: PreflightInput): Promise<PreflightResult>
   for (const role of required) {
     if (!configs.process.roles[role]) {
       findings.push({
-        file: fs.existsSync(files.processOverride) ? files.processOverride : files.processDefault,
+        file: fs.existsSync(files.processOverride)
+          ? files.processOverride
+          : files.processDefault,
         key: `roles.${role}`,
         message: `required role "${role}" is not configured`,
       });
@@ -184,7 +215,8 @@ export async function preflight(input: PreflightInput): Promise<PreflightResult>
   // A task tier names a run-config alias directly; an escalated task that names
   // one the run config lacks would fail only mid-turn, after the plan spent.
   for (const task of await store.listTasks()) {
-    if (!task.tier || task.tier === "default" || configs.run.aliases[task.tier]) continue;
+    if (!task.tier || task.tier === "default" || configs.run.aliases[task.tier])
+      continue;
     findings.push({
       file: path.join(store.tasksDir, `${task.slug}.md`),
       key: "tier",
@@ -193,7 +225,8 @@ export async function preflight(input: PreflightInput): Promise<PreflightResult>
   }
 
   const usedHarnesses = new Set<string>();
-  for (const alias of Object.values(configs.run.aliases)) usedHarnesses.add(alias.harness);
+  for (const alias of Object.values(configs.run.aliases))
+    usedHarnesses.add(alias.harness);
   const architectAlias = roleAlias(configs.process, "architect");
   if (configs.run.scouts && architectAlias) {
     const architect = configs.run.aliases[architectAlias];
@@ -228,18 +261,44 @@ export async function preflight(input: PreflightInput): Promise<PreflightResult>
   for (const [name, alias] of Object.entries(configs.run.aliases)) {
     await checkAlias(ctx, name, alias, resolvedAliases);
   }
-  await checkScouts(ctx, configs, roleAlias(configs.process, "architect"), resolvedAliases);
+  await checkScouts(
+    ctx,
+    configs,
+    roleAlias(configs.process, "architect"),
+    resolvedAliases,
+  );
 
   const worktreeFile =
-    !configs.run.worktreeRoot && configs.repo.worktreeRoot ? files.repo : files.run;
+    !configs.run.worktreeRoot && configs.repo.worktreeRoot
+      ? files.repo
+      : files.run;
   const worktreeProblem = inside(paths.worktreeRoot, paths.repoRoot)
     ? undefined
     : await writable(paths.worktreeRoot);
-  rootFinding(findings, worktreeFile, "worktreeRoot", paths.worktreeRoot, paths.repoRoot, worktreeProblem);
-  const sessionsProblem = inside(paths.sessionsDir, paths.repoRoot) ? undefined : await writable(paths.sessionsDir);
-  rootFinding(findings, files.run, "sessions.dir", paths.sessionsDir, paths.repoRoot, sessionsProblem);
+  rootFinding(
+    findings,
+    worktreeFile,
+    "worktreeRoot",
+    paths.worktreeRoot,
+    paths.repoRoot,
+    worktreeProblem,
+  );
+  const sessionsProblem = inside(paths.sessionsDir, paths.repoRoot)
+    ? undefined
+    : await writable(paths.sessionsDir);
+  rootFinding(
+    findings,
+    files.run,
+    "sessions.dir",
+    paths.sessionsDir,
+    paths.repoRoot,
+    sessionsProblem,
+  );
 
-  const baseCommit = await resolveBaseCommit(paths.repoRoot, configs.repo.baseBranch);
+  const baseCommit = await resolveBaseCommit(
+    paths.repoRoot,
+    configs.repo.baseBranch,
+  );
   if (!baseCommit) {
     findings.push({
       file: files.repo,
@@ -249,13 +308,23 @@ export async function preflight(input: PreflightInput): Promise<PreflightResult>
   }
 
   const unique = new Map<string, Finding>();
-  for (const finding of findings) unique.set(`${finding.file}\u0000${finding.key}\u0000${finding.message}`, finding);
+  for (const finding of findings)
+    unique.set(
+      `${finding.file}\u0000${finding.key}\u0000${finding.message}`,
+      finding,
+    );
   const all = [...unique.values()];
   if (all.length > 0) throw new PreflightError(all);
 
   const result: PreflightResult = { aliases: resolvedAliases };
   if (baseCommit && input.baseGates !== false) {
-    result.base = await checkBase(configs, store, paths.repoRoot, configs.repo.baseBranch, baseCommit);
+    result.base = await checkBase(
+      configs,
+      store,
+      paths.repoRoot,
+      configs.repo.baseBranch,
+      baseCommit,
+    );
   }
   for (const [name, effort] of Object.entries(resolvedAliases)) {
     if (name === "scouts") {

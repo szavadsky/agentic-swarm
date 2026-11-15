@@ -1,11 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import type { TmpRepo } from "../helpers/tmp-repo.js";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
 import { ensureTaskWorktree } from "../../src/kernel/worktree.js";
+import type { TmpRepo } from "../helpers/tmp-repo.js";
 import { task } from "./helpers.js";
 import {
   cleanupFlowRepo,
@@ -21,7 +21,13 @@ function head(repo: TmpRepo, dir: string): string {
 }
 
 /** An integration commit, as the merge queue leaves one after a task lands. */
-function commitIn(repo: TmpRepo, dir: string, file: string, content: string, message: string): string {
+function commitIn(
+  repo: TmpRepo,
+  dir: string,
+  file: string,
+  content: string,
+  message: string,
+): string {
   fs.mkdirSync(path.dirname(path.join(dir, file)), { recursive: true });
   fs.writeFileSync(path.join(dir, file), content, "utf8");
   repo.git(["add", "-A"], { cwd: dir });
@@ -37,7 +43,9 @@ function parkAlpha(harness: FakeHarness, file: string, content: string): void {
     return fakeTurnResult(req);
   });
   harness.script((req, ctx) => {
-    ctx.writeOutcome(outcome({ summary: "alpha is not acceptable", verdict: "reject" }));
+    ctx.writeOutcome(
+      outcome({ summary: "alpha is not acceptable", verdict: "reject" }),
+    );
     return fakeTurnResult(req);
   });
 }
@@ -54,9 +62,17 @@ describe("parked continuation syncs to the integration head", () => {
       const alphaStart = head(repo, checkout);
       await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
       await runDispatch(runtime, { iteration: 1 });
-      const alphaTip = repo.git(["rev-parse", "factory-task/demo/alpha"]).stdout.trim();
+      const alphaTip = repo
+        .git(["rev-parse", "factory-task/demo/alpha"])
+        .stdout.trim();
 
-      const integrationSha = commitIn(repo, checkout, "merged-since.txt", "later\n", "factory: merge later task");
+      const integrationSha = commitIn(
+        repo,
+        checkout,
+        "merged-since.txt",
+        "later\n",
+        "factory: merge later task",
+      );
 
       let laterVisible = false;
       let alphaVisible = false;
@@ -66,7 +82,9 @@ describe("parked continuation syncs to the integration head", () => {
         laterVisible = fs.existsSync(path.join(req.cwd!, "merged-since.txt"));
         alphaVisible = fs.existsSync(path.join(req.cwd!, "alpha.txt"));
         carriedDiff = repo
-          .git(["diff", "--name-only", `${integrationSha}..HEAD`], { cwd: req.cwd! })
+          .git(["diff", "--name-only", `${integrationSha}..HEAD`], {
+            cwd: req.cwd!,
+          })
           .stdout.split("\n")
           .map((p) => p.trim())
           .filter(Boolean);
@@ -76,19 +94,31 @@ describe("parked continuation syncs to the integration head", () => {
       });
       harness.script((req, ctx) => {
         reviewerSawHead = req.prompt.includes(`${integrationSha}..`);
-        ctx.writeOutcome(outcome({ summary: "beta approved", verdict: "approve" }));
+        ctx.writeOutcome(
+          outcome({ summary: "beta approved", verdict: "approve" }),
+        );
         return fakeTurnResult(req);
       });
 
-      await writeTask(runtime, task("beta", { base: "alpha", scope: ["beta.txt"] }));
+      await writeTask(
+        runtime,
+        task("beta", { base: "alpha", scope: ["beta.txt"] }),
+      );
       const result = await runDispatch(runtime, { iteration: 2 });
       expect(result.reason).toBe("boundary");
 
       const records = await runtime.store.listRecords();
-      const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
       const firstAgent = (slug: string) =>
         records
-          .filter((r) => r.slug === slug && r.step === "implement" && r.actor === "agent")
+          .filter(
+            (r) =>
+              r.slug === slug && r.step === "implement" && r.actor === "agent",
+          )
           .sort((a, b) => a.seq - b.seq)[0];
 
       expect(state.tasks.beta!.status).toBe("merged");
@@ -100,9 +130,15 @@ describe("parked continuation syncs to the integration head", () => {
       // A task without `base` still starts at the integration head of its dispatch.
       expect(firstAgent("alpha")?.base).toBe(alphaStart);
       // The parked branch is never rewritten, only the continuation branch moves.
-      expect(repo.git(["rev-parse", "factory-task/demo/alpha"]).stdout.trim()).toBe(alphaTip);
-      expect(repo.git(["show", "factory/demo:merged-since.txt"]).stdout.trim()).toBe("later");
-      expect(repo.git(["show", "factory/demo:beta.txt"]).stdout.trim()).toBe("beta");
+      expect(
+        repo.git(["rev-parse", "factory-task/demo/alpha"]).stdout.trim(),
+      ).toBe(alphaTip);
+      expect(
+        repo.git(["show", "factory/demo:merged-since.txt"]).stdout.trim(),
+      ).toBe("later");
+      expect(repo.git(["show", "factory/demo:beta.txt"]).stdout.trim()).toBe(
+        "beta",
+      );
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -111,17 +147,31 @@ describe("parked continuation syncs to the integration head", () => {
   it("does not resync a continuation worktree that already exists", async () => {
     const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
     try {
-      const runtime = await makeRuntime(repo, goal, { fake: new FakeHarness({ id: "fake" }) });
+      const runtime = await makeRuntime(repo, goal, {
+        fake: new FakeHarness({ id: "fake" }),
+      });
       const checkout = goalCheckout(repo, goal);
       repo.git(["branch", "factory-task/demo/alpha", head(repo, checkout)]);
 
-      const first = await ensureTaskWorktree(runtime, task("beta", { base: "alpha", scope: ["beta.txt"] }));
+      const first = await ensureTaskWorktree(
+        runtime,
+        task("beta", { base: "alpha", scope: ["beta.txt"] }),
+      );
       expect(first.created).toBe(true);
       expect(first.error).toBeUndefined();
       const synced = head(repo, first.path);
 
-      const laterSha = commitIn(repo, checkout, "after.txt", "after\n", "factory: merge after the worktree");
-      const second = await ensureTaskWorktree(runtime, task("beta", { base: "alpha", scope: ["beta.txt"] }));
+      const laterSha = commitIn(
+        repo,
+        checkout,
+        "after.txt",
+        "after\n",
+        "factory: merge after the worktree",
+      );
+      const second = await ensureTaskWorktree(
+        runtime,
+        task("beta", { base: "alpha", scope: ["beta.txt"] }),
+      );
       expect(second.created).toBe(false);
       // ensureTaskWorktree never rewrites an existing worktree; the advance to
       // the current integration head happens at the turn seam (runStep), only
@@ -144,28 +194,58 @@ describe("parked continuation syncs to the integration head", () => {
       const checkout = goalCheckout(repo, goal);
       await writeTask(runtime, task("alpha", { scope: ["clash.txt"] }));
       await runDispatch(runtime, { iteration: 1 });
-      const alphaTip = repo.git(["rev-parse", "factory-task/demo/alpha"]).stdout.trim();
+      const alphaTip = repo
+        .git(["rev-parse", "factory-task/demo/alpha"])
+        .stdout.trim();
 
-      const integrationSha = commitIn(repo, checkout, "clash.txt", "integration\n", "factory: merge clashing task");
+      const integrationSha = commitIn(
+        repo,
+        checkout,
+        "clash.txt",
+        "integration\n",
+        "factory: merge clashing task",
+      );
 
-      await writeTask(runtime, task("beta", { base: "alpha", scope: ["beta.txt"] }));
+      await writeTask(
+        runtime,
+        task("beta", { base: "alpha", scope: ["beta.txt"] }),
+      );
       await runDispatch(runtime, { iteration: 2 });
 
       const records = await runtime.store.listRecords();
-      const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
       expect(state.tasks.beta!.status).toBe("parked");
       expect(state.tasks.beta!.cause).toContain("base-conflict: clash.txt");
       // The sync fails before the implementer turn can start.
-      expect(records.filter((r) => r.slug === "beta" && r.actor === "agent")).toHaveLength(0);
-
-      const betaWt = path.join(runtime.paths.worktreeRoot, `${goal}-tasks`, "beta");
-      expect(repo.git(["status", "--porcelain"], { cwd: betaWt }).stdout).toBe("");
       expect(
-        repo.git(["rev-parse", "--verify", "--quiet", "MERGE_HEAD"], { cwd: betaWt, allowFail: true }).code
+        records.filter((r) => r.slug === "beta" && r.actor === "agent"),
+      ).toHaveLength(0);
+
+      const betaWt = path.join(
+        runtime.paths.worktreeRoot,
+        `${goal}-tasks`,
+        "beta",
+      );
+      expect(repo.git(["status", "--porcelain"], { cwd: betaWt }).stdout).toBe(
+        "",
+      );
+      expect(
+        repo.git(["rev-parse", "--verify", "--quiet", "MERGE_HEAD"], {
+          cwd: betaWt,
+          allowFail: true,
+        }).code,
       ).not.toBe(0);
       // The aborted sync leaves the continuation at the parked tip.
-      expect(fs.readFileSync(path.join(betaWt, "clash.txt"), "utf8")).toBe("alpha\n");
-      expect(repo.git(["rev-parse", "factory-task/demo/alpha"]).stdout.trim()).toBe(alphaTip);
+      expect(fs.readFileSync(path.join(betaWt, "clash.txt"), "utf8")).toBe(
+        "alpha\n",
+      );
+      expect(
+        repo.git(["rev-parse", "factory-task/demo/alpha"]).stdout.trim(),
+      ).toBe(alphaTip);
       expect(head(repo, checkout)).toBe(integrationSha);
     } finally {
       cleanupFlowRepo(repo);
@@ -190,14 +270,25 @@ describe("parked continuation syncs to the integration head", () => {
         return fakeTurnResult(req);
       });
       harness.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "beta needs changes", verdict: "changes" }));
+        ctx.writeOutcome(
+          outcome({ summary: "beta needs changes", verdict: "changes" }),
+        );
         return fakeTurnResult(req);
       });
-      await writeTask(runtime, task("beta", { base: "alpha", scope: ["beta.txt"] }));
+      await writeTask(
+        runtime,
+        task("beta", { base: "alpha", scope: ["beta.txt"] }),
+      );
       await runDispatch(runtime, { iteration: 2 });
 
       // The integration branch moves after beta's worktree was created.
-      commitIn(repo, checkout, "merged-since.txt", "later\n", "factory: merge later task");
+      commitIn(
+        repo,
+        checkout,
+        "merged-since.txt",
+        "later\n",
+        "factory: merge later task",
+      );
 
       let sawSince = false;
       harness.script((req, ctx) => {
@@ -207,14 +298,20 @@ describe("parked continuation syncs to the integration head", () => {
         return fakeTurnResult(req);
       });
       harness.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "beta approved", verdict: "approve" }));
+        ctx.writeOutcome(
+          outcome({ summary: "beta approved", verdict: "approve" }),
+        );
         return fakeTurnResult(req);
       });
       await runDispatch(runtime, { iteration: 3 });
 
       expect(sawSince).toBe(true);
       const records = await runtime.store.listRecords();
-      const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
       expect(state.tasks.beta!.status).toBe("merged");
     } finally {
       cleanupFlowRepo(repo);

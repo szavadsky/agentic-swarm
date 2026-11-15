@@ -20,7 +20,7 @@ export interface OpencodeSessionTokens {
  */
 export function usageFromSessionDelta(
   before: OpencodeSessionTokens | undefined,
-  after: OpencodeSessionTokens
+  after: OpencodeSessionTokens,
 ): Usage {
   const delta = (a: number | undefined, b: number | undefined) =>
     Math.max(0, (b ?? 0) - (a ?? 0));
@@ -38,7 +38,9 @@ export function usageFromSessionDelta(
  * unreadable, holds malformed JSON, or carries no `info.tokens`. Callers then
  * fall back to the step stream's usage.
  */
-export function readExportTokens(file: string): OpencodeSessionTokens | undefined {
+export function readExportTokens(
+  file: string,
+): OpencodeSessionTokens | undefined {
   try {
     const parsed = JSON.parse(fs.readFileSync(file, "utf8"));
     return parsed?.info?.tokens;

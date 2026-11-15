@@ -16,7 +16,9 @@ import {
 
 describe("KERNEL0 scenario 8 — drain", () => {
   it("stops dispatching at the iteration turn limit, lets in-flight work finish and writes the summary", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 2, turns: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: 2, turns: 1 },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       harness.script((req, ctx) => {
@@ -25,7 +27,9 @@ describe("KERNEL0 scenario 8 — drain", () => {
         return fakeTurnResult(req);
       });
       harness.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "a approved", verdict: "approve" }));
+        ctx.writeOutcome(
+          outcome({ summary: "a approved", verdict: "approve" }),
+        );
         return fakeTurnResult(req);
       });
 
@@ -40,13 +44,21 @@ describe("KERNEL0 scenario 8 — drain", () => {
       expect(harness.calls.length).toBe(2);
 
       const records = await runtime.store.listRecords();
-      const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
       expect(state.tasks.a!.status).toBe("merged");
       expect(state.tasks.a!.turns).toBe(2);
       expect(state.tasks.b!.turns).toBe(0);
       expect(state.tasks.c!.turns).toBe(0);
-      expect(records.filter((r) => r.slug === "b" && r.actor === "agent").length).toBe(0);
-      expect(records.filter((r) => r.slug === "c" && r.actor === "agent").length).toBe(0);
+      expect(
+        records.filter((r) => r.slug === "b" && r.actor === "agent").length,
+      ).toBe(0);
+      expect(
+        records.filter((r) => r.slug === "c" && r.actor === "agent").length,
+      ).toBe(0);
 
       await writeIterationSummary(runtime.store, {
         iteration: 1,
@@ -54,7 +66,11 @@ describe("KERNEL0 scenario 8 — drain", () => {
         records,
         status: "in-progress",
       });
-      expect(fs.existsSync(path.join(runtime.store.goalDir, "iterations/1/summary.md"))).toBe(true);
+      expect(
+        fs.existsSync(
+          path.join(runtime.store.goalDir, "iterations/1/summary.md"),
+        ),
+      ).toBe(true);
     } finally {
       cleanupFlowRepo(repo);
     }

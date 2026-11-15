@@ -56,7 +56,7 @@ export class KeyedMutex {
   }
   public async runExclusive<T>(
     key: string,
-    fn: () => Promise<T> | T
+    fn: () => Promise<T> | T,
   ): Promise<T> {
     let entry = this.mutexes.get(key);
     if (!entry) {

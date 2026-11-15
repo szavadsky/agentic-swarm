@@ -5,7 +5,7 @@ import type { ArtifactStore, Concern, Outcome, RecordStart } from "./types.js";
 export function scriptMeta(
   iteration: number,
   step: string,
-  opts: { slug?: string; round?: number } = {}
+  opts: { slug?: string; round?: number } = {},
 ): RecordStart {
   return {
     iteration,
@@ -25,12 +25,15 @@ export async function appendChecks(
   store: ArtifactStore,
   meta: { iteration: number; slug: string; round: number },
   checks: CheckResult[],
-  opts: { step?: string; preexisting?: ReadonlySet<string> } = {}
+  opts: { step?: string; preexisting?: ReadonlySet<string> } = {},
 ): Promise<void> {
-  await store.appendRecord(scriptMeta(meta.iteration, opts.step ?? "checks", meta), {
-    ok: newGateFailures(checks, opts.preexisting ?? new Set()).length === 0,
-    checks,
-  });
+  await store.appendRecord(
+    scriptMeta(meta.iteration, opts.step ?? "checks", meta),
+    {
+      ok: newGateFailures(checks, opts.preexisting ?? new Set()).length === 0,
+      checks,
+    },
+  );
 }
 
 /** Mechanical commit record: the resulting tree feeds no-progress fingerprints. */
@@ -38,9 +41,13 @@ export async function appendCommit(
   store: ArtifactStore,
   meta: { iteration: number; slug: string; round: number },
   commit: string,
-  tree: string
+  tree: string,
 ): Promise<void> {
-  await store.appendRecord(scriptMeta(meta.iteration, "commit", meta), { ok: true, commit, tree });
+  await store.appendRecord(scriptMeta(meta.iteration, "commit", meta), {
+    ok: true,
+    commit,
+    tree,
+  });
 }
 
 /** The last-round reviewer concerns, recorded as debt once the item merges. */
@@ -48,7 +55,7 @@ export async function appendDebt(
   store: ArtifactStore,
   meta: { iteration: number; slug: string; round: number },
   concerns: Concern[],
-  fallback: string
+  fallback: string,
 ): Promise<void> {
   // Concerns already marked debt live on the review record; only the rest need
   // converting, or the summary would report the same debt twice.
@@ -67,39 +74,54 @@ export async function appendDebt(
   if (debt.length === 0) return;
   await store.appendRecord(scriptMeta(meta.iteration, "debt", meta), {
     ok: true,
-    outcome: { status: "done", summary: "last-round review concerns recorded as debt", concerns: debt, forward: [] },
+    outcome: {
+      status: "done",
+      summary: "last-round review concerns recorded as debt",
+      concerns: debt,
+      forward: [],
+    },
   });
 }
 
 export async function appendPark(
   store: ArtifactStore,
   meta: { iteration: number; slug: string; round: number },
-  cause: string
+  cause: string,
 ): Promise<void> {
-  await store.appendRecord(scriptMeta(meta.iteration, "park", meta), { ok: true, cause });
+  await store.appendRecord(scriptMeta(meta.iteration, "park", meta), {
+    ok: true,
+    cause,
+  });
 }
 
 export async function appendFinish(
   store: ArtifactStore,
   meta: { iteration: number; slug: string; round: number },
-  commit?: string
+  commit?: string,
 ): Promise<void> {
-  await store.appendRecord(scriptMeta(meta.iteration, "finish", meta), { ok: true, commit });
+  await store.appendRecord(scriptMeta(meta.iteration, "finish", meta), {
+    ok: true,
+    commit,
+  });
 }
 
 /** A pending task the architect dropped from the plan; the slug stays spent. */
 export async function appendCancel(
   store: ArtifactStore,
   meta: { iteration: number; slug: string; round: number },
-  cause: string
+  cause: string,
 ): Promise<void> {
-  await store.appendRecord(scriptMeta(meta.iteration, "cancel", meta), { ok: true, cause });
+  await store.appendRecord(scriptMeta(meta.iteration, "cancel", meta), {
+    ok: true,
+    cause,
+  });
 }
 
 /** Normalized concern text for prompts; outcome concerns carry no ids in KERNEL0. */
 export function formatConcerns(outcome: Outcome): string {
   const lines = outcome.concerns.map(
-    (c) => `- [${c.kind}/${c.calibration}] ${c.text}${c.evidence ? ` (${c.evidence})` : ""}`
+    (c) =>
+      `- [${c.kind}/${c.calibration}] ${c.text}${c.evidence ? ` (${c.evidence})` : ""}`,
   );
   lines.push(...outcome.forward.map((f) => `- forward: ${f}`));
   return lines.length > 0 ? lines.join("\n") : "";

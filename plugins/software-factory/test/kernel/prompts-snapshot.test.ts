@@ -34,7 +34,7 @@ const ROLES: Record<string, Record<string, string>> = {
     plan_path: "/goal/plan.md",
     tasks_dir: "/goal/tasks",
     existing_tasks: "- alpha | merged | abcdef1234 | deps: none | frozen",
-    repair: "- task \"beta\" depends on missing task \"ghost\"",
+    repair: '- task "beta" depends on missing task "ghost"',
     steers: "- s1 (mailbox/inbox/s1.md):\n  keep the API stable",
     holds_dir: "/goal/mailbox/holds",
     outcome_path: "/goal/records/00043-i3-pm-r1/outcome.yaml",
@@ -77,7 +77,9 @@ function library() {
 function processConfig(): ProcessConfig {
   return {
     flows: {},
-    roles: Object.fromEntries(Object.keys(ROLES).map((role) => [role, { prompt: role }])),
+    roles: Object.fromEntries(
+      Object.keys(ROLES).map((role) => [role, { prompt: role }]),
+    ),
     itemTurns: 8,
   };
 }
@@ -86,7 +88,9 @@ describe("role prompts", () => {
   for (const [role, vars] of Object.entries(ROLES)) {
     it(`renders ${role} from exactly its documented variables`, () => {
       const lib = library();
-      const placeholders = new Set(lib.placeholders(processConfig().roles[role]!.prompt));
+      const placeholders = new Set(
+        lib.placeholders(processConfig().roles[role]!.prompt),
+      );
       expect([...placeholders].sort()).toEqual(Object.keys(vars).sort());
 
       const rendered = lib.render(processConfig().roles[role]!.prompt, vars);
@@ -96,9 +100,9 @@ describe("role prompts", () => {
       for (const name of placeholders) {
         const missing = { ...vars };
         delete missing[name];
-        expect(() => lib.render(processConfig().roles[role]!.prompt, missing)).toThrow(
-          "Missing required prompt variables"
-        );
+        expect(() =>
+          lib.render(processConfig().roles[role]!.prompt, missing),
+        ).toThrow("Missing required prompt variables");
       }
     });
   }
@@ -106,7 +110,10 @@ describe("role prompts", () => {
   it("keeps role text out of a separate system channel", () => {
     // The harness contract has `system`, but OpenCode has no system flag; role
     // identity must therefore live in the rendered prompt itself (KERNEL0 S3).
-    const rendered = library().render(processConfig().roles.architect!.prompt, ROLES.architect!);
+    const rendered = library().render(
+      processConfig().roles.architect!.prompt,
+      ROLES.architect!,
+    );
     expect(rendered.startsWith("You are the architect")).toBe(true);
   });
 });

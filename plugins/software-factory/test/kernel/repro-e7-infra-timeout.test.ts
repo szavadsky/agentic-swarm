@@ -3,7 +3,12 @@ import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
 import { task } from "./helpers.js";
-import { cleanupFlowRepo, makeRuntime, setupFlowRepo, writeTask } from "./s2-helpers.js";
+import {
+  cleanupFlowRepo,
+  makeRuntime,
+  setupFlowRepo,
+  writeTask,
+} from "./s2-helpers.js";
 
 /**
  * E7 inverted: an infra timeout or crash consumes the item turn budget and
@@ -18,10 +23,22 @@ describe("E7 inverted — infra timeouts and crashes spend the turn budget", () 
       try {
         const harness = new FakeHarness({ id: "fake" });
         harness.script((req) =>
-          fakeTurnResult(req, { stop: { kind: "infra", cause, details: cause === "timeout" ? "idle 30m" : "session not found" } })
+          fakeTurnResult(req, {
+            stop: {
+              kind: "infra",
+              cause,
+              details: cause === "timeout" ? "idle 30m" : "session not found",
+            },
+          }),
         );
         harness.script((req) =>
-          fakeTurnResult(req, { stop: { kind: "infra", cause, details: cause === "timeout" ? "idle 30m" : "session not found" } })
+          fakeTurnResult(req, {
+            stop: {
+              kind: "infra",
+              cause,
+              details: cause === "timeout" ? "idle 30m" : "session not found",
+            },
+          }),
         );
         const runtime = await makeRuntime(repo, goal, { fake: harness });
         await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
@@ -29,7 +46,11 @@ describe("E7 inverted — infra timeouts and crashes spend the turn budget", () 
         const first = await runDispatch(runtime, { iteration: 1 });
         expect(first.reason).toBe("infra");
         let records = await runtime.store.listRecords();
-        let state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+        let state = derive(
+          await runtime.store.listTasks(),
+          records,
+          runtime.configs.process.flows,
+        );
         expect(state.tasks.alpha!.turns).toBe(1);
         expect(state.tasks.alpha!.phase).toBe("implement");
         expect(state.tasks.alpha!.park).toBeUndefined();
@@ -37,7 +58,11 @@ describe("E7 inverted — infra timeouts and crashes spend the turn budget", () 
         const second = await runDispatch(runtime, { iteration: 2 });
         expect(second.reason).toBe("infra");
         records = await runtime.store.listRecords();
-        state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+        state = derive(
+          await runtime.store.listTasks(),
+          records,
+          runtime.configs.process.flows,
+        );
         expect(state.tasks.alpha!.turns).toBe(2);
         expect(state.tasks.alpha!.phase).toBe("parked");
         expect(state.tasks.alpha!.park).toContain(`infra-repeat: ${cause}`);
@@ -47,7 +72,7 @@ describe("E7 inverted — infra timeouts and crashes spend the turn budget", () 
         expect(third.reason).toBe("boundary");
         expect(harness.calls).toHaveLength(2);
         const turns = (await runtime.store.listRecords()).filter(
-          (r) => r.slug === "alpha" && r.actor === "agent"
+          (r) => r.slug === "alpha" && r.actor === "agent",
         );
         expect(turns).toHaveLength(2);
       } finally {
@@ -61,7 +86,9 @@ describe("E7 inverted — infra timeouts and crashes spend the turn budget", () 
     try {
       const harness = new FakeHarness({ id: "fake" });
       harness.script((req) =>
-        fakeTurnResult(req, { stop: { kind: "infra", cause: "quota", details: "quota exceeded" } })
+        fakeTurnResult(req, {
+          stop: { kind: "infra", cause: "quota", details: "quota exceeded" },
+        }),
       );
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
@@ -69,7 +96,11 @@ describe("E7 inverted — infra timeouts and crashes spend the turn budget", () 
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("infra");
       const records = await runtime.store.listRecords();
-      const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
       expect(state.tasks.alpha!.turns).toBe(0);
       expect(state.tasks.alpha!.phase).toBe("implement");
       expect(state.tasks.alpha!.park).toBeUndefined();

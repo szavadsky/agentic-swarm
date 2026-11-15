@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -71,22 +71,31 @@ describe("createFolderStore", () => {
     const repo = createTmpRepo();
     try {
       const artifactRoot = path.join(repo.dir, ".factory/artifacts");
-      const store = createFolderStore(path.join(artifactRoot, "demo"), artifactRoot);
+      const store = createFolderStore(
+        path.join(artifactRoot, "demo"),
+        artifactRoot,
+      );
       await store.ensureLayout();
       await store.writeFile("records/00001/started.yaml", "seq: 1\n");
       expect(fs.existsSync(path.join(artifactRoot, ".gitignore"))).toBe(true);
       expect(repo.git(["status", "--porcelain"]).stdout).toBe("");
 
       repo.writeFile(".factory/artifacts/.gitignore", "existing\n");
-      const other = createFolderStore(path.join(artifactRoot, "other"), artifactRoot);
+      const other = createFolderStore(
+        path.join(artifactRoot, "other"),
+        artifactRoot,
+      );
       await other.ensureLayout();
-      expect(fs.readFileSync(path.join(artifactRoot, ".gitignore"), "utf8")).toBe("existing\n");
+      expect(
+        fs.readFileSync(path.join(artifactRoot, ".gitignore"), "utf8"),
+      ).toBe("existing\n");
     } finally {
       repo.cleanup();
     }
   });
 
-  it("reads, writes and lists goal-relative files", async () => {    const store = createFolderStore(goalDir);
+  it("reads, writes and lists goal-relative files", async () => {
+    const store = createFolderStore(goalDir);
     expect(await store.readFile("missing.txt")).toBeNull();
     expect(await store.listDir("missing")).toEqual([]);
 
@@ -123,13 +132,17 @@ describe("createFolderStore", () => {
     const store = createFolderStore(goalDir);
     const turn = await store.startRecord(start());
 
-    expect(turn.dir).toBe(path.join(goalDir, "records", "00001-i1-auth.login-implement-r1"));
+    expect(turn.dir).toBe(
+      path.join(goalDir, "records", "00001-i1-auth.login-implement-r1"),
+    );
     expect(turn.outcomePath).toBe(path.join(turn.dir, "outcome.yaml"));
     expect(turn.meta.seq).toBe(1);
     expect(turn.meta.startedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     expect(fs.existsSync(path.join(turn.dir, "started.yaml"))).toBe(true);
     expect(fs.existsSync(path.join(turn.dir, "end.yaml"))).toBe(false);
-    expect(await readYaml<{ seq: number }>(path.join(turn.dir, "started.yaml"))).toMatchObject({
+    expect(
+      await readYaml<{ seq: number }>(path.join(turn.dir, "started.yaml")),
+    ).toMatchObject({
       seq: 1,
       startedAt: turn.meta.startedAt,
     });
@@ -145,26 +158,37 @@ describe("createFolderStore", () => {
   it("finishes atomically: outcome.yaml, then end.yaml with endedAt", async () => {
     const store = createFolderStore(goalDir);
     const turn = await store.startRecord(start());
-    const outcome = { status: "done" as const, summary: "landed", concerns: [], forward: [] };
+    const outcome = {
+      status: "done" as const,
+      summary: "landed",
+      concerns: [],
+      forward: [],
+    };
     const finished = await turn.finish({ stop: { kind: "done" }, outcome });
 
     expect(finished.seq).toBe(1);
     expect(finished.endedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     expect(finished.stop).toEqual({ kind: "done" });
     expect(finished.outcome).toEqual(outcome);
-    expect(await readYaml(path.join(turn.dir, "outcome.yaml"))).toEqual(outcome);
+    expect(await readYaml(path.join(turn.dir, "outcome.yaml"))).toEqual(
+      outcome,
+    );
 
     const endRaw = fs.readFileSync(path.join(turn.dir, "end.yaml"), "utf8");
     expect(endRaw).not.toContain("undefined");
     expect(endRaw).not.toContain("usage");
-    const end = await readYaml<{ endedAt: string; stop: unknown; outcome: unknown }>(
-      path.join(turn.dir, "end.yaml")
-    );
+    const end = await readYaml<{
+      endedAt: string;
+      stop: unknown;
+      outcome: unknown;
+    }>(path.join(turn.dir, "end.yaml"));
     expect(end.endedAt).toBe(finished.endedAt!);
     expect(end.stop).toEqual({ kind: "done" });
     expect(end.outcome).toEqual(outcome);
 
-    expect(fs.readdirSync(turn.dir).filter((name) => name.includes(".tmp"))).toEqual([]);
+    expect(
+      fs.readdirSync(turn.dir).filter((name) => name.includes(".tmp")),
+    ).toEqual([]);
 
     const records = await store.listRecords();
     expect(records).toHaveLength(1);
@@ -175,10 +199,15 @@ describe("createFolderStore", () => {
   it("increments seq from the highest existing record dir", async () => {
     const store = createFolderStore(goalDir);
     const first = await store.appendRecord(start(), { stop: { kind: "done" } });
-    const reviewOutcome = { status: "done" as const, summary: "looks good", concerns: [], forward: [] as string[] };
+    const reviewOutcome = {
+      status: "done" as const,
+      summary: "looks good",
+      concerns: [],
+      forward: [] as string[],
+    };
     const second = await store.appendRecord(
       start({ step: "review", alias: "reviewer" }),
-      { stop: { kind: "done" }, outcome: reviewOutcome }
+      { stop: { kind: "done" }, outcome: reviewOutcome },
     );
     expect(first.seq).toBe(1);
     expect(second.seq).toBe(2);
@@ -188,24 +217,44 @@ describe("createFolderStore", () => {
     expect(second.outcome).toEqual(reviewOutcome);
     expect(second.endedAt!).toMatch(/^\d{4}-\d{2}-\d{2}T/);
 
-    fs.mkdirSync(path.join(goalDir, "records", "00007-i2-auth.login-implement-r1"), {
-      recursive: true,
-    });
+    fs.mkdirSync(
+      path.join(goalDir, "records", "00007-i2-auth.login-implement-r1"),
+      {
+        recursive: true,
+      },
+    );
     const third = await store.startRecord(start({ iteration: 2 }));
     expect(third.meta.seq).toBe(8);
-    expect(third.dir).toBe(path.join(goalDir, "records", "00008-i2-auth.login-implement-r1"));
+    expect(third.dir).toBe(
+      path.join(goalDir, "records", "00008-i2-auth.login-implement-r1"),
+    );
   });
 
   it("skips record dirs without a parseable started.yaml", async () => {
     const store = createFolderStore(goalDir);
     await store.startRecord(start());
 
-    fs.mkdirSync(path.join(goalDir, "records", "00002-empty"), { recursive: true });
-    fs.mkdirSync(path.join(goalDir, "records", "00003-scalar"), { recursive: true });
-    fs.writeFileSync(path.join(goalDir, "records", "00003-scalar", "started.yaml"), "just a string");
-    fs.mkdirSync(path.join(goalDir, "records", "00004-bad"), { recursive: true });
-    fs.writeFileSync(path.join(goalDir, "records", "00004-bad", "started.yaml"), "key: [unclosed");
-    fs.writeFileSync(path.join(goalDir, "records", "00005-file"), "not a directory");
+    fs.mkdirSync(path.join(goalDir, "records", "00002-empty"), {
+      recursive: true,
+    });
+    fs.mkdirSync(path.join(goalDir, "records", "00003-scalar"), {
+      recursive: true,
+    });
+    fs.writeFileSync(
+      path.join(goalDir, "records", "00003-scalar", "started.yaml"),
+      "just a string",
+    );
+    fs.mkdirSync(path.join(goalDir, "records", "00004-bad"), {
+      recursive: true,
+    });
+    fs.writeFileSync(
+      path.join(goalDir, "records", "00004-bad", "started.yaml"),
+      "key: [unclosed",
+    );
+    fs.writeFileSync(
+      path.join(goalDir, "records", "00005-file"),
+      "not a directory",
+    );
 
     const records = await store.listRecords();
     expect(records.map((r) => r.seq)).toEqual([1]);
@@ -216,9 +265,19 @@ describe("createFolderStore", () => {
     const turn = await store.startRecord(start());
     await turn.finish({
       stop: { kind: "done" },
-      outcome: { status: "failed", summary: "stale", concerns: [], forward: [] },
+      outcome: {
+        status: "failed",
+        summary: "stale",
+        concerns: [],
+        forward: [],
+      },
     });
-    const rewritten = { status: "done" as const, summary: "fresh", concerns: [], forward: [] };
+    const rewritten = {
+      status: "done" as const,
+      summary: "fresh",
+      concerns: [],
+      forward: [],
+    };
     await writeYamlAtomic(path.join(turn.dir, "outcome.yaml"), rewritten);
 
     const records = await store.listRecords();
@@ -232,7 +291,7 @@ describe("createFolderStore", () => {
     // Truncated JSON mid-string, as a cut-off reviewer turn leaves it.
     await fs.promises.writeFile(
       path.join(turn.dir, "outcome.yaml"),
-      '{\n  "status": "done",\n  "summary": "Deletions match the done-when exactly (docs/adr 22 files, docs/factory'
+      '{\n  "status": "done",\n  "summary": "Deletions match the done-when exactly (docs/adr 22 files, docs/factory',
     );
     const records = await store.listRecords();
     expect(records).toHaveLength(1);
@@ -243,7 +302,10 @@ describe("createFolderStore", () => {
   it("degrades a torn end.yaml to an orphan instead of throwing", async () => {
     const store = createFolderStore(goalDir);
     const turn = await store.startRecord(start());
-    await fs.promises.writeFile(path.join(turn.dir, "end.yaml"), "stop: {kind: [unclosed\n");
+    await fs.promises.writeFile(
+      path.join(turn.dir, "end.yaml"),
+      "stop: {kind: [unclosed\n",
+    );
     const records = await store.listRecords();
     expect(records).toHaveLength(1);
     expect(records[0]!.stop).toBeUndefined();

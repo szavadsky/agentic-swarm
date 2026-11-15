@@ -1,6 +1,6 @@
+import type { Caps, Harness, ModelRef } from "../harness/types.js";
 import type { Finding } from "./findings.js";
 import type { AliasConfig, ConfigBundle, ConfigFiles } from "./types.js";
-import type { Caps, Harness, ModelRef } from "../harness/types.js";
 
 /** Tells pre-flight whether a harness lists a model; omitted for fake harnesses. */
 export type ModelCatalog = (harness: string, model: string) => Promise<boolean>;
@@ -15,11 +15,20 @@ export interface AliasContext {
   modelCache: Map<string, Promise<boolean>>;
 }
 
-function add(ctx: AliasContext, key: string, message: string, file = ctx.files.run): void {
+function add(
+  ctx: AliasContext,
+  key: string,
+  message: string,
+  file = ctx.files.run,
+): void {
   ctx.findings.push({ file, key, message });
 }
 
-async function modelListed(ctx: AliasContext, harness: string, model: string): Promise<boolean> {
+async function modelListed(
+  ctx: AliasContext,
+  harness: string,
+  model: string,
+): Promise<boolean> {
   if (!ctx.catalog) return true;
   const key = `${harness}\u0000${model}`;
   let pending = ctx.modelCache.get(key);
@@ -31,7 +40,11 @@ async function modelListed(ctx: AliasContext, harness: string, model: string): P
   return pending;
 }
 
-async function capsOf(ctx: AliasContext, harness: string, model: ModelRef): Promise<Caps> {
+async function capsOf(
+  ctx: AliasContext,
+  harness: string,
+  model: ModelRef,
+): Promise<Caps> {
   const key = `${harness}\u0000${model.id}`;
   const found = ctx.harnesses.get(harness);
   if (!found) throw new Error(`no harness "${harness}" is registered`);
@@ -52,7 +65,11 @@ async function capsOf(ctx: AliasContext, harness: string, model: ModelRef): Prom
 function effortLevels(caps: Caps): string[] {
   return (caps.effort as unknown[]).flatMap((level) => {
     if (typeof level === "string") return [level];
-    if (level && typeof level === "object" && typeof (level as { id?: unknown }).id === "string") {
+    if (
+      level &&
+      typeof level === "object" &&
+      typeof (level as { id?: unknown }).id === "string"
+    ) {
       return [(level as { id: string }).id];
     }
     return [];
@@ -65,21 +82,29 @@ async function resolveEffort(
   key: string,
   harness: string,
   model: ModelRef,
-  effort: string | undefined
+  effort: string | undefined,
 ): Promise<string | undefined> {
   if (!effort) return undefined;
   let caps: Caps;
   try {
     caps = await capsOf(ctx, harness, model);
   } catch (err) {
-    add(ctx, `${key}.effort`, `cannot probe model capabilities: ${(err as Error).message}`);
+    add(
+      ctx,
+      `${key}.effort`,
+      `cannot probe model capabilities: ${(err as Error).message}`,
+    );
     return undefined;
   }
   const levels = effortLevels(caps);
   if (effort === "highest") {
     const highest = levels.at(-1);
     if (!highest) {
-      add(ctx, `${key}.effort`, "effort is \"highest\" but the model lists no effort levels");
+      add(
+        ctx,
+        `${key}.effort`,
+        'effort is "highest" but the model lists no effort levels',
+      );
       return undefined;
     }
     return highest;
@@ -88,7 +113,7 @@ async function resolveEffort(
     add(
       ctx,
       `${key}.effort`,
-      `effort "${effort}" is not supported; model accepts: ${levels.join(", ") || "none"}`
+      `effort "${effort}" is not supported; model accepts: ${levels.join(", ") || "none"}`,
     );
   }
   return effort;
@@ -98,14 +123,14 @@ export async function checkAlias(
   ctx: AliasContext,
   name: string,
   alias: AliasConfig,
-  effortOut: Record<string, string | undefined>
+  effortOut: Record<string, string | undefined>,
 ): Promise<void> {
   const key = `aliases.${name}`;
   if (!ctx.harnesses.has(alias.harness)) {
     add(
       ctx,
       `${key}.harness`,
-      `harness "${alias.harness}" is not registered (registered: ${[...ctx.harnesses.keys()].join(", ") || "none"})`
+      `harness "${alias.harness}" is not registered (registered: ${[...ctx.harnesses.keys()].join(", ") || "none"})`,
     );
     return;
   }
@@ -119,21 +144,39 @@ export async function checkAlias(
     listed = false;
   }
   if (!listed) {
-    add(ctx, `${key}.model`, `model "${alias.model}" is not listed by harness "${alias.harness}"`);
+    add(
+      ctx,
+      `${key}.model`,
+      `model "${alias.model}" is not listed by harness "${alias.harness}"`,
+    );
     return;
   }
 
-  effortOut[name] = await resolveEffort(ctx, key, alias.harness, { id: alias.model }, alias.effort);
+  effortOut[name] = await resolveEffort(
+    ctx,
+    key,
+    alias.harness,
+    { id: alias.model },
+    alias.effort,
+  );
   for (const [index, fallback] of (alias.fallbacks ?? []).entries()) {
     try {
       const fallbackListed = await modelListed(ctx, alias.harness, fallback);
       if (!fallbackListed) {
-        add(ctx, `${key}.fallbacks.${index}`, `fallback "${fallback}" is not listed by harness "${alias.harness}"`);
+        add(
+          ctx,
+          `${key}.fallbacks.${index}`,
+          `fallback "${fallback}" is not listed by harness "${alias.harness}"`,
+        );
         continue;
       }
       await capsOf(ctx, alias.harness, { id: fallback });
     } catch (err) {
-      add(ctx, `${key}.fallbacks.${index}`, `fallback "${fallback}" cannot be probed: ${(err as Error).message}`);
+      add(
+        ctx,
+        `${key}.fallbacks.${index}`,
+        `fallback "${fallback}" cannot be probed: ${(err as Error).message}`,
+      );
     }
   }
 }
@@ -142,12 +185,19 @@ export async function checkScouts(
   ctx: AliasContext,
   configs: ConfigBundle,
   architectAliasName: string | undefined,
-  effortOut: Record<string, string | undefined>
+  effortOut: Record<string, string | undefined>,
 ): Promise<void> {
   const scouts = configs.run.scouts;
   if (!scouts) return;
-  const architect = architectAliasName ? configs.run.aliases[architectAliasName] : undefined;
-  if (!architect || !ctx.harnesses.has(architect.harness) || ctx.unavailable.has(architect.harness)) return;
+  const architect = architectAliasName
+    ? configs.run.aliases[architectAliasName]
+    : undefined;
+  if (
+    !architect ||
+    !ctx.harnesses.has(architect.harness) ||
+    ctx.unavailable.has(architect.harness)
+  )
+    return;
   let listed = true;
   try {
     listed = await modelListed(ctx, architect.harness, scouts.model);
@@ -156,8 +206,18 @@ export async function checkScouts(
     listed = false;
   }
   if (!listed) {
-    add(ctx, "scouts.model", `model "${scouts.model}" is not listed by harness "${architect.harness}"`);
+    add(
+      ctx,
+      "scouts.model",
+      `model "${scouts.model}" is not listed by harness "${architect.harness}"`,
+    );
     return;
   }
-  effortOut.scouts = await resolveEffort(ctx, "scouts", architect.harness, { id: scouts.model }, scouts.effort);
+  effortOut.scouts = await resolveEffort(
+    ctx,
+    "scouts",
+    architect.harness,
+    { id: scouts.model },
+    scouts.effort,
+  );
 }

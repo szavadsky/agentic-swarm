@@ -93,22 +93,31 @@ live("omp harness live smoke", () => {
             .readFileSync(file, "utf8")
             .split("\n")
             .filter((line) => line.includes('"type":"model_change"'))
-            .map((line) => JSON.parse(line))
+            .map((line) => JSON.parse(line)),
         )
         .filter((entry) => String(entry.role ?? "").startsWith("subagent:"));
       expect(changes.length).toBeGreaterThan(0);
-      expect(changes.some((entry) => String(entry.model).includes("longcat-2.5-free"))).toBe(
-        true
-      );
+      expect(
+        changes.some((entry) =>
+          String(entry.model).includes("longcat-2.5-free"),
+        ),
+      ).toBe(true);
       console.log(
         "omp live",
         JSON.stringify({
           wallMs: Date.now() - started,
           caps: caps.effort,
-          turn1: { model: first.model, usage: first.usage, transcript: first.transcript },
+          turn1: {
+            model: first.model,
+            usage: first.usage,
+            transcript: first.transcript,
+          },
           turn2: { model: second.model, usage: second.usage },
-          subagentTurn: { usage: spawned.usage, childModels: changes.map((c) => c.model) },
-        })
+          subagentTurn: {
+            usage: spawned.usage,
+            childModels: changes.map((c) => c.model),
+          },
+        }),
       );
     } finally {
       fs.rmSync(root, { recursive: true, force: true });

@@ -37,9 +37,13 @@ export async function runWorktreeSetup(opts: {
   timeoutSec?: number;
   outputBytes?: number;
 }): Promise<SetupResult> {
-  const commands = (opts.commands ?? []).filter((c) => typeof c === "string" && c.trim().length > 0);
-  const timeoutSec = opts.timeoutSec && opts.timeoutSec > 0 ? opts.timeoutSec : 900;
-  const outputBytes = opts.outputBytes && opts.outputBytes > 0 ? opts.outputBytes : 4096;
+  const commands = (opts.commands ?? []).filter(
+    (c) => typeof c === "string" && c.trim().length > 0,
+  );
+  const timeoutSec =
+    opts.timeoutSec && opts.timeoutSec > 0 ? opts.timeoutSec : 900;
+  const outputBytes =
+    opts.outputBytes && opts.outputBytes > 0 ? opts.outputBytes : 4096;
   const ran: string[] = [];
   const start = Date.now();
 

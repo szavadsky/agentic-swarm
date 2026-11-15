@@ -3,7 +3,9 @@ import { zeroUsage } from "../usage.js";
 import type { AcpxError, AcpxTurnSummary } from "./types.js";
 
 function number(value: unknown): number {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0;
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? value
+    : 0;
 }
 
 /**
@@ -20,7 +22,9 @@ export function usageFromAcpxResult(raw: unknown): Usage {
   const reasoning = number(source.thoughtTokens);
   usage.in = number(source.inputTokens);
   usage.cacheRead = number(source.cachedReadTokens);
-  usage.cacheWrite5m = number(source.cachedWriteTokens ?? source.cacheCreationInputTokens);
+  usage.cacheWrite5m = number(
+    source.cachedWriteTokens ?? source.cacheCreationInputTokens,
+  );
   usage.out = Math.max(0, output - reasoning);
   usage.reasoningOut = reasoning;
   return usage;
@@ -67,7 +71,9 @@ export class AcpxTranscriptParser {
     return {
       text: this.lastText,
       usage: usageFromAcpxResult(this.promptResult?.usage),
-      ...(this.promptResult?.stopReason ? { stopReason: this.promptResult.stopReason } : {}),
+      ...(this.promptResult?.stopReason
+        ? { stopReason: this.promptResult.stopReason }
+        : {}),
       ...(this.sessionId ? { sessionId: this.sessionId } : {}),
       errors: [...this.errors],
     };
@@ -76,14 +82,19 @@ export class AcpxTranscriptParser {
   private feed(frame: any): void {
     if (!frame || typeof frame !== "object") return;
 
-    if (frame.method === "session/prompt" && frame.id !== undefined && frame.id !== null) {
+    if (
+      frame.method === "session/prompt" &&
+      frame.id !== undefined &&
+      frame.id !== null
+    ) {
       this.promptId = frame.id;
       return;
     }
 
     if (frame.method === "session/update") {
       const update = frame.params?.update;
-      if (typeof frame.params?.sessionId === "string") this.sessionId = frame.params.sessionId;
+      if (typeof frame.params?.sessionId === "string")
+        this.sessionId = frame.params.sessionId;
       if (update?.sessionUpdate === "agent_message_chunk") {
         this.feedChunk(update);
       } else if (update?.sessionUpdate !== "agent_thought_chunk") {
@@ -97,10 +108,15 @@ export class AcpxTranscriptParser {
       return;
     }
 
-    if (frame.result && this.promptId !== undefined && frame.id === this.promptId) {
+    if (
+      frame.result &&
+      this.promptId !== undefined &&
+      frame.id === this.promptId
+    ) {
       const result = frame.result as PromptResult;
       this.promptResult = result;
-      if (typeof result.sessionId === "string") this.sessionId = result.sessionId;
+      if (typeof result.sessionId === "string")
+        this.sessionId = result.sessionId;
       this.flush();
       return;
     }
@@ -113,7 +129,8 @@ export class AcpxTranscriptParser {
   private feedChunk(update: any): void {
     const text = update.content?.text;
     if (typeof text !== "string") return;
-    const messageId = typeof update.messageId === "string" ? update.messageId : undefined;
+    const messageId =
+      typeof update.messageId === "string" ? update.messageId : undefined;
     if (messageId !== this.messageId) {
       this.flush();
       this.messageId = messageId;
@@ -138,9 +155,7 @@ export function acpxErrors(stdout: string): AcpxError[] {
     try {
       const frame = JSON.parse(trimmed);
       if (frame?.error) errors.push(frame.error as AcpxError);
-    } catch {
-      continue;
-    }
+    } catch {}
   }
   return errors;
 }

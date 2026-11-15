@@ -28,22 +28,44 @@ describe("iteration summary", () => {
             status: "done",
             summary: "the goal is met",
             concerns: [
-              { kind: "choice", calibration: "architect", text: "kept the old storage format" },
-              { kind: "uncertainty", calibration: "owner", text: "confirm the public API is now frozen" },
+              {
+                kind: "choice",
+                calibration: "architect",
+                text: "kept the old storage format",
+              },
+              {
+                kind: "uncertainty",
+                calibration: "owner",
+                text: "confirm the public API is now frozen",
+              },
             ],
-            forward: ["debt closed: removed the compatibility shim", "steer s9: yes, drop it"],
+            forward: [
+              "debt closed: removed the compatibility shim",
+              "steer s9: yes, drop it",
+            ],
             decision: "done",
           },
         }),
         script(2, { slug: "merged1", step: "merge", ok: true }),
-        script(3, { slug: "parked1", step: "park", ok: true, cause: "review rejected: missing test" }),
+        script(3, {
+          slug: "parked1",
+          step: "park",
+          ok: true,
+          cause: "review rejected: missing test",
+        }),
         rec(4, {
           slug: "merged1",
           step: "review",
           outcome: {
             status: "done",
             summary: "approved with a debt note",
-            concerns: [{ kind: "debt", calibration: "architect", text: "cache invalidation needs a follow-up" }],
+            concerns: [
+              {
+                kind: "debt",
+                calibration: "architect",
+                text: "cache invalidation needs a follow-up",
+              },
+            ],
             forward: [],
             verdict: "approve",
           },
@@ -60,7 +82,7 @@ describe("iteration summary", () => {
       const text = fs.readFileSync(path.join(store.goalDir, rel), "utf8");
       const outbox = fs.readFileSync(
         path.join(store.goalDir, "mailbox/outbox/iteration-1-summary.md"),
-        "utf8"
+        "utf8",
       );
       expect(outbox).toBe(text);
 

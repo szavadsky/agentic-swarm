@@ -6,7 +6,7 @@ export class GitError extends Error {
     public readonly command: string,
     public readonly code: number | null,
     public readonly stderr: string,
-    public readonly stdout: string = ""
+    public readonly stdout: string = "",
   ) {
     super(`git ${command} failed with exit code ${code}:\n${stderr}`);
     this.name = "GitError";
@@ -91,7 +91,7 @@ async function probeRepoIdentity(cwd: string): Promise<boolean> {
 export async function git(
   cwd: string,
   args: string[],
-  opts?: GitOptions
+  opts?: GitOptions,
 ): Promise<GitResult> {
   const baseArgs = [
     "-c",

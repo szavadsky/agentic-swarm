@@ -1,6 +1,6 @@
-import { stepFingerprint } from "./progress.js";
-import { isInfraCheck } from "./gates.js";
 import type { Stop } from "../harness/types.js";
+import { isInfraCheck } from "./gates.js";
+import { stepFingerprint } from "./progress.js";
 import type {
   FlowDefinition,
   ProgressRepeat,
@@ -57,16 +57,28 @@ interface PendingChecks {
   mergeAfter: boolean;
 }
 
-function terminalFromRecords(task: TaskFile, records: StepRecord[]): TerminalFact | null {
+function terminalFromRecords(
+  task: TaskFile,
+  records: StepRecord[],
+): TerminalFact | null {
   let out: TerminalFact | null = null;
   for (const rec of records) {
     if (!rec.endedAt) continue;
     if (rec.step === "park") {
-      out = { status: "parked", cause: rec.cause ?? "parked without a recorded cause" };
+      out = {
+        status: "parked",
+        cause: rec.cause ?? "parked without a recorded cause",
+      };
     } else if (rec.step === "cancel") {
-      out = { status: "cancelled", cause: rec.cause ?? "cancelled without a recorded cause" };
+      out = {
+        status: "cancelled",
+        cause: rec.cause ?? "cancelled without a recorded cause",
+      };
     } else if (rec.step === "merge" && rec.ok === true) {
-      out = { status: task.kind === "spike" ? "finished" : "merged", commit: rec.commit };
+      out = {
+        status: task.kind === "spike" ? "finished" : "merged",
+        commit: rec.commit,
+      };
     } else if (rec.step === "finish" && rec.ok === true) {
       out = { status: "finished", commit: rec.commit };
     }
@@ -74,7 +86,11 @@ function terminalFromRecords(task: TaskFile, records: StepRecord[]): TerminalFac
   return out;
 }
 
-function phaseAfter(flow: FlowDefinition, index: number, kind: TaskFile["kind"]): TaskPhase {
+function phaseAfter(
+  flow: FlowDefinition,
+  index: number,
+  kind: TaskFile["kind"],
+): TaskPhase {
   if (index >= flow.steps.length) return kind === "spike" ? "finish" : "merge";
   return flow.steps[index]!.id;
 }
@@ -84,8 +100,17 @@ function phaseAfter(flow: FlowDefinition, index: number, kind: TaskFile["kind"])
  * first turn the commit is the branch start; later turns keep the tree the last
  * counted turn left. Spikes are exempt: their product is the finding, not a diff.
  */
-function committedNothing(kind: TaskKind, rec: StepRecord, priorTree: string | undefined): boolean {
-  if (kind === "spike" || rec.outcome?.status !== "done" || rec.tree === undefined) return false;
+function committedNothing(
+  kind: TaskKind,
+  rec: StepRecord,
+  priorTree: string | undefined,
+): boolean {
+  if (
+    kind === "spike" ||
+    rec.outcome?.status !== "done" ||
+    rec.tree === undefined
+  )
+    return false;
   if (priorTree !== undefined) return rec.tree === priorTree;
   return rec.commit !== undefined && rec.commit === rec.base;
 }
@@ -115,7 +140,11 @@ function redChecksText(rec: StepRecord): string | undefined {
  * step before a review, and a merged-result gate failure adds one fix turn
  * without consuming a review round.
  */
-export function reduceTask(task: TaskFile, records: StepRecord[], flow: FlowDefinition): TaskReduction {
+export function reduceTask(
+  task: TaskFile,
+  records: StepRecord[],
+  flow: FlowDefinition,
+): TaskReduction {
   const flowIndex = new Map(flow.steps.map((step, i) => [step.id, i]));
   const terminal = terminalFromRecords(task, records);
   const firstStep = flow.steps[0]?.id ?? "done";
@@ -158,13 +187,20 @@ export function reduceTask(task: TaskFile, records: StepRecord[], flow: FlowDefi
           phase = firstStep;
         } else {
           stepIndex = pendingChecks.nextIndex;
-          phase = pendingChecks.mergeAfter ? phaseAfter(flow, flow.steps.length, task.kind) : phaseAfter(flow, stepIndex, task.kind);
+          phase = pendingChecks.mergeAfter
+            ? phaseAfter(flow, flow.steps.length, task.kind)
+            : phaseAfter(flow, stepIndex, task.kind);
         }
         pendingChecks = null;
       }
       continue;
     }
-    if (rec.step === "merge-checks" || rec.step === "debt" || rec.step === "setup" || rec.step === "pm-validate") {
+    if (
+      rec.step === "merge-checks" ||
+      rec.step === "debt" ||
+      rec.step === "setup" ||
+      rec.step === "pm-validate"
+    ) {
       continue;
     }
     if (rec.step === "merge") {
@@ -189,11 +225,16 @@ export function reduceTask(task: TaskFile, records: StepRecord[], flow: FlowDefi
             park = cause;
             phase = "parked";
           }
-        } else if (cause.startsWith("conflict:") || cause.startsWith("no-progress:")) {
+        } else if (
+          cause.startsWith("conflict:") ||
+          cause.startsWith("no-progress:")
+        ) {
           park = cause;
           phase = "parked";
         } else {
-          park = cause ? `merge failed: ${cause}` : "merge failed without a recorded cause";
+          park = cause
+            ? `merge failed: ${cause}`
+            : "merge failed without a recorded cause";
           phase = "parked";
         }
       }
@@ -207,7 +248,8 @@ export function reduceTask(task: TaskFile, records: StepRecord[], flow: FlowDefi
     const isInfra = stop?.kind === "infra";
     const isCancelled = stop?.kind === "cancelled";
     const isTruncated = stop?.kind === "truncated";
-    const isTimeoutOrCrash = isInfra && (stop.cause === "timeout" || stop.cause === "crash");
+    const isTimeoutOrCrash =
+      isInfra && (stop.cause === "timeout" || stop.cause === "crash");
 
     // Infra without a valid outcome: timeout/crash consume the turn budget and
     // park after two repeats on the same step; other infra (quota, auth, ...)
@@ -246,7 +288,12 @@ export function reduceTask(task: TaskFile, records: StepRecord[], flow: FlowDefi
     if (fp) {
       const prior = seen.get(fp);
       if (prior && !loop) {
-        loop = { fingerprint: fp, step: rec.step, round: rec.round, firstRound: prior.round };
+        loop = {
+          fingerprint: fp,
+          step: rec.step,
+          round: rec.round,
+          firstRound: prior.round,
+        };
       } else if (!prior) {
         seen.set(fp, { step: rec.step, round: rec.round });
       }
@@ -281,9 +328,10 @@ export function reduceTask(task: TaskFile, records: StepRecord[], flow: FlowDefi
     // gate-fix turn names the red checks that sent it back, so the cause says
     // why a task that already committed looks empty.
     if (!step.review && committedNothing(task.kind, rec, priorTree)) {
-      park = gateFix && gateFailure
-        ? `empty-diff: ${rec.step} r${rec.round} committed no changes after red checks: ${gateFailure}`
-        : `empty-diff: ${rec.step} r${rec.round} committed no changes`;
+      park =
+        gateFix && gateFailure
+          ? `empty-diff: ${rec.step} r${rec.round} committed no changes after red checks: ${gateFailure}`
+          : `empty-diff: ${rec.step} r${rec.round} committed no changes`;
       phase = "parked";
       continue;
     }
@@ -350,7 +398,12 @@ export function reduceTask(task: TaskFile, records: StepRecord[], flow: FlowDefi
   };
 }
 
-export type StopClassification = "ok" | "infra" | "cancelled" | "timeout" | "crash";
+export type StopClassification =
+  | "ok"
+  | "infra"
+  | "cancelled"
+  | "timeout"
+  | "crash";
 
 export function classifyStop(stop: Stop | undefined): StopClassification {
   if (!stop || stop.kind === "done") return "ok";

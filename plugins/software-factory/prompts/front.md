@@ -36,7 +36,7 @@ Write only `class.yaml`, the one task file, the pack and the outcome. Never chan
 - goal checkout: `{{checkout}}`
 - setup: `{{setup_command}}`
 - gates:
-{{gate_commands}}
+  {{gate_commands}}
 - outcome path: `{{outcome_path}}`
 
 {{> _calibration}}

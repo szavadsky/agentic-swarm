@@ -21,7 +21,11 @@ export function classifyOpencodeError(error: OpencodeError): Stop {
         ? error.statusCode
         : undefined;
 
-  if (/free[- ]?limit|quota|usage limit|insufficient|billing|exceeded your/i.test(text)) {
+  if (
+    /free[- ]?limit|quota|usage limit|insufficient|billing|exceeded your/i.test(
+      text,
+    )
+  ) {
     return withDetails({ kind: "infra", cause: "quota" }, text);
   }
   if (status === 402 || status === 429 || /\b(402|429)\b/.test(text)) {
@@ -30,13 +34,25 @@ export function classifyOpencodeError(error: OpencodeError): Stop {
   if (status === 401 || status === 403) {
     return withDetails({ kind: "infra", cause: "auth" }, text);
   }
-  if (/rate[\s_-]?limit|too many requests|overloaded|service unavailable|bad gateway/i.test(text)) {
+  if (
+    /rate[\s_-]?limit|too many requests|overloaded|service unavailable|bad gateway/i.test(
+      text,
+    )
+  ) {
     return withDetails({ kind: "infra", cause: "rate" }, text);
   }
-  if (/unauthori[sz]ed|forbidden|invalid api key|no api key|credential|auth/i.test(text)) {
+  if (
+    /unauthori[sz]ed|forbidden|invalid api key|no api key|credential|auth/i.test(
+      text,
+    )
+  ) {
     return withDetails({ kind: "infra", cause: "auth" }, text);
   }
-  if (/context (length|window)|maximum context|too many tokens|token limit|prompt is too long|overflow/i.test(text)) {
+  if (
+    /context (length|window)|maximum context|too many tokens|token limit|prompt is too long|overflow/i.test(
+      text,
+    )
+  ) {
     return withDetails({ kind: "infra", cause: "overflow" }, text);
   }
   if (/refus|safety|content policy|declined/i.test(text)) {
@@ -82,7 +98,11 @@ export function classifyOpencodeTurn(input: {
   }
 
   const reason = input.summary.lastStepReason;
-  if (reason === "length" || reason === "max_tokens" || reason === "max-tokens") {
+  if (
+    reason === "length" ||
+    reason === "max_tokens" ||
+    reason === "max-tokens"
+  ) {
     return { kind: "truncated", cause: "max-tokens" };
   }
   if (reason === "turn-limit" || reason === "max_turns") {

@@ -51,12 +51,16 @@ describe("omp subagent usage", () => {
     // turn's prompt timestamp; its earlier message must fall outside the turn.
     fs.copyFileSync(
       path.join(FIXTURES, "child-session-cost.jsonl"),
-      path.join(childDir, "Scout.jsonl")
+      path.join(childDir, "Scout.jsonl"),
     );
     const binary = path.join(tmp, "fake-omp.js");
     fs.writeFileSync(binary, FAKE_OMP, { mode: 0o755 });
     try {
-      const harness = new OmpHarness({ binary, sessionDir, readyTimeoutMs: 5_000 });
+      const harness = new OmpHarness({
+        binary,
+        sessionDir,
+        readyTimeoutMs: 5_000,
+      });
       const result = await harness.turn({
         model: { id: "opencode-go/beam-free" },
         cwd: tmp,

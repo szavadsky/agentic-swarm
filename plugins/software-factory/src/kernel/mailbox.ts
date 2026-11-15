@@ -2,8 +2,8 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import { z } from "zod";
 import yaml from "yaml";
+import { z } from "zod";
 import { writeTextAtomic } from "../core/records/io.js";
 import { scriptMeta } from "./record.js";
 import type { ArtifactStore, Outcome } from "./types.js";
@@ -41,7 +41,9 @@ const holdFileSchema = z.object({
 });
 
 function contentHash(text: string): string {
-  return createHash("sha1").update(text.replace(/\r\n/g, "\n"), "utf8").digest("hex");
+  return createHash("sha1")
+    .update(text.replace(/\r\n/g, "\n"), "utf8")
+    .digest("hex");
 }
 
 function isENOENT(err: unknown): boolean {
@@ -90,7 +92,10 @@ async function processedNames(store: ArtifactStore): Promise<Set<string>> {
  * that holds across one settle interval is the reader-side contract. Correct
  * writers (`postSteer`) use tmp + rename and pass at once.
  */
-async function stableInboxNames(dir: string, settleMs: number): Promise<string[]> {
+async function stableInboxNames(
+  dir: string,
+  settleMs: number,
+): Promise<string[]> {
   const names = async (): Promise<Map<string, number>> => {
     const out = new Map<string, number>();
     let entries: fs.Dirent[];
@@ -103,7 +108,10 @@ async function stableInboxNames(dir: string, settleMs: number): Promise<string[]
     for (const entry of entries) {
       if (!entry.isFile() || entry.name.startsWith(".")) continue;
       try {
-        out.set(entry.name, (await fs.promises.stat(path.join(dir, entry.name))).size);
+        out.set(
+          entry.name,
+          (await fs.promises.stat(path.join(dir, entry.name))).size,
+        );
       } catch (err) {
         if (!isENOENT(err)) throw err;
       }
@@ -122,9 +130,15 @@ async function stableInboxNames(dir: string, settleMs: number): Promise<string[]
 }
 
 /** Inbox files are user drops; a file still growing is left for the next boundary. */
-export async function scanInbox(store: ArtifactStore, opts: ScanOptions = {}): Promise<Steer[]> {
+export async function scanInbox(
+  store: ArtifactStore,
+  opts: ScanOptions = {},
+): Promise<Steer[]> {
   const inbox = path.join(store.mailboxDir, "inbox");
-  const names = await stableInboxNames(inbox, opts.settleMs ?? DEFAULT_SETTLE_MS);
+  const names = await stableInboxNames(
+    inbox,
+    opts.settleMs ?? DEFAULT_SETTLE_MS,
+  );
   if (names.length === 0) return [];
   const seen = await processedNames(store);
   const steers: Steer[] = [];
@@ -159,7 +173,11 @@ export async function scanInbox(store: ArtifactStore, opts: ScanOptions = {}): P
  * Writes a steer into the inbox the way every writer must: a private file on
  * the same filesystem, then rename. Readers never see a partial file.
  */
-export async function postSteer(store: ArtifactStore, id: string, text: string): Promise<string> {
+export async function postSteer(
+  store: ArtifactStore,
+  id: string,
+  text: string,
+): Promise<string> {
   if (!/^[a-z0-9][a-z0-9._-]*$/i.test(id)) {
     throw new Error(`steer id "${id}" must be a safe file name`);
   }
@@ -188,7 +206,10 @@ export async function postSteer(store: ArtifactStore, id: string, text: string):
   return path.join("mailbox", "inbox", path.basename(target));
 }
 
-async function archiveDuplicate(store: ArtifactStore, steer: Steer): Promise<void> {
+async function archiveDuplicate(
+  store: ArtifactStore,
+  steer: Steer,
+): Promise<void> {
   const dir = path.join(store.mailboxDir, "processed");
   await fs.promises.mkdir(dir, { recursive: true });
   const from = path.join(store.mailboxDir, "inbox", steer.file);
@@ -204,7 +225,10 @@ async function archiveDuplicate(store: ArtifactStore, steer: Steer): Promise<voi
  * Moves a claimed steer to processed. Replaying a crash that already moved it
  * is a no-op; a name collision from a different content keeps both files.
  */
-export async function markProcessed(store: ArtifactStore, steer: Steer): Promise<void> {
+export async function markProcessed(
+  store: ArtifactStore,
+  steer: Steer,
+): Promise<void> {
   const dir = path.join(store.mailboxDir, "processed");
   await fs.promises.mkdir(dir, { recursive: true });
   const from = path.join(store.mailboxDir, "inbox", steer.file);
@@ -254,7 +278,7 @@ async function quarantineHold(
   store: ArtifactStore,
   name: string,
   text: string,
-  problem: string
+  problem: string,
 ): Promise<void> {
   const dir = quarantineDir(store);
   await fs.promises.mkdir(dir, { recursive: true });
@@ -269,10 +293,13 @@ async function quarantineHold(
     return;
   }
   const rel = path.relative(store.goalDir, target);
-  await store.appendRecord(scriptMeta(await currentIteration(store), "hold-quarantine"), {
-    ok: false,
-    cause: `malformed hold "${name}" moved to ${rel}: ${problem}`,
-  });
+  await store.appendRecord(
+    scriptMeta(await currentIteration(store), "hold-quarantine"),
+    {
+      ok: false,
+      cause: `malformed hold "${name}" moved to ${rel}: ${problem}`,
+    },
+  );
 }
 
 /**
@@ -305,7 +332,10 @@ export async function readHolds(store: ArtifactStore): Promise<Hold[]> {
     try {
       const valid = holdFileSchema.safeParse(yaml.parse(text));
       if (valid.success) {
-        parsed = { steer: path.basename(name, path.extname(name)), ...valid.data };
+        parsed = {
+          steer: path.basename(name, path.extname(name)),
+          ...valid.data,
+        };
       } else {
         problem = "must be { slugs: string[], goal: boolean }";
       }
@@ -326,7 +356,10 @@ export async function readHolds(store: ArtifactStore): Promise<Hold[]> {
  * architect left unanswered, so held work resumes instead of waiting for an
  * answer that may never come.
  */
-export async function expireHold(store: ArtifactStore, steerId: string): Promise<void> {
+export async function expireHold(
+  store: ArtifactStore,
+  steerId: string,
+): Promise<void> {
   const dir = holdsDir(store);
   let names: string[];
   try {
@@ -346,9 +379,16 @@ export async function expireHold(store: ArtifactStore, steerId: string): Promise
   }
 }
 
-export async function writeOutbox(store: ArtifactStore, id: string, text: string): Promise<string> {
+export async function writeOutbox(
+  store: ArtifactStore,
+  id: string,
+  text: string,
+): Promise<string> {
   const rel = path.join("mailbox", "outbox", `steer-${id}.md`);
-  await writeTextAtomic(path.join(store.mailboxDir, "outbox", `steer-${id}.md`), `${text.trim()}\n`);
+  await writeTextAtomic(
+    path.join(store.mailboxDir, "outbox", `steer-${id}.md`),
+    `${text.trim()}\n`,
+  );
   return rel;
 }
 
@@ -376,6 +416,8 @@ export function formatSteers(steers: Steer[]): string {
 export function formatSteerTurn(steers: Steer[]): string {
   if (steers.length === 0) return "none";
   return steers
-    .map((s) => `- ${s.id} (${s.relPath}):\n${s.text.trim().replace(/^/gm, "  ")}`)
+    .map(
+      (s) => `- ${s.id} (${s.relPath}):\n${s.text.trim().replace(/^/gm, "  ")}`,
+    )
     .join("\n");
 }

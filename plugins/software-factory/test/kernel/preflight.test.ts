@@ -2,18 +2,22 @@ import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
-import { ConfigError, loadConfigs, resolveGoalPaths } from "../../src/kernel/config.js";
-import {
-  preflight,
-  PreflightError,
-  type ModelCatalog,
-  type PreflightInput,
-} from "../../src/kernel/preflight.js";
-import { recordedBaseGates } from "../../src/kernel/baseline.js";
-import { createFolderStore } from "../../src/kernel/store.js";
 import { FakeHarness } from "../../src/harness/fake/index.js";
 import type { Harness } from "../../src/harness/types.js";
+import { recordedBaseGates } from "../../src/kernel/baseline.js";
+import {
+  ConfigError,
+  loadConfigs,
+  resolveGoalPaths,
+} from "../../src/kernel/config.js";
+import {
+  type ModelCatalog,
+  PreflightError,
+  type PreflightInput,
+  preflight,
+} from "../../src/kernel/preflight.js";
+import { createFolderStore } from "../../src/kernel/store.js";
+import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 import { task } from "./helpers.js";
 
 const RUN_HEAD = `aliases:
@@ -31,7 +35,10 @@ interface Fixture {
   input: PreflightInput;
 }
 
-async function fixture(runYaml = RUN_HEAD, repoYaml?: string): Promise<Fixture> {
+async function fixture(
+  runYaml = RUN_HEAD,
+  repoYaml?: string,
+): Promise<Fixture> {
   const repo = createTmpRepo();
   const base = path.basename(repo.dir);
   const run = runYaml
@@ -39,7 +46,8 @@ async function fixture(runYaml = RUN_HEAD, repoYaml?: string): Promise<Fixture> 
     .replaceAll("SESSIONS_DIR", `../${base}-sessions`);
   repo.writeFile(
     ".factory/repo.yaml",
-    repoYaml ?? "baseBranch: main\nartifactRoot: .factory/artifacts\nsetup: []\ngates: []\n"
+    repoYaml ??
+      "baseBranch: main\nartifactRoot: .factory/artifacts\nsetup: []\ngates: []\n",
   );
   repo.writeFile(".factory/run.yaml", run);
   repo.commit("factory config");
@@ -49,7 +57,10 @@ async function fixture(runYaml = RUN_HEAD, repoYaml?: string): Promise<Fixture> 
   fs.writeFileSync(path.join(paths.goalDir, "intent.md"), "# Goal\n", "utf8");
   const store = createFolderStore(paths.goalDir);
   await store.ensureLayout();
-  const harness = new FakeHarness({ id: "fake", caps: { effort: ["low", "high", "max"] } });
+  const harness = new FakeHarness({
+    id: "fake",
+    caps: { effort: ["low", "high", "max"] },
+  });
   const harnesses = new Map<string, Harness>([["fake", harness]]);
   return { repo, configs, paths, input: { configs, paths, store, harnesses } };
 }
@@ -83,7 +94,10 @@ describe("pre-flight", () => {
         id: "fake",
         caps: { effort: [{ id: "low" }, { id: "max" }] as unknown as string[] },
       });
-      const result = await preflight({ ...f.input, harnesses: new Map([["fake", harness]]) });
+      const result = await preflight({
+        ...f.input,
+        harnesses: new Map([["fake", harness]]),
+      });
       expect(result.aliases.architect).toBe("max");
       expect(f.configs.run.aliases.architect!.effort).toBe("max");
     } finally {
@@ -94,13 +108,16 @@ describe("pre-flight", () => {
   it("reports an alias missing for a required role with file and key", async () => {
     const f = await fixture();
     try {
-      f.configs.process.roles.architect = { prompt: "architect", alias: "boss" };
+      f.configs.process.roles.architect = {
+        prompt: "architect",
+        alias: "boss",
+      };
       const err = await refusal(f.input);
       expect(err.findings).toContainEqual(
         expect.objectContaining({
           file: path.join(f.repo.dir, ".factory/run.yaml"),
           key: "aliases.boss",
-        })
+        }),
       );
       expect(err.report).toContain("aliases.boss");
       expect(err.report).toContain(".factory/run.yaml");
@@ -110,11 +127,16 @@ describe("pre-flight", () => {
   });
 
   it("refuses an effort level the model does not accept", async () => {
-    const f = await fixture(RUN_HEAD.replace("effort: highest", "effort: ultra"));
+    const f = await fixture(
+      RUN_HEAD.replace("effort: highest", "effort: ultra"),
+    );
     try {
       const err = await refusal(f.input);
       expect(err.findings).toContainEqual(
-        expect.objectContaining({ key: "aliases.architect.effort", file: expect.stringContaining(".factory/run.yaml") })
+        expect.objectContaining({
+          key: "aliases.architect.effort",
+          file: expect.stringContaining(".factory/run.yaml"),
+        }),
       );
       expect(err.report).toContain('effort "ultra" is not supported');
       expect(err.report).toContain("low, high, max");
@@ -127,11 +149,12 @@ describe("pre-flight", () => {
     const f = await fixture(
       RUN_HEAD.replace("model: pm", "model: ghost").replace(
         "model: arch",
-        "model: arch, fallbacks: [gone/model]"
-      )
+        "model: arch, fallbacks: [gone/model]",
+      ),
     );
     try {
-      const catalog: ModelCatalog = async (_harness, model) => model !== "ghost" && model !== "gone/model";
+      const catalog: ModelCatalog = async (_harness, model) =>
+        model !== "ghost" && model !== "gone/model";
       const err = await refusal({ ...f.input, catalog });
       const keys = err.findings.map((x) => x.key);
       expect(keys).toContain("aliases.pm.model");
@@ -149,7 +172,7 @@ describe("pre-flight", () => {
         expect.objectContaining({
           key: "harness.fake",
           message: 'binary "fake" is not executable or not on PATH',
-        })
+        }),
       );
     } finally {
       f.repo.cleanup();
@@ -158,7 +181,10 @@ describe("pre-flight", () => {
 
   it("names acpx and the bunx route when an acpx alias has no binary", async () => {
     const f = await fixture(
-      RUN_HEAD.replace("implementer: { harness: fake, model: impl }", "implementer: { harness: pi, model: impl }")
+      RUN_HEAD.replace(
+        "implementer: { harness: fake, model: impl }",
+        "implementer: { harness: pi, model: impl }",
+      ),
     );
     try {
       const harnesses = new Map(f.input.harnesses);
@@ -185,22 +211,31 @@ describe("pre-flight", () => {
       await f.input.store.writeTask(task("escalated", { tier: "escalation" }));
       await f.input.store.writeTask(task("plain", { tier: "default" }));
       const err = await refusal(f.input);
-      const tierFindings = err.findings.filter((finding) => finding.key === "tier");
+      const tierFindings = err.findings.filter(
+        (finding) => finding.key === "tier",
+      );
       expect(tierFindings).toHaveLength(1);
       expect(tierFindings[0]).toEqual(
         expect.objectContaining({
           file: path.join(f.input.store.tasksDir, "escalated.md"),
           message: 'tier "escalation" names no run-config alias',
-        })
+        }),
       );
-      expect(err.report).toContain('tier "escalation" names no run-config alias');
+      expect(err.report).toContain(
+        'tier "escalation" names no run-config alias',
+      );
     } finally {
       f.repo.cleanup();
     }
   });
 
   it("accepts a tier that names a configured alias", async () => {
-    const f = await fixture(RUN_HEAD.replace("limits:", "  escalation: { harness: fake, model: esc }\nlimits:"));
+    const f = await fixture(
+      RUN_HEAD.replace(
+        "limits:",
+        "  escalation: { harness: fake, model: esc }\nlimits:",
+      ),
+    );
     try {
       await f.input.store.writeTask(task("escalated", { tier: "escalation" }));
       const result = await preflight(f.input);
@@ -212,7 +247,10 @@ describe("pre-flight", () => {
 
   it("refuses an escalateTo that names no alias", async () => {
     const f = await fixture(
-      RUN_HEAD.replace("pm: { harness: fake, model: pm }", "pm: { harness: fake, model: pm, escalateTo: ghost }")
+      RUN_HEAD.replace(
+        "pm: { harness: fake, model: pm }",
+        "pm: { harness: fake, model: pm, escalateTo: ghost }",
+      ),
     );
     try {
       const err = await refusal(f.input);
@@ -221,7 +259,7 @@ describe("pre-flight", () => {
           file: path.join(f.repo.dir, ".factory/run.yaml"),
           key: "aliases.pm.escalateTo",
           message: 'escalateTo "ghost" names no run-config alias',
-        })
+        }),
       );
       expect(err.report).toContain("aliases.pm.escalateTo");
     } finally {
@@ -233,16 +271,17 @@ describe("pre-flight", () => {
     const f = await fixture(
       RUN_HEAD.replace(
         "pm: { harness: fake, model: pm }",
-        "pm: { harness: fake, model: pm, escalateTo: default }\n  default: { harness: fake, model: dflt }"
-      )
+        "pm: { harness: fake, model: pm, escalateTo: default }\n  default: { harness: fake, model: dflt }",
+      ),
     );
     try {
       const err = await refusal(f.input);
       expect(err.findings).toContainEqual(
         expect.objectContaining({
           key: "aliases.pm.escalateTo",
-          message: 'escalateTo "default" is reserved for "no tier override"; it would re-run the PM\'s own alias',
-        })
+          message:
+            'escalateTo "default" is reserved for "no tier override"; it would re-run the PM\'s own alias',
+        }),
       );
     } finally {
       f.repo.cleanup();
@@ -253,12 +292,14 @@ describe("pre-flight", () => {
     const f = await fixture(
       RUN_HEAD.replace(
         "pm: { harness: fake, model: pm }",
-        "pm: { harness: fake, model: pm, escalateTo: esc }\n  esc: { harness: fake, model: esc, escalateTo: pm }"
-      )
+        "pm: { harness: fake, model: pm, escalateTo: esc }\n  esc: { harness: fake, model: esc, escalateTo: pm }",
+      ),
     );
     try {
       const err = await refusal(f.input);
-      const finding = err.findings.find((item) => item.key === "aliases.pm.escalateTo");
+      const finding = err.findings.find(
+        (item) => item.key === "aliases.pm.escalateTo",
+      );
       expect(finding?.message).toContain("cycle");
       expect(finding?.message).toContain("pm -> esc -> pm");
     } finally {
@@ -269,7 +310,7 @@ describe("pre-flight", () => {
   it("refuses session and worktree roots inside the repository", async () => {
     const f = await fixture(
       RUN_HEAD +
-        "sessions: { dir: .factory/sessions, keepRuns: 2 }\nworktreeRoot: .factory/worktrees\n"
+        "sessions: { dir: .factory/sessions, keepRuns: 2 }\nworktreeRoot: .factory/worktrees\n",
     );
     try {
       const err = await refusal(f.input);
@@ -283,11 +324,17 @@ describe("pre-flight", () => {
   });
 
   it("refuses a base branch that does not exist", async () => {
-    const f = await fixture(undefined, "baseBranch: ghost\nartifactRoot: .factory/artifacts\n");
+    const f = await fixture(
+      undefined,
+      "baseBranch: ghost\nartifactRoot: .factory/artifacts\n",
+    );
     try {
       const err = await refusal(f.input);
       expect(err.findings).toContainEqual(
-        expect.objectContaining({ key: "baseBranch", file: path.join(f.repo.dir, ".factory/repo.yaml") })
+        expect.objectContaining({
+          key: "baseBranch",
+          file: path.join(f.repo.dir, ".factory/repo.yaml"),
+        }),
       );
     } finally {
       f.repo.cleanup();
@@ -297,7 +344,7 @@ describe("pre-flight", () => {
   it("records and warns about a red base once, without aborting", async () => {
     const f = await fixture(
       undefined,
-      "baseBranch: main\nartifactRoot: .factory/artifacts\ngates:\n  - { id: never, command: test -f never.txt }\n"
+      "baseBranch: main\nartifactRoot: .factory/artifacts\ngates:\n  - { id: never, command: test -f never.txt }\n",
     );
     const warnings: string[] = [];
     const original = console.warn;
@@ -308,7 +355,9 @@ describe("pre-flight", () => {
       expect(first.base?.ok).toBe(false);
       const second = await preflight(f.input);
       expect(second.base?.fresh).toBe(false);
-      const baselines = (await f.input.store.listRecords()).filter((r) => r.step === "baseline");
+      const baselines = (await f.input.store.listRecords()).filter(
+        (r) => r.step === "baseline",
+      );
       expect(baselines).toHaveLength(1);
       expect(baselines[0]!.ok).toBe(false);
       expect(warnings.join("\n")).toContain("is red; recorded once");
@@ -322,7 +371,7 @@ describe("pre-flight", () => {
   it("baselines the integration head tasks start from, not the base branch", async () => {
     const f = await fixture(
       undefined,
-      "baseBranch: main\nartifactRoot: .factory/artifacts\ngates:\n  - { id: integration-red, command: test ! -f integration-red.txt }\n"
+      "baseBranch: main\nartifactRoot: .factory/artifacts\ngates:\n  - { id: integration-red, command: test ! -f integration-red.txt }\n",
     );
     const warnings: string[] = [];
     const original = console.warn;
@@ -340,7 +389,9 @@ describe("pre-flight", () => {
       const result = await preflight(f.input);
       expect(result.base?.commit).toBe(integrationSha);
       expect(result.base?.ok).toBe(false);
-      const baselines = (await f.input.store.listRecords()).filter((r) => r.step === "baseline");
+      const baselines = (await f.input.store.listRecords()).filter(
+        (r) => r.step === "baseline",
+      );
       expect(baselines).toHaveLength(1);
       expect(baselines[0]!.base).toBe(integrationSha);
       expect(warnings.join("\n")).toContain(f.paths.integrationBranch);
@@ -353,7 +404,7 @@ describe("pre-flight", () => {
   it("baselines the base tip when the integration branch only lags it", async () => {
     const f = await fixture(
       undefined,
-      "baseBranch: main\nartifactRoot: .factory/artifacts\ngates:\n  - { id: stale, command: test ! -f broken.txt }\n"
+      "baseBranch: main\nartifactRoot: .factory/artifacts\ngates:\n  - { id: stale, command: test ! -f broken.txt }\n",
     );
     const warnings: string[] = [];
     const original = console.warn;
@@ -370,7 +421,9 @@ describe("pre-flight", () => {
       const result = await preflight(f.input);
       expect(result.base?.commit).toBe(greenSha);
       expect(result.base?.ok).toBe(true);
-      const baselines = (await f.input.store.listRecords()).filter((r) => r.step === "baseline");
+      const baselines = (await f.input.store.listRecords()).filter(
+        (r) => r.step === "baseline",
+      );
       expect(baselines).toHaveLength(1);
       expect(baselines[0]!.base).toBe(greenSha);
       expect(warnings).toEqual([]);
@@ -383,7 +436,7 @@ describe("pre-flight", () => {
   it("does not record a gate that could not run as base-red", async () => {
     const f = await fixture(
       undefined,
-      "baseBranch: main\nartifactRoot: .factory/artifacts\ngates:\n  - { id: missing, command: no-such-factory-gate-command }\n"
+      "baseBranch: main\nartifactRoot: .factory/artifacts\ngates:\n  - { id: missing, command: no-such-factory-gate-command }\n",
     );
     const warnings: string[] = [];
     const original = console.warn;
@@ -392,25 +445,43 @@ describe("pre-flight", () => {
       // A red record from an older head must not be inherited into this one.
       const older = f.repo.git(["rev-parse", "HEAD"]).stdout;
       await f.input.store.appendRecord(
-        { iteration: 0, step: "baseline", round: 1, actor: "script", base: older },
+        {
+          iteration: 0,
+          step: "baseline",
+          round: 1,
+          actor: "script",
+          base: older,
+        },
         {
           ok: false,
-          checks: [{ name: "missing", ok: false, summary: "exit 1", output: "old red", fingerprint: "old" }],
-        }
+          checks: [
+            {
+              name: "missing",
+              ok: false,
+              summary: "exit 1",
+              output: "old red",
+              fingerprint: "old",
+            },
+          ],
+        },
       );
       f.repo.writeFile("newer.txt", "newer\n");
       f.repo.commit("head moves past the old baseline");
 
       const first = await preflight(f.input);
       expect(first.base?.infra).toBe(true);
-      expect(recordedBaseGates(await f.input.store.listRecords())).toBeUndefined();
+      expect(
+        recordedBaseGates(await f.input.store.listRecords()),
+      ).toBeUndefined();
 
       // Nothing was cached as red: the next launch runs the gate again.
       const second = await preflight(f.input);
       expect(second.base?.infra).toBe(true);
       const records = await f.input.store.listRecords();
       expect(records.filter((r) => r.step === "baseline")).toHaveLength(1);
-      expect(records.filter((r) => r.step === "baseline-infra")).toHaveLength(2);
+      expect(records.filter((r) => r.step === "baseline-infra")).toHaveLength(
+        2,
+      );
       expect(warnings.join("\n")).toContain("could not be checked");
       expect(warnings.join("\n")).toContain("not recorded as red");
     } finally {
@@ -422,7 +493,7 @@ describe("pre-flight", () => {
   it("does not record a failed baseline setup as base-red", async () => {
     const f = await fixture(
       undefined,
-      "baseBranch: main\nartifactRoot: .factory/artifacts\nsetup:\n  - exit 7\ngates: []\n"
+      "baseBranch: main\nartifactRoot: .factory/artifacts\nsetup:\n  - exit 7\ngates: []\n",
     );
     const warnings: string[] = [];
     const original = console.warn;
@@ -430,7 +501,9 @@ describe("pre-flight", () => {
     try {
       const result = await preflight(f.input);
       expect(result.base?.infra).toBe(true);
-      expect(recordedBaseGates(await f.input.store.listRecords())).toBeUndefined();
+      expect(
+        recordedBaseGates(await f.input.store.listRecords()),
+      ).toBeUndefined();
       expect(warnings.join("\n")).toContain("setup");
     } finally {
       console.warn = original;
@@ -465,8 +538,12 @@ describe("pre-flight", () => {
       expect(result.base?.checks.map((c) => c.ok)).toEqual([true]);
 
       const scratch = fs.readFileSync(cwdFile, "utf8").trim();
-      expect(scratch.startsWith(path.resolve(f.paths.worktreeRoot) + path.sep)).toBe(true);
-      expect(scratch.startsWith(path.resolve(f.repo.dir) + path.sep)).toBe(false);
+      expect(
+        scratch.startsWith(path.resolve(f.paths.worktreeRoot) + path.sep),
+      ).toBe(true);
+      expect(scratch.startsWith(path.resolve(f.repo.dir) + path.sep)).toBe(
+        false,
+      );
       expect(fs.existsSync(scratch)).toBe(false);
     } finally {
       if (previousTmp === undefined) delete process.env.TMPDIR;
@@ -482,7 +559,10 @@ describe("configuration report", () => {
     const repo = createTmpRepo();
     try {
       repo.writeFile(".factory/repo.yaml", "baseBranch: main\ngates: nope\n");
-      repo.writeFile(".factory/run.yaml", "aliases:\n  architect: { harness: 7, model: x }\nlimits: { iterations: 0 }\n");
+      repo.writeFile(
+        ".factory/run.yaml",
+        "aliases:\n  architect: { harness: 7, model: x }\nlimits: { iterations: 0 }\n",
+      );
       repo.commit("broken config");
       try {
         loadConfigs(repo.dir);
@@ -490,7 +570,9 @@ describe("configuration report", () => {
       } catch (err) {
         expect(err).toBeInstanceOf(ConfigError);
         const error = err as ConfigError;
-        const keys = error.findings.map((f) => `${path.basename(f.file)}:${f.key}`);
+        const keys = error.findings.map(
+          (f) => `${path.basename(f.file)}:${f.key}`,
+        );
         expect(keys).toContain("repo.yaml:gates");
         expect(keys).toContain("run.yaml:aliases.architect.harness");
         expect(keys).toContain("run.yaml:limits.iterations");

@@ -2,8 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { git } from "../core/git/exec.js";
 import type { SessionRef } from "../harness/types.js";
-import { resumableSession } from "./architect-session.js";
 import { runAgentTurn } from "./agent.js";
+import { resumableSession } from "./architect-session.js";
 import { recordedBaseGates } from "./baseline.js";
 import {
   contextPackRelPath,
@@ -15,7 +15,6 @@ import {
 import { derive } from "./derive.js";
 import { writeLaunchDigest } from "./digest.js";
 import { compactSession, resolveRole } from "./flow-context.js";
-import { integrationHead } from "./worktree.js";
 import {
   expireHold,
   formatSteers,
@@ -24,9 +23,10 @@ import {
   steerResponses,
   writeOutbox,
 } from "./mailbox.js";
-import { runPm, type PmRung } from "./pm.js";
+import { type PmRung, runPm } from "./pm.js";
 import { scriptMeta } from "./record.js";
 import type { GoalDecision, KernelRuntime, Outcome } from "./types.js";
+import { integrationHead } from "./worktree.js";
 
 export interface BoundaryResult {
   iteration: number;
@@ -48,15 +48,23 @@ export interface BoundaryOptions {
   frontPack?: string;
 }
 
-function previousSummary(goalDir: string, iteration: number): string | undefined {
+function previousSummary(
+  goalDir: string,
+  iteration: number,
+): string | undefined {
   if (iteration <= 0) return undefined;
   const rel = summaryRelPath(iteration);
-  return fs.existsSync(path.join(goalDir, rel)) ? path.join(goalDir, rel) : undefined;
+  return fs.existsSync(path.join(goalDir, rel))
+    ? path.join(goalDir, rel)
+    : undefined;
 }
 
 function rungTrace(rungs: PmRung[]): string {
   return rungs
-    .map((rung) => `rung ${rung.round} ${rung.alias} (${rung.model}): ${rung.failure}`)
+    .map(
+      (rung) =>
+        `rung ${rung.round} ${rung.alias} (${rung.model}): ${rung.failure}`,
+    )
     .join("; ");
 }
 
@@ -87,12 +95,16 @@ async function taskSnapshot(goalDir: string): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   if (!fs.existsSync(dir)) return out;
   for (const name of (await fs.promises.readdir(dir)).sort()) {
-    if (name.endsWith(".md")) out.set(name, await fs.promises.readFile(path.join(dir, name), "utf8"));
+    if (name.endsWith(".md"))
+      out.set(name, await fs.promises.readFile(path.join(dir, name), "utf8"));
   }
   return out;
 }
 
-function snapshotDiff(before: Map<string, string>, after: Map<string, string>): string | null {
+function snapshotDiff(
+  before: Map<string, string>,
+  after: Map<string, string>,
+): string | null {
   const names = new Set([...before.keys(), ...after.keys()]);
   for (const name of [...names].sort()) {
     if (before.get(name) !== after.get(name)) return name;
@@ -117,7 +129,7 @@ async function codeMap(checkout: string): Promise<string[]> {
  */
 export async function runBoundary(
   runtime: KernelRuntime,
-  opts: BoundaryOptions
+  opts: BoundaryOptions,
 ): Promise<BoundaryResult> {
   const tasks = await runtime.store.listTasks();
   const records = await runtime.store.listRecords();
@@ -133,7 +145,9 @@ export async function runBoundary(
     opts.relaunch && records.length > 0
       ? await writeLaunchDigest(runtime, iteration, records)
       : null;
-  const digestPath = digestRel ? path.join(runtime.store.goalDir, digestRel) : undefined;
+  const digestPath = digestRel
+    ? path.join(runtime.store.goalDir, digestRel)
+    : undefined;
 
   const steers = await scanInbox(runtime.store);
   const seenSteers = steers.map((steer) => steer.id);
@@ -206,7 +220,8 @@ export async function runBoundary(
     session !== undefined &&
     stopBeforeRetry?.kind === "infra" &&
     stopBeforeRetry.cause === "overflow";
-  if (!overflowTerminal && infraDied(result)) result = await architectTurn(undefined);
+  if (!overflowTerminal && infraDied(result))
+    result = await architectTurn(undefined);
   const architectStop = result.record.stop;
   if (architectStop?.kind === "infra" && !result.outcome?.decision) {
     return {
@@ -220,7 +235,9 @@ export async function runBoundary(
     };
   }
 
-  const responses = result.outcome ? steerResponses(result.outcome) : new Map<string, string>();
+  const responses = result.outcome
+    ? steerResponses(result.outcome)
+    : new Map<string, string>();
   // A steer stays pending when the architect does not answer, so every later
   // boundary presents it again. The first unanswered boundary only records
   // that fact; the second expires the hold and reports the unanswered steer.
@@ -230,7 +247,7 @@ export async function runBoundary(
       priorRecords
         .filter((record) => record.step === step && record.cause)
         .map((record) => recordedSteerId(record.cause!))
-        .filter((id): id is string => Boolean(id))
+        .filter((id): id is string => Boolean(id)),
     );
   const presented = unansweredAt("steer-presented");
   const expired = unansweredAt("steer-unanswered");
@@ -240,40 +257,49 @@ export async function runBoundary(
       await writeOutbox(
         runtime.store,
         steer.id,
-        `# Steer ${steer.id}\n\n${answer}\n\nSource: ${steer.relPath}`
+        `# Steer ${steer.id}\n\n${answer}\n\nSource: ${steer.relPath}`,
       );
       await markProcessed(runtime.store, steer);
       continue;
     }
     if (expired.has(steer.id)) continue;
     if (!presented.has(steer.id)) {
-      await runtime.store.appendRecord(scriptMeta(iteration, "steer-presented"), {
-        ok: false,
-        cause: `unanswered steer ${JSON.stringify(steer.id)} in ${steer.relPath}; the next boundary presents it again before its hold expires`,
-      });
+      await runtime.store.appendRecord(
+        scriptMeta(iteration, "steer-presented"),
+        {
+          ok: false,
+          cause: `unanswered steer ${JSON.stringify(steer.id)} in ${steer.relPath}; the next boundary presents it again before its hold expires`,
+        },
+      );
       continue;
     }
     await expireHold(runtime.store, steer.id);
-    await runtime.store.appendRecord(scriptMeta(iteration, "steer-unanswered"), {
-      ok: false,
-      cause: `unanswered steer ${JSON.stringify(steer.id)} in ${steer.relPath}; hold expired after one boundary`,
-      outcome: {
-        status: "done",
-        summary: `steer ${steer.id} was left unanswered at two boundaries; its hold expired`,
-        concerns: [
-          {
-            kind: "debt",
-            calibration: "architect",
-            text: `steer ${steer.id} is unanswered after a second boundary; its hold expired and held work resumed`,
-            evidence: steer.relPath,
-          },
-        ],
-        forward: [],
+    await runtime.store.appendRecord(
+      scriptMeta(iteration, "steer-unanswered"),
+      {
+        ok: false,
+        cause: `unanswered steer ${JSON.stringify(steer.id)} in ${steer.relPath}; hold expired after one boundary`,
+        outcome: {
+          status: "done",
+          summary: `steer ${steer.id} was left unanswered at two boundaries; its hold expired`,
+          concerns: [
+            {
+              kind: "debt",
+              calibration: "architect",
+              text: `steer ${steer.id} is unanswered after a second boundary; its hold expired and held work resumed`,
+              evidence: steer.relPath,
+            },
+          ],
+          forward: [],
+        },
       },
-    });
+    );
   }
 
-  const touched = snapshotDiff(tasksBefore, await taskSnapshot(runtime.store.goalDir));
+  const touched = snapshotDiff(
+    tasksBefore,
+    await taskSnapshot(runtime.store.goalDir),
+  );
   if (touched) {
     return {
       iteration,
@@ -299,7 +325,13 @@ export async function runBoundary(
   }
 
   if (decision !== "continue") {
-    return { iteration, decision, outcome: result.outcome, packPath: packRel, seenSteers };
+    return {
+      iteration,
+      decision,
+      outcome: result.outcome,
+      packPath: packRel,
+      seenSteers,
+    };
   }
 
   const planPath = path.join(runtime.store.goalDir, "plan.md");
@@ -332,7 +364,9 @@ export async function runBoundary(
   }
   if (pm.status === "infra") {
     const rung = pm.rungs.at(-1);
-    const where = rung ? ` at rung ${rung.round} ${rung.alias} (${rung.model})` : "";
+    const where = rung
+      ? ` at rung ${rung.round} ${rung.alias} (${rung.model})`
+      : "";
     return {
       iteration,
       decision: "blocked",

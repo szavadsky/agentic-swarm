@@ -1,7 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import { FakeHarness, fakeTurnResult, type FakeTurnHandler } from "../../src/harness/fake/index.js";
+import {
+  FakeHarness,
+  type FakeTurnHandler,
+  fakeTurnResult,
+} from "../../src/harness/fake/index.js";
 import type { TurnResult } from "../../src/harness/types.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
@@ -28,10 +32,14 @@ describe("turn failures — outcome, crash and wall-clock handling", () => {
       harness.script((req, ctx) => {
         fs.writeFileSync(path.join(req.cwd!, "a.txt"), "a\n", "utf8");
         ctx.writeOutcome(outcome({ summary: "a implemented" }));
-        return fakeTurnResult(req, { stop: { kind: "infra", cause: "timeout", details: "idle 30m" } });
+        return fakeTurnResult(req, {
+          stop: { kind: "infra", cause: "timeout", details: "idle 30m" },
+        });
       });
       harness.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "a approved", verdict: "approve" }));
+        ctx.writeOutcome(
+          outcome({ summary: "a approved", verdict: "approve" }),
+        );
         return fakeTurnResult(req);
       });
       const runtime = await makeRuntime(repo, goal, { fake: harness });
@@ -43,21 +51,36 @@ describe("turn failures — outcome, crash and wall-clock handling", () => {
       // launch; the outcome itself is kept.
       expect(harness.calls).toHaveLength(1);
       let records = await runtime.store.listRecords();
-      const implement = records.find((r) => r.slug === "a" && r.step === "implement" && r.actor === "agent");
+      const implement = records.find(
+        (r) => r.slug === "a" && r.step === "implement" && r.actor === "agent",
+      );
       expect(implement?.outcome?.summary).toBe("a implemented");
       expect(implement?.stop?.kind).toBe("infra");
       const checks = records.find((r) => r.slug === "a" && r.step === "checks");
       expect(checks?.ok).toBe(true);
-      let state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+      let state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
       expect(state.tasks.a!.phase).toBe("review");
 
       // A relaunch advances on the kept outcome instead of redispatching implement.
       const second = await runDispatch(runtime, { iteration: 2 });
       expect(second.reason).toBe("boundary");
       records = await runtime.store.listRecords();
-      state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+      state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
       expect(state.tasks.a!.status).toBe("merged");
-      expect(records.filter((r) => r.slug === "a" && r.step === "implement" && r.actor === "agent")).toHaveLength(1);
+      expect(
+        records.filter(
+          (r) =>
+            r.slug === "a" && r.step === "implement" && r.actor === "agent",
+        ),
+      ).toHaveLength(1);
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -73,7 +96,9 @@ describe("turn failures — outcome, crash and wall-clock handling", () => {
         return fakeTurnResult(req, { stop: { kind: "cancelled" } });
       });
       harness.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "a approved", verdict: "approve" }));
+        ctx.writeOutcome(
+          outcome({ summary: "a approved", verdict: "approve" }),
+        );
         return fakeTurnResult(req);
       });
       const runtime = await makeRuntime(repo, goal, { fake: harness });
@@ -83,15 +108,25 @@ describe("turn failures — outcome, crash and wall-clock handling", () => {
       expect(first.reason).toBe("cancelled");
       expect(harness.calls).toHaveLength(1);
       let records = await runtime.store.listRecords();
-      const implement = records.find((r) => r.slug === "a" && r.step === "implement" && r.actor === "agent");
+      const implement = records.find(
+        (r) => r.slug === "a" && r.step === "implement" && r.actor === "agent",
+      );
       expect(implement?.outcome?.summary).toBe("a implemented");
       expect(implement?.stop?.kind).toBe("cancelled");
-      let state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+      let state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
       expect(state.tasks.a!.phase).toBe("review");
 
       const second = await runDispatch(runtime, { iteration: 2 });
       records = await runtime.store.listRecords();
-      state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+      state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
       expect(state.tasks.a!.status).toBe("merged");
       expect(second.reason).toBe("boundary");
     } finally {
@@ -124,9 +159,15 @@ describe("turn failures — outcome, crash and wall-clock handling", () => {
       const checks = records.find((r) => r.slug === "a" && r.step === "checks");
       expect(checks?.ok).toBe(false);
       expect(checks?.checks?.[0]?.summary).toBe("exit 1");
-      expect((checks?.checks?.[0]?.details as { kind?: unknown } | undefined)?.kind).not.toBe("infra");
+      expect(
+        (checks?.checks?.[0]?.details as { kind?: unknown } | undefined)?.kind,
+      ).not.toBe("infra");
 
-      const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
       expect(state.tasks.a!.cause ?? "").not.toContain("infra: gate");
       expect(state.tasks.a!.status).not.toBe("merged");
     } finally {
@@ -157,9 +198,15 @@ describe("turn failures — outcome, crash and wall-clock handling", () => {
       expect(checks?.checks?.[0]?.summary).toBe("exit 127");
       expect(checks?.checks?.[0]?.details).toMatchObject({ kind: "infra" });
 
-      const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
       expect(state.tasks.a!.status).toBe("parked");
-      expect(state.tasks.a!.cause).toContain("infra: gate could not start: typecheck");
+      expect(state.tasks.a!.cause).toContain(
+        "infra: gate could not start: typecheck",
+      );
       expect(state.tasks.a!.cause).not.toContain("empty-diff");
       const park = records.find((r) => r.slug === "a" && r.step === "park");
       expect(park?.cause).toContain("infra: gate could not start: typecheck");
@@ -183,7 +230,9 @@ describe("turn failures — outcome, crash and wall-clock handling", () => {
       harness.script(implement);
       harness.script(implement);
       harness.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "b approved", verdict: "approve" }));
+        ctx.writeOutcome(
+          outcome({ summary: "b approved", verdict: "approve" }),
+        );
         return fakeTurnResult(req);
       });
       const runtime = await makeRuntime(repo, goal, { fake: harness });
@@ -195,12 +244,20 @@ describe("turn failures — outcome, crash and wall-clock handling", () => {
       expect(result.cause).toContain("a: crash: simulated kill in a");
       const records = await runtime.store.listRecords();
       const aCrash = records.find(
-        (r) => r.slug === "a" && r.step === "implement" && r.actor === "script"
+        (r) => r.slug === "a" && r.step === "implement" && r.actor === "script",
       );
       expect(aCrash?.ok).toBe(false);
       expect(aCrash?.cause).toBe("crash: simulated kill in a");
-      expect(aCrash?.stop).toEqual({ kind: "infra", cause: "crash", details: "simulated kill in a" });
-      const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+      expect(aCrash?.stop).toEqual({
+        kind: "infra",
+        cause: "crash",
+        details: "simulated kill in a",
+      });
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
       expect(state.tasks.b!.status).toBe("merged");
       expect(state.tasks.a!.status).not.toBe("merged");
     } finally {
@@ -224,10 +281,14 @@ describe("turn failures — outcome, crash and wall-clock handling", () => {
       expect(result.cause).toContain("crash: simulated non-error failure");
       const records = await runtime.store.listRecords();
       const crash = records.find(
-        (r) => r.slug === "a" && r.step === "implement" && r.actor === "script"
+        (r) => r.slug === "a" && r.step === "implement" && r.actor === "script",
       );
       expect(crash?.cause).toBe("crash: simulated non-error failure");
-      expect(crash?.stop).toEqual({ kind: "infra", cause: "crash", details: "simulated non-error failure" });
+      expect(crash?.stop).toEqual({
+        kind: "infra",
+        cause: "crash",
+        details: "simulated non-error failure",
+      });
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -235,12 +296,16 @@ describe("turn failures — outcome, crash and wall-clock handling", () => {
 
   it("stops a turn at the turn wall bound set by limits.turnMinutes", async () => {
     // 0.0005 minute = 30ms; the handler never settles, so only the bound ends the turn.
-    const { repo, goal } = setupFlowRepo({ limits: { turnMinutes: 0.0005, concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { turnMinutes: 0.0005, concurrency: 1 },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       harness.script(() => new Promise<TurnResult>(() => {}));
       const runtime = await makeRuntime(repo, goal, { fake: harness });
-      expect((runtime.limits as { turnMinutes?: number }).turnMinutes).toBe(0.0005);
+      expect((runtime.limits as { turnMinutes?: number }).turnMinutes).toBe(
+        0.0005,
+      );
       await writeTask(runtime, task("a", { scope: ["a.txt"] }));
 
       const result = await runDispatch(runtime, { iteration: 1 });
@@ -252,7 +317,11 @@ describe("turn failures — outcome, crash and wall-clock handling", () => {
         expect(turn.stop.cause).toBe("timeout");
         expect(turn.stop.details).toContain("wall clock");
       }
-      const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
       expect(state.tasks.a!.turns).toBe(1);
     } finally {
       cleanupFlowRepo(repo);
@@ -261,7 +330,9 @@ describe("turn failures — outcome, crash and wall-clock handling", () => {
 
   it("stops an iteration at the wall bound set by limits.iterationMinutes before dispatching anything", async () => {
     // ~0.06ms rounds to 0: the bound is already reached when the loop first reads the clock.
-    const { repo, goal } = setupFlowRepo({ limits: { iterationMinutes: 0.000001, concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { iterationMinutes: 0.000001, concurrency: 1 },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       const runtime = await makeRuntime(repo, goal, { fake: harness });

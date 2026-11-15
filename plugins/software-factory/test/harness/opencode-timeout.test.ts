@@ -24,7 +24,10 @@ function fakeHarness(): { harness: OpencodeHarness; cleanup: () => void } {
     binary,
     sessionDir: path.join(tmp, "sessions"),
   });
-  return { harness, cleanup: () => fs.rmSync(tmp, { recursive: true, force: true }) };
+  return {
+    harness,
+    cleanup: () => fs.rmSync(tmp, { recursive: true, force: true }),
+  };
 }
 
 describe("OpencodeHarness fake process", () => {

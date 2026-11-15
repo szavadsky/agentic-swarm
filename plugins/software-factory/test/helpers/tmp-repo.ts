@@ -1,7 +1,7 @@
-import fs from "node:fs";
-import path from "node:path";
-import os from "node:os";
 import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 export interface TmpRepo {
   dir: string;
@@ -11,7 +11,10 @@ export interface TmpRepo {
   commit(message: string, paths?: string[]): string;
   createBranch(branchName: string, startPoint?: string): void;
   createWorktree(branchName: string, wtPath?: string): string;
-  git(args: string[], opts?: { allowFail?: boolean; env?: Record<string, string>; cwd?: string }): {
+  git(
+    args: string[],
+    opts?: { allowFail?: boolean; env?: Record<string, string>; cwd?: string },
+  ): {
     stdout: string;
     stderr: string;
     code: number;
@@ -40,23 +43,38 @@ process.on("exit", () => {
   activeTmpRepos.clear();
 });
 
-export function createTmpRepo(options?: { initialCommitMessage?: string }): TmpRepo {
+export function createTmpRepo(options?: {
+  initialCommitMessage?: string;
+}): TmpRepo {
   // Normalize the tmp base: os.tmpdir() inherits TMPDIR, and head-guard path
   // math breaks when TMPDIR sits under `/.factory-runtime`. Fall back to /tmp
   // whenever the inherited dir looks factory-owned or is missing.
   const rawTmp = os.tmpdir() ?? "";
   const baseTmp =
-    rawTmp && fs.existsSync(rawTmp) && !rawTmp.includes(".factory") ? rawTmp : "/tmp";
+    rawTmp && fs.existsSync(rawTmp) && !rawTmp.includes(".factory")
+      ? rawTmp
+      : "/tmp";
   const dir = fs.mkdtempSync(path.join(baseTmp, "factory-test-repo-"));
   const worktrees: string[] = [];
 
   function runGit(
     args: string | string[],
-    opts: { cwd?: string; allowFail?: boolean; env?: Record<string, string> } = {}
+    opts: {
+      cwd?: string;
+      allowFail?: boolean;
+      env?: Record<string, string>;
+    } = {},
   ): { stdout: string; stderr: string; code: number } {
     const cwd = opts.cwd ?? dir;
     const baseTmp = fs.existsSync(os.tmpdir()) ? os.tmpdir() : "/tmp";
-    const env = { ...process.env, TMPDIR: baseTmp, TMP: baseTmp, TEMP: baseTmp, ...DEFAULT_ENV, ...(opts.env ?? {}) };
+    const env = {
+      ...process.env,
+      TMPDIR: baseTmp,
+      TMP: baseTmp,
+      TEMP: baseTmp,
+      ...DEFAULT_ENV,
+      ...(opts.env ?? {}),
+    };
     const argsArr = Array.isArray(args) ? args : [args];
 
     try {
@@ -70,7 +88,7 @@ export function createTmpRepo(options?: { initialCommitMessage?: string }): TmpR
     } catch (err: any) {
       if (!opts.allowFail) {
         throw new Error(
-          `git ${argsArr.join(" ")} failed in ${cwd}: ${err.stderr || err.message}`
+          `git ${argsArr.join(" ")} failed in ${cwd}: ${err.stderr || err.message}`,
         );
       }
       return {
@@ -132,7 +150,14 @@ export function createTmpRepo(options?: { initialCommitMessage?: string }): TmpR
       return targetPath;
     },
 
-    git(args: string[], opts?: { allowFail?: boolean; env?: Record<string, string>; cwd?: string }) {
+    git(
+      args: string[],
+      opts?: {
+        allowFail?: boolean;
+        env?: Record<string, string>;
+        cwd?: string;
+      },
+    ) {
       return runGit(args, opts);
     },
 
@@ -159,7 +184,10 @@ export function createTmpRepo(options?: { initialCommitMessage?: string }): TmpR
           for (const entry of entries) {
             if (entry.includes(baseName) && entry !== baseName) {
               try {
-                fs.rmSync(path.join(parentDir, entry), { recursive: true, force: true });
+                fs.rmSync(path.join(parentDir, entry), {
+                  recursive: true,
+                  force: true,
+                });
               } catch {}
             }
           }
@@ -176,10 +204,17 @@ export function createTmpRepo(options?: { initialCommitMessage?: string }): TmpR
         if (fs.existsSync(tmp)) {
           const entries = fs.readdirSync(tmp);
           for (const entry of entries) {
-            if (entry.startsWith("preflight-probe-") || entry.startsWith("preflight-overlay-")) {
+            if (
+              entry.startsWith("preflight-probe-") ||
+              entry.startsWith("preflight-overlay-")
+            ) {
               try {
                 const st = fs.statSync(path.join(tmp, entry));
-                if (st.mtimeMs < cutoff) fs.rmSync(path.join(tmp, entry), { recursive: true, force: true });
+                if (st.mtimeMs < cutoff)
+                  fs.rmSync(path.join(tmp, entry), {
+                    recursive: true,
+                    force: true,
+                  });
               } catch {}
             }
           }

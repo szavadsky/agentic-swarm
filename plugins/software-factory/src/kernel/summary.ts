@@ -3,18 +3,28 @@ import { recordedBaseGates } from "./baseline.js";
 import { summaryRelPath } from "./context-pack.js";
 import { derive } from "./derive.js";
 import {
-  DEFAULT_ROLE_BY_STEP,
   costText,
+  DEFAULT_ROLE_BY_STEP,
+  type GroupMetrics,
+  type IncidentCounts,
   iterationMetrics,
   rolesByStep,
   writeMetrics,
-  type GroupMetrics,
-  type IncidentCounts,
 } from "./metrics.js";
 import type { PriceTable } from "./pricing.js";
-import type { ArtifactStore, GoalDecision, KernelRuntime, State, StepRecord } from "./types.js";
+import type {
+  ArtifactStore,
+  GoalDecision,
+  KernelRuntime,
+  State,
+  StepRecord,
+} from "./types.js";
 
-export type SummaryStatus = "goal-met" | "in-progress" | "blocked-by-user" | "stopped-with-debt";
+export type SummaryStatus =
+  | "goal-met"
+  | "in-progress"
+  | "blocked-by-user"
+  | "stopped-with-debt";
 
 export interface SummaryInput {
   iteration: number;
@@ -43,7 +53,7 @@ function shortHash(hash: string): string {
 
 function spendTable(
   label: string,
-  rows: Array<{ name: string } & GroupMetrics>
+  rows: Array<{ name: string } & GroupMetrics>,
 ): string[] {
   if (rows.length === 0) return ["- none"];
   return [
@@ -51,12 +61,15 @@ function spendTable(
     "| --- | --- | --- | --- | --- |",
     ...rows.map(
       (row) =>
-        `| ${row.name} | ${row.turns} | ${row.tokens} | ${costText(row.usage.costUsd, row.unpricedTurns)} | ${row.promptBytes} |`
+        `| ${row.name} | ${row.turns} | ${row.tokens} | ${costText(row.usage.costUsd, row.unpricedTurns)} | ${row.promptBytes} |`,
     ),
   ];
 }
 
-function incidentLines(incidents: IncidentCounts, loopIncidents: number): string[] {
+function incidentLines(
+  incidents: IncidentCounts,
+  loopIncidents: number,
+): string[] {
   return [
     `- infra retries: ${incidents.infraRetries}`,
     `- fallback hops: ${incidents.fallbackHops}`,
@@ -80,8 +93,8 @@ function concernLines(recs: StepRecord[], kind?: string): string[] {
         (concern) =>
           `- ${rec.slug ? `${rec.slug}: ` : ""}${concern.text}${
             concern.evidence ? ` (${concern.evidence})` : ""
-          }`
-      )
+          }`,
+      ),
   );
 }
 
@@ -92,20 +105,28 @@ function concernLines(recs: StepRecord[], kind?: string): string[] {
  */
 export async function writeIterationSummary(
   store: ArtifactStore,
-  input: SummaryInput
+  input: SummaryInput,
 ): Promise<string> {
   const { iteration } = input;
   const recs = input.records.filter((r) => r.iteration === iteration);
-  const architect = recs.filter((r) => r.step === "architect" && r.outcome).at(-1);
+  const architect = recs
+    .filter((r) => r.step === "architect" && r.outcome)
+    .at(-1);
   const status = input.decision
     ? defaultStatus(input.decision)
     : (input.status ?? defaultStatus(undefined));
   // Dispatch marks a drain from the USD brake with a `budget:` cause; it is a
   // spend fact, so it gets its own metrics line instead of the boundary remark.
-  const budgetStop = input.cause ? /^budget:\s*(.+)$/i.exec(input.cause)?.[1]?.trim() : undefined;
+  const budgetStop = input.cause
+    ? /^budget:\s*(.+)$/i.exec(input.cause)?.[1]?.trim()
+    : undefined;
 
-  const merged = recs.filter((r) => r.step === "merge" && r.ok === true).map((r) => r.slug!);
-  const finished = recs.filter((r) => r.step === "finish" && r.ok === true).map((r) => r.slug!);
+  const merged = recs
+    .filter((r) => r.step === "merge" && r.ok === true)
+    .map((r) => r.slug!);
+  const finished = recs
+    .filter((r) => r.step === "finish" && r.ok === true)
+    .map((r) => r.slug!);
   const parkedByCause = new Map<string, string[]>();
   const pending: string[] = [];
   const cancelled: string[] = [];
@@ -128,13 +149,15 @@ export async function writeIterationSummary(
         (concern) =>
           `- [${concern.kind}] ${rec.slug ? `${rec.slug}: ` : ""}${concern.text}${
             concern.evidence ? ` (${concern.evidence})` : ""
-          }`
-      )
+          }`,
+      ),
   );
-  const inbox = (await store.listDir("mailbox/inbox")).filter((name) => !name.startsWith("."));
+  const inbox = (await store.listDir("mailbox/inbox")).filter(
+    (name) => !name.startsWith("."),
+  );
   const unanswered = inbox.map(
     (file) =>
-      `- steer ${path.basename(file, path.extname(file))} is still in mailbox/inbox/${file}`
+      `- steer ${path.basename(file, path.extname(file))} is still in mailbox/inbox/${file}`,
   );
 
   const remarks: string[] = [];
@@ -152,26 +175,47 @@ export async function writeIterationSummary(
     }
   }
 
-  const assumed = concernLines(recs.filter((r) => r.step === "architect"), "choice");
+  const assumed = concernLines(
+    recs.filter((r) => r.step === "architect"),
+    "choice",
+  );
   const debtOpened = concernLines(recs, "debt");
   const debtClosed = recs.flatMap((rec) =>
     (rec.outcome?.forward ?? [])
       .map((forward) => /^debt closed:\s*(.+)$/i.exec(forward)?.[1]?.trim())
       .filter((text): text is string => Boolean(text))
-      .map((text) => `- ${text}`)
+      .map((text) => `- ${text}`),
   );
 
   const roleByStep = { ...DEFAULT_ROLE_BY_STEP, ...(input.roleByStep ?? {}) };
-  const computed = iterationMetrics(iteration, status, input.records, roleByStep, 0, input.prices ?? {});
-  const { usage, unpricedTurns, roles: roleCosts, aliases, incidents, loopIncidents } = computed;
+  const computed = iterationMetrics(
+    iteration,
+    status,
+    input.records,
+    roleByStep,
+    0,
+    input.prices ?? {},
+  );
+  const {
+    usage,
+    unpricedTurns,
+    roles: roleCosts,
+    aliases,
+    incidents,
+    loopIncidents,
+  } = computed;
   const roleNames = Object.values(roleCosts)
     .map((entry) => ({ name: entry.role, ...entry }))
     .sort((a, b) => a.name.localeCompare(b.name));
   const aliasNames = Object.values(aliases)
     .map((entry) => ({ name: entry.alias, ...entry }))
     .sort((a, b) => a.name.localeCompare(b.name));
-  const agentTurns = recs.filter((r) => r.actor === "agent" && r.endedAt).length;
-  const scriptTurns = recs.filter((r) => r.actor === "script" && r.endedAt).length;
+  const agentTurns = recs.filter(
+    (r) => r.actor === "agent" && r.endedAt,
+  ).length;
+  const scriptTurns = recs.filter(
+    (r) => r.actor === "script" && r.endedAt,
+  ).length;
   const base = recordedBaseGates(input.records);
   const baseLines = !base
     ? ["- not recorded"]
@@ -179,7 +223,9 @@ export async function writeIterationSummary(
       ? [`- ${shortHash(base.commit)}: green`]
       : [
           `- ${shortHash(base.commit)} was red before any task (pre-existing; not attributed to tasks):`,
-          ...base.checks.filter((c) => !c.ok).map((c) => `  - ${c.name}: ${c.summary}`),
+          ...base.checks
+            .filter((c) => !c.ok)
+            .map((c) => `  - ${c.name}: ${c.summary}`),
         ];
 
   const lines = [
@@ -207,7 +253,10 @@ export async function writeIterationSummary(
     "",
     "## Parked by root cause",
     ...(parkedByCause.size
-      ? [...parkedByCause.entries()].flatMap(([cause, slugs]) => [`- ${cause}`, `  - ${slugs.join(", ")}`])
+      ? [...parkedByCause.entries()].flatMap(([cause, slugs]) => [
+          `- ${cause}`,
+          `  - ${slugs.join(", ")}`,
+        ])
       : ["- none"]),
     "",
     "## Debt opened",
@@ -231,7 +280,10 @@ export async function writeIterationSummary(
     `- cost by role: ${
       roleNames.length
         ? roleNames
-            .map((entry) => `${entry.name} ${costText(entry.usage.costUsd, entry.unpricedTurns)}`)
+            .map(
+              (entry) =>
+                `${entry.name} ${costText(entry.usage.costUsd, entry.unpricedTurns)}`,
+            )
             .join("; ")
         : "none"
     }`,
@@ -258,7 +310,10 @@ export async function writeIterationSummary(
   const text = lines.join("\n");
   await store.writeFile(rel, text);
   // The outbox is how the owner sees the guaranteed remarkable without reading the goal dir.
-  await store.writeFile(`mailbox/outbox/iteration-${iteration}-summary.md`, text);
+  await store.writeFile(
+    `mailbox/outbox/iteration-${iteration}-summary.md`,
+    text,
+  );
   return rel;
 }
 
@@ -269,9 +324,17 @@ export async function writeIterationSummary(
  */
 export async function backfillSummaries(runtime: KernelRuntime): Promise<void> {
   const records = await runtime.store.listRecords();
-  const state = derive(await runtime.store.listTasks(), records, runtime.configs.process.flows);
+  const state = derive(
+    await runtime.store.listTasks(),
+    records,
+    runtime.configs.process.flows,
+  );
   const status =
-    state.goal === "done" ? "goal-met" : state.goal === "blocked" ? "blocked-by-user" : "stopped-with-debt";
+    state.goal === "done"
+      ? "goal-met"
+      : state.goal === "blocked"
+        ? "blocked-by-user"
+        : "stopped-with-debt";
   const roleByStep = rolesByStep(runtime.configs.process.flows);
   for (let n = 1; n <= state.iteration; n++) {
     if (await runtime.store.readFile(summaryRelPath(n))) continue;

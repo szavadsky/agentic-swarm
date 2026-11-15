@@ -2,16 +2,22 @@ import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { Repo } from "../../src/core/git/repo.js";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import type { SessionRef } from "../../src/harness/types.js";
-import { Repo } from "../../src/core/git/repo.js";
 import { runAgentTurn } from "../../src/kernel/agent.js";
-import { resolveRole } from "../../src/kernel/flow-context.js";
 import { renderContextPack } from "../../src/kernel/context-pack.js";
-import { createFolderStore } from "../../src/kernel/store.js";
-import { loadPrompts } from "../../src/kernel/prompts.js";
 import { derive } from "../../src/kernel/derive.js";
-import type { FlowDefinition, KernelRuntime, ProcessConfig, RepoConfig, RunConfig } from "../../src/kernel/types.js";
+import { resolveRole } from "../../src/kernel/flow-context.js";
+import { loadPrompts } from "../../src/kernel/prompts.js";
+import { createFolderStore } from "../../src/kernel/store.js";
+import type {
+  FlowDefinition,
+  KernelRuntime,
+  ProcessConfig,
+  RepoConfig,
+  RunConfig,
+} from "../../src/kernel/types.js";
 import { task } from "./helpers.js";
 
 function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
@@ -81,12 +87,19 @@ describe("agent turn outcome delivery", () => {
     const runtime = runtimeFor(fake, root);
     await runtime.store.ensureLayout();
     fake.script((req) => {
-      fs.writeFileSync(req.outcomePath!, "status: done\nsummary: no decision\n");
+      fs.writeFileSync(
+        req.outcomePath!,
+        "status: done\nsummary: no decision\n",
+      );
       return fakeTurnResult(req, { usage: { in: 10 } });
     });
     fake.script((req, ctx) => {
       expect(req.session).toBeDefined();
-      ctx.writeOutcome({ status: "done", summary: "fixed", decision: "continue" });
+      ctx.writeOutcome({
+        status: "done",
+        summary: "fixed",
+        decision: "continue",
+      });
       return fakeTurnResult(req, { usage: { in: 3 } });
     });
 
@@ -133,7 +146,9 @@ describe("agent turn outcome delivery", () => {
     const fake = new FakeHarness({ id: "fake" });
     const runtime = runtimeFor(fake, root);
     await runtime.store.ensureLayout();
-    fake.script((req) => fakeTurnResult(req, { stop: { kind: "infra", cause: "quota" } }));
+    fake.script((req) =>
+      fakeTurnResult(req, { stop: { kind: "infra", cause: "quota" } }),
+    );
 
     const result = await runAgentTurn(runtime, {
       target: resolveRole(runtime, "architect"),
@@ -190,13 +205,18 @@ describe("agent turn outcome delivery", () => {
         },
         {
           stop: { kind: "done" },
-          outcome: { status: "done", summary: "implemented", concerns: [], forward: [] },
+          outcome: {
+            status: "done",
+            summary: "implemented",
+            concerns: [],
+            forward: [],
+          },
           session: priorSession(root),
-        }
+        },
       );
       await runtime.store.appendRecord(
         { iteration: 1, slug: "a", step: "checks", round: 1, actor: "script" },
-        { ok: true, checks: [] }
+        { ok: true, checks: [] },
       );
       await runtime.store.appendRecord(
         {
@@ -210,12 +230,21 @@ describe("agent turn outcome delivery", () => {
         },
         {
           stop: { kind: "done" },
-          outcome: { status: "done", summary: "needs a fix", concerns: [], forward: [], verdict: "changes" },
-        }
+          outcome: {
+            status: "done",
+            summary: "needs a fix",
+            concerns: [],
+            forward: [],
+            verdict: "changes",
+          },
+        },
       );
       fake.script((req) => {
         expect(req.session?.id).toBe("prior-session");
-        return fakeTurnResult(req, { stop: { kind: "infra", cause: "overflow" }, usage: { in: 40 } });
+        return fakeTurnResult(req, {
+          stop: { kind: "infra", cause: "overflow" },
+          usage: { in: 40 },
+        });
       });
       fake.script((req, ctx) => {
         ctx.writeOutcome({ status: "done", summary: "implemented" });
@@ -240,7 +269,11 @@ describe("agent turn outcome delivery", () => {
       expect(result.record.session?.id).not.toBe("prior-session");
 
       const records = await runtime.store.listRecords();
-      expect(records.filter((r) => r.step === "implement" && r.actor === "agent" && r.endedAt)).toHaveLength(2);
+      expect(
+        records.filter(
+          (r) => r.step === "implement" && r.actor === "agent" && r.endedAt,
+        ),
+      ).toHaveLength(2);
       const state = derive([task("a")], records, flows);
       expect(state.tasks.a!.turns).toBe(3);
       expect(state.tasks.a!.round).toBe(2);
@@ -257,9 +290,14 @@ describe("agent turn outcome delivery", () => {
       fake.script((req) => {
         fs.writeFileSync(
           req.outcomePath!,
-          JSON.stringify({ status: "done", summary: "stale from the resumed attempt" })
+          JSON.stringify({
+            status: "done",
+            summary: "stale from the resumed attempt",
+          }),
         );
-        return fakeTurnResult(req, { stop: { kind: "infra", cause: "overflow" } });
+        return fakeTurnResult(req, {
+          stop: { kind: "infra", cause: "overflow" },
+        });
       });
       fake.script((req) => fakeTurnResult(req));
       fake.script((req, ctx) => {
@@ -287,7 +325,9 @@ describe("agent turn outcome delivery", () => {
       const fake = new FakeHarness({ id: "fake" });
       const runtime = runtimeFor(fake, root);
       await runtime.store.ensureLayout();
-      fake.script((req) => fakeTurnResult(req, { stop: { kind: "infra", cause: "overflow" } }));
+      fake.script((req) =>
+        fakeTurnResult(req, { stop: { kind: "infra", cause: "overflow" } }),
+      );
 
       const result = await runAgentTurn(runtime, {
         target: resolveRole(runtime, "implementer"),
@@ -313,8 +353,12 @@ describe("agent turn outcome delivery", () => {
       const fake = new FakeHarness({ id: "fake" });
       const runtime = runtimeFor(fake, root);
       await runtime.store.ensureLayout();
-      fake.script((req) => fakeTurnResult(req, { stop: { kind: "infra", cause: "overflow" } }));
-      fake.script((req) => fakeTurnResult(req, { stop: { kind: "infra", cause: "overflow" } }));
+      fake.script((req) =>
+        fakeTurnResult(req, { stop: { kind: "infra", cause: "overflow" } }),
+      );
+      fake.script((req) =>
+        fakeTurnResult(req, { stop: { kind: "infra", cause: "overflow" } }),
+      );
 
       const result = await runAgentTurn(runtime, {
         target: resolveRole(runtime, "implementer"),
@@ -327,7 +371,11 @@ describe("agent turn outcome delivery", () => {
 
       expect(fake.calls).toHaveLength(2);
       expect(result.record.stop).toEqual({ kind: "infra", cause: "overflow" });
-      const state = derive([task("a")], await runtime.store.listRecords(), flows);
+      const state = derive(
+        [task("a")],
+        await runtime.store.listRecords(),
+        flows,
+      );
       expect(state.tasks.a!.status).toBe("parked");
       expect(state.tasks.a!.cause).toBe("overflow");
       fs.rmSync(root, { recursive: true, force: true });
@@ -338,7 +386,9 @@ describe("agent turn outcome delivery", () => {
       const fake = new FakeHarness({ id: "fake" });
       const runtime = runtimeFor(fake, root);
       await runtime.store.ensureLayout();
-      fake.script((req) => fakeTurnResult(req, { stop: { kind: "infra", cause: "auth" } }));
+      fake.script((req) =>
+        fakeTurnResult(req, { stop: { kind: "infra", cause: "auth" } }),
+      );
 
       const result = await runAgentTurn(runtime, {
         target: resolveRole(runtime, "implementer"),
@@ -365,7 +415,11 @@ describe("agent turn outcome delivery", () => {
     await runtime.store.ensureLayout();
     const turn = async (timeouts?: { idleMs: number; wallMs: number }) => {
       fake.script((req, ctx) => {
-        ctx.writeOutcome({ status: "done", summary: "ok", decision: "continue" });
+        ctx.writeOutcome({
+          status: "done",
+          summary: "ok",
+          decision: "continue",
+        });
         return fakeTurnResult(req);
       });
       return runAgentTurn(runtime, {
@@ -379,8 +433,14 @@ describe("agent turn outcome delivery", () => {
     };
 
     await turn();
-    expect(fake.calls[0]!.timeouts).toEqual({ idleMs: 20 * 60_000, wallMs: 60 * 60_000 });
-    runtime.configs.run.aliases.architect!.timeouts = { idleMs: 111, wallMs: 222 };
+    expect(fake.calls[0]!.timeouts).toEqual({
+      idleMs: 20 * 60_000,
+      wallMs: 60 * 60_000,
+    });
+    runtime.configs.run.aliases.architect!.timeouts = {
+      idleMs: 111,
+      wallMs: 222,
+    };
     await turn();
     expect(fake.calls[1]!.timeouts).toEqual({ idleMs: 111, wallMs: 222 });
     await turn({ idleMs: 7, wallMs: 9 });
@@ -451,7 +511,9 @@ describe("agent turn prompt size", () => {
       expectation: "any",
     });
 
-    expect(result.record.promptBytes).toBe(Buffer.byteLength(fake.calls[0]!.prompt, "utf8"));
+    expect(result.record.promptBytes).toBe(
+      Buffer.byteLength(fake.calls[0]!.prompt, "utf8"),
+    );
     expect(result.record.promptBytes).toBeGreaterThan(0);
     expect(result.record.packBytes).toBeUndefined();
     expect(result.record.packTruncated).toBeUndefined();
@@ -468,7 +530,11 @@ describe("agent turn prompt size", () => {
     await runtime.store.writeFile("iterations/1/context-pack.md", pack);
 
     fake.script((req, ctx) => {
-      ctx.writeOutcome({ status: "done", summary: "plan", decision: "continue" });
+      ctx.writeOutcome({
+        status: "done",
+        summary: "plan",
+        decision: "continue",
+      });
       return fakeTurnResult(req);
     });
     const architect = await runAgentTurn(runtime, {
@@ -505,7 +571,11 @@ describe("agent turn prompt size", () => {
     const pack = packFixture();
     await runtime.store.writeFile("iterations/1/context-pack.md", pack);
     fake.script((req, ctx) => {
-      ctx.writeOutcome({ status: "done", summary: "plan", decision: "continue" });
+      ctx.writeOutcome({
+        status: "done",
+        summary: "plan",
+        decision: "continue",
+      });
       return fakeTurnResult(req);
     });
 
