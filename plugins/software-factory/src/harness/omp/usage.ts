@@ -32,7 +32,7 @@ export interface OmpStats {
 /**
  * omp reports `totalTokens = input + output + cacheRead` and counts reasoning
  * inside `output`. The kernel keeps them disjoint, so subtract reasoning.
- * Cache writes are 5m because the launch overlay pins `cacheRetention: short`.
+ * omp reports one cache-write bucket, so both retention tiers land in `cacheWrite5m`.
  */
 export function costOf(cost: OmpMessageUsage["cost"]): number {
   if (typeof cost === "number") return cost;

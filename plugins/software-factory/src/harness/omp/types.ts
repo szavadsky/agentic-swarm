@@ -16,6 +16,8 @@ export interface OmpHarnessOptions {
   sessionDir: string;
   /** Cheap model for subagents spawned inside a turn. */
   subagentModel?: ModelRef | string;
+  /** Provider cache window; the launch overlay and the session stamp share it. */
+  retention?: "short" | "long";
   retry?: Partial<RetryPolicy>;
   overlayExtra?: Record<string, unknown>;
   readyTimeoutMs?: number;
