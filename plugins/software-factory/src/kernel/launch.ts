@@ -139,6 +139,30 @@ function infraCause(stop: { cause: string; details?: string }): string {
   return stop.details ? `${stop.cause}: ${stop.details}` : stop.cause;
 }
 
+/**
+ * The iteration status follows the launch result, not the architect's claim.
+ * A done refused for open debt (derive stays active) reports in-progress, so
+ * the summary's distance explains why the goal continues. Infra and signal
+ * stops win over any decision; a front-path blocked stop (unfinished tasks,
+ * not a user block) reports stopped-with-debt.
+ */
+export function statusForIteration(opts: {
+  decision: GoalDecision;
+  ended: "infra" | "cancelled" | undefined;
+  stopped: boolean;
+  signalsStopped: boolean;
+  goal: State["goal"];
+}): "goal-met" | "in-progress" | "blocked-by-user" | "stopped-with-debt" {
+  if (opts.ended === "infra") return "stopped-with-debt";
+  if (opts.signalsStopped || opts.stopped) return "stopped-with-debt";
+  if (opts.decision === "done")
+    return opts.goal === "done" ? "goal-met" : "in-progress";
+  if (opts.decision === "blocked") return "blocked-by-user";
+  if (opts.goal === "done") return "goal-met";
+  if (opts.goal === "blocked") return "stopped-with-debt";
+  return "in-progress";
+}
+
 async function writeIterationFacts(
   runtime: KernelRuntime,
   iteration: number,
@@ -520,20 +544,13 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
           await store.listRecords(),
           runtime.configs.process.flows,
         );
-        const status =
-          decision === "done"
-            ? "goal-met"
-            : ended === "infra"
-              ? "stopped-with-debt"
-              : decision === "blocked"
-                ? "blocked-by-user"
-                : signals.shouldStop() || stopped
-                  ? "stopped-with-debt"
-                  : afterStop.goal === "done"
-                    ? "goal-met"
-                    : afterStop.goal === "blocked"
-                      ? "stopped-with-debt"
-                      : "in-progress";
+        const status = statusForIteration({
+          decision,
+          ended,
+          stopped,
+          signalsStopped: signals.shouldStop(),
+          goal: afterStop.goal,
+        });
         lastSummary = await writeIterationFacts(
           runtime,
           iteration,

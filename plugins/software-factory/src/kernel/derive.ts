@@ -60,6 +60,76 @@ function isRecoveryCrash(rec: StepRecord): boolean {
   return true;
 }
 
+/** One debt-kind concern that no `debt closed:` forward has retired. */
+export interface OpenDebt {
+  text: string;
+  evidence?: string;
+  /** `slug step rN` of the first record that raised it. */
+  source: string;
+  iteration: number;
+  seq: number;
+}
+
+function normalizeDebtText(text: string): string {
+  return text.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function debtClosedTexts(records: readonly StepRecord[]): string[] {
+  const closed = new Set<string>();
+  for (const rec of records) {
+    for (const forward of rec.outcome?.forward ?? []) {
+      const text = /^debt closed:\s*(.+)$/i.exec(forward)?.[1]?.trim();
+      if (text) closed.add(normalizeDebtText(text));
+    }
+  }
+  return [...closed];
+}
+
+/**
+ * Open (material) debt: debt-kind concerns with architect/owner calibration,
+ * deduplicated by text, minus those a `debt closed:` forward quotes. FYI
+ * entries are notes, not blockers. A close matches when it equals the debt or
+ * quotes it (either direction contains the other); short fragments (<24 chars
+ * on the shorter side) never match, so `debt closed: tests` cannot retire an
+ * unrelated paragraph. The architect closes by quoting the opened text.
+ */
+export function openDebts(records: readonly StepRecord[]): OpenDebt[] {
+  const byText = new Map<string, OpenDebt>();
+  for (const rec of [...records].sort(bySeq)) {
+    if (!rec.outcome) continue;
+    for (const concern of rec.outcome.concerns) {
+      if (concern.kind !== "debt") continue;
+      if (concern.calibration === "fyi") continue;
+      const key = normalizeDebtText(concern.text);
+      if (byText.has(key)) continue;
+      byText.set(key, {
+        text: concern.text,
+        ...(concern.evidence ? { evidence: concern.evidence } : {}),
+        source: `${rec.slug ?? "goal"} ${rec.step} r${rec.round}`,
+        iteration: rec.iteration,
+        seq: rec.seq,
+      });
+    }
+  }
+  const closed = debtClosedTexts(records);
+  const isClosed = (norm: string): boolean =>
+    closed.some((c) => {
+      if (c === norm) return true;
+      const shorter = Math.min(c.length, norm.length);
+      if (shorter < 24) return false;
+      return c.includes(norm) || norm.includes(c);
+    });
+  return [...byText.entries()]
+    .filter(([norm]) => !isClosed(norm))
+    .map(([, debt]) => debt)
+    .sort((a, b) => a.seq - b.seq);
+}
+
+/** True while any material debt is still open. */
+export function hasOpenDebt(records: readonly StepRecord[]): boolean {
+  return openDebts(records).length > 0;
+}
+
 /** The goal decision a completed record carries: the architect's, or the front path's stop. */
 function recordedDecision(rec: StepRecord): GoalDecision | undefined {
   if (!rec.endedAt || !rec.outcome?.decision) return undefined;
@@ -96,12 +166,19 @@ export function derive(
     }
     const decision = recordedDecision(rec);
     if (decision) {
-      goal =
-        decision === "done"
-          ? "done"
-          : decision === "blocked"
-            ? "blocked"
-            : "active";
+      // Done sees open debt: a done recorded while material debt is open is
+      // refused — the goal stays active so the next boundary must plan the
+      // removers. The check reads records up to this decision, so a later
+      // close needs a later done to land.
+      if (decision === "done") {
+        const prior = sorted.filter((r) => r.seq <= rec.seq);
+        if (hasOpenDebt(prior)) continue;
+        goal = "done";
+      } else if (decision === "blocked") {
+        goal = "blocked";
+      } else {
+        goal = "active";
+      }
     }
   }
   const currentIteration = iteration;
