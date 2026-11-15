@@ -1,15 +1,38 @@
 # Agentic software factory — INTENT
 
-Authoritative owner intent; replaces `manifesto.md`. **Intent** is the WHAT and its invariants; it changes only by owner decision. **Notes on implementation** are the HOW, shiftable on real behavior. Status and evidence never live here — they live in iteration summaries and the dashboard.
+ **Intent** is the WHAT and its invariants; it changes only by owner decision. **Notes on implementation** are the HOW, shiftable on real behavior. Status and evidence never live here — they live in iteration summaries and the dashboard.
 
 This document supersedes `docs/factory.v2.md` and the design of `plugins/software-builder` wherever they contradict it. Components and code are reusable; everything in v2 not rejected here is worth consideration — intent, principles and practical observation decide. Avoid ceremony; stay focused on practical tasks.
 
 ## Intent
 
-Modern harnesses deliver a decent story (several hundred lines of code). The agentic software factory is an orchestration framework on top of harnesses that delivers up to a saga (entire product) or a major refactoring — token-efficient, slop-free, steerable or autonomous, scalable from a trivial edit to a saga. One goal may span many epics and tens of tasks per iteration, across multiple resumable iterations; no hard-coded size ceiling.
+Modern harnesses deliver a decent story (several hundred lines of code). The agentic software factory is an orchestration framework on top of harnesses that delivers up to a saga (entire product) or a major refactoring — token-efficient, slop-free, steerable, observable,  autonomous, scalable from a trivial edit to a saga. One goal may span many epics and tens of tasks per iteration, across multiple resumable iterations; no  size ceiling.
 
 - Stop in the middle, relaunch — it keeps going; no architect intervention required.
 - The saga flow (hierarchy) is required and built as specified.
+
+
+### Model economics
+- Architect-tier (expensive) models do only what a human architect does: convert intent into actionable plans, directional interfaces, key-algorithm direction, tradeoffs above task level. Called with a prepared context pack; agentic and subagentic — launching scouts/tasks and waiting for them is fine, no limits on them. Write no code beyond key interfaces and no verbose documents. The architect produces a single markdown plan written for architect/reviewer friendliness and efficiency — never schema-consistent files; maintaining file schemas is not architect work.
+- A weaker model (same tier as task models) reviews the architect's plan: impracticality, unclarity, rule violations — real bugs are not unusual. Advisory input, not a veto. "Consider" spans the full range: from ignoring based on fact judgement, to clarifying the plan, to realizing "oops" and changing it. During self-improvement the architect samples whether the review was helpful (one issue caught earlier reduces work 10x).
+- Architect-tier costs or subscription use are ~40–80x the cheap capable tier (vs 2–3x for human architects); the architect outweighs the bill. Optimize overall cost on that ratio (~50x).
+- Measure both actual cost and work: per-model cost and token use (assume the prefix is cached when not reported separately), number of turns, and work done — edits, test runs, etc. Subscriptions under-report prices (e.g. OpenCode Go may count deepseek as free).
+- Quota management is not a primary purpose; subscription throttling and fallback in dispatch is a feature (see Concurrency).
+- Escalation to an expensive implementer-tier model (Sonnet/Terra class) only when a task goes wrong or needs a highly non-trivial class/PoC; the architect calls it, in advance or on review. Minimize its use.
+- Consults are batched: delayed until non-blocked tasks are exhausted — the iteration boundary. Expensive models are used rarely and only when necessary.
+
+### Context and focus is as important as model tier/diveristy
+ - It a popular belief that you you need smarter model and provider diversity to improve, and you need very smart model to plan. It is not entirely true
+ - Smaller models are 
+    - more likely to make suboptimal decisions
+    - degrade more quickly on tasks having contradictory and/or complex context, neeing trade-off etc
+    - work quite good on well defined, focused task even if this task is more of architecture and planning nature
+    - eg, smaller model can perfectly plan or define architecture. It will degrade if it needs to simutaneously consider callgraphs and edge cases.
+    - same model, small or large, can perfectly review results even of a larger model. At the end of the day, the job of smarter actor is to make sure results AND motivation are understandable to small actors.
+
+
+### Role of agents/models - that coceptual section shall help to interpret anything below
+- Architect agent preferrably to run with large frontier level models (Opus, Fable, Astra, Kimi). The job of architect is to decide what needs to 
 
 ### Escalation ladder
 - One cheap-but-capable agent classifies the goal: trivial / task / bigger (epic, saga). For a task it defines the scope. It is not smart enough to decide how big "bigger" is — that is the architect's call.
@@ -29,14 +52,6 @@ Modern harnesses deliver a decent story (several hundred lines of code). The age
 - Why: too-tight scopes, no end-of-wave merging with repeat, and no plan status check before the architect cause rework and conflicts.
 - The kernel ensures every agent delivers. An agent that ends its turn without delivering is asked again — e.g. the architect: "You need to deliver. Specify actions, including spikes if needed to plan more, in the plan; or declare the build done [if allowed by config], or blocked till done." The ask is a prompt template from config; its exact shape depends on the agent.
 
-### Model economics
-- Architect-tier (expensive) models do only what a human architect does: convert intent into actionable plans, directional interfaces, key-algorithm direction, tradeoffs above task level. Called with a prepared context pack; agentic and subagentic — launching scouts/tasks and waiting for them is fine, no limits on them. Write no code beyond key interfaces and no verbose documents. The architect produces a single markdown plan written for architect/reviewer friendliness and efficiency — never schema-consistent files; maintaining file schemas is not architect work.
-- A weaker model (same tier as task models) reviews the architect's plan: impracticality, unclarity, rule violations — real bugs are not unusual. Advisory input, not a veto. "Consider" spans the full range: from ignoring based on fact judgement, to clarifying the plan, to realizing "oops" and changing it. During self-improvement the architect samples whether the review was helpful (one issue caught earlier reduces work 10x).
-- Architect-tier costs or subscription use are ~40–80x the cheap capable tier (vs 2–3x for human architects); the architect outweighs the bill. Optimize overall cost on that ratio (~50x).
-- Measure both actual cost and work: per-model cost and token use (assume the prefix is cached when not reported separately), number of turns, and work done — edits, test runs, etc. Subscriptions under-report prices (e.g. OpenCode Go may count deepseek as free).
-- Quota management is not a primary purpose; subscription throttling and fallback in dispatch is a feature (see Concurrency).
-- Escalation to an expensive implementer-tier model (Sonnet/Terra class) only when a task goes wrong or needs a highly non-trivial class/PoC; the architect calls it, in advance or on review. Minimize its use.
-- Consults are batched: delayed until non-blocked tasks are exhausted — the iteration boundary. Expensive models are used rarely and only when necessary.
 
 ### Context economy
 - Same context: same agent. Different context: different agent.
