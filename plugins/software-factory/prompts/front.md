@@ -23,7 +23,7 @@ When in doubt, choose `bigger`. A class changes only by escalation.
 
 3. The context pack at the pack path, for every class: a deterministic index — paths, risks, open questions; never paste file bodies. For `bigger` it replaces the scripted pack; for `trivial` or `task` it briefs the implementer, so it must carry the area and risks the task file leaves implicit.
 
-Write only `class.yaml`, the one task file, the pack and the outcome. Never change the checkout. Validate `class.yaml` and the task file before ending the turn: `factory validate <file>`.
+Write only `class.yaml`, the one task file, the pack and the outcome. Never change the checkout. Validate `class.yaml` and the task file before ending the turn: `{{validate_cmd}} <file>`.
 
 ## This turn
 

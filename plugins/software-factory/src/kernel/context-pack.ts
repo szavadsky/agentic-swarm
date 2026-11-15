@@ -31,7 +31,10 @@ export interface ContextPackInput {
   running?: string[];
   /** Shallow directory index of the goal checkout, already grouped. */
   codeMap?: string[];
+  /** Steers routed to the architect; PM-handled steers are answered elsewhere, never here. */
   steers: Steer[];
+  /** The PM's routed answers, one line per steer, for architect context. */
+  pmAnswers?: string[];
   setup: string[];
   gates: { id: string; command: string }[];
   /** Last recorded pre-flight base run; absent when it was skipped. */
@@ -182,6 +185,13 @@ export function renderContextPack(input: ContextPackInput): string {
   lines.push(
     input.steers.length > 0
       ? input.steers.map((s) => `- ${s.id}: ${s.relPath}`).join("\n")
+      : "- none",
+  );
+
+  lines.push("", "## PM steer answers");
+  lines.push(
+    input.pmAnswers && input.pmAnswers.length > 0
+      ? input.pmAnswers.join("\n")
       : "- none",
   );
 

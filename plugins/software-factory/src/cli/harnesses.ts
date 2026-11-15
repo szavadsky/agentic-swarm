@@ -1,7 +1,7 @@
 import { runProcess } from "../core/proc.js";
 import {
   resolveAcpxCommand,
-  resolveAgyBinary,
+  resolveRawAgentBinary,
 } from "../harness/acpx/command.js";
 import { AcpxHarness } from "../harness/acpx/index.js";
 import { OmpHarness } from "../harness/omp/index.js";
@@ -10,38 +10,44 @@ import { OpencodeHarness } from "../harness/opencode/index.js";
 import type { Harness } from "../harness/types.js";
 import type { HarnessFactoryContext } from "../kernel/launch.js";
 import type { ModelCatalog } from "../kernel/preflight.js";
+import type { HarnessConfig } from "../kernel/types.js";
 
-export function resolveHarnessBinaries(): Record<string, string | undefined> {
+export function resolveHarnessBinaries(
+  harnessConfigs: Record<string, HarnessConfig> = {},
+): Record<string, string | undefined> {
   const acpx = resolveAcpxCommand().binary;
-  return {
+  const binaries: Record<string, string | undefined> = {
     opencode: process.env.OPENCODE_PATH ?? Bun.which("opencode") ?? undefined,
     omp: process.env.OMP_PATH ?? Bun.which("omp") ?? undefined,
-    // pi and codex are served by the acpx dispatcher; the harness id names the
-    // agent. Without acpx on PATH this is bunx, the executable pre-flight can
-    // check; the dispatcher fetches acpx on demand.
-    pi: acpx,
-    codex: acpx,
-    // agy is its own CLI: acpx reaches its `agy acp` server through the raw
-    // agent route, so the binary pre-flight checks is the one the adapter
-    // spawns (same resolution as AcpxHarness).
-    agy: resolveAgyBinary(),
   };
+  for (const [id, entry] of Object.entries(harnessConfigs)) {
+    if (!entry.acpx) continue;
+    // A positional agent is served by the acpx dispatcher (bunx when acpx is
+    // absent, which pre-flight can check); a raw route spawns its own binary
+    // (same resolution as AcpxHarness).
+    binaries[id] = entry.acpx.raw
+      ? resolveRawAgentBinary(entry.acpx.agent)
+      : acpx;
+  }
+  return binaries;
 }
 
 /** Real adapters, all rooted in the launch's private session directory. */
 export function createRealHarnesses(
   context: HarnessFactoryContext,
 ): Record<string, Harness> {
-  return {
+  const harnesses: Record<string, Harness> = {
     opencode: new OpencodeHarness({ sessionDir: context.sessionDir }),
     omp: new OmpHarness({
       sessionDir: context.sessionDir,
       subagentModel: context.scouts,
     }),
-    pi: new AcpxHarness({ agent: "pi" }),
-    codex: new AcpxHarness({ agent: "codex" }),
-    agy: new AcpxHarness({ agent: "agy" }),
   };
+  for (const [id, entry] of Object.entries(context.harnesses ?? {})) {
+    if (!entry.acpx) continue;
+    harnesses[id] = new AcpxHarness({ id, acpx: entry.acpx });
+  }
+  return harnesses;
 }
 
 const MODEL_TIMEOUT_SEC = 60;
@@ -76,18 +82,16 @@ async function ompModels(binary: string): Promise<Set<string>> {
 
 /**
  * acpx only advertises models after an ACP session starts, so a pre-flight
- * model check cannot list pi, codex or agy models. Skip it with the reason
- * recorded rather than inventing a list; the turn itself still passes `--model`.
+ * model check cannot list them. Skip it with the reason recorded rather than
+ * inventing a list; the turn itself still passes `--model`.
  */
-const ACPX_MODEL_LIST_SKIP: Record<string, string> = {
-  pi: "acpx pi exposes its model list only inside an ACP session",
-  codex: "acpx codex exposes its model list only inside an ACP session",
-  agy: "acpx agy exposes its model list only inside an ACP session",
-};
+const ACPX_MODEL_LIST_SKIP =
+  "acpx exposes its model list only inside an ACP session";
 
 /** Real model lists, cached per process; used only by pre-flight. */
 export function createRealModelCatalog(
   binaries: Record<string, string | undefined> = resolveHarnessBinaries(),
+  harnessConfigs: Record<string, HarnessConfig> = {},
 ): ModelCatalog {
   const cache = new Map<string, Promise<Set<string>>>();
   const skipped = new Set<string>();
@@ -110,12 +114,11 @@ export function createRealModelCatalog(
     return pending;
   };
   return async (harness, model) => {
-    const reason = ACPX_MODEL_LIST_SKIP[harness];
-    if (reason) {
+    if (harnessConfigs[harness]?.acpx) {
       if (!skipped.has(harness)) {
         skipped.add(harness);
         console.warn(
-          `[factory] pre-flight: skipping model check for "${harness}": ${reason}`,
+          `[factory] pre-flight: skipping model check for "${harness}": ${ACPX_MODEL_LIST_SKIP}`,
         );
       }
       return true;

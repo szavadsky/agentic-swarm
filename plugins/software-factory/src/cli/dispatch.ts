@@ -1,4 +1,6 @@
+import path from "node:path";
 import type { Harness } from "../harness/types.js";
+import { loadConfigs } from "../kernel/config.js";
 import {
   type HarnessFactory,
   type LaunchResult,
@@ -213,6 +215,19 @@ async function runCommand(parsed: ParsedArgs, deps: CliDeps): Promise<number> {
   if (!parsed.goal) throw new Error("run requires --goal <name>");
   const injected =
     deps.harnesses !== undefined || deps.harnessFactory !== undefined;
+  // The binary and model checks are harness-aware; the run config names the
+  // harness ids, so it is loaded here as well as in the launch.
+  const needBinaries = deps.binaries === undefined && !injected;
+  const needCatalog = deps.modelCatalog === undefined && !injected;
+  const harnessConfigs =
+    needBinaries || needCatalog
+      ? loadConfigs(path.resolve(parsed.repo), {
+          runConfigPath: parsed.runConfig,
+        }).run.harnesses
+      : undefined;
+  const binaries =
+    deps.binaries ??
+    (needBinaries ? resolveHarnessBinaries(harnessConfigs) : undefined);
   const result = await runGoal({
     repo: parsed.repo,
     goal: parsed.goal,
@@ -222,9 +237,11 @@ async function runCommand(parsed: ParsedArgs, deps: CliDeps): Promise<number> {
     harnessFactory:
       deps.harnessFactory ?? (injected ? undefined : createRealHarnesses),
     modelCatalog:
-      deps.modelCatalog ?? (injected ? undefined : createRealModelCatalog()),
-    binaries:
-      deps.binaries ?? (injected ? undefined : resolveHarnessBinaries()),
+      deps.modelCatalog ??
+      (needCatalog
+        ? createRealModelCatalog(binaries, harnessConfigs)
+        : undefined),
+    binaries,
     signals: deps.signals,
   });
   console.log(

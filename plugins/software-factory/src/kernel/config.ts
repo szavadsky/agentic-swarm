@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import yaml from "yaml";
 import { z } from "zod";
+import { acpxConfigSchema } from "../harness/acpx/config.js";
 import { type Finding, formatFindings } from "./findings.js";
 import type {
   ConfigBundle,
@@ -123,7 +124,8 @@ export const aliasSchema = z
   })
   .strict();
 
-/** Run-config drain limits, shared by the schema and `toLimits`. */
+export const harnessEntrySchema = z.object({ acpx: acpxConfigSchema }).strict();
+
 const limitsSchema = z
   .object({
     concurrency: z.number().int().positive().default(2),
@@ -143,6 +145,8 @@ const limitsSchema = z
 export const runConfigSchema = z
   .object({
     aliases: z.record(z.string(), aliasSchema).default({}),
+    /** Harness id -> adapter binding; a harness id is a config name. */
+    harnesses: z.record(z.string(), harnessEntrySchema).default({}),
     /** Model id -> USD per Mtok; harnesses that report no cost are priced from here. */
     prices: z.record(z.string(), modelPriceSchema).default({}),
     limits: limitsSchema,

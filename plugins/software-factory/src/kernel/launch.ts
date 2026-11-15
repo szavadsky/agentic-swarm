@@ -6,6 +6,7 @@ import type { Harness, ModelRef } from "../harness/types.js";
 import { type BoundaryResult, runBoundary } from "./boundary.js";
 import { loadConfigs, resolveGoalPaths, toLimits } from "./config.js";
 import { derive, FRONT_STOP_STEP } from "./derive.js";
+import { readFrontClass } from "./flow-context.js";
 import {
   type DispatchResult,
   iterationSpend,
@@ -28,7 +29,12 @@ import {
 } from "./signals.js";
 import { createFolderStore } from "./store.js";
 import { writeIterationSummary } from "./summary.js";
-import type { GoalDecision, KernelRuntime, State } from "./types.js";
+import type {
+  GoalDecision,
+  HarnessConfig,
+  KernelRuntime,
+  State,
+} from "./types.js";
 import { BaseFollowConflictError } from "./worktree.js";
 
 export class LaunchError extends Error {
@@ -42,6 +48,8 @@ export interface HarnessFactoryContext {
   /** Per-launch store: `<sessions.dir>/<goal>/<launch-id>/`. */
   sessionDir: string;
   scouts?: ModelRef;
+  /** Run-config harness entries; each acpx entry binds one harness id. */
+  harnesses?: Record<string, HarnessConfig>;
 }
 
 export type HarnessFactory = (
@@ -129,6 +137,30 @@ async function recordFrontStop(
 /** The classified cause plus the scrubbed error tail, as the boundary reports it. */
 function infraCause(stop: { cause: string; details?: string }): string {
   return stop.details ? `${stop.cause}: ${stop.details}` : stop.cause;
+}
+
+/**
+ * The iteration status follows the launch result, not the architect's claim.
+ * A done refused for open debt (derive stays active) reports in-progress, so
+ * the summary's distance explains why the goal continues. Infra and signal
+ * stops win over any decision; a front-path blocked stop (unfinished tasks,
+ * not a user block) reports stopped-with-debt.
+ */
+export function statusForIteration(opts: {
+  decision: GoalDecision;
+  ended: "infra" | "cancelled" | undefined;
+  stopped: boolean;
+  signalsStopped: boolean;
+  goal: State["goal"];
+}): "goal-met" | "in-progress" | "blocked-by-user" | "stopped-with-debt" {
+  if (opts.ended === "infra") return "stopped-with-debt";
+  if (opts.signalsStopped || opts.stopped) return "stopped-with-debt";
+  if (opts.decision === "done")
+    return opts.goal === "done" ? "goal-met" : "in-progress";
+  if (opts.decision === "blocked") return "blocked-by-user";
+  if (opts.goal === "done") return "goal-met";
+  if (opts.goal === "blocked") return "stopped-with-debt";
+  return "in-progress";
 }
 
 async function writeIterationFacts(
@@ -226,6 +258,7 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
               : {}),
           }
         : undefined,
+      harnesses: configs.run.harnesses,
     });
   }
 
@@ -291,7 +324,9 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
         recoveredRecords: interrupted,
       };
     }
-    const relaunch = (await store.listRecords()).some((r) => r.iteration > 0);
+    const relaunch = (await store.listRecords()).some(
+      (r) => r.iteration > 0 && r.step !== "task-quarantine",
+    );
     let iterations = 0;
     let lastSummary: string | undefined;
     let ended: "infra" | "cancelled" | undefined;
@@ -476,43 +511,46 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
           front.action === "dispatch" &&
           dispatched?.reason === "boundary";
         if (frontFinished) {
-          const afterDispatch = derive(
-            await store.listTasks(),
-            await store.listRecords(),
-            runtime.configs.process.flows,
-          );
-          const unfinished = unfinishedTasks(afterDispatch);
-          const landed =
-            Object.keys(afterDispatch.tasks).length > 0 &&
-            unfinished.length === 0;
-          await recordFrontStop(
-            store,
-            iteration,
-            landed ? "done" : "blocked",
-            landed
-              ? `front path landed every task in iteration ${iteration}`
-              : `front path stopped with ${unfinished.join(", ")} in iteration ${iteration}`,
-          );
+          let escalated = false;
+          try {
+            escalated = readFrontClass(runtime)?.class === "bigger";
+          } catch {
+            escalated = false;
+          }
+          // An upscope escalation rewrote the class mid-dispatch: the goal stays
+          // active so the next launch runs the architect instead of stopping here.
+          if (!escalated) {
+            const afterDispatch = derive(
+              await store.listTasks(),
+              await store.listRecords(),
+              runtime.configs.process.flows,
+            );
+            const unfinished = unfinishedTasks(afterDispatch);
+            const landed =
+              Object.keys(afterDispatch.tasks).length > 0 &&
+              unfinished.length === 0;
+            await recordFrontStop(
+              store,
+              iteration,
+              landed ? "done" : "blocked",
+              landed
+                ? `front path landed every task in iteration ${iteration}`
+                : `front path stopped with ${unfinished.join(", ")} in iteration ${iteration}`,
+            );
+          }
         }
         const afterStop = derive(
           await store.listTasks(),
           await store.listRecords(),
           runtime.configs.process.flows,
         );
-        const status =
-          decision === "done"
-            ? "goal-met"
-            : ended === "infra"
-              ? "stopped-with-debt"
-              : decision === "blocked"
-                ? "blocked-by-user"
-                : signals.shouldStop() || stopped
-                  ? "stopped-with-debt"
-                  : afterStop.goal === "done"
-                    ? "goal-met"
-                    : afterStop.goal === "blocked"
-                      ? "stopped-with-debt"
-                      : "in-progress";
+        const status = statusForIteration({
+          decision,
+          ended,
+          stopped,
+          signalsStopped: signals.shouldStop(),
+          goal: afterStop.goal,
+        });
         lastSummary = await writeIterationFacts(
           runtime,
           iteration,

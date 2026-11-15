@@ -6,7 +6,12 @@ import yaml from "yaml";
 import { z } from "zod";
 import { writeTextAtomic } from "../core/records/io.js";
 import { scriptMeta } from "./record.js";
-import type { ArtifactStore, Outcome } from "./types.js";
+import type {
+  ArtifactStore,
+  Outcome,
+  StepRecord,
+  SteerRoute,
+} from "./types.js";
 
 export interface Steer {
   id: string;
@@ -471,4 +476,45 @@ export function formatSteerTurn(steers: Steer[]): string {
       (s) => `- ${s.id} (${s.relPath}):\n${s.text.trim().replace(/^/gm, "  ")}`,
     )
     .join("\n");
+}
+
+/** A PM-created task's provenance: its `source` frontmatter is `steer: <id>`. */
+export function steerProvenance(source: string): string | undefined {
+  const match = /^steer:\s*(.+)$/.exec(source.trim());
+  const id = match?.[1]?.trim();
+  return id ? id : undefined;
+}
+
+/** Latest committed PM route per steer, from successful steer turns only; last record wins. */
+export function collectSteerRoutes(
+  records: StepRecord[],
+): Map<string, { route: SteerRoute; answer?: string }> {
+  const out = new Map<string, { route: SteerRoute; answer?: string }>();
+  const sorted = [...records].sort(
+    (a, b) => a.seq - b.seq || a.startedAt.localeCompare(b.startedAt),
+  );
+  for (const record of sorted) {
+    if (record.step !== "steer-routes" || record.actor !== "script") continue;
+    const routes = record.outcome?.steerRoutes;
+    if (!routes) continue;
+    for (const entry of routes) {
+      const answer = entry.answer?.trim();
+      out.set(entry.steer, {
+        route: entry.route,
+        ...(answer ? { answer } : {}),
+      });
+    }
+  }
+  return out;
+}
+
+/** One line per PM-routed steer for the architect's pack; sorted by steer id. */
+export function formatPmAnswers(
+  routes: Map<string, { route: SteerRoute; answer?: string }>,
+): string[] {
+  return [...routes.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([steer, { route, answer }]) =>
+      answer ? `- ${steer} [${route}]: ${answer}` : `- ${steer} [${route}]`,
+    );
 }

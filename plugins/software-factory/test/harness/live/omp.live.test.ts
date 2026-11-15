@@ -73,7 +73,7 @@ live("omp harness live smoke", () => {
       expect(second.session?.id).toBe(first.session!.id);
 
       const compacted = await harness.compact(second.session!);
-      expect(compacted.compacted).toBe(true);
+      expect(compacted.session.compacted).toBe(true);
 
       const spawned = await harness.turn({
         model: PARENT,

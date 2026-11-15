@@ -105,8 +105,10 @@ describe("iteration USD brake", () => {
         path.join(runtime.store.goalDir, "iterations/1/summary.md"),
         "utf8",
       );
+      // The PM turn is fully unpriced; the implement turn is priced but its
+      // recorded compaction has no table entry, so it counts blind too.
       expect(text).toContain(
-        "- budget: iteration USD limit $1.0000 reached (spent $1.1000); brake blind for 1 unpriced turn",
+        "- budget: iteration USD limit $1.0000 reached (spent $1.1000); brake blind for 2 unpriced turns",
       );
       expect(text).not.toContain("boundary: budget");
     } finally {

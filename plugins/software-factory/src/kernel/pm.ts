@@ -1,10 +1,19 @@
 import fs from "node:fs";
 import path from "node:path";
+import yaml from "yaml";
 import { writeTextAtomic } from "../core/records/io.js";
 import type { Stop } from "../harness/types.js";
 import { runAgentTurn } from "./agent.js";
 import { resolveRole } from "./flow-context.js";
-import { formatSteerTurn, holdsDir, type Steer } from "./mailbox.js";
+import {
+  expireHold,
+  formatSteerTurn,
+  holdsDir,
+  markProcessed,
+  steerProvenance,
+  writeOutbox,
+  type Steer,
+} from "./mailbox.js";
 import { appendCancel, appendPark, scriptMeta } from "./record.js";
 import {
   materialHash,
@@ -18,6 +27,7 @@ import type {
   Outcome,
   State,
   StepRecord,
+  SteerRoute,
   TaskFile,
   TaskStatus,
 } from "./types.js";
@@ -143,7 +153,11 @@ function existingTasks(state: State, tasks: TaskFile[]): string {
     .sort((a, b) => a.slug.localeCompare(b.slug))
     .map((task) => {
       const status = state.tasks[task.slug]?.status ?? "new";
-      return `- ${task.slug} | ${status} | ${materialHash(task).slice(0, 10)} | deps: ${task.deps.join(",") || "none"}${readOnlyMarker(status)}`;
+      const steer = steerProvenance(task.source);
+      const provenance = steer
+        ? ` | steer ${steer} (not in the plan; leave it)`
+        : "";
+      return `- ${task.slug} | ${status} | ${materialHash(task).slice(0, 10)} | deps: ${task.deps.join(",") || "none"}${readOnlyMarker(status)}${provenance}`;
     })
     .join("\n");
 }
@@ -233,6 +247,23 @@ async function reconcile(
       );
     }
   }
+  for (const [slug, original] of taskSnapshot) {
+    if (texts.has(slug)) continue;
+    if (frozenSlugs(opts.state).includes(slug)) continue;
+    if (cancelledSlugs(opts.state).includes(slug)) continue;
+    let source = "";
+    try {
+      source = parseTaskFile(original, slug).source;
+    } catch {
+      continue;
+    }
+    const steer = steerProvenance(source);
+    if (!steer) continue;
+    await writeTextAtomic(taskPath(runtime, slug), original);
+    findings.push(
+      `steer task "${slug}" was deleted; restored: a task with provenance steer ${steer} is not in the plan and the PM must leave it`,
+    );
+  }
 
   if (findings.length > 0) {
     await runtime.store.appendRecord(
@@ -268,7 +299,9 @@ async function validate(
  * its slug stays spent and state needs no memory. A changed task that remains
  * in the plan needs nothing: dispatch re-reads the file. A dropped task that
  * already committed on its branch is parked instead: cancelling it would strand
- * work no record names, and its slug must stay reusable by a `base:` task.
+ * work no record names, and its slug must stay reusable by a `base:` task. A
+ * PM-created task with provenance `steer: <id>` is never in the plan and is
+ * never cancelled here: its steer, not the plan, owns it.
  */
 async function cancelRemovedTasks(
   runtime: KernelRuntime,
@@ -276,8 +309,11 @@ async function cancelRemovedTasks(
   plan: string,
   iteration: number,
 ): Promise<void> {
+  const files = await runtime.store.listTasks();
+  const provenance = new Map(files.map((file) => [file.slug, file.source]));
   for (const [slug, task] of Object.entries(state.tasks)) {
     if (task.status !== "pending" && task.status !== "ready") continue;
+    if (steerProvenance(provenance.get(slug) ?? "")) continue;
     if (planMentionsSlug(plan, slug)) continue;
     if (task.commit !== undefined) {
       await appendPark(
@@ -487,18 +523,275 @@ export async function runPm(
   return { status: "exhausted", rungs };
 }
 
+function steerLadderNote(
+  rung: { alias: string; mandate: PmMandate },
+  target: ReturnType<typeof resolveRole>,
+  failure: string[],
+): string {
+  const notes: string[] = [];
+  if (rung.mandate.startsWith("escalated")) {
+    notes.push(
+      `The PM ladder escalated to alias "${target.alias}" (model "${target.model.id}"). You hold a broader mandate: route the steers again from their text, and if a steer cannot be routed, send it to the architect with an empty hold.`,
+    );
+  }
+  if (rung.mandate.endsWith("retry")) {
+    notes.push(
+      `This is a fresh retry on alias "${target.alias}"; the previous turn's plan and task-file writes were rolled back to the pre-PM snapshot.`,
+    );
+  }
+  notes.push(
+    "Restated PM steer contract: you are the PM — never edit the plan, never plan, never implement, never invent intent. Route each pending steer as task|spike|architect|stall, write one hold file per steer, write task files only for task and spike steers with source steer: <id>, then the outcome with steerRoutes.",
+  );
+  if (failure.length > 0)
+    notes.push("", "Findings:", ...failure.map((reason) => `- ${reason}`));
+  return notes.join("\n");
+}
+
+type ParsedHold =
+  | { status: "missing" }
+  | { status: "bad"; message: string }
+  | { status: "ok"; slugs: unknown; goal: unknown };
+
+function parseHoldFile(runtime: KernelRuntime, steerId: string): ParsedHold {
+  const dir = holdsDir(runtime.store);
+  const candidates = [`${steerId}.yaml`, `${steerId}.yml`].map((name) =>
+    path.join(dir, name),
+  );
+  const file = candidates.find((candidate) => fs.existsSync(candidate));
+  if (!file) return { status: "missing" };
+  let parsed: unknown;
+  try {
+    parsed = yaml.parse(fs.readFileSync(file, "utf8"));
+  } catch (err) {
+    return { status: "bad", message: (err as Error).message };
+  }
+  if (typeof parsed !== "object" || parsed === null) {
+    return { status: "bad", message: "hold is not a mapping" };
+  }
+  const { slugs, goal } = parsed as { slugs?: unknown; goal?: unknown };
+  return { status: "ok", slugs, goal };
+}
+
+function stallHoldProblem(
+  runtime: KernelRuntime,
+  steerId: string,
+): string | undefined {
+  const hold = parseHoldFile(runtime, steerId);
+  if (hold.status === "missing") {
+    return `stall steer "${steerId}" has no hold file; a stall drains the goal with goal: true`;
+  }
+  if (hold.status === "bad") {
+    return `stall steer "${steerId}" hold is not valid YAML: ${hold.message}`;
+  }
+  if (hold.goal !== true) {
+    return `stall steer "${steerId}" hold has no goal: true; a stall drains the goal`;
+  }
+  return undefined;
+}
+
+function architectHoldProblem(
+  runtime: KernelRuntime,
+  steerId: string,
+): string | undefined {
+  const hold = parseHoldFile(runtime, steerId);
+  if (hold.status === "missing") return undefined;
+  if (hold.status === "bad") {
+    return `architect steer "${steerId}" hold is not valid YAML: ${hold.message}`;
+  }
+  if (!Array.isArray(hold.slugs) || hold.slugs.length > 0) {
+    return `architect steer "${steerId}" hold lists slugs; an architect steer holds nothing with slugs: []`;
+  }
+  if (hold.goal !== false) {
+    return `architect steer "${steerId}" hold has no goal: false; an architect steer holds nothing`;
+  }
+  return undefined;
+}
+
+async function validateSteerTurn(
+  runtime: KernelRuntime,
+  opts: {
+    iteration: number;
+    state: State;
+    planPath: string;
+    round: number;
+    claim: Steer[];
+  },
+  planBefore: string,
+  taskSnapshot: Map<string, string>,
+  outcome: Outcome | undefined,
+): Promise<string[]> {
+  const findings = await reconcile(runtime, opts, planBefore, taskSnapshot);
+  const texts = await readTaskTexts(runtime);
+  const { tasks, findings: parseFindings } = parseTasks(texts);
+  findings.push(...parseFindings);
+  const parked = new Set(
+    Object.keys(opts.state.tasks).filter(
+      (slug) => opts.state.tasks[slug]!.status === "parked",
+    ),
+  );
+  findings.push(...validateTaskGraph(tasks, { parked }));
+
+  const routes = outcome?.steerRoutes ?? [];
+  const claimed = new Set(opts.claim.map((steer) => steer.id));
+  const seen = new Set<string>();
+  const routeOf = new Map<string, SteerRoute>();
+  for (const entry of routes) {
+    if (seen.has(entry.steer)) {
+      findings.push(
+        `steer "${entry.steer}" is routed twice; route each claimed steer once`,
+      );
+      continue;
+    }
+    seen.add(entry.steer);
+    routeOf.set(entry.steer, entry.route);
+    if (!claimed.has(entry.steer)) {
+      findings.push(
+        `steer "${entry.steer}" was not claimed this turn; route only the pending steers from this turn`,
+      );
+    }
+  }
+  for (const steer of opts.claim) {
+    if (!seen.has(steer.id)) {
+      findings.push(
+        `steer "${steer.id}" has no route; route each claimed steer as task|spike|architect|stall`,
+      );
+    }
+  }
+  for (const entry of routes) {
+    if (!claimed.has(entry.steer)) continue;
+    const answer = entry.answer?.trim() ?? "";
+    if (entry.route === "task") {
+      if (!answer) {
+        findings.push(
+          `steer "${entry.steer}" routed task needs an answer; the PM answers a task steer in the outbox now`,
+        );
+      }
+    } else if (answer) {
+      findings.push(
+        `steer "${entry.steer}" routed ${entry.route} must not carry an answer; only task answers now`,
+      );
+    }
+    if (entry.route === "stall") {
+      const problem = stallHoldProblem(runtime, entry.steer);
+      if (problem) findings.push(problem);
+    }
+    if (entry.route === "architect") {
+      const problem = architectHoldProblem(runtime, entry.steer);
+      if (problem) findings.push(problem);
+    }
+  }
+
+  if (parseFindings.length === 0) {
+    const changed = [...taskSnapshot]
+      .filter(
+        ([slug, original]) => texts.has(slug) && texts.get(slug) !== original,
+      )
+      .map(([slug]) => slug);
+    const created = [...texts.keys()].filter((slug) => !taskSnapshot.has(slug));
+    const bySlug = new Map(tasks.map((task) => [task.slug, task]));
+    for (const slug of created) {
+      const task = bySlug.get(slug);
+      if (!task) continue;
+      const provenance = steerProvenance(task.source);
+      if (!provenance) {
+        findings.push(
+          `new task "${slug}" has no provenance steer: <id>; a steer creates tasks only with source steer: <claimed>`,
+        );
+        continue;
+      }
+      if (!claimed.has(provenance)) {
+        findings.push(
+          `new task "${slug}" names unknown steer "${provenance}"; provenance must be a claimed steer`,
+        );
+        continue;
+      }
+      const route = routeOf.get(provenance);
+      if (route !== "task" && route !== "spike") {
+        findings.push(
+          `new task "${slug}" names steer "${provenance}" routed ${route}; only task and spike steers create tasks`,
+        );
+      }
+    }
+    const createdProvenance = new Set(
+      created
+        .map((slug) => bySlug.get(slug))
+        .filter((task): task is TaskFile => task !== undefined)
+        .map((task) => steerProvenance(task.source))
+        .filter((id): id is string => id !== undefined),
+    );
+    for (const entry of routes) {
+      if (!claimed.has(entry.steer) || entry.route !== "spike") continue;
+      if (!createdProvenance.has(entry.steer)) {
+        findings.push(
+          `spike steer "${entry.steer}" created no task; a spike writes one standalone task with source steer: ${entry.steer}`,
+        );
+      }
+    }
+    const hasTask = routes.some(
+      (entry) => claimed.has(entry.steer) && entry.route === "task",
+    );
+    const hasSpike = routes.some(
+      (entry) => claimed.has(entry.steer) && entry.route === "spike",
+    );
+    if (hasTask) {
+      const taskProvenance = new Set(
+        routes
+          .filter((entry) => claimed.has(entry.steer) && entry.route === "task")
+          .map((entry) => entry.steer),
+      );
+      const rework = [...createdProvenance].some((id) =>
+        taskProvenance.has(id),
+      );
+      if (changed.length === 0 && !rework) {
+        findings.push(
+          "task steers changed no task file; amend the pending task or write a rework task with source steer: <id>",
+        );
+      }
+    }
+    if (!hasTask && !hasSpike && (changed.length > 0 || created.length > 0)) {
+      findings.push(
+        "task files changed but no steer routed to task or spike; architect and stall steers write no task file",
+      );
+    }
+  }
+  return [...new Set(findings)];
+}
+
+function ensureSteerHold(
+  runtime: KernelRuntime,
+  steerId: string,
+  route: SteerRoute,
+): void {
+  const dir = holdsDir(runtime.store);
+  const candidates = [`${steerId}.yaml`, `${steerId}.yml`].map((name) =>
+    path.join(dir, name),
+  );
+  if (candidates.some((candidate) => fs.existsSync(candidate))) return;
+  fs.mkdirSync(dir, { recursive: true });
+  const goal = route === "stall";
+  fs.writeFileSync(
+    path.join(dir, `${steerId}.yaml`),
+    `slugs: []\ngoal: ${goal}\n`,
+    "utf8",
+  );
+}
+
 /**
- * One PM turn for steers dropped mid-iteration. The PM structures each steer
- * into a hold file and writes no task file; there is no ladder because the
- * steer still reaches the architect at the boundary whether this turn succeeds
- * or fails. A failed turn therefore writes no hold and changes no dispatch.
- * The record uses the PM step, so it stays out of the item turn budget and
- * prices into the iteration's spend like every other PM turn.
+ * PM ladder for steers dropped mid-iteration. Each claimed steer gets one
+ * route: `task` amends a pending task or writes a rework task and is answered
+ * in the outbox now; `spike` writes a standalone task whose landed outcome is
+ * answered later; `architect` waits for the next boundary with its hold;
+ * `stall` drains the goal with `goal: true` and waits for the architect. The
+ * record uses the PM step, so it stays out of the item turn budget and prices
+ * into the iteration's spend like every other PM turn.
  *
- * A steer turn is not the task turn: any task-file or plan write it makes is
- * restored from the pre-turn snapshot and named in a failed script record, so
- * a malformed write cannot throw out of the next derive or stand all
- * iteration.
+ * Accepted routes commit to a `steer-routes` script record; a failed rung's
+ * routes die with its rollback, so the boundary never reads them. A legacy
+ * turn with no `steerRoutes` keeps the old contract: any task-file or plan
+ * write is restored and the steer reaches the architect. A routed turn that
+ * exhausts the ladder or stops on infra falls back the same way: the writes
+ * are rolled back and the steer still reaches the architect, so a steer turn
+ * never blocks dispatch.
  */
 export async function runSteerPm(
   runtime: KernelRuntime,
@@ -512,34 +805,108 @@ export async function runSteerPm(
 ): Promise<void> {
   const planPath = path.join(runtime.store.goalDir, "plan.md");
   const snapshot = await snapshotTurn(runtime, planPath);
-  await runAgentTurn(runtime, {
-    target: resolveRole(runtime, "pm"),
-    cwd: opts.cwd,
-    meta: { iteration: opts.iteration, step: "pm", round: 1 },
-    vars: {
-      iteration: String(opts.iteration),
-      intent_path: path.join(runtime.store.goalDir, "intent.md"),
-      plan_path: planPath,
-      tasks_dir: runtime.store.tasksDir,
-      existing_tasks: existingTasks(opts.state, opts.tasks),
-      repair: "",
-      steers: formatSteerTurn(opts.steers),
-      holds_dir: holdsDir(runtime.store),
-    },
-    expectation: "any",
-  });
-  const restored = await restoreTurn(runtime, snapshot);
-  const files = [
-    ...(restored.plan ? ["plan.md"] : []),
-    ...restored.tasks.map((slug) => `tasks/${slug}.md`),
-  ];
-  if (files.length > 0) {
-    await runtime.store.appendRecord(
-      scriptMeta(opts.iteration, "steer-reconcile"),
-      {
-        ok: false,
-        cause: `steer turn changed ${files.join(", ")}; restored: a steer structures holds and writes no task file or plan`,
+  const planBefore = snapshot.plan;
+  const taskSnapshot = snapshot.tasks;
+  const claim = new Map(opts.steers.map((steer) => [steer.id, steer]));
+  let failure: string[] = [];
+
+  for (const [index, rung] of rungSteps(runtime).entries()) {
+    const target = resolveRole(runtime, "pm", rung.alias);
+    const round = index + 1;
+    const { tasks } = parseTasks(await readTaskTexts(runtime));
+    const result = await runAgentTurn(runtime, {
+      target,
+      cwd: opts.cwd,
+      meta: { iteration: opts.iteration, step: "pm", round },
+      vars: {
+        iteration: String(opts.iteration),
+        intent_path: path.join(runtime.store.goalDir, "intent.md"),
+        plan_path: planPath,
+        tasks_dir: runtime.store.tasksDir,
+        existing_tasks: existingTasks(opts.state, tasks),
+        repair: round === 1 ? "" : steerLadderNote(rung, target, failure),
+        steers: formatSteerTurn(opts.steers),
+        holds_dir: holdsDir(runtime.store),
       },
+      expectation: "any",
+    });
+    const outcome = result.outcome;
+    if (outcome?.steerRoutes === undefined) {
+      const restored = await restoreTurn(runtime, snapshot);
+      const files = [
+        ...(restored.plan ? ["plan.md"] : []),
+        ...restored.tasks.map((slug) => `tasks/${slug}.md`),
+      ];
+      if (files.length > 0) {
+        await runtime.store.appendRecord(
+          scriptMeta(opts.iteration, "steer-reconcile"),
+          {
+            ok: false,
+            cause: `steer turn changed ${files.join(", ")}; restored: a steer structures holds and writes no task file or plan`,
+          },
+        );
+      }
+      return;
+    }
+
+    const findings = await validateSteerTurn(
+      runtime,
+      {
+        iteration: opts.iteration,
+        state: opts.state,
+        planPath,
+        round,
+        claim: opts.steers,
+      },
+      planBefore,
+      taskSnapshot,
+      outcome,
     );
+    if (outcome?.status === "done" && findings.length === 0) {
+      const accepted = [...(outcome.steerRoutes ?? [])].sort((a, b) =>
+        a.steer.localeCompare(b.steer),
+      );
+      // The boundary reads routes from this record only, never from the agent
+      // rung outcomes: a failed rung's routes die with its rollback.
+      await runtime.store.appendRecord(
+        scriptMeta(opts.iteration, "steer-routes", { round }),
+        {
+          ok: true,
+          outcome: {
+            status: "done",
+            summary: `steer routes: ${accepted.map((entry) => `${entry.steer}=${entry.route}`).join(", ")}`,
+            concerns: [],
+            forward: [],
+            steerRoutes: accepted,
+          },
+        },
+      );
+      for (const entry of outcome.steerRoutes ?? []) {
+        const steer = claim.get(entry.steer);
+        if (!steer) continue;
+        if (entry.route === "task") {
+          const answer = entry.answer?.trim() ?? "";
+          await writeOutbox(
+            runtime.store,
+            steer.id,
+            `# Steer ${steer.id}\n\n${answer}\n\nSource: ${steer.relPath}`,
+          );
+          await markProcessed(runtime.store, steer);
+          await expireHold(runtime.store, steer.id);
+        } else {
+          ensureSteerHold(runtime, steer.id, entry.route);
+        }
+      }
+      return;
+    }
+
+    const reasons = failureReasons(outcome, findings, result.record);
+    await runtime.store.appendRecord(
+      scriptMeta(opts.iteration, "pm-validate", { round }),
+      { ok: false, cause: reasons.join("; ") },
+    );
+    await restoreTurn(runtime, snapshot);
+    if (result.record.stop?.kind === "infra") return;
+    failure = reasons;
   }
 }

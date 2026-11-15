@@ -7,7 +7,9 @@ import { commitAll } from "../../src/core/git/commit.js";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
+import { promptVars } from "../../src/kernel/flow-context.js";
 import { executeTaskAction } from "../../src/kernel/flow.js";
+import { createFolderStore } from "../../src/kernel/store.js";
 import { type GoalMetrics, writeMetrics } from "../../src/kernel/metrics.js";
 import { writeIterationSummary } from "../../src/kernel/summary.js";
 import type {
@@ -26,6 +28,15 @@ import {
   setupFlowRepo,
   writeTask,
 } from "./s2-helpers.js";
+import {
+  cleanup as cleanupGoal,
+  expectLaunch,
+  makeGoal,
+  scriptDigest,
+  simpleTask,
+  stateOf,
+  writeTask as writeGoalTask,
+} from "./e2e-helpers.js";
 
 function scriptFix(harness: FakeHarness): void {
   harness.script((req, ctx) => {
@@ -261,16 +272,15 @@ describe("fix-round follow-up modes", () => {
       const review = records
         .filter((r) => r.slug === "task" && r.step === "review")
         .sort((a, b) => a.seq - b.seq);
-      // Each settled turn compacts its own session; the fix turn's resume adds
-      // none because the ref it resumes is already compacted.
+      // Each implement turn compacts its own session; reviews compact nothing
+      // because no turn ever resumes them. The fix turn's resume adds none
+      // because the ref it resumes is already compacted.
       expect(harness.compactions.map((c) => c.id)).toEqual([
         implement[0]!.session!.id,
-        review[0]!.session!.id,
         implement[1]!.session!.id,
-        review[1]!.session!.id,
       ]);
       expect(implement.map((r) => r.session?.compacted)).toEqual([true, true]);
-      expect(review.map((r) => r.session?.compacted)).toEqual([true, true]);
+      expect(review.map((r) => r.session?.compacted)).toEqual([false, false]);
 
       const fix = harness.calls[2]!;
       expect(fix.session?.id).toBe(implement[0]?.session?.id);
@@ -1191,6 +1201,168 @@ describe("gate flake re-run", () => {
       cleanupFlowRepo(repo);
       cleanupProbe(green);
       cleanupProbe(red);
+    }
+  }, 60_000);
+});
+
+describe("standalone upscope", () => {
+  function writeClass(goalDir: string, text: string): void {
+    fs.writeFileSync(path.join(goalDir, "class.yaml"), text, "utf8");
+  }
+
+  function readClass(goalDir: string): unknown {
+    return yaml.parse(
+      fs.readFileSync(path.join(goalDir, "class.yaml"), "utf8"),
+    );
+  }
+
+  it("parks on review upscope=yes, rewrites the class to bigger, and the next launch runs the architect", async () => {
+    const goal = makeGoal({ classYaml: "class: task\nslug: solo\n" });
+    try {
+      writeGoalTask(goal.goalDir, simpleTask("solo", "solo.txt"));
+      const first = new FakeHarness({ id: "fake" });
+      let reviewPrompt = "";
+      first.script((req, ctx) => {
+        fs.writeFileSync(path.join(req.cwd!, "solo.txt"), "v1\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "implemented" }));
+        return fakeTurnResult(req);
+      });
+      first.script((req, ctx) => {
+        reviewPrompt = req.prompt;
+        ctx.writeOutcome(
+          outcome({
+            summary: "needs an architect: two services, not one",
+            verdict: "approve",
+            upscope: "yes",
+          }),
+        );
+        return fakeTurnResult(req);
+      });
+
+      // Iteration 1 escalates through the launch: the class rewrite skips the
+      // front stop, so the goal stays active instead of blocking on the park.
+      await expectLaunch(3, goal.repo, first, 1);
+      expect(reviewPrompt).toContain("standalone task");
+
+      const store = createFolderStore(goal.goalDir);
+      const escalated = await stateOf(goal.goalDir);
+      expect(escalated.tasks.solo!.status).toBe("parked");
+      expect(escalated.tasks.solo!.cause).toMatch(/^upscope: /);
+      expect(escalated.goal).toBe("active");
+      expect(escalated.terminal).toBe(false);
+      expect(readClass(goal.goalDir)).toEqual({ class: "bigger" });
+      expect(
+        (await store.listRecords()).filter((r) => r.step === "front-stop"),
+      ).toEqual([]);
+
+      // The next launch reads the bigger class and runs the architect.
+      const second = new FakeHarness({ id: "fake" });
+      scriptDigest(second, goal.goalDir, 2);
+      second.script((req, ctx) => {
+        expect(req.prompt).toContain("You are the architect");
+        ctx.writeOutcome(outcome({ summary: "planned", decision: "done" }));
+        return fakeTurnResult(req);
+      });
+      await expectLaunch(0, goal.repo, second, 1);
+
+      const records = await store.listRecords();
+      const architect = records.find((r) => r.step === "architect");
+      expect(architect).toBeDefined();
+      expect(architect?.iteration).toBe(2);
+      expect((await stateOf(goal.goalDir)).goal).toBe("done");
+      expect(first.calls).toHaveLength(2);
+      expect(second.calls).toHaveLength(2);
+    } finally {
+      cleanupGoal(goal);
+    }
+  }, 90_000);
+
+  it("keeps the normal verdict path on review upscope=no", async () => {
+    const { repo, goal, goalDir } = setupFlowRepo();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script((req, ctx) => {
+        fs.writeFileSync(path.join(req.cwd!, "task.txt"), "v1\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "implemented" }));
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(
+          outcome({
+            summary: "looks right",
+            verdict: "approve",
+            upscope: "no",
+          }),
+        );
+        return fakeTurnResult(req);
+      });
+
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      writeClass(goalDir, "class: task\nslug: solo\n");
+      await writeTask(runtime, task("solo", { scope: ["task.txt"] }));
+
+      const result = await runDispatch(runtime, { iteration: 1 });
+      expect(result.reason).toBe("boundary");
+
+      const state = derive(
+        await runtime.store.listTasks(),
+        await runtime.store.listRecords(),
+        runtime.configs.process.flows,
+      );
+      expect(state.tasks.solo!.status).toBe("merged");
+      expect(readClass(goalDir)).toEqual({ class: "task", slug: "solo" });
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("never escalates tasks inside an architect plan", async () => {
+    const { repo, goal, goalDir } = setupFlowRepo();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script((req, ctx) => {
+        fs.writeFileSync(path.join(req.cwd!, "task.txt"), "v1\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "implemented" }));
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(
+          outcome({
+            summary: "hallucinated escalation",
+            verdict: "approve",
+            upscope: "yes",
+          }),
+        );
+        return fakeTurnResult(req);
+      });
+
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      const file = task("planned", { scope: ["task.txt"] });
+      await writeTask(runtime, file);
+
+      const vars = promptVars(
+        runtime,
+        file,
+        "/worktrees/demo-tasks/planned",
+        [],
+        1,
+        runtime.configs.process.flows["implement-review"]!,
+      );
+      expect(vars.upscope_ask).toBe("");
+
+      const result = await runDispatch(runtime, { iteration: 1 });
+      expect(result.reason).toBe("boundary");
+
+      const state = derive(
+        await runtime.store.listTasks(),
+        await runtime.store.listRecords(),
+        runtime.configs.process.flows,
+      );
+      expect(state.tasks.planned!.status).toBe("parked");
+      expect(state.tasks.planned!.cause).toMatch(/^upscope: /);
+      expect(fs.existsSync(path.join(goalDir, "class.yaml"))).toBe(false);
+    } finally {
+      cleanupFlowRepo(repo);
     }
   }, 60_000);
 });

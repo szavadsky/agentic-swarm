@@ -1,7 +1,7 @@
 import path from "node:path";
 import { recordedBaseGates } from "./baseline.js";
 import { summaryRelPath } from "./context-pack.js";
-import { derive } from "./derive.js";
+import { derive, openDebts } from "./derive.js";
 import {
   costText,
   DEFAULT_ROLE_BY_STEP,
@@ -33,7 +33,7 @@ export interface SummaryInput {
   decision?: GoalDecision;
   /** Boundary/launch cause shown as a remarkable (PM ladder, crash). */
   cause?: string;
-  /** Crash or drain override; the architect decision wins when present. */
+  /** Launch result; wins over `decision`, which is display-only. */
   status?: SummaryStatus;
   /** Step id -> role, from the process flow config. */
   roleByStep?: Record<string, string>;
@@ -115,9 +115,7 @@ export async function writeIterationSummary(
   const architect = recs
     .filter((r) => r.step === "architect" && r.outcome)
     .at(-1);
-  const status = input.decision
-    ? defaultStatus(input.decision)
-    : (input.status ?? defaultStatus(undefined));
+  const status = input.status ?? defaultStatus(input.decision);
   // Dispatch marks a drain from the USD brake with a `budget:` cause; it is a
   // spend fact, so it gets its own metrics line instead of the boundary remark.
   const budgetStop = input.cause
@@ -131,19 +129,25 @@ export async function writeIterationSummary(
     .filter((r) => r.step === "finish" && r.ok === true)
     .map((r) => r.slug!);
   const parkedByCause = new Map<string, string[]>();
+  for (const rec of recs) {
+    if (rec.step !== "park" || !rec.endedAt || !rec.slug) continue;
+    const cause = rec.cause ?? "no recorded cause";
+    parkedByCause.set(cause, [...(parkedByCause.get(cause) ?? []), rec.slug]);
+  }
   const pending: string[] = [];
+  const parkedAll: string[] = [];
   const cancelled: string[] = [];
   for (const slug of Object.keys(input.state.tasks).sort()) {
     const task = input.state.tasks[slug]!;
     if (task.status === "parked") {
-      const cause = task.cause ?? "no recorded cause";
-      parkedByCause.set(cause, [...(parkedByCause.get(cause) ?? []), slug]);
+      parkedAll.push(slug);
     } else if (task.status === "pending" || task.status === "ready") {
       pending.push(slug);
     } else if (task.status === "cancelled") {
       cancelled.push(slug);
     }
   }
+  const open = openDebts(input.records);
 
   const ownerRemarkable = recs.flatMap((rec) =>
     (rec.outcome?.concerns ?? [])
@@ -202,6 +206,7 @@ export async function writeIterationSummary(
   const {
     usage,
     unpricedTurns,
+    quarantined,
     roles: roleCosts,
     aliases,
     models,
@@ -246,11 +251,26 @@ export async function writeIterationSummary(
             .map((c) => `  - ${c.name}: ${c.summary}`),
         ];
 
+  const distanceDebt =
+    open.length === 0
+      ? ["- open debt (0): none"]
+      : [
+          `- open debt (${open.length}):`,
+          ...open.map(
+            (debt) =>
+              `  - ${debt.source}: ${debt.text}${debt.evidence ? ` (${debt.evidence})` : ""}`,
+          ),
+        ];
   const lines = [
     `# Iteration ${iteration} summary`,
     "",
     `status: ${status}`,
     ...(input.decision ? [`decision: ${input.decision}`] : []),
+    "",
+    "## Distance",
+    `- pending (${pending.length}): ${pending.length ? pending.join(", ") : "none"}`,
+    `- parks (${parkedAll.length}): ${parkedAll.length ? parkedAll.join(", ") : "none"}`,
+    ...distanceDebt,
     "",
     "## Architect",
     ...(architect?.outcome
@@ -265,6 +285,7 @@ export async function writeIterationSummary(
     `- spikes finished: ${finished.length ? finished.join(", ") : "none"}`,
     `- pending: ${pending.length ? pending.join(", ") : "none"}`,
     `- cancelled: ${cancelled.length ? cancelled.join(", ") : "none"}`,
+    `- quarantined: ${quarantined.length ? quarantined.join(", ") : "none"}`,
     "",
     "## Base gates",
     ...baseLines,

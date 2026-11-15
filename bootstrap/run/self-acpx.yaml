@@ -38,6 +38,31 @@ aliases:
     harness: omp
     model: anthropic/claude-sonnet-5-5
 
+# acpx harness bindings: each id is a config name, no code. Effort is a session
+# config option; agy also splits it out of the model id, and needs approve-all
+# or every shell command is denied (probe §7).
+harnesses:
+  pi:
+    acpx:
+      agent: pi
+      effort: { configId: thought_level, levels: [off, minimal, low, medium, high, xhigh] }
+      usage: { cache: false }
+  codex:
+    acpx:
+      agent: codex
+      effort: { configId: reasoning_effort, levels: [low, medium, high, xhigh, max] }
+      usage: { cache: true }
+  agy:
+    acpx:
+      agent: agy acp
+      raw: true
+      args: [--approve-all]
+      effort:
+        configId: thought_level
+        levels: [low, medium, high]
+        modelBases: { gemini-3.8-flash: [low, medium, high] }
+      usage: { cache: true }
+
 scouts:
   model: opencode-go/deepseek-v4.1-flash
 
