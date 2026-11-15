@@ -1,12 +1,29 @@
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import yaml from "yaml";
 import { dispatch } from "../../src/cli/dispatch.js";
+import { Repo } from "../../src/core/git/repo.js";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import type { Usage } from "../../src/harness/types.js";
+import { runAgentTurn } from "../../src/kernel/agent.js";
+import { resolveRole } from "../../src/kernel/flow-context.js";
 import { type GoalMetrics, writeMetrics } from "../../src/kernel/metrics.js";
+import {
+  type PriceTable,
+  priceTableOnly,
+  pricedUsage,
+} from "../../src/kernel/pricing.js";
+import { loadPrompts } from "../../src/kernel/prompts.js";
+import { finishChecks, startChecks } from "../../src/kernel/record.js";
 import { createFolderStore } from "../../src/kernel/store.js";
+import type {
+  KernelRuntime,
+  ProcessConfig,
+  RepoConfig,
+  RunConfig,
+} from "../../src/kernel/types.js";
 import { createTmpRepo } from "../helpers/tmp-repo.js";
 import { rec, script } from "./helpers.js";
 
@@ -161,6 +178,14 @@ describe("iteration metrics", () => {
       expect(one.loopIncidents).toBe(0);
       expect(one.humanInterventions).toBe(0);
 
+      // Production seam: the commit the flow made returned its diff stats
+      // into the implement agent record via settle, and metrics aggregates it.
+      const implement = turns.filter((r) => r.step === "implement");
+      expect(implement).toHaveLength(1);
+      expect(implement[0]!.edits?.files ?? 0).toBeGreaterThanOrEqual(1);
+      expect(one.edits).toBeGreaterThanOrEqual(1);
+      expect(one.roles.implementer!.edits).toBeGreaterThanOrEqual(1);
+      expect(one.commitWallMs).toBeGreaterThan(0);
       expect(one.roles.architect).toMatchObject({ turns: 1, tokens: 110 });
       expect(one.roles.pm).toMatchObject({ turns: 1, tokens: 55 });
       expect(one.roles.implementer).toMatchObject({ turns: 1, tokens: 220 });
@@ -250,6 +275,303 @@ describe("iteration metrics", () => {
       expect(metrics.totals.iterations).toBe(2);
     } finally {
       repo.cleanup();
+    }
+  });
+});
+
+const PRICES: PriceTable = {
+  "paid/one": { input: 4, cachedInput: 0.2, output: 20, reasoning: 20 },
+};
+
+function priced(light: Partial<Usage> = {}): Usage {
+  return {
+    in: 0,
+    cacheRead: 0,
+    cacheWrite5m: 0,
+    cacheWrite1h: 0,
+    out: 0,
+    reasoningOut: 0,
+    ...light,
+  };
+}
+
+describe("record cost truth", () => {
+  it("keeps the harness figure and adds the list-price equivalent", () => {
+    // A subscription-style zero is repriced for cost but stays visible as the
+    // harness figure; the list column always shows the table price.
+    const paid = pricedUsage(
+      priced({ costUsd: 0, in: 1_000_000 }),
+      "paid/one",
+      PRICES,
+    );
+    expect(paid.costKnown).toBe(true);
+    expect(paid.usage.costUsd).toBeCloseTo(4, 10);
+    expect(paid.usage.listCostUsd).toBeCloseTo(4, 10);
+    expect(paid.usage.harnessCostUsd).toBe(0);
+
+    // A non-zero harness figure wins for cost; the list still shows the table.
+    const discounted = pricedUsage(
+      priced({ costUsd: 0.05, in: 1_000_000 }),
+      "paid/one",
+      PRICES,
+    );
+    expect(discounted.usage.costUsd).toBe(0.05);
+    expect(discounted.usage.listCostUsd).toBeCloseTo(4, 10);
+    expect(discounted.usage.harnessCostUsd).toBe(0.05);
+
+    // Repricing is idempotent: the harness figure is not lost to the priced cost.
+    const again = pricedUsage(paid.usage, "paid/one", PRICES);
+    expect(again.usage.costUsd).toBeCloseTo(4, 10);
+    expect(again.usage.harnessCostUsd).toBe(0);
+  });
+
+  it("prices a resumed unsplit prefix at the cached rate", () => {
+    const fresh = priceTableOnly(priced({ in: 1_000_000 }), "paid/one", PRICES);
+    const resumed = priceTableOnly(
+      priced({ in: 1_000_000 }),
+      "paid/one",
+      PRICES,
+      { cachedPrefix: true },
+    );
+    expect(fresh).toBeCloseTo(4, 10);
+    expect(resumed).toBeCloseTo(0.2, 10);
+    // A split cache already names its cached prefix; the flag changes nothing.
+    const split = priceTableOnly(
+      priced({ in: 500_000, cacheRead: 500_000 }),
+      "paid/one",
+      PRICES,
+      { cachedPrefix: true },
+    );
+    expect(split).toBeCloseTo(2.1, 10);
+  });
+
+  it("aggregates per-model cost, work, gate time and operator acts", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-models-"));
+    const store = createFolderStore(path.join(root, "goal"));
+    try {
+      await store.ensureLayout();
+      const check = (name: string) => ({
+        name,
+        ok: true,
+        summary: "pass",
+        output: "ok",
+        fingerprint: name,
+      });
+      const records = [
+        rec(1, {
+          step: "architect",
+          slug: undefined,
+          model: { id: "paid/one" },
+          usage: priced({ in: 1_000_000 }),
+          edits: { files: 2, added: 10, removed: 5 },
+          promptBytes: 100,
+        }),
+        rec(2, {
+          slug: "a",
+          model: { id: "paid/one" },
+          usage: priced({ costUsd: 0, in: 1_000_000 }),
+          edits: { files: 1, added: 20, removed: 0 },
+        }),
+        rec(3, {
+          slug: "a",
+          step: "review",
+          model: { id: "mystery/model" },
+          usage: priced({ in: 1_000_000 }),
+        }),
+        rec(4, {
+          slug: "b",
+          model: { id: "paid/one" },
+          cachedPrefix: true,
+          usage: priced({ in: 1_000_000 }),
+        }),
+        script(5, {
+          slug: "b",
+          step: "checks",
+          ok: true,
+          checks: [check("typecheck"), check("tests")],
+          testRuns: 2,
+          wallMs: 5000,
+          startedAt: new Date(0).toISOString(),
+          endedAt: new Date(5000).toISOString(),
+        }),
+        script(6, {
+          slug: "a",
+          step: "commit",
+          ok: true,
+          commit: "abc",
+          tree: "def",
+          wallMs: 100,
+        }),
+        script(7, { slug: "a", step: "merge", ok: true }),
+        script(8, {
+          slug: "wt-a",
+          step: "containment",
+          ok: true,
+          cause: "outside-change: files changed in /repo",
+        }),
+        script(9, {
+          slug: "b",
+          step: "merge",
+          ok: false,
+          cause:
+            "integration moved: expected aaa, found bbb; an outside commit is on the integration branch and this merge left it untouched",
+        }),
+      ];
+      await writeMetrics(store, {
+        iteration: 1,
+        status: "in-progress",
+        records,
+        prices: PRICES,
+        humanInterventions: 2,
+      });
+      const metrics = yaml.parse(
+        (await store.readFile("metrics.yaml"))!,
+      ) as GoalMetrics;
+      const one = metrics.iterations[0]!;
+
+      // Per-model cost: architect 4 + implement 4 (repriced zero) + resumed 0.2.
+      expect(one.models["paid/one"]!.turns).toBe(3);
+      expect(one.models["paid/one"]!.usage.costUsd).toBeCloseTo(8.2, 10);
+      expect(one.models["paid/one"]!.usage.listCostUsd).toBeCloseTo(8.2, 10);
+      expect(one.models["paid/one"]!.usage.harnessCostUsd).toBe(0);
+      expect(one.models["paid/one"]!.unpricedTurns).toBe(0);
+      expect(one.models["mystery/model"]!.turns).toBe(1);
+      expect(one.models["mystery/model"]!.unpricedTurns).toBe(1);
+
+      // Work: edits from agent commits, test runs attributed to the b turn.
+      expect(one.models["paid/one"]!.edits).toBe(3);
+      expect(one.models["paid/one"]!.testRuns).toBe(2);
+      expect(one.edits).toBe(3);
+      expect(one.testRuns).toBe(2);
+      expect(one.gateRuns).toBe(1);
+
+      // Gate/commit wall comes from the script stamps, not zero-length windows.
+      expect(one.gateWallMs).toBe(5000);
+      expect(one.commitWallMs).toBe(100);
+
+      // Partial per-merged cost: the priced numerator covers priced turns only.
+      expect(one.unpricedTurns).toBe(1);
+      expect(one.costPerMergedTask).toBeCloseTo(8.2, 10);
+      expect(one.listCostPerMergedTask).toBeCloseTo(8.2, 10);
+
+      // Operator acts: steers plus the two outside records.
+      expect(one.humanInterventions).toBe(2);
+      expect(one.operatorActs).toBe(4);
+      expect(metrics.totals.operatorActs).toBe(4);
+      expect(metrics.totals.models["paid/one"]!.turns).toBe(3);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("stamps gate wall time around the run", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-gate-"));
+    const store = createFolderStore(path.join(root, "goal"));
+    try {
+      await store.ensureLayout();
+      const gate = await startChecks(store, {
+        iteration: 1,
+        slug: "a",
+        round: 1,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 15));
+      const done = await finishChecks(gate, [
+        {
+          name: "tests",
+          ok: true,
+          summary: "pass",
+          output: "",
+          fingerprint: "t",
+        },
+      ]);
+      expect(done.testRuns).toBe(1);
+      expect(done.wallMs).toBeGreaterThanOrEqual(10);
+      expect(
+        Date.parse(done.endedAt!) - Date.parse(done.startedAt),
+      ).toBeGreaterThanOrEqual(10);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("writes priced cost and list price into every agent record", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-priced-"));
+    const fake = new FakeHarness({ id: "fake" });
+    const process: ProcessConfig = {
+      flows: {},
+      roles: { implementer: { prompt: "implementer" } },
+      itemTurns: 8,
+    };
+    const repo: RepoConfig = {
+      baseBranch: "main",
+      artifactRoot: ".factory/artifacts",
+      setup: [],
+      gates: [],
+    };
+    const run: RunConfig = {
+      aliases: { implementer: { harness: "fake", model: "paid/one" } },
+      prices: PRICES,
+      limits: { concurrency: 1, perHarness: {}, iterations: 1 },
+      sessions: { dir: "", keepRuns: 1 },
+    };
+    const runtime: KernelRuntime = {
+      paths: {
+        repoRoot: root,
+        goalDir: path.join(root, "goal"),
+        goalCheckout: root,
+        integrationBranch: "factory/g",
+        worktreeRoot: root,
+        sessionsDir: path.join(root, "sessions"),
+      },
+      configs: { repo, process, run },
+      repo: new Repo({ mainRoot: root, worktreeRoot: root }),
+      store: createFolderStore(path.join(root, "goal")),
+      harnesses: new Map([["fake", fake]]),
+      prompts: loadPrompts(process, root),
+      limits: {
+        itemTurns: 8,
+        flows: {},
+        iterations: 1,
+        concurrency: 1,
+        perHarness: {},
+      },
+    };
+    try {
+      await runtime.store.ensureLayout();
+      fake.script((req, ctx) => {
+        ctx.writeOutcome({
+          status: "done",
+          summary: "ok",
+          concerns: [],
+          forward: [],
+        });
+        return fakeTurnResult(req, {
+          usage: { in: 1_000_000, costUsd: 0 },
+          model: { id: "paid/one" },
+        });
+      });
+      const result = await runAgentTurn(runtime, {
+        target: resolveRole(runtime, "implementer"),
+        cwd: root,
+        meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
+        vars: {
+          task_path: "tasks/a.md",
+          front_pack: "none",
+          worktree: root,
+          setup_command: "true",
+          gate_commands: "true",
+          baseline_checks: "none",
+          findings: "none",
+        },
+        expectation: "any",
+      });
+      expect(result.record.model?.id).toBe("paid/one");
+      expect(result.record.usage?.costUsd).toBeCloseTo(4, 10);
+      expect(result.record.usage?.listCostUsd).toBeCloseTo(4, 10);
+      expect(result.record.usage?.harnessCostUsd).toBe(0);
+      expect(result.record.attempts?.[0]?.usage.costUsd).toBeCloseTo(4, 10);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
     }
   });
 });

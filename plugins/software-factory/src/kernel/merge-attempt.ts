@@ -8,7 +8,7 @@ import {
   resolveRole,
   resumeSessionFor,
 } from "./flow-context.js";
-import { scriptMeta } from "./record.js";
+import { commitEdits, scriptMeta } from "./record.js";
 import { materialHash } from "./tasks.js";
 import type {
   KernelRuntime,
@@ -63,15 +63,19 @@ async function settleMergeAttempt(
   await git(cwd, ["add", "-A"]);
   const flagged = await hasConflictMarkers(cwd);
   if (flagged.length > 0) return {};
+  const turn = await runtime.store.startRecord(
+    scriptMeta(meta.iteration, "commit", meta),
+  );
+  const started = Date.parse(turn.meta.startedAt);
   const commit = await commitAll(runtime.repo, cwd, message);
   const head = await headSha(cwd);
   const tree = await treeSha(cwd);
-  await runtime.store.appendRecord(scriptMeta(meta.iteration, "commit", meta), {
-    ok: true,
-    commit: head,
-    tree,
-  });
-  return { commit: commit ?? head, tree };
+  const edits = await commitEdits(cwd, commit);
+  const wallMs = Number.isFinite(started)
+    ? Math.max(0, Date.now() - started)
+    : 0;
+  await turn.finish({ ok: true, commit: head, tree, edits, wallMs });
+  return { commit: commit ?? head, tree, edits };
 }
 
 /**

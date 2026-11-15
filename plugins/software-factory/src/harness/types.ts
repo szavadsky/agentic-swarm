@@ -48,6 +48,10 @@ export type Usage = {
   out: number;
   reasoningOut: number;
   costUsd?: number;
+  /** List-price equivalent from the run-config table, ignoring any harness figure. */
+  listCostUsd?: number;
+  /** The harness-reported figure before pricing filled costUsd from the table. */
+  harnessCostUsd?: number;
 };
 
 export type SessionRef = {

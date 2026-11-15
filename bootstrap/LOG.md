@@ -445,3 +445,11 @@ Verbatim, newest last; each with what it changed.
 ### 2026-11-15 — owner INTENT.md update synced (main, uncommitted text carried)
 - Sections changed (owner's words, carried verbatim): preamble (dropped "Authoritative owner intent; replaces manifesto.md"); Intent line (added observable; "no size ceiling"); Model economics moved up under Intent; new "Context and focus is as important as model tier/diveristy" (smaller-model degradation on complex/contradictory context, focus over tier; same-model review incl. smaller-reviewing-larger; smarter actor must make results AND motivation understandable to small actors); new "Role of agents/models" stub (one line, owner still editing).
 - Sync: cp main→v3, blob 17bbf30d verified equal both sides. Owner text on MAIN left uncommitted (standing instruction still open). Intent-change steer names the sections for the architect.
+
+### 2026-11-15 — iteration 28: 1 merged (m6-record-metrics), exit 3, $2.03
+- 67 min, stop=iteration-limit, base gates green at 483bee7. Merged on factory/self: m6-record-metrics (912f163, 17 files: per-model cost/work recording). Pending: 16 (acpx-config-land, checks-prune-land, gate-flake-rerun, M4x2, M5x3, M6x3, pm-stall-resolve, pm-store-debt, resume-repair, steer-pm-routing).
+- Owner INTENT steer (steer-i28-intent) processed: plan now requires task files carry the bullet's why. New sections did not otherwise reroute planning.
+- doc-drift retired: plan no longer names the slug, PM cancel path closed the loop.
+- Legs: implement+review omp muse:max, PM ernie, digest beam $0 worked. 0 fallbacks, 0 quota. Costs: architect $1.7562, implementer $0.2547, reviewer $0.0188.
+- Notable parks steered: fake-script-keyed-apply (budget-vs-evidence, 3rd instance); continuation-conflict (architect-created task empty-diffed).
+- Merge eb531de. Gates 648/0. No owner INTENT changes (be9affe all sides).

@@ -50,7 +50,8 @@ function costPerMerged(totals: MetricsTotals): string {
   if (totals.merged.length === 0) return "n/a (no merged tasks)";
   if (totals.costPerMergedTask === null)
     return `unknown (${unpricedText(totals.unpricedTurns)})`;
-  return `$${totals.costPerMergedTask.toFixed(4)}`;
+  const value = `$${totals.costPerMergedTask.toFixed(4)}`;
+  return totals.unpricedTurns > 0 ? `${value} (partial)` : value;
 }
 
 /** Goal wall clock: first record start to the last start or end on disk. */
@@ -142,6 +143,11 @@ export async function benchmarkGoal(
       unit: "USD",
     },
     {
+      metric: "list cost",
+      value: costText(totals.usage.listCostUsd, totals.unpricedTurns),
+      unit: "USD",
+    },
+    {
       metric: "architect share",
       value: architectShare(totals),
       unit: "% of cost",
@@ -152,6 +158,11 @@ export async function benchmarkGoal(
       unit: "USD/merged task",
     },
     {
+      metric: "work",
+      value: `${totals.edits ?? 0} files, ${totals.testRuns ?? 0} test runs`,
+      unit: "files, runs",
+    },
+    {
       metric: "loop incidents",
       value: String(totals.loopIncidents),
       unit: "events",
@@ -159,6 +170,11 @@ export async function benchmarkGoal(
     {
       metric: "human interventions",
       value: String(totals.humanInterventions),
+      unit: "events",
+    },
+    {
+      metric: "operator acts",
+      value: String(totals.operatorActs ?? totals.humanInterventions),
       unit: "events",
     },
     { metric: "wall", value: wallText(wallMs(records)), unit: "h m" },

@@ -163,6 +163,7 @@ async function writeIterationFacts(
     cause,
     roleByStep,
     prices,
+    humanInterventions,
   });
 }
 

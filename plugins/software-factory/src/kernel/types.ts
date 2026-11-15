@@ -188,6 +188,8 @@ export interface StepRecord {
   model?: ModelRef;
   /** Every retry/fallback hop the harness made for this turn. */
   attempts?: TurnAttempt[];
+  /** Resumed turn: unsplit input is priced as the cached prefix. */
+  cachedPrefix?: boolean;
   /** Task hash at dispatch, for the frozen-task check. */
   taskHash?: string;
   /** Integration head (or parked branch tip) the branch started from. */
@@ -207,11 +209,24 @@ export interface StepRecord {
   /** base-advance only: integration head tree at the creation advance. */
   headTree?: string;
   checks?: CheckResult[];
+  /** Files and lines the turn's commit changed, measured at commit time. */
+  edits?: WorkEdits;
+  /** Gates run by this record; checks records only. */
+  testRuns?: number;
+  /** Wall time in ms; checks/commit records stamp the gate/commit run itself. */
+  wallMs?: number;
   outcome?: Outcome;
   ok?: boolean;
   cause?: string;
   startedAt: string;
   endedAt?: string;
+}
+
+/** Work one turn committed: files changed plus added/removed lines. */
+export interface WorkEdits {
+  files: number;
+  added: number;
+  removed: number;
 }
 
 /** Input of one turn/script step, written before the turn starts. */
@@ -236,6 +251,8 @@ export interface RecordEnd {
   stop?: Stop;
   usage?: Usage;
   session?: SessionRef;
+  /** Resumed turn: unsplit input is priced as the cached prefix. */
+  cachedPrefix?: boolean;
   /** Rendered prompt and, for the boundary roles, context-pack size. */
   promptBytes?: number;
   packBytes?: number;
@@ -246,6 +263,9 @@ export interface RecordEnd {
   /** base-advance only: integration head tree at the creation advance. */
   headTree?: string;
   checks?: CheckResult[];
+  edits?: WorkEdits;
+  testRuns?: number;
+  wallMs?: number;
   outcome?: Outcome;
   ok?: boolean;
   cause?: string;
