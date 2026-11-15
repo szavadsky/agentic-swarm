@@ -1,5 +1,5 @@
 /**
- * Harness contract (KERNEL0 §4). Caps/Stop/Usage/SessionRef are verbatim from
+ * Harness contract (KERNEL0 §4). Caps/Stop/Usage/SessionRef are adapted from
  * `manifesto.advice.md:96-143`; flows branch on Caps, never on harness id.
  */
 
@@ -12,7 +12,6 @@ export interface ModelRef {
 export type Caps = {
   resume: boolean;
   compact: "none" | "local" | "server";
-  fork: boolean;
   subagents: "none" | "spawn" | "steer";
   structuredOutput: "none" | "native";
   /** Levels this model accepts on this harness. */
