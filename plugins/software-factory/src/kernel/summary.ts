@@ -78,6 +78,7 @@ function incidentLines(
     `- outcome-repair turns: ${incidents.outcomeRepairs}`,
     `- merge conflicts: ${incidents.mergeConflicts}`,
     `- merged-gate failures: ${incidents.mergedGateFailures}`,
+    `- gate flakes: ${incidents.gateFlakes}`,
     `- round-limit parks: ${incidents.roundLimitParks}`,
     `- no-progress parks: ${incidents.noProgressParks}`,
     `- empty-diff parks: ${incidents.emptyDiffParks}`,
