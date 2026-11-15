@@ -6,7 +6,7 @@ import { type Hold, readHolds, type Steer, scanInbox } from "./mailbox.js";
 import { next } from "./next.js";
 import { runSteerPm } from "./pm.js";
 import { type PriceTable, pricedRecord } from "./pricing.js";
-import { appendPark, scriptMeta } from "./record.js";
+import { scriptMeta } from "./record.js";
 import type { DrainController } from "./signals.js";
 import type {
   Action,
@@ -236,7 +236,10 @@ export async function runDispatch(
 
   let holds: Hold[];
   try {
-    holds = await readHolds(runtime.store);
+    holds = await readHolds(runtime.store, {
+      iteration,
+      knownSlugs: initialTasks.map((task) => task.slug),
+    });
   } catch (err) {
     // A hold file that cannot be read decides what may merge, so nothing is
     // dispatched this iteration; the launch surfaces the infra stop.
@@ -302,7 +305,10 @@ export async function runDispatch(
       cwd: runtime.paths.goalCheckout,
     });
     try {
-      holds = await readHolds(runtime.store);
+      holds = await readHolds(runtime.store, {
+        iteration,
+        knownSlugs: tasks.map((task) => task.slug),
+      });
     } catch (err) {
       return {
         hold: activeHolds(holds, pending),
@@ -381,8 +387,9 @@ export async function runDispatch(
     const iterationWallMs = runtime.limits.iterationWallMs;
     if (!drain && !cancelled) {
       if (hold.goal !== undefined) {
-        // A goal hold is a drain with a name: in-flight steps settle unmerged,
-        // nothing new starts, and the architect sees the remainder.
+        // A goal hold is a drain with a name: started tasks run their flow to
+        // the end, nothing new starts, and the architect sees the remainder.
+        // Parks happen only through the existing park causes, never from a hold.
         drain = `steer: ${hold.goal} goal hold`;
       } else if (
         runtime.limits.iterationTurns !== undefined &&
@@ -423,31 +430,13 @@ export async function runDispatch(
       if (!task) throw new Error(`action names unknown task "${action.slug}"`);
       const taskState = state.tasks[action.slug]!;
 
-      // A per-slug hold parks that task (started or not, once its in-flight
-      // step finishes). A goal hold is a drain: it never parks — started tasks
-      // settle in their current phase and stay resumable for the next iteration.
-      const heldBySlug = hold.slugs.get(action.slug);
-      if (heldBySlug !== undefined && action.kind !== "park") {
-        if (started.has(action.slug)) {
-          await appendPark(
-            runtime.store,
-            { iteration, slug: action.slug, round: taskState.round },
-            `steer: ${heldBySlug}`,
-          );
-        }
-        continue;
-      }
-      if (
-        hold.goal !== undefined &&
-        !hold.slugs.has(action.slug) &&
-        action.kind !== "park"
-      ) {
-        // Block further steps of started tasks without parking them.
-        continue;
-      }
+      // A hold is an admission filter only: it keeps an unstarted task from
+      // starting and never parks or blocks a task mid-flow. Parks happen only
+      // through the existing park causes, which stay allowed below.
 
       if (action.kind === "step") {
         if (drain && !started.has(action.slug)) continue;
+        if (hold.slugs.has(action.slug) && !started.has(action.slug)) continue;
         if (
           !drain &&
           runtime.limits.iterationTurns !== undefined &&
@@ -471,6 +460,12 @@ export async function runDispatch(
 
       if (action.kind === "checks" || action.kind === "merge") {
         if (drain && !started.has(action.slug) && taskState.turns === 0)
+          continue;
+        if (
+          hold.slugs.has(action.slug) &&
+          !started.has(action.slug) &&
+          taskState.turns === 0
+        )
           continue;
         if (overlapsRunning(task.scope, running)) continue;
         start(action, taskState, task, false);

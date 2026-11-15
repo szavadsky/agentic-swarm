@@ -98,7 +98,7 @@ function approver(summary: string): FakeTurnHandler {
 }
 
 describe("mid-run steer holds", () => {
-  it("holds pending tasks, parks the in-flight one unmerged, and still reaches the architect", async () => {
+  it("holds unstarted tasks without parking the in-flight one, and still reaches the architect", async () => {
     const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
     try {
       const harness = new FakeHarness({ id: "fake" });
@@ -130,6 +130,8 @@ describe("mid-run steer holds", () => {
         ctx.writeOutcome(outcome({ summary: "structured s1" }));
         return fakeTurnResult(req);
       });
+      // Alpha already started, so its hold never blocks it mid-flow.
+      harness.script(approver("alpha is correct"));
       harness.script(implementer("gamma.txt"));
       harness.script(approver("gamma is correct"));
 
@@ -137,9 +139,8 @@ describe("mid-run steer holds", () => {
       expect(dispatched.reason).toBe("boundary");
 
       const held = await tasks(runtime);
-      expect(held.tasks.alpha!.status).toBe("parked");
-      expect(held.tasks.alpha!.cause).toBe("steer: s1");
-      expect(held.tasks.beta!.status).toBe("pending");
+      expect(held.tasks.alpha!.status).toBe("merged");
+      expect(held.tasks.beta!.status).toBe("ready");
       expect(held.tasks.delta!.status).toBe("ready");
       expect(held.tasks.gamma!.status).toBe("merged");
 
@@ -151,12 +152,12 @@ describe("mid-run steer holds", () => {
             r.slug === "alpha" && r.actor === "agent" && r.step === "implement",
         )?.outcome?.status,
       ).toBe("done");
-      expect(
-        records.find((r) => r.slug === "alpha" && r.step === "park")?.cause,
-      ).toBe("steer: s1");
+      expect(records.some((r) => r.slug === "alpha" && r.step === "park")).toBe(
+        false,
+      );
       expect(
         records.some((r) => r.slug === "alpha" && r.step === "merge"),
-      ).toBe(false);
+      ).toBe(true);
       expect(
         records.some((r) => r.slug === "beta" && r.actor === "agent"),
       ).toBe(false);
@@ -206,18 +207,25 @@ describe("mid-run steer holds", () => {
       ).toContain("hold alpha; I will review the branch");
 
       const after = await tasks(runtime);
-      expect(after.tasks.alpha!.status).toBe("parked");
-      expect(after.tasks.beta!.status).toBe("pending");
+      expect(after.tasks.alpha!.status).toBe("merged");
+      expect(after.tasks.beta!.status).toBe("ready");
       expect(after.tasks.delta!.status).toBe("ready");
       expect(after.tasks.gamma!.status).toBe("merged");
+      // An answered steer's hold file is gone after the boundary.
+      expect(fs.existsSync(path.join(holdsDir(runtime.store), "s1.yaml"))).toBe(
+        false,
+      );
       // The boundary PM turn does not restructure the steer a second time.
       expect(steerTurns()).toBe(1);
 
-      // The processed steer's hold expires: the task that waited now runs.
+      // The hold is gone: the tasks that waited now run.
+      harness.script(implementer("beta.txt"));
+      harness.script(approver("beta is correct"));
       harness.script(implementer("delta.txt"));
       harness.script(approver("delta is correct"));
       const resumed = await runDispatch(runtime, { iteration: 2 });
       expect(resumed.reason).toBe("boundary");
+      expect((await tasks(runtime)).tasks.beta!.status).toBe("merged");
       expect((await tasks(runtime)).tasks.delta!.status).toBe("merged");
       expect(steerTurns()).toBe(1);
     } finally {
@@ -338,7 +346,7 @@ describe("mid-run steer holds", () => {
     }
   }, 60_000);
 
-  it("a goal hold drains dispatch and leaves started tasks resumable, never parked", async () => {
+  it("a goal hold drains dispatch while started tasks run to the end, never parked", async () => {
     const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
     try {
       const harness = new FakeHarness({ id: "fake" });
@@ -356,18 +364,24 @@ describe("mid-run steer holds", () => {
         ctx.writeOutcome(outcome({ summary: "goal held" }));
         return fakeTurnResult(req);
       });
+      harness.script(approver("alpha is correct"));
 
       const dispatched = await runDispatch(runtime, { iteration: 1 });
       expect(dispatched.reason).toBe("drained");
       expect(dispatched.cause).toBe("steer: s1 goal hold");
       const state = await tasks(runtime);
-      expect(state.tasks.alpha!.status).toBe("ready");
+      expect(state.tasks.alpha!.status).toBe("merged");
       expect(state.tasks.alpha!.park).toBeUndefined();
       expect(state.tasks.gamma!.status).toBe("ready");
       expect(
         (await runtime.store.listRecords()).some((r) => r.slug === "gamma"),
       ).toBe(false);
-      expect(harness.calls).toHaveLength(2);
+      expect(
+        (await runtime.store.listRecords()).some(
+          (r) => r.slug === "alpha" && r.step === "park",
+        ),
+      ).toBe(false);
+      expect(harness.calls).toHaveLength(3);
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -394,6 +408,8 @@ describe("mid-run steer holds", () => {
         ctx.writeOutcome(outcome({ summary: "held alpha" }));
         return fakeTurnResult(req, { usage: { costUsd: 10 } });
       });
+      // Alpha started before the brake, so it runs to the end despite its hold.
+      harness.script(approver("alpha is correct"));
       // If the PM turn were free, gamma would run and need these.
       harness.script(implementer("gamma.txt"));
       harness.script(approver("gamma is correct"));
@@ -404,7 +420,7 @@ describe("mid-run steer holds", () => {
         "budget: iteration USD limit $5.0000 reached",
       );
       const state = await tasks(runtime);
-      expect(state.tasks.alpha!.status).toBe("parked");
+      expect(state.tasks.alpha!.status).toBe("merged");
       expect(state.tasks.gamma!.status).toBe("ready");
       expect(
         (await runtime.store.listRecords()).some((r) => r.slug === "gamma"),
@@ -724,6 +740,7 @@ describe("mid-run steer holds", () => {
         (r) => r.step === "steer-presented",
       );
       expect(presented?.ok).toBe(false);
+      expect(presented?.slug).toBe("s1");
       expect(presented?.cause).toContain('"s1"');
       expect(
         (await runtime.store.listRecords()).some(
@@ -747,6 +764,7 @@ describe("mid-run steer holds", () => {
         (r) => r.step === "steer-unanswered",
       );
       expect(expired?.ok).toBe(false);
+      expect(expired?.slug).toBe("s1");
       expect(expired?.cause).toContain('"s1"');
       expect(expired?.outcome?.concerns[0]?.calibration).toBe("architect");
       expect(expired?.outcome?.concerns[0]?.text).toContain("s1");
@@ -863,6 +881,127 @@ describe("mid-run steer holds", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+  it("answers a steer file named with spaces or a colon and deletes its hold", async () => {
+    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      writePlan(runtime);
+      await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
+      const inbox = path.join(runtime.store.goalDir, "mailbox/inbox");
+      fs.mkdirSync(inbox, { recursive: true });
+      fs.writeFileSync(
+        path.join(inbox, "my steer:1.md"),
+        "Hold alpha until I answer.\n",
+        "utf8",
+      );
+      writeHold(runtime, "my steer:1", ["alpha"]);
+
+      harness.script((req, ctx) => {
+        expect(req.prompt).toContain(
+          "- my steer:1 (mailbox/inbox/my steer:1.md): Hold alpha until I answer.",
+        );
+        editPlan(runtime);
+        ctx.writeOutcome(
+          outcome({
+            summary: "answered the oddly named steer",
+            decision: "continue",
+            forward: ["steer my steer:1: hold is released"],
+          }),
+        );
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "tasks unchanged" }));
+        return fakeTurnResult(req);
+      });
+
+      const boundary = await runBoundary(runtime, { relaunch: false });
+      expect(boundary.decision).toBe("continue");
+      expect(
+        fs.existsSync(
+          path.join(runtime.store.goalDir, "mailbox/inbox/my steer:1.md"),
+        ),
+      ).toBe(false);
+      expect(
+        fs.existsSync(
+          path.join(runtime.store.goalDir, "mailbox/processed/my steer:1.md"),
+        ),
+      ).toBe(true);
+      expect(
+        fs.readFileSync(
+          path.join(
+            runtime.store.goalDir,
+            "mailbox/outbox/steer-my steer:1.md",
+          ),
+          "utf8",
+        ),
+      ).toContain("hold is released");
+      expect(
+        fs.existsSync(path.join(holdsDir(runtime.store), "my steer:1.yaml")),
+      ).toBe(false);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("tracks unanswered steers by record data, not cause text", async () => {
+    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      writePlan(runtime);
+      await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
+      await postSteer(runtime.store, "s1", "Hold alpha until I answer.");
+      writeHold(runtime, "s1", ["alpha"]);
+      // The slug says s1 was presented; the cause names a different steer and
+      // must be ignored, proving the id travels as data.
+      await runtime.store.appendRecord(
+        {
+          iteration: 1,
+          step: "steer-presented",
+          round: 1,
+          actor: "script",
+          slug: "s1",
+        },
+        {
+          ok: false,
+          cause:
+            'unanswered steer "s2" in mailbox/inbox/s1.md; the next boundary presents it again before its hold expires',
+        },
+      );
+
+      harness.script((req, ctx) => {
+        expect(req.prompt).toContain(
+          "- s1 (mailbox/inbox/s1.md): Hold alpha until I answer.",
+        );
+        editPlan(runtime);
+        ctx.writeOutcome(
+          outcome({ summary: "ignored the steer", decision: "continue" }),
+        );
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "tasks unchanged" }));
+        return fakeTurnResult(req);
+      });
+
+      const boundary = await runBoundary(runtime, { relaunch: false });
+      expect(boundary.decision).toBe("continue");
+      const records = await runtime.store.listRecords();
+      expect(records.filter((r) => r.step === "steer-presented")).toHaveLength(
+        1,
+      );
+      const expired = records.filter((r) => r.step === "steer-unanswered");
+      expect(expired).toHaveLength(1);
+      expect(expired[0]?.slug).toBe("s1");
+      expect(fs.existsSync(path.join(holdsDir(runtime.store), "s1.yaml"))).toBe(
+        false,
+      );
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
 
   it("answers two different steers that carry identical text", async () => {
     const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
@@ -909,6 +1048,79 @@ describe("mid-run steer holds", () => {
           ),
         ).toBe(true);
       }
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("leaves a task alone when a steer id equals its slug", async () => {
+    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      writePlan(runtime);
+      await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
+      // The steer id collides with the task slug. Its hold blocks nothing, so
+      // any effect on alpha comes from the steer records keyed by that slug.
+      await postSteer(runtime.store, "alpha", "A steer sharing the task slug.");
+      writeHold(runtime, "alpha", []);
+
+      const ignoreSteer: FakeTurnHandler = (req, ctx) => {
+        expect(req.prompt).toContain(
+          "- alpha (mailbox/inbox/alpha.md): A steer sharing the task slug.",
+        );
+        editPlan(runtime);
+        ctx.writeOutcome(
+          outcome({ summary: "ignored the steer", decision: "continue" }),
+        );
+        return fakeTurnResult(req);
+      };
+      const unchanged: FakeTurnHandler = (req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "tasks unchanged" }));
+        return fakeTurnResult(req);
+      };
+
+      harness.script(ignoreSteer);
+      harness.script(unchanged);
+      expect((await runBoundary(runtime, { relaunch: false })).decision).toBe(
+        "continue",
+      );
+      harness.script(ignoreSteer);
+      harness.script(unchanged);
+      expect((await runBoundary(runtime, { relaunch: false })).decision).toBe(
+        "continue",
+      );
+
+      const records = await runtime.store.listRecords();
+      expect(
+        records.filter(
+          (r) => r.step === "steer-presented" && r.slug === "alpha",
+        ),
+      ).toHaveLength(1);
+      expect(
+        records.filter(
+          (r) => r.step === "steer-unanswered" && r.slug === "alpha",
+        ),
+      ).toHaveLength(1);
+
+      // The steer records share the task's slug but carry no task state.
+      const state = await tasks(runtime);
+      expect(state.tasks.alpha!.status).toBe("ready");
+      expect(state.tasks.alpha!.turns).toBe(0);
+      expect(state.tasks.alpha!.round).toBe(1);
+      expect(state.tasks.alpha!.phase).toBe("implement");
+      expect(state.tasks.alpha!.park).toBeUndefined();
+      expect(state.tasks.alpha!.cause).toBeUndefined();
+
+      // The task still runs its flow to the end through the same records.
+      harness.script(implementer("alpha.txt"));
+      harness.script(approver("alpha is correct"));
+      const dispatched = await runDispatch(runtime, {
+        iteration: 3,
+        seenSteers: ["alpha"],
+      });
+      expect(dispatched.reason).toBe("boundary");
+      expect((await tasks(runtime)).tasks.alpha!.status).toBe("merged");
     } finally {
       cleanupFlowRepo(repo);
     }
