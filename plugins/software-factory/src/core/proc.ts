@@ -9,6 +9,8 @@ interface RunProcessOptions {
   timeoutSec?: number;
   maxOutputBytes?: number;
   stdin?: string;
+  /** Aborts the child (group SIGTERM, then SIGKILL) and resolves with `aborted`. */
+  signal?: AbortSignal;
 }
 
 interface ProcessResult {
@@ -17,6 +19,8 @@ interface ProcessResult {
   stdout: string;
   stderr: string;
   timedOut: boolean;
+  /** The run ended because `signal` fired; the child was killed, not reaped. */
+  aborted: boolean;
   durationMs: number;
   suspendDetected?: boolean;
   suspendGapMs?: number;
@@ -110,11 +114,22 @@ export function runProcess(options: RunProcessOptions): Promise<ProcessResult> {
   const { cmd, cwd, env, timeoutSec, maxOutputBytes, stdin } = options;
 
   return new Promise((resolve) => {
+    if (options.signal?.aborted) {
+      return resolve({
+        code: null,
+        stdout: "",
+        stderr: "",
+        timedOut: false,
+        aborted: true,
+        durationMs: 0,
+      });
+    }
     const clock = getClock();
     const startWall = clock.now();
     const startMono = clock.monotonic();
     const startTime = startWall;
     let timedOut = false;
+    let aborted = false;
     let settled = false;
     let exitCode: number | null = null;
     let exitSignal: string | undefined;
@@ -132,6 +147,7 @@ export function runProcess(options: RunProcessOptions): Promise<ProcessResult> {
           stdout: "",
           stderr: "Empty command array",
           timedOut: false,
+          aborted: false,
           durationMs: 0,
         });
       }
@@ -176,6 +192,7 @@ export function runProcess(options: RunProcessOptions): Promise<ProcessResult> {
         stdout: "",
         stderr: err?.message ?? String(err),
         timedOut: false,
+        aborted: false,
         durationMs: Date.now() - startTime,
       });
     }
@@ -184,9 +201,11 @@ export function runProcess(options: RunProcessOptions): Promise<ProcessResult> {
     }
     let activeTimer: { cancel: () => void } | undefined;
     let graceTimer: NodeJS.Timeout | undefined;
+    let onAbort: (() => void) | undefined;
 
     const finish = () => {
       if (settled) return;
+      if (onAbort) options.signal?.removeEventListener("abort", onAbort);
       if (child.pid && child.pid > 0) {
         unregisterChildGroup(child.pid);
       }
@@ -203,6 +222,7 @@ export function runProcess(options: RunProcessOptions): Promise<ProcessResult> {
         stdout: finalizeStream(stdoutRing),
         stderr: finalizeStream(stderrRing),
         timedOut,
+        aborted,
         durationMs: clock.now() - startWall,
         suspendDetected,
         suspendGapMs: gapMs,
@@ -237,36 +257,47 @@ export function runProcess(options: RunProcessOptions): Promise<ProcessResult> {
       child.stdin.end();
     }
 
+    // Kill the whole process group: SIGTERM first, then SIGKILL.
+    const killGroup = () => {
+      if (child.pid && child.pid > 0) {
+        try {
+          process.kill(-child.pid, "SIGTERM");
+        } catch {
+          try {
+            child.kill("SIGTERM");
+          } catch {}
+        }
+        setTimeout(() => {
+          if (child.pid && child.pid > 0) {
+            try {
+              process.kill(-child.pid, "SIGKILL");
+            } catch {
+              try {
+                child.kill("SIGKILL");
+              } catch {}
+            }
+          }
+        }, 500);
+      } else {
+        try {
+          child.kill("SIGKILL");
+        } catch {}
+      }
+    };
+    onAbort = () => {
+      if (settled || aborted) return;
+      aborted = true;
+      killGroup();
+      scheduleGraceFinish();
+    };
+    options.signal?.addEventListener("abort", onAbort, { once: true });
+
     if (timeoutSec && timeoutSec > 0) {
       activeTimer = createActiveTimer(
         timeoutSec * 1000,
         () => {
           timedOut = true;
-          // Kill the whole process group: SIGTERM first, then SIGKILL
-          if (child.pid && child.pid > 0) {
-            try {
-              process.kill(-child.pid, "SIGTERM");
-            } catch {
-              try {
-                child.kill("SIGTERM");
-              } catch {}
-            }
-            setTimeout(() => {
-              if (child.pid && child.pid > 0) {
-                try {
-                  process.kill(-child.pid, "SIGKILL");
-                } catch {
-                  try {
-                    child.kill("SIGKILL");
-                  } catch {}
-                }
-              }
-            }, 500);
-          } else {
-            try {
-              child.kill("SIGKILL");
-            } catch {}
-          }
+          killGroup();
           scheduleGraceFinish();
         },
         clock,
@@ -286,6 +317,7 @@ export function runProcess(options: RunProcessOptions): Promise<ProcessResult> {
     child.on("error", (err) => {
       if (settled) return;
       settled = true;
+      if (onAbort) options.signal?.removeEventListener("abort", onAbort);
       if (activeTimer) activeTimer.cancel();
       if (graceTimer) clearTimeout(graceTimer);
       const { suspendDetected, gapMs } = detectSuspend(
@@ -298,6 +330,7 @@ export function runProcess(options: RunProcessOptions): Promise<ProcessResult> {
         stdout: finalizeStream(stdoutRing),
         stderr: err.message,
         timedOut,
+        aborted,
         durationMs: clock.now() - startWall,
         suspendDetected,
         suspendGapMs: gapMs,

@@ -122,6 +122,11 @@ async function turnWithTimeout(
   request: import("../harness/types.js").TurnRequest,
 ): Promise<import("../harness/types.js").TurnResult> {
   const wallMs = request.timeouts.wallMs;
+  // The kernel owns the wall bound: when it fires, the harness child is
+  // aborted so it cannot write past the bound, and the race resolves with the
+  // synthesized timeout. A turn that resolves first is never aborted.
+  const controller = new AbortController();
+  const req = { ...request, signal: controller.signal };
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeoutResult: import("../harness/types.js").TurnResult = {
     stop: {
@@ -144,11 +149,14 @@ async function turnWithTimeout(
   };
   const timeoutPromise = new Promise<import("../harness/types.js").TurnResult>(
     (resolve) => {
-      timer = setTimeout(() => resolve(timeoutResult), wallMs);
+      timer = setTimeout(() => {
+        controller.abort();
+        resolve(timeoutResult);
+      }, wallMs);
     },
   );
   try {
-    return await Promise.race([harness.turn(request), timeoutPromise]);
+    return await Promise.race([harness.turn(req), timeoutPromise]);
   } finally {
     if (timer) clearTimeout(timer);
   }

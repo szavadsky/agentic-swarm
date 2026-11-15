@@ -9,6 +9,8 @@ import {
 import type { TurnResult } from "../../src/harness/types.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
+import { TIMEOUT_SETTLE_GRACE_MS } from "../../src/kernel/flow.js";
+import { ensureTaskWorktree, treeSha } from "../../src/kernel/worktree.js";
 import { task } from "./helpers.js";
 import {
   cleanupFlowRepo,
@@ -295,17 +297,18 @@ describe("turn failures — outcome, crash and wall-clock handling", () => {
   }, 60_000);
 
   it("stops a turn at the turn wall bound set by limits.turnMinutes", async () => {
-    // 0.0005 minute = 30ms; the handler never settles, so only the bound ends the turn.
+    // 0.0005 minute = 30ms; the handler returns past the bound, so only the bound ends the turn.
     const { repo, goal } = setupFlowRepo({
       limits: { turnMinutes: 0.0005, concurrency: 1 },
     });
     try {
       const harness = new FakeHarness({ id: "fake" });
-      harness.script(() => new Promise<TurnResult>(() => {}));
+      harness.script(async (req) => {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        return fakeTurnResult(req);
+      });
       const runtime = await makeRuntime(repo, goal, { fake: harness });
-      expect((runtime.limits as { turnMinutes?: number }).turnMinutes).toBe(
-        0.0005,
-      );
+      expect(runtime.limits.turnMinutes).toBe(0.0005);
       await writeTask(runtime, task("a", { scope: ["a.txt"] }));
 
       const result = await runDispatch(runtime, { iteration: 1 });
@@ -323,6 +326,212 @@ describe("turn failures — outcome, crash and wall-clock handling", () => {
         runtime.configs.process.flows,
       );
       expect(state.tasks.a!.turns).toBe(1);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("times out without committing the orphan's writes and resets the tree", async () => {
+    // 30ms bound; the orphan writes before it, sleeps past it, then writes again.
+    const { repo, goal } = setupFlowRepo({
+      limits: { turnMinutes: 0.0005, concurrency: 1 },
+    });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script(async (req) => {
+        fs.writeFileSync(path.join(req.cwd, "orphan.txt"), "before\n", "utf8");
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        fs.writeFileSync(
+          path.join(req.cwd, "orphan.txt"),
+          "before\nlate\n",
+          "utf8",
+        );
+        fs.writeFileSync(path.join(req.cwd, "late.txt"), "late\n", "utf8");
+        return fakeTurnResult(req);
+      });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      const taskFile = task("a", { scope: ["a.txt"] });
+      await writeTask(runtime, taskFile);
+      const wtPath = (await ensureTaskWorktree(runtime, taskFile)).path;
+      const startHead = repo
+        .git(["rev-parse", "HEAD"], { cwd: wtPath })
+        .stdout.trim();
+      const startTree = await treeSha(wtPath);
+
+      const result = await runDispatch(runtime, { iteration: 1 });
+      expect(result.reason).toBe("infra");
+      const records = await runtime.store.listRecords();
+      const turn = records.find((r) => r.slug === "a" && r.actor === "agent");
+      expect(turn?.stop?.kind).toBe("infra");
+      if (turn?.stop?.kind === "infra") {
+        expect(turn.stop.cause).toBe("timeout");
+      }
+      expect(turn?.commit).toBeUndefined();
+      expect(turn?.tree).toBeUndefined();
+      // No commit carries the orphan's writes: the task branch never moved.
+      expect(repo.git(["rev-parse", "factory-task/demo/a"]).stdout.trim()).toBe(
+        startHead,
+      );
+      // The worktree is back at the step's start tree.
+      expect(await treeSha(wtPath)).toBe(startTree);
+      expect(fs.existsSync(path.join(wtPath, "orphan.txt"))).toBe(false);
+      expect(fs.existsSync(path.join(wtPath, "late.txt"))).toBe(false);
+      expect(repo.git(["status", "--porcelain"], { cwd: wtPath }).stdout).toBe(
+        "",
+      );
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("keeps a valid outcome written before the bound on a timed-out turn", async () => {
+    const { repo, goal } = setupFlowRepo({
+      limits: { turnMinutes: 0.0005, concurrency: 1 },
+    });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script(async (req, ctx) => {
+        ctx.writeOutcome(outcome({ status: "done", summary: "early" }));
+        fs.writeFileSync(path.join(req.cwd, "orphan.txt"), "before\n", "utf8");
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        fs.writeFileSync(
+          path.join(req.cwd, "orphan.txt"),
+          "before\nlate\n",
+          "utf8",
+        );
+        return fakeTurnResult(req);
+      });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      const taskFile = task("a", { scope: ["a.txt"] });
+      await writeTask(runtime, taskFile);
+      const wtPath = (await ensureTaskWorktree(runtime, taskFile)).path;
+      const startTree = await treeSha(wtPath);
+
+      await runDispatch(runtime, { iteration: 1 });
+      const records = await runtime.store.listRecords();
+      const turn = records.find((r) => r.slug === "a" && r.actor === "agent");
+      expect(turn?.stop?.kind).toBe("infra");
+      if (turn?.stop?.kind === "infra") {
+        expect(turn.stop.cause).toBe("timeout");
+      }
+      expect(turn?.outcome?.status).toBe("done");
+      expect(turn?.outcome?.summary).toBe("early");
+      expect(turn?.commit).toBeUndefined();
+      expect(await treeSha(wtPath)).toBe(startTree);
+      expect(fs.existsSync(path.join(wtPath, "orphan.txt"))).toBe(false);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("times out a never-resolving harness after the bound plus grace and moves the launch on", async () => {
+    // 30ms bound; the handler writes, then ignores the bound and never resolves.
+    const { repo, goal } = setupFlowRepo({
+      limits: { turnMinutes: 0.0005, concurrency: 1 },
+    });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script((req) => {
+        fs.writeFileSync(path.join(req.cwd, "orphan.txt"), "before\n", "utf8");
+        return new Promise<TurnResult>(() => {});
+      });
+      // Relaunch handlers: implement completes, review approves.
+      harness.script((req, ctx) => {
+        fs.writeFileSync(path.join(req.cwd, "a.txt"), "a\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "a implemented" }));
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(
+          outcome({ summary: "a approved", verdict: "approve" }),
+        );
+        return fakeTurnResult(req);
+      });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      const taskFile = task("a", { scope: ["a.txt"] });
+      await writeTask(runtime, taskFile);
+      const wtPath = (await ensureTaskWorktree(runtime, taskFile)).path;
+      const startHead = repo
+        .git(["rev-parse", "HEAD"], { cwd: wtPath })
+        .stdout.trim();
+      const startTree = await treeSha(wtPath);
+
+      const start = Date.now();
+      const result = await runDispatch(runtime, { iteration: 1 });
+      const elapsed = Date.now() - start;
+      expect(result.reason).toBe("infra");
+      // Bound plus the fixed settle grace — the hung turn holds the launch for
+      // the grace, never forever.
+      expect(elapsed).toBeGreaterThanOrEqual(TIMEOUT_SETTLE_GRACE_MS - 250);
+      expect(elapsed).toBeLessThan(TIMEOUT_SETTLE_GRACE_MS + 30_000);
+      const records = await runtime.store.listRecords();
+      const turn = records.find((r) => r.slug === "a" && r.actor === "agent");
+      expect(turn?.stop?.kind).toBe("infra");
+      if (turn?.stop?.kind === "infra") {
+        expect(turn.stop.cause).toBe("timeout");
+      }
+      expect(turn?.commit).toBeUndefined();
+      expect(turn?.tree).toBeUndefined();
+      // No commit carries the orphan's writes: the task branch never moved.
+      expect(repo.git(["rev-parse", "factory-task/demo/a"]).stdout.trim()).toBe(
+        startHead,
+      );
+      // The worktree is back at the step's start tree.
+      expect(await treeSha(wtPath)).toBe(startTree);
+      expect(fs.existsSync(path.join(wtPath, "orphan.txt"))).toBe(false);
+
+      // The launch moves on: a relaunch redispatches and merges the task.
+      const second = await runDispatch(runtime, { iteration: 2 });
+      expect(second.reason).toBe("boundary");
+      const state = derive(
+        await runtime.store.listTasks(),
+        await runtime.store.listRecords(),
+        runtime.configs.process.flows,
+      );
+      expect(state.tasks.a!.status).toBe("merged");
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("aborts the harness turn when the wall bound fires", async () => {
+    const { repo, goal } = setupFlowRepo({
+      limits: { turnMinutes: 0.0005, concurrency: 1 },
+    });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      let observed: AbortSignal | undefined;
+      harness.script(async (req) => {
+        observed = req.signal;
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        return fakeTurnResult(req);
+      });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("a", { scope: ["a.txt"] }));
+
+      await runDispatch(runtime, { iteration: 1 });
+      expect(observed?.aborted).toBe(true);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("leaves the signal alone when the turn resolves before the bound", async () => {
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: 1 },
+    });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "a implemented" }));
+        return fakeTurnResult(req);
+      });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("a", { scope: ["a.txt"] }));
+
+      await runDispatch(runtime, { iteration: 1 });
+      expect(harness.calls[0]?.signal).toBeDefined();
+      expect(harness.calls[0]?.signal?.aborted).toBe(false);
     } finally {
       cleanupFlowRepo(repo);
     }

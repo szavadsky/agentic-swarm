@@ -92,6 +92,11 @@ export interface TurnRequest {
   /** Where a harness without native structured output expects the agent to write its outcome. */
   outcomePath?: string;
   timeouts: { idleMs: number; wallMs: number };
+  /**
+   * Cancellation from the kernel (the wall bound fired). Adapters kill their
+   * child and report `cancelled`; aborting after the turn resolved is a no-op.
+   */
+  signal?: AbortSignal;
   /** Harness configuration passed through untouched. */
   opaque?: unknown;
 }
