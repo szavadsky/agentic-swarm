@@ -161,7 +161,7 @@ describe("review findings carry", () => {
       const runtime = await makeRuntime(repo, goal, {
         fake: new FakeHarness({ id: "fake" }),
       });
-      const taskFile = task("alpha", { scope: ["src/x.ts"] });
+      const taskFile = task("alpha", { scope: ["alpha-area"] });
       const flow = runtime.configs.process.flows["implement-review"]!;
       const summary = "1. src/x.ts:41 needs a null check";
       const records = [
@@ -194,7 +194,7 @@ describe("review findings carry", () => {
       const runtime = await makeRuntime(repo, goal, {
         fake: new FakeHarness({ id: "fake" }),
       });
-      const taskFile = task("alpha", { scope: ["src/x.ts"] });
+      const taskFile = task("alpha", { scope: ["alpha-area"] });
       const flow = runtime.configs.process.flows["implement-review"]!;
       const summary = "1. src/x.ts:41 needs a null check";
       const records = [
@@ -252,5 +252,36 @@ describe("review findings carry", () => {
     const rendered = library().render("implementer", ROLES.implementer!);
     expect(rendered).not.toContain("empty on the first turn");
     expect(rendered).toContain("review summary, then concerns and forward");
+  });
+});
+
+describe("scope as predicted area", () => {
+  it("defines scope as a predicted area, not a fence, in one shared include", () => {
+    const implementer = library().render("implementer", ROLES.implementer!);
+    const reviewer = library().render("reviewer", ROLES.reviewer!);
+    for (const rendered of [implementer, reviewer]) {
+      expect(rendered).toContain("predicted area, not a fence");
+      expect(rendered).toContain("list files outside the area");
+      expect(rendered).toContain("different seam or a missing dependency");
+      expect(rendered).not.toContain("Touch only files");
+    }
+    expect(implementer).toContain(
+      "Fix every finding from the previous review round that the done-when covers, wherever it lives",
+    );
+    expect(reviewer).toContain("judge by the done-when, not by location");
+    expect(reviewer).not.toContain("Scope creep");
+  });
+
+  it("carries an area, not file globs, in the authoring roles", () => {
+    const architect = library().render("architect", ROLES.architect!);
+    expect(architect).toContain("the predicted area this task works in");
+    expect(architect).toContain("must declare disjoint areas");
+    expect(architect).not.toContain("must not overlap in scope");
+    const pm = library().render("pm", ROLES.pm!);
+    expect(pm).toContain("the predicted area, from the task's stated area");
+    expect(pm).not.toContain("globs the task may touch");
+    const front = library().render("front", ROLES.front!);
+    expect(front).toContain("`scope` (the predicted area)");
+    expect(front).not.toContain("globs the task may touch");
   });
 });

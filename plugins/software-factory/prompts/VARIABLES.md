@@ -8,10 +8,10 @@ Template syntax: [LiquidJS](https://liquidjs.com), strict mode (unknown variable
 | front       | `calibration`, `outcome`                        |
 | pm          | `calibration`, `outcome`                        |
 | implementer | `clean-code`, `scope`, `calibration`, `outcome` |
-| reviewer    | `clean-code`, `calibration`, `outcome`          |
+| reviewer    | `clean-code`, `scope`, `calibration`, `outcome` |
 | digest      | `outcome`                                       |
 
-The shared definitions exist once as partials: `scope` (the task-scope rule), `calibration` (concerns and calibration, with `remarkable` inside it), `outcome` (the outcome contract), `clean-code` (the code standard) and `remarkable` (the remarkable definition).
+The shared definitions exist once as partials: `scope` (the predicted-area rule), `calibration` (concerns and calibration, with `remarkable` inside it), `outcome` (the outcome contract), `clean-code` (the code standard) and `remarkable` (the remarkable definition).
 
 `calibration` is the default calibration partial. The process config may replace its content per repo; the prompt template does not change.
 

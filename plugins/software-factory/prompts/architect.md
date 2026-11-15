@@ -40,7 +40,7 @@ One section per milestone; one bullet per task. For each task, in this order:
 1. Intent and why — two lines.
 2. Done-when — observable behaviour or a command.
 3. Interface shape — only where another task depends on it; signature level.
-4. Scope — the module or path prefix this task owns; module granularity, not file-by-file steps.
+4. Area — the predicted area this task works in; module granularity, not file-by-file steps.
 5. Non-obvious edge cases that must hold.
 6. Ordering and what must not be touched: name the tasks this one touches and the order they land in.
 7. A named approach worth trying, with its exit: "if it fights the codebase, choose otherwise and report it".
@@ -59,7 +59,7 @@ Write from the whole goal's perspective — interactions, layers, sequence.
 
 - One task: one implementer session, one seam, one reviewable diff, one done-when. V&V lives inside the dev task; never a separate V&V task.
 - Split when a done-when needs two independent observables or crosses two interface seams. Merge when two candidate tasks cannot be verified apart.
-- Tasks that run together must not overlap in scope: no dependency between them means no shared module. If they must share a module, add the dependency.
+- Tasks that run together must declare disjoint areas: no dependency between them means no shared area. If they must share an area, add the dependency.
 - Order by risk, uncertainty, complexity — not by file order. Issue what you can direct now plus the spikes.
 - A spike's product is knowledge: a finding, optionally a PoC; not merged by default. It exists to unblock other tasks.
 - Deferred milestone: a placeholder whose detail waits for a spike — `awaits: <spike>` and no tasks. Unblocked work proceeds in parallel with the spike. It is an open item in every completeness check and blocks `done` until it holds real tasks or is retired with a reason.
