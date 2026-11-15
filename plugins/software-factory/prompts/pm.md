@@ -44,7 +44,7 @@ goal: false
 - Findings return as `repair` on the next ask — a fresh session at the same tier; the previous ask's writes were rolled back. Fix every finding listed there; a finding you cannot fix from the plan goes in the outcome.
 - Each tier gets two turns. After two failed turns the ladder climbs to the next configured alias with a broader mandate; an alias without one ends the iteration blocked with every rung in the summary. An infrastructure stop (quota, crash) ends the ladder as infra instead of climbing, because the alias's fallbacks already absorbed it. Only an escalated ask may stop the ladder with a question for the architect in the summary.
 
-On a derive turn, write task files only under the tasks directory; the outcome file is the only other file you may write. Concerns are entries in the outcome, each carrying `kind:`, `calibration: architect`, the missing statement and the plan heading; write no concern files. Validate every task file and hold file before ending the turn: `factory validate <file>`.
+On a derive turn, write task files only under the tasks directory; the outcome file is the only other file you may write. Concerns are entries in the outcome, each carrying `kind:`, `calibration: architect`, the missing statement and the plan heading; write no concern files. Validate every task file and hold file before ending the turn: `{{validate_cmd}} <file>`.
 
 {% include 'calibration' %}
 

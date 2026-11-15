@@ -25,6 +25,7 @@ const ROLES: Record<string, Record<string, string>> = {
     digest_path: "/goal/iterations/3/digest.md",
     steers: "- s1 (mailbox/inbox/s1.md): keep the API stable",
     outcome_path: "/goal/records/00042-i3-architect-r1/outcome.yaml",
+    validate_cmd: "bun /factory/bin/factory.ts validate",
   },
   front: {
     iteration: "3",
@@ -37,6 +38,7 @@ const ROLES: Record<string, Record<string, string>> = {
     setup_command: "bun install",
     gate_commands: "- test: bun test",
     outcome_path: "/goal/records/00041-i3-front-r1/outcome.yaml",
+    validate_cmd: "bun /factory/bin/factory.ts validate",
   },
   pm: {
     iteration: "3",
@@ -48,6 +50,7 @@ const ROLES: Record<string, Record<string, string>> = {
     steers: "- s1 (mailbox/inbox/s1.md):\n  keep the API stable",
     holds_dir: "/goal/mailbox/holds",
     outcome_path: "/goal/records/00043-i3-pm-r1/outcome.yaml",
+    validate_cmd: "bun /factory/bin/factory.ts validate",
   },
   implementer: {
     task_path: "/goal/tasks/alpha.md",
@@ -59,6 +62,7 @@ const ROLES: Record<string, Record<string, string>> = {
     baseline_checks: "- test: 2 failing",
     findings: "- src/x.ts:41 needs a null check",
     outcome_path: "/worktrees/demo-tasks/alpha/outcome.yaml",
+    validate_cmd: "bun /factory/bin/factory.ts validate",
   },
   reviewer: {
     task_path: "/goal/tasks/alpha.md",
@@ -70,6 +74,7 @@ const ROLES: Record<string, Record<string, string>> = {
     baseline_checks: "- test: 2 failing",
     prior_findings: "",
     outcome_path: "/worktrees/demo-tasks/alpha/outcome.yaml",
+    validate_cmd: "bun /factory/bin/factory.ts validate",
   },
   digest: {
     launch_id: "previous-launch-before-3",
@@ -78,6 +83,7 @@ const ROLES: Record<string, Record<string, string>> = {
     transcripts_dir: "/sessions/demo/launch-2",
     digest_path: "/goal/iterations/3/digest.md",
     outcome_path: "/goal/records/00044-i3-digest-r1/outcome.yaml",
+    validate_cmd: "bun /factory/bin/factory.ts validate",
   },
 };
 

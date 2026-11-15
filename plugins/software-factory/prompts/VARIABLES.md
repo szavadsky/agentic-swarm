@@ -15,6 +15,8 @@ The shared definitions exist once as partials: `scope` (the predicted-area rule)
 
 `calibration` is the default calibration partial. The process config may replace its content per repo; the prompt template does not change.
 
+`validate_cmd` is the one variable outside a `This turn` block: it renders the running build's absolute `bun <build>/bin/factory.ts validate`, so it cannot be prompt text and the prefix is stable only within one checkout. The renderer supplies it as a launch-wide default; turn code never passes it.
+
 ## architect.md
 
 | variable       | meaning                                                                                                               |
@@ -28,6 +30,7 @@ The shared definitions exist once as partials: `scope` (the predicted-area rule)
 | `digest_path`  | path to the previous launch's digest; empty string on a first launch                                                  |
 | `steers`       | formatted pending steers: id, first line, file path; `none` when empty                                                |
 | `outcome_path` | path where the outcome file must be written when the harness asks for a file                                          |
+| `validate_cmd` | absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default                                      |
 
 ## front.md
 
@@ -43,6 +46,7 @@ The shared definitions exist once as partials: `scope` (the predicted-area rule)
 | `setup_command` | repository setup command; `none` when not needed                                                                                       |
 | `gate_commands` | configured gate commands as `- id: command` lines; `none` when empty                                                                   |
 | `outcome_path`  | path where the outcome file must be written when the harness asks for a file                                                           |
+| `validate_cmd`  | absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default                                                       |
 
 ## pm.md
 
@@ -57,6 +61,7 @@ The shared definitions exist once as partials: `scope` (the predicted-area rule)
 | `steers`         | pending steers as `- id (file):` plus indented full text; `none` on a derive turn                                                                                       |
 | `holds_dir`      | directory for one `<steer-id>.yaml` hold file per structured steer                                                                                                      |
 | `outcome_path`   | path where the outcome file must be written when the harness asks for a file                                                                                            |
+| `validate_cmd`   | absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default                                                                                        |
 
 ## implementer.md
 
@@ -71,6 +76,7 @@ The shared definitions exist once as partials: `scope` (the predicted-area rule)
 | `baseline_checks` | gate failures recorded before this turn, same format; `none` when the baseline is green                                                                                       |
 | `findings`        | previous review round's summary, concerns and forward for this task (summary first); gate failures when the latest record is red checks; empty string before the first review |
 | `outcome_path`    | path where the outcome file must be written when the harness asks for a file                                                                                                  |
+| `validate_cmd`    | absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default                                                                                              |
 
 ## reviewer.md
 
@@ -85,6 +91,7 @@ The shared definitions exist once as partials: `scope` (the predicted-area rule)
 | `baseline_checks` | gate failures recorded on the base before any task; pre-existing, not findings against this diff |
 | `prior_findings`  | previous round's summary, concerns and forward (summary first); empty string in round 1          |
 | `outcome_path`    | path where the outcome file must be written when the harness asks for a file                     |
+| `validate_cmd`    | absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default                 |
 
 ## digest.md
 
@@ -96,6 +103,7 @@ The shared definitions exist once as partials: `scope` (the predicted-area rule)
 | `transcripts_dir` | path to the session transcripts outside the repo                                                    |
 | `digest_path`     | path where the digest must be written; the script has already written the cost-and-turn table there |
 | `outcome_path`    | path where the outcome file must be written when the harness asks for a file                        |
+| `validate_cmd`    | absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default                    |
 
 The digest scout appends loops, failures and interventions; it does not restate the script table.
 

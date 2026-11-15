@@ -103,15 +103,20 @@ function loadFragment(
  * 1. In-memory `overrides`
  * 2. `overrideDirs` in order
  * 3. `builtinDir`
+ *
+ * `defaults` are launch-wide variables merged under every render's own vars:
+ * an explicit var wins, so callers that do not know a default still render.
  */
 export function loadPromptLibrary(opts: {
   builtinDir: string;
   overrideDirs?: string[];
   overrides?: Record<string, string>;
+  defaults?: Record<string, string>;
 }): PromptLibrary {
   const overrideDirs = opts.overrideDirs ?? [];
   const roots = [...overrideDirs, opts.builtinDir];
   const overrides = opts.overrides ?? {};
+  const defaults = opts.defaults ?? {};
   for (const [name, content] of Object.entries(overrides)) {
     if (typeof content !== "string") {
       throw new TypeError(`prompt override "${name}" must be a string`);
@@ -199,9 +204,10 @@ export function loadPromptLibrary(opts: {
 
     render(fragment: string, vars: Record<string, string>): string {
       loadFragment(layers, roots, fragment);
-      requireVars(fragment, vars);
+      const merged = { ...defaults, ...vars };
+      requireVars(fragment, merged);
       try {
-        return engine.renderFileSync(fragment, vars);
+        return engine.renderFileSync(fragment, merged);
       } catch (error) {
         const message = (error as Error).message ?? "";
         if (message.includes("ENOENT")) {
@@ -231,6 +237,27 @@ export function loadPromptLibrary(opts: {
 }
 
 /**
+ * Double-quotes a shell word only when it needs it; backslash-escapes the
+ * characters a double-quoted word still interprets.
+ */
+function shellQuote(word: string): string {
+  if (/^[A-Za-z0-9_@%+=:,./-]+$/.test(word)) return word;
+  return `"${word.replace(/([\\"$`!])/g, "\\$1")}"`;
+}
+
+/**
+ * The `validate_cmd` prompt variable: the running build's `bin/factory.ts
+ * validate`, absolute, so it runs from any task worktree. Resolved from the
+ * running build (packageRoot), never from PATH or cwd. The optional path
+ * exists for tests; production always uses the running build.
+ */
+export function validateCmd(
+  binPath: string = path.join(packageRoot, "bin", "factory.ts"),
+): string {
+  return `bun ${shellQuote(binPath)} validate`;
+}
+
+/**
  * Templates live in the package `prompts/` dir; a repo may shadow any
  * template under `.factory/prompts/` and replace the calibration partial with
  * process-config text.
@@ -250,6 +277,7 @@ export function loadPrompts(
     builtinDir: path.join(packageRoot, "prompts"),
     overrideDirs,
     overrides,
+    defaults: { validate_cmd: validateCmd() },
   });
 }
 
