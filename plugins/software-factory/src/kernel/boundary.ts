@@ -216,7 +216,11 @@ export async function runBoundary(
       settle: async (_record, outcome, live) => {
         if (!live || outcome?.decision !== "continue") return {};
         const compacted = await compactSession(runtime, live);
-        return compacted ? { session: compacted } : {};
+        if (!compacted) return {};
+        return {
+          session: compacted.session,
+          ...(compacted.usage ? { compactUsage: compacted.usage } : {}),
+        };
       },
     });
 

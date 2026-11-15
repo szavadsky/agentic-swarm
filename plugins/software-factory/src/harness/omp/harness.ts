@@ -3,6 +3,7 @@ import type { RetryPolicy } from "../fallback.js";
 import { runWithFallbacks } from "../fallback.js";
 import type {
   Caps,
+  CompactResult,
   Harness,
   ModelRef,
   SessionRef,
@@ -69,7 +70,7 @@ export class OmpHarness implements Harness {
     return { ...value, attempts };
   }
 
-  async compact(ref: SessionRef): Promise<SessionRef> {
+  async compact(ref: SessionRef): Promise<CompactResult> {
     if (ref.harness !== this.id) {
       throw new Error(`OmpHarness cannot compact a ${ref.harness} session`);
     }
@@ -88,17 +89,20 @@ export class OmpHarness implements Harness {
       const response = await rpc.request("compact", {}, 180_000);
       if (!response.success) {
         const message = String(response.error ?? "unknown error");
-        if (/nothing to compact/i.test(message)) return ref;
+        if (/nothing to compact/i.test(message)) return { session: ref };
         throw new Error(`omp compact failed: ${message}`);
       }
       const state = await rpc
         .request("get_state", {}, 10_000)
         .catch(() => undefined);
+      // No usage: the RPC reports no tokens or cost for the compaction call.
       return {
-        ...ref,
-        lastRequestStartedAt: new Date().toISOString(),
-        compacted: true,
-        model: actualModel(state?.data, ref.model),
+        session: {
+          ...ref,
+          lastRequestStartedAt: new Date().toISOString(),
+          compacted: true,
+          model: actualModel(state?.data, ref.model),
+        },
       };
     } finally {
       await rpc.close(2_000);

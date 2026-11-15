@@ -152,12 +152,22 @@ describe("iteration metrics", () => {
         (r) => r.iteration === 1 && r.endedAt && r.actor === "agent",
       );
       expect(turns).toHaveLength(4);
+      const part = (u: Usage | undefined): number =>
+        (u?.in ?? 0) +
+        (u?.cacheRead ?? 0) +
+        (u?.cacheWrite5m ?? 0) +
+        (u?.cacheWrite1h ?? 0) +
+        (u?.out ?? 0) +
+        (u?.reasoningOut ?? 0);
+      // Metrics sum each attempt plus the turn's compaction; the fake's single
+      // attempt mirrors the turn counters, so usage plus compaction matches it.
       const fromRecords = turns.reduce(
-        (sum, r) => sum + (r.usage?.in ?? 0) + (r.usage?.out ?? 0),
+        (sum, r) => sum + part(r.usage) + part(r.compactUsage),
         0,
       );
       const costFromRecords = turns.reduce(
-        (sum, r) => sum + (r.usage?.costUsd ?? 0),
+        (sum, r) =>
+          sum + (r.usage?.costUsd ?? 0) + (r.compactUsage?.costUsd ?? 0),
         0,
       );
 
@@ -167,9 +177,9 @@ describe("iteration metrics", () => {
       expect(metrics.iterations).toHaveLength(1);
       const one = metrics.iterations[0]!;
       expect(one.n).toBe(1);
-      expect(one.turns).toBe(4);
       expect(one.tokens).toBe(fromRecords);
-      expect(one.tokens).toBe(473);
+      // 473 turn tokens plus two recorded compactions (architect, implement).
+      expect(one.tokens).toBe(17_273);
       expect(one.usage.costUsd).toBeCloseTo(costFromRecords, 10);
       expect(one.usage.costUsd).toBeCloseTo(0.43, 10);
       expect(one.merged).toEqual(["alpha"]);
@@ -186,19 +196,19 @@ describe("iteration metrics", () => {
       expect(one.edits).toBeGreaterThanOrEqual(1);
       expect(one.roles.implementer!.edits).toBeGreaterThanOrEqual(1);
       expect(one.commitWallMs).toBeGreaterThan(0);
-      expect(one.roles.architect).toMatchObject({ turns: 1, tokens: 110 });
+      expect(one.roles.architect).toMatchObject({ turns: 1, tokens: 8_510 });
       expect(one.roles.pm).toMatchObject({ turns: 1, tokens: 55 });
-      expect(one.roles.implementer).toMatchObject({ turns: 1, tokens: 220 });
+      expect(one.roles.implementer).toMatchObject({ turns: 1, tokens: 8_620 });
       expect(one.roles.reviewer).toMatchObject({ turns: 1, tokens: 88 });
 
       expect(one.architect.launches).toBe(1);
-      expect(one.architect.tokens).toBe(110);
+      expect(one.architect.tokens).toBe(8_510);
       expect(one.architect.costShare).toBeCloseTo(0.1 / 0.43, 10);
-      expect(one.architect.tokenShare).toBeCloseTo(110 / 473, 10);
+      expect(one.architect.tokenShare).toBeCloseTo(8_510 / 17_273, 10);
 
       expect(metrics.totals.iterations).toBe(1);
       expect(metrics.totals.turns).toBe(4);
-      expect(metrics.totals.tokens).toBe(473);
+      expect(metrics.totals.tokens).toBe(17_273);
       expect(metrics.totals.merged).toEqual(["alpha"]);
       expect(metrics.totals.usage.costUsd).toBeCloseTo(0.43, 10);
 

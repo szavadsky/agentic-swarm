@@ -200,6 +200,8 @@ export interface StepRecord {
   base?: string;
   stop?: Stop;
   usage?: Usage;
+  /** Priced tokens of this turn's session-end compaction, when the harness reported them. */
+  compactUsage?: Usage;
   session?: SessionRef;
   commit?: string;
   /** UTF-8 bytes of the rendered prompt sent to the harness (agent steps only). */
@@ -254,6 +256,8 @@ export interface RecordEnd {
   model?: ModelRef;
   stop?: Stop;
   usage?: Usage;
+  /** Raw session-end compaction tokens from the settle; the agent turn prices them. */
+  compactUsage?: Usage;
   session?: SessionRef;
   /** Resumed turn: unsplit input is priced as the cached prefix. */
   cachedPrefix?: boolean;

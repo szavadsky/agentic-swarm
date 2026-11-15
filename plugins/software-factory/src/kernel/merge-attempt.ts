@@ -183,7 +183,12 @@ export async function attemptConflictMerge(
       // the ref as it is.
       if (!outcome || !live) return settled;
       const compacted = await compactSession(runtime, live);
-      return compacted ? { ...settled, session: compacted } : settled;
+      if (!compacted) return settled;
+      return {
+        ...settled,
+        session: compacted.session,
+        ...(compacted.usage ? { compactUsage: compacted.usage } : {}),
+      };
     },
   });
 

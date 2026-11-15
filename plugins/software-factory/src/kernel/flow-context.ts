@@ -3,6 +3,7 @@ import path from "node:path";
 import yaml from "yaml";
 import { z } from "zod";
 import {
+  type CompactResult,
   type Harness,
   type ModelRef,
   portable,
@@ -12,6 +13,7 @@ import { preexistingRed, recordedBaseGates } from "./baseline.js";
 import { contextPackRelPath } from "./context-pack.js";
 import { formatFailingChecks, newGateFailures } from "./gates.js";
 import { formatReviewFindings } from "./record.js";
+import { sessionCacheHot } from "./sessions.js";
 import type {
   FlowDefinition,
   FlowStep,
@@ -428,7 +430,8 @@ function aliasHarness(runtime: KernelRuntime, alias: string): string {
 export async function compactSession(
   runtime: KernelRuntime,
   session: SessionRef,
-): Promise<SessionRef | undefined> {
+): Promise<CompactResult | undefined> {
+  if (!sessionCacheHot(session)) return undefined;
   const harness = runtime.harnesses.get(session.harness);
   if (!harness?.compact) return undefined;
   try {

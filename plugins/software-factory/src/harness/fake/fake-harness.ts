@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type {
   Caps,
+  CompactResult,
   Harness,
   ModelRef,
   SessionRef,
@@ -205,7 +206,18 @@ export class FakeHarness implements Harness {
       },
     });
 
-    const session = outcome.session ?? req.session ?? this.newSession(req);
+    // A resumed request keeps its id, cwd and compacted flag, but the request
+    // restarts the cache lifetime, as the real adapters report. Only a
+    // handler-set session (a different ref than the request carried) passes
+    // through untouched, so tests can stage a cold transcript.
+    const overridden =
+      outcome.session !== undefined && outcome.session !== req.session;
+    const base = overridden
+      ? outcome.session!
+      : (req.session ?? this.newSession(req));
+    const session = overridden
+      ? base
+      : { ...base, lastRequestStartedAt: new Date().toISOString() };
     this.sessions.set(session.id, session);
 
     return {
@@ -216,11 +228,19 @@ export class FakeHarness implements Harness {
     };
   }
 
-  async compact(ref: SessionRef): Promise<SessionRef> {
+  /**
+   * A hot compaction: the transcript reread from cache plus the summary
+   * write. Fixed synthetic tokens; the kernel prices them like any usage.
+   */
+  async compact(ref: SessionRef): Promise<CompactResult> {
     this.compactions.push(ref);
-    const compacted = { ...ref, compacted: true };
-    this.sessions.set(compacted.id, compacted);
-    return compacted;
+    const session = {
+      ...ref,
+      lastRequestStartedAt: new Date().toISOString(),
+      compacted: true,
+    };
+    this.sessions.set(session.id, session);
+    return { session, usage: { ...emptyUsage(), cacheRead: 8000, out: 400 } };
   }
 
   /** Sessions the harness has seen, keyed by id. */

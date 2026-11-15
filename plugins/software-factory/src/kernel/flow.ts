@@ -630,10 +630,16 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
       );
       // Compact where the session ends, so the stored ref is already compacted
       // when a later fix turn resumes it. An infra/refusal stop delivers no
-      // outcome; that session is not kept.
-      if (!outcome || !live) return settled;
+      // outcome; that session is not kept. Review sessions are never resumed,
+      // so compacting them would burn a summarization call for no reader.
+      if (!outcome || !live || step.review) return settled;
       const compacted = await compactSession(runtime, live);
-      return compacted ? { ...settled, session: compacted } : settled;
+      if (!compacted) return settled;
+      return {
+        ...settled,
+        session: compacted.session,
+        ...(compacted.usage ? { compactUsage: compacted.usage } : {}),
+      };
     },
   });
   if (tracked.timedOut()) {

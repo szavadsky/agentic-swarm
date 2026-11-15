@@ -162,10 +162,13 @@ describe("FakeHarness (kernel contract)", () => {
     const res = await harness.turn(request());
     const compacted = await harness.compact(res.session!);
 
-    expect(compacted.compacted).toBe(true);
-    expect(compacted.id).toBe(res.session!.id);
+    expect(compacted.session.compacted).toBe(true);
+    expect(compacted.session.id).toBe(res.session!.id);
+    expect(compacted.usage?.cacheRead).toBeGreaterThan(0);
     expect(harness.compactions).toHaveLength(1);
-    expect(harness.knownSessions().get(compacted.id)?.compacted).toBe(true);
+    expect(harness.knownSessions().get(compacted.session.id)?.compacted).toBe(
+      true,
+    );
   });
 
   it("fails loudly when a turn was not scripted", async () => {

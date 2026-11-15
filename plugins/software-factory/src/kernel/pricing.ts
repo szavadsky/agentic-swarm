@@ -142,13 +142,15 @@ export function pricedUsage(
   return { usage: priced, costKnown: true };
 }
 
-/** The record fields pricing reads; a settled agent step carries all four. */
+/** The record fields pricing reads; a settled agent step carries all five. */
 export interface UsageRecord {
   usage?: Usage;
   model?: ModelRef;
   attempts?: TurnAttempt[];
   /** Resumed turn whose unsplit input is the cached prefix, set at record time. */
   cachedPrefix?: boolean;
+  /** This turn's session-end compaction, priced as the hot cache read it was. */
+  compactUsage?: Usage;
 }
 
 /**
@@ -157,21 +159,33 @@ export interface UsageRecord {
  * the last call of each harness turn: summing the attempts replaces `usage`
  * rather than adding to it, so the final call is counted once. An attempt list
  * that reports nothing falls back to the record's own counters, which is what a
- * harness without per-call usage leaves behind.
+ * harness without per-call usage leaves behind. The compaction is a separate
+ * call outside every attempt, so it is always added on top.
  */
 export function pricedRecord(rec: UsageRecord, table: PriceTable): PricedUsage {
   const opts = { cachedPrefix: rec.cachedPrefix };
   const reported = (rec.attempts ?? []).filter((attempt) =>
     reportsUsage(attempt.usage),
   );
-  if (reported.length === 0)
-    return pricedUsage(rec.usage, rec.model?.id, table, opts);
-  let usage = zeroUsage();
-  let costKnown = true;
-  for (const attempt of reported) {
-    const priced = pricedUsage(attempt.usage, attempt.model.id, table, opts);
-    usage = addUsage(usage, priced.usage);
-    costKnown = costKnown && priced.costKnown;
+  let usage: Usage;
+  let costKnown: boolean;
+  if (reported.length === 0) {
+    ({ usage, costKnown } = pricedUsage(rec.usage, rec.model?.id, table, opts));
+  } else {
+    usage = zeroUsage();
+    costKnown = true;
+    for (const attempt of reported) {
+      const priced = pricedUsage(attempt.usage, attempt.model.id, table, opts);
+      usage = addUsage(usage, priced.usage);
+      costKnown = costKnown && priced.costKnown;
+    }
+  }
+  if (rec.compactUsage && reportsUsage(rec.compactUsage)) {
+    const compact = pricedUsage(rec.compactUsage, rec.model?.id, table, {
+      cachedPrefix: true,
+    });
+    usage = addUsage(usage, compact.usage);
+    costKnown = costKnown && compact.costKnown;
   }
   return { usage, costKnown };
 }

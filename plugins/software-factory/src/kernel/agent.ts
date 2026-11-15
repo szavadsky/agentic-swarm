@@ -361,6 +361,13 @@ export async function runAgentTurn(
   const pricedTop = pricedUsage(usage, actualModel?.id, prices, {
     cachedPrefix,
   }).usage;
+  // The settle ran while the cache was hot, so an unsplit compaction input is
+  // the cached transcript, priced at the cached rate.
+  const pricedCompact = settled.compactUsage
+    ? pricedUsage(settled.compactUsage, actualModel?.id, prices, {
+        cachedPrefix: true,
+      }).usage
+    : undefined;
   const record = await started.finish({
     ...settled,
     promptBytes,
@@ -369,6 +376,7 @@ export async function runAgentTurn(
     ...(cachedPrefix ? { cachedPrefix } : {}),
     stop,
     usage: pricedTop,
+    ...(pricedCompact ? { compactUsage: pricedCompact } : {}),
     ...(pricedAttempts.length > 0 ? { attempts: pricedAttempts } : {}),
     ...(lastResult.transcript ? { transcript: lastResult.transcript } : {}),
     session: settled.session ?? session,
