@@ -421,3 +421,9 @@ Verbatim, newest last; each with what it changed.
 - Kept-work note: i24 parked the 13-file f20fce0 tip on budget; i25 parked its -land continuation on a malformed outcome. Two parks, same gate task, different causes — neither is a code defect in the work itself.
 - Ladder green (muse/ernie), 0 fallbacks, 0 quota. Assumptions: none. Owner attention: none. Inbox was empty.
 - STOP: 0-merge count = 2 (i24 budget-cut park, i25 malformed-outcome park). Journal + steer + pin refresh only; NO relaunch until owner decides.
+
+### 2026-11-15 — operator unblock after i24+i25: 4 h turn walls live, PM/repair ruling steered
+- Owner ruling: (1) up to 3 repair turns, keeping the exact verification message; (2) the PM resolves 0-merge iterations automatically — authority to raise per-item timeouts and order extra repairs within the whole-item budget. Steered as steer-i26-zeromerge.md (binding requirements; rest is the architect's).
+- Verified in code before acting: timeouts are a per-alias run-config knob (config.ts:117, defaults 60m wall/20m idle, types.ts:167-170), no preflight value check; repairs hardcoded to exactly 1 (agent.ts:273-303); the repair prompt already embeds the full validator message with line/col (outcome.ts parseOutcome → delivery-repair findings); task schema has no timeout/retry fields and the PM prompt has no budget authority (architect work).
+- Correction to the i24 triage: turn 01004 ended stop=done after 14m52s — the agent stopped itself and declared its done-when unproven, not a wall-clock kill. The 1 h wall stands as genuinely restrictive for 20x-rerun tasks regardless.
+- bootstrap/run/self-quota.yaml: wallMs 14400000 (4 h) on architect/implementer/reviewer/escalation; validated through the kernel loader (idle 1200000 default retained). Takes effect on the relaunch.
