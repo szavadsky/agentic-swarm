@@ -285,3 +285,28 @@ describe("scope as predicted area", () => {
     expect(front).not.toContain("globs the task may touch");
   });
 });
+
+describe("architect horizon", () => {
+  it("evaluates the project against the intent first and plans the road to completion", () => {
+    const rendered = library().render("architect", ROLES.architect!);
+    const firstStep = rendered.indexOf("### 1. Completeness check");
+    const editPlan = rendered.indexOf("### 4. Edit the plan");
+    expect(firstStep).toBeGreaterThanOrEqual(0);
+    expect(editPlan).toBeGreaterThan(firstStep);
+    const stepOne = rendered.slice(firstStep, editPlan);
+    expect(stepOne).toContain("against the intent");
+    expect(stepOne).toContain(
+      "completeness, quality, correctness of what exists",
+    );
+    expect(stepOne).toContain("not only the last iteration");
+    expect(stepOne).toContain(
+      "Reuse this evaluation context for planning below",
+    );
+    expect(rendered).toContain(
+      "road to completion as far as uncertainty allows",
+    );
+    expect(rendered).toContain("not one iteration's slice");
+    expect(rendered).toContain("details after spike X / task Y lands");
+    expect(rendered).not.toContain("plan the whole iteration");
+  });
+});
