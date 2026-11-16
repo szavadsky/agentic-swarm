@@ -37,6 +37,12 @@ export const acpxConfigSchema = z
   .object({
     agent: z.string().min(1),
     raw: z.boolean().optional(),
+    /**
+     * The agent accepts `/compact` as an adapter slash command. Declared per
+     * harness because ACP has no compaction method and only pi, codex and
+     * opencode are verified to handle it (acpx probe §5).
+     */
+    compact: z.boolean().optional(),
     /** Extra global args, before the agent selection. */
     args: z.array(z.string()).optional(),
     /** Extra env for the acpx child processes. */

@@ -43,3 +43,14 @@ export interface AcpxTurnSummary {
   sessionId?: string;
   errors: AcpxError[];
 }
+
+/** One slash command's parsed transcript plus the process facts behind it. */
+export interface AcpxCommandResult {
+  /** Parsed `--format json` transcript; `errors` carries the ACP error frames. */
+  summary: AcpxTurnSummary;
+  code: number | null;
+  signal: string | null;
+  timedOut: boolean;
+  aborted: boolean;
+  stderr: string;
+}

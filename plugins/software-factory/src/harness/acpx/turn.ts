@@ -10,6 +10,7 @@ import { exitDetails, stopDetails } from "../details.js";
 import type {
   AdapterTurnResult,
   ModelRef,
+  SessionRef,
   Stop,
   TurnAttempt,
   TurnRequest,
@@ -23,10 +24,19 @@ import {
 import { resolveRawAgentCommand } from "./command.js";
 import { AcpxTranscriptParser, acpxErrors } from "./transcript.js";
 import type { AcpxConfig, AcpxTurnOpaque } from "./config.js";
-import type { AcpxCommand, AcpxTurnSummary } from "./types.js";
+import type {
+  AcpxCommand,
+  AcpxCommandResult,
+  AcpxTurnSummary,
+} from "./types.js";
 
 const SETUP_TIMEOUT_SEC = 120;
 const MAX_STDERR_BYTES = 64 * 1024;
+/** A slash command reuses the session; no model turn runs, so the bound is setup-sized. */
+const COMMAND_TIMEOUTS: TurnRequest["timeouts"] = {
+  idleMs: 120_000,
+  wallMs: 180_000,
+};
 
 export interface AcpxRuntime {
   id: string;
@@ -275,6 +285,43 @@ function runPromptProcess(
       resolve({ code, signal, stderr, timedOut, aborted });
     });
   });
+}
+
+/**
+ * One adapter slash command on a named session, with no model prompt: the
+ * command is the whole prompt and `--model` is omitted, so `/compact` reaches
+ * the adapter instead of spending a model turn. Returns the parsed transcript
+ * (ACP errors included) and the process facts so callers can classify it.
+ */
+export async function runAcpxCommand(
+  runtime: AcpxRuntime,
+  config: AcpxConfig,
+  ref: SessionRef,
+  command: string,
+): Promise<AcpxCommandResult> {
+  const globals = globalArgs(config, ref.cwd);
+  const selection = agentSelection(config);
+  // The raw --agent route has no positional agent: the prompt verb follows the
+  // selection. A positional agent takes `-s` and the command directly.
+  const verb = config.raw ? ["prompt"] : [];
+  const args = [...globals, ...selection, ...verb, "-s", ref.id, command];
+  const parser = new AcpxTranscriptParser(config.usage?.fields);
+  const result = await runPromptProcess(
+    runtime,
+    config,
+    args,
+    ref.cwd,
+    COMMAND_TIMEOUTS,
+    parser,
+  );
+  return {
+    summary: parser.result(),
+    code: result.code,
+    signal: result.signal,
+    timedOut: result.timedOut,
+    aborted: result.aborted,
+    stderr: result.stderr,
+  };
 }
 
 /** One acpx turn for one model from the fallback chain. */

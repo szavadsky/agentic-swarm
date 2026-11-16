@@ -18,6 +18,12 @@ export interface AcpxStubOptions {
   banner?: string;
   /** ACP `usage_update` cost payload; absent means the update carries none. */
   cost?: { amount: number; currency: string };
+  /**
+   * What `/compact` answers: success text, pi's small-session -32603, or a
+   * different adapter failure. The command itself carries no marker, so this
+   * is the stub's switch.
+   */
+  compact?: "ok" | "nothing" | "fail";
 }
 
 /**
@@ -35,6 +41,7 @@ export function createAcpxStub(opts: AcpxStubOptions = {}): AcpxStub {
   const usageJs = JSON.stringify(opts.usage ?? null);
   const bannerJs = JSON.stringify(opts.banner ?? null);
   const costJs = JSON.stringify(opts.cost ?? null);
+  const compactJs = JSON.stringify(opts.compact ?? "ok");
 
   const script = `#!/usr/bin/env bun
 import fs from "node:fs";
@@ -65,6 +72,7 @@ const reply = marker("text") ?? "PONG";
 const usage = ${usageJs};
 const banner = ${bannerJs};
 const cost = ${costJs};
+const compactMode = ${compactJs};
 const sessionFile = (name) => path.join(stateDir, "session-" + name);
 const noSession = () =>
   emit({
@@ -121,16 +129,34 @@ if (mode === "hang") {
 }
 
 const sessionId = "sess-" + session;
-emit({ jsonrpc: "2.0", id: 1, method: "session/load", params: { sessionId, cwd: process.cwd() } });
-emit({ jsonrpc: "2.0", id: 1, result: { sessionId } });
-emit({ jsonrpc: "2.0", id: 7, method: "session/prompt", params: { sessionId, prompt: [{ type: "text", text: prompt }] } });
-
+const startPrompt = () => {
+  emit({ jsonrpc: "2.0", id: 1, method: "session/load", params: { sessionId, cwd: process.cwd() } });
+  emit({ jsonrpc: "2.0", id: 1, result: { sessionId } });
+  emit({ jsonrpc: "2.0", id: 7, method: "session/prompt", params: { sessionId, prompt: [{ type: "text", text: prompt }] } });
+};
 const chunk = (text, messageId) => {
   const update = { sessionUpdate: "agent_message_chunk", content: { type: "text", text } };
   if (messageId) update.messageId = messageId;
   emit({ jsonrpc: "2.0", method: "session/update", params: { sessionId, update } });
 };
 
+// A slash command is the whole prompt: answer it with the adapter's frames.
+if (prompt === "/compact") {
+  if (compactMode === "nothing") {
+    emit({ jsonrpc: "2.0", id: null, error: { code: -32603, message: "Internal error", data: { details: "pi compact failed: Nothing to compact (session too small)" } } });
+    process.exit(1);
+  }
+  if (compactMode === "fail") {
+    emit({ jsonrpc: "2.0", id: null, error: { code: -32603, message: "Internal error", data: { details: "pi compact failed: summarizer unavailable" } } });
+    process.exit(1);
+  }
+  startPrompt();
+  chunk("Compaction completed.\\nTokens before: 55832", "msg_compact");
+  emit({ jsonrpc: "2.0", id: 7, result: { stopReason: "end_turn" } });
+  process.exit(0);
+}
+
+startPrompt();
 if (banner) {
   chunk(banner, undefined);
   emit({ jsonrpc: "2.0", method: "session/update", params: { sessionId, update: { sessionUpdate: "available_commands_update", availableCommands: [] } } });

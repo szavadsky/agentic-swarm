@@ -89,11 +89,13 @@ harnesses:
   pi:
     acpx:
       agent: pi
+      compact: true
       effort: { configId: thought_level, levels: [off, minimal, low, medium, high, xhigh] }
       usage: { cache: false }
   codex:
     acpx:
       agent: codex
+      compact: true
       effort: { configId: reasoning_effort, levels: [low, medium, high, xhigh, max] }
       usage: { cache: true }
   claude-code:
@@ -107,6 +109,7 @@ harnesses:
   opencode:
     acpx:
       agent: opencode acp
+      compact: true
       raw: true
       effort: { configId: effort, levels: [none, high, default] }
       usage: { cache: true }

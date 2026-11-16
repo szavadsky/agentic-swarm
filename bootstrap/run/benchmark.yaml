@@ -48,6 +48,7 @@ harnesses:
   opencode:
     acpx:
       agent: opencode acp
+      compact: true
       raw: true
       effort: { configId: effort, levels: [low, medium, high, xhigh, max] }
       usage: { cache: true }
