@@ -124,6 +124,8 @@ scouts:
 priceIds:
   opencode/beam-free: reflection/beam-1.0-501b-a23b
   opencode-go/beam-free: reflection/beam-1.0-501b-a23b
+  opus: anthropic/claude-opus-5-5
+  sonnet: anthropic/claude-sonnet-5-5
 
 limits:
   concurrency: { overall: 3 }
