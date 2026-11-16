@@ -65,6 +65,18 @@ export function parseTaskFile(text: string, fileSlug: string): TaskFile {
     throw new TaskFileError(
       `task "${slug}" frontmatter "repairTurns" must be a non-negative integer`,
     );
+  const turnMinutes =
+    meta.turnMinutes === undefined
+      ? undefined
+      : typeof meta.turnMinutes === "number" &&
+          Number.isFinite(meta.turnMinutes) &&
+          meta.turnMinutes > 0
+        ? meta.turnMinutes
+        : null;
+  if (turnMinutes === null)
+    throw new TaskFileError(
+      `task "${slug}" frontmatter "turnMinutes" must be a positive number`,
+    );
   return {
     slug,
     title,
@@ -80,6 +92,7 @@ export function parseTaskFile(text: string, fileSlug: string): TaskFile {
     source: typeof meta.source === "string" ? meta.source : "",
     body: (match[2] ?? "").trim(),
     ...(repairTurns !== undefined ? { repairTurns } : {}),
+    ...(turnMinutes !== undefined ? { turnMinutes } : {}),
   };
 }
 
@@ -96,6 +109,7 @@ export function renderTaskFile(task: TaskFile): string {
   if (task.base) front.base = task.base;
   if (task.source) front.source = task.source;
   if (task.repairTurns !== undefined) front.repairTurns = task.repairTurns;
+  if (task.turnMinutes !== undefined) front.turnMinutes = task.turnMinutes;
   return `---\n${yaml.stringify(front).trimEnd()}\n---\n\n${task.body.trim()}\n`;
 }
 

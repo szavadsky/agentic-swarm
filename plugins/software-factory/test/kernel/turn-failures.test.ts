@@ -1,7 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
+import {
+  FakeHarness,
+  fakeTurnIdentity,
+  fakeTurnResult,
+} from "../../src/harness/fake/index.js";
 import type { TurnResult } from "../../src/harness/types.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
@@ -12,6 +16,7 @@ import {
   cleanupFlowRepo,
   makeRuntime,
   outcome,
+  scriptStallLeave,
   setupFlowRepo,
   whenTurn,
   writeTask,
@@ -150,6 +155,7 @@ describe("turn failures — outcome, crash and wall-clock handling", () => {
         ctx.writeOutcome(outcome({ summary: "nothing to fix" }));
         return fakeTurnResult(req);
       });
+      scriptStallLeave(harness, ["a"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("a", { scope: ["a.txt"] }));
 
@@ -186,11 +192,14 @@ describe("turn failures — outcome, crash and wall-clock handling", () => {
         ctx.writeOutcome(outcome({ summary: "a implemented" }));
         return fakeTurnResult(req);
       });
+      scriptStallLeave(harness, ["a"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("a", { scope: ["a.txt"] }));
 
       await runDispatch(runtime, { iteration: 1 });
-      expect(harness.calls).toHaveLength(1);
+      // One implement turn plus the stall turn that leaves the infra park for the architect.
+      expect(harness.calls).toHaveLength(2);
+      expect(fakeTurnIdentity(harness.calls[1]!).step).toBe("pm");
       const records = await runtime.store.listRecords();
       const checks = records.find((r) => r.slug === "a" && r.step === "checks");
       expect(checks?.ok).toBe(false);
@@ -532,6 +541,7 @@ describe("turn failures — outcome, crash and wall-clock handling", () => {
         ctx.writeOutcome(outcome({ summary: "a implemented" }));
         return fakeTurnResult(req);
       });
+      scriptStallLeave(harness, ["a"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("a", { scope: ["a.txt"] }));
 
@@ -558,6 +568,82 @@ describe("turn failures — outcome, crash and wall-clock handling", () => {
       expect(result.reason).toBe("drained");
       expect(result.cause).toContain("wall limit");
       expect(harness.calls).toHaveLength(0);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("bounds a task turn at the task file's turnMinutes", async () => {
+    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      let seen: { wallMs: number } | undefined;
+      harness.script(
+        (req, ctx) => {
+          seen = req.timeouts;
+          fs.writeFileSync(path.join(req.cwd!, "a.txt"), "a\n", "utf8");
+          ctx.writeOutcome(outcome({ summary: "a implemented" }));
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: "implement" }) },
+      );
+      harness.script(
+        (req, ctx) => {
+          ctx.writeOutcome(
+            outcome({ summary: "a approved", verdict: "approve" }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: "review" }) },
+      );
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(
+        runtime,
+        task("a", { scope: ["a.txt"], turnMinutes: 30 }),
+      );
+
+      const result = await runDispatch(runtime, { iteration: 1 });
+      expect(result.reason).toBe("boundary");
+      expect(seen?.wallMs).toBe(30 * 60_000);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("still caps the task file's turnMinutes at the run's turnMinutes", async () => {
+    const { repo, goal } = setupFlowRepo({
+      limits: { turnMinutes: 5, concurrency: 1 },
+    });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      let seen: { wallMs: number } | undefined;
+      harness.script(
+        (req, ctx) => {
+          seen = req.timeouts;
+          fs.writeFileSync(path.join(req.cwd!, "a.txt"), "a\n", "utf8");
+          ctx.writeOutcome(outcome({ summary: "a implemented" }));
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: "implement" }) },
+      );
+      harness.script(
+        (req, ctx) => {
+          ctx.writeOutcome(
+            outcome({ summary: "a approved", verdict: "approve" }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: "review" }) },
+      );
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(
+        runtime,
+        task("a", { scope: ["a.txt"], turnMinutes: 30 }),
+      );
+
+      const result = await runDispatch(runtime, { iteration: 1 });
+      expect(result.reason).toBe("boundary");
+      expect(seen?.wallMs).toBe(5 * 60_000);
     } finally {
       cleanupFlowRepo(repo);
     }

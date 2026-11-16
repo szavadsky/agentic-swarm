@@ -887,6 +887,7 @@ const pmVars = {
   repair: "",
   steers: "none",
   holds_dir: "/g/mailbox/holds",
+  stalls: "none",
 };
 
 const implementerVars = {

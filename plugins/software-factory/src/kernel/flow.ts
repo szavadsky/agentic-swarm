@@ -579,19 +579,27 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
   const contained = await containmentSnapshot(runtime, ensured.path);
   let breach: string | undefined;
   const aliasTimeouts = target.timeouts;
-  const turnMinutes = runtime.limits.turnMinutes;
-  const turnMinutesMs =
-    turnMinutes !== undefined ? Math.round(turnMinutes * 60_000) : undefined;
+  const aliasWallMs = aliasTimeouts?.wallMs ?? DEFAULT_TIMEOUTS.wallMs;
+  // The task file overrides the alias wall for its own turns; the run's bound
+  // still caps it, because the operator's bound beats the PM's. Owner ruling 2.
+  const taskWallMs =
+    task.turnMinutes !== undefined
+      ? Math.round(task.turnMinutes * 60_000)
+      : aliasWallMs;
+  const runWallMs =
+    runtime.limits.turnMinutes !== undefined
+      ? Math.round(runtime.limits.turnMinutes * 60_000)
+      : undefined;
   const timeouts =
-    turnMinutesMs !== undefined
-      ? {
+    task.turnMinutes === undefined && runWallMs === undefined
+      ? (aliasTimeouts ?? DEFAULT_TIMEOUTS)
+      : {
           idleMs: aliasTimeouts?.idleMs ?? DEFAULT_TIMEOUTS.idleMs,
-          wallMs: Math.min(
-            aliasTimeouts?.wallMs ?? DEFAULT_TIMEOUTS.wallMs,
-            turnMinutesMs,
-          ),
-        }
-      : (aliasTimeouts ?? DEFAULT_TIMEOUTS);
+          wallMs:
+            runWallMs !== undefined
+              ? Math.min(taskWallMs, runWallMs)
+              : taskWallMs,
+        };
   // The commit the turn starts from; a timed-out turn returns the worktree here.
   const startHead = await headSha(ensured.path);
   const tracked = trackHarnessTimeouts(target.harness);

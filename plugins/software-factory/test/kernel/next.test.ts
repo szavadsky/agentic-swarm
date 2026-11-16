@@ -191,4 +191,26 @@ describe("next", () => {
     )[0]!;
     expect(action.kind).toBe("park");
   });
+
+  it("parks a continuation whose whole-item budget the base already spent", () => {
+    const tasks = [task("a"), task("b", { base: "a" })];
+    const state = derive(
+      tasks,
+      [
+        implement(1),
+        check(2),
+        review(3, "changes", 1),
+        implement(4, 2),
+        implement(5, 1, { slug: "b" }),
+        { ...check(6), slug: "b" },
+      ],
+      limits.flows,
+    );
+    expect(state.tasks.b!.turns).toBe(4);
+    const parks = next(state, limits, new Set()).filter(
+      (action) => action.kind === "park" && action.slug === "b",
+    );
+    expect(parks).toHaveLength(1);
+    expect(parks[0]).toMatchObject({ kind: "park", slug: "b" });
+  });
 });

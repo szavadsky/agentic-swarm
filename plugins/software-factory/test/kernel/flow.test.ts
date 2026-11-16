@@ -25,6 +25,7 @@ import {
   goalCheckout,
   makeRuntime,
   outcome,
+  scriptStallLeave,
   setupFlowRepo,
   writeTask,
 } from "./s2-helpers.js";
@@ -222,6 +223,7 @@ describe("just-implement", () => {
         ctx.writeOutcome(outcome({ summary: "v2" }));
         return fakeTurnResult(req);
       });
+      scriptStallLeave(harness, ["task"]);
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(
@@ -240,7 +242,7 @@ describe("just-implement", () => {
       expect(state.tasks.task!.status).toBe("parked");
       expect(state.tasks.task!.cause).toContain("gates: branch-only");
       expect(state.tasks.task!.round).toBe(1);
-      expect(harness.calls.length).toBe(2);
+      expect(harness.calls.length).toBe(3);
       expect(
         records.filter(
           (r) => r.slug === "task" && r.step === "merge" && r.ok === false,
@@ -410,6 +412,7 @@ describe("empty diff", () => {
         );
         return fakeTurnResult(req);
       });
+      scriptStallLeave(harness, ["task"]);
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("task", { scope: ["task.txt"] }));
@@ -424,7 +427,7 @@ describe("empty diff", () => {
       );
       expect(state.tasks.task!.status).toBe("parked");
       expect(state.tasks.task!.cause!.startsWith("empty-diff:")).toBe(true);
-      expect(harness.calls.length).toBe(1);
+      expect(harness.calls.length).toBe(2);
       expect(
         records.filter((r) => r.slug === "task" && r.step === "review"),
       ).toEqual([]);
@@ -579,6 +582,7 @@ describe("continuation carry", () => {
         );
         return fakeTurnResult(req);
       });
+      scriptStallLeave(harness, ["alpha"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
       await runDispatch(runtime, { iteration: 1 });
@@ -656,6 +660,7 @@ describe("continuation carry", () => {
         );
         return fakeTurnResult(req);
       });
+      scriptStallLeave(harness, ["alpha"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
       await runDispatch(runtime, { iteration: 1 });
@@ -718,6 +723,8 @@ describe("continuation carry", () => {
         );
         return fakeTurnResult(req);
       });
+      scriptStallLeave(harness, ["alpha"]);
+      scriptStallLeave(harness, ["beta"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       const checkout = goalCheckout(repo, goal);
       await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
@@ -843,6 +850,7 @@ describe("delivery guard", () => {
         fs.writeFileSync(path.join(req.cwd!, "task.txt"), "work\n", "utf8");
         return fakeTurnResult(req, { text: "nothing" });
       });
+      scriptStallLeave(harness, ["task"]);
       harness.script((req) => fakeTurnResult(req, { text: "still nothing" }));
       harness.script((req) => fakeTurnResult(req, { text: "still nothing" }));
       harness.script((req) => fakeTurnResult(req, { text: "still nothing" }));
@@ -860,7 +868,7 @@ describe("delivery guard", () => {
       );
       expect(state.tasks.task!.status).toBe("parked");
       expect(state.tasks.task!.cause).toContain("no outcome after repair");
-      expect(harness.calls).toHaveLength(4);
+      expect(harness.calls).toHaveLength(5);
       expect(harness.calls[1]!.prompt).toContain(
         "You are the implementer. Your turn did not deliver its outcome.",
       );
@@ -893,6 +901,7 @@ describe("delivery guard", () => {
         ctx.writeOutcome(outcome({ summary: "still no verdict" }));
         return fakeTurnResult(req);
       });
+      scriptStallLeave(harness, ["task"]);
       harness.script((req, ctx) => {
         ctx.writeOutcome(outcome({ summary: "still no verdict" }));
         return fakeTurnResult(req);
@@ -911,7 +920,7 @@ describe("delivery guard", () => {
       );
       expect(state.tasks.task!.status).toBe("parked");
       expect(state.tasks.task!.cause).toContain("verdict is required");
-      expect(harness.calls).toHaveLength(5);
+      expect(harness.calls).toHaveLength(6);
       expect(harness.calls[2]!.prompt).toContain(
         "You are the reviewer. Your turn did not deliver its verdict.",
       );
@@ -969,6 +978,7 @@ describe("delivery guard", () => {
         fs.writeFileSync(path.join(req.cwd!, "task.txt"), "work\n", "utf8");
         return fakeTurnResult(req, { text: "nothing" });
       });
+      scriptStallLeave(harness, ["task"]);
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(
@@ -977,7 +987,7 @@ describe("delivery guard", () => {
       );
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("boundary");
-      expect(harness.calls).toHaveLength(1);
+      expect(harness.calls).toHaveLength(2);
 
       const records = await runtime.store.listRecords();
       const state = derive(
@@ -1313,6 +1323,7 @@ describe("standalone upscope", () => {
         );
         return fakeTurnResult(req);
       });
+      scriptStallLeave(first, ["solo"]);
 
       // Iteration 1 escalates through the launch: the class rewrite skips the
       // front stop, so the goal stays active instead of blocking on the park.
@@ -1345,7 +1356,7 @@ describe("standalone upscope", () => {
       expect(architect).toBeDefined();
       expect(architect?.iteration).toBe(2);
       expect((await stateOf(goal.goalDir)).goal).toBe("done");
-      expect(first.calls).toHaveLength(2);
+      expect(first.calls).toHaveLength(3);
       expect(second.calls).toHaveLength(2);
     } finally {
       cleanupGoal(goal);
@@ -1410,6 +1421,7 @@ describe("standalone upscope", () => {
         );
         return fakeTurnResult(req);
       });
+      scriptStallLeave(harness, ["planned"]);
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       const file = task("planned", { scope: ["task.txt"] });

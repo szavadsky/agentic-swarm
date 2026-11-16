@@ -7,6 +7,7 @@ import {
   cleanupFlowRepo,
   makeRuntime,
   setupFlowRepo,
+  scriptStallLeave,
   writeTask,
 } from "./s2-helpers.js";
 
@@ -40,6 +41,7 @@ describe("E7 inverted — infra timeouts and crashes spend the turn budget", () 
             },
           }),
         );
+        scriptStallLeave(harness, ["alpha"]);
         const runtime = await makeRuntime(repo, goal, { fake: harness });
         await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
 
@@ -70,7 +72,7 @@ describe("E7 inverted — infra timeouts and crashes spend the turn budget", () 
         // The parked step is not re-dispatched by a third launch.
         const third = await runDispatch(runtime, { iteration: 3 });
         expect(third.reason).toBe("boundary");
-        expect(harness.calls).toHaveLength(2);
+        expect(harness.calls).toHaveLength(3);
         const turns = (await runtime.store.listRecords()).filter(
           (r) => r.slug === "alpha" && r.actor === "agent",
         );

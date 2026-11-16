@@ -11,6 +11,7 @@ import {
   makeRuntime,
   outcome,
   setupFlowRepo,
+  scriptStallLeave,
   writeTask,
 } from "./s2-helpers.js";
 
@@ -67,6 +68,7 @@ describe("E5 inverted — inherited red is matched per failing signature", () =>
         ctx.writeOutcome(outcome({ summary: "gate fix attempt" }));
         return fakeTurnResult(req);
       });
+      scriptStallLeave(harness, ["task"]);
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       const head = await integrationHead(runtime);
@@ -121,7 +123,7 @@ describe("E5 inverted — inherited red is matched per failing signature", () =>
       expect(merges.map((r) => r.ok)).toEqual([false, false]);
       expect(mergeChecks.map((r) => r.ok)).toEqual([false, false]);
       expect(mergeChecks[0]!.checks![0]!.output).toContain("reason Y");
-      expect(harness.calls.length).toBe(3);
+      expect(harness.calls.length).toBe(4);
       expect(
         repo.git(["show", "factory/demo:feature.txt"], { allowFail: true })
           .code,
@@ -156,6 +158,7 @@ describe("E5 inverted — inherited red is matched per failing signature", () =>
         ctx.writeOutcome(outcome({ summary: "fix attempt" }));
         return fakeTurnResult(req);
       });
+      scriptStallLeave(harness, ["task"]);
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       const head = await integrationHead(runtime);

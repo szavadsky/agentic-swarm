@@ -23,6 +23,7 @@ import {
   makeRuntime,
   outcome,
   setupFlowRepo,
+  scriptStallLeave,
   writeTask,
 } from "./s2-helpers.js";
 
@@ -154,6 +155,7 @@ describe("end-of-turn compaction", () => {
           stop: { kind: "refusal", details: "content policy" },
         }),
       );
+      scriptStallLeave(harness, ["task"]);
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("task", { scope: ["task.txt"] }));

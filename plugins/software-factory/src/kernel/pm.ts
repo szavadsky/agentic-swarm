@@ -10,12 +10,14 @@ import {
   formatSteerTurn,
   holdsDir,
   markProcessed,
+  stallProvenance,
   steerProvenance,
   writeOutbox,
   type Steer,
 } from "./mailbox.js";
 import { appendCancel, appendPark, scriptMeta } from "./record.js";
 import {
+  doneWhen,
   materialHash,
   parseTaskFile,
   TaskFileError,
@@ -25,12 +27,14 @@ import type {
   AliasConfig,
   KernelRuntime,
   Outcome,
+  StallRouteEntry,
   State,
   StepRecord,
   SteerRoute,
   TaskFile,
   TaskStatus,
 } from "./types.js";
+import { integrationHead, taskBranchName } from "./worktree.js";
 
 function taskPath(runtime: KernelRuntime, slug: string): string {
   return path.join(runtime.store.tasksDir, `${slug}.md`);
@@ -154,9 +158,12 @@ function existingTasks(state: State, tasks: TaskFile[]): string {
     .map((task) => {
       const status = state.tasks[task.slug]?.status ?? "new";
       const steer = steerProvenance(task.source);
+      const stall = steer ? undefined : stallProvenance(task.source);
       const provenance = steer
         ? ` | steer ${steer} (not in the plan; leave it)`
-        : "";
+        : stall
+          ? ` | stall ${stall} (not in the plan; leave it)`
+          : "";
       return `- ${task.slug} | ${status} | ${materialHash(task).slice(0, 10)} | deps: ${task.deps.join(",") || "none"}${readOnlyMarker(status)}${provenance}`;
     })
     .join("\n");
@@ -258,10 +265,13 @@ async function reconcile(
       continue;
     }
     const steer = steerProvenance(source);
-    if (!steer) continue;
+    const stall = steer ? undefined : stallProvenance(source);
+    if (!steer && !stall) continue;
     await writeTextAtomic(taskPath(runtime, slug), original);
     findings.push(
-      `steer task "${slug}" was deleted; restored: a task with provenance steer ${steer} is not in the plan and the PM must leave it`,
+      steer
+        ? `steer task "${slug}" was deleted; restored: a task with provenance steer ${steer} is not in the plan and the PM must leave it`
+        : `stall task "${slug}" was deleted; restored: a task with provenance stall ${stall} is not in the plan and the PM must leave it`,
     );
   }
 
@@ -301,7 +311,9 @@ async function validate(
  * already committed on its branch is parked instead: cancelling it would strand
  * work no record names, and its slug must stay reusable by a `base:` task. A
  * PM-created task with provenance `steer: <id>` is never in the plan and is
- * never cancelled here: its steer, not the plan, owns it.
+ * never cancelled here: its steer, not the plan, owns it. A stall
+ * continuation (`stall: <iteration>`) is likewise owned by its stall, not the
+ * plan, so the next boundary keeps it for the architect's pack.
  */
 async function cancelRemovedTasks(
   runtime: KernelRuntime,
@@ -314,6 +326,7 @@ async function cancelRemovedTasks(
   for (const [slug, task] of Object.entries(state.tasks)) {
     if (task.status !== "pending" && task.status !== "ready") continue;
     if (steerProvenance(provenance.get(slug) ?? "")) continue;
+    if (stallProvenance(provenance.get(slug) ?? "")) continue;
     if (planMentionsSlug(plan, slug)) continue;
     if (task.commit !== undefined) {
       await appendPark(
@@ -475,6 +488,7 @@ export async function runPm(
         repair: round === 1 ? "" : ladderNote(rung, target, failure),
         steers: "none",
         holds_dir: holdsDir(runtime.store),
+        stalls: "none",
       },
       expectation: "any",
     });
@@ -827,6 +841,7 @@ export async function runSteerPm(
         repair: round === 1 ? "" : steerLadderNote(rung, target, failure),
         steers: formatSteerTurn(opts.steers),
         holds_dir: holdsDir(runtime.store),
+        stalls: "none",
       },
       expectation: "any",
     });
@@ -909,4 +924,355 @@ export async function runSteerPm(
     if (result.record.stop?.kind === "infra") return;
     failure = reasons;
   }
+}
+
+/** Script step committing a stall turn's routes; its presence marks the iteration's one stall turn spent. */
+export const STALL_ROUTES_STEP = "stall-routes";
+
+/** Which parked slugs a stall turn continued; the rest stay parked with recorded reasons. */
+export interface StallResult {
+  continued: string[];
+  left: string[];
+}
+
+/**
+ * One stall entry per parked slug: the cause, this iteration's record paths,
+ * the kept branch, spent item turns and the done-when the continuation keeps.
+ * The integration head lets the PM check a base for conflicts before choosing.
+ */
+async function stallBrief(
+  runtime: KernelRuntime,
+  opts: { iteration: number; state: State; slugs: string[] },
+): Promise<string> {
+  const tasks = await runtime.store.listTasks();
+  const records = await runtime.store.listRecords();
+  const bySlug = new Map(tasks.map((task) => [task.slug, task]));
+  const dirs = new Map<number, string>();
+  for (const name of await runtime.store.listDir("records")) {
+    const match = /^(\d+)-/.exec(name);
+    if (match) dirs.set(Number(match[1]), name);
+  }
+  const head = await integrationHead(runtime);
+  const lines: string[] = [];
+  for (const slug of [...opts.slugs].sort()) {
+    const parked = opts.state.tasks[slug];
+    const paths = records
+      .filter(
+        (record) =>
+          record.slug === slug &&
+          record.iteration === opts.iteration &&
+          record.endedAt,
+      )
+      .sort((a, b) => a.seq - b.seq)
+      .map((record) => dirs.get(record.seq))
+      .filter((dir): dir is string => dir !== undefined)
+      .map((dir) => path.join(runtime.store.recordsDir, dir));
+    lines.push(
+      `- ${slug}`,
+      `  cause: ${parked?.cause ?? "no recorded cause"}`,
+      `  records: ${paths.length > 0 ? paths.join(", ") : "none"}`,
+      `  branch: ${taskBranchName(runtime, slug)}`,
+      `  turns: ${parked?.turns ?? 0} of ${runtime.limits.itemTurns} spent`,
+      `  done-when: ${doneWhen(bySlug.get(slug)?.body ?? "") || "(none)"}`,
+    );
+  }
+  lines.push(`integration head: ${head}`);
+  return lines.join("\n");
+}
+
+function stallLadderNote(
+  rung: { alias: string; mandate: PmMandate },
+  target: ReturnType<typeof resolveRole>,
+  failure: string[],
+): string {
+  const notes: string[] = [];
+  if (rung.mandate.startsWith("escalated")) {
+    notes.push(
+      `The PM ladder escalated to alias "${target.alias}" (model "${target.model.id}"). You hold a broader mandate: route the stalled slugs again from their records, and if a slug cannot continue, leave it parked with a reason for the architect.`,
+    );
+  }
+  if (rung.mandate.endsWith("retry")) {
+    notes.push(
+      `This is a fresh retry on alias "${target.alias}"; the previous turn's plan and task-file writes were rolled back to the pre-PM snapshot.`,
+    );
+  }
+  notes.push(
+    "Restated PM stall contract: you are the PM — never edit the plan, never plan, never implement, never invent intent. Write one continuation task file per continued slug with source stall: <iteration>, then the outcome with stallRoutes.",
+  );
+  if (failure.length > 0)
+    notes.push("", "Findings:", ...failure.map((reason) => `- ${reason}`));
+  return notes.join("\n");
+}
+
+async function validateStallTurn(
+  runtime: KernelRuntime,
+  opts: {
+    iteration: number;
+    state: State;
+    planPath: string;
+    round: number;
+    slugs: string[];
+  },
+  planBefore: string,
+  taskSnapshot: Map<string, string>,
+  outcome: Outcome | undefined,
+): Promise<string[]> {
+  const findings = await reconcile(runtime, opts, planBefore, taskSnapshot);
+  const texts = await readTaskTexts(runtime);
+  const { tasks, findings: parseFindings } = parseTasks(texts);
+  findings.push(...parseFindings);
+  const parked = new Set(
+    Object.keys(opts.state.tasks).filter(
+      (slug) => opts.state.tasks[slug]!.status === "parked",
+    ),
+  );
+  findings.push(...validateTaskGraph(tasks, { parked }));
+
+  const routes = outcome?.stallRoutes;
+  if (!routes) {
+    findings.push(
+      `stall turn lists no stallRoutes; route each parked slug (${opts.slugs.join(", ")}) as continue|leave`,
+    );
+    return [...new Set(findings)];
+  }
+  const claimed = new Set(opts.slugs);
+  const seen = new Set<string>();
+  const actionOf = new Map<string, StallRouteEntry["action"]>();
+  for (const entry of routes) {
+    if (seen.has(entry.slug)) {
+      findings.push(
+        `slug "${entry.slug}" is routed twice; route each parked slug once`,
+      );
+      continue;
+    }
+    seen.add(entry.slug);
+    actionOf.set(entry.slug, entry.action);
+    if (!claimed.has(entry.slug)) {
+      findings.push(
+        `slug "${entry.slug}" is not in this stall; route only ${opts.slugs.join(", ")}`,
+      );
+    }
+    if (!entry.reason.trim()) {
+      findings.push(
+        `slug "${entry.slug}" needs a reason; say why it continues or stays parked`,
+      );
+    }
+  }
+  for (const slug of opts.slugs) {
+    if (!seen.has(slug)) {
+      findings.push(
+        `slug "${slug}" has no route; route each parked slug as continue|leave`,
+      );
+    }
+    if (!texts.has(slug)) {
+      findings.push(
+        `parked task "${slug}" was deleted; the stall set must survive the turn`,
+      );
+    }
+  }
+
+  if (parseFindings.length === 0) {
+    const bySlug = new Map(tasks.map((task) => [task.slug, task]));
+    for (const [slug, original] of taskSnapshot) {
+      if (texts.has(slug) && texts.get(slug) !== original) {
+        findings.push(
+          `task "${slug}" was edited; a stall turn writes continuations only, never edits`,
+        );
+      }
+    }
+    const created = [...texts.keys()].filter((slug) => !taskSnapshot.has(slug));
+    for (const slug of created) {
+      const task = bySlug.get(slug);
+      if (!task) continue;
+      if (stallProvenance(task.source) !== String(opts.iteration)) {
+        findings.push(
+          `new task "${slug}" has no provenance stall: ${opts.iteration}; a stall turn creates continuations only with source stall: ${opts.iteration}`,
+        );
+      }
+    }
+    // Each new task claims its parked slug: a base names it, a fresh
+    // (rule-10) task without a base matches its done-when instead.
+    const claimedBy = new Map<string, string[]>();
+    const claim = (park: string, slug: string): void => {
+      const list = claimedBy.get(park) ?? [];
+      list.push(slug);
+      claimedBy.set(park, list);
+    };
+    for (const slug of [...created].sort()) {
+      const task = bySlug.get(slug);
+      if (!task) continue;
+      if (task.base !== undefined) {
+        if (!claimed.has(task.base)) {
+          findings.push(
+            `new task "${slug}" continues "${task.base}", which is not in this stall`,
+          );
+          continue;
+        }
+        if (actionOf.get(task.base) !== "continue") {
+          findings.push(
+            `new task "${slug}" continues "${task.base}", which was left parked`,
+          );
+          continue;
+        }
+        const base = bySlug.get(task.base);
+        if (base && doneWhen(task.body) !== doneWhen(base.body)) {
+          findings.push(
+            `new task "${slug}" changes the done-when; a continuation keeps its base's done-when`,
+          );
+        }
+        claim(task.base, slug);
+        continue;
+      }
+      const candidates = opts.slugs
+        .filter((park) => actionOf.get(park) === "continue")
+        .filter((park) => (claimedBy.get(park) ?? []).length === 0)
+        .filter((park) => {
+          const base = bySlug.get(park);
+          return (
+            base !== undefined && doneWhen(task.body) === doneWhen(base.body)
+          );
+        })
+        .sort();
+      if (candidates.length === 0) {
+        findings.push(
+          `new task "${slug}" names no base and matches no continued slug's done-when; name the parked slug as base or keep its done-when`,
+        );
+        continue;
+      }
+      claim(candidates[0]!, slug);
+    }
+    for (const slug of opts.slugs) {
+      const action = actionOf.get(slug);
+      const claims = claimedBy.get(slug) ?? [];
+      if (action === "continue" && claims.length === 0) {
+        findings.push(
+          `slug "${slug}" continues but has no continuation task; write one with base: ${slug}`,
+        );
+      } else if (action === "continue" && claims.length > 1) {
+        findings.push(
+          `slug "${slug}" has ${claims.length} continuation tasks (${claims.join(", ")}); write exactly one`,
+        );
+      } else if (action === "leave" && claims.length > 0) {
+        findings.push(
+          `slug "${slug}" was left parked but gained ${claims.join(", ")}; leave means no new task`,
+        );
+      }
+    }
+  }
+  return [...new Set(findings)];
+}
+
+/**
+ * PM ladder for a zero-merge stall mid-iteration. Each parked slug of the
+ * stall gets one route: `continue` writes a continuation task (a new slug
+ * with `base:` naming the parked slug, or a fresh task when the kept branch
+ * conflicts with the head) and dispatch resumes in the same iteration;
+ * `leave` keeps the slug parked with a reason the next boundary sees. The
+ * record uses the PM step, so it stays out of the item turn budget and prices
+ * into the iteration's spend like every other PM turn.
+ *
+ * Accepted routes commit to a `stall-routes` script record; a failed rung's
+ * routes die with its rollback. A turn that exhausts the ladder or stops on
+ * infra falls back to the boundary as today: the writes are rolled back, the
+ * attempt is recorded so dispatch does not retry it, and the stall still
+ * reaches the architect.
+ */
+export async function runStallPm(
+  runtime: KernelRuntime,
+  opts: {
+    iteration: number;
+    state: State;
+    slugs: string[];
+    cwd: string;
+  },
+): Promise<StallResult> {
+  const left = [...opts.slugs].sort();
+  const planPath = path.join(runtime.store.goalDir, "plan.md");
+  const snapshot = await snapshotTurn(runtime, planPath);
+  const planBefore = snapshot.plan;
+  const taskSnapshot = snapshot.tasks;
+  const brief = await stallBrief(runtime, opts);
+  let failure: string[] = [];
+
+  for (const [index, rung] of rungSteps(runtime).entries()) {
+    const target = resolveRole(runtime, "pm", rung.alias);
+    const round = index + 1;
+    const { tasks } = parseTasks(await readTaskTexts(runtime));
+    const result = await runAgentTurn(runtime, {
+      target,
+      cwd: opts.cwd,
+      meta: { iteration: opts.iteration, step: "pm", round },
+      vars: {
+        iteration: String(opts.iteration),
+        intent_path: path.join(runtime.store.goalDir, "intent.md"),
+        plan_path: planPath,
+        tasks_dir: runtime.store.tasksDir,
+        existing_tasks: existingTasks(opts.state, tasks),
+        repair: round === 1 ? "" : stallLadderNote(rung, target, failure),
+        steers: "none",
+        holds_dir: holdsDir(runtime.store),
+        stalls: brief,
+      },
+      expectation: "any",
+    });
+    const outcome = result.outcome;
+    const findings = await validateStallTurn(
+      runtime,
+      { ...opts, planPath, round },
+      planBefore,
+      taskSnapshot,
+      outcome,
+    );
+    if (outcome?.status === "done" && findings.length === 0) {
+      const accepted: StallRouteEntry[] = [...(outcome.stallRoutes ?? [])].sort(
+        (a, b) => a.slug.localeCompare(b.slug),
+      );
+      // The boundary reads routes from this record only, never from the agent
+      // rung outcomes: a failed rung's routes die with its rollback.
+      await runtime.store.appendRecord(
+        scriptMeta(opts.iteration, STALL_ROUTES_STEP, { round }),
+        {
+          ok: true,
+          outcome: {
+            status: "done",
+            summary: `stall routes: ${accepted.map((entry) => `${entry.slug}=${entry.action}`).join(", ")}`,
+            concerns: [],
+            forward: [],
+            stallRoutes: accepted,
+          },
+        },
+      );
+      return {
+        continued: accepted
+          .filter((entry) => entry.action === "continue")
+          .map((entry) => entry.slug),
+        left: accepted
+          .filter((entry) => entry.action === "leave")
+          .map((entry) => entry.slug),
+      };
+    }
+
+    const reasons = failureReasons(outcome, findings, result.record);
+    await runtime.store.appendRecord(
+      scriptMeta(opts.iteration, "pm-validate", { round }),
+      { ok: false, cause: reasons.join("; ") },
+    );
+    await restoreTurn(runtime, snapshot);
+    if (result.record.stop?.kind === "infra") {
+      await runtime.store.appendRecord(
+        scriptMeta(opts.iteration, STALL_ROUTES_STEP, { round }),
+        { ok: false, cause: reasons.join("; ") },
+      );
+      return { continued: [], left };
+    }
+    failure = reasons;
+  }
+  await runtime.store.appendRecord(
+    scriptMeta(opts.iteration, STALL_ROUTES_STEP),
+    {
+      ok: false,
+      cause: failure.join("; ") || "stall PM ladder exhausted",
+    },
+  );
+  return { continued: [], left };
 }

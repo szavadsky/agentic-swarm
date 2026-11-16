@@ -16,6 +16,7 @@ import {
   makeRuntime,
   outcome,
   setupFlowRepo,
+  scriptStallLeave,
   twoPartyBarrier,
   whenTurn,
   writeTask,
@@ -351,6 +352,7 @@ describe("script crash budget", () => {
       };
       harness.script(throwing);
       harness.script(throwing);
+      scriptStallLeave(harness, ["alpha"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("alpha", { scope: ["alpha-area"] }));
 
@@ -389,7 +391,7 @@ describe("script crash budget", () => {
       // The parked step is not re-dispatched by a third launch.
       const third = await runDispatch(runtime, { iteration: 3 });
       expect(third.reason).toBe("boundary");
-      expect(harness.calls).toHaveLength(2);
+      expect(harness.calls).toHaveLength(3);
       records = await runtime.store.listRecords();
       const scriptCrashes = records.filter(
         (r) =>

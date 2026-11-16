@@ -34,6 +34,13 @@ export const steerRouteEntrySchema = z.object({
   answer: z.string().optional(),
 });
 
+export const stallRouteEntrySchema = z.object({
+  slug: z.string().min(1),
+  action: z.enum(["continue", "leave"]),
+  reason: z.string().min(1),
+});
+export type StallRouteEntry = z.infer<typeof stallRouteEntrySchema>;
+
 /** The only agent ↔ script surface; one schema for every step. */
 export const outcomeSchema = z.object({
   status: z.enum(["done", "blocked", "failed", "upscope"]),
@@ -49,6 +56,10 @@ export const outcomeSchema = z.object({
   // PM steer turns only: one route per claimed steer. Absent on every other
   // step; absent on a legacy steer turn means every steer goes to the architect.
   steerRoutes: z.array(steerRouteEntrySchema).optional(),
+  // PM stall turns only: one entry per parked slug of this iteration's stall.
+  // Absent on every other step; the kernel continues `continue` slugs and
+  // records `leave` reasons for the next boundary.
+  stallRoutes: z.array(stallRouteEntrySchema).optional(),
 });
 
 export type Concern = z.infer<typeof concernSchema>;
@@ -72,6 +83,11 @@ export interface TaskFile {
   body: string;
   /** Outcome-repair turns for this task's turns; defaults to REPAIR_TURNS. */
   repairTurns?: number;
+  /**
+   * Per-turn wall bound in minutes for this task's turns; overrides the alias
+   * wall, still capped by the run's `limits.turnMinutes`. Owner ruling 2.
+   */
+  turnMinutes?: number;
 }
 
 export type TaskStatus =

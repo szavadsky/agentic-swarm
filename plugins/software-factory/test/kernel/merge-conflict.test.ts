@@ -14,6 +14,7 @@ import {
   goalCheckout,
   makeRuntime,
   outcome,
+  scriptStallLeave,
   setupFlowRepo,
   writeTask,
 } from "./s2-helpers.js";
@@ -258,6 +259,7 @@ describe("merge conflicts", () => {
           stop: { kind: "refusal", details: "content policy" },
         }),
       );
+      scriptStallLeave(harness, ["task"]);
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       const file = task("task", { scope: ["conflict.txt"] });
@@ -301,6 +303,7 @@ describe("merge conflicts", () => {
         ctx.writeOutcome(outcome({ summary: "steward could not resolve" }));
         return fakeTurnResult(req);
       });
+      scriptStallLeave(harness, ["task"]);
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       const file = task("task", { scope: ["conflict.txt"] });
@@ -444,6 +447,7 @@ describe("steward", () => {
         ctx.writeOutcome(outcome({ summary: "steward could not resolve" }));
         return fakeTurnResult(req);
       });
+      scriptStallLeave(harness, ["task"]);
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       const file = task("task", { scope: ["conflict.txt"] });
@@ -579,6 +583,7 @@ describe("steward", () => {
         );
         return fakeTurnResult(req);
       });
+      scriptStallLeave(harness, ["task"]);
       harness.script((req, ctx) => {
         fs.writeFileSync(
           path.join(req.cwd!, "conflict.txt"),

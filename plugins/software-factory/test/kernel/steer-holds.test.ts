@@ -22,6 +22,7 @@ import {
   cleanupFlowRepo,
   makeRuntime,
   outcome,
+  scriptStallLeave,
   setupFlowRepo,
   whenTurn,
   writeTask,
@@ -252,6 +253,7 @@ describe("mid-run steer holds", () => {
         ctx.writeOutcome(outcome({ summary: "held alpha" }));
         return fakeTurnResult(req);
       });
+      scriptStallLeave(harness, ["alpha"]);
 
       const dispatched = await runDispatch(runtime, { iteration: 1 });
       expect(dispatched.reason).toBe("boundary");

@@ -247,3 +247,27 @@ export function filePerTaskHandler(
     }
   };
 }
+
+/**
+ * Scripts one stall-PM turn that leaves every listed slug parked. For
+ * dispatches that stall on purpose: the turn answers, the reasons land in
+ * the stall-routes record, and dispatch ends at the boundary as today.
+ */
+export function scriptStallLeave(
+  harness: FakeHarness,
+  slugs: string[],
+  reason = "left for the architect",
+): void {
+  harness.script(
+    (req, ctx) => {
+      ctx.writeOutcome(
+        outcome({
+          summary: `stall leaves ${slugs.join(", ")} parked`,
+          stallRoutes: slugs.map((slug) => ({ slug, action: "leave", reason })),
+        }),
+      );
+      return fakeTurnResult(req);
+    },
+    { when: whenTurn({ step: "pm" }) },
+  );
+}

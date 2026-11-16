@@ -51,18 +51,19 @@ The shared definitions exist once as partials: `scope` (the predicted-area rule:
 
 ## pm.md
 
-| variable         | meaning                                                                                                                                                                 |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `iteration`      | 1-based iteration number of this launch                                                                                                                                 |
-| `intent_path`    | path to the goal's `intent.md`, for resolving wording only                                                                                                              |
-| `plan_path`      | path to the plan to derive from; read-only to the PM                                                                                                                    |
-| `tasks_dir`      | directory where task files are written, one `<slug>.md` per task                                                                                                        |
-| `existing_tasks` | existing task files as `- slug \| status \| hash \| deps: a,b` lines (`none` when empty); merged/finished lines end `frozen (read-only)`, cancelled `read-only (spent)` |
-| `repair`         | the script validator's findings from the previous ask; empty string on the first ask and on steer turns                                                                 |
-| `steers`         | pending steers as `- id (file):` plus indented full text; `none` on a derive turn                                                                                       |
-| `holds_dir`      | directory for one `<steer-id>.yaml` hold file per structured steer                                                                                                      |
-| `outcome_path`   | path where the outcome file must be written when the harness asks for a file                                                                                            |
-| `validate_cmd`   | absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default                                                                                        |
+| variable         | meaning                                                                                                                                                                                                                            |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `iteration`      | 1-based iteration number of this launch                                                                                                                                                                                            |
+| `intent_path`    | path to the goal's `intent.md`, for resolving wording only                                                                                                                                                                         |
+| `plan_path`      | path to the plan to derive from; read-only to the PM                                                                                                                                                                               |
+| `tasks_dir`      | directory where task files are written, one `<slug>.md` per task                                                                                                                                                                   |
+| `existing_tasks` | existing task files as `- slug \| status \| hash \| deps: a,b` lines (`none` when empty); merged/finished lines end `frozen (read-only)`, cancelled `read-only (spent)`, steer tasks `steer <id>`, stall continuations `stall <n>` |
+| `repair`         | the script validator's findings from the previous ask; empty string on the first ask and on steer turns                                                                                                                            |
+| `steers`         | pending steers as `- id (file):` plus indented full text; `none` on a derive or stall turn                                                                                                                                         |
+| `stalls`         | stalled parks as one entry per parked slug (cause, record paths, kept branch, spent turns, done-when); `none` except on a stall turn                                                                                               |
+| `holds_dir`      | directory for one `<steer-id>.yaml` hold file per structured steer                                                                                                                                                                 |
+| `outcome_path`   | path where the outcome file must be written when the harness asks for a file                                                                                                                                                       |
+| `validate_cmd`   | absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default                                                                                                                                                   |
 
 ## implementer.md
 

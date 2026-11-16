@@ -4,7 +4,7 @@ import { stepTarget } from "./flow-context.js";
 import type { MergeResult } from "./integrate.js";
 import { type Hold, readHolds, type Steer, scanInbox } from "./mailbox.js";
 import { next } from "./next.js";
-import { runSteerPm } from "./pm.js";
+import { runStallPm, runSteerPm, STALL_ROUTES_STEP } from "./pm.js";
 import { loadPriceTable } from "./openrouter.js";
 import { type PriceTable, pricedRecord } from "./pricing.js";
 import { scriptMeta } from "./record.js";
@@ -542,6 +542,58 @@ export async function runDispatch(
         return { reason: "cancelled", turns };
       }
       if (!steward.skipped) continue;
+      // Zero-merge stall: the dispatch set ran out with no merges and fresh
+      // parks, and no drain caused it. The PM owns the dispatch sets, so one
+      // stall turn resolves it in this iteration; a second stall, an
+      // all-left turn, or any drain falls through to the boundary as today.
+      // Owner ruling 2.
+      if (!opts.signals?.shouldStop()) {
+        const stallTasks = await runtime.store.listTasks();
+        const stallRecords = await runtime.store.listRecords();
+        const stallState = derive(
+          stallTasks,
+          stallRecords,
+          runtime.configs.process.flows,
+        );
+        const merges = stallRecords.filter(
+          (record) =>
+            record.iteration === iteration &&
+            record.step === "merge" &&
+            record.ok === true &&
+            record.endedAt,
+        ).length;
+        const attempted = stallRecords.some(
+          (record) =>
+            record.iteration === iteration &&
+            record.step === STALL_ROUTES_STEP &&
+            record.endedAt,
+        );
+        if (merges === 0 && !attempted) {
+          const slugs = [
+            ...new Set(
+              stallRecords
+                .filter(
+                  (record) =>
+                    record.iteration === iteration &&
+                    record.step === "park" &&
+                    record.endedAt &&
+                    record.slug &&
+                    stallState.tasks[record.slug]?.status === "parked",
+                )
+                .map((record) => record.slug!),
+            ),
+          ].sort();
+          if (slugs.length > 0) {
+            const stalled = await runStallPm(runtime, {
+              iteration,
+              state: stallState,
+              slugs,
+              cwd: runtime.paths.goalCheckout,
+            });
+            if (stalled.continued.length > 0) continue;
+          }
+        }
+      }
       const turns = settledTurns(await runtime.store.listRecords(), iteration);
       return { reason: "boundary", turns };
     }
