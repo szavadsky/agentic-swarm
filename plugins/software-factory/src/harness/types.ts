@@ -28,10 +28,11 @@ export type Stop =
   | { kind: "truncated"; cause: "max-tokens" | "turn-limit" }
   /**
    * Infrastructure trouble must never consume item budget or review rounds.
-   * `details` carries the scrubbed, one-line tail of the harness error text: at
-   * most 500 characters of text, with a leading `…` added when truncated. The
-   * text is a structured error message, stderr, or a synthetic cause, falling
-   * back to the exit code and signal when stderr is empty.
+   * `details` carries scrubbed, one-line harness error text capped at 501
+   * characters, including a leading `…` when truncated. For an acpx crash the
+   * exit code and signal are kept outside the cut, followed by the last
+   * non-banner stderr line, the last ACP error frame, or a synthetic cause.
+   * Other crash paths use stderr or fall back to their exit facts.
    */
   | {
       kind: "infra";

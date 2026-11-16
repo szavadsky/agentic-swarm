@@ -1,7 +1,11 @@
 import type { Stop } from "./types.js";
 
-/** Longest crash detail kept; the useful part of a failure is its tail. */
+/** Longest detail text retained; truncation adds one leading `…`. */
 const MAX_DETAILS_CHARS = 500;
+
+/** acpx's startup banner names the session and says nothing about a stop. */
+const ACPX_BANNER =
+  /^\[acpx\]\s+session\b.*\bagent\s+(?:connected|starting)\b/i;
 
 const SECRET_PATTERNS: ReadonlyArray<readonly [RegExp, string]> = [
   [/\b(bearer|basic)\s+[A-Za-z0-9._~+/=-]{8,}/gi, "$1 [redacted]"],
@@ -42,6 +46,34 @@ export function stopDetails(
     .replace(/\s+/g, " ");
   if (!collapsed) return undefined;
   return collapsed.length > max ? `…${collapsed.slice(-max)}` : collapsed;
+}
+
+/** Last stderr line that is not acpx's startup banner. */
+export function lastNonBannerLine(
+  text: string | undefined,
+): string | undefined {
+  for (const line of (text ?? "").split(/\r\n?|\n/).reverse()) {
+    const trimmed = line.trim();
+    if (trimmed && !ACPX_BANNER.test(trimmed)) return trimmed;
+  }
+  return undefined;
+}
+
+/**
+ * Joins the process exit facts to the useful detail text. The exit prefix is
+ * kept outside truncation, so a long tail cannot hide the code or signal.
+ */
+export function exitWithDetails(
+  code: number | null,
+  signal: string | null,
+  text: string | undefined,
+): string | undefined {
+  const exit = exitDetails(code, signal);
+  if (!exit) return stopDetails(text);
+  const separator = ": ";
+  const budget = MAX_DETAILS_CHARS - exit.length - separator.length;
+  const tail = budget > 0 ? stopDetails(text, budget) : undefined;
+  return tail ? `${exit}${separator}${tail}` : exit;
 }
 
 /**

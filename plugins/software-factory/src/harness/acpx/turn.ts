@@ -6,7 +6,7 @@ import {
   registerChildGroup,
   unregisterChildGroup,
 } from "../../core/shutdown.js";
-import { exitDetails, stopDetails } from "../details.js";
+import { exitWithDetails, lastNonBannerLine } from "../details.js";
 import type {
   AdapterTurnResult,
   ModelRef,
@@ -129,15 +129,20 @@ async function runSetup(
   const error = errors.at(-1);
   if (error)
     return {
-      stop: classifyAcpxError(error),
+      stop: classifyAcpxError(error, {
+        code: result.code,
+        signal: result.signal ?? null,
+      }),
       noSession: isNoSessionError(error),
     };
   if (result.timedOut)
     return { stop: { kind: "infra", cause: "timeout" }, noSession: false };
   if (result.code !== 0) {
-    const details =
-      stopDetails(result.stderr) ??
-      exitDetails(result.code, result.signal ?? null);
+    const details = exitWithDetails(
+      result.code,
+      result.signal ?? null,
+      lastNonBannerLine(result.stderr),
+    );
     const stop: Stop = details
       ? { kind: "infra", cause: "crash", details }
       : { kind: "infra", cause: "crash" };
