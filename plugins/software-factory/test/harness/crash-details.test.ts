@@ -120,6 +120,36 @@ describe("stop details helper", () => {
 });
 
 describe("AcpxHarness crash classification", () => {
+  it("keeps SIGTERM and SIGINT with no result as cancelled", () => {
+    for (const signal of ["SIGTERM", "SIGINT"]) {
+      expect(
+        classifyAcpxTurn({
+          summary: { text: "", usage: zeroUsage(), errors: [] },
+          code: null,
+          signal,
+          timedOut: false,
+        }),
+      ).toEqual({ kind: "cancelled" });
+    }
+  });
+
+  it("lets a parsed result outrank the exit facts", () => {
+    expect(
+      classifyAcpxTurn({
+        summary: {
+          text: "OUTCOME",
+          usage: zeroUsage(),
+          stopReason: "end_turn",
+          errors: [],
+        },
+        code: 5,
+        signal: null,
+        timedOut: false,
+        stderr: "teardown failed",
+      }),
+    ).toEqual({ kind: "done" });
+  });
+
   it("keeps the last ACP error frame with the exit facts", () => {
     const stop = classifyAcpxTurn({
       summary: {

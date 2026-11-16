@@ -109,8 +109,32 @@ export interface AcpxTurnClassificationInput {
 }
 
 /**
- * A prompt that exits 0 can still be cancelled, and no exit code proves an
- * outcome was written. The response frame and the error frames decide.
+ * The stop a parsed prompt result names. A result is the turn's outcome even
+ * when acpx exits nonzero afterwards, after the result frame reached stdout.
+ * An unrecognised reason leaves the caller to the exit facts.
+ */
+function stopForStopReason(reason: string | undefined): Stop | undefined {
+  if (reason === "cancelled") return { kind: "cancelled" };
+  if (reason === "refusal") return { kind: "refusal" };
+  if (
+    reason === "max_tokens" ||
+    reason === "max-tokens" ||
+    reason === "length"
+  ) {
+    return { kind: "truncated", cause: "max-tokens" };
+  }
+  if (reason === "max_turns" || reason === "turn-limit") {
+    return { kind: "truncated", cause: "turn-limit" };
+  }
+  if (reason === "end_turn") return { kind: "done" };
+  return undefined;
+}
+
+/**
+ * A wall timeout or an ACP error frame means any result already on stdout is
+ * untrustworthy, so those decide first. Otherwise the prompt result decides,
+ * and only a turn with no recognised result is judged from the exit facts.
+ * SIGTERM/SIGINT with no result is the caller's cancellation.
  */
 export function classifyAcpxTurn(input: AcpxTurnClassificationInput): Stop {
   if (input.timedOut) return { kind: "infra", cause: "timeout" };
@@ -122,6 +146,9 @@ export function classifyAcpxTurn(input: AcpxTurnClassificationInput): Stop {
       signal: input.signal,
     });
   }
+
+  const byResult = stopForStopReason(input.summary.stopReason);
+  if (byResult) return byResult;
 
   if (input.code !== 0) {
     if (input.signal === "SIGTERM" || input.signal === "SIGINT") {
@@ -136,21 +163,6 @@ export function classifyAcpxTurn(input: AcpxTurnClassificationInput): Stop {
       ? { kind: "infra", cause: "crash", details }
       : { kind: "infra", cause: "crash" };
   }
-
-  const reason = input.summary.stopReason;
-  if (reason === "cancelled") return { kind: "cancelled" };
-  if (reason === "refusal") return { kind: "refusal" };
-  if (
-    reason === "max_tokens" ||
-    reason === "max-tokens" ||
-    reason === "length"
-  ) {
-    return { kind: "truncated", cause: "max-tokens" };
-  }
-  if (reason === "max_turns" || reason === "turn-limit") {
-    return { kind: "truncated", cause: "turn-limit" };
-  }
-  if (reason === "end_turn") return { kind: "done" };
 
   const details = exitWithDetails(
     input.code,
