@@ -17,6 +17,8 @@ import {
 import { runFront } from "./front.js";
 import { type Hold, readHolds, scanInbox } from "./mailbox.js";
 import { rolesByStep, writeMetrics } from "./metrics.js";
+import type { PriceSource } from "./openrouter.js";
+import { loadPriceTable } from "./openrouter.js";
 import { type ModelCatalog, preflight } from "./preflight.js";
 import { loadPrompts } from "./prompts.js";
 import { scriptMeta } from "./record.js";
@@ -70,6 +72,8 @@ export interface RunGoalOptions {
   binaries?: Record<string, string | undefined>;
   signals?: DrainController;
   baseGates?: boolean;
+  /** Price cache and fetcher; undefined means the shared cache plus network. */
+  priceSource?: PriceSource;
 }
 
 export type LaunchStop =
@@ -179,7 +183,8 @@ async function writeIterationFacts(
     runtime.configs.process.flows,
   );
   const roleByStep = rolesByStep(runtime.configs.process.flows);
-  const prices = runtime.configs.run.prices;
+  const prices = await loadPriceTable(runtime.priceSource);
+  const priceIds = runtime.configs.run.priceIds;
   await writeMetrics(runtime.store, {
     iteration,
     status,
@@ -187,6 +192,7 @@ async function writeIterationFacts(
     state,
     roleByStep,
     prices,
+    priceIds,
     humanInterventions,
   });
   return writeIterationSummary(runtime.store, {
@@ -197,6 +203,7 @@ async function writeIterationFacts(
     cause,
     roleByStep,
     prices,
+    priceIds,
     humanInterventions,
   });
 }
@@ -277,6 +284,7 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
     harnesses: new Map(Object.entries(harnesses)),
     prompts: loadPrompts(configs.process, repoRoot),
     limits: toLimits(configs),
+    priceSource: opts.priceSource,
   };
 
   const signals = opts.signals ?? createDrainController();
@@ -385,7 +393,8 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
           const spent = iterationSpend(
             recordsBefore,
             before.iteration,
-            runtime.configs.run.prices ?? {},
+            await loadPriceTable(runtime.priceSource),
+            runtime.configs.run.priceIds,
           );
           if (spent >= runtime.limits.iterationUsd) resume = false;
         }

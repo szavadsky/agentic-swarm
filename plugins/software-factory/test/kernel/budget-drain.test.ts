@@ -9,6 +9,7 @@ import {
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
 import { iterationMetrics } from "../../src/kernel/metrics.js";
+import { loadPriceTable } from "../../src/kernel/openrouter.js";
 import { writeIterationSummary } from "../../src/kernel/summary.js";
 import { task } from "./helpers.js";
 import {
@@ -56,7 +57,7 @@ describe("iteration USD brake", () => {
           outcome: outcome({ summary: "go", decision: "continue" }),
         },
       );
-      // Neither harness nor price table priced this turn, so the brake sees $0.
+      // Neither harness nor OpenRouter priced this turn, so the brake sees $0.
       await runtime.store.appendRecord(
         {
           iteration: 1,
@@ -99,14 +100,14 @@ describe("iteration USD brake", () => {
         records,
         status: "in-progress",
         cause: result.cause,
-        prices: runtime.configs.run.prices,
+        prices: await loadPriceTable(runtime.priceSource),
       });
       const text = fs.readFileSync(
         path.join(runtime.store.goalDir, "iterations/1/summary.md"),
         "utf8",
       );
       // The PM turn is fully unpriced; the implement and review turns are
-      // priced but their recorded compactions have no table entry, so each
+      // priced but their recorded compactions have no OpenRouter entry, so each
       // counts blind too.
       expect(text).toContain(
         "- budget: iteration USD limit $1.0000 reached (spent $1.1000); brake blind for 3 unpriced turns",
@@ -120,7 +121,7 @@ describe("iteration USD brake", () => {
   it("counts every reported attempt toward the USD brake, equal to the metrics figure", async () => {
     const { repo, goal } = setupFlowRepo({
       limits: { concurrency: 1, iterationUsd: 1 },
-      prices: {
+      priceTable: {
         "retry/model": {
           input: 4,
           cachedInput: 0.2,
@@ -135,7 +136,7 @@ describe("iteration USD brake", () => {
       });
       await writeTask(runtime, task("a", { scope: ["a.txt"] }));
       // A turn that retried onto another model: the harness priced one call,
-      // the table prices the other. `usage` repeats only the last call, so
+      // OpenRouter prices the other. `usage` repeats only the last call, so
       // counting it as well would double that call.
       await runtime.store.appendRecord(
         {
@@ -173,12 +174,12 @@ describe("iteration USD brake", () => {
         records,
         {},
         0,
-        runtime.configs.run.prices ?? {},
+        await loadPriceTable(runtime.priceSource),
       );
 
       expect(metrics.usage.costUsd).toBeCloseTo(4.5, 10);
-      // $0.50 from the harness-priced first call plus $4.00 from the table-priced
-      // second: `usage`'s $4.00 last call is not added a second time.
+      // $0.50 from the harness-priced first call plus $4.00 from the
+      // OpenRouter-priced second: `usage`'s $4.00 last call is not added a second time.
       expect(result.reason).toBe("drained");
       expect(result.cause).toBe(
         "budget: iteration USD limit $1.0000 reached (spent $4.5000)",
@@ -249,10 +250,10 @@ describe("iteration USD brake", () => {
     }
   }, 60_000);
 
-  it("prices harness-silent turns from run.prices and reports no blind turns", async () => {
+  it("prices harness-silent turns from the price cache and reports no blind turns", async () => {
     const { repo, goal } = setupFlowRepo({
       limits: { concurrency: 1, iterationUsd: 1 },
-      prices: {
+      priceTable: {
         "fake-impl": { input: 1, cachedInput: 0, output: 0, reasoning: 0 },
         "fake-review": { input: 1, cachedInput: 0, output: 0, reasoning: 0 },
       },
@@ -277,7 +278,7 @@ describe("iteration USD brake", () => {
 
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("drained");
-      // $1.00 of table-priced input crossed the $1 brake; the review then finished.
+      // $1.00 of OpenRouter-priced input crossed the $1 brake; the review then finished.
       expect(result.cause).toBe(
         "budget: iteration USD limit $1.0000 reached (spent $1.0000)",
       );
@@ -298,7 +299,7 @@ describe("iteration USD brake", () => {
         records,
         status: "in-progress",
         cause: result.cause,
-        prices: runtime.configs.run.prices,
+        prices: await loadPriceTable(runtime.priceSource),
       });
       const text = fs.readFileSync(
         path.join(runtime.store.goalDir, "iterations/1/summary.md"),

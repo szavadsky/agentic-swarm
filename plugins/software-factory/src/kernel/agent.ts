@@ -6,6 +6,7 @@ import type {
   TurnAttempt,
 } from "../harness/types.js";
 import { addUsage } from "../harness/usage.js";
+import { loadPriceTable } from "./openrouter.js";
 import { pricedUsage } from "./pricing.js";
 import { missingPlanFinding, snapshotPlan } from "./architect-session.js";
 import { contextPackRelPath } from "./context-pack.js";
@@ -351,21 +352,25 @@ export async function runAgentTurn(
   // list-price equivalent; aggregation reprices idempotently for old records.
   // A resumed turn whose harness did not split the cache priced its prefix.
   const cachedPrefix = spec.session ? true : undefined;
-  const prices = runtime.configs.run.prices ?? {};
+  const prices = await loadPriceTable(runtime.priceSource);
+  const priceIds = runtime.configs.run.priceIds;
   const pricedAttempts: TurnAttempt[] = attempts.map((attempt) => ({
     ...attempt,
     usage: pricedUsage(attempt.usage, attempt.model.id, prices, {
       cachedPrefix,
+      priceIds,
     }).usage,
   }));
   const pricedTop = pricedUsage(usage, actualModel?.id, prices, {
     cachedPrefix,
+    priceIds,
   }).usage;
   // The settle ran while the cache was hot, so an unsplit compaction input is
   // the cached transcript, priced at the cached rate.
   const pricedCompact = settled.compactUsage
     ? pricedUsage(settled.compactUsage, actualModel?.id, prices, {
         cachedPrefix: true,
+        priceIds,
       }).usage
     : undefined;
   const record = await started.finish({

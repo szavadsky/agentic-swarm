@@ -7,6 +7,7 @@ import {
   runGoal,
 } from "../kernel/launch.js";
 import type { ModelCatalog } from "../kernel/preflight.js";
+import type { PriceSource } from "../kernel/openrouter.js";
 import type { DrainController } from "../kernel/signals.js";
 import { benchmarkGoal, formatBenchmark } from "./benchmark.js";
 import {
@@ -41,6 +42,8 @@ export interface CliDeps {
   modelCatalog?: ModelCatalog;
   binaries?: Record<string, string | undefined>;
   signals?: DrainController;
+  /** Price cache and fetcher; undefined means the shared cache plus network. */
+  priceSource?: PriceSource;
 }
 
 const ROOT_USAGE = `
@@ -243,6 +246,7 @@ async function runCommand(parsed: ParsedArgs, deps: CliDeps): Promise<number> {
         : undefined),
     binaries,
     signals: deps.signals,
+    priceSource: deps.priceSource,
   });
   console.log(
     [

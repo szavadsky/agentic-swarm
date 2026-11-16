@@ -328,6 +328,7 @@ export function iterationMetrics(
   roleByStep: Record<string, string>,
   humanInterventions: number,
   prices: PriceTable,
+  priceIds?: Record<string, string>,
 ): IterationMetrics {
   const recs = records.filter(
     (r) => r.iteration === n && r.endedAt && r.actor === "agent",
@@ -343,7 +344,7 @@ export function iterationMetrics(
   const architect: ArchitectMetrics = emptyArchitect();
 
   for (const rec of recs) {
-    const priced = pricedRecord(rec, prices);
+    const priced = pricedRecord(rec, prices, priceIds);
     const part = priced.usage;
     const unpriced = priced.costKnown ? 0 : 1;
     const promptBytes = rec.promptBytes ?? 0;
@@ -630,8 +631,10 @@ export interface MetricsInput {
   state?: State;
   /** Step id -> role, from the process flow config. */
   roleByStep?: Record<string, string>;
-  /** Model id -> USD per Mtok, from the run config. */
+  /** OpenRouter price table, loaded once per write. */
   prices?: PriceTable;
+  /** Harness model id -> OpenRouter model id, from the run config. */
+  priceIds?: Record<string, string>;
   humanInterventions?: number;
 }
 
@@ -678,6 +681,7 @@ export async function writeMetrics(
         roleByStep,
         human,
         input.prices ?? {},
+        input.priceIds,
       );
     });
   const metrics: GoalMetrics = { iterations, totals: totalsOf(iterations) };

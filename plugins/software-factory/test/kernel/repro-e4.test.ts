@@ -5,6 +5,7 @@ import { dispatch } from "../../src/cli/dispatch.js";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { createDrainController } from "../../src/kernel/signals.js";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
+import { testPriceSource } from "../helpers/price-source.js";
 
 const PLAN =
   "# Plan\n\n## alpha\nCreate alpha.txt.\n\n## beta\nCreate beta.txt.\n\n## gamma\nCreate gamma.txt.\n\n## delta\nCreate delta.txt.\n";
@@ -105,6 +106,7 @@ describe("repro E4: first signal does not stop dispatch admission", () => {
       await dispatch(["run", "--repo", s.repo.dir, "--goal", "demo"], {
         harnesses: { fake: harness },
         signals: controller,
+        priceSource: testPriceSource(s.repo.dir),
       });
 
       const afterSignal = implementStart.filter((e) => e.turn > signalTurn!);

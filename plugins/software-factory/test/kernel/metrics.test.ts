@@ -15,6 +15,7 @@ import {
   priceTableOnly,
   pricedUsage,
 } from "../../src/kernel/pricing.js";
+import { writePriceCache } from "../../src/kernel/openrouter.js";
 import { loadPrompts } from "../../src/kernel/prompts.js";
 import { finishChecks, startChecks } from "../../src/kernel/record.js";
 import { createFolderStore } from "../../src/kernel/store.js";
@@ -560,10 +561,10 @@ describe("record cost truth", () => {
     };
     const run: RunConfig = {
       aliases: { implementer: { harness: "fake", model: "paid/one" } },
-      prices: PRICES,
       limits: { concurrency: 1, perHarness: {}, iterations: 1 },
       sessions: { dir: "", keepRuns: 1, retention: "short" },
     };
+    writePriceCache(path.join(root, "price-cache.json"), PRICES);
     const runtime: KernelRuntime = {
       paths: {
         repoRoot: root,
@@ -584,6 +585,13 @@ describe("record cost truth", () => {
         iterations: 1,
         concurrency: 1,
         perHarness: {},
+      },
+      // Hermetic prices: the test-local cache, never the network.
+      priceSource: {
+        cachePath: path.join(root, "price-cache.json"),
+        fetchModels: async () => {
+          throw new Error("price fetch disabled in tests");
+        },
       },
     };
     try {

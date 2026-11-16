@@ -13,7 +13,8 @@ import {
   resolveGoalPaths,
   toLimits,
 } from "../../src/kernel/config.js";
-import type { ModelPrice } from "../../src/kernel/pricing.js";
+import { writePriceCache } from "../../src/kernel/openrouter.js";
+import type { PriceTable } from "../../src/kernel/pricing.js";
 import { loadPrompts } from "../../src/kernel/prompts.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import type {
@@ -30,8 +31,8 @@ export interface FlowRepoOptions {
   /** Raw `.factory/process.yaml` override. */
   process?: Record<string, unknown>;
   limits?: Record<string, unknown>;
-  /** Model id -> USD per Mtok, for harnesses that report no cost. */
-  prices?: Record<string, ModelPrice>;
+  /** Seed for the repo-local price cache, for harnesses that report no cost. */
+  priceTable?: PriceTable;
   aliases?: Record<
     string,
     {
@@ -51,6 +52,11 @@ export interface FlowRepo {
   repo: TmpRepo;
   goalDir: string;
   goal: string;
+}
+
+/** Repo-local price cache; `setupFlowRepo` seeds it when given a table. */
+export function priceCachePath(repoDir: string): string {
+  return path.join(repoDir, ".factory", "price-cache.json");
 }
 
 export function outcome(patch: Record<string, unknown> = {}): Outcome {
@@ -105,10 +111,12 @@ export function setupFlowRepo(opts: FlowRepoOptions = {}): FlowRepo {
     ".factory/run.yaml",
     yaml.stringify({
       aliases,
-      ...(opts.prices ? { prices: opts.prices } : {}),
       limits: { iterations: 1, concurrency: 1, ...(opts.limits ?? {}) },
     }),
   );
+  if (opts.priceTable) {
+    writePriceCache(priceCachePath(repo.dir), opts.priceTable);
+  }
   if (opts.process) {
     repo.writeFile(".factory/process.yaml", yaml.stringify(opts.process));
   }
@@ -144,6 +152,13 @@ export async function makeRuntime(
     harnesses: new Map(Object.entries(harnesses)),
     prompts: loadPrompts(configs.process, repo.dir),
     limits: toLimits(configs),
+    // Hermetic prices: the repo-local cache, never the network.
+    priceSource: {
+      cachePath: priceCachePath(repo.dir),
+      fetchModels: async () => {
+        throw new Error("price fetch disabled in tests");
+      },
+    },
   };
   await prepareIntegrationCheckout(runtime);
   return runtime;

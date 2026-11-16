@@ -5,6 +5,7 @@ import type { MergeResult } from "./integrate.js";
 import { type Hold, readHolds, type Steer, scanInbox } from "./mailbox.js";
 import { next } from "./next.js";
 import { runSteerPm } from "./pm.js";
+import { loadPriceTable } from "./openrouter.js";
 import { type PriceTable, pricedRecord } from "./pricing.js";
 import { scriptMeta } from "./record.js";
 import type { DrainController } from "./signals.js";
@@ -106,12 +107,13 @@ export function iterationSpend(
   records: StepRecord[],
   iteration: number,
   prices: PriceTable,
+  priceIds?: Record<string, string>,
 ): number {
   let usd = 0;
   for (const rec of records) {
     if (rec.iteration !== iteration || rec.actor !== "agent" || !rec.endedAt)
       continue;
-    const cost = pricedRecord(rec, prices).usage.costUsd;
+    const cost = pricedRecord(rec, prices, priceIds).usage.costUsd;
     if (cost !== undefined) usd += cost;
   }
   return usd;
@@ -408,7 +410,8 @@ export async function runDispatch(
         const spent = iterationSpend(
           records,
           iteration,
-          runtime.configs.run.prices ?? {},
+          await loadPriceTable(runtime.priceSource),
+          runtime.configs.run.priceIds,
         );
         if (spent >= usdLimit) {
           drain = `budget: iteration USD limit $${usdLimit.toFixed(4)} reached (spent $${spent.toFixed(4)})`;

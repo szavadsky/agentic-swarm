@@ -92,20 +92,7 @@ export const processConfigSchema = z
   })
   .strict();
 
-/**
- * USD per million tokens. Every rate is required: a model is either fully
- * priced or absent from the table, which is how unknown differs from $0.
- */
-export const modelPriceSchema = z
-  .object({
-    input: z.number().nonnegative(),
-    cachedInput: z.number().nonnegative(),
-    output: z.number().nonnegative(),
-    reasoning: z.number().nonnegative(),
-  })
-  .strict();
-
-/** Run layer: not tracked; aliases, prices, limits, session store, scout pin. */
+/** Run layer: not tracked; aliases, price ids, limits, session store, scout pin. */
 export const aliasSchema = z
   .object({
     harness: z.string().min(1),
@@ -147,8 +134,12 @@ export const runConfigSchema = z
     aliases: z.record(z.string(), aliasSchema).default({}),
     /** Harness id -> adapter binding; a harness id is a config name. */
     harnesses: z.record(z.string(), harnessEntrySchema).default({}),
-    /** Model id -> USD per Mtok; harnesses that report no cost are priced from here. */
-    prices: z.record(z.string(), modelPriceSchema).default({}),
+    /**
+     * Harness model id -> OpenRouter model id, for ids matching cannot
+     * resolve. Explicit wins over matching; ids across providers cannot be
+     * derived, so an unmatchable live model is mapped here, not guessed.
+     */
+    priceIds: z.record(z.string(), z.string().min(1)).default({}),
     limits: limitsSchema,
     sessions: z
       .object({

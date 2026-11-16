@@ -11,6 +11,7 @@ import {
   iterationMetrics,
 } from "../../src/kernel/metrics.js";
 import type { PriceTable } from "../../src/kernel/pricing.js";
+import { writePriceCache } from "../../src/kernel/openrouter.js";
 import { loadPrompts } from "../../src/kernel/prompts.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import type {
@@ -57,6 +58,13 @@ function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
       iterations: 1,
       concurrency: 1,
       perHarness: {},
+    },
+    // Hermetic prices: the test-local cache, never the network.
+    priceSource: {
+      cachePath: path.join(root, "price-cache.json"),
+      fetchModels: async () => {
+        throw new Error("price fetch disabled in tests");
+      },
     },
   };
 }
@@ -208,7 +216,7 @@ describe("launch digest", () => {
     const prices: PriceTable = {
       "paid/one": { input: 4, cachedInput: 0.2, output: 20, reasoning: 20 },
     };
-    runtime.configs.run.prices = prices;
+    writePriceCache(path.join(root, "price-cache.json"), prices);
     try {
       await runtime.store.ensureLayout();
       await runtime.store.appendRecord(
@@ -334,7 +342,7 @@ describe("launch digest", () => {
     const prices: PriceTable = {
       "paid/one": { input: 4, cachedInput: 0.2, output: 20, reasoning: 20 },
     };
-    runtime.configs.run.prices = prices;
+    writePriceCache(path.join(root, "price-cache.json"), prices);
     try {
       await runtime.store.ensureLayout();
       // pi via acpx: all-zero counters are no usage report, even on a priced model.

@@ -9,6 +9,7 @@ import { postSteer } from "../../src/kernel/mailbox.js";
 import { createDrainController } from "../../src/kernel/signals.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
+import { testPriceSource } from "../helpers/price-source.js";
 
 const PLAN = `# Milestone 1 — files
 
@@ -682,7 +683,10 @@ describe("resume guards", () => {
       });
       await dispatch(
         ["run", "--repo", repo.dir, "--goal", "demo", "--iterations", "1"],
-        { harnesses: { fake: second } },
+        {
+          harnesses: { fake: second },
+          priceSource: testPriceSource(repo.dir),
+        },
       );
 
       const store = createFolderStore(goalDir);

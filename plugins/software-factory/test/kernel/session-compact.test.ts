@@ -287,7 +287,7 @@ describe("compaction timing and cost", () => {
   };
 
   it("compacts the resumed session at its end, records the cost, and the fix resumes fewer input tokens", async () => {
-    const { repo, goal } = setupFlowRepo({ prices: PRICES });
+    const { repo, goal } = setupFlowRepo({ priceTable: PRICES });
     try {
       const harness = new FakeHarness({ id: "fake" });
       harness.script((req, ctx) => {

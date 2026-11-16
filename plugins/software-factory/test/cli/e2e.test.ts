@@ -6,6 +6,7 @@ import { dispatch } from "../../src/cli/dispatch.js";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
+import { testPriceSource } from "../helpers/price-source.js";
 
 const PACKAGE_ROOT = path.resolve(import.meta.dir, "../..");
 
@@ -210,6 +211,7 @@ describe("CLI end to end — init, steer, run, status", () => {
       const run = await capturedLog(async () =>
         dispatch(["run", "--repo", repo.dir, "--goal", "demo"], {
           harnesses: { fake: alphaRun(goalDir, taskDir) },
+          priceSource: testPriceSource(repo.dir),
         }),
       );
       expect(run.code).toBe(3);
@@ -240,6 +242,7 @@ describe("CLI end to end — init, steer, run, status", () => {
       const close = await capturedLog(async () =>
         dispatch(["run", "--repo", repo.dir, "--goal", "demo"], {
           harnesses: { fake: doneHarness() },
+          priceSource: testPriceSource(repo.dir),
         }),
       );
       expect(close.code).toBe(0);

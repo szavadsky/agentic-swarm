@@ -27,6 +27,12 @@ aliases:
     fallbacks:
       - opencode-go/deepseek-v4.1-flash
 
+# Prices come from the harness or OpenRouter's model list; beam has no
+# beam-suffixed OpenRouter id and is mapped explicitly to the only
+# beam-family entry.
+priceIds:
+  opencode/beam-free: reflection/beam-1.0-501b-a23b
+
 limits:
   concurrency: 3
   iterations: 1

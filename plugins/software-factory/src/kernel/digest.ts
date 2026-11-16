@@ -2,6 +2,7 @@ import path from "node:path";
 import { runAgentTurn } from "./agent.js";
 import { type RoleTarget, resolveRole } from "./flow-context.js";
 import { costText, DEFAULT_ROLE_BY_STEP, rolesByStep } from "./metrics.js";
+import { loadPriceTable } from "./openrouter.js";
 import { type PriceTable, pricedRecord } from "./pricing.js";
 import type { KernelRuntime, StepRecord } from "./types.js";
 
@@ -30,6 +31,7 @@ function renderDigestFacts(
   iteration: number,
   roleByStep: Record<string, string>,
   prices: PriceTable,
+  priceIds?: Record<string, string>,
 ): string {
   const rows = new Map<string, RoleRow>();
   let turns = 0;
@@ -37,7 +39,7 @@ function renderDigestFacts(
     if (rec.actor !== "agent" || !rec.endedAt) continue;
     if (rec.iteration >= iteration) continue;
     turns += 1;
-    const priced = pricedRecord(rec, prices);
+    const priced = pricedRecord(rec, prices, priceIds);
     const role = roleOf(rec, roleByStep);
     const alias = rec.alias ?? "-";
     const key = `${role}\u0000${alias}`;
@@ -178,7 +180,8 @@ export async function writeLaunchDigest(
         ...DEFAULT_ROLE_BY_STEP,
         ...rolesByStep(runtime.configs.process.flows),
       },
-      runtime.configs.run.prices ?? {},
+      await loadPriceTable(runtime.priceSource),
+      runtime.configs.run.priceIds,
     ),
   );
 

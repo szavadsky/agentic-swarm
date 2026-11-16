@@ -27,6 +27,7 @@ import {
   writePlan,
 } from "./e2e-helpers.js";
 import { cleanupFlowRepo, makeRuntime, setupFlowRepo } from "./s2-helpers.js";
+import { testPriceSource } from "../helpers/price-source.js";
 
 function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
   const process: ProcessConfig = {
@@ -65,6 +66,13 @@ function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
       iterations: 1,
       concurrency: 1,
       perHarness: {},
+    },
+    // Hermetic prices: the test-local cache, never the network.
+    priceSource: {
+      cachePath: path.join(root, "price-cache.json"),
+      fetchModels: async () => {
+        throw new Error("price fetch disabled in tests");
+      },
     },
   };
 }
@@ -1165,6 +1173,7 @@ describe("PM turn reconciliation", () => {
         goal: "demo",
         iterations: 2,
         harnesses: { fake: harness },
+        priceSource: testPriceSource(goal.repo.dir),
       });
 
       expect(result.stop).toBe("infra");

@@ -12,6 +12,7 @@ import {
   writeTask as writeGoalTask,
   writePlan,
 } from "./e2e-helpers.js";
+import { testPriceSource } from "../helpers/price-source.js";
 import { task } from "./helpers.js";
 import {
   cleanupFlowRepo,
@@ -132,6 +133,7 @@ describe("infra stop details", () => {
         goal: "demo",
         iterations: 2,
         harnesses: { fake: harness },
+        priceSource: testPriceSource(goal.repo.dir),
       });
       const stopText = `infrastructure stop during iteration 1: alpha: auth: ${NO_ROUTE}; relaunch to retry`;
       expect(result.stop).toBe("infra");

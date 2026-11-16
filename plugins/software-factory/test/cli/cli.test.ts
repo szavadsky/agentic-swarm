@@ -12,6 +12,7 @@ import {
 } from "../../src/cli/lock.js";
 import { FakeHarness } from "../../src/harness/fake/index.js";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
+import { testPriceSource } from "../helpers/price-source.js";
 
 function conflictingBaseRepo(): TmpRepo {
   const repo = createTmpRepo();
@@ -132,6 +133,7 @@ describe("CLI dispatch", () => {
       try {
         code = await dispatch(["run", "--repo", repo.dir, "--goal", "demo"], {
           harnesses: { fake: new FakeHarness({ id: "fake" }) },
+          priceSource: testPriceSource(repo.dir),
         });
       } finally {
         console.log = originalLog;

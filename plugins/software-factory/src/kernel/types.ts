@@ -14,7 +14,7 @@ import type {
   TurnAttempt,
   Usage,
 } from "../harness/types.js";
-import type { PriceTable } from "./pricing.js";
+import type { PriceSource } from "./openrouter.js";
 
 export const concernSchema = z.object({
   kind: z.enum(["debt", "risk", "uncertainty", "choice"]),
@@ -370,8 +370,8 @@ export interface RunConfig {
   aliases: Record<string, AliasConfig>;
   /** Harness id -> adapter binding; native harnesses need no entry. */
   harnesses?: Record<string, HarnessConfig>;
-  /** Model id -> USD per Mtok; absent model means unpriced, not free. */
-  prices?: PriceTable;
+  /** Harness model id -> OpenRouter model id, for ids matching cannot resolve. */
+  priceIds?: Record<string, string>;
   limits: {
     concurrency: number;
     perHarness: Record<string, number>;
@@ -424,4 +424,6 @@ export interface KernelRuntime {
   harnesses: ReadonlyMap<string, Harness>;
   prompts: PromptLibrary;
   limits: Limits;
+  /** Price cache and fetcher; undefined means the shared cache plus network. */
+  priceSource?: PriceSource;
 }

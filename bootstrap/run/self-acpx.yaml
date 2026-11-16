@@ -66,18 +66,15 @@ harnesses:
 scouts:
   model: opencode-go/deepseek-v4.1-flash
 
-# USD per million tokens. A model absent here is unpriced (unknown), never $0;
-# free models are listed explicitly at 0. Codex reports tokens without cost, so
-# its model is priced here by id as the probe recorded it (no provider prefix).
-prices:
-  anthropic/claude-opus-5-5: { input: 4, cachedInput: 0.2, output: 20, reasoning: 20 }
-  anthropic/claude-sonnet-5-5: { input: 2, cachedInput: 0.1, output: 10, reasoning: 10 }
-  opencode/beam-free: { input: 0, cachedInput: 0, output: 0, reasoning: 0 }
-  opencode/deepseek-v4.1-flash-free: { input: 0, cachedInput: 0, output: 0, reasoning: 0 }
-  opencode/minimax-m3.1-flash-free: { input: 0, cachedInput: 0, output: 0, reasoning: 0 }
-  opencode-go/beam-free: { input: 0, cachedInput: 0, output: 0, reasoning: 0 }
-  deepseek-v4.1-flash: { input: 0.15, cachedInput: 0.003, output: 0.6, reasoning: 0.6 }
-  # agy reports no cost and gemini-3.8-flash-high has no price row: unknown, never $0.
+# Prices come from the harness or OpenRouter's model list (cached locally);
+# nothing is hardcoded here. Codex reports tokens without cost, so its bare
+# model id matches OpenRouter by suffix; agy reports no cost and its
+# effort-suffixed id matches once the suffix is stripped. Only beam, with no
+# beam-suffixed OpenRouter id, is mapped explicitly to the only beam-family
+# entry.
+priceIds:
+  opencode/beam-free: reflection/beam-1.0-501b-a23b
+  opencode-go/beam-free: reflection/beam-1.0-501b-a23b
 
 limits:
   concurrency: 3

@@ -71,6 +71,13 @@ function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
       concurrency: 1,
       perHarness: {},
     },
+    // Hermetic prices: the test-local cache, never the network.
+    priceSource: {
+      cachePath: path.join(root, "price-cache.json"),
+      fetchModels: async () => {
+        throw new Error("price fetch disabled in tests");
+      },
+    },
   };
 }
 
