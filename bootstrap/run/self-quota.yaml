@@ -1,12 +1,9 @@
-# Self-run, emergency rotation (iteration 39 forward, owner 2026-11-16):
-# OpenCode Go MONTHLY quota exhausted (resets in ~14d, confirmed live) — every
-# Go model on every harness 429s. pi (Go-only provider) and codex (Go-only
-# auth) sit out with evidence; all roles reroute to omp / agy / opencode-free.
-# Implementer goes to agy/gemini (strongest live task model; the paid
-# subscription must be used); omp/ernie-free covers reviewer/
-# escalation-fallback/steward (small-reviewing-large is explicitly allowed).
-# muse-vs-deepseek comparison PAUSED (both Go). Revert to B-shape when Go
-# resets. Every alias keeps >=1 fallback; no Go id anywhere below.
+# Self-run, emergency rotation (iteration 40 forward, owner 2026-11-16):
+# OpenCode Go MONTHLY quota exhausted (resets in ~13d) — pi and codex sit out;
+# all roles on omp / agy / opencode-free, verified working in i39 (1 merge,
+# 0 Go turns, no rate-limit hits). Revert to B-shape when Go resets.
+# muse-vs-deepseek comparison PAUSED (both Go). Every alias keeps >=1
+# fallback; no Go id anywhere below.
 aliases:
   architect:
     harness: omp
