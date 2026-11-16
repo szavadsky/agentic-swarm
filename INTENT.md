@@ -36,6 +36,7 @@ Modern harnesses deliver a decent story (several hundred lines of code). The age
    - developer - must develop task + working test
    - QA: indepepdently runs tests, verifies no regressions, add extra test if required to ensure logical coverage, validates interfaces vs plan, extra tests
    - Reviwer: assumes tests working. read code + tests + output, verifies correctness and adherence to plan (or noted concerns), filters concerns, decides on severity, summarizes the job done
+   - Review round-trip: review → concerns → author (change and/or reply, both in the outcome schema) → review. An empty r2 that replies without code change is valid, not a fault.
 
 ### Model diversity
 - When several suitable models are available (there are many at task and mechanical level), different steps of the same flow are assigned to different models. This is config-driven — the factory config specifies it with aliases. E.g. task implementer: switch model on retry, especially inside one multi-model harness that can reuse the compacted transcript.

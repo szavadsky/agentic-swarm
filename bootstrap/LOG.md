@@ -554,3 +554,10 @@ Verbatim, newest last; each with what it changed.
 
 ### 2026-11-16 — rotation for i36: B-shape (omp-arch, codex-impl, pi-review, agy-PM); claude-primary suspended
 - Map: architect omp/opus:high (fb claude-code/opus, fb2 claude-code/sonnet — fallback only), pm agy/gemini:high (fb pi-Go/deepseek), digest opencode/beam:high (fb Go/deepseek), implementer codex/deepseek:max (fb codex-muse), reviewer pi/Go-deepseek:xhigh (fb pi-Go/muse), escalation omp/sonnet (fb omp-Go/muse), steward pi/Go-deepseek:high (fb pi-Go/muse), scouts ernie restored. Loader + price-coverage green before commit.
+
+### 2026-11-16 — i36 landed: 4 merges, 0 parks, queue EMPTIED; claude forensics in
+- Exit 3 (iteration-limit), 3h53m wall. factory/self +4: compact-hot-end, reviewer-author-apply (r1 changes 01517 → r2 approve 01526 — the 4-name saga ENDS: prompt → land → review → apply), m5-plan-review (r1 changes 01533 → r2 approve 01538 + debt), prompt-debloat (r1 approve 01546). ZERO parks, pending 0 — queue emptied for the first time.
+- Legs: digest opencode/beam $0 DONE; architect omp/opus $1.44 single attempt, fb unneeded; PM agy/gemini $0.53 priced; implements 6 codex/deepseek:max ~$0.01; reviews 6/6 pi/Go-deepseek:xhigh $0.16 PRICED (delta usage scheme works — first priced pi turns); steward stub skipped 4th (no conflicts). Cost ~$2.14 FULLY priced (no unpriced turns). 0 infra retries, 0 fallback hops, 1 minor outcome-repair, 0 conflicts, 0 gate flakes.
+- Forensics (owner-ordered, task agent): claude "crashes" (01390, 01495) all completed per acpx journals (end_turn + turn_result completed); classifyAcpxTurn judges exit facts alone, never reads journals; i35 attempt1 $2.63 discarded on all-refused Edit/Write (permission loop). Steered with evidence; cheapest proof supplied (exit-5-after-end_turn stub).
+- Applied staged review-round-trip INTENT line (guards passed, MAIN unchanged 74cb1c05) + steered. Operator fix: claude-code binding gains --approve-all (agy precedent).
+- Steers for i37: review-reply (intent-change) + crash-verdict (observation). Budget steer still awaiting owner word — NOT steered.
