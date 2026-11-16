@@ -50,6 +50,14 @@ aliases:
 # config option; agy also splits it out of the model id, and needs approve-all
 # or every shell command is denied (probe §7).
 harnesses:
+  # The built-in `acpx opencode` route resolves 1.19.5 and fails on the 2.2.7
+  # data dir; the raw `opencode acp` route runs the installed CLI (probe §0).
+  opencode:
+    acpx:
+      agent: opencode acp
+      raw: true
+      effort: { configId: effort, levels: [low, medium, high, xhigh, max] }
+      usage: { cache: true }
   pi:
     acpx:
       agent: pi

@@ -1,8 +1,8 @@
 import type { AcpxCommand } from "./types.js";
 
 /**
- * Binary resolution mirrors OPENCODE_PATH: an explicit path wins, then PATH,
- * then the on-demand `bunx acpx` route the probe used (acpx was never installed
+ * Binary resolution mirrors OMP_PATH: an explicit path wins, then PATH, then
+ * the on-demand `bunx acpx` route the probe used (acpx was never installed
  * globally).
  */
 export function resolveAcpxCommand(binary?: string): AcpxCommand {

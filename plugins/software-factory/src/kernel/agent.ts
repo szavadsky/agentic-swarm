@@ -22,6 +22,7 @@ import {
   validateExpectation,
 } from "./outcome.js";
 import { renderRolePrompt } from "./prompts.js";
+import { outcomeRepairSchemaVar } from "./prompt-schema.js";
 import { appendPark } from "./record.js";
 import {
   DEFAULT_TIMEOUTS,
@@ -377,6 +378,12 @@ export async function runAgentTurn(
         done_allowed: spec.expectation === "any" ? "true" : "false",
         findings: findings.map((f) => `- ${f}`).join("\n"),
         outcome_path: outcomePath,
+        // The repair shows only the fields this turn can deliver, so a bare
+        // done is never asked for a verdict or decision.
+        outcome_schema: outcomeRepairSchemaVar(
+          spec.target.role,
+          spec.expectation,
+        ),
       }),
       session,
     );

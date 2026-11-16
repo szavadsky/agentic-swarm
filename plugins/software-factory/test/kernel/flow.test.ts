@@ -1066,6 +1066,22 @@ describe("gate flake re-run", () => {
     return `echo run >> ${quote(probe.count)}; exit 127`;
   }
 
+  /**
+   * A bun-style red report longer than the `tail -25` the implementer used
+   * live: the `(fail)` line sits above 30 detail lines, so a truncated run
+   * loses the only line that names the failure.
+   */
+  function longRedCommand(probe: GateProbe): string {
+    const detail = Array.from(
+      { length: 30 },
+      (_, i) => `    at src/long.test.ts:${i + 1}:3`,
+    ).join("\n");
+    return (
+      `echo run >> ${quote(probe.count)}; ` +
+      `printf 'src/long.test.ts:\n(fail) suite > hidden red [1.2ms]\n${detail}\n'; exit 1`
+    );
+  }
+
   /** Drives one real action and returns the freshly derived state. */
   async function driveAction(
     runtime: KernelRuntime,
@@ -1215,6 +1231,63 @@ describe("gate flake re-run", () => {
     } finally {
       cleanupFlowRepo(repo);
       cleanupProbe(green);
+      cleanupProbe(red);
+    }
+  }, 60_000);
+
+  it("names a red test above the last 25 lines in the fix turn's prompt", async () => {
+    const red = makeProbe();
+    const { repo, goal } = setupFlowRepo({
+      gates: [{ id: "unit", command: longRedCommand(red) }],
+    });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script((req, ctx) => {
+        fs.writeFileSync(path.join(req.cwd!, "task.txt"), "v1\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "v1" }));
+        return fakeTurnResult(req);
+      });
+      let fixPrompt = "";
+      harness.script((req, ctx) => {
+        fixPrompt = req.prompt;
+        fs.writeFileSync(path.join(req.cwd!, "task.txt"), "v2\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "v2" }));
+        return fakeTurnResult(req);
+      });
+
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      const file = task("task", { scope: ["task.txt"] });
+      await writeTask(runtime, file);
+      const after = await driveAction(runtime, file, {
+        kind: "step",
+        slug: "task",
+        step: "implement",
+        round: 1,
+      });
+      expect(after.phase).toBe("implement");
+      expect(after.gateFix).toBe(true);
+
+      const records = await runtime.store.listRecords();
+      const redRun = records.find(
+        (r) => r.slug === "task" && r.step === "checks" && r.ok === false,
+      );
+      const output = redRun?.checks?.[0]?.output ?? "";
+      const lines = output.split("\n");
+      expect(lines.length).toBeGreaterThan(25);
+      // The report fits a `tail -25` without the line that names the failure.
+      expect(lines.slice(-25).join("\n")).not.toContain("hidden red");
+
+      await driveAction(runtime, file, {
+        kind: "step",
+        slug: "task",
+        step: "implement",
+        round: 1,
+      });
+      expect(harness.calls).toHaveLength(2);
+      expect(fixPrompt).toContain("### unit: exit 1");
+      expect(fixPrompt).toContain("(fail) suite > hidden red");
+    } finally {
+      cleanupFlowRepo(repo);
       cleanupProbe(red);
     }
   }, 60_000);

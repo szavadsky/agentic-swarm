@@ -16,8 +16,7 @@ export type { AcpxHarnessOptions } from "./types.js";
 /**
  * One named acpx session per turn chain, model via the global flag, effort via
  * the session config option; a run-config suffix map splits effort out of the
- * model id. opencode and omp keep native adapters because acpx's built-in
- * opencode route resolves the wrong version (probe §0).
+ * model id. omp keeps a native adapter; every other harness is a route here.
  */
 export class AcpxHarness implements Harness {
   readonly id: string;
@@ -37,7 +36,8 @@ export class AcpxHarness implements Harness {
       subagents: "none",
       structuredOutput: "none",
       effort: [...(this.runtime.acpx.effort?.levels ?? [])],
-      usage: { cache: this.runtime.acpx.usage?.cache ?? false, cost: false },
+      // ACP carries cost on `usage_update`; a silent agent leaves it unknown.
+      usage: { cache: this.runtime.acpx.usage?.cache ?? false, cost: true },
     };
   }
 

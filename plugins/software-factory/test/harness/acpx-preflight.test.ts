@@ -26,6 +26,12 @@ const RUN_CONFIG_TEXT = `aliases:
   steward: { harness: pi, model: opencode-go/beam-free, effort: high }
   escalation: { harness: omp, model: anthropic/claude-sonnet-5-5 }
 harnesses:
+  opencode:
+    acpx:
+      agent: opencode acp
+      raw: true
+      effort: { configId: effort, levels: [low, medium, high, xhigh, max] }
+      usage: { cache: true }
   pi:
     acpx:
       agent: pi
@@ -109,7 +115,11 @@ describe("self-acpx run config", () => {
       const harnesses = new Map<string, Harness>([
         [
           "opencode",
-          new FakeHarness({ id: "opencode", caps: { effort: EFFORTS } }),
+          new AcpxHarness({
+            id: "opencode",
+            binary: stub.binary,
+            acpx: configs.run.harnesses!.opencode!.acpx,
+          }),
         ],
         ["omp", new FakeHarness({ id: "omp", caps: { effort: EFFORTS } })],
         [
@@ -131,13 +141,14 @@ describe("self-acpx run config", () => {
       ]);
       const acpxCatalog = createRealModelCatalog(
         {
+          opencode: stub.binary,
           pi: stub.binary,
           codex: stub.binary,
         },
         configs.run.harnesses,
       );
       const catalog: ModelCatalog = (harness, model) =>
-        harness === "pi" || harness === "codex"
+        harness === "opencode" || harness === "pi" || harness === "codex"
           ? acpxCatalog(harness, model)
           : Promise.resolve(true);
 
@@ -158,6 +169,11 @@ describe("self-acpx run config", () => {
 
       expect(result.aliases.implementer).toBe("high");
       expect(result.aliases.reviewer).toBe("high");
+      // opencode is an acpx harness now: its model list also comes from the
+      // acpx path, which skips the pre-session check.
+      expect(warnings.join("\n")).toContain(
+        'skipping model check for "opencode"',
+      );
       expect(warnings.join("\n")).toContain('skipping model check for "pi"');
       expect(warnings.join("\n")).toContain('skipping model check for "codex"');
     } finally {
@@ -406,11 +422,21 @@ describe("acpx harness registry", () => {
             effort: { configId: "nova_level", levels: ["low", "high"] },
           },
         },
+        opencode: {
+          acpx: { agent: "opencode acp", raw: true },
+        },
       },
     });
     expect(harnesses.nova).toBeInstanceOf(AcpxHarness);
     expect(harnesses.nova!.id).toBe("nova");
-    expect(harnesses.opencode).toBeDefined();
+    expect(harnesses.opencode).toBeInstanceOf(AcpxHarness);
+    expect(harnesses.opencode!.id).toBe("opencode");
+    expect(harnesses.omp).toBeDefined();
+  });
+
+  it("registers no native opencode adapter", () => {
+    const harnesses = createRealHarnesses({ sessionDir: "/tmp/sessions" });
+    expect(harnesses.opencode).toBeUndefined();
     expect(harnesses.omp).toBeDefined();
   });
 

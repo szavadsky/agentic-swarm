@@ -81,32 +81,49 @@ export const planCheckRouteEntrySchema = z.object({
 });
 export type PlanCheckRouteEntry = z.infer<typeof planCheckRouteEntrySchema>;
 
-/** The only agent ↔ script surface; one schema for every step. */
+/** The only agent ↔ script surface; one schema for every step. Field
+ * descriptions render into the outcome prompt skeleton, so they are the
+ * prompt-facing wording; comments below keep kernel-only behavior. */
 export const outcomeSchema = z.object({
-  status: z.enum(["done", "blocked", "failed", "upscope"]),
-  summary: z.string(),
+  status: z
+    .enum(["done", "blocked", "failed", "upscope"])
+    .describe("upscope on task steps only"),
+  summary: z.string().describe("one paragraph"),
   concerns: z.array(concernSchema).default([]),
   forward: z.array(z.string()).default([]),
-  verdict: z.enum(["approve", "changes", "reject"]).optional(),
-  decision: z.enum(["continue", "done", "blocked"]).optional(),
-  // Standalone review escalation: the reviewer answers the upscope ask alongside
-  // its verdict. `yes` parks with cause upscope and (standalone only) rewrites
-  // the front class to bigger; `no` and absent keep the normal verdict path.
-  upscope: z.enum(["yes", "no"]).optional(),
-  // PM steer turns only: one route per claimed steer. Absent on every other
-  // step; absent on a legacy steer turn means every steer goes to the architect.
-  steerRoutes: z.array(steerRouteEntrySchema).optional(),
-  // PM stall turns only: one entry per parked slug of this iteration's stall.
-  // Absent on every other step; the kernel continues `continue` slugs and
-  // records `leave` reasons for the next boundary.
-  stallRoutes: z.array(stallRouteEntrySchema).optional(),
-  // Plan-checker turns only: the verdict the kernel branches on, the evidence
-  // per plan item, and the mechanical follow-ups. Absent on every other step.
-  planCheck: planCheckSchema.optional(),
-  // Plan-check PM turns only: one entry per checker follow-up of this round.
-  // Absent on every other step; the kernel continues `continue` slugs and
-  // records `leave` reasons for the next boundary.
-  planCheckRoutes: z.array(planCheckRouteEntrySchema).optional(),
+  verdict: z
+    .enum(["approve", "changes", "reject"])
+    .optional()
+    .describe("review steps only"),
+  decision: z
+    .enum(["continue", "done", "blocked"])
+    .optional()
+    .describe("architect step only"),
+  // `yes` parks with cause upscope and (standalone only) rewrites the front
+  // class to bigger; `no` and absent keep the normal verdict path.
+  upscope: z
+    .enum(["yes", "no"])
+    .optional()
+    .describe("standalone review escalation: answer with the verdict"),
+  // Absent on a legacy steer turn means every steer goes to the architect.
+  steerRoutes: z
+    .array(steerRouteEntrySchema)
+    .optional()
+    .describe("PM steer turns only: one route per claimed steer"),
+  // The kernel continues `continue` slugs and records `leave` reasons for
+  // the next boundary.
+  stallRoutes: z
+    .array(stallRouteEntrySchema)
+    .optional()
+    .describe("PM stall turns only: one entry per parked slug"),
+  // The kernel branches on the verdict.
+  planCheck: planCheckSchema.optional().describe("plan-checker turns only"),
+  // The kernel continues `continue` slugs and records `leave` reasons for
+  // the next boundary.
+  planCheckRoutes: z
+    .array(planCheckRouteEntrySchema)
+    .optional()
+    .describe("plan-check PM turns only: one entry per checker follow-up"),
 });
 
 export type Concern = z.infer<typeof concernSchema>;

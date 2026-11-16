@@ -103,19 +103,29 @@ harnesses:
     acpx:
       agent: claude
       effort: { configId: effort, levels: [low, medium, high, xhigh, max] }
+  # The built-in `acpx opencode` route resolves 1.19.5 and fails on the 2.2.7
+  # data dir; the raw `opencode acp` route runs the installed CLI (probe §0).
+  opencode:
+    acpx:
+      agent: opencode acp
+      raw: true
+      effort: { configId: effort, levels: [low, medium, high, xhigh, max] }
+      usage: { cache: true }
 
 scouts:
   model: openrouter/baidu/ernie-5.5-flash-preview:free
   effort: high
 
 # Harness model id -> OpenRouter model id, only where matching cannot resolve.
-# Prices come from OpenRouter's model list; acpx harnesses report no cost, so
-# pi/codex/claude/agy ids stay unpriced (unknown, never $0) until real rates
-# exist (agy precedent, i32). Beam has no beam-suffixed OpenRouter id, hence
-# the explicit map (self-acpx.yaml precedent).
+# Prices come from OpenRouter's model list; opencode is the only acpx harness
+# that reports a cost, so pi/codex/claude/agy ids stay unpriced (unknown, never
+# $0) until real rates exist (agy precedent, i32). Beam has no beam-suffixed
+# OpenRouter id, hence the explicit map (self-acpx.yaml precedent).
 priceIds:
   opencode/beam-free: reflection/beam-1.0-501b-a23b
   opencode-go/beam-free: reflection/beam-1.0-501b-a23b
+  opus: anthropic/claude-opus-5-5
+  sonnet: anthropic/claude-sonnet-5-5
 
 limits:
   concurrency: { overall: 3 }

@@ -102,6 +102,27 @@ describe("acpx transcript", () => {
     });
   });
 
+  it("keeps opencode's separate output and reasoning counters", () => {
+    // opencode's total adds reasoning on top of output and cache; codex/agy's
+    // total already contains it, so the same numbers must not be subtracted.
+    expect(
+      usageFromAcpxResult({
+        totalTokens: 105,
+        inputTokens: 80,
+        cachedReadTokens: 12,
+        outputTokens: 8,
+        thoughtTokens: 5,
+      }),
+    ).toEqual({
+      in: 80,
+      cacheRead: 12,
+      cacheWrite5m: 0,
+      cacheWrite1h: 0,
+      out: 8,
+      reasoningOut: 5,
+    });
+  });
+
   it("leaves usage unknown when the prompt result carries none", () => {
     expect(usageFromAcpxResult(undefined)).toEqual({
       in: 0,
@@ -111,5 +132,65 @@ describe("acpx transcript", () => {
       out: 0,
       reasoningOut: 0,
     });
+  });
+
+  it("records the newest usage_update cost alongside the prompt usage", () => {
+    const summary = feed([
+      { jsonrpc: "2.0", id: 7, method: "session/prompt", params: {} },
+      {
+        jsonrpc: "2.0",
+        method: "session/update",
+        params: {
+          sessionId: "s",
+          update: {
+            sessionUpdate: "usage_update",
+            used: 7163,
+            size: 1048576,
+            cost: { amount: 0.001, currency: "USD" },
+          },
+        },
+      },
+      {
+        jsonrpc: "2.0",
+        method: "session/update",
+        params: {
+          sessionId: "s",
+          update: {
+            sessionUpdate: "usage_update",
+            used: 7200,
+            size: 1048576,
+            cost: { amount: 0.0032, currency: "USD" },
+          },
+        },
+      },
+      {
+        jsonrpc: "2.0",
+        id: 7,
+        result: { stopReason: "end_turn", usage: { inputTokens: 10 } },
+      },
+    ]);
+    expect(summary.usage.costUsd).toBe(0.0032);
+    expect(summary.usage.in).toBe(10);
+  });
+
+  it("leaves cost unknown for a non-USD usage_update cost", () => {
+    const summary = feed([
+      { jsonrpc: "2.0", id: 7, method: "session/prompt", params: {} },
+      {
+        jsonrpc: "2.0",
+        method: "session/update",
+        params: {
+          sessionId: "s",
+          update: {
+            sessionUpdate: "usage_update",
+            used: 7163,
+            size: 1048576,
+            cost: { amount: 5, currency: "EUR" },
+          },
+        },
+      },
+      { jsonrpc: "2.0", id: 7, result: { stopReason: "end_turn" } },
+    ]);
+    expect(summary.usage.costUsd).toBeUndefined();
   });
 });

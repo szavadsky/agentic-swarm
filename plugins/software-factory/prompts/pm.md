@@ -4,16 +4,16 @@ Four kinds of turns. When `steers`, `stalls` and `plan_checks` are all `none`, d
 
 ## Derive
 
-For each task the plan yields, write one file in the tasks directory. A split yields one per observable; a merge yields one. Frontmatter:
+For each task the plan yields, write one file in the tasks directory. A split yields one per observable; a merge yields one.
+
+{% include 'task-frontmatter' %}
 
 - `slug` — keep the architect's slug; assign a short kebab-case one only when the bullet has none. Immutable, never reused, safe as a branch and file name, unique across the goal including dropped tasks.
-- `title` — one line.
-- `flow` — the flow named on the bullet (`spike`, `just-implement`); `implement-review` by default.
+- `flow` — the flow named on the bullet, or the marked default when the bullet names none.
 - `deps` — slugs that must merge first, taken only from the plan's explicit ordering statements — the tasks a bullet names and their landing order; never from bullet position.
 - `scope` — the predicted area, from the task's stated area; if the plan states none, file no task and record the concern.
-- `tier` — `default` unless the plan names an escalation.
-- `source` — the plan heading the task derives from.
-- `base` — optional; the parked task whose kept branch this continues, when the plan names one.
+- `tier` — `default` unless the plan names one of the configured tiers.
+- `base` — the parked task this continues, only when the plan names one.
 
 Position carries no meaning; `deps` does.
 

@@ -59,25 +59,6 @@ async function capsOf(
   return pending;
 }
 
-/**
- * Harness caps normally carry effort ids as strings; opencode's server currently
- * reports variant objects `{id}`, so accept both shapes and keep the contract
- * usable until the adapter flattens them.
- */
-function effortLevels(caps: Caps): string[] {
-  return (caps.effort as unknown[]).flatMap((level) => {
-    if (typeof level === "string") return [level];
-    if (
-      level &&
-      typeof level === "object" &&
-      typeof (level as { id?: unknown }).id === "string"
-    ) {
-      return [(level as { id: string }).id];
-    }
-    return [];
-  });
-}
-
 /** Resolves `highest`, validates a literal level, and reports every failure. */
 async function resolveEffort(
   ctx: AliasContext,
@@ -98,7 +79,7 @@ async function resolveEffort(
     );
     return undefined;
   }
-  const levels = effortLevels(caps);
+  const levels = caps.effort;
   if (effort === "highest") {
     const highest = levels.at(-1);
     if (!highest) {
