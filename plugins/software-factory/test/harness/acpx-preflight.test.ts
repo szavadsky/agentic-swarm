@@ -201,7 +201,7 @@ describe("acpx live pre-flight", () => {
     }
   });
 
-  it("probes fallbacks and scouts once per harness/model and resolves their highest", async () => {
+  it("probes fallbacks once per harness/model and resolves their highest", async () => {
     const stub = createAcpxStub({
       models: LIVE_MODELS,
       effortConfigId: "effort",
@@ -218,13 +218,11 @@ harnesses:
     acpx:
       agent: opencode
       effort: { configId: effort }
-scouts: { model: model-b, effort: highest }
 limits: { concurrency: { overall: 2 }, iterations: 1 }
 `;
     const f = await fixture(text, stub);
     try {
-      const result = await preflight(f.input);
-      expect(result.aliases.scouts).toBe("medium");
+      await preflight(f.input);
       expect(f.configs.run.aliases.pm!.fallbacks![0]!.effort).toBe("medium");
       const creates = sessionCalls(stub, "new");
       const models = creates.map(

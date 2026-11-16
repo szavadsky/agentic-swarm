@@ -1,3 +1,4 @@
+import { OMP_ID } from "../harness/omp/types.js";
 import type { Caps, Harness, ModelProbe, ModelRef } from "../harness/types.js";
 import type { Finding } from "./findings.js";
 import type { AliasConfig, ConfigBundle, ConfigFiles } from "./types.js";
@@ -270,27 +271,40 @@ export async function checkAlias(
   }
 }
 
+/**
+ * `scouts` is a subagent model pin only the omp adapter reads, so it is valid
+ * only while some alias or fallback tier runs on omp.
+ */
+function runsOnOmp(aliases: Record<string, AliasConfig>): boolean {
+  for (const alias of Object.values(aliases)) {
+    if (alias.harness === OMP_ID) return true;
+    for (const fallback of alias.fallbacks ?? []) {
+      if ((fallback.harness ?? alias.harness) === OMP_ID) return true;
+    }
+  }
+  return false;
+}
+
 export async function checkScouts(
   ctx: AliasContext,
   configs: ConfigBundle,
-  architectAliasName: string | undefined,
   effortOut: Record<string, string | undefined>,
 ): Promise<void> {
   const scouts = configs.run.scouts;
   if (!scouts) return;
-  const architect = architectAliasName
-    ? configs.run.aliases[architectAliasName]
-    : undefined;
-  if (
-    !architect ||
-    !ctx.harnesses.has(architect.harness) ||
-    ctx.unavailable.has(architect.harness)
-  )
+  if (!runsOnOmp(configs.run.aliases)) {
+    add(
+      ctx,
+      "scouts",
+      `scouts configures a subagent model, but no harness consumes it: no alias or fallback runs on harness "${OMP_ID}"`,
+    );
     return;
+  }
+  if (!ctx.harnesses.has(OMP_ID) || ctx.unavailable.has(OMP_ID)) return;
   const checked = await checkedModel(
     ctx,
     "scouts",
-    architect.harness,
+    OMP_ID,
     scouts.model,
     "model",
   );
@@ -298,7 +312,7 @@ export async function checkScouts(
   effortOut.scouts = await resolveEffort(
     ctx,
     "scouts",
-    architect.harness,
+    OMP_ID,
     { id: scouts.model },
     scouts.effort ?? checked.modelEffort,
     checked.effort,
