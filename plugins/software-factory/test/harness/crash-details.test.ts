@@ -7,8 +7,9 @@ import {
   scrubSecrets,
   stopDetails,
 } from "../../src/harness/details.js";
+import { AcpxHarness } from "../../src/harness/acpx/harness.js";
+import type { AcpxConfig } from "../../src/harness/acpx/config.js";
 import { OmpHarness } from "../../src/harness/omp/harness.js";
-import { OpencodeHarness } from "../../src/harness/opencode/harness.js";
 import type { Stop } from "../../src/harness/types.js";
 
 const SECRET = "sk-live-TOPSECRETTOKEN1234567890";
@@ -46,11 +47,16 @@ async function ompTurn(binary: string, dir: string) {
 }
 
 async function opencodeTurn(binary: string, dir: string) {
-  const harness = new OpencodeHarness({
-    binary,
-    sessionDir: path.join(dir, "sessions"),
-    retry: { retries: 0 },
-  });
+  const acpx: AcpxConfig = {
+    agent: "opencode acp",
+    raw: true,
+    effort: {
+      configId: "effort",
+      levels: ["low", "medium", "high", "xhigh", "max"],
+    },
+    usage: { cache: true },
+  };
+  const harness = new AcpxHarness({ id: "opencode", binary, acpx });
   return harness.turn({
     model: { id: "opencode/fake-model" },
     cwd: dir,
@@ -129,7 +135,7 @@ describe("OmpHarness crash details", () => {
   }, 20_000);
 });
 
-describe("OpencodeHarness crash details", () => {
+describe("AcpxHarness opencode raw route crash details", () => {
   it("carries the errno when the binary is missing", async () => {
     const dir = tempDir("oc-missing-");
     try {

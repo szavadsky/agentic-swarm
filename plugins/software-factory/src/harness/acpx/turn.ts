@@ -404,6 +404,10 @@ export async function runAcpxTurn(
     );
     const summary: AcpxTurnSummary = parser.result();
     const lost = summary.errors.some(isNoSessionError);
+    // ACP `usage_update.cost` is cumulative for the session, so a resumed one
+    // already carries earlier turns. Only a fresh session's figure is this
+    // turn's spend; a resumed turn leaves cost to the price table.
+    if (resume !== undefined && attempt === 0) delete summary.usage.costUsd;
 
     // An aborted turn never retries de novo: the caller stopped the turn, so no
     // new child may spawn after the abort.

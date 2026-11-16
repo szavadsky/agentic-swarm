@@ -94,13 +94,14 @@ describe.skipIf(!LIVE)("bootstrap run configs against the real CLIs", () => {
         const store = createFolderStore(paths.goalDir);
         await store.ensureLayout();
 
-        const binaries = resolveHarnessBinaries();
+        const binaries = resolveHarnessBinaries(configs.run.harnesses);
         expect(binaries.opencode).toBeTruthy();
         expect(binaries.omp).toBeTruthy();
         const harnesses = new Map(
           Object.entries(
             createRealHarnesses({
               sessionDir: path.join(paths.sessionsDir, "probe"),
+              harnesses: configs.run.harnesses,
               scouts: configs.run.scouts
                 ? { id: configs.run.scouts.model }
                 : undefined,
@@ -113,7 +114,7 @@ describe.skipIf(!LIVE)("bootstrap run configs against the real CLIs", () => {
           store,
           harnesses,
           binaries,
-          catalog: createRealModelCatalog(binaries),
+          catalog: createRealModelCatalog(binaries, configs.run.harnesses),
         });
 
         expect(result.aliases.architect).toBe("high");
@@ -192,8 +193,23 @@ const RUN_CONFIGS = [
   "shakedown-plan",
 ] as const;
 
-describe("live run-config price coverage", () => {
+describe("shipped run-config coverage", () => {
   for (const name of RUN_CONFIGS) {
+    it(`routes opencode through the acpx raw route: ${name}.yaml`, () => {
+      const runPath = path.join(BOOTSTRAP_RUN, `${name}.yaml`);
+      if (!fs.existsSync(runPath)) return;
+      const run = runConfigSchema.parse(
+        yaml.parse(fs.readFileSync(runPath, "utf8")),
+      );
+      // The built-in acpx opencode route runs 1.19.5; the raw `opencode acp`
+      // route runs the installed CLI (acpx-probe §0).
+      expect(run.harnesses.opencode?.acpx).toMatchObject({
+        agent: "opencode acp",
+        raw: true,
+        effort: { configId: "effort" },
+      });
+    });
+
     it(`resolves every model id: ${name}.yaml`, () => {
       const runPath = path.join(BOOTSTRAP_RUN, `${name}.yaml`);
       // A package-only export has no bootstrap/ sibling.
