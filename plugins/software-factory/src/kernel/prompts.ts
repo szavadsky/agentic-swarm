@@ -127,14 +127,16 @@ export function loadPromptLibrary(opts: {
     const analysis = engine.parseAndAnalyzeSync(text, filepath);
     // `locals` are assigned inside the template (`{% assign %}`), so they are
     // not inputs the caller must pass. The reviewer assigns `author_body` and
-    // `review_duties` to include its author's `<role>-body` and `review-<role>`
-    // partials; Liquid cannot resolve those includes statically, so the
-    // fragments they name are analyzed here (a missing one fails by name).
+    // `review_duties` to include its author's `<role>-body`, `review-<role>`
+    // duties and `review-<role>-turn` inputs; Liquid cannot resolve those
+    // includes statically, so the fragments they name are analyzed here (a
+    // missing one fails by name).
     const names = new Set(Object.keys(analysis.globals));
     if (vars.author !== undefined) {
       const dynamic = [
         ...(analysis.locals.author_body ? [`${vars.author}-body`] : []),
         ...(analysis.locals.review_duties ? [`review-${vars.author}`] : []),
+        ...(analysis.locals.review_turn ? [`review-${vars.author}-turn`] : []),
       ];
       for (const included of dynamic) {
         for (const name of requiredVariables(included, vars)) names.add(name);

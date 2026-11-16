@@ -22,6 +22,7 @@ import {
   planCheckFollowUpSchema,
   planCheckRouteEntrySchema,
   planCheckSchema,
+  planReviewMarkSchema,
   stallRouteEntrySchema,
   steerRouteEntrySchema,
 } from "../src/kernel/types.js";
@@ -154,6 +155,7 @@ describe("prompts: schema skeletons", () => {
       ["planCheck", planCheckEvidenceSchema],
       ["planCheck", planCheckFollowUpSchema],
       ["planCheckRoutes", planCheckRouteEntrySchema],
+      ["planReviewMarks", planReviewMarkSchema],
     ];
     for (const [field, schema] of nested) {
       const shape = skeletonShape(skeleton, field);
@@ -191,6 +193,7 @@ describe("prompts: schema skeletons", () => {
         ],
       ],
       ["planCheckRoutes", ["continue", "leave"]],
+      ["planReviewMarks", ["helpful", "unhelpful"]],
     ];
     for (const [field, values] of enums) {
       const comment = skeletonComment(skeleton, field);
@@ -231,6 +234,7 @@ describe("prompts: schema skeletons", () => {
         "stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: continue | leave",
         "planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: continuation | missing-dep | unmerged",
         "planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave",
+        "planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful",
         "```",
       ].join("\n"),
     );
@@ -351,6 +355,9 @@ describe("prompts: repair skeleton", () => {
     );
     expect(outcomeRepairSchemaVar("implementer", "any")).not.toContain(
       "steerRoutes:",
+    );
+    expect(outcomeRepairSchemaVar("architect", "architect")).toContain(
+      "planReviewMarks:",
     );
   });
 });

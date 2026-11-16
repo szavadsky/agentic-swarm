@@ -26,6 +26,15 @@ export interface PlanCheckPack {
   evidence: PlanCheckEvidence[];
 }
 
+/** The latest plan-review turn's advisory findings, for the next architect turn. */
+export interface PlanReviewPack {
+  iteration: number;
+  /** The resolved reviewer alias, e.g. `plan-reviewer`. */
+  alias: string;
+  /** The reviewer's numbered findings, one paragraph or list. */
+  summary: string;
+}
+
 export interface ContextPackInput {
   goal: string;
   iteration: number;
@@ -60,6 +69,8 @@ export interface ContextPackInput {
   openRecords?: string[];
   /** The latest plan-check report; absent when the checker never ran. */
   planCheck?: PlanCheckPack;
+  /** The latest plan-review findings; absent when the reviewer never ran. */
+  planReview?: PlanReviewPack;
 }
 
 const CODE_MAP_ENTRIES = 40;
@@ -164,6 +175,16 @@ export function renderContextPack(input: ContextPackInput): string {
     else
       for (const entry of input.planCheck.evidence)
         lines.push(`- ${entry.item} (${entry.status}): ${entry.evidence}`);
+  }
+
+  if (input.planReview) {
+    lines.push(
+      "",
+      "## Plan review (advisory findings; mark each finding helpful or unhelpful in planReviewMarks)",
+      `- iteration ${input.planReview.iteration}, reviewer \`${input.planReview.alias}\``,
+      "",
+      input.planReview.summary,
+    );
   }
 
   if (input.forwarded.length > 0) {

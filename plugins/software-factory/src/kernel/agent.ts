@@ -123,6 +123,8 @@ function deliverableFor(role: string): string {
       return "merge resolution";
     case "plan-checker":
       return "plan verdict";
+    case "plan-reviewer":
+      return "numbered plan-review findings";
     default:
       return "outcome";
   }

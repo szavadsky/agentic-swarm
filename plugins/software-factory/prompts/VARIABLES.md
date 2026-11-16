@@ -2,16 +2,17 @@
 
 Template syntax: [LiquidJS](https://liquidjs.com), strict mode (unknown variable = render error; unknown filter = render error). `{{ name }}` interpolates one value; `{% include 'partial-name' %}` inlines `prompts/partial-name.md`. Every prompt is stable text up to its final `## This turn` block; all turn variables live there so providers can cache the prefix. Renderer defaults also appear above the block, so the prefix is stable only within one checkout and launch.
 
-| prompt       | partials                                                                             |
-| ------------ | ------------------------------------------------------------------------------------ |
-| architect    | `architect-body`, `calibration`, `outcome`, `verdict`                                |
-| front        | `calibration`, `outcome`, `task-frontmatter`                                         |
-| pm           | `calibration`, `outcome`, `task-frontmatter`                                         |
-| implementer  | `implementer-body`, `clean-code`, `scope`, `calibration`, `outcome`                  |
-| reviewer     | `<author>-body` (`implementer-body` by default), `review-<author>` duties, `verdict` |
-| digest       | `calibration`, `outcome`                                                             |
-| steward      | `clean-code`, `calibration`, `outcome`                                               |
-| plan-checker | `calibration`, `outcome`                                                             |
+| prompt        | partials                                                                                                                   |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| architect     | `architect-body`, `calibration`, `outcome`, `verdict`                                                                      |
+| front         | `calibration`, `outcome`, `task-frontmatter`                                                                               |
+| pm            | `calibration`, `outcome`, `task-frontmatter`                                                                               |
+| implementer   | `implementer-body`, `clean-code`, `scope`, `calibration`, `outcome`                                                        |
+| reviewer      | `<author>-body` (`implementer-body` by default), `review-<author>` duties, `review-<author>-turn` inputs, `verdict`        |
+| plan-reviewer | the `reviewer` template with `author: architect`: `architect-body`, `review-architect`, `review-architect-turn`, `verdict` |
+| digest        | `calibration`, `outcome`                                                                                                   |
+| steward       | `clean-code`, `calibration`, `outcome`                                                                                     |
+| plan-checker  | `calibration`, `outcome`                                                                                                   |
 
 The shared definitions exist once as partials: `scope` (the predicted-area rule: out-of-area judgement, upscope condition, plan read-only), `calibration` (concerns and calibration, with `remarkable` inside it), `outcome` (the outcome contract, shape rendered from the kernel outcome schema), `task-frontmatter` (the task-file frontmatter shape rendered from the kernel task schema, plus the configured flows and tiers; included by the authoring roles), `clean-code` (the code standard), `remarkable` (the remarkable definition), `verdict` (which step each of `verdict` and `decision` belongs to, for review and architect steps) and the role bodies `implementer-body` and `architect-body` (everything before the role's turn block; a reviewer includes its author's body by role name, so the plan review reuses the reviewer template over `architect-body`).
 
@@ -97,11 +98,33 @@ Renderer defaults live outside any `This turn` block and the renderer supplies t
 
 ## reviewer.md
 
+`reviewer.md` is the shared reviewer composition: an author-neutral intro, the
+author's body, the duties partial named by `author`, the verdict sentence, and
+the turn block common to every review. The plan-reviewer role renders it with
+`author: architect`, which selects `architect-body`, `review-architect` and
+`review-architect-turn`; the task reviewer renders it with `author: implementer`,
+which selects `implementer-body`, `review-implementer` and
+`review-implementer-turn`. All turn variables stay in the final `## This turn`
+block.
+
+| variable         | meaning                                                                            |
+| ---------------- | ---------------------------------------------------------------------------------- |
+| `worktree`       | task worktree for a task review; goal checkout for a plan review                   |
+| `author`         | role whose body the reviewer includes (`implementer` by default); renderer default |
+| `outcome_path`   | path where the outcome file must be written when the harness asks for a file       |
+| `validate_cmd`   | absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default   |
+| `outcome_schema` | outcome YAML skeleton from the kernel schema; renderer default                     |
+
+## review-implementer.md
+
+The diff-review duties, included by `reviewer.md` when `author: implementer`.
+They contain no turn variables.
+
+## review-implementer-turn.md
+
 | variable           | meaning                                                                                                                                                |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `task_path`        | path to the task file the diff is judged against                                                                                                       |
-| `worktree`         | path to the task worktree holding the diff                                                                                                             |
-| `author`           | role whose body the reviewer includes (`implementer` by default); renderer default                                                                     |
 | `base_hash`        | commit hash before this task's first turn; the range spans every round                                                                                 |
 | `head_hash`        | commit hash after the latest implementer turn                                                                                                          |
 | `round`            | 1-based review round                                                                                                                                   |
@@ -110,9 +133,20 @@ Renderer defaults live outside any `This turn` block and the renderer supplies t
 | `prior_findings`   | previous round's summary, concerns and forward (summary first); empty string in round 1                                                                |
 | `upscope_ask`      | escalation ask for a standalone task review, answered as `upscope: yes\|no` with the verdict; empty string when this task is part of an architect plan |
 | `fix_dispositions` | the current fix round's per-finding disposition claims from its outcome; empty string in round 1; renderer default                                     |
-| `outcome_path`     | path where the outcome file must be written when the harness asks for a file                                                                           |
-| `validate_cmd`     | absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default                                                                       |
-| `outcome_schema`   | outcome YAML skeleton from the kernel schema; renderer default                                                                                         |
+
+## review-architect.md
+
+The plan-review duties, included by `reviewer.md` when `author: architect`. They
+contain no turn variables.
+
+## review-architect-turn.md
+
+| variable      | meaning                                                       |
+| ------------- | ------------------------------------------------------------- |
+| `iteration`   | 1-based iteration number of this launch                       |
+| `intent_path` | path to the goal's `intent.md`                                |
+| `plan_path`   | path to the plan under review; read-only to the reviewer      |
+| `pack_path`   | path to the iteration context pack the architect planned from |
 
 ## digest.md
 

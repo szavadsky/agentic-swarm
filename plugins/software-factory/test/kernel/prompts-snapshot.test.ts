@@ -244,29 +244,46 @@ describe("reviewer includes its author's body", () => {
     ).toThrow('Prompt fragment "review-nobody" not found');
   });
 
-  it("selects the author's partials by role name", () => {
-    const lib = loadPromptLibrary({
-      builtinDir: path.join(packageRoot, "prompts"),
-      overrides: { "review-architect": "## Review\n\nReview the plan." },
-    });
+  it("selects the architect body and plan duties for author architect", () => {
+    const lib = library();
     const architectPlaceholders = lib.placeholders("reviewer", {
       author: "architect",
     });
     const implementerPlaceholders = lib.placeholders("reviewer", {
       author: "implementer",
     });
-    expect(architectPlaceholders).toContain("tiers");
-    expect(architectPlaceholders).toContain("flows");
+    expect(architectPlaceholders).toEqual(
+      expect.arrayContaining([
+        "tiers",
+        "flows",
+        "iteration",
+        "intent_path",
+        "plan_path",
+        "pack_path",
+        "worktree",
+      ]),
+    );
+    expect(architectPlaceholders).not.toContain("task_path");
+    expect(architectPlaceholders).not.toContain("base_hash");
     expect(implementerPlaceholders).not.toContain("tiers");
     expect(implementerPlaceholders).not.toContain("flows");
+    expect(implementerPlaceholders).not.toContain("intent_path");
 
     const rendered = lib.render("reviewer", {
       ...ROLES.architect!,
       ...ROLES.reviewer!,
       author: "architect",
     });
-    expect(rendered).toContain("## Review\n\nReview the plan.");
+    expect(rendered.startsWith("You review one author's work.")).toBe(true);
+    expect(rendered).toContain("You are the architect");
+    expect(rendered).toContain("You review the architect's plan");
+    expect(rendered).toContain("/goal/intent.md");
+    expect(rendered).toContain("/goal/plan.md");
+    expect(rendered).not.toContain("You implement one task");
     expect(rendered).not.toContain("You review the task diff");
+    expect(rendered).not.toContain("### Decision");
+    // Only the reviewer's own turn block: the architect's stayed out.
+    expect(rendered.split("## This turn").length - 1).toBe(1);
     expect(
       rendered.split("- `verdict` is used on review steps").length - 1,
     ).toBe(1);
@@ -593,7 +610,7 @@ describe("prompt structure", () => {
       const stray = source
         .split("\n")
         .slice(turnLine + 1)
-        .filter((l) => l.trim() !== "" && !/^(\s|-)/.test(l));
+        .filter((l) => l.trim() !== "" && !/^(\s|-|\{%|\{\{)/.test(l));
       expect(
         stray,
         `${role} has non-variable content after ## This turn: ${stray.join(" | ")}`,

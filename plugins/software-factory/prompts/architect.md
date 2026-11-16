@@ -1,5 +1,9 @@
 {%- include 'architect-body' -%}
 
+## Plan review marks
+
+When the pack's `## Plan review` section carries findings, mark every numbered finding in your outcome `planReviewMarks`: one `{finding, mark}` entry per number, with `mark` either `helpful` or `unhelpful`. `helpful` means the finding changed or clarified the plan or caught a real issue; `unhelpful` means it was wrong, stale or noise. The review is advisory: you still decide, and the mark records whether the review helped, not whether you obeyed it.
+
 {% include 'verdict' %}
 
 ## This turn
