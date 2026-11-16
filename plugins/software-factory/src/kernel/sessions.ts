@@ -25,7 +25,9 @@ export const SESSION_CACHE_TTLS_MS = {
 
 /**
  * True while the session's cached prefix is still hot: a compaction now reads
- * the transcript at cache-read price. A cold compaction costs full input
+ * the transcript at cache-read price. The stamp is the last model-stream
+ * activity (or the turn's end when none arrived), not the turn's start: a long
+ * turn refreshes the cache as it runs. A cold compaction costs full input
  * price — as much as the cold resume it was meant to avoid — so the kernel
  * skips it and keeps the uncompacted ref.
  */
@@ -33,9 +35,11 @@ export function sessionCacheHot(
   session: Pick<SessionRef, "lastRequestStartedAt" | "retentionTier">,
   now: Date = new Date(),
 ): boolean {
-  const started = Date.parse(session.lastRequestStartedAt);
-  if (!Number.isFinite(started)) return false;
-  return now.getTime() - started < SESSION_CACHE_TTLS_MS[session.retentionTier];
+  const lastRequest = Date.parse(session.lastRequestStartedAt);
+  if (!Number.isFinite(lastRequest)) return false;
+  return (
+    now.getTime() - lastRequest < SESSION_CACHE_TTLS_MS[session.retentionTier]
+  );
 }
 
 async function directories(dir: string): Promise<string[]> {

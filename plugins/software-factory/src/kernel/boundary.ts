@@ -34,6 +34,11 @@ import {
   type Steer,
 } from "./mailbox.js";
 import { latestPlanCheck } from "./plan-check.js";
+import {
+  latestPlanReview,
+  planReviewSkipCause,
+  runPlanReview,
+} from "./plan-review.js";
 import { type PmRung, runPm } from "./pm.js";
 import { scriptMeta } from "./record.js";
 import type {
@@ -295,6 +300,7 @@ export async function runBoundary(
       runConfigPath: opts.runConfigPath,
       openRecords: await openRecords(runtime.store),
       planCheck: latestPlanCheck(records),
+      planReview: latestPlanReview(records),
     });
     await runtime.store.writeFile(packRel, pack);
   }
@@ -476,6 +482,20 @@ export async function runBoundary(
       packPath: packRel,
       seenSteers,
     };
+  }
+
+  // R14: the plan gets a second reading after the architect turn. The review
+  // is advisory and fresh; its findings reach the architect in the next pack.
+  // A run config that cannot resolve the reviewer leaves a skip record instead
+  // of dropping the step silently.
+  const reviewSkip = planReviewSkipCause(runtime);
+  if (reviewSkip) {
+    await runtime.store.appendRecord(
+      scriptMeta(iteration, "plan-review-skip", { round: 1 }),
+      { ok: true, cause: `plan review skipped: ${reviewSkip}` },
+    );
+  } else {
+    await runPlanReview(runtime, { iteration, packRel });
   }
 
   const pm = await runPm(runtime, {

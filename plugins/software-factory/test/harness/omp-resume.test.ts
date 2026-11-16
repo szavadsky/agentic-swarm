@@ -5,14 +5,23 @@ import path from "node:path";
 import { OmpHarness } from "../../src/harness/omp/harness.js";
 import type { SessionRef } from "../../src/harness/types.js";
 import { zeroUsage } from "../../src/harness/usage.js";
+import { compactSession } from "../../src/kernel/flow-context.js";
+import { sessionCacheHot } from "../../src/kernel/sessions.js";
+import type { KernelRuntime } from "../../src/kernel/types.js";
+import { installFakeClock } from "../helpers/fake-clock.js";
 
-function fakeOmpScript(logPath: string, promptsPath: string): string {
+function fakeOmpScript(
+  logPath: string,
+  promptsPath: string,
+  promptDelayMs = 0,
+): string {
   return `#!/usr/bin/env bun
 const fs = require("node:fs");
 const readline = require("node:readline");
 const argv = process.argv.slice(2);
 const logPath = ${JSON.stringify(logPath)};
 const promptsPath = ${JSON.stringify(promptsPath)};
+const promptDelayMs = ${JSON.stringify(promptDelayMs)};
 fs.appendFileSync(logPath, JSON.stringify(argv) + "\\n");
 const flag = (name) => {
   const index = argv.indexOf(name);
@@ -24,6 +33,10 @@ const fail = (message, code) => {
   process.stderr.write(message + "\\n");
   process.exit(code);
 };
+if (argv[0] === "models") {
+  process.stdout.write(JSON.stringify({ models: [] }) + "\\n");
+  process.exit(0);
+}
 
 // A resumed session that was pruned reports omp's "Session ... not found"
 // wording before the ready frame. The retry launch then fails for real.
@@ -44,7 +57,7 @@ write({ type: "ready", protocolVersion: 1 });
 let prompted = false;
 const rl = readline.createInterface({ input: process.stdin });
 rl.on("close", () => process.exit(0));
-rl.on("line", (line) => {
+rl.on("line", async (line) => {
   let frame;
   try { frame = JSON.parse(line); } catch { return; }
   const respond = (data) =>
@@ -57,9 +70,14 @@ rl.on("line", (line) => {
     respond({ text: "resumed" });
   } else if (frame.type === "get_state") {
     respond({ sessionId, thinkingLevel: "low", model: { provider: "provider", id: model.split("/")[1] } });
+  } else if (frame.type === "compact") {
+    respond({});
   } else if (frame.type === "prompt") {
     prompted = true;
     fs.appendFileSync(promptsPath, JSON.stringify(frame.message) + "\\n");
+    if (promptDelayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, promptDelayMs));
+    }
     write({ type: "message_end", message: { role: "assistant", usage: { input: 5, output: 3 }, stopReason: "stop" } });
     write({ type: "prompt_result", id: frame.id, agentInvoked: true, status: "completed", sessionSettled: true });
   }
@@ -76,14 +94,16 @@ interface FakeOmp {
   cleanup(): void;
 }
 
-function createFakeOmp(): FakeOmp {
+function createFakeOmp(options: { promptDelayMs?: number } = {}): FakeOmp {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "omp-resume-"));
   const logPath = path.join(tmp, "invocations.ndjson");
   const promptsPath = path.join(tmp, "prompts.ndjson");
   const binary = path.join(tmp, "fake-omp.js");
-  fs.writeFileSync(binary, fakeOmpScript(logPath, promptsPath), {
-    mode: 0o755,
-  });
+  fs.writeFileSync(
+    binary,
+    fakeOmpScript(logPath, promptsPath, options.promptDelayMs),
+    { mode: 0o755 },
+  );
   return {
     binary,
     invocations: () =>
@@ -105,6 +125,22 @@ function createFakeOmp(): FakeOmp {
 function flag(args: string[], name: string): string | undefined {
   const index = args.indexOf(name);
   return index >= 0 ? args[index + 1] : undefined;
+}
+
+function compactRuntime(harness: OmpHarness): KernelRuntime {
+  return {
+    harnesses: new Map([[harness.id, harness]]),
+  } as unknown as KernelRuntime;
+}
+
+async function waitForPrompts(fake: FakeOmp, count: number): Promise<void> {
+  for (let attempt = 0; attempt < 500; attempt += 1) {
+    try {
+      if (fake.prompts().length >= count) return;
+    } catch {}
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`timed out waiting for ${count} omp prompt(s)`);
 }
 
 /** The runtime's default launch home (`OmpRuntime.dirs().sessions`) for a harness. */
@@ -347,6 +383,56 @@ describe("omp resume", () => {
       expect(result.stop).toEqual({ kind: "done" });
       expect(result.session?.retentionTier).toBe("long");
     } finally {
+      fake.cleanup();
+    }
+  }, 20_000);
+
+  it("keeps a long turn's cache hot through its last model event and skips once idle", async () => {
+    const fake = createFakeOmp({ promptDelayMs: 100 });
+    const root = path.dirname(fake.binary);
+    const sessionDir = path.join(root, "sessions");
+    const clock = installFakeClock(Date.parse("2026-11-16T12:00:00.000Z"));
+    try {
+      const harness = new OmpHarness({
+        binary: fake.binary,
+        sessionDir,
+        readyTimeoutMs: 5_000,
+      });
+      const turnStartedAt = Date.now();
+      const pending = harness.turn({
+        model: { id: "provider/resume-ok" },
+        cwd: root,
+        prompt: "long turn",
+        timeouts: silent,
+      });
+      await waitForPrompts(fake, 1);
+      clock.advance(10 * 60_000);
+      const result = await pending;
+
+      expect(result.stop).toEqual({ kind: "done" });
+      expect(
+        Date.parse(result.session!.lastRequestStartedAt) - turnStartedAt,
+      ).toBe(10 * 60_000);
+      expect(sessionCacheHot(result.session!, new Date())).toBe(true);
+
+      const compacted = await compactSession(
+        compactRuntime(harness),
+        result.session!,
+      );
+      expect(compacted?.session.compacted).toBe(true);
+      const launches = () =>
+        fake.invocations().filter((args) => args.includes("--mode"));
+      expect(launches()).toHaveLength(2);
+      expect(flag(launches()[1]!, "--resume")).toBe(result.session!.id);
+
+      clock.advance(10 * 60_000);
+      expect(sessionCacheHot(result.session!, new Date())).toBe(false);
+      expect(
+        await compactSession(compactRuntime(harness), result.session!),
+      ).toBeUndefined();
+      expect(launches()).toHaveLength(2);
+    } finally {
+      clock.restore();
       fake.cleanup();
     }
   }, 20_000);

@@ -1,0 +1,7 @@
+- task: `{{task_path}}`
+- diff range: `{{base_hash}}..{{head_hash}}` — spans every round of this task
+- round: `{{round}}` of `{{max_rounds}}`
+- pre-existing base gate failures: `{{baseline_checks}}` — not findings against this diff
+- prior findings: `{{prior_findings}}` — empty in round 1
+- standalone upscope: `{{upscope_ask}}` — empty when this task is part of an architect plan; then give no upscope field
+- fix dispositions: `{{fix_dispositions}}` — empty in round 1. Verify each claim against the diff: a claim the diff does not evidence is still a finding.

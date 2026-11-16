@@ -12,7 +12,8 @@ import {
 import type { ProcessConfig } from "../../src/kernel/types.js";
 
 // The vars each production render site supplies (boundary, front, pm, digest,
-// promptVars): none passes validate_cmd, the renderer default must fill it.
+// promptVars): none passes validate_cmd, and none passes the reviewer's author;
+// the renderer defaults fill both.
 const ROLES: Record<string, Record<string, string>> = {
   architect: {
     turn: "boundary",
@@ -150,13 +151,16 @@ describe("validate_cmd", () => {
       expect(placeholders).toContain("validate_cmd");
       // Production-like values above; anything the template gained since
       // (e.g. `resume_note`) renders empty so this test tracks only the
-      // validate command, not every template variable.
+      // validate command and the reviewer author default, not every template
+      // variable.
       const filled: Record<string, string> = { ...vars };
       for (const name of placeholders)
-        if (name !== "validate_cmd") filled[name] ??= "";
+        if (name !== "validate_cmd" && name !== "author") filled[name] ??= "";
       const rendered = lib.render(role, filled);
       expect(rendered).not.toContain("factory validate");
       expect(rendered).toContain(validateCmd());
+      if (role === "reviewer")
+        expect(rendered).toContain("You implement one task in one worktree.");
 
       const worktree = fs.mkdtempSync(
         path.join(os.tmpdir(), "validate-cmd-wt-"),

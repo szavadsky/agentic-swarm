@@ -38,6 +38,10 @@ aliases:
     harness: agy
     model: gemini-3.8-flash-high
     # no effort key: the suffix is the effort
+  plan-reviewer:
+    harness: agy
+    model: gemini-3.8-flash-high
+    # no effort key: the suffix is the effort
   reviewer-codex:
     harness: codex
     model: deepseek-v4.1-flash

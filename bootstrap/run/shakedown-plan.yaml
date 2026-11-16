@@ -26,6 +26,11 @@ aliases:
     model: opencode-go/deepseek-v4.1-flash
     fallbacks:
       - model: opencode-go/muse-spark-1.3-contributor
+  plan-reviewer:
+    harness: opencode
+    model: opencode-go/deepseek-v4.1-flash
+    fallbacks:
+      - model: opencode-go/muse-spark-1.3-contributor
   steward:
     harness: opencode
     model: opencode-go/deepseek-v4.1-flash

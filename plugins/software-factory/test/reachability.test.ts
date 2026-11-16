@@ -155,9 +155,17 @@ function promptFragments(): string[] {
   return fragments.sort();
 }
 
+/** Matches the reviewer's dynamic includes: `<author>-body`, `review-<author>` duties and `review-<author>-turn` inputs. */
+const AUTHOR_BODY_INCLUDE = /\{%-?\s*include\s+author_body\s*-?%\}/;
+const REVIEW_DUTIES_INCLUDE = /\{%-?\s*include\s+review_duties\s*-?%\}/;
+const REVIEW_TURN_INCLUDE = /\{%-?\s*include\s+review_turn\s*-?%\}/;
+
 /** Fragments another template pulls in via `{% include %}` (docs excluded: they quote syntax). */
 function includedFragments(): Set<string> {
   const included = new Set<string>();
+  let dynamicAuthorBody = false;
+  let dynamicReviewDuties = false;
+  let dynamicReviewTurn = false;
   const walk = (dir: string) => {
     for (const entry of fs.readdirSync(path.join(PACKAGE_ROOT, dir), {
       withFileTypes: true,
@@ -167,6 +175,9 @@ function includedFragments(): Set<string> {
       else if (entry.name.endsWith(".md")) {
         if (path.relative("prompts", child) in PROMPT_DOCS) continue;
         const source = fs.readFileSync(path.join(PACKAGE_ROOT, child), "utf8");
+        if (AUTHOR_BODY_INCLUDE.test(source)) dynamicAuthorBody = true;
+        if (REVIEW_DUTIES_INCLUDE.test(source)) dynamicReviewDuties = true;
+        if (REVIEW_TURN_INCLUDE.test(source)) dynamicReviewTurn = true;
         for (const match of source.matchAll(INCLUDE_SPECIFIER)) {
           const name = match[1]!;
           included.add(
@@ -177,6 +188,19 @@ function includedFragments(): Set<string> {
     }
   };
   walk("prompts");
+  // The dynamic includes resolve to any role's body, duties or turn inputs,
+  // so every `<role>-body`, `review-<role>` and `review-<role>-turn` fragment is
+  // reachable through them.
+  for (const fragment of promptFragments()) {
+    if (
+      (dynamicAuthorBody && fragment.endsWith("-body")) ||
+      (dynamicReviewDuties && fragment.startsWith("review-")) ||
+      (dynamicReviewTurn &&
+        fragment.startsWith("review-") &&
+        fragment.endsWith("-turn"))
+    )
+      included.add(fragment);
+  }
   return included;
 }
 
