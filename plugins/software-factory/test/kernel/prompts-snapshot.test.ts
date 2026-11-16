@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import fs from "node:fs";
 import path from "node:path";
 import { FakeHarness } from "../../src/harness/fake/index.js";
 import { packageRoot } from "../../src/kernel/config.js";
@@ -409,5 +410,57 @@ describe("architect horizon", () => {
     expect(rendered).toContain("not one iteration's slice");
     expect(rendered).toContain("details after spike X / task Y lands");
     expect(rendered).not.toContain("plan the whole iteration");
+  });
+});
+
+describe("prompt structure", () => {
+  it("gives every role one H1, ordered headings, and nothing after the turn block", () => {
+    const promptsDir = path.join(packageRoot, "prompts");
+    for (const [role, vars] of Object.entries(ROLES)) {
+      const rendered = library().render(role, vars);
+      const lines = rendered.split("\n");
+      const h1 = lines.filter((l) => l.startsWith("# "));
+      expect(h1.length, `${role} H1s: ${h1.join(" | ")}`).toBeLessThan(2);
+      let prev = 0;
+      let first = true;
+      for (const line of lines) {
+        const m = line.match(/^(#{1,6})\s/);
+        if (!m) continue;
+        const level = m[1]!.length;
+        if (!first && level > prev + 1) {
+          expect(
+            `skipped heading in ${role}: H${prev} -> H${level}: ${line}`,
+          ).toEqual("");
+        }
+        first = false;
+        prev = level;
+      }
+      const headings = lines.filter((l) => /^#{1,6}\s/.test(l));
+      const turnAt = headings.findIndex((h) => h.startsWith("## This turn"));
+      expect(turnAt, `${role} has no ## This turn`).toBeGreaterThanOrEqual(0);
+      expect(
+        turnAt,
+        `${role} has text after ## This turn: ${headings.slice(turnAt + 1).join(" | ")}`,
+      ).toBe(headings.length - 1);
+      const source = fs.readFileSync(
+        path.join(promptsDir, `${role}.md`),
+        "utf8",
+      );
+      const turnLine = source
+        .split("\n")
+        .findIndex((l) => l.startsWith("## This turn"));
+      expect(
+        turnLine,
+        `${role} source has no ## This turn`,
+      ).toBeGreaterThanOrEqual(0);
+      const stray = source
+        .split("\n")
+        .slice(turnLine + 1)
+        .filter((l) => l.trim() !== "" && !/^(\s|-)/.test(l));
+      expect(
+        stray,
+        `${role} has non-variable content after ## This turn: ${stray.join(" | ")}`,
+      ).toEqual([]);
+    }
   });
 });

@@ -25,6 +25,14 @@ When in doubt, choose `bigger`. A class changes only by escalation.
 
 Write only `class.yaml`, the one task file, the pack and the outcome. Never change the checkout. Validate `class.yaml` and the task file before ending the turn: `{{validate_cmd}} <file>`.
 
+## Calibration
+
+{% include 'calibration' %}
+
+## Outcome
+
+{% include 'outcome' %}
+
 ## This turn
 
 - iteration: `{{iteration}}`
@@ -38,7 +46,3 @@ Write only `class.yaml`, the one task file, the pack and the outcome. Never chan
 - gates:
   {{gate_commands}}
 - outcome path: `{{outcome_path}}`
-
-{% include 'calibration' %}
-
-{% include 'outcome' %}

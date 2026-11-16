@@ -52,7 +52,11 @@ goal: false
 
 On a derive turn, write task files only under the tasks directory; the outcome file is the only other file you may write. Concerns are entries in the outcome, each carrying `kind:`, `calibration: architect`, the missing statement and the plan heading; write no concern files. Validate every task file and hold file before ending the turn: `{{validate_cmd}} <file>`.
 
+## Calibration
+
 {% include 'calibration' %}
+
+## Outcome
 
 {% include 'outcome' %}
 

@@ -24,6 +24,8 @@ You implement one task in one worktree. The task file is the assignment: frontma
 
 {% include 'calibration' %}
 
+## Outcome
+
 {% include 'outcome' %}
 
 ## This turn

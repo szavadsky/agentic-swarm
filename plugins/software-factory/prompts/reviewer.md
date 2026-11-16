@@ -32,7 +32,11 @@ Forward only what the calibration calls remarkable; everything else stays on the
 
 {% include 'calibration' %}
 
+## Outcome
+
 {% include 'outcome' %}
+
+{% include 'verdict' %}
 
 ## This turn
 

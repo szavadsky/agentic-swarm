@@ -81,7 +81,11 @@ Every steer gets an answer in `forward`, prefixed `steer <id>:`. Silence is not 
 
 {% include 'calibration' %}
 
+## Outcome
+
 {% include 'outcome' %}
+
+{% include 'verdict' %}
 
 ## This turn
 

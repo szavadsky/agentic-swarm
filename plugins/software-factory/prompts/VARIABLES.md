@@ -2,16 +2,16 @@
 
 Template syntax: [LiquidJS](https://liquidjs.com), strict mode (unknown variable = render error; unknown filter = render error). `{{ name }}` interpolates one value; `{% include 'partial-name' %}` inlines `prompts/partial-name.md`. Every prompt is stable text up to its final `## This turn` block; all variables live there so providers can cache the prefix. Partials carry no variables.
 
-| prompt      | partials                                        |
-| ----------- | ----------------------------------------------- |
-| architect   | `calibration`, `outcome`                        |
-| front       | `calibration`, `outcome`                        |
-| pm          | `calibration`, `outcome`                        |
-| implementer | `clean-code`, `scope`, `calibration`, `outcome` |
-| reviewer    | `clean-code`, `scope`, `calibration`, `outcome` |
-| digest      | `outcome`                                       |
+| prompt      | partials                                                   |
+| ----------- | ---------------------------------------------------------- |
+| architect   | `calibration`, `outcome`, `verdict`                        |
+| front       | `calibration`, `outcome`                                   |
+| pm          | `calibration`, `outcome`                                   |
+| implementer | `clean-code`, `scope`, `calibration`, `outcome`            |
+| reviewer    | `clean-code`, `scope`, `calibration`, `outcome`, `verdict` |
+| digest      | `calibration`, `outcome`                                   |
 
-The shared definitions exist once as partials: `scope` (the predicted-area rule), `calibration` (concerns and calibration, with `remarkable` inside it), `outcome` (the outcome contract), `clean-code` (the code standard) and `remarkable` (the remarkable definition).
+The shared definitions exist once as partials: `scope` (the predicted-area rule), `calibration` (concerns and calibration, with `remarkable` inside it), `outcome` (the outcome contract), `clean-code` (the code standard), `remarkable` (the remarkable definition) and `verdict` (the verdict/decision lines, for review and architect steps).
 
 `calibration` is the default calibration partial. The process config may replace its content per repo; the prompt template does not change.
 
@@ -111,7 +111,7 @@ The digest scout appends loops, failures and interventions; it does not restate 
 
 ## delivery-repair.md
 
-The one in-session repair ask, rendered by the kernel when a turn delivers no outcome, no verdict or decision, or (architect) no plan. A repo may shadow it like any template. It is not a role prompt: it is rendered directly, never included.
+The one in-session repair ask, rendered by the kernel when a turn delivers no outcome, no verdict or decision, or (architect) no plan. A repo may shadow it like any template. It is not a role prompt: it is rendered directly, never included. It includes `outcome` for the contract and, unless a bare done delivers, `verdict` for the verdict/decision lines.
 
 | variable       | meaning                                                                                                      |
 | -------------- | ------------------------------------------------------------------------------------------------------------ |
@@ -120,3 +120,4 @@ The one in-session repair ask, rendered by the kernel when a turn delivers no ou
 | `done_allowed` | `true` when a bare `status: done` delivers (no verdict or decision required), else `false`                   |
 | `findings`     | the missing or invalid findings as `- ` bullet lines                                                         |
 | `outcome_path` | path where the corrected outcome must be written                                                             |
+| `validate_cmd` | absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default                             |
