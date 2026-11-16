@@ -87,7 +87,7 @@ A question the architect asked (exit 2): answer only when `INTENT.md` or `Phase1
 | Merge conflict `factory/self` → `factory-v3` | `git merge --abort`; stop and report. |
 | Run must be stopped | One `pkill -INT -f "factory.ts run"`; wait for the exit; journal; incident report; relaunch. |
 
-Stop and report to the owner, do not relaunch: two consecutive iterations with 0 merges; one iteration over 8 h; the same failure twice in a row; an architect turn that does not deliver twice in a row. (runbook stop rule)
+Stop and report to the owner, do not relaunch: two consecutive iterations with 0 merges; one iteration over 8 h; the same failure twice in a row; an architect turn that does not deliver twice in a row. (operator runbook rule, not owner intent)
 
 Every recovery act is journaled and reported as an incident, so the architect owns the proper fix.
 
