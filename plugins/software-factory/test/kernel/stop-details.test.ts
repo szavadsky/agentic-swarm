@@ -22,6 +22,7 @@ import {
   scriptStallLeave,
   writeTask,
 } from "./s2-helpers.js";
+import { withPlanRoleFallbacks } from "./fake-defaults.js";
 
 /** The scrubbed one-line text an opencode provider.no-route stop carries. */
 const NO_ROUTE =
@@ -31,7 +32,7 @@ describe("infra stop details", () => {
   it("shows a no-route stop's details in the dispatch cause and keeps the record verbatim", async () => {
     const { repo, goal } = setupFlowRepo();
     try {
-      const harness = new FakeHarness({ id: "fake" });
+      const harness = withPlanRoleFallbacks(new FakeHarness({ id: "fake" }));
       harness.script((req) =>
         fakeTurnResult(req, {
           stop: { kind: "infra", cause: "auth", details: NO_ROUTE },
@@ -61,7 +62,7 @@ describe("infra stop details", () => {
   it("prints a stop without details as before", async () => {
     const { repo, goal } = setupFlowRepo();
     try {
-      const harness = new FakeHarness({ id: "fake" });
+      const harness = withPlanRoleFallbacks(new FakeHarness({ id: "fake" }));
       harness.script((req) =>
         fakeTurnResult(req, { stop: { kind: "infra", cause: "auth" } }),
       );
@@ -80,7 +81,7 @@ describe("infra stop details", () => {
   it("keeps refusal details in the park cause", async () => {
     const { repo, goal } = setupFlowRepo();
     try {
-      const harness = new FakeHarness({ id: "fake" });
+      const harness = withPlanRoleFallbacks(new FakeHarness({ id: "fake" }));
       harness.script((req) =>
         fakeTurnResult(req, {
           stop: { kind: "refusal", details: "content policy refusal" },
@@ -108,7 +109,7 @@ describe("infra stop details", () => {
   it("carries the details through the launch stop text and the iteration summary", async () => {
     const goal = makeGoal();
     try {
-      const harness = new FakeHarness({ id: "fake" });
+      const harness = withPlanRoleFallbacks(new FakeHarness({ id: "fake" }));
       harness.script((req, ctx) => {
         writePlan(
           goal.goalDir,

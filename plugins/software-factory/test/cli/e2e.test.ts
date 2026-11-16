@@ -7,6 +7,7 @@ import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 import { testPriceSource } from "../helpers/price-source.js";
+import { scriptPlanRoleFallbacks } from "../kernel/fake-defaults.js";
 
 const PACKAGE_ROOT = path.resolve(import.meta.dir, "../..");
 
@@ -45,6 +46,8 @@ function runYaml(repo: TmpRepo): string {
     "  implementer: { harness: fake, model: fake-impl }",
     "  reviewer: { harness: fake, model: fake-review }",
     "  steward: { harness: fake, model: fake-steward }",
+    "  plan-checker: { harness: fake, model: fake-check }",
+    "  plan-reviewer: { harness: fake, model: fake-plan-review }",
     "limits: { iterations: 1, concurrency: { overall: 1 } }",
     `worktreeRoot: ../${base}-wt`,
     `sessions: { dir: ../${base}-sessions, keepRuns: 2 }`,
@@ -105,6 +108,7 @@ function alphaRun(goalDir: string, taskDir: string): FakeHarness {
     );
     return fakeTurnResult(req);
   });
+  scriptPlanRoleFallbacks(harness);
   return harness;
 }
 
@@ -114,6 +118,7 @@ function doneHarness(): FakeHarness {
     ctx.writeOutcome(outcome({ summary: "goal met", decision: "done" }));
     return fakeTurnResult(req);
   });
+  scriptPlanRoleFallbacks(harness);
   return harness;
 }
 

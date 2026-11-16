@@ -216,6 +216,48 @@ describe("FakeHarness (kernel contract)", () => {
     }
   });
 
+  it("serves a bound fallback before an unbound script, but explicit bindings win", async () => {
+    const harness = new FakeHarness();
+    harness.script((req) => fakeTurnResult(req, { text: "review default" }), {
+      when: (req) => fakeTurnIdentity(req).step === "planreview",
+      fallback: true,
+    });
+    harness.script((req) => fakeTurnResult(req, { text: "pm positional" }), {
+      when: (req) => fakeTurnIdentity(req).step === "pm",
+    });
+    harness.script((req) => fakeTurnResult(req, { text: "review explicit" }), {
+      when: (req) =>
+        fakeTurnIdentity(req).step === "planreview" &&
+        fakeTurnIdentity(req).slug === undefined,
+    });
+
+    const review = await harness.turn(
+      request({
+        outcomePath: "/tmp/records/00001-i1-planreview-r1/outcome.yaml",
+      }),
+    );
+    const pm = await harness.turn(
+      request({ outcomePath: "/tmp/records/00002-i1-pm-r1/outcome.yaml" }),
+    );
+    expect(review.text).toBe("review explicit");
+    expect(pm.text).toBe("pm positional");
+
+    // The fallback remains after use and serves requests no explicit binding
+    // claims, while the unbound PM script above was not consumed by review.
+    const alphaReview = await harness.turn(
+      request({
+        outcomePath: "/tmp/records/00003-i1-alpha-planreview-r1/outcome.yaml",
+      }),
+    );
+    const betaReview = await harness.turn(
+      request({
+        outcomePath: "/tmp/records/00004-i1-beta-planreview-r1/outcome.yaml",
+      }),
+    );
+    expect(alphaReview.text).toBe("review default");
+    expect(betaReview.text).toBe("review default");
+  });
+
   it("fails an unmatched request naming its slug and step", async () => {
     const harness = new FakeHarness();
     harness.script((req) => fakeTurnResult(req), {

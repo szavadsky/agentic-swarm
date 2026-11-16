@@ -12,8 +12,8 @@ import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
 import {
   latestPlanCheck,
+  PLAN_CHECK_STEP,
   planCheckBrief,
-  planCheckConfigured,
 } from "../../src/kernel/plan-check.js";
 import { PLAN_CHECK_ROUTES_STEP } from "../../src/kernel/pm.js";
 import { appendCancel } from "../../src/kernel/record.js";
@@ -24,6 +24,7 @@ import {
   makeRuntime,
   outcome,
   setupFlowRepo,
+  whenTurn,
   writeTask,
 } from "./s2-helpers.js";
 
@@ -34,6 +35,7 @@ const ALIASES = {
   reviewer: { harness: "fake", model: "fake-review" },
   steward: { harness: "fake", model: "fake-steward" },
   "plan-checker": { harness: "fake", model: "fake-check" },
+  "plan-reviewer": { harness: "fake", model: "fake-plan-review" },
 };
 
 function writeFileTurn(file: string, summary: string): FakeTurnHandler {
@@ -63,31 +65,34 @@ describe("plan checker", () => {
         );
         return fakeTurnResult(req);
       });
-      harness.script((req, ctx) => {
-        ctx.writeOutcome(
-          outcome({
-            summary: "beta can continue",
-            planCheck: {
-              verdict: "progress",
-              evidence: [
-                {
-                  item: "beta",
-                  status: "missing",
-                  evidence: "beta implement turn failed; runner crashed",
-                },
-              ],
-              followUps: [
-                {
-                  kind: "continuation",
-                  slug: "beta",
-                  reason: "mechanical park, runner crashed",
-                },
-              ],
-            },
-          }),
-        );
-        return fakeTurnResult(req);
-      });
+      harness.script(
+        (req, ctx) => {
+          ctx.writeOutcome(
+            outcome({
+              summary: "beta can continue",
+              planCheck: {
+                verdict: "progress",
+                evidence: [
+                  {
+                    item: "beta",
+                    status: "missing",
+                    evidence: "beta implement turn failed; runner crashed",
+                  },
+                ],
+                followUps: [
+                  {
+                    kind: "continuation",
+                    slug: "beta",
+                    reason: "mechanical park, runner crashed",
+                  },
+                ],
+              },
+            }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: PLAN_CHECK_STEP }) },
+      );
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       harness.script((req, ctx) => {
@@ -118,25 +123,28 @@ describe("plan checker", () => {
         );
         return fakeTurnResult(req);
       });
-      harness.script((req, ctx) => {
-        ctx.writeOutcome(
-          outcome({
-            summary: "nothing left to continue",
-            planCheck: {
-              verdict: "architect",
-              evidence: [
-                {
-                  item: "beta",
-                  status: "done",
-                  evidence: "beta.txt on the head",
-                },
-              ],
-              followUps: [],
-            },
-          }),
-        );
-        return fakeTurnResult(req);
-      });
+      harness.script(
+        (req, ctx) => {
+          ctx.writeOutcome(
+            outcome({
+              summary: "nothing left to continue",
+              planCheck: {
+                verdict: "architect",
+                evidence: [
+                  {
+                    item: "beta",
+                    status: "done",
+                    evidence: "beta.txt on the head",
+                  },
+                ],
+                followUps: [],
+              },
+            }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: PLAN_CHECK_STEP }) },
+      );
 
       await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
       await writeTask(runtime, task("beta", { scope: ["beta.txt"] }));
@@ -190,25 +198,28 @@ describe("plan checker", () => {
         );
         return fakeTurnResult(req);
       });
-      harness.script((req, ctx) => {
-        ctx.writeOutcome(
-          outcome({
-            summary: "direction problem",
-            planCheck: {
-              verdict: "architect",
-              evidence: [
-                {
-                  item: "beta",
-                  status: "below-standard",
-                  evidence: "review rejected the design twice running",
-                },
-              ],
-              followUps: [],
-            },
-          }),
-        );
-        return fakeTurnResult(req);
-      });
+      harness.script(
+        (req, ctx) => {
+          ctx.writeOutcome(
+            outcome({
+              summary: "direction problem",
+              planCheck: {
+                verdict: "architect",
+                evidence: [
+                  {
+                    item: "beta",
+                    status: "below-standard",
+                    evidence: "review rejected the design twice running",
+                  },
+                ],
+                followUps: [],
+              },
+            }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: PLAN_CHECK_STEP }) },
+      );
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
@@ -260,25 +271,28 @@ describe("plan checker", () => {
         );
         return fakeTurnResult(req);
       });
-      harness.script((req, ctx) => {
-        ctx.writeOutcome(
-          outcome({
-            summary: "beta can continue",
-            planCheck: {
-              verdict: "progress",
-              evidence: [],
-              followUps: [
-                {
-                  kind: "continuation",
-                  slug: "beta",
-                  reason: "mechanical park",
-                },
-              ],
-            },
-          }),
-        );
-        return fakeTurnResult(req);
-      });
+      harness.script(
+        (req, ctx) => {
+          ctx.writeOutcome(
+            outcome({
+              summary: "beta can continue",
+              planCheck: {
+                verdict: "progress",
+                evidence: [],
+                followUps: [
+                  {
+                    kind: "continuation",
+                    slug: "beta",
+                    reason: "mechanical park",
+                  },
+                ],
+              },
+            }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: PLAN_CHECK_STEP }) },
+      );
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       harness.script((req, ctx) => {
@@ -435,21 +449,24 @@ describe("plan checker", () => {
         "utf8",
       );
 
-      harness.script((req, ctx) => {
-        fs.writeFileSync(planPath, "# Plan\n\nHACKED\n", "utf8");
-        fs.writeFileSync(
-          path.join(runtime.store.tasksDir, "beta.md"),
-          "HACKED\n",
-          "utf8",
-        );
-        ctx.writeOutcome(
-          outcome({
-            summary: "direction problem",
-            planCheck: { verdict: "architect", evidence: [], followUps: [] },
-          }),
-        );
-        return fakeTurnResult(req);
-      });
+      harness.script(
+        (req, ctx) => {
+          fs.writeFileSync(planPath, "# Plan\n\nHACKED\n", "utf8");
+          fs.writeFileSync(
+            path.join(runtime.store.tasksDir, "beta.md"),
+            "HACKED\n",
+            "utf8",
+          );
+          ctx.writeOutcome(
+            outcome({
+              summary: "direction problem",
+              planCheck: { verdict: "architect", evidence: [], followUps: [] },
+            }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: PLAN_CHECK_STEP }) },
+      );
 
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("boundary");
@@ -472,32 +489,35 @@ describe("plan checker", () => {
     const { repo, goal } = setupFlowRepo({ aliases: ALIASES });
     try {
       const harness = new FakeHarness({ id: "fake" });
-      harness.script((req, ctx) => {
-        ctx.writeOutcome(
-          outcome({
-            summary: "app waits on a dropped dep",
-            planCheck: {
-              verdict: "progress",
-              evidence: [
-                {
-                  item: "app",
-                  status: "missing",
-                  evidence: "app never dispatched; ghost is cancelled",
-                },
-              ],
-              followUps: [
-                {
-                  kind: "missing-dep",
-                  slug: "app",
-                  dep: "ghost",
-                  reason: "ghost is cancelled, app waits forever",
-                },
-              ],
-            },
-          }),
-        );
-        return fakeTurnResult(req);
-      });
+      harness.script(
+        (req, ctx) => {
+          ctx.writeOutcome(
+            outcome({
+              summary: "app waits on a dropped dep",
+              planCheck: {
+                verdict: "progress",
+                evidence: [
+                  {
+                    item: "app",
+                    status: "missing",
+                    evidence: "app never dispatched; ghost is cancelled",
+                  },
+                ],
+                followUps: [
+                  {
+                    kind: "missing-dep",
+                    slug: "app",
+                    dep: "ghost",
+                    reason: "ghost is cancelled, app waits forever",
+                  },
+                ],
+              },
+            }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: PLAN_CHECK_STEP }) },
+      );
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("ghost", { scope: ["ghost.txt"] }));
@@ -539,19 +559,22 @@ describe("plan checker", () => {
         );
         return fakeTurnResult(req);
       });
-      harness.script((req, ctx) => {
-        ctx.writeOutcome(
-          outcome({
-            summary: "nothing left to continue",
-            planCheck: {
-              verdict: "architect",
-              evidence: [],
-              followUps: [],
-            },
-          }),
-        );
-        return fakeTurnResult(req);
-      });
+      harness.script(
+        (req, ctx) => {
+          ctx.writeOutcome(
+            outcome({
+              summary: "nothing left to continue",
+              planCheck: {
+                verdict: "architect",
+                evidence: [],
+                followUps: [],
+              },
+            }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: PLAN_CHECK_STEP }) },
+      );
 
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("boundary");
@@ -583,25 +606,28 @@ describe("plan checker", () => {
         );
         return fakeTurnResult(req);
       });
-      harness.script((req, ctx) => {
-        ctx.writeOutcome(
-          outcome({
-            summary: "beta can continue",
-            planCheck: {
-              verdict: "progress",
-              evidence: [],
-              followUps: [
-                {
-                  kind: "continuation",
-                  slug: "beta",
-                  reason: "mechanical park",
-                },
-              ],
-            },
-          }),
-        );
-        return fakeTurnResult(req);
-      });
+      harness.script(
+        (req, ctx) => {
+          ctx.writeOutcome(
+            outcome({
+              summary: "beta can continue",
+              planCheck: {
+                verdict: "progress",
+                evidence: [],
+                followUps: [
+                  {
+                    kind: "continuation",
+                    slug: "beta",
+                    reason: "mechanical park",
+                  },
+                ],
+              },
+            }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: PLAN_CHECK_STEP }) },
+      );
       // Both ladder rungs answer without routes; the writes roll back.
       harness.script((req, ctx) => {
         ctx.writeOutcome(outcome({ summary: "no routes" }));
@@ -671,30 +697,6 @@ describe("plan checker", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
-
-  it("skips the checker when the run config has no plan-checker alias", async () => {
-    const { repo, goal } = setupFlowRepo();
-    try {
-      const runtime = await makeRuntime(repo, goal, {
-        fake: new FakeHarness({ id: "fake" }),
-      });
-      expect(planCheckConfigured(runtime)).toBe(false);
-    } finally {
-      cleanupFlowRepo(repo);
-    }
-  });
-
-  it("resolves the checker once the alias exists", async () => {
-    const { repo, goal } = setupFlowRepo({ aliases: ALIASES });
-    try {
-      const runtime = await makeRuntime(repo, goal, {
-        fake: new FakeHarness({ id: "fake" }),
-      });
-      expect(planCheckConfigured(runtime)).toBe(true);
-    } finally {
-      cleanupFlowRepo(repo);
-    }
-  });
 
   it("defaults planCheckRounds to 2 and honours the knob", async () => {
     const plain = setupFlowRepo({ aliases: ALIASES });

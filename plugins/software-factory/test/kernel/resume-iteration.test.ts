@@ -72,6 +72,8 @@ function setupRepo(): { repo: TmpRepo; goalDir: string; taskDir: string } {
       "  implementer: { harness: fake, model: fake-impl }",
       "  reviewer: { harness: fake, model: fake-review }",
       "  steward: { harness: fake, model: fake-steward }",
+      "  plan-checker: { harness: fake, model: fake-check }",
+      "  plan-reviewer: { harness: fake, model: fake-plan-review }",
       "limits: { iterations: 3, concurrency: { overall: 1 } }",
       `worktreeRoot: ../${base}-wt`,
       `sessions: { dir: ../${base}-sessions, keepRuns: 2 }`,
@@ -663,7 +665,6 @@ Create delta.txt.
         "utf8",
       );
       addAlias(repo, "digest", "fake-digest");
-      addAlias(repo, "plan-checker", "fake-check");
 
       const second = new FakeHarness({ id: "fake" });
       let pmSawDigest = false;
@@ -796,7 +797,6 @@ Create delta.txt.
         },
       );
       addAlias(repo, "digest", "fake-digest");
-      addAlias(repo, "plan-checker", "fake-check");
 
       const second = new FakeHarness({ id: "fake" });
       queueDigestSteer(second);

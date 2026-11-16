@@ -14,7 +14,12 @@ import {
   stateOf,
   writePlan,
 } from "./e2e-helpers.js";
-import { cleanupFlowRepo, makeRuntime, setupFlowRepo } from "./s2-helpers.js";
+import {
+  cleanupFlowRepo,
+  makeRuntime,
+  setupFlowRepo,
+  whenTurn,
+} from "./s2-helpers.js";
 
 const PLAN = `# Milestone 1
 
@@ -247,6 +252,7 @@ const PLAN_REVIEW_ALIASES = {
   implementer: { harness: "fake", model: "fake-impl" },
   reviewer: { harness: "fake", model: "fake-review" },
   steward: { harness: "fake", model: "fake-steward" },
+  "plan-checker": { harness: "fake", model: "fake-check" },
   "plan-reviewer": { harness: "fake", model: "fake-plan-review" },
 };
 
@@ -267,12 +273,15 @@ describe("plan review session hygiene", () => {
         );
         return fakeTurnResult(req);
       });
-      harness.script((req, ctx) => {
-        reviewSessions.push(req.session?.id);
-        fs.writeFileSync(planPath, "# Plan\n\nHACKED\n", "utf8");
-        ctx.writeOutcome(outcome({ summary: "1. alpha needs a test" }));
-        return fakeTurnResult(req);
-      });
+      harness.script(
+        (req, ctx) => {
+          reviewSessions.push(req.session?.id);
+          fs.writeFileSync(planPath, "# Plan\n\nHACKED\n", "utf8");
+          ctx.writeOutcome(outcome({ summary: "1. alpha needs a test" }));
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: PLAN_REVIEW_STEP }) },
+      );
       harness.script((req, ctx) => {
         ctx.writeOutcome(outcome({ summary: "no tasks to file" }));
         return fakeTurnResult(req);
@@ -294,12 +303,15 @@ describe("plan review session hygiene", () => {
         );
         return fakeTurnResult(req);
       });
-      harness.script((req, ctx) => {
-        reviewSessions.push(req.session?.id);
-        return fakeTurnResult(req, {
-          stop: { kind: "infra", cause: "quota" },
-        });
-      });
+      harness.script(
+        (req, ctx) => {
+          reviewSessions.push(req.session?.id);
+          return fakeTurnResult(req, {
+            stop: { kind: "infra", cause: "quota" },
+          });
+        },
+        { when: whenTurn({ step: PLAN_REVIEW_STEP }) },
+      );
       harness.script((req, ctx) => {
         ctx.writeOutcome(outcome({ summary: "no tasks to file" }));
         return fakeTurnResult(req);

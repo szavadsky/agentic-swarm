@@ -21,6 +21,7 @@ import {
   setupFlowRepo,
   writeTask,
 } from "./s2-helpers.js";
+import { workCalls } from "./fake-defaults.js";
 
 const PLAN = `# Milestone 1 — files
 
@@ -917,7 +918,7 @@ describe("steer PM routing", () => {
       expect(
         records.some((r) => r.actor === "agent" && r.slug === "beta"),
       ).toBe(false);
-      expect(harness.calls).toHaveLength(1);
+      expect(workCalls(harness)).toHaveLength(1);
 
       harness.script((req, ctx) => {
         expect(req.prompt).toContain("s1 (mailbox/inbox/s1.md)");

@@ -9,6 +9,7 @@ import type { TurnRequest } from "../../src/harness/types.js";
 import { createDrainController } from "../../src/kernel/signals.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
+import { workCalls } from "./fake-defaults.js";
 
 const PLAN = "# Plan\n\n## alpha\nCreate alpha.txt.\n";
 
@@ -32,6 +33,8 @@ function setupRepo(): { repo: TmpRepo; goalDir: string; taskDir: string } {
       "  implementer: { harness: fake, model: fake-impl }",
       "  reviewer: { harness: fake, model: fake-review }",
       "  steward: { harness: fake, model: fake-steward }",
+      "  plan-checker: { harness: fake, model: fake-check }",
+      "  plan-reviewer: { harness: fake, model: fake-plan-review }",
       "limits: { iterations: 1, concurrency: { overall: 1 } }",
       `worktreeRoot: ../${base}-wt`,
       `sessions: { dir: ../${base}-sessions, keepRuns: 2 }`,
@@ -126,7 +129,7 @@ describe("signal policy", () => {
           signals: controller,
         },
       );
-      expect(harness.calls).toHaveLength(2);
+      expect(workCalls(harness)).toHaveLength(2);
 
       const store = createFolderStore(s.goalDir);
       const metrics = yaml.parse((await store.readFile("metrics.yaml"))!) as {

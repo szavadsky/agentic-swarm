@@ -184,14 +184,13 @@ const OPENROUTER_IDS: PriceTable = {
   },
 };
 
-const RUN_CONFIGS = [
-  "self",
-  "self-acpx",
-  "self-quota",
-  "benchmark",
-  "shakedown",
-  "shakedown-plan",
-] as const;
+const RUN_CONFIGS = fs.existsSync(BOOTSTRAP_RUN)
+  ? fs
+      .readdirSync(BOOTSTRAP_RUN)
+      .filter((name) => name.endsWith(".yaml"))
+      .map((name) => name.slice(0, -".yaml".length))
+      .sort()
+  : [];
 
 describe("shipped run-config coverage", () => {
   for (const name of RUN_CONFIGS) {
@@ -208,6 +207,24 @@ describe("shipped run-config coverage", () => {
         raw: true,
         effort: { configId: "effort" },
       });
+    });
+
+    it(`carries the required plan role aliases: ${name}.yaml`, () => {
+      const runPath = path.join(BOOTSTRAP_RUN, `${name}.yaml`);
+      if (!fs.existsSync(runPath)) return;
+      const run = runConfigSchema.parse(
+        yaml.parse(fs.readFileSync(runPath, "utf8")),
+      );
+      expect(run.aliases["plan-checker"]).toBeDefined();
+      expect(run.aliases["plan-reviewer"]).toBeDefined();
+      if (name === "self-quota") {
+        const reviewer = run.aliases["plan-reviewer"]!;
+        expect(run.aliases["plan-checker"]).toMatchObject({
+          harness: reviewer.harness,
+          model: reviewer.model,
+          effort: reviewer.effort,
+        });
+      }
     });
 
     it(`resolves every model id: ${name}.yaml`, () => {

@@ -9,24 +9,6 @@ import type { KernelRuntime, StepRecord } from "./types.js";
 /** Agent step of a plan-review turn; slug-less, so it stays out of the item budget. */
 export const PLAN_REVIEW_STEP = "planreview";
 
-/**
- * Why the plan review cannot run, or `undefined` when the role and its alias
- * resolve. The boundary records a skip with this cause: a run config without
- * the alias must never drop R14 silently. The role names the prompt; the run
- * config prices it through the alias, so a repo can review with the task tier
- * or frontier.
- */
-export function planReviewSkipCause(
-  runtime: KernelRuntime,
-): string | undefined {
-  try {
-    resolveRole(runtime, "plan-reviewer");
-    return undefined;
-  } catch (err) {
-    return err instanceof Error ? err.message : String(err);
-  }
-}
-
 async function recordMissing(
   runtime: KernelRuntime,
   iteration: number,
