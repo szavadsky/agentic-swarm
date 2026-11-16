@@ -2,6 +2,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { Liquid, type FS } from "liquidjs";
 import { packageRoot } from "./config.js";
+import {
+  flowNamesVar,
+  outcomeSchemaVar,
+  taskFrontmatterVar,
+  tierNamesVar,
+} from "./prompt-schema.js";
 import type { ProcessConfig } from "./types.js";
 
 /**
@@ -172,11 +178,15 @@ export function validateCmd(
 /**
  * Templates live in the package `prompts/` dir; a repo may shadow any
  * template under `.factory/prompts/` and replace the calibration partial with
- * process-config text.
+ * process-config text. Schema and config names render as launch-wide defaults
+ * so turn code never passes them: the outcome and task-frontmatter skeletons
+ * from the kernel schemas, flow names from the process config, tier names
+ * from the run-config aliases.
  */
 export function loadPrompts(
   process: ProcessConfig,
   repoRoot: string,
+  aliases?: Record<string, unknown>,
 ): PromptLibrary {
   const overrideDirs: string[] = [];
   if (process.promptsDir)
@@ -191,7 +201,14 @@ export function loadPrompts(
     overrides,
     // Round 1 has no fix to judge; promptVars overrides this with the current
     // fix round's dispositions wherever they exist.
-    defaults: { validate_cmd: validateCmd(), fix_dispositions: "" },
+    defaults: {
+      validate_cmd: validateCmd(),
+      fix_dispositions: "",
+      outcome_schema: outcomeSchemaVar(),
+      task_frontmatter: taskFrontmatterVar(),
+      flows: flowNamesVar(process.flows),
+      tiers: tierNamesVar(aliases),
+    },
   });
 }
 

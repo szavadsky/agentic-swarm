@@ -4,6 +4,13 @@ import path from "node:path";
 import { FakeHarness } from "../../src/harness/fake/index.js";
 import { packageRoot } from "../../src/kernel/config.js";
 import { promptVars } from "../../src/kernel/flow-context.js";
+import { frontClassFlowsVar } from "../../src/kernel/front.js";
+import {
+  flowNamesVar,
+  outcomeSchemaVar,
+  taskFrontmatterVar,
+  tierNamesVar,
+} from "../../src/kernel/prompt-schema.js";
 import { loadPromptLibrary } from "../../src/kernel/prompts.js";
 import { formatReviewFindings } from "../../src/kernel/record.js";
 import type { ProcessConfig } from "../../src/kernel/types.js";
@@ -14,6 +21,16 @@ import {
   outcome,
   setupFlowRepo,
 } from "./s2-helpers.js";
+
+const OUTCOME_SCHEMA = outcomeSchemaVar();
+const TASK_FRONTMATTER = taskFrontmatterVar();
+const FLOWS = flowNamesVar({
+  "implement-review": {},
+  "just-implement": {},
+  spike: {},
+});
+const TIERS = tierNamesVar({ implementer: {}, escalation: {} });
+const CLASS_FLOWS = frontClassFlowsVar();
 
 const ROLES: Record<string, Record<string, string>> = {
   architect: {
@@ -27,6 +44,9 @@ const ROLES: Record<string, Record<string, string>> = {
     steers: "- s1 (mailbox/inbox/s1.md): keep the API stable",
     outcome_path: "/goal/records/00042-i3-architect-r1/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
+    outcome_schema: OUTCOME_SCHEMA,
+    flows: FLOWS,
+    tiers: TIERS,
   },
   front: {
     iteration: "3",
@@ -40,6 +60,11 @@ const ROLES: Record<string, Record<string, string>> = {
     gate_commands: "- test: bun test",
     outcome_path: "/goal/records/00041-i3-front-r1/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
+    outcome_schema: OUTCOME_SCHEMA,
+    task_frontmatter: TASK_FRONTMATTER,
+    flows: FLOWS,
+    tiers: TIERS,
+    class_flows: CLASS_FLOWS,
   },
   pm: {
     iteration: "3",
@@ -56,6 +81,10 @@ const ROLES: Record<string, Record<string, string>> = {
     plan_checks:
       "- alpha (continuation): mechanical park\n  cause: infra: runner lost\n  records: /goal/records/00007-i3-alpha-implement-r1\n  branch: factory-task/demo/alpha\n  turns: 1 of 8 spent\n  done-when: Done when: it works.",
     validate_cmd: "bun /factory/bin/factory.ts validate",
+    outcome_schema: OUTCOME_SCHEMA,
+    task_frontmatter: TASK_FRONTMATTER,
+    flows: FLOWS,
+    tiers: TIERS,
   },
   implementer: {
     task_path: "/goal/tasks/alpha.md",
@@ -68,6 +97,7 @@ const ROLES: Record<string, Record<string, string>> = {
     findings: "- src/x.ts:41 needs a null check",
     outcome_path: "/worktrees/demo-tasks/alpha/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
+    outcome_schema: OUTCOME_SCHEMA,
   },
   reviewer: {
     task_path: "/goal/tasks/alpha.md",
@@ -82,6 +112,7 @@ const ROLES: Record<string, Record<string, string>> = {
     fix_dispositions: "",
     outcome_path: "/worktrees/demo-tasks/alpha/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
+    outcome_schema: OUTCOME_SCHEMA,
   },
   digest: {
     launch_id: "previous-launch-before-3",
@@ -91,6 +122,7 @@ const ROLES: Record<string, Record<string, string>> = {
     digest_path: "/goal/iterations/3/digest.md",
     outcome_path: "/goal/records/00044-i3-digest-r1/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
+    outcome_schema: OUTCOME_SCHEMA,
   },
   steward: {
     worktree: "/worktrees/demo-tasks/alpha",
@@ -101,6 +133,7 @@ const ROLES: Record<string, Record<string, string>> = {
     baseline_checks: "none",
     outcome_path: "/worktrees/demo-tasks/alpha/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
+    outcome_schema: OUTCOME_SCHEMA,
   },
   "plan-checker": {
     iteration: "3",
@@ -111,6 +144,7 @@ const ROLES: Record<string, Record<string, string>> = {
     existing_tasks: "- alpha | merged | abcdef1234 | deps: none | frozen",
     outcome_path: "/goal/records/00045-i3-plan-check-r1/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
+    outcome_schema: OUTCOME_SCHEMA,
   },
 };
 

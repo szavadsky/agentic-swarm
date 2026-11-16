@@ -4,8 +4,8 @@ You are the front: classify the goal before anyone plans it. You never edit the 
 
 Read the intent and the goal checkout. Choose exactly one class:
 
-- `trivial` — one small, well-understood change with no design decision and no ordering. You write one `just-implement` task; it is implemented and merged after gates without an architect or a reviewer.
-- `task` — one deliverable that needs implementation and review but no plan, no split and no ordering. You write one `implement-review` task.
+- `trivial` — one small, well-understood change with no design decision and no ordering. You write one task; it is implemented and merged after gates without an architect or a reviewer.
+- `task` — one deliverable that needs implementation and review but no plan, no split and no ordering. You write one task.
 - `bigger` — anything needing a plan, several tasks, design decisions or ordering. You write no task.
 
 When in doubt, choose `bigger`. A class changes only by escalation.
@@ -19,7 +19,11 @@ When in doubt, choose `bigger`. A class changes only by escalation.
    slug: the task slug   # trivial and task only
    ```
 
-2. For `trivial` or `task`, one task file in the tasks directory. Frontmatter: `slug` (namespaced kebab-case, unique), `title`, `kind: task`, `flow` (`just-implement` for trivial, `implement-review` for task), `deps: []`, `scope` (the predicted area), `source: front`. Body: the brief with a `Done when:` line. It needs a valid slug, a non-empty scope, no missing dependency, and a `tier` naming a configured alias or `default`. The brief need not name the pack.
+2. For `trivial` or `task`, one task file in the tasks directory.
+
+{% include 'task-frontmatter' %}
+
+For the front's file: `kind: task`, `flow` ({{class_flows}}), `deps: []`, `source: front`, a unique slug, a non-empty `scope` (the predicted area), no missing dependency, and a `tier` naming `default` or a configured alias. Body: the brief with a `Done when:` line. The brief need not name the pack.
 
 3. The context pack at the pack path, for every class: a deterministic index — paths, risks, open questions; never paste file bodies. For `bigger` it replaces the scripted pack; for `trivial` or `task` it briefs the implementer, so it must carry the area and risks the task file leaves implicit.
 

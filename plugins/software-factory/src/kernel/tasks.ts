@@ -1,6 +1,47 @@
 import { createHash } from "node:crypto";
+import { z } from "zod";
 import yaml from "yaml";
 import type { TaskFile, TaskKind } from "./types.js";
+
+/** The flow a task file gets when its frontmatter names none. */
+export const DEFAULT_FLOW = "implement-review";
+
+/**
+ * Task frontmatter shape. The prompt skeleton renders from this; `parseTaskFile`
+ * stays the validator (file-name authority, lenient kind, custom messages).
+ * Field descriptions are the prompt-facing wording, as on `outcomeSchema`.
+ */
+export const taskFrontmatterSchema = z.object({
+  slug: z
+    .string()
+    .min(1)
+    .describe("namespaced kebab-case, matches the file name"),
+  title: z.string().min(1).describe("one line"),
+  kind: z
+    .enum(["task", "spike"])
+    .describe("task merges, spike finishes with findings"),
+  flow: z.string().min(1).describe("one of the configured flows"),
+  deps: z
+    .array(z.string().describe("a slug that must merge first"))
+    .default([]),
+  scope: z.array(z.string().describe("a predicted area")),
+  tier: z.string().min(1).optional().describe("default, or a run-config alias"),
+  base: z.string().min(1).optional().describe("the parked slug this continues"),
+  source: z
+    .string()
+    .describe("plan heading, front, steer, stall or plan-check turn"),
+  repairTurns: z
+    .number()
+    .int()
+    .nonnegative()
+    .optional()
+    .describe("outcome-repair turns for this task's turns"),
+  turnMinutes: z
+    .number()
+    .positive()
+    .optional()
+    .describe("per-turn wall bound in minutes"),
+});
 
 export class TaskFileError extends Error {
   constructor(message: string) {
@@ -81,10 +122,7 @@ export function parseTaskFile(text: string, fileSlug: string): TaskFile {
     slug,
     title,
     kind,
-    flow:
-      typeof meta.flow === "string" && meta.flow
-        ? meta.flow
-        : "implement-review",
+    flow: typeof meta.flow === "string" && meta.flow ? meta.flow : DEFAULT_FLOW,
     deps: stringList(meta.deps ?? meta.after, "deps"),
     scope: stringList(meta.scope, "scope"),
     tier: typeof meta.tier === "string" ? meta.tier : undefined,

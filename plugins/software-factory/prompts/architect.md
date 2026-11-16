@@ -48,11 +48,11 @@ One section per milestone; one bullet per task. For each task, in this order:
 6. Ordering and what must not be touched: name the tasks this one touches and the order they land in.
 7. A named approach worth trying, with its exit: "if it fights the codebase, choose otherwise and report it".
 8. What is unknown — and whether that is a spike.
-9. Tier — `escalation` plus one line of reason, only when escalating.
+9. Tier — a configured alias ({{tiers}}) plus one line of reason, only when escalating.
 
 Each bullet starts with its slug: short kebab-case, unique across the goal, never renamed or reused. A merged task's bullet is history: do not edit it; collapse a merged milestone to one line — records hold the history. Rework is a new bullet with a new slug.
 
-Name a non-default flow (`spike`, `just-implement`) on the bullet, and a parked task's slug as `base` when this task continues it.
+Name a non-default flow ({{flows}}) on the bullet, and a parked task's slug as `base` when this task continues it.
 
 Leave out: file-by-file steps, code bodies, line counts, test lists, anything the repo's conventions already say.
 
@@ -69,7 +69,7 @@ Write from the whole goal's perspective — interactions, layers, sequence.
 
 ## Tiers, debt, parked work
 
-- Escalate to implementer tier `escalation` only when the direction needs a PoC before it can be believed, or the last round failed differently from the first (per-task rounds in the pack). The same failure twice means the direction is wrong, so fix the direction. One line naming the reason; rare and explicit.
+- Escalate to an implementer tier ({{tiers}}) only when the direction needs a PoC before it can be believed, or the last round failed differently from the first (per-task rounds in the pack). The same failure twice means the direction is wrong, so fix the direction. One line naming the reason; rare and explicit.
 - Parked tasks come from the pack with a cause. Parked is terminal for that slug: continue it only through a new task that names the parked slug as its `base` (the branch is kept), or drop it with a reason. Never retry as is.
 - No new debt created by the goal. Temporary debt only with a named remover — a task in this plan — and a named cost of not removing it. Debt without a remover is permanent.
 - Close a removed temporary debt by writing `debt closed: <what>` in `forward`.
