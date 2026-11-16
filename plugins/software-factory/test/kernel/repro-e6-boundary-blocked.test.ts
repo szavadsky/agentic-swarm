@@ -18,6 +18,7 @@ import {
   scriptDigest,
   writePlan,
 } from "./e2e-helpers.js";
+import { testPriceSource } from "../helpers/price-source.js";
 
 const PLAN =
   "# Milestone 1\n\n## alpha\nCreate alpha.txt.\nDone when: alpha.txt exists.\n";
@@ -82,8 +83,9 @@ const PM_CHAIN_YAML = [
   "  pm-strong: { harness: fake, model: fake-pm-strong }",
   "  implementer: { harness: fake, model: fake-impl }",
   "  reviewer: { harness: fake, model: fake-review }",
+  "  steward: { harness: fake, model: fake-steward }",
   "  digest: { harness: fake, model: fake-digest }",
-  "limits: { iterations: 1, concurrency: 1 }",
+  "limits: { iterations: 1, concurrency: { overall: 1 } }",
   "",
 ].join("\n");
 
@@ -99,6 +101,7 @@ describe("E6 inverted: an architect infra death is infra, not blocked-by-user", 
         goal: "demo",
         iterations: 2,
         harnesses: { fake: harness },
+        priceSource: testPriceSource(goal.repo.dir),
       });
       const summary = facts(goal.goalDir, 1);
       expect(result.stop).toBe("infra");
@@ -159,6 +162,7 @@ describe("E6 inverted: an architect infra death is infra, not blocked-by-user", 
         goal: "demo",
         iterations: 1,
         harnesses: { fake: harness },
+        priceSource: testPriceSource(goal.repo.dir),
       });
       const summary = facts(goal.goalDir, 2);
       expect(harness.calls[1]?.session?.id).toBe(resumed.id);
@@ -193,6 +197,7 @@ describe("E6 inverted: an architect infra death is infra, not blocked-by-user", 
         goal: "demo",
         iterations: 1,
         harnesses: { fake: harness },
+        priceSource: testPriceSource(goal.repo.dir),
       });
       const summary = facts(goal.goalDir, 2);
       expect(result.stop).toBe("infra");
@@ -239,6 +244,7 @@ describe("E6 inverted: an architect infra death is infra, not blocked-by-user", 
         goal: "demo",
         iterations: 1,
         harnesses: { fake: harness },
+        priceSource: testPriceSource(goal.repo.dir),
       });
       const summary = facts(goal.goalDir, 1);
       expect(result.stop).toBe("iteration-limit");

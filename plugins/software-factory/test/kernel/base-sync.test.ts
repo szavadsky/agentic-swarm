@@ -12,6 +12,7 @@ import {
   goalCheckout,
   makeRuntime,
   outcome,
+  scriptStallLeave,
   setupFlowRepo,
   writeTask,
 } from "./s2-helpers.js";
@@ -52,10 +53,13 @@ function parkAlpha(harness: FakeHarness, file: string, content: string): void {
 
 describe("parked continuation syncs to the integration head", () => {
   it("sees a commit merged after the park and reviews from that head", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       parkAlpha(harness, "alpha.txt", "alpha\n");
+      scriptStallLeave(harness, ["alpha"]);
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       const checkout = goalCheckout(repo, goal);
@@ -145,7 +149,9 @@ describe("parked continuation syncs to the integration head", () => {
   }, 60_000);
 
   it("does not resync a continuation worktree that already exists", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const runtime = await makeRuntime(repo, goal, {
         fake: new FakeHarness({ id: "fake" }),
@@ -185,10 +191,13 @@ describe("parked continuation syncs to the integration head", () => {
   }, 60_000);
 
   it("resolves a first-turn creation conflict in the turn and proceeds to review", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       parkAlpha(harness, "clash.txt", "alpha\n");
+      scriptStallLeave(harness, ["alpha"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       const checkout = goalCheckout(repo, goal);
       await writeTask(runtime, task("alpha", { scope: ["clash.txt"] }));
@@ -247,7 +256,8 @@ describe("parked continuation syncs to the integration head", () => {
       expect(
         records.filter((r) => r.slug === "beta" && r.step === "merge-attempt"),
       ).toHaveLength(0);
-      expect(state.tasks.beta!.turns).toBe(2);
+      // Whole-item budget: beta's own 2 turns plus alpha's 2 spent turns.
+      expect(state.tasks.beta!.turns).toBe(4);
       const betaTip = repo
         .git(["rev-parse", "factory-task/demo/beta"])
         .stdout.trim();
@@ -290,10 +300,14 @@ describe("parked continuation syncs to the integration head", () => {
   }, 60_000);
 
   it("parks base-conflict when markers remain after the first resolve turn", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       parkAlpha(harness, "clash.txt", "alpha\n");
+      scriptStallLeave(harness, ["alpha"]);
+      scriptStallLeave(harness, ["beta"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       const checkout = goalCheckout(repo, goal);
       await writeTask(runtime, task("alpha", { scope: ["clash.txt"] }));
@@ -367,10 +381,14 @@ describe("parked continuation syncs to the integration head", () => {
   }, 60_000);
 
   it("parks base-conflict when the first resolve turn leaves the conflict unmerged", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       parkAlpha(harness, "clash.txt", "alpha\n");
+      scriptStallLeave(harness, ["alpha"]);
+      scriptStallLeave(harness, ["beta"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       const checkout = goalCheckout(repo, goal);
       await writeTask(runtime, task("alpha", { scope: ["clash.txt"] }));
@@ -417,10 +435,13 @@ describe("parked continuation syncs to the integration head", () => {
   }, 60_000);
 
   it("resolves a reused-worktree first-turn conflict in the turn", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       parkAlpha(harness, "clash.txt", "alpha\n");
+      scriptStallLeave(harness, ["alpha"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       const checkout = goalCheckout(repo, goal);
       await writeTask(runtime, task("alpha", { scope: ["clash.txt"] }));
@@ -474,10 +495,13 @@ describe("parked continuation syncs to the integration head", () => {
   }, 60_000);
 
   it("resumes a first-turn resolve after a crash without committing markers", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       parkAlpha(harness, "clash.txt", "alpha\n");
+      scriptStallLeave(harness, ["alpha"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       const checkout = goalCheckout(repo, goal);
       await writeTask(runtime, task("alpha", { scope: ["clash.txt"] }));
@@ -546,10 +570,14 @@ describe("parked continuation syncs to the integration head", () => {
   }, 60_000);
 
   it("still parks a fix-turn conflict instead of resolving", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       parkAlpha(harness, "alpha.txt", "alpha\n");
+      scriptStallLeave(harness, ["alpha"]);
+      scriptStallLeave(harness, ["beta"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       const checkout = goalCheckout(repo, goal);
       await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
@@ -601,10 +629,13 @@ describe("parked continuation syncs to the integration head", () => {
   }, 60_000);
 
   it("advances a reused base worktree to the integration head before the fix turn", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       parkAlpha(harness, "alpha.txt", "alpha\n");
+      scriptStallLeave(harness, ["alpha"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       const checkout = goalCheckout(repo, goal);
       await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
@@ -671,11 +702,13 @@ describe("parked continuation syncs to the integration head", () => {
     // so an empty fix still parks instead of deferring to a reviewer.
     const { repo, goal } = setupFlowRepo({
       gates: [{ id: "no-beta", command: "test ! -f beta.txt" }],
-      limits: { concurrency: 1 },
+      limits: { concurrency: { overall: 1 } },
     });
     try {
       const harness = new FakeHarness({ id: "fake" });
       parkAlpha(harness, "alpha.txt", "alpha\n");
+      scriptStallLeave(harness, ["alpha"]);
+      scriptStallLeave(harness, ["beta"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       const checkout = goalCheckout(repo, goal);
       await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));

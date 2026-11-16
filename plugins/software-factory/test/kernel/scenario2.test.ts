@@ -17,7 +17,9 @@ import {
 
 describe("KERNEL0 scenario 2 — last-round review decisions", () => {
   it("parks a last-round reject, leaves its dependent pending and merges an independent task", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       harness.script((req, ctx) => {

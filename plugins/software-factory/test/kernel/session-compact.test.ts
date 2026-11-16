@@ -23,6 +23,7 @@ import {
   makeRuntime,
   outcome,
   setupFlowRepo,
+  scriptStallLeave,
   writeTask,
 } from "./s2-helpers.js";
 
@@ -154,6 +155,7 @@ describe("end-of-turn compaction", () => {
           stop: { kind: "refusal", details: "content policy" },
         }),
       );
+      scriptStallLeave(harness, ["task"]);
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("task", { scope: ["task.txt"] }));
@@ -287,7 +289,7 @@ describe("compaction timing and cost", () => {
   };
 
   it("compacts the resumed session at its end, records the cost, and the fix resumes fewer input tokens", async () => {
-    const { repo, goal } = setupFlowRepo({ prices: PRICES });
+    const { repo, goal } = setupFlowRepo({ priceTable: PRICES });
     try {
       const harness = new FakeHarness({ id: "fake" });
       harness.script((req, ctx) => {
@@ -573,6 +575,7 @@ describe("review session resume", () => {
         pm: { harness: "fake", model: "fake-pm" },
         implementer: { harness: "fake", model: "fake-impl" },
         reviewer: { harness: "fake", model: "fake-review" },
+        steward: { harness: "fake", model: "fake-steward" },
         "implementer-strong": { harness: "fake", model: "fake-strong" },
       },
     });
@@ -648,6 +651,8 @@ describe("review session resume", () => {
           alias: "reviewer",
           harness: fake,
           model: { id: "fake-review" },
+          tiers: [{ harness: fake, model: { id: "fake-review" } }],
+          tierOffset: 0,
         },
         "review",
         records,
@@ -708,6 +713,8 @@ describe("review session resume", () => {
             alias: "implementer",
             harness: fake,
             model: { id: "fake-review" },
+            tiers: [{ harness: fake, model: { id: "fake-review" } }],
+            tierOffset: 0,
           },
           "review",
           records,
@@ -723,6 +730,8 @@ describe("review session resume", () => {
             alias: "reviewer",
             harness: fake,
             model: { id: "fake-review" },
+            tiers: [{ harness: fake, model: { id: "fake-review" } }],
+            tierOffset: 0,
           },
           "review",
           movedRecords,

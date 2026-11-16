@@ -1098,4 +1098,19 @@ describe("derive", () => {
       "done",
     );
   });
+
+  it("charges a continuation's turns against its base's spent item budget", () => {
+    const tasks = [task("a"), task("b", { base: "a" })];
+    const records = [
+      implement(1),
+      doneCheck(2),
+      review(3, "changes", 1),
+      implement(4, 2),
+      implement(5, 1, { slug: "b" }),
+    ];
+    const state = derive(tasks, records);
+    expect(state.tasks.a!.turns).toBe(3);
+    // The continuation's own turn plus the base's three: renaming buys no new budget.
+    expect(state.tasks.b!.turns).toBe(4);
+  });
 });

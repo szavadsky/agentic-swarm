@@ -6,6 +6,7 @@ import { dispatch } from "../../src/cli/dispatch.js";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
+import { testPriceSource } from "../helpers/price-source.js";
 
 const PACKAGE_ROOT = path.resolve(import.meta.dir, "../..");
 
@@ -43,7 +44,8 @@ function runYaml(repo: TmpRepo): string {
     "  pm: { harness: fake, model: fake-pm }",
     "  implementer: { harness: fake, model: fake-impl }",
     "  reviewer: { harness: fake, model: fake-review }",
-    "limits: { iterations: 1, concurrency: 1 }",
+    "  steward: { harness: fake, model: fake-steward }",
+    "limits: { iterations: 1, concurrency: { overall: 1 } }",
     `worktreeRoot: ../${base}-wt`,
     `sessions: { dir: ../${base}-sessions, keepRuns: 2 }`,
     "",
@@ -210,6 +212,7 @@ describe("CLI end to end — init, steer, run, status", () => {
       const run = await capturedLog(async () =>
         dispatch(["run", "--repo", repo.dir, "--goal", "demo"], {
           harnesses: { fake: alphaRun(goalDir, taskDir) },
+          priceSource: testPriceSource(repo.dir),
         }),
       );
       expect(run.code).toBe(3);
@@ -240,6 +243,7 @@ describe("CLI end to end — init, steer, run, status", () => {
       const close = await capturedLog(async () =>
         dispatch(["run", "--repo", repo.dir, "--goal", "demo"], {
           harnesses: { fake: doneHarness() },
+          priceSource: testPriceSource(repo.dir),
         }),
       );
       expect(close.code).toBe(0);

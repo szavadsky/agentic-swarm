@@ -19,11 +19,12 @@ const aliases = {
   pm: { harness: "fake", model: "fake-pm" },
   implementer: { harness: "fake", model: "fake-impl" },
   reviewer: { harness: "fake", model: "fake-review" },
+  steward: { harness: "fake", model: "fake-steward" },
   escalation: {
     harness: "expensive",
     model: "fake-escalated",
     effort: "high",
-    fallbacks: ["fake-fallback"],
+    fallbacks: [{ model: "fake-fallback" }],
     timeouts: { idleMs: 123, wallMs: 456 },
   },
 };
@@ -64,9 +65,18 @@ describe("task tier resolution", () => {
         alias: "escalation",
         model: { id: "fake-escalated", effort: "high" },
         effort: "high",
-        fallbacks: ["fake-fallback"],
+        tierOffset: 0,
         timeouts: { idleMs: 123, wallMs: 456 },
       });
+      const tiers = resolveRole(runtime, "implementer", "escalation").tiers;
+      expect(tiers.map((tier) => tier.harness.id)).toEqual([
+        "expensive",
+        "expensive",
+      ]);
+      expect(tiers.map((tier) => tier.model)).toEqual([
+        { id: "fake-escalated", effort: "high" },
+        { id: "fake-fallback", effort: "high" },
+      ]);
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -114,9 +124,9 @@ describe("task tier resolution", () => {
       // Admission and the turn agree: the escalation harness is the one that ran it.
       expect(expensive.calls).toHaveLength(1);
       expect(expensive.calls[0]!.model.id).toBe(admitted.model.id);
-      expect(expensive.calls[0]!.fallbacks).toEqual([
-        { id: "fake-fallback", effort: "high" },
-      ]);
+      expect(expensive.calls[0]!.effort).toBe("high");
+      // The kernel walks the tiers; the adapter sees one model, no chain.
+      expect(expensive.calls[0]!.fallbacks).toBeUndefined();
       expect(fake.calls).toHaveLength(1);
 
       const records = await runtime.store.listRecords();

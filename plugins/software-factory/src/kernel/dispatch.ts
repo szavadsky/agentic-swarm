@@ -1,12 +1,26 @@
+import fs from "node:fs";
+import path from "node:path";
 import { derive } from "./derive.js";
 import { executeTaskAction, type TaskActionResult } from "./flow.js";
 import { stepTarget } from "./flow-context.js";
 import type { MergeResult } from "./integrate.js";
 import { type Hold, readHolds, type Steer, scanInbox } from "./mailbox.js";
 import { next } from "./next.js";
-import { runSteerPm } from "./pm.js";
+import {
+  PLAN_CHECK_STEP,
+  planCheckConfigured,
+  runPlanCheck,
+} from "./plan-check.js";
+import {
+  runPlanCheckPm,
+  runStallPm,
+  runSteerPm,
+  STALL_ROUTES_STEP,
+} from "./pm.js";
+import { loadPriceTable } from "./openrouter.js";
 import { type PriceTable, pricedRecord } from "./pricing.js";
 import { scriptMeta } from "./record.js";
+import { runSteward } from "./steward.js";
 import type { DrainController } from "./signals.js";
 import type {
   Action,
@@ -44,7 +58,9 @@ interface Running {
   promise: Promise<void>;
   scope: readonly string[];
   agent: boolean;
-  harnessId?: string;
+  /** Quota pool and model the turn drew admission against; agent turns only. */
+  subscription?: string;
+  model?: string;
 }
 
 /** Declared-area overlap: two tasks collide only when they name the same area. */
@@ -106,12 +122,13 @@ export function iterationSpend(
   records: StepRecord[],
   iteration: number,
   prices: PriceTable,
+  priceIds?: Record<string, string>,
 ): number {
   let usd = 0;
   for (const rec of records) {
     if (rec.iteration !== iteration || rec.actor !== "agent" || !rec.endedAt)
       continue;
-    const cost = pricedRecord(rec, prices).usage.costUsd;
+    const cost = pricedRecord(rec, prices, priceIds).usage.costUsd;
     if (cost !== undefined) usd += cost;
   }
   return usd;
@@ -194,12 +211,46 @@ function activeHolds(holds: Hold[], pending: ReadonlySet<string>): ActiveHolds {
 }
 
 /**
+ * Names the steers whose slug holds still gate non-terminal work when dispatch
+ * exhausts. A hold that voids every pending task ends the iteration early at
+ * the boundary with this cause; a partial hold reports the same way.
+ */
+function heldBoundaryCause(
+  hold: ActiveHolds,
+  state: State,
+): string | undefined {
+  const bySteer = new Map<string, string[]>();
+  for (const [slug, steer] of hold.slugs) {
+    const status = state.tasks[slug]?.status;
+    if (
+      status === undefined ||
+      status === "merged" ||
+      status === "finished" ||
+      status === "parked" ||
+      status === "cancelled"
+    )
+      continue;
+    const list = bySteer.get(steer) ?? [];
+    list.push(slug);
+    bySteer.set(steer, list);
+  }
+  if (bySteer.size === 0) return undefined;
+  return [...bySteer.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(
+      ([steer, slugs]) =>
+        `steer: ${steer} holds ${[...slugs].sort().join(", ")}`,
+    )
+    .join("; ");
+}
+
+/**
  * The dispatch loop: `next` proposes, this loop admits. Admission holds the
- * absolute and per-harness turn limits and never starts two tasks whose declared
- * areas overlap. On an optional iteration limit — turns, wall clock or dollars — the
- * loop drains: a task that has not started this iteration gets no turn, tasks
- * already started finish their flow, in-flight work settles, then the caller
- * ends the iteration normally.
+ * overall, per-subscription and per-model turn limits and never starts two
+ * tasks whose declared areas overlap. On an optional iteration limit — turns,
+ * wall clock or dollars — the loop drains: a task that has not started this
+ * iteration gets no turn, tasks already started finish their flow, in-flight
+ * work settles, then the caller ends the iteration normally.
  */
 export async function runDispatch(
   runtime: KernelRuntime,
@@ -327,7 +378,7 @@ export async function runDispatch(
     taskState: TaskState,
     task: TaskFile,
     agent: boolean,
-    harnessId?: string,
+    quota?: { subscription?: string; model?: string },
   ): void => {
     const promise = (async () => {
       try {
@@ -350,7 +401,13 @@ export async function runDispatch(
     })().finally(() => {
       running.delete(action.slug);
     });
-    running.set(action.slug, { promise, scope: task.scope, agent, harnessId });
+    running.set(action.slug, {
+      promise,
+      scope: task.scope,
+      agent,
+      subscription: quota?.subscription,
+      model: quota?.model,
+    });
     if (agent) started.add(action.slug);
   };
 
@@ -408,7 +465,8 @@ export async function runDispatch(
         const spent = iterationSpend(
           records,
           iteration,
-          runtime.configs.run.prices ?? {},
+          await loadPriceTable(runtime.priceSource),
+          runtime.configs.run.priceIds,
         );
         if (spent >= usdLimit) {
           drain = `budget: iteration USD limit $${usdLimit.toFixed(4)} reached (spent $${spent.toFixed(4)})`;
@@ -447,17 +505,32 @@ export async function runDispatch(
         ) {
           continue;
         }
-        if (agentCount() >= runtime.limits.concurrency) continue;
+        if (agentCount() >= runtime.limits.concurrency.overall) continue;
+        // The target is already on the working tier: admission counts the pool
+        // and model the turn will actually draw on, whichever harness that is.
         const target = stepTarget(runtime, task, taskState, action.step);
-        const limit = runtime.limits.perHarness[target.harness.id];
-        if (limit !== undefined) {
-          const onHarness = [...running.values()].filter(
-            (r) => r.agent && r.harnessId === target.harness.id,
+        if (target.subscription !== undefined) {
+          const poolLimit =
+            runtime.limits.concurrency.perSubscription[target.subscription];
+          if (poolLimit !== undefined) {
+            const onPool = [...running.values()].filter(
+              (r) => r.agent && r.subscription === target.subscription,
+            ).length;
+            if (onPool >= poolLimit) continue;
+          }
+        }
+        const modelLimit = runtime.limits.concurrency.perModel[target.model.id];
+        if (modelLimit !== undefined) {
+          const onModel = [...running.values()].filter(
+            (r) => r.agent && r.model === target.model.id,
           ).length;
-          if (onHarness >= limit) continue;
+          if (onModel >= modelLimit) continue;
         }
         if (overlapsRunning(task.scope, running)) continue;
-        start(action, taskState, task, true, target.harness.id);
+        start(action, taskState, task, true, {
+          subscription: target.subscription,
+          model: target.model.id,
+        });
         continue;
       }
 
@@ -509,7 +582,141 @@ export async function runDispatch(
         return { reason: "infra", cause: causes.join("; "), turns: turnsUsed };
       }
       if (drain) return { reason: "drained", cause: drain, turns: turnsUsed };
-      return { reason: "boundary", turns: turnsUsed };
+      // Wave end: the steward owns remaining merge conflicts. A wave that did
+      // work re-derives (landed merges unblock deps); a skipped or held wave
+      // is the boundary.
+      let steward: Awaited<ReturnType<typeof runSteward>>;
+      try {
+        steward = await runSteward(runtime, iteration);
+      } catch (err) {
+        const cause = err instanceof Error ? err.message : String(err);
+        const turns = settledTurns(
+          await runtime.store.listRecords(),
+          iteration,
+        );
+        return { reason: "infra", cause: `steward: ${cause}`, turns };
+      }
+      if (steward.infra) {
+        const turns = settledTurns(
+          await runtime.store.listRecords(),
+          iteration,
+        );
+        return { reason: "infra", cause: steward.infra.cause, turns };
+      }
+      if (steward.cancelled) {
+        const turns = settledTurns(
+          await runtime.store.listRecords(),
+          iteration,
+        );
+        return { reason: "cancelled", turns };
+      }
+      if (!steward.skipped) continue;
+      // Zero-merge stall: the dispatch set ran out with no merges and fresh
+      // parks, and no drain caused it. The PM owns the dispatch sets, so one
+      // stall turn resolves it in this iteration; a second stall, an
+      // all-left turn, or any drain falls through to the boundary as today.
+      // Owner ruling 2.
+      if (!opts.signals?.shouldStop()) {
+        const stallTasks = await runtime.store.listTasks();
+        const stallRecords = await runtime.store.listRecords();
+        const stallState = derive(
+          stallTasks,
+          stallRecords,
+          runtime.configs.process.flows,
+        );
+        const merges = stallRecords.filter(
+          (record) =>
+            record.iteration === iteration &&
+            record.step === "merge" &&
+            record.ok === true &&
+            record.endedAt,
+        ).length;
+        const attempted = stallRecords.some(
+          (record) =>
+            record.iteration === iteration &&
+            record.step === STALL_ROUTES_STEP &&
+            record.endedAt,
+        );
+        if (merges === 0 && !attempted) {
+          const slugs = [
+            ...new Set(
+              stallRecords
+                .filter(
+                  (record) =>
+                    record.iteration === iteration &&
+                    record.step === "park" &&
+                    record.endedAt &&
+                    record.slug &&
+                    stallState.tasks[record.slug]?.status === "parked",
+                )
+                .map((record) => record.slug!),
+            ),
+          ].sort();
+          if (slugs.length > 0) {
+            const stalled = await runStallPm(runtime, {
+              iteration,
+              state: stallState,
+              slugs,
+              cwd: runtime.paths.goalCheckout,
+            });
+            if (stalled.continued.length > 0) continue;
+          }
+        }
+      }
+      // Plan check: the dispatch set ran out short of terminal. A task-tier
+      // checker verifies the plan against the repo; on `progress` the PM
+      // writes the follow-ups and dispatch resumes in this iteration, and
+      // the checker re-runs after. `architect`, an empty follow-up list, a
+      // failed PM turn, or exhausted rounds fall through to the boundary,
+      // whose pack carries the checker's evidence per plan item. Without a
+      // plan there is nothing to verify, so the front path dispatches as
+      // before instead of spending a checker turn.
+      const planPath = path.join(runtime.store.goalDir, "plan.md");
+      if (
+        !opts.signals?.shouldStop() &&
+        planCheckConfigured(runtime) &&
+        fs.existsSync(planPath)
+      ) {
+        const checkTasks = await runtime.store.listTasks();
+        const checkRecords = await runtime.store.listRecords();
+        const checkState = derive(
+          checkTasks,
+          checkRecords,
+          runtime.configs.process.flows,
+        );
+        const rounds = checkRecords.filter(
+          (record) =>
+            record.iteration === iteration &&
+            record.step === PLAN_CHECK_STEP &&
+            record.actor === "agent" &&
+            record.endedAt,
+        ).length;
+        if (rounds < runtime.limits.planCheckRounds) {
+          const checked = await runPlanCheck(runtime, {
+            iteration,
+            round: rounds + 1,
+            state: checkState,
+          });
+          if (
+            !checked.infra &&
+            checked.verdict === "progress" &&
+            checked.followUps.length > 0
+          ) {
+            const followed = await runPlanCheckPm(runtime, {
+              iteration,
+              state: checkState,
+              followUps: checked.followUps,
+              cwd: runtime.paths.goalCheckout,
+            });
+            if (followed.continued.length > 0) continue;
+          }
+        }
+      }
+      const turns = settledTurns(await runtime.store.listRecords(), iteration);
+      const heldCause = heldBoundaryCause(hold, state);
+      return heldCause
+        ? { reason: "boundary", cause: heldCause, turns }
+        : { reason: "boundary", turns };
     }
     await Promise.race([...running.values()].map((r) => r.promise));
   }

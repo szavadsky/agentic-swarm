@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import fs from "node:fs";
 import path from "node:path";
 import { FakeHarness } from "../../src/harness/fake/index.js";
 import { packageRoot } from "../../src/kernel/config.js";
@@ -49,7 +50,11 @@ const ROLES: Record<string, Record<string, string>> = {
     repair: '- task "beta" depends on missing task "ghost"',
     steers: "- s1 (mailbox/inbox/s1.md):\n  keep the API stable",
     holds_dir: "/goal/mailbox/holds",
+    stalls:
+      "- alpha\n  cause: blocked: stuck\n  records: /goal/records/00007-i3-alpha-implement-r1\n  branch: factory-task/demo/alpha\n  turns: 1 of 8 spent\n  done-when: Done when: it works.",
     outcome_path: "/goal/records/00043-i3-pm-r1/outcome.yaml",
+    plan_checks:
+      "- alpha (continuation): mechanical park\n  cause: infra: runner lost\n  records: /goal/records/00007-i3-alpha-implement-r1\n  branch: factory-task/demo/alpha\n  turns: 1 of 8 spent\n  done-when: Done when: it works.",
     validate_cmd: "bun /factory/bin/factory.ts validate",
   },
   implementer: {
@@ -85,6 +90,26 @@ const ROLES: Record<string, Record<string, string>> = {
     transcripts_dir: "/sessions/demo/launch-2",
     digest_path: "/goal/iterations/3/digest.md",
     outcome_path: "/goal/records/00044-i3-digest-r1/outcome.yaml",
+    validate_cmd: "bun /factory/bin/factory.ts validate",
+  },
+  steward: {
+    worktree: "/worktrees/demo-tasks/alpha",
+    branch: "factory-task/demo/alpha",
+    integration_head: "abc1234def5678",
+    conflicts: "conflict.txt",
+    gate_commands: "- test: bun test",
+    baseline_checks: "none",
+    outcome_path: "/worktrees/demo-tasks/alpha/outcome.yaml",
+    validate_cmd: "bun /factory/bin/factory.ts validate",
+  },
+  "plan-checker": {
+    iteration: "3",
+    intent_path: "/goal/intent.md",
+    plan_path: "/goal/plan.md",
+    checkout: "/worktrees/demo",
+    tasks_dir: "/goal/tasks",
+    existing_tasks: "- alpha | merged | abcdef1234 | deps: none | frozen",
+    outcome_path: "/goal/records/00045-i3-plan-check-r1/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
   },
 };
@@ -369,7 +394,9 @@ describe("scope as predicted area", () => {
     expect(implementer).toContain(
       "Fix every finding from the previous review round that the done-when covers, wherever it lives",
     );
-    expect(reviewer).toContain("judge by the done-when, not by location");
+    expect(reviewer).toContain(
+      "judge out-of-area changes by the done-when, not by location",
+    );
     expect(reviewer).not.toContain("Scope creep");
   });
 
@@ -409,5 +436,191 @@ describe("architect horizon", () => {
     expect(rendered).toContain("not one iteration's slice");
     expect(rendered).toContain("details after spike X / task Y lands");
     expect(rendered).not.toContain("plan the whole iteration");
+  });
+});
+
+describe("prompt structure", () => {
+  it("gives every role one H1, ordered headings, and nothing after the turn block", () => {
+    const promptsDir = path.join(packageRoot, "prompts");
+    for (const [role, vars] of Object.entries(ROLES)) {
+      const rendered = library().render(role, vars);
+      const lines = rendered.split("\n");
+      const h1 = lines.filter((l) => l.startsWith("# "));
+      expect(h1.length, `${role} H1s: ${h1.join(" | ")}`).toBeLessThan(2);
+      let prev = 0;
+      let first = true;
+      for (const line of lines) {
+        const m = line.match(/^(#{1,6})\s/);
+        if (!m) continue;
+        const level = m[1]!.length;
+        if (!first && level > prev + 1) {
+          expect(
+            `skipped heading in ${role}: H${prev} -> H${level}: ${line}`,
+          ).toEqual("");
+        }
+        first = false;
+        prev = level;
+      }
+      const headings = lines.filter((l) => /^#{1,6}\s/.test(l));
+      const turnAt = headings.findIndex((h) => h.startsWith("## This turn"));
+      expect(turnAt, `${role} has no ## This turn`).toBeGreaterThanOrEqual(0);
+      expect(
+        turnAt,
+        `${role} has text after ## This turn: ${headings.slice(turnAt + 1).join(" | ")}`,
+      ).toBe(headings.length - 1);
+      const source = fs.readFileSync(
+        path.join(promptsDir, `${role}.md`),
+        "utf8",
+      );
+      const turnLine = source
+        .split("\n")
+        .findIndex((l) => l.startsWith("## This turn"));
+      expect(
+        turnLine,
+        `${role} source has no ## This turn`,
+      ).toBeGreaterThanOrEqual(0);
+      const stray = source
+        .split("\n")
+        .slice(turnLine + 1)
+        .filter((l) => l.trim() !== "" && !/^(\s|-)/.test(l));
+      expect(
+        stray,
+        `${role} has non-variable content after ## This turn: ${stray.join(" | ")}`,
+      ).toEqual([]);
+    }
+  });
+});
+
+const SINGLE_DEFINITION_WORDS = 8;
+
+function promptSentences(text: string): string[] {
+  const stripped = text
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/\{\{[\s\S]*?\}\}/g, " ")
+    .replace(/\{%[\s\S]*?%\}/g, " ");
+  const sentences: string[] = [];
+  for (const line of stripped.split("\n")) {
+    const cleaned = line
+      .replace(/^\s*(#{1,6}\s+|\d+[.)]\s+|[-*]\s+)/, "")
+      .trim();
+    if (!cleaned) continue;
+    for (const part of cleaned.split(/(?<=[.!?])\s+/)) {
+      const sentence = part.replace(/\s+/g, " ").trim().toLowerCase();
+      if (sentence && sentence.split(/\s+/).length >= SINGLE_DEFINITION_WORDS) {
+        sentences.push(sentence);
+      }
+    }
+  }
+  return sentences;
+}
+
+function internalRepeats(
+  rendered: Map<string, string>,
+  allowed: Record<string, string[]>,
+): { sentence: string; holders: string[] }[] {
+  const repeats: { sentence: string; holders: string[] }[] = [];
+  for (const [role, text] of rendered) {
+    const seen = new Set<string>();
+    const dupes = new Set<string>();
+    for (const sentence of promptSentences(text)) {
+      if (seen.has(sentence)) dupes.add(sentence);
+      seen.add(sentence);
+    }
+    for (const sentence of dupes) {
+      if (!(allowed[role] ?? []).includes(sentence)) {
+        repeats.push({ sentence, holders: [role, role] });
+      }
+    }
+  }
+  return repeats;
+}
+
+function crossFragmentRepeats(
+  fragments: Map<string, string>,
+  allowed: Record<string, string[]> = {},
+): { sentence: string; holders: string[] }[] {
+  const holders = new Map<string, string[]>();
+  for (const [name, text] of fragments) {
+    for (const sentence of new Set(promptSentences(text))) {
+      const list = holders.get(sentence) ?? [];
+      list.push(name);
+      holders.set(sentence, list);
+    }
+  }
+  return [...holders]
+    .filter(([, names]) => names.length > 1)
+    .filter(
+      ([sentence, names]) =>
+        !names.some((name) => (allowed[name] ?? []).includes(sentence)),
+    )
+    .map(([sentence, holders]) => ({ sentence, holders }));
+}
+
+describe("prompt single definitions", () => {
+  // Sentences (normalized, 8+ words) allowed to repeat, keyed by fragment
+  // name. A repeat is excused when any fragment or role holding it lists it
+  // here. Empty: every rule lives in exactly one fragment.
+  const ALLOWED_REPEATS: Record<string, string[]> = {};
+
+  it("defines every 8-word sentence once: no repeat inside one rendered prompt or across two fragments", () => {
+    const rendered = new Map<string, string>();
+    for (const [role, vars] of Object.entries(ROLES)) {
+      rendered.set(role, library().render(role, vars));
+    }
+    const promptsDir = path.join(packageRoot, "prompts");
+    const fragments = new Map<string, string>();
+    for (const file of fs.readdirSync(promptsDir).sort()) {
+      if (!file.endsWith(".md") || file === "VARIABLES.md") continue;
+      fragments.set(
+        file.replace(/\.md$/, ""),
+        fs.readFileSync(path.join(promptsDir, file), "utf8"),
+      );
+    }
+    const repeats = [
+      ...internalRepeats(rendered, ALLOWED_REPEATS),
+      ...crossFragmentRepeats(fragments, ALLOWED_REPEATS),
+    ];
+    expect(
+      repeats.map(
+        ({ sentence, holders }) => `${holders.join(" + ")}: ${sentence}`,
+      ),
+      "duplicated prompt sentences (move each to the fragment that owns it, or allow-list it)",
+    ).toEqual([]);
+  });
+
+  it("treats liquid tags and code blocks as non-sentences", () => {
+    expect(
+      promptSentences(
+        [
+          "{% include 'scope' %}",
+          "```yaml",
+          "a one two three four five six seven eight nine ten code sentence",
+          "```",
+          "Rule {{name}} text {{other}} here.",
+          "A real rule sentence with more than eight words lives here plainly.",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "a real rule sentence with more than eight words lives here plainly.",
+    ]);
+  });
+
+  it("excuses an allow-listed repeat", () => {
+    const fragments = new Map([
+      ["a", "A shared rule sentence with more than eight words lives here."],
+      ["b", "A shared rule sentence with more than eight words lives here."],
+    ]);
+    expect(crossFragmentRepeats(fragments)).toEqual([
+      {
+        sentence:
+          "a shared rule sentence with more than eight words lives here.",
+        holders: ["a", "b"],
+      },
+    ]);
+    expect(
+      crossFragmentRepeats(fragments, {
+        b: ["a shared rule sentence with more than eight words lives here."],
+      }),
+    ).toEqual([]);
   });
 });

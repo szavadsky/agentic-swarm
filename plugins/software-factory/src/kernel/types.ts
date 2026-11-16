@@ -14,7 +14,7 @@ import type {
   TurnAttempt,
   Usage,
 } from "../harness/types.js";
-import type { PriceTable } from "./pricing.js";
+import type { PriceSource } from "./openrouter.js";
 
 export const concernSchema = z.object({
   kind: z.enum(["debt", "risk", "uncertainty", "choice"]),
@@ -34,6 +34,53 @@ export const steerRouteEntrySchema = z.object({
   answer: z.string().optional(),
 });
 
+export const stallRouteEntrySchema = z.object({
+  slug: z.string().min(1),
+  action: z.enum(["continue", "leave"]),
+  reason: z.string().min(1),
+});
+export type StallRouteEntry = z.infer<typeof stallRouteEntrySchema>;
+
+/** One plan item's check result: what the checker inspected and what it showed. */
+export const planCheckEvidenceSchema = z.object({
+  item: z.string().min(1),
+  status: z.enum(["done", "missing", "below-standard", "unverifiable"]),
+  evidence: z.string().min(1),
+});
+export type PlanCheckEvidence = z.infer<typeof planCheckEvidenceSchema>;
+
+/** One mechanical follow-up the PM can write without new direction. */
+export const planCheckFollowUpSchema = z.object({
+  kind: z.enum(["continuation", "missing-dep", "unmerged"]),
+  /** The parked slug to continue, or the pending task a dead dep blocks. */
+  slug: z.string().min(1),
+  /** A missing-dep follow-up's dead dependency; absent for every other kind. */
+  dep: z.string().optional(),
+  reason: z.string().min(1),
+});
+export type PlanCheckFollowUp = z.infer<typeof planCheckFollowUpSchema>;
+
+/**
+ * The checker's report: the kernel resumes dispatch on `progress` and
+ * consults the architect on `architect`. One enum, because the kernel
+ * branches on it.
+ */
+export const planCheckSchema = z.object({
+  verdict: z.enum(["progress", "architect"]),
+  evidence: z.array(planCheckEvidenceSchema).default([]),
+  followUps: z.array(planCheckFollowUpSchema).default([]),
+});
+export type PlanCheck = z.infer<typeof planCheckSchema>;
+export type PlanCheckVerdict = PlanCheck["verdict"];
+
+/** One plan-check follow-up the PM routed: `continue` writes a task, `leave` keeps it for the architect. */
+export const planCheckRouteEntrySchema = z.object({
+  slug: z.string().min(1),
+  action: z.enum(["continue", "leave"]),
+  reason: z.string().min(1),
+});
+export type PlanCheckRouteEntry = z.infer<typeof planCheckRouteEntrySchema>;
+
 /** The only agent ↔ script surface; one schema for every step. */
 export const outcomeSchema = z.object({
   status: z.enum(["done", "blocked", "failed", "upscope"]),
@@ -49,6 +96,17 @@ export const outcomeSchema = z.object({
   // PM steer turns only: one route per claimed steer. Absent on every other
   // step; absent on a legacy steer turn means every steer goes to the architect.
   steerRoutes: z.array(steerRouteEntrySchema).optional(),
+  // PM stall turns only: one entry per parked slug of this iteration's stall.
+  // Absent on every other step; the kernel continues `continue` slugs and
+  // records `leave` reasons for the next boundary.
+  stallRoutes: z.array(stallRouteEntrySchema).optional(),
+  // Plan-checker turns only: the verdict the kernel branches on, the evidence
+  // per plan item, and the mechanical follow-ups. Absent on every other step.
+  planCheck: planCheckSchema.optional(),
+  // Plan-check PM turns only: one entry per checker follow-up of this round.
+  // Absent on every other step; the kernel continues `continue` slugs and
+  // records `leave` reasons for the next boundary.
+  planCheckRoutes: z.array(planCheckRouteEntrySchema).optional(),
 });
 
 export type Concern = z.infer<typeof concernSchema>;
@@ -72,6 +130,11 @@ export interface TaskFile {
   body: string;
   /** Outcome-repair turns for this task's turns; defaults to REPAIR_TURNS. */
   repairTurns?: number;
+  /**
+   * Per-turn wall bound in minutes for this task's turns; overrides the alias
+   * wall, still capped by the run's `limits.turnMinutes`. Owner ruling 2.
+   */
+  turnMinutes?: number;
 }
 
 export type TaskStatus =
@@ -163,8 +226,13 @@ export interface Limits {
   itemTurns: number;
   flows: Record<string, FlowDefinition>;
   iterations: number;
-  concurrency: number;
-  perHarness: Record<string, number>;
+  concurrency: {
+    overall: number;
+    /** Quota-pool name -> parallel sessions; pools are named on aliases. */
+    perSubscription: Record<string, number>;
+    /** Model id -> parallel sessions; empty means no per-model cap. */
+    perModel: Record<string, number>;
+  };
   /** Optional drain limits for one iteration: new turns, wall clock and USD. */
   iterationTurns?: number;
   iterationWallMs?: number;
@@ -173,6 +241,8 @@ export interface Limits {
   turnMinutes?: number;
   /** Per-iteration wall bound in minutes; folds into `iterationWallMs`. */
   iterationMinutes?: number;
+  /** Plan-checker re-runs per iteration; exhausted rounds consult the architect. */
+  planCheckRounds: number;
 }
 
 export type StepActor = "agent" | "script";
@@ -350,11 +420,24 @@ export interface ProcessConfig {
   promptsDir?: string;
 }
 
+/** One fallback tier: a model on the alias's harness or another, with its own effort. */
+export interface FallbackConfig {
+  /** Harness id; defaults to the alias's harness. */
+  harness?: string;
+  model: string;
+  /** Effort level; defaults to the alias's resolved effort. */
+  effort?: string;
+  /** Quota pool this tier draws on; defaults to the alias's subscription. */
+  subscription?: string;
+}
+
 export interface AliasConfig {
   harness: string;
   model: string;
   effort?: string;
-  fallbacks?: string[];
+  /** Quota pool this alias draws on; absent means throttled only overall. */
+  subscription?: string;
+  fallbacks?: FallbackConfig[];
   /** Alias the PM ladder climbs to after a tier fails; absent ends the ladder. */
   escalateTo?: string;
   /** Alias-level turn bounds; config defaults match `DEFAULT_TIMEOUTS`. */
@@ -370,12 +453,17 @@ export interface RunConfig {
   aliases: Record<string, AliasConfig>;
   /** Harness id -> adapter binding; native harnesses need no entry. */
   harnesses?: Record<string, HarnessConfig>;
-  /** Model id -> USD per Mtok; absent model means unpriced, not free. */
-  prices?: PriceTable;
+  /** Harness model id -> OpenRouter model id, for ids matching cannot resolve. */
+  priceIds?: Record<string, string>;
   limits: {
-    concurrency: number;
-    perHarness: Record<string, number>;
+    concurrency: {
+      overall: number;
+      perSubscription: Record<string, number>;
+      perModel: Record<string, number>;
+    };
     iterations: number;
+    /** Plan-checker re-runs per iteration; exhausted rounds consult the architect. */
+    planCheckRounds: number;
     turns?: number;
     wallMinutes?: number;
     /** Optional USD brake: crossing it drains the iteration. */
@@ -424,4 +512,12 @@ export interface KernelRuntime {
   harnesses: ReadonlyMap<string, Harness>;
   prompts: PromptLibrary;
   limits: Limits;
+  /**
+   * Alias -> chain index of the tier to start at. A turn that lands on a
+   * fallback records it here, so the rest of the launch starts on the working
+   * tier instead of restarting at exhausted ones.
+   */
+  workingTier: Map<string, number>;
+  /** Price cache and fetcher; undefined means the shared cache plus network. */
+  priceSource?: PriceSource;
 }

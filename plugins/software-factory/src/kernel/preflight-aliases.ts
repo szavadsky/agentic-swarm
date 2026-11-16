@@ -11,6 +11,8 @@ export interface AliasContext {
   harnesses: ReadonlyMap<string, Harness>;
   catalog?: ModelCatalog;
   unavailable: ReadonlySet<string>;
+  /** Quota-pool names `limits.concurrency.perSubscription` caps. */
+  subscriptions: ReadonlySet<string>;
   capsCache: Map<string, Promise<Caps>>;
   modelCache: Map<string, Promise<boolean>>;
 }
@@ -134,6 +136,16 @@ export async function checkAlias(
     );
     return;
   }
+  if (
+    alias.subscription !== undefined &&
+    !ctx.subscriptions.has(alias.subscription)
+  ) {
+    add(
+      ctx,
+      `${key}.subscription`,
+      `subscription "${alias.subscription}" names no limits.concurrency.perSubscription pool`,
+    );
+  }
   if (ctx.unavailable.has(alias.harness)) return;
 
   let listed = true;
@@ -160,22 +172,59 @@ export async function checkAlias(
     alias.effort,
   );
   for (const [index, fallback] of (alias.fallbacks ?? []).entries()) {
+    const tierKey = `${key}.fallbacks.${index}`;
+    const tierHarness = fallback.harness ?? alias.harness;
+    if (
+      fallback.harness !== undefined &&
+      !ctx.harnesses.has(fallback.harness)
+    ) {
+      add(
+        ctx,
+        `${tierKey}.harness`,
+        `harness "${fallback.harness}" is not registered (registered: ${[...ctx.harnesses.keys()].join(", ") || "none"})`,
+      );
+      continue;
+    }
+    const tierSubscription = fallback.subscription ?? alias.subscription;
+    if (
+      tierSubscription !== undefined &&
+      !ctx.subscriptions.has(tierSubscription)
+    ) {
+      add(
+        ctx,
+        `${tierKey}.subscription`,
+        `subscription "${tierSubscription}" names no limits.concurrency.perSubscription pool`,
+      );
+    }
+    if (ctx.unavailable.has(tierHarness)) continue;
     try {
-      const fallbackListed = await modelListed(ctx, alias.harness, fallback);
+      const fallbackListed = await modelListed(
+        ctx,
+        tierHarness,
+        fallback.model,
+      );
       if (!fallbackListed) {
         add(
           ctx,
-          `${key}.fallbacks.${index}`,
-          `fallback "${fallback}" is not listed by harness "${alias.harness}"`,
+          `${tierKey}.model`,
+          `fallback "${fallback.model}" is not listed by harness "${tierHarness}"`,
         );
         continue;
       }
-      await capsOf(ctx, alias.harness, { id: fallback });
+      // Each tier carries its own effort: explicit, else the alias's, resolved
+      // against the tier's own harness caps and written back in place.
+      fallback.effort = await resolveEffort(
+        ctx,
+        tierKey,
+        tierHarness,
+        { id: fallback.model },
+        fallback.effort ?? alias.effort,
+      );
     } catch (err) {
       add(
         ctx,
-        `${key}.fallbacks.${index}`,
-        `fallback "${fallback}" cannot be probed: ${(err as Error).message}`,
+        tierKey,
+        `fallback "${fallback.model}" cannot be probed: ${(err as Error).message}`,
       );
     }
   }

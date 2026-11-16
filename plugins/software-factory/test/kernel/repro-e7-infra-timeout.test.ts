@@ -7,6 +7,7 @@ import {
   cleanupFlowRepo,
   makeRuntime,
   setupFlowRepo,
+  scriptStallLeave,
   writeTask,
 } from "./s2-helpers.js";
 
@@ -19,7 +20,9 @@ import {
 describe("E7 inverted — infra timeouts and crashes spend the turn budget", () => {
   for (const cause of ["timeout", "crash"] as const) {
     it(`parks infra-repeat on the same step after two ${cause} stops`, async () => {
-      const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+      const { repo, goal } = setupFlowRepo({
+        limits: { concurrency: { overall: 1 } },
+      });
       try {
         const harness = new FakeHarness({ id: "fake" });
         harness.script((req) =>
@@ -40,6 +43,7 @@ describe("E7 inverted — infra timeouts and crashes spend the turn budget", () 
             },
           }),
         );
+        scriptStallLeave(harness, ["alpha"]);
         const runtime = await makeRuntime(repo, goal, { fake: harness });
         await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
 
@@ -70,7 +74,7 @@ describe("E7 inverted — infra timeouts and crashes spend the turn budget", () 
         // The parked step is not re-dispatched by a third launch.
         const third = await runDispatch(runtime, { iteration: 3 });
         expect(third.reason).toBe("boundary");
-        expect(harness.calls).toHaveLength(2);
+        expect(harness.calls).toHaveLength(3);
         const turns = (await runtime.store.listRecords()).filter(
           (r) => r.slug === "alpha" && r.actor === "agent",
         );
@@ -82,7 +86,9 @@ describe("E7 inverted — infra timeouts and crashes spend the turn budget", () 
   }
 
   it("still lets an infra quota stop pass without spending the budget", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       harness.script((req) =>

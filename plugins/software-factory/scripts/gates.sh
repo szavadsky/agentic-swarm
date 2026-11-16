@@ -6,14 +6,16 @@
 # promote time.
 # Usage: gates.sh [package-dir] [gate]
 #   gate: typecheck | tests | format | lint | schema | schema-validation (default: all)
-# The schema-validation gate also validates the repo's schema-enforced files
-# (.factory config, task files, class.yaml, outcome records); the export
-# carries only the package, so the repo root arrives in FACTORY_REPO_ROOT.
-# A caller may point it at another checkout carrying the artifact tree (e.g.
-# the ops checkout). Otherwise the invoking directory wins when it carries the
-# artifact tree; a bare checkout (task worktree, merge scratch) falls back to
-# the worktree on the repo's base branch, where the operator runs, and finally
-# to the invoking directory.
+# The schema-validation gate also validates the repo's schema-enforced files.
+# The export carries only the package, so both roots arrive in the
+# environment: FACTORY_REPO_ROOT carries the artifact checkout (tasks, class,
+# outcomes) and FACTORY_TREE_ROOT the git toplevel of the tree under test
+# (repo config, bootstrap/run). A caller may point FACTORY_REPO_ROOT at
+# another checkout carrying the artifact tree (e.g. the ops checkout).
+# Otherwise the invoking directory wins when it carries the artifact tree; a
+# bare checkout (task worktree, merge scratch) falls back to the worktree on
+# the repo's base branch, where the operator runs, and finally to the
+# invoking directory.
 set -euo pipefail
 
 pkg="${1:-$(dirname "$(readlink -f "$0")")/..}"
@@ -45,6 +47,7 @@ if [ -z "${FACTORY_REPO_ROOT:-}" ]; then
   fi
 fi
 export FACTORY_REPO_ROOT
+export FACTORY_TREE_ROOT="${FACTORY_TREE_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 
 unknown_gate() {
   echo "gates: unknown gate '$1' (expected typecheck, tests, format, lint, schema, schema-validation or all)" >&2

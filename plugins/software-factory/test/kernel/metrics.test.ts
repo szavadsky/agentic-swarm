@@ -15,6 +15,7 @@ import {
   priceTableOnly,
   pricedUsage,
 } from "../../src/kernel/pricing.js";
+import { writePriceCache } from "../../src/kernel/openrouter.js";
 import { loadPrompts } from "../../src/kernel/prompts.js";
 import { finishChecks, startChecks } from "../../src/kernel/record.js";
 import { createFolderStore } from "../../src/kernel/store.js";
@@ -96,7 +97,8 @@ describe("iteration metrics", () => {
           "  pm: { harness: fake, model: fake-pm }",
           "  implementer: { harness: fake, model: fake-impl }",
           "  reviewer: { harness: fake, model: fake-review }",
-          "limits: { iterations: 1, concurrency: 1 }",
+          "  steward: { harness: fake, model: fake-steward }",
+          "limits: { iterations: 1, concurrency: { overall: 1, perSubscription: {}, perModel: {} } }",
           `worktreeRoot: ../${base}-wt`,
           `sessions: { dir: ../${base}-sessions, keepRuns: 2 }`,
           "",
@@ -560,10 +562,14 @@ describe("record cost truth", () => {
     };
     const run: RunConfig = {
       aliases: { implementer: { harness: "fake", model: "paid/one" } },
-      prices: PRICES,
-      limits: { concurrency: 1, perHarness: {}, iterations: 1 },
+      limits: {
+        concurrency: { overall: 1, perSubscription: {}, perModel: {} },
+        iterations: 1,
+        planCheckRounds: 2,
+      },
       sessions: { dir: "", keepRuns: 1, retention: "short" },
     };
+    writePriceCache(path.join(root, "price-cache.json"), PRICES);
     const runtime: KernelRuntime = {
       paths: {
         repoRoot: root,
@@ -582,8 +588,16 @@ describe("record cost truth", () => {
         itemTurns: 8,
         flows: {},
         iterations: 1,
-        concurrency: 1,
-        perHarness: {},
+        concurrency: { overall: 1, perSubscription: {}, perModel: {} },
+        planCheckRounds: 2,
+      },
+      workingTier: new Map(),
+      // Hermetic prices: the test-local cache, never the network.
+      priceSource: {
+        cachePath: path.join(root, "price-cache.json"),
+        fetchModels: async () => {
+          throw new Error("price fetch disabled in tests");
+        },
       },
     };
     try {

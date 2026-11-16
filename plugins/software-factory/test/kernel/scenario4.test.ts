@@ -19,6 +19,7 @@ import {
   makeRuntime,
   outcome,
   setupFlowRepo,
+  scriptStallLeave,
   writeTask,
 } from "./s2-helpers.js";
 
@@ -189,6 +190,7 @@ describe("KERNEL0 scenario 4 — infra stops and the item budget", () => {
         );
         return fakeTurnResult(req);
       });
+      scriptStallLeave(harness, ["task"]);
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("task", { scope: ["task.txt"] }));
@@ -205,7 +207,7 @@ describe("KERNEL0 scenario 4 — infra stops and the item budget", () => {
       expect(state.tasks.task!.cause!.startsWith("budget:")).toBe(true);
       expect(state.tasks.task!.turns).toBe(2);
       expect(state.tasks.task!.round).toBe(2);
-      expect(harness.calls.length).toBe(2);
+      expect(harness.calls.length).toBe(3);
     } finally {
       cleanupFlowRepo(repo);
     }

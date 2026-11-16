@@ -12,12 +12,14 @@ import {
   writeTask as writeGoalTask,
   writePlan,
 } from "./e2e-helpers.js";
+import { testPriceSource } from "../helpers/price-source.js";
 import { task } from "./helpers.js";
 import {
   cleanupFlowRepo,
   makeRuntime,
   outcome,
   setupFlowRepo,
+  scriptStallLeave,
   writeTask,
 } from "./s2-helpers.js";
 
@@ -84,6 +86,7 @@ describe("infra stop details", () => {
           stop: { kind: "refusal", details: "content policy refusal" },
         }),
       );
+      scriptStallLeave(harness, ["task"]);
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("task", { scope: ["task.txt"] }));
@@ -132,6 +135,7 @@ describe("infra stop details", () => {
         goal: "demo",
         iterations: 2,
         harnesses: { fake: harness },
+        priceSource: testPriceSource(goal.repo.dir),
       });
       const stopText = `infrastructure stop during iteration 1: alpha: auth: ${NO_ROUTE}; relaunch to retry`;
       expect(result.stop).toBe("infra");

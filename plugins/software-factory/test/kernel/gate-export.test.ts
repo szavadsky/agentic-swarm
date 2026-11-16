@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { createTmpRepo } from "../helpers/tmp-repo.js";
 
 const PACKAGE_ROOT = path.join(import.meta.dir, "..", "..");
 const GATES = path.join(PACKAGE_ROOT, "scripts", "gates.sh");
@@ -165,6 +166,76 @@ describe("package-only export gate", () => {
       expect(honored.status).toBe(0);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("exports the tree under test to the gate", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gate-tree-root-"));
+    const pkg = path.join(root, "pkg");
+    const elsewhere = path.join(root, "elsewhere");
+    try {
+      fs.mkdirSync(pkg, { recursive: true });
+      fs.mkdirSync(elsewhere, { recursive: true });
+      fs.writeFileSync(
+        path.join(pkg, "package.json"),
+        `${JSON.stringify({
+          name: "gate-tree-root",
+          private: true,
+          scripts: {
+            "schema-validation": 'echo "tree-root:$FACTORY_TREE_ROOT"',
+          },
+        })}\n`,
+      );
+      const baseEnv = { ...process.env };
+      delete baseEnv.FACTORY_TREE_ROOT;
+      const defaulted = spawnSync("bash", [GATES, pkg, "schema-validation"], {
+        cwd: root,
+        encoding: "utf8",
+        env: baseEnv,
+      });
+      // Default outside a git checkout: the invoking directory.
+      expect(defaulted.status).toBe(0);
+      expect(defaulted.stdout).toContain(`tree-root:${root}`);
+      const honored = spawnSync("bash", [GATES, pkg, "schema-validation"], {
+        cwd: root,
+        encoding: "utf8",
+        env: { ...baseEnv, FACTORY_TREE_ROOT: elsewhere },
+      });
+      expect(honored.status).toBe(0);
+      expect(honored.stdout).toContain(`tree-root:${elsewhere}`);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("defaults the tree root to the git toplevel of the invoking directory", () => {
+    const repo = createTmpRepo();
+    try {
+      const subdir = path.join(repo.dir, "nested", "deep");
+      const pkg = path.join(repo.dir, "pkg");
+      fs.mkdirSync(subdir, { recursive: true });
+      fs.mkdirSync(pkg, { recursive: true });
+      fs.writeFileSync(
+        path.join(pkg, "package.json"),
+        `${JSON.stringify({
+          name: "gate-tree-toplevel",
+          private: true,
+          scripts: {
+            "schema-validation": 'echo "tree-root:$FACTORY_TREE_ROOT"',
+          },
+        })}\n`,
+      );
+      const baseEnv = { ...process.env };
+      delete baseEnv.FACTORY_TREE_ROOT;
+      const result = spawnSync("bash", [GATES, pkg, "schema-validation"], {
+        cwd: subdir,
+        encoding: "utf8",
+        env: baseEnv,
+      });
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain(`tree-root:${repo.dir}`);
+    } finally {
+      repo.cleanup();
     }
   });
 });

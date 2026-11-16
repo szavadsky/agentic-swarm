@@ -1,11 +1,15 @@
 import fs from "node:fs";
-import type {
-  ModelRef,
-  SessionRef,
-  Stop,
-  TurnAttempt,
+import {
+  portable,
+  type ModelRef,
+  type SessionRef,
+  type Stop,
+  type TurnAttempt,
+  type TurnResult,
+  type Usage,
 } from "../harness/types.js";
 import { addUsage } from "../harness/usage.js";
+import { loadPriceTable } from "./openrouter.js";
 import { pricedUsage } from "./pricing.js";
 import { missingPlanFinding, snapshotPlan } from "./architect-session.js";
 import { contextPackRelPath } from "./context-pack.js";
@@ -114,6 +118,10 @@ function deliverableFor(role: string): string {
       return "task files";
     case "front":
       return "class, task, and pack";
+    case "steward":
+      return "merge resolution";
+    case "plan-checker":
+      return "plan verdict";
     default:
       return "outcome";
   }
@@ -188,12 +196,10 @@ export async function runAgentTurn(
 ): Promise<AgentTurnResult> {
   const {
     alias,
-    harness,
     model,
-    effort,
-    fallbacks,
+    tiers,
+    tierOffset,
     timeouts: aliasTimeouts,
-    opaque,
   } = spec.target;
   const started = await runtime.store.startRecord({
     ...spec.meta,
@@ -217,28 +223,81 @@ export async function runAgentTurn(
   const pack = await measurePack(runtime, spec);
   const timeouts = spec.timeouts ?? aliasTimeouts ?? DEFAULT_TIMEOUTS;
 
-  const request = {
-    model,
-    effort,
-    cwd: spec.cwd,
-    prompt,
-    session: spec.session,
-    outcomePath,
-    timeouts,
-    fallbacks: fallbacks?.map((id) => ({ id, effort })),
-    opaque,
+  /**
+   * Walks the alias's tiers from `fromIndex`: one harness call per tier, each
+   * with its own model, effort and opaque config, advancing on infrastructure
+   * stops the tier's own retries could not cure. A session crosses only to a
+   * harness it is portable to; every attempt is stamped with the harness that
+   * ran it. A tier that lands a task-side stop becomes the launch's working
+   * tier for this alias.
+   */
+  const callChain = async (
+    fromIndex: number,
+    ask: string,
+    chainSession: SessionRef | undefined,
+  ): Promise<{
+    result: TurnResult;
+    endIndex: number;
+    attempts: TurnAttempt[];
+    usage: Usage;
+  }> => {
+    let index = fromIndex;
+    let current = chainSession;
+    const chainAttempts: TurnAttempt[] = [];
+    let chainUsage: Usage | undefined;
+    let result: TurnResult | undefined;
+    for (;;) {
+      const tier = tiers[index]!;
+      result = await turnWithTimeout(tier.harness, {
+        model: tier.model,
+        ...(tier.effort ? { effort: tier.effort } : {}),
+        cwd: spec.cwd,
+        prompt: ask,
+        ...(current && portable(current.harness, tier.harness.id)
+          ? { session: current }
+          : {}),
+        outcomePath,
+        timeouts,
+        opaque: tier.opaque,
+      });
+      for (const attempt of result.attempts ?? []) {
+        chainAttempts.push({ ...attempt, harness: tier.harness.id });
+      }
+      chainUsage = chainUsage
+        ? addUsage(chainUsage, result.usage)
+        : result.usage;
+      current = result.session;
+      if (result.stop.kind !== "infra" || index + 1 >= tiers.length) break;
+      index += 1;
+    }
+    const landed = result!.stop;
+    if (
+      landed.kind === "done" ||
+      landed.kind === "refusal" ||
+      landed.kind === "truncated"
+    ) {
+      runtime.workingTier.set(alias, tierOffset + index);
+    }
+    return {
+      result: result!,
+      endIndex: index,
+      attempts: chainAttempts,
+      usage: chainUsage!,
+    };
   };
+
   // The plan snapshot is taken once before the first attempt, so the repair
   // turn compares against the pre-turn plan, not the first attempt's.
   const planBefore =
     spec.target.role === "architect" ? snapshotPlan(spec.vars.plan_path) : null;
-  const result = await turnWithTimeout(harness, request);
-  let lastResult = result;
-  let attempts = [...(result.attempts ?? [])];
-  let stop: Stop = result.stop;
-  let usage = result.usage;
-  let session = result.session;
-  let text = result.text;
+  const first = await callChain(0, prompt, spec.session);
+  let lastResult = first.result;
+  let attempts = first.attempts;
+  let stop: Stop = first.result.stop;
+  let usage = first.usage;
+  let session = first.result.session;
+  let text = first.result.text;
+  let tierIndex = first.endIndex;
   let outcome: Outcome | null = null;
   let findings: string[] = [];
 
@@ -248,16 +307,14 @@ export async function runAgentTurn(
   if (spec.session && overflowed(stop)) {
     // A half-delivered outcome from the failed attempt is not the retry's.
     fs.rmSync(outcomePath, { force: true });
-    const retry = await turnWithTimeout(harness, {
-      ...request,
-      session: undefined,
-    });
-    lastResult = retry;
-    attempts = [...attempts, ...(retry.attempts ?? [])];
-    stop = retry.stop;
+    const retry = await callChain(tierIndex, prompt, undefined);
+    lastResult = retry.result;
+    attempts = [...attempts, ...retry.attempts];
+    stop = retry.result.stop;
     usage = addUsage(usage, retry.usage);
-    session = retry.session;
-    text = retry.text;
+    session = retry.result.session;
+    text = retry.result.text;
+    tierIndex = retry.endIndex;
   }
 
   const deliverable = deliverableFor(spec.target.role);
@@ -309,12 +366,12 @@ export async function runAgentTurn(
   const needsRepair = findings.length > 0 && !haltedNow();
   let repairs = 0;
   while (findings.length > 0 && !haltedNow() && repairs < maxRepairs) {
-    const repair = await turnWithTimeout(harness, {
-      ...request,
-      // One in-session repair ask, rendered from the process-config prompt
-      // template so repos can reword it; a bare status:done only delivers
-      // when no verdict or decision is required.
-      prompt: runtime.prompts.render("delivery-repair", {
+    // One in-session repair ask, rendered from the process-config prompt
+    // template so repos can reword it; a bare status:done only delivers
+    // when no verdict or decision is required.
+    const repair = await callChain(
+      tierIndex,
+      runtime.prompts.render("delivery-repair", {
         role: spec.target.role,
         deliverable,
         done_allowed: spec.expectation === "any" ? "true" : "false",
@@ -322,14 +379,15 @@ export async function runAgentTurn(
         outcome_path: outcomePath,
       }),
       session,
-    });
+    );
     repairs += 1;
-    lastResult = repair;
-    attempts = [...attempts, ...(repair.attempts ?? [])];
-    stop = repair.stop;
+    lastResult = repair.result;
+    attempts = [...attempts, ...repair.attempts];
+    stop = repair.result.stop;
     usage = addUsage(usage, repair.usage);
-    session = repair.session ?? session;
-    text = repair.text;
+    session = repair.result.session ?? session;
+    text = repair.result.text;
+    tierIndex = repair.endIndex;
     assess(true);
   }
   if (needsRepair) {
@@ -351,21 +409,25 @@ export async function runAgentTurn(
   // list-price equivalent; aggregation reprices idempotently for old records.
   // A resumed turn whose harness did not split the cache priced its prefix.
   const cachedPrefix = spec.session ? true : undefined;
-  const prices = runtime.configs.run.prices ?? {};
+  const prices = await loadPriceTable(runtime.priceSource);
+  const priceIds = runtime.configs.run.priceIds;
   const pricedAttempts: TurnAttempt[] = attempts.map((attempt) => ({
     ...attempt,
     usage: pricedUsage(attempt.usage, attempt.model.id, prices, {
       cachedPrefix,
+      priceIds,
     }).usage,
   }));
   const pricedTop = pricedUsage(usage, actualModel?.id, prices, {
     cachedPrefix,
+    priceIds,
   }).usage;
   // The settle ran while the cache was hot, so an unsplit compaction input is
   // the cached transcript, priced at the cached rate.
   const pricedCompact = settled.compactUsage
     ? pricedUsage(settled.compactUsage, actualModel?.id, prices, {
         cachedPrefix: true,
+        priceIds,
       }).usage
     : undefined;
   const record = await started.finish({

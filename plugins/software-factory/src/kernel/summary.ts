@@ -11,6 +11,7 @@ import {
   rolesByStep,
   writeMetrics,
 } from "./metrics.js";
+import { loadPriceTable } from "./openrouter.js";
 import type { PriceTable } from "./pricing.js";
 import type {
   ArtifactStore,
@@ -37,8 +38,10 @@ export interface SummaryInput {
   status?: SummaryStatus;
   /** Step id -> role, from the process flow config. */
   roleByStep?: Record<string, string>;
-  /** Model id -> USD per Mtok, from the run config. */
+  /** OpenRouter price table, loaded once per write. */
   prices?: PriceTable;
+  /** Harness model id -> OpenRouter model id, from the run config. */
+  priceIds?: Record<string, string>;
   /** Steers moved to processed; feeds the operator-act counter. */
   humanInterventions?: number;
 }
@@ -202,6 +205,7 @@ export async function writeIterationSummary(
     roleByStep,
     input.humanInterventions ?? 0,
     input.prices ?? {},
+    input.priceIds,
   );
   const {
     usage,
@@ -391,6 +395,8 @@ export async function backfillSummaries(runtime: KernelRuntime): Promise<void> {
         ? "blocked-by-user"
         : "stopped-with-debt";
   const roleByStep = rolesByStep(runtime.configs.process.flows);
+  const prices = await loadPriceTable(runtime.priceSource);
+  const priceIds = runtime.configs.run.priceIds;
   for (let n = 1; n <= state.iteration; n++) {
     if (await runtime.store.readFile(summaryRelPath(n))) continue;
     await writeIterationSummary(runtime.store, {
@@ -399,7 +405,8 @@ export async function backfillSummaries(runtime: KernelRuntime): Promise<void> {
       records,
       status,
       roleByStep,
-      prices: runtime.configs.run.prices,
+      prices,
+      priceIds,
     });
     await writeMetrics(runtime.store, {
       iteration: n,
@@ -407,7 +414,8 @@ export async function backfillSummaries(runtime: KernelRuntime): Promise<void> {
       records,
       state,
       roleByStep,
-      prices: runtime.configs.run.prices,
+      prices,
+      priceIds,
     });
   }
 }

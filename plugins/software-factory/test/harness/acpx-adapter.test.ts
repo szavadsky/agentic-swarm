@@ -376,7 +376,7 @@ describe("AcpxHarness", () => {
     }
   });
 
-  it("maps codex usage into Usage and leaves cost to the price table", async () => {
+  it("maps codex usage into Usage and leaves cost to OpenRouter pricing", async () => {
     // The live codex probe reported in 556 / cache-read 5760 / out 4.
     const stub = createAcpxStub({
       usage: {
