@@ -18,7 +18,6 @@ const PI_ACPX: AcpxConfig = {
   compact: true,
   effort: {
     configId: "thought_level",
-    levels: ["off", "minimal", "low", "medium", "high", "xhigh"],
   },
   usage: { cache: false },
 };
@@ -150,7 +149,6 @@ describe("AcpxHarness session compaction", () => {
       compact: true,
       effort: {
         configId: "effort",
-        levels: ["low", "medium", "high", "xhigh", "max"],
       },
       usage: { cache: true },
     };

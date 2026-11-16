@@ -4,12 +4,14 @@ import type {
   CompactResult,
   Harness,
   ModelRef,
+  ModelProbe,
   SessionRef,
   TurnAttempt,
   TurnRequest,
   TurnResult,
 } from "../types.js";
 import { resolveAcpxCommand } from "./command.js";
+import { probeAcpxModel } from "./probe.js";
 import { runAcpxCommand, runAcpxTurn } from "./turn.js";
 import type { AcpxHarnessOptions, AcpxTurnSummary } from "./types.js";
 
@@ -37,7 +39,8 @@ export class AcpxHarness implements Harness {
       compact: this.runtime.acpx.compact === true ? "server" : "none",
       subagents: "none",
       structuredOutput: "none",
-      effort: [...(this.runtime.acpx.effort?.levels ?? [])],
+      // Live levels exist only inside a session; pre-flight probes them.
+      effort: [],
       // ACP carries cost on `usage_update`; a silent agent leaves it unknown.
       usage: { cache: this.runtime.acpx.usage?.cache ?? false, cost: true },
     };
@@ -62,6 +65,11 @@ export class AcpxHarness implements Harness {
     const value = result.outcome.value;
     const attempts: TurnAttempt[] = result.attempts;
     return { ...value, attempts };
+  }
+
+  /** Opens one no-prompt ACP session and reads that model's live options. */
+  async probe(model: ModelRef): Promise<ModelProbe> {
+    return await probeAcpxModel(this.runtime, this.runtime.acpx, model);
   }
 
   /**

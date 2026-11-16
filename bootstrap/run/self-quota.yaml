@@ -83,25 +83,24 @@ harnesses:
       args: [--approve-all]
       effort:
         configId: thought_level
-        levels: [low, medium, high]
         modelBases: { gemini-3.8-flash: [low, medium, high] }
       usage: { cache: true }
   pi:
     acpx:
       agent: pi
       compact: true
-      effort: { configId: thought_level, levels: [off, minimal, low, medium, high, xhigh] }
+      effort: { configId: thought_level }
       usage: { cache: false }
   codex:
     acpx:
       agent: codex
       compact: true
-      effort: { configId: reasoning_effort, levels: [low, medium, high, xhigh, max] }
+      effort: { configId: reasoning_effort }
       usage: { cache: true }
   claude-code:
     acpx:
       agent: claude
-      effort: { configId: effort, levels: [low, medium, high, xhigh, max] }
+      effort: { configId: effort }
   # The built-in `acpx opencode` route resolves 1.19.5 and fails on the 2.2.7
   # data dir; the raw `opencode acp` route runs the installed CLI (probe §0).
   # Live effort options are none/high/default (`set effort max` rejected,
@@ -111,7 +110,7 @@ harnesses:
       agent: opencode acp
       compact: true
       raw: true
-      effort: { configId: effort, levels: [none, high, default] }
+      effort: { configId: effort }
       usage: { cache: true }
 
 scouts:

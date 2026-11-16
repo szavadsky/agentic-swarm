@@ -22,6 +22,7 @@ import {
   isNoSessionError,
 } from "./classify.js";
 import { resolveRawAgentCommand } from "./command.js";
+import { acpxModel } from "./model.js";
 import { AcpxTranscriptParser, acpxErrors } from "./transcript.js";
 import type { AcpxConfig, AcpxTurnOpaque } from "./config.js";
 import type {
@@ -61,13 +62,13 @@ function turnConfig(runtime: AcpxRuntime, req: TurnRequest): AcpxConfig {
  * the dispatcher cannot spawn itself. The path is resolved here rather than
  * left to the spawned process so config and pre-flight agree.
  */
-function agentSelection(config: AcpxConfig): string[] {
+export function acpxAgentSelection(config: AcpxConfig): string[] {
   return config.raw
     ? ["--agent", resolveRawAgentCommand(config.agent)]
     : [config.agent];
 }
 
-function globalArgs(config: AcpxConfig, cwd: string): string[] {
+export function acpxGlobalArgs(config: AcpxConfig, cwd: string): string[] {
   // acpx requires global flags before the agent subcommand (probe §0).
   return [
     "--format",
@@ -76,31 +77,6 @@ function globalArgs(config: AcpxConfig, cwd: string): string[] {
     path.resolve(cwd),
     ...(config.args ?? []),
   ];
-}
-
-/**
- * Some agents keep effort inside the model id, while acpx's `--model` accepts
- * only the base id its `model` config option lists. A known suffix moves to
- * the session option; an explicit effort wins.
- */
-function acpxModel(
-  config: AcpxConfig,
-  model: ModelRef,
-): { id: string; effort?: string } {
-  let id = model.id;
-  let effort = model.effort;
-  const bases = config.effort?.modelBases ?? {};
-  for (const [base, levels] of Object.entries(bases)) {
-    const suffix = id.startsWith(`${base}-`)
-      ? id.slice(base.length + 1)
-      : undefined;
-    if (suffix !== undefined && levels.includes(suffix)) {
-      id = base;
-      effort = effort ?? suffix;
-      break;
-    }
-  }
-  return effort === undefined ? { id } : { id, effort };
 }
 
 interface SetupFailure {
@@ -304,8 +280,8 @@ export async function runAcpxCommand(
   ref: SessionRef,
   command: string,
 ): Promise<AcpxCommandResult> {
-  const globals = globalArgs(config, ref.cwd);
-  const selection = agentSelection(config);
+  const globals = acpxGlobalArgs(config, ref.cwd);
+  const selection = acpxAgentSelection(config);
   // The raw --agent route has no positional agent: the prompt verb follows the
   // selection. A positional agent takes `-s` and the command directly.
   const verb = config.raw ? ["prompt"] : [];
@@ -358,8 +334,8 @@ export async function runAcpxTurn(
       : undefined;
   const freshName = () => `${runtime.id}-${randomUUID()}`;
   let name = resume ?? freshName();
-  const globals = globalArgs(config, req.cwd);
-  const selection = agentSelection(config);
+  const globals = acpxGlobalArgs(config, req.cwd);
+  const selection = acpxAgentSelection(config);
   const base = [...globals, ...selection];
 
   // A resumed record may be gone (TTL, `sessions close`); acpx then answers

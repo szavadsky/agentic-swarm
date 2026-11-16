@@ -1,10 +1,9 @@
 import { z } from "zod";
 
-/** Effort as an acpx session config option plus optional model-id suffix split. */
+/** Effort as a live acpx session config option plus optional model-id suffix split. */
 export const acpxEffortSchema = z
   .object({
     configId: z.string().min(1),
-    levels: z.array(z.string().min(1)).min(1),
     /** Base model ids whose `-<level>` suffix splits to effort. */
     modelBases: z.record(z.string(), z.array(z.string().min(1))).optional(),
   })

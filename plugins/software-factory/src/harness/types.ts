@@ -19,6 +19,22 @@ export type Caps = {
   usage: { cache: boolean; cost: boolean };
 };
 
+/**
+ * A harness's live answer for one model. Harnesses whose model and effort
+ * values exist only inside a session implement `Harness.probe`; pre-flight uses
+ * it instead of static capabilities.
+ */
+export interface ModelProbe {
+  /** Whether the harness offered this model in a live session. */
+  listed: boolean;
+  /** Live model ids, used to explain a rejected model. */
+  available: string[];
+  /** Live effort values for this model; empty means it offers none. */
+  effort: string[];
+  /** Effort encoded in the configured model id, when its suffix names one. */
+  modelEffort?: string;
+}
+
 export type Stop =
   | { kind: "done" }
   | { kind: "cancelled" }
@@ -143,6 +159,8 @@ export interface Harness {
   id: string;
   /** Probed at pre-flight, per model. */
   caps(model: ModelRef): Promise<Caps>;
+  /** Live model/effort discovery for harnesses that only expose it in a session. */
+  probe?(model: ModelRef): Promise<ModelProbe>;
   turn(req: TurnRequest): Promise<TurnResult>;
   /** Absent capability = missing member, a type error at the call site. */
   compact?(ref: SessionRef): Promise<CompactResult>;

@@ -7,8 +7,15 @@ export interface AcpxStub {
   cleanup(): void;
   /** argv of every acpx invocation, in order. */
   invocations(): string[][];
+  /** Named sessions still open in the stub's state directory. */
+  sessionNames(): string[];
   /** Forgets a named record, like acpx's TTL or `sessions close`. */
   closeSession(name: string): void;
+}
+
+export interface AcpxStubModel {
+  id: string;
+  effort: string[];
 }
 
 export interface AcpxStubOptions {
@@ -24,6 +31,12 @@ export interface AcpxStubOptions {
    * is the stub's switch.
    */
   compact?: "ok" | "nothing" | "fail";
+  /** Models the stub agent advertises; absent keeps the old no-model behavior. */
+  models?: AcpxStubModel[];
+  /** Model used when the invocation carries no `--model`. */
+  defaultModel?: string;
+  /** Live effort option id; defaults to `effort`. */
+  effortConfigId?: string;
 }
 
 /**
@@ -42,6 +55,9 @@ export function createAcpxStub(opts: AcpxStubOptions = {}): AcpxStub {
   const bannerJs = JSON.stringify(opts.banner ?? null);
   const costJs = JSON.stringify(opts.cost ?? null);
   const compactJs = JSON.stringify(opts.compact ?? "ok");
+  const modelsJs = JSON.stringify(opts.models ?? null);
+  const defaultModelJs = JSON.stringify(opts.defaultModel ?? null);
+  const effortConfigIdJs = JSON.stringify(opts.effortConfigId ?? "effort");
 
   const script = `#!/usr/bin/env bun
 import fs from "node:fs";
@@ -53,7 +69,8 @@ const stateDir = ${JSON.stringify(stateDir)};
 fs.mkdirSync(stateDir, { recursive: true });
 fs.appendFileSync(logPath, JSON.stringify(args) + "\\n");
 
-const emit = (frame) => process.stdout.write(JSON.stringify(frame) + "\\n");
+// Synchronous: process.exit() right after an async pipe write can drop the frame.
+const emit = (frame) => fs.writeSync(1, JSON.stringify(frame) + "\\n");
 const flag = (names) => {
   for (const name of names) {
     const index = args.indexOf(name);
@@ -73,6 +90,9 @@ const usage = ${usageJs};
 const banner = ${bannerJs};
 const cost = ${costJs};
 const compactMode = ${compactJs};
+const models = ${modelsJs};
+const defaultModel = ${defaultModelJs};
+const effortConfigId = ${effortConfigIdJs};
 const sessionFile = (name) => path.join(stateDir, "session-" + name);
 const noSession = () =>
   emit({
@@ -87,8 +107,69 @@ const noSession = () =>
 
 if (args.includes("sessions") && args.includes("new")) {
   const name = flag(["--name"]) ?? "default";
-  fs.writeFileSync(sessionFile(name), "1");
+  const requested = flag(["--model"]) ?? defaultModel ?? models?.[0]?.id;
+  if (requested && models && !models.some((model) => model.id === requested)) {
+    emit({
+      jsonrpc: "2.0",
+      id: null,
+      error: {
+        code: -32603,
+        message:
+          'Cannot apply --model "' + requested +
+          '": the ACP agent did not advertise that model. Available models: ' +
+          models.map((model) => model.id).join(", ") + ".",
+        data: { acpxCode: "RUNTIME" },
+      },
+    });
+    process.exit(1);
+  }
+  const chosen = models?.find((model) => model.id === requested);
+  const configOptions = [];
+  if (models) {
+    configOptions.push({
+      id: "model",
+      name: "Model",
+      category: "model",
+      type: "select",
+      currentValue: requested,
+      options: models.map((model) => ({ value: model.id, name: model.id })),
+    });
+  }
+  if (chosen) {
+    configOptions.push({
+      id: effortConfigId,
+      name: "Effort",
+      category: "thought_level",
+      type: "select",
+      currentValue: chosen.effort[0] ?? "",
+      options: chosen.effort.map((value) => ({ value, name: value })),
+    });
+  }
+  fs.writeFileSync(sessionFile(name), JSON.stringify({
+    schema: "acpx.session.v1",
+    acpxRecordId: "rec-" + name,
+    acpSessionId: "sess-" + name,
+    cwd: process.cwd(),
+    name,
+    closed: false,
+    acpx: { config_options: configOptions },
+  }));
   emit({ action: "session_ensured", created: true, acpxRecordId: "rec-" + name, acpxSessionId: "sess-" + name, name });
+  process.exit(0);
+}
+if (args.includes("sessions") && args.includes("show")) {
+  const name = args[args.length - 1];
+  if (!name || !fs.existsSync(sessionFile(name))) {
+    noSession();
+    process.exit(4);
+  }
+  fs.writeSync(1, fs.readFileSync(sessionFile(name), "utf8") + "\\n");
+  process.exit(0);
+}
+if (args.includes("sessions") && args.includes("close")) {
+  const name = args[args.length - 1];
+  fs.rmSync(sessionFile(name), { force: true });
+  emit({ action: "session_closed", acpxRecordId: "rec-" + name });
   process.exit(0);
 }
 if (args.includes("set")) {
@@ -121,7 +202,7 @@ if (mode === "quota") {
   process.exit(1);
 }
 if (mode === "bare") {
-  process.stderr.write("boom api_key=supersecretvalue\\n");
+  fs.writeSync(2, "boom api_key=supersecretvalue\\n");
   process.exit(3);
 }
 if (mode === "hang") {
@@ -182,6 +263,14 @@ if (usage) {
   return {
     binary,
     cleanup: () => fs.rmSync(dir, { recursive: true, force: true }),
+    sessionNames: () => {
+      if (!fs.existsSync(stateDir)) return [];
+      return fs
+        .readdirSync(stateDir)
+        .filter((name) => name.startsWith("session-"))
+        .map((name) => name.slice("session-".length))
+        .sort();
+    },
     closeSession: (name: string) =>
       fs.rmSync(path.join(stateDir, `session-${name}`), { force: true }),
     invocations: () => {

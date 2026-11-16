@@ -64,7 +64,6 @@ async function opencodeTurn(binary: string, dir: string) {
     raw: true,
     effort: {
       configId: "effort",
-      levels: ["low", "medium", "high", "xhigh", "max"],
     },
     usage: { cache: true },
   };
