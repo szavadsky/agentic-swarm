@@ -118,6 +118,8 @@ const limitsSchema = z
     concurrency: z.number().int().positive().default(2),
     perHarness: z.record(z.string(), z.number().int().positive()).default({}),
     iterations: z.number().int().positive().default(1),
+    /** Plan-checker re-runs per iteration; exhausted rounds consult the architect. */
+    planCheckRounds: z.number().int().positive().default(2),
     /** Optional drain limits for one iteration. */
     turns: z.number().int().positive().optional(),
     wallMinutes: z.number().positive().optional(),
@@ -127,7 +129,12 @@ const limitsSchema = z
     iterationMinutes: z.number().positive().optional(),
   })
   .strict()
-  .default(() => ({ concurrency: 2, perHarness: {}, iterations: 1 }));
+  .default(() => ({
+    concurrency: 2,
+    perHarness: {},
+    iterations: 1,
+    planCheckRounds: 2,
+  }));
 
 export const runConfigSchema = z
   .object({
@@ -482,6 +489,7 @@ export function toLimits(configs: ConfigBundle): Limits {
     iterations: runLimits.iterations,
     concurrency: runLimits.concurrency,
     perHarness: runLimits.perHarness,
+    planCheckRounds: runLimits.planCheckRounds,
     iterationTurns: runLimits.turns,
     iterationWallMs:
       runLimits.iterationMinutes !== undefined

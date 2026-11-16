@@ -25,6 +25,7 @@ const limits: Limits = {
   iterations: 1,
   concurrency: 1,
   perHarness: {},
+  planCheckRounds: 2,
 };
 
 const review = (

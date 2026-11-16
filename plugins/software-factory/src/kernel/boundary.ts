@@ -32,6 +32,7 @@ import {
   writeOutbox,
   type Steer,
 } from "./mailbox.js";
+import { latestPlanCheck } from "./plan-check.js";
 import { type PmRung, runPm } from "./pm.js";
 import { scriptMeta } from "./record.js";
 import type {
@@ -285,6 +286,7 @@ export async function runBoundary(
       forwarded: forwardedConcerns(records),
       runConfigPath: opts.runConfigPath,
       openRecords: await openRecords(runtime.store),
+      planCheck: latestPlanCheck(records),
     });
     await runtime.store.writeFile(packRel, pack);
   }

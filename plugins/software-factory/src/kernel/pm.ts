@@ -10,6 +10,7 @@ import {
   formatSteerTurn,
   holdsDir,
   markProcessed,
+  planCheckProvenance,
   stallProvenance,
   steerProvenance,
   writeOutbox,
@@ -27,6 +28,8 @@ import type {
   AliasConfig,
   KernelRuntime,
   Outcome,
+  PlanCheckFollowUp,
+  PlanCheckRouteEntry,
   StallRouteEntry,
   State,
   StepRecord,
@@ -53,7 +56,7 @@ async function readTaskTexts(
 }
 
 /** The plan and every task file as they stood before a turn. */
-interface TurnSnapshot {
+export interface TurnSnapshot {
   planPath: string;
   plan: string;
   /** An absent plan is restored by deleting the file, not by emptying it. */
@@ -61,7 +64,7 @@ interface TurnSnapshot {
   tasks: Map<string, string>;
 }
 
-async function snapshotTurn(
+export async function snapshotTurn(
   runtime: KernelRuntime,
   planPath: string,
 ): Promise<TurnSnapshot> {
@@ -79,7 +82,7 @@ async function snapshotTurn(
  * byte, and names what it restored. The PM task turn uses it to roll back a
  * failed rung; the steer turn uses it to undo a write that must not happen.
  */
-async function restoreTurn(
+export async function restoreTurn(
   runtime: KernelRuntime,
   snapshot: TurnSnapshot,
 ): Promise<{ plan: boolean; tasks: string[] }> {
@@ -151,7 +154,7 @@ function readOnlyMarker(status: TaskStatus | "new"): string {
   return "";
 }
 
-function existingTasks(state: State, tasks: TaskFile[]): string {
+export function existingTasks(state: State, tasks: TaskFile[]): string {
   if (tasks.length === 0) return "none";
   return [...tasks]
     .sort((a, b) => a.slug.localeCompare(b.slug))
@@ -159,11 +162,15 @@ function existingTasks(state: State, tasks: TaskFile[]): string {
       const status = state.tasks[task.slug]?.status ?? "new";
       const steer = steerProvenance(task.source);
       const stall = steer ? undefined : stallProvenance(task.source);
+      const check =
+        steer || stall ? undefined : planCheckProvenance(task.source);
       const provenance = steer
         ? ` | steer ${steer} (not in the plan; leave it)`
         : stall
           ? ` | stall ${stall} (not in the plan; leave it)`
-          : "";
+          : check
+            ? ` | plan-check ${check} (not in the plan; leave it)`
+            : "";
       return `- ${task.slug} | ${status} | ${materialHash(task).slice(0, 10)} | deps: ${task.deps.join(",") || "none"}${readOnlyMarker(status)}${provenance}`;
     })
     .join("\n");
@@ -266,12 +273,15 @@ async function reconcile(
     }
     const steer = steerProvenance(source);
     const stall = steer ? undefined : stallProvenance(source);
-    if (!steer && !stall) continue;
+    const check = steer || stall ? undefined : planCheckProvenance(source);
+    if (!steer && !stall && !check) continue;
     await writeTextAtomic(taskPath(runtime, slug), original);
     findings.push(
       steer
         ? `steer task "${slug}" was deleted; restored: a task with provenance steer ${steer} is not in the plan and the PM must leave it`
-        : `stall task "${slug}" was deleted; restored: a task with provenance stall ${stall} is not in the plan and the PM must leave it`,
+        : stall
+          ? `stall task "${slug}" was deleted; restored: a task with provenance stall ${stall} is not in the plan and the PM must leave it`
+          : `plan-check task "${slug}" was deleted; restored: a task with provenance plan-check ${check} is not in the plan and the PM must leave it`,
     );
   }
 
@@ -313,7 +323,9 @@ async function validate(
  * PM-created task with provenance `steer: <id>` is never in the plan and is
  * never cancelled here: its steer, not the plan, owns it. A stall
  * continuation (`stall: <iteration>`) is likewise owned by its stall, not the
- * plan, so the next boundary keeps it for the architect's pack.
+ * plan, so the next boundary keeps it for the architect's pack. A plan-check
+ * follow-up (`plan-check: <iteration>`) is likewise owned by its checker
+ * round, not the plan.
  */
 async function cancelRemovedTasks(
   runtime: KernelRuntime,
@@ -327,6 +339,7 @@ async function cancelRemovedTasks(
     if (task.status !== "pending" && task.status !== "ready") continue;
     if (steerProvenance(provenance.get(slug) ?? "")) continue;
     if (stallProvenance(provenance.get(slug) ?? "")) continue;
+    if (planCheckProvenance(provenance.get(slug) ?? "")) continue;
     if (planMentionsSlug(plan, slug)) continue;
     if (task.commit !== undefined) {
       await appendPark(
@@ -489,6 +502,7 @@ export async function runPm(
         steers: "none",
         holds_dir: holdsDir(runtime.store),
         stalls: "none",
+        plan_checks: "none",
       },
       expectation: "any",
     });
@@ -842,6 +856,7 @@ export async function runSteerPm(
         steers: formatSteerTurn(opts.steers),
         holds_dir: holdsDir(runtime.store),
         stalls: "none",
+        plan_checks: "none",
       },
       expectation: "any",
     });
@@ -934,7 +949,6 @@ export interface StallResult {
   continued: string[];
   left: string[];
 }
-
 /**
  * One stall entry per parked slug: the cause, this iteration's record paths,
  * the kept branch, spent item turns and the done-when the continuation keeps.
@@ -944,6 +958,24 @@ async function stallBrief(
   runtime: KernelRuntime,
   opts: { iteration: number; state: State; slugs: string[] },
 ): Promise<string> {
+  const facts = await briefFacts(runtime);
+  const lines: string[] = [];
+  for (const slug of [...opts.slugs].sort()) {
+    lines.push(`- ${slug}`, ...slugFactLines(runtime, facts, opts, slug));
+  }
+  lines.push(`integration head: ${facts.head}`);
+  return lines.join("\n");
+}
+
+/** Everything a per-slug brief entry needs, read once per PM turn. */
+interface BriefFacts {
+  records: StepRecord[];
+  bySlug: Map<string, TaskFile>;
+  dirs: Map<number, string>;
+  head: string;
+}
+
+async function briefFacts(runtime: KernelRuntime): Promise<BriefFacts> {
   const tasks = await runtime.store.listTasks();
   const records = await runtime.store.listRecords();
   const bySlug = new Map(tasks.map((task) => [task.slug, task]));
@@ -953,31 +985,39 @@ async function stallBrief(
     if (match) dirs.set(Number(match[1]), name);
   }
   const head = await integrationHead(runtime);
-  const lines: string[] = [];
-  for (const slug of [...opts.slugs].sort()) {
-    const parked = opts.state.tasks[slug];
-    const paths = records
-      .filter(
-        (record) =>
-          record.slug === slug &&
-          record.iteration === opts.iteration &&
-          record.endedAt,
-      )
-      .sort((a, b) => a.seq - b.seq)
-      .map((record) => dirs.get(record.seq))
-      .filter((dir): dir is string => dir !== undefined)
-      .map((dir) => path.join(runtime.store.recordsDir, dir));
-    lines.push(
-      `- ${slug}`,
-      `  cause: ${parked?.cause ?? "no recorded cause"}`,
-      `  records: ${paths.length > 0 ? paths.join(", ") : "none"}`,
-      `  branch: ${taskBranchName(runtime, slug)}`,
-      `  turns: ${parked?.turns ?? 0} of ${runtime.limits.itemTurns} spent`,
-      `  done-when: ${doneWhen(bySlug.get(slug)?.body ?? "") || "(none)"}`,
-    );
-  }
-  lines.push(`integration head: ${head}`);
-  return lines.join("\n");
+  return { records, bySlug, dirs, head };
+}
+
+/**
+ * The indented fact lines under one `- slug` brief entry: the cause, this
+ * iteration's record paths, the kept branch, spent item turns and the
+ * done-when. Shared by the stall and plan-check briefs.
+ */
+function slugFactLines(
+  runtime: KernelRuntime,
+  facts: BriefFacts,
+  opts: { iteration: number; state: State },
+  slug: string,
+): string[] {
+  const parked = opts.state.tasks[slug];
+  const paths = facts.records
+    .filter(
+      (record) =>
+        record.slug === slug &&
+        record.iteration === opts.iteration &&
+        record.endedAt,
+    )
+    .sort((a, b) => a.seq - b.seq)
+    .map((record) => facts.dirs.get(record.seq))
+    .filter((dir): dir is string => dir !== undefined)
+    .map((dir) => path.join(runtime.store.recordsDir, dir));
+  return [
+    `  cause: ${parked?.cause ?? "no recorded cause"}`,
+    `  records: ${paths.length > 0 ? paths.join(", ") : "none"}`,
+    `  branch: ${taskBranchName(runtime, slug)}`,
+    `  turns: ${parked?.turns ?? 0} of ${runtime.limits.itemTurns} spent`,
+    `  done-when: ${doneWhen(facts.bySlug.get(slug)?.body ?? "") || "(none)"}`,
+  ];
 }
 
 function stallLadderNote(
@@ -1212,6 +1252,7 @@ export async function runStallPm(
         steers: "none",
         holds_dir: holdsDir(runtime.store),
         stalls: brief,
+        plan_checks: "none",
       },
       expectation: "any",
     });
@@ -1272,6 +1313,419 @@ export async function runStallPm(
     {
       ok: false,
       cause: failure.join("; ") || "stall PM ladder exhausted",
+    },
+  );
+  return { continued: [], left };
+}
+
+/** Script step committing a plan-check turn's routes; one record per checker round. */
+export const PLAN_CHECK_ROUTES_STEP = "plan-check-routes";
+
+/** Which follow-up slugs a plan-check turn continued; the rest stay for the architect. */
+export interface PlanCheckPmResult {
+  continued: string[];
+  left: string[];
+}
+
+/**
+ * One brief entry per checker follow-up: its kind, slug, dead dep and reason,
+ * plus the slug's facts when the task file exists (cause, record paths, kept
+ * branch, spent turns, done-when). The integration head lets the PM check a
+ * base for conflicts before choosing.
+ */
+async function planCheckPmBrief(
+  runtime: KernelRuntime,
+  opts: { iteration: number; state: State; followUps: PlanCheckFollowUp[] },
+): Promise<string> {
+  const facts = await briefFacts(runtime);
+  const lines: string[] = [];
+  for (const followUp of [...opts.followUps].sort((a, b) =>
+    a.slug.localeCompare(b.slug),
+  )) {
+    const dep = followUp.dep ? `, dep ${followUp.dep}` : "";
+    lines.push(
+      `- ${followUp.slug} (${followUp.kind}${dep}): ${followUp.reason}`,
+    );
+    if (facts.bySlug.has(followUp.slug)) {
+      lines.push(...slugFactLines(runtime, facts, opts, followUp.slug));
+    }
+  }
+  lines.push(`integration head: ${facts.head}`);
+  return lines.join("\n");
+}
+
+function planCheckLadderNote(
+  rung: { alias: string; mandate: PmMandate },
+  target: ReturnType<typeof resolveRole>,
+  failure: string[],
+): string {
+  const notes: string[] = [];
+  if (rung.mandate.startsWith("escalated")) {
+    notes.push(
+      `The PM ladder escalated to alias "${target.alias}" (model "${target.model.id}"). You hold a broader mandate: route the checker's follow-ups again from their brief, and if a slug cannot continue, leave it with a reason for the architect.`,
+    );
+  }
+  if (rung.mandate.endsWith("retry")) {
+    notes.push(
+      `This is a fresh retry on alias "${target.alias}"; the previous turn's plan and task-file writes were rolled back to the pre-PM snapshot.`,
+    );
+  }
+  notes.push(
+    "Restated PM plan-check contract: you are the PM — never edit the plan, never plan, never implement, never invent intent. Write one follow-up task file per continued slug with source plan-check: <iteration>, then the outcome with planCheckRoutes.",
+  );
+  if (failure.length > 0)
+    notes.push("", "Findings:", ...failure.map((reason) => `- ${reason}`));
+  return notes.join("\n");
+}
+
+/**
+ * Whether two task texts differ only in their dependency list. An
+ * unparseable side is not a dep fix: the caller reports the edit as is.
+ */
+function onlyDepsChanged(before: string, after: string, slug: string): boolean {
+  let oldTask: TaskFile;
+  let newTask: TaskFile;
+  try {
+    oldTask = parseTaskFile(before, slug);
+    newTask = parseTaskFile(after, slug);
+  } catch {
+    return false;
+  }
+  const { deps: _oldDeps, ...oldRest } = oldTask;
+  const { deps: _newDeps, ...newRest } = newTask;
+  return (
+    JSON.stringify(oldRest) === JSON.stringify(newRest) &&
+    JSON.stringify([...oldTask.deps].sort()) !==
+      JSON.stringify([...newTask.deps].sort())
+  );
+}
+
+async function validatePlanCheckTurn(
+  runtime: KernelRuntime,
+  opts: {
+    iteration: number;
+    state: State;
+    planPath: string;
+    round: number;
+    followUps: PlanCheckFollowUp[];
+  },
+  planBefore: string,
+  taskSnapshot: Map<string, string>,
+  outcome: Outcome | undefined,
+): Promise<string[]> {
+  const findings = await reconcile(runtime, opts, planBefore, taskSnapshot);
+  const texts = await readTaskTexts(runtime);
+  const { tasks, findings: parseFindings } = parseTasks(texts);
+  findings.push(...parseFindings);
+  const parked = new Set(
+    Object.keys(opts.state.tasks).filter(
+      (slug) => opts.state.tasks[slug]!.status === "parked",
+    ),
+  );
+  findings.push(...validateTaskGraph(tasks, { parked }));
+
+  const routes = outcome?.planCheckRoutes;
+  const slugs = [...new Set(opts.followUps.map((item) => item.slug))].sort();
+  const followUpOf = new Map(opts.followUps.map((item) => [item.slug, item]));
+  if (!routes) {
+    findings.push(
+      `plan-check turn lists no planCheckRoutes; route each follow-up (${slugs.join(", ")}) as continue|leave`,
+    );
+    return [...new Set(findings)];
+  }
+  const claimed = new Set(slugs);
+  const seen = new Set<string>();
+  const actionOf = new Map<string, PlanCheckRouteEntry["action"]>();
+  for (const entry of routes) {
+    if (seen.has(entry.slug)) {
+      findings.push(
+        `slug "${entry.slug}" is routed twice; route each follow-up once`,
+      );
+      continue;
+    }
+    seen.add(entry.slug);
+    actionOf.set(entry.slug, entry.action);
+    if (!claimed.has(entry.slug)) {
+      findings.push(
+        `slug "${entry.slug}" is not in this plan-check; route only ${slugs.join(", ")}`,
+      );
+    }
+    if (!entry.reason.trim()) {
+      findings.push(
+        `slug "${entry.slug}" needs a reason; say why it continues or stays for the architect`,
+      );
+    }
+  }
+  for (const slug of slugs) {
+    if (!seen.has(slug)) {
+      findings.push(
+        `slug "${slug}" has no route; route each follow-up as continue|leave`,
+      );
+    }
+    if (!texts.has(slug)) {
+      findings.push(
+        `follow-up task "${slug}" was deleted; the follow-up set must survive the turn`,
+      );
+    }
+  }
+
+  if (parseFindings.length === 0) {
+    const bySlug = new Map(tasks.map((task) => [task.slug, task]));
+    // The one edit a plan-check turn may make: a missing-dep follow-up drops
+    // its dead deps from its own slug. Anything else edited is a finding.
+    const depFixed = new Set<string>();
+    for (const [slug, original] of taskSnapshot) {
+      const now = texts.get(slug);
+      if (now === undefined || now === original) continue;
+      const followUp = followUpOf.get(slug);
+      if (
+        followUp?.kind === "missing-dep" &&
+        onlyDepsChanged(original, now, slug)
+      ) {
+        const before = parseTaskFile(original, slug);
+        const after = parseTaskFile(now, slug);
+        const dropped = before.deps.filter((dep) => !after.deps.includes(dep));
+        const added = after.deps.filter((dep) => !before.deps.includes(dep));
+        if (added.length > 0) {
+          findings.push(
+            `task "${slug}" adds dependencies (${added.join(", ")}); a missing-dep follow-up drops dead deps only`,
+          );
+          continue;
+        }
+        const live = dropped.filter(
+          (dep) =>
+            taskSnapshot.has(dep) &&
+            opts.state.tasks[dep]?.status !== "cancelled",
+        );
+        if (live.length > 0) {
+          findings.push(
+            `task "${slug}" drops live dependencies (${live.join(", ")}); only deps on missing or cancelled tasks go`,
+          );
+          continue;
+        }
+        depFixed.add(slug);
+        continue;
+      }
+      findings.push(
+        `task "${slug}" was edited; a plan-check turn writes follow-ups only, never edits`,
+      );
+    }
+    const created = [...texts.keys()].filter((slug) => !taskSnapshot.has(slug));
+    for (const slug of created) {
+      const task = bySlug.get(slug);
+      if (!task) continue;
+      if (planCheckProvenance(task.source) !== String(opts.iteration)) {
+        findings.push(
+          `new task "${slug}" has no provenance plan-check: ${opts.iteration}; a plan-check turn creates follow-ups only with source plan-check: ${opts.iteration}`,
+        );
+      }
+    }
+    // Each new task claims its follow-up: a base names it, a fresh (rule-10)
+    // task without a base matches its done-when instead, and a missing-dep
+    // rewrite carries the dead dep's name. A fresh task never claims a
+    // missing-dep slug: that slug is pending, and matching its done-when
+    // would duplicate live work.
+    const claimedBy = new Map<string, string[]>();
+    const claim = (followUp: string, slug: string): void => {
+      const list = claimedBy.get(followUp) ?? [];
+      list.push(slug);
+      claimedBy.set(followUp, list);
+    };
+    for (const slug of [...created].sort()) {
+      const task = bySlug.get(slug);
+      if (!task) continue;
+      const depClaim = opts.followUps.find(
+        (item) => item.kind === "missing-dep" && item.dep === slug,
+      );
+      if (depClaim) {
+        if (actionOf.get(depClaim.slug) !== "continue") {
+          findings.push(
+            `new task "${slug}" rewrites the dead dep of "${depClaim.slug}", which was left for the architect`,
+          );
+          continue;
+        }
+        claim(depClaim.slug, slug);
+        continue;
+      }
+      if (task.base !== undefined) {
+        if (!claimed.has(task.base)) {
+          findings.push(
+            `new task "${slug}" continues "${task.base}", which is not in this plan-check`,
+          );
+          continue;
+        }
+        if (actionOf.get(task.base) !== "continue") {
+          findings.push(
+            `new task "${slug}" continues "${task.base}", which was left for the architect`,
+          );
+          continue;
+        }
+        const base = bySlug.get(task.base);
+        if (base && doneWhen(task.body) !== doneWhen(base.body)) {
+          findings.push(
+            `new task "${slug}" changes the done-when; a continuation keeps its base's done-when`,
+          );
+        }
+        claim(task.base, slug);
+        continue;
+      }
+      const candidates = slugs
+        .filter((park) => actionOf.get(park) === "continue")
+        .filter((park) => followUpOf.get(park)?.kind !== "missing-dep")
+        .filter((park) => (claimedBy.get(park) ?? []).length === 0)
+        .filter((park) => {
+          const base = bySlug.get(park);
+          return (
+            base !== undefined && doneWhen(task.body) === doneWhen(base.body)
+          );
+        })
+        .sort();
+      if (candidates.length === 0) {
+        findings.push(
+          `new task "${slug}" names no base and matches no continued slug's done-when; name the follow-up slug as base or keep its done-when`,
+        );
+        continue;
+      }
+      claim(candidates[0]!, slug);
+    }
+    for (const slug of slugs) {
+      const action = actionOf.get(slug);
+      const claims = claimedBy.get(slug) ?? [];
+      const fixed = depFixed.has(slug) ? 1 : 0;
+      if (action === "continue" && claims.length + fixed === 0) {
+        findings.push(
+          `slug "${slug}" continues but has no follow-up task; write one with base: ${slug} or fix its dead dep`,
+        );
+      } else if (action === "continue" && claims.length + fixed > 1) {
+        findings.push(
+          `slug "${slug}" has ${claims.length + fixed} follow-ups (${[...claims, ...(fixed ? ["dep fix"] : [])].join(", ")}); write exactly one`,
+        );
+      } else if (
+        action === "leave" &&
+        (claims.length > 0 || depFixed.has(slug))
+      ) {
+        findings.push(
+          `slug "${slug}" was left for the architect but gained ${[...claims, ...(depFixed.has(slug) ? ["dep fix"] : [])].join(", ")}; leave means no new task`,
+        );
+      }
+    }
+  }
+  return [...new Set(findings)];
+}
+
+/**
+ * PM ladder for a plan-checker's follow-ups at dispatch exhaustion. Each
+ * follow-up slug gets one route: `continue` writes one follow-up task (a new
+ * slug with `base:` naming the parked slug, a fresh task when the kept branch
+ * conflicts with the head, a rewrite of a dead dep, or a dead-dep drop on a
+ * missing-dep slug) and dispatch resumes in the same iteration; `leave`
+ * keeps the slug for the architect with a reason. The record uses the PM
+ * step, so it stays out of the item turn budget and prices into the
+ * iteration's spend like every other PM turn.
+ *
+ * Accepted routes commit to a `plan-check-routes` script record; a failed
+ * rung's routes die with its rollback. A turn that exhausts the ladder or
+ * stops on infra falls back to the boundary as today: the writes are rolled
+ * back, the attempt is recorded so the round counts once, and the evidence
+ * still reaches the architect through the pack.
+ */
+export async function runPlanCheckPm(
+  runtime: KernelRuntime,
+  opts: {
+    iteration: number;
+    state: State;
+    followUps: PlanCheckFollowUp[];
+    cwd: string;
+  },
+): Promise<PlanCheckPmResult> {
+  const slugs = [...new Set(opts.followUps.map((item) => item.slug))].sort();
+  const left = [...slugs];
+  const planPath = path.join(runtime.store.goalDir, "plan.md");
+  const snapshot = await snapshotTurn(runtime, planPath);
+  const planBefore = snapshot.plan;
+  const taskSnapshot = snapshot.tasks;
+  const brief = await planCheckPmBrief(runtime, opts);
+  let failure: string[] = [];
+
+  for (const [index, rung] of rungSteps(runtime).entries()) {
+    const target = resolveRole(runtime, "pm", rung.alias);
+    const round = index + 1;
+    const { tasks } = parseTasks(await readTaskTexts(runtime));
+    const result = await runAgentTurn(runtime, {
+      target,
+      cwd: opts.cwd,
+      meta: { iteration: opts.iteration, step: "pm", round },
+      vars: {
+        iteration: String(opts.iteration),
+        intent_path: path.join(runtime.store.goalDir, "intent.md"),
+        plan_path: planPath,
+        tasks_dir: runtime.store.tasksDir,
+        existing_tasks: existingTasks(opts.state, tasks),
+        repair: round === 1 ? "" : planCheckLadderNote(rung, target, failure),
+        steers: "none",
+        holds_dir: holdsDir(runtime.store),
+        stalls: "none",
+        plan_checks: brief,
+      },
+      expectation: "any",
+    });
+    const outcome = result.outcome;
+    const findings = await validatePlanCheckTurn(
+      runtime,
+      { ...opts, planPath, round },
+      planBefore,
+      taskSnapshot,
+      outcome,
+    );
+    if (outcome?.status === "done" && findings.length === 0) {
+      const accepted: PlanCheckRouteEntry[] = [
+        ...(outcome.planCheckRoutes ?? []),
+      ].sort((a, b) => a.slug.localeCompare(b.slug));
+      // The boundary reads routes from this record only, never from the agent
+      // rung outcomes: a failed rung's routes die with its rollback.
+      await runtime.store.appendRecord(
+        scriptMeta(opts.iteration, PLAN_CHECK_ROUTES_STEP, { round }),
+        {
+          ok: true,
+          outcome: {
+            status: "done",
+            summary: `plan-check routes: ${accepted.map((entry) => `${entry.slug}=${entry.action}`).join(", ")}`,
+            concerns: [],
+            forward: [],
+            planCheckRoutes: accepted,
+          },
+        },
+      );
+      return {
+        continued: accepted
+          .filter((entry) => entry.action === "continue")
+          .map((entry) => entry.slug),
+        left: accepted
+          .filter((entry) => entry.action === "leave")
+          .map((entry) => entry.slug),
+      };
+    }
+
+    const reasons = failureReasons(outcome, findings, result.record);
+    await runtime.store.appendRecord(
+      scriptMeta(opts.iteration, "pm-validate", { round }),
+      { ok: false, cause: reasons.join("; ") },
+    );
+    await restoreTurn(runtime, snapshot);
+    if (result.record.stop?.kind === "infra") {
+      await runtime.store.appendRecord(
+        scriptMeta(opts.iteration, PLAN_CHECK_ROUTES_STEP, { round }),
+        { ok: false, cause: reasons.join("; ") },
+      );
+      return { continued: [], left };
+    }
+    failure = reasons;
+  }
+  await runtime.store.appendRecord(
+    scriptMeta(opts.iteration, PLAN_CHECK_ROUTES_STEP),
+    {
+      ok: false,
+      cause: failure.join("; ") || "plan-check PM ladder exhausted",
     },
   );
   return { continued: [], left };

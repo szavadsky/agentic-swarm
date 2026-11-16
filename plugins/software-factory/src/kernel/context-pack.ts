@@ -2,7 +2,12 @@ import type { ConcernKind } from "../core/concern-types.js";
 import { concernFingerprint } from "../core/concerns.js";
 import type { BaseGateState } from "./baseline.js";
 import type { Steer } from "./mailbox.js";
-import type { State, StepRecord, TaskFile } from "./types.js";
+import type {
+  PlanCheckEvidence,
+  State,
+  StepRecord,
+  TaskFile,
+} from "./types.js";
 
 export interface ForwardedConcern {
   source: string;
@@ -12,6 +17,13 @@ export interface ForwardedConcern {
   evidence?: string;
   /** Repeat count for the same fingerprint, e.g. the same risk raised twice. */
   occurrences?: number;
+}
+
+/** The latest plan-check turn's report, for the architect that it summoned. */
+export interface PlanCheckPack {
+  iteration: number;
+  verdict: string;
+  evidence: PlanCheckEvidence[];
 }
 
 export interface ContextPackInput {
@@ -44,6 +56,8 @@ export interface ContextPackInput {
   runConfigPath?: string;
   /** Records with started.yaml but no end.yaml, as paths the architect can drill into. */
   openRecords?: string[];
+  /** The latest plan-check report; absent when the checker never ran. */
+  planCheck?: PlanCheckPack;
 }
 
 const CODE_MAP_ENTRIES = 40;
@@ -136,6 +150,19 @@ export function renderContextPack(input: ContextPackInput): string {
       return `- ${t.slug}: ${waiting.length > 0 ? `waits on ${waiting.join(", ")}` : "ready"}`;
     });
   if (pending.length > 0) lines.push("", "## Pending", ...pending);
+
+  if (input.planCheck) {
+    lines.push(
+      "",
+      "## Plan check (the evidence that summoned the architect)",
+      `- iteration ${input.planCheck.iteration}, verdict ${input.planCheck.verdict}`,
+    );
+    if (input.planCheck.evidence.length === 0)
+      lines.push("- no evidence recorded");
+    else
+      for (const entry of input.planCheck.evidence)
+        lines.push(`- ${entry.item} (${entry.status}): ${entry.evidence}`);
+  }
 
   if (input.forwarded.length > 0) {
     lines.push("", "## Forwarded concerns (architect/owner)");

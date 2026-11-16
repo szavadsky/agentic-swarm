@@ -53,6 +53,8 @@ const ROLES: Record<string, Record<string, string>> = {
     stalls:
       "- alpha\n  cause: blocked: stuck\n  records: /goal/records/00007-i3-alpha-implement-r1\n  branch: factory-task/demo/alpha\n  turns: 1 of 8 spent\n  done-when: Done when: it works.",
     outcome_path: "/goal/records/00043-i3-pm-r1/outcome.yaml",
+    plan_checks:
+      "- alpha (continuation): mechanical park\n  cause: infra: runner lost\n  records: /goal/records/00007-i3-alpha-implement-r1\n  branch: factory-task/demo/alpha\n  turns: 1 of 8 spent\n  done-when: Done when: it works.",
     validate_cmd: "bun /factory/bin/factory.ts validate",
   },
   implementer: {
@@ -98,6 +100,16 @@ const ROLES: Record<string, Record<string, string>> = {
     gate_commands: "- test: bun test",
     baseline_checks: "none",
     outcome_path: "/worktrees/demo-tasks/alpha/outcome.yaml",
+    validate_cmd: "bun /factory/bin/factory.ts validate",
+  },
+  "plan-checker": {
+    iteration: "3",
+    intent_path: "/goal/intent.md",
+    plan_path: "/goal/plan.md",
+    checkout: "/worktrees/demo",
+    tasks_dir: "/goal/tasks",
+    existing_tasks: "- alpha | merged | abcdef1234 | deps: none | frozen",
+    outcome_path: "/goal/records/00045-i3-plan-check-r1/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
   },
 };

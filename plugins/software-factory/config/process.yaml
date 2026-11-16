@@ -28,4 +28,5 @@ roles:
   reviewer: { prompt: reviewer }
   digest: { prompt: digest }
   steward: { prompt: steward }
+  plan-checker: { prompt: plan-checker }
 itemTurns: 8

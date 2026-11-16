@@ -57,7 +57,12 @@ function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
   };
   const run: RunConfig = {
     aliases: { pm: { harness: "fake", model: "fake-pm" } },
-    limits: { concurrency: 1, perHarness: {}, iterations: 1 },
+    limits: {
+      concurrency: 1,
+      perHarness: {},
+      iterations: 1,
+      planCheckRounds: 2,
+    },
     sessions: { dir: "", keepRuns: 1, retention: "short" },
   };
   return {
@@ -80,6 +85,7 @@ function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
       iterations: 1,
       concurrency: 1,
       perHarness: {},
+      planCheckRounds: 2,
     },
     // Hermetic prices: the test-local cache, never the network.
     priceSource: {

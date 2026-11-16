@@ -1,10 +1,22 @@
+import fs from "node:fs";
+import path from "node:path";
 import { derive } from "./derive.js";
 import { executeTaskAction, type TaskActionResult } from "./flow.js";
 import { stepTarget } from "./flow-context.js";
 import type { MergeResult } from "./integrate.js";
 import { type Hold, readHolds, type Steer, scanInbox } from "./mailbox.js";
 import { next } from "./next.js";
-import { runStallPm, runSteerPm, STALL_ROUTES_STEP } from "./pm.js";
+import {
+  PLAN_CHECK_STEP,
+  planCheckConfigured,
+  runPlanCheck,
+} from "./plan-check.js";
+import {
+  runPlanCheckPm,
+  runStallPm,
+  runSteerPm,
+  STALL_ROUTES_STEP,
+} from "./pm.js";
 import { loadPriceTable } from "./openrouter.js";
 import { type PriceTable, pricedRecord } from "./pricing.js";
 import { scriptMeta } from "./record.js";
@@ -591,6 +603,55 @@ export async function runDispatch(
               cwd: runtime.paths.goalCheckout,
             });
             if (stalled.continued.length > 0) continue;
+          }
+        }
+      }
+      // Plan check: the dispatch set ran out short of terminal. A task-tier
+      // checker verifies the plan against the repo; on `progress` the PM
+      // writes the follow-ups and dispatch resumes in this iteration, and
+      // the checker re-runs after. `architect`, an empty follow-up list, a
+      // failed PM turn, or exhausted rounds fall through to the boundary,
+      // whose pack carries the checker's evidence per plan item. Without a
+      // plan there is nothing to verify, so the front path dispatches as
+      // before instead of spending a checker turn.
+      const planPath = path.join(runtime.store.goalDir, "plan.md");
+      if (
+        !opts.signals?.shouldStop() &&
+        planCheckConfigured(runtime) &&
+        fs.existsSync(planPath)
+      ) {
+        const checkTasks = await runtime.store.listTasks();
+        const checkRecords = await runtime.store.listRecords();
+        const checkState = derive(
+          checkTasks,
+          checkRecords,
+          runtime.configs.process.flows,
+        );
+        const rounds = checkRecords.filter(
+          (record) =>
+            record.iteration === iteration &&
+            record.step === PLAN_CHECK_STEP &&
+            record.actor === "agent" &&
+            record.endedAt,
+        ).length;
+        if (rounds < runtime.limits.planCheckRounds) {
+          const checked = await runPlanCheck(runtime, {
+            iteration,
+            round: rounds + 1,
+            state: checkState,
+          });
+          if (
+            !checked.infra &&
+            checked.verdict === "progress" &&
+            checked.followUps.length > 0
+          ) {
+            const followed = await runPlanCheckPm(runtime, {
+              iteration,
+              state: checkState,
+              followUps: checked.followUps,
+              cwd: runtime.paths.goalCheckout,
+            });
+            if (followed.continued.length > 0) continue;
           }
         }
       }

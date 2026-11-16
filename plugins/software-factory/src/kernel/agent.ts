@@ -117,6 +117,8 @@ function deliverableFor(role: string): string {
       return "class, task, and pack";
     case "steward":
       return "merge resolution";
+    case "plan-checker":
+      return "plan verdict";
     default:
       return "outcome";
   }

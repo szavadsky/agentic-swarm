@@ -36,6 +36,11 @@ aliases:
     model: opencode/deepseek-v4.1-flash-free
     fallbacks:
       - opencode-go/deepseek-v4.1-flash
+  plan-checker:
+    harness: opencode
+    model: opencode/deepseek-v4.1-flash-free
+    fallbacks:
+      - opencode-go/deepseek-v4.1-flash
 
 # Prices come from the harness or OpenRouter's model list (cached locally);
 # nothing is hardcoded here. Every model above matches by normalized id except

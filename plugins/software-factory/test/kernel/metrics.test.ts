@@ -562,7 +562,12 @@ describe("record cost truth", () => {
     };
     const run: RunConfig = {
       aliases: { implementer: { harness: "fake", model: "paid/one" } },
-      limits: { concurrency: 1, perHarness: {}, iterations: 1 },
+      limits: {
+        concurrency: 1,
+        perHarness: {},
+        iterations: 1,
+        planCheckRounds: 2,
+      },
       sessions: { dir: "", keepRuns: 1, retention: "short" },
     };
     writePriceCache(path.join(root, "price-cache.json"), PRICES);
@@ -586,6 +591,7 @@ describe("record cost truth", () => {
         iterations: 1,
         concurrency: 1,
         perHarness: {},
+        planCheckRounds: 2,
       },
       // Hermetic prices: the test-local cache, never the network.
       priceSource: {

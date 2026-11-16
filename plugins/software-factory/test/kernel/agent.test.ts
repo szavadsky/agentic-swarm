@@ -48,7 +48,12 @@ function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
       steward: { harness: "fake", model: "fake-steward" },
       front: { harness: "fake", model: "fake-front" },
     },
-    limits: { concurrency: 1, perHarness: {}, iterations: 1 },
+    limits: {
+      concurrency: 1,
+      perHarness: {},
+      iterations: 1,
+      planCheckRounds: 2,
+    },
     sessions: { dir: "", keepRuns: 1, retention: "short" },
   };
   return {
@@ -71,6 +76,7 @@ function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
       iterations: 1,
       concurrency: 1,
       perHarness: {},
+      planCheckRounds: 2,
     },
     // Hermetic prices: the test-local cache, never the network.
     priceSource: {
@@ -888,6 +894,7 @@ const pmVars = {
   steers: "none",
   holds_dir: "/g/mailbox/holds",
   stalls: "none",
+  plan_checks: "none",
 };
 
 const implementerVars = {

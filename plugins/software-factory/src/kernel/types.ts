@@ -41,6 +41,46 @@ export const stallRouteEntrySchema = z.object({
 });
 export type StallRouteEntry = z.infer<typeof stallRouteEntrySchema>;
 
+/** One plan item's check result: what the checker inspected and what it showed. */
+export const planCheckEvidenceSchema = z.object({
+  item: z.string().min(1),
+  status: z.enum(["done", "missing", "below-standard", "unverifiable"]),
+  evidence: z.string().min(1),
+});
+export type PlanCheckEvidence = z.infer<typeof planCheckEvidenceSchema>;
+
+/** One mechanical follow-up the PM can write without new direction. */
+export const planCheckFollowUpSchema = z.object({
+  kind: z.enum(["continuation", "missing-dep", "unmerged"]),
+  /** The parked slug to continue, or the pending task a dead dep blocks. */
+  slug: z.string().min(1),
+  /** A missing-dep follow-up's dead dependency; absent for every other kind. */
+  dep: z.string().optional(),
+  reason: z.string().min(1),
+});
+export type PlanCheckFollowUp = z.infer<typeof planCheckFollowUpSchema>;
+
+/**
+ * The checker's report: the kernel resumes dispatch on `progress` and
+ * consults the architect on `architect`. One enum, because the kernel
+ * branches on it.
+ */
+export const planCheckSchema = z.object({
+  verdict: z.enum(["progress", "architect"]),
+  evidence: z.array(planCheckEvidenceSchema).default([]),
+  followUps: z.array(planCheckFollowUpSchema).default([]),
+});
+export type PlanCheck = z.infer<typeof planCheckSchema>;
+export type PlanCheckVerdict = PlanCheck["verdict"];
+
+/** One plan-check follow-up the PM routed: `continue` writes a task, `leave` keeps it for the architect. */
+export const planCheckRouteEntrySchema = z.object({
+  slug: z.string().min(1),
+  action: z.enum(["continue", "leave"]),
+  reason: z.string().min(1),
+});
+export type PlanCheckRouteEntry = z.infer<typeof planCheckRouteEntrySchema>;
+
 /** The only agent ↔ script surface; one schema for every step. */
 export const outcomeSchema = z.object({
   status: z.enum(["done", "blocked", "failed", "upscope"]),
@@ -60,6 +100,13 @@ export const outcomeSchema = z.object({
   // Absent on every other step; the kernel continues `continue` slugs and
   // records `leave` reasons for the next boundary.
   stallRoutes: z.array(stallRouteEntrySchema).optional(),
+  // Plan-checker turns only: the verdict the kernel branches on, the evidence
+  // per plan item, and the mechanical follow-ups. Absent on every other step.
+  planCheck: planCheckSchema.optional(),
+  // Plan-check PM turns only: one entry per checker follow-up of this round.
+  // Absent on every other step; the kernel continues `continue` slugs and
+  // records `leave` reasons for the next boundary.
+  planCheckRoutes: z.array(planCheckRouteEntrySchema).optional(),
 });
 
 export type Concern = z.infer<typeof concernSchema>;
@@ -189,6 +236,8 @@ export interface Limits {
   turnMinutes?: number;
   /** Per-iteration wall bound in minutes; folds into `iterationWallMs`. */
   iterationMinutes?: number;
+  /** Plan-checker re-runs per iteration; exhausted rounds consult the architect. */
+  planCheckRounds: number;
 }
 
 export type StepActor = "agent" | "script";
@@ -392,6 +441,8 @@ export interface RunConfig {
     concurrency: number;
     perHarness: Record<string, number>;
     iterations: number;
+    /** Plan-checker re-runs per iteration; exhausted rounds consult the architect. */
+    planCheckRounds: number;
     turns?: number;
     wallMinutes?: number;
     /** Optional USD brake: crossing it drains the iteration. */
