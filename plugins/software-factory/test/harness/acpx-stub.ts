@@ -16,6 +16,8 @@ export interface AcpxStubOptions {
   usage?: Record<string, number>;
   /** Banner text emitted as an earlier agent message before the reply. */
   banner?: string;
+  /** ACP `usage_update` cost payload; absent means the update carries none. */
+  cost?: { amount: number; currency: string };
 }
 
 /**
@@ -32,6 +34,7 @@ export function createAcpxStub(opts: AcpxStubOptions = {}): AcpxStub {
   const binary = path.join(dir, "acpx-stub.js");
   const usageJs = JSON.stringify(opts.usage ?? null);
   const bannerJs = JSON.stringify(opts.banner ?? null);
+  const costJs = JSON.stringify(opts.cost ?? null);
 
   const script = `#!/usr/bin/env bun
 import fs from "node:fs";
@@ -61,6 +64,7 @@ const mode = marker("mode");
 const reply = marker("text") ?? "PONG";
 const usage = ${usageJs};
 const banner = ${bannerJs};
+const cost = ${costJs};
 const sessionFile = (name) => path.join(stateDir, "session-" + name);
 const noSession = () =>
   emit({
@@ -140,7 +144,7 @@ if (mode === "cancelled") {
 }
 
 if (usage) {
-  emit({ jsonrpc: "2.0", method: "session/update", params: { sessionId, update: { sessionUpdate: "usage_update", used: 5927, size: 950000 } } });
+  emit({ jsonrpc: "2.0", method: "session/update", params: { sessionId, update: { sessionUpdate: "usage_update", used: 5927, size: 950000, ...(cost ? { cost } : {}) } } });
   emit({ jsonrpc: "2.0", id: 7, result: { stopReason: "end_turn", usage } });
 } else {
   emit({ jsonrpc: "2.0", id: 7, result: { stopReason: "end_turn" } });

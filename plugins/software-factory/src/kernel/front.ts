@@ -30,6 +30,22 @@ interface FrontRunOptions {
 const PLAN_FILE = "plan.md";
 const CLASS_FILE = "class.yaml";
 
+/**
+ * The flow each front class writes, enforced by `validateFrontTasks` and
+ * rendered into the front prompt as `class_flows` from this same mapping.
+ */
+export const FRONT_CLASS_FLOWS = {
+  trivial: "just-implement",
+  task: "implement-review",
+} as const;
+
+/** The `class_flows` prompt variable: the class-to-flow mapping, in class order. */
+export function frontClassFlowsVar(): string {
+  return Object.entries(FRONT_CLASS_FLOWS)
+    .map(([cls, flow]) => `\`${flow}\` for ${cls}`)
+    .join(", ");
+}
+
 /** A front output the script refuses; the launch ends as infra, never as a default class. */
 class FrontError extends Error {
   constructor(message: string) {
@@ -91,7 +107,9 @@ function validateFrontTasks(runtime: KernelRuntime, cls: FrontClass): void {
     );
   }
   const expectedFlow =
-    cls.class === "trivial" ? "just-implement" : "implement-review";
+    cls.class === "trivial"
+      ? FRONT_CLASS_FLOWS.trivial
+      : FRONT_CLASS_FLOWS.task;
   if (task.kind !== "task") {
     throw new FrontError(
       `front task "${task.slug}" has kind "${task.kind}"; the front writes a task`,
@@ -196,6 +214,7 @@ export async function runFront(
         checkout: runtime.paths.goalCheckout,
         setup_command: runtime.configs.repo.setup.join(" && ") || "none",
         gate_commands: gateCommands(runtime),
+        class_flows: frontClassFlowsVar(),
       },
       expectation: "any",
     });

@@ -5,8 +5,6 @@ import {
 } from "../harness/acpx/command.js";
 import { AcpxHarness } from "../harness/acpx/index.js";
 import { OmpHarness } from "../harness/omp/index.js";
-import { OpencodeApi } from "../harness/opencode/api.js";
-import { OpencodeHarness } from "../harness/opencode/index.js";
 import type { Harness } from "../harness/types.js";
 import type { HarnessFactoryContext } from "../kernel/launch.js";
 import type { ModelCatalog } from "../kernel/preflight.js";
@@ -17,7 +15,6 @@ export function resolveHarnessBinaries(
 ): Record<string, string | undefined> {
   const acpx = resolveAcpxCommand().binary;
   const binaries: Record<string, string | undefined> = {
-    opencode: process.env.OPENCODE_PATH ?? Bun.which("opencode") ?? undefined,
     omp: process.env.OMP_PATH ?? Bun.which("omp") ?? undefined,
   };
   for (const [id, entry] of Object.entries(harnessConfigs)) {
@@ -37,7 +34,6 @@ export function createRealHarnesses(
   context: HarnessFactoryContext,
 ): Record<string, Harness> {
   const harnesses: Record<string, Harness> = {
-    opencode: new OpencodeHarness({ sessionDir: context.sessionDir }),
     omp: new OmpHarness({
       sessionDir: context.sessionDir,
       subagentModel: context.scouts,
@@ -52,11 +48,6 @@ export function createRealHarnesses(
 }
 
 const MODEL_TIMEOUT_SEC = 60;
-
-async function opencodeModels(binary: string): Promise<Set<string>> {
-  const rows = await new OpencodeApi(binary).models(process.cwd());
-  return new Set(rows.map((row) => `${row.providerID}/${row.modelID}`));
-}
 
 async function ompModels(binary: string): Promise<Set<string>> {
   const res = await runProcess({
@@ -105,11 +96,9 @@ export function createRealModelCatalog(
         new Error(`harness "${harness}" binary is not available`),
       );
     pending =
-      harness === "opencode"
-        ? opencodeModels(binary)
-        : harness === "omp"
-          ? ompModels(binary)
-          : Promise.resolve(new Set<string>());
+      harness === "omp"
+        ? ompModels(binary)
+        : Promise.resolve(new Set<string>());
     cache.set(harness, pending);
     pending.catch(() => cache.delete(harness));
     return pending;

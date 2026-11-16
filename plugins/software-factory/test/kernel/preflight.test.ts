@@ -88,24 +88,6 @@ describe("pre-flight", () => {
     }
   });
 
-  it("reads object-valued capability variants from the opencode adapter", async () => {
-    const f = await fixture();
-    try {
-      const harness = new FakeHarness({
-        id: "fake",
-        caps: { effort: [{ id: "low" }, { id: "max" }] as unknown as string[] },
-      });
-      const result = await preflight({
-        ...f.input,
-        harnesses: new Map([["fake", harness]]),
-      });
-      expect(result.aliases.architect).toBe("max");
-      expect(f.configs.run.aliases.architect!.effort).toBe("max");
-    } finally {
-      f.repo.cleanup();
-    }
-  });
-
   it("reports an alias missing for a required role with file and key", async () => {
     const f = await fixture();
     try {

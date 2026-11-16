@@ -43,9 +43,18 @@ aliases:
     harness: omp
     model: anthropic/claude-sonnet-5-5
 
+# The built-in `acpx opencode` route resolves 1.19.5 and fails on the 2.2.7
+# data dir; the raw `opencode acp` route runs the installed CLI (probe §0).
+harnesses:
+  opencode:
+    acpx:
+      agent: opencode acp
+      raw: true
+      effort: { configId: effort, levels: [low, medium, high, xhigh, max] }
+      usage: { cache: true }
+
 scouts:
   model: opencode-go/deepseek-v4.1-flash
-
 # Prices come from the harness or OpenRouter's model list (cached locally);
 # nothing is hardcoded here. Every model above matches by normalized id except
 # beam, which has no beam-suffixed OpenRouter id and is mapped explicitly to

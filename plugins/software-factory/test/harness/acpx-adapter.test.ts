@@ -602,7 +602,7 @@ describe("AcpxHarness", () => {
       subagents: "none",
       structuredOutput: "none",
       effort: ["low", "medium", "high"],
-      usage: { cache: true, cost: false },
+      usage: { cache: true, cost: true },
     });
   });
 
@@ -677,7 +677,7 @@ describe("AcpxHarness", () => {
       ]);
       expect(await harness.caps({ id: "nova-model" })).toMatchObject({
         effort: ["low", "high"],
-        usage: { cache: false, cost: false },
+        usage: { cache: false, cost: true },
       });
     } finally {
       stub.cleanup();

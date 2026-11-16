@@ -79,26 +79,40 @@ export function readDeliveredOutcome(
   return { outcome: parseOutcome(fenced), source: "fenced" };
 }
 
+/**
+ * The one outcome field each expectation gates: a review delivers a verdict, the
+ * architect step a decision, `any` delivers either only if it chooses. The
+ * validator enforces the field and the repair ask renders just that one, so a
+ * bare done is never asked for a verdict.
+ */
+export function expectationField(
+  expectation: OutcomeExpectation,
+): "verdict" | "decision" | undefined {
+  if (expectation === "review") return "verdict";
+  if (expectation === "architect") return "decision";
+  return undefined;
+}
+
 /** Per-step contract the schema alone cannot express. */
 export function validateExpectation(
   outcome: Outcome,
   expectation: OutcomeExpectation,
 ): string[] {
-  const findings: string[] = [];
-  if (expectation === "architect" && !outcome.decision) {
-    findings.push("decision is required: continue | done | blocked");
+  const field = expectationField(expectation);
+  if (field === "decision" && !outcome.decision) {
+    return ["decision is required: continue | done | blocked"];
   }
   if (
-    expectation === "review" &&
+    field === "verdict" &&
     !outcome.verdict &&
     outcome.status !== "failed" &&
     outcome.status !== "blocked"
   ) {
-    findings.push(
+    return [
       "verdict is required on a completed review: approve | changes | reject",
-    );
+    ];
   }
-  return findings;
+  return [];
 }
 
 /** The synthetic outcome after failed repairs; an invalid outcome past repair is failed (KERNEL0 §4). */

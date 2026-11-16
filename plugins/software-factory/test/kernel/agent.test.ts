@@ -10,6 +10,7 @@ import { renderContextPack } from "../../src/kernel/context-pack.js";
 import { derive } from "../../src/kernel/derive.js";
 import { countOutcomeRepairs } from "../../src/kernel/metrics.js";
 import { resolveRole } from "../../src/kernel/flow-context.js";
+import { frontClassFlowsVar } from "../../src/kernel/front.js";
 import { loadPrompts } from "../../src/kernel/prompts.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import type {
@@ -494,6 +495,7 @@ describe("delivery guard", () => {
     checkout: "/wt",
     setup_command: "none",
     gate_commands: "none",
+    class_flows: frontClassFlowsVar(),
   };
 
   async function setup() {
@@ -571,6 +573,40 @@ describe("delivery guard", () => {
       expect(repair).not.toContain("verdict:");
       expect(repair).not.toContain("decision:");
       expect(result.outcome?.summary).toBe("recovered");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps the decision line but no verdict in an architect repair", async () => {
+    const { root, fake, runtime } = await setup();
+    try {
+      fake.script((req) => fakeTurnResult(req, { text: "nothing" }));
+      fake.script((req, ctx) => {
+        ctx.writeOutcome({
+          status: "done",
+          summary: "stopped",
+          decision: "done",
+        });
+        return fakeTurnResult(req);
+      });
+
+      const result = await runAgentTurn(runtime, {
+        target: resolveRole(runtime, "architect"),
+        cwd: root,
+        meta: { iteration: 1, slug: "a", step: "architect", round: 1 },
+        vars,
+        expectation: "architect",
+      });
+
+      expect(fake.calls).toHaveLength(2);
+      const repair = fake.calls[1]!.prompt;
+      expect(repair).toContain(
+        "You are the architect. Your turn did not deliver its plan edit or stop decision.",
+      );
+      expect(repair).toContain("decision: continue | done | blocked");
+      expect(repair).not.toContain("verdict:");
+      expect(result.outcome?.decision).toBe("done");
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }

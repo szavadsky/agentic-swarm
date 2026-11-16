@@ -26,9 +26,9 @@ function first(source: Record<string, unknown>, names: string[]): number {
 }
 
 /**
- * Token counts come from the prompt result with no cost; an absent usage stays
- * unknown. Reasoning stays disjoint from text output, as in the omp adapter.
- * Field names come from config; the defaults cover the probed agents.
+ * Token counts come from the prompt result; an absent usage stays unknown.
+ * Reasoning stays disjoint from text output, as in the omp adapter. Field
+ * names come from config; the defaults cover the probed agents.
  */
 export function usageFromAcpxResult(
   raw: unknown,
@@ -43,7 +43,22 @@ export function usageFromAcpxResult(
   usage.in = first(source, names.input);
   usage.cacheRead = first(source, names.cacheRead);
   usage.cacheWrite5m = first(source, names.cacheWrite);
-  usage.out = Math.max(0, output - reasoning);
+  // codex and agy count thought inside output; opencode counts it on top and
+  // reports totalTokens = input+output+reasoning+cache read/write. That total
+  // is the only field that separates the two shapes; without it the codex/agy
+  // shape is assumed. Reading it wrong moves tokens between `out` and
+  // `reasoningOut` and drops them from the priced total.
+  const total = first(source, ["totalTokens"]);
+  const thoughtSeparate =
+    reasoning > 0 &&
+    total ===
+      usage.in +
+        usage.cacheRead +
+        usage.cacheWrite5m +
+        usage.cacheWrite1h +
+        output +
+        reasoning;
+  usage.out = thoughtSeparate ? output : Math.max(0, output - reasoning);
   usage.reasoningOut = reasoning;
   return usage;
 }
@@ -52,6 +67,22 @@ interface PromptResult {
   stopReason?: string;
   usage?: unknown;
   sessionId?: string;
+}
+
+/**
+ * ACP `usage_update.cost` is the session-cumulative figure in USD (opencode
+ * reads it from `session.get().cost`), not this turn's spend. Any other
+ * currency is not a `Usage` dollar amount, so it stays unknown.
+ */
+function usageUpdateCost(update: any): number | undefined {
+  const cost = update?.cost;
+  if (!cost || typeof cost !== "object" || cost.currency !== "USD")
+    return undefined;
+  return typeof cost.amount === "number" &&
+    Number.isFinite(cost.amount) &&
+    cost.amount >= 0
+    ? cost.amount
+    : undefined;
 }
 
 /**
@@ -71,6 +102,7 @@ export class AcpxTranscriptParser {
   private currentText = "";
   private lastText = "";
   private messageId?: string;
+  private costUsd?: number;
   private readonly fields?: AcpxUsageFields;
 
   constructor(fields?: AcpxUsageFields) {
@@ -91,9 +123,12 @@ export class AcpxTranscriptParser {
 
   result(): AcpxTurnSummary {
     this.flush();
+    const usage = usageFromAcpxResult(this.promptResult?.usage, this.fields);
+    // The last update of the turn carries the newest session total.
+    if (this.costUsd !== undefined) usage.costUsd = this.costUsd;
     return {
       text: this.lastText,
-      usage: usageFromAcpxResult(this.promptResult?.usage, this.fields),
+      usage,
       ...(this.promptResult?.stopReason
         ? { stopReason: this.promptResult.stopReason }
         : {}),
@@ -118,6 +153,10 @@ export class AcpxTranscriptParser {
       const update = frame.params?.update;
       if (typeof frame.params?.sessionId === "string")
         this.sessionId = frame.params.sessionId;
+      if (update?.sessionUpdate === "usage_update") {
+        const cost = usageUpdateCost(update);
+        if (cost !== undefined) this.costUsd = cost;
+      }
       if (update?.sessionUpdate === "agent_message_chunk") {
         this.feedChunk(update);
       } else if (update?.sessionUpdate !== "agent_thought_chunk") {

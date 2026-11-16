@@ -37,6 +37,16 @@ aliases:
     fallbacks:
       - model: opencode-go/muse-spark-1.3-contributor
 
+# The built-in `acpx opencode` route resolves 1.19.5 and fails on the 2.2.7
+# data dir; the raw `opencode acp` route runs the installed CLI (probe §0).
+harnesses:
+  opencode:
+    acpx:
+      agent: opencode acp
+      raw: true
+      effort: { configId: effort, levels: [low, medium, high, xhigh, max] }
+      usage: { cache: true }
+
 # Prices come from the harness or OpenRouter's model list; beam has no
 # beam-suffixed OpenRouter id and is mapped explicitly to the only
 # beam-family entry.
