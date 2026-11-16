@@ -139,6 +139,7 @@ const BASE_OUTCOME_FIELDS = ["status", "summary", "concerns", "forward"];
  */
 const ROLE_OUTCOME_FIELDS: Record<string, string[]> = {
   architect: ["planReviewMarks"],
+  implementer: ["replies"],
   pm: ["steerRoutes", "stallRoutes", "planCheckRoutes"],
   "plan-checker": ["planCheck"],
   reviewer: ["upscope"],
