@@ -27,4 +27,5 @@ roles:
   implementer: { prompt: implementer }
   reviewer: { prompt: reviewer }
   digest: { prompt: digest }
+  steward: { prompt: steward }
 itemTurns: 8

@@ -573,6 +573,7 @@ describe("review session resume", () => {
         pm: { harness: "fake", model: "fake-pm" },
         implementer: { harness: "fake", model: "fake-impl" },
         reviewer: { harness: "fake", model: "fake-review" },
+        steward: { harness: "fake", model: "fake-steward" },
         "implementer-strong": { harness: "fake", model: "fake-strong" },
       },
     });

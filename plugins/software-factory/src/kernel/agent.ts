@@ -115,6 +115,8 @@ function deliverableFor(role: string): string {
       return "task files";
     case "front":
       return "class, task, and pack";
+    case "steward":
+      return "merge resolution";
     default:
       return "outcome";
   }

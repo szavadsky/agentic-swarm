@@ -26,6 +26,11 @@ aliases:
     model: opencode/minimax-m3.1-flash-free
     fallbacks:
       - opencode-go/deepseek-v4.1-flash
+  steward:
+    harness: opencode
+    model: opencode/deepseek-v4.1-flash-free
+    fallbacks:
+      - opencode-go/deepseek-v4.1-flash
 
 # Prices come from the harness or OpenRouter's model list; beam has no
 # beam-suffixed OpenRouter id and is mapped explicitly to the only

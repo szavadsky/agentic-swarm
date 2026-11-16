@@ -10,6 +10,7 @@ Template syntax: [LiquidJS](https://liquidjs.com), strict mode (unknown variable
 | implementer | `clean-code`, `scope`, `calibration`, `outcome`            |
 | reviewer    | `clean-code`, `scope`, `calibration`, `outcome`, `verdict` |
 | digest      | `calibration`, `outcome`                                   |
+| steward     | `clean-code`, `calibration`, `outcome`                     |
 
 The shared definitions exist once as partials: `scope` (the predicted-area rule: out-of-area judgement, upscope condition, plan read-only), `calibration` (concerns and calibration, with `remarkable` inside it), `outcome` (the outcome contract), `clean-code` (the code standard), `remarkable` (the remarkable definition) and `verdict` (the verdict/decision lines, for review and architect steps).
 
@@ -108,6 +109,19 @@ The shared definitions exist once as partials: `scope` (the predicted-area rule:
 | `validate_cmd`    | absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default                    |
 
 The digest scout appends loops, failures and interventions; it does not restate the script table.
+
+## steward.md
+
+| variable           | meaning                                                                          |
+| ------------------ | -------------------------------------------------------------------------------- |
+| `worktree`         | path to the task worktree holding the conflicted merge                           |
+| `branch`           | task branch the integration head merges into                                     |
+| `integration_head` | integration head sha the branch must absorb                                      |
+| `conflicts`        | conflicted files, comma-separated; `none` when the merge needs no resolution     |
+| `gate_commands`    | configured gate commands as `- id: command` lines; `none` when empty             |
+| `baseline_checks`  | gate failures recorded on the base before any task; pre-existing, not findings   |
+| `outcome_path`     | path where the outcome file must be written when the harness asks for a file     |
+| `validate_cmd`     | absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default |
 
 ## delivery-repair.md
 

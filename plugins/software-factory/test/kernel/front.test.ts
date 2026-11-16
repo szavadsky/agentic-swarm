@@ -208,6 +208,7 @@ describe("front ladder", () => {
         "  pm: { harness: fake, model: fake-pm }",
         "  implementer: { harness: fake, model: fake-impl }",
         "  reviewer: { harness: fake, model: fake-review }",
+        "  steward: { harness: fake, model: fake-steward }",
         "  digest: { harness: fake, model: fake-digest }",
         "limits: { iterations: 1, concurrency: 1 }",
         "",

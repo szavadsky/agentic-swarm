@@ -25,6 +25,7 @@ const RUN_HEAD = `aliases:
   pm: { harness: fake, model: pm }
   implementer: { harness: fake, model: impl }
   reviewer: { harness: fake, model: rev }
+  steward: { harness: fake, model: steward }
 limits: { concurrency: 2, iterations: 1 }
 `;
 

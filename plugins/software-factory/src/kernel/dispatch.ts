@@ -8,6 +8,7 @@ import { runSteerPm } from "./pm.js";
 import { loadPriceTable } from "./openrouter.js";
 import { type PriceTable, pricedRecord } from "./pricing.js";
 import { scriptMeta } from "./record.js";
+import { runSteward } from "./steward.js";
 import type { DrainController } from "./signals.js";
 import type {
   Action,
@@ -512,7 +513,37 @@ export async function runDispatch(
         return { reason: "infra", cause: causes.join("; "), turns: turnsUsed };
       }
       if (drain) return { reason: "drained", cause: drain, turns: turnsUsed };
-      return { reason: "boundary", turns: turnsUsed };
+      // Wave end: the steward owns remaining merge conflicts. A wave that did
+      // work re-derives (landed merges unblock deps); a skipped or held wave
+      // is the boundary.
+      let steward: Awaited<ReturnType<typeof runSteward>>;
+      try {
+        steward = await runSteward(runtime, iteration);
+      } catch (err) {
+        const cause = err instanceof Error ? err.message : String(err);
+        const turns = settledTurns(
+          await runtime.store.listRecords(),
+          iteration,
+        );
+        return { reason: "infra", cause: `steward: ${cause}`, turns };
+      }
+      if (steward.infra) {
+        const turns = settledTurns(
+          await runtime.store.listRecords(),
+          iteration,
+        );
+        return { reason: "infra", cause: steward.infra.cause, turns };
+      }
+      if (steward.cancelled) {
+        const turns = settledTurns(
+          await runtime.store.listRecords(),
+          iteration,
+        );
+        return { reason: "cancelled", turns };
+      }
+      if (!steward.skipped) continue;
+      const turns = settledTurns(await runtime.store.listRecords(), iteration);
+      return { reason: "boundary", turns };
     }
     await Promise.race([...running.values()].map((r) => r.promise));
   }

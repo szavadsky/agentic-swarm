@@ -24,6 +24,10 @@ aliases:
     harness: pi
     model: opencode-go/beam-free
     effort: max
+  steward:
+    harness: pi
+    model: opencode-go/beam-free
+    effort: max
   # Reviewer on agy first, codex kept switchable (iteration 17 agy-acpx-leg forward).
   # Cross-harness fallback needs the kernel change from that task's architect concern.
   reviewer:

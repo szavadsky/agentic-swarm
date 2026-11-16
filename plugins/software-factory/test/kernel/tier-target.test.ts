@@ -19,6 +19,7 @@ const aliases = {
   pm: { harness: "fake", model: "fake-pm" },
   implementer: { harness: "fake", model: "fake-impl" },
   reviewer: { harness: "fake", model: "fake-review" },
+  steward: { harness: "fake", model: "fake-steward" },
   escalation: {
     harness: "expensive",
     model: "fake-escalated",

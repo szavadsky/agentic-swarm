@@ -29,6 +29,11 @@ aliases:
     model: opencode/minimax-m3.1-flash-free
     fallbacks:
       - opencode-go/deepseek-v4.1-flash
+  steward:
+    harness: opencode
+    model: opencode/deepseek-v4.1-flash-free
+    fallbacks:
+      - opencode-go/deepseek-v4.1-flash
   escalation:
     harness: omp
     model: anthropic/claude-sonnet-5-5

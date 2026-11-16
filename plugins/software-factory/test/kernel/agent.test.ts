@@ -45,6 +45,7 @@ function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
       pm: { harness: "fake", model: "fake-pm" },
       implementer: { harness: "fake", model: "fake-implementer" },
       reviewer: { harness: "fake", model: "fake-reviewer" },
+      steward: { harness: "fake", model: "fake-steward" },
       front: { harness: "fake", model: "fake-front" },
     },
     limits: { concurrency: 1, perHarness: {}, iterations: 1 },

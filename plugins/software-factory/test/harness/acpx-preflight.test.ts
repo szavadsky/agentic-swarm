@@ -23,6 +23,7 @@ const RUN_CONFIG_TEXT = `aliases:
   digest: { harness: opencode, model: opencode/beam-free, fallbacks: [opencode-go/deepseek-v4.1-flash] }
   implementer: { harness: pi, model: opencode-go/beam-free, effort: high }
   reviewer: { harness: codex, model: deepseek-v4.1-flash, effort: high }
+  steward: { harness: pi, model: opencode-go/beam-free, effort: high }
   escalation: { harness: omp, model: anthropic/claude-sonnet-5-5 }
 harnesses:
   pi:

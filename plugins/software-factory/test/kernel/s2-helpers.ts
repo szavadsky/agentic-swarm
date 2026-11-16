@@ -106,6 +106,7 @@ export function setupFlowRepo(opts: FlowRepoOptions = {}): FlowRepo {
     pm: { harness: "fake", model: "fake-pm" },
     implementer: { harness: "fake", model: "fake-impl" },
     reviewer: { harness: "fake", model: "fake-review" },
+    steward: { harness: "fake", model: "fake-steward" },
   };
   repo.writeFile(
     ".factory/run.yaml",

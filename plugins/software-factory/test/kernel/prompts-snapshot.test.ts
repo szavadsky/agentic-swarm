@@ -88,6 +88,16 @@ const ROLES: Record<string, Record<string, string>> = {
     outcome_path: "/goal/records/00044-i3-digest-r1/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
   },
+  steward: {
+    worktree: "/worktrees/demo-tasks/alpha",
+    branch: "factory-task/demo/alpha",
+    integration_head: "abc1234def5678",
+    conflicts: "conflict.txt",
+    gate_commands: "- test: bun test",
+    baseline_checks: "none",
+    outcome_path: "/worktrees/demo-tasks/alpha/outcome.yaml",
+    validate_cmd: "bun /factory/bin/factory.ts validate",
+  },
 };
 
 function library() {
