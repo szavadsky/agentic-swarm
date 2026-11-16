@@ -19,6 +19,7 @@ import {
   makeRuntime,
   outcome,
   setupFlowRepo,
+  scriptStallLeave,
   writeTask,
 } from "./s2-helpers.js";
 
@@ -161,6 +162,7 @@ describe("KERNEL0 scenario 5 — red gates on the merged result", () => {
         ctx.writeOutcome(outcome({ summary: "gate fix attempt" }));
         return fakeTurnResult(req);
       });
+      scriptStallLeave(harness, ["task"]);
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       const file = task("task", { scope: ["feature.txt", "fix.txt"] });
@@ -235,7 +237,7 @@ describe("KERNEL0 scenario 5 — red gates on the merged result", () => {
         repo.git(["show", "factory/demo:feature.txt"], { allowFail: true })
           .code,
       ).not.toBe(0);
-      expect(harness.calls.length).toBe(3);
+      expect(harness.calls.length).toBe(4);
     } finally {
       cleanupFlowRepo(repo);
     }

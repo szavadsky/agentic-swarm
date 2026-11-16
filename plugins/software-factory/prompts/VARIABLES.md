@@ -2,16 +2,18 @@
 
 Template syntax: [LiquidJS](https://liquidjs.com), strict mode (unknown variable = render error; unknown filter = render error). `{{ name }}` interpolates one value; `{% include 'partial-name' %}` inlines `prompts/partial-name.md`. Every prompt is stable text up to its final `## This turn` block; all variables live there so providers can cache the prefix. Partials carry no variables.
 
-| prompt      | partials                                        |
-| ----------- | ----------------------------------------------- |
-| architect   | `calibration`, `outcome`                        |
-| front       | `calibration`, `outcome`                        |
-| pm          | `calibration`, `outcome`                        |
-| implementer | `clean-code`, `scope`, `calibration`, `outcome` |
-| reviewer    | `clean-code`, `scope`, `calibration`, `outcome` |
-| digest      | `outcome`                                       |
+| prompt       | partials                                                   |
+| ------------ | ---------------------------------------------------------- |
+| architect    | `calibration`, `outcome`, `verdict`                        |
+| front        | `calibration`, `outcome`                                   |
+| pm           | `calibration`, `outcome`                                   |
+| implementer  | `clean-code`, `scope`, `calibration`, `outcome`            |
+| reviewer     | `clean-code`, `scope`, `calibration`, `outcome`, `verdict` |
+| digest       | `calibration`, `outcome`                                   |
+| steward      | `clean-code`, `calibration`, `outcome`                     |
+| plan-checker | `calibration`, `outcome`                                   |
 
-The shared definitions exist once as partials: `scope` (the predicted-area rule), `calibration` (concerns and calibration, with `remarkable` inside it), `outcome` (the outcome contract), `clean-code` (the code standard) and `remarkable` (the remarkable definition).
+The shared definitions exist once as partials: `scope` (the predicted-area rule: out-of-area judgement, upscope condition, plan read-only), `calibration` (concerns and calibration, with `remarkable` inside it), `outcome` (the outcome contract), `clean-code` (the code standard), `remarkable` (the remarkable definition) and `verdict` (the verdict/decision lines, for review and architect steps).
 
 `calibration` is the default calibration partial. The process config may replace its content per repo; the prompt template does not change.
 
@@ -50,18 +52,20 @@ The shared definitions exist once as partials: `scope` (the predicted-area rule)
 
 ## pm.md
 
-| variable         | meaning                                                                                                                                                                 |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `iteration`      | 1-based iteration number of this launch                                                                                                                                 |
-| `intent_path`    | path to the goal's `intent.md`, for resolving wording only                                                                                                              |
-| `plan_path`      | path to the plan to derive from; read-only to the PM                                                                                                                    |
-| `tasks_dir`      | directory where task files are written, one `<slug>.md` per task                                                                                                        |
-| `existing_tasks` | existing task files as `- slug \| status \| hash \| deps: a,b` lines (`none` when empty); merged/finished lines end `frozen (read-only)`, cancelled `read-only (spent)` |
-| `repair`         | the script validator's findings from the previous ask; empty string on the first ask and on steer turns                                                                 |
-| `steers`         | pending steers as `- id (file):` plus indented full text; `none` on a derive turn                                                                                       |
-| `holds_dir`      | directory for one `<steer-id>.yaml` hold file per structured steer                                                                                                      |
-| `outcome_path`   | path where the outcome file must be written when the harness asks for a file                                                                                            |
-| `validate_cmd`   | absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default                                                                                        |
+| variable         | meaning                                                                                                                                                                                                                                                                    |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `iteration`      | 1-based iteration number of this launch                                                                                                                                                                                                                                    |
+| `intent_path`    | path to the goal's `intent.md`, for resolving wording only                                                                                                                                                                                                                 |
+| `plan_path`      | path to the plan to derive from; read-only to the PM                                                                                                                                                                                                                       |
+| `tasks_dir`      | directory where task files are written, one `<slug>.md` per task                                                                                                                                                                                                           |
+| `existing_tasks` | existing task files as `- slug \| status \| hash \| deps: a,b` lines (`none` when empty); merged/finished lines end `frozen (read-only)`, cancelled `read-only (spent)`, steer tasks `steer <id>`, stall continuations `stall <n>`, plan-check follow-ups `plan-check <n>` |
+| `repair`         | the script validator's findings from the previous ask; empty string on the first ask and on steer turns                                                                                                                                                                    |
+| `steers`         | pending steers as `- id (file):` plus indented full text; `none` on a derive, stall or plan-check turn                                                                                                                                                                     |
+| `stalls`         | stalled parks as one entry per parked slug (cause, record paths, kept branch, spent turns, done-when); `none` except on a stall turn                                                                                                                                       |
+| `plan_checks`    | checker follow-ups as one entry per slug (kind, reason, cause, record paths, kept branch, spent turns, done-when); `none` except on a plan-check turn                                                                                                                      |
+| `holds_dir`      | directory for one `<steer-id>.yaml` hold file per structured steer                                                                                                                                                                                                         |
+| `outcome_path`   | path where the outcome file must be written when the harness asks for a file                                                                                                                                                                                               |
+| `validate_cmd`   | absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default                                                                                                                                                                                           |
 
 ## implementer.md
 
@@ -109,9 +113,35 @@ The shared definitions exist once as partials: `scope` (the predicted-area rule)
 
 The digest scout appends loops, failures and interventions; it does not restate the script table.
 
+## steward.md
+
+| variable           | meaning                                                                          |
+| ------------------ | -------------------------------------------------------------------------------- |
+| `worktree`         | path to the task worktree holding the conflicted merge                           |
+| `branch`           | task branch the integration head merges into                                     |
+| `integration_head` | integration head sha the branch must absorb                                      |
+| `conflicts`        | conflicted files, comma-separated; `none` when the merge needs no resolution     |
+| `gate_commands`    | configured gate commands as `- id: command` lines; `none` when empty             |
+| `baseline_checks`  | gate failures recorded on the base before any task; pre-existing, not findings   |
+| `outcome_path`     | path where the outcome file must be written when the harness asks for a file     |
+| `validate_cmd`     | absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default |
+
+## plan-checker.md
+
+| variable         | meaning                                                                                                                      |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `iteration`      | 1-based iteration number of this launch                                                                                      |
+| `intent_path`    | path to the goal's `intent.md`, for resolving wording only                                                                   |
+| `plan_path`      | path to the plan to verify against the repo; read-only to the checker                                                        |
+| `checkout`       | path to the stable goal checkout (integration worktree)                                                                      |
+| `tasks_dir`      | directory holding one `<slug>.md` task file per task                                                                         |
+| `existing_tasks` | existing task files as `- slug \| status \| hash \| deps: a,b` lines (`none` when empty), then parked slugs with their cause |
+| `outcome_path`   | path where the outcome file must be written when the harness asks for a file                                                 |
+| `validate_cmd`   | absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default                                             |
+
 ## delivery-repair.md
 
-The one in-session repair ask, rendered by the kernel when a turn delivers no outcome, no verdict or decision, or (architect) no plan. A repo may shadow it like any template. It is not a role prompt: it is rendered directly, never included.
+The one in-session repair ask, rendered by the kernel when a turn delivers no outcome, no verdict or decision, or (architect) no plan. A repo may shadow it like any template. It is not a role prompt: it is rendered directly, never included. It includes `outcome` for the contract and, unless a bare done delivers, `verdict` for the verdict/decision lines.
 
 | variable       | meaning                                                                                                      |
 | -------------- | ------------------------------------------------------------------------------------------------------------ |
@@ -120,3 +150,4 @@ The one in-session repair ask, rendered by the kernel when a turn delivers no ou
 | `done_allowed` | `true` when a bare `status: done` delivers (no verdict or decision required), else `false`                   |
 | `findings`     | the missing or invalid findings as `- ` bullet lines                                                         |
 | `outcome_path` | path where the corrected outcome must be written                                                             |
+| `validate_cmd` | absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default                             |

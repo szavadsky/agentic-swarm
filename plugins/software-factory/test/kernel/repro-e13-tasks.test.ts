@@ -5,6 +5,7 @@ import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { runGoal } from "../../src/kernel/launch.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import { cleanup, makeGoal, outcome, writePlan } from "./e2e-helpers.js";
+import { testPriceSource } from "../helpers/price-source.js";
 
 describe("E13: a half-written task file does not wedge the launch", () => {
   it("quarantines the file, records the report, and runs the iteration", async () => {
@@ -35,6 +36,7 @@ describe("E13: a half-written task file does not wedge the launch", () => {
           iterations: 1,
           harnesses: { fake: harness },
           baseGates: false,
+          priceSource: testPriceSource(goal.repo.dir),
         });
       expect((await run()).stop).toBe("blocked");
       expect(

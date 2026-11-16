@@ -17,6 +17,7 @@ import {
   makeRuntime,
   outcome,
   setupFlowRepo,
+  scriptStallLeave,
   whenTurn,
   writeTask,
 } from "./s2-helpers.js";
@@ -35,6 +36,7 @@ describe("agent containment", () => {
         return fakeTurnResult(req);
       });
 
+      scriptStallLeave(harness, ["task"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("task", { scope: ["task.txt"] }));
       const result = await runDispatch(runtime, { iteration: 1 });
@@ -54,7 +56,7 @@ describe("agent containment", () => {
       expect(state.tasks.task!.cause).toContain(
         "files changed outside the worktree",
       );
-      expect(harness.calls.length).toBe(1);
+      expect(harness.calls.length).toBe(2);
       expect(records.filter((r) => r.step === "merge")).toHaveLength(0);
       expect(fs.existsSync(path.join(checkout, "OUTSIDE.txt"))).toBe(true);
     } finally {
@@ -152,6 +154,7 @@ describe("agent containment", () => {
         return fakeTurnResult(req);
       });
 
+      scriptStallLeave(harness, ["task"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("task", { scope: ["task.txt"] }));
       await runDispatch(runtime, { iteration: 1 });
@@ -203,6 +206,7 @@ describe("agent containment", () => {
       });
 
       await writeTask(runtime, task("task", { scope: ["task.txt"] }));
+      scriptStallLeave(harness, ["task"]);
       await runDispatch(runtime, { iteration: 1 });
 
       const records = await runtime.store.listRecords();
@@ -236,6 +240,7 @@ describe("agent containment", () => {
         return fakeTurnResult(req);
       });
 
+      scriptStallLeave(harness, ["task"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("task", { scope: ["task.txt"] }));
       await runDispatch(runtime, { iteration: 1 });
@@ -270,6 +275,7 @@ describe("agent containment", () => {
         return fakeTurnResult(req);
       });
 
+      scriptStallLeave(harness, ["task"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("task", { scope: ["task.txt"] }));
       await runDispatch(runtime, { iteration: 1 });
@@ -307,6 +313,7 @@ describe("agent containment", () => {
         return fakeTurnResult(req);
       });
 
+      scriptStallLeave(harness, ["task"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("task", { scope: ["task.txt"] }));
       await runDispatch(runtime, { iteration: 1 });
@@ -327,7 +334,9 @@ describe("agent containment", () => {
   }, 60_000);
 
   it("merges a task whose turn spans another task's merge of the shared checkout", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 2 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 2 } },
+    });
     try {
       const checkout = goalCheckout(repo, goal);
       let initial = "";
@@ -653,6 +662,7 @@ describe("agent containment", () => {
         return fakeTurnResult(req);
       });
 
+      scriptStallLeave(harness, ["task"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("task", { scope: ["task.txt"] }));
       await runDispatch(runtime, { iteration: 1 });

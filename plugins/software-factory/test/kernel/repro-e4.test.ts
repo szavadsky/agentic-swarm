@@ -5,6 +5,7 @@ import { dispatch } from "../../src/cli/dispatch.js";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { createDrainController } from "../../src/kernel/signals.js";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
+import { testPriceSource } from "../helpers/price-source.js";
 
 const PLAN =
   "# Plan\n\n## alpha\nCreate alpha.txt.\n\n## beta\nCreate beta.txt.\n\n## gamma\nCreate gamma.txt.\n\n## delta\nCreate delta.txt.\n";
@@ -29,7 +30,8 @@ function setupRepo(): { repo: TmpRepo; goalDir: string; taskDir: string } {
       "  pm: { harness: fake, model: fake-pm }",
       "  implementer: { harness: fake, model: fake-impl }",
       "  reviewer: { harness: fake, model: fake-review }",
-      "limits: { iterations: 1, concurrency: 1 }",
+      "  steward: { harness: fake, model: fake-steward }",
+      "limits: { iterations: 1, concurrency: { overall: 1 } }",
       `worktreeRoot: ../${base}-wt`,
       `sessions: { dir: ../${base}-sessions, keepRuns: 2 }`,
       "",
@@ -105,6 +107,7 @@ describe("repro E4: first signal does not stop dispatch admission", () => {
       await dispatch(["run", "--repo", s.repo.dir, "--goal", "demo"], {
         harnesses: { fake: harness },
         signals: controller,
+        priceSource: testPriceSource(s.repo.dir),
       });
 
       const afterSignal = implementStart.filter((e) => e.turn > signalTurn!);

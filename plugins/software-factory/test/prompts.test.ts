@@ -60,7 +60,7 @@ describe("prompts: PromptLibrary", () => {
       dir,
     );
     expect(builtin.render("calibration", {})).toContain(
-      "Concerns, remarkables, autonomy",
+      "A concern is a recorded debt",
     );
   });
 

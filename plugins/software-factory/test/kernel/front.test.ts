@@ -22,6 +22,7 @@ import {
   writePlan,
   writeTask,
 } from "./e2e-helpers.js";
+import { scriptStallLeave } from "./s2-helpers.js";
 
 function writeClass(goal: E2EGoal, text: string): void {
   fs.writeFileSync(path.join(goal.goalDir, "class.yaml"), text, "utf8");
@@ -208,8 +209,9 @@ describe("front ladder", () => {
         "  pm: { harness: fake, model: fake-pm }",
         "  implementer: { harness: fake, model: fake-impl }",
         "  reviewer: { harness: fake, model: fake-review }",
+        "  steward: { harness: fake, model: fake-steward }",
         "  digest: { harness: fake, model: fake-digest }",
-        "limits: { iterations: 1, concurrency: 1 }",
+        "limits: { iterations: 1, concurrency: { overall: 1 } }",
         "",
       ].join("\n"),
     });
@@ -287,6 +289,7 @@ describe("front ladder", () => {
         );
         return fakeTurnResult(req);
       });
+      scriptStallLeave(harness, ["tiny"]);
 
       await expectLaunch(2, goal.repo, harness, 3);
 
@@ -317,6 +320,7 @@ describe("front ladder", () => {
         );
         return fakeTurnResult(req);
       });
+      scriptStallLeave(harness, ["tiny"]);
 
       await expectLaunch(2, goal.repo, harness, 3);
       expect((await stateOf(goal.goalDir)).goal).toBe("blocked");
@@ -562,6 +566,7 @@ describe("front ladder", () => {
       // No scripted turns: the front is skipped for an existing class, and the
       // implement turn must never run without a front session to resume.
       const harness = new FakeHarness({ id: "fake" });
+      scriptStallLeave(harness, ["tiny"]);
 
       await expectLaunch(2, goal.repo, harness, 3);
 
@@ -581,7 +586,7 @@ describe("front ladder", () => {
           (r) => r.slug === "tiny" && r.step === "merge" && r.ok === true,
         ),
       ).toBe(false);
-      expect(harness.calls).toHaveLength(0);
+      expect(harness.calls).toHaveLength(1);
       expect((await stateOf(goal.goalDir)).goal).toBe("blocked");
     } finally {
       cleanup(goal);
@@ -593,6 +598,7 @@ describe("front ladder", () => {
     try {
       const harness = new FakeHarness({ id: "fake", caps: { resume: false } });
       harness.script(trivialFront(goal, "tiny"));
+      scriptStallLeave(harness, ["tiny"]);
       // No implement script: the follow-up turn must never run de novo when
       // the probe reports no resume capability.
 
@@ -613,7 +619,7 @@ describe("front ladder", () => {
           (r) => r.slug === "tiny" && r.step === "merge" && r.ok === true,
         ),
       ).toBe(false);
-      expect(harness.calls).toHaveLength(1);
+      expect(harness.calls).toHaveLength(2);
       expect((await stateOf(goal.goalDir)).goal).toBe("blocked");
     } finally {
       cleanup(goal);
@@ -633,6 +639,7 @@ describe("front ladder", () => {
         ctx.writeOutcome(outcome({ summary: "wrote to the wrong tree" }));
         return fakeTurnResult(req);
       });
+      scriptStallLeave(harness, ["tiny"]);
 
       await expectLaunch(2, goal.repo, harness, 3);
 
@@ -721,12 +728,15 @@ describe("front ladder", () => {
         );
         return fakeTurnResult(req);
       });
+      scriptStallLeave(harness, ["tiny"]);
 
       await expectLaunch(2, goal.repo, harness, 3);
 
       const records = await recordsOf(goal);
       expect(records.filter((r) => r.step === "architect")).toEqual([]);
-      expect(records.filter((r) => r.step === "pm")).toEqual([]);
+      // One PM turn ran: the stall turn that left the park for the boundary.
+      expect(records.filter((r) => r.step === "pm")).toHaveLength(1);
+      expect(records.filter((r) => r.step === "stall-routes")).toHaveLength(1);
       expect(records.some((r) => r.slug === "tiny" && r.step === "park")).toBe(
         true,
       );

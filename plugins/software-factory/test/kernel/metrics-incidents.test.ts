@@ -26,8 +26,18 @@ function usage(costUsd: number, tin: number, out: number): Usage {
   };
 }
 
-function attempt(model: string, stop: Stop, usageValue?: Usage) {
-  return { model: { id: model }, stop, usage: usageValue ?? usage(0, 0, 0) };
+function attempt(
+  model: string,
+  stop: Stop,
+  usageValue?: Usage,
+  harness?: string,
+) {
+  return {
+    model: { id: model },
+    stop,
+    usage: usageValue ?? usage(0, 0, 0),
+    ...(harness ? { harness } : {}),
+  };
 }
 
 const OK: Stop = { kind: "done" };
@@ -292,6 +302,37 @@ describe("iteration metrics incidents and spend tables", () => {
       expect(metrics.iterations[0]!.incidents.overflowParks).toBe(0);
       expect(metrics.iterations[0]!.incidents.roundLimitParks).toBe(0);
       expect(metrics.iterations[0]!.parked).toEqual(["a", "b"]);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+  it("counts a same-model hop across harnesses as a fallback, not a retry", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-incidents-"));
+    const store = createFolderStore(path.join(root, "goal"));
+    try {
+      await store.ensureLayout();
+      const records = [
+        rec(1, {
+          slug: "a",
+          alias: "implementer",
+          usage: usage(0.01, 10, 1),
+          attempts: [
+            attempt("model-a", QUOTA, usage(0, 0, 0), "harness-a"),
+            attempt("model-a", OK, usage(0.01, 10, 1), "harness-b"),
+          ],
+        }),
+      ];
+
+      await writeMetrics(store, {
+        iteration: 1,
+        status: "in-progress",
+        records,
+      });
+      const metrics = yaml.parse(
+        (await store.readFile("metrics.yaml"))!,
+      ) as GoalMetrics;
+      expect(metrics.iterations[0]!.incidents.fallbackHops).toBe(1);
+      expect(metrics.iterations[0]!.incidents.infraRetries).toBe(0);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }

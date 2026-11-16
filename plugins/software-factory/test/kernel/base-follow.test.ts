@@ -9,6 +9,7 @@ import {
   prepareIntegrationCheckout,
 } from "../../src/kernel/worktree.js";
 import type { TmpRepo } from "../helpers/tmp-repo.js";
+import { testPriceSource } from "../helpers/price-source.js";
 import {
   cleanupFlowRepo,
   goalCheckout,
@@ -293,6 +294,7 @@ describe("launch follows base advances into the integration branch", () => {
           goal,
           harnesses: { fake: new FakeHarness({ id: "fake" }) },
           baseGates: false,
+          priceSource: testPriceSource(repo.dir),
         });
         expect(result.iterations).toBe(0);
         expect(result.stop).toBe("infra");

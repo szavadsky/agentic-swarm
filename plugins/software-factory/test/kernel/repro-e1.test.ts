@@ -47,6 +47,7 @@ async function runtimeFor(repo: TmpRepo, goal: string): Promise<KernelRuntime> {
     harnesses: new Map<string, Harness>(),
     prompts: loadPrompts(configs.process, repo.dir),
     limits: toLimits(configs),
+    workingTier: new Map(),
   };
 }
 
@@ -110,6 +111,13 @@ describe("E1: a second goal's recovery stays inside its own goal", () => {
           iterations: 1,
           harnesses: fake(),
           baseGates: false,
+          // Hermetic prices: the repo-local cache, never the network.
+          priceSource: {
+            cachePath: path.join(repo.dir, ".factory", "price-cache.json"),
+            fetchModels: async () => {
+              throw new Error("price fetch disabled in tests");
+            },
+          },
         });
       } catch (err) {
         failed = err as Error;
@@ -195,6 +203,13 @@ describe("E1: a second goal's recovery stays inside its own goal", () => {
           iterations: 1,
           harnesses: fake(),
           baseGates: false,
+          // Hermetic prices: the repo-local cache, never the network.
+          priceSource: {
+            cachePath: path.join(two.repo.dir, ".factory", "price-cache.json"),
+            fetchModels: async () => {
+              throw new Error("price fetch disabled in tests");
+            },
+          },
         });
       } catch (err) {
         failed = err as Error;

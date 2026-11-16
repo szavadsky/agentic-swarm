@@ -13,7 +13,8 @@ import {
   resolveGoalPaths,
   toLimits,
 } from "../../src/kernel/config.js";
-import type { ModelPrice } from "../../src/kernel/pricing.js";
+import { writePriceCache } from "../../src/kernel/openrouter.js";
+import type { PriceTable } from "../../src/kernel/pricing.js";
 import { loadPrompts } from "../../src/kernel/prompts.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import type {
@@ -30,15 +31,22 @@ export interface FlowRepoOptions {
   /** Raw `.factory/process.yaml` override. */
   process?: Record<string, unknown>;
   limits?: Record<string, unknown>;
-  /** Model id -> USD per Mtok, for harnesses that report no cost. */
-  prices?: Record<string, ModelPrice>;
+  /** Seed for the repo-local price cache, for harnesses that report no cost. */
+  priceTable?: PriceTable;
   aliases?: Record<
     string,
     {
       harness: string;
       model: string;
       effort?: string;
-      fallbacks?: string[];
+      subscription?: string;
+      escalateTo?: string;
+      fallbacks?: {
+        harness?: string;
+        model: string;
+        effort?: string;
+        subscription?: string;
+      }[];
       timeouts?: { idleMs: number; wallMs: number };
     }
   >;
@@ -51,6 +59,11 @@ export interface FlowRepo {
   repo: TmpRepo;
   goalDir: string;
   goal: string;
+}
+
+/** Repo-local price cache; `setupFlowRepo` seeds it when given a table. */
+export function priceCachePath(repoDir: string): string {
+  return path.join(repoDir, ".factory", "price-cache.json");
 }
 
 export function outcome(patch: Record<string, unknown> = {}): Outcome {
@@ -100,15 +113,22 @@ export function setupFlowRepo(opts: FlowRepoOptions = {}): FlowRepo {
     pm: { harness: "fake", model: "fake-pm" },
     implementer: { harness: "fake", model: "fake-impl" },
     reviewer: { harness: "fake", model: "fake-review" },
+    steward: { harness: "fake", model: "fake-steward" },
   };
   repo.writeFile(
     ".factory/run.yaml",
     yaml.stringify({
       aliases,
-      ...(opts.prices ? { prices: opts.prices } : {}),
-      limits: { iterations: 1, concurrency: 1, ...(opts.limits ?? {}) },
+      limits: {
+        iterations: 1,
+        concurrency: { overall: 1 },
+        ...(opts.limits ?? {}),
+      },
     }),
   );
+  if (opts.priceTable) {
+    writePriceCache(priceCachePath(repo.dir), opts.priceTable);
+  }
   if (opts.process) {
     repo.writeFile(".factory/process.yaml", yaml.stringify(opts.process));
   }
@@ -144,6 +164,14 @@ export async function makeRuntime(
     harnesses: new Map(Object.entries(harnesses)),
     prompts: loadPrompts(configs.process, repo.dir),
     limits: toLimits(configs),
+    workingTier: new Map(),
+    // Hermetic prices: the repo-local cache, never the network.
+    priceSource: {
+      cachePath: priceCachePath(repo.dir),
+      fetchModels: async () => {
+        throw new Error("price fetch disabled in tests");
+      },
+    },
   };
   await prepareIntegrationCheckout(runtime);
   return runtime;
@@ -230,4 +258,28 @@ export function filePerTaskHandler(
       counter.active -= 1;
     }
   };
+}
+
+/**
+ * Scripts one stall-PM turn that leaves every listed slug parked. For
+ * dispatches that stall on purpose: the turn answers, the reasons land in
+ * the stall-routes record, and dispatch ends at the boundary as today.
+ */
+export function scriptStallLeave(
+  harness: FakeHarness,
+  slugs: string[],
+  reason = "left for the architect",
+): void {
+  harness.script(
+    (req, ctx) => {
+      ctx.writeOutcome(
+        outcome({
+          summary: `stall leaves ${slugs.join(", ")} parked`,
+          stallRoutes: slugs.map((slug) => ({ slug, action: "leave", reason })),
+        }),
+      );
+      return fakeTurnResult(req);
+    },
+    { when: whenTurn({ step: "pm" }) },
+  );
 }

@@ -485,6 +485,20 @@ export function steerProvenance(source: string): string | undefined {
   return id ? id : undefined;
 }
 
+/** A PM-created stall continuation's provenance: its `source` is `stall: <iteration>`. */
+export function stallProvenance(source: string): string | undefined {
+  const match = /^stall:\s*(.+)$/.exec(source.trim());
+  const id = match?.[1]?.trim();
+  return id ? id : undefined;
+}
+
+/** A plan-check follow-up's provenance: its `source` is `plan-check: <iteration>`. */
+export function planCheckProvenance(source: string): string | undefined {
+  const match = /^plan-check:\s*(.+)$/.exec(source.trim());
+  const id = match?.[1]?.trim();
+  return id ? id : undefined;
+}
+
 /** Latest committed PM route per steer, from successful steer turns only; last record wins. */
 export function collectSteerRoutes(
   records: StepRecord[],

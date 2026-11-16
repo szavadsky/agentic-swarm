@@ -1,7 +1,10 @@
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { runAgentTurn } from "./agent.js";
 import { type RoleTarget, resolveRole } from "./flow-context.js";
+import { type Steer, postSteer, scanInbox } from "./mailbox.js";
 import { costText, DEFAULT_ROLE_BY_STEP, rolesByStep } from "./metrics.js";
+import { loadPriceTable } from "./openrouter.js";
 import { type PriceTable, pricedRecord } from "./pricing.js";
 import type { KernelRuntime, StepRecord } from "./types.js";
 
@@ -30,6 +33,7 @@ function renderDigestFacts(
   iteration: number,
   roleByStep: Record<string, string>,
   prices: PriceTable,
+  priceIds?: Record<string, string>,
 ): string {
   const rows = new Map<string, RoleRow>();
   let turns = 0;
@@ -37,7 +41,7 @@ function renderDigestFacts(
     if (rec.actor !== "agent" || !rec.endedAt) continue;
     if (rec.iteration >= iteration) continue;
     turns += 1;
-    const priced = pricedRecord(rec, prices);
+    const priced = pricedRecord(rec, prices, priceIds);
     const role = roleOf(rec, roleByStep);
     const alias = rec.alias ?? "-";
     const key = `${role}\u0000${alias}`;
@@ -178,7 +182,8 @@ export async function writeLaunchDigest(
         ...DEFAULT_ROLE_BY_STEP,
         ...rolesByStep(runtime.configs.process.flows),
       },
-      runtime.configs.run.prices ?? {},
+      await loadPriceTable(runtime.priceSource),
+      runtime.configs.run.priceIds,
     ),
   );
 
@@ -202,4 +207,42 @@ export async function writeLaunchDigest(
     }
   }
   return rel;
+}
+
+/**
+ * A resumed launch has no architect turn, so its digest reaches the PM as a
+ * steer instead: the PM routes the evidence (a repair task, a spike, the
+ * architect) and dispatch proceeds. The id carries the content hash, so a
+ * relaunch of the same iteration with unchanged evidence is not delivered
+ * twice, while fresh evidence is. Null when there is no previous launch to
+ * digest or the identical steer was already handled.
+ */
+export async function postLaunchDigest(
+  runtime: KernelRuntime,
+  iteration: number,
+  records: StepRecord[],
+): Promise<Steer | null> {
+  const rel = await writeLaunchDigest(runtime, iteration, records);
+  if (!rel) return null;
+  const digest = await runtime.store.readFile(rel);
+  if (digest === null) return null;
+  const text = [
+    `# Launch digest before iteration ${iteration}`,
+    "",
+    "The previous launch was interrupted; this launch resumes its iteration with no architect turn. Route this evidence like any steer: a repair to task, a finding to spike, an architecture decision to architect.",
+    "",
+    digest.trim(),
+    "",
+    `Digest: ${rel}`,
+  ].join("\n");
+  const hash = createHash("sha256").update(text).digest("hex").slice(0, 8);
+  const id = `digest-${iteration}-${hash}`;
+  if ((await scanInbox(runtime.store)).some((steer) => steer.id === id))
+    return null;
+  const posted = await postSteer(runtime.store, id, text);
+  return (
+    (await scanInbox(runtime.store)).find(
+      (steer) => steer.relPath === posted,
+    ) ?? null
+  );
 }

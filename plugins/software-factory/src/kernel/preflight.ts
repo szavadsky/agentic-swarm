@@ -107,9 +107,9 @@ function escalationFindings(
   return findings;
 }
 
-/** Roles the kernel actually calls: architect, PM and every configured flow step. */
+/** Roles the kernel actually calls: architect, PM, steward and every configured flow step. */
 function requiredRoles(process: ProcessConfig): Set<string> {
-  const roles = new Set(["architect", "pm"]);
+  const roles = new Set(["architect", "pm", "steward"]);
   for (const flow of Object.values(process.flows)) {
     for (const step of flow.steps) roles.add(step.role);
     if (flow.followUp?.mode === "different-model" && flow.followUp.role)
@@ -225,8 +225,12 @@ export async function preflight(
   }
 
   const usedHarnesses = new Set<string>();
-  for (const alias of Object.values(configs.run.aliases))
+  for (const alias of Object.values(configs.run.aliases)) {
     usedHarnesses.add(alias.harness);
+    for (const fallback of alias.fallbacks ?? []) {
+      if (fallback.harness) usedHarnesses.add(fallback.harness);
+    }
+  }
   const architectAlias = roleAlias(configs.process, "architect");
   if (configs.run.scouts && architectAlias) {
     const architect = configs.run.aliases[architectAlias];
@@ -254,6 +258,9 @@ export async function preflight(
     harnesses,
     catalog: input.catalog,
     unavailable,
+    subscriptions: new Set(
+      Object.keys(configs.run.limits.concurrency.perSubscription),
+    ),
     capsCache: new Map(),
     modelCache: new Map(),
   };

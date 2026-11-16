@@ -10,6 +10,7 @@ import {
   makeRuntime,
   outcome,
   setupFlowRepo,
+  scriptStallLeave,
   writeTask,
 } from "./s2-helpers.js";
 
@@ -42,6 +43,7 @@ describe("KERNEL0 scenario 9 — no progress over the item history", () => {
       harness.script(implement("B", "attempt B"));
       harness.script(changes("round 2 needs work"));
       harness.script(implement("A", "attempt A again"));
+      scriptStallLeave(harness, ["task"]);
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("task", { scope: ["task.txt"] }));
@@ -58,7 +60,7 @@ describe("KERNEL0 scenario 9 — no progress over the item history", () => {
       expect(state.tasks.task!.cause!.startsWith("no-progress:")).toBe(true);
       expect(state.tasks.task!.cause).toContain("implement r3");
       expect(state.tasks.task!.turns).toBe(5);
-      expect(harness.calls.length).toBe(5);
+      expect(harness.calls.length).toBe(6);
 
       const incidents = records.filter(
         (r) =>

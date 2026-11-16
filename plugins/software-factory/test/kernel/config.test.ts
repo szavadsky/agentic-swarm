@@ -118,6 +118,53 @@ describe("three config layers", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
+  it("defaults concurrency to overall-only and maps pool and model caps", () => {
+    const root = tmpRepo();
+    expect(toLimits(loadConfigs(root)).concurrency).toEqual({
+      overall: 2,
+      perSubscription: {},
+      perModel: {},
+    });
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    const runYaml = path.join(root, ".factory/run.yaml");
+    fs.writeFileSync(
+      runYaml,
+      "limits: { iterations: 1, concurrency: { overall: 3, perSubscription: { go: 2 }, perModel: { a/b: 1 } } }\n",
+    );
+    expect(toLimits(loadConfigs(root)).concurrency).toEqual({
+      overall: 3,
+      perSubscription: { go: 2 },
+      perModel: { "a/b": 1 },
+    });
+    fs.writeFileSync(
+      runYaml,
+      "limits: { iterations: 1, concurrency: { overall: 0 } }\n",
+    );
+    expect(() => loadConfigs(root)).toThrow(/overall/);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("parses alias subscriptions and cross-harness fallback tiers", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, ".factory/run.yaml"),
+      [
+        "aliases:",
+        "  implementer: { harness: omp, model: m, subscription: go,",
+        "    fallbacks: [{ harness: agy, model: g, effort: high, subscription: ag }] }",
+        "limits: { iterations: 1 }",
+        "",
+      ].join("\n"),
+    );
+    const alias = loadConfigs(root).run.aliases.implementer!;
+    expect(alias.subscription).toBe("go");
+    expect(alias.fallbacks).toEqual([
+      { harness: "agy", model: "g", effort: "high", subscription: "ag" },
+    ]);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
   it("rejects an unsafe goal name", () => {
     const root = tmpRepo();
     const configs = loadConfigs(root);

@@ -45,9 +45,14 @@ function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
       pm: { harness: "fake", model: "fake-pm" },
       implementer: { harness: "fake", model: "fake-implementer" },
       reviewer: { harness: "fake", model: "fake-reviewer" },
+      steward: { harness: "fake", model: "fake-steward" },
       front: { harness: "fake", model: "fake-front" },
     },
-    limits: { concurrency: 1, perHarness: {}, iterations: 1 },
+    limits: {
+      concurrency: { overall: 1, perSubscription: {}, perModel: {} },
+      iterations: 1,
+      planCheckRounds: 2,
+    },
     sessions: { dir: "", keepRuns: 1, retention: "short" },
   };
   return {
@@ -68,8 +73,16 @@ function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
       itemTurns: 8,
       flows: {},
       iterations: 1,
-      concurrency: 1,
-      perHarness: {},
+      concurrency: { overall: 1, perSubscription: {}, perModel: {} },
+      planCheckRounds: 2,
+    },
+    workingTier: new Map(),
+    // Hermetic prices: the test-local cache, never the network.
+    priceSource: {
+      cachePath: path.join(root, "price-cache.json"),
+      fetchModels: async () => {
+        throw new Error("price fetch disabled in tests");
+      },
     },
   };
 }
@@ -879,6 +892,8 @@ const pmVars = {
   repair: "",
   steers: "none",
   holds_dir: "/g/mailbox/holds",
+  stalls: "none",
+  plan_checks: "none",
 };
 
 const implementerVars = {

@@ -1,5 +1,3 @@
-# Concerns, remarkables, autonomy
-
 A concern is a recorded debt, risk, uncertainty or design choice: `kind: debt | risk | uncertainty | choice`.
 Calibration says who must act:
 

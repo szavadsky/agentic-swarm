@@ -25,6 +25,12 @@ One digest, at most 80 lines, written to the digest path. Keep the cost-and-turn
 - When the 80-line cap binds, keep totals, outcomes, failures and the top loops; collapse the rest to counts and say what was collapsed.
 - Write the digest file. Your outcome summary is one paragraph pointing at it.
 
+## Calibration
+
+{% include 'calibration' %}
+
+## Outcome
+
 {% include 'outcome' %}
 
 ## This turn

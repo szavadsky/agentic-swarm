@@ -34,7 +34,7 @@ export interface AttemptResult {
   cancelled?: boolean;
 }
 
-async function concludeAutoMerge(
+export async function concludeAutoMerge(
   runtime: KernelRuntime,
   task: TaskFile,
   cwd: string,
@@ -51,7 +51,7 @@ async function concludeAutoMerge(
   }
 }
 
-async function settleMergeAttempt(
+export async function settleMergeAttempt(
   runtime: KernelRuntime,
   meta: { iteration: number; slug: string; round: number },
   cwd: string,

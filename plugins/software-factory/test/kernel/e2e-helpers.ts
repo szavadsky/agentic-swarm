@@ -2,6 +2,8 @@ import { expect } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { dispatch } from "../../src/cli/dispatch.js";
+import type { PriceSource } from "../../src/kernel/openrouter.js";
+import { testPriceSource } from "../helpers/price-source.js";
 import {
   type FakeHarness,
   type FakeTurnHandler,
@@ -32,8 +34,9 @@ const DEFAULT_RUN_YAML = [
   "  pm: { harness: fake, model: fake-pm }",
   "  implementer: { harness: fake, model: fake-impl }",
   "  reviewer: { harness: fake, model: fake-review }",
+  "  steward: { harness: fake, model: fake-steward }",
   "  digest: { harness: fake, model: fake-digest }",
-  "limits: { iterations: 1, concurrency: 1 }",
+  "limits: { iterations: 1, concurrency: { overall: 1 } }",
   "",
 ].join("\n");
 
@@ -83,6 +86,7 @@ export async function launch(
 ): Promise<number> {
   return dispatch(launchArgs(repo, iterations), {
     harnesses: { fake: harness },
+    priceSource: testPriceSource(repo.dir),
   });
 }
 
@@ -99,9 +103,22 @@ function launchArgs(repo: TmpRepo, iterations: number): string[] {
 }
 
 /**
- * Runs the CLI and fails with the launch's own output (stop, cause, summary,
- * errors) when the exit code differs, so a mismatch names its cause.
+ * Hermetic prices for CLI-driven tests: the repo's own (usually missing)
+ * cache, never the network. An explicit `priceSource` in `deps` wins.
  */
+function hermeticPriceSource(argv: string[]): PriceSource {
+  let repo = process.cwd();
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    if (arg === "--repo" && argv[i + 1]) {
+      repo = argv[i + 1]!;
+      i += 1;
+    } else if (arg?.startsWith("--repo=")) {
+      repo = arg.slice("--repo=".length);
+    }
+  }
+  return testPriceSource(repo);
+}
 export async function expectDispatch(
   expected: number,
   argv: string[],
@@ -120,7 +137,10 @@ export async function expectDispatch(
   };
   let code: number;
   try {
-    code = await dispatch(argv, deps);
+    code = await dispatch(argv, {
+      priceSource: hermeticPriceSource(argv),
+      ...deps,
+    });
   } finally {
     console.log = realLog;
     console.error = realError;

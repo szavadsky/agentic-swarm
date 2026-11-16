@@ -64,31 +64,42 @@ if (fs.existsSync(processFile)) {
 }
 
 // Repository-level schema-enforced files. gates.sh exports the package alone,
-// so the invoking repo's root arrives in FACTORY_REPO_ROOT; a direct run from
-// the package resolves it from the package location.
-const repoRoot =
+// so both roots arrive in the environment: FACTORY_REPO_ROOT carries the
+// artifact checkout (tasks, class, outcomes) while FACTORY_TREE_ROOT carries
+// the git toplevel of the tree under test (repo/run config, process
+// override, bootstrap/run). A branch that changes a schema and migrates the
+// tree-owned files stays green; the base checkout's unmigrated copies are
+// not the tree's. A direct run from the package resolves both roots from
+// the package location.
+const artifactRoot =
   process.env.FACTORY_REPO_ROOT ?? path.resolve(packageRoot, "..", "..");
-const factoryDir = path.join(repoRoot, ".factory");
-const repoFiles = {
-  repo: path.join(factoryDir, "repo.yaml"),
-  run: path.join(factoryDir, "run.yaml"),
-  processOverride: path.join(factoryDir, "process.yaml"),
+const treeRoot = process.env.FACTORY_TREE_ROOT ?? artifactRoot;
+const treeFactoryDir = path.join(treeRoot, ".factory");
+const artifactFactoryDir = path.join(artifactRoot, ".factory");
+const treeFiles = {
+  repo: path.join(treeFactoryDir, "repo.yaml"),
+  run: path.join(treeFactoryDir, "run.yaml"),
+  processOverride: path.join(treeFactoryDir, "process.yaml"),
 };
 
-if (fs.existsSync(factoryDir)) {
-  if (fs.existsSync(repoFiles.repo))
-    validateYamlFile(repoFiles.repo, repoConfigSchema);
-  else missing.push(repoFiles.repo);
+if (fs.existsSync(treeFactoryDir)) {
+  if (fs.existsSync(treeFiles.repo))
+    validateYamlFile(treeFiles.repo, repoConfigSchema);
+  else missing.push(treeFiles.repo);
 
-  if (fs.existsSync(repoFiles.run))
-    validateYamlFile(repoFiles.run, runConfigSchema);
-  else missing.push(repoFiles.run);
+  if (fs.existsSync(treeFiles.run))
+    validateYamlFile(treeFiles.run, runConfigSchema);
+  else missing.push(treeFiles.run);
 
-  if (fs.existsSync(repoFiles.processOverride))
-    validateYamlFile(repoFiles.processOverride, processConfigSchema);
+  if (fs.existsSync(treeFiles.processOverride))
+    validateYamlFile(treeFiles.processOverride, processConfigSchema);
+} else {
+  missing.push(`${treeFactoryDir} (tree-level: repo/run config)`);
+}
 
+if (fs.existsSync(artifactFactoryDir)) {
   // Task files, grouped by their containing directory.
-  const taskFiles = walk(factoryDir, (file) =>
+  const taskFiles = walk(artifactFactoryDir, (file) =>
     /\/tasks\/[^/]+\.md$/.test(file),
   );
   const byDir = new Map<string, string[]>();
@@ -122,7 +133,7 @@ if (fs.existsSync(factoryDir)) {
 
   // Class files.
   for (const file of walk(
-    factoryDir,
+    artifactFactoryDir,
     (f) => path.basename(f) === "class.yaml",
   )) {
     validateYamlFile(file, classSchema);
@@ -130,7 +141,7 @@ if (fs.existsSync(factoryDir)) {
 
   // Outcome files.
   for (const file of walk(
-    factoryDir,
+    artifactFactoryDir,
     (f) => path.basename(f) === "outcome.yaml",
   )) {
     try {
@@ -143,12 +154,12 @@ if (fs.existsSync(factoryDir)) {
   }
 } else {
   missing.push(
-    `${factoryDir} (repo-level: repo/run config, tasks, class, outcomes)`,
+    `${artifactFactoryDir} (artifact-level: tasks, class, outcomes)`,
   );
 }
 
-// Run-config library shipped by the repo, one run layer per file.
-const runConfigDir = path.join(repoRoot, "bootstrap", "run");
+// Run-config library shipped by the tree under test, one run layer per file.
+const runConfigDir = path.join(treeRoot, "bootstrap", "run");
 const runConfigs = walk(
   runConfigDir,
   (f) => f.endsWith(".yaml") || f.endsWith(".yml"),
@@ -160,7 +171,7 @@ if (runConfigs.length > 0) {
 // The kernel's explicit run-config path, when the operator set one.
 const envRunConfig = process.env.FACTORY_RUN_CONFIG;
 if (envRunConfig) {
-  const file = path.resolve(repoRoot, envRunConfig);
+  const file = path.resolve(treeRoot, envRunConfig);
   if (runConfigs.includes(file)) {
     // Already validated by the bootstrap/run walk.
   } else if (fs.existsSync(file)) {
@@ -170,8 +181,12 @@ if (envRunConfig) {
   }
 }
 
+const scope =
+  treeRoot === artifactRoot
+    ? artifactRoot
+    : `tree ${treeRoot}, artifacts ${artifactRoot}`;
 console.log(
-  `schema-check: ${checked} schema-enforced file(s) valid under ${repoRoot}`,
+  `schema-check: ${checked} schema-enforced file(s) valid under ${scope}`,
 );
 for (const entry of missing) console.log(`schema-check: not present: ${entry}`);
 

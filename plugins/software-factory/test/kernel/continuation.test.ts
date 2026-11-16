@@ -14,13 +14,16 @@ import {
   goalCheckout,
   makeRuntime,
   outcome,
+  scriptStallLeave,
   setupFlowRepo,
   writeTask,
 } from "./s2-helpers.js";
 
 describe("parked continuation", () => {
   it("continues a task with base from the parked task's kept branch", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       harness.script((req, ctx) => {
@@ -193,10 +196,10 @@ describe("kept-land", () => {
     });
   }
 
-  it("lands a flake-parked kept branch with no new task and no agent turn", async () => {
+  it("lands a flake-parked kept branch with no new task", async () => {
     const counter = freshCounter();
     const { repo, goal } = setupFlowRepo({
-      limits: { concurrency: 1 },
+      limits: { concurrency: { overall: 1 } },
       gates: [
         {
           id: "unit",
@@ -211,6 +214,7 @@ describe("kept-land", () => {
         ctx.writeOutcome(outcome({ summary: "nothing to fix" }));
         return fakeTurnResult(req);
       });
+      scriptStallLeave(harness, ["kept-flake"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("kept-flake", { scope: ["feature.txt"] }));
       writePlan(runtime, ["kept-flake"]);
@@ -224,7 +228,7 @@ describe("kept-land", () => {
       expect((await stateOf(runtime)).tasks["kept-flake"]!.cause).toContain(
         "gates: unit",
       );
-      expect(harness.calls).toHaveLength(3);
+      expect(harness.calls).toHaveLength(4);
 
       scriptContinueBoundary(harness, runtime);
       const boundary = await runBoundary(runtime, { relaunch: false });
@@ -243,7 +247,7 @@ describe("kept-land", () => {
       expect(
         records.filter((r) => r.slug === "kept-flake" && r.actor === "agent"),
       ).toHaveLength(3);
-      expect(harness.calls).toHaveLength(5);
+      expect(harness.calls).toHaveLength(6);
       expect(repo.git(["show", "factory/demo:feature.txt"]).stdout.trim()).toBe(
         "feature",
       );
@@ -261,7 +265,7 @@ describe("kept-land", () => {
   it("leaves a conflicted kept branch parked and named in the pack", async () => {
     const counter = freshCounter();
     const { repo, goal } = setupFlowRepo({
-      limits: { concurrency: 1 },
+      limits: { concurrency: { overall: 1 } },
       gates: [
         {
           id: "unit",
@@ -276,6 +280,7 @@ describe("kept-land", () => {
         ctx.writeOutcome(outcome({ summary: "nothing to fix" }));
         return fakeTurnResult(req);
       });
+      scriptStallLeave(harness, ["kept-conflict"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(
         runtime,
@@ -327,7 +332,7 @@ describe("kept-land", () => {
           (r) => r.slug === "kept-conflict" && r.actor === "agent",
         ),
       ).toHaveLength(3);
-      expect(harness.calls).toHaveLength(5);
+      expect(harness.calls).toHaveLength(6);
       const pack = fs.readFileSync(
         path.join(runtime.store.goalDir, contextPackRelPath(2)),
         "utf8",
@@ -342,7 +347,7 @@ describe("kept-land", () => {
 
   it("leaves a repeat-red kept branch parked", async () => {
     const { repo, goal } = setupFlowRepo({
-      limits: { concurrency: 1 },
+      limits: { concurrency: { overall: 1 } },
       gates: [
         {
           id: "unit",
@@ -357,6 +362,7 @@ describe("kept-land", () => {
         ctx.writeOutcome(outcome({ summary: "nothing to fix" }));
         return fakeTurnResult(req);
       });
+      scriptStallLeave(harness, ["kept-red"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("kept-red", { scope: ["feature.txt"] }));
       writePlan(runtime, ["kept-red"]);
@@ -384,7 +390,7 @@ describe("kept-land", () => {
       expect(
         records.filter((r) => r.slug === "kept-red" && r.step === "kept-land"),
       ).toHaveLength(0);
-      expect(harness.calls).toHaveLength(5);
+      expect(harness.calls).toHaveLength(6);
       const pack = fs.readFileSync(
         path.join(runtime.store.goalDir, contextPackRelPath(2)),
         "utf8",
@@ -411,14 +417,16 @@ describe("kept-land", () => {
             r.iteration === 3,
         ),
       ).toHaveLength(0);
-      expect(harness.calls).toHaveLength(7);
+      expect(harness.calls).toHaveLength(8);
     } finally {
       cleanupFlowRepo(repo);
     }
   }, 90_000);
 
   it("never lands a branch parked for a review rejection", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       harness.script((req, ctx) => {
@@ -436,6 +444,7 @@ describe("kept-land", () => {
         );
         return fakeTurnResult(req);
       });
+      scriptStallLeave(harness, ["kept-reject"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("kept-reject", { scope: ["feature.txt"] }));
       writePlan(runtime, ["kept-reject"]);
@@ -458,7 +467,7 @@ describe("kept-land", () => {
       expect(
         records.filter((r) => r.slug === "kept-reject" && r.step === "merge"),
       ).toHaveLength(0);
-      expect(harness.calls).toHaveLength(4);
+      expect(harness.calls).toHaveLength(5);
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -467,7 +476,7 @@ describe("kept-land", () => {
   it("never lands when a later commit voids the approve", async () => {
     const counter = freshCounter();
     const { repo, goal } = setupFlowRepo({
-      limits: { concurrency: 1 },
+      limits: { concurrency: { overall: 1 } },
       gates: [
         {
           id: "unit",
@@ -483,6 +492,7 @@ describe("kept-land", () => {
         ctx.writeOutcome(outcome({ summary: "gate fix attempt" }));
         return fakeTurnResult(req);
       });
+      scriptStallLeave(harness, ["kept-void"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("kept-void", { scope: ["feature.txt"] }));
       writePlan(runtime, ["kept-void"]);
@@ -509,7 +519,7 @@ describe("kept-land", () => {
             r.slug === "kept-void" && r.step === "merge" && r.iteration === 2,
         ),
       ).toHaveLength(0);
-      expect(harness.calls).toHaveLength(5);
+      expect(harness.calls).toHaveLength(6);
     } finally {
       rmCounter(counter);
       cleanupFlowRepo(repo);
@@ -519,7 +529,7 @@ describe("kept-land", () => {
   it("lands a just-implement branch on green checks", async () => {
     const counter = freshCounter();
     const { repo, goal } = setupFlowRepo({
-      limits: { concurrency: 1 },
+      limits: { concurrency: { overall: 1 } },
       gates: [
         {
           id: "unit",
@@ -542,6 +552,7 @@ describe("kept-land", () => {
         ctx.writeOutcome(outcome({ summary: "nothing to fix" }));
         return fakeTurnResult(req);
       });
+      scriptStallLeave(harness, ["kept-simple"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(
         runtime,
@@ -569,7 +580,7 @@ describe("kept-land", () => {
       );
       expect(kept).toHaveLength(1);
       expect(kept[0]!.ok).toBe(true);
-      expect(harness.calls).toHaveLength(4);
+      expect(harness.calls).toHaveLength(5);
       expect(repo.git(["show", "factory/demo:feature.txt"]).stdout.trim()).toBe(
         "feature",
       );
@@ -582,7 +593,7 @@ describe("kept-land", () => {
   it("skips a base another task continues", async () => {
     const counter = freshCounter();
     const { repo, goal } = setupFlowRepo({
-      limits: { concurrency: 1 },
+      limits: { concurrency: { overall: 1 } },
       gates: [
         {
           id: "unit",
@@ -597,6 +608,7 @@ describe("kept-land", () => {
         ctx.writeOutcome(outcome({ summary: "nothing to fix" }));
         return fakeTurnResult(req);
       });
+      scriptStallLeave(harness, ["kept-base"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("kept-base", { scope: ["alpha.txt"] }));
       await writeTask(
@@ -633,7 +645,7 @@ describe("kept-land", () => {
             r.slug === "kept-base" && r.step === "merge" && r.iteration === 2,
         ),
       ).toHaveLength(0);
-      expect(harness.calls).toHaveLength(5);
+      expect(harness.calls).toHaveLength(6);
     } finally {
       rmCounter(counter);
       cleanupFlowRepo(repo);
@@ -643,7 +655,7 @@ describe("kept-land", () => {
   it("lands when the boundary re-run flips a red gate to green", async () => {
     const counter = freshCounter();
     const { repo, goal } = setupFlowRepo({
-      limits: { concurrency: 1 },
+      limits: { concurrency: { overall: 1 } },
       gates: [
         {
           id: "unit",
@@ -658,6 +670,7 @@ describe("kept-land", () => {
         ctx.writeOutcome(outcome({ summary: "nothing to fix" }));
         return fakeTurnResult(req);
       });
+      scriptStallLeave(harness, ["kept-flip"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("kept-flip", { scope: ["feature.txt"] }));
       writePlan(runtime, ["kept-flip"]);
@@ -668,7 +681,7 @@ describe("kept-land", () => {
       expect((await stateOf(runtime)).tasks["kept-flip"]!.status).toBe(
         "parked",
       );
-      expect(harness.calls).toHaveLength(3);
+      expect(harness.calls).toHaveLength(4);
 
       scriptContinueBoundary(harness, runtime);
       const boundary = await runBoundary(runtime, { relaunch: false });
@@ -692,7 +705,7 @@ describe("kept-land", () => {
       expect(
         records.filter((r) => r.slug === "kept-flip" && r.actor === "agent"),
       ).toHaveLength(3);
-      expect(harness.calls).toHaveLength(5);
+      expect(harness.calls).toHaveLength(6);
       expect(repo.git(["show", "factory/demo:feature.txt"]).stdout.trim()).toBe(
         "feature",
       );

@@ -1,5 +1,3 @@
-# Code standard
-
 - Repository conventions win; these are the defaults they override.
 - Test real behavior: cover the task's stated edge cases and failure paths, not only success. A test that mirrors the implementation, asserts a mock, or only covers the happy path is not a test.
 - Smallest correct change at the task's seam. Delete dead weight rather than comment it out; no speculative abstraction.

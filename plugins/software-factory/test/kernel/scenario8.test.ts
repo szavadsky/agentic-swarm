@@ -18,7 +18,7 @@ import {
 describe("KERNEL0 scenario 8 — drain", () => {
   it("stops dispatching at the iteration turn limit, lets in-flight work finish and writes the summary", async () => {
     const { repo, goal } = setupFlowRepo({
-      limits: { concurrency: 2, turns: 1 },
+      limits: { concurrency: { overall: 2 }, turns: 1 },
     });
     try {
       const harness = new FakeHarness({ id: "fake" });

@@ -12,6 +12,7 @@ import {
 } from "../../src/cli/lock.js";
 import { FakeHarness } from "../../src/harness/fake/index.js";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
+import { testPriceSource } from "../helpers/price-source.js";
 
 function conflictingBaseRepo(): TmpRepo {
   const repo = createTmpRepo();
@@ -28,7 +29,8 @@ function conflictingBaseRepo(): TmpRepo {
       "  pm: { harness: fake, model: fake-pm }",
       "  implementer: { harness: fake, model: fake-impl }",
       "  reviewer: { harness: fake, model: fake-review }",
-      "limits: { iterations: 1, concurrency: 1 }",
+      "  steward: { harness: fake, model: fake-steward }",
+      "limits: { iterations: 1, concurrency: { overall: 1 } }",
       `worktreeRoot: ../${base}-wt`,
       `sessions: { dir: ../${base}-sessions, keepRuns: 1 }`,
       "",
@@ -132,6 +134,7 @@ describe("CLI dispatch", () => {
       try {
         code = await dispatch(["run", "--repo", repo.dir, "--goal", "demo"], {
           harnesses: { fake: new FakeHarness({ id: "fake" }) },
+          priceSource: testPriceSource(repo.dir),
         });
       } finally {
         console.log = originalLog;

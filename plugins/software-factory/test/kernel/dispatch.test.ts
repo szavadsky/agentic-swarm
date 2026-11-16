@@ -13,9 +13,11 @@ import { task } from "./helpers.js";
 import {
   cleanupFlowRepo,
   filePerTaskHandler,
+  type FlowRepoOptions,
   makeRuntime,
   outcome,
   setupFlowRepo,
+  scriptStallLeave,
   twoPartyBarrier,
   whenTurn,
   writeTask,
@@ -26,8 +28,14 @@ async function runPair(opts: {
   scopeB: string[];
   limits: Record<string, unknown>;
   rendezvous?: boolean;
+  aliases?: FlowRepoOptions["aliases"];
+  tierA?: string;
+  tierB?: string;
 }): Promise<{ max: number; reason: string }> {
-  const { repo, goal } = setupFlowRepo({ limits: opts.limits });
+  const { repo, goal } = setupFlowRepo({
+    limits: opts.limits,
+    ...(opts.aliases ? { aliases: opts.aliases } : {}),
+  });
   try {
     const counter = { active: 0, max: 0 };
     const barrier = opts.rendezvous ? twoPartyBarrier() : undefined;
@@ -46,8 +54,20 @@ async function runPair(opts: {
       });
     }
     const runtime = await makeRuntime(repo, goal, { fake: harness });
-    await writeTask(runtime, task("alpha", { scope: opts.scopeA }));
-    await writeTask(runtime, task("beta", { scope: opts.scopeB }));
+    await writeTask(
+      runtime,
+      task("alpha", {
+        scope: opts.scopeA,
+        ...(opts.tierA ? { tier: opts.tierA } : {}),
+      }),
+    );
+    await writeTask(
+      runtime,
+      task("beta", {
+        scope: opts.scopeB,
+        ...(opts.tierB ? { tier: opts.tierB } : {}),
+      }),
+    );
     const result = await runDispatch(runtime, { iteration: 1 });
     const state = derive(
       await runtime.store.listTasks(),
@@ -76,7 +96,7 @@ describe("dispatch admission", () => {
     const run = await runPair({
       scopeA: ["alpha-area"],
       scopeB: ["beta-area"],
-      limits: { concurrency: 2 },
+      limits: { concurrency: { overall: 2 } },
       rendezvous: true,
     });
     expect(run.reason).toBe("boundary");
@@ -87,13 +107,15 @@ describe("dispatch admission", () => {
     const run = await runPair({
       scopeA: ["shared-area"],
       scopeB: ["shared-area"],
-      limits: { concurrency: 2 },
+      limits: { concurrency: { overall: 2 } },
     });
     expect(run.max).toBe(1);
   }, 60_000);
 
   it("runs disjoint areas concurrently even when their diffs touch the same file", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 2 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 2 } },
+    });
     try {
       const counter = { active: 0, max: 0 };
       const arrive = twoPartyBarrier();
@@ -149,11 +171,69 @@ describe("dispatch admission", () => {
     }
   }, 60_000);
 
-  it("honours the per-harness limit even when the absolute limit allows more", async () => {
+  it("throttles one subscription even when the overall limit allows more", async () => {
     const run = await runPair({
       scopeA: ["alpha-area"],
       scopeB: ["beta-area"],
-      limits: { concurrency: 2, perHarness: { fake: 1 } },
+      limits: { concurrency: { overall: 2, perSubscription: { pool: 1 } } },
+      aliases: {
+        architect: { harness: "fake", model: "fake-architect" },
+        pm: { harness: "fake", model: "fake-pm" },
+        implementer: {
+          harness: "fake",
+          model: "fake-impl",
+          subscription: "pool",
+        },
+        reviewer: {
+          harness: "fake",
+          model: "fake-review",
+          subscription: "pool",
+        },
+        steward: { harness: "fake", model: "fake-steward" },
+      },
+    });
+    expect(run.max).toBe(1);
+  }, 60_000);
+
+  it("runs separate subscriptions in parallel within the overall limit", async () => {
+    const run = await runPair({
+      scopeA: ["alpha-area"],
+      scopeB: ["beta-area"],
+      limits: {
+        concurrency: {
+          overall: 2,
+          perSubscription: { "pool-a": 1, "pool-b": 1 },
+        },
+      },
+      aliases: {
+        architect: { harness: "fake", model: "fake-architect" },
+        pm: { harness: "fake", model: "fake-pm" },
+        implementer: { harness: "fake", model: "fake-impl" },
+        reviewer: { harness: "fake", model: "fake-review" },
+        steward: { harness: "fake", model: "fake-steward" },
+        "tier-a": { harness: "fake", model: "fake-a", subscription: "pool-a" },
+        "tier-b": { harness: "fake", model: "fake-b", subscription: "pool-b" },
+      },
+      tierA: "tier-a",
+      tierB: "tier-b",
+      rendezvous: true,
+    });
+    expect(run.reason).toBe("boundary");
+    expect(run.max).toBe(2);
+  }, 60_000);
+
+  it("throttles one model even when the overall limit allows more", async () => {
+    const run = await runPair({
+      scopeA: ["alpha-area"],
+      scopeB: ["beta-area"],
+      limits: { concurrency: { overall: 2, perModel: { shared: 1 } } },
+      aliases: {
+        architect: { harness: "fake", model: "fake-architect" },
+        pm: { harness: "fake", model: "fake-pm" },
+        implementer: { harness: "fake", model: "shared" },
+        reviewer: { harness: "fake", model: "shared" },
+        steward: { harness: "fake", model: "fake-steward" },
+      },
     });
     expect(run.max).toBe(1);
   }, 60_000);
@@ -162,7 +242,7 @@ describe("dispatch admission", () => {
     const run = await runPair({
       scopeA: ["alpha-area"],
       scopeB: ["beta-area"],
-      limits: { concurrency: 1 },
+      limits: { concurrency: { overall: 1 } },
     });
     expect(run.max).toBe(1);
   }, 60_000);
@@ -237,7 +317,9 @@ describe("dispatch admission", () => {
   }, 60_000);
 
   it("drains on the first signal: the in-flight task finishes its flow and no unstarted task starts", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     const originalWarn = console.warn;
     console.warn = () => {};
     try {
@@ -295,7 +377,9 @@ describe("dispatch admission", () => {
   }, 60_000);
 
   it("keeps the second signal a hard stop: the aborted turn returns cancelled and nothing else starts", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     const originalWarn = console.warn;
     console.warn = () => {};
     try {
@@ -343,7 +427,9 @@ describe("dispatch admission", () => {
 
 describe("script crash budget", () => {
   it("parks a deterministically throwing step after the same budget as a harness crash, across relaunches", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       const throwing = () => {
@@ -351,6 +437,7 @@ describe("script crash budget", () => {
       };
       harness.script(throwing);
       harness.script(throwing);
+      scriptStallLeave(harness, ["alpha"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("alpha", { scope: ["alpha-area"] }));
 
@@ -389,7 +476,7 @@ describe("script crash budget", () => {
       // The parked step is not re-dispatched by a third launch.
       const third = await runDispatch(runtime, { iteration: 3 });
       expect(third.reason).toBe("boundary");
-      expect(harness.calls).toHaveLength(2);
+      expect(harness.calls).toHaveLength(3);
       records = await runtime.store.listRecords();
       const scriptCrashes = records.filter(
         (r) =>
@@ -410,7 +497,9 @@ describe("script crash budget", () => {
   }, 60_000);
 
   it("logs a store failure from recordCrash instead of swallowing it", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     const originalWarn = console.warn;
     const warnings: string[] = [];
     console.warn = (...args: unknown[]) => {
@@ -454,7 +543,9 @@ describe("script crash budget", () => {
   }, 60_000);
 
   it("logs a non-Error store failure with its text, never undefined", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     const originalWarn = console.warn;
     const warnings: string[] = [];
     console.warn = (...args: unknown[]) => {

@@ -7,10 +7,18 @@ import { expectDispatch } from "./e2e-helpers.js";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import type { Usage } from "../../src/harness/types.js";
 import { addUsage, zeroUsage } from "../../src/harness/usage.js";
-import { modelPriceSchema, runConfigSchema } from "../../src/kernel/config.js";
+import { runConfigSchema } from "../../src/kernel/config.js";
 import { derive } from "../../src/kernel/derive.js";
 import { type GoalMetrics, writeMetrics } from "../../src/kernel/metrics.js";
-import { type PriceTable, priceUsage } from "../../src/kernel/pricing.js";
+import { writePriceCache } from "../../src/kernel/openrouter.js";
+import {
+  isFreeTierId,
+  matchPrice,
+  type PriceTable,
+  priceTableOnly,
+  priceUsage,
+  pricedUsage,
+} from "../../src/kernel/pricing.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import { writeIterationSummary } from "../../src/kernel/summary.js";
 import { createTmpRepo } from "../helpers/tmp-repo.js";
@@ -97,6 +105,111 @@ describe("price usage at aggregation time", () => {
     expect(
       addUsage(usage({ costUsd: 0.2 }), usage({ costUsd: 0 })).costUsd,
     ).toBe(0.2);
+  });
+});
+
+describe("harness id matching against the OpenRouter table", () => {
+  const OPENROUTER: PriceTable = {
+    "anthropic/claude-opus-5-5": {
+      input: 4,
+      cachedInput: 0.2,
+      output: 20,
+      reasoning: 20,
+    },
+    "deepseek/deepseek-v4.1-flash": {
+      input: 0.0507,
+      cachedInput: 0.001,
+      output: 0.2028,
+      reasoning: 0.2028,
+    },
+    "minimax/minimax-m3.1-flash": {
+      input: 0.075,
+      cachedInput: 0.0075,
+      output: 0.3,
+      reasoning: 0.3,
+    },
+    "baidu/ernie-5.5-flash-preview:free": {
+      input: 0,
+      cachedInput: 0,
+      output: 0,
+      reasoning: 0,
+    },
+    "reflection/beam-1.0-501b-a23b": {
+      input: 0.3,
+      cachedInput: 0.04,
+      output: 1,
+      reasoning: 1,
+    },
+  };
+
+  it("matches exact, provider-stripped, bare and effort-suffixed ids", () => {
+    expect(matchPrice(OPENROUTER, "anthropic/claude-opus-5-5")?.input).toBe(4);
+    // A surplus harness provider prefix is stripped before matching.
+    expect(
+      matchPrice(OPENROUTER, "opencode-go/deepseek-v4.1-flash")?.input,
+    ).toBeCloseTo(0.0507, 10);
+    // A bare harness id names the model, not its host.
+    expect(matchPrice(OPENROUTER, "deepseek-v4.1-flash")?.input).toBeCloseTo(
+      0.0507,
+      10,
+    );
+    // The recorded id keeps the effort suffix; only acpx's --model gets the base.
+    expect(
+      matchPrice(OPENROUTER, "minimax-m3.1-flash-high")?.input,
+    ).toBeCloseTo(0.075, 10);
+    expect(matchPrice(OPENROUTER, "mystery/model")).toBeUndefined();
+    // A qualified id that matches nothing exactly is another provider's
+    // model, not this one: the same suffix must not match across providers.
+    expect(matchPrice(OPENROUTER, "other/deepseek-v4.1-flash")).toBeUndefined();
+  });
+
+  it("lets an explicit priceId win and leaves a stale mapping unpriced", () => {
+    expect(
+      matchPrice(OPENROUTER, "opencode/beam-free", {
+        "opencode/beam-free": "reflection/beam-1.0-501b-a23b",
+      })?.input,
+    ).toBeCloseTo(0.3, 10);
+    // A mapping that names nothing is unpriced, never a silent mismatch.
+    expect(
+      matchPrice(OPENROUTER, "opencode/beam-free", {
+        "opencode/beam-free": "retired/beam-0.9",
+      }),
+    ).toBeUndefined();
+  });
+
+  it("prices a free-tier turn at $0 actual with the paid list equivalent", () => {
+    expect(isFreeTierId("opencode/beam-free")).toBe(true);
+    expect(isFreeTierId("baidu/ernie-5.5-flash-preview:free")).toBe(true);
+    expect(isFreeTierId("MiniMax/M3-FREE")).toBe(true);
+    expect(isFreeTierId("free/zero")).toBe(false);
+    expect(isFreeTierId("paid/one")).toBe(false);
+    const paid = pricedUsage(
+      usage({ costUsd: 0, in: 1_000_000 }),
+      "opencode/minimax-m3.1-flash-free",
+      OPENROUTER,
+    );
+    expect(paid.costKnown).toBe(true);
+    expect(paid.usage.costUsd).toBe(0);
+    expect(paid.usage.listCostUsd).toBeCloseTo(0.075, 10);
+    expect(paid.usage.harnessCostUsd).toBe(0);
+    // A free-tier id with no paid equivalent stays unknown, never $0.
+    expect(
+      priceUsage(usage({ in: 1 }), "opencode/nothing-free", OPENROUTER),
+    ).toBeUndefined();
+    expect(
+      priceTableOnly(usage({ in: 1 }), "opencode/nothing-free", OPENROUTER),
+    ).toBeUndefined();
+  });
+
+  it("prices an ernie turn from the :free entry at a known $0", () => {
+    const priced = pricedUsage(
+      usage({ in: 1_000_000, out: 500_000 }),
+      "openrouter/baidu/ernie-5.5-flash-preview:free",
+      OPENROUTER,
+    );
+    expect(priced.costKnown).toBe(true);
+    expect(priced.usage.costUsd).toBe(0);
+    expect(priced.usage.listCostUsd).toBe(0);
   });
 });
 
@@ -529,7 +642,7 @@ describe("priced metrics and summary", () => {
 });
 
 describe("pricing in a launch", () => {
-  it("wires the run-config table into the summary and metrics of an unpriced turn", async () => {
+  it("wires the price cache into the summary and metrics of a harness-silent turn", async () => {
     const repo = createTmpRepo();
     try {
       repo.writeFile(
@@ -545,15 +658,24 @@ describe("pricing in a launch", () => {
           "  pm: { harness: fake, model: paid/one }",
           "  implementer: { harness: fake, model: paid/one }",
           "  reviewer: { harness: fake, model: paid/one }",
-          "prices:",
-          "  paid/one: { input: 4, cachedInput: 0.2, output: 20, reasoning: 20 }",
-          "limits: { iterations: 1, concurrency: 1 }",
+          "  steward: { harness: fake, model: fake-steward }",
+          "limits: { iterations: 1, concurrency: { overall: 1 } }",
           `worktreeRoot: ../${base}-wt`,
           `sessions: { dir: ../${base}-sessions, keepRuns: 2 }`,
           "",
         ].join("\n"),
       );
       repo.commit("factory config");
+      // The model is absent from config; only the seeded cache prices it.
+      const cachePath = path.join(repo.dir, ".factory", "price-cache.json");
+      writePriceCache(cachePath, {
+        "paid/one": {
+          input: 4,
+          cachedInput: 0.2,
+          output: 20,
+          reasoning: 20,
+        },
+      });
       const goalDir = path.join(repo.dir, ".factory/artifacts/demo");
       fs.mkdirSync(goalDir, { recursive: true });
       fs.writeFileSync(
@@ -587,6 +709,12 @@ describe("pricing in a launch", () => {
         ["run", "--repo", repo.dir, "--goal", "demo", "--iterations", "1"],
         {
           harnesses: { fake: harness },
+          priceSource: {
+            cachePath,
+            fetchModels: async () => {
+              throw new Error("price fetch disabled in tests");
+            },
+          },
         },
       );
 
@@ -610,39 +738,51 @@ describe("pricing in a launch", () => {
   }, 60_000);
 });
 
-describe("run-config price table", () => {
-  it("requires every rate and prices every model the self run uses", () => {
-    expect(runConfigSchema.parse({}).prices).toEqual({});
-    expect(() =>
-      modelPriceSchema.parse({
-        input: -1,
-        cachedInput: 0,
-        output: 0,
-        reasoning: 0,
-      }),
-    ).toThrow();
-    expect(() =>
-      modelPriceSchema.parse({ input: 1, cachedInput: 0, output: 0 }),
-    ).toThrow();
+describe("run-config price ids", () => {
+  it("defaults to no mappings and resolves every configured model id", () => {
+    expect(runConfigSchema.parse({}).priceIds).toEqual({});
+    expect(() => runConfigSchema.parse({ priceIds: { "a/b": "" } })).toThrow();
 
     // The package suite must not reach outside the package: an equivalent
-    // run-config shape, inline. (Validating a real run file's coverage is a
-    // `factory doctor` job, not a unit test.)
+    // run-config shape, inline. (Validating the real run files' coverage is
+    // a live-config test, not a unit test.)
     const run = runConfigSchema.parse(
       yaml.parse(`
 aliases:
-  architect: { harness: omp, model: anthropic/claude-opus-5-5, fallbacks: [opencode-go/deepseek-v4.1-flash] }
+  architect: { harness: omp, model: anthropic/claude-opus-5-5, fallbacks: [{ model: opencode-go/deepseek-v4.1-flash }] }
   implementer: { harness: opencode, model: opencode/deepseek-v4.1-flash-free }
-prices:
-  anthropic/claude-opus-5-5: { input: 4, cachedInput: 0.2, output: 20, reasoning: 20 }
-  opencode-go/deepseek-v4.1-flash: { input: 0.15, cachedInput: 0.003, output: 0.6, reasoning: 0.6 }
-  opencode/deepseek-v4.1-flash-free: { input: 0, cachedInput: 0, output: 0, reasoning: 0 }
+priceIds:
+  opencode/beam-free: reflection/beam-1.0-501b-a23b
 `),
     );
+    const catalog: PriceTable = {
+      "anthropic/claude-opus-5-5": {
+        input: 4,
+        cachedInput: 0.2,
+        output: 20,
+        reasoning: 20,
+      },
+      "deepseek/deepseek-v4.1-flash": {
+        input: 0.0507,
+        cachedInput: 0.001,
+        output: 0.2028,
+        reasoning: 0.2028,
+      },
+      "reflection/beam-1.0-501b-a23b": {
+        input: 0.3,
+        cachedInput: 0.04,
+        output: 1,
+        reasoning: 1,
+      },
+    };
     expect(run.aliases.architect!.model).toBe("anthropic/claude-opus-5-5");
     for (const alias of Object.values(run.aliases)) {
-      expect(run.prices[alias.model]).toBeDefined();
-      for (const fb of alias.fallbacks) expect(run.prices[fb]).toBeDefined();
+      expect(matchPrice(catalog, alias.model, run.priceIds)).toBeDefined();
+      for (const fb of alias.fallbacks)
+        expect(matchPrice(catalog, fb.model, run.priceIds)).toBeDefined();
     }
+    expect(
+      matchPrice(catalog, "opencode/beam-free", run.priceIds),
+    ).toBeDefined();
   });
 });

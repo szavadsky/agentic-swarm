@@ -26,12 +26,14 @@ import {
   formatPmAnswers,
   formatSteers,
   markProcessed,
+  readHolds,
   scanInbox,
   steerProvenance,
   steerResponses,
   writeOutbox,
   type Steer,
 } from "./mailbox.js";
+import { latestPlanCheck } from "./plan-check.js";
 import { type PmRung, runPm } from "./pm.js";
 import { scriptMeta } from "./record.js";
 import type {
@@ -262,6 +264,12 @@ export async function runBoundary(
   if (!opts.frontPack) {
     const head = await integrationHead(runtime);
     const previous = previousSummary(runtime.store.goalDir, iteration - 1);
+    const holds = await readHolds(runtime.store).catch((err) => {
+      console.warn(
+        `[factory] pending-steer holds unreadable: ${(err as Error).message}`,
+      );
+      return [];
+    });
     const pack = renderContextPack({
       goal: path.basename(runtime.paths.goalDir),
       iteration,
@@ -278,6 +286,7 @@ export async function runBoundary(
       state,
       codeMap: await codeMap(runtime.paths.goalCheckout),
       steers: forArchitect,
+      holds,
       pmAnswers,
       setup: runtime.configs.repo.setup,
       gates: runtime.configs.repo.gates,
@@ -285,6 +294,7 @@ export async function runBoundary(
       forwarded: forwardedConcerns(records),
       runConfigPath: opts.runConfigPath,
       openRecords: await openRecords(runtime.store),
+      planCheck: latestPlanCheck(records),
     });
     await runtime.store.writeFile(packRel, pack);
   }

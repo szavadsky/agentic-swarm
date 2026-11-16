@@ -73,6 +73,40 @@ describe("task files", () => {
     );
   });
 
+  it("parses an optional turnMinutes override and round-trips it", () => {
+    const withOverride = TEXT.replace(
+      "source: Milestone auth / refresh",
+      "source: Milestone auth / refresh\nturnMinutes: 45",
+    );
+    const parsed = parseTaskFile(withOverride, "auth.token-refresh");
+    expect(parsed.turnMinutes).toBe(45);
+    const round = parseTaskFile(renderTaskFile(parsed), parsed.slug);
+    expect(round.turnMinutes).toBe(45);
+    expect(
+      parseTaskFile(TEXT, "auth.token-refresh").turnMinutes,
+    ).toBeUndefined();
+    expect(materialHash({ ...parsed, turnMinutes: 5 })).toBe(
+      materialHash(parsed),
+    );
+  });
+
+  it("rejects a non-positive turnMinutes override", () => {
+    const bad = TEXT.replace(
+      "source: Milestone auth / refresh",
+      "source: Milestone auth / refresh\nturnMinutes: 0",
+    );
+    expect(() => parseTaskFile(bad, "auth.token-refresh")).toThrow(
+      /turnMinutes/,
+    );
+    const words = TEXT.replace(
+      "source: Milestone auth / refresh",
+      "source: Milestone auth / refresh\nturnMinutes: soon",
+    );
+    expect(() => parseTaskFile(words, "auth.token-refresh")).toThrow(
+      /turnMinutes/,
+    );
+  });
+
   it("hashes material fields, not cosmetic body prose", () => {
     const base = parseTaskFile(TEXT, "auth.token-refresh");
     const cosmetic = {

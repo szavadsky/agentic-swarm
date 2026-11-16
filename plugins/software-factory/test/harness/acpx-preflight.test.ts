@@ -18,11 +18,12 @@ import { createAcpxStub } from "./acpx-stub.js";
 // Mirrors bootstrap/run/self-acpx.yaml (implementer on pi, reviewer on codex).
 // Inlined: the package suite must not reach outside the package.
 const RUN_CONFIG_TEXT = `aliases:
-  architect: { harness: omp, model: anthropic/claude-opus-5-5, effort: high, fallbacks: [opencode-go/deepseek-v4.1-flash] }
-  pm: { harness: opencode, model: opencode/beam-free, fallbacks: [opencode-go/deepseek-v4.1-flash] }
-  digest: { harness: opencode, model: opencode/beam-free, fallbacks: [opencode-go/deepseek-v4.1-flash] }
+  architect: { harness: omp, model: anthropic/claude-opus-5-5, effort: high, fallbacks: [{ model: opencode-go/deepseek-v4.1-flash }] }
+  pm: { harness: opencode, model: opencode/beam-free, fallbacks: [{ model: opencode-go/deepseek-v4.1-flash }] }
+  digest: { harness: opencode, model: opencode/beam-free, fallbacks: [{ model: opencode-go/deepseek-v4.1-flash }] }
   implementer: { harness: pi, model: opencode-go/beam-free, effort: high }
   reviewer: { harness: codex, model: deepseek-v4.1-flash, effort: high }
+  steward: { harness: pi, model: opencode-go/beam-free, effort: high }
   escalation: { harness: omp, model: anthropic/claude-sonnet-5-5 }
 harnesses:
   pi:
@@ -46,14 +47,10 @@ harnesses:
         modelBases: { gemini-3.8-flash: [low, medium, high] }
       usage: { cache: true }
 scouts: { model: opencode-go/deepseek-v4.1-flash }
-prices:
-  anthropic/claude-opus-5-5: { input: 4, cachedInput: 0.2, output: 20, reasoning: 20 }
-  anthropic/claude-sonnet-5-5: { input: 2, cachedInput: 0.1, output: 10, reasoning: 10 }
-  opencode/beam-free: { input: 0, cachedInput: 0, output: 0, reasoning: 0 }
-  opencode-go/beam-free: { input: 0, cachedInput: 0, output: 0, reasoning: 0 }
-  opencode-go/deepseek-v4.1-flash: { input: 0.15, cachedInput: 0.003, output: 0.6, reasoning: 0.6 }
-  deepseek-v4.1-flash: { input: 0.15, cachedInput: 0.003, output: 0.6, reasoning: 0.6 }
-limits: { concurrency: 3, iterations: 1 }
+priceIds:
+  opencode/beam-free: reflection/beam-1.0-501b-a23b
+  opencode-go/beam-free: reflection/beam-1.0-501b-a23b
+limits: { concurrency: { overall: 3 }, iterations: 1 }
 sessions: { dir: "", keepRuns: 5 }
 worktreeRoot: "/tmp/worktrees"
 `;
@@ -95,7 +92,9 @@ describe("self-acpx run config", () => {
         model: "deepseek-v4.1-flash",
         effort: "high",
       });
-      expect(configs.run.prices?.["deepseek-v4.1-flash"]).toBeDefined();
+      expect(configs.run.priceIds?.["opencode-go/beam-free"]).toBe(
+        "reflection/beam-1.0-501b-a23b",
+      );
 
       const paths = resolveGoalPaths(configs, repo.dir, "self-acpx");
       fs.mkdirSync(paths.goalDir, { recursive: true });
