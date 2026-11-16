@@ -1,11 +1,11 @@
-# Self-run, full-harness rotation (iteration 36 forward, owner 2026-11-16):
-# B-shape — architect omp, implementer codex, reviewer pi, PM agy, digest
-# opencode, steward pi, escalation omp. claude-code as primary architect is
-# suspended after 2/2 double-crash outings (i33, i35; omp fallback saved both);
-# it stays as architect fallback only, pending the owner's call. agy back on
-# PM (guaranteed spend) after 0 turns gambling on steward in i35. Reviewer is
+# Self-run, full-harness rotation (iteration 37 forward, owner 2026-11-16):
+# B-shape repeats — architect omp, implementer codex, reviewer pi, PM agy,
+# digest opencode, steward pi, escalation omp (claude-primary reinstatement
+# awaits the owner's call). Forensics fix applied: claude-code binding gains
+# --approve-all (agy precedent) — i35 attempt1's every-Edit/Write-refused
+# cascade burned $2.63 before the omp fallback saved the turn. Reviewer is
 # task-grade (INTENT): pi/deepseek reviews its codex/deepseek sibling in a
-# different context and focus. i32 was muse-implements; i33-i36
+# different context and focus. i32 was muse-implements; i33-i37
 # deepseek-implements on alternating harnesses continues the unsettled
 # muse-vs-deepseek comparison.
 aliases:
@@ -106,6 +106,7 @@ harnesses:
   claude-code:
     acpx:
       agent: claude
+      args: [--approve-all]
       effort: { configId: effort }
   # The built-in `acpx opencode` route resolves 1.19.5 and fails on the 2.2.7
   # data dir; the raw `opencode acp` route runs the installed CLI (probe §0).

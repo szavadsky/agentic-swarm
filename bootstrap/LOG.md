@@ -561,3 +561,6 @@ Verbatim, newest last; each with what it changed.
 - Forensics (owner-ordered, task agent): claude "crashes" (01390, 01495) all completed per acpx journals (end_turn + turn_result completed); classifyAcpxTurn judges exit facts alone, never reads journals; i35 attempt1 $2.63 discarded on all-refused Edit/Write (permission loop). Steered with evidence; cheapest proof supplied (exit-5-after-end_turn stub).
 - Applied staged review-round-trip INTENT line (guards passed, MAIN unchanged 74cb1c05) + steered. Operator fix: claude-code binding gains --approve-all (agy precedent).
 - Steers for i37: review-reply (intent-change) + crash-verdict (observation). Budget steer still awaiting owner word — NOT steered.
+
+### 2026-11-16 — rotation for i37: B-shape repeats + claude-code --approve-all (forensics fix)
+- Same map as i36 (claude-primary reinstatement awaits owner call): architect omp/opus (fb claude-opus/sonnet), pm agy, digest opencode/beam, implementer codex:max, reviewer pi:xhigh (+ plan-reviewer pi from m5-plan-review), escalation omp/sonnet, steward pi, scouts ernie. New: claude-code binding gains args [--approve-all] (agy precedent) — answers the i35 attempt1 all-refused cascade ($2.63) at the operator level; kernel journal-blindness steered. Loader + price-coverage green before commit.
