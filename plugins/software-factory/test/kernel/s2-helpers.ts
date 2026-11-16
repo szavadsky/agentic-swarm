@@ -24,6 +24,7 @@ import type {
 } from "../../src/kernel/types.js";
 import { prepareIntegrationCheckout } from "../../src/kernel/worktree.js";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
+import { scriptPlanRoleFallbacks } from "./fake-defaults.js";
 
 export interface FlowRepoOptions {
   gates?: { id: string; command: string }[];
@@ -114,6 +115,8 @@ export function setupFlowRepo(opts: FlowRepoOptions = {}): FlowRepo {
     implementer: { harness: "fake", model: "fake-impl" },
     reviewer: { harness: "fake", model: "fake-review" },
     steward: { harness: "fake", model: "fake-steward" },
+    "plan-checker": { harness: "fake", model: "fake-check" },
+    "plan-reviewer": { harness: "fake", model: "fake-plan-review" },
   };
   repo.writeFile(
     ".factory/run.yaml",
@@ -148,6 +151,8 @@ export async function makeRuntime(
   goal: string,
   harnesses: Record<string, FakeHarness>,
 ): Promise<KernelRuntime> {
+  for (const harness of Object.values(harnesses))
+    scriptPlanRoleFallbacks(harness);
   const configs = loadConfigs(repo.dir);
   const paths = resolveGoalPaths(configs, repo.dir, goal);
   const store = createFolderStore(paths.goalDir, path.dirname(paths.goalDir));

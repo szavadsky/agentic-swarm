@@ -130,7 +130,7 @@ describe("continuation carry", () => {
     expect(reduction.park).toContain("already on the head");
   });
 
-  it("defers a no-change fix turn in a later round to review instead of parking", () => {
+  it("defers a reply-only fix turn in a later round to review instead of parking", () => {
     const t = task("beta", { base: "alpha" });
     const flow = DEFAULT_FLOWS["implement-review"]!;
     const reduction = reduceTask(
@@ -140,7 +140,18 @@ describe("continuation carry", () => {
         implement(2, 1, { tree: "tree-work", commit: "c1", base: "b0" }),
         checks(3),
         review(4, "changes", 1),
-        implement(5, 2, { tree: "tree-work", commit: "c2", base: "b0" }),
+        implement(5, 2, {
+          tree: "tree-work",
+          commit: "c2",
+          base: "b0",
+          outcome: {
+            status: "done",
+            summary: "replied without a change",
+            concerns: [],
+            forward: [],
+            replies: [{ finding: 1, reply: "already answered in r1" }],
+          },
+        }),
       ],
       flow,
     );
@@ -149,7 +160,7 @@ describe("continuation carry", () => {
     expect(reduction.verdict).toBe("changes");
   });
 
-  it("defers a no-change turn after a reused-worktree sync to review instead of parking", () => {
+  it("defers a reply-only turn after a reused-worktree sync to review instead of parking", () => {
     const t = task("beta", { base: "alpha" });
     const flow = DEFAULT_FLOWS["implement-review"]!;
     const reduction = reduceTask(
@@ -160,7 +171,18 @@ describe("continuation carry", () => {
         checks(3),
         review(4, "changes", 1),
         advance(5, "tree-synced"),
-        implement(6, 2, { tree: "tree-synced", commit: "c2", base: "b0" }),
+        implement(6, 2, {
+          tree: "tree-synced",
+          commit: "c2",
+          base: "b0",
+          outcome: {
+            status: "done",
+            summary: "replied without a change",
+            concerns: [],
+            forward: [],
+            replies: [{ finding: 1, reply: "already answered in r1" }],
+          },
+        }),
       ],
       flow,
     );
@@ -186,7 +208,7 @@ describe("continuation carry", () => {
     );
   });
 
-  it("defers after a later advance without resetting the first-turn carry", () => {
+  it("defers a reply-only fix after a later advance without resetting the first-turn carry", () => {
     const t = task("beta", { base: "alpha" });
     const flow = DEFAULT_FLOWS["implement-review"]!;
     const reduction = reduceTask(
@@ -197,7 +219,18 @@ describe("continuation carry", () => {
         checks(3),
         advance(4, "tree-recreated", "tree-head2"),
         review(5, "changes", 1),
-        implement(6, 2, { tree: "tree-recreated", commit: "c2", base: "b0" }),
+        implement(6, 2, {
+          tree: "tree-recreated",
+          commit: "c2",
+          base: "b0",
+          outcome: {
+            status: "done",
+            summary: "replied without a change",
+            concerns: [],
+            forward: [],
+            replies: [{ finding: 1, reply: "already answered in r1" }],
+          },
+        }),
       ],
       flow,
     );

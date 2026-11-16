@@ -11,14 +11,6 @@ import type {
   TaskStatus,
 } from "./types.js";
 
-// Augment the shared State shape with the derived "interrupted" flag so the
-// interface file stays untouched; the flag is computed in `derive`.
-declare module "./types.js" {
-  interface State {
-    interrupted: boolean;
-  }
-}
-
 /**
  * The script record the launch appends when the front path stops: a front
  * trivial/task goal has no architect turn, so this record carries its goal

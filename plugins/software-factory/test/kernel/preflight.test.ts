@@ -26,6 +26,8 @@ const RUN_HEAD = `aliases:
   implementer: { harness: fake, model: impl }
   reviewer: { harness: fake, model: rev }
   steward: { harness: fake, model: steward }
+  plan-checker: { harness: fake, model: check }
+  plan-reviewer: { harness: fake, model: plan-review }
 limits: { concurrency: { overall: 2 }, iterations: 1 }
 `;
 
@@ -134,6 +136,25 @@ describe("pre-flight", () => {
       f.repo.cleanup();
     }
   });
+
+  for (const role of ["plan-checker", "plan-reviewer"]) {
+    it(`refuses a missing ${role} alias before a plan exists`, async () => {
+      const f = await fixture();
+      try {
+        delete f.configs.run.aliases[role];
+        const err = await refusal(f.input);
+        expect(err.findings).toContainEqual({
+          file: path.join(f.repo.dir, ".factory/run.yaml"),
+          key: `aliases.${role}`,
+          message: `required by role "${role}" but missing`,
+        });
+        expect(err.report).toContain(`aliases.${role}`);
+        expect(err.report).toContain(`role "${role}"`);
+      } finally {
+        f.repo.cleanup();
+      }
+    });
+  }
 
   it("refuses an effort level the model does not accept", async () => {
     const f = await fixture(

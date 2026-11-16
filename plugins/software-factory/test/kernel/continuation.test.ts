@@ -18,6 +18,7 @@ import {
   setupFlowRepo,
   writeTask,
 } from "./s2-helpers.js";
+import { workCalls } from "./fake-defaults.js";
 
 describe("parked continuation", () => {
   it("continues a task with base from the parked task's kept branch", async () => {
@@ -228,7 +229,7 @@ describe("kept-land", () => {
       expect((await stateOf(runtime)).tasks["kept-flake"]!.cause).toContain(
         "gates: unit",
       );
-      expect(harness.calls).toHaveLength(4);
+      expect(workCalls(harness)).toHaveLength(4);
 
       scriptContinueBoundary(harness, runtime);
       const boundary = await runBoundary(runtime, { relaunch: false });
@@ -247,7 +248,7 @@ describe("kept-land", () => {
       expect(
         records.filter((r) => r.slug === "kept-flake" && r.actor === "agent"),
       ).toHaveLength(3);
-      expect(harness.calls).toHaveLength(6);
+      expect(workCalls(harness)).toHaveLength(6);
       expect(repo.git(["show", "factory/demo:feature.txt"]).stdout.trim()).toBe(
         "feature",
       );
@@ -332,7 +333,7 @@ describe("kept-land", () => {
           (r) => r.slug === "kept-conflict" && r.actor === "agent",
         ),
       ).toHaveLength(3);
-      expect(harness.calls).toHaveLength(6);
+      expect(workCalls(harness)).toHaveLength(6);
       const pack = fs.readFileSync(
         path.join(runtime.store.goalDir, contextPackRelPath(2)),
         "utf8",
@@ -390,7 +391,7 @@ describe("kept-land", () => {
       expect(
         records.filter((r) => r.slug === "kept-red" && r.step === "kept-land"),
       ).toHaveLength(0);
-      expect(harness.calls).toHaveLength(6);
+      expect(workCalls(harness)).toHaveLength(6);
       const pack = fs.readFileSync(
         path.join(runtime.store.goalDir, contextPackRelPath(2)),
         "utf8",
@@ -417,7 +418,7 @@ describe("kept-land", () => {
             r.iteration === 3,
         ),
       ).toHaveLength(0);
-      expect(harness.calls).toHaveLength(8);
+      expect(workCalls(harness)).toHaveLength(8);
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -467,7 +468,7 @@ describe("kept-land", () => {
       expect(
         records.filter((r) => r.slug === "kept-reject" && r.step === "merge"),
       ).toHaveLength(0);
-      expect(harness.calls).toHaveLength(5);
+      expect(workCalls(harness)).toHaveLength(5);
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -519,7 +520,7 @@ describe("kept-land", () => {
             r.slug === "kept-void" && r.step === "merge" && r.iteration === 2,
         ),
       ).toHaveLength(0);
-      expect(harness.calls).toHaveLength(6);
+      expect(workCalls(harness)).toHaveLength(6);
     } finally {
       rmCounter(counter);
       cleanupFlowRepo(repo);
@@ -580,7 +581,7 @@ describe("kept-land", () => {
       );
       expect(kept).toHaveLength(1);
       expect(kept[0]!.ok).toBe(true);
-      expect(harness.calls).toHaveLength(5);
+      expect(workCalls(harness)).toHaveLength(5);
       expect(repo.git(["show", "factory/demo:feature.txt"]).stdout.trim()).toBe(
         "feature",
       );
@@ -645,7 +646,7 @@ describe("kept-land", () => {
             r.slug === "kept-base" && r.step === "merge" && r.iteration === 2,
         ),
       ).toHaveLength(0);
-      expect(harness.calls).toHaveLength(6);
+      expect(workCalls(harness)).toHaveLength(6);
     } finally {
       rmCounter(counter);
       cleanupFlowRepo(repo);
@@ -681,7 +682,7 @@ describe("kept-land", () => {
       expect((await stateOf(runtime)).tasks["kept-flip"]!.status).toBe(
         "parked",
       );
-      expect(harness.calls).toHaveLength(4);
+      expect(workCalls(harness)).toHaveLength(4);
 
       scriptContinueBoundary(harness, runtime);
       const boundary = await runBoundary(runtime, { relaunch: false });
@@ -705,7 +706,7 @@ describe("kept-land", () => {
       expect(
         records.filter((r) => r.slug === "kept-flip" && r.actor === "agent"),
       ).toHaveLength(3);
-      expect(harness.calls).toHaveLength(6);
+      expect(workCalls(harness)).toHaveLength(6);
       expect(repo.git(["show", "factory/demo:feature.txt"]).stdout.trim()).toBe(
         "feature",
       );

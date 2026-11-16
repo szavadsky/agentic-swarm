@@ -8,5 +8,5 @@
 - setup command: `{{setup_command}}`
 - gate commands: `{{gate_commands}}`
 - gate baseline: `{{baseline_checks}}` — failures here are pre-existing
-- previous review findings: `{{findings}}` — empty before the first review
+- previous review findings: `{{findings}}` — empty before the first review; each is answered by a change, a reply in `replies`, or both, and a reply-only round is `done`.
 - outcome path: `{{outcome_path}}`
