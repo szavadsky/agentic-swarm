@@ -579,3 +579,7 @@ Verbatim, newest last; each with what it changed.
 - Secondary kernel issue (steered): 429-as-completed-text should classify quota/infra with a fallback hop, not done + wasted repairs. The completed-exit fix has a hole: transport 429 arrives as completed text, not an error frame.
 - Gates skipped this landing: 0 code delta since green pin 9b5a0f2a4a34 (factory/self == factory-v3); no promote (pin unchanged). Rotation reroutes OFF Go for ~14d (see next entry).
 - Steer for i39: 429-as-completed observation. Budget steer still awaiting owner word — NOT steered (4th iteration).
+
+### 2026-11-16 — rotation for i39: EMERGENCY off-Go (quota resets in ~14d)
+- Map: architect omp/opus (fb claude x2), pm agy/gemini (fb omp/ernie), digest opencode/beam (fb opencode/hy4-flash-free, probed live 9.5s), implementer agy/gemini (fb omp/ernie), reviewer omp/ernie (fb agy/gemini), plan-reviewer + plan-checker agy/gemini (fb omp/ernie; checker mirrors reviewer per coverage test), escalation omp/sonnet (fb omp/ernie), steward omp/ernie (fb agy/gemini), scouts ernie. Zero Go ids in aliases. hy4 maps to the $0 beam price row.
+- Evidence: pi settings show Go-only provider (pi-opencode-go-provider extension, 3 Go models); codex config.toml Go-only auth; `pi models` 429s with "monthly, resets in 13d 23h". pi + codex sit out; bindings kept for the revert. muse-vs-deepseek paused.
