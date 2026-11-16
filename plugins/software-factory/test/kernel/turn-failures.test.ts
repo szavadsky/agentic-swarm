@@ -30,7 +30,9 @@ import {
  */
 describe("turn failures — outcome, crash and wall-clock handling", () => {
   it("keeps a valid outcome delivered on an infra stop and advances on the relaunch", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       harness.script((req, ctx) => {
@@ -91,7 +93,9 @@ describe("turn failures — outcome, crash and wall-clock handling", () => {
   }, 60_000);
 
   it("keeps a valid outcome delivered on a cancelled stop", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       harness.script((req, ctx) => {
@@ -141,7 +145,7 @@ describe("turn failures — outcome, crash and wall-clock handling", () => {
   it("does not stamp a real red gate infra for printing an install-looking error", async () => {
     const { repo, goal } = setupFlowRepo({
       gates: [{ id: "unit", command: "echo 'Cannot find module x'; exit 1" }],
-      limits: { concurrency: 1 },
+      limits: { concurrency: { overall: 1 } },
     });
     try {
       const harness = new FakeHarness({ id: "fake" });
@@ -183,7 +187,7 @@ describe("turn failures — outcome, crash and wall-clock handling", () => {
   it("records an unstartable gate as infra and parks as infra, never empty-diff", async () => {
     const { repo, goal } = setupFlowRepo({
       gates: [{ id: "typecheck", command: "factory-missing-command-xyz-123" }],
-      limits: { concurrency: 1 },
+      limits: { concurrency: { overall: 1 } },
     });
     try {
       const harness = new FakeHarness({ id: "fake" });
@@ -224,7 +228,9 @@ describe("turn failures — outcome, crash and wall-clock handling", () => {
   }, 60_000);
 
   it("records a throwing task as an infra crash and the sibling continues", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 2 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 2 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       // Each turn is bound to its slug and step, so the thrower can never be
@@ -283,7 +289,9 @@ describe("turn failures — outcome, crash and wall-clock handling", () => {
   }, 60_000);
 
   it("records a non-Error throw with its crash cause instead of 'crash: undefined'", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       harness.script((): TurnResult => {
@@ -314,7 +322,7 @@ describe("turn failures — outcome, crash and wall-clock handling", () => {
   it("stops a turn at the turn wall bound set by limits.turnMinutes", async () => {
     // 0.0005 minute = 30ms; the handler returns past the bound, so only the bound ends the turn.
     const { repo, goal } = setupFlowRepo({
-      limits: { turnMinutes: 0.0005, concurrency: 1 },
+      limits: { turnMinutes: 0.0005, concurrency: { overall: 1 } },
     });
     try {
       const harness = new FakeHarness({ id: "fake" });
@@ -349,7 +357,7 @@ describe("turn failures — outcome, crash and wall-clock handling", () => {
   it("times out without committing the orphan's writes and resets the tree", async () => {
     // 30ms bound; the orphan writes before it, sleeps past it, then writes again.
     const { repo, goal } = setupFlowRepo({
-      limits: { turnMinutes: 0.0005, concurrency: 1 },
+      limits: { turnMinutes: 0.0005, concurrency: { overall: 1 } },
     });
     try {
       const harness = new FakeHarness({ id: "fake" });
@@ -401,7 +409,7 @@ describe("turn failures — outcome, crash and wall-clock handling", () => {
 
   it("keeps a valid outcome written before the bound on a timed-out turn", async () => {
     const { repo, goal } = setupFlowRepo({
-      limits: { turnMinutes: 0.0005, concurrency: 1 },
+      limits: { turnMinutes: 0.0005, concurrency: { overall: 1 } },
     });
     try {
       const harness = new FakeHarness({ id: "fake" });
@@ -442,7 +450,7 @@ describe("turn failures — outcome, crash and wall-clock handling", () => {
   it("times out a never-resolving harness after the bound plus grace and moves the launch on", async () => {
     // 30ms bound; the handler writes, then ignores the bound and never resolves.
     const { repo, goal } = setupFlowRepo({
-      limits: { turnMinutes: 0.0005, concurrency: 1 },
+      limits: { turnMinutes: 0.0005, concurrency: { overall: 1 } },
     });
     try {
       const harness = new FakeHarness({ id: "fake" });
@@ -511,7 +519,7 @@ describe("turn failures — outcome, crash and wall-clock handling", () => {
 
   it("aborts the harness turn when the wall bound fires", async () => {
     const { repo, goal } = setupFlowRepo({
-      limits: { turnMinutes: 0.0005, concurrency: 1 },
+      limits: { turnMinutes: 0.0005, concurrency: { overall: 1 } },
     });
     try {
       const harness = new FakeHarness({ id: "fake" });
@@ -533,7 +541,7 @@ describe("turn failures — outcome, crash and wall-clock handling", () => {
 
   it("leaves the signal alone when the turn resolves before the bound", async () => {
     const { repo, goal } = setupFlowRepo({
-      limits: { concurrency: 1 },
+      limits: { concurrency: { overall: 1 } },
     });
     try {
       const harness = new FakeHarness({ id: "fake" });
@@ -556,7 +564,7 @@ describe("turn failures — outcome, crash and wall-clock handling", () => {
   it("stops an iteration at the wall bound set by limits.iterationMinutes before dispatching anything", async () => {
     // ~0.06ms rounds to 0: the bound is already reached when the loop first reads the clock.
     const { repo, goal } = setupFlowRepo({
-      limits: { iterationMinutes: 0.000001, concurrency: 1 },
+      limits: { iterationMinutes: 0.000001, concurrency: { overall: 1 } },
     });
     try {
       const harness = new FakeHarness({ id: "fake" });
@@ -574,7 +582,9 @@ describe("turn failures — outcome, crash and wall-clock handling", () => {
   }, 60_000);
 
   it("bounds a task turn at the task file's turnMinutes", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       let seen: { wallMs: number } | undefined;
@@ -612,7 +622,7 @@ describe("turn failures — outcome, crash and wall-clock handling", () => {
 
   it("still caps the task file's turnMinutes at the run's turnMinutes", async () => {
     const { repo, goal } = setupFlowRepo({
-      limits: { turnMinutes: 5, concurrency: 1 },
+      limits: { turnMinutes: 5, concurrency: { overall: 1 } },
     });
     try {
       const harness = new FakeHarness({ id: "fake" });

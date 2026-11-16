@@ -5,37 +5,37 @@ aliases:
     model: opencode/minimax-m3.1-flash-free
     effort: high
     fallbacks:
-      - opencode-go/deepseek-v4.1-flash
+      - model: opencode-go/deepseek-v4.1-flash
   pm:
     harness: opencode
     model: opencode/beam-free
     fallbacks:
-      - opencode-go/deepseek-v4.1-flash
+      - model: opencode-go/deepseek-v4.1-flash
   digest:
     harness: opencode
     model: opencode/beam-free
     fallbacks:
-      - opencode-go/deepseek-v4.1-flash
+      - model: opencode-go/deepseek-v4.1-flash
   implementer:
     harness: opencode
     model: opencode/deepseek-v4.1-flash-free
     fallbacks:
-      - opencode-go/deepseek-v4.1-flash
+      - model: opencode-go/deepseek-v4.1-flash
   reviewer:
     harness: opencode
     model: opencode/minimax-m3.1-flash-free
     fallbacks:
-      - opencode-go/deepseek-v4.1-flash
+      - model: opencode-go/deepseek-v4.1-flash
   steward:
     harness: opencode
     model: opencode/deepseek-v4.1-flash-free
     fallbacks:
-      - opencode-go/deepseek-v4.1-flash
+      - model: opencode-go/deepseek-v4.1-flash
   plan-checker:
     harness: opencode
     model: opencode/deepseek-v4.1-flash-free
     fallbacks:
-      - opencode-go/deepseek-v4.1-flash
+      - model: opencode-go/deepseek-v4.1-flash
 
 # Prices come from the harness or OpenRouter's model list; beam has no
 # beam-suffixed OpenRouter id and is mapped explicitly to the only
@@ -44,7 +44,7 @@ priceIds:
   opencode/beam-free: reflection/beam-1.0-501b-a23b
 
 limits:
-  concurrency: 3
+  concurrency: { overall: 3 }
   iterations: 1
 
 sessions:

@@ -30,7 +30,7 @@ function conflictingBaseRepo(): TmpRepo {
       "  implementer: { harness: fake, model: fake-impl }",
       "  reviewer: { harness: fake, model: fake-review }",
       "  steward: { harness: fake, model: fake-steward }",
-      "limits: { iterations: 1, concurrency: 1 }",
+      "limits: { iterations: 1, concurrency: { overall: 1 } }",
       `worktreeRoot: ../${base}-wt`,
       `sessions: { dir: ../${base}-sessions, keepRuns: 1 }`,
       "",

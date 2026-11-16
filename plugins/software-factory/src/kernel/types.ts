@@ -226,8 +226,13 @@ export interface Limits {
   itemTurns: number;
   flows: Record<string, FlowDefinition>;
   iterations: number;
-  concurrency: number;
-  perHarness: Record<string, number>;
+  concurrency: {
+    overall: number;
+    /** Quota-pool name -> parallel sessions; pools are named on aliases. */
+    perSubscription: Record<string, number>;
+    /** Model id -> parallel sessions; empty means no per-model cap. */
+    perModel: Record<string, number>;
+  };
   /** Optional drain limits for one iteration: new turns, wall clock and USD. */
   iterationTurns?: number;
   iterationWallMs?: number;
@@ -415,11 +420,24 @@ export interface ProcessConfig {
   promptsDir?: string;
 }
 
+/** One fallback tier: a model on the alias's harness or another, with its own effort. */
+export interface FallbackConfig {
+  /** Harness id; defaults to the alias's harness. */
+  harness?: string;
+  model: string;
+  /** Effort level; defaults to the alias's resolved effort. */
+  effort?: string;
+  /** Quota pool this tier draws on; defaults to the alias's subscription. */
+  subscription?: string;
+}
+
 export interface AliasConfig {
   harness: string;
   model: string;
   effort?: string;
-  fallbacks?: string[];
+  /** Quota pool this alias draws on; absent means throttled only overall. */
+  subscription?: string;
+  fallbacks?: FallbackConfig[];
   /** Alias the PM ladder climbs to after a tier fails; absent ends the ladder. */
   escalateTo?: string;
   /** Alias-level turn bounds; config defaults match `DEFAULT_TIMEOUTS`. */
@@ -438,8 +456,11 @@ export interface RunConfig {
   /** Harness model id -> OpenRouter model id, for ids matching cannot resolve. */
   priceIds?: Record<string, string>;
   limits: {
-    concurrency: number;
-    perHarness: Record<string, number>;
+    concurrency: {
+      overall: number;
+      perSubscription: Record<string, number>;
+      perModel: Record<string, number>;
+    };
     iterations: number;
     /** Plan-checker re-runs per iteration; exhausted rounds consult the architect. */
     planCheckRounds: number;
@@ -491,6 +512,12 @@ export interface KernelRuntime {
   harnesses: ReadonlyMap<string, Harness>;
   prompts: PromptLibrary;
   limits: Limits;
+  /**
+   * Alias -> chain index of the tier to start at. A turn that lands on a
+   * fallback records it here, so the rest of the launch starts on the working
+   * tier instead of restarting at exhausted ones.
+   */
+  workingTier: Map<string, number>;
   /** Price cache and fetcher; undefined means the shared cache plus network. */
   priceSource?: PriceSource;
 }

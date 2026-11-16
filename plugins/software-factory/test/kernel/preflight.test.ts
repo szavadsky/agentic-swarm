@@ -26,7 +26,7 @@ const RUN_HEAD = `aliases:
   implementer: { harness: fake, model: impl }
   reviewer: { harness: fake, model: rev }
   steward: { harness: fake, model: steward }
-limits: { concurrency: 2, iterations: 1 }
+limits: { concurrency: { overall: 2 }, iterations: 1 }
 `;
 
 interface Fixture {
@@ -150,7 +150,7 @@ describe("pre-flight", () => {
     const f = await fixture(
       RUN_HEAD.replace("model: pm", "model: ghost").replace(
         "model: arch",
-        "model: arch, fallbacks: [gone/model]",
+        "model: arch, fallbacks: [{ model: gone/model }]",
       ),
     );
     try {
@@ -159,7 +159,94 @@ describe("pre-flight", () => {
       const err = await refusal({ ...f.input, catalog });
       const keys = err.findings.map((x) => x.key);
       expect(keys).toContain("aliases.pm.model");
-      expect(keys).toContain("aliases.architect.fallbacks.0");
+      expect(keys).toContain("aliases.architect.fallbacks.0.model");
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("validates a cross-harness fallback against its own harness", async () => {
+    const f = await fixture(
+      RUN_HEAD.replace(
+        "implementer: { harness: fake, model: impl }",
+        "implementer: { harness: fake, model: impl, fallbacks: [{ harness: other, model: far }] }",
+      ),
+    );
+    try {
+      const harnesses = new Map(f.input.harnesses);
+      harnesses.set("other", new FakeHarness({ id: "other" }));
+      const catalog: ModelCatalog = async (harness, model) =>
+        !(harness === "other" && model === "far");
+      const err = await refusal({ ...f.input, harnesses, catalog });
+      expect(err.findings).toContainEqual(
+        expect.objectContaining({
+          key: "aliases.implementer.fallbacks.0.model",
+          message: 'fallback "far" is not listed by harness "other"',
+        }),
+      );
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("refuses a fallback on an unregistered harness", async () => {
+    const f = await fixture(
+      RUN_HEAD.replace(
+        "implementer: { harness: fake, model: impl }",
+        "implementer: { harness: fake, model: impl, fallbacks: [{ harness: ghost, model: far }] }",
+      ),
+    );
+    try {
+      const err = await refusal(f.input);
+      expect(err.findings).toContainEqual(
+        expect.objectContaining({
+          key: "aliases.implementer.fallbacks.0.harness",
+        }),
+      );
+      expect(err.report).toContain('harness "ghost" is not registered');
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("resolves each fallback effort against its own harness caps", async () => {
+    const f = await fixture(
+      RUN_HEAD.replace(
+        "implementer: { harness: fake, model: impl }",
+        "implementer: { harness: fake, model: impl, effort: highest, fallbacks: [{ harness: other, model: far, effort: highest }, { model: near }] }",
+      ),
+    );
+    try {
+      const harnesses = new Map(f.input.harnesses);
+      harnesses.set(
+        "other",
+        new FakeHarness({ id: "other", caps: { effort: ["low", "high"] } }),
+      );
+      const result = await preflight({ ...f.input, harnesses });
+      expect(result.aliases.implementer).toBe("max");
+      const fallbacks = f.configs.run.aliases.implementer!.fallbacks!;
+      expect(fallbacks[0]!.effort).toBe("high");
+      expect(fallbacks[1]!.effort).toBe("max");
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("refuses a subscription that names no capped pool", async () => {
+    const f = await fixture(
+      RUN_HEAD.replace(
+        "implementer: { harness: fake, model: impl }",
+        "implementer: { harness: fake, model: impl, subscription: typo, fallbacks: [{ model: near, subscription: other-typo }] }",
+      ).replace(
+        "limits: { concurrency: { overall: 2 }, iterations: 1 }",
+        "limits: { concurrency: { overall: 2, perSubscription: { pool: 1 } }, iterations: 1 }",
+      ),
+    );
+    try {
+      const err = await refusal(f.input);
+      const keys = err.findings.map((x) => x.key);
+      expect(keys).toContain("aliases.implementer.subscription");
+      expect(keys).toContain("aliases.implementer.fallbacks.0.subscription");
     } finally {
       f.repo.cleanup();
     }

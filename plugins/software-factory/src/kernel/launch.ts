@@ -284,6 +284,7 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
     harnesses: new Map(Object.entries(harnesses)),
     prompts: loadPrompts(configs.process, repoRoot),
     limits: toLimits(configs),
+    workingTier: new Map(),
     priceSource: opts.priceSource,
   };
 

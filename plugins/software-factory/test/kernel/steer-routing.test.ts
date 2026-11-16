@@ -100,7 +100,9 @@ function inboxHas(runtime: KernelRuntime, steer: string): boolean {
 
 describe("steer PM routing", () => {
   it("task: amends the pending task file and answers in the outbox", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       const runtime = await makeRuntime(repo, goal, { fake: harness });
@@ -175,7 +177,9 @@ describe("steer PM routing", () => {
   }, 60_000);
 
   it("task redo: writes a rework task with base and the next reconcile keeps it", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       const runtime = await makeRuntime(repo, goal, { fake: harness });
@@ -272,7 +276,9 @@ describe("steer PM routing", () => {
   }, 60_000);
 
   it("spike: writes a standalone task whose landed outcome is answered to the owner", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       const runtime = await makeRuntime(repo, goal, { fake: harness });
@@ -362,7 +368,9 @@ describe("steer PM routing", () => {
   }, 60_000);
 
   it("architect: routes an intent amendment to the next boundary with nothing held", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       const runtime = await makeRuntime(repo, goal, { fake: harness });
@@ -447,7 +455,9 @@ describe("steer PM routing", () => {
   }, 60_000);
 
   it("stall: drains the goal, then the architect answers", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       const runtime = await makeRuntime(repo, goal, { fake: harness });
@@ -512,7 +522,9 @@ describe("steer PM routing", () => {
   }, 60_000);
 
   it("pack lists only architect-routed steers plus every PM answer", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       const runtime = await makeRuntime(repo, goal, { fake: harness });
@@ -585,7 +597,9 @@ describe("steer PM routing", () => {
   }, 60_000);
 
   it("frozen: a steer turn cannot edit a merged task and retries the ladder", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       const runtime = await makeRuntime(repo, goal, { fake: harness });
@@ -669,7 +683,9 @@ describe("steer PM routing", () => {
   }, 60_000);
 
   it("exhausted: a failed task route reaches the architect with no outbox answer", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       const runtime = await makeRuntime(repo, goal, { fake: harness });
@@ -765,7 +781,9 @@ describe("steer PM routing", () => {
   }, 60_000);
 
   it("architect: a blocking hold fails validation and the retry holds nothing", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       const runtime = await makeRuntime(repo, goal, { fake: harness });

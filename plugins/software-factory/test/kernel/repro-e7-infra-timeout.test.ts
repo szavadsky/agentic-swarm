@@ -20,7 +20,9 @@ import {
 describe("E7 inverted — infra timeouts and crashes spend the turn budget", () => {
   for (const cause of ["timeout", "crash"] as const) {
     it(`parks infra-repeat on the same step after two ${cause} stops`, async () => {
-      const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+      const { repo, goal } = setupFlowRepo({
+        limits: { concurrency: { overall: 1 } },
+      });
       try {
         const harness = new FakeHarness({ id: "fake" });
         harness.script((req) =>
@@ -84,7 +86,9 @@ describe("E7 inverted — infra timeouts and crashes spend the turn budget", () 
   }
 
   it("still lets an infra quota stop pass without spending the budget", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       harness.script((req) =>

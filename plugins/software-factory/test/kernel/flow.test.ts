@@ -568,7 +568,9 @@ describe("empty diff", () => {
 
 describe("continuation carry", () => {
   it("lands a no-change first turn carrying kept work past checks to review", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       harness.script((req, ctx) => {
@@ -646,7 +648,9 @@ describe("continuation carry", () => {
   }, 60_000);
 
   it("lands a no-change first turn carrying kept work past checks to merge on just-implement", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       harness.script((req, ctx) => {
@@ -709,7 +713,9 @@ describe("continuation carry", () => {
   }, 60_000);
 
   it("parks empty-diff when the kept work is already on the head", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       harness.script((req, ctx) => {

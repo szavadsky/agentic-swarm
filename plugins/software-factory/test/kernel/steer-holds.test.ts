@@ -100,7 +100,9 @@ function approver(summary: string): FakeTurnHandler {
 
 describe("mid-run steer holds", () => {
   it("holds unstarted tasks without parking the in-flight one, and still reaches the architect", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       const runtime = await makeRuntime(repo, goal, { fake: harness });
@@ -235,7 +237,9 @@ describe("mid-run steer holds", () => {
   }, 60_000);
 
   it("parks a held in-flight task with the cause it earned, not the steer", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       const runtime = await makeRuntime(repo, goal, { fake: harness });
@@ -278,7 +282,9 @@ describe("mid-run steer holds", () => {
   }, 60_000);
 
   it("does not run a steer PM turn for a steer already present at the boundary", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       const runtime = await makeRuntime(repo, goal, { fake: harness });
@@ -307,7 +313,9 @@ describe("mid-run steer holds", () => {
   }, 60_000);
 
   it("a steer holding nothing changes nothing", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       const runtime = await makeRuntime(repo, goal, { fake: harness });
@@ -349,7 +357,9 @@ describe("mid-run steer holds", () => {
   }, 60_000);
 
   it("a goal hold drains dispatch while started tasks run to the end, never parked", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       const runtime = await makeRuntime(repo, goal, { fake: harness });
@@ -391,7 +401,7 @@ describe("mid-run steer holds", () => {
 
   it("charges the steer PM turn to the iteration dollar brake", async () => {
     const { repo, goal } = setupFlowRepo({
-      limits: { concurrency: 1, iterationUsd: 5 },
+      limits: { concurrency: { overall: 1 }, iterationUsd: 5 },
     });
     try {
       const harness = new FakeHarness({ id: "fake" });
@@ -433,7 +443,9 @@ describe("mid-run steer holds", () => {
   }, 60_000);
 
   it("restores a task file the steer turn edits and records the failed guard", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       const runtime = await makeRuntime(repo, goal, { fake: harness });
@@ -476,7 +488,9 @@ describe("mid-run steer holds", () => {
   }, 60_000);
 
   it("removes a plan the steer turn creates when none existed", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       const runtime = await makeRuntime(repo, goal, { fake: harness });
@@ -521,7 +535,9 @@ describe("mid-run steer holds", () => {
   }, 60_000);
 
   it("quarantines a malformed hold the steer turn writes and keeps dispatching", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 2 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 2 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       const runtime = await makeRuntime(repo, goal, { fake: harness });
@@ -604,7 +620,9 @@ describe("mid-run steer holds", () => {
   }, 60_000);
 
   it("does not claim a fresh steer that is still growing across the settle interval", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     let writer: ReturnType<typeof setInterval> | undefined;
     try {
       const harness = new FakeHarness({ id: "fake" });
@@ -675,7 +693,9 @@ describe("mid-run steer holds", () => {
   }, 60_000);
 
   it("quarantines a malformed hold left in the mailbox and dispatches normally", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       const runtime = await makeRuntime(repo, goal, { fake: harness });
@@ -715,7 +735,9 @@ describe("mid-run steer holds", () => {
   }, 60_000);
 
   it("re-presents an unanswered steer, then expires its hold with a concern", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       const runtime = await makeRuntime(repo, goal, { fake: harness });
@@ -825,7 +847,9 @@ describe("mid-run steer holds", () => {
   }, 60_000);
 
   it("expires an unanswered steer whose id contains a quote", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       const runtime = await makeRuntime(repo, goal, { fake: harness });
@@ -893,7 +917,9 @@ describe("mid-run steer holds", () => {
     }
   }, 60_000);
   it("answers a steer file named with spaces or a colon and deletes its hold", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       const runtime = await makeRuntime(repo, goal, { fake: harness });
@@ -957,7 +983,9 @@ describe("mid-run steer holds", () => {
   }, 60_000);
 
   it("tracks unanswered steers by record data, not cause text", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       const runtime = await makeRuntime(repo, goal, { fake: harness });
@@ -1015,7 +1043,9 @@ describe("mid-run steer holds", () => {
   }, 60_000);
 
   it("answers two different steers that carry identical text", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       const runtime = await makeRuntime(repo, goal, { fake: harness });
@@ -1065,7 +1095,9 @@ describe("mid-run steer holds", () => {
   }, 60_000);
 
   it("leaves a task alone when a steer id equals its slug", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       const runtime = await makeRuntime(repo, goal, { fake: harness });

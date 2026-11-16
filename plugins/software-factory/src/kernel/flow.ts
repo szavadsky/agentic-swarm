@@ -212,7 +212,7 @@ async function worktreeClean(cwd: string): Promise<boolean> {
  * its writes are final and settle commits them through the kept-outcome rule.
  */
 interface TimeoutTracker {
-  harness: Harness;
+  harnesses: Harness[];
   timedOut: () => boolean;
   waitSettled: () => Promise<void>;
 }
@@ -224,11 +224,12 @@ interface TimeoutTracker {
  */
 export const TIMEOUT_SETTLE_GRACE_MS = 5_000;
 
-function trackHarnessTimeouts(inner: Harness): TimeoutTracker {
+/** Wraps every tier harness with one shared orphan account for the turn. */
+function trackHarnessTimeouts(inners: readonly Harness[]): TimeoutTracker {
   let sawTimeout = false;
   let pending = 0;
   const orphans = new Set<Promise<TurnResult>>();
-  const harness: Harness = {
+  const wrap = (inner: Harness): Harness => ({
     id: inner.id,
     caps: (model) => inner.caps(model),
     turn: (req: TurnRequest): Promise<TurnResult> => {
@@ -259,9 +260,9 @@ function trackHarnessTimeouts(inner: Harness): TimeoutTracker {
       return tracked;
     },
     ...(inner.compact ? { compact: (ref) => inner.compact!(ref) } : {}),
-  };
+  });
   return {
-    harness,
+    harnesses: inners.map(wrap),
     timedOut: () => sawTimeout || pending > 0,
     waitSettled: async () => {
       const pendingTurns = [...orphans];
@@ -602,9 +603,19 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
         };
   // The commit the turn starts from; a timed-out turn returns the worktree here.
   const startHead = await headSha(ensured.path);
-  const tracked = trackHarnessTimeouts(target.harness);
+  const tracked = trackHarnessTimeouts(
+    target.tiers.map((tier) => tier.harness),
+  );
+  const trackedTarget = {
+    ...target,
+    harness: tracked.harnesses[0]!,
+    tiers: target.tiers.map((tier, index) => ({
+      ...tier,
+      harness: tracked.harnesses[index]!,
+    })),
+  };
   const result = await runAgentTurn(runtime, {
-    target: { ...target, harness: tracked.harness },
+    target: trackedTarget,
     cwd: turnCwd,
     meta: {
       ...meta,

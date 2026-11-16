@@ -47,6 +47,7 @@ async function runtimeFor(repo: TmpRepo, goal: string): Promise<KernelRuntime> {
     harnesses: new Map<string, Harness>(),
     prompts: loadPrompts(configs.process, repo.dir),
     limits: toLimits(configs),
+    workingTier: new Map(),
   };
 }
 

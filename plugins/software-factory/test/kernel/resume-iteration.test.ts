@@ -66,7 +66,7 @@ function setupRepo(): { repo: TmpRepo; goalDir: string; taskDir: string } {
       "  implementer: { harness: fake, model: fake-impl }",
       "  reviewer: { harness: fake, model: fake-review }",
       "  steward: { harness: fake, model: fake-steward }",
-      "limits: { iterations: 3, concurrency: 1 }",
+      "limits: { iterations: 3, concurrency: { overall: 1 } }",
       `worktreeRoot: ../${base}-wt`,
       `sessions: { dir: ../${base}-sessions, keepRuns: 2 }`,
       "",
@@ -445,8 +445,8 @@ describe("resume guards", () => {
     const file = path.join(repo.dir, ".factory/run.yaml");
     const text = fs.readFileSync(file, "utf8");
     const next = text.replace(
-      "limits: { iterations: 3, concurrency: 1 }",
-      `limits: { iterations: 3, concurrency: 1, ${extra} }`,
+      "limits: { iterations: 3, concurrency: { overall: 1 } }",
+      `limits: { iterations: 3, concurrency: { overall: 1 }, ${extra} }`,
     );
     expect(next).not.toBe(text);
     fs.writeFileSync(file, next, "utf8");

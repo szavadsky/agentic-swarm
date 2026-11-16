@@ -23,8 +23,7 @@ const limits: Limits = {
     },
   },
   iterations: 1,
-  concurrency: 1,
-  perHarness: {},
+  concurrency: { overall: 1, perSubscription: {}, perModel: {} },
   planCheckRounds: 2,
 };
 

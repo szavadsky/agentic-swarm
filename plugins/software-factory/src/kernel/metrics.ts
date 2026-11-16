@@ -288,7 +288,10 @@ function attemptIncidents(recs: StepRecord[], incidents: IncidentCounts): void {
       const previous = attempts[i - 1]!;
       const next = attempts[i]!;
       if (previous.stop.kind !== "infra") continue;
-      if (sameModel(previous.model, next.model)) {
+      if (
+        sameModel(previous.model, next.model) &&
+        previous.harness === next.harness
+      ) {
         incidents.infraRetries += 1;
       } else {
         incidents.fallbackHops += 1;

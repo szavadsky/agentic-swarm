@@ -659,7 +659,7 @@ describe("pricing in a launch", () => {
           "  implementer: { harness: fake, model: paid/one }",
           "  reviewer: { harness: fake, model: paid/one }",
           "  steward: { harness: fake, model: fake-steward }",
-          "limits: { iterations: 1, concurrency: 1 }",
+          "limits: { iterations: 1, concurrency: { overall: 1 } }",
           `worktreeRoot: ../${base}-wt`,
           `sessions: { dir: ../${base}-sessions, keepRuns: 2 }`,
           "",
@@ -749,7 +749,7 @@ describe("run-config price ids", () => {
     const run = runConfigSchema.parse(
       yaml.parse(`
 aliases:
-  architect: { harness: omp, model: anthropic/claude-opus-5-5, fallbacks: [opencode-go/deepseek-v4.1-flash] }
+  architect: { harness: omp, model: anthropic/claude-opus-5-5, fallbacks: [{ model: opencode-go/deepseek-v4.1-flash }] }
   implementer: { harness: opencode, model: opencode/deepseek-v4.1-flash-free }
 priceIds:
   opencode/beam-free: reflection/beam-1.0-501b-a23b
@@ -779,7 +779,7 @@ priceIds:
     for (const alias of Object.values(run.aliases)) {
       expect(matchPrice(catalog, alias.model, run.priceIds)).toBeDefined();
       for (const fb of alias.fallbacks)
-        expect(matchPrice(catalog, fb, run.priceIds)).toBeDefined();
+        expect(matchPrice(catalog, fb.model, run.priceIds)).toBeDefined();
     }
     expect(
       matchPrice(catalog, "opencode/beam-free", run.priceIds),

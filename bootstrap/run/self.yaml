@@ -5,40 +5,40 @@ aliases:
     model: anthropic/claude-opus-5-5
     effort: high
     fallbacks:
-      - opencode-go/deepseek-v4.1-flash
+      - model: opencode-go/deepseek-v4.1-flash
   pm:
     harness: opencode
     model: opencode-go/deepseek-v4.1-flash
     effort: high
     escalateTo: escalation
     fallbacks:
-      - opencode/deepseek-v4.1-flash-free
+      - model: opencode/deepseek-v4.1-flash-free
   digest:
     harness: opencode
     model: opencode/beam-free
     effort: max
     fallbacks:
-      - opencode-go/deepseek-v4.1-flash
+      - model: opencode-go/deepseek-v4.1-flash
   implementer:
     harness: opencode
     model: opencode/deepseek-v4.1-flash-free
     fallbacks:
-      - opencode-go/deepseek-v4.1-flash
+      - model: opencode-go/deepseek-v4.1-flash
   reviewer:
     harness: opencode
     model: opencode/minimax-m3.1-flash-free
     fallbacks:
-      - opencode-go/deepseek-v4.1-flash
+      - model: opencode-go/deepseek-v4.1-flash
   steward:
     harness: opencode
     model: opencode/deepseek-v4.1-flash-free
     fallbacks:
-      - opencode-go/deepseek-v4.1-flash
+      - model: opencode-go/deepseek-v4.1-flash
   plan-checker:
     harness: opencode
     model: opencode/deepseek-v4.1-flash-free
     fallbacks:
-      - opencode-go/deepseek-v4.1-flash
+      - model: opencode-go/deepseek-v4.1-flash
   escalation:
     harness: omp
     model: anthropic/claude-sonnet-5-5
@@ -55,7 +55,7 @@ priceIds:
   opencode/beam-free: reflection/beam-1.0-501b-a23b
 
 limits:
-  concurrency: 3
+  concurrency: { overall: 3 }
   iterations: 1
 
 sessions:

@@ -58,8 +58,7 @@ function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
   const run: RunConfig = {
     aliases: { pm: { harness: "fake", model: "fake-pm" } },
     limits: {
-      concurrency: 1,
-      perHarness: {},
+      concurrency: { overall: 1, perSubscription: {}, perModel: {} },
       iterations: 1,
       planCheckRounds: 2,
     },
@@ -83,10 +82,10 @@ function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
       itemTurns: 8,
       flows: {},
       iterations: 1,
-      concurrency: 1,
-      perHarness: {},
+      concurrency: { overall: 1, perSubscription: {}, perModel: {} },
       planCheckRounds: 2,
     },
+    workingTier: new Map(),
     // Hermetic prices: the test-local cache, never the network.
     priceSource: {
       cachePath: path.join(root, "price-cache.json"),
@@ -864,7 +863,7 @@ describe("PM turn reconciliation", () => {
         "  implementer: { harness: fake, model: fake-impl }",
         "  reviewer: { harness: fake, model: fake-review }",
         "  steward: { harness: fake, model: fake-steward }",
-        "limits: { iterations: 1, concurrency: 1 }",
+        "limits: { iterations: 1, concurrency: { overall: 1, perSubscription: {}, perModel: {} } }",
         "",
       ].join("\n"),
     });
@@ -928,7 +927,7 @@ describe("PM turn reconciliation", () => {
         "  implementer: { harness: fake, model: fake-impl }",
         "  reviewer: { harness: fake, model: fake-review }",
         "  steward: { harness: fake, model: fake-steward }",
-        "limits: { iterations: 1, concurrency: 1 }",
+        "limits: { iterations: 1, concurrency: { overall: 1, perSubscription: {}, perModel: {} } }",
         "",
       ].join("\n"),
     });
@@ -1253,7 +1252,11 @@ describe("stall PM — zero-merge stall in the running iteration", () => {
   const ALPHA_BODY = "Write alpha.txt.\nDone when: alpha.txt holds alpha.";
 
   function stallSetup() {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: {
+        concurrency: { overall: 1, perSubscription: {}, perModel: {} },
+      },
+    });
     const harness = new FakeHarness({ id: "fake" });
     return { repo, goal, harness };
   }
@@ -1489,7 +1492,10 @@ describe("stall PM — zero-merge stall in the running iteration", () => {
 
   it("never runs the stall turn on a drained iteration", async () => {
     const { repo, goal } = setupFlowRepo({
-      limits: { concurrency: 1, turns: 1 },
+      limits: {
+        concurrency: { overall: 1, perSubscription: {}, perModel: {} },
+        turns: 1,
+      },
     });
     const harness = new FakeHarness({ id: "fake" });
     try {
@@ -1655,7 +1661,11 @@ describe("stall PM — zero-merge stall in the running iteration", () => {
 
 describe("stall PM validation", () => {
   async function stallFixture(slugs: string[]) {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: {
+        concurrency: { overall: 1, perSubscription: {}, perModel: {} },
+      },
+    });
     const harness = new FakeHarness({ id: "fake" });
     const runtime = await makeRuntime(repo, goal, { fake: harness });
     fs.writeFileSync(
@@ -1822,7 +1832,11 @@ describe("stall PM validation", () => {
   }, 60_000);
 
   it("keeps the stall continuation for the next boundary's pack instead of cancelling it", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: {
+        concurrency: { overall: 1, perSubscription: {}, perModel: {} },
+      },
+    });
     const harness = new FakeHarness({ id: "fake" });
     try {
       const runtime = await makeRuntime(repo, goal, { fake: harness });

@@ -40,7 +40,7 @@ describe.skipIf(!LIVE)("bootstrap run configs against the real CLIs", () => {
         const configs = loadConfigs(repo.dir, { runConfigPath: runPath });
 
         expect(configs.run.limits).toMatchObject({
-          concurrency: 3,
+          concurrency: { overall: 3 },
           iterations: 1,
         });
         expect(configs.run.sessions).toEqual({
@@ -205,7 +205,7 @@ describe("live run-config price coverage", () => {
       const ids = new Set<string>();
       for (const alias of Object.values(run.aliases)) {
         ids.add(alias.model);
-        for (const fb of alias.fallbacks) ids.add(fb);
+        for (const fb of alias.fallbacks) ids.add(fb.model);
       }
       if (run.scouts) ids.add(run.scouts.model);
       expect(ids.size).toBeGreaterThan(0);

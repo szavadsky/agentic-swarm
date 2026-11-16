@@ -6,20 +6,20 @@ aliases:
     model: anthropic/claude-opus-5-5
     effort: high
     fallbacks:
-      - opencode-go/deepseek-v4.1-flash
+      - model: opencode-go/deepseek-v4.1-flash
   pm:
     harness: opencode
     model: opencode/beam-free
     effort: max
     escalateTo: escalation
     fallbacks:
-      - opencode-go/deepseek-v4.1-flash
+      - model: opencode-go/deepseek-v4.1-flash
   digest:
     harness: opencode
     model: opencode/beam-free
     effort: max
     fallbacks:
-      - opencode-go/deepseek-v4.1-flash
+      - model: opencode-go/deepseek-v4.1-flash
   implementer:
     harness: pi
     model: opencode-go/beam-free
@@ -85,7 +85,7 @@ priceIds:
   opencode-go/beam-free: reflection/beam-1.0-501b-a23b
 
 limits:
-  concurrency: 3
+  concurrency: { overall: 3 }
   iterations: 1
 
 sessions:

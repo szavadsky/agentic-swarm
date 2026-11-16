@@ -473,7 +473,7 @@ describe("steward", () => {
   it("readies dependents after landing: unmerged work relaunches on the new head", async () => {
     const { repo, goal } = setupFlowRepo({
       aliases: stewardAliases,
-      limits: { concurrency: 1 },
+      limits: { concurrency: { overall: 1 } },
     });
     const checkout = goalCheckout(repo, goal);
     try {

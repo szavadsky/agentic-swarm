@@ -18,9 +18,9 @@ import { createAcpxStub } from "./acpx-stub.js";
 // Mirrors bootstrap/run/self-acpx.yaml (implementer on pi, reviewer on codex).
 // Inlined: the package suite must not reach outside the package.
 const RUN_CONFIG_TEXT = `aliases:
-  architect: { harness: omp, model: anthropic/claude-opus-5-5, effort: high, fallbacks: [opencode-go/deepseek-v4.1-flash] }
-  pm: { harness: opencode, model: opencode/beam-free, fallbacks: [opencode-go/deepseek-v4.1-flash] }
-  digest: { harness: opencode, model: opencode/beam-free, fallbacks: [opencode-go/deepseek-v4.1-flash] }
+  architect: { harness: omp, model: anthropic/claude-opus-5-5, effort: high, fallbacks: [{ model: opencode-go/deepseek-v4.1-flash }] }
+  pm: { harness: opencode, model: opencode/beam-free, fallbacks: [{ model: opencode-go/deepseek-v4.1-flash }] }
+  digest: { harness: opencode, model: opencode/beam-free, fallbacks: [{ model: opencode-go/deepseek-v4.1-flash }] }
   implementer: { harness: pi, model: opencode-go/beam-free, effort: high }
   reviewer: { harness: codex, model: deepseek-v4.1-flash, effort: high }
   steward: { harness: pi, model: opencode-go/beam-free, effort: high }
@@ -50,7 +50,7 @@ scouts: { model: opencode-go/deepseek-v4.1-flash }
 priceIds:
   opencode/beam-free: reflection/beam-1.0-501b-a23b
   opencode-go/beam-free: reflection/beam-1.0-501b-a23b
-limits: { concurrency: 3, iterations: 1 }
+limits: { concurrency: { overall: 3 }, iterations: 1 }
 sessions: { dir: "", keepRuns: 5 }
 worktreeRoot: "/tmp/worktrees"
 `;

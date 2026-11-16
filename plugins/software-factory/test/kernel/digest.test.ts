@@ -36,8 +36,7 @@ function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
   const run: RunConfig = {
     aliases: { digest: { harness: "fake", model: "fake-digest" } },
     limits: {
-      concurrency: 1,
-      perHarness: {},
+      concurrency: { overall: 1, perSubscription: {}, perModel: {} },
       iterations: 1,
       planCheckRounds: 2,
     },
@@ -61,10 +60,10 @@ function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
       itemTurns: 8,
       flows: {},
       iterations: 1,
-      concurrency: 1,
-      perHarness: {},
+      concurrency: { overall: 1, perSubscription: {}, perModel: {} },
       planCheckRounds: 2,
     },
+    workingTier: new Map(),
     // Hermetic prices: the test-local cache, never the network.
     priceSource: {
       cachePath: path.join(root, "price-cache.json"),

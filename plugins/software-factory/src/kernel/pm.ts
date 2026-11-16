@@ -538,7 +538,7 @@ export async function runPm(
     await restoreTurn(runtime, snapshot);
 
     // Refusal and missing or invalid outcomes climb; an infra stop does not,
-    // because the alias's fallbacks already absorbed the same-harness trouble.
+    // because the alias's tiers already absorbed the infrastructure trouble.
     if (stop?.kind === "infra") {
       return { status: "infra", stop, rungs };
     }

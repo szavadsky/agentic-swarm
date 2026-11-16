@@ -36,7 +36,7 @@ const DEFAULT_RUN_YAML = [
   "  reviewer: { harness: fake, model: fake-review }",
   "  steward: { harness: fake, model: fake-steward }",
   "  digest: { harness: fake, model: fake-digest }",
-  "limits: { iterations: 1, concurrency: 1 }",
+  "limits: { iterations: 1, concurrency: { overall: 1 } }",
   "",
 ].join("\n");
 

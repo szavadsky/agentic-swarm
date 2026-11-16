@@ -39,7 +39,14 @@ export interface FlowRepoOptions {
       harness: string;
       model: string;
       effort?: string;
-      fallbacks?: string[];
+      subscription?: string;
+      escalateTo?: string;
+      fallbacks?: {
+        harness?: string;
+        model: string;
+        effort?: string;
+        subscription?: string;
+      }[];
       timeouts?: { idleMs: number; wallMs: number };
     }
   >;
@@ -112,7 +119,11 @@ export function setupFlowRepo(opts: FlowRepoOptions = {}): FlowRepo {
     ".factory/run.yaml",
     yaml.stringify({
       aliases,
-      limits: { iterations: 1, concurrency: 1, ...(opts.limits ?? {}) },
+      limits: {
+        iterations: 1,
+        concurrency: { overall: 1 },
+        ...(opts.limits ?? {}),
+      },
     }),
   );
   if (opts.priceTable) {
@@ -153,6 +164,7 @@ export async function makeRuntime(
     harnesses: new Map(Object.entries(harnesses)),
     prompts: loadPrompts(configs.process, repo.dir),
     limits: toLimits(configs),
+    workingTier: new Map(),
     // Hermetic prices: the repo-local cache, never the network.
     priceSource: {
       cachePath: priceCachePath(repo.dir),

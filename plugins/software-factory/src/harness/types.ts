@@ -72,6 +72,8 @@ export type TurnAttempt = {
   model: ModelRef;
   stop: Stop;
   usage: Usage;
+  /** Harness that ran this call; stamped by the kernel tier walk. */
+  harness?: string;
 };
 
 /**

@@ -93,12 +93,26 @@ export const processConfigSchema = z
   .strict();
 
 /** Run layer: not tracked; aliases, price ids, limits, session store, scout pin. */
+export const fallbackSchema = z
+  .object({
+    /** Harness id; defaults to the alias's harness. */
+    harness: z.string().min(1).optional(),
+    model: z.string().min(1),
+    /** Effort level; defaults to the alias's resolved effort. */
+    effort: z.string().min(1).optional(),
+    /** Quota pool this tier draws on; defaults to the alias's subscription. */
+    subscription: z.string().min(1).optional(),
+  })
+  .strict();
+
 export const aliasSchema = z
   .object({
     harness: z.string().min(1),
     model: z.string().min(1),
     effort: z.string().min(1).optional(),
-    fallbacks: z.array(z.string().min(1)).default([]),
+    /** Quota pool this alias draws on; absent means throttled only overall. */
+    subscription: z.string().min(1).optional(),
+    fallbacks: z.array(fallbackSchema).default([]),
     /** Run-config alias the PM ladder climbs to after this alias's tier fails. */
     escalateTo: z.string().min(1).optional(),
     /** Per-alias turn bounds; the defaults cover a full test-suite run. */
@@ -113,10 +127,22 @@ export const aliasSchema = z
 
 export const harnessEntrySchema = z.object({ acpx: acpxConfigSchema }).strict();
 
+const concurrencySchema = z
+  .object({
+    overall: z.number().int().positive().default(2),
+    /** Quota-pool name -> parallel sessions; pools are named on aliases. */
+    perSubscription: z
+      .record(z.string(), z.number().int().positive())
+      .default({}),
+    /** Model id -> parallel sessions; empty means no per-model cap. */
+    perModel: z.record(z.string(), z.number().int().positive()).default({}),
+  })
+  .strict()
+  .default(() => ({ overall: 2, perSubscription: {}, perModel: {} }));
+
 const limitsSchema = z
   .object({
-    concurrency: z.number().int().positive().default(2),
-    perHarness: z.record(z.string(), z.number().int().positive()).default({}),
+    concurrency: concurrencySchema,
     iterations: z.number().int().positive().default(1),
     /** Plan-checker re-runs per iteration; exhausted rounds consult the architect. */
     planCheckRounds: z.number().int().positive().default(2),
@@ -130,8 +156,7 @@ const limitsSchema = z
   })
   .strict()
   .default(() => ({
-    concurrency: 2,
-    perHarness: {},
+    concurrency: { overall: 2, perSubscription: {}, perModel: {} },
     iterations: 1,
     planCheckRounds: 2,
   }));
@@ -488,7 +513,6 @@ export function toLimits(configs: ConfigBundle): Limits {
     flows,
     iterations: runLimits.iterations,
     concurrency: runLimits.concurrency,
-    perHarness: runLimits.perHarness,
     planCheckRounds: runLimits.planCheckRounds,
     iterationTurns: runLimits.turns,
     iterationWallMs:

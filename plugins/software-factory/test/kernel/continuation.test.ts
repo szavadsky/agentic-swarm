@@ -21,7 +21,9 @@ import {
 
 describe("parked continuation", () => {
   it("continues a task with base from the parked task's kept branch", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       harness.script((req, ctx) => {
@@ -197,7 +199,7 @@ describe("kept-land", () => {
   it("lands a flake-parked kept branch with no new task", async () => {
     const counter = freshCounter();
     const { repo, goal } = setupFlowRepo({
-      limits: { concurrency: 1 },
+      limits: { concurrency: { overall: 1 } },
       gates: [
         {
           id: "unit",
@@ -263,7 +265,7 @@ describe("kept-land", () => {
   it("leaves a conflicted kept branch parked and named in the pack", async () => {
     const counter = freshCounter();
     const { repo, goal } = setupFlowRepo({
-      limits: { concurrency: 1 },
+      limits: { concurrency: { overall: 1 } },
       gates: [
         {
           id: "unit",
@@ -345,7 +347,7 @@ describe("kept-land", () => {
 
   it("leaves a repeat-red kept branch parked", async () => {
     const { repo, goal } = setupFlowRepo({
-      limits: { concurrency: 1 },
+      limits: { concurrency: { overall: 1 } },
       gates: [
         {
           id: "unit",
@@ -422,7 +424,9 @@ describe("kept-land", () => {
   }, 90_000);
 
   it("never lands a branch parked for a review rejection", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       harness.script((req, ctx) => {
@@ -472,7 +476,7 @@ describe("kept-land", () => {
   it("never lands when a later commit voids the approve", async () => {
     const counter = freshCounter();
     const { repo, goal } = setupFlowRepo({
-      limits: { concurrency: 1 },
+      limits: { concurrency: { overall: 1 } },
       gates: [
         {
           id: "unit",
@@ -525,7 +529,7 @@ describe("kept-land", () => {
   it("lands a just-implement branch on green checks", async () => {
     const counter = freshCounter();
     const { repo, goal } = setupFlowRepo({
-      limits: { concurrency: 1 },
+      limits: { concurrency: { overall: 1 } },
       gates: [
         {
           id: "unit",
@@ -589,7 +593,7 @@ describe("kept-land", () => {
   it("skips a base another task continues", async () => {
     const counter = freshCounter();
     const { repo, goal } = setupFlowRepo({
-      limits: { concurrency: 1 },
+      limits: { concurrency: { overall: 1 } },
       gates: [
         {
           id: "unit",
@@ -651,7 +655,7 @@ describe("kept-land", () => {
   it("lands when the boundary re-run flips a red gate to green", async () => {
     const counter = freshCounter();
     const { repo, goal } = setupFlowRepo({
-      limits: { concurrency: 1 },
+      limits: { concurrency: { overall: 1 } },
       gates: [
         {
           id: "unit",

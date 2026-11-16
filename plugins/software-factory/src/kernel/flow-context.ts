@@ -24,6 +24,16 @@ import type {
   Timeouts,
 } from "./types.js";
 
+/** One resolved fallback tier: the harness, model, effort and quota pool one call draws on. */
+export interface ResolvedTier {
+  harness: Harness;
+  model: ModelRef;
+  effort?: string;
+  subscription?: string;
+  /** Harness configuration passed through `TurnRequest.opaque`. */
+  opaque?: unknown;
+}
+
 /** Everything one turn needs to run: the resolved alias, harness, model and its own limits. */
 export interface RoleTarget {
   role: string;
@@ -31,7 +41,14 @@ export interface RoleTarget {
   harness: Harness;
   model: ModelRef;
   effort?: string;
-  fallbacks?: string[];
+  subscription?: string;
+  /**
+   * Effective fallback chain, primary first: exhausted tiers the launch already
+   * recorded in `workingTier` are dropped, so `[0]` mirrors the fields above.
+   */
+  tiers: ResolvedTier[];
+  /** Chain index `tiers[0]` had before the drop; the agent reports wins against it. */
+  tierOffset: number;
   timeouts?: Timeouts;
   /** Harness configuration passed through `TurnRequest.opaque`. */
   opaque?: unknown;
@@ -214,24 +231,81 @@ function targetForAlias(
     throw new Error(
       `run config has no alias "${aliasName}" (needed by role "${role}")`,
     );
-  const harness = runtime.harnesses.get(alias.harness);
-  if (!harness)
-    throw new Error(
-      `no harness "${alias.harness}" registered for alias "${aliasName}"`,
-    );
+  const chain = resolveChain(runtime, aliasName);
+  const offset = Math.min(
+    Math.max(0, runtime.workingTier.get(aliasName) ?? 0),
+    chain.length - 1,
+  );
+  const tiers = chain.slice(offset);
+  const first = tiers[0]!;
   return {
     role,
     alias: aliasName,
-    harness,
-    model: {
-      id: alias.model,
-      ...(alias.effort ? { effort: alias.effort } : {}),
-    },
-    effort: alias.effort,
-    fallbacks: alias.fallbacks,
+    harness: first.harness,
+    model: first.model,
+    effort: first.effort,
+    subscription: first.subscription,
+    tiers,
+    tierOffset: offset,
     timeouts: alias.timeouts,
-    opaque: runtime.configs.run.harnesses?.[alias.harness]?.acpx,
+    opaque: first.opaque,
   };
+}
+
+/**
+ * The alias's full fallback chain, primary first, deduplicated by harness,
+ * model and effort. A fallback names another harness to leave the primary's;
+ * effort and subscription default to the alias's own.
+ */
+function resolveChain(
+  runtime: KernelRuntime,
+  aliasName: string,
+): ResolvedTier[] {
+  const alias = runtime.configs.run.aliases[aliasName]!;
+  const seen = new Set<string>();
+  const chain: ResolvedTier[] = [];
+  const push = (
+    harnessId: string,
+    modelId: string,
+    effort: string | undefined,
+    subscription: string | undefined,
+  ): void => {
+    const key = `${harnessId}\u0000${modelId}\u0000${effort ?? ""}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    const harness = runtime.harnesses.get(harnessId);
+    if (!harness)
+      throw new Error(
+        `no harness "${harnessId}" registered for alias "${aliasName}"`,
+      );
+    chain.push({
+      harness,
+      model: { id: modelId, ...(effort ? { effort } : {}) },
+      ...(effort ? { effort } : {}),
+      ...(subscription ? { subscription } : {}),
+      opaque: runtime.configs.run.harnesses?.[harnessId]?.acpx,
+    });
+  };
+  push(alias.harness, alias.model, alias.effort, alias.subscription);
+  for (const fallback of alias.fallbacks ?? []) {
+    push(
+      fallback.harness ?? alias.harness,
+      fallback.model,
+      fallback.effort ?? alias.effort,
+      fallback.subscription ?? alias.subscription,
+    );
+  }
+  return chain;
+}
+
+/** The harness a turn on this alias would actually start on. */
+function effectiveAliasHarness(runtime: KernelRuntime, alias: string): string {
+  const chain = resolveChain(runtime, alias);
+  const offset = Math.min(
+    Math.max(0, runtime.workingTier.get(alias) ?? 0),
+    chain.length - 1,
+  );
+  return chain[offset]!.harness.id;
 }
 
 /**
@@ -392,7 +466,7 @@ export function stepTarget(
   return resolveRole(runtime, role, step.review ? undefined : task.tier);
 }
 
-/** Resume the last session for this alias when it is portable to the alias's harness. */
+/** Resume the last session for this alias when it is portable to the turn's harness. */
 export async function resumeSessionFor(
   runtime: KernelRuntime,
   task: TaskFile,
@@ -413,17 +487,14 @@ export async function resumeSessionFor(
     .at(-1)?.session;
   if (!prior) return undefined;
   if (path.resolve(prior.cwd) !== path.resolve(worktree)) return undefined;
-  // The alias may route elsewhere now (rotation, a changed run config): a
-  // session is only portable to the harness that recorded it. Compaction is not
-  // done here — a session is compacted by the turn that ended it.
-  if (!portable(prior.harness, aliasHarness(runtime, alias))) return undefined;
+  // The alias may route elsewhere now (a working fallback tier, a changed run
+  // config): a session is only portable to the harness that recorded it.
+  // Compaction is not done here — a session is compacted by the turn that ended it.
+  if (!runtime.configs.run.aliases[alias])
+    throw new Error(`run config has no alias "${alias}"`);
+  if (!portable(prior.harness, effectiveAliasHarness(runtime, alias)))
+    return undefined;
   return prior;
-}
-
-function aliasHarness(runtime: KernelRuntime, alias: string): string {
-  const configured = runtime.configs.run.aliases[alias];
-  if (!configured) throw new Error(`run config has no alias "${alias}"`);
-  return configured.harness;
 }
 
 /** Compaction is cache hygiene, not a gate; a failure keeps the uncompacted ref. */
@@ -512,7 +583,7 @@ export async function reviewSession(
     );
     return undefined;
   }
-  const current = aliasHarness(runtime, target.alias);
+  const current = target.harness.id;
   if (!portable(prior.harness, current)) {
     console.warn(
       `[factory] review "${task.slug}" step "${stepId}" starts de novo: ` +
@@ -569,7 +640,7 @@ export async function trivialResumeSession(
         `so trivial task "${task.slug}" cannot implement in the front's session`,
     };
   }
-  const current = aliasHarness(runtime, target.alias);
+  const current = target.harness.id;
   const kept = (ref: SessionRef | undefined): SessionRef | undefined =>
     ref && portable(ref.harness, current) ? ref : undefined;
   if (isFix) {

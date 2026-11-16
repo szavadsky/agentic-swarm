@@ -23,7 +23,7 @@ import {
 describe("iteration USD brake", () => {
   it("drains when priced spend crosses the limit, finishes started work and reports the blind turns", async () => {
     const { repo, goal } = setupFlowRepo({
-      limits: { concurrency: 1, iterationUsd: 1 },
+      limits: { concurrency: { overall: 1 }, iterationUsd: 1 },
     });
     try {
       const harness = new FakeHarness({ id: "fake" });
@@ -120,7 +120,7 @@ describe("iteration USD brake", () => {
 
   it("counts every reported attempt toward the USD brake, equal to the metrics figure", async () => {
     const { repo, goal } = setupFlowRepo({
-      limits: { concurrency: 1, iterationUsd: 1 },
+      limits: { concurrency: { overall: 1 }, iterationUsd: 1 },
       priceTable: {
         "retry/model": {
           input: 4,
@@ -191,7 +191,7 @@ describe("iteration USD brake", () => {
 
   it("ignores priced spend from earlier iterations", async () => {
     const { repo, goal } = setupFlowRepo({
-      limits: { concurrency: 1, iterationUsd: 1 },
+      limits: { concurrency: { overall: 1 }, iterationUsd: 1 },
     });
     try {
       const harness = new FakeHarness({ id: "fake" });
@@ -252,7 +252,7 @@ describe("iteration USD brake", () => {
 
   it("prices harness-silent turns from the price cache and reports no blind turns", async () => {
     const { repo, goal } = setupFlowRepo({
-      limits: { concurrency: 1, iterationUsd: 1 },
+      limits: { concurrency: { overall: 1 }, iterationUsd: 1 },
       priceTable: {
         "fake-impl": { input: 1, cachedInput: 0, output: 0, reasoning: 0 },
         "fake-review": { input: 1, cachedInput: 0, output: 0, reasoning: 0 },
@@ -315,7 +315,7 @@ describe("iteration USD brake", () => {
 
   it("treats an unpriced turn as $0 and does not trip the brake", async () => {
     const { repo, goal } = setupFlowRepo({
-      limits: { concurrency: 1, iterationUsd: 0.01 },
+      limits: { concurrency: { overall: 1 }, iterationUsd: 0.01 },
     });
     try {
       const harness = new FakeHarness({ id: "fake" });
@@ -349,7 +349,9 @@ describe("iteration USD brake", () => {
   }, 60_000);
 
   it("leaves dispatch unchanged when no limit is configured", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 1 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       for (let i = 0; i < 4; i += 1) {

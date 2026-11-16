@@ -72,7 +72,10 @@ prices:
   opencode/minimax-m3.1-flash-free: { input: 0, cachedInput: 0, output: 0, reasoning: 0 }
   opencode/deepseek-v4.1-flash-free: { input: 0, cachedInput: 0, output: 0, reasoning: 0 }
   opencode-go/deepseek-v4.1-flash: { input: 0.15, cachedInput: 0.003, output: 0.6, reasoning: 0.6 }
-limits: { concurrency: 3, iterations: 1, iterationUsd: 5 }
+limits:
+  concurrency: { overall: 3, perSubscription: { opencode-go: 2 }, perModel: {} }
+  iterations: 1
+  iterationUsd: 5
 sessions: { dir: ~/.local/share/factory/sessions, keepRuns: 5, retention: short }
 worktreeRoot: ~/.local/share/factory/worktrees
 scouts: { model: opencode-go/deepseek-v4.1-flash }   # omp architect subagents
@@ -82,8 +85,11 @@ An alias may carry `escalateTo: <alias>` to name the PM's next rung. A PM turn
 that is not usable gets a fresh retry on the same alias; after two failed turns
 the ladder climbs to `escalateTo`, which carries a broader mandate and may stop
 with one question for the architect. Without `escalateTo` the iteration blocks
-with every rung in the summary. `fallbacks` stay infrastructure-only (same
-harness, quota and crash), so escalation is model routing, not a retry.
+with every rung in the summary. `fallbacks` stay infrastructure-only (quota and
+crash), so escalation is model routing, not a retry. Each fallback tier names
+its own model, harness and effort, and the quota pool it draws on; a turn that
+lands on a tier keeps the launch on it, and dispatch throttles each pool and
+model within the overall limit.
 
 `prices` maps a model id to USD per million tokens: `input`, `cachedInput`,
 `output` and `reasoning`, all four required. A turn costs its harness's

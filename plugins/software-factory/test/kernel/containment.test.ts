@@ -334,7 +334,9 @@ describe("agent containment", () => {
   }, 60_000);
 
   it("merges a task whose turn spans another task's merge of the shared checkout", async () => {
-    const { repo, goal } = setupFlowRepo({ limits: { concurrency: 2 } });
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 2 } },
+    });
     try {
       const checkout = goalCheckout(repo, goal);
       let initial = "";

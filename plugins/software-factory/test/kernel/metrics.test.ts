@@ -98,7 +98,7 @@ describe("iteration metrics", () => {
           "  implementer: { harness: fake, model: fake-impl }",
           "  reviewer: { harness: fake, model: fake-review }",
           "  steward: { harness: fake, model: fake-steward }",
-          "limits: { iterations: 1, concurrency: 1 }",
+          "limits: { iterations: 1, concurrency: { overall: 1, perSubscription: {}, perModel: {} } }",
           `worktreeRoot: ../${base}-wt`,
           `sessions: { dir: ../${base}-sessions, keepRuns: 2 }`,
           "",
@@ -563,8 +563,7 @@ describe("record cost truth", () => {
     const run: RunConfig = {
       aliases: { implementer: { harness: "fake", model: "paid/one" } },
       limits: {
-        concurrency: 1,
-        perHarness: {},
+        concurrency: { overall: 1, perSubscription: {}, perModel: {} },
         iterations: 1,
         planCheckRounds: 2,
       },
@@ -589,10 +588,10 @@ describe("record cost truth", () => {
         itemTurns: 8,
         flows: {},
         iterations: 1,
-        concurrency: 1,
-        perHarness: {},
+        concurrency: { overall: 1, perSubscription: {}, perModel: {} },
         planCheckRounds: 2,
       },
+      workingTier: new Map(),
       // Hermetic prices: the test-local cache, never the network.
       priceSource: {
         cachePath: path.join(root, "price-cache.json"),

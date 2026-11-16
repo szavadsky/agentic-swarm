@@ -58,7 +58,9 @@ interface Running {
   promise: Promise<void>;
   scope: readonly string[];
   agent: boolean;
-  harnessId?: string;
+  /** Quota pool and model the turn drew admission against; agent turns only. */
+  subscription?: string;
+  model?: string;
 }
 
 /** Declared-area overlap: two tasks collide only when they name the same area. */
@@ -210,11 +212,11 @@ function activeHolds(holds: Hold[], pending: ReadonlySet<string>): ActiveHolds {
 
 /**
  * The dispatch loop: `next` proposes, this loop admits. Admission holds the
- * absolute and per-harness turn limits and never starts two tasks whose declared
- * areas overlap. On an optional iteration limit — turns, wall clock or dollars — the
- * loop drains: a task that has not started this iteration gets no turn, tasks
- * already started finish their flow, in-flight work settles, then the caller
- * ends the iteration normally.
+ * overall, per-subscription and per-model turn limits and never starts two
+ * tasks whose declared areas overlap. On an optional iteration limit — turns,
+ * wall clock or dollars — the loop drains: a task that has not started this
+ * iteration gets no turn, tasks already started finish their flow, in-flight
+ * work settles, then the caller ends the iteration normally.
  */
 export async function runDispatch(
   runtime: KernelRuntime,
@@ -342,7 +344,7 @@ export async function runDispatch(
     taskState: TaskState,
     task: TaskFile,
     agent: boolean,
-    harnessId?: string,
+    quota?: { subscription?: string; model?: string },
   ): void => {
     const promise = (async () => {
       try {
@@ -365,7 +367,13 @@ export async function runDispatch(
     })().finally(() => {
       running.delete(action.slug);
     });
-    running.set(action.slug, { promise, scope: task.scope, agent, harnessId });
+    running.set(action.slug, {
+      promise,
+      scope: task.scope,
+      agent,
+      subscription: quota?.subscription,
+      model: quota?.model,
+    });
     if (agent) started.add(action.slug);
   };
 
@@ -463,17 +471,32 @@ export async function runDispatch(
         ) {
           continue;
         }
-        if (agentCount() >= runtime.limits.concurrency) continue;
+        if (agentCount() >= runtime.limits.concurrency.overall) continue;
+        // The target is already on the working tier: admission counts the pool
+        // and model the turn will actually draw on, whichever harness that is.
         const target = stepTarget(runtime, task, taskState, action.step);
-        const limit = runtime.limits.perHarness[target.harness.id];
-        if (limit !== undefined) {
-          const onHarness = [...running.values()].filter(
-            (r) => r.agent && r.harnessId === target.harness.id,
+        if (target.subscription !== undefined) {
+          const poolLimit =
+            runtime.limits.concurrency.perSubscription[target.subscription];
+          if (poolLimit !== undefined) {
+            const onPool = [...running.values()].filter(
+              (r) => r.agent && r.subscription === target.subscription,
+            ).length;
+            if (onPool >= poolLimit) continue;
+          }
+        }
+        const modelLimit = runtime.limits.concurrency.perModel[target.model.id];
+        if (modelLimit !== undefined) {
+          const onModel = [...running.values()].filter(
+            (r) => r.agent && r.model === target.model.id,
           ).length;
-          if (onHarness >= limit) continue;
+          if (onModel >= modelLimit) continue;
         }
         if (overlapsRunning(task.scope, running)) continue;
-        start(action, taskState, task, true, target.harness.id);
+        start(action, taskState, task, true, {
+          subscription: target.subscription,
+          model: target.model.id,
+        });
         continue;
       }
 
