@@ -8,7 +8,9 @@ import {
 } from "../../src/harness/acpx/turn.js";
 import type { Harness } from "../../src/harness/types.js";
 import { compactSession } from "../../src/kernel/flow-context.js";
+import { sessionCacheHot } from "../../src/kernel/sessions.js";
 import type { KernelRuntime } from "../../src/kernel/types.js";
+import { installFakeClock } from "../helpers/fake-clock.js";
 import { createAcpxStub, type AcpxStub } from "./acpx-stub.js";
 
 const TIMEOUTS = { idleMs: 10_000, wallMs: 30_000 };
@@ -56,6 +58,16 @@ function compactRuntime(harness: Harness): KernelRuntime {
   return {
     harnesses: new Map([[harness.id, harness]]),
   } as unknown as KernelRuntime;
+}
+
+async function waitForPrompt(stub: AcpxStub, marker: string): Promise<void> {
+  for (let attempt = 0; attempt < 500; attempt += 1) {
+    if (stub.invocations().some((args) => args.at(-1)?.includes(marker))) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`timed out waiting for acpx prompt containing ${marker}`);
 }
 
 describe("AcpxHarness session compaction", () => {
@@ -269,6 +281,49 @@ describe("AcpxHarness session compaction", () => {
         stub.invocations().filter((args) => args.at(-1) === "/compact"),
       ).toEqual([]);
     } finally {
+      stub.cleanup();
+    }
+  });
+
+  it("keeps a long turn's cache hot through its last model event and skips once idle", async () => {
+    const stub = createAcpxStub({ promptDelayMs: 100 });
+    const harness = new AcpxHarness({
+      id: "pi",
+      binary: stub.binary,
+      acpx: PI_ACPX,
+    });
+    const clock = installFakeClock(Date.parse("2026-11-16T12:00:00.000Z"));
+    try {
+      const cwd = path.dirname(stub.binary);
+      const turnStartedAt = Date.now();
+      const pending = harness.turn(request(cwd, "long turn"));
+      await waitForPrompt(stub, "long turn");
+      clock.advance(10 * 60_000);
+      const first = await pending;
+
+      expect(first.stop).toEqual({ kind: "done" });
+      expect(
+        Date.parse(first.session!.lastRequestStartedAt) - turnStartedAt,
+      ).toBe(10 * 60_000);
+      expect(sessionCacheHot(first.session!, new Date())).toBe(true);
+
+      const compacted = await compactSession(
+        compactRuntime(harness),
+        first.session!,
+      );
+      expect(compacted?.session.compacted).toBe(true);
+      const compacts = () =>
+        stub.invocations().filter((args) => args.at(-1) === "/compact");
+      expect(compacts()).toHaveLength(1);
+
+      clock.advance(10 * 60_000);
+      expect(sessionCacheHot(first.session!, new Date())).toBe(false);
+      expect(
+        await compactSession(compactRuntime(harness), first.session!),
+      ).toBeUndefined();
+      expect(compacts()).toHaveLength(1);
+    } finally {
+      clock.restore();
       stub.cleanup();
     }
   });

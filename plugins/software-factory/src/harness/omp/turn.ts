@@ -106,6 +106,7 @@ export async function runOmpTurn(
   let aborted = false;
   let rpc: OmpRpc | undefined;
   let finished = false;
+  let lastModelEventAtMs: number | undefined;
 
   const clearTimers = () => {
     if (idleTimer) clearTimeout(idleTimer);
@@ -212,6 +213,9 @@ export async function runOmpTurn(
   // Idle resets on every frame, including streamed deltas the RPC discards.
   rpc.setOnFrame((frame: any) => {
     if (finished) return;
+    // Frame timestamps mark message creation, not completion. Receipt time is
+    // the freshest evidence that the final request's cache is still hot.
+    lastModelEventAtMs = Date.now();
     resetIdle();
     if (frame.type === "message_end") {
       const message = frame.message ?? {};
@@ -244,9 +248,10 @@ export async function runOmpTurn(
   // was never sent, so there is no result to keep.
   if (aborted) return cancelBeforePrompt();
 
-  // Cache lifetime runs from the start of the model request, not from launch.
+  // Usage for this turn starts when the prompt is sent. Cache hotness instead
+  // follows the last streamed model frame: a long final request refreshes the
+  // cache while it streams.
   const startedAtMs = Date.now();
-  const startedAt = new Date(startedAtMs).toISOString();
   const promptId = rpc.send("prompt", { message: req.prompt });
   const promptPromise = rpc.awaitFrame(
     (frame) => frame.type === "prompt_result" && frame.id === promptId,
@@ -344,7 +349,9 @@ export async function runOmpTurn(
         cwd: req.cwd,
         dir: resumeDir,
         model: actualModel(state, model),
-        lastRequestStartedAt: startedAt,
+        lastRequestStartedAt: new Date(
+          lastModelEventAtMs ?? Date.now(),
+        ).toISOString(),
         retentionTier: runtime.retention,
         compacted:
           isSessionCompacted(sessionFile) ||

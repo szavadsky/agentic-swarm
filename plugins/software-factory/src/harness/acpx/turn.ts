@@ -136,6 +136,8 @@ interface PromptProcessResult {
   timedOut: boolean;
   /** The kernel's AbortSignal fired; the child was killed, not reaped. */
   aborted: boolean;
+  /** Local receipt time of the last non-empty stdout line; absent when none arrived. */
+  lastEventAt?: string;
 }
 
 /** One prompt process: stream stdout into the parser, enforce idle and wall bounds. */
@@ -166,6 +168,7 @@ function runPromptProcess(
     let closed = false;
     let child: ReturnType<typeof spawn> | undefined;
     let pid = 0;
+    let lastEventAt: string | undefined;
 
     const killGroup = (signal: NodeJS.Signals) => {
       if (closed) return;
@@ -245,6 +248,7 @@ function runPromptProcess(
         index = buffer.indexOf("\n");
         if (index < 0) break;
         parser.feedLine(buffer.slice(0, index));
+        lastEventAt = new Date().toISOString();
         buffer = buffer.slice(index + 1);
       }
     });
@@ -261,11 +265,14 @@ function runPromptProcess(
     });
     child.on("close", (code, signal) => {
       closed = true;
-      if (buffer.trim()) parser.feedLine(buffer);
+      if (buffer.trim()) {
+        parser.feedLine(buffer);
+        lastEventAt = new Date().toISOString();
+      }
       clearTimers();
       clearSignal();
       if (pid > 0) unregisterChildGroup(pid);
-      resolve({ code, signal, stderr, timedOut, aborted });
+      resolve({ code, signal, stderr, timedOut, aborted, lastEventAt });
     });
   });
 }
@@ -434,7 +441,6 @@ export async function runAcpxTurn(
       }
     }
 
-    const startedAt = new Date().toISOString();
     const parser = new AcpxTranscriptParser(config.usage?.fields);
     // acpx parses the agent subcommand with enablePositionalOptions, so a
     // global `--model` after it is `unknown option '--model'` (exit 2).
@@ -504,7 +510,11 @@ export async function runAcpxTurn(
           id: name,
           cwd: req.cwd,
           model,
-          lastRequestStartedAt: startedAt,
+          // Use the last streamed model event, not the prompt's start: a long
+          // turn's cache is refreshed while its final response streams. ACP
+          // carries no request timestamp, so local receipt time is the evidence.
+          lastRequestStartedAt:
+            processResult.lastEventAt ?? new Date().toISOString(),
           retentionTier: "short" as const,
           compacted: req.session?.compacted ?? false,
           // A failed usage command must not drop the delta baseline.

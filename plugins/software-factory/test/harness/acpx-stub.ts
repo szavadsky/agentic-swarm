@@ -42,6 +42,8 @@ export interface AcpxStubOptions {
   };
   /** Banner text emitted as an earlier agent message before the reply. */
   banner?: string;
+  /** Delay before a prompt turn's result frames, simulating a long turn. */
+  promptDelayMs?: number;
   /** ACP `usage_update` cost payload; absent means the update carries none. */
   cost?: { amount: number; currency: string };
   /**
@@ -75,6 +77,7 @@ export function createAcpxStub(opts: AcpxStubOptions = {}): AcpxStub {
   const sessionCommandJs = JSON.stringify(opts.sessionCommand ?? "ok");
   const compactUsageJs = JSON.stringify(opts.compactUsage ?? null);
   const bannerJs = JSON.stringify(opts.banner ?? null);
+  const promptDelayJs = JSON.stringify(opts.promptDelayMs ?? 0);
   const costJs = JSON.stringify(opts.cost ?? null);
   const compactJs = JSON.stringify(opts.compact ?? "ok");
   const modelsJs = JSON.stringify(opts.models ?? null);
@@ -113,6 +116,7 @@ const sessionUsage = ${sessionUsageJs};
 const sessionCommand = ${sessionCommandJs};
 const compactUsage = ${compactUsageJs};
 const banner = ${bannerJs};
+const promptDelayMs = ${promptDelayJs};
 const cost = ${costJs};
 const compactMode = ${compactJs};
 const models = ${modelsJs};
@@ -304,6 +308,9 @@ if (prompt === "/compact") {
   process.exit(0);
 }
 
+if (promptDelayMs > 0) {
+  await new Promise((resolve) => setTimeout(resolve, promptDelayMs));
+}
 startPrompt();
 addSessionUsage(session, sessionUsage);
 if (banner) {
