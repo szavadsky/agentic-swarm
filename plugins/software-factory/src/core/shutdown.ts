@@ -59,8 +59,9 @@ export async function terminateAllChildGroups(graceMs = 500): Promise<void> {
 
   // 3. For any still active, send SIGKILL
   for (const pid of pids) {
-    terminateChildGroup(pid, "SIGKILL");
+    if (activeChildGroups.has(pid)) {
+      terminateChildGroup(pid, "SIGKILL");
+      activeChildGroups.delete(pid);
+    }
   }
-
-  activeChildGroups.clear();
 }
