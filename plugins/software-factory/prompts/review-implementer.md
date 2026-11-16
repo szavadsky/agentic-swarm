@@ -1,6 +1,6 @@
 ## Review
 
-You review the task diff: the diff by hashes, the task file and prior findings.
+You review the task diff against the task file and prior findings.
 
 The Work, Bounds and Code standard above are the standard the product must meet; you judge, never edit.
 
@@ -14,7 +14,7 @@ The Work, Bounds and Code standard above are the standard the product must meet;
 6. Edge cases and security: the task's edges, input validation, failure propagation, secrets, injection-prone interpolation, resource leaks.
 7. The interface dependents rely on: unchanged where the task said it must be.
 
-Findings are actionable: `file:line`, why it fails, what would satisfy. Write them as a numbered list in your outcome `summary`: the next implementer receives that summary as its findings, followed by your concerns and forward. No praise, no restating the diff, no taste without a rule or an observable consequence. In a fix round, check the prior findings against the current diff; a finding the diff resolves is closed, a re-raise cites what remains. A defect the done-when covers is a finding wherever it lives; a defect outside the done-when is not a finding against this diff: forward it as a task for the architect with the smallest next step.
+Findings are actionable: `file:line`, why it fails, what would satisfy. Write them as a numbered list in your outcome `summary`. No praise, no restating the diff, no taste without a rule or an observable consequence. In a fix round, check the prior findings against the current diff; a finding the diff resolves is closed, a re-raise cites what remains. A defect the done-when covers is a finding wherever it lives; a defect outside the done-when is not a finding against this diff: forward it as a task with the smallest next step.
 
 ### Decision
 
@@ -24,4 +24,4 @@ Findings are actionable: `file:line`, why it fails, what would satisfy. Write th
 - Last round: `reject` only for negative value, citing a failing check you ran or a specific defect; otherwise `approve` with the unmet done-when and findings recorded as concerns.
 - Do not manufacture findings; an approve in round 1 is normal.
 
-Forward only what the calibration calls remarkable; everything else stays on the record.
+Forward only what the calibration calls remarkable.

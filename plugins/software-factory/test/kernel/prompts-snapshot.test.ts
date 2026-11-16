@@ -402,18 +402,113 @@ describe("review findings carry", () => {
     }
   }, 60_000);
 
-  it("tells the reviewer its summary carries the implementer's findings", () => {
+  it("tells the reviewer to write numbered findings in its summary", () => {
     const rendered = library().render("reviewer", ROLES.reviewer!);
     expect(rendered).toContain("numbered list in your outcome `summary`");
-    expect(rendered).toContain(
-      "receives that summary as its findings, followed by your concerns and forward",
-    );
+    expect(rendered).not.toContain("next implementer receives");
   });
 
-  it("no longer calls fix-round findings empty on the first turn", () => {
+  it("marks findings empty before the first review, not per fix round", () => {
     const rendered = library().render("implementer", ROLES.implementer!);
     expect(rendered).not.toContain("empty on the first turn");
-    expect(rendered).toContain("review summary, then concerns and forward");
+    expect(rendered).toContain("empty before the first review");
+  });
+});
+
+describe("prompt debloat", () => {
+  function renderedPrompts(): Map<string, string> {
+    const rendered = new Map<string, string>();
+    for (const [role, vars] of Object.entries(ROLES))
+      rendered.set(role, library().render(role, vars));
+    rendered.set(
+      "plan-reviewer",
+      library().render("reviewer", {
+        ...ROLES.architect!,
+        ...ROLES.reviewer!,
+        author: "architect",
+      }),
+    );
+    return rendered;
+  }
+
+  // One entry per original sentence class: where an input came from, how it
+  // was produced, or what the kernel/next role does with the output.
+  const PROVENANCE_OR_DOWNSTREAM = [
+    "implemented and merged after gates",
+    "the front's briefing for this goal",
+    "review summary, then concerns and forward",
+    "You get the task file or plan",
+    "next implementer receives",
+    "Each tier gets two turns",
+    "the ladder climbs",
+    "fallbacks already absorbed",
+    "A pending task in this list is not dispatched",
+    "runs its flow to the end",
+    "keeps running to exhaustion",
+    "outbox response",
+    "landed outcome is answered to the owner later",
+    "The next boundary presents the steer verbatim",
+    "the hold drains the goal",
+    "the next boundary sees your reason",
+    "the next reconcile never cancels them",
+    "a fresh session at the same tier",
+    "writes were rolled back",
+    "Records follow the kernel step record",
+    "the previous launch being summarised",
+    "replaces the scripted pack",
+    "it briefs the implementer",
+    "after this turn the script runs",
+    "records hold the history",
+    "Parked tasks come from the pack with a cause",
+    "the rest continues unless the steer blocks the goal",
+    "There is no diff and no task file to judge",
+    "next implementers receive only what its bullets say",
+    "The plan stands or changes on the architect's decision",
+    "The dispatch set ran out",
+    "before the architect is consulted",
+    "the kernel throws away whatever you write outside the outcome",
+    "everything else stays on the record",
+    "the fix round's per-finding disposition claims",
+    "the escalation ask for a standalone task",
+    "red before this diff",
+    "status, hashes, paths, evidence; drill in by path",
+    "stays on the record",
+    "waits for the next architect turn",
+    "a concern costs the next stage attention",
+    "deserves the next stage's attention",
+  ];
+
+  it("drops input provenance and downstream steps from every rendered prompt", () => {
+    const rendered = renderedPrompts();
+    const found: string[] = [];
+    for (const [role, prompt] of rendered) {
+      for (const phrase of PROVENANCE_OR_DOWNSTREAM) {
+        if (prompt.includes(phrase)) found.push(`${role}: ${phrase}`);
+      }
+    }
+    expect(found).toEqual([]);
+  });
+
+  it("keeps the bounds and deliverables a role acts on", () => {
+    const rendered = renderedPrompts();
+    const keeps: [string, string][] = [
+      ["architect", "Nothing asks mid-flight"],
+      ["architect", "plan the road to completion as far as uncertainty allows"],
+      ["front", "no design decision, no ordering and no review"],
+      ["front", "On `trivial` or `task`, carry the area and risks"],
+      ["pm", "Write one hold file per steer"],
+      ["pm", "Only an escalated ask may put a question"],
+      ["implementer", "Do not commit, amend, push"],
+      ["implementer", "failures here are pre-existing"],
+      ["reviewer", "Write them as a numbered list in your outcome `summary`"],
+      ["reviewer", "not findings against this diff"],
+      ["digest", "at most 80 lines"],
+      ["plan-checker", "MUST report honestly"],
+      ["steward", "Never rebase"],
+    ];
+    for (const [role, phrase] of keeps) {
+      expect(rendered.get(role), role).toContain(phrase);
+    }
   });
 });
 
