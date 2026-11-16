@@ -19,7 +19,11 @@ import type { ProcessConfig } from "./types.js";
 
 export interface PromptLibrary {
   render(fragment: string, vars: Record<string, string>): string;
-  placeholders(fragment: string): string[];
+  /**
+   * Variables a render needs; `vars` resolves a template's dynamic include
+   * (the reviewer's author body) that static analysis cannot name.
+   */
+  placeholders(fragment: string, vars?: Record<string, string>): string[];
 }
 
 function resolveWithExt(dir: string, file: string, ext: string): string {
@@ -115,14 +119,34 @@ export function loadPromptLibrary(opts: {
   }
   const { engine, fs: layers } = createEngine(roots, overrides);
 
-  const requiredVariables = (fragment: string): string[] => {
+  const requiredVariables = (
+    fragment: string,
+    vars: Record<string, string>,
+  ): string[] => {
     const { text, filepath } = loadFragment(layers, roots, fragment);
     const analysis = engine.parseAndAnalyzeSync(text, filepath);
-    return Object.keys(analysis.variables);
+    // `locals` are assigned inside the template (`{% assign %}`), so they are
+    // not inputs the caller must pass. The reviewer assigns `author_body` and
+    // `review_duties` to include its author's `<role>-body` and `review-<role>`
+    // partials; Liquid cannot resolve those includes statically, so the
+    // fragments they name are analyzed here (a missing one fails by name).
+    const names = new Set(Object.keys(analysis.globals));
+    if (vars.author !== undefined) {
+      const dynamic = [
+        ...(analysis.locals.author_body ? [`${vars.author}-body`] : []),
+        ...(analysis.locals.review_duties ? [`review-${vars.author}`] : []),
+      ];
+      for (const included of dynamic) {
+        for (const name of requiredVariables(included, vars)) names.add(name);
+      }
+    }
+    return [...names];
   };
 
   const requireVars = (fragment: string, vars: Record<string, string>) => {
-    const missing = requiredVariables(fragment).filter((v) => !(v in vars));
+    const missing = requiredVariables(fragment, vars).filter(
+      (v) => !(v in vars),
+    );
     if (missing.length > 0) {
       throw new Error(
         `Missing required prompt variables for "${fragment}": ${missing.join(
@@ -133,8 +157,11 @@ export function loadPromptLibrary(opts: {
   };
 
   return {
-    placeholders(fragment: string): string[] {
-      return requiredVariables(fragment);
+    placeholders(
+      fragment: string,
+      vars: Record<string, string> = {},
+    ): string[] {
+      return requiredVariables(fragment, { ...defaults, ...vars });
     },
 
     render(fragment: string, vars: Record<string, string>): string {
@@ -201,8 +228,11 @@ export function loadPrompts(
     overrides,
     // Round 1 has no fix to judge; promptVars overrides this with the current
     // fix round's dispositions wherever they exist.
+    // A reviewer includes its author's `<role>-body` fragment; the diff
+    // reviewer's author is the implementer unless the turn names another.
     defaults: {
       validate_cmd: validateCmd(),
+      author: "implementer",
       fix_dispositions: "",
       outcome_schema: outcomeSchemaVar(),
       task_frontmatter: taskFrontmatterVar(),

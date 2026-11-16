@@ -102,6 +102,7 @@ const ROLES: Record<string, Record<string, string>> = {
   reviewer: {
     task_path: "/goal/tasks/alpha.md",
     worktree: "/worktrees/demo-tasks/alpha",
+    author: "implementer",
     base_hash: "abc1234",
     head_hash: "def5678",
     round: "1",
@@ -167,7 +168,7 @@ describe("role prompts", () => {
     it(`renders ${role} from exactly its documented variables`, () => {
       const lib = library();
       const placeholders = new Set(
-        lib.placeholders(processConfig().roles[role]!.prompt),
+        lib.placeholders(processConfig().roles[role]!.prompt, vars),
       );
       expect([...placeholders].sort()).toEqual(Object.keys(vars).sort());
 
@@ -193,6 +194,82 @@ describe("role prompts", () => {
       ROLES.architect!,
     );
     expect(rendered.startsWith("You are the architect")).toBe(true);
+  });
+});
+
+describe("reviewer includes its author's body", () => {
+  function body(role: keyof typeof ROLES): string {
+    const rendered = library().render(role, ROLES[role]!);
+    const at = rendered.indexOf("## This turn");
+    expect(at, `${role} has no turn block`).toBeGreaterThan(0);
+    return rendered.slice(0, at);
+  }
+
+  it("is an author-neutral intro, the implementer's body verbatim, then its duties", () => {
+    const implementerBody = body("implementer");
+    const reviewer = library().render("reviewer", ROLES.reviewer!);
+    const intro = reviewer.slice(0, reviewer.indexOf("\n\n"));
+    expect(intro.startsWith("You review one author's work.")).toBe(true);
+    expect(intro).not.toContain("task diff");
+    expect(reviewer.startsWith(`${intro}\n\n${implementerBody}`)).toBe(true);
+    const duties = reviewer.slice(intro.length + 2 + implementerBody.length);
+    expect(duties.startsWith("## Review\n")).toBe(true);
+    expect(duties).toContain("You review the task diff");
+    expect(duties).toContain(
+      "5. Out-of-area changes, per the scope rule above.",
+    );
+    // The shared fragments arrive once, through the author's body.
+    for (const heading of ["## Code standard", "## Calibration", "## Outcome"])
+      expect(reviewer.split(heading).length - 1, heading).toBe(1);
+    // Only the reviewer's own turn block: the author's stayed out.
+    expect(reviewer.split("## This turn").length - 1).toBe(1);
+    expect(
+      reviewer.split("- `verdict` is used on review steps").length - 1,
+    ).toBe(1);
+  });
+
+  it("fails loudly when the author has no body", () => {
+    expect(() =>
+      library().render("reviewer", { ...ROLES.reviewer!, author: "nobody" }),
+    ).toThrow('Prompt fragment "nobody-body" not found');
+  });
+
+  it("fails loudly, by name, when the author has no duties", () => {
+    const lib = loadPromptLibrary({
+      builtinDir: path.join(packageRoot, "prompts"),
+      overrides: { "nobody-body": "Implementer body." },
+    });
+    expect(() =>
+      lib.render("reviewer", { ...ROLES.reviewer!, author: "nobody" }),
+    ).toThrow('Prompt fragment "review-nobody" not found');
+  });
+
+  it("selects the author's partials by role name", () => {
+    const lib = loadPromptLibrary({
+      builtinDir: path.join(packageRoot, "prompts"),
+      overrides: { "review-architect": "## Review\n\nReview the plan." },
+    });
+    const architectPlaceholders = lib.placeholders("reviewer", {
+      author: "architect",
+    });
+    const implementerPlaceholders = lib.placeholders("reviewer", {
+      author: "implementer",
+    });
+    expect(architectPlaceholders).toContain("tiers");
+    expect(architectPlaceholders).toContain("flows");
+    expect(implementerPlaceholders).not.toContain("tiers");
+    expect(implementerPlaceholders).not.toContain("flows");
+
+    const rendered = lib.render("reviewer", {
+      ...ROLES.architect!,
+      ...ROLES.reviewer!,
+      author: "architect",
+    });
+    expect(rendered).toContain("## Review\n\nReview the plan.");
+    expect(rendered).not.toContain("You review the task diff");
+    expect(
+      rendered.split("- `verdict` is used on review steps").length - 1,
+    ).toBe(1);
   });
 });
 

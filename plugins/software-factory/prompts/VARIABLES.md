@@ -2,22 +2,22 @@
 
 Template syntax: [LiquidJS](https://liquidjs.com), strict mode (unknown variable = render error; unknown filter = render error). `{{ name }}` interpolates one value; `{% include 'partial-name' %}` inlines `prompts/partial-name.md`. Every prompt is stable text up to its final `## This turn` block; all turn variables live there so providers can cache the prefix. Renderer defaults also appear above the block, so the prefix is stable only within one checkout and launch.
 
-| prompt       | partials                                                   |
-| ------------ | ---------------------------------------------------------- |
-| architect    | `calibration`, `outcome`, `verdict`                        |
-| front        | `calibration`, `outcome`, `task-frontmatter`               |
-| pm           | `calibration`, `outcome`, `task-frontmatter`               |
-| implementer  | `clean-code`, `scope`, `calibration`, `outcome`            |
-| reviewer     | `clean-code`, `scope`, `calibration`, `outcome`, `verdict` |
-| digest       | `calibration`, `outcome`                                   |
-| steward      | `clean-code`, `calibration`, `outcome`                     |
-| plan-checker | `calibration`, `outcome`                                   |
+| prompt       | partials                                                                             |
+| ------------ | ------------------------------------------------------------------------------------ |
+| architect    | `architect-body`, `calibration`, `outcome`, `verdict`                                |
+| front        | `calibration`, `outcome`, `task-frontmatter`                                         |
+| pm           | `calibration`, `outcome`, `task-frontmatter`                                         |
+| implementer  | `implementer-body`, `clean-code`, `scope`, `calibration`, `outcome`                  |
+| reviewer     | `<author>-body` (`implementer-body` by default), `review-<author>` duties, `verdict` |
+| digest       | `calibration`, `outcome`                                                             |
+| steward      | `clean-code`, `calibration`, `outcome`                                               |
+| plan-checker | `calibration`, `outcome`                                                             |
 
-The shared definitions exist once as partials: `scope` (the predicted-area rule: out-of-area judgement, upscope condition, plan read-only), `calibration` (concerns and calibration, with `remarkable` inside it), `outcome` (the outcome contract, shape rendered from the kernel outcome schema), `task-frontmatter` (the task-file frontmatter shape rendered from the kernel task schema, plus the configured flows and tiers; included by the authoring roles), `clean-code` (the code standard), `remarkable` (the remarkable definition) and `verdict` (which step each of `verdict` and `decision` belongs to, for review and architect steps).
+The shared definitions exist once as partials: `scope` (the predicted-area rule: out-of-area judgement, upscope condition, plan read-only), `calibration` (concerns and calibration, with `remarkable` inside it), `outcome` (the outcome contract, shape rendered from the kernel outcome schema), `task-frontmatter` (the task-file frontmatter shape rendered from the kernel task schema, plus the configured flows and tiers; included by the authoring roles), `clean-code` (the code standard), `remarkable` (the remarkable definition), `verdict` (which step each of `verdict` and `decision` belongs to, for review and architect steps) and the role bodies `implementer-body` and `architect-body` (everything before the role's turn block; a reviewer includes its author's body by role name, so the plan review reuses the reviewer template over `architect-body`).
 
 `calibration` is the default calibration partial. The process config may replace its content per repo; the prompt template does not change.
 
-Renderer defaults live outside any `This turn` block and the renderer supplies them, so turn code never passes them: `validate_cmd` (the running build's absolute `bun <build>/bin/factory.ts validate`, stable only within one checkout), `outcome_schema` (the outcome YAML skeleton rendered from the kernel outcome schema, in the `outcome` partial), `task_frontmatter` (the frontmatter YAML skeleton rendered from the kernel task schema, in the `task-frontmatter` partial), `flows` (configured flow names in config order with the kernel default marked, from the process config) and `tiers` (run-config alias names in config order; `default` is kernel vocabulary for no tier override and stays literal). `class_flows` is the one turn-supplied variable above the block: the front turn renders its class-to-flow mapping from the same kernel mapping the validator enforces. The delivery-repair ask also supplies its own narrowed `outcome_schema`; it has no role prompt, so its shape must match the turn it repairs.
+Renderer defaults live outside any `This turn` block and the renderer supplies them, so turn code does not pass them: `validate_cmd` (the running build's absolute `bun <build>/bin/factory.ts validate`, stable only within one checkout), `outcome_schema` (the outcome YAML skeleton rendered from the kernel outcome schema, in the `outcome` partial), `task_frontmatter` (the frontmatter YAML skeleton rendered from the kernel task schema, in the `task-frontmatter` partial), `flows` (configured flow names in config order with the kernel default marked, from the process config), `tiers` (run-config alias names in config order; `default` is kernel vocabulary for no tier override and stays literal) and `author` (the reviewer's author role; it selects the `<role>-body` and `review-<role>` fragments). `author` defaults to `implementer`; the plan-review turn overrides it with `architect`. `class_flows` is a turn-supplied variable above the block: the front turn renders its class-to-flow mapping from the same kernel mapping the validator enforces. The delivery-repair ask also supplies its own narrowed `outcome_schema`; it has no role prompt, so its shape must match the turn it repairs.
 
 ## architect.md
 
@@ -101,6 +101,7 @@ Renderer defaults live outside any `This turn` block and the renderer supplies t
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `task_path`        | path to the task file the diff is judged against                                                                                                       |
 | `worktree`         | path to the task worktree holding the diff                                                                                                             |
+| `author`           | role whose body the reviewer includes (`implementer` by default); renderer default                                                                     |
 | `base_hash`        | commit hash before this task's first turn; the range spans every round                                                                                 |
 | `head_hash`        | commit hash after the latest implementer turn                                                                                                          |
 | `round`            | 1-based review round                                                                                                                                   |
