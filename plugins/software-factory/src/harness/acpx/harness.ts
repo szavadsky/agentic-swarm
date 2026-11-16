@@ -1,15 +1,20 @@
 import { type RetryPolicy, runWithFallbacks } from "../fallback.js";
 import type {
   Caps,
+  CompactResult,
   Harness,
   ModelRef,
+  ModelProbe,
+  SessionRef,
   TurnAttempt,
   TurnRequest,
   TurnResult,
 } from "../types.js";
 import { resolveAcpxCommand } from "./command.js";
-import { runAcpxTurn } from "./turn.js";
-import type { AcpxHarnessOptions } from "./types.js";
+import { probeAcpxModel } from "./probe.js";
+import { readAcpxSessionUsage, runAcpxCommand, runAcpxTurn } from "./turn.js";
+import { turnUsageFromTotals } from "./usage.js";
+import type { AcpxHarnessOptions, AcpxTurnSummary } from "./types.js";
 
 export type { AcpxHarnessOptions } from "./types.js";
 
@@ -32,10 +37,11 @@ export class AcpxHarness implements Harness {
   async caps(_model: ModelRef): Promise<Caps> {
     return {
       resume: true,
-      compact: "none",
+      compact: this.runtime.acpx.compact === true ? "server" : "none",
       subagents: "none",
       structuredOutput: "none",
-      effort: [...(this.runtime.acpx.effort?.levels ?? [])],
+      // Live levels exist only inside a session; pre-flight probes them.
+      effort: [],
       // ACP carries cost on `usage_update`; a silent agent leaves it unknown.
       usage: { cache: this.runtime.acpx.usage?.cache ?? false, cost: true },
     };
@@ -61,6 +67,74 @@ export class AcpxHarness implements Harness {
     const attempts: TurnAttempt[] = result.attempts;
     return { ...value, attempts };
   }
+
+  /** Opens one no-prompt ACP session and reads that model's live options. */
+  async probe(model: ModelRef): Promise<ModelProbe> {
+    return await probeAcpxModel(this.runtime, this.runtime.acpx, model);
+  }
+
+  /**
+   * Session-end compaction over acpx's `/compact` adapter command. ACP has no
+   * compaction method, so the command must be the whole prompt; the config flag
+   * only marks agents verified to accept it. pi answers "Nothing to compact"
+   * as ACP -32603 for a small session: that session stays as it was, usable.
+   * Every other failure throws, and the kernel's `compactSession` contains it
+   * so the turn that ended still settles with the uncompacted ref.
+   */
+  async compact(ref: SessionRef): Promise<CompactResult> {
+    if (ref.harness !== this.id) {
+      throw new Error(`AcpxHarness cannot compact a ${ref.harness} session`);
+    }
+    const config = this.runtime.acpx;
+    if (config.compact !== true) {
+      throw new Error(
+        `acpx harness "${this.id}" is not configured for compaction`,
+      );
+    }
+    const result = await runAcpxCommand(this.runtime, config, ref, "/compact");
+    const error = result.summary.errors.at(-1);
+    if (error) {
+      const details = [error.message, error.data?.details]
+        .filter((part) => part !== undefined && part !== null && part !== "")
+        .join(" ");
+      if (/nothing to compact/i.test(details)) return { session: ref };
+      throw new Error(`acpx compact failed: ${details || "unknown ACP error"}`);
+    }
+    if (result.aborted) throw new Error("acpx compact was aborted");
+    if (result.timedOut) throw new Error("acpx compact timed out");
+    if (result.code !== 0) {
+      const stderr = result.stderr.trim().slice(-500);
+      throw new Error(
+        `acpx compact exited ${result.code ?? "without a code"}` +
+          (stderr ? `: ${stderr}` : ""),
+      );
+    }
+    requireCompacted(result.summary);
+    const compacted: SessionRef = {
+      ...ref,
+      lastRequestStartedAt: new Date().toISOString(),
+      compacted: true,
+    };
+    // The usage command's totals are cumulative, so the compaction's own tokens
+    // sit between the baseline recorded on the ref and the next turn. Refresh
+    // it here (no model turn) and report the delta as the compaction's spend.
+    const cumulative = await readAcpxSessionUsage(this.runtime, config, ref);
+    if (!cumulative) return { session: compacted };
+    const session = { ...compacted, cumulativeUsage: cumulative };
+    if (!ref.cumulativeUsage) return { session };
+    return {
+      session,
+      usage: turnUsageFromTotals(cumulative, ref.cumulativeUsage),
+    };
+  }
+}
+
+/** A completed slash command, not a cancelled or refused prompt, is a compaction. */
+function requireCompacted(summary: AcpxTurnSummary): void {
+  if (summary.stopReason === "end_turn") return;
+  throw new Error(
+    `acpx compact stopped at "${summary.stopReason ?? "no stop reason"}"`,
+  );
 }
 
 function runtimeOf(opts: AcpxHarnessOptions) {

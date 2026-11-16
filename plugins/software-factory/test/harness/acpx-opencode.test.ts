@@ -16,7 +16,6 @@ const OPENCODE_ACPX: AcpxConfig = {
   raw: true,
   effort: {
     configId: "effort",
-    levels: ["low", "medium", "high", "xhigh", "max"],
   },
   usage: { cache: true },
 };
@@ -89,7 +88,7 @@ describe("AcpxHarness opencode raw route", () => {
         compact: "none",
         subagents: "none",
         structuredOutput: "none",
-        effort: ["low", "medium", "high", "xhigh", "max"],
+        effort: [],
         usage: { cache: true, cost: true },
       });
 

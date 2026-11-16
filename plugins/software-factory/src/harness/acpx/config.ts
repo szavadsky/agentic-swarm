@@ -1,10 +1,9 @@
 import { z } from "zod";
 
-/** Effort as an acpx session config option plus optional model-id suffix split. */
+/** Effort as a live acpx session config option plus optional model-id suffix split. */
 export const acpxEffortSchema = z
   .object({
     configId: z.string().min(1),
-    levels: z.array(z.string().min(1)).min(1),
     /** Base model ids whose `-<level>` suffix splits to effort. */
     modelBases: z.record(z.string(), z.array(z.string().min(1))).optional(),
   })
@@ -25,6 +24,19 @@ export const acpxUsageSchema = z
   .object({
     cache: z.boolean().optional(),
     fields: acpxUsageFieldsSchema.optional(),
+    /**
+     * Adapter slash command whose reply carries the session's cumulative token
+     * totals. pi is the only probed agent whose prompt result has no usage, so
+     * only it needs `/session` (acpx probe §4).
+     */
+    command: z
+      .string()
+      .min(2)
+      .regex(
+        /^\//,
+        "usage command must be an adapter slash command (leading /)",
+      )
+      .optional(),
   })
   .strict();
 
@@ -37,6 +49,12 @@ export const acpxConfigSchema = z
   .object({
     agent: z.string().min(1),
     raw: z.boolean().optional(),
+    /**
+     * The agent accepts `/compact` as an adapter slash command. Declared per
+     * harness because ACP has no compaction method and only pi, codex and
+     * opencode are verified to handle it (acpx probe §5).
+     */
+    compact: z.boolean().optional(),
     /** Extra global args, before the agent selection. */
     args: z.array(z.string()).optional(),
     /** Extra env for the acpx child processes. */

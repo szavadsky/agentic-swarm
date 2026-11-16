@@ -114,7 +114,7 @@ describe.skipIf(!LIVE)("bootstrap run configs against the real CLIs", () => {
           store,
           harnesses,
           binaries,
-          catalog: createRealModelCatalog(binaries, configs.run.harnesses),
+          catalog: createRealModelCatalog(binaries),
         });
 
         expect(result.aliases.architect).toBe("high");

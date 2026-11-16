@@ -20,7 +20,6 @@ const PI_ACPX: AcpxConfig = {
   agent: "pi",
   effort: {
     configId: "thought_level",
-    levels: ["off", "minimal", "low", "medium", "high", "xhigh"],
   },
   usage: { cache: false },
 };
@@ -28,7 +27,6 @@ const CODEX_ACPX: AcpxConfig = {
   agent: "codex",
   effort: {
     configId: "reasoning_effort",
-    levels: ["low", "medium", "high", "xhigh", "max"],
   },
   usage: { cache: true },
 };
@@ -38,7 +36,6 @@ const agyAcpx = (agent: string): AcpxConfig => ({
   args: ["--approve-all"],
   effort: {
     configId: "thought_level",
-    levels: ["low", "medium", "high"],
     modelBases: { "gemini-3.8-flash": ["low", "medium", "high"] },
   },
   usage: { cache: true },
@@ -590,7 +587,7 @@ describe("AcpxHarness", () => {
     }
   });
 
-  it("advertises agy's session effort levels and cache usage", async () => {
+  it("advertises agy's static caps without inventing live effort levels", async () => {
     const harness = new AcpxHarness({
       id: "agy",
       binary: "/nonexistent/agy",
@@ -601,7 +598,7 @@ describe("AcpxHarness", () => {
       compact: "none",
       subagents: "none",
       structuredOutput: "none",
-      effort: ["low", "medium", "high"],
+      effort: [],
       usage: { cache: true, cost: true },
     });
   });
@@ -620,7 +617,7 @@ describe("AcpxHarness", () => {
           effort: "high",
           opaque: {
             ...CODEX_ACPX,
-            effort: { configId: "reasoning_effort", levels: ["high"] },
+            effort: { configId: "reasoning_effort" },
           } satisfies AcpxConfig,
         }),
       );
@@ -649,7 +646,7 @@ describe("AcpxHarness", () => {
       binary: stub.binary,
       acpx: {
         agent: "nova",
-        effort: { configId: "nova_level", levels: ["low", "high"] },
+        effort: { configId: "nova_level" },
         usage: { cache: false },
       },
     });
@@ -676,7 +673,7 @@ describe("AcpxHarness", () => {
         "high",
       ]);
       expect(await harness.caps({ id: "nova-model" })).toMatchObject({
-        effort: ["low", "high"],
+        effort: [],
         usage: { cache: false, cost: true },
       });
     } finally {

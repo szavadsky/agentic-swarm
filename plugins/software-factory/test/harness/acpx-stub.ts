@@ -7,17 +7,55 @@ export interface AcpxStub {
   cleanup(): void;
   /** argv of every acpx invocation, in order. */
   invocations(): string[][];
+  /** Named sessions still open in the stub's state directory. */
+  sessionNames(): string[];
   /** Forgets a named record, like acpx's TTL or `sessions close`. */
   closeSession(name: string): void;
+}
+
+export interface AcpxStubModel {
+  id: string;
+  effort: string[];
 }
 
 export interface AcpxStubOptions {
   /** Prompt result usage frame; absent means the result carries none. */
   usage?: Record<string, number>;
+  /**
+   * Tokens one prompt adds to the stub session. When set, `/session` answers
+   * pi's cumulative report; absent leaves the command unimplemented.
+   */
+  sessionUsage?: {
+    input: number;
+    output: number;
+    cacheRead?: number;
+    cacheWrite?: number;
+  };
+  /** How `/session` answers: the cumulative report, or an ACP error. */
+  sessionCommand?: "ok" | "fail";
+  /** Tokens a successful `/compact` adds before the next usage read. */
+  compactUsage?: {
+    input: number;
+    output: number;
+    cacheRead?: number;
+    cacheWrite?: number;
+  };
   /** Banner text emitted as an earlier agent message before the reply. */
   banner?: string;
   /** ACP `usage_update` cost payload; absent means the update carries none. */
   cost?: { amount: number; currency: string };
+  /**
+   * What `/compact` answers: success text, pi's small-session -32603, or a
+   * different adapter failure. The command itself carries no marker, so this
+   * is the stub's switch.
+   */
+  compact?: "ok" | "nothing" | "fail";
+  /** Models the stub agent advertises; absent keeps the old no-model behavior. */
+  models?: AcpxStubModel[];
+  /** Model used when the invocation carries no `--model`. */
+  defaultModel?: string;
+  /** Live effort option id; defaults to `effort`. */
+  effortConfigId?: string;
 }
 
 /**
@@ -33,8 +71,15 @@ export function createAcpxStub(opts: AcpxStubOptions = {}): AcpxStub {
   const stateDir = path.join(dir, "state");
   const binary = path.join(dir, "acpx-stub.js");
   const usageJs = JSON.stringify(opts.usage ?? null);
+  const sessionUsageJs = JSON.stringify(opts.sessionUsage ?? null);
+  const sessionCommandJs = JSON.stringify(opts.sessionCommand ?? "ok");
+  const compactUsageJs = JSON.stringify(opts.compactUsage ?? null);
   const bannerJs = JSON.stringify(opts.banner ?? null);
   const costJs = JSON.stringify(opts.cost ?? null);
+  const compactJs = JSON.stringify(opts.compact ?? "ok");
+  const modelsJs = JSON.stringify(opts.models ?? null);
+  const defaultModelJs = JSON.stringify(opts.defaultModel ?? null);
+  const effortConfigIdJs = JSON.stringify(opts.effortConfigId ?? "effort");
 
   const script = `#!/usr/bin/env bun
 import fs from "node:fs";
@@ -46,7 +91,8 @@ const stateDir = ${JSON.stringify(stateDir)};
 fs.mkdirSync(stateDir, { recursive: true });
 fs.appendFileSync(logPath, JSON.stringify(args) + "\\n");
 
-const emit = (frame) => process.stdout.write(JSON.stringify(frame) + "\\n");
+// Synchronous: process.exit() right after an async pipe write can drop the frame.
+const emit = (frame) => fs.writeSync(1, JSON.stringify(frame) + "\\n");
 const flag = (names) => {
   for (const name of names) {
     const index = args.indexOf(name);
@@ -63,9 +109,29 @@ const marker = (name) => {
 const mode = marker("mode");
 const reply = marker("text") ?? "PONG";
 const usage = ${usageJs};
+const sessionUsage = ${sessionUsageJs};
+const sessionCommand = ${sessionCommandJs};
+const compactUsage = ${compactUsageJs};
 const banner = ${bannerJs};
 const cost = ${costJs};
+const compactMode = ${compactJs};
+const models = ${modelsJs};
+const defaultModel = ${defaultModelJs};
+const effortConfigId = ${effortConfigIdJs};
 const sessionFile = (name) => path.join(stateDir, "session-" + name);
+const sessionUsageFile = (name) => path.join(stateDir, "usage-" + name);
+const addSessionUsage = (name, amount) => {
+  if (!amount) return;
+  let totals = { in: 0, out: 0, cacheRead: 0, cacheWrite: 0 };
+  try {
+    totals = JSON.parse(fs.readFileSync(sessionUsageFile(name), "utf8"));
+  } catch {}
+  totals.in += amount.input;
+  totals.out += amount.output;
+  totals.cacheRead += amount.cacheRead ?? 0;
+  totals.cacheWrite += amount.cacheWrite ?? 0;
+  fs.writeFileSync(sessionUsageFile(name), JSON.stringify(totals));
+};
 const noSession = () =>
   emit({
     jsonrpc: "2.0",
@@ -79,8 +145,69 @@ const noSession = () =>
 
 if (args.includes("sessions") && args.includes("new")) {
   const name = flag(["--name"]) ?? "default";
-  fs.writeFileSync(sessionFile(name), "1");
+  const requested = flag(["--model"]) ?? defaultModel ?? models?.[0]?.id;
+  if (requested && models && !models.some((model) => model.id === requested)) {
+    emit({
+      jsonrpc: "2.0",
+      id: null,
+      error: {
+        code: -32603,
+        message:
+          'Cannot apply --model "' + requested +
+          '": the ACP agent did not advertise that model. Available models: ' +
+          models.map((model) => model.id).join(", ") + ".",
+        data: { acpxCode: "RUNTIME" },
+      },
+    });
+    process.exit(1);
+  }
+  const chosen = models?.find((model) => model.id === requested);
+  const configOptions = [];
+  if (models) {
+    configOptions.push({
+      id: "model",
+      name: "Model",
+      category: "model",
+      type: "select",
+      currentValue: requested,
+      options: models.map((model) => ({ value: model.id, name: model.id })),
+    });
+  }
+  if (chosen) {
+    configOptions.push({
+      id: effortConfigId,
+      name: "Effort",
+      category: "thought_level",
+      type: "select",
+      currentValue: chosen.effort[0] ?? "",
+      options: chosen.effort.map((value) => ({ value, name: value })),
+    });
+  }
+  fs.writeFileSync(sessionFile(name), JSON.stringify({
+    schema: "acpx.session.v1",
+    acpxRecordId: "rec-" + name,
+    acpSessionId: "sess-" + name,
+    cwd: process.cwd(),
+    name,
+    closed: false,
+    acpx: { config_options: configOptions },
+  }));
   emit({ action: "session_ensured", created: true, acpxRecordId: "rec-" + name, acpxSessionId: "sess-" + name, name });
+  process.exit(0);
+}
+if (args.includes("sessions") && args.includes("show")) {
+  const name = args[args.length - 1];
+  if (!name || !fs.existsSync(sessionFile(name))) {
+    noSession();
+    process.exit(4);
+  }
+  fs.writeSync(1, fs.readFileSync(sessionFile(name), "utf8") + "\\n");
+  process.exit(0);
+}
+if (args.includes("sessions") && args.includes("close")) {
+  const name = args[args.length - 1];
+  fs.rmSync(sessionFile(name), { force: true });
+  emit({ action: "session_closed", acpxRecordId: "rec-" + name });
   process.exit(0);
 }
 if (args.includes("set")) {
@@ -113,7 +240,7 @@ if (mode === "quota") {
   process.exit(1);
 }
 if (mode === "bare") {
-  process.stderr.write("boom api_key=supersecretvalue\\n");
+  fs.writeSync(2, "boom api_key=supersecretvalue\\n");
   process.exit(3);
 }
 if (mode === "hang") {
@@ -121,16 +248,64 @@ if (mode === "hang") {
 }
 
 const sessionId = "sess-" + session;
-emit({ jsonrpc: "2.0", id: 1, method: "session/load", params: { sessionId, cwd: process.cwd() } });
-emit({ jsonrpc: "2.0", id: 1, result: { sessionId } });
-emit({ jsonrpc: "2.0", id: 7, method: "session/prompt", params: { sessionId, prompt: [{ type: "text", text: prompt }] } });
-
+const startPrompt = () => {
+  emit({ jsonrpc: "2.0", id: 1, method: "session/load", params: { sessionId, cwd: process.cwd() } });
+  emit({ jsonrpc: "2.0", id: 1, result: { sessionId } });
+  emit({ jsonrpc: "2.0", id: 7, method: "session/prompt", params: { sessionId, prompt: [{ type: "text", text: prompt }] } });
+};
 const chunk = (text, messageId) => {
   const update = { sessionUpdate: "agent_message_chunk", content: { type: "text", text } };
   if (messageId) update.messageId = messageId;
   emit({ jsonrpc: "2.0", method: "session/update", params: { sessionId, update } });
 };
 
+// A slash command is the whole prompt: answer it with the adapter's frames.
+if (prompt === "/session") {
+  if (!session || !fs.existsSync(sessionFile(session))) {
+    noSession();
+    process.exit(4);
+  }
+  if (sessionCommand === "fail") {
+    emit({ jsonrpc: "2.0", id: null, error: { code: -32603, message: "Internal error", data: { details: "session command failed" } } });
+    process.exit(1);
+  }
+  if (!sessionUsage) {
+    emit({ jsonrpc: "2.0", id: null, error: { code: -32603, message: "Internal error", data: { details: "no session usage configured" } } });
+    process.exit(1);
+  }
+  const totals = JSON.parse(fs.readFileSync(sessionUsageFile(session), "utf8"));
+  startPrompt();
+  chunk(
+    "Session: " + sessionId + "\\n" +
+      "Session file: " + path.join(stateDir, "pi-" + session + ".jsonl") + "\\n" +
+      "Messages: 1\\n" +
+      "Cost: 0\\n" +
+      "Tokens: in " + totals.in + ", out " + totals.out +
+      ", cache read " + totals.cacheRead + ", cache write " + totals.cacheWrite +
+      ", total " + (totals.in + totals.out + totals.cacheRead + totals.cacheWrite),
+    "msg_session",
+  );
+  emit({ jsonrpc: "2.0", id: 7, result: { stopReason: "end_turn" } });
+  process.exit(0);
+}
+if (prompt === "/compact") {
+  if (compactMode === "nothing") {
+    emit({ jsonrpc: "2.0", id: null, error: { code: -32603, message: "Internal error", data: { details: "pi compact failed: Nothing to compact (session too small)" } } });
+    process.exit(1);
+  }
+  if (compactMode === "fail") {
+    emit({ jsonrpc: "2.0", id: null, error: { code: -32603, message: "Internal error", data: { details: "pi compact failed: summarizer unavailable" } } });
+    process.exit(1);
+  }
+  startPrompt();
+  addSessionUsage(session, compactUsage);
+  chunk("Compaction completed.\\nTokens before: 55832", "msg_compact");
+  emit({ jsonrpc: "2.0", id: 7, result: { stopReason: "end_turn" } });
+  process.exit(0);
+}
+
+startPrompt();
+addSessionUsage(session, sessionUsage);
 if (banner) {
   chunk(banner, undefined);
   emit({ jsonrpc: "2.0", method: "session/update", params: { sessionId, update: { sessionUpdate: "available_commands_update", availableCommands: [] } } });
@@ -156,6 +331,14 @@ if (usage) {
   return {
     binary,
     cleanup: () => fs.rmSync(dir, { recursive: true, force: true }),
+    sessionNames: () => {
+      if (!fs.existsSync(stateDir)) return [];
+      return fs
+        .readdirSync(stateDir)
+        .filter((name) => name.startsWith("session-"))
+        .map((name) => name.slice("session-".length))
+        .sort();
+    },
     closeSession: (name: string) =>
       fs.rmSync(path.join(stateDir, `session-${name}`), { force: true }),
     invocations: () => {

@@ -1,4 +1,4 @@
-import type { Caps, Harness, ModelRef } from "../harness/types.js";
+import type { Caps, Harness, ModelProbe, ModelRef } from "../harness/types.js";
 import type { Finding } from "./findings.js";
 import type { AliasConfig, ConfigBundle, ConfigFiles } from "./types.js";
 
@@ -15,6 +15,7 @@ export interface AliasContext {
   subscriptions: ReadonlySet<string>;
   capsCache: Map<string, Promise<Caps>>;
   modelCache: Map<string, Promise<boolean>>;
+  probeCache: Map<string, Promise<ModelProbe>>;
 }
 
 function add(
@@ -38,6 +39,23 @@ async function modelListed(
     pending = ctx.catalog(harness, model);
     ctx.modelCache.set(key, pending);
     pending.catch(() => ctx.modelCache.delete(key));
+  }
+  return pending;
+}
+
+async function liveProbe(
+  ctx: AliasContext,
+  harness: string,
+  model: ModelRef,
+): Promise<ModelProbe | undefined> {
+  const found = ctx.harnesses.get(harness);
+  if (!found?.probe) return undefined;
+  const key = `${harness}\u0000${model.id}`;
+  let pending = ctx.probeCache.get(key);
+  if (!pending) {
+    pending = found.probe(model);
+    ctx.probeCache.set(key, pending);
+    pending.catch(() => ctx.probeCache.delete(key));
   }
   return pending;
 }
@@ -66,20 +84,24 @@ async function resolveEffort(
   harness: string,
   model: ModelRef,
   effort: string | undefined,
+  liveLevels?: readonly string[],
 ): Promise<string | undefined> {
   if (!effort) return undefined;
-  let caps: Caps;
-  try {
-    caps = await capsOf(ctx, harness, model);
-  } catch (err) {
-    add(
-      ctx,
-      `${key}.effort`,
-      `cannot probe model capabilities: ${(err as Error).message}`,
-    );
-    return undefined;
+  let levels: readonly string[];
+  if (liveLevels !== undefined) {
+    levels = liveLevels;
+  } else {
+    try {
+      levels = (await capsOf(ctx, harness, model)).effort;
+    } catch (err) {
+      add(
+        ctx,
+        `${key}.effort`,
+        `cannot probe model capabilities: ${(err as Error).message}`,
+      );
+      return undefined;
+    }
   }
-  const levels = caps.effort;
   if (effort === "highest") {
     const highest = levels.at(-1);
     if (!highest) {
@@ -100,6 +122,61 @@ async function resolveEffort(
     );
   }
   return effort;
+}
+
+interface CheckedModel {
+  /** Live values from the harness; absent means use `caps()`. */
+  effort?: readonly string[];
+  /** Effort named by the configured model-id suffix. */
+  modelEffort?: string;
+}
+
+/**
+ * Checks one model, preferring the harness's live session probe and falling
+ * back to the binary catalog plus static caps for harnesses such as omp.
+ */
+async function checkedModel(
+  ctx: AliasContext,
+  key: string,
+  harness: string,
+  model: string,
+  label: "model" | "fallback",
+): Promise<CheckedModel | undefined> {
+  let live: ModelProbe | undefined;
+  try {
+    live = await liveProbe(ctx, harness, { id: model });
+  } catch (err) {
+    add(ctx, `${key}.model`, `cannot probe model: ${(err as Error).message}`);
+    return undefined;
+  }
+  if (live) {
+    if (!live.listed) {
+      add(
+        ctx,
+        `${key}.model`,
+        `${label} "${model}" is not listed by harness "${harness}"; available models: ${live.available.join(", ") || "none"}`,
+      );
+      return undefined;
+    }
+    return { effort: live.effort, modelEffort: live.modelEffort };
+  }
+
+  let listed = true;
+  try {
+    listed = await modelListed(ctx, harness, model);
+  } catch (err) {
+    add(ctx, `${key}.model`, `cannot list models: ${(err as Error).message}`);
+    return undefined;
+  }
+  if (!listed) {
+    add(
+      ctx,
+      `${key}.model`,
+      `${label} "${model}" is not listed by harness "${harness}"`,
+    );
+    return undefined;
+  }
+  return {};
 }
 
 export async function checkAlias(
@@ -129,28 +206,22 @@ export async function checkAlias(
   }
   if (ctx.unavailable.has(alias.harness)) return;
 
-  let listed = true;
-  try {
-    listed = await modelListed(ctx, alias.harness, alias.model);
-  } catch (err) {
-    add(ctx, `${key}.model`, `cannot list models: ${(err as Error).message}`);
-    listed = false;
-  }
-  if (!listed) {
-    add(
-      ctx,
-      `${key}.model`,
-      `model "${alias.model}" is not listed by harness "${alias.harness}"`,
-    );
-    return;
-  }
+  const primary = await checkedModel(
+    ctx,
+    key,
+    alias.harness,
+    alias.model,
+    "model",
+  );
+  if (!primary) return;
 
   effortOut[name] = await resolveEffort(
     ctx,
     key,
     alias.harness,
     { id: alias.model },
-    alias.effort,
+    alias.effort ?? primary.modelEffort,
+    primary.effort,
   );
   for (const [index, fallback] of (alias.fallbacks ?? []).entries()) {
     const tierKey = `${key}.fallbacks.${index}`;
@@ -178,36 +249,24 @@ export async function checkAlias(
       );
     }
     if (ctx.unavailable.has(tierHarness)) continue;
-    try {
-      const fallbackListed = await modelListed(
-        ctx,
-        tierHarness,
-        fallback.model,
-      );
-      if (!fallbackListed) {
-        add(
-          ctx,
-          `${tierKey}.model`,
-          `fallback "${fallback.model}" is not listed by harness "${tierHarness}"`,
-        );
-        continue;
-      }
-      // Each tier carries its own effort: explicit, else the alias's, resolved
-      // against the tier's own harness caps and written back in place.
-      fallback.effort = await resolveEffort(
-        ctx,
-        tierKey,
-        tierHarness,
-        { id: fallback.model },
-        fallback.effort ?? alias.effort,
-      );
-    } catch (err) {
-      add(
-        ctx,
-        tierKey,
-        `fallback "${fallback.model}" cannot be probed: ${(err as Error).message}`,
-      );
-    }
+    const tier = await checkedModel(
+      ctx,
+      tierKey,
+      tierHarness,
+      fallback.model,
+      "fallback",
+    );
+    if (!tier) continue;
+    // Each tier carries its own effort: explicit, else the alias's, else a
+    // suffix declared on that model, resolved against the tier's live values.
+    fallback.effort = await resolveEffort(
+      ctx,
+      tierKey,
+      tierHarness,
+      { id: fallback.model },
+      fallback.effort ?? alias.effort ?? tier.modelEffort,
+      tier.effort,
+    );
   }
 }
 
@@ -228,26 +287,20 @@ export async function checkScouts(
     ctx.unavailable.has(architect.harness)
   )
     return;
-  let listed = true;
-  try {
-    listed = await modelListed(ctx, architect.harness, scouts.model);
-  } catch (err) {
-    add(ctx, "scouts.model", `cannot list models: ${(err as Error).message}`);
-    listed = false;
-  }
-  if (!listed) {
-    add(
-      ctx,
-      "scouts.model",
-      `model "${scouts.model}" is not listed by harness "${architect.harness}"`,
-    );
-    return;
-  }
+  const checked = await checkedModel(
+    ctx,
+    "scouts",
+    architect.harness,
+    scouts.model,
+    "model",
+  );
+  if (!checked) return;
   effortOut.scouts = await resolveEffort(
     ctx,
     "scouts",
     architect.harness,
     { id: scouts.model },
-    scouts.effort,
+    scouts.effort ?? checked.modelEffort,
+    checked.effort,
   );
 }

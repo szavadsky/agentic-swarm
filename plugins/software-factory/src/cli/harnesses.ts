@@ -72,21 +72,11 @@ async function ompModels(binary: string): Promise<Set<string>> {
   return models;
 }
 
-/**
- * acpx only advertises models after an ACP session starts, so a pre-flight
- * model check cannot list them. Skip it with the reason recorded rather than
- * inventing a list; the turn itself still passes `--model`.
- */
-const ACPX_MODEL_LIST_SKIP =
-  "acpx exposes its model list only inside an ACP session";
-
 /** Real model lists, cached per process; used only by pre-flight. */
 export function createRealModelCatalog(
   binaries: Record<string, string | undefined> = resolveHarnessBinaries(),
-  harnessConfigs: Record<string, HarnessConfig> = {},
 ): ModelCatalog {
   const cache = new Map<string, Promise<Set<string>>>();
-  const skipped = new Set<string>();
   const models = (harness: string): Promise<Set<string>> => {
     let pending = cache.get(harness);
     if (pending) return pending;
@@ -95,24 +85,12 @@ export function createRealModelCatalog(
       return Promise.reject(
         new Error(`harness "${harness}" binary is not available`),
       );
-    pending =
-      harness === "omp"
-        ? ompModels(binary)
-        : Promise.resolve(new Set<string>());
+    pending = ompModels(binary);
     cache.set(harness, pending);
     pending.catch(() => cache.delete(harness));
     return pending;
   };
   return async (harness, model) => {
-    if (harnessConfigs[harness]?.acpx) {
-      if (!skipped.has(harness)) {
-        skipped.add(harness);
-        console.warn(
-          `[factory] pre-flight: skipping model check for "${harness}": ${ACPX_MODEL_LIST_SKIP}`,
-        );
-      }
-      return true;
-    }
     return (await models(harness)).has(model);
   };
 }
