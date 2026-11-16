@@ -25,7 +25,7 @@ On a steer turn, route each pending steer with one `steerRoutes` entry in the ou
 
 - `task` — the steer amends a pending task or redoes landed work. Amend the pending task file in place, or write a rework task file with a new slug, `base:` naming the kept branch when one is kept, and `source: "steer: <id>"`. Answer now: `answer` is the outbox response.
 - `spike` — the steer is a small task or a finding to report back. Write one standalone task file with `source: "steer: <id>"`; its landed outcome is answered to the owner later. No `answer` now.
-- `architect` — the steer amends intent or needs an architecture decision. Write no task file, hold nothing, carry nothing over: the next boundary presents the steer verbatim. No `answer` now.
+- `architect` — the steer amends intent or needs an architecture decision. Write no task file; list the pending tasks the amendment voids in the hold, or hold nothing when it voids nothing. The next boundary presents the steer verbatim. No `answer` now.
 - `stall` — no pending task keeps its value, or the steer names an unplanned priority. Write no task file; the hold drains the goal and the architect answers next. No `answer` now.
 
 Write one hold file per steer in the holds directory, named `<steer-id>.yaml`, exactly this shape:
@@ -35,9 +35,9 @@ slugs: [alpha, beta]
 goal: false
 ```
 
-- `slugs` — the tasks the steer blocks. A pending task in this list is not dispatched; a task already in flight runs its flow to the end (checks, review, merge) and is never parked by the hold. A task not listed keeps running to exhaustion. Never list a task under an `architect` steer.
+- `slugs` — the tasks the steer blocks. A pending task in this list is not dispatched; a task already in flight runs its flow to the end (checks, review, merge) and is never parked by the hold. A task not listed keeps running to exhaustion.
 - `goal` — `true` only for `stall`: in-flight work runs to the end and nothing new starts. Every other route uses `goal: false`.
-- A steer that blocks nothing still gets a hold file, with `slugs: []` and `goal: false`; it changes no dispatch. An `architect` steer always holds nothing: `slugs: []` and `goal: false`, even when it names tasks.
+- A steer that blocks nothing still gets a hold file, with `slugs: []` and `goal: false`; it changes no dispatch. An `architect` steer that voids nothing holds nothing the same way.
 - New task files carry `source: "steer: <id>"` and are never in the plan; the next reconcile never cancels them. Never edit a frozen file, never reuse a spent slug, never touch the plan or the intent.
 
 ## Stall

@@ -211,6 +211,40 @@ function activeHolds(holds: Hold[], pending: ReadonlySet<string>): ActiveHolds {
 }
 
 /**
+ * Names the steers whose slug holds still gate non-terminal work when dispatch
+ * exhausts. A hold that voids every pending task ends the iteration early at
+ * the boundary with this cause; a partial hold reports the same way.
+ */
+function heldBoundaryCause(
+  hold: ActiveHolds,
+  state: State,
+): string | undefined {
+  const bySteer = new Map<string, string[]>();
+  for (const [slug, steer] of hold.slugs) {
+    const status = state.tasks[slug]?.status;
+    if (
+      status === undefined ||
+      status === "merged" ||
+      status === "finished" ||
+      status === "parked" ||
+      status === "cancelled"
+    )
+      continue;
+    const list = bySteer.get(steer) ?? [];
+    list.push(slug);
+    bySteer.set(steer, list);
+  }
+  if (bySteer.size === 0) return undefined;
+  return [...bySteer.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(
+      ([steer, slugs]) =>
+        `steer: ${steer} holds ${[...slugs].sort().join(", ")}`,
+    )
+    .join("; ");
+}
+
+/**
  * The dispatch loop: `next` proposes, this loop admits. Admission holds the
  * overall, per-subscription and per-model turn limits and never starts two
  * tasks whose declared areas overlap. On an optional iteration limit — turns,
@@ -679,7 +713,10 @@ export async function runDispatch(
         }
       }
       const turns = settledTurns(await runtime.store.listRecords(), iteration);
-      return { reason: "boundary", turns };
+      const heldCause = heldBoundaryCause(hold, state);
+      return heldCause
+        ? { reason: "boundary", cause: heldCause, turns }
+        : { reason: "boundary", turns };
     }
     await Promise.race([...running.values()].map((r) => r.promise));
   }

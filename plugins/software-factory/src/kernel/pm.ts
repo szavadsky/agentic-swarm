@@ -626,11 +626,14 @@ function architectHoldProblem(
   if (hold.status === "bad") {
     return `architect steer "${steerId}" hold is not valid YAML: ${hold.message}`;
   }
-  if (!Array.isArray(hold.slugs) || hold.slugs.length > 0) {
-    return `architect steer "${steerId}" hold lists slugs; an architect steer holds nothing with slugs: []`;
+  if (
+    !Array.isArray(hold.slugs) ||
+    !hold.slugs.every((slug) => typeof slug === "string")
+  ) {
+    return `architect steer "${steerId}" hold slugs must be a list of task slugs; an architect steer that voids nothing holds nothing with slugs: []`;
   }
   if (hold.goal !== false) {
-    return `architect steer "${steerId}" hold has no goal: false; an architect steer holds nothing`;
+    return `architect steer "${steerId}" hold has no goal: false; goal: true stays reserved for stall`;
   }
   return undefined;
 }

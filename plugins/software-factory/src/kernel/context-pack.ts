@@ -45,6 +45,8 @@ export interface ContextPackInput {
   codeMap?: string[];
   /** Steers routed to the architect; PM-handled steers are answered elsewhere, never here. */
   steers: Steer[];
+  /** The PM's hold per steer; the pack shows each steer's held slugs under it. */
+  holds?: { steer: string; slugs: readonly string[]; goal: boolean }[];
   /** The PM's routed answers, one line per steer, for architect context. */
   pmAnswers?: string[];
   setup: string[];
@@ -209,11 +211,20 @@ export function renderContextPack(input: ContextPackInput): string {
   }
 
   lines.push("", "## Pending steers");
-  lines.push(
-    input.steers.length > 0
-      ? input.steers.map((s) => `- ${s.id}: ${s.relPath}`).join("\n")
-      : "- none",
-  );
+  if (input.steers.length === 0) {
+    lines.push("- none");
+  } else {
+    const heldBySteer = new Map(
+      (input.holds ?? []).map((hold) => [hold.steer, hold]),
+    );
+    for (const steer of input.steers) {
+      lines.push(`- ${steer.id}: ${steer.relPath}`);
+      const hold = heldBySteer.get(steer.id);
+      if (hold?.goal) lines.push(`  - holds: goal`);
+      else if (hold && hold.slugs.length > 0)
+        lines.push(`  - holds: ${[...hold.slugs].sort().join(", ")}`);
+    }
+  }
 
   lines.push("", "## PM steer answers");
   lines.push(

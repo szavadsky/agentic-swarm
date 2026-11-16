@@ -26,6 +26,7 @@ import {
   formatPmAnswers,
   formatSteers,
   markProcessed,
+  readHolds,
   scanInbox,
   steerProvenance,
   steerResponses,
@@ -263,6 +264,12 @@ export async function runBoundary(
   if (!opts.frontPack) {
     const head = await integrationHead(runtime);
     const previous = previousSummary(runtime.store.goalDir, iteration - 1);
+    const holds = await readHolds(runtime.store).catch((err) => {
+      console.warn(
+        `[factory] pending-steer holds unreadable: ${(err as Error).message}`,
+      );
+      return [];
+    });
     const pack = renderContextPack({
       goal: path.basename(runtime.paths.goalDir),
       iteration,
@@ -279,6 +286,7 @@ export async function runBoundary(
       state,
       codeMap: await codeMap(runtime.paths.goalCheckout),
       steers: forArchitect,
+      holds,
       pmAnswers,
       setup: runtime.configs.repo.setup,
       gates: runtime.configs.repo.gates,
