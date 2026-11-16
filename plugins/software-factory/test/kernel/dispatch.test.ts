@@ -329,7 +329,7 @@ describe("dispatch admission", () => {
     const originalWarn = console.warn;
     console.warn = () => {};
     try {
-      const controller = createDrainController();
+      const controller = createDrainController(() => Promise.resolve());
       const harness = new FakeHarness({ id: "fake" });
       const starts: string[] = [];
       for (let i = 0; i < 4; i += 1) {
@@ -389,7 +389,7 @@ describe("dispatch admission", () => {
     const originalWarn = console.warn;
     console.warn = () => {};
     try {
-      const controller = createDrainController();
+      const controller = createDrainController(() => Promise.resolve());
       const harness = new FakeHarness({ id: "fake" });
       const starts: string[] = [];
       harness.script((req) => {

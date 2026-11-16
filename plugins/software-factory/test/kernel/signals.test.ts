@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import yaml from "yaml";
@@ -75,7 +76,10 @@ function captureWarn(): { lines: string[]; restore(): void } {
 describe("signal policy", () => {
   it("drains on the first signal and aborts on the second, without OS signals", () => {
     const warning = captureWarn();
-    const controller = createDrainController();
+    let recordedGrace: number | undefined;
+    const controller = createDrainController(async (graceMs) => {
+      recordedGrace = graceMs;
+    });
     try {
       const before = process.listenerCount("SIGINT");
       const uninstall = controller.install();
@@ -91,6 +95,7 @@ describe("signal policy", () => {
       controller.handleSignal("SIGTERM");
       expect(controller.aborted).toBe(true);
       expect(controller.interruptedBy).toBe("SIGINT");
+      expect(recordedGrace).toBe(500);
 
       uninstall();
       expect(process.listenerCount("SIGINT")).toBe(before);
@@ -147,7 +152,7 @@ describe("signal policy", () => {
 
   it("records the partial usage a cancelled turn returns", async () => {
     const s = setupRepo();
-    const controller = createDrainController();
+    const controller = createDrainController(() => Promise.resolve());
     const warning = captureWarn();
     try {
       const harness = new FakeHarness({ id: "fake" });
@@ -190,4 +195,60 @@ describe("signal policy", () => {
       s.repo.cleanup();
     }
   }, 60_000);
+
+  it("a real second SIGINT in a launch still kills every registered group", async () => {
+    const shutdownPath = path.resolve(__dirname, "../../src/core/shutdown.ts");
+    const signalsPath = path.resolve(__dirname, "../../src/kernel/signals.ts");
+
+    const childCode = `
+import { spawn } from "node:child_process";
+import { registerChildGroup } from ${JSON.stringify(shutdownPath)};
+import { createDrainController } from ${JSON.stringify(signalsPath)};
+
+const target1 = spawn("sleep", ["30"], { detached: true });
+const target2 = spawn("sleep", ["30"], { detached: true });
+if (!target1.pid || !target2.pid) process.exit(1);
+registerChildGroup(target1.pid);
+registerChildGroup(target2.pid);
+
+// Default createDrainController uses terminateAllChildGroups
+const controller = createDrainController();
+controller.handleSignal("SIGINT");
+controller.handleSignal("SIGINT");
+
+// Wait for grace period and SIGKILL to land
+await new Promise((r) => setTimeout(r, 800));
+
+let alive1 = true;
+try {
+  process.kill(target1.pid, 0);
+} catch {
+  alive1 = false;
+}
+
+let alive2 = true;
+try {
+  process.kill(target2.pid, 0);
+} catch {
+  alive2 = false;
+}
+
+if (alive1 || alive2) {
+  try { if (target1.pid) process.kill(target1.pid, "SIGKILL"); } catch {}
+  try { if (target2.pid) process.kill(target2.pid, "SIGKILL"); } catch {}
+  process.exit(2);
+}
+process.exit(0);
+`;
+
+    const res = await new Promise<{ exitCode: number }>((resolve, reject) => {
+      const cp = spawn("bun", ["-e", childCode], {
+        stdio: "inherit",
+      });
+      cp.on("error", reject);
+      cp.on("exit", (code) => resolve({ exitCode: code ?? 1 }));
+    });
+
+    expect(res.exitCode).toBe(0);
+  });
 });

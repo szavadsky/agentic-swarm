@@ -1,6 +1,7 @@
 import { terminateAllChildGroups } from "../core/shutdown.js";
 
 export type DrainSignal = "SIGINT" | "SIGTERM";
+export type Terminator = (graceMs?: number) => Promise<void>;
 
 export interface DrainController {
   /** First signal: stop dispatching, let in-flight turns finish. */
@@ -18,7 +19,9 @@ export interface DrainController {
  * SIGINT/SIGTERM policy: first drains, second aborts and lets the in-flight
  * harness turn return its partial usage into the end record, third force-exits.
  */
-export function createDrainController(): DrainController {
+export function createDrainController(
+  terminate: Terminator = terminateAllChildGroups,
+): DrainController {
   let draining = false;
   let aborted = false;
   let interruptedBy: DrainSignal | undefined;
@@ -41,7 +44,7 @@ export function createDrainController(): DrainController {
       console.warn(
         "[factory] second signal: aborting in-flight turns; partial usage will be recorded",
       );
-      void terminateAllChildGroups(500);
+      void terminate(500);
       return;
     }
     console.warn("[factory] third signal: forcing exit");
