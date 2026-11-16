@@ -12,7 +12,10 @@ import {
   tierNamesVar,
 } from "../../src/kernel/prompt-schema.js";
 import { loadPromptLibrary } from "../../src/kernel/prompts.js";
-import { formatReviewFindings } from "../../src/kernel/record.js";
+import {
+  formatFixDispositions,
+  formatReviewFindings,
+} from "../../src/kernel/record.js";
 import type { ProcessConfig } from "../../src/kernel/types.js";
 import { rec, task } from "./helpers.js";
 import {
@@ -309,6 +312,7 @@ describe("review findings carry", () => {
       }),
     );
     expect(text).toContain(summary);
+    expect(text.split("\n")[0]).toBe("1. src/x.ts:41 needs a null check");
     const summaryAt = text.indexOf("1. src/x.ts:41");
     const concernAt = text.indexOf("retry helper duplicates backoff");
     const forwardAt = text.indexOf("split the helper next iteration");
@@ -523,6 +527,10 @@ describe("fix dispositions carry", () => {
       const flow = runtime.configs.process.flows["implement-review"]!;
       const dispositions =
         "F1 fixed in src/x.ts:41; F2 out of scope per done-when";
+      const replies = [
+        { finding: 1, reply: "null check added at src/x.ts:41" },
+        { finding: 2, reply: "the assertion moves to test/y.ts:9" },
+      ];
       const records = [
         rec(1, { slug: "alpha", step: "implement", round: 1 }),
         rec(2, {
@@ -538,7 +546,7 @@ describe("fix dispositions carry", () => {
           slug: "alpha",
           step: "implement",
           round: 2,
-          outcome: outcome({ summary: dispositions }),
+          outcome: outcome({ summary: dispositions, replies }),
         }),
       ];
       const vars = promptVars(
@@ -549,11 +557,32 @@ describe("fix dispositions carry", () => {
         2,
         flow,
       );
-      expect(vars.fix_dispositions).toBe(dispositions);
+      expect(vars.fix_dispositions).toContain(dispositions);
+      for (const reply of replies) {
+        expect(vars.fix_dispositions).toContain(
+          `finding ${reply.finding}: ${reply.reply}`,
+        );
+      }
     } finally {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+
+  it("renders each reply by its finding number after the fix summary", () => {
+    const summary = "replied without a change";
+    const text = formatFixDispositions(
+      outcome({
+        summary,
+        replies: [
+          { finding: 1, reply: "already guarded" },
+          { finding: 2, reply: "already asserted" },
+        ],
+      }),
+    );
+    expect(text).toBe(
+      "replied without a change\n- finding 1: already guarded\n- finding 2: already asserted",
+    );
+  });
 
   it("leaves fix_dispositions empty without a current-round fix", async () => {
     const { repo, goal } = setupFlowRepo();
@@ -600,7 +629,18 @@ describe("fix dispositions carry", () => {
       fix_dispositions: "F1 fixed",
     });
     expect(rendered).toContain("F1 fixed");
-    expect(rendered).toContain("Verify each claim against the diff");
+    expect(rendered).toContain(
+      "Re-judge each finding against the diff or its reply",
+    );
+    expect(rendered).toContain("a reply is judged on its argument");
+  });
+
+  it("tells the implementer a reply-only round is done", () => {
+    const rendered = library().render("implementer", ROLES.implementer!);
+    expect(rendered).toContain(
+      "each is answered by a change, a reply in `replies`, or both",
+    );
+    expect(rendered).toContain("a reply-only round is `done`");
   });
 });
 

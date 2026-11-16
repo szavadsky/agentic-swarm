@@ -659,6 +659,8 @@ describe("pricing in a launch", () => {
           "  implementer: { harness: fake, model: paid/one }",
           "  reviewer: { harness: fake, model: paid/one }",
           "  steward: { harness: fake, model: fake-steward }",
+          "  plan-checker: { harness: fake, model: fake-check }",
+          "  plan-reviewer: { harness: fake, model: fake-plan-review }",
           "limits: { iterations: 1, concurrency: { overall: 1 } }",
           `worktreeRoot: ../${base}-wt`,
           `sessions: { dir: ../${base}-sessions, keepRuns: 2 }`,

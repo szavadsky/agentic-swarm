@@ -82,19 +82,19 @@ Renderer defaults live outside any `This turn` block and the renderer supplies t
 
 ## implementer.md
 
-| variable          | meaning                                                                                                                                                                       |
-| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `task_path`       | path to this task's file: frontmatter plus brief                                                                                                                              |
-| `front_pack`      | path to the front's context pack for a front-classified trivial or task goal; empty string when no front classified this task                                                 |
-| `worktree`        | path to the task worktree to edit                                                                                                                                             |
-| `resume_note`     | follow-up notice for a turn resumed in the front's session: the task branch plus the absolute-path rules; empty string on a de-novo turn                                      |
-| `setup_command`   | worktree bootstrap command (dependencies etc.); `none` when not needed                                                                                                        |
-| `gate_commands`   | configured compile/lint/test commands as `- id: command` lines; `none` when empty                                                                                             |
-| `baseline_checks` | gate failures recorded before this turn, same format; `none` when the baseline is green                                                                                       |
-| `findings`        | previous review round's summary, concerns and forward for this task (summary first); gate failures when the latest record is red checks; empty string before the first review |
-| `outcome_path`    | path where the outcome file must be written when the harness asks for a file                                                                                                  |
-| `validate_cmd`    | absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default                                                                                              |
-| `outcome_schema`  | outcome YAML skeleton from the kernel schema; renderer default                                                                                                                |
+| variable          | meaning                                                                                                                                                                                                                                       |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `task_path`       | path to this task's file: frontmatter plus brief                                                                                                                                                                                              |
+| `front_pack`      | path to the front's context pack for a front-classified trivial or task goal; empty string when no front classified this task                                                                                                                 |
+| `worktree`        | path to the task worktree to edit                                                                                                                                                                                                             |
+| `resume_note`     | follow-up notice for a turn resumed in the front's session: the task branch plus the absolute-path rules; empty string on a de-novo turn                                                                                                      |
+| `setup_command`   | worktree bootstrap command (dependencies etc.); `none` when not needed                                                                                                                                                                        |
+| `gate_commands`   | configured compile/lint/test commands as `- id: command` lines; `none` when empty                                                                                                                                                             |
+| `baseline_checks` | gate failures recorded before this turn, same format; `none` when the baseline is green                                                                                                                                                       |
+| `findings`        | previous review round's summary, concerns and forward for this task (summary first); gate failures when the latest record is red checks; empty string before the first review. Each numbered finding is answered by a change, a reply or both |
+| `outcome_path`    | path where the outcome file must be written when the harness asks for a file                                                                                                                                                                  |
+| `validate_cmd`    | absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default                                                                                                                                                              |
+| `outcome_schema`  | outcome YAML skeleton from the kernel schema; renderer default                                                                                                                                                                                |
 
 ## reviewer.md
 
@@ -130,9 +130,9 @@ They contain no turn variables.
 | `round`            | 1-based review round                                                                                                                                   |
 | `max_rounds`       | configured review round limit for this flow                                                                                                            |
 | `baseline_checks`  | gate failures recorded on the base before any task; pre-existing, not findings against this diff                                                       |
-| `prior_findings`   | previous round's summary, concerns and forward (summary first); empty string in round 1                                                                |
+| `prior_findings`   | previous round's numbered summary, concerns and forward (summary first); empty string in round 1                                                       |
 | `upscope_ask`      | escalation ask for a standalone task review, answered as `upscope: yes\|no` with the verdict; empty string when this task is part of an architect plan |
-| `fix_dispositions` | the current fix round's per-finding disposition claims from its outcome; empty string in round 1; renderer default                                     |
+| `fix_dispositions` | the current fix round's summary plus one numbered reply per prior finding; empty string in round 1; renderer default                                   |
 
 ## review-architect.md
 

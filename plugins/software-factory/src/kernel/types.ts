@@ -23,6 +23,11 @@ export const concernSchema = z.object({
   evidence: z.string().optional(),
 });
 
+/** One fix turn's answer to a prior review finding, by its numbered position. */
+export const replySchema = z.object({
+  finding: z.number().int().positive(),
+  reply: z.string().min(1),
+});
 /** Where the PM's steer turn sends one steer: handled now, a new task, the architect, or drain-then-architect. */
 export const steerRouteSchema = z.enum(["task", "spike", "architect", "stall"]);
 export type SteerRoute = z.infer<typeof steerRouteSchema>;
@@ -97,6 +102,14 @@ export const outcomeSchema = z.object({
   summary: z.string().describe("one paragraph"),
   concerns: z.array(concernSchema).default([]),
   forward: z.array(z.string()).default([]),
+  // A fix turn answers its prior review with one entry per numbered finding;
+  // the summary stays free text. Derive parks an empty fix with no replies.
+  replies: z
+    .array(replySchema)
+    .optional()
+    .describe(
+      "fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position",
+    ),
   verdict: z
     .enum(["approve", "changes", "reject"])
     .optional()

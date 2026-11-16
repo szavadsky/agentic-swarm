@@ -12,7 +12,7 @@ import {
 import { preexistingRed, recordedBaseGates } from "./baseline.js";
 import { contextPackRelPath } from "./context-pack.js";
 import { formatFailingChecks, newGateFailures } from "./gates.js";
-import { formatReviewFindings } from "./record.js";
+import { formatFixDispositions, formatReviewFindings } from "./record.js";
 import { sessionCacheHot } from "./sessions.js";
 import type {
   FlowDefinition,
@@ -140,8 +140,9 @@ function lastProductiveTurn(
 }
 
 /**
- * The current fix round's per-finding dispositions for the deferred review.
- * Round 1 has no fix to judge, and a stale turn must never speak for this one.
+ * The current fix round's per-finding dispositions for the deferred review:
+ * every reply by its finding number, plus the fix summary. Round 1 has no fix
+ * to judge, and a stale turn must never speak for this one.
  */
 function fixDispositions(
   records: StepRecord[],
@@ -152,7 +153,7 @@ function fixDispositions(
   if (round < 2) return "";
   const fix = lastProductiveTurn(records, slug, flow);
   if (!fix || fix.round !== round || !fix.outcome) return "";
-  return fix.outcome.summary.trim();
+  return formatFixDispositions(fix.outcome);
 }
 
 function lastChecks(

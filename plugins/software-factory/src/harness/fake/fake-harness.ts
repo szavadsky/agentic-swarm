@@ -45,6 +45,13 @@ export interface FakeScriptOptions {
 +   * request, so tests that never bind keep positional FIFO order.
 +   */
   when?: (req: TurnRequest) => boolean;
+  /**
+   * A reusable handler that serves every matching request before an unbound
+   * scripted turn, but after an explicit bound handler. Mandatory background
+   * turns can then use a neutral default without consuming another step's
+   * positional script.
+   */
+  fallback?: boolean;
 }
 
 /** A scripted turn's identity, recovered from the request's record path. */
@@ -140,6 +147,7 @@ export class FakeHarness implements Harness {
   private readonly handlers: {
     handler: FakeTurnHandler;
     when?: (req: TurnRequest) => boolean;
+    fallback: boolean;
   }[] = [];
   private readonly sessions = new Map<string, SessionRef>();
   private sessionCounter = 0;
@@ -159,7 +167,11 @@ export class FakeHarness implements Harness {
 +   * handler serves the next unmatched request in queue order.
 +   */
   script(handler: FakeTurnHandler, opts: FakeScriptOptions = {}): this {
-    this.handlers.push({ handler, when: opts.when });
+    this.handlers.push({
+      handler,
+      when: opts.when,
+      fallback: opts.fallback ?? false,
+    });
     return this;
   }
 
@@ -179,16 +191,31 @@ export class FakeHarness implements Harness {
     this.calls.push(req);
     const n = this.calls.length;
     // The match runs synchronously at call time, so concurrent turns cannot
-    // interleave between the scan and the splice.
-    const index = this.handlers.findIndex(
-      (entry) => !entry.when || entry.when(req),
+    // interleave between the scan and the splice. A fallback bound to this
+    // request beats an unbound positional script, while an explicit binding
+    // still beats the fallback.
+    const matches = (entry: { when?: (req: TurnRequest) => boolean }) =>
+      !entry.when || entry.when(req);
+    let index = this.handlers.findIndex(
+      (entry) => entry.fallback && matches(entry),
     );
+    if (index >= 0) {
+      const explicit = this.handlers.findIndex(
+        (entry) =>
+          !entry.fallback && entry.when !== undefined && matches(entry),
+      );
+      if (explicit >= 0) index = explicit;
+    } else {
+      index = this.handlers.findIndex(matches);
+    }
     if (index < 0) {
       throw new Error(
         `FakeHarness: no scripted turn for request ${n}${describeRequest(req)}`,
       );
     }
-    const entry = this.handlers.splice(index, 1)[0]!;
+    const entry = this.handlers[index];
+    if (!entry) throw new Error("FakeHarness: handler index out of range");
+    if (!entry.fallback) this.handlers.splice(index, 1);
 
     const outcome = await entry.handler(req, {
       n,

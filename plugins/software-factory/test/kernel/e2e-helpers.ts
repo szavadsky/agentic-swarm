@@ -5,7 +5,7 @@ import { dispatch } from "../../src/cli/dispatch.js";
 import type { PriceSource } from "../../src/kernel/openrouter.js";
 import { testPriceSource } from "../helpers/price-source.js";
 import {
-  type FakeHarness,
+  FakeHarness,
   type FakeTurnHandler,
   fakeTurnResult,
 } from "../../src/harness/fake/index.js";
@@ -13,6 +13,7 @@ import { derive } from "../../src/kernel/derive.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import type { State } from "../../src/kernel/types.js";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
+import { scriptPlanRoleFallbacks } from "./fake-defaults.js";
 
 export interface E2EGoal {
   repo: TmpRepo;
@@ -35,6 +36,8 @@ const DEFAULT_RUN_YAML = [
   "  implementer: { harness: fake, model: fake-impl }",
   "  reviewer: { harness: fake, model: fake-review }",
   "  steward: { harness: fake, model: fake-steward }",
+  "  plan-checker: { harness: fake, model: fake-check }",
+  "  plan-reviewer: { harness: fake, model: fake-plan-review }",
   "  digest: { harness: fake, model: fake-digest }",
   "limits: { iterations: 1, concurrency: { overall: 1 } }",
   "",
@@ -84,6 +87,7 @@ export async function launch(
   harness: FakeHarness,
   iterations = 1,
 ): Promise<number> {
+  scriptPlanRoleFallbacks(harness);
   return dispatch(launchArgs(repo, iterations), {
     harnesses: { fake: harness },
     priceSource: testPriceSource(repo.dir),
@@ -124,6 +128,9 @@ export async function expectDispatch(
   argv: string[],
   deps: Parameters<typeof dispatch>[1],
 ): Promise<void> {
+  for (const harness of Object.values(deps?.harnesses ?? {})) {
+    if (harness instanceof FakeHarness) scriptPlanRoleFallbacks(harness);
+  }
   const lines: string[] = [];
   const realLog = console.log;
   const realError = console.error;

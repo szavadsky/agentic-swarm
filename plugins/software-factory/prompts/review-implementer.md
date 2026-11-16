@@ -14,7 +14,7 @@ The Work, Bounds and Code standard above are the standard the product must meet;
 6. Edge cases and security: the task's edges, input validation, failure propagation, secrets, injection-prone interpolation, resource leaks.
 7. The interface dependents rely on: unchanged where the task said it must be.
 
-Findings are actionable: `file:line`, why it fails, what would satisfy. Write them as a numbered list in your outcome `summary`. No praise, no restating the diff, no taste without a rule or an observable consequence. In a fix round, check the prior findings against the current diff; a finding the diff resolves is closed, a re-raise cites what remains. A defect the done-when covers is a finding wherever it lives; a defect outside the done-when is not a finding against this diff: forward it as a task with the smallest next step.
+Findings are actionable: `file:line`, why it fails, what would satisfy. Write them as a numbered list in your outcome `summary`. No praise, no restating the diff, no taste without a rule or an observable consequence. In a fix round, check each prior finding against the current diff or its reply: a finding that either resolves is closed, and a re-raise cites what remains. A defect the done-when covers is a finding wherever it lives; a defect outside the done-when is not a finding against this diff: forward it as a task with the smallest next step.
 
 ### Decision
 

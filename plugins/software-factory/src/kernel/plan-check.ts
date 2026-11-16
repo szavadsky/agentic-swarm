@@ -20,20 +20,6 @@ import type {
 export const PLAN_CHECK_STEP = "plancheck";
 
 /**
- * Whether the checker can run. A run config without the plan-checker alias
- * predates the checker, so dispatch ends at the boundary as before instead
- * of failing on an unresolvable role.
- */
-export function planCheckConfigured(runtime: KernelRuntime): boolean {
-  try {
-    resolveRole(runtime, "plan-checker");
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
  * The checker's brief: every task file with status, then parked slugs with
  * the cause that parked them. The causes let the checker tell a mechanical
  * park (a follow-up) from a review rejection or a deterministic red (the

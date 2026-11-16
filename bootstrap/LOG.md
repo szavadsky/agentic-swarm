@@ -564,3 +564,8 @@ Verbatim, newest last; each with what it changed.
 
 ### 2026-11-16 — rotation for i37: B-shape repeats + claude-code --approve-all (forensics fix)
 - Same map as i36 (claude-primary reinstatement awaits owner call): architect omp/opus (fb claude-opus/sonnet), pm agy, digest opencode/beam, implementer codex:max, reviewer pi:xhigh (+ plan-reviewer pi from m5-plan-review), escalation omp/sonnet, steward pi, scouts ernie. New: claude-code binding gains args [--approve-all] (agy precedent) — answers the i35 attempt1 all-refused cascade ($2.63) at the operator level; kernel journal-blindness steered. Loader + price-coverage green before commit.
+
+### 2026-11-16 — i37 landed: 4 merges, 0 parks; both steers became tasks
+- Exit 3 (iteration-limit), 2h26m wall. factory/self +4: acpx-completed-exit (parsed end_turn frame now wins over later nonzero acpx exit — exactly the forensics recommendation; crash-verdict steer consumed), state-decl-single, review-reply (author change-and/or-reply path in prompts + derive-task + flow-context — the staged intent line consumed), plan-roles-required. ZERO parks, pending 0.
+- Legs: digest opencode/beam $0 DONE; architect omp/opus $2.71 single attempt, 55k out (planning-heavy from the emptied queue, as predicted), fb unneeded; plan-reviewer pi/Go-deepseek $0.045 (NEW role live first time); PM agy/gemini $0.45 priced; implements codex:max ~$0.001; reviews pi:xhigh ~$0.018, all 3 approve r1; steward stub skipped 5th (no conflicts). Cost $3.28 across 12 priced turns. 0 infra retries, 0 fallback hops, 0 conflicts, 0 gate flakes; 1 minor outcome-repair.
+- No steers for i38: no incidents, no new observations. Budget steer still awaiting owner word — NOT steered (3rd iteration).

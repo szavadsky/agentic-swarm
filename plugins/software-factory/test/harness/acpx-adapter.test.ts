@@ -857,3 +857,120 @@ describe("AcpxHarness", () => {
     }
   });
 });
+
+describe("AcpxHarness prompt result precedence", () => {
+  function turnOn(
+    stub: ReturnType<typeof createAcpxStub>,
+    prompt: string,
+    extra: Record<string, unknown> = {},
+  ) {
+    const harness = new AcpxHarness({
+      id: "pi",
+      binary: stub.binary,
+      acpx: PI_ACPX,
+    });
+    return harness.turn(request(path.dirname(stub.binary), prompt, extra));
+  }
+
+  it("returns done and reads the outcome when exit 5 follows a valid result", async () => {
+    const stub = createAcpxStub({
+      usage: {
+        inputTokens: 11,
+        outputTokens: 7,
+        cachedReadTokens: 3,
+        cachedWriteTokens: 2,
+      },
+      promptExitCode: 5,
+    });
+    try {
+      const result = await turnOn(stub, "Say [[text:COMPLETE]]");
+      expect(result.stop).toEqual({ kind: "done" });
+      expect(result.text).toBe("COMPLETE");
+      expect(result.usage).toMatchObject({
+        in: 11,
+        out: 7,
+        cacheRead: 3,
+        cacheWrite5m: 2,
+      });
+      expect(result.session?.id).toMatch(/^pi-/);
+    } finally {
+      stub.cleanup();
+    }
+  });
+
+  it("carries exit details when exit 5 has no prompt result", async () => {
+    const stub = createAcpxStub({
+      promptExitCode: 5,
+      omitPromptResult: true,
+    });
+    try {
+      const result = await turnOn(stub, "Say [[text:INCOMPLETE]]");
+      expect(result.stop).toEqual({
+        kind: "infra",
+        cause: "crash",
+        details: "exit 5, signal none",
+      });
+    } finally {
+      stub.cleanup();
+    }
+  });
+
+  it("keeps an ACP error frame over a parsed result", async () => {
+    const stub = createAcpxStub({
+      promptExitCode: 5,
+      errorAfterResult: {
+        code: -32603,
+        message: "agent transport crashed",
+      },
+    });
+    try {
+      const result = await turnOn(stub, "Say [[text:COMPLETE]]");
+      expect(result.stop.kind).toBe("infra");
+      if (result.stop.kind !== "infra")
+        throw new Error("expected an infra stop");
+      expect(result.stop.cause).toBe("crash");
+      expect(result.stop.details).toContain("exit 5");
+      expect(result.stop.details).toContain("agent transport crashed");
+    } finally {
+      stub.cleanup();
+    }
+  });
+
+  it("keeps a wall timeout over a parsed result", async () => {
+    const stub = createAcpxStub({ hangAfterResult: true });
+    try {
+      const result = await turnOn(stub, "Say [[text:COMPLETE]]", {
+        timeouts: { idleMs: 0, wallMs: 250 },
+      });
+      expect(result.stop).toEqual({ kind: "infra", cause: "timeout" });
+    } finally {
+      stub.cleanup();
+    }
+  }, 20_000);
+
+  it("keeps refusal and truncation kinds under exit 5", async () => {
+    const cases = [
+      { stopReason: "refusal", stop: { kind: "refusal" } },
+      {
+        stopReason: "max_tokens",
+        stop: { kind: "truncated", cause: "max-tokens" },
+      },
+      {
+        stopReason: "max_turns",
+        stop: { kind: "truncated", cause: "turn-limit" },
+      },
+    ] as const;
+    for (const testCase of cases) {
+      const stub = createAcpxStub({
+        stopReason: testCase.stopReason,
+        promptExitCode: 5,
+      });
+      try {
+        const result = await turnOn(stub, "Say [[text:CUT]]");
+        expect(result.stop).toEqual(testCase.stop);
+      } finally {
+        stub.cleanup();
+      }
+    }
+  }, 20_000);
+});

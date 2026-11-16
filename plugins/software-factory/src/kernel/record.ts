@@ -178,6 +178,16 @@ export async function appendCancel(
   });
 }
 
+/** A fix turn's dispositions: its summary plus one numbered line per reply. */
+export function formatFixDispositions(outcome: Outcome): string {
+  const lines: string[] = [];
+  const summary = outcome.summary.trim();
+  if (summary) lines.push(summary);
+  for (const entry of outcome.replies ?? [])
+    lines.push(`- finding ${entry.finding}: ${entry.reply.trim()}`);
+  return lines.join("\n");
+}
+
 /** Review findings for prompts: summary first, then concerns and forward lines. */
 export function formatReviewFindings(outcome: Outcome): string {
   const lines: string[] = [];

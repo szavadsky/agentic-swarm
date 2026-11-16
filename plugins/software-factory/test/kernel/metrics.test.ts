@@ -98,6 +98,8 @@ describe("iteration metrics", () => {
           "  implementer: { harness: fake, model: fake-impl }",
           "  reviewer: { harness: fake, model: fake-review }",
           "  steward: { harness: fake, model: fake-steward }",
+          "  plan-checker: { harness: fake, model: fake-check }",
+          "  plan-reviewer: { harness: fake, model: fake-plan-review }",
           "limits: { iterations: 1, concurrency: { overall: 1, perSubscription: {}, perModel: {} } }",
           `worktreeRoot: ../${base}-wt`,
           `sessions: { dir: ../${base}-sessions, keepRuns: 2 }`,
@@ -139,7 +141,6 @@ describe("iteration metrics", () => {
           outcome({ summary: "alpha is correct", verdict: "approve" }),
         );
       });
-
       await expectDispatch(
         3,
         ["run", "--repo", repo.dir, "--goal", "demo", "--iterations", "1"],
@@ -153,7 +154,7 @@ describe("iteration metrics", () => {
       const turns = records.filter(
         (r) => r.iteration === 1 && r.endedAt && r.actor === "agent",
       );
-      expect(turns).toHaveLength(4);
+      expect(turns).toHaveLength(6);
       const part = (u: Usage | undefined): number =>
         (u?.in ?? 0) +
         (u?.cacheRead ?? 0) +
@@ -180,7 +181,8 @@ describe("iteration metrics", () => {
       const one = metrics.iterations[0]!;
       expect(one.n).toBe(1);
       expect(one.tokens).toBe(fromRecords);
-      // 473 turn tokens plus three recorded compactions (architect, implement, review).
+      // 473 scripted turn tokens plus three recorded compactions (architect,
+      // implement, review); the mandatory plan turns report zero usage.
       expect(one.tokens).toBe(25_673);
       expect(one.usage.costUsd).toBeCloseTo(costFromRecords, 10);
       expect(one.usage.costUsd).toBeCloseTo(0.43, 10);
@@ -209,7 +211,7 @@ describe("iteration metrics", () => {
       expect(one.architect.tokenShare).toBeCloseTo(8_510 / 25_673, 10);
 
       expect(metrics.totals.iterations).toBe(1);
-      expect(metrics.totals.turns).toBe(4);
+      expect(metrics.totals.turns).toBe(6);
       expect(metrics.totals.tokens).toBe(25_673);
       expect(metrics.totals.merged).toEqual(["alpha"]);
       expect(metrics.totals.usage.costUsd).toBeCloseTo(0.43, 10);

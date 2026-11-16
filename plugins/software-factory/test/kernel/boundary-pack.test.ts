@@ -27,7 +27,12 @@ import {
   writeTask,
 } from "./e2e-helpers.js";
 
-import { cleanupFlowRepo, makeRuntime, setupFlowRepo } from "./s2-helpers.js";
+import {
+  cleanupFlowRepo,
+  makeRuntime,
+  setupFlowRepo,
+  whenTurn,
+} from "./s2-helpers.js";
 
 const PLAN = `# Milestone 1
 
@@ -234,6 +239,7 @@ const PLAN_REVIEW_ALIASES = {
   implementer: { harness: "fake", model: "fake-impl" },
   reviewer: { harness: "fake", model: "fake-review" },
   steward: { harness: "fake", model: "fake-steward" },
+  "plan-checker": { harness: "fake", model: "fake-check" },
   "plan-reviewer": { harness: "fake", model: "fake-plan-review" },
 };
 
@@ -257,17 +263,20 @@ describe("boundary plan review", () => {
         );
         return fakeTurnResult(req);
       });
-      harness.script((req, ctx) => {
-        reviewPrompt = req.prompt;
-        ctx.writeOutcome(
-          outcome({
-            summary:
-              "1. alpha's done-when names no test; name the command that proves it.",
-            verdict: "reject",
-          }),
-        );
-        return fakeTurnResult(req);
-      });
+      harness.script(
+        (req, ctx) => {
+          reviewPrompt = req.prompt;
+          ctx.writeOutcome(
+            outcome({
+              summary:
+                "1. alpha's done-when names no test; name the command that proves it.",
+              verdict: "reject",
+            }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: PLAN_REVIEW_STEP }) },
+      );
       harness.script((req, ctx) => {
         ctx.writeOutcome(outcome({ summary: "no tasks to file" }));
         return fakeTurnResult(req);
@@ -295,10 +304,6 @@ describe("boundary plan review", () => {
       );
       expect(review?.alias).toBe("plan-reviewer");
       expect(review?.outcome?.summary).toContain("no test");
-      expect(records.some((record) => record.step === "plan-review-skip")).toBe(
-        false,
-      );
-
       // The next consult's pack carries the advisory findings; the architect
       // marks each one in its outcome, and the mark is on the record.
       harness.script((req, ctx) => {
@@ -364,46 +369,4 @@ describe("boundary plan review", () => {
     });
     expect(latestPlanReview([older, newer, failed])).toBeUndefined();
   });
-
-  it("records a skip when the run config has no plan-reviewer alias", async () => {
-    const { repo, goal } = setupFlowRepo();
-    try {
-      const harness = new FakeHarness({ id: "fake" });
-      const runtime = await makeRuntime(repo, goal, { fake: harness });
-      fs.writeFileSync(
-        path.join(runtime.store.goalDir, "plan.md"),
-        "# Plan\n\n- alpha\n",
-        "utf8",
-      );
-      harness.script((req, ctx) => {
-        fs.appendFileSync(
-          path.join(runtime.store.goalDir, "plan.md"),
-          "\n## alpha\n",
-          "utf8",
-        );
-        ctx.writeOutcome(
-          outcome({ summary: "planned alpha", decision: "continue" }),
-        );
-        return fakeTurnResult(req);
-      });
-      harness.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "no tasks to file" }));
-        return fakeTurnResult(req);
-      });
-
-      const boundary = await runBoundary(runtime, { relaunch: false });
-      expect(boundary.decision).toBe("continue");
-      const records = await runtime.store.listRecords();
-      expect(records.some((record) => record.step === PLAN_REVIEW_STEP)).toBe(
-        false,
-      );
-      const skip = records.find((record) => record.step === "plan-review-skip");
-      expect(skip?.ok).toBe(true);
-      expect(skip?.cause).toContain(
-        'plan review skipped: run config has no alias "plan-reviewer"',
-      );
-    } finally {
-      cleanupFlowRepo(repo);
-    }
-  }, 60_000);
 });

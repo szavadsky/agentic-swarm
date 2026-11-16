@@ -6,11 +6,7 @@ import { stepTarget } from "./flow-context.js";
 import type { MergeResult } from "./integrate.js";
 import { type Hold, readHolds, type Steer, scanInbox } from "./mailbox.js";
 import { next } from "./next.js";
-import {
-  PLAN_CHECK_STEP,
-  planCheckConfigured,
-  runPlanCheck,
-} from "./plan-check.js";
+import { PLAN_CHECK_STEP, runPlanCheck } from "./plan-check.js";
 import {
   runPlanCheckPm,
   runStallPm,
@@ -670,13 +666,10 @@ export async function runDispatch(
       // failed PM turn, or exhausted rounds fall through to the boundary,
       // whose pack carries the checker's evidence per plan item. Without a
       // plan there is nothing to verify, so the front path dispatches as
-      // before instead of spending a checker turn.
+      // before instead of spending a checker turn. The alias is required by
+      // pre-flight, so only the plan's presence gates this step.
       const planPath = path.join(runtime.store.goalDir, "plan.md");
-      if (
-        !opts.signals?.shouldStop() &&
-        planCheckConfigured(runtime) &&
-        fs.existsSync(planPath)
-      ) {
+      if (!opts.signals?.shouldStop() && fs.existsSync(planPath)) {
         const checkTasks = await runtime.store.listTasks();
         const checkRecords = await runtime.store.listRecords();
         const checkState = derive(

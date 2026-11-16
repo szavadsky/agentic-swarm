@@ -236,6 +236,8 @@ export function reduceTask(
   let mergeFix = false;
   /** The last review's `changes` still awaits its answer; an empty answer goes back for a verdict. */
   let changesPending = false;
+  /** The fix before the next review answered by replies alone: that review repeats its tree by design. */
+  let replyOnlyFix = false;
   let gatesFailures = 0;
   let pendingChecks: PendingChecks | null = null;
   let lastTree: string | undefined;
@@ -459,19 +461,23 @@ export function reduceTask(
       creationAdvance = null;
     }
 
-    // A fix round that answers a `changes` review with dispositions but no diff
+    // A fix round that answers a `changes` review with replies but no diff
     // repeats its tree by design; the fingerprint owns non-empty repeats, so it
     // skips the deferred answer and the round budget bounds the loop instead.
+    // The review that judges a reply-only fix repeats the same tree too, so it
+    // skips the history fingerprint and lets the round limit decide.
     // An empty gate-fix turn repeats its tree by design too: the checks that
     // follow own the verdict, so a deferred turn must not loop-park a fix the
     // checks would clear. The item budget still bounds repeated deferrals.
     const answeredIndex = flowIndex.get(rec.step);
     const answeredStep =
       answeredIndex === undefined ? undefined : flow.steps[answeredIndex];
+    const replyCount = rec.outcome?.replies?.length ?? 0;
     const answeredReview =
       changesPending &&
       answeredStep !== undefined &&
       !answeredStep.review &&
+      replyCount > 0 &&
       committedNothing(task.kind, rec, priorTree);
     const emptyGateFix =
       gateFix &&
@@ -481,7 +487,9 @@ export function reduceTask(
       !answeredStep.review &&
       committedNothing(task.kind, rec, priorTree);
     const fp =
-      answeredReview || emptyGateFix
+      answeredReview ||
+      emptyGateFix ||
+      (answeredStep?.review === true && replyOnlyFix)
         ? null
         : stepFingerprint(task.kind, rec, lastTree);
     if (fp) {
@@ -523,14 +531,14 @@ export function reduceTask(
     const idx = flowIndex.get(rec.step)!;
     const step = flow.steps[idx]!;
     // An empty commit is its own no-progress signal — unless it answers a
-    // `changes` review, whose dispositions still need a verdict, or carries
-    // a continuation's kept work. With no review awaiting, skip the reviewer
-    // and park now instead of spending review rounds — except after red
-    // checks, where the checks that run next decide: the branch may already
-    // be done and only a repeated identical red proves the fix empty.
+    // `changes` review with replies, whose claims still need a verdict, or
+    // carries a continuation's kept work. With no review awaiting, skip the
+    // reviewer and park now instead of spending review rounds — except after
+    // red checks, where the checks that run next decide: the branch may
+    // already be done and only a repeated identical red proves the fix empty.
     let deferredEmpty: { step: string; round: number } | null = null;
     if (!step.review && committedNothing(task.kind, rec, priorTree)) {
-      if (carriedWork !== true && !changesPending) {
+      if (carriedWork !== true && (!changesPending || replyCount === 0)) {
         if (carriedWork === false) {
           park = `empty-diff: ${rec.step} r${rec.round} kept work is already on the head`;
           phase = "parked";
@@ -591,10 +599,12 @@ export function reduceTask(
       }
       // No `else`: a done review always carries a verdict — outcome repair
       // fails the turn otherwise — so a missing verdict never reaches derive.
+      replyOnlyFix = false;
       continue;
     }
 
     // This turn answers the awaited review, with work or with dispositions.
+    replyOnlyFix = answeredReview;
     changesPending = false;
     stepIndex = idx + 1;
     const nextStep = flow.steps[stepIndex];

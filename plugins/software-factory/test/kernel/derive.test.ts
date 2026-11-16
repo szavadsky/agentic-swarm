@@ -284,7 +284,7 @@ describe("derive", () => {
     expect(parked.tasks.a!.round).toBe(1);
   });
 
-  it("sends an empty fix round after changes back to review instead of parking", () => {
+  it("sends a reply-only fix round after changes back to review instead of parking", () => {
     const answered = [
       implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
       script(2, { step: "commit", ok: true, commit: "c1", tree: "tree-1" }),
@@ -300,6 +300,10 @@ describe("derive", () => {
           summary: "declined F1: out of scope per done-when; F2 already fixed",
           concerns: [],
           forward: [],
+          replies: [
+            { finding: 1, reply: "out of scope per the done-when" },
+            { finding: 2, reply: "already fixed in the previous round" },
+          ],
         },
       }),
     ];
@@ -317,7 +321,7 @@ describe("derive", () => {
     expect(reviewed.tasks.a!.loop).toBeUndefined();
   });
 
-  it("bounds a deferred empty fix round by review rounds", () => {
+  it("parks an empty fix after changes when it carries no replies", () => {
     const state = derive(
       [task("a")],
       [
@@ -326,12 +330,38 @@ describe("derive", () => {
         doneCheck(3),
         review(4, "changes", 1),
         implement(5, 2, { tree: "tree-1", commit: "c1", base: "c0" }),
+      ],
+    );
+    expect(state.tasks.a!.phase).toBe("parked");
+    expect(state.tasks.a!.park).toStartWith("empty-diff: implement r2");
+  });
+
+  it("bounds a reply-only fix round by review rounds", () => {
+    const state = derive(
+      [task("a")],
+      [
+        implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
+        script(2, { step: "commit", ok: true, commit: "c1", tree: "tree-1" }),
+        doneCheck(3),
+        review(4, "changes", 1),
+        implement(5, 2, {
+          tree: "tree-1",
+          commit: "c1",
+          base: "c0",
+          outcome: {
+            status: "done",
+            summary: "replied without a change",
+            concerns: [],
+            forward: [],
+            replies: [{ finding: 1, reply: "already answered" }],
+          },
+        }),
         doneCheck(6),
         review(7, "changes", 2),
       ],
     );
-    // Last-round `changes` merges with the concerns as debt: the deferred
-    // empty round cannot loop forever.
+    // Last-round `changes` merges with the concerns as debt: the reply-only
+    // round cannot loop forever.
     expect(state.tasks.a!.phase).toBe("merge");
     expect(state.tasks.a!.round).toBe(2);
     expect(state.tasks.a!.park).toBeUndefined();

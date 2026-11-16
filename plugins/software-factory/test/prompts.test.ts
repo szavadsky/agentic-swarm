@@ -23,6 +23,7 @@ import {
   planCheckRouteEntrySchema,
   planCheckSchema,
   planReviewMarkSchema,
+  replySchema,
   stallRouteEntrySchema,
   steerRouteEntrySchema,
 } from "../src/kernel/types.js";
@@ -149,6 +150,7 @@ describe("prompts: schema skeletons", () => {
     const skeleton = outcomeSchemaVar();
     const nested: [string, { shape: Record<string, unknown> }][] = [
       ["concerns", concernSchema],
+      ["replies", replySchema],
       ["steerRoutes", steerRouteEntrySchema],
       ["stallRoutes", stallRouteEntrySchema],
       ["planCheck", planCheckSchema],
@@ -227,6 +229,7 @@ describe("prompts: schema skeletons", () => {
         "summary: one paragraph",
         "concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner",
         "forward: []",
+        "replies: [{finding, reply}]  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position",
         "verdict: approve | changes | reject  # optional; review steps only",
         "decision: continue | done | blocked  # optional; architect step only",
         "upscope: yes | no  # optional; standalone review escalation: answer with the verdict",
@@ -325,6 +328,7 @@ describe("prompts: repair skeleton", () => {
       "summary",
       "concerns",
       "forward",
+      "replies",
     ]);
     expect(implementer).not.toContain("verdict:");
     expect(implementer).not.toContain("decision:");
@@ -353,6 +357,7 @@ describe("prompts: repair skeleton", () => {
     expect(outcomeRepairSchemaVar("reviewer", "review")).toContain(
       "upscope: yes | no",
     );
+    expect(outcomeRepairSchemaVar("implementer", "any")).toContain("replies:");
     expect(outcomeRepairSchemaVar("implementer", "any")).not.toContain(
       "steerRoutes:",
     );

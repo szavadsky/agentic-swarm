@@ -58,6 +58,16 @@ export interface AcpxStubOptions {
   defaultModel?: string;
   /** Live effort option id; defaults to `effort`. */
   effortConfigId?: string;
+  /** Stop reason on the prompt result; defaults to `end_turn`. */
+  stopReason?: string;
+  /** Exit code after the prompt's frames; defaults to 0. */
+  promptExitCode?: number;
+  /** Emit no prompt result frame, leaving the exit facts as the only evidence. */
+  omitPromptResult?: boolean;
+  /** Emit this ACP error frame after the prompt result. */
+  errorAfterResult?: { code: number; message: string };
+  /** Keep the process alive after the prompt result, so a wall timeout wins. */
+  hangAfterResult?: boolean;
 }
 
 /**
@@ -83,6 +93,11 @@ export function createAcpxStub(opts: AcpxStubOptions = {}): AcpxStub {
   const modelsJs = JSON.stringify(opts.models ?? null);
   const defaultModelJs = JSON.stringify(opts.defaultModel ?? null);
   const effortConfigIdJs = JSON.stringify(opts.effortConfigId ?? "effort");
+  const stopReasonJs = JSON.stringify(opts.stopReason ?? "end_turn");
+  const promptExitCodeJs = JSON.stringify(opts.promptExitCode ?? 0);
+  const omitPromptResultJs = JSON.stringify(opts.omitPromptResult ?? false);
+  const errorAfterResultJs = JSON.stringify(opts.errorAfterResult ?? null);
+  const hangAfterResultJs = JSON.stringify(opts.hangAfterResult ?? false);
 
   const script = `#!/usr/bin/env bun
 import fs from "node:fs";
@@ -122,6 +137,11 @@ const compactMode = ${compactJs};
 const models = ${modelsJs};
 const defaultModel = ${defaultModelJs};
 const effortConfigId = ${effortConfigIdJs};
+const stopReason = ${stopReasonJs};
+const promptExitCode = ${promptExitCodeJs};
+const omitPromptResult = ${omitPromptResultJs};
+const errorAfterResult = ${errorAfterResultJs};
+const hangAfterResult = ${hangAfterResultJs};
 const sessionFile = (name) => path.join(stateDir, "session-" + name);
 const sessionUsageFile = (name) => path.join(stateDir, "usage-" + name);
 const addSessionUsage = (name, amount) => {
@@ -325,12 +345,22 @@ if (mode === "cancelled") {
   process.exit(0);
 }
 
+if (omitPromptResult) {
+  process.exit(promptExitCode);
+}
 if (usage) {
   emit({ jsonrpc: "2.0", method: "session/update", params: { sessionId, update: { sessionUpdate: "usage_update", used: 5927, size: 950000, ...(cost ? { cost } : {}) } } });
-  emit({ jsonrpc: "2.0", id: 7, result: { stopReason: "end_turn", usage } });
+  emit({ jsonrpc: "2.0", id: 7, result: { stopReason, usage } });
 } else {
-  emit({ jsonrpc: "2.0", id: 7, result: { stopReason: "end_turn" } });
+  emit({ jsonrpc: "2.0", id: 7, result: { stopReason } });
 }
+if (errorAfterResult) {
+  emit({ jsonrpc: "2.0", id: null, error: errorAfterResult });
+}
+if (hangAfterResult) {
+  await new Promise(() => {});
+}
+process.exit(promptExitCode);
 `;
 
   fs.writeFileSync(binary, script, { mode: 0o755 });

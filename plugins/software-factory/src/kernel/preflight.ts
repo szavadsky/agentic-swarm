@@ -107,9 +107,18 @@ function escalationFindings(
   return findings;
 }
 
-/** Roles the kernel actually calls: architect, PM, steward and every configured flow step. */
+/**
+ * Roles the kernel calls on every goal generation: architect, PM, steward and
+ * both plan roles, plus every configured flow step.
+ */
 function requiredRoles(process: ProcessConfig): Set<string> {
-  const roles = new Set(["architect", "pm", "steward"]);
+  const roles = new Set([
+    "architect",
+    "pm",
+    "steward",
+    "plan-checker",
+    "plan-reviewer",
+  ]);
   for (const flow of Object.values(process.flows)) {
     for (const step of flow.steps) roles.add(step.role);
     if (flow.followUp?.mode === "different-model" && flow.followUp.role)
