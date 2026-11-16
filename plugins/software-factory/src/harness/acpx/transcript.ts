@@ -85,6 +85,63 @@ function usageUpdateCost(update: any): number | undefined {
     : undefined;
 }
 
+/** Extracts adapter-level error metadata from a session_info_update frame. */
+function extractAdapterError(update: unknown): AcpxError | undefined {
+  if (!update || typeof update !== "object") return undefined;
+  const meta = (update as Record<string, unknown>)._meta;
+  if (!meta || typeof meta !== "object") return undefined;
+  const metaObj = meta as Record<string, unknown>;
+  const candidates: Record<string, unknown>[] = [];
+  if (metaObj.error && typeof metaObj.error === "object") {
+    candidates.push(metaObj.error as Record<string, unknown>);
+  }
+  for (const val of Object.values(metaObj)) {
+    if (val && typeof val === "object") {
+      const sub = (val as Record<string, unknown>).error;
+      if (sub && typeof sub === "object") {
+        candidates.push(sub as Record<string, unknown>);
+      }
+    }
+  }
+  for (const raw of candidates) {
+    const codexErrorInfo =
+      raw.codexErrorInfo && typeof raw.codexErrorInfo === "object"
+        ? (raw.codexErrorInfo as Record<string, unknown>)
+        : undefined;
+    const disconnected =
+      codexErrorInfo?.responseStreamDisconnected &&
+      typeof codexErrorInfo.responseStreamDisconnected === "object"
+        ? (codexErrorInfo.responseStreamDisconnected as Record<string, unknown>)
+        : undefined;
+    const code =
+      typeof raw.httpStatusCode === "number"
+        ? raw.httpStatusCode
+        : typeof disconnected?.httpStatusCode === "number"
+          ? disconnected.httpStatusCode
+          : typeof raw.code === "number"
+            ? raw.code
+            : undefined;
+    const message = typeof raw.message === "string" ? raw.message : undefined;
+    const details =
+      typeof raw.additionalDetails === "string"
+        ? raw.additionalDetails
+        : typeof raw.details === "string"
+          ? raw.details
+          : undefined;
+    const errorName =
+      typeof raw.errorName === "string" ? raw.errorName : undefined;
+    return {
+      ...(code !== undefined ? { code } : {}),
+      ...(message ? { message } : {}),
+      data: {
+        ...(details ? { details } : {}),
+        ...(errorName ? { errorName } : {}),
+      },
+    };
+  }
+  return undefined;
+}
+
 /**
  * Parser for acpx's `--format json` stdout: a raw ACP JSON-RPC transcript, not
  * an acpx event stream. Requests and responses share ids, so the prompt result
@@ -99,6 +156,7 @@ export class AcpxTranscriptParser {
   private promptResult?: PromptResult;
   private sessionId?: string;
   private readonly errors: AcpxError[] = [];
+  private adapterError?: AcpxError;
   private currentText = "";
   private lastText = "";
   private messageId?: string;
@@ -134,6 +192,7 @@ export class AcpxTranscriptParser {
         : {}),
       ...(this.sessionId ? { sessionId: this.sessionId } : {}),
       errors: [...this.errors],
+      ...(this.adapterError ? { adapterError: this.adapterError } : {}),
     };
   }
 
@@ -156,6 +215,10 @@ export class AcpxTranscriptParser {
       if (update?.sessionUpdate === "usage_update") {
         const cost = usageUpdateCost(update);
         if (cost !== undefined) this.costUsd = cost;
+      }
+      if (update?.sessionUpdate === "session_info_update") {
+        const adapterErr = extractAdapterError(update);
+        if (adapterErr) this.adapterError = adapterErr;
       }
       if (update?.sessionUpdate === "agent_message_chunk") {
         this.feedChunk(update);

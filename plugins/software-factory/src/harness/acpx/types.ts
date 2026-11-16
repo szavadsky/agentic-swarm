@@ -42,6 +42,8 @@ export interface AcpxTurnSummary {
   stopReason?: string;
   sessionId?: string;
   errors: AcpxError[];
+  /** Adapter error metadata extracted from session_info_update, e.g. _meta.codex.error. */
+  adapterError?: AcpxError;
 }
 
 /** One slash command's parsed transcript plus the process facts behind it. */
