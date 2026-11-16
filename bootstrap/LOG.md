@@ -588,3 +588,6 @@ Verbatim, newest last; each with what it changed.
 - Exit 3 (iteration-limit), 1h53m wall. factory/self +1: child-group-sentinel — NOT 0-merge, stop counter resets to 0. 1 park: acpx-zero-usage (review-rejected round 2: r1 findings 1-4 resolved, review cited failing-test evidence — review working as designed, not a failure). Pending 0; inbox empty; 429 steer consumed with outbox receipt.
 - Legs (emergency rotation verified): digest beam $0; architect omp/opus $1.12 single attempt; PM agy $0.35; planreview agy $0.86; plancheck agy $0.70; implements 4 agy/gemini ($6.21 — real subscription money); reviews 4 ernie $0; steward skipped 6th (no conflicts). 0 Go turns — reroute held; no agy rate-limit hits. Cost $9.23 fully priced (informational only). 1 routine infra retry, 0 fallback hops, 3 outcome-repairs, 0 conflicts, 0 gate flakes.
 - No steers for i40: no incidents. Budget steer still awaiting owner word — NOT steered (5th iteration).
+
+### 2026-11-16 — rotation for i40: off-Go map repeats (comment-only bump)
+- Same emergency map, verified in i39. Price-coverage green before commit.
