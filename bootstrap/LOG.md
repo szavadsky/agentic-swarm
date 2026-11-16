@@ -572,3 +572,10 @@ Verbatim, newest last; each with what it changed.
 
 ### 2026-11-16 — rotation for i38: B-shape repeats a third time (comment-only)
 - Same map (claude-primary reinstatement still awaiting owner call; acpx-completed-exit fix in pin 9b5a0f2a4a34, verifiable only by a future claude-primary outing). Loader + price-coverage green before commit.
+
+### 2026-11-16 — i38 landed: FIRST 0-merge (stop counter 1/2); Go monthly quota exhausted
+- Exit 3 (iteration-limit), 34m wall. factory/self +0 commits — nothing to merge. 2 parks: child-group-scope + child-group-scope-land (both `failed: invalid outcome: no outcome after repair`); plan-review-missing + plancheck failed the same way; 12 outcome-repair turns; pending 0; inbox empty.
+- ROOT CAUSE (external, proven by live probe): OpenCode Go MONTHLY limit exhausted (resets in ~14d). Every Go turn (all codex implements, all pi reviews/plancheck/planreview) got 429 `exceeded retry limit` delivered as agent text with end_turn/completed — trusted as done by the new completed-exit logic (journal e.g. eebf7b65: codex reconnect 4/5→5/5 429). Non-Go legs all worked: digest beam $0, architect omp/opus $1.21, PM agy $0.66 (2 turns). Cost $1.88 partial.
+- Secondary kernel issue (steered): 429-as-completed-text should classify quota/infra with a fallback hop, not done + wasted repairs. The completed-exit fix has a hole: transport 429 arrives as completed text, not an error frame.
+- Gates skipped this landing: 0 code delta since green pin 9b5a0f2a4a34 (factory/self == factory-v3); no promote (pin unchanged). Rotation reroutes OFF Go for ~14d (see next entry).
+- Steer for i39: 429-as-completed observation. Budget steer still awaiting owner word — NOT steered (4th iteration).
