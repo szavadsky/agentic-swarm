@@ -25,32 +25,23 @@ export function isNoSessionError(error: AcpxError): boolean {
   );
 }
 
-function classifyAcpxErrorBase(error: AcpxError): Stop {
-  const text = errorText(error);
-
-  if (isNoSessionError(error)) {
-    return withDetails(
-      { kind: "infra", cause: "crash" },
-      error.message ?? text,
-    );
-  }
+/** Matches known infrastructure error patterns in harness or agent text. */
+export function classifyErrorText(
+  text: string,
+  preferredDetails?: string,
+): Stop | undefined {
   if (
-    error.data?.errorName === "provider.quota" ||
-    /quota|insufficient balance|billing|usage limit|exceeded your/i.test(text)
+    /quota|insufficient balance|billing|usage limit|exceeded your/i.test(
+      text,
+    ) ||
+    /\b(402|429)\b/.test(text)
   ) {
-    return withDetails({ kind: "infra", cause: "quota" }, text);
-  }
-  if (/\b(402|429)\b/.test(text)) {
     return withDetails({ kind: "infra", cause: "quota" }, text);
   }
   if (
     /did not advertise that model|cannot apply --model|unknown model|model .*not found|model .*not available|no-route/i.test(
       text,
-    )
-  ) {
-    return withDetails({ kind: "infra", cause: "auth" }, text);
-  }
-  if (
+    ) ||
     /\b(401|403)\b/.test(text) ||
     /unauthori[sz]ed|forbidden|invalid api key|no api key|credential/i.test(
       text,
@@ -73,7 +64,7 @@ function classifyAcpxErrorBase(error: AcpxError): Stop {
     return withDetails({ kind: "infra", cause: "overflow" }, text);
   }
   if (/refus|safety|content policy|declined/i.test(text)) {
-    return withDetails({ kind: "refusal" }, error.message ?? text);
+    return withDetails({ kind: "refusal" }, preferredDetails ?? text);
   }
   if (/abort|cancel|interrupted/i.test(text)) {
     return { kind: "cancelled" };
@@ -81,7 +72,51 @@ function classifyAcpxErrorBase(error: AcpxError): Stop {
   if (/timed out|timeout|deadline/i.test(text)) {
     return withDetails({ kind: "infra", cause: "timeout" }, text);
   }
+  return undefined;
+}
+
+function classifyAcpxErrorBase(error: AcpxError): Stop {
+  const text = errorText(error);
+
+  if (isNoSessionError(error)) {
+    return withDetails(
+      { kind: "infra", cause: "crash" },
+      error.message ?? text,
+    );
+  }
+  if (error.data?.errorName === "provider.quota") {
+    return withDetails({ kind: "infra", cause: "quota" }, text);
+  }
+  const byText = classifyErrorText(text, error.message ?? text);
+  if (byText) return byText;
   return withDetails({ kind: "infra", cause: "crash" }, text);
+}
+
+/**
+ * A completed prompt (end_turn) whose usage was measured as zero did no model work.
+ * The cause is derived from the agent text and adapter error metadata through the
+ * existing error classifier. With no text or unclassified text/adapter errors,
+ * defaults to rate with details naming the text or the zero-usage completion.
+ */
+export function classifyZeroUsageTurn(summary: AcpxTurnSummary): Stop {
+  const text = summary.text.trim();
+  if (text) {
+    const fromText = classifyErrorText(text);
+    if (fromText) return fromText;
+  }
+  if (summary.adapterError) {
+    const fromAdapter = classifyAcpxError(summary.adapterError);
+    if (fromAdapter.kind === "infra" && fromAdapter.cause !== "crash") {
+      return fromAdapter;
+    }
+    if (fromAdapter.kind !== "infra") {
+      return fromAdapter;
+    }
+  }
+  return withDetails(
+    { kind: "infra", cause: "rate" },
+    text || "completed prompt with zero measured usage",
+  );
 }
 
 /**

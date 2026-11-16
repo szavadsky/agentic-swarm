@@ -20,6 +20,7 @@ import { zeroUsage } from "../usage.js";
 import {
   classifyAcpxError,
   classifyAcpxTurn,
+  classifyZeroUsageTurn,
   isNoSessionError,
 } from "./classify.js";
 import { resolveRawAgentCommand } from "./command.js";
@@ -342,6 +343,17 @@ export async function readAcpxSessionUsage(
   return usageFromAcpxSessionText(result.summary.text);
 }
 
+function isZeroUsage(usage: Usage): boolean {
+  return (
+    usage.in === 0 &&
+    usage.out === 0 &&
+    usage.cacheRead === 0 &&
+    usage.cacheWrite5m === 0 &&
+    usage.cacheWrite1h === 0 &&
+    usage.reasoningOut === 0
+  );
+}
+
 /** One acpx turn for one model from the fallback chain. */
 export async function runAcpxTurn(
   runtime: AcpxRuntime,
@@ -491,7 +503,7 @@ export async function runAcpxTurn(
       continue;
     }
 
-    const stop: Stop = processResult.aborted
+    let stop: Stop = processResult.aborted
       ? { kind: "cancelled" }
       : classifyAcpxTurn({
           summary,
@@ -528,23 +540,35 @@ export async function runAcpxTurn(
     // failure leaves the stop and the prompt's usage exactly as they were.
     let usage = summary.usage;
     let storedSession = session;
-    if (session && !processResult.aborted && !processResult.timedOut) {
-      const cumulative = await readAcpxSessionUsage(
-        runtime,
-        config,
-        session,
-        req.signal,
-      );
-      if (cumulative) {
-        const previous = resumed ? req.session?.cumulativeUsage : undefined;
-        // A resumed session with no recorded total cannot separate this turn
-        // from its history; keep this turn's usage unknown but leave a baseline
-        // behind for the next delta.
-        if (!resumed || previous) {
-          usage = turnUsageFromTotals(cumulative, previous);
+    let usageMeasured = false;
+    if (config.usage) {
+      if (config.usage.command) {
+        if (session && !processResult.aborted && !processResult.timedOut) {
+          const cumulative = await readAcpxSessionUsage(
+            runtime,
+            config,
+            session,
+            req.signal,
+          );
+          if (cumulative) {
+            const previous = resumed ? req.session?.cumulativeUsage : undefined;
+            // A resumed session with no recorded total cannot separate this turn
+            // from its history; keep this turn's usage unknown but leave a baseline
+            // behind for the next delta.
+            if (!resumed || previous) {
+              usage = turnUsageFromTotals(cumulative, previous);
+              usageMeasured = true;
+            }
+            storedSession = { ...session, cumulativeUsage: cumulative };
+          }
         }
-        storedSession = { ...session, cumulativeUsage: cumulative };
+      } else {
+        usageMeasured = true;
       }
+    }
+
+    if (stop.kind === "done" && usageMeasured && isZeroUsage(usage)) {
+      stop = classifyZeroUsageTurn(summary);
     }
 
     return {

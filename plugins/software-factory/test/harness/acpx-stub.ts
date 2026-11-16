@@ -18,6 +18,23 @@ export interface AcpxStubModel {
   effort: string[];
 }
 
+export interface AcpxStubBehavior {
+  usage?: Record<string, number> | null;
+  sessionUsage?: {
+    input: number;
+    output: number;
+    cacheRead?: number;
+    cacheWrite?: number;
+  } | null;
+  reply?: string;
+  sessionInfoError?: {
+    httpStatusCode?: number;
+    message?: string;
+    additionalDetails?: string;
+    willRetry?: boolean;
+  } | null;
+}
+
 export interface AcpxStubOptions {
   /** Prompt result usage frame; absent means the result carries none. */
   usage?: Record<string, number>;
@@ -68,6 +85,15 @@ export interface AcpxStubOptions {
   errorAfterResult?: { code: number; message: string };
   /** Keep the process alive after the prompt result, so a wall timeout wins. */
   hangAfterResult?: boolean;
+  /** session_info_update adapter error frame emitted during prompt */
+  sessionInfoError?: {
+    httpStatusCode?: number;
+    message?: string;
+    additionalDetails?: string;
+    willRetry?: boolean;
+  };
+  /** Per-model option overrides when invocation includes --model */
+  modelBehaviors?: Record<string, AcpxStubBehavior>;
 }
 
 /**
@@ -98,6 +124,8 @@ export function createAcpxStub(opts: AcpxStubOptions = {}): AcpxStub {
   const omitPromptResultJs = JSON.stringify(opts.omitPromptResult ?? false);
   const errorAfterResultJs = JSON.stringify(opts.errorAfterResult ?? null);
   const hangAfterResultJs = JSON.stringify(opts.hangAfterResult ?? false);
+  const sessionInfoErrorJs = JSON.stringify(opts.sessionInfoError ?? null);
+  const modelBehaviorsJs = JSON.stringify(opts.modelBehaviors ?? null);
 
   const script = `#!/usr/bin/env bun
 import fs from "node:fs";
@@ -124,10 +152,17 @@ const marker = (name) => {
   const match = new RegExp("\\\\[\\\\[" + name + ":([^\\\\]]*)\\\\]\\\\]").exec(prompt);
   return match ? match[1] : undefined;
 };
+const modelFlag = flag(["--model"]);
+const behaviors = ${modelBehaviorsJs};
+const activeBehavior = (modelFlag && behaviors && behaviors[modelFlag]) ? behaviors[modelFlag] : {};
+
 const mode = marker("mode");
-const reply = marker("text") ?? "PONG";
-const usage = ${usageJs};
-const sessionUsage = ${sessionUsageJs};
+const textMarker = marker("text");
+const defaultReply = "reply" in activeBehavior ? activeBehavior.reply : "PONG";
+const reply = textMarker !== undefined ? textMarker : defaultReply;
+const usage = "usage" in activeBehavior ? activeBehavior.usage : ${usageJs};
+const sessionUsage = "sessionUsage" in activeBehavior ? activeBehavior.sessionUsage : ${sessionUsageJs};
+const sessionInfoError = "sessionInfoError" in activeBehavior ? activeBehavior.sessionInfoError : ${sessionInfoErrorJs};
 const sessionCommand = ${sessionCommandJs};
 const compactUsage = ${compactUsageJs};
 const banner = ${bannerJs};
@@ -293,11 +328,14 @@ if (prompt === "/session") {
     emit({ jsonrpc: "2.0", id: null, error: { code: -32603, message: "Internal error", data: { details: "session command failed" } } });
     process.exit(1);
   }
-  if (!sessionUsage) {
+  const hasUsageFile = fs.existsSync(sessionUsageFile(session));
+  if (!sessionUsage && !hasUsageFile) {
     emit({ jsonrpc: "2.0", id: null, error: { code: -32603, message: "Internal error", data: { details: "no session usage configured" } } });
     process.exit(1);
   }
-  const totals = JSON.parse(fs.readFileSync(sessionUsageFile(session), "utf8"));
+  const totals = hasUsageFile
+    ? JSON.parse(fs.readFileSync(sessionUsageFile(session), "utf8"))
+    : { in: 0, out: 0, cacheRead: 0, cacheWrite: 0 };
   startPrompt();
   chunk(
     "Session: " + sessionId + "\\n" +
@@ -333,12 +371,31 @@ if (promptDelayMs > 0) {
 }
 startPrompt();
 addSessionUsage(session, sessionUsage);
+if (sessionInfoError) {
+  emit({
+    jsonrpc: "2.0",
+    method: "session/update",
+    params: {
+      sessionId,
+      update: {
+        sessionUpdate: "session_info_update",
+        _meta: {
+          codex: {
+            error: sessionInfoError,
+          },
+        },
+      },
+    },
+  });
+}
 if (banner) {
   chunk(banner, undefined);
   emit({ jsonrpc: "2.0", method: "session/update", params: { sessionId, update: { sessionUpdate: "available_commands_update", availableCommands: [] } } });
 }
-chunk(reply.slice(0, 1), "msg_stub");
-chunk(reply.slice(1), "msg_stub");
+if (reply) {
+  chunk(reply.slice(0, 1), "msg_stub");
+  chunk(reply.slice(1), "msg_stub");
+}
 
 if (mode === "cancelled") {
   emit({ jsonrpc: "2.0", id: 7, result: { stopReason: "cancelled", usage: null } });

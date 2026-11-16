@@ -21,7 +21,6 @@ const PI_ACPX: AcpxConfig = {
   effort: {
     configId: "thought_level",
   },
-  usage: { cache: false },
 };
 const CODEX_ACPX: AcpxConfig = {
   agent: "codex",
@@ -516,7 +515,9 @@ describe("AcpxHarness", () => {
   });
 
   it("resumes an agy session from a second process without creating a new one", async () => {
-    const stub = createAcpxStub();
+    const stub = createAcpxStub({
+      usage: { totalTokens: 10, inputTokens: 5, outputTokens: 5 },
+    });
     const options = {
       id: "agy",
       binary: stub.binary,
@@ -563,7 +564,9 @@ describe("AcpxHarness", () => {
   });
 
   it("keeps an agy model id whose effort word is part of the name", async () => {
-    const stub = createAcpxStub();
+    const stub = createAcpxStub({
+      usage: { totalTokens: 10, inputTokens: 5, outputTokens: 5 },
+    });
     const harness = new AcpxHarness({
       id: "agy",
       binary: stub.binary,
@@ -604,7 +607,9 @@ describe("AcpxHarness", () => {
   });
 
   it("takes the turn config from opaque when the kernel passes one", async () => {
-    const stub = createAcpxStub();
+    const stub = createAcpxStub({
+      usage: { totalTokens: 10, inputTokens: 5, outputTokens: 5 },
+    });
     const harness = new AcpxHarness({
       id: "pi",
       binary: stub.binary,
@@ -640,7 +645,9 @@ describe("AcpxHarness", () => {
   });
 
   it("runs a new agent from config with no code", async () => {
-    const stub = createAcpxStub();
+    const stub = createAcpxStub({
+      usage: { totalTokens: 10, inputTokens: 5, outputTokens: 5 },
+    });
     const harness = new AcpxHarness({
       id: "nova",
       binary: stub.binary,

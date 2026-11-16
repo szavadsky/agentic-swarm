@@ -21,7 +21,6 @@ const PI_ACPX: AcpxConfig = {
   effort: {
     configId: "thought_level",
   },
-  usage: { cache: false },
 };
 
 const AGY_ACPX: AcpxConfig = {
