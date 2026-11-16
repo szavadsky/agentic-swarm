@@ -569,3 +569,6 @@ Verbatim, newest last; each with what it changed.
 - Exit 3 (iteration-limit), 2h26m wall. factory/self +4: acpx-completed-exit (parsed end_turn frame now wins over later nonzero acpx exit — exactly the forensics recommendation; crash-verdict steer consumed), state-decl-single, review-reply (author change-and/or-reply path in prompts + derive-task + flow-context — the staged intent line consumed), plan-roles-required. ZERO parks, pending 0.
 - Legs: digest opencode/beam $0 DONE; architect omp/opus $2.71 single attempt, 55k out (planning-heavy from the emptied queue, as predicted), fb unneeded; plan-reviewer pi/Go-deepseek $0.045 (NEW role live first time); PM agy/gemini $0.45 priced; implements codex:max ~$0.001; reviews pi:xhigh ~$0.018, all 3 approve r1; steward stub skipped 5th (no conflicts). Cost $3.28 across 12 priced turns. 0 infra retries, 0 fallback hops, 0 conflicts, 0 gate flakes; 1 minor outcome-repair.
 - No steers for i38: no incidents, no new observations. Budget steer still awaiting owner word — NOT steered (3rd iteration).
+
+### 2026-11-16 — rotation for i38: B-shape repeats a third time (comment-only)
+- Same map (claude-primary reinstatement still awaiting owner call; acpx-completed-exit fix in pin 9b5a0f2a4a34, verifiable only by a future claude-primary outing). Loader + price-coverage green before commit.

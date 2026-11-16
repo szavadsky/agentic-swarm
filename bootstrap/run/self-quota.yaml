@@ -1,13 +1,12 @@
-# Self-run, full-harness rotation (iteration 37 forward, owner 2026-11-16):
-# B-shape repeats — architect omp, implementer codex, reviewer pi, PM agy,
-# digest opencode, steward pi, escalation omp (claude-primary reinstatement
-# awaits the owner's call). Forensics fix applied: claude-code binding gains
-# --approve-all (agy precedent) — i35 attempt1's every-Edit/Write-refused
-# cascade burned $2.63 before the omp fallback saved the turn. Reviewer is
-# task-grade (INTENT): pi/deepseek reviews its codex/deepseek sibling in a
-# different context and focus. i32 was muse-implements; i33-i37
-# deepseek-implements on alternating harnesses continues the unsettled
-# muse-vs-deepseek comparison.
+# Self-run, full-harness rotation (iteration 38 forward, owner 2026-11-16):
+# B-shape repeats a third time — architect omp, implementer codex, reviewer pi,
+# PM agy, digest opencode, steward pi, escalation omp (claude-primary
+# reinstatement awaits the owner's call; the acpx-completed-exit fix is in the
+# pin, verified only by a future claude-primary outing). claude-code binding
+# keeps --approve-all (forensics fix for the $2.63 all-refused cascade).
+# Reviewer is task-grade (INTENT): pi/deepseek reviews its codex/deepseek
+# sibling in a different context and focus. i32 was muse-implements; i33-i38
+# deepseek-implements continues the unsettled muse-vs-deepseek comparison.
 aliases:
   architect:
     harness: omp
