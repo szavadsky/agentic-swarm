@@ -102,6 +102,7 @@ const ROLES: Record<string, Record<string, string>> = {
   reviewer: {
     task_path: "/goal/tasks/alpha.md",
     worktree: "/worktrees/demo-tasks/alpha",
+    author: "implementer",
     base_hash: "abc1234",
     head_hash: "def5678",
     round: "1",
@@ -167,7 +168,7 @@ describe("role prompts", () => {
     it(`renders ${role} from exactly its documented variables`, () => {
       const lib = library();
       const placeholders = new Set(
-        lib.placeholders(processConfig().roles[role]!.prompt),
+        lib.placeholders(processConfig().roles[role]!.prompt, vars),
       );
       expect([...placeholders].sort()).toEqual(Object.keys(vars).sort());
 
@@ -193,6 +194,99 @@ describe("role prompts", () => {
       ROLES.architect!,
     );
     expect(rendered.startsWith("You are the architect")).toBe(true);
+  });
+});
+
+describe("reviewer includes its author's body", () => {
+  function body(role: keyof typeof ROLES): string {
+    const rendered = library().render(role, ROLES[role]!);
+    const at = rendered.indexOf("## This turn");
+    expect(at, `${role} has no turn block`).toBeGreaterThan(0);
+    return rendered.slice(0, at);
+  }
+
+  it("is an author-neutral intro, the implementer's body verbatim, then its duties", () => {
+    const implementerBody = body("implementer");
+    const reviewer = library().render("reviewer", ROLES.reviewer!);
+    const intro = reviewer.slice(0, reviewer.indexOf("\n\n"));
+    expect(intro.startsWith("You review one author's work.")).toBe(true);
+    expect(intro).not.toContain("task diff");
+    expect(reviewer.startsWith(`${intro}\n\n${implementerBody}`)).toBe(true);
+    const duties = reviewer.slice(intro.length + 2 + implementerBody.length);
+    expect(duties.startsWith("## Review\n")).toBe(true);
+    expect(duties).toContain("You review the task diff");
+    expect(duties).toContain(
+      "5. Out-of-area changes, per the scope rule above.",
+    );
+    // The shared fragments arrive once, through the author's body.
+    for (const heading of ["## Code standard", "## Calibration", "## Outcome"])
+      expect(reviewer.split(heading).length - 1, heading).toBe(1);
+    // Only the reviewer's own turn block: the author's stayed out.
+    expect(reviewer.split("## This turn").length - 1).toBe(1);
+    expect(
+      reviewer.split("- `verdict` is used on review steps").length - 1,
+    ).toBe(1);
+  });
+
+  it("fails loudly when the author has no body", () => {
+    expect(() =>
+      library().render("reviewer", { ...ROLES.reviewer!, author: "nobody" }),
+    ).toThrow('Prompt fragment "nobody-body" not found');
+  });
+
+  it("fails loudly, by name, when the author has no duties", () => {
+    const lib = loadPromptLibrary({
+      builtinDir: path.join(packageRoot, "prompts"),
+      overrides: { "nobody-body": "Implementer body." },
+    });
+    expect(() =>
+      lib.render("reviewer", { ...ROLES.reviewer!, author: "nobody" }),
+    ).toThrow('Prompt fragment "review-nobody" not found');
+  });
+
+  it("selects the architect body and plan duties for author architect", () => {
+    const lib = library();
+    const architectPlaceholders = lib.placeholders("reviewer", {
+      author: "architect",
+    });
+    const implementerPlaceholders = lib.placeholders("reviewer", {
+      author: "implementer",
+    });
+    expect(architectPlaceholders).toEqual(
+      expect.arrayContaining([
+        "tiers",
+        "flows",
+        "iteration",
+        "intent_path",
+        "plan_path",
+        "pack_path",
+        "worktree",
+      ]),
+    );
+    expect(architectPlaceholders).not.toContain("task_path");
+    expect(architectPlaceholders).not.toContain("base_hash");
+    expect(implementerPlaceholders).not.toContain("tiers");
+    expect(implementerPlaceholders).not.toContain("flows");
+    expect(implementerPlaceholders).not.toContain("intent_path");
+
+    const rendered = lib.render("reviewer", {
+      ...ROLES.architect!,
+      ...ROLES.reviewer!,
+      author: "architect",
+    });
+    expect(rendered.startsWith("You review one author's work.")).toBe(true);
+    expect(rendered).toContain("You are the architect");
+    expect(rendered).toContain("You review the architect's plan");
+    expect(rendered).toContain("/goal/intent.md");
+    expect(rendered).toContain("/goal/plan.md");
+    expect(rendered).not.toContain("You implement one task");
+    expect(rendered).not.toContain("You review the task diff");
+    expect(rendered).not.toContain("### Decision");
+    // Only the reviewer's own turn block: the architect's stayed out.
+    expect(rendered.split("## This turn").length - 1).toBe(1);
+    expect(
+      rendered.split("- `verdict` is used on review steps").length - 1,
+    ).toBe(1);
   });
 });
 
@@ -308,18 +402,113 @@ describe("review findings carry", () => {
     }
   }, 60_000);
 
-  it("tells the reviewer its summary carries the implementer's findings", () => {
+  it("tells the reviewer to write numbered findings in its summary", () => {
     const rendered = library().render("reviewer", ROLES.reviewer!);
     expect(rendered).toContain("numbered list in your outcome `summary`");
-    expect(rendered).toContain(
-      "receives that summary as its findings, followed by your concerns and forward",
-    );
+    expect(rendered).not.toContain("next implementer receives");
   });
 
-  it("no longer calls fix-round findings empty on the first turn", () => {
+  it("marks findings empty before the first review, not per fix round", () => {
     const rendered = library().render("implementer", ROLES.implementer!);
     expect(rendered).not.toContain("empty on the first turn");
-    expect(rendered).toContain("review summary, then concerns and forward");
+    expect(rendered).toContain("empty before the first review");
+  });
+});
+
+describe("prompt debloat", () => {
+  function renderedPrompts(): Map<string, string> {
+    const rendered = new Map<string, string>();
+    for (const [role, vars] of Object.entries(ROLES))
+      rendered.set(role, library().render(role, vars));
+    rendered.set(
+      "plan-reviewer",
+      library().render("reviewer", {
+        ...ROLES.architect!,
+        ...ROLES.reviewer!,
+        author: "architect",
+      }),
+    );
+    return rendered;
+  }
+
+  // One entry per original sentence class: where an input came from, how it
+  // was produced, or what the kernel/next role does with the output.
+  const PROVENANCE_OR_DOWNSTREAM = [
+    "implemented and merged after gates",
+    "the front's briefing for this goal",
+    "review summary, then concerns and forward",
+    "You get the task file or plan",
+    "next implementer receives",
+    "Each tier gets two turns",
+    "the ladder climbs",
+    "fallbacks already absorbed",
+    "A pending task in this list is not dispatched",
+    "runs its flow to the end",
+    "keeps running to exhaustion",
+    "outbox response",
+    "landed outcome is answered to the owner later",
+    "The next boundary presents the steer verbatim",
+    "the hold drains the goal",
+    "the next boundary sees your reason",
+    "the next reconcile never cancels them",
+    "a fresh session at the same tier",
+    "writes were rolled back",
+    "Records follow the kernel step record",
+    "the previous launch being summarised",
+    "replaces the scripted pack",
+    "it briefs the implementer",
+    "after this turn the script runs",
+    "records hold the history",
+    "Parked tasks come from the pack with a cause",
+    "the rest continues unless the steer blocks the goal",
+    "There is no diff and no task file to judge",
+    "next implementers receive only what its bullets say",
+    "The plan stands or changes on the architect's decision",
+    "The dispatch set ran out",
+    "before the architect is consulted",
+    "the kernel throws away whatever you write outside the outcome",
+    "everything else stays on the record",
+    "the fix round's per-finding disposition claims",
+    "the escalation ask for a standalone task",
+    "red before this diff",
+    "status, hashes, paths, evidence; drill in by path",
+    "stays on the record",
+    "waits for the next architect turn",
+    "a concern costs the next stage attention",
+    "deserves the next stage's attention",
+  ];
+
+  it("drops input provenance and downstream steps from every rendered prompt", () => {
+    const rendered = renderedPrompts();
+    const found: string[] = [];
+    for (const [role, prompt] of rendered) {
+      for (const phrase of PROVENANCE_OR_DOWNSTREAM) {
+        if (prompt.includes(phrase)) found.push(`${role}: ${phrase}`);
+      }
+    }
+    expect(found).toEqual([]);
+  });
+
+  it("keeps the bounds and deliverables a role acts on", () => {
+    const rendered = renderedPrompts();
+    const keeps: [string, string][] = [
+      ["architect", "Nothing asks mid-flight"],
+      ["architect", "plan the road to completion as far as uncertainty allows"],
+      ["front", "no design decision, no ordering and no review"],
+      ["front", "On `trivial` or `task`, carry the area and risks"],
+      ["pm", "Write one hold file per steer"],
+      ["pm", "Only an escalated ask may put a question"],
+      ["implementer", "Do not commit, amend, push"],
+      ["implementer", "failures here are pre-existing"],
+      ["reviewer", "Write them as a numbered list in your outcome `summary`"],
+      ["reviewer", "not findings against this diff"],
+      ["digest", "at most 80 lines"],
+      ["plan-checker", "MUST report honestly"],
+      ["steward", "Never rebase"],
+    ];
+    for (const [role, phrase] of keeps) {
+      expect(rendered.get(role), role).toContain(phrase);
+    }
   });
 });
 
@@ -516,7 +705,7 @@ describe("prompt structure", () => {
       const stray = source
         .split("\n")
         .slice(turnLine + 1)
-        .filter((l) => l.trim() !== "" && !/^(\s|-)/.test(l));
+        .filter((l) => l.trim() !== "" && !/^(\s|-|\{%|\{\{)/.test(l));
       expect(
         stray,
         `${role} has non-variable content after ## This turn: ${stray.join(" | ")}`,

@@ -76,7 +76,7 @@ export type SessionRef = {
   /** Resume is cwd-bound. */
   cwd: string;
   model: ModelRef;
-  /** Cache lifetime runs from the start of the last request, not turn end. */
+  /** Last model-stream activity in the turn, or the turn's end when none arrived. */
   lastRequestStartedAt: string;
   retentionTier: "short" | "long";
   compacted: boolean;

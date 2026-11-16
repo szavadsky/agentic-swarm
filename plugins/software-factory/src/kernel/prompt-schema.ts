@@ -138,6 +138,7 @@ const BASE_OUTCOME_FIELDS = ["status", "summary", "concerns", "forward"];
  * the upscope ask.
  */
 const ROLE_OUTCOME_FIELDS: Record<string, string[]> = {
+  architect: ["planReviewMarks"],
   pm: ["steerRoutes", "stallRoutes", "planCheckRoutes"],
   "plan-checker": ["planCheck"],
   reviewer: ["upscope"],

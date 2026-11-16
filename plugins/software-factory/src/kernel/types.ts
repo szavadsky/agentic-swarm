@@ -81,6 +81,12 @@ export const planCheckRouteEntrySchema = z.object({
 });
 export type PlanCheckRouteEntry = z.infer<typeof planCheckRouteEntrySchema>;
 
+/** One architect mark on a plan-review finding: whether the advisory review helped. */
+export const planReviewMarkSchema = z.object({
+  finding: z.number().int().positive(),
+  mark: z.enum(["helpful", "unhelpful"]),
+});
+
 /** The only agent ↔ script surface; one schema for every step. Field
  * descriptions render into the outcome prompt skeleton, so they are the
  * prompt-facing wording; comments below keep kernel-only behavior. */
@@ -124,6 +130,10 @@ export const outcomeSchema = z.object({
     .array(planCheckRouteEntrySchema)
     .optional()
     .describe("plan-check PM turns only: one entry per checker follow-up"),
+  planReviewMarks: z
+    .array(planReviewMarkSchema)
+    .optional()
+    .describe("architect step only: one mark per plan-review finding"),
 });
 
 export type Concern = z.infer<typeof concernSchema>;

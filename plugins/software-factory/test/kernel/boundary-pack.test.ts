@@ -1,9 +1,19 @@
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
+import {
+  FakeHarness,
+  fakeTurnIdentity,
+  fakeTurnResult,
+} from "../../src/harness/fake/index.js";
 import { runBoundary } from "../../src/kernel/boundary.js";
 import { contextPackRelPath } from "../../src/kernel/context-pack.js";
+import {
+  latestPlanReview,
+  PLAN_REVIEW_STEP,
+} from "../../src/kernel/plan-review.js";
+import type { Outcome } from "../../src/kernel/types.js";
+import { rec } from "./helpers.js";
 import { scriptMeta } from "../../src/kernel/record.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import {
@@ -216,4 +226,184 @@ describe("boundary context pack", () => {
       cleanup(goal);
     }
   });
+});
+
+const PLAN_REVIEW_ALIASES = {
+  architect: { harness: "fake", model: "fake-architect" },
+  pm: { harness: "fake", model: "fake-pm" },
+  implementer: { harness: "fake", model: "fake-impl" },
+  reviewer: { harness: "fake", model: "fake-review" },
+  steward: { harness: "fake", model: "fake-steward" },
+  "plan-reviewer": { harness: "fake", model: "fake-plan-review" },
+};
+
+describe("boundary plan review", () => {
+  it("runs a fresh plan review after the architect and packs its findings for the next consult", async () => {
+    const { repo, goal } = setupFlowRepo({ aliases: PLAN_REVIEW_ALIASES });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      const planPath = path.join(runtime.store.goalDir, "plan.md");
+      fs.writeFileSync(planPath, "# Plan\n\n- alpha\n", "utf8");
+
+      let reviewPrompt = "";
+      harness.script((req, ctx) => {
+        expect(req.prompt).toContain("planReviewMarks");
+        expect(req.prompt).toContain("helpful");
+        expect(req.prompt).toContain("unhelpful");
+        fs.appendFileSync(planPath, "\n## alpha\n", "utf8");
+        ctx.writeOutcome(
+          outcome({ summary: "planned alpha", decision: "continue" }),
+        );
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        reviewPrompt = req.prompt;
+        ctx.writeOutcome(
+          outcome({
+            summary:
+              "1. alpha's done-when names no test; name the command that proves it.",
+            verdict: "reject",
+          }),
+        );
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "no tasks to file" }));
+        return fakeTurnResult(req);
+      });
+
+      const first = await runBoundary(runtime, { relaunch: false });
+      expect(first.decision).toBe("continue");
+
+      const reviewCall = harness.calls.find(
+        (call) => fakeTurnIdentity(call).step === PLAN_REVIEW_STEP,
+      );
+      expect(reviewCall).toBeDefined();
+      expect(reviewCall!.model.id).toBe("fake-plan-review");
+      expect(reviewCall!.session).toBeUndefined();
+      expect(reviewPrompt).toContain("You review the architect's plan");
+      expect(reviewPrompt).toContain("advisory input, never a veto");
+      expect(reviewPrompt).not.toContain("You review the task diff");
+      expect(reviewPrompt).toContain(planPath);
+      expect(reviewPrompt).toContain(runtime.paths.goalCheckout);
+
+      const records = await runtime.store.listRecords();
+      const review = records.find(
+        (record) =>
+          record.step === PLAN_REVIEW_STEP && record.actor === "agent",
+      );
+      expect(review?.alias).toBe("plan-reviewer");
+      expect(review?.outcome?.summary).toContain("no test");
+      expect(records.some((record) => record.step === "plan-review-skip")).toBe(
+        false,
+      );
+
+      // The next consult's pack carries the advisory findings; the architect
+      // marks each one in its outcome, and the mark is on the record.
+      harness.script((req, ctx) => {
+        const pack = fs.readFileSync(
+          path.join(runtime.store.goalDir, contextPackRelPath(2)),
+          "utf8",
+        );
+        expect(pack).toContain("## Plan review");
+        expect(pack).toContain("iteration 1, reviewer `plan-reviewer`");
+        expect(pack).toContain("alpha's done-when names no test");
+        expect(req.prompt).toContain("mark every numbered finding");
+        ctx.writeOutcome(
+          outcome({
+            summary: "marked the review",
+            decision: "done",
+            planReviewMarks: [{ finding: 1, mark: "helpful" }],
+          }),
+        );
+        return fakeTurnResult(req);
+      });
+      const second = await runBoundary(runtime, {
+        relaunch: false,
+        iteration: 2,
+      });
+      expect(second.decision).toBe("done");
+      const architect = (await runtime.store.listRecords())
+        .filter(
+          (record) =>
+            record.step === "architect" &&
+            record.iteration === 2 &&
+            record.endedAt,
+        )
+        .at(-1);
+      expect(architect?.outcome?.planReviewMarks).toEqual([
+        { finding: 1, mark: "helpful" },
+      ]);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 90_000);
+
+  it("packs only the latest plan review attempt, never stale findings", () => {
+    const older = rec(1, {
+      slug: undefined,
+      step: PLAN_REVIEW_STEP,
+      outcome: outcome({ summary: "1. stale finding" }) as Outcome,
+    });
+    const newer = rec(2, {
+      slug: undefined,
+      step: PLAN_REVIEW_STEP,
+      outcome: outcome({ summary: "1. fresh finding" }) as Outcome,
+    });
+    expect(latestPlanReview([older, newer])?.summary).toContain(
+      "fresh finding",
+    );
+    const failed = rec(3, {
+      slug: undefined,
+      step: PLAN_REVIEW_STEP,
+      outcome: outcome({
+        status: "failed",
+        summary: "invalid outcome",
+      }) as Outcome,
+    });
+    expect(latestPlanReview([older, newer, failed])).toBeUndefined();
+  });
+
+  it("records a skip when the run config has no plan-reviewer alias", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      fs.writeFileSync(
+        path.join(runtime.store.goalDir, "plan.md"),
+        "# Plan\n\n- alpha\n",
+        "utf8",
+      );
+      harness.script((req, ctx) => {
+        fs.appendFileSync(
+          path.join(runtime.store.goalDir, "plan.md"),
+          "\n## alpha\n",
+          "utf8",
+        );
+        ctx.writeOutcome(
+          outcome({ summary: "planned alpha", decision: "continue" }),
+        );
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "no tasks to file" }));
+        return fakeTurnResult(req);
+      });
+
+      const boundary = await runBoundary(runtime, { relaunch: false });
+      expect(boundary.decision).toBe("continue");
+      const records = await runtime.store.listRecords();
+      expect(records.some((record) => record.step === PLAN_REVIEW_STEP)).toBe(
+        false,
+      );
+      const skip = records.find((record) => record.step === "plan-review-skip");
+      expect(skip?.ok).toBe(true);
+      expect(skip?.cause).toContain(
+        'plan review skipped: run config has no alias "plan-reviewer"',
+      );
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
 });

@@ -2,6 +2,8 @@ import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
+import { runBoundary } from "../../src/kernel/boundary.js";
+import { PLAN_REVIEW_STEP } from "../../src/kernel/plan-review.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import {
   cleanup,
@@ -12,6 +14,7 @@ import {
   stateOf,
   writePlan,
 } from "./e2e-helpers.js";
+import { cleanupFlowRepo, makeRuntime, setupFlowRepo } from "./s2-helpers.js";
 
 const PLAN = `# Milestone 1
 
@@ -236,4 +239,103 @@ describe("delivery guard", () => {
       cleanup(goal);
     }
   }, 60_000);
+});
+
+const PLAN_REVIEW_ALIASES = {
+  architect: { harness: "fake", model: "fake-architect" },
+  pm: { harness: "fake", model: "fake-pm" },
+  implementer: { harness: "fake", model: "fake-impl" },
+  reviewer: { harness: "fake", model: "fake-review" },
+  steward: { harness: "fake", model: "fake-steward" },
+  "plan-reviewer": { harness: "fake", model: "fake-plan-review" },
+};
+
+describe("plan review session hygiene", () => {
+  it("starts every plan review fresh, discards its writes, and never blocks on its failure", async () => {
+    const { repo, goal } = setupFlowRepo({ aliases: PLAN_REVIEW_ALIASES });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      const planPath = path.join(runtime.store.goalDir, "plan.md");
+      fs.writeFileSync(planPath, "# Plan\n\n- alpha\n", "utf8");
+      const reviewSessions: (string | undefined)[] = [];
+
+      harness.script((req, ctx) => {
+        fs.appendFileSync(planPath, "\n## alpha\n", "utf8");
+        ctx.writeOutcome(
+          outcome({ summary: "planned alpha", decision: "continue" }),
+        );
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        reviewSessions.push(req.session?.id);
+        fs.writeFileSync(planPath, "# Plan\n\nHACKED\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "1. alpha needs a test" }));
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "no tasks to file" }));
+        return fakeTurnResult(req);
+      });
+
+      const first = await runBoundary(runtime, { relaunch: false });
+      expect(first.decision).toBe("continue");
+      expect(fs.readFileSync(planPath, "utf8")).toContain("- alpha");
+      const reconciled = (await runtime.store.listRecords()).find(
+        (record) => record.step === "plan-review-reconcile",
+      );
+      expect(reconciled?.ok).toBe(false);
+      expect(reconciled?.cause).toContain("plan.md");
+
+      harness.script((req, ctx) => {
+        fs.appendFileSync(planPath, "\n## beta\n", "utf8");
+        ctx.writeOutcome(
+          outcome({ summary: "planned beta", decision: "continue" }),
+        );
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        reviewSessions.push(req.session?.id);
+        return fakeTurnResult(req, {
+          stop: { kind: "infra", cause: "quota" },
+        });
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "no tasks to file" }));
+        return fakeTurnResult(req);
+      });
+
+      const second = await runBoundary(runtime, {
+        relaunch: false,
+        iteration: 2,
+      });
+      expect(second.decision).toBe("continue");
+      // The first review left a session on the same alias and cwd; the second
+      // still starts de novo.
+      expect(reviewSessions).toEqual([undefined, undefined]);
+      const records = await runtime.store.listRecords();
+      const missing = records.find(
+        (record) =>
+          record.step === "plan-review-missing" && record.iteration === 2,
+      );
+      expect(missing?.ok).toBe(false);
+      expect(missing?.cause).toContain("infrastructure: quota");
+      expect(
+        records.some(
+          (record) =>
+            record.step === PLAN_REVIEW_STEP &&
+            record.iteration === 2 &&
+            record.endedAt,
+        ),
+      ).toBe(true);
+      // Advisory: the PM still ran after the failed review.
+      expect(
+        records.some(
+          (record) => record.step === "pm" && record.iteration === 2,
+        ),
+      ).toBe(true);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 90_000);
 });
