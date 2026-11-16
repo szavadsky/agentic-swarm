@@ -80,6 +80,11 @@ export type SessionRef = {
   lastRequestStartedAt: string;
   retentionTier: "short" | "long";
   compacted: boolean;
+  /**
+   * Session-cumulative token totals last read from the harness's usage command;
+   * a later turn reports the delta. Adapters without cumulative counters omit it.
+   */
+  cumulativeUsage?: Usage;
   /** Harness-managed session home; resume resolves against it, not the current launch dir. */
   dir?: string;
 };

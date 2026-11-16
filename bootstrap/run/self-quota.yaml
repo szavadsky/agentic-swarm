@@ -90,7 +90,7 @@ harnesses:
       agent: pi
       compact: true
       effort: { configId: thought_level }
-      usage: { cache: false }
+      usage: { cache: true, command: "/session" }
   codex:
     acpx:
       agent: codex

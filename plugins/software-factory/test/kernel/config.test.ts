@@ -214,4 +214,40 @@ describe("three config layers", () => {
     ).toBe(true);
     fs.rmSync(root, { recursive: true, force: true });
   });
+
+  it("requires an acpx usage command to be an adapter slash command", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    const runYaml = path.join(root, ".factory/run.yaml");
+    const run = (command: string) =>
+      [
+        "harnesses:",
+        "  pi:",
+        "    acpx:",
+        "      agent: pi",
+        `      usage: { command: "${command}" }`,
+        "",
+      ].join("\n");
+
+    fs.writeFileSync(runYaml, run("session"));
+    let error: unknown;
+    try {
+      loadConfigs(root);
+    } catch (err) {
+      error = err;
+    }
+    expect(error).toBeInstanceOf(ConfigError);
+    expect((error as ConfigError).findings).toContainEqual(
+      expect.objectContaining({
+        key: "harnesses.pi.acpx.usage.command",
+        message: expect.stringMatching(/leading \//),
+      }),
+    );
+
+    fs.writeFileSync(runYaml, run("/session"));
+    expect(loadConfigs(root).run.harnesses!.pi!.acpx.usage!.command).toBe(
+      "/session",
+    );
+    fs.rmSync(root, { recursive: true, force: true });
+  });
 });

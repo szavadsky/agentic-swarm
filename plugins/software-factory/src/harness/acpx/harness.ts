@@ -12,7 +12,8 @@ import type {
 } from "../types.js";
 import { resolveAcpxCommand } from "./command.js";
 import { probeAcpxModel } from "./probe.js";
-import { runAcpxCommand, runAcpxTurn } from "./turn.js";
+import { readAcpxSessionUsage, runAcpxCommand, runAcpxTurn } from "./turn.js";
+import { turnUsageFromTotals } from "./usage.js";
 import type { AcpxHarnessOptions, AcpxTurnSummary } from "./types.js";
 
 export type { AcpxHarnessOptions } from "./types.js";
@@ -109,12 +110,21 @@ export class AcpxHarness implements Harness {
       );
     }
     requireCompacted(result.summary);
+    const compacted: SessionRef = {
+      ...ref,
+      lastRequestStartedAt: new Date().toISOString(),
+      compacted: true,
+    };
+    // The usage command's totals are cumulative, so the compaction's own tokens
+    // sit between the baseline recorded on the ref and the next turn. Refresh
+    // it here (no model turn) and report the delta as the compaction's spend.
+    const cumulative = await readAcpxSessionUsage(this.runtime, config, ref);
+    if (!cumulative) return { session: compacted };
+    const session = { ...compacted, cumulativeUsage: cumulative };
+    if (!ref.cumulativeUsage) return { session };
     return {
-      session: {
-        ...ref,
-        lastRequestStartedAt: new Date().toISOString(),
-        compacted: true,
-      },
+      session,
+      usage: turnUsageFromTotals(cumulative, ref.cumulativeUsage),
     };
   }
 }

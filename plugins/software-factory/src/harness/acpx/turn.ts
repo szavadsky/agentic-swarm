@@ -14,6 +14,7 @@ import type {
   Stop,
   TurnAttempt,
   TurnRequest,
+  Usage,
 } from "../types.js";
 import { zeroUsage } from "../usage.js";
 import {
@@ -24,6 +25,7 @@ import {
 import { resolveRawAgentCommand } from "./command.js";
 import { acpxModel } from "./model.js";
 import { AcpxTranscriptParser, acpxErrors } from "./transcript.js";
+import { turnUsageFromTotals, usageFromAcpxSessionText } from "./usage.js";
 import type { AcpxConfig, AcpxTurnOpaque } from "./config.js";
 import type {
   AcpxCommand,
@@ -277,8 +279,9 @@ function runPromptProcess(
 export async function runAcpxCommand(
   runtime: AcpxRuntime,
   config: AcpxConfig,
-  ref: SessionRef,
+  ref: Pick<SessionRef, "id" | "cwd">,
   command: string,
+  signal?: AbortSignal,
 ): Promise<AcpxCommandResult> {
   const globals = acpxGlobalArgs(config, ref.cwd);
   const selection = acpxAgentSelection(config);
@@ -294,6 +297,7 @@ export async function runAcpxCommand(
     ref.cwd,
     COMMAND_TIMEOUTS,
     parser,
+    signal,
   );
   return {
     summary: parser.result(),
@@ -303,6 +307,32 @@ export async function runAcpxCommand(
     aborted: result.aborted,
     stderr: result.stderr,
   };
+}
+
+/**
+ * Read a session's cumulative token totals through its usage command. The
+ * command is the whole prompt, so it reuses the session without spending a
+ * model turn. Any failure leaves the caller's stop and usage untouched.
+ */
+export async function readAcpxSessionUsage(
+  runtime: AcpxRuntime,
+  config: AcpxConfig,
+  ref: Pick<SessionRef, "id" | "cwd">,
+  signal?: AbortSignal,
+): Promise<Usage | undefined> {
+  const command = config.usage?.command;
+  if (!command) return undefined;
+  const result = await runAcpxCommand(runtime, config, ref, command, signal);
+  if (
+    result.aborted ||
+    result.timedOut ||
+    result.code !== 0 ||
+    result.summary.errors.length > 0 ||
+    result.summary.stopReason !== "end_turn"
+  ) {
+    return undefined;
+  }
+  return usageFromAcpxSessionText(result.summary.text);
 }
 
 /** One acpx turn for one model from the fallback chain. */
@@ -465,8 +495,9 @@ export async function runAcpxTurn(
           stderr: processResult.stderr,
         });
 
+    const resumed = resume !== undefined && attempt === 0;
     // A session that acpx says is gone must not be handed back to the kernel.
-    const session = lost
+    const session: SessionRef | undefined = lost
       ? undefined
       : {
           harness: runtime.id,
@@ -476,13 +507,41 @@ export async function runAcpxTurn(
           lastRequestStartedAt: startedAt,
           retentionTier: "short" as const,
           compacted: req.session?.compacted ?? false,
+          // A failed usage command must not drop the delta baseline.
+          ...(resumed && req.session?.cumulativeUsage
+            ? { cumulativeUsage: req.session.cumulativeUsage }
+            : {}),
         };
+
+    // pi's prompt result carries no usage, so its configured command is the only
+    // source. The command reuses the session and never spends a model turn; a
+    // failure leaves the stop and the prompt's usage exactly as they were.
+    let usage = summary.usage;
+    let storedSession = session;
+    if (session && !processResult.aborted && !processResult.timedOut) {
+      const cumulative = await readAcpxSessionUsage(
+        runtime,
+        config,
+        session,
+        req.signal,
+      );
+      if (cumulative) {
+        const previous = resumed ? req.session?.cumulativeUsage : undefined;
+        // A resumed session with no recorded total cannot separate this turn
+        // from its history; keep this turn's usage unknown but leave a baseline
+        // behind for the next delta.
+        if (!resumed || previous) {
+          usage = turnUsageFromTotals(cumulative, previous);
+        }
+        storedSession = { ...session, cumulativeUsage: cumulative };
+      }
+    }
 
     return {
       stop,
       text: summary.text,
-      usage: summary.usage,
-      session,
+      usage,
+      session: storedSession,
       model,
       attempts,
     };

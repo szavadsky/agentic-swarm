@@ -24,6 +24,19 @@ export const acpxUsageSchema = z
   .object({
     cache: z.boolean().optional(),
     fields: acpxUsageFieldsSchema.optional(),
+    /**
+     * Adapter slash command whose reply carries the session's cumulative token
+     * totals. pi is the only probed agent whose prompt result has no usage, so
+     * only it needs `/session` (acpx probe §4).
+     */
+    command: z
+      .string()
+      .min(2)
+      .regex(
+        /^\//,
+        "usage command must be an adapter slash command (leading /)",
+      )
+      .optional(),
   })
   .strict();
 

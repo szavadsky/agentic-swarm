@@ -21,6 +21,25 @@ export interface AcpxStubModel {
 export interface AcpxStubOptions {
   /** Prompt result usage frame; absent means the result carries none. */
   usage?: Record<string, number>;
+  /**
+   * Tokens one prompt adds to the stub session. When set, `/session` answers
+   * pi's cumulative report; absent leaves the command unimplemented.
+   */
+  sessionUsage?: {
+    input: number;
+    output: number;
+    cacheRead?: number;
+    cacheWrite?: number;
+  };
+  /** How `/session` answers: the cumulative report, or an ACP error. */
+  sessionCommand?: "ok" | "fail";
+  /** Tokens a successful `/compact` adds before the next usage read. */
+  compactUsage?: {
+    input: number;
+    output: number;
+    cacheRead?: number;
+    cacheWrite?: number;
+  };
   /** Banner text emitted as an earlier agent message before the reply. */
   banner?: string;
   /** ACP `usage_update` cost payload; absent means the update carries none. */
@@ -52,6 +71,9 @@ export function createAcpxStub(opts: AcpxStubOptions = {}): AcpxStub {
   const stateDir = path.join(dir, "state");
   const binary = path.join(dir, "acpx-stub.js");
   const usageJs = JSON.stringify(opts.usage ?? null);
+  const sessionUsageJs = JSON.stringify(opts.sessionUsage ?? null);
+  const sessionCommandJs = JSON.stringify(opts.sessionCommand ?? "ok");
+  const compactUsageJs = JSON.stringify(opts.compactUsage ?? null);
   const bannerJs = JSON.stringify(opts.banner ?? null);
   const costJs = JSON.stringify(opts.cost ?? null);
   const compactJs = JSON.stringify(opts.compact ?? "ok");
@@ -87,6 +109,9 @@ const marker = (name) => {
 const mode = marker("mode");
 const reply = marker("text") ?? "PONG";
 const usage = ${usageJs};
+const sessionUsage = ${sessionUsageJs};
+const sessionCommand = ${sessionCommandJs};
+const compactUsage = ${compactUsageJs};
 const banner = ${bannerJs};
 const cost = ${costJs};
 const compactMode = ${compactJs};
@@ -94,6 +119,19 @@ const models = ${modelsJs};
 const defaultModel = ${defaultModelJs};
 const effortConfigId = ${effortConfigIdJs};
 const sessionFile = (name) => path.join(stateDir, "session-" + name);
+const sessionUsageFile = (name) => path.join(stateDir, "usage-" + name);
+const addSessionUsage = (name, amount) => {
+  if (!amount) return;
+  let totals = { in: 0, out: 0, cacheRead: 0, cacheWrite: 0 };
+  try {
+    totals = JSON.parse(fs.readFileSync(sessionUsageFile(name), "utf8"));
+  } catch {}
+  totals.in += amount.input;
+  totals.out += amount.output;
+  totals.cacheRead += amount.cacheRead ?? 0;
+  totals.cacheWrite += amount.cacheWrite ?? 0;
+  fs.writeFileSync(sessionUsageFile(name), JSON.stringify(totals));
+};
 const noSession = () =>
   emit({
     jsonrpc: "2.0",
@@ -222,6 +260,34 @@ const chunk = (text, messageId) => {
 };
 
 // A slash command is the whole prompt: answer it with the adapter's frames.
+if (prompt === "/session") {
+  if (!session || !fs.existsSync(sessionFile(session))) {
+    noSession();
+    process.exit(4);
+  }
+  if (sessionCommand === "fail") {
+    emit({ jsonrpc: "2.0", id: null, error: { code: -32603, message: "Internal error", data: { details: "session command failed" } } });
+    process.exit(1);
+  }
+  if (!sessionUsage) {
+    emit({ jsonrpc: "2.0", id: null, error: { code: -32603, message: "Internal error", data: { details: "no session usage configured" } } });
+    process.exit(1);
+  }
+  const totals = JSON.parse(fs.readFileSync(sessionUsageFile(session), "utf8"));
+  startPrompt();
+  chunk(
+    "Session: " + sessionId + "\\n" +
+      "Session file: " + path.join(stateDir, "pi-" + session + ".jsonl") + "\\n" +
+      "Messages: 1\\n" +
+      "Cost: 0\\n" +
+      "Tokens: in " + totals.in + ", out " + totals.out +
+      ", cache read " + totals.cacheRead + ", cache write " + totals.cacheWrite +
+      ", total " + (totals.in + totals.out + totals.cacheRead + totals.cacheWrite),
+    "msg_session",
+  );
+  emit({ jsonrpc: "2.0", id: 7, result: { stopReason: "end_turn" } });
+  process.exit(0);
+}
 if (prompt === "/compact") {
   if (compactMode === "nothing") {
     emit({ jsonrpc: "2.0", id: null, error: { code: -32603, message: "Internal error", data: { details: "pi compact failed: Nothing to compact (session too small)" } } });
@@ -232,12 +298,14 @@ if (prompt === "/compact") {
     process.exit(1);
   }
   startPrompt();
+  addSessionUsage(session, compactUsage);
   chunk("Compaction completed.\\nTokens before: 55832", "msg_compact");
   emit({ jsonrpc: "2.0", id: 7, result: { stopReason: "end_turn" } });
   process.exit(0);
 }
 
 startPrompt();
+addSessionUsage(session, sessionUsage);
 if (banner) {
   chunk(banner, undefined);
   emit({ jsonrpc: "2.0", method: "session/update", params: { sessionId, update: { sessionUpdate: "available_commands_update", availableCommands: [] } } });
