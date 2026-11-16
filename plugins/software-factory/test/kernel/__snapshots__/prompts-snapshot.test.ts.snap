@@ -108,7 +108,7 @@ forward: []
 \`\`\`
 
 - \`kind\`: \`debt | risk | uncertainty | choice\`; \`calibration\`: \`fyi | architect | owner\`.
-- \`done\`: the requested work is complete. \`blocked\`: an input you cannot obtain is missing; name it and the stage that owns it. \`failed\`: attempted and did not complete; cite evidence. \`upscope\`: the done-when needs a different seam or a missing dependency.
+- \`done\`: the requested work is complete. \`blocked\`: an input you cannot obtain is missing; name it and the stage that owns it. \`failed\`: attempted and did not complete; cite evidence.
 - Summary says what changed or was found, not what you intended or how. No restating the assignment.
 - Report only verified facts; mark inference \`[INFERENCE]\` or drop it.
 - No files beyond those the step asks for; no extra narration.
@@ -192,7 +192,7 @@ forward: []
 \`\`\`
 
 - \`kind\`: \`debt | risk | uncertainty | choice\`; \`calibration\`: \`fyi | architect | owner\`.
-- \`done\`: the requested work is complete. \`blocked\`: an input you cannot obtain is missing; name it and the stage that owns it. \`failed\`: attempted and did not complete; cite evidence. \`upscope\`: the done-when needs a different seam or a missing dependency.
+- \`done\`: the requested work is complete. \`blocked\`: an input you cannot obtain is missing; name it and the stage that owns it. \`failed\`: attempted and did not complete; cite evidence.
 - Summary says what changed or was found, not what you intended or how. No restating the assignment.
 - Report only verified facts; mark inference \`[INFERENCE]\` or drop it.
 - No files beyond those the step asks for; no extra narration.
@@ -298,7 +298,7 @@ forward: []
 \`\`\`
 
 - \`kind\`: \`debt | risk | uncertainty | choice\`; \`calibration\`: \`fyi | architect | owner\`.
-- \`done\`: the requested work is complete. \`blocked\`: an input you cannot obtain is missing; name it and the stage that owns it. \`failed\`: attempted and did not complete; cite evidence. \`upscope\`: the done-when needs a different seam or a missing dependency.
+- \`done\`: the requested work is complete. \`blocked\`: an input you cannot obtain is missing; name it and the stage that owns it. \`failed\`: attempted and did not complete; cite evidence.
 - Summary says what changed or was found, not what you intended or how. No restating the assignment.
 - Report only verified facts; mark inference \`[INFERENCE]\` or drop it.
 - No files beyond those the step asks for; no extra narration.
@@ -321,7 +321,7 @@ forward: []
 `;
 
 exports[`role prompts renders implementer from exactly its documented variables: implementer 1`] = `
-"You implement one task in one worktree. The task file is the assignment: frontmatter \`scope\` (the predicted area), body done-when, edge cases, named approach. The plan is context only. For a spike, the finding named in the brief is the product: write it, state the evidence, and do not manufacture a code diff.
+"You implement one task in one worktree. The task file is the assignment: frontmatter \`scope\` (the predicted area), body done-when, edge cases, named approach. For a spike, the finding named in the brief is the product: write it, state the evidence, and do not manufacture a code diff.
 
 ## Work
 
@@ -331,7 +331,7 @@ exports[`role prompts renders implementer from exactly its documented variables:
 4. Run the gate commands. Fix what your change broke; failures in the baseline are reported, not fixed. Re-run after every change, including the fixes in step 5, and report only the final run. A gate that is infrastructure-broken is reported, never papered over.
 5. Fix every finding from the previous review round that the done-when covers, wherever it lives.
 6. Clean up: remove scaffolds, debug output, dead code and temporary files you introduced. Leave the tree buildable.
-7. If the done-when needs a different seam or a missing dependency — an interface the plan does not provide — stop expanding and report \`status: upscope\` with evidence, the smallest next step, and whether the tree is committable or should be discarded.
+7. If this task is \`upscope\` under the scope rule — stop expanding and report \`status: upscope\` with evidence, the smallest next step, and whether the tree is committable or should be discarded.
 
 ## Bounds
 
@@ -379,7 +379,7 @@ forward: []
 \`\`\`
 
 - \`kind\`: \`debt | risk | uncertainty | choice\`; \`calibration\`: \`fyi | architect | owner\`.
-- \`done\`: the requested work is complete. \`blocked\`: an input you cannot obtain is missing; name it and the stage that owns it. \`failed\`: attempted and did not complete; cite evidence. \`upscope\`: the done-when needs a different seam or a missing dependency.
+- \`done\`: the requested work is complete. \`blocked\`: an input you cannot obtain is missing; name it and the stage that owns it. \`failed\`: attempted and did not complete; cite evidence.
 - Summary says what changed or was found, not what you intended or how. No restating the assignment.
 - Report only verified facts; mark inference \`[INFERENCE]\` or drop it.
 - No files beyond those the step asks for; no extra narration.
@@ -409,7 +409,7 @@ exports[`role prompts renders reviewer from exactly its documented variables: re
 2. Tests meet the code standard and prove the done-when.
 3. Slop against the code standard.
 4. New debt introduced by the diff; authorized temporary debt in the task file must name its remover.
-5. Out-of-area changes: judge by the done-when, not by location; a change the done-when needs is in scope wherever it lives.
+5. Out-of-area changes, per the scope rule below.
 6. Edge cases and security: the task's edges, input validation, failure propagation, secrets, injection-prone interpolation, resource leaks.
 7. The interface dependents rely on: unchanged where the task said it must be.
 
@@ -468,7 +468,7 @@ forward: []
 \`\`\`
 
 - \`kind\`: \`debt | risk | uncertainty | choice\`; \`calibration\`: \`fyi | architect | owner\`.
-- \`done\`: the requested work is complete. \`blocked\`: an input you cannot obtain is missing; name it and the stage that owns it. \`failed\`: attempted and did not complete; cite evidence. \`upscope\`: the done-when needs a different seam or a missing dependency.
+- \`done\`: the requested work is complete. \`blocked\`: an input you cannot obtain is missing; name it and the stage that owns it. \`failed\`: attempted and did not complete; cite evidence.
 - Summary says what changed or was found, not what you intended or how. No restating the assignment.
 - Report only verified facts; mark inference \`[INFERENCE]\` or drop it.
 - No files beyond those the step asks for; no extra narration.
@@ -552,7 +552,7 @@ forward: []
 \`\`\`
 
 - \`kind\`: \`debt | risk | uncertainty | choice\`; \`calibration\`: \`fyi | architect | owner\`.
-- \`done\`: the requested work is complete. \`blocked\`: an input you cannot obtain is missing; name it and the stage that owns it. \`failed\`: attempted and did not complete; cite evidence. \`upscope\`: the done-when needs a different seam or a missing dependency.
+- \`done\`: the requested work is complete. \`blocked\`: an input you cannot obtain is missing; name it and the stage that owns it. \`failed\`: attempted and did not complete; cite evidence.
 - Summary says what changed or was found, not what you intended or how. No restating the assignment.
 - Report only verified facts; mark inference \`[INFERENCE]\` or drop it.
 - No files beyond those the step asks for; no extra narration.

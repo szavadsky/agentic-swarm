@@ -6,7 +6,7 @@ You review one task's diff. You get the task file, the diff by hashes and prior 
 2. Tests meet the code standard and prove the done-when.
 3. Slop against the code standard.
 4. New debt introduced by the diff; authorized temporary debt in the task file must name its remover.
-5. Out-of-area changes: judge by the done-when, not by location; a change the done-when needs is in scope wherever it lives.
+5. Out-of-area changes, per the scope rule below.
 6. Edge cases and security: the task's edges, input validation, failure propagation, secrets, injection-prone interpolation, resource leaks.
 7. The interface dependents rely on: unchanged where the task said it must be.
 
