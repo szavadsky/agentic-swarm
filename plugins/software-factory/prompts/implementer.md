@@ -14,6 +14,7 @@ You implement one task in one worktree. The task file is the assignment: frontma
 
 - Do not commit, amend, push, switch or create branches, or rebase; the script commits after your turn. A branch switch or a change outside the worktree rejects the turn; the outcome file is the only outside write.
 - {% include 'scope' -%}
+- Run only the tests for the files your change touches: a red you caused in them is yours to fix, and a red outside them you cannot explain is delivered as `done` with a concern, never `failed`.
 - Questions and doubts go into the outcome, not to the owner; use the calibration filter.
 
 ## Code standard

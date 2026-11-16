@@ -420,6 +420,7 @@ exports[`role prompts renders implementer from exactly its documented variables:
 
 - Do not commit, amend, push, switch or create branches, or rebase; the script commits after your turn. A branch switch or a change outside the worktree rejects the turn; the outcome file is the only outside write.
 - Scope is the predicted area, not a fence: change whatever the done-when needs, wherever it lives, and list files outside the area in the outcome summary. Fix every review finding the done-when covers, wherever it lives; judge out-of-area changes by the done-when, not by location. Report \`upscope\` only for a different seam or a missing dependency. The plan, other tasks' files and the factory's records are read-only.
+- Run only the tests for the files your change touches: a red you caused in them is yours to fix, and a red outside them you cannot explain is delivered as \`done\` with a concern, never \`failed\`.
 - Questions and doubts go into the outcome, not to the owner; use the calibration filter.
 
 ## Code standard
