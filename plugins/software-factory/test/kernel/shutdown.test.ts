@@ -10,8 +10,6 @@ import {
 } from "../../src/core/shutdown.js";
 import { createDrainController } from "../../src/kernel/signals.js";
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
 async function runShutdownSweepInChild(
   dir: string,
   grandchildPid: string,

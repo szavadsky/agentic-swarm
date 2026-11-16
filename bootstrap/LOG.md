@@ -591,3 +591,10 @@ Verbatim, newest last; each with what it changed.
 
 ### 2026-11-16 — rotation for i40: off-Go map repeats (comment-only bump)
 - Same emergency map, verified in i39. Price-coverage green before commit.
+
+### 2026-11-16 — i40 landed: 2 merges, 0 parks; Phase-1 evidence goals ordered
+- Exit 3 (iteration-limit), 1h27m wall. factory/self +2: shutdown-sleep-drop, acpx-zero-usage-land (fresh task, no base — converges the i39-parked chain; reversible assumption recorded). ZERO parks, pending 0, inbox empty.
+- Legs: digest beam $0; architect omp/opus $1.05 (attempt1 infra crash out0 → attempt2 done 18k out, same-model retry); planreview+plancheck agy ($0.68+$0.87); PM agy $0.30; implements 2 agy; review 01649: ernie INFRA QUOTA 3x (attempt1 14075 out, then 2x out0) → cross-harness fallback hop to agy/gemini DONE (9154 out) — fallback chain worked as designed (reviewer $1.08). Steward stub skipped 6th. Cost $9.53 fully priced (implementer $5.55). 3 infra retries, 1 fallback hop, 1 outcome-repair, 0 conflicts, 0 gate flakes.
+- WATCH: ernie-free hit infra quota 3x (first time) — off-Go map's reviewer/fallback workhorse is rate-sensitive; fallback saved it. Reroute to agy-primary review if it repeats.
+- Architect forward: Phase 1 live evidence owed — (1) steward agent turn (colliding tasks), (2) each steer class handled once (mid-dispatch injection). "The factory is ready for both now... running them after this iteration lands." Operator launches next (p1-trivial/p1-task precedent), then i41 self.
+- No steers for i41: no incidents. Budget steer still awaiting owner word — NOT steered (6th iteration).
