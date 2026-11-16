@@ -532,3 +532,7 @@ Verbatim, newest last; each with what it changed.
 - Landing incident (operator-caused): merged tree red 1/849 — `resolves every model id: self-quota.yaml`: bare `opus` (my i33 rotation) matches no OpenRouter id. Fixed in operator territory: priceIds opus/sonnet → anthropic/claude-opus/sonnet-5-5. Lesson: loader-validate is not enough for run-config edits — also run the 100 ms live-run-configs test file from now on.
 - Opencode binding effort levels wrong as merged ([low..max]); live only none/high/default. Operator corrected live config to high (digest + opencode fallbacks); steered for the other shipped configs.
 - Steers for i34: arch-crash observation (01390); opencode-effort observation.
+
+### 2026-11-16 — rotation for i34: wheel turns (omp-arch, codex-impl, pi-review, agy-PM)
+- Map: architect omp/opus:high (fb claude-code/opus = reverse cross-harness test, fb2 claude-code/sonnet), pm agy/gemini:high (fb pi-Go/deepseek; agy guaranteed spend after i33's 0 turns), digest opencode/beam:high (fb Go/deepseek; high is opencode-acp's real max — `set effort max` rejected live), implementer codex/deepseek:max (fb codex-muse; max catalog-supported + set-verified), reviewer pi/Go-deepseek:xhigh (fb pi-Go/muse; mirror keeps cross-harness review), escalation omp/sonnet (fb omp-Go/muse), steward pi/Go-deepseek:high (fb pi-Go/muse).
+- opencode binding levels corrected to live truth [none, high, default] (merged [low..max] rejected by installed 2.2.7; steered for other shipped configs). Loader + price-coverage green before commit (new lesson applied).
