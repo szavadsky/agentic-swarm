@@ -36,6 +36,32 @@ interface Fixture {
   input: PreflightInput;
 }
 
+/** Architect and implementer on different harnesses; omp is the scouts consumer. */
+const SPLIT_HARNESSES = RUN_HEAD.replace(
+  "architect: { harness: fake, model: arch, effort: highest }",
+  "architect: { harness: claude-code, model: arch }",
+).replace(
+  "implementer: { harness: fake, model: impl }",
+  "implementer: { harness: omp, model: impl }",
+);
+
+function splitHarnesses(f: Fixture): Map<string, Harness> {
+  const harnesses = new Map(f.input.harnesses);
+  harnesses.set("claude-code", new FakeHarness({ id: "claude-code" }));
+  harnesses.set(
+    "omp",
+    new FakeHarness({
+      id: "omp",
+      caps: { effort: ["low", "medium", "high"] },
+    }),
+  );
+  return harnesses;
+}
+
+function withScouts(runYaml: string, scouts: string): string {
+  return runYaml.replace("limits:", `${scouts}\nlimits:`);
+}
+
 async function fixture(
   runYaml = RUN_HEAD,
   repoYaml?: string,
@@ -166,6 +192,94 @@ describe("pre-flight", () => {
           message: 'fallback "far" is not listed by harness "other"',
         }),
       );
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("checks scouts against omp, not the architect's harness", async () => {
+    const f = await fixture(
+      withScouts(SPLIT_HARNESSES, "scouts: { model: ernie, effort: highest }"),
+    );
+    try {
+      const seen: string[] = [];
+      const catalog: ModelCatalog = async (harness, model) => {
+        seen.push(`${harness}/${model}`);
+        return true;
+      };
+      const result = await preflight({
+        ...f.input,
+        harnesses: splitHarnesses(f),
+        catalog,
+      });
+      expect(result.aliases.scouts).toBe("high");
+      expect(f.configs.run.scouts!.effort).toBe("high");
+      expect(seen).toContain("omp/ernie");
+      expect(seen).not.toContain("claude-code/ernie");
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("refuses a scouts model omp does not list, naming omp", async () => {
+    const f = await fixture(
+      withScouts(SPLIT_HARNESSES, "scouts: { model: ernie }"),
+    );
+    try {
+      const catalog: ModelCatalog = async (harness, model) =>
+        harness !== "omp" || model === "impl";
+      const err = await refusal({
+        ...f.input,
+        harnesses: splitHarnesses(f),
+        catalog,
+      });
+      expect(err.findings).toContainEqual(
+        expect.objectContaining({
+          key: "scouts.model",
+          message: 'model "ernie" is not listed by harness "omp"',
+        }),
+      );
+      expect(err.report).toContain('harness "omp"');
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("refuses a scouts block when no alias or fallback runs on omp", async () => {
+    const f = await fixture(withScouts(RUN_HEAD, "scouts: { model: ernie }"));
+    try {
+      const err = await refusal(f.input);
+      expect(err.findings).toContainEqual(
+        expect.objectContaining({
+          file: path.join(f.repo.dir, ".factory/run.yaml"),
+          key: "scouts",
+          message: expect.stringContaining("no harness consumes it"),
+        }),
+      );
+      expect(err.report).toContain('harness "omp"');
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("accepts scouts when only a fallback tier runs on omp", async () => {
+    const f = await fixture(
+      withScouts(
+        SPLIT_HARNESSES.replace(
+          "implementer: { harness: omp, model: impl }",
+          "implementer: { harness: fake, model: impl, fallbacks: [{ harness: omp, model: impl-omp }] }",
+        ),
+        "scouts: { model: ernie }",
+      ),
+    );
+    try {
+      const seen: string[] = [];
+      const catalog: ModelCatalog = async (harness, model) => {
+        seen.push(`${harness}/${model}`);
+        return true;
+      };
+      await preflight({ ...f.input, harnesses: splitHarnesses(f), catalog });
+      expect(seen).toContain("omp/ernie");
     } finally {
       f.repo.cleanup();
     }

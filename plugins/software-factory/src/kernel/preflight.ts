@@ -231,11 +231,6 @@ export async function preflight(
       if (fallback.harness) usedHarnesses.add(fallback.harness);
     }
   }
-  const architectAlias = roleAlias(configs.process, "architect");
-  if (configs.run.scouts && architectAlias) {
-    const architect = configs.run.aliases[architectAlias];
-    if (architect) usedHarnesses.add(architect.harness);
-  }
   const unavailable = new Set<string>();
   if (input.binaries) {
     for (const harness of [...usedHarnesses].sort()) {
@@ -269,12 +264,7 @@ export async function preflight(
   for (const [name, alias] of Object.entries(configs.run.aliases)) {
     await checkAlias(ctx, name, alias, resolvedAliases);
   }
-  await checkScouts(
-    ctx,
-    configs,
-    roleAlias(configs.process, "architect"),
-    resolvedAliases,
-  );
+  await checkScouts(ctx, configs, resolvedAliases);
 
   const worktreeFile =
     !configs.run.worktreeRoot && configs.repo.worktreeRoot

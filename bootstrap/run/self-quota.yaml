@@ -115,11 +115,9 @@ harnesses:
       effort: { configId: effort }
       usage: { cache: true }
 
-# No scouts block while the architect is claude-code: scouts are consumed only
-# by OmpHarness (cheap subagent pin), but pre-flight checks scouts.model
-# against the architect's harness — no one id is both omp-usable and
-# claude-code-listed. The B-shape (omp architect) restores scouts. See
-# steer-i35-scouts-harness.md for the kernel-side observation.
+scouts:
+  model: openrouter/baidu/ernie-5.5-flash-preview:free
+  effort: high
 
 # Harness model id -> OpenRouter model id, only where matching cannot resolve.
 # Prices come from OpenRouter's model list; opencode is the only acpx harness
