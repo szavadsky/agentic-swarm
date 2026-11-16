@@ -1,412 +1,256 @@
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import {
   createRealHarnesses,
-  createRealModelCatalog,
   resolveHarnessBinaries,
 } from "../../src/cli/harnesses.js";
 import { AcpxHarness } from "../../src/harness/acpx/harness.js";
 import { FakeHarness } from "../../src/harness/fake/index.js";
 import type { Harness } from "../../src/harness/types.js";
 import { loadConfigs, resolveGoalPaths } from "../../src/kernel/config.js";
-import { type ModelCatalog, preflight } from "../../src/kernel/preflight.js";
+import {
+  PreflightError,
+  type PreflightInput,
+  preflight,
+} from "../../src/kernel/preflight.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import { createTmpRepo } from "../helpers/tmp-repo.js";
-import { createAcpxStub } from "./acpx-stub.js";
+import {
+  createAcpxStub,
+  type AcpxStub,
+  type AcpxStubModel,
+} from "./acpx-stub.js";
 
-// Mirrors bootstrap/run/self-acpx.yaml (implementer on pi, reviewer on codex).
-// Inlined: the package suite must not reach outside the package.
-const RUN_CONFIG_TEXT = `aliases:
-  architect: { harness: omp, model: anthropic/claude-opus-5-5, effort: high, fallbacks: [{ model: opencode-go/deepseek-v4.1-flash }] }
-  pm: { harness: opencode, model: opencode/beam-free, fallbacks: [{ model: opencode-go/deepseek-v4.1-flash }] }
-  digest: { harness: opencode, model: opencode/beam-free, fallbacks: [{ model: opencode-go/deepseek-v4.1-flash }] }
-  implementer: { harness: pi, model: opencode-go/beam-free, effort: high }
-  reviewer: { harness: codex, model: deepseek-v4.1-flash, effort: high }
-  steward: { harness: pi, model: opencode-go/beam-free, effort: high }
-  escalation: { harness: omp, model: anthropic/claude-sonnet-5-5 }
+const LIVE_MODELS: AcpxStubModel[] = [
+  { id: "model-a", effort: ["none", "high", "default"] },
+  { id: "model-b", effort: ["low", "medium"] },
+];
+
+interface RunSpec {
+  pmModel?: string;
+  pmEffort?: string;
+  reviewerEffort?: string;
+}
+
+function runConfig(spec: RunSpec = {}): string {
+  const pmModel = spec.pmModel ?? "model-a";
+  return `aliases:
+  architect: { harness: omp, model: arch, effort: high }
+  pm: { harness: opencode, model: ${pmModel}${spec.pmEffort ? `, effort: ${spec.pmEffort}` : ""} }
+  digest: { harness: opencode, model: model-a }
+  implementer: { harness: opencode, model: model-a }
+  reviewer: { harness: opencode, model: model-a${spec.reviewerEffort ? `, effort: ${spec.reviewerEffort}` : ""} }
+  steward: { harness: opencode, model: model-a }
 harnesses:
   opencode:
     acpx:
-      agent: opencode acp
-      raw: true
-      effort: { configId: effort, levels: [low, medium, high, xhigh, max] }
-      usage: { cache: true }
-  pi:
-    acpx:
-      agent: pi
-      effort: { configId: thought_level, levels: [off, minimal, low, medium, high, xhigh] }
-      usage: { cache: false }
-  codex:
-    acpx:
-      agent: codex
-      effort: { configId: reasoning_effort, levels: [low, medium, high, xhigh, max] }
-      usage: { cache: true }
-  agy:
-    acpx:
-      agent: agy acp
-      raw: true
-      args: [--approve-all]
+      agent: opencode
       effort:
-        configId: thought_level
-        levels: [low, medium, high]
-        modelBases: { gemini-3.8-flash: [low, medium, high] }
-      usage: { cache: true }
-scouts: { model: opencode-go/deepseek-v4.1-flash }
-priceIds:
-  opencode/beam-free: reflection/beam-1.0-501b-a23b
-  opencode-go/beam-free: reflection/beam-1.0-501b-a23b
-limits: { concurrency: { overall: 3 }, iterations: 1 }
-sessions: { dir: "", keepRuns: 5 }
-worktreeRoot: "/tmp/worktrees"
+        configId: effort
+        modelBases: { model-a: [none, high, default] }
+limits: { concurrency: { overall: 2 }, iterations: 1 }
 `;
-const EFFORTS = ["low", "medium", "high", "xhigh", "max"];
+}
 
-describe("self-acpx run config", () => {
-  it("routes implementer through pi and reviewer through codex and passes pre-flight", async () => {
-    const repo = createTmpRepo();
-    const stub = createAcpxStub();
-    const warnings: string[] = [];
-    const originalWarn = console.warn;
-    console.warn = (message: string) => warnings.push(message);
+async function fixture(
+  text: string,
+  stub: AcpxStub,
+): Promise<{
+  repo: ReturnType<typeof createTmpRepo>;
+  input: PreflightInput;
+  configs: ReturnType<typeof loadConfigs>;
+}> {
+  const repo = createTmpRepo();
+  repo.writeFile(
+    ".factory/repo.yaml",
+    "baseBranch: main\nartifactRoot: .factory/artifacts\nsetup: []\ngates: []\n",
+  );
+  repo.commit("factory config");
+  const runConfigPath = path.join(repo.dir, ".factory", "run-acpx.yaml");
+  fs.writeFileSync(runConfigPath, text, "utf8");
+  const configs = loadConfigs(repo.dir, { runConfigPath });
+  const base = path.basename(repo.dir);
+  configs.run.sessions.dir = path.join(
+    path.dirname(repo.dir),
+    `${base}-sessions`,
+  );
+  configs.run.worktreeRoot = path.join(
+    path.dirname(repo.dir),
+    `${base}-worktrees`,
+  );
+  const paths = resolveGoalPaths(configs, repo.dir, "self-acpx");
+  fs.mkdirSync(paths.goalDir, { recursive: true });
+  fs.writeFileSync(path.join(paths.goalDir, "intent.md"), "# Goal\n", "utf8");
+  const store = createFolderStore(paths.goalDir);
+  await store.ensureLayout();
+  const harnesses = new Map<string, Harness>([
+    ["omp", new FakeHarness({ id: "omp", caps: { effort: ["low", "high"] } })],
+    [
+      "opencode",
+      new AcpxHarness({
+        id: "opencode",
+        binary: stub.binary,
+        acpx: configs.run.harnesses!.opencode!.acpx,
+      }),
+    ],
+  ]);
+  return {
+    repo,
+    configs,
+    input: {
+      configs,
+      paths,
+      store,
+      harnesses,
+      binaries: { omp: process.execPath, opencode: stub.binary },
+      baseGates: false,
+    },
+  };
+}
+
+async function refusal(input: PreflightInput): Promise<PreflightError> {
+  try {
+    await preflight(input);
+  } catch (err) {
+    expect(err).toBeInstanceOf(PreflightError);
+    return err as PreflightError;
+  }
+  throw new Error("pre-flight unexpectedly passed");
+}
+
+function sessionCalls(stub: AcpxStub, verb: "new" | "show" | "close") {
+  return stub
+    .invocations()
+    .filter((args) => args.includes("sessions") && args.includes(verb));
+}
+
+describe("acpx live pre-flight", () => {
+  it("rejects max against the model's live values and accepts high/highest", async () => {
+    const stub = createAcpxStub({
+      models: LIVE_MODELS,
+      effortConfigId: "effort",
+    });
+    const failed = await fixture(runConfig({ pmEffort: "max" }), stub);
     try {
-      repo.writeFile(
-        ".factory/repo.yaml",
-        "baseBranch: main\nartifactRoot: .factory/artifacts\nsetup: []\ngates: []\n",
+      const err = await refusal(failed.input);
+      expect(err.findings).toContainEqual(
+        expect.objectContaining({
+          key: "aliases.pm.effort",
+          file: expect.stringContaining(".factory/run-acpx.yaml"),
+        }),
       );
-      repo.commit("factory config");
-      const runConfigPath = path.join(repo.dir, ".factory", "run-acpx.yaml");
-      fs.writeFileSync(runConfigPath, RUN_CONFIG_TEXT, "utf8");
-      const configs = loadConfigs(repo.dir, { runConfigPath });
-      const base = path.basename(repo.dir);
-      configs.run.sessions.dir = path.join(
-        path.dirname(repo.dir),
-        `${base}-sessions`,
+      expect(err.report).toContain(
+        'effort "max" is not supported; model accepts: none, high, default',
       );
-      configs.run.worktreeRoot = path.join(
-        path.dirname(repo.dir),
-        `${base}-worktrees`,
-      );
-
-      expect(configs.run.aliases.implementer).toMatchObject({
-        harness: "pi",
-        model: "opencode-go/beam-free",
-        effort: "high",
-      });
-      expect(configs.run.aliases.reviewer).toMatchObject({
-        harness: "codex",
-        model: "deepseek-v4.1-flash",
-        effort: "high",
-      });
-      expect(configs.run.priceIds?.["opencode-go/beam-free"]).toBe(
-        "reflection/beam-1.0-501b-a23b",
-      );
-
-      const paths = resolveGoalPaths(configs, repo.dir, "self-acpx");
-      fs.mkdirSync(paths.goalDir, { recursive: true });
-      fs.writeFileSync(
-        path.join(paths.goalDir, "intent.md"),
-        "# Goal\n",
-        "utf8",
-      );
-      const store = createFolderStore(paths.goalDir);
-      await store.ensureLayout();
-
-      const harnesses = new Map<string, Harness>([
-        [
-          "opencode",
-          new AcpxHarness({
-            id: "opencode",
-            binary: stub.binary,
-            acpx: configs.run.harnesses!.opencode!.acpx,
-          }),
-        ],
-        ["omp", new FakeHarness({ id: "omp", caps: { effort: EFFORTS } })],
-        [
-          "pi",
-          new AcpxHarness({
-            id: "pi",
-            binary: stub.binary,
-            acpx: configs.run.harnesses!.pi!.acpx,
-          }),
-        ],
-        [
-          "codex",
-          new AcpxHarness({
-            id: "codex",
-            binary: stub.binary,
-            acpx: configs.run.harnesses!.codex!.acpx,
-          }),
-        ],
-      ]);
-      const acpxCatalog = createRealModelCatalog(
-        {
-          opencode: stub.binary,
-          pi: stub.binary,
-          codex: stub.binary,
-        },
-        configs.run.harnesses,
-      );
-      const catalog: ModelCatalog = (harness, model) =>
-        harness === "opencode" || harness === "pi" || harness === "codex"
-          ? acpxCatalog(harness, model)
-          : Promise.resolve(true);
-
-      const result = await preflight({
-        configs,
-        paths,
-        store,
-        harnesses,
-        binaries: {
-          opencode: stub.binary,
-          omp: stub.binary,
-          pi: stub.binary,
-          codex: stub.binary,
-        },
-        catalog,
-        baseGates: false,
-      });
-
-      expect(result.aliases.implementer).toBe("high");
-      expect(result.aliases.reviewer).toBe("high");
-      // opencode is an acpx harness now: its model list also comes from the
-      // acpx path, which skips the pre-session check.
-      expect(warnings.join("\n")).toContain(
-        'skipping model check for "opencode"',
-      );
-      expect(warnings.join("\n")).toContain('skipping model check for "pi"');
-      expect(warnings.join("\n")).toContain('skipping model check for "codex"');
+      expect(stub.sessionNames()).toEqual([]);
     } finally {
-      console.warn = originalWarn;
-      stub.cleanup();
-      repo.cleanup();
+      failed.repo.cleanup();
+    }
+
+    const before = stub.invocations().length;
+    const passed = await fixture(
+      runConfig({ pmEffort: "high", reviewerEffort: "highest" }),
+      stub,
+    );
+    try {
+      const result = await preflight(passed.input);
+      expect(result.aliases.pm).toBe("high");
+      expect(result.aliases.reviewer).toBe("default");
+      const calls = stub.invocations().slice(before);
+      const creates = calls.filter(
+        (args) => args.includes("sessions") && args.includes("new"),
+      );
+      // Everyone shares one harness/model pair, so one live session serves all.
+      expect(creates).toHaveLength(1);
+      expect(calls.filter((args) => args.includes("show"))).toHaveLength(1);
+      expect(calls.filter((args) => args.includes("close"))).toHaveLength(1);
+      expect(calls.some((args) => args.includes("prompt"))).toBe(false);
+      expect(creates[0]![creates[0]!.indexOf("--model") + 1]).toBe("model-a");
+      const cwd = creates[0]![creates[0]!.indexOf("--cwd") + 1]!;
+      expect(cwd.startsWith(path.join(os.tmpdir(), "preflight-acpx-"))).toBe(
+        true,
+      );
+      expect(fs.existsSync(cwd)).toBe(false);
+      expect(stub.sessionNames()).toEqual([]);
+    } finally {
+      passed.repo.cleanup();
     }
   });
 
-  it("accepts an agy reviewer whose effort lives in the model id and skips its model list", async () => {
-    const repo = createTmpRepo();
-    const stub = createAcpxStub();
-    const warnings: string[] = [];
-    const originalWarn = console.warn;
-    console.warn = (message: string) => warnings.push(message);
+  it("rejects an unlisted model and names the live model list", async () => {
+    const stub = createAcpxStub({
+      models: LIVE_MODELS,
+      effortConfigId: "effort",
+    });
+    const f = await fixture(runConfig({ pmModel: "ghost-model" }), stub);
     try {
-      repo.writeFile(
-        ".factory/repo.yaml",
-        "baseBranch: main\nartifactRoot: .factory/artifacts\nsetup: []\ngates: []\n",
+      const err = await refusal(f.input);
+      expect(err.findings).toContainEqual(
+        expect.objectContaining({
+          key: "aliases.pm.model",
+          message:
+            'model "ghost-model" is not listed by harness "opencode"; available models: model-a, model-b',
+        }),
       );
-      repo.commit("factory config");
-      const runConfigPath = path.join(repo.dir, ".factory", "run-agy.yaml");
-      fs.writeFileSync(
-        runConfigPath,
-        RUN_CONFIG_TEXT.replace(
-          "  reviewer: { harness: codex, model: deepseek-v4.1-flash, effort: high }",
-          "  reviewer: { harness: agy, model: gemini-3.8-flash-high }",
-        ),
-        "utf8",
-      );
-      const configs = loadConfigs(repo.dir, { runConfigPath });
-      const base = path.basename(repo.dir);
-      configs.run.sessions.dir = path.join(
-        path.dirname(repo.dir),
-        `${base}-sessions`,
-      );
-      configs.run.worktreeRoot = path.join(
-        path.dirname(repo.dir),
-        `${base}-worktrees`,
-      );
-
-      const paths = resolveGoalPaths(configs, repo.dir, "self-agy");
-      fs.mkdirSync(paths.goalDir, { recursive: true });
-      fs.writeFileSync(
-        path.join(paths.goalDir, "intent.md"),
-        "# Goal\n",
-        "utf8",
-      );
-      const store = createFolderStore(paths.goalDir);
-      await store.ensureLayout();
-
-      const harnesses = new Map<string, Harness>([
-        [
-          "opencode",
-          new FakeHarness({ id: "opencode", caps: { effort: EFFORTS } }),
-        ],
-        ["omp", new FakeHarness({ id: "omp", caps: { effort: EFFORTS } })],
-        [
-          "pi",
-          new AcpxHarness({
-            id: "pi",
-            binary: stub.binary,
-            acpx: configs.run.harnesses!.pi!.acpx,
-          }),
-        ],
-        [
-          "agy",
-          new AcpxHarness({
-            id: "agy",
-            binary: stub.binary,
-            acpx: configs.run.harnesses!.agy!.acpx,
-          }),
-        ],
-      ]);
-      const acpxCatalog = createRealModelCatalog(
-        {
-          pi: stub.binary,
-          agy: stub.binary,
-        },
-        configs.run.harnesses,
-      );
-      const catalog: ModelCatalog = (harness, model) =>
-        harness === "pi" || harness === "agy"
-          ? acpxCatalog(harness, model)
-          : Promise.resolve(true);
-
-      const result = await preflight({
-        configs,
-        paths,
-        store,
-        harnesses,
-        binaries: {
-          opencode: stub.binary,
-          omp: stub.binary,
-          pi: stub.binary,
-          agy: stub.binary,
-        },
-        catalog,
-        baseGates: false,
-      });
-
-      // The suffix is the effort: no separate alias key, nothing to resolve.
-      expect(result.aliases.reviewer).toBeUndefined();
-      expect(warnings.join("\n")).toContain('skipping model check for "agy"');
+      expect(err.report).toContain("available models: model-a, model-b");
+      expect(stub.sessionNames()).toEqual([]);
     } finally {
-      console.warn = originalWarn;
-      stub.cleanup();
-      repo.cleanup();
+      f.repo.cleanup();
     }
   });
 
-  it("adds a new acpx agent from the run config with no code", async () => {
-    const repo = createTmpRepo();
-    const stub = createAcpxStub();
-    const warnings: string[] = [];
-    const originalWarn = console.warn;
-    console.warn = (message: string) => warnings.push(message);
+  it("probes fallbacks and scouts once per harness/model and resolves their highest", async () => {
+    const stub = createAcpxStub({
+      models: LIVE_MODELS,
+      effortConfigId: "effort",
+    });
+    const text = `aliases:
+  architect: { harness: opencode, model: model-a }
+  pm: { harness: opencode, model: model-a, fallbacks: [{ model: model-b, effort: highest }] }
+  digest: { harness: opencode, model: model-a }
+  implementer: { harness: opencode, model: model-a }
+  reviewer: { harness: opencode, model: model-a }
+  steward: { harness: opencode, model: model-a }
+harnesses:
+  opencode:
+    acpx:
+      agent: opencode
+      effort: { configId: effort }
+scouts: { model: model-b, effort: highest }
+limits: { concurrency: { overall: 2 }, iterations: 1 }
+`;
+    const f = await fixture(text, stub);
     try {
-      repo.writeFile(
-        ".factory/repo.yaml",
-        "baseBranch: main\nartifactRoot: .factory/artifacts\nsetup: []\ngates: []\n",
+      const result = await preflight(f.input);
+      expect(result.aliases.scouts).toBe("medium");
+      expect(f.configs.run.aliases.pm!.fallbacks![0]!.effort).toBe("medium");
+      const creates = sessionCalls(stub, "new");
+      const models = creates.map(
+        (args) => args[args.indexOf("--model") + 1] ?? "",
       );
-      repo.commit("factory config");
-      const runConfigPath = path.join(repo.dir, ".factory", "run-nova.yaml");
-      // The nova binding lives in the run config text, not in code.
-      fs.writeFileSync(
-        runConfigPath,
-        RUN_CONFIG_TEXT.replace(
-          "  reviewer: { harness: codex, model: deepseek-v4.1-flash, effort: high }",
-          "  reviewer: { harness: nova, model: nova-model, effort: high }",
-        ).replace(
-          "  agy:\n",
-          "  nova:\n    acpx:\n      agent: nova\n      effort: { configId: nova_level, levels: [low, high] }\n      usage: { cache: false }\n  agy:\n",
-        ),
-        "utf8",
-      );
-      const novaConfigs = loadConfigs(repo.dir, { runConfigPath });
-      const base = path.basename(repo.dir);
-      novaConfigs.run.sessions.dir = path.join(
-        path.dirname(repo.dir),
-        `${base}-sessions`,
-      );
-      novaConfigs.run.worktreeRoot = path.join(
-        path.dirname(repo.dir),
-        `${base}-worktrees`,
-      );
-
-      expect(novaConfigs.run.harnesses!.nova).toMatchObject({
-        acpx: { agent: "nova" },
-      });
-
-      const paths = resolveGoalPaths(novaConfigs, repo.dir, "self-nova");
-      fs.mkdirSync(paths.goalDir, { recursive: true });
-      fs.writeFileSync(
-        path.join(paths.goalDir, "intent.md"),
-        "# Goal\n",
-        "utf8",
-      );
-      const store = createFolderStore(paths.goalDir);
-      await store.ensureLayout();
-
-      const harnesses = new Map<string, Harness>([
-        [
-          "opencode",
-          new FakeHarness({ id: "opencode", caps: { effort: EFFORTS } }),
-        ],
-        ["omp", new FakeHarness({ id: "omp", caps: { effort: EFFORTS } })],
-        [
-          "pi",
-          new AcpxHarness({
-            id: "pi",
-            binary: stub.binary,
-            acpx: novaConfigs.run.harnesses!.pi!.acpx,
-          }),
-        ],
-        [
-          "nova",
-          new AcpxHarness({
-            id: "nova",
-            binary: stub.binary,
-            acpx: novaConfigs.run.harnesses!.nova!.acpx,
-          }),
-        ],
-      ]);
-      const acpxCatalog = createRealModelCatalog(
-        { pi: stub.binary, nova: stub.binary },
-        novaConfigs.run.harnesses,
-      );
-      const catalog: ModelCatalog = (harness, model) =>
-        harness === "pi" || harness === "nova"
-          ? acpxCatalog(harness, model)
-          : Promise.resolve(true);
-
-      const result = await preflight({
-        configs: novaConfigs,
-        paths,
-        store,
-        harnesses,
-        binaries: {
-          opencode: stub.binary,
-          omp: stub.binary,
-          pi: stub.binary,
-          nova: stub.binary,
-        },
-        catalog,
-        baseGates: false,
-      });
-
-      expect(result.aliases.reviewer).toBe("high");
-      expect(warnings.join("\n")).toContain('skipping model check for "nova"');
-
-      // And it turns: the effort level from config reaches the session set.
-      const nova = harnesses.get("nova")!;
-      const turn = await nova.turn({
-        model: { id: "nova-model" },
-        effort: "high",
-        cwd: path.dirname(stub.binary),
-        prompt: "Say [[text:PONG]]",
-        timeouts: { idleMs: 10_000, wallMs: 30_000 },
-        opaque: novaConfigs.run.harnesses!.nova!.acpx,
-      });
-      expect(turn.stop).toEqual({ kind: "done" });
-      expect(turn.text).toBe("PONG");
-      const set = stub.invocations().find((args) => args.includes("set"))!;
-      expect(set.slice(set.indexOf("set"))).toEqual([
-        "set",
-        "nova_level",
-        "high",
-      ]);
+      expect(models.sort()).toEqual(["model-a", "model-b"]);
+      expect(sessionCalls(stub, "show")).toHaveLength(2);
+      expect(sessionCalls(stub, "close")).toHaveLength(2);
     } finally {
-      console.warn = originalWarn;
-      stub.cleanup();
-      repo.cleanup();
+      f.repo.cleanup();
+    }
+  });
+
+  it("splits a declared model suffix, probes the wire id, and validates its live level", async () => {
+    const stub = createAcpxStub({
+      models: LIVE_MODELS,
+      effortConfigId: "effort",
+    });
+    const f = await fixture(runConfig({ pmModel: "model-a-high" }), stub);
+    try {
+      const result = await preflight(f.input);
+      expect(result.aliases.pm).toBe("high");
+      const create = sessionCalls(stub, "new")[0]!;
+      expect(create[create.indexOf("--model") + 1]).toBe("model-a");
+    } finally {
+      f.repo.cleanup();
     }
   });
 });
@@ -419,7 +263,7 @@ describe("acpx harness registry", () => {
         nova: {
           acpx: {
             agent: "nova",
-            effort: { configId: "nova_level", levels: ["low", "high"] },
+            effort: { configId: "nova_level" },
           },
         },
         opencode: {

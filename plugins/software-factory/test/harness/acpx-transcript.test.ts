@@ -3,6 +3,10 @@ import {
   AcpxTranscriptParser,
   usageFromAcpxResult,
 } from "../../src/harness/acpx/transcript.js";
+import {
+  turnUsageFromTotals,
+  usageFromAcpxSessionText,
+} from "../../src/harness/acpx/usage.js";
 
 function feed(lines: unknown[]): ReturnType<AcpxTranscriptParser["result"]> {
   const parser = new AcpxTranscriptParser();
@@ -192,5 +196,59 @@ describe("acpx transcript", () => {
       { jsonrpc: "2.0", id: 7, result: { stopReason: "end_turn" } },
     ]);
     expect(summary.usage.costUsd).toBeUndefined();
+  });
+
+  it("parses pi's /session token report", () => {
+    // The exact shape from the probe: human text, cumulative session counters.
+    const report =
+      "Session: 01a1d37f-1c1e-…\n" +
+      "Session file: /home/slava/.pi/agent/sessions/--tmp-acpx-pi-1--/s.jsonl\n" +
+      "Messages: 7\n" +
+      "Cost: 0\n" +
+      "Tokens: in 2403, out 87, cache read 1216, cache write 0, total 3706";
+    expect(usageFromAcpxSessionText(report)).toEqual({
+      in: 2403,
+      cacheRead: 1216,
+      cacheWrite5m: 0,
+      cacheWrite1h: 0,
+      out: 87,
+      reasoningOut: 0,
+    });
+  });
+
+  it("leaves usage unknown when /session has no token line", () => {
+    expect(
+      usageFromAcpxSessionText("Session: s\nMessages: 7\nCost: 0"),
+    ).toBeUndefined();
+  });
+
+  it("turns cumulative totals into a non-negative per-turn delta", () => {
+    const before = {
+      in: 2403,
+      cacheRead: 1216,
+      cacheWrite5m: 0,
+      cacheWrite1h: 0,
+      out: 87,
+      reasoningOut: 0,
+    };
+    const after = {
+      in: 3000,
+      cacheRead: 1500,
+      cacheWrite5m: 10,
+      cacheWrite1h: 0,
+      out: 100,
+      reasoningOut: 0,
+    };
+    expect(turnUsageFromTotals(after, before)).toEqual({
+      in: 597,
+      cacheRead: 284,
+      cacheWrite5m: 10,
+      cacheWrite1h: 0,
+      out: 13,
+      reasoningOut: 0,
+    });
+    expect(turnUsageFromTotals(after, undefined)).toEqual(after);
+    // A reset counter must not produce a negative turn.
+    expect(turnUsageFromTotals({ ...after, in: 10 }, before).in).toBe(0);
   });
 });

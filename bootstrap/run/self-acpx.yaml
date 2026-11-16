@@ -55,18 +55,21 @@ harnesses:
   opencode:
     acpx:
       agent: opencode acp
+      compact: true
       raw: true
-      effort: { configId: effort, levels: [low, medium, high, xhigh, max] }
+      effort: { configId: effort }
       usage: { cache: true }
   pi:
     acpx:
       agent: pi
-      effort: { configId: thought_level, levels: [off, minimal, low, medium, high, xhigh] }
-      usage: { cache: false }
+      compact: true
+      effort: { configId: thought_level }
+      usage: { cache: true, command: "/session" }
   codex:
     acpx:
       agent: codex
-      effort: { configId: reasoning_effort, levels: [low, medium, high, xhigh, max] }
+      compact: true
+      effort: { configId: reasoning_effort }
       usage: { cache: true }
   agy:
     acpx:
@@ -75,7 +78,6 @@ harnesses:
       args: [--approve-all]
       effort:
         configId: thought_level
-        levels: [low, medium, high]
         modelBases: { gemini-3.8-flash: [low, medium, high] }
       usage: { cache: true }
 

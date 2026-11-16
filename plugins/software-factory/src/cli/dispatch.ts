@@ -241,9 +241,7 @@ async function runCommand(parsed: ParsedArgs, deps: CliDeps): Promise<number> {
       deps.harnessFactory ?? (injected ? undefined : createRealHarnesses),
     modelCatalog:
       deps.modelCatalog ??
-      (needCatalog
-        ? createRealModelCatalog(binaries, harnessConfigs)
-        : undefined),
+      (needCatalog ? createRealModelCatalog(binaries) : undefined),
     binaries,
     signals: deps.signals,
     priceSource: deps.priceSource,

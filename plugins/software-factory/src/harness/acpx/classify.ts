@@ -1,4 +1,4 @@
-import { exitDetails, stopDetails, withDetails } from "../details.js";
+import { exitWithDetails, lastNonBannerLine, withDetails } from "../details.js";
 import type { Stop } from "../types.js";
 import type { AcpxError, AcpxTurnSummary } from "./types.js";
 
@@ -25,11 +25,7 @@ export function isNoSessionError(error: AcpxError): boolean {
   );
 }
 
-/**
- * acpx error classes from probe §8. A rejected model is a harness/auth problem,
- * provider quota is infrastructure, and anything else keeps its scrubbed text.
- */
-export function classifyAcpxError(error: AcpxError): Stop {
+function classifyAcpxErrorBase(error: AcpxError): Stop {
   const text = errorText(error);
 
   if (isNoSessionError(error)) {
@@ -88,6 +84,21 @@ export function classifyAcpxError(error: AcpxError): Stop {
   return withDetails({ kind: "infra", cause: "crash" }, text);
 }
 
+/**
+ * acpx error classes from probe §8. A rejected model is a harness/auth problem,
+ * provider quota is infrastructure, and anything else keeps its scrubbed text.
+ * A crash also names the process exit facts, which no error frame carries.
+ */
+export function classifyAcpxError(
+  error: AcpxError,
+  exit?: { code: number | null; signal: string | null },
+): Stop {
+  const stop = classifyAcpxErrorBase(error);
+  if (!exit || stop.kind !== "infra" || stop.cause !== "crash") return stop;
+  const details = exitWithDetails(exit.code, exit.signal, errorText(error));
+  return details ? { ...stop, details } : stop;
+}
+
 export interface AcpxTurnClassificationInput {
   summary: AcpxTurnSummary;
   code: number | null;
@@ -105,14 +116,22 @@ export function classifyAcpxTurn(input: AcpxTurnClassificationInput): Stop {
   if (input.timedOut) return { kind: "infra", cause: "timeout" };
 
   const error = input.summary.errors.at(-1);
-  if (error) return classifyAcpxError(error);
+  if (error) {
+    return classifyAcpxError(error, {
+      code: input.code,
+      signal: input.signal,
+    });
+  }
 
   if (input.code !== 0) {
     if (input.signal === "SIGTERM" || input.signal === "SIGINT") {
       return { kind: "cancelled" };
     }
-    const details =
-      stopDetails(input.stderr) ?? exitDetails(input.code, input.signal);
+    const details = exitWithDetails(
+      input.code,
+      input.signal,
+      lastNonBannerLine(input.stderr),
+    );
     return details
       ? { kind: "infra", cause: "crash", details }
       : { kind: "infra", cause: "crash" };
@@ -133,9 +152,12 @@ export function classifyAcpxTurn(input: AcpxTurnClassificationInput): Stop {
   }
   if (reason === "end_turn") return { kind: "done" };
 
-  return {
-    kind: "infra",
-    cause: "crash",
-    details: "acpx exited without a session/prompt result",
-  };
+  const details = exitWithDetails(
+    input.code,
+    input.signal,
+    "acpx exited without a session/prompt result",
+  );
+  return details
+    ? { kind: "infra", cause: "crash", details }
+    : { kind: "infra", cause: "crash" };
 }

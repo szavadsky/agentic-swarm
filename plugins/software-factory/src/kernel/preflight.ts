@@ -263,6 +263,7 @@ export async function preflight(
     ),
     capsCache: new Map(),
     modelCache: new Map(),
+    probeCache: new Map(),
   };
   const resolvedAliases: Record<string, string | undefined> = {};
   for (const [name, alias] of Object.entries(configs.run.aliases)) {

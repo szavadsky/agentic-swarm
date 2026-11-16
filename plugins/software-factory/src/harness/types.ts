@@ -19,6 +19,22 @@ export type Caps = {
   usage: { cache: boolean; cost: boolean };
 };
 
+/**
+ * A harness's live answer for one model. Harnesses whose model and effort
+ * values exist only inside a session implement `Harness.probe`; pre-flight uses
+ * it instead of static capabilities.
+ */
+export interface ModelProbe {
+  /** Whether the harness offered this model in a live session. */
+  listed: boolean;
+  /** Live model ids, used to explain a rejected model. */
+  available: string[];
+  /** Live effort values for this model; empty means it offers none. */
+  effort: string[];
+  /** Effort encoded in the configured model id, when its suffix names one. */
+  modelEffort?: string;
+}
+
 export type Stop =
   | { kind: "done" }
   | { kind: "cancelled" }
@@ -28,10 +44,11 @@ export type Stop =
   | { kind: "truncated"; cause: "max-tokens" | "turn-limit" }
   /**
    * Infrastructure trouble must never consume item budget or review rounds.
-   * `details` carries the scrubbed, one-line tail of the harness error text: at
-   * most 500 characters of text, with a leading `…` added when truncated. The
-   * text is a structured error message, stderr, or a synthetic cause, falling
-   * back to the exit code and signal when stderr is empty.
+   * `details` carries scrubbed, one-line harness error text capped at 501
+   * characters, including a leading `…` when truncated. For an acpx crash the
+   * exit code and signal are kept outside the cut, followed by the last
+   * non-banner stderr line, the last ACP error frame, or a synthetic cause.
+   * Other crash paths use stderr or fall back to their exit facts.
    */
   | {
       kind: "infra";
@@ -63,6 +80,11 @@ export type SessionRef = {
   lastRequestStartedAt: string;
   retentionTier: "short" | "long";
   compacted: boolean;
+  /**
+   * Session-cumulative token totals last read from the harness's usage command;
+   * a later turn reports the delta. Adapters without cumulative counters omit it.
+   */
+  cumulativeUsage?: Usage;
   /** Harness-managed session home; resume resolves against it, not the current launch dir. */
   dir?: string;
 };
@@ -142,6 +164,8 @@ export interface Harness {
   id: string;
   /** Probed at pre-flight, per model. */
   caps(model: ModelRef): Promise<Caps>;
+  /** Live model/effort discovery for harnesses that only expose it in a session. */
+  probe?(model: ModelRef): Promise<ModelProbe>;
   turn(req: TurnRequest): Promise<TurnResult>;
   /** Absent capability = missing member, a type error at the call site. */
   compact?(ref: SessionRef): Promise<CompactResult>;

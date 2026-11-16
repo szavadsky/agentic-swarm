@@ -6,13 +6,15 @@ import {
   registerChildGroup,
   unregisterChildGroup,
 } from "../../core/shutdown.js";
-import { exitDetails, stopDetails } from "../details.js";
+import { exitWithDetails, lastNonBannerLine } from "../details.js";
 import type {
   AdapterTurnResult,
   ModelRef,
+  SessionRef,
   Stop,
   TurnAttempt,
   TurnRequest,
+  Usage,
 } from "../types.js";
 import { zeroUsage } from "../usage.js";
 import {
@@ -21,12 +23,23 @@ import {
   isNoSessionError,
 } from "./classify.js";
 import { resolveRawAgentCommand } from "./command.js";
+import { acpxModel } from "./model.js";
 import { AcpxTranscriptParser, acpxErrors } from "./transcript.js";
+import { turnUsageFromTotals, usageFromAcpxSessionText } from "./usage.js";
 import type { AcpxConfig, AcpxTurnOpaque } from "./config.js";
-import type { AcpxCommand, AcpxTurnSummary } from "./types.js";
+import type {
+  AcpxCommand,
+  AcpxCommandResult,
+  AcpxTurnSummary,
+} from "./types.js";
 
 const SETUP_TIMEOUT_SEC = 120;
 const MAX_STDERR_BYTES = 64 * 1024;
+/** A slash command reuses the session; no model turn runs, so the bound is setup-sized. */
+const COMMAND_TIMEOUTS: TurnRequest["timeouts"] = {
+  idleMs: 120_000,
+  wallMs: 180_000,
+};
 
 export interface AcpxRuntime {
   id: string;
@@ -51,13 +64,13 @@ function turnConfig(runtime: AcpxRuntime, req: TurnRequest): AcpxConfig {
  * the dispatcher cannot spawn itself. The path is resolved here rather than
  * left to the spawned process so config and pre-flight agree.
  */
-function agentSelection(config: AcpxConfig): string[] {
+export function acpxAgentSelection(config: AcpxConfig): string[] {
   return config.raw
     ? ["--agent", resolveRawAgentCommand(config.agent)]
     : [config.agent];
 }
 
-function globalArgs(config: AcpxConfig, cwd: string): string[] {
+export function acpxGlobalArgs(config: AcpxConfig, cwd: string): string[] {
   // acpx requires global flags before the agent subcommand (probe §0).
   return [
     "--format",
@@ -66,31 +79,6 @@ function globalArgs(config: AcpxConfig, cwd: string): string[] {
     path.resolve(cwd),
     ...(config.args ?? []),
   ];
-}
-
-/**
- * Some agents keep effort inside the model id, while acpx's `--model` accepts
- * only the base id its `model` config option lists. A known suffix moves to
- * the session option; an explicit effort wins.
- */
-function acpxModel(
-  config: AcpxConfig,
-  model: ModelRef,
-): { id: string; effort?: string } {
-  let id = model.id;
-  let effort = model.effort;
-  const bases = config.effort?.modelBases ?? {};
-  for (const [base, levels] of Object.entries(bases)) {
-    const suffix = id.startsWith(`${base}-`)
-      ? id.slice(base.length + 1)
-      : undefined;
-    if (suffix !== undefined && levels.includes(suffix)) {
-      id = base;
-      effort = effort ?? suffix;
-      break;
-    }
-  }
-  return effort === undefined ? { id } : { id, effort };
 }
 
 interface SetupFailure {
@@ -119,15 +107,20 @@ async function runSetup(
   const error = errors.at(-1);
   if (error)
     return {
-      stop: classifyAcpxError(error),
+      stop: classifyAcpxError(error, {
+        code: result.code,
+        signal: result.signal ?? null,
+      }),
       noSession: isNoSessionError(error),
     };
   if (result.timedOut)
     return { stop: { kind: "infra", cause: "timeout" }, noSession: false };
   if (result.code !== 0) {
-    const details =
-      stopDetails(result.stderr) ??
-      exitDetails(result.code, result.signal ?? null);
+    const details = exitWithDetails(
+      result.code,
+      result.signal ?? null,
+      lastNonBannerLine(result.stderr),
+    );
     const stop: Stop = details
       ? { kind: "infra", cause: "crash", details }
       : { kind: "infra", cause: "crash" };
@@ -277,6 +270,71 @@ function runPromptProcess(
   });
 }
 
+/**
+ * One adapter slash command on a named session, with no model prompt: the
+ * command is the whole prompt and `--model` is omitted, so `/compact` reaches
+ * the adapter instead of spending a model turn. Returns the parsed transcript
+ * (ACP errors included) and the process facts so callers can classify it.
+ */
+export async function runAcpxCommand(
+  runtime: AcpxRuntime,
+  config: AcpxConfig,
+  ref: Pick<SessionRef, "id" | "cwd">,
+  command: string,
+  signal?: AbortSignal,
+): Promise<AcpxCommandResult> {
+  const globals = acpxGlobalArgs(config, ref.cwd);
+  const selection = acpxAgentSelection(config);
+  // The raw --agent route has no positional agent: the prompt verb follows the
+  // selection. A positional agent takes `-s` and the command directly.
+  const verb = config.raw ? ["prompt"] : [];
+  const args = [...globals, ...selection, ...verb, "-s", ref.id, command];
+  const parser = new AcpxTranscriptParser(config.usage?.fields);
+  const result = await runPromptProcess(
+    runtime,
+    config,
+    args,
+    ref.cwd,
+    COMMAND_TIMEOUTS,
+    parser,
+    signal,
+  );
+  return {
+    summary: parser.result(),
+    code: result.code,
+    signal: result.signal,
+    timedOut: result.timedOut,
+    aborted: result.aborted,
+    stderr: result.stderr,
+  };
+}
+
+/**
+ * Read a session's cumulative token totals through its usage command. The
+ * command is the whole prompt, so it reuses the session without spending a
+ * model turn. Any failure leaves the caller's stop and usage untouched.
+ */
+export async function readAcpxSessionUsage(
+  runtime: AcpxRuntime,
+  config: AcpxConfig,
+  ref: Pick<SessionRef, "id" | "cwd">,
+  signal?: AbortSignal,
+): Promise<Usage | undefined> {
+  const command = config.usage?.command;
+  if (!command) return undefined;
+  const result = await runAcpxCommand(runtime, config, ref, command, signal);
+  if (
+    result.aborted ||
+    result.timedOut ||
+    result.code !== 0 ||
+    result.summary.errors.length > 0 ||
+    result.summary.stopReason !== "end_turn"
+  ) {
+    return undefined;
+  }
+  return usageFromAcpxSessionText(result.summary.text);
+}
+
 /** One acpx turn for one model from the fallback chain. */
 export async function runAcpxTurn(
   runtime: AcpxRuntime,
@@ -306,8 +364,8 @@ export async function runAcpxTurn(
       : undefined;
   const freshName = () => `${runtime.id}-${randomUUID()}`;
   let name = resume ?? freshName();
-  const globals = globalArgs(config, req.cwd);
-  const selection = agentSelection(config);
+  const globals = acpxGlobalArgs(config, req.cwd);
+  const selection = acpxAgentSelection(config);
   const base = [...globals, ...selection];
 
   // A resumed record may be gone (TTL, `sessions close`); acpx then answers
@@ -437,8 +495,9 @@ export async function runAcpxTurn(
           stderr: processResult.stderr,
         });
 
+    const resumed = resume !== undefined && attempt === 0;
     // A session that acpx says is gone must not be handed back to the kernel.
-    const session = lost
+    const session: SessionRef | undefined = lost
       ? undefined
       : {
           harness: runtime.id,
@@ -448,13 +507,41 @@ export async function runAcpxTurn(
           lastRequestStartedAt: startedAt,
           retentionTier: "short" as const,
           compacted: req.session?.compacted ?? false,
+          // A failed usage command must not drop the delta baseline.
+          ...(resumed && req.session?.cumulativeUsage
+            ? { cumulativeUsage: req.session.cumulativeUsage }
+            : {}),
         };
+
+    // pi's prompt result carries no usage, so its configured command is the only
+    // source. The command reuses the session and never spends a model turn; a
+    // failure leaves the stop and the prompt's usage exactly as they were.
+    let usage = summary.usage;
+    let storedSession = session;
+    if (session && !processResult.aborted && !processResult.timedOut) {
+      const cumulative = await readAcpxSessionUsage(
+        runtime,
+        config,
+        session,
+        req.signal,
+      );
+      if (cumulative) {
+        const previous = resumed ? req.session?.cumulativeUsage : undefined;
+        // A resumed session with no recorded total cannot separate this turn
+        // from its history; keep this turn's usage unknown but leave a baseline
+        // behind for the next delta.
+        if (!resumed || previous) {
+          usage = turnUsageFromTotals(cumulative, previous);
+        }
+        storedSession = { ...session, cumulativeUsage: cumulative };
+      }
+    }
 
     return {
       stop,
       text: summary.text,
-      usage: summary.usage,
-      session,
+      usage,
+      session: storedSession,
       model,
       attempts,
     };
