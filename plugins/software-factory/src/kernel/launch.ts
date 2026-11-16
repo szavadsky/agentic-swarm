@@ -6,6 +6,7 @@ import type { Harness, ModelRef } from "../harness/types.js";
 import { type BoundaryResult, runBoundary } from "./boundary.js";
 import { loadConfigs, resolveGoalPaths, toLimits } from "./config.js";
 import { derive, FRONT_STOP_STEP } from "./derive.js";
+import { postLaunchDigest } from "./digest.js";
 import { readFrontClass } from "./flow-context.js";
 import {
   type DispatchResult,
@@ -15,10 +16,11 @@ import {
   settledTurns,
 } from "./dispatch.js";
 import { runFront } from "./front.js";
-import { type Hold, readHolds, scanInbox } from "./mailbox.js";
+import { type Hold, type Steer, readHolds, scanInbox } from "./mailbox.js";
 import { rolesByStep, writeMetrics } from "./metrics.js";
 import type { PriceSource } from "./openrouter.js";
 import { loadPriceTable } from "./openrouter.js";
+import { runSteerPm } from "./pm.js";
 import { type ModelCatalog, preflight } from "./preflight.js";
 import { loadPrompts } from "./prompts.js";
 import { scriptMeta } from "./record.js";
@@ -116,6 +118,14 @@ function unfinishedTasks(state: State): string[] {
       ([, task]) => task.status !== "merged" && task.status !== "finished",
     )
     .map(([slug, task]) => `${slug} ${task.status}`);
+}
+
+/** Non-terminal tasks, as `slug status`: work the goal still owes. */
+function openTasks(state: State): string[] {
+  return Object.entries(state.tasks)
+    .filter(([, task]) => task.status === "pending" || task.status === "ready")
+    .map(([slug, task]) => `${slug} ${task.status}`)
+    .sort();
 }
 
 /**
@@ -407,7 +417,32 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
       }
       let iteration = resume ? before.iteration : before.iteration + 1;
       let humanInterventions = 0;
+      let digestSteer: Steer | null = null;
       try {
+        // A resume skips the architect turn but not the digest: the digest is
+        // delivered to the PM as a steer, and that one turn routes the evidence
+        // and any repair it warrants before dispatch.
+        if (resume) {
+          digestSteer = await postLaunchDigest(
+            runtime,
+            iteration,
+            await store.listRecords(),
+          );
+          if (digestSteer) {
+            const tasks = await store.listTasks();
+            await runSteerPm(runtime, {
+              iteration,
+              state: derive(
+                tasks,
+                await store.listRecords(),
+                runtime.configs.process.flows,
+              ),
+              tasks,
+              steers: [digestSteer],
+              cwd: runtime.paths.goalCheckout,
+            });
+          }
+        }
         const processedBefore = await processedSteers(store);
         let front: Awaited<ReturnType<typeof runFront>>;
         if (resume) {
@@ -469,6 +504,9 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
           seenSteers = inbox
             .filter((s) => holdSteers.has(s.id) || presented.has(s.id))
             .map((s) => s.id);
+          // The digest steer was just claimed by the resume PM turn; dispatch
+          // must not hand it a second PM turn.
+          if (digestSteer) seenSteers.push(digestSteer.id);
         }
         if (front.action === "boundary") {
           boundary = await runBoundary(runtime, {
@@ -564,12 +602,20 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
           signalsStopped: signals.shouldStop(),
           goal: afterStop.goal,
         });
+        // A resumed iteration that ends at the boundary has no architect turn
+        // to hand the stuck state to in this iteration; the cause travels in
+        // the summary the next iteration's architect reads in its pack.
+        const open = resume ? openTasks(afterStop) : [];
+        const stuckCause =
+          dispatched?.reason === "boundary" && open.length > 0
+            ? `resumed iteration ${iteration}: nothing dispatchable, non-terminal work remains: ${open.join(", ")}`
+            : undefined;
         lastSummary = await writeIterationFacts(
           runtime,
           iteration,
           status,
           humanInterventions,
-          boundary?.cause ?? dispatchCause,
+          boundary?.cause ?? dispatchCause ?? stuckCause,
         );
         if (decision !== "continue" || stopped || signals.shouldStop()) break;
         if (frontFinished) break;
