@@ -626,3 +626,8 @@ Verbatim, newest last; each with what it changed.
 ### 2026-11-17 — p1-steward-v2 landed: STEWARD EVIDENCE PRODUCED
 - Exit 3 (iteration-limit), 53m. Implements 00006/00007 started 0.3s apart (concurrent dispatch — admit-overlap proof); real conflict on SELF-IMPROVE.md:69 → merge-attempt 00014 → park 00017 (conflict) → STEWARD AGENT TURN 00018 (ernie/high, done, 2 attempts, merge commit 6b90907 keeping own variant) → merge 00021. Both tasks merged (37922aa, 76b95b0), 0 parks pending, cost $1.99 (steward $0.00 ernie). Phase-1 steward evidence COMPLETE. Gates 925/0.
 - No promote (doc-only landing; pin unchanged 24934e2389f4).
+
+### 2026-11-17 — rotation for i42: @free digest + ernie↔hy4 PM/review/QA + subscriptions
+- Map: architect claude/opus (fb sonnet, fb2 omp/opus; verified clean i41), pm omp/ernie (fb opencode/hy4), digest omp/@free literal, no effort key (fb opencode/hy4; alias-pricing limitation steered), implementer omp-Go/deepseek:max (fb omp-Go/muse:max; flip of i41), reviewer omp/ernie (fb opencode/hy4), qa omp/ernie (fb opencode/hy4; NEW alias, dormant — no kernel qa role yet), plan-reviewer + plan-checker agy (fb omp/ernie), escalation omp/sonnet:high (fb omp-Go/muse:max; explicit effort per forward ask), steward omp/ernie (fb agy).
+- Subscriptions named on every alias; per-pool caps: opencode-go 2 (2 keys), openrouter-free 1 (i40 ernie quota evidence). iterationUsd stays off (owner: 0). priceIds gains @free → $0 ernie row.
+- i43 flips PM/review/QA to hy4-first/ernie-fallback per the rotation directive.
