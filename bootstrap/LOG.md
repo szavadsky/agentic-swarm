@@ -667,3 +667,6 @@ Verbatim, newest last; each with what it changed.
 - Legs: digest omp/@free resolved to ernie primary DONE $0 (alias transparent in production); architect claude/opus single attempt done (4th clean outing — fix holds 4/4); PM omp/ernie $0; implements 3 omp-Go/muse ($0.09); reviews: r1 ernie 429 QUOTA 3x (free-models-per-day exhausted, retry-after ~6.5h) → hy4 fallback delivered; r2 straight to hy4. Plan roles agy. Steward stub skipped 7th. 12 agent + 13 script turns.
 - Landing gates: 1 fail/1022 first run, green on the allowed rerun (unnamed flake — first-run tail didn't name it; rerun showed zero fail markers). Proceeding per runbook.
 - Phase-1-done NOT declared (gates-fast parked; needs its continuation to merge).
+
+### 2026-11-17 — rotation for i45: hy4-first flip + Go-hy4 digest + deepseek implementer
+- Map: architect claude/opus (fb sonnet, fb2 omp/opus), pm opencode/hy4 (fb omp/ernie), digest omp-Go/hy4:xhigh (fb opencode/hy4), implementer omp-Go/deepseek:max (fb omp-Go/muse:max; cycle muse44 → deepseek45), reviewer opencode/hy4 (fb omp/ernie), qa opencode/hy4 dormant (fb omp/ernie), plan-rev+check agy (fb omp/ernie), esc omp/sonnet:high (fb omp-Go/muse), steward omp/ernie (fb agy). Subs + caps kept. Loader + price-coverage green before commit.
