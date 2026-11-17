@@ -640,3 +640,10 @@ Verbatim, newest last; each with what it changed.
 - Legs: digest omp/@free DONE $0 single attempt (alias works in production); architect claude/opus single attempt done, 2nd clean outing — fix HOLDS; PM omp/ernie $0; implements 13 omp-Go/deepseek $1.39 (fb never needed); reviews 12/12 opencode/hy4 $0 — review 1 (01705) ernie TIMED OUT (OpenRouter stream stall) → hy4 fallback delivered, reviews 2-12 went STRAIGHT to hy4 (post-failure tier latch, mechanism unidentified — steered as observation); plan roles agy $1.51; steward + PM the only 2 ernie turns. Cost $2.91 partial, list $4.11. 3 outcome-repairs, 1 benign merged-gate note, 0 conflicts/flakes.
 - Forwards both stale (record-seal + steward-ladder merged; v2 evidence already produced). QA alias dormant (no kernel role yet, as predicted).
 - park-amend merged → firing deferred ask: re-run p1-trivial + p1-task on the new pin, then i43.
+
+### 2026-11-17 — p1-trivial re-run: exit 0, done, 0 iterations (4m, no drift)
+
+### 2026-11-17 — p1-task re-run: exit 0, done, 0 iterations (4m, no drift)
+
+### 2026-11-17 — rotation for i43: hy4-first PM/review/QA + Go-hy4 digest + agy implementer
+- Map: architect claude/opus (fb sonnet, fb2 omp/opus), pm opencode/hy4 (fb omp/ernie), digest omp-Go/hy4:xhigh (fb opencode/hy4), implementer agy/gemini (fb omp-Go/deepseek:max; cycle muse41 → deepseek42 → agy43), reviewer opencode/hy4 (fb omp/ernie), qa opencode/hy4 (fb omp/ernie; dormant — no kernel role), plan-rev+check agy (fb omp/ernie), esc omp/sonnet:high (fb omp-Go/muse), steward omp/ernie (fb agy). Subs + caps kept. Loader + price-coverage green before commit.
