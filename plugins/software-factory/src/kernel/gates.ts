@@ -11,6 +11,8 @@ export const GATE_OUTPUT_CAP = 4000;
 const ANSI = new RegExp("\\u001b\\[[0-9;]*m", "g");
 /** `bun test v1.4.4 (38afee6c8)`: names the runner, not the failure. */
 const BUN_BANNER = /^bun test v\d[^\s(]*(?: \([0-9a-f]+\))?$/;
+/** `tests gate: wall 63.8s (...)`: run-tests.ts's timing report, not a failure. */
+const TESTS_GATE_WALL = /^tests gate: wall \d+(?:\.\d+)?s(?:\s|$)/;
 /** `src/a.ts(12,3): error TS2322:` — tsc's default format, the one a piped gate gets. */
 const TSC_PAREN = /^(.+?)\((\d+),\d+\):\s+error\s+(TS\d+):/;
 /** `src/a.ts:12:3 - error TS2322:` — tsc's `--pretty` (TTY) format. */
@@ -217,7 +219,7 @@ export function gateSignatures(check: CheckResult): Set<string> {
   };
   for (const line of lines) {
     if (!line) continue;
-    if (BUN_BANNER.test(line)) continue;
+    if (BUN_BANNER.test(line) || TESTS_GATE_WALL.test(line)) continue;
     if (line === BUN_UNHANDLED) {
       unhandled = true;
       opened = false;

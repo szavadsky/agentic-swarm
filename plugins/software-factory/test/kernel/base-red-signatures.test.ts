@@ -92,7 +92,7 @@ describe("gate failure signatures", () => {
   });
 
   it("keeps bun test names unique per file and ignores timings and the banner", () => {
-    const output = [
+    const lines = [
       "bun test v1.4.4 (38afee6c8)",
       "other.test.ts:",
       "error: expect(received).toBe(expected)",
@@ -101,11 +101,24 @@ describe("gate failure signatures", () => {
       "(fail) alpha > fails one [0.04ms]",
       " 1 pass",
       " 2 fail",
-    ].join("\n");
-    expect([...gateSignatures(check("tests", output))]).toEqual([
+    ];
+    const signatures = (wall: string) => [
+      ...gateSignatures(check("tests", [...lines, wall].join("\n"))),
+    ];
+    const first = signatures(
+      "tests gate: wall 63.8s (--parallel=8; serial: 6 files; slowest: test/kernel/flow.test.ts 37.1s)",
+    );
+    // The runner always prints its wall line; a slower run must not look like
+    // a new failure to the baseline signature or the gate-flake record.
+    const second = signatures(
+      "tests gate: wall 74.2s (--parallel=8; serial: 6 files; slowest: test/kernel/flow.test.ts 41.9s)",
+    );
+    const expected = [
       "other.test.ts > alpha > fails one",
       "sample.test.ts > alpha > fails one",
-    ]);
+    ];
+    expect(first).toEqual(expected);
+    expect(second).toEqual(expected);
   });
 
   it("falls back to the output lines when the gate speaks no known format", () => {
