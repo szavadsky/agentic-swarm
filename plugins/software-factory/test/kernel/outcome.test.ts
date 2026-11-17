@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
+  expectationForStep,
   fencedOutcome,
   parseOutcome,
   readDeliveredOutcome,
@@ -59,5 +60,27 @@ describe("outcome delivery", () => {
         "review",
       ),
     ).toEqual([]);
+  });
+
+  it("maps steps to expectations from the flow catalog", () => {
+    const flows = {
+      "implement-review": {
+        reviewRounds: 2,
+        steps: [
+          { id: "implement", role: "implementer" },
+          { id: "review", role: "reviewer", review: true },
+        ],
+      },
+    };
+    expect(expectationForStep(undefined, flows)).toBe("any");
+    expect(expectationForStep("implement", flows)).toBe("any");
+    expect(expectationForStep("review", flows)).toBe("review");
+    expect(expectationForStep("architect", flows)).toBe("architect");
+  });
+
+  it("fails loud on a step no flow configures", () => {
+    expect(() => expectationForStep("reveiw", {})).toThrow(
+      'step "reveiw" is not configured in the repo\'s flows',
+    );
   });
 });

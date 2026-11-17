@@ -10,6 +10,7 @@ import {
   materialHash,
   parseTaskFile,
   renderTaskFile,
+  validateTaskFlows,
   validateTaskGraph,
 } from "../../src/kernel/tasks.js";
 import { task } from "./helpers.js";
@@ -163,6 +164,31 @@ describe("task files", () => {
     expect(findings).toContain(
       'task "narrow" has no scope: declare the predicted area it works in',
     );
+  });
+
+  it("rejects an unknown kind with the kernel finding", () => {
+    const bad = TEXT.replace("kind: task", "kind: banana");
+    expect(() => parseTaskFile(bad, "auth.token-refresh")).toThrow(
+      'task "auth.token-refresh" has kind "banana": expected "task" or "spike"',
+    );
+  });
+
+  it("rejects an unknown flow with the dispatcher text", () => {
+    const flows = {
+      "implement-review": {
+        reviewRounds: 2,
+        steps: [{ id: "implement", role: "implementer" }],
+      },
+    };
+    expect(validateTaskFlows([task("a", { scope: ["x"] })], flows)).toEqual([]);
+    expect(
+      validateTaskFlows(
+        [task("a", { scope: ["x"], flow: "no-such-flow" })],
+        flows,
+      ),
+    ).toEqual([
+      'task "a" uses flow "no-such-flow": flow "no-such-flow" is not configured',
+    ]);
   });
 });
 

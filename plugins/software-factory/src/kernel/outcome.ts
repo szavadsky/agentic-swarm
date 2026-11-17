@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import yaml from "yaml";
-import { type Outcome, outcomeSchema } from "./types.js";
+import { type FlowDefinition, type Outcome, outcomeSchema } from "./types.js";
 
 export type OutcomeExpectation = "any" | "review" | "architect";
 
@@ -91,6 +91,25 @@ export function expectationField(
   if (expectation === "review") return "verdict";
   if (expectation === "architect") return "decision";
   return undefined;
+}
+
+/**
+ * Maps a flow step id to its outcome expectation: the architect consult gates a
+ * decision, review steps a verdict, every other configured step accepts any
+ * outcome. An id no flow configures is an error, never an unenforced contract.
+ */
+export function expectationForStep(
+  step: string | undefined,
+  flows: Record<string, FlowDefinition>,
+): OutcomeExpectation {
+  if (!step) return "any";
+  // The architect consult is a boundary role, not a step of any flow.
+  if (step === "architect") return "architect";
+  for (const flow of Object.values(flows)) {
+    const found = flow.steps.find((s) => s.id === step);
+    if (found) return found.review ? "review" : "any";
+  }
+  throw new Error(`step "${step}" is not configured in the repo's flows`);
 }
 
 /** Per-step contract the schema alone cannot express. */

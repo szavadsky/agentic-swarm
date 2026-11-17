@@ -1,14 +1,14 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import yaml from "yaml";
-import type { TaskFile, TaskKind } from "./types.js";
+import type { FlowDefinition, TaskFile, TaskKind } from "./types.js";
 
 /** The flow a task file gets when its frontmatter names none. */
 export const DEFAULT_FLOW = "implement-review";
 
 /**
  * Task frontmatter shape. The prompt skeleton renders from this; `parseTaskFile`
- * stays the validator (file-name authority, lenient kind, custom messages).
+ * stays the validator (file-name authority, custom messages).
  * Field descriptions are the prompt-facing wording, as on `outcomeSchema`.
  */
 export const taskFrontmatterSchema = z.object({
@@ -91,7 +91,13 @@ export function parseTaskFile(text: string, fileSlug: string): TaskFile {
       `task file "${fileSlug}" declares slug "${slug}": slugs are immutable and file names authoritative`,
     );
   }
-  const kind: TaskKind = meta.kind === "spike" ? "spike" : "task";
+  const rawKind = meta.kind;
+  if (rawKind !== undefined && rawKind !== "task" && rawKind !== "spike") {
+    throw new TaskFileError(
+      `task "${slug}" has kind "${String(rawKind)}": expected "task" or "spike"`,
+    );
+  }
+  const kind: TaskKind = rawKind === "spike" ? "spike" : "task";
   const title = typeof meta.title === "string" ? meta.title.trim() : "";
   if (!title) throw new TaskFileError(`task "${slug}" has no title`);
   const repairTurns =
@@ -235,5 +241,25 @@ export function validateTaskGraph(
     done.add(slug);
   };
   for (const slug of [...bySlug.keys()].sort()) walk(slug, []);
+  return [...new Set(findings)];
+}
+
+/**
+ * Flow existence against the merged process config. Same `flow "x" is not
+ * configured` text the dispatcher parks on; `factory validate` calls this so
+ * one definition rejects unknown flows.
+ */
+export function validateTaskFlows(
+  tasks: TaskFile[],
+  flows: Record<string, FlowDefinition>,
+): string[] {
+  const findings: string[] = [];
+  for (const task of tasks) {
+    if (!flows[task.flow]) {
+      findings.push(
+        `task "${task.slug}" uses flow "${task.flow}": flow "${task.flow}" is not configured`,
+      );
+    }
+  }
   return [...new Set(findings)];
 }

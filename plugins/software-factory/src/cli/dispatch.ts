@@ -31,6 +31,7 @@ export interface ParsedArgs {
   runConfig?: string;
   intent?: string;
   file?: string;
+  step?: string;
   help: boolean;
   version: boolean;
 }
@@ -106,12 +107,15 @@ at the next iteration boundary and answers in mailbox/outbox.
 `;
 
 const VALIDATE_USAGE = `
-factory validate <file>
+factory validate [--step <id>] <file>
 
 Validates one schema-enforced file with the same validators as the
-schema-validation gate: tasks/*.md (with its directory's dependency graph),
-class.yaml, outcome.yaml, mailbox/holds/*.yaml, repo.yaml, run.yaml and
-process.yaml. Exit: 0 valid, 1 invalid or unknown kind.
+schema-validation gate: tasks/*.md (with its directory's dependency graph and
+flow existence against the merged process config), class.yaml, outcome.yaml,
+mailbox/holds/*.yaml, repo.yaml, run.yaml and process.yaml. --step names the
+flow step an outcome is given for and overrides the step in the sibling
+started.yaml; a standalone outcome without either gets step-independent checks
+only. Exit: 0 valid, 1 invalid or unknown kind.
 `;
 
 function usageFor(command: string | undefined): string {
@@ -183,6 +187,11 @@ export function parseCliArgs(args: string[]): ParsedArgs {
       result.intent = parsed.value;
       i = parsed.next;
       if (!result.intent) throw new Error("--intent requires a file");
+    } else if (arg === "--step" || arg.startsWith("--step=")) {
+      const parsed = flagValue(arg, "--step", args, i);
+      result.step = parsed.value;
+      i = parsed.next;
+      if (!result.step) throw new Error("--step requires a step id");
     } else if (arg === "-" || !arg.startsWith("-")) {
       positional.push(arg);
     }
@@ -334,9 +343,16 @@ export async function dispatch(
     }
     if (parsed.command === "validate") {
       if (!parsed.file) throw new Error("validate requires a file path");
-      const findings = await validateFile(parsed.file);
-      for (const finding of findings) console.error(finding);
-      if (findings.length > 0) return 1;
+      const result = await validateFile(parsed.file, {
+        step: parsed.step,
+        repo: parsed.repo,
+      });
+      for (const finding of result.findings) console.error(finding);
+      if (result.findings.length > 0) return 1;
+      if (result.stepIndependent)
+        console.log(
+          `${parsed.file}: no --step and no started.yaml: step-independent checks only`,
+        );
       console.log(`${parsed.file}: valid`);
       return 0;
     }
