@@ -155,7 +155,6 @@ describe("E5 inverted — inherited red is matched per failing signature", () =>
   it("fails a task whose new failure hides behind an inherited red gate", async () => {
     const { repo, goal } = setupFlowRepo({
       gates: [{ id: "package", command: GATE }],
-      process: { itemTurns: 2 },
     });
     try {
       // Base is red for reason X: base-broken.txt is on main.
@@ -175,6 +174,12 @@ describe("E5 inverted — inherited red is matched per failing signature", () =>
           "utf8",
         );
         ctx.writeOutcome(outcome({ summary: "fix attempt" }));
+        return fakeTurnResult(req);
+      });
+      // A fix that changes nothing leaves the same red: the checks that follow
+      // decide, and the inherited-red rule parks it as a deterministic red.
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "no change to make" }));
         return fakeTurnResult(req);
       });
       scriptStallLeave(harness, ["task"]);
@@ -226,9 +231,11 @@ describe("E5 inverted — inherited red is matched per failing signature", () =>
       );
 
       expect(state.tasks.task!.status).toBe("parked");
-      expect(state.tasks.task!.cause!.startsWith("budget:")).toBe(true);
+      expect(state.tasks.task!.cause).toContain(
+        "empty-diff: implement r1 committed no changes after red checks: package",
+      );
       // Reason Y is absent from base, so the first branch check is the task's own.
-      expect(checks).toHaveLength(2);
+      expect(checks).toHaveLength(3);
       expect(checks.every((r) => r.ok === false)).toBe(true);
       expect(checks[0]!.checks![0]!.name).toBe("package");
       expect(checks[0]!.checks![0]!.output).toContain("reason Y");

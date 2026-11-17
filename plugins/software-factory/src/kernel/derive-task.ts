@@ -192,9 +192,10 @@ function sameFailingSet(
 /**
  * A record recovery sealed after a hard death: a bare `infra: crash` with
  * nothing the turn itself reported. Mirrors `isRecoveryCrash` in derive.ts —
- * resume and budget share the seal. Bare seals are free interruptions,
- * redispatched; a crash the turn reported (cause, details, usage or prompt
- * bytes) spends the budget. Recovery only seals crash, never timeout.
+ * resume and the turn count share the seal. Bare seals are free
+ * interruptions, redispatched; a crash the turn reported (cause, details,
+ * usage or prompt bytes) counts as a turn. Recovery only seals crash, never
+ * timeout.
  */
 function isBareRecoverySeal(rec: StepRecord): boolean {
   if (rec.stop?.kind !== "infra" || rec.stop?.cause !== "crash") return false;
@@ -262,7 +263,7 @@ export function reduceTask(
       // agent (creation merge or reused-worktree sync): the next turn's
       // empty-diff baseline is the post-advance tree, not the last counted
       // turn's. No existing record carries it — commit records only follow
-      // turns — so this script record is the baseline. Free: no budget.
+      // turns — so this script record is the baseline. Free: not a turn.
       if (rec.tree !== undefined) countedTree = rec.tree;
       // Only the creation advance carries, and only for the first counted
       // turn: a reused-worktree sync or merge-checks recreation either lacks
@@ -373,10 +374,10 @@ export function reduceTask(
       }
       continue;
     }
-    // A crash the script reports (dispatch `recordCrash`) budgets like a harness
+    // A crash the script reports (dispatch `recordCrash`) counts like a harness
     // crash on the same step: a throwing pre-harness step parks after two
     // repeats instead of redispatching forever. Only reported crashes on flow
-    // steps consume; bare recovery seals, script phases (checks, merge, park,
+    // steps count; bare recovery seals, script phases (checks, merge, park,
     // finish), quota/rate/auth/overflow and drain (tasks never started) stay free.
     if (rec.actor === "script") {
       const scriptStop = rec.stop;
@@ -414,8 +415,8 @@ export function reduceTask(
     const isTimeoutOrCrash =
       isInfra && (stop.cause === "timeout" || stop.cause === "crash");
 
-    // Infra without a valid outcome: a reported timeout/crash consumes the turn
-    // budget and parks after two repeats on the same step; bare recovery seals
+    // Infra without a valid outcome: a reported timeout/crash counts as a turn
+    // and parks after two repeats on the same step; bare recovery seals
     // (free interruptions) and other infra (quota, auth, ...) stay free and resumable.
     if (isInfra && !hasOutcome) {
       if (isTimeoutOrCrash && !isBareRecoverySeal(rec)) {
@@ -437,8 +438,8 @@ export function reduceTask(
     lastInfraStep = undefined;
     infraRepeatCount = 0;
 
-    // Outcome repairs are harness turns on the same record; each one spends the
-    // item budget like the turn that needed it.
+    // Outcome repairs are harness turns on the same record; each one counts
+    // like the turn that needed it.
     turns += 1 + countOutcomeRepairs(rec.attempts);
     if (isTruncated) continue;
     if (isCancelled && !hasOutcome) continue;
@@ -468,7 +469,8 @@ export function reduceTask(
     // skips the history fingerprint and lets the round limit decide.
     // An empty gate-fix turn repeats its tree by design too: the checks that
     // follow own the verdict, so a deferred turn must not loop-park a fix the
-    // checks would clear. The item budget still bounds repeated deferrals.
+    // checks would clear. The review round limit still bounds repeated
+    // deferrals.
     const answeredIndex = flowIndex.get(rec.step);
     const answeredStep =
       answeredIndex === undefined ? undefined : flow.steps[answeredIndex];
@@ -557,7 +559,7 @@ export function reduceTask(
       // Deferred: the fix round goes back for a verdict with its outcome's
       // dispositions — or the turn carries a continuation's kept work, which
       // is progress, not an empty diff — or the following checks settle an
-      // empty gate fix. Review rounds and the item budget still bound the loop.
+      // empty gate fix. Review rounds still bound the loop.
     }
     if (step.review) {
       // Standalone escalation (and any review upscope answer): parks with the

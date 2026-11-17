@@ -18,7 +18,6 @@ describe("KERNEL0 scenario 9 — no progress over the item history", () => {
   it("parks on an A, B, A sequence that only a history comparison catches", async () => {
     const { repo, goal } = setupFlowRepo({
       process: {
-        itemTurns: 10,
         flows: { "implement-review": { reviewRounds: 4 } },
       },
     });

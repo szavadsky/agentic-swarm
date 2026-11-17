@@ -813,7 +813,7 @@ function ensureSteerHold(
  * in the outbox now; `spike` writes a standalone task whose landed outcome is
  * answered later; `architect` waits for the next boundary with its hold;
  * `stall` drains the goal with `goal: true` and waits for the architect. The
- * record uses the PM step, so it stays out of the item turn budget and prices
+ * record uses the PM step, so it stays out of the item's turn count and prices
  * into the iteration's spend like every other PM turn.
  *
  * Accepted routes commit to a `steer-routes` script record; a failed rung's
@@ -954,7 +954,7 @@ export interface StallResult {
 }
 /**
  * One stall entry per parked slug: the cause, this iteration's record paths,
- * the kept branch, spent item turns and the done-when the continuation keeps.
+ * the kept branch, spent turns and the done-when the continuation keeps.
  * The integration head lets the PM check a base for conflicts before choosing.
  */
 async function stallBrief(
@@ -993,7 +993,7 @@ async function briefFacts(runtime: KernelRuntime): Promise<BriefFacts> {
 
 /**
  * The indented fact lines under one `- slug` brief entry: the cause, this
- * iteration's record paths, the kept branch, spent item turns and the
+ * iteration's record paths, the kept branch, spent turns and the
  * done-when. Shared by the stall and plan-check briefs.
  */
 function slugFactLines(
@@ -1018,7 +1018,7 @@ function slugFactLines(
     `  cause: ${parked?.cause ?? "no recorded cause"}`,
     `  records: ${paths.length > 0 ? paths.join(", ") : "none"}`,
     `  branch: ${taskBranchName(runtime, slug)}`,
-    `  turns: ${parked?.turns ?? 0} of ${runtime.limits.itemTurns} spent`,
+    `  turns: ${parked?.turns ?? 0} spent`,
     `  done-when: ${doneWhen(facts.bySlug.get(slug)?.body ?? "") || "(none)"}`,
   ];
 }
@@ -1211,7 +1211,7 @@ async function validateStallTurn(
  * with `base:` naming the parked slug, or a fresh task when the kept branch
  * conflicts with the head) and dispatch resumes in the same iteration;
  * `leave` keeps the slug parked with a reason the next boundary sees. The
- * record uses the PM step, so it stays out of the item turn budget and prices
+ * record uses the PM step, so it stays out of the item's turn count and prices
  * into the iteration's spend like every other PM turn.
  *
  * Accepted routes commit to a `stall-routes` script record; a failed rung's
@@ -1623,7 +1623,7 @@ async function validatePlanCheckTurn(
  * conflicts with the head, a rewrite of a dead dep, or a dead-dep drop on a
  * missing-dep slug) and dispatch resumes in the same iteration; `leave`
  * keeps the slug for the architect with a reason. The record uses the PM
- * step, so it stays out of the item turn budget and prices into the
+ * step, so it stays out of the item's turn count and prices into the
  * iteration's spend like every other PM turn.
  *
  * Accepted routes commit to a `plan-check-routes` script record; a failed

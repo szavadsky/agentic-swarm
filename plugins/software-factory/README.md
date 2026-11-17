@@ -51,7 +51,6 @@ gates:
 `.factory/process.yaml`:
 
 ```yaml
-itemTurns: 8
 flows:
   implement-review:
     reviewRounds: 2
@@ -145,7 +144,7 @@ assumptions and debt. `metrics.yaml` is rebuilt from the usage records:
 architect launches, architect cost and token share, cost and list cost per
 merged task, incident counts (infra retries, fallback hops, outcome-repair
 turns, merge conflicts, merged-gate failures, and round-limit, no-progress,
-empty-diff, overflow and budget parks), loop incidents (no-progress and
+empty-diff and overflow parks), loop incidents (no-progress and
 empty-diff parks; a spike's empty finish and overflow parks are not loop
 incidents), human interventions (processed steers) and the observable
 operator-act counter (steers plus containment outside-changes and

@@ -50,12 +50,6 @@ export interface AgentTurnSpec {
   /** Outcome reminders after the first attempt; defaults to process `reminders`. */
   repairTurns?: number;
   /**
-   * Item budget before this turn. The first attempt spends one turn, so the
-   * loop caps repairs at `limit - used - 1`. Steps without an item leave it
-   * unset and repair up to `repairTurns`.
-   */
-  itemBudget?: { used: number; limit: number };
-  /**
    * Runs after the turn and before the end record commits. `settle` sees the
    * accepted outcome and the live session, so it can compact and return the
    * compacted ref that must be stored (mechanical commits ignore the extras).
@@ -398,16 +392,10 @@ export async function runAgentTurn(
     stop.kind === "infra" ||
     stop.kind === "refusal" ||
     stop.kind === "cancelled";
-  // The first attempt spent one turn of the item budget; repairs spend the rest.
+  // Repairs are bounded by the reminder count (the task may override it).
   const requestedRepairs =
     spec.repairTurns ?? runtime.configs.process.reminders ?? 1;
-  const budgetRepairs = spec.itemBudget
-    ? Math.max(0, spec.itemBudget.limit - spec.itemBudget.used - 1)
-    : requestedRepairs;
-  const maxRepairs = Math.min(
-    Math.max(0, Math.floor(requestedRepairs)),
-    Math.max(0, Math.floor(budgetRepairs)),
-  );
+  const maxRepairs = Math.max(0, Math.floor(requestedRepairs));
   const needsRepair = findings.length > 0 && !haltedNow();
   let repairs = 0;
   const repairFindings: string[] = [];

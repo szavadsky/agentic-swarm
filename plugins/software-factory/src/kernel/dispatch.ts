@@ -58,7 +58,7 @@ interface Running {
   model?: string;
 }
 
-/** Agent turns charged to the item budget; boundary roles and infra stops are free. */
+/** Agent turns charged to the iteration's turn count; boundary roles and infra stops are free. */
 export function settledTurns(records: StepRecord[], iteration: number): number {
   return records.filter(
     (r) =>

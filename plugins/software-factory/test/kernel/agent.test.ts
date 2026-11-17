@@ -38,7 +38,6 @@ function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
       reviewer: { prompt: "reviewer" },
       front: { prompt: "front" },
     },
-    itemTurns: 8,
     reminders: 1,
   };
   const repo: RepoConfig = {
@@ -80,7 +79,6 @@ function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
     harnesses: new Map([["fake", fake]]),
     prompts: loadPrompts(process, root),
     limits: {
-      itemTurns: 8,
       flows: {},
       iterations: 1,
       concurrency: { overall: 1, perSubscription: {}, perModel: {} },
@@ -1253,51 +1251,6 @@ describe("bounded repairs", () => {
       expect(secondAsk).toContain("not valid YAML");
       expect(secondAsk).toMatch(/line \d+, column \d+/);
       expect(secondAsk).not.toContain(firstBad.trim());
-    } finally {
-      fs.rmSync(root, { recursive: true, force: true });
-    }
-  });
-
-  it("fails without a repair when the item budget has no turn left", async () => {
-    const { root, fake, runtime } = await setup();
-    try {
-      fake.script((req) => fakeTurnResult(req, { text: "nothing" }));
-
-      const result = await runAgentTurn(runtime, {
-        target: resolveRole(runtime, "implementer"),
-        cwd: root,
-        meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
-        vars: implementerVars,
-        expectation: "any",
-        itemBudget: { used: 7, limit: 8 },
-      });
-
-      expect(fake.calls).toHaveLength(1);
-      expect(result.outcome?.status).toBe("failed");
-      expect(result.outcome?.summary).toContain("no outcome");
-    } finally {
-      fs.rmSync(root, { recursive: true, force: true });
-    }
-  });
-
-  it("caps repairs at the remaining item budget", async () => {
-    const { root, fake, runtime } = await setup();
-    try {
-      fake.script((req) => fakeTurnResult(req, { text: "nothing" }));
-      fake.script((req) => fakeTurnResult(req, { text: "still nothing" }));
-
-      const result = await runAgentTurn(runtime, {
-        target: resolveRole(runtime, "implementer"),
-        cwd: root,
-        meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
-        vars: implementerVars,
-        expectation: "any",
-        itemBudget: { used: 6, limit: 8 },
-      });
-
-      expect(fake.calls).toHaveLength(2);
-      expect(result.outcome?.status).toBe("failed");
-      expect(countOutcomeRepairs(result.record.attempts)).toBe(1);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }

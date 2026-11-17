@@ -222,7 +222,7 @@ describe("factory validate", () => {
   it(
     "accepts a valid process file",
     withTmp(async (root) => {
-      const file = writeFile(root, "process.yaml", "itemTurns: 8\n");
+      const file = writeFile(root, "process.yaml", "reminders: 2\n");
       const result = await runValidate(file);
       expect(result.code).toBe(0);
       expect(result.out).toContain(": valid");
@@ -232,10 +232,10 @@ describe("factory validate", () => {
   it(
     "rejects an invalid process file",
     withTmp(async (root) => {
-      const file = writeFile(root, "process.yaml", "itemTurns: 0\n");
+      const file = writeFile(root, "process.yaml", "reminders: -1\n");
       const result = await runValidate(file);
       expect(result.code).toBe(1);
-      expect(result.err).toContain("itemTurns");
+      expect(result.err).toContain("reminders");
     }),
   );
 

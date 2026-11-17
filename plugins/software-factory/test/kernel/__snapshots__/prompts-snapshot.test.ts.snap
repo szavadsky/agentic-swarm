@@ -400,13 +400,13 @@ planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark pe
   cause: blocked: stuck
   records: /goal/records/00007-i3-alpha-implement-r1
   branch: factory-task/demo/alpha
-  turns: 1 of 8 spent
+  turns: 1 spent
   done-when: Done when: it works.\`
 - checker follow-ups: \`- alpha (continuation): mechanical park
   cause: infra: runner lost
   records: /goal/records/00007-i3-alpha-implement-r1
   branch: factory-task/demo/alpha
-  turns: 1 of 8 spent
+  turns: 1 spent
   done-when: Done when: it works.\`
 - outcome path: \`/goal/records/00043-i3-pm-r1/outcome.yaml\`
 "

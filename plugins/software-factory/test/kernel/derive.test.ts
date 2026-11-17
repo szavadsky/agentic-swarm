@@ -241,7 +241,7 @@ describe("derive", () => {
     expect(state.tasks.a!.park).toBeUndefined();
   });
 
-  it("never charges an infra stop to the item budget or the round", () => {
+  it("never counts an infra stop as a turn or a round", () => {
     const state = derive(
       [task("a")],
       [
@@ -867,7 +867,7 @@ describe("derive", () => {
     );
   });
 
-  it("charges each outcome repair to the item budget", () => {
+  it("counts each outcome repair as a turn", () => {
     const done = { kind: "done" } as const;
     const usage = {
       in: 0,
@@ -885,7 +885,7 @@ describe("derive", () => {
     expect(state.tasks.a!.turns).toBe(3);
   });
 
-  it("leaves infra retries outside the item budget", () => {
+  it("leaves infra retries out of the turn count", () => {
     const usage = {
       in: 0,
       cacheRead: 0,
@@ -1129,7 +1129,7 @@ describe("derive", () => {
     );
   });
 
-  it("charges a continuation's turns against its base's spent item budget", () => {
+  it("counts only a continuation's own turns, not its base's", () => {
     const tasks = [task("a"), task("b", { base: "a" })];
     const records = [
       implement(1),
@@ -1140,7 +1140,6 @@ describe("derive", () => {
     ];
     const state = derive(tasks, records);
     expect(state.tasks.a!.turns).toBe(3);
-    // The continuation's own turn plus the base's three: renaming buys no new budget.
-    expect(state.tasks.b!.turns).toBe(4);
+    expect(state.tasks.b!.turns).toBe(1);
   });
 });

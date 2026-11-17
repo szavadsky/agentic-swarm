@@ -88,12 +88,6 @@ export function next(
       );
       continue;
     }
-    if (task.turns >= limits.itemTurns) {
-      actions.push(
-        park(slug, `budget: item budget exhausted after ${task.turns} turns`),
-      );
-      continue;
-    }
     actions.push({ kind: "step", slug, step: step.id, round: task.round });
   }
 

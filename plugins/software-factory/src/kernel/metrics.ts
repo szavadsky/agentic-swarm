@@ -73,7 +73,6 @@ export interface IncidentCounts {
   emptyDiffParks: number;
   /** Parks whose cause names a turn that could not fit its context. */
   overflowParks: number;
-  budgetParks: number;
 }
 
 export interface ArchitectMetrics {
@@ -208,7 +207,6 @@ function emptyIncidents(): IncidentCounts {
     noProgressParks: 0,
     emptyDiffParks: 0,
     overflowParks: 0,
-    budgetParks: 0,
   };
 }
 
@@ -384,7 +382,6 @@ function parkIncidents(all: StepRecord[], incidents: IncidentCounts): void {
       // park, so it never reaches this count.
       else if (/^empty-diff:/i.test(cause)) incidents.emptyDiffParks += 1;
       else if (/^overflow\b/i.test(cause)) incidents.overflowParks += 1;
-      else if (/^budget:/i.test(cause)) incidents.budgetParks += 1;
     }
   }
 }

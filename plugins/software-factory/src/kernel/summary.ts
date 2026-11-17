@@ -101,7 +101,6 @@ function incidentLines(
     `- no-progress parks: ${incidents.noProgressParks}`,
     `- empty-diff parks: ${incidents.emptyDiffParks}`,
     `- overflow parks: ${incidents.overflowParks}`,
-    `- budget parks: ${incidents.budgetParks}`,
     `- loop incidents: ${loopIncidents}`,
   ];
 }

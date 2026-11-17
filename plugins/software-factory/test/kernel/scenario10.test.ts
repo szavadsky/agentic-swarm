@@ -138,7 +138,6 @@ describe("KERNEL0 scenario 10 — review reply round-trip", () => {
   it("bounds a reply ping-pong by the review rounds and merges the last changes", async () => {
     const { repo, goal } = setupFlowRepo({
       process: {
-        itemTurns: 8,
         flows: { "implement-review": { reviewRounds: 2 } },
       },
     });

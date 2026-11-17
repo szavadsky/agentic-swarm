@@ -48,7 +48,6 @@ function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
   const process: ProcessConfig = {
     flows: {},
     roles: { pm: { prompt: "pm" } },
-    itemTurns: 8,
     reminders: 1,
   };
   const repo: RepoConfig = {
@@ -81,7 +80,6 @@ function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
     harnesses: new Map([["fake", fake]]),
     prompts: loadPrompts(process, root),
     limits: {
-      itemTurns: 8,
       flows: {},
       iterations: 1,
       concurrency: { overall: 1, perSubscription: {}, perModel: {} },
@@ -1367,7 +1365,7 @@ describe("stall PM — zero-merge stall in the running iteration", () => {
       expect(stallPrompt).toContain("records/");
       expect(stallPrompt).toContain("alpha-implement");
       expect(stallPrompt).toContain("factory-task/demo/alpha");
-      expect(stallPrompt).toContain("1 of 8 spent");
+      expect(stallPrompt).toContain("turns: 1 spent");
       const continuation = parseTaskFile(
         fs.readFileSync(
           path.join(runtime.store.tasksDir, "alpha-2.md"),

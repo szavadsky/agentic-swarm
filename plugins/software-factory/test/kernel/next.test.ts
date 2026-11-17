@@ -5,7 +5,6 @@ import type { Limits, StepRecord } from "../../src/kernel/types.js";
 import { rec, script, task } from "./helpers.js";
 
 const limits: Limits = {
-  itemTurns: 4,
   flows: {
     "implement-review": {
       reviewRounds: 2,
@@ -127,7 +126,7 @@ describe("next", () => {
     ]);
   });
 
-  it("merges last-round changes instead of parking, and parks on an exhausted item budget", () => {
+  it("merges last-round changes instead of parking", () => {
     const lastRound = derive(
       [task("a")],
       [
@@ -143,30 +142,6 @@ describe("next", () => {
       { kind: "merge", slug: "a" },
     ]);
     expect(lastRound.tasks.a!.round).toBe(2);
-
-    const spent = derive(
-      [task("a")],
-      [
-        implement(1),
-        check(2),
-        review(3, "changes", 1),
-        implement(4, 2),
-        check(5),
-      ],
-    );
-    const budget = next(spent, { ...limits, itemTurns: 3 }, new Set())[0]!;
-    expect(budget.kind).toBe("park");
-    if (budget.kind === "park") expect(budget.cause).toContain("budget");
-  });
-
-  it("merges approved work even when the item budget is already spent", () => {
-    const approved = derive(
-      [task("a")],
-      [implement(1), check(2), review(3, "approve")],
-    );
-    expect(next(approved, { ...limits, itemTurns: 2 }, new Set())).toEqual([
-      { kind: "merge", slug: "a" },
-    ]);
   });
 
   it("does not redispatch a task that is already running", () => {
@@ -192,25 +167,19 @@ describe("next", () => {
     expect(action.kind).toBe("park");
   });
 
-  it("parks a continuation whose whole-item budget the base already spent", () => {
+  it("starts a `base:` continuation's first turn whatever its chain spent", () => {
     const tasks = [task("a"), task("b", { base: "a" })];
     const state = derive(
       tasks,
-      [
-        implement(1),
-        check(2),
-        review(3, "changes", 1),
-        implement(4, 2),
-        implement(5, 1, { slug: "b" }),
-        { ...check(6), slug: "b" },
-      ],
+      [implement(1), check(2), review(3, "changes", 1), implement(4, 2)],
       limits.flows,
     );
-    expect(state.tasks.b!.turns).toBe(4);
-    const parks = next(state, limits, new Set()).filter(
-      (action) => action.kind === "park" && action.slug === "b",
-    );
-    expect(parks).toHaveLength(1);
-    expect(parks[0]).toMatchObject({ kind: "park", slug: "b" });
+    expect(state.tasks.a!.turns).toBeGreaterThan(0);
+    expect(state.tasks.b!.turns).toBe(0);
+    expect(
+      next(state, limits, new Set()).filter(
+        (action) => action.kind === "step" && action.slug === "b",
+      ),
+    ).toEqual([{ kind: "step", slug: "b", step: "implement", round: 1 }]);
   });
 });

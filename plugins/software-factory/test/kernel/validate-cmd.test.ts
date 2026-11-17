@@ -82,7 +82,7 @@ const ROLES: Record<string, Record<string, string>> = {
 
 function library() {
   return loadPrompts(
-    { flows: {}, roles: {}, itemTurns: 8 } as ProcessConfig,
+    { flows: {}, roles: {}, reminders: 1 } as ProcessConfig,
     os.tmpdir(),
   );
 }

@@ -73,7 +73,6 @@ describe("prompts: PromptLibrary", () => {
     const process = {
       flows: {},
       roles: {},
-      itemTurns: 8,
       reminders: 1,
       calibration: "CUSTOM CALIBRATION",
     } as ProcessConfig;
@@ -81,7 +80,7 @@ describe("prompts: PromptLibrary", () => {
     expect(lib.render("calibration", {})).toBe("CUSTOM CALIBRATION");
     // Built-ins still render when the process config sets no calibration.
     const builtin = loadPrompts(
-      { flows: {}, roles: {}, itemTurns: 8, reminders: 1 } as ProcessConfig,
+      { flows: {}, roles: {}, reminders: 1 } as ProcessConfig,
       dir,
     );
     expect(builtin.render("calibration", {})).toContain(
@@ -414,7 +413,6 @@ describe("prompts: schema defaults", () => {
           ]),
         ),
         roles: {},
-        itemTurns: 8,
         reminders: 1,
       } as ProcessConfig,
       os.tmpdir(),

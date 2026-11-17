@@ -116,12 +116,6 @@ function incidentRecords() {
       ok: true,
       cause: "no-progress: implement r2 repeats r1 (deadbeef)",
     }),
-    script(9, {
-      slug: "d",
-      step: "park",
-      ok: true,
-      cause: "budget: item budget exhausted after 8 turns",
-    }),
     script(10, {
       slug: "e",
       step: "park",
@@ -143,7 +137,6 @@ const EXPECTED_INCIDENTS = {
   noProgressParks: 1,
   emptyDiffParks: 1,
   overflowParks: 1,
-  budgetParks: 1,
 };
 
 const SUMMARY_LABELS = {
@@ -157,7 +150,6 @@ const SUMMARY_LABELS = {
   "no-progress parks": "noProgressParks",
   "empty-diff parks": "emptyDiffParks",
   "overflow parks": "overflowParks",
-  "budget parks": "budgetParks",
 } as const;
 
 function summaryIncidents(text: string): IncidentCounts {
@@ -230,7 +222,7 @@ describe("iteration metrics incidents and spend tables", () => {
       });
 
       const state = derive(
-        [task("a"), task("b"), task("c"), task("d"), task("e"), task("f")],
+        [task("a"), task("b"), task("c"), task("e"), task("f")],
         records,
       );
       await writeIterationSummary(store, {
@@ -382,7 +374,6 @@ describe("iteration metrics incidents and spend tables", () => {
         noProgressParks: 0,
         emptyDiffParks: 0,
         overflowParks: 0,
-        budgetParks: 0,
       });
     } finally {
       fs.rmSync(root, { recursive: true, force: true });

@@ -636,7 +636,6 @@ describe("record cost truth", () => {
     const process: ProcessConfig = {
       flows: {},
       roles: { implementer: { prompt: "implementer" } },
-      itemTurns: 8,
       reminders: 1,
     };
     const repo: RepoConfig = {
@@ -670,7 +669,6 @@ describe("record cost truth", () => {
       harnesses: new Map([["fake", fake]]),
       prompts: loadPrompts(process, root),
       limits: {
-        itemTurns: 8,
         flows: {},
         iterations: 1,
         concurrency: { overall: 1, perSubscription: {}, perModel: {} },

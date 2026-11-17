@@ -43,7 +43,7 @@ describe("three config layers", () => {
     fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
     fs.writeFileSync(
       path.join(root, ".factory/process.yaml"),
-      "flows:\n  implement-review:\n    reviewRounds: 4\nitemTurns: 12\nreminders: 0\nroles:\n  architect:\n    prompt: architect\n    alias: boss\n",
+      "flows:\n  implement-review:\n    reviewRounds: 4\nreminders: 0\nroles:\n  architect:\n    prompt: architect\n    alias: boss\n",
     );
     fs.writeFileSync(
       path.join(root, ".factory/run.yaml"),
@@ -52,12 +52,31 @@ describe("three config layers", () => {
     const configs = loadConfigs(root);
     expect(configs.process.flows["implement-review"]!.reviewRounds).toBe(4);
     expect(configs.process.flows.spike!.reviewRounds).toBe(1);
-    expect(configs.process.itemTurns).toBe(12);
     expect(configs.process.reminders).toBe(0);
     expect(configs.process.roles.architect!.alias).toBe("boss");
     expect(configs.run.aliases.boss!.model).toBe("big");
     expect(toLimits(configs).flows["implement-review"]!.reviewRounds).toBe(4);
     expect(toLimits(configs).iterations).toBe(2);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("fails loud on a repo process file that still carries itemTurns", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    const override = path.join(root, ".factory/process.yaml");
+    fs.writeFileSync(override, "itemTurns: 8\n");
+    let error: ConfigError | undefined;
+    try {
+      loadConfigs(root);
+    } catch (err) {
+      error = err as ConfigError;
+    }
+    expect(error).toBeInstanceOf(ConfigError);
+    expect(error!.findings).toContainEqual({
+      file: override,
+      key: "(root)",
+      message: expect.stringContaining("itemTurns"),
+    });
     fs.rmSync(root, { recursive: true, force: true });
   });
 

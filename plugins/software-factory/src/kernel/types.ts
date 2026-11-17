@@ -204,7 +204,7 @@ export interface ProgressRepeat {
 export interface TaskState {
   status: TaskStatus;
   cause?: string;
-  /** Non-infra agent turns spent on this slug (item budget). */
+  /** Agent turns spent on this slug, a spend fact only: no bound reads it. */
   turns: number;
   /** Current implementation/review round, 1-based. */
   round: number;
@@ -264,7 +264,6 @@ export interface FlowDefinition {
 
 /** Limits the pure `next` needs; resolved from the three config layers. */
 export interface Limits {
-  itemTurns: number;
   flows: Record<string, FlowDefinition>;
   iterations: number;
   concurrency: {
@@ -479,7 +478,6 @@ export interface RoleConfig {
 export interface ProcessConfig {
   flows: Record<string, FlowDefinition>;
   roles: Record<string, RoleConfig>;
-  itemTurns: number;
   /** Outcome reminders after the first attempt; a task file's `repairTurns` overrides it for that task's turns only. */
   reminders: number;
   calibration?: string;

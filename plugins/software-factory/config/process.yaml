@@ -30,5 +30,4 @@ roles:
   steward: { prompt: steward }
   plan-checker: { prompt: plan-checker }
   plan-reviewer: { prompt: reviewer }
-itemTurns: 8
 reminders: 1

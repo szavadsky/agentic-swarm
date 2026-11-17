@@ -79,10 +79,10 @@ const ROLES: Record<string, Record<string, string>> = {
     steers: "- s1 (mailbox/inbox/s1.md):\n  keep the API stable",
     holds_dir: "/goal/mailbox/holds",
     stalls:
-      "- alpha\n  cause: blocked: stuck\n  records: /goal/records/00007-i3-alpha-implement-r1\n  branch: factory-task/demo/alpha\n  turns: 1 of 8 spent\n  done-when: Done when: it works.",
+      "- alpha\n  cause: blocked: stuck\n  records: /goal/records/00007-i3-alpha-implement-r1\n  branch: factory-task/demo/alpha\n  turns: 1 spent\n  done-when: Done when: it works.",
     outcome_path: "/goal/records/00043-i3-pm-r1/outcome.yaml",
     plan_checks:
-      "- alpha (continuation): mechanical park\n  cause: infra: runner lost\n  records: /goal/records/00007-i3-alpha-implement-r1\n  branch: factory-task/demo/alpha\n  turns: 1 of 8 spent\n  done-when: Done when: it works.",
+      "- alpha (continuation): mechanical park\n  cause: infra: runner lost\n  records: /goal/records/00007-i3-alpha-implement-r1\n  branch: factory-task/demo/alpha\n  turns: 1 spent\n  done-when: Done when: it works.",
     validate_cmd: "bun /factory/bin/factory.ts validate",
     outcome_schema: OUTCOME_SCHEMA,
     task_frontmatter: TASK_FRONTMATTER,
@@ -162,7 +162,6 @@ function processConfig(): ProcessConfig {
     roles: Object.fromEntries(
       Object.keys(ROLES).map((role) => [role, { prompt: role }]),
     ),
-    itemTurns: 8,
     reminders: 1,
   };
 }

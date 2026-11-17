@@ -43,7 +43,7 @@ export type Stop =
   /** Task-side: the turn was cut short with a half-written artifact. */
   | { kind: "truncated"; cause: "max-tokens" | "turn-limit" }
   /**
-   * Infrastructure trouble must never consume item budget or review rounds.
+   * Infrastructure trouble must never consume a review round.
    * `details` carries scrubbed, one-line harness error text capped at 501
    * characters, including a leading `…` when truncated. For an acpx crash the
    * exit code and signal are kept outside the cut, followed by the last
