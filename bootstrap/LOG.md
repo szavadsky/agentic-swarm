@@ -598,3 +598,10 @@ Verbatim, newest last; each with what it changed.
 - WATCH: ernie-free hit infra quota 3x (first time) — off-Go map's reviewer/fallback workhorse is rate-sensitive; fallback saved it. Reroute to agy-primary review if it repeats.
 - Architect forward: Phase 1 live evidence owed — (1) steward agent turn (colliding tasks), (2) each steer class handled once (mid-dispatch injection). "The factory is ready for both now... running them after this iteration lands." Operator launches next (p1-trivial/p1-task precedent), then i41 self.
 - No steers for i41: no incidents. Budget steer still awaiting owner word — NOT steered (6th iteration).
+
+### 2026-11-16 — p1-steward landed: negative result (serialization kills same-file collision)
+- Exit 3 (iteration-limit), 52m. 2 tasks planned correctly (stop-rule-label, stop-rule-owner-note, deps:[]) — PM split worked. BOTH MERGED sequentially (2625ff2, d93e0f6); 0 parks; disk carries owner-note variant only (doc-only, acceptable).
+- STEWARD EVIDENCE NOT PRODUCED: record 00016 script stub `skipped: no conflicts` — no agent turn. Root: kernel serializes same-scope tasks (dispatch.ts:525,542 overlapsRunning); owner-note started 0.9s after label merged, branch already contained the variant. Same-file collision unreachable by design. Plancheck debt opened (sequential-not-arbitrated). Steered as observation; v2 design awaited in forward.
+- INTENT synced MAIN 2984165 → V3 (16db7d78 verified): review-bounds + binary-config lines now in the factory tree.
+- Steers for i41: review-bounds (intent-change) + binary-config (intent-change) + steward-serialization (observation).
+- No promote (doc-only landing; pin unchanged c92247c216ca).
