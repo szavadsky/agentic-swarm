@@ -17,6 +17,7 @@ import { sessionCacheHot } from "./sessions.js";
 import { GATE_LAST_CALL_ASK } from "./prompts.js";
 import { agentSteps, isLastChecksFixCall } from "./review.js";
 import type {
+  AliasConfig,
   FlowDefinition,
   FlowStep,
   KernelRuntime,
@@ -256,13 +257,14 @@ function targetForAlias(
   runtime: KernelRuntime,
   role: string,
   aliasName: string,
+  iteration?: number,
 ): RoleTarget {
   const alias = runtime.configs.run.aliases[aliasName];
   if (!alias)
     throw new Error(
       `run config has no alias "${aliasName}" (needed by role "${role}")`,
     );
-  const chain = resolveChain(runtime, aliasName);
+  const chain = resolveChain(runtime, aliasName, iteration);
   const available = chain.filter(
     (tier) => !runtime.exhaustedPools.has(tierPoolKey(tier)),
   );
@@ -284,15 +286,42 @@ function targetForAlias(
 }
 
 /**
+ * The alias's primary entry for an iteration: its rotate entry when one is
+ * configured, else the alias's own harness, model and effort. Iteration N
+ * selects `rotate[N % rotate.length]`, so iteration 1 starts at index 1.
+ */
+function primaryEntry(
+  alias: AliasConfig,
+  iteration: number | undefined,
+): { harness: string; model: string; effort?: string } {
+  const rotate = alias.rotate ?? [];
+  if (iteration === undefined || rotate.length === 0)
+    return {
+      harness: alias.harness,
+      model: alias.model,
+      ...(alias.effort ? { effort: alias.effort } : {}),
+    };
+  const entry = rotate[iteration % rotate.length]!;
+  const effort = entry.effort ?? alias.effort;
+  return {
+    harness: entry.harness,
+    model: entry.model,
+    ...(effort ? { effort } : {}),
+  };
+}
+
+/**
  * The alias's full fallback chain, primary first, deduplicated by harness,
  * model and effort. A fallback names another harness to leave the primary's;
- * effort and subscription default to the alias's own.
+ * effort and subscription default to the primary's.
  */
 function resolveChain(
   runtime: KernelRuntime,
   aliasName: string,
+  iteration?: number,
 ): ResolvedTier[] {
   const alias = runtime.configs.run.aliases[aliasName]!;
+  const primary = primaryEntry(alias, iteration);
   const seen = new Set<string>();
   const chain: ResolvedTier[] = [];
   const push = (
@@ -317,12 +346,12 @@ function resolveChain(
       opaque: runtime.configs.run.harnesses?.[harnessId]?.acpx,
     });
   };
-  push(alias.harness, alias.model, alias.effort, alias.subscription);
+  push(primary.harness, primary.model, primary.effort, alias.subscription);
   for (const fallback of alias.fallbacks ?? []) {
     push(
-      fallback.harness ?? alias.harness,
+      fallback.harness ?? primary.harness,
       fallback.model,
-      fallback.effort ?? alias.effort,
+      fallback.effort ?? primary.effort,
       fallback.subscription ?? alias.subscription,
     );
   }
@@ -330,8 +359,12 @@ function resolveChain(
 }
 
 /** The harness a turn on this alias would actually start on. */
-function effectiveAliasHarness(runtime: KernelRuntime, alias: string): string {
-  const chain = resolveChain(runtime, alias);
+function effectiveAliasHarness(
+  runtime: KernelRuntime,
+  alias: string,
+  iteration?: number,
+): string {
+  const chain = resolveChain(runtime, alias, iteration);
   const available = chain.filter(
     (tier) => !runtime.exhaustedPools.has(tierPoolKey(tier)),
   );
@@ -340,20 +373,23 @@ function effectiveAliasHarness(runtime: KernelRuntime, alias: string): string {
 }
 
 /**
- * Resolves a role to its alias, harness and model. A task tier names an alias
- * directly (`default` and absent mean no override); flows branch on this,
- * never on a harness id.
+ * Resolves a role to its alias, harness and model for an iteration. A task
+ * tier names an alias directly (`default` and absent mean no override); flows
+ * branch on this, never on a harness id. An alias with `rotate` resolves the
+ * iteration's entry as its primary; omitting the iteration resolves the
+ * alias's own primary, for callers that need only its identity.
  */
 export function resolveRole(
   runtime: KernelRuntime,
   role: string,
   tier?: string,
+  iteration?: number,
 ): RoleTarget {
   const roleConfig = runtime.configs.process.roles[role];
   if (!roleConfig) throw new Error(`process config has no role "${role}"`);
   const override = tier && tier !== "default" ? tier : undefined;
   const aliasName = override ?? roleConfig.alias ?? role;
-  return targetForAlias(runtime, role, aliasName);
+  return targetForAlias(runtime, role, aliasName, iteration);
 }
 
 /** The role that actually runs this step: a `different-model` fix turn overrides it. */
@@ -386,14 +422,17 @@ function stepRole(
  * The front alias is optional: when the run config has no `front` alias, the
  * front speaks through the `pm` alias, so the ladder needs no new required knob.
  */
-export function frontTarget(runtime: KernelRuntime): RoleTarget {
+export function frontTarget(
+  runtime: KernelRuntime,
+  iteration?: number,
+): RoleTarget {
   const configured = runtime.configs.process.roles.front;
   if (!configured) throw new Error('process config has no role "front"');
   const aliasName = configured.alias ?? "front";
   if (runtime.configs.run.aliases[aliasName])
-    return resolveRole(runtime, "front");
+    return resolveRole(runtime, "front", undefined, iteration);
   if (aliasName === "front" && runtime.configs.run.aliases.pm) {
-    return targetForAlias(runtime, "front", "pm");
+    return targetForAlias(runtime, "front", "pm", iteration);
   }
   throw new Error(
     `run config has no alias "${aliasName}" (needed by role "front") and no "pm" fallback`,
@@ -490,16 +529,22 @@ export function stepTarget(
   task: TaskFile,
   state: TaskState,
   stepId: string,
+  iteration: number,
 ): RoleTarget {
   if (isTrivialImplementTurn(runtime, task, state, stepId)) {
     // The front's alias and model run the turn, but the prompt stays the
     // implementer's: the role names the prompt, not the agent's history.
-    return { ...frontTarget(runtime), role: "implementer" };
+    return { ...frontTarget(runtime, iteration), role: "implementer" };
   }
   const step = findStep(flowOf(runtime, task), stepId);
   const role = stepRole(runtime, task, state, stepId);
   // A task tier escalates the producer; review keeps the reviewer alias.
-  return resolveRole(runtime, role, step.review ? undefined : task.tier);
+  return resolveRole(
+    runtime,
+    role,
+    step.review ? undefined : task.tier,
+    iteration,
+  );
 }
 
 /** Resume the last session for this alias when it is portable to the turn's harness. */
@@ -509,6 +554,7 @@ export async function resumeSessionFor(
   alias: string,
   records: StepRecord[],
   worktree: string,
+  iteration?: number,
 ): Promise<SessionRef | undefined> {
   const prior = records
     .filter(
@@ -528,7 +574,9 @@ export async function resumeSessionFor(
   // Compaction is not done here — a session is compacted by the turn that ended it.
   if (!runtime.configs.run.aliases[alias])
     throw new Error(`run config has no alias "${alias}"`);
-  if (!portable(prior.harness, effectiveAliasHarness(runtime, alias)))
+  if (
+    !portable(prior.harness, effectiveAliasHarness(runtime, alias, iteration))
+  )
     return undefined;
   return prior;
 }
@@ -556,11 +604,19 @@ export async function followUpSession(
   target: RoleTarget,
   records: StepRecord[],
   worktree: string,
+  iteration?: number,
 ): Promise<SessionRef | undefined> {
   const flow = flowOf(runtime, task);
   const followUp = flow.followUp ?? { mode: "same-session" as const };
   if (followUp.mode !== "same-session") return undefined;
-  return resumeSessionFor(runtime, task, target.alias, records, worktree);
+  return resumeSessionFor(
+    runtime,
+    task,
+    target.alias,
+    records,
+    worktree,
+    iteration,
+  );
 }
 /**
  * Resume the last review session for this review step on this alias. Keyed on
@@ -661,8 +717,9 @@ export async function trivialResumeSession(
   task: TaskFile,
   records: StepRecord[],
   isFix: boolean,
+  iteration: number,
 ): Promise<TrivialResume> {
-  const target = frontTarget(runtime);
+  const target = frontTarget(runtime, iteration);
   let resumable = false;
   try {
     resumable = (await target.harness.caps(target.model)).resume;

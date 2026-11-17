@@ -495,6 +495,81 @@ describe("pre-flight", () => {
     }
   });
 
+  it("validates every rotation entry's harness, model and effort", async () => {
+    const f = await fixture(
+      RUN_HEAD.replace(
+        "implementer: { harness: fake, model: impl }",
+        `implementer:
+    harness: fake
+    model: impl
+    rotate:
+      - { harness: other, model: far }
+      - { harness: fake, model: ghost }
+      - { harness: fake, model: impl, effort: ultra }
+      - { harness: ghost, model: far }`,
+      ),
+    );
+    try {
+      const harnesses = new Map(f.input.harnesses);
+      harnesses.set("other", new FakeHarness({ id: "other" }));
+      const catalog: ModelCatalog = async (_harness, model) =>
+        model !== "ghost";
+      const err = await refusal({ ...f.input, harnesses, catalog });
+      const keys = err.findings.map((finding) => finding.key);
+      expect(keys).toContain("aliases.implementer.rotate.1.model");
+      expect(keys).toContain("aliases.implementer.rotate.2.effort");
+      expect(keys).toContain("aliases.implementer.rotate.3.harness");
+      expect(keys).not.toContain("aliases.implementer.rotate.0.model");
+      expect(err.report).toContain(
+        'rotation "ghost" is not listed by harness "fake"',
+      );
+      expect(err.report).toContain('effort "ultra" is not supported');
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("resolves a rotated entry's effort against its own harness and checks a rotating fallback everywhere it can land", async () => {
+    const f = await fixture(
+      RUN_HEAD.replace(
+        "implementer: { harness: fake, model: impl }",
+        `implementer:
+    harness: fake
+    model: impl
+    effort: highest
+    rotate:
+      - { harness: other, model: far, effort: highest }
+      - { harness: fake, model: near, effort: max }
+    fallbacks:
+      - { model: near }`,
+      ),
+    );
+    try {
+      const harnesses = new Map(f.input.harnesses);
+      harnesses.set(
+        "other",
+        new FakeHarness({ id: "other", caps: { effort: ["low", "high"] } }),
+      );
+      const catalog: ModelCatalog = async (harness, model) =>
+        !(harness === "other" && model === "near");
+      const err = await refusal({ ...f.input, harnesses, catalog });
+      expect(err.findings).toContainEqual(
+        expect.objectContaining({
+          key: "aliases.implementer.fallbacks.0.model",
+          message: 'fallback "near" is not listed by harness "other"',
+        }),
+      );
+      const entries = f.configs.run.aliases.implementer!.rotate!;
+      expect(entries[0]!.effort).toBe("high");
+      expect(entries[1]!.effort).toBe("max");
+      expect(
+        f.configs.run.aliases.implementer!.fallbacks![0]!.effort,
+      ).toBeUndefined();
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
   it("refuses a subscription that names no capped pool", async () => {
     const f = await fixture(
       RUN_HEAD.replace(

@@ -4,6 +4,8 @@ import path from "node:path";
 import { dispatch } from "../../src/cli/dispatch.js";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { createDrainController } from "../../src/kernel/signals.js";
+import { createFolderStore } from "../../src/kernel/store.js";
+import { whenTurn } from "./s2-helpers.js";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 import { testPriceSource } from "../helpers/price-source.js";
 
@@ -62,49 +64,74 @@ function writeTasks(taskDir: string): void {
 }
 
 describe("repro E4: first signal does not stop dispatch admission", () => {
-  it("admits queued tasks after a first signal raised inside an in-flight turn", async () => {
+  it("drains after a first signal raised inside an in-flight implement turn", async () => {
     const s = setupRepo();
     const controller = createDrainController();
     const originalWarn = console.warn;
     console.warn = () => {};
     try {
+      // Bind every harness turn by step: the plan flow gained plan-review and
+      // PM turns, and a positional script queue would let one of them consume
+      // the handler that raises the signal before dispatch ever runs.
       const harness = new FakeHarness({ id: "fake" });
-      harness.script((req, ctx) => {
-        fs.writeFileSync(path.join(s.goalDir, "plan.md"), PLAN, "utf8");
-        ctx.writeOutcome(outcome({ summary: "planned", decision: "continue" }));
-        return fakeTurnResult(req);
-      });
-      harness.script((req, ctx) => {
-        writeTasks(s.taskDir);
-        ctx.writeOutcome(outcome({ summary: "filed" }));
-        return fakeTurnResult(req);
-      });
-
-      let signalTurn: number | undefined;
-      const implementStart: Array<{ slug: string; turn: number }> = [];
-      for (let i = 0; i < 40; i += 1) {
-        harness.script((req, ctx) => {
-          const slug = path.basename(req.cwd!);
-          if (req.prompt.startsWith("You review")) {
-            ctx.writeOutcome(
-              outcome({ summary: `${slug} approved`, verdict: "approve" }),
-            );
-          } else {
-            implementStart.push({ slug, turn: harness.calls.length });
-            if (signalTurn === undefined) {
-              signalTurn = harness.calls.length;
-              controller.handleSignal("SIGINT");
-            }
-            fs.writeFileSync(
-              path.join(req.cwd!, `${slug}.txt`),
-              `${slug}\n`,
-              "utf8",
-            );
-            ctx.writeOutcome(outcome({ summary: `${slug} implemented` }));
-          }
+      harness.script(
+        (req, ctx) => {
+          fs.writeFileSync(path.join(s.goalDir, "plan.md"), PLAN, "utf8");
+          ctx.writeOutcome(
+            outcome({ summary: "planned", decision: "continue" }),
+          );
           return fakeTurnResult(req);
-        });
-      }
+        },
+        { when: whenTurn({ step: "architect" }) },
+      );
+      harness.script(
+        (req, ctx) => {
+          ctx.writeOutcome(outcome({ summary: "plan reviewed" }));
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: "planreview" }) },
+      );
+      harness.script(
+        (req, ctx) => {
+          writeTasks(s.taskDir);
+          ctx.writeOutcome(outcome({ summary: "filed" }));
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: "pm" }) },
+      );
+
+      const implemented: string[] = [];
+      harness.script(
+        (req, ctx) => {
+          const slug = path.basename(req.cwd!);
+          implemented.push(slug);
+          if (!controller.draining) controller.handleSignal("SIGINT");
+          fs.writeFileSync(
+            path.join(req.cwd!, `${slug}.txt`),
+            `${slug}\n`,
+            "utf8",
+          );
+          ctx.writeOutcome(outcome({ summary: `${slug} implemented` }));
+          return fakeTurnResult(req);
+        },
+        {
+          when: whenTurn({ step: "implement" }),
+          fallback: true,
+        },
+      );
+      harness.script(
+        (req, ctx) => {
+          const slug = path.basename(req.cwd!);
+          ctx.writeOutcome(
+            outcome({ summary: `${slug} approved`, verdict: "approve" }),
+          );
+          return fakeTurnResult(req);
+        },
+        {
+          when: whenTurn({ step: "review" }),
+          fallback: true,
+        },
+      );
 
       await dispatch(["run", "--repo", s.repo.dir, "--goal", "demo"], {
         harnesses: { fake: harness },
@@ -112,11 +139,29 @@ describe("repro E4: first signal does not stop dispatch admission", () => {
         priceSource: testPriceSource(s.repo.dir),
       });
 
-      const afterSignal = implementStart.filter((e) => e.turn > signalTurn!);
-      const furtherTasks = [...new Set(afterSignal.map((e) => e.slug))];
-
       expect(controller.draining).toBe(true);
-      expect(furtherTasks).toEqual([]);
+      expect(implemented).toHaveLength(1);
+      const inFlight = implemented[0]!;
+
+      // The signaled turn finished and recorded: it was not cancelled, its
+      // review ran, and its merge landed. No other task has a record.
+      const store = createFolderStore(s.goalDir);
+      const records = await store.listRecords();
+      const ended = (step: string) =>
+        records.find(
+          (r) => r.slug === inFlight && r.step === step && r.endedAt,
+        );
+      expect(ended("implement")).toBeDefined();
+      expect(ended("implement")?.stop?.kind).not.toBe("cancelled");
+      expect(ended("review")).toBeDefined();
+      expect(
+        records.some(
+          (r) => r.slug === inFlight && r.step === "merge" && r.ok === true,
+        ),
+      ).toBe(true);
+      for (const slug of SLUGS.filter((slug) => slug !== inFlight)) {
+        expect(records.filter((r) => r.slug === slug)).toEqual([]);
+      }
     } finally {
       console.warn = originalWarn;
       s.repo.cleanup();

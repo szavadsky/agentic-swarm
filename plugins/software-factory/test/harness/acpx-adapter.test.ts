@@ -727,6 +727,8 @@ describe("AcpxHarness", () => {
         id: "pi",
         binary: stub.binary,
         acpx: PI_ACPX,
+        // The quota case retries; default backoff would sleep 1s + 2s.
+        retry: { baseDelayMs: 1, maxDelayMs: 1 },
       });
       try {
         const result = await harness.turn(

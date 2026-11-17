@@ -8,6 +8,7 @@
   "scripts": {
     "factory": "bun run ./bin/factory.ts",
     "test": "bun test",
+    "test:gate": "bun scripts/run-tests.ts",
     "typecheck": "tsc --noEmit",
     "format": "biome format .",
     "lint": "biome lint . && knip",

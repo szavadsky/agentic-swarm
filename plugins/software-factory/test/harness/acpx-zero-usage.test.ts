@@ -8,6 +8,9 @@ import { countOutcomeRepairs } from "../../src/kernel/metrics.js";
 import { createAcpxStub } from "./acpx-stub.js";
 
 const TIMEOUTS = { idleMs: 10_000, wallMs: 30_000 };
+// Default backoff sleeps 1s + 2s on every retryable turn; classification tests
+// keep the retries (same attempts) but not the wait.
+const FAST_RETRY = { baseDelayMs: 1, maxDelayMs: 1 };
 
 const CODEX_ACPX: AcpxConfig = {
   agent: "codex",
@@ -51,6 +54,7 @@ describe("acpx-zero-usage classification", () => {
       id: "codex",
       binary: stub.binary,
       acpx: CODEX_ACPX,
+      retry: FAST_RETRY,
     });
     try {
       const cwd = path.dirname(stub.binary);
@@ -77,6 +81,7 @@ describe("acpx-zero-usage classification", () => {
       id: "pi",
       binary: stub.binary,
       acpx: PI_ACPX,
+      retry: FAST_RETRY,
     });
     try {
       const cwd = path.dirname(stub.binary);
@@ -198,6 +203,7 @@ describe("acpx-zero-usage classification", () => {
       id: "codex",
       binary: stub.binary,
       acpx: CODEX_ACPX,
+      retry: FAST_RETRY,
     });
     try {
       const cwd = path.dirname(stub.binary);
@@ -225,6 +231,7 @@ describe("acpx-zero-usage classification", () => {
       id: "pi",
       binary: stub.binary,
       acpx: PI_ACPX,
+      retry: FAST_RETRY,
     });
     try {
       const cwd = path.dirname(stub.binary);
@@ -258,6 +265,7 @@ describe("acpx-zero-usage classification", () => {
         agent: "claude-code",
         args: ["--approve-all"],
       },
+      retry: FAST_RETRY,
     });
     try {
       const cwd = path.dirname(stub.binary);
@@ -289,6 +297,7 @@ describe("acpx-zero-usage classification", () => {
       id: "codex",
       binary: stub.binary,
       acpx: CODEX_ACPX,
+      retry: FAST_RETRY,
     });
     try {
       const cwd = path.dirname(stub.binary);
@@ -322,6 +331,7 @@ describe("acpx-zero-usage classification", () => {
       id: "codex",
       binary: stub.binary,
       acpx: CODEX_ACPX,
+      retry: FAST_RETRY,
     });
     try {
       const cwd = path.dirname(stub.binary);
@@ -357,6 +367,7 @@ describe("acpx-zero-usage classification", () => {
       id: "codex",
       binary: stub.binary,
       acpx: CODEX_ACPX,
+      retry: FAST_RETRY,
     });
     try {
       const cwd = path.dirname(stub.binary);
@@ -388,6 +399,7 @@ describe("acpx-zero-usage classification", () => {
       id: "codex",
       binary: stub.binary,
       acpx: CODEX_ACPX,
+      retry: FAST_RETRY,
     });
     try {
       const cwd = path.dirname(stub.binary);
@@ -416,6 +428,7 @@ describe("acpx-zero-usage classification", () => {
       id: "codex",
       binary: stub.binary,
       acpx: CODEX_ACPX,
+      retry: FAST_RETRY,
     });
     try {
       const cwd = path.dirname(stub.binary);
@@ -441,6 +454,7 @@ describe("acpx-zero-usage classification", () => {
       id: "codex",
       binary: initialStub.binary,
       acpx: CODEX_ACPX,
+      retry: FAST_RETRY,
     });
     try {
       const cwd = path.dirname(initialStub.binary);
@@ -517,6 +531,7 @@ describe("acpx-zero-usage classification", () => {
       id: "pi",
       binary: initialStub.binary,
       acpx: PI_ACPX,
+      retry: FAST_RETRY,
     });
     try {
       const cwd = path.dirname(initialStub.binary);
@@ -604,6 +619,7 @@ describe("acpx-zero-usage classification", () => {
       id: "codex",
       binary: stub.binary,
       acpx: CODEX_ACPX,
+      retry: FAST_RETRY,
     });
     try {
       const cwd = path.dirname(stub.binary);
@@ -636,6 +652,7 @@ describe("acpx-zero-usage classification", () => {
       id: "codex",
       binary: stub.binary,
       acpx: CODEX_ACPX,
+      retry: FAST_RETRY,
     });
     try {
       const cwd = path.dirname(stub.binary);
@@ -669,6 +686,7 @@ describe("acpx-zero-usage classification", () => {
         agent: "pi",
         usage: { cache: true },
       },
+      retry: FAST_RETRY,
     });
     try {
       const cwd = path.dirname(stub.binary);

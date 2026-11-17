@@ -551,7 +551,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
     return {};
   }
   const preexisting = preexistingRed(recordedBaseGates(records));
-  const target = stepTarget(runtime, task, state, step.id);
+  const target = stepTarget(runtime, task, state, step.id, iteration);
   const fix = isFixTurn(flow, state, step.id);
   // A trivial goal implements in the front's own session: the turn resumes it
   // with the session's recorded cwd, and the prompt names the absolute
@@ -563,11 +563,24 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
   let session = step.review
     ? await reviewSession(runtime, task, target, step.id, records, ensured.path)
     : fix && !trivial
-      ? await followUpSession(runtime, task, target, records, ensured.path)
+      ? await followUpSession(
+          runtime,
+          task,
+          target,
+          records,
+          ensured.path,
+          iteration,
+        )
       : undefined;
   let turnCwd = ensured.path;
   if (trivial) {
-    const resumed = await trivialResumeSession(runtime, task, records, fix);
+    const resumed = await trivialResumeSession(
+      runtime,
+      task,
+      records,
+      fix,
+      iteration,
+    );
     if ("cause" in resumed) {
       await appendPark(runtime.store, meta, resumed.cause);
       return {};

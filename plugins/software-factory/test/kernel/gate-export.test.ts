@@ -54,6 +54,7 @@ beforeAll(() => {
       scripts: {
         typecheck: `test ! -e ../${marker}`,
         test: "bun test",
+        "test:gate": "bun test",
         format: `test ! -e ../${marker}`,
         lint: `test ! -e ../${marker}`,
         "schema-validation": `test ! -e ../${marker}`,
