@@ -634,3 +634,9 @@ Verbatim, newest last; each with what it changed.
 
 ### 2026-11-17 — i42 pre-flight refusal: named subscriptions require pools (fixed)
 - First i42 launch refused exit 1 (nothing written): every subscription name must have a limits.concurrency.perSubscription entry — bare labels are invalid. Fixed: claude 1 (architect single-threaded + rare escalation), antigravity 2 (4 agy primaries, no rate hits at 3 so far — gentle), opencode-free 1 (fallbacks only). Kept: go 2 (2 keys), openrouter-free 1 (i40 quota evidence).
+
+### 2026-11-17 — i42 landed: 11 merges, 0 parks; owner-revision queue crushed
+- Exit 3 (iteration-limit), 5h11m wall (30 agent turns + ernie-timeout latency + 6433s gates over 25 runs). factory/self +11: park-amend, review-last-call, binary-config-only, turn-budget-drop, record-seal, omp-alias-model, steward-ladder, validate-parity-land, repair-finding-land, merge-check-skip-land, omp-alias-effort. ZERO parks, pending 0, inbox empty (alias-pricing steer consumed).
+- Legs: digest omp/@free DONE $0 single attempt (alias works in production); architect claude/opus single attempt done, 2nd clean outing — fix HOLDS; PM omp/ernie $0; implements 13 omp-Go/deepseek $1.39 (fb never needed); reviews 12/12 opencode/hy4 $0 — review 1 (01705) ernie TIMED OUT (OpenRouter stream stall) → hy4 fallback delivered, reviews 2-12 went STRAIGHT to hy4 (post-failure tier latch, mechanism unidentified — steered as observation); plan roles agy $1.51; steward + PM the only 2 ernie turns. Cost $2.91 partial, list $4.11. 3 outcome-repairs, 1 benign merged-gate note, 0 conflicts/flakes.
+- Forwards both stale (record-seal + steward-ladder merged; v2 evidence already produced). QA alias dormant (no kernel role yet, as predicted).
+- park-amend merged → firing deferred ask: re-run p1-trivial + p1-task on the new pin, then i43.
