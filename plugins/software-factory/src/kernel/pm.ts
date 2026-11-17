@@ -5,6 +5,7 @@ import { writeTextAtomic } from "../core/records/io.js";
 import type { Stop } from "../harness/types.js";
 import { runAgentTurn } from "./agent.js";
 import { resolveRole } from "./flow-context.js";
+import { KERNEL_TURN_STEPS } from "./outcome.js";
 import {
   expireHold,
   formatSteerTurn,
@@ -511,7 +512,7 @@ export async function runPm(
         stalls: "none",
         plan_checks: "none",
       },
-      expectation: "any",
+      expectation: KERNEL_TURN_STEPS.pm,
     });
     const findings = await validate(
       runtime,
@@ -868,7 +869,7 @@ export async function runSteerPm(
         stalls: "none",
         plan_checks: "none",
       },
-      expectation: "any",
+      expectation: KERNEL_TURN_STEPS.pm,
     });
     const outcome = result.outcome;
     if (outcome?.steerRoutes === undefined) {
@@ -1409,7 +1410,7 @@ export async function runStallPm(
         stalls: brief,
         plan_checks: "none",
       },
-      expectation: "any",
+      expectation: KERNEL_TURN_STEPS.pm,
     });
     const outcome = result.outcome;
     const findings = await validateStallTurn(
@@ -1797,7 +1798,7 @@ export async function runPlanCheckPm(
         stalls: "none",
         plan_checks: brief,
       },
-      expectation: "any",
+      expectation: KERNEL_TURN_STEPS.pm,
     });
     const outcome = result.outcome;
     const findings = await validatePlanCheckTurn(

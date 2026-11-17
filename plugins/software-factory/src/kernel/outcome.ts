@@ -121,17 +121,36 @@ export function expectationField(
 }
 
 /**
- * Maps a flow step id to its outcome expectation: the architect consult gates a
- * decision, review steps a verdict, every other configured step accepts any
- * outcome. An id no flow configures is an error, never an unenforced contract.
+ * Kernel turn steps that run outside any configured flow, mapped to the outcome
+ * expectation they enforce.
+ */
+export const KERNEL_TURN_STEPS = {
+  architect: "architect",
+  digest: "any",
+  front: "any",
+  plancheck: "any",
+  planreview: "any",
+  pm: "any",
+  steward: "any",
+} as const satisfies Record<string, OutcomeExpectation>;
+
+export type KernelTurnStep = keyof typeof KERNEL_TURN_STEPS;
+
+/**
+ * Maps a flow step id or kernel turn step to its outcome expectation: the
+ * architect consult gates a decision, review steps a verdict, kernel turn steps
+ * their expectation, and every other configured step accepts any outcome. An
+ * id that is neither a flow step nor a kernel turn step is an error, never an
+ * unenforced contract.
  */
 export function expectationForStep(
   step: string | undefined,
   flows: Record<string, FlowDefinition>,
 ): OutcomeExpectation {
   if (!step) return "any";
-  // The architect consult is a boundary role, not a step of any flow.
-  if (step === "architect") return "architect";
+  if (Object.hasOwn(KERNEL_TURN_STEPS, step)) {
+    return KERNEL_TURN_STEPS[step as KernelTurnStep];
+  }
   const found = flowStepFor(step, flows);
   if (!found) {
     throw new Error(`step "${step}" is not configured in the repo's flows`);

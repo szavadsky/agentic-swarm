@@ -94,6 +94,38 @@ describe("three config layers", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
+  it("allows checks flow step without a role and retains changeRequests", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, ".factory/process.yaml"),
+      [
+        "flows:",
+        "  custom:",
+        "    steps:",
+        "      - id: implement",
+        "        role: implementer",
+        "      - id: checks",
+        "        changeRequests: 1",
+        "      - id: review",
+        "        role: reviewer",
+        "        review: true",
+        "",
+      ].join("\n"),
+    );
+    const configs = loadConfigs(root);
+    const checks = configs.process.flows.custom!.steps.find(
+      (s) => s.id === "checks",
+    );
+    expect(checks).toEqual({
+      id: "checks",
+      role: undefined,
+      review: false,
+      changeRequests: 1,
+    });
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
   it("fails loud on a repo process file that still carries itemTurns", () => {
     const root = tmpRepo();
     fs.mkdirSync(path.join(root, ".factory"), { recursive: true });

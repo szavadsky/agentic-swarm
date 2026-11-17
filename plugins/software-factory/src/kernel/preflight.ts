@@ -121,7 +121,9 @@ function requiredRoles(process: ProcessConfig): Set<string> {
     "plan-reviewer",
   ]);
   for (const flow of Object.values(process.flows)) {
-    for (const step of flow.steps) roles.add(step.role);
+    for (const step of flow.steps) {
+      if (step.role) roles.add(step.role);
+    }
     if (flow.followUp?.mode === "different-model" && flow.followUp.role)
       roles.add(flow.followUp.role);
   }

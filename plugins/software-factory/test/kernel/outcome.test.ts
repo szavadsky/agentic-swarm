@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
+  KERNEL_TURN_STEPS,
   expectationForStep,
   fencedOutcome,
   parseOutcome,
@@ -110,7 +111,7 @@ describe("outcome delivery", () => {
     ).toEqual([]);
   });
 
-  it("maps steps to expectations from the flow catalog", () => {
+  it("maps steps to expectations from the flow catalog and kernel turn steps", () => {
     const flows = {
       "implement-review": {
         steps: [
@@ -123,11 +124,31 @@ describe("outcome delivery", () => {
     expect(expectationForStep("implement", flows)).toBe("any");
     expect(expectationForStep("review", flows)).toBe("review");
     expect(expectationForStep("architect", flows)).toBe("architect");
+    expect(expectationForStep("pm", flows)).toBe("any");
+    expect(expectationForStep("digest", flows)).toBe("any");
+    expect(expectationForStep("planreview", flows)).toBe("any");
+    expect(expectationForStep("plancheck", flows)).toBe("any");
+    expect(expectationForStep("steward", flows)).toBe("any");
+    expect(expectationForStep("front", flows)).toBe("any");
+    expect(KERNEL_TURN_STEPS.architect).toBe("architect");
+    expect(KERNEL_TURN_STEPS.pm).toBe("any");
   });
 
   it("fails loud on a step no flow configures", () => {
     expect(() => expectationForStep("reveiw", {})).toThrow(
       'step "reveiw" is not configured in the repo\'s flows',
+    );
+    expect(() => expectationForStep("merge-attempt", {})).toThrow(
+      'step "merge-attempt" is not configured in the repo\'s flows',
+    );
+    expect(() => expectationForStep("debt", {})).toThrow(
+      'step "debt" is not configured in the repo\'s flows',
+    );
+    expect(() => expectationForStep("constructor", {})).toThrow(
+      'step "constructor" is not configured in the repo\'s flows',
+    );
+    expect(() => expectationForStep("toString", {})).toThrow(
+      'step "toString" is not configured in the repo\'s flows',
     );
   });
 });

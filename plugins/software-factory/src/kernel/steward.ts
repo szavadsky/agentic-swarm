@@ -9,6 +9,7 @@ import { compactSession, resolveRole } from "./flow-context.js";
 import { formatFailingChecks } from "./gates.js";
 import { mergeTask } from "./integrate.js";
 import { abortMerge } from "./merge-conflict.js";
+import { KERNEL_TURN_STEPS } from "./outcome.js";
 import { commitEdits, scriptMeta } from "./record.js";
 import { materialHash } from "./tasks.js";
 import type {
@@ -217,7 +218,7 @@ async function attemptStewardMerge(
       taskHash: materialHash(task),
     },
     vars,
-    expectation: "any",
+    expectation: KERNEL_TURN_STEPS.steward,
     session,
     settle: async (_record, outcome, live) => {
       breach = await containmentViolation(

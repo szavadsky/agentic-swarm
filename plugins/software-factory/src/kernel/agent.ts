@@ -14,7 +14,7 @@ import { loadPriceTable } from "./openrouter.js";
 import { pricedServed, pricedUsage } from "./pricing.js";
 import { missingPlanFinding, snapshotPlan } from "./architect-session.js";
 import { contextPackRelPath } from "./context-pack.js";
-import type { RoleTarget } from "./flow-context.js";
+import { type RoleTarget, tierPoolKey } from "./flow-context.js";
 import {
   failedOutcome,
   type OutcomeExpectation,
@@ -205,13 +205,7 @@ export async function runAgentTurn(
   runtime: KernelRuntime,
   spec: AgentTurnSpec,
 ): Promise<AgentTurnResult> {
-  const {
-    alias,
-    model,
-    tiers,
-    tierOffset,
-    timeouts: aliasTimeouts,
-  } = spec.target;
+  const { alias, model, tiers, timeouts: aliasTimeouts } = spec.target;
   const started = await runtime.store.startRecord({
     ...spec.meta,
     actor: "agent",
@@ -239,8 +233,8 @@ export async function runAgentTurn(
    * with its own model, effort and opaque config, advancing on infrastructure
    * stops the tier's own retries could not cure. A session crosses only to a
    * harness it is portable to; every attempt is stamped with the harness that
-   * ran it. A tier that lands a task-side stop becomes the launch's working
-   * tier for this alias.
+   * ran it. A tier that stops on quota records its pool in the launch's
+   * exhausted set; transient stops do not exhaust the pool.
    */
   const callChain = async (
     fromIndex: number,
@@ -293,16 +287,11 @@ export async function runAgentTurn(
         servedOpen = false;
       }
       current = result.session;
+      if (result.stop.kind === "infra" && result.stop.cause === "quota") {
+        runtime.exhaustedPools.add(tierPoolKey(tier));
+      }
       if (result.stop.kind !== "infra" || index + 1 >= tiers.length) break;
       index += 1;
-    }
-    const landed = result!.stop;
-    if (
-      landed.kind === "done" ||
-      landed.kind === "refusal" ||
-      landed.kind === "truncated"
-    ) {
-      runtime.workingTier.set(alias, tierOffset + index);
     }
     return {
       result: result!,

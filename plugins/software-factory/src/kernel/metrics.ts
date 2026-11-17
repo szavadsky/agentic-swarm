@@ -149,7 +149,9 @@ export function rolesByStep(
 ): Record<string, string> {
   const roles: Record<string, string> = {};
   for (const flow of Object.values(flows)) {
-    for (const step of flow.steps) roles[step.id] = step.role;
+    for (const step of flow.steps) {
+      if (step.role) roles[step.id] = step.role;
+    }
   }
   return roles;
 }

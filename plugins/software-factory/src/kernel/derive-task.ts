@@ -2,7 +2,13 @@ import type { CheckResult } from "../core/checks/types.js";
 import { isInfraCheck } from "./gates.js";
 import { countOutcomeRepairs } from "./metrics.js";
 import { stepFingerprint } from "./progress.js";
-import { DEFAULT_CHANGE_REQUESTS, isLastReviewCall } from "./review.js";
+import {
+  agentSteps,
+  checksFixLimit,
+  DEFAULT_CHANGE_REQUESTS,
+  isLastChecksFixCall,
+  isLastReviewCall,
+} from "./review.js";
 import type {
   FlowDefinition,
   ProgressRepeat,
@@ -54,6 +60,7 @@ export interface TaskReduction {
   park?: string;
   loop?: ProgressRepeat;
   gateFix?: boolean;
+  gateLastCall?: boolean;
 }
 
 interface PendingChecks {
@@ -135,8 +142,9 @@ function phaseAfter(
   index: number,
   kind: TaskFile["kind"],
 ): TaskPhase {
-  if (index >= flow.steps.length) return kind === "spike" ? "finish" : "merge";
-  return flow.steps[index]!.id;
+  const steps = agentSteps(flow);
+  if (index >= steps.length) return kind === "spike" ? "finish" : "merge";
+  return steps[index]!.id;
 }
 
 /**
@@ -244,10 +252,11 @@ export function reduceTask(
   records: StepRecord[],
   flow: FlowDefinition,
 ): TaskReduction {
-  const flowIndex = new Map(flow.steps.map((step, i) => [step.id, i]));
+  const steps = agentSteps(flow);
+  const flowIndex = new Map(steps.map((step, i) => [step.id, i]));
   const owned = records.slice(revisionStart(task, records));
   const terminal = terminalFactFromRecords(owned, task.slug, task.kind);
-  const firstStep = flow.steps[0]?.id ?? "done";
+  const firstStep = steps[0]?.id ?? "done";
 
   let phase: TaskPhase = firstStep;
   let round = 1;
@@ -257,6 +266,8 @@ export function reduceTask(
   let park: string | undefined;
   let loop: ProgressRepeat | undefined;
   let gateFix = false;
+  let gateLastCall = false;
+  let gateFixCount = 0;
   let gateFailure: string | undefined;
   /** Sorted actionable failing names behind the current gate fix; the deferred empty-fix comparison. */
   let gateRed: string[] | undefined;
@@ -330,18 +341,29 @@ export function reduceTask(
                 : `empty-diff: ${deferred.step} r${deferred.round} committed no changes`;
             phase = "parked";
           } else {
-            gateFix = true;
-            gateFailure = failingChecksText(red);
-            gateRed = failingNames(red);
-            // A task-checks reroute ends the merge-fix: this fix goes back to review.
-            mergeFix = false;
-            stepIndex = 0;
-            phase = firstStep;
+            gateFixCount += 1;
+            if (gateFixCount > checksFixLimit(flow)) {
+              park = `gates: ${failingNames(red).join(", ") || "failing checks"}`;
+              phase = "parked";
+              gateFix = false;
+              gateLastCall = false;
+            } else {
+              gateFix = true;
+              gateLastCall = isLastChecksFixCall(flow, gateFixCount);
+              gateFailure = failingChecksText(red);
+              gateRed = failingNames(red);
+              // A task-checks reroute ends the merge-fix: this fix goes back to review.
+              mergeFix = false;
+              stepIndex = 0;
+              phase = firstStep;
+            }
           }
         } else {
+          gateFix = false;
+          gateLastCall = false;
           stepIndex = pendingChecks.nextIndex;
           phase = pendingChecks.mergeAfter
-            ? phaseAfter(flow, flow.steps.length, task.kind)
+            ? phaseAfter(flow, steps.length, task.kind)
             : phaseAfter(flow, stepIndex, task.kind);
         }
         pendingChecks = null;
@@ -362,15 +384,18 @@ export function reduceTask(
       if (rec.stop?.kind === "infra") continue;
       if (rec.ok === true) {
         gateFix = false;
+        gateLastCall = false;
         mergeFix = false;
         pendingChecks = null;
         phase = "done";
       } else if (rec.ok === false) {
         const cause = rec.cause ?? "";
         if (cause.startsWith("gates:")) {
+          gateFixCount += 1;
           gatesFailures += 1;
-          if (gatesFailures === 1) {
+          if (gatesFailures === 1 && gateFixCount <= checksFixLimit(flow)) {
             gateFix = true;
+            gateLastCall = isLastChecksFixCall(flow, gateFixCount);
             mergeFix = true;
             gateFailure = redChecksText(rec);
             // No matched names (old records without checks) leaves no
@@ -385,6 +410,8 @@ export function reduceTask(
           } else {
             park = cause;
             phase = "parked";
+            gateFix = false;
+            gateLastCall = false;
           }
         } else if (
           cause.startsWith("conflict:") ||
@@ -500,7 +527,7 @@ export function reduceTask(
     // deferrals.
     const answeredIndex = flowIndex.get(rec.step);
     const answeredStep =
-      answeredIndex === undefined ? undefined : flow.steps[answeredIndex];
+      answeredIndex === undefined ? undefined : steps[answeredIndex];
     const replyCount = rec.outcome?.replies?.length ?? 0;
     const answeredReview =
       changesPending &&
@@ -558,7 +585,7 @@ export function reduceTask(
     }
 
     const idx = flowIndex.get(rec.step)!;
-    const step = flow.steps[idx]!;
+    const step = steps[idx]!;
     // An empty commit is its own no-progress signal — unless it answers a
     // `changes` review with replies, whose claims still need a verdict, or
     // carries a continuation's kept work. With no review awaiting, skip the
@@ -602,6 +629,7 @@ export function reduceTask(
       if (verdict === "approve") {
         stepIndex = idx + 1;
         gateFix = false;
+        gateLastCall = false;
         mergeFix = false;
         changesPending = false;
         pendingChecks = null;
@@ -618,6 +646,7 @@ export function reduceTask(
           round = rec.round + 1;
           stepIndex = 0;
           gateFix = false;
+          gateLastCall = false;
           mergeFix = false;
           phase = firstStep;
           changesPending = true;
@@ -637,7 +666,7 @@ export function reduceTask(
     replyOnlyFix = answeredReview;
     changesPending = false;
     stepIndex = idx + 1;
-    const nextStep = flow.steps[stepIndex];
+    const nextStep = steps[stepIndex];
     if (!nextStep || nextStep.review) {
       pendingChecks = {
         nextIndex: stepIndex,
@@ -656,6 +685,7 @@ export function reduceTask(
   if (terminal) {
     phase = "done";
     gateFix = false;
+    gateLastCall = false;
     park = undefined;
     commit = terminal.commit ?? commit;
   }
@@ -670,5 +700,6 @@ export function reduceTask(
     park: terminal ? undefined : park,
     loop,
     gateFix: terminal ? undefined : gateFix || undefined,
+    gateLastCall: terminal ? undefined : (gateFix && gateLastCall) || undefined,
   };
 }
