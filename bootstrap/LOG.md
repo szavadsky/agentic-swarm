@@ -658,3 +658,6 @@ Verbatim, newest last; each with what it changed.
 ### 2026-11-17 — p1-trivial regression r3: exit 0, done, 0 iterations (5m, no drift)
 
 ### 2026-11-17 — p1-task regression r3: exit 0, done, 0 iterations (5m, no drift)
+
+### 2026-11-17 — rotation for i44: flip-backs (ernie-first, @free digest, muse implementer)
+- Map: architect claude/opus (fb sonnet, fb2 omp/opus), pm omp/ernie (fb opencode/hy4), digest omp/@free (fb opencode/hy4), implementer omp-Go/muse:max (fb omp-Go/deepseek:max; cycle agy43 → muse44), reviewer omp/ernie (fb opencode/hy4), qa omp/ernie dormant (fb opencode/hy4), plan-rev+check agy (fb omp/ernie), esc omp/sonnet:high (fb omp-Go/muse), steward omp/ernie (fb agy). Subs + caps kept. Loader + price-coverage green before commit.
