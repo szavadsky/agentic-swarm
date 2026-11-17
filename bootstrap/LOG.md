@@ -642,3 +642,5 @@ Verbatim, newest last; each with what it changed.
 - park-amend merged → firing deferred ask: re-run p1-trivial + p1-task on the new pin, then i43.
 
 ### 2026-11-17 — p1-trivial re-run: exit 0, done, 0 iterations (4m, no drift)
+
+### 2026-11-17 — p1-task re-run: exit 0, done, 0 iterations (4m, no drift)
