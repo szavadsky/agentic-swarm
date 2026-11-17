@@ -240,11 +240,11 @@ describe("pre-flight", () => {
     }
   });
 
-  it("skips the effort check for an @-prefixed omp alias", async () => {
+  it("passes an explicit omp level on an @-prefixed omp alias", async () => {
     const f = await fixture(
       SPLIT_HARNESSES.replace(
         "model: impl }",
-        'model: "@free", effort: ultra }',
+        'model: "@free", effort: high }',
       ),
     );
     try {
@@ -255,7 +255,76 @@ describe("pre-flight", () => {
         harnesses: splitHarnesses(f),
         catalog,
       });
-      expect(result.aliases.implementer).toBe("ultra");
+      expect(result.aliases.implementer).toBe("high");
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("refuses effort: highest on an @-prefixed omp alias, naming the alias and omp's levels", async () => {
+    const f = await fixture(
+      SPLIT_HARNESSES.replace(
+        "model: impl }",
+        'model: "@free", effort: highest }',
+      ),
+    );
+    try {
+      const err = await refusal({ ...f.input, harnesses: splitHarnesses(f) });
+      expect(err.findings).toContainEqual(
+        expect.objectContaining({
+          file: f.configs.files?.run,
+          key: "aliases.implementer.effort",
+          message:
+            'effort "highest" is not an omp thinking level; alias "@free" accepts: off, minimal, low, medium, high, xhigh, max, auto',
+        }),
+      );
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("refuses an effort omp does not parse on an @-prefixed omp alias", async () => {
+    const f = await fixture(
+      SPLIT_HARNESSES.replace(
+        "model: impl }",
+        'model: "@free", effort: ultra }',
+      ),
+    );
+    try {
+      const err = await refusal({ ...f.input, harnesses: splitHarnesses(f) });
+      expect(err.findings).toContainEqual(
+        expect.objectContaining({
+          key: "aliases.implementer.effort",
+          message:
+            'effort "ultra" is not an omp thinking level; alias "@free" accepts: off, minimal, low, medium, high, xhigh, max, auto',
+        }),
+      );
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("resolves effort: highest on a plain omp model through the catalog", async () => {
+    const f = await fixture(
+      SPLIT_HARNESSES.replace(
+        "model: impl }",
+        "model: impl, effort: highest }",
+      ),
+    );
+    try {
+      const seen: string[] = [];
+      const catalog: ModelCatalog = async (harness, model) => {
+        seen.push(`${harness}/${model}`);
+        return true;
+      };
+      const result = await preflight({
+        ...f.input,
+        harnesses: splitHarnesses(f),
+        catalog,
+      });
+      expect(seen).toContain("omp/impl");
+      expect(result.aliases.implementer).toBe("high");
+      expect(f.configs.run.aliases.implementer?.effort).toBe("high");
     } finally {
       f.repo.cleanup();
     }

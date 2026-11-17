@@ -112,6 +112,10 @@ turns the brake could not price.
 Pre-flight resolves every alias (and fallback) through the harness, checks the
 model list, `effort: highest` (highest level the model accepts), binaries, the
 base branch, and that session/worktree roots are writable and outside the repo.
+An omp `@` alias is the exception: omp resolves it inside its own chain, so
+there is no catalog entry and no per-model effort list. `effort: highest` is
+refused there, and the effort must be one omp's `--thinking` flag parses
+(`off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`, `auto`) — or absent.
 Gates run once on the base; a red base is recorded and warned once, not fatal.
 
 ## Goal directory
