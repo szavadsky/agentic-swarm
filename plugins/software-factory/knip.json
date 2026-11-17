@@ -1,4 +1,5 @@
 {
   "$schema": "https://knip.dev/schema.json",
-  "ignoreExportsUsedInFile": true
+  "ignoreExportsUsedInFile": true,
+  "ignoreBinaries": ["agy", "codex", "pi"]
 }
