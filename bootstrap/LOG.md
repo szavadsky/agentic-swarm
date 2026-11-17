@@ -661,3 +661,9 @@ Verbatim, newest last; each with what it changed.
 
 ### 2026-11-17 — rotation for i44: flip-backs (ernie-first, @free digest, muse implementer)
 - Map: architect claude/opus (fb sonnet, fb2 omp/opus), pm omp/ernie (fb opencode/hy4), digest omp/@free (fb opencode/hy4), implementer omp-Go/muse:max (fb omp-Go/deepseek:max; cycle agy43 → muse44), reviewer omp/ernie (fb opencode/hy4), qa omp/ernie dormant (fb opencode/hy4), plan-rev+check agy (fb omp/ernie), esc omp/sonnet:high (fb omp-Go/muse), steward omp/ernie (fb agy). Subs + caps kept. Loader + price-coverage green before commit.
+
+### 2026-11-17 — i44 landed: 1 merge; ernie daily quota; gates flake
+- Exit 3 (iteration-limit), 2h37m wall. factory/self +1: gates-hermetic. 1 park: gates-fast (01862, failed — substantial progress: parallel gate run 73.6s wall 1018/1, zero-usage test 28s→0.95s, new scripts/run-tests.ts runner wired; but 3 kernel files still >10s serially, no final green under 90s — needs continuation). Pending 0, inbox empty (gates-fast steer consumed with receipt).
+- Legs: digest omp/@free resolved to ernie primary DONE $0 (alias transparent in production); architect claude/opus single attempt done (4th clean outing — fix holds 4/4); PM omp/ernie $0; implements 3 omp-Go/muse ($0.09); reviews: r1 ernie 429 QUOTA 3x (free-models-per-day exhausted, retry-after ~6.5h) → hy4 fallback delivered; r2 straight to hy4. Plan roles agy. Steward stub skipped 7th. 12 agent + 13 script turns.
+- Landing gates: 1 fail/1022 first run, green on the allowed rerun (unnamed flake — first-run tail didn't name it; rerun showed zero fail markers). Proceeding per runbook.
+- Phase-1-done NOT declared (gates-fast parked; needs its continuation to merge).
