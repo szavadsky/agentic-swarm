@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { resolveAcpxCommand } from "../harness/acpx/command.js";
 import type { Harness } from "../harness/types.js";
 import {
   type BaselineResult,
@@ -151,6 +152,29 @@ function executable(value: string | undefined): boolean {
   }
 }
 
+/**
+ * One harness executable that pre-flight must find; the key is the run-config
+ * path the operator sets to point at it.
+ */
+function binaryFinding(
+  findings: Finding[],
+  file: string,
+  harness: string,
+  binary: string | undefined,
+  key: string,
+  unavailable: Set<string>,
+): void {
+  if (executable(binary)) return;
+  unavailable.add(harness);
+  // resolveAcpxCommand reports `bunx` when acpx is absent; naming only the
+  // shim would hide the dispatcher and the route the operator must provide.
+  const message =
+    binary !== undefined && path.basename(binary) === ACPX_ON_DEMAND_BINARY
+      ? `acpx is not on PATH and the on-demand \`bunx acpx\` route cannot run: binary "bunx" is not executable or not on PATH`
+      : `binary "${binary ?? harness}" is not executable or not on PATH`;
+  findings.push({ file, key, message });
+}
+
 async function writable(dir: string): Promise<string | undefined> {
   try {
     await fs.promises.mkdir(dir, { recursive: true });
@@ -243,16 +267,36 @@ export async function preflight(
   const unavailable = new Set<string>();
   if (input.binaries) {
     for (const harness of [...usedHarnesses].sort()) {
-      const binary = input.binaries[harness];
-      if (executable(binary)) continue;
-      unavailable.add(harness);
-      // resolveAcpxCommand reports `bunx` when acpx is absent; naming only the
-      // shim would hide the dispatcher and the route the operator must provide.
-      const message =
-        binary !== undefined && path.basename(binary) === ACPX_ON_DEMAND_BINARY
-          ? `acpx is not on PATH and the on-demand \`bunx acpx\` route cannot run: binary "bunx" is not executable or not on PATH`
-          : `binary "${binary ?? harness}" is not executable or not on PATH`;
-      findings.push({ file: files.run, key: `harness.${harness}`, message });
+      const entry = configs.run.harnesses?.[harness];
+      if (entry?.acpx?.raw) {
+        // A raw agent is still spawned by acpx, so both executables must run:
+        // the dispatcher (config override, else PATH/bunx) and the agent head.
+        binaryFinding(
+          findings,
+          files.run,
+          harness,
+          resolveAcpxCommand(entry.binary).binary,
+          `harnesses.${harness}.binary`,
+          unavailable,
+        );
+        binaryFinding(
+          findings,
+          files.run,
+          harness,
+          input.binaries[harness],
+          `harnesses.${harness}.acpx.agent`,
+          unavailable,
+        );
+        continue;
+      }
+      binaryFinding(
+        findings,
+        files.run,
+        harness,
+        input.binaries[harness],
+        `harnesses.${harness}.binary`,
+        unavailable,
+      );
     }
   }
 

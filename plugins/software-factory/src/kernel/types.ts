@@ -508,14 +508,17 @@ export interface AliasConfig {
   timeouts?: Timeouts;
 }
 
-/** One run-config harness entry: a config name bound to an adapter. */
+/** One run-config harness entry: an adapter binding or an executable override. */
 export interface HarnessConfig {
-  acpx: import("../harness/acpx/config.js").AcpxConfig;
+  /** Adapter binding; absent for a native adapter that only takes a binary. */
+  acpx?: import("../harness/acpx/config.js").AcpxConfig;
+  /** Executable override; absent resolves through PATH. */
+  binary?: string;
 }
 
 export interface RunConfig {
   aliases: Record<string, AliasConfig>;
-  /** Harness id -> adapter binding; native harnesses need no entry. */
+  /** Harness id -> adapter or binary override; native omp takes only a binary. */
   harnesses?: Record<string, HarnessConfig>;
   /** Harness model id -> OpenRouter model id, for ids matching cannot resolve. */
   priceIds?: Record<string, string>;

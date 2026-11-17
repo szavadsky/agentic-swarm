@@ -125,7 +125,25 @@ export const aliasSchema = z
   })
   .strict();
 
-export const harnessEntrySchema = z.object({ acpx: acpxConfigSchema }).strict();
+/**
+ * A harness entry binds an adapter (`acpx`) or overrides the executable a
+ * native adapter runs (omp); neither alone is a binding.
+ */
+export const harnessEntrySchema = z
+  .object({
+    acpx: acpxConfigSchema.optional(),
+    /**
+     * Executable the factory spawns: acpx for an acpx harness (a raw agent
+     * names its own executable in `acpx.agent`), omp for the native adapter.
+     * Absent resolves through PATH.
+     */
+    binary: z.string().min(1).optional(),
+  })
+  .strict()
+  .refine(
+    (entry) => entry.acpx !== undefined || entry.binary !== undefined,
+    "harness entry needs an acpx binding or a binary override",
+  );
 
 const concurrencySchema = z
   .object({

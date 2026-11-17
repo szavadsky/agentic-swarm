@@ -5,7 +5,7 @@ import type { AcpxConfig } from "./config.js";
 export interface AcpxHarnessOptions {
   /** Harness id: a run-config name bound to the acpx adapter. */
   id: string;
-  /** Explicit acpx executable (tests and ACPX_PATH); defaults to PATH, then `bunx acpx`. */
+  /** Explicit acpx executable (tests and `harnesses.<id>.binary`); defaults to PATH, then `bunx acpx`. */
   binary?: string;
   /** Run-config `acpx` block; a per-turn opaque replaces it. */
   acpx: AcpxConfig;

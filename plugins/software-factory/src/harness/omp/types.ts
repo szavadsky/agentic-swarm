@@ -11,6 +11,7 @@ export interface OmpTurnOpaque {
 }
 
 export interface OmpHarnessOptions {
+  /** Run-config `harnesses.omp.binary`; defaults to PATH, then the bare `omp`. */
   binary?: string;
   /** Caller-given session store; sessions and overlays live here, never in a worktree. */
   sessionDir: string;

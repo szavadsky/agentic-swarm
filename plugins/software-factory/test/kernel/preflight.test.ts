@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { resolveHarnessBinaries } from "../../src/cli/harnesses.js";
 import { FakeHarness } from "../../src/harness/fake/index.js";
 import type { Harness } from "../../src/harness/types.js";
 import { recordedBaseGates } from "../../src/kernel/baseline.js";
@@ -514,16 +515,45 @@ describe("pre-flight", () => {
     }
   });
 
-  it("refuses an absent harness binary", async () => {
+  it("refuses an absent harness binary and names its config key", async () => {
     const f = await fixture();
     try {
       const err = await refusal({ ...f.input, binaries: { fake: undefined } });
       expect(err.findings).toContainEqual(
         expect.objectContaining({
-          key: "harness.fake",
+          key: "harnesses.fake.binary",
           message: 'binary "fake" is not executable or not on PATH',
         }),
       );
+      expect(err.report).toContain("harnesses.fake.binary");
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("refuses a configured omp binary that is missing, naming the path", async () => {
+    const configured = path.join(os.tmpdir(), `missing-omp-${process.pid}`);
+    expect(fs.existsSync(configured)).toBe(false);
+    const f = await fixture(
+      SPLIT_HARNESSES.replace(
+        "limits:",
+        `harnesses:\n  omp:\n    binary: ${configured}\nlimits:`,
+      ),
+    );
+    try {
+      const err = await refusal({
+        ...f.input,
+        harnesses: splitHarnesses(f),
+        binaries: {
+          ...resolveHarnessBinaries(f.configs.run.harnesses),
+          "claude-code": process.execPath,
+        },
+      });
+      const finding = err.findings.find(
+        (x) => x.key === "harnesses.omp.binary",
+      );
+      expect(finding?.message).toContain(configured);
+      expect(err.report).toContain("harnesses.omp.binary");
     } finally {
       f.repo.cleanup();
     }
@@ -546,10 +576,74 @@ describe("pre-flight", () => {
         harnesses,
         binaries: { fake: process.execPath, pi: "/nonexistent/bin/bunx" },
       });
-      const finding = err.findings.find((x) => x.key === "harness.pi");
+      const finding = err.findings.find((x) => x.key === "harnesses.pi.binary");
       expect(finding?.message).toContain("acpx");
       expect(finding?.message).toContain("bunx acpx");
       expect(err.report).toContain("bunx acpx");
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("checks a raw agent's configured acpx dispatcher and its agent head", async () => {
+    const configured = path.join(os.tmpdir(), `missing-acpx-${process.pid}`);
+    expect(fs.existsSync(configured)).toBe(false);
+    const f = await fixture(
+      RUN_HEAD.replace(
+        "implementer: { harness: fake, model: impl }",
+        "implementer: { harness: opencode, model: impl }",
+      ).replace(
+        "limits:",
+        `harnesses:\n  opencode:\n    binary: ${configured}\n    acpx: { agent: opencode acp, raw: true }\nlimits:`,
+      ),
+    );
+    try {
+      const harnesses = new Map(f.input.harnesses);
+      harnesses.set("opencode", new FakeHarness({ id: "opencode" }));
+      const err = await refusal({
+        ...f.input,
+        harnesses,
+        binaries: { fake: process.execPath, opencode: process.execPath },
+      });
+      const finding = err.findings.find(
+        (x) => x.key === "harnesses.opencode.binary",
+      );
+      expect(finding?.message).toContain(configured);
+      expect(err.findings.some((x) => x.key.endsWith(".acpx.agent"))).toBe(
+        false,
+      );
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("names a raw agent's missing executable and its agent key", async () => {
+    const missing = path.join(os.tmpdir(), `missing-agent-${process.pid}`);
+    expect(fs.existsSync(missing)).toBe(false);
+    const f = await fixture(
+      RUN_HEAD.replace(
+        "implementer: { harness: fake, model: impl }",
+        "implementer: { harness: opencode, model: impl }",
+      ).replace(
+        "limits:",
+        `harnesses:\n  opencode:\n    binary: ${process.execPath}\n    acpx: { agent: opencode acp, raw: true }\nlimits:`,
+      ),
+    );
+    try {
+      const harnesses = new Map(f.input.harnesses);
+      harnesses.set("opencode", new FakeHarness({ id: "opencode" }));
+      const err = await refusal({
+        ...f.input,
+        harnesses,
+        binaries: { fake: process.execPath, opencode: missing },
+      });
+      const finding = err.findings.find(
+        (x) => x.key === "harnesses.opencode.acpx.agent",
+      );
+      expect(finding?.message).toContain(missing);
+      expect(
+        err.findings.some((x) => x.key === "harnesses.opencode.binary"),
+      ).toBe(false);
     } finally {
       f.repo.cleanup();
     }

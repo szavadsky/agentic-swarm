@@ -266,7 +266,7 @@ describe("three config layers", () => {
     );
 
     fs.writeFileSync(runYaml, run("/session"));
-    expect(loadConfigs(root).run.harnesses!.pi!.acpx.usage!.command).toBe(
+    expect(loadConfigs(root).run.harnesses!.pi!.acpx!.usage!.command).toBe(
       "/session",
     );
     fs.rmSync(root, { recursive: true, force: true });
