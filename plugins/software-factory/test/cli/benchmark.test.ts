@@ -157,7 +157,7 @@ describe("benchmark command", () => {
           slug: "beta",
           step: "park",
           ok: true,
-          cause: "budget: item budget exhausted after 8 turns",
+          cause: "review rejected: out of scope",
           startedAt: "2026-01-01T03:00:00.000Z",
           endedAt: "2026-01-01T03:05:00.000Z",
         }),

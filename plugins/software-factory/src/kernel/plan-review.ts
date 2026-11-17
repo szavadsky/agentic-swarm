@@ -6,7 +6,7 @@ import { restoreTurn, snapshotTurn } from "./pm.js";
 import { scriptMeta } from "./record.js";
 import type { KernelRuntime, StepRecord } from "./types.js";
 
-/** Agent step of a plan-review turn; slug-less, so it stays out of the item budget. */
+/** Agent step of a plan-review turn; slug-less, so it stays out of the item's turn count. */
 export const PLAN_REVIEW_STEP = "planreview";
 
 async function recordMissing(

@@ -335,6 +335,12 @@ describe("iteration metrics", () => {
 
 const PRICES: PriceTable = {
   "paid/one": { input: 4, cachedInput: 0.2, output: 20, reasoning: 20 },
+  "baidu/ernie-5.5-flash-preview:free": {
+    input: 0,
+    cachedInput: 0,
+    output: 0,
+    reasoning: 0,
+  },
 };
 
 function priced(light: Partial<Usage> = {}): Usage {
@@ -518,6 +524,82 @@ describe("record cost truth", () => {
     }
   });
 
+  it("splits an alias turn's spend by the models it served", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-served-"));
+    const store = createFolderStore(path.join(root, "goal"));
+    try {
+      await store.ensureLayout();
+      const ernie = "openrouter/baidu/ernie-5.5-flash-preview:free";
+      const records = [
+        rec(1, {
+          alias: "digest",
+          model: { id: ernie },
+          usage: priced({ in: 2_000_000 }),
+          served: [
+            {
+              model: { id: ernie },
+              usage: priced({ in: 1_000_000, costUsd: 0 }),
+            },
+            { model: { id: "paid/one" }, usage: priced({ in: 1_000_000 }) },
+          ],
+          edits: { files: 2, added: 5, removed: 1 },
+          promptBytes: 50,
+        }),
+        rec(2, {
+          slug: "b",
+          alias: "digest",
+          model: { id: ernie },
+          usage: priced({ in: 2_000 }),
+          served: [
+            {
+              model: { id: ernie },
+              usage: priced({ in: 1_000, costUsd: 0 }),
+            },
+            { model: { id: "mystery/hop" }, usage: priced({ in: 1_000 }) },
+          ],
+        }),
+      ];
+      await writeMetrics(store, {
+        iteration: 1,
+        status: "in-progress",
+        records,
+        prices: PRICES,
+      });
+      const metrics = yaml.parse(
+        (await store.readFile("metrics.yaml"))!,
+      ) as GoalMetrics;
+      const one = metrics.iterations[0]!;
+
+      // Each served model keeps its own tokens and price: the free row is a
+      // known $0, the paid hop is charged at its own row, not the alias's.
+      expect(one.models[ernie]!.turns).toBe(2);
+      expect(one.models[ernie]!.usage.in).toBe(1_001_000);
+      expect(one.models[ernie]!.usage.costUsd).toBe(0);
+      expect(one.models[ernie]!.unpricedTurns).toBe(0);
+      expect(one.models["paid/one"]!.turns).toBe(1);
+      expect(one.models["paid/one"]!.usage.in).toBe(1_000_000);
+      expect(one.models["paid/one"]!.usage.costUsd).toBeCloseTo(4, 10);
+
+      // Committed work belongs to the record's own model row, once.
+      expect(one.models[ernie]!.edits).toBe(2);
+      expect(one.models["paid/one"]!.edits).toBe(0);
+
+      // A served model with no row is unpriced, never $0.
+      expect(one.models["mystery/hop"]!.turns).toBe(1);
+      expect(one.models["mystery/hop"]!.unpricedTurns).toBe(1);
+      expect(one.models["mystery/hop"]!.usage.costUsd).toBeUndefined();
+
+      // The alias and iteration totals sum the served shares.
+      expect(one.aliases.digest!.turns).toBe(2);
+      expect(one.aliases.digest!.usage.costUsd).toBeCloseTo(4, 10);
+      expect(one.usage.in).toBe(2_002_000);
+      expect(one.usage.costUsd).toBeCloseTo(4, 10);
+      expect(one.unpricedTurns).toBe(1);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("stamps gate wall time around the run", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-gate-"));
     const store = createFolderStore(path.join(root, "goal"));
@@ -554,7 +636,7 @@ describe("record cost truth", () => {
     const process: ProcessConfig = {
       flows: {},
       roles: { implementer: { prompt: "implementer" } },
-      itemTurns: 8,
+      reminders: 1,
     };
     const repo: RepoConfig = {
       baseBranch: "main",
@@ -587,7 +669,6 @@ describe("record cost truth", () => {
       harnesses: new Map([["fake", fake]]),
       prompts: loadPrompts(process, root),
       limits: {
-        itemTurns: 8,
         flows: {},
         iterations: 1,
         concurrency: { overall: 1, perSubscription: {}, perModel: {} },

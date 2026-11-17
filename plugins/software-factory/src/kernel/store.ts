@@ -36,6 +36,48 @@ function recordDirName(seq: number, meta: RecordStart): string {
 }
 
 /**
+ * Goal-relative directories of records whose `end.yaml` commits them. Their
+ * files are history: a stale writer's path there is never a turn's breach.
+ */
+export function sealedRecordDirs(records: readonly StepRecord[]): Set<string> {
+  const dirs = new Set<string>();
+  for (const record of records) {
+    if (record.endedAt !== undefined)
+      dirs.add(`records/${recordDirName(record.seq, record)}`);
+  }
+  return dirs;
+}
+
+/** The files the store owns in a record directory; nothing else is a record. */
+const RECORD_FILES = ["started.yaml", "outcome.yaml", "end.yaml"] as const;
+
+async function chmodRecord(dir: string, mode: number): Promise<void> {
+  for (const name of RECORD_FILES) {
+    try {
+      await fs.promises.chmod(path.join(dir, name), mode);
+    } catch (err) {
+      // outcome.yaml is absent on a script step; the rest exist from start.
+      if (!isENOENT(err)) throw err;
+    }
+  }
+}
+
+/**
+ * A record is history once `end.yaml` lands: its files are read-only, so a
+ * resumed turn still holding the record's stale outcome path gets a write
+ * error instead of rewriting it. Only the kernel reopens one, for a rewrite
+ * it owns, and seals it again.
+ */
+export async function sealRecord(dir: string): Promise<void> {
+  await chmodRecord(dir, 0o444);
+}
+
+/** Reopen a sealed record for a kernel-owned rewrite; seal it after. */
+export async function unsealRecord(dir: string): Promise<void> {
+  await chmodRecord(dir, 0o644);
+}
+
+/**
  * A broken file for a merged, finished or cancelled slug is history: it
  * must stay in `tasks/` so the record keeps the only file it names.
  * Terminal facts come from `derive-task`, the single source.
@@ -289,10 +331,16 @@ class FolderStore implements ArtifactStore {
     });
     const outcomePath = path.join(dir, "outcome.yaml");
     const finish = async (end: RecordEnd): Promise<StepRecord> => {
-      if (end.outcome) await writeYamlAtomic(outcomePath, end.outcome);
-      const ended = { ...end, endedAt: new Date().toISOString() };
-      await writeYamlAtomic(path.join(dir, "end.yaml"), ended);
-      return { ...started, ...ended };
+      // A kernel-owned rewrite reopens a sealed record and seals it again.
+      await unsealRecord(dir);
+      try {
+        if (end.outcome) await writeYamlAtomic(outcomePath, end.outcome);
+        const ended = { ...end, endedAt: new Date().toISOString() };
+        await writeYamlAtomic(path.join(dir, "end.yaml"), ended);
+        return { ...started, ...ended };
+      } finally {
+        await sealRecord(dir);
+      }
     };
     return { dir, meta: started, outcomePath, finish };
   }

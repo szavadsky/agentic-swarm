@@ -189,7 +189,7 @@ describe("steer PM routing", () => {
       await writeTask(runtime, task("beta", { scope: ["beta.txt"] }));
       await appendPark(
         runtime.store,
-        { iteration: 1, slug: "alpha", round: 1 },
+        { iteration: 1, slug: "alpha", round: 1, revision: 0 },
         "flaky foundation",
       );
       expect((await stateOf(runtime)).tasks.alpha!.status).toBe("parked");
@@ -235,8 +235,6 @@ describe("steer PM routing", () => {
         return fakeTurnResult(req);
       });
       harness.script(approver("beta is correct"));
-      harness.script(implementer("alpha.txt"));
-      harness.script(approver("alpha retry is correct"));
 
       const dispatched = await runDispatch(runtime, { iteration: 1 });
       expect(dispatched.reason).toBe("boundary");

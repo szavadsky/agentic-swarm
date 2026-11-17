@@ -223,6 +223,7 @@ export function derive(
       flow: "implement-review",
       deps: [],
       scope: [],
+      revision: 0,
       source: "orphan terminal record",
       body: "",
     };
@@ -287,30 +288,6 @@ export function derive(
       loop: undefined,
       gateFix: undefined,
     };
-  }
-
-  // A continuation spends its base's whole-item budget: its turns charge
-  // against the base's spent turns, so renaming cannot buy extra rounds past
-  // itemTurns. Chains add up; a missing base or a cycle stops the walk.
-  {
-    const bySlug = new Map(tasks.map((t) => [t.slug, t]));
-    const combined = new Map<string, number>();
-    const resolveTurns = (slug: string, trail: readonly string[]): number => {
-      const cached = combined.get(slug);
-      if (cached !== undefined) return cached;
-      const own = taskStates[slug]?.turns ?? 0;
-      const base = bySlug.get(slug)?.base;
-      if (!base || trail.includes(base) || taskStates[base] === undefined) {
-        combined.set(slug, own);
-        return own;
-      }
-      const total = own + resolveTurns(base, [...trail, base]);
-      combined.set(slug, total);
-      return total;
-    };
-    for (const task of tasks) {
-      taskStates[task.slug]!.turns = resolveTurns(task.slug, [task.slug]);
-    }
   }
 
   const interrupted =

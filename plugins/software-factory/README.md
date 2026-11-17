@@ -13,7 +13,7 @@ bun bin/factory.ts run    --repo <path> --goal <name> --run-config <file> [--ite
 bun bin/factory.ts status --repo <path> --goal <name>
 bun bin/factory.ts benchmark --repo <path> --goal <name>
 bun bin/factory.ts steer  --repo <path> --goal <name> <file | ->
-bun bin/factory.ts validate <file>
+bun bin/factory.ts validate [--step <id>] <file>
 ```
 
 `init` writes `.factory/repo.yaml` if missing, creates the goal directory and
@@ -22,9 +22,10 @@ lock, recovers interrupted work and runs the iteration loop. `status` prints
 derived state and parked causes; `benchmark` prints one goal's benchmark rows;
 `steer` drops a file into the inbox atomically. `validate` checks one
 schema-enforced file with the gate's validators (tasks/*.md with its
-directory's dependency graph, class.yaml, outcome.yaml,
-mailbox/holds/*.yaml, repo.yaml, run.yaml, process.yaml); exit 0 valid, 1
-invalid or unknown kind.
+directory's dependency graph and flow existence against the merged process
+config, class.yaml, outcome.yaml keyed by the step in the sibling
+started.yaml or `--step`, mailbox/holds/*.yaml, repo.yaml, run.yaml,
+process.yaml); exit 0 valid, 1 invalid or unknown kind.
 
 Exit codes for `run`: `0` goal done, `1` failure, `2` blocked, `3` iteration
 limit, `130`/`143` interrupted by SIGINT/SIGTERM. The first signal drains (no
@@ -50,13 +51,11 @@ gates:
 `.factory/process.yaml`:
 
 ```yaml
-itemTurns: 8
 flows:
   implement-review:
-    reviewRounds: 2
     steps:
       - { id: implement, role: implementer }
-      - { id: review, role: reviewer, review: true }
+      - { id: review, role: reviewer, review: true, changeRequests: 2 }
 roles:
   architect: { prompt: architect }
   implementer: { prompt: implementer }
@@ -112,6 +111,10 @@ turns the brake could not price.
 Pre-flight resolves every alias (and fallback) through the harness, checks the
 model list, `effort: highest` (highest level the model accepts), binaries, the
 base branch, and that session/worktree roots are writable and outside the repo.
+An omp `@` alias is the exception: omp resolves it inside its own chain, so
+there is no catalog entry and no per-model effort list. `effort: highest` is
+refused there, and the effort must be one omp's `--thinking` flag parses
+(`off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`, `auto`) — or absent.
 Gates run once on the base; a red base is recorded and warned once, not fatal.
 
 ## Goal directory
@@ -140,7 +143,7 @@ assumptions and debt. `metrics.yaml` is rebuilt from the usage records:
 architect launches, architect cost and token share, cost and list cost per
 merged task, incident counts (infra retries, fallback hops, outcome-repair
 turns, merge conflicts, merged-gate failures, and round-limit, no-progress,
-empty-diff, overflow and budget parks), loop incidents (no-progress and
+empty-diff and overflow parks), loop incidents (no-progress and
 empty-diff parks; a spike's empty finish and overflow parks are not loop
 incidents), human interventions (processed steers) and the observable
 operator-act counter (steers plus containment outside-changes and
@@ -148,8 +151,13 @@ integration-moved merges), gate and commit wall time, and turns, tokens, cost
 and work (committed files/lines, attributed gate runs) by role, alias and
 model. Costs come from the price table, and every retry or fallback call the
 harness reports in `attempts` is priced too, each call once. A turn whose
-counters are all zero carries no usage report and is unpriced even when its
-model has a table entry. A turn neither the harness nor the table priced is
+harness resolved its model inside one call (an omp `@` alias, which can hop
+natively) records each served model with its own tokens and prices each at its
+own row; the model table counts the turn in every served row and keeps
+committed work on the record's own model row. The hop adds no attempt, the
+record keeps the configured alias, and a served model with no price row is
+unpriced, never `$0`. A turn whose counters are all zero carries no usage
+report and is unpriced even when its model has a table entry. A turn neither the harness nor the table priced is
 counted as unpriced, so a total containing one is partial; cost per merged
 task is unset only when nothing merged or no turn had a known cost. A free
 model prices to a known `$0` through its all-zero table entry, and its tokens

@@ -19,12 +19,11 @@ import {
   makeRuntime,
   outcome,
   setupFlowRepo,
-  scriptStallLeave,
   writeTask,
 } from "./s2-helpers.js";
 
-describe("KERNEL0 scenario 4 — infra stops and the item budget", () => {
-  it("retries an infra stop without consuming the item budget or a review round", async () => {
+describe("KERNEL0 scenario 4 — infra stops and item turns", () => {
+  it("retries an infra stop without counting a turn or a review round", async () => {
     const { repo, goal } = setupFlowRepo();
     try {
       const harness = new FakeHarness({ id: "fake" });
@@ -170,30 +169,67 @@ describe("KERNEL0 scenario 4 — infra stops and the item budget", () => {
     }
   }, 60_000);
 
-  it("parks a task whose item budget is exhausted", async () => {
+  it("drives one task through ten-plus turns of glitches, repairs and change requests without parking it", async () => {
     const { repo, goal } = setupFlowRepo({
       process: {
-        itemTurns: 2,
-        flows: { "implement-review": { reviewRounds: 4 } },
+        reminders: 2,
+        flows: {
+          "implement-review": {
+            steps: [
+              { id: "implement", role: "implementer" },
+              {
+                id: "review",
+                role: "reviewer",
+                review: true,
+                changeRequests: 3,
+              },
+            ],
+          },
+        },
       },
     });
     try {
       const harness = new FakeHarness({ id: "fake" });
-      harness.script((req, ctx) => {
-        fs.writeFileSync(path.join(req.cwd!, "task.txt"), "v1\n", "utf8");
-        ctx.writeOutcome(outcome({ summary: "implemented" }));
-        return fakeTurnResult(req);
-      });
-      harness.script((req, ctx) => {
-        ctx.writeOutcome(
-          outcome({ summary: "needs another round", verdict: "changes" }),
+      const implement = (content: string) => (req: any, ctx: any) => {
+        fs.writeFileSync(
+          path.join(req.cwd!, "task.txt"),
+          `${content}\n`,
+          "utf8",
         );
+        ctx.writeOutcome(outcome({ summary: `wrote ${content}` }));
         return fakeTurnResult(req);
-      });
-      scriptStallLeave(harness, ["task"]);
+      };
+      const review =
+        (summary: string, verdict: "changes" | "approve") =>
+        (req: any, ctx: any) => {
+          ctx.writeOutcome(outcome({ summary, verdict }));
+          return fakeTurnResult(req);
+        };
+      // Reported timeouts count as turns; each is a glitch the launch survives.
+      harness.script((req) =>
+        fakeTurnResult(req, { stop: { kind: "infra", cause: "timeout" } }),
+      );
+      // Implement r1: a missing outcome spends a repair, then delivers.
+      harness.script((req) => fakeTurnResult(req, { text: "no outcome" }));
+      harness.script(implement("v1"));
+      // Review r1: a missing verdict spends a repair, then requests changes.
+      harness.script((req) => fakeTurnResult(req, { text: "no verdict" }));
+      harness.script(review("needs another round", "changes"));
+      harness.script((req) =>
+        fakeTurnResult(req, { stop: { kind: "infra", cause: "timeout" } }),
+      );
+      harness.script(implement("v2"));
+      harness.script(review("still not there", "changes"));
+      harness.script(implement("v3"));
+      harness.script(review("approved", "approve"));
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("task", { scope: ["task.txt"] }));
+
+      for (let launch = 0; launch < 2; launch += 1) {
+        const stopped = await runDispatch(runtime, { iteration: 1 });
+        expect(stopped.reason).toBe("infra");
+      }
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("boundary");
 
@@ -203,11 +239,20 @@ describe("KERNEL0 scenario 4 — infra stops and the item budget", () => {
         records,
         runtime.configs.process.flows,
       );
-      expect(state.tasks.task!.status).toBe("parked");
-      expect(state.tasks.task!.cause!.startsWith("budget:")).toBe(true);
-      expect(state.tasks.task!.turns).toBe(2);
-      expect(state.tasks.task!.round).toBe(2);
-      expect(harness.calls.length).toBe(3);
+      expect(state.tasks.task!.status).toBe("merged");
+      expect(state.tasks.task!.turns).toBeGreaterThanOrEqual(10);
+      expect(
+        records.filter(
+          (r) =>
+            r.slug === "task" &&
+            r.step === "review" &&
+            r.outcome?.verdict === "changes",
+        ),
+      ).toHaveLength(2);
+      expect(
+        records.filter((r) => r.slug === "task" && r.step === "park"),
+      ).toHaveLength(0);
+      expect(harness.calls.length).toBe(10);
     } finally {
       cleanupFlowRepo(repo);
     }

@@ -135,11 +135,22 @@ describe("KERNEL0 scenario 10 — review reply round-trip", () => {
     }
   }, 60_000);
 
-  it("bounds a reply ping-pong by the review rounds and merges the last changes", async () => {
+  it("bounds a reply ping-pong by the change-request bound and ships its last call", async () => {
     const { repo, goal } = setupFlowRepo({
       process: {
-        itemTurns: 8,
-        flows: { "implement-review": { reviewRounds: 2 } },
+        flows: {
+          "implement-review": {
+            steps: [
+              { id: "implement", role: "implementer" },
+              {
+                id: "review",
+                role: "reviewer",
+                review: true,
+                changeRequests: 1,
+              },
+            ],
+          },
+        },
       },
     });
     try {
@@ -168,8 +179,8 @@ describe("KERNEL0 scenario 10 — review reply round-trip", () => {
       harness.script((req, ctx) => {
         ctx.writeOutcome(
           outcome({
-            summary: "1. one finding remains",
-            verdict: "changes",
+            summary: "1. one finding remains; shipping with it recorded",
+            verdict: "approve",
             concerns: [
               {
                 kind: "uncertainty",

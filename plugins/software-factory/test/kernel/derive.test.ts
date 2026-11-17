@@ -116,7 +116,7 @@ describe("derive", () => {
     expect(red.tasks.a!.round).toBe(1);
   });
 
-  it("advances the round after changes and merges when the last round decides", () => {
+  it("advances the round after changes and parks changes on the last call", () => {
     const tasks = [task("a")];
     const afterFirst = derive(tasks, [
       implement(1),
@@ -135,9 +135,27 @@ describe("derive", () => {
       doneCheck(5),
       review(6, "changes", 2),
     ]);
-    expect(afterSecond.tasks.a!.round).toBe(2);
-    expect(afterSecond.tasks.a!.phase).toBe("merge");
+    expect(afterSecond.tasks.a!.round).toBe(3);
+    expect(afterSecond.tasks.a!.phase).toBe("implement");
     expect(afterSecond.tasks.a!.turns).toBe(4);
+
+    const afterThird = derive(tasks, [
+      implement(1),
+      doneCheck(2),
+      review(3, "changes", 1),
+      implement(4, 2),
+      doneCheck(5),
+      review(6, "changes", 2),
+      implement(7, 3),
+      doneCheck(8),
+      review(9, "changes", 3),
+    ]);
+    expect(afterThird.tasks.a!.round).toBe(3);
+    expect(afterThird.tasks.a!.phase).toBe("parked");
+    expect(afterThird.tasks.a!.park).toBe(
+      "invalid outcome: changes on the last review call: review r3",
+    );
+    expect(afterThird.tasks.a!.turns).toBe(6);
   });
 
   it("derives a park request on a reject and keeps the cause", () => {
@@ -148,6 +166,55 @@ describe("derive", () => {
     expect(state.tasks.a!.status).toBe("ready");
     expect(state.tasks.a!.park).toContain("review rejected");
     expect(state.tasks.a!.phase).toBe("parked");
+  });
+
+  it("restarts an amended task after the park its earlier revision ended", () => {
+    const parkRecord = (seq: number, revision: number, cause: string) =>
+      script(seq, {
+        step: "park",
+        ok: true,
+        cause,
+        revision,
+        startedAt: new Date(seq).toISOString(),
+      });
+    const firstRevision = [
+      implement(1),
+      doneCheck(2),
+      review(3, "changes", 1),
+      implement(4, 2),
+      doneCheck(5),
+      review(6, "reject", 2),
+      parkRecord(7, 0, "review rejected: not salvageable"),
+    ];
+    const parked = derive([task("a")], firstRevision);
+    expect(parked.tasks.a!.status).toBe("parked");
+    expect(parked.tasks.a!.turns).toBe(4);
+
+    // The amendment resets phase, counts and the terminal fact; the records
+    // stay for the prompts' review history.
+    const amended = derive(
+      [task("a", { revision: 1, body: "Retry.\nDone when: it works." })],
+      firstRevision,
+    );
+    expect(amended.tasks.a!.status).toBe("ready");
+    expect(amended.tasks.a!.phase).toBe("implement");
+    expect(amended.tasks.a!.round).toBe(1);
+    expect(amended.tasks.a!.turns).toBe(0);
+    expect(amended.tasks.a!.park).toBeUndefined();
+    expect(amended.tasks.a!.verdict).toBeUndefined();
+
+    // A park of the current revision still ends it.
+    const reparked = derive(
+      [task("a", { revision: 1 })],
+      [
+        ...firstRevision,
+        implement(8, 1, { base: undefined }),
+        parkRecord(9, 1, "blocked: still stuck"),
+      ],
+    );
+    expect(reparked.tasks.a!.status).toBe("parked");
+    expect(reparked.tasks.a!.cause).toBe("blocked: still stuck");
+    expect(reparked.tasks.a!.turns).toBe(1);
   });
 
   it("derives park requests on blocked, failed and upscope outcomes, and parks on a park record", () => {
@@ -241,7 +308,7 @@ describe("derive", () => {
     expect(state.tasks.a!.park).toBeUndefined();
   });
 
-  it("never charges an infra stop to the item budget or the round", () => {
+  it("never counts an infra stop as a turn or a round", () => {
     const state = derive(
       [task("a")],
       [
@@ -336,7 +403,15 @@ describe("derive", () => {
     expect(state.tasks.a!.park).toStartWith("empty-diff: implement r2");
   });
 
-  it("bounds a reply-only fix round by review rounds", () => {
+  it("parks last-call changes after a reply-only fix", () => {
+    const flows = {
+      "implement-review": {
+        steps: [
+          { id: "implement", role: "implementer" },
+          { id: "review", role: "reviewer", review: true, changeRequests: 1 },
+        ],
+      },
+    };
     const state = derive(
       [task("a")],
       [
@@ -359,12 +434,15 @@ describe("derive", () => {
         doneCheck(6),
         review(7, "changes", 2),
       ],
+      flows,
     );
-    // Last-round `changes` merges with the concerns as debt: the reply-only
-    // round cannot loop forever.
-    expect(state.tasks.a!.phase).toBe("merge");
+    // The reply-only fix returns to review and consumes the single change
+    // request, so the next changes is refused instead of looping.
+    expect(state.tasks.a!.phase).toBe("parked");
+    expect(state.tasks.a!.park).toContain(
+      "invalid outcome: changes on the last review call",
+    );
     expect(state.tasks.a!.round).toBe(2);
-    expect(state.tasks.a!.park).toBeUndefined();
   });
 
   it("sets gateFix on red task checks and names them when the repeated checks still fail", () => {
@@ -447,7 +525,7 @@ describe("derive", () => {
     expect(state.tasks.a!.park).toBeUndefined();
   });
 
-  it("parks an empty fix after last-round changes followed by a merge-gates failure", () => {
+  it("parks an empty fix after an approve followed by a merge-gates failure", () => {
     const tasks = [task("a")];
     const prefix = [
       implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
@@ -457,7 +535,7 @@ describe("derive", () => {
       implement(5, 2, { tree: "tree-2", commit: "c2", base: "c0" }),
       script(6, { step: "commit", ok: true, commit: "c2", tree: "tree-2" }),
       doneCheck(7),
-      review(8, "changes", 2),
+      review(8, "approve", 2),
       script(9, {
         step: "merge",
         ok: false,
@@ -867,7 +945,7 @@ describe("derive", () => {
     );
   });
 
-  it("charges each outcome repair to the item budget", () => {
+  it("counts each outcome repair as a turn", () => {
     const done = { kind: "done" } as const;
     const usage = {
       in: 0,
@@ -885,7 +963,7 @@ describe("derive", () => {
     expect(state.tasks.a!.turns).toBe(3);
   });
 
-  it("leaves infra retries outside the item budget", () => {
+  it("leaves infra retries out of the turn count", () => {
     const usage = {
       in: 0,
       cacheRead: 0,
@@ -1129,7 +1207,7 @@ describe("derive", () => {
     );
   });
 
-  it("charges a continuation's turns against its base's spent item budget", () => {
+  it("counts only a continuation's own turns, not its base's", () => {
     const tasks = [task("a"), task("b", { base: "a" })];
     const records = [
       implement(1),
@@ -1140,7 +1218,6 @@ describe("derive", () => {
     ];
     const state = derive(tasks, records);
     expect(state.tasks.a!.turns).toBe(3);
-    // The continuation's own turn plus the base's three: renaming buys no new budget.
-    expect(state.tasks.b!.turns).toBe(4);
+    expect(state.tasks.b!.turns).toBe(1);
   });
 });

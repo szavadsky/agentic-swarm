@@ -2,9 +2,13 @@ import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import yaml from "yaml";
+import { writeYamlAtomic } from "../../src/core/records/io.js";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
+import { executeTaskAction } from "../../src/kernel/flow.js";
+import { sealRecord, unsealRecord } from "../../src/kernel/store.js";
+import type { Action } from "../../src/kernel/types.js";
 import {
   containmentSnapshot,
   containmentViolation,
@@ -179,34 +183,20 @@ describe("agent containment", () => {
     }
   }, 60_000);
 
-  it("parks a turn that rewrites an existing record", async () => {
-    const { repo, goal } = setupFlowRepo();
+  it("parks a turn that writes a task file", async () => {
+    const { repo, goal, goalDir } = setupFlowRepo();
     try {
       const harness = new FakeHarness({ id: "fake" });
-      const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await runtime.store.appendRecord(
-        {
-          iteration: 1,
-          step: "checks",
-          round: 1,
-          actor: "script",
-          slug: "task",
-        },
-        { ok: true },
-      );
-      const recordsDir = path.join(runtime.store.goalDir, "records");
-      const recordDir = fs.readdirSync(recordsDir)[0]!;
-      const recordFile = path.join(recordsDir, recordDir, "end.yaml");
-
       harness.script((req, ctx) => {
-        fs.writeFileSync(recordFile, "ok: false\n", "utf8");
+        fs.appendFileSync(path.join(goalDir, "tasks/task.md"), "\n", "utf8");
         fs.writeFileSync(path.join(req.cwd!, "task.txt"), "task\n", "utf8");
         ctx.writeOutcome(outcome({ summary: "implemented" }));
         return fakeTurnResult(req);
       });
 
-      await writeTask(runtime, task("task", { scope: ["task.txt"] }));
       scriptStallLeave(harness, ["task"]);
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("task", { scope: ["task.txt"] }));
       await runDispatch(runtime, { iteration: 1 });
 
       const records = await runtime.store.listRecords();
@@ -219,9 +209,76 @@ describe("agent containment", () => {
       expect(state.tasks.task!.cause).toContain(
         "goal artifacts changed outside the worktree",
       );
-      expect(state.tasks.task!.cause).toContain(
-        `changed records/${recordDir}/end.yaml`,
+      expect(state.tasks.task!.cause).toContain("changed tasks/task.md");
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("contains a turn that tries to rewrite a sealed record", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      const sealed = await runtime.store.startRecord({
+        iteration: 1,
+        step: "review",
+        round: 1,
+        actor: "agent",
+        slug: "other",
+      });
+      await sealed.finish({
+        ok: true,
+        outcome: outcome({ summary: "other approved", verdict: "approve" }),
+      });
+      const before = fs.readFileSync(sealed.outcomePath, "utf8");
+      let writeError: NodeJS.ErrnoException | undefined;
+
+      harness.script(
+        (req, ctx) => {
+          // A resumed turn still holding the sealed record's stale path.
+          try {
+            fs.writeFileSync(
+              sealed.outcomePath,
+              "status: failed\nsummary: stale\n",
+              "utf8",
+            );
+          } catch (err) {
+            writeError = err as NodeJS.ErrnoException;
+          }
+          fs.writeFileSync(path.join(req.cwd!, "task.txt"), "task\n", "utf8");
+          ctx.writeOutcome(outcome({ summary: "implemented" }));
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ slug: "task", step: "implement" }) },
       );
+      harness.script(
+        (req, ctx) => {
+          ctx.writeOutcome(
+            outcome({ summary: "approved", verdict: "approve" }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ slug: "task", step: "review" }) },
+      );
+
+      await writeTask(runtime, task("task", { scope: ["task.txt"] }));
+      await runDispatch(runtime, { iteration: 1 });
+
+      const records = await runtime.store.listRecords();
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
+      expect(writeError?.code).toBe("EACCES");
+      expect(fs.statSync(sealed.outcomePath).mode & 0o777).toBe(0o444);
+      expect(fs.readFileSync(sealed.outcomePath, "utf8")).toBe(before);
+      expect(state.tasks.task!.status).toBe("merged");
+      expect(
+        records.filter((r) => r.slug === "task" && r.step === "park"),
+      ).toHaveLength(0);
+      expect(records.filter((r) => r.step === "containment")).toHaveLength(0);
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -467,6 +524,50 @@ describe("agent containment", () => {
     }
   }, 60_000);
 
+  it("ignores a sealed record the kernel reopens and rewrites", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      const file = task("task", { scope: ["task.txt"] });
+      await writeTask(runtime, file);
+      const ensured = await ensureTaskWorktree(runtime, file);
+      const sealed = await runtime.store.startRecord({
+        iteration: 1,
+        step: "checks",
+        round: 1,
+        actor: "script",
+        slug: "task",
+      });
+      await sealed.finish({
+        ok: true,
+        outcome: outcome({ summary: "gates green" }),
+      });
+      const snapshot = await containmentSnapshot(runtime, ensured.path);
+
+      // A kernel-owned rewrite reopens the sealed record and seals it again.
+      const rewritten = outcome({ summary: "gates green after a rewrite" });
+      await unsealRecord(sealed.dir);
+      await writeYamlAtomic(sealed.outcomePath, rewritten);
+      await sealRecord(sealed.dir);
+
+      expect(fs.statSync(sealed.outcomePath).mode & 0o777).toBe(0o444);
+      expect(
+        await containmentViolation(
+          runtime,
+          ensured.path,
+          ensured.branch,
+          snapshot,
+        ),
+      ).toBeUndefined();
+      expect((await runtime.store.listRecords())[0]!.outcome).toEqual(
+        rewritten,
+      );
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
   it("ignores a record that closes after the turn started", async () => {
     const { repo, goal } = setupFlowRepo();
     try {
@@ -650,6 +751,7 @@ describe("agent containment", () => {
     const { repo, goal } = setupFlowRepo({
       gates: [{ id: "detached", command: gate }],
     });
+    const checkout = goalCheckout(repo, goal);
     try {
       const harness = new FakeHarness({ id: "fake" });
       harness.script((req, ctx) => {
@@ -662,9 +764,32 @@ describe("agent containment", () => {
         return fakeTurnResult(req);
       });
 
-      scriptStallLeave(harness, ["task"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await writeTask(runtime, task("task", { scope: ["task.txt"] }));
+      const file = task("task", { scope: ["task.txt"] });
+      await writeTask(runtime, file);
+      const drive = async (action: Action): Promise<void> => {
+        const before = derive(
+          await runtime.store.listTasks(),
+          await runtime.store.listRecords(),
+          runtime.configs.process.flows,
+        );
+        await executeTaskAction(
+          runtime,
+          file,
+          action,
+          1,
+          before.tasks[file.slug]!,
+        );
+      };
+      await drive({ kind: "step", slug: "task", step: "implement", round: 1 });
+      await drive({ kind: "step", slug: "task", step: "review", round: 1 });
+      // Differ the merged tree so the merge gates run: without a concurrent
+      // landing the merge would skip them on the already-judged tree.
+      fs.writeFileSync(path.join(checkout, "other.txt"), "other\n", "utf8");
+      repo.git(["add", "other.txt"], { cwd: checkout });
+      repo.git(["commit", "-m", "concurrent landing"], { cwd: checkout });
+      await drive({ kind: "merge", slug: "task" });
+      scriptStallLeave(harness, ["task"]);
       await runDispatch(runtime, { iteration: 1 });
 
       const records = await runtime.store.listRecords();

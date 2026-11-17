@@ -12,12 +12,12 @@ import {
 } from "./s2-helpers.js";
 
 /**
- * E7 inverted: an infra timeout or crash consumes the item turn budget and
- * parks the step after two repeats on the same step, so a launch never
- * re-dispatches a deterministically failing step without bound. A reported
- * quota/auth stop is not timeout/crash and still consumes nothing.
+ * E7 inverted: an infra timeout or crash counts as a turn and parks the step
+ * after two repeats on the same step, so a launch never re-dispatches a
+ * deterministically failing step without bound. A reported quota/auth stop is
+ * not timeout/crash and still counts nothing.
  */
-describe("E7 inverted — infra timeouts and crashes spend the turn budget", () => {
+describe("E7 inverted — infra timeouts and crashes count as turn repeats", () => {
   for (const cause of ["timeout", "crash"] as const) {
     it(`parks infra-repeat on the same step after two ${cause} stops`, async () => {
       const { repo, goal } = setupFlowRepo({

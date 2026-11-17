@@ -82,7 +82,7 @@ const ROLES: Record<string, Record<string, string>> = {
 
 function library() {
   return loadPrompts(
-    { flows: {}, roles: {}, itemTurns: 8 } as ProcessConfig,
+    { flows: {}, roles: {}, reminders: 1 } as ProcessConfig,
     os.tmpdir(),
   );
 }
@@ -94,6 +94,18 @@ function extractCommand(rendered: string): string {
   );
   if (!match) throw new Error("rendered prompt has no validate command");
   return match[1]!;
+}
+
+function renderPrompt(role: string): string {
+  const lib = library();
+  // Production-like values above; anything the template gained since
+  // (e.g. `resume_note`) renders empty so this test tracks only the
+  // validate command and the reviewer author default, not every template
+  // variable.
+  const filled: Record<string, string> = { ...ROLES[role]! };
+  for (const name of lib.placeholders(role))
+    if (name !== "validate_cmd" && name !== "author") filled[name] ??= "";
+  return lib.render(role, filled);
 }
 
 const VALID_OUTCOME = "status: done\nsummary: did the thing\n";
@@ -144,19 +156,12 @@ describe("validate_cmd", () => {
     expect(rendered).toContain("task files");
   });
 
-  for (const [role, vars] of Object.entries(ROLES)) {
+  for (const role of Object.keys(ROLES)) {
     it(`renders ${role} with a runnable validate command`, () => {
       const lib = library();
       const placeholders = lib.placeholders(role);
       expect(placeholders).toContain("validate_cmd");
-      // Production-like values above; anything the template gained since
-      // (e.g. `resume_note`) renders empty so this test tracks only the
-      // validate command and the reviewer author default, not every template
-      // variable.
-      const filled: Record<string, string> = { ...vars };
-      for (const name of placeholders)
-        if (name !== "validate_cmd" && name !== "author") filled[name] ??= "";
-      const rendered = lib.render(role, filled);
+      const rendered = renderPrompt(role);
       expect(rendered).not.toContain("factory validate");
       expect(rendered).toContain(validateCmd());
       if (role === "reviewer")
@@ -191,4 +196,37 @@ describe("validate_cmd", () => {
       }
     });
   }
+
+  it("checks a review record's outcome with the step from started.yaml", () => {
+    const worktree = fs.mkdtempSync(
+      path.join(os.tmpdir(), "validate-cmd-record-"),
+    );
+    try {
+      const record = path.join(worktree, "records", "00042-i1-alpha-review-r1");
+      fs.mkdirSync(record, { recursive: true });
+      fs.writeFileSync(
+        path.join(record, "started.yaml"),
+        "seq: 42\niteration: 1\nstep: review\nround: 1\nactor: agent\n",
+      );
+      const outcome = path.join(record, "outcome.yaml");
+      const cmd = extractCommand(renderPrompt("reviewer"));
+      const run = () =>
+        spawnSync("sh", ["-c", `${cmd} "${outcome}"`], {
+          cwd: worktree,
+          encoding: "utf8",
+        });
+
+      fs.writeFileSync(outcome, VALID_OUTCOME);
+      const missing = run();
+      expect(missing.status).not.toBe(0);
+      expect(missing.stderr).toContain("verdict is required");
+
+      fs.writeFileSync(outcome, `${VALID_OUTCOME}verdict: approve\n`);
+      const valid = run();
+      expect(valid.status).toBe(0);
+      expect(valid.stdout).toContain("valid");
+    } finally {
+      fs.rmSync(worktree, { recursive: true, force: true });
+    }
+  });
 });

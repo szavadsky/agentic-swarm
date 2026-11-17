@@ -5,20 +5,17 @@ import type { Limits, StepRecord } from "../../src/kernel/types.js";
 import { rec, script, task } from "./helpers.js";
 
 const limits: Limits = {
-  itemTurns: 4,
   flows: {
     "implement-review": {
-      reviewRounds: 2,
       steps: [
         { id: "implement", role: "implementer" },
-        { id: "review", role: "reviewer", review: true },
+        { id: "review", role: "reviewer", review: true, changeRequests: 2 },
       ],
     },
     spike: {
-      reviewRounds: 1,
       steps: [
         { id: "implement", role: "implementer" },
-        { id: "review", role: "reviewer", review: true },
+        { id: "review", role: "reviewer", review: true, changeRequests: 0 },
       ],
     },
   },
@@ -127,8 +124,8 @@ describe("next", () => {
     ]);
   });
 
-  it("merges last-round changes instead of parking, and parks on an exhausted item budget", () => {
-    const lastRound = derive(
+  it("parks changes on the last call and merges a last-call approve", () => {
+    const lastCallChanges = derive(
       [task("a")],
       [
         implement(1),
@@ -137,14 +134,25 @@ describe("next", () => {
         implement(4, 2),
         check(5),
         review(6, "changes", 2),
+        implement(7, 3),
+        check(8),
+        review(9, "changes", 3),
       ],
     );
-    expect(next(lastRound, limits, new Set())).toEqual([
-      { kind: "merge", slug: "a" },
+    expect(lastCallChanges.tasks.a!.park).toContain(
+      "invalid outcome: changes on the last review call",
+    );
+    expect(next(lastCallChanges, limits, new Set())).toEqual([
+      {
+        kind: "park",
+        slug: "a",
+        cause: expect.stringContaining(
+          "invalid outcome: changes on the last review call",
+        ),
+      },
     ]);
-    expect(lastRound.tasks.a!.round).toBe(2);
 
-    const spent = derive(
+    const lastCallApprove = derive(
       [task("a")],
       [
         implement(1),
@@ -152,19 +160,14 @@ describe("next", () => {
         review(3, "changes", 1),
         implement(4, 2),
         check(5),
+        review(6, "changes", 2),
+        implement(7, 3),
+        check(8),
+        review(9, "approve", 3),
       ],
     );
-    const budget = next(spent, { ...limits, itemTurns: 3 }, new Set())[0]!;
-    expect(budget.kind).toBe("park");
-    if (budget.kind === "park") expect(budget.cause).toContain("budget");
-  });
-
-  it("merges approved work even when the item budget is already spent", () => {
-    const approved = derive(
-      [task("a")],
-      [implement(1), check(2), review(3, "approve")],
-    );
-    expect(next(approved, { ...limits, itemTurns: 2 }, new Set())).toEqual([
+    expect(lastCallApprove.tasks.a!.round).toBe(3);
+    expect(next(lastCallApprove, limits, new Set())).toEqual([
       { kind: "merge", slug: "a" },
     ]);
   });
@@ -192,25 +195,19 @@ describe("next", () => {
     expect(action.kind).toBe("park");
   });
 
-  it("parks a continuation whose whole-item budget the base already spent", () => {
+  it("starts a `base:` continuation's first turn whatever its chain spent", () => {
     const tasks = [task("a"), task("b", { base: "a" })];
     const state = derive(
       tasks,
-      [
-        implement(1),
-        check(2),
-        review(3, "changes", 1),
-        implement(4, 2),
-        implement(5, 1, { slug: "b" }),
-        { ...check(6), slug: "b" },
-      ],
+      [implement(1), check(2), review(3, "changes", 1), implement(4, 2)],
       limits.flows,
     );
-    expect(state.tasks.b!.turns).toBe(4);
-    const parks = next(state, limits, new Set()).filter(
-      (action) => action.kind === "park" && action.slug === "b",
-    );
-    expect(parks).toHaveLength(1);
-    expect(parks[0]).toMatchObject({ kind: "park", slug: "b" });
+    expect(state.tasks.a!.turns).toBeGreaterThan(0);
+    expect(state.tasks.b!.turns).toBe(0);
+    expect(
+      next(state, limits, new Set()).filter(
+        (action) => action.kind === "step" && action.slug === "b",
+      ),
+    ).toEqual([{ kind: "step", slug: "b", step: "implement", round: 1 }]);
   });
 });

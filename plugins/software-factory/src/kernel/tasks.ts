@@ -1,14 +1,14 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import yaml from "yaml";
-import type { TaskFile, TaskKind } from "./types.js";
+import type { FlowDefinition, TaskFile, TaskKind } from "./types.js";
 
 /** The flow a task file gets when its frontmatter names none. */
 export const DEFAULT_FLOW = "implement-review";
 
 /**
  * Task frontmatter shape. The prompt skeleton renders from this; `parseTaskFile`
- * stays the validator (file-name authority, lenient kind, custom messages).
+ * stays the validator (file-name authority, custom messages).
  * Field descriptions are the prompt-facing wording, as on `outcomeSchema`.
  */
 export const taskFrontmatterSchema = z.object({
@@ -26,6 +26,12 @@ export const taskFrontmatterSchema = z.object({
     .default([]),
   scope: z.array(z.string().describe("a predicted area")),
   tier: z.string().min(1).optional().describe("default, or a run-config alias"),
+  revision: z
+    .number()
+    .int()
+    .nonnegative()
+    .optional()
+    .describe("one more than the parked revision when amending under its slug"),
   base: z.string().min(1).optional().describe("the parked slug this continues"),
   source: z
     .string()
@@ -91,7 +97,13 @@ export function parseTaskFile(text: string, fileSlug: string): TaskFile {
       `task file "${fileSlug}" declares slug "${slug}": slugs are immutable and file names authoritative`,
     );
   }
-  const kind: TaskKind = meta.kind === "spike" ? "spike" : "task";
+  const rawKind = meta.kind;
+  if (rawKind !== undefined && rawKind !== "task" && rawKind !== "spike") {
+    throw new TaskFileError(
+      `task "${slug}" has kind "${String(rawKind)}": expected "task" or "spike"`,
+    );
+  }
+  const kind: TaskKind = rawKind === "spike" ? "spike" : "task";
   const title = typeof meta.title === "string" ? meta.title.trim() : "";
   if (!title) throw new TaskFileError(`task "${slug}" has no title`);
   const repairTurns =
@@ -118,6 +130,18 @@ export function parseTaskFile(text: string, fileSlug: string): TaskFile {
     throw new TaskFileError(
       `task "${slug}" frontmatter "turnMinutes" must be a positive number`,
     );
+  const revision =
+    meta.revision === undefined
+      ? 0
+      : typeof meta.revision === "number" &&
+          Number.isInteger(meta.revision) &&
+          meta.revision >= 0
+        ? meta.revision
+        : null;
+  if (revision === null)
+    throw new TaskFileError(
+      `task "${slug}" frontmatter "revision" must be a non-negative integer`,
+    );
   return {
     slug,
     title,
@@ -126,6 +150,7 @@ export function parseTaskFile(text: string, fileSlug: string): TaskFile {
     deps: stringList(meta.deps ?? meta.after, "deps"),
     scope: stringList(meta.scope, "scope"),
     tier: typeof meta.tier === "string" ? meta.tier : undefined,
+    revision,
     base: typeof meta.base === "string" && meta.base ? meta.base : undefined,
     source: typeof meta.source === "string" ? meta.source : "",
     body: (match[2] ?? "").trim(),
@@ -144,6 +169,7 @@ export function renderTaskFile(task: TaskFile): string {
     scope: task.scope,
   };
   if (task.tier) front.tier = task.tier;
+  if (task.revision > 0) front.revision = task.revision;
   if (task.base) front.base = task.base;
   if (task.source) front.source = task.source;
   if (task.repairTurns !== undefined) front.repairTurns = task.repairTurns;
@@ -159,7 +185,8 @@ export function doneWhen(body: string): string {
 
 /**
  * Material hash: frozen-task comparisons must ignore cosmetic edits but catch
- * a changed dependency set, scope, flow, tier, kind, slug or done-when.
+ * a changed dependency set, scope, flow, tier, revision, kind, slug or
+ * done-when.
  */
 export function materialHash(task: TaskFile): string {
   const canonical = JSON.stringify([
@@ -169,6 +196,7 @@ export function materialHash(task: TaskFile): string {
     [...task.deps].sort(),
     [...task.scope],
     task.tier ?? "",
+    task.revision,
     task.base ?? "",
     doneWhen(task.body),
   ]);
@@ -235,5 +263,25 @@ export function validateTaskGraph(
     done.add(slug);
   };
   for (const slug of [...bySlug.keys()].sort()) walk(slug, []);
+  return [...new Set(findings)];
+}
+
+/**
+ * Flow existence against the merged process config. Same `flow "x" is not
+ * configured` text the dispatcher parks on; `factory validate` calls this so
+ * one definition rejects unknown flows.
+ */
+export function validateTaskFlows(
+  tasks: TaskFile[],
+  flows: Record<string, FlowDefinition>,
+): string[] {
+  const findings: string[] = [];
+  for (const task of tasks) {
+    if (!flows[task.flow]) {
+      findings.push(
+        `task "${task.slug}" uses flow "${task.flow}": flow "${task.flow}" is not configured`,
+      );
+    }
+  }
   return [...new Set(findings)];
 }

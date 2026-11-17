@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
+  expectationForStep,
   fencedOutcome,
   parseOutcome,
   readDeliveredOutcome,
@@ -23,6 +24,34 @@ describe("outcome delivery", () => {
 
   it("rejects an invalid outcome with field findings", () => {
     expect(() => parseOutcome("status: nope\nsummary: x\n")).toThrow(/status/);
+  });
+
+  it("reads the retired continue route as a replace, and refuses unknown actions", () => {
+    const legacy = parseOutcome(
+      [
+        "status: done",
+        "summary: continued the park",
+        "stallRoutes:",
+        "  - slug: alpha",
+        "    action: continue",
+        "    reason: retry with direction",
+      ].join("\n"),
+    );
+    expect(legacy.stallRoutes).toEqual([
+      { slug: "alpha", action: "replace", reason: "retry with direction" },
+    ]);
+    expect(() =>
+      parseOutcome(
+        [
+          "status: done",
+          "summary: routed the park",
+          "stallRoutes:",
+          "  - slug: alpha",
+          "    action: redo",
+          "    reason: unknown",
+        ].join("\n"),
+      ),
+    ).toThrow(/action/);
   });
 
   it("prefers the prompt-named file over a fenced block", () => {
@@ -59,5 +88,46 @@ describe("outcome delivery", () => {
         "review",
       ),
     ).toEqual([]);
+  });
+
+  it("refuses changes on the last review call", () => {
+    const changes = parseOutcome(
+      "status: done\nsummary: fixed\nverdict: changes\n",
+    );
+    expect(validateExpectation(changes, "review")).toEqual([]);
+    expect(validateExpectation(changes, "review", { lastCall: false })).toEqual(
+      [],
+    );
+    expect(validateExpectation(changes, "review", { lastCall: true })).toEqual([
+      'verdict "changes" is not available on the last review call: approve with concerns, or reject',
+    ]);
+    expect(
+      validateExpectation(
+        parseOutcome("status: failed\nsummary: broke\nverdict: changes\n"),
+        "review",
+        { lastCall: true },
+      ),
+    ).toEqual([]);
+  });
+
+  it("maps steps to expectations from the flow catalog", () => {
+    const flows = {
+      "implement-review": {
+        steps: [
+          { id: "implement", role: "implementer" },
+          { id: "review", role: "reviewer", review: true, changeRequests: 2 },
+        ],
+      },
+    };
+    expect(expectationForStep(undefined, flows)).toBe("any");
+    expect(expectationForStep("implement", flows)).toBe("any");
+    expect(expectationForStep("review", flows)).toBe("review");
+    expect(expectationForStep("architect", flows)).toBe("architect");
+  });
+
+  it("fails loud on a step no flow configures", () => {
+    expect(() => expectationForStep("reveiw", {})).toThrow(
+      'step "reveiw" is not configured in the repo\'s flows',
+    );
   });
 });

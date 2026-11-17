@@ -253,11 +253,8 @@ describe("parked continuation syncs to the integration head", () => {
         (r) => r.slug === "beta" && r.actor === "agent" && r.endedAt,
       );
       expect(betaAgents).toHaveLength(2);
-      expect(
-        records.filter((r) => r.slug === "beta" && r.step === "merge-attempt"),
-      ).toHaveLength(0);
-      // Whole-item budget: beta's own 2 turns plus alpha's 2 spent turns.
-      expect(state.tasks.beta!.turns).toBe(4);
+      // A continuation counts its own turns only; alpha's spend does not carry.
+      expect(state.tasks.beta!.turns).toBe(2);
       const betaTip = repo
         .git(["rev-parse", "factory-task/demo/beta"])
         .stdout.trim();

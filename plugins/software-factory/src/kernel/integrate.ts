@@ -13,7 +13,6 @@ import {
   newGateFailures,
   runGates,
 } from "./gates.js";
-import { attemptConflictMerge } from "./merge-attempt.js";
 import {
   appendGateFlake,
   finishChecks,
@@ -44,8 +43,8 @@ export interface MergeResult {
 
 export interface MergeOptions {
   /**
-   * Kept-land mode: no implementer conflict attempt (a conflict parks the
-   * branch) and one flake re-run on red merge gates.
+   * Kept-land mode: one flake re-run on red merge gates. Conflicts park the
+   * branch in every mode; no boundary merge starts an agent turn.
    */
   keptLand?: boolean;
 }
@@ -209,6 +208,32 @@ async function recoverOpenMerge(
 }
 
 /**
+ * The last task-checks record that already judged `tree` under the current
+ * inherited-failure set. Tree identity, not commit: the squash commit always
+ * differs from the task tip. A gate-flake re-run that closed green counts —
+ * the checks record carries the re-run result.
+ */
+function judgedChecks(
+  records: StepRecord[],
+  slug: string,
+  tree: string,
+  preexisting: ReadonlySet<string>,
+): StepRecord | undefined {
+  return records
+    .filter(
+      (r) =>
+        r.slug === slug &&
+        r.step === "checks" &&
+        r.endedAt &&
+        r.tree === tree &&
+        r.checks !== undefined &&
+        newGateFailures(r.checks, preexisting).length === 0,
+    )
+    .sort(bySeq)
+    .at(-1);
+}
+
+/**
  * Serial squash-merge queue. The squash commit is built and gated in a scratch
  * worktree detached at the current integration head; the integration ref moves
  * only after green, and the stable goal checkout is synced afterwards.
@@ -241,54 +266,21 @@ export async function mergeTask(
       return {};
     }
 
-    let head = await integrationHead(runtime);
-    let scratch = await resetMergeScratch(runtime, head);
-    let squash = await git(scratch, ["merge", "--squash", branch], {
+    const head = await integrationHead(runtime);
+    const scratch = await resetMergeScratch(runtime, head);
+    const squash = await git(scratch, ["merge", "--squash", branch], {
       allowFail: true,
     });
     if (squash.code !== 0) {
-      if (opts.keptLand) {
-        // No agent turn at the boundary: a conflict leaves the kept branch
-        // parked for the next boundary (or a continuation) to retry.
-        const paths = await unmergedFiles(scratch);
-        await removeMergeScratch(runtime);
-        await recordMerge(runtime, task, iteration, round, {
-          ok: false,
-          cause: `conflict: ${paths.join(", ") || "squash merge conflicts with the integration head"}`,
-        });
-        return {};
-      }
+      // No agent turn at the merge boundary: the conflict parks the branch and
+      // the wave-end steward owns it (or a continuation ports the work).
+      const paths = await unmergedFiles(scratch);
       await removeMergeScratch(runtime);
-      const attempt = await attemptConflictMerge(
-        runtime,
-        task,
-        records,
-        iteration,
-        state,
-      );
-      if (attempt.infra) return { infra: attempt.infra };
-      if (attempt.cancelled) return { cancelled: true };
-      if (!attempt.ok) {
-        await recordMerge(runtime, task, iteration, round, {
-          ok: false,
-          cause: `conflict: ${attempt.cause ?? "unresolved"}`,
-        });
-        return {};
-      }
-      head = await integrationHead(runtime);
-      scratch = await resetMergeScratch(runtime, head);
-      squash = await git(scratch, ["merge", "--squash", branch], {
-        allowFail: true,
+      await recordMerge(runtime, task, iteration, round, {
+        ok: false,
+        cause: `conflict: ${paths.join(", ") || "squash merge conflicts with the integration head"}`,
       });
-      if (squash.code !== 0) {
-        await removeMergeScratch(runtime);
-        await recordMerge(runtime, task, iteration, round, {
-          ok: false,
-          cause:
-            "conflict: squash merge still conflicts after one implementer attempt",
-        });
-        return {};
-      }
+      return {};
     }
 
     const staged = await git(scratch, ["diff", "--cached", "--quiet"], {
@@ -326,44 +318,54 @@ export async function mergeTask(
       return {};
     }
 
-    const setup = await runWorktreeSetup({
-      commands: runtime.configs.repo.setup,
-      cwd: scratch,
-    });
-    if (!setup.ok) {
-      await removeMergeScratch(runtime);
-      await recordMerge(runtime, task, iteration, round, {
-        ok: false,
-        cause: `setup: ${setup.error ?? "unknown"}`,
-      });
-      return {};
-    }
-    const gate = await startChecks(
-      runtime.store,
-      { iteration, slug: task.slug, round },
-      { step: "merge-checks" },
-    );
-    let checks = await runGates(runtime, scratch);
+    const mergedTree = await treeSha(scratch);
     const preexisting = preexistingRed(recordedBaseGates(records));
-    if (opts.keptLand) {
-      checks = await rerunRedKeptGates(
-        runtime,
-        { iteration, slug: task.slug, round },
-        scratch,
-        checks,
-        preexisting,
-      );
-    }
-    await finishChecks(gate, checks, { preexisting });
-    const red = newGateFailures(checks, preexisting);
-    if (red.length > 0) {
-      await removeMergeScratch(runtime);
-      await recordMerge(runtime, task, iteration, round, {
-        ok: false,
-        cause: `gates: ${red.map((c) => c.name).join(", ")}`,
-        checks,
+    const judged = judgedChecks(records, task.slug, mergedTree, preexisting);
+    let checks: CheckResult[];
+    let skipCause: string | undefined;
+    if (judged) {
+      checks = judged.checks ?? [];
+      skipCause = `skipped merge-checks: merged tree equals checked tree ${mergedTree}`;
+    } else {
+      const setup = await runWorktreeSetup({
+        commands: runtime.configs.repo.setup,
+        cwd: scratch,
       });
-      return {};
+      if (!setup.ok) {
+        await removeMergeScratch(runtime);
+        await recordMerge(runtime, task, iteration, round, {
+          ok: false,
+          cause: `setup: ${setup.error ?? "unknown"}`,
+        });
+        return {};
+      }
+      const gate = await startChecks(
+        runtime.store,
+        { iteration, slug: task.slug, round },
+        { step: "merge-checks" },
+      );
+      let ran = await runGates(runtime, scratch);
+      if (opts.keptLand) {
+        ran = await rerunRedKeptGates(
+          runtime,
+          { iteration, slug: task.slug, round },
+          scratch,
+          ran,
+          preexisting,
+        );
+      }
+      await finishChecks(gate, ran, { preexisting });
+      const red = newGateFailures(ran, preexisting);
+      if (red.length > 0) {
+        await removeMergeScratch(runtime);
+        await recordMerge(runtime, task, iteration, round, {
+          ok: false,
+          cause: `gates: ${red.map((c) => c.name).join(", ")}`,
+          checks: ran,
+        });
+        return {};
+      }
+      checks = ran;
     }
 
     const commit = await headSha(scratch);
@@ -381,7 +383,11 @@ export async function mergeTask(
     }
     await syncCheckout(runtime, commit);
     await removeMergeScratch(runtime);
-    await turn.finish({ ok: true, commit, checks });
+    await turn.finish(
+      skipCause
+        ? { ok: true, commit, checks, cause: skipCause }
+        : { ok: true, commit, checks },
+    );
     return {};
   });
 }

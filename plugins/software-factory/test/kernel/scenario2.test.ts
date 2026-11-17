@@ -15,10 +15,25 @@ import {
   writeTask,
 } from "./s2-helpers.js";
 
-describe("KERNEL0 scenario 2 — last-round review decisions", () => {
-  it("parks a last-round reject, leaves its dependent pending and merges an independent task", async () => {
+describe("KERNEL0 scenario 2 — last-call review decisions", () => {
+  it("parks a last-call reject, leaves its dependent pending and merges an independent task", async () => {
     const { repo, goal } = setupFlowRepo({
       limits: { concurrency: { overall: 1 } },
+      process: {
+        flows: {
+          "implement-review": {
+            steps: [
+              { id: "implement", role: "implementer" },
+              {
+                id: "review",
+                role: "reviewer",
+                review: true,
+                changeRequests: 1,
+              },
+            ],
+          },
+        },
+      },
     });
     try {
       const harness = new FakeHarness({ id: "fake" });
@@ -124,8 +139,24 @@ describe("KERNEL0 scenario 2 — last-round review decisions", () => {
     }
   }, 60_000);
 
-  it("merges last-round changes and records the reviewer concerns as debt", async () => {
-    const { repo, goal } = setupFlowRepo();
+  it("merges a last-call approve with concerns and records them as debt", async () => {
+    const { repo, goal } = setupFlowRepo({
+      process: {
+        flows: {
+          "implement-review": {
+            steps: [
+              { id: "implement", role: "implementer" },
+              {
+                id: "review",
+                role: "reviewer",
+                review: true,
+                changeRequests: 1,
+              },
+            ],
+          },
+        },
+      },
+    });
     try {
       const harness = new FakeHarness({ id: "fake" });
       harness.script((req, ctx) => {
@@ -153,8 +184,8 @@ describe("KERNEL0 scenario 2 — last-round review decisions", () => {
       harness.script((req, ctx) => {
         ctx.writeOutcome(
           outcome({
-            summary: "still incomplete but not worth discarding",
-            verdict: "changes",
+            summary: "ships with its remaining risk recorded",
+            verdict: "approve",
             concerns: [
               {
                 kind: "uncertainty",

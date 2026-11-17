@@ -740,7 +740,6 @@ export function promptVars(
     round: String(round),
     base_hash: "",
     head_hash: "",
-    max_rounds: String(flow.reviewRounds),
     prior_findings: review?.outcome ? formatReviewFindings(review.outcome) : "",
     fix_dispositions: fixDispositions(records, task.slug, flow, round),
     front_pack: frontPack(runtime, task, records) ?? "",

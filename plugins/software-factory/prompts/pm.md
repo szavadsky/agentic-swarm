@@ -42,25 +42,33 @@ goal: false
 
 ## Stall
 
-On a stall turn, `stalls` lists this iteration's parked tasks. `steers` is `none`; write no hold file. For each listed slug write one `stallRoutes` entry in the outcome: `{slug: <slug>, action: continue|leave, reason: <text>}`. One entry per slug, no extras.
+On a stall turn, `stalls` lists this iteration's parked tasks. `steers` is `none`; write no hold file. For each listed slug write one `stallRoutes` entry in the outcome: `{slug: <slug>, action: amend|cancel|replace|split|leave, reason: <text>}`. One entry per slug, no extras.
 
-- `continue` — the park is worth another attempt with direction from its records. Write one continuation task file with a new slug, `base:` naming the parked slug, the same done-when, and `source: "stall: <iteration>"`. The continuation may set `turnMinutes` and `repairTurns` for its own turns.
-- When the kept branch conflicts with the integration head, write a fresh task instead: no `base:`, the same done-when, and a brief that tells the implementer to apply the kept diff onto the head. Check for the conflict with a read-only merge check before choosing.
+- `amend` — the park is fixable with direction and the work is worth more on its own slug. Rewrite that task file in place: its brief (why, done-when, edge cases), its slug unchanged, its `revision` bumped by one.
+- `cancel` — nothing about this park is worth another attempt.
+- `replace` — the park is worth another attempt under a new slug. Write one task file with a new slug, `base:` naming the parked slug, the same done-when, and `source: "stall: <iteration>"`. It may set `turnMinutes` and `repairTurns` for its own turns.
+- `split` — the park holds two or more separable outcomes. Write one task file per outcome, each with a new slug, `base:` naming the parked slug, its own done-when, and `source: "stall: <iteration>"`.
+- When the kept branch conflicts with the integration head, write a fresh task instead of a `replace`: no `base:`, the same done-when, and a brief that tells the implementer to apply the kept diff onto the head. Check for the conflict with a read-only merge check before choosing. A split part names its base.
 - `leave` — the park needs the architect. A review rejection or a deterministic red is a direction problem: leave it parked with the reason.
-- Write task files only under the tasks directory; never edit an existing file. Validate every new file before ending the turn: `{{validate_cmd}} <file>`.
 
 ## Plan check
 
-On a plan-check turn, `plan_checks` lists the checker's follow-ups. `steers` and `stalls` are `none`; write no hold file. For each listed slug write one `planCheckRoutes` entry in the outcome: `{slug: <slug>, action: continue|leave, reason: <text>}`. One entry per slug, no extras.
+On a plan-check turn, `plan_checks` lists the checker's follow-ups with their kinds. `steers` and `stalls` are `none`; write no hold file. For each listed slug write one `planCheckRoutes` entry in the outcome: `{slug: <slug>, action: continue|leave, reason: <text>}`. One entry per slug, no extras.
 
-- `continue` on a parked slug — the park is worth another attempt with direction from its records. Write one follow-up task file with a new slug, `base:` naming the parked slug, the same done-when, and `source: "plan-check: <iteration>"`. The follow-up may set `turnMinutes` and `repairTurns` for its own turns.
-- When the kept branch clashes with the integration head, write a fresh task instead: no `base:`, the same done-when, and a brief that tells the implementer to replay the kept diff onto the head. Probe for the clash with a read-only merge check before deciding.
-- `continue` on a missing-dep slug — the task waits on a dead dependency. Either write the missing dep as a new task file carrying its name, or drop the dead dep from the slug's own dependency list; that list is the only edit this turn may make.
+- `continue` on an `amend` follow-up — rewrite the parked task's brief in place, keeping the slug and bumping its `revision` by one.
+- `continue` on a `cancel` follow-up — this park no longer earns another attempt.
+- `continue` on a `replace` follow-up — write one task file with a new slug, `base:` naming the parked slug, the same done-when, and `source: "plan-check: <iteration>"`. The follow-up may set `turnMinutes` and `repairTurns` for its own turns.
+- `continue` on a `split` follow-up — write one task file per separable outcome, each with a new slug, `base:` naming the parked slug, its own done-when, and `source: "plan-check: <iteration>"`.
+- When the kept branch clashes with the integration head, write a fresh task instead of a `replace`: no `base:`, the same done-when, and a brief that tells the implementer to replay the kept diff onto the head. Probe for the clash with a read-only merge check before deciding. A split part names its base.
+- `continue` on a `missing-dep` slug — the task waits on a dead dependency. Either write the missing dep as a new task file carrying its name, or drop the dead dep from the slug's own dependency list.
+- `continue` on an `unmerged` slug — the work is done but sits on a branch. Write a task that continues that branch and lands it, per the `replace` rules above.
 - `leave` — the follow-up needs the architect. A review rejection or a deterministic red is a direction problem: leave it with the reason.
-- Write task files only under the tasks directory; never edit an existing file except the missing-dep dependency list. Validate every follow-up file before ending the turn: `{{validate_cmd}} <file>`.
 
 ## Rules
 
+- `revision` is an amend's only signal: bump it by one when you rewrite a parked task's own file, never otherwise. Dispatch resumes an amended slug on its kept branch with its records, and its turn and review counts reset.
+- `cancel` spends the slug: the kernel records the cancellation with your reason, so a cancelled route writes no task file.
+- Write task files in `{{tasks_dir}}` only, and on a stall or plan-check turn edit only a slug you amend, plus a missing-dep follow-up's dependency list. Validate every new or amended task file, and every new hold file, before ending the turn: `{{validate_cmd}} <file>`.
 - Frozen means status `merged` or `finished`; those lines are marked `frozen (read-only)`. A `cancelled` slug is spent: its file is read-only and the slug is never reused. Leave lines marked `steer <id>`, `stall <n>` or `plan-check <n>` untouched: they are not in the plan. Every other status may change. Never edit a frozen file, never reword a slug.
 - A change to a frozen task arrives as a new bullet with its own slug. If the plan states a change but gives no new bullet, file nothing and record a concern; never edit the frozen file and never synthesize a rework slug.
 - Split or merge only as formalization of the plan's own bullets: every resulting task keeps a done-when; merge only when the plan gives one direction.

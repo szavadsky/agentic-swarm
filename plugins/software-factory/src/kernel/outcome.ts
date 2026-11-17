@@ -1,6 +1,11 @@
 import fs from "node:fs";
 import yaml from "yaml";
-import { type Outcome, outcomeSchema } from "./types.js";
+import {
+  type FlowDefinition,
+  type FlowStep,
+  type Outcome,
+  outcomeSchema,
+} from "./types.js";
 
 export type OutcomeExpectation = "any" | "review" | "architect";
 
@@ -21,6 +26,28 @@ function zodFindings(error: unknown): string[] {
   );
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * A recorded outcome from before the park decision vocabulary spells the
+ * acted-on park `continue`. It wrote one continuation task, which the current
+ * vocabulary calls a replace, so the retired spelling reads as one: recorded
+ * outcomes stay valid under the current schema, and no live prompt offers it.
+ */
+function migrateStallRoutes(raw: unknown): unknown {
+  if (!isRecord(raw) || !Array.isArray(raw.stallRoutes)) return raw;
+  return {
+    ...raw,
+    stallRoutes: raw.stallRoutes.map((route) =>
+      isRecord(route) && route.action === "continue"
+        ? { ...route, action: "replace" }
+        : route,
+    ),
+  };
+}
+
 /** Parses one YAML/JSON outcome body; zod is the only validator. */
 export function parseOutcome(text: string): Outcome {
   let raw: unknown;
@@ -32,7 +59,7 @@ export function parseOutcome(text: string): Outcome {
     ]);
   }
   try {
-    return outcomeSchema.parse(raw);
+    return outcomeSchema.parse(migrateStallRoutes(raw));
   } catch (err) {
     throw new OutcomeInvalidError(zodFindings(err));
   }
@@ -93,10 +120,47 @@ export function expectationField(
   return undefined;
 }
 
+/**
+ * Maps a flow step id to its outcome expectation: the architect consult gates a
+ * decision, review steps a verdict, every other configured step accepts any
+ * outcome. An id no flow configures is an error, never an unenforced contract.
+ */
+export function expectationForStep(
+  step: string | undefined,
+  flows: Record<string, FlowDefinition>,
+): OutcomeExpectation {
+  if (!step) return "any";
+  // The architect consult is a boundary role, not a step of any flow.
+  if (step === "architect") return "architect";
+  const found = flowStepFor(step, flows);
+  if (!found) {
+    throw new Error(`step "${step}" is not configured in the repo's flows`);
+  }
+  return found.review ? "review" : "any";
+}
+
+/** The first configured step with this id; step ids are kernel flow vocabulary. */
+export function flowStepFor(
+  step: string,
+  flows: Record<string, FlowDefinition>,
+): FlowStep | undefined {
+  for (const flow of Object.values(flows)) {
+    const found = flow.steps.find((s) => s.id === step);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+export interface ExpectationOptions {
+  /** A review's last call: `changes` is not accepted, only ship or park. */
+  lastCall?: boolean;
+}
+
 /** Per-step contract the schema alone cannot express. */
 export function validateExpectation(
   outcome: Outcome,
   expectation: OutcomeExpectation,
+  opts: ExpectationOptions = {},
 ): string[] {
   const field = expectationField(expectation);
   if (field === "decision" && !outcome.decision) {
@@ -110,6 +174,17 @@ export function validateExpectation(
   ) {
     return [
       "verdict is required on a completed review: approve | changes | reject",
+    ];
+  }
+  if (
+    field === "verdict" &&
+    opts.lastCall &&
+    outcome.verdict === "changes" &&
+    outcome.status !== "failed" &&
+    outcome.status !== "blocked"
+  ) {
+    return [
+      'verdict "changes" is not available on the last review call: approve with concerns, or reject',
     ];
   }
   return [];

@@ -125,6 +125,7 @@ export function fakeTurnResult(
     session: patch.session ?? req.session,
     model,
     attempts: patch.attempts ?? [{ model, stop, usage }],
+    served: patch.served,
     transcript: patch.transcript,
   };
 }

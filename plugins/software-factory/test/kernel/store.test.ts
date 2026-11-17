@@ -30,6 +30,7 @@ function task(over: Partial<TaskFile> = {}): TaskFile {
     flow: "implement-review",
     deps: [],
     scope: ["src/auth"],
+    revision: 0,
     source: "Plan §auth",
     body: "why login\n\ndone when: user can log in",
     ...over,
@@ -189,6 +190,9 @@ describe("createFolderStore", () => {
     expect(
       fs.readdirSync(turn.dir).filter((name) => name.includes(".tmp")),
     ).toEqual([]);
+    for (const name of ["started.yaml", "outcome.yaml", "end.yaml"]) {
+      expect(fs.statSync(path.join(turn.dir, name)).mode & 0o777).toBe(0o444);
+    }
 
     const records = await store.listRecords();
     expect(records).toHaveLength(1);

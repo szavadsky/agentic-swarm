@@ -27,8 +27,7 @@ export class OmpRuntime {
   private modelsCache?: Promise<any[]>;
 
   constructor(opts: OmpHarnessOptions) {
-    this.binary =
-      opts.binary ?? process.env.OMP_PATH ?? Bun.which("omp") ?? "omp";
+    this.binary = opts.binary ?? Bun.which("omp") ?? "omp";
     this.sessionDir = path.resolve(opts.sessionDir);
     this.subagentModel = selectorOf(opts.subagentModel);
     this.overlayExtra = opts.overlayExtra;

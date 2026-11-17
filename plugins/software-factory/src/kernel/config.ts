@@ -51,6 +51,8 @@ export const flowStepSchema = z
       ),
     role: z.string().min(1),
     review: z.boolean().default(false),
+    /** Review steps only: change requests honored before the last call. */
+    changeRequests: z.number().int().nonnegative().optional(),
   })
   .strict();
 
@@ -66,7 +68,6 @@ export const followUpSchema = z
 export const flowSchema = z
   .object({
     steps: z.array(flowStepSchema).min(1),
-    reviewRounds: z.number().int().positive().default(2),
     followUp: followUpSchema,
   })
   .strict();
@@ -86,7 +87,7 @@ export const processConfigSchema = z
           .strict(),
       )
       .default({}),
-    itemTurns: z.number().int().positive().default(8),
+    reminders: z.number().int().nonnegative().default(1),
     calibration: z.string().optional(),
     promptsDir: z.string().min(1).optional(),
   })
@@ -125,7 +126,25 @@ export const aliasSchema = z
   })
   .strict();
 
-export const harnessEntrySchema = z.object({ acpx: acpxConfigSchema }).strict();
+/**
+ * A harness entry binds an adapter (`acpx`) or overrides the executable a
+ * native adapter runs (omp); neither alone is a binding.
+ */
+export const harnessEntrySchema = z
+  .object({
+    acpx: acpxConfigSchema.optional(),
+    /**
+     * Executable the factory spawns: acpx for an acpx harness (a raw agent
+     * names its own executable in `acpx.agent`), omp for the native adapter.
+     * Absent resolves through PATH.
+     */
+    binary: z.string().min(1).optional(),
+  })
+  .strict()
+  .refine(
+    (entry) => entry.acpx !== undefined || entry.binary !== undefined,
+    "harness entry needs an acpx binding or a binary override",
+  );
 
 const concurrencySchema = z
   .object({
@@ -262,14 +281,14 @@ function readLayer(file: string): Layer {
 function parseLayer<T>(
   schema: z.ZodType<T>,
   data: unknown,
-  fileFor: string | ((issuePath: PropertyKey[]) => string),
+  fileFor: string | ((issue: z.core.$ZodIssue) => string),
   findings: Finding[],
 ): T | undefined {
   const result = schema.safeParse(data ?? {});
   if (result.success) return result.data;
   for (const issue of result.error.issues) {
     findings.push({
-      file: typeof fileFor === "string" ? fileFor : fileFor(issue.path),
+      file: typeof fileFor === "string" ? fileFor : fileFor(issue),
       key: issue.path.length > 0 ? issue.path.join(".") : "(root)",
       message: issue.message,
     });
@@ -300,17 +319,22 @@ function deepMerge(base: unknown, override: unknown): unknown {
   return override;
 }
 
+/**
+ * The file an issue came from. A path issue names its first segment; an
+ * unrecognized root key (`path` empty, the key in `keys`) falls back to the
+ * unknown keys, so a retired key in the repo override is blamed there rather
+ * than on the package default it no longer belongs to.
+ */
 function processFileFor(
   data: unknown,
-  issuePath: PropertyKey[],
+  issue: { path: PropertyKey[]; keys?: PropertyKey[] },
   files: ConfigFiles,
 ): string {
-  const key = issuePath[0];
+  const named = issue.path.length > 0 ? [issue.path[0]] : (issue.keys ?? []);
   if (
-    typeof key === "string" &&
     data &&
     typeof data === "object" &&
-    key in data
+    named.some((key) => typeof key === "string" && key in data)
   ) {
     return files.processOverride;
   }
@@ -349,7 +373,7 @@ export function loadConfigs(
   const processData = parseLayer(
     processConfigSchema,
     processMerged,
-    (issuePath) => processFileFor(overrideLayer.data, issuePath, files),
+    (issue) => processFileFor(overrideLayer.data, issue, files),
     findings,
   );
   const run = parseLayer(runConfigSchema, runLayer.data, files.run, findings);
@@ -357,7 +381,11 @@ export function loadConfigs(
     for (const [name, flow] of Object.entries(processData.flows)) {
       if (flow.followUp?.mode === "different-model" && !flow.followUp.role) {
         findings.push({
-          file: processFileFor(overrideLayer.data, ["flows", name], files),
+          file: processFileFor(
+            overrideLayer.data,
+            { path: ["flows", name] },
+            files,
+          ),
           key: `flows.${name}.followUp.role`,
           message: "follow-up mode different-model needs a role",
         });
@@ -509,7 +537,6 @@ export function toLimits(configs: ConfigBundle): Limits {
     flows[name] = flow;
   }
   return {
-    itemTurns: configs.process.itemTurns,
     flows,
     iterations: runLimits.iterations,
     concurrency: runLimits.concurrency,

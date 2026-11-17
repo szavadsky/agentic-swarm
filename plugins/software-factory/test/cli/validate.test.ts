@@ -8,6 +8,14 @@ function taskFile(slug: string, deps: string[]): string {
   return `---\nslug: ${slug}\ntitle: ${slug}\nkind: task\nflow: implement-review\ndeps: [${deps.join(", ")}]\nscope:\n  - "src/**"\n---\n\nDone when: ${slug} works\n`;
 }
 
+/** A repo flow whose review step id is not one of the package defaults. */
+const CUSTOM_FLOW =
+  "flows:\n  custom:\n    steps:\n      - id: build\n        role: implementer\n      - id: audit\n        role: reviewer\n        review: true\n        changeRequests: 2\n";
+
+/** The fields inference reads from a record directory's started.yaml. */
+const STARTED = (step: string, round = 1): string =>
+  `seq: 42\niteration: 1\nstep: ${step}\nround: ${round}\nactor: agent\n`;
+
 function writeFile(root: string, rel: string, content: string): string {
   const abs = path.join(root, rel);
   fs.mkdirSync(path.dirname(abs), { recursive: true });
@@ -15,7 +23,10 @@ function writeFile(root: string, rel: string, content: string): string {
   return abs;
 }
 
-async function runValidate(file: string): Promise<{
+async function runValidate(
+  file: string,
+  extraArgs: string[] = [],
+): Promise<{
   code: number;
   out: string;
   err: string;
@@ -31,7 +42,7 @@ async function runValidate(file: string): Promise<{
     errors.push(args.map(String).join(" "));
   };
   try {
-    const code = await dispatch(["validate", file]);
+    const code = await dispatch(["validate", ...extraArgs, file]);
     return { code, out: logs.join("\n"), err: errors.join("\n") };
   } finally {
     console.log = origLog;
@@ -211,7 +222,7 @@ describe("factory validate", () => {
   it(
     "accepts a valid process file",
     withTmp(async (root) => {
-      const file = writeFile(root, "process.yaml", "itemTurns: 8\n");
+      const file = writeFile(root, "process.yaml", "reminders: 2\n");
       const result = await runValidate(file);
       expect(result.code).toBe(0);
       expect(result.out).toContain(": valid");
@@ -221,10 +232,10 @@ describe("factory validate", () => {
   it(
     "rejects an invalid process file",
     withTmp(async (root) => {
-      const file = writeFile(root, "process.yaml", "itemTurns: 0\n");
+      const file = writeFile(root, "process.yaml", "reminders: -1\n");
       const result = await runValidate(file);
       expect(result.code).toBe(1);
-      expect(result.err).toContain("itemTurns");
+      expect(result.err).toContain("reminders");
     }),
   );
 
@@ -244,6 +255,203 @@ describe("factory validate", () => {
       const result = await runValidate(path.join(root, "nope.yaml"));
       expect(result.code).toBe(1);
       expect(result.err).toContain("no such file");
+    }),
+  );
+
+  it(
+    "rejects kind banana with the kernel finding",
+    withTmp(async (root) => {
+      const bad = taskFile("alpha", []).replace("kind: task", "kind: banana");
+      const file = writeFile(root, "tasks/alpha.md", bad);
+      const result = await runValidate(file);
+      expect(result.code).toBe(1);
+      expect(result.err).toContain(
+        'task "alpha" has kind "banana": expected "task" or "spike"',
+      );
+    }),
+  );
+
+  it(
+    "rejects an unknown flow with the kernel finding",
+    withTmp(async (root) => {
+      const bad = taskFile("alpha", []).replace(
+        "flow: implement-review",
+        "flow: no-such-flow",
+      );
+      const file = writeFile(root, "tasks/alpha.md", bad);
+      const result = await runValidate(file);
+      expect(result.code).toBe(1);
+      expect(result.err).toContain('flow "no-such-flow" is not configured');
+    }),
+  );
+
+  it(
+    "rejects a review outcome without a verdict for --step review",
+    withTmp(async (root) => {
+      const file = writeFile(
+        root,
+        "outcome.yaml",
+        "status: done\nsummary: reviewed\n",
+      );
+      const result = await runValidate(file, ["--step", "review"]);
+      expect(result.code).toBe(1);
+      expect(result.err).toContain(
+        "verdict is required on a completed review: approve | changes | reject",
+      );
+    }),
+  );
+
+  it(
+    "accepts a valid review outcome for --step review",
+    withTmp(async (root) => {
+      const file = writeFile(
+        root,
+        "outcome.yaml",
+        "status: done\nsummary: reviewed\nverdict: approve\n",
+      );
+      const result = await runValidate(file, ["--step", "review"]);
+      expect(result.code).toBe(0);
+      expect(result.out).toContain(": valid");
+    }),
+  );
+
+  it(
+    "validates a task against its repo's own process config",
+    withTmp(async (root) => {
+      writeFile(root, ".factory/process.yaml", CUSTOM_FLOW);
+      const file = writeFile(
+        root,
+        "tasks/alpha.md",
+        taskFile("alpha", []).replace("flow: implement-review", "flow: custom"),
+      );
+      const result = await runValidate(file);
+      expect(result.code).toBe(0);
+      expect(result.out).toContain(": valid");
+    }),
+  );
+
+  it(
+    "rejects a task flow its repo's config does not define",
+    withTmp(async (root) => {
+      writeFile(root, ".factory/process.yaml", CUSTOM_FLOW);
+      const file = writeFile(
+        root,
+        "tasks/alpha.md",
+        taskFile("alpha", []).replace("flow: implement-review", "flow: ghost"),
+      );
+      const result = await runValidate(file);
+      expect(result.code).toBe(1);
+      expect(result.err).toContain('flow "ghost" is not configured');
+    }),
+  );
+
+  it(
+    "surfaces an invalid process config instead of wrong flow findings",
+    withTmp(async (root) => {
+      writeFile(root, ".factory/process.yaml", "flows: 7\n");
+      const file = writeFile(root, "tasks/alpha.md", taskFile("alpha", []));
+      const result = await runValidate(file);
+      expect(result.code).toBe(1);
+      expect(result.err).toContain("configuration is invalid");
+      expect(result.err).toContain("flows");
+      expect(result.err).not.toContain("is not configured");
+    }),
+  );
+
+  it(
+    "infers a record outcome's review step from started.yaml",
+    withTmp(async (root) => {
+      writeFile(root, ".factory/process.yaml", CUSTOM_FLOW);
+      const record = "records/00042-alpha-review-r1";
+      writeFile(root, `${record}/started.yaml`, STARTED("audit"));
+      const file = writeFile(
+        root,
+        `${record}/outcome.yaml`,
+        "status: done\nsummary: reviewed\n",
+      );
+      const missing = await runValidate(file);
+      expect(missing.code).toBe(1);
+      expect(missing.err).toContain(
+        "verdict is required on a completed review",
+      );
+
+      writeFile(
+        root,
+        `${record}/outcome.yaml`,
+        "status: done\nsummary: reviewed\nverdict: approve\n",
+      );
+      const valid = await runValidate(file);
+      expect(valid.code).toBe(0);
+      expect(valid.out).toContain(": valid");
+    }),
+  );
+
+  it(
+    "refuses a changes verdict on a record's last review call",
+    withTmp(async (root) => {
+      writeFile(root, ".factory/process.yaml", CUSTOM_FLOW);
+      const record = "records/00042-alpha-review-r3";
+      writeFile(root, `${record}/started.yaml`, STARTED("audit", 3));
+      const file = writeFile(
+        root,
+        `${record}/outcome.yaml`,
+        "status: done\nsummary: reviewed\nverdict: changes\n",
+      );
+      const refused = await runValidate(file);
+      expect(refused.code).toBe(1);
+      expect(refused.err).toContain(
+        'verdict "changes" is not available on the last review call',
+      );
+
+      writeFile(root, `${record}/started.yaml`, STARTED("audit", 2));
+      const accepted = await runValidate(file);
+      expect(accepted.code).toBe(0);
+      expect(accepted.out).toContain(": valid");
+    }),
+  );
+
+  it(
+    "fails loud on a step no flow configures",
+    withTmp(async (root) => {
+      writeFile(root, ".factory/process.yaml", CUSTOM_FLOW);
+      const record = "records/00042-alpha-review-r1";
+      writeFile(root, `${record}/started.yaml`, STARTED("reveiw"));
+      const file = writeFile(
+        root,
+        `${record}/outcome.yaml`,
+        "status: done\nsummary: reviewed\n",
+      );
+      const inferred = await runValidate(file);
+      expect(inferred.code).toBe(1);
+      expect(inferred.err).toContain(
+        'step "reveiw" is not configured in the repo\'s flows',
+      );
+
+      const standalone = writeFile(
+        root,
+        "scratch/outcome.yaml",
+        "status: done\nsummary: reviewed\n",
+      );
+      const explicit = await runValidate(standalone, ["--step", "reveiw"]);
+      expect(explicit.code).toBe(1);
+      expect(explicit.err).toContain(
+        'step "reveiw" is not configured in the repo\'s flows',
+      );
+    }),
+  );
+
+  it(
+    "checks a standalone outcome without a step for schema only, and says so",
+    withTmp(async (root) => {
+      const file = writeFile(
+        root,
+        "scratch/outcome.yaml",
+        "status: done\nsummary: reviewed\n",
+      );
+      const result = await runValidate(file);
+      expect(result.code).toBe(0);
+      expect(result.out).toContain("step-independent checks only");
+      expect(result.out).toContain(": valid");
     }),
   );
 });

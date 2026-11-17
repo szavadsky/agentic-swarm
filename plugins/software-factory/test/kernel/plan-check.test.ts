@@ -15,9 +15,9 @@ import {
   PLAN_CHECK_STEP,
   planCheckBrief,
 } from "../../src/kernel/plan-check.js";
-import { PLAN_CHECK_ROUTES_STEP } from "../../src/kernel/pm.js";
-import { appendCancel } from "../../src/kernel/record.js";
-import { renderTaskFile } from "../../src/kernel/tasks.js";
+import { PLAN_CHECK_ROUTES_STEP, runPlanCheckPm } from "../../src/kernel/pm.js";
+import { appendCancel, scriptMeta } from "../../src/kernel/record.js";
+import { parseTaskFile, renderTaskFile } from "../../src/kernel/tasks.js";
 import { rec, task } from "./helpers.js";
 import {
   cleanupFlowRepo,
@@ -81,7 +81,7 @@ describe("plan checker", () => {
                 ],
                 followUps: [
                   {
-                    kind: "continuation",
+                    kind: "replace",
                     slug: "beta",
                     reason: "mechanical park, runner crashed",
                   },
@@ -281,7 +281,7 @@ describe("plan checker", () => {
                 evidence: [],
                 followUps: [
                   {
-                    kind: "continuation",
+                    kind: "replace",
                     slug: "beta",
                     reason: "mechanical park",
                   },
@@ -589,6 +589,142 @@ describe("plan checker", () => {
     }
   }, 60_000);
 
+  it("amends a parked task through a plan-check follow-up", async () => {
+    const { repo, goal } = setupFlowRepo({ aliases: ALIASES });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("beta", { scope: ["beta.txt"] }));
+      await runtime.store.appendRecord(
+        scriptMeta(1, "park", { slug: "beta", round: 1, revision: 0 }),
+        { ok: true, cause: "failed: runner crashed mid-turn" },
+      );
+      const state = derive(
+        await runtime.store.listTasks(),
+        await runtime.store.listRecords(),
+        runtime.configs.process.flows,
+      );
+      expect(state.tasks.beta!.status).toBe("parked");
+      const betaPath = path.join(runtime.store.tasksDir, "beta.md");
+      harness.script(
+        (req, ctx) => {
+          const current = parseTaskFile(
+            fs.readFileSync(betaPath, "utf8"),
+            "beta",
+          );
+          fs.writeFileSync(
+            betaPath,
+            renderTaskFile({
+              ...current,
+              revision: 1,
+              body: "Amended brief.\nDone when: beta.txt holds beta and a test reads it.",
+            }),
+            "utf8",
+          );
+          ctx.writeOutcome(
+            outcome({
+              summary: "amended beta",
+              planCheckRoutes: [
+                {
+                  slug: "beta",
+                  action: "continue",
+                  reason: "the brief was too vague to retry",
+                },
+              ],
+            }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: "pm" }) },
+      );
+      const result = await runPlanCheckPm(runtime, {
+        iteration: 1,
+        state,
+        followUps: [
+          {
+            kind: "amend",
+            slug: "beta",
+            reason: "the brief was too vague to retry",
+          },
+        ],
+        cwd: runtime.paths.goalCheckout,
+      });
+      expect(result.continued).toEqual(["beta"]);
+      const amended = parseTaskFile(fs.readFileSync(betaPath, "utf8"), "beta");
+      expect(amended.revision).toBe(1);
+      expect(amended.body).toContain("a test reads it");
+      const after = derive(
+        await runtime.store.listTasks(),
+        await runtime.store.listRecords(),
+        runtime.configs.process.flows,
+      );
+      expect(after.tasks.beta!.status).toBe("ready");
+      expect(after.tasks.beta!.turns).toBe(0);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("refuses a follow-up that amends merged work", async () => {
+    const { repo, goal } = setupFlowRepo({ aliases: ALIASES });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("beta", { scope: ["beta.txt"] }));
+      await runtime.store.appendRecord(
+        scriptMeta(1, "merge", { slug: "beta" }),
+        { ok: true, commit: "abc123" },
+      );
+      const state = derive(
+        await runtime.store.listTasks(),
+        await runtime.store.listRecords(),
+        runtime.configs.process.flows,
+      );
+      expect(state.tasks.beta!.status).toBe("merged");
+      const betaPath = path.join(runtime.store.tasksDir, "beta.md");
+      const before = fs.readFileSync(betaPath, "utf8");
+      for (let i = 0; i < 2; i++) {
+        harness.script(
+          (req, ctx) => {
+            const current = parseTaskFile(
+              fs.readFileSync(betaPath, "utf8"),
+              "beta",
+            );
+            fs.writeFileSync(
+              betaPath,
+              renderTaskFile({ ...current, revision: 1 }),
+              "utf8",
+            );
+            ctx.writeOutcome(
+              outcome({
+                summary: "amended beta",
+                planCheckRoutes: [
+                  { slug: "beta", action: "continue", reason: "retry" },
+                ],
+              }),
+            );
+            return fakeTurnResult(req);
+          },
+          { when: whenTurn({ step: "pm" }) },
+        );
+      }
+      const result = await runPlanCheckPm(runtime, {
+        iteration: 1,
+        state,
+        followUps: [{ kind: "amend", slug: "beta", reason: "retry" }],
+        cwd: runtime.paths.goalCheckout,
+      });
+      expect(result.continued).toEqual([]);
+      const validations = (await runtime.store.listRecords()).filter(
+        (r) => r.step === "pm-validate",
+      );
+      expect(validations[0]!.cause).toContain("amend is refused");
+      expect(fs.readFileSync(betaPath, "utf8")).toBe(before);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
   it("falls back to the boundary when the PM routes nothing", async () => {
     const { repo, goal } = setupFlowRepo({ aliases: ALIASES });
     try {
@@ -616,7 +752,7 @@ describe("plan checker", () => {
                 evidence: [],
                 followUps: [
                   {
-                    kind: "continuation",
+                    kind: "replace",
                     slug: "beta",
                     reason: "mechanical park",
                   },

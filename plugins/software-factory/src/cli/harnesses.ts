@@ -5,6 +5,7 @@ import {
 } from "../harness/acpx/command.js";
 import { AcpxHarness } from "../harness/acpx/index.js";
 import { OmpHarness } from "../harness/omp/index.js";
+import { OMP_ID } from "../harness/omp/types.js";
 import type { Harness } from "../harness/types.js";
 import type { HarnessFactoryContext } from "../kernel/launch.js";
 import type { ModelCatalog } from "../kernel/preflight.js";
@@ -13,9 +14,8 @@ import type { HarnessConfig } from "../kernel/types.js";
 export function resolveHarnessBinaries(
   harnessConfigs: Record<string, HarnessConfig> = {},
 ): Record<string, string | undefined> {
-  const acpx = resolveAcpxCommand().binary;
   const binaries: Record<string, string | undefined> = {
-    omp: process.env.OMP_PATH ?? Bun.which("omp") ?? undefined,
+    [OMP_ID]: harnessConfigs[OMP_ID]?.binary ?? Bun.which("omp") ?? undefined,
   };
   for (const [id, entry] of Object.entries(harnessConfigs)) {
     if (!entry.acpx) continue;
@@ -24,7 +24,7 @@ export function resolveHarnessBinaries(
     // (same resolution as AcpxHarness).
     binaries[id] = entry.acpx.raw
       ? resolveRawAgentBinary(entry.acpx.agent)
-      : acpx;
+      : resolveAcpxCommand(entry.binary).binary;
   }
   return binaries;
 }
@@ -34,15 +34,20 @@ export function createRealHarnesses(
   context: HarnessFactoryContext,
 ): Record<string, Harness> {
   const harnesses: Record<string, Harness> = {
-    omp: new OmpHarness({
+    [OMP_ID]: new OmpHarness({
       sessionDir: context.sessionDir,
       subagentModel: context.scouts,
       retention: context.retention,
+      binary: context.harnesses?.[OMP_ID]?.binary,
     }),
   };
   for (const [id, entry] of Object.entries(context.harnesses ?? {})) {
     if (!entry.acpx) continue;
-    harnesses[id] = new AcpxHarness({ id, acpx: entry.acpx });
+    harnesses[id] = new AcpxHarness({
+      id,
+      binary: entry.binary,
+      acpx: entry.acpx,
+    });
   }
   return harnesses;
 }

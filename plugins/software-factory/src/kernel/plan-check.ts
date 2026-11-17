@@ -16,7 +16,7 @@ import type {
   TaskFile,
 } from "./types.js";
 
-/** Agent step of a plan-checker turn; slug-less, so it stays out of the item budget. */
+/** Agent step of a plan-checker turn; slug-less, so it stays out of the item's turn count. */
 export const PLAN_CHECK_STEP = "plancheck";
 
 /**

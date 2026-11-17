@@ -12,6 +12,7 @@ export function task(slug: string, patch: Partial<TaskFile> = {}): TaskFile {
     flow: "implement-review",
     deps: [],
     scope: [],
+    revision: 0,
     source: "test",
     body: "Do it.\nDone when: it works.",
     ...patch,
