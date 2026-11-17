@@ -4,6 +4,7 @@ import { newGateFailures } from "./gates.js";
 import type {
   ArtifactStore,
   Concern,
+  LaunchKind,
   Outcome,
   RecordEnd,
   RecordStart,
@@ -14,7 +15,7 @@ import type {
 export function scriptMeta(
   iteration: number,
   step: string,
-  opts: { slug?: string; round?: number } = {},
+  opts: { slug?: string; round?: number; revision?: number } = {},
 ): RecordStart {
   return {
     iteration,
@@ -22,6 +23,7 @@ export function scriptMeta(
     round: opts.round ?? 1,
     actor: "script",
     ...(opts.slug ? { slug: opts.slug } : {}),
+    ...(opts.revision !== undefined ? { revision: opts.revision } : {}),
   };
 }
 
@@ -111,7 +113,7 @@ export async function commitEdits(
   return { files, added, removed };
 }
 
-/** The last-round reviewer concerns, recorded as debt once the item merges. */
+/** The last-call reviewer concerns, recorded as debt once the item merges. */
 export async function appendDebt(
   store: ArtifactStore,
   meta: { iteration: number; slug: string; round: number },
@@ -137,22 +139,49 @@ export async function appendDebt(
     ok: true,
     outcome: {
       status: "done",
-      summary: "last-round review concerns recorded as debt",
+      summary: "last-call review concerns recorded as debt",
       concerns: debt,
       forward: [],
     },
   });
 }
 
+/**
+ * A park's launch kind from its cause: infra-like parks are glitches, the
+ * round limit reached after a review `changes` verdict is a change request,
+ * everything else failed. Only that exact cause is a change request: a failure
+ * summary quoting the verdict enum (`approve | changes | reject`) stays a
+ * failure.
+ */
+export function parkLaunchKind(cause: string): LaunchKind {
+  if (/^(overflow\b|infra-repeat:)/i.test(cause)) return "glitch";
+  if (/^review round limit reached after verdict "changes"/i.test(cause)) {
+    return "change-request";
+  }
+  return "failure";
+}
+
+/**
+ * A park records the task revision it ends: a later amend bumps the file's
+ * revision, and derive then ignores the parks of the revisions it amended past.
+ */
 export async function appendPark(
   store: ArtifactStore,
-  meta: { iteration: number; slug: string; round: number },
+  meta: { iteration: number; slug: string; round: number; revision: number },
   cause: string,
 ): Promise<void> {
-  await store.appendRecord(scriptMeta(meta.iteration, "park", meta), {
-    ok: true,
-    cause,
-  });
+  await store.appendRecord(
+    scriptMeta(meta.iteration, "park", {
+      slug: meta.slug,
+      round: meta.round,
+      revision: meta.revision,
+    }),
+    {
+      ok: true,
+      cause,
+      launchKind: parkLaunchKind(cause),
+    },
+  );
 }
 
 export async function appendFinish(

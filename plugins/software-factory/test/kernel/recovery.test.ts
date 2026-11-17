@@ -5,6 +5,7 @@ import { commitAll } from "../../src/core/git/commit.js";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
+import { recoverLaunch } from "../../src/kernel/recovery.js";
 import { ensureTaskWorktree, treeSha } from "../../src/kernel/worktree.js";
 import { recordStart, task } from "./helpers.js";
 import {
@@ -60,6 +61,38 @@ describe("script-step recovery", () => {
       expect(repo.git(["show", "factory/demo:task.txt"]).stdout.trim()).toBe(
         "task",
       );
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("seals the interrupted record it closes", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      const legacy = await runtime.store.startRecord(
+        recordStart({ slug: "old", step: "review" }),
+      );
+      await legacy.finish({
+        ok: true,
+        outcome: outcome({ summary: "old", verdict: "approve" }),
+      });
+      // A record closed before the kernel sealed them read-only.
+      fs.chmodSync(legacy.outcomePath, 0o644);
+      const turn = await runtime.store.startRecord(
+        recordStart({ slug: "task", step: "implement" }),
+      );
+      const mode = (name: string): number =>
+        fs.statSync(path.join(turn.dir, name)).mode & 0o777;
+      expect(mode("started.yaml")).toBe(0o644);
+
+      expect(await recoverLaunch(runtime)).toBe(1);
+
+      expect(mode("started.yaml")).toBe(0o444);
+      expect(mode("end.yaml")).toBe(0o444);
+      expect(fs.statSync(legacy.outcomePath).mode & 0o777).toBe(0o444);
+      expect(fs.existsSync(turn.outcomePath)).toBe(false);
     } finally {
       cleanupFlowRepo(repo);
     }

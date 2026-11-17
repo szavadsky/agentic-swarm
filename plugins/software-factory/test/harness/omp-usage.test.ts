@@ -4,6 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import {
   isSessionCompacted,
+  servedTotal,
+  servedUsage,
   statsDelta,
   subagentUsage,
   summarizeOmpFrames,
@@ -44,6 +46,14 @@ function withChildSession(
 
 function statsOf(recorded: any[], id: string): any {
   return recorded.find((frame) => frame.id === id)?.data;
+}
+
+/** One transcript `message` line, assistant by default. */
+function assistant(message: Record<string, unknown>): string {
+  return JSON.stringify({
+    type: "message",
+    message: { role: "assistant", ...message },
+  });
 }
 
 describe("omp usage", () => {
@@ -225,6 +235,165 @@ describe("omp usage", () => {
         reasoningOut: 398,
         costUsd: 0.0472,
       });
+    });
+  });
+
+  it("splits a turn's assistant usage by the model that served it", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "omp-served-"));
+    try {
+      const parent = path.join(tmp, "parent.jsonl");
+      fs.writeFileSync(
+        parent,
+        [
+          assistant({
+            provider: "openrouter",
+            model: "baidu/ernie-5.5-flash-preview:free",
+            usage: {
+              input: 100,
+              output: 10,
+              cacheRead: 5,
+              cacheWrite: 0,
+              reasoningTokens: 2,
+              cost: { total: 0 },
+            },
+            timestamp: 1_000,
+          }),
+          assistant({
+            provider: "opencode-go",
+            model: "deepseek-v4.1-flash",
+            usage: {
+              input: 200,
+              output: 20,
+              cacheRead: 7,
+              cacheWrite: 3,
+              reasoningTokens: 4,
+              cost: { total: 0.02 },
+            },
+            timestamp: 2_000,
+          }),
+          // Before the prompt: another turn's message, never part of the split.
+          assistant({
+            provider: "openrouter",
+            model: "baidu/ernie-5.5-flash-preview:free",
+            usage: { input: 999, output: 1, timestamp: 10 },
+            timestamp: 10,
+          }),
+          JSON.stringify({
+            type: "message",
+            message: { role: "user", timestamp: 1_500 },
+          }),
+        ].join("\n"),
+      );
+      expect(servedUsage(parent, 1_000)).toEqual([
+        {
+          model: { id: "openrouter/baidu/ernie-5.5-flash-preview:free" },
+          usage: {
+            in: 100,
+            cacheRead: 5,
+            cacheWrite5m: 0,
+            cacheWrite1h: 0,
+            out: 8,
+            reasoningOut: 2,
+            costUsd: 0,
+          },
+        },
+        {
+          model: { id: "opencode-go/deepseek-v4.1-flash" },
+          usage: {
+            in: 200,
+            cacheRead: 7,
+            cacheWrite5m: 3,
+            cacheWrite1h: 0,
+            out: 16,
+            reasoningOut: 4,
+            costUsd: 0.02,
+          },
+        },
+      ]);
+      expect(servedTotal(servedUsage(parent, 1_000)!)).toEqual({
+        in: 300,
+        cacheRead: 12,
+        cacheWrite5m: 3,
+        cacheWrite1h: 0,
+        out: 24,
+        reasoningOut: 6,
+        costUsd: 0.02,
+      });
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it("returns one served model and refuses a partial split", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "omp-served-"));
+    try {
+      const parent = path.join(tmp, "parent.jsonl");
+      fs.writeFileSync(
+        parent,
+        assistant({
+          provider: "opencode-go",
+          model: "beam-free",
+          usage: { input: 10, output: 2 },
+          timestamp: 1_000,
+        }),
+      );
+      // One served model still names the model whose row prices the turn.
+      expect(servedUsage(parent, 0)).toEqual([
+        {
+          model: { id: "opencode-go/beam-free" },
+          usage: {
+            in: 10,
+            cacheRead: 0,
+            cacheWrite5m: 0,
+            cacheWrite1h: 0,
+            out: 2,
+            reasoningOut: 0,
+            costUsd: 0,
+          },
+        },
+      ]);
+
+      fs.writeFileSync(
+        parent,
+        [
+          assistant({
+            provider: "opencode-go",
+            model: "beam-free",
+            usage: { input: 10, output: 2 },
+            timestamp: 1_000,
+          }),
+          assistant({
+            usage: { input: 5, output: 1 },
+            timestamp: 2_000,
+          }),
+        ].join("\n"),
+      );
+      // A usage-bearing message without a model would lose its tokens, so the
+      // caller keeps the aggregate usage rather than a partial split.
+      expect(servedUsage(parent, 0)).toBeUndefined();
+      expect(servedUsage(path.join(tmp, "missing.jsonl"), 0)).toBeUndefined();
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it("adds a child session's model to the served split", () => {
+    withChildSession("child-session-cost.jsonl", (sessionFile) => {
+      fs.writeFileSync(
+        sessionFile,
+        assistant({
+          provider: "opencode-go",
+          model: "beam-free",
+          usage: { input: 10, output: 2, timestamp: 2_100 },
+          timestamp: 2_100,
+        }),
+      );
+      const split = servedUsage(sessionFile, 2_000);
+      expect(split?.map((entry) => entry.model.id)).toEqual([
+        "opencode-go/beam-free",
+        "cheap/model",
+      ]);
+      expect(split?.[1]?.usage.in).toBe(4790);
     });
   });
 

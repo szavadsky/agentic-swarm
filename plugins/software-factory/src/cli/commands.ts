@@ -17,10 +17,20 @@ import { summaryRelPath } from "../kernel/context-pack.js";
 import { derive } from "../kernel/derive.js";
 import { classSchema } from "../kernel/flow-context.js";
 import { holdFileSchema } from "../kernel/mailbox.js";
-import { parseOutcome } from "../kernel/outcome.js";
+import {
+  expectationForStep,
+  flowStepFor,
+  parseOutcome,
+  validateExpectation,
+} from "../kernel/outcome.js";
+import { isLastReviewCall } from "../kernel/review.js";
 import { createFolderStore } from "../kernel/store.js";
-import { parseTaskFile, validateTaskGraph } from "../kernel/tasks.js";
-import type { State } from "../kernel/types.js";
+import {
+  parseTaskFile,
+  validateTaskFlows,
+  validateTaskGraph,
+} from "../kernel/tasks.js";
+import type { FlowDefinition, State } from "../kernel/types.js";
 
 export interface InitResult {
   goalDir: string;
@@ -236,10 +246,121 @@ function holdFindings(text: string, file: string): string[] {
 }
 
 /**
-+ * One task file plus its directory's graph, as the gate groups them: sibling
-+ * tasks load together so a missing dependency reads as a finding, not a crash.
-+ */
-async function taskFindings(absPath: string): Promise<string[]> {
+ * Nearest repo root above `fromDir`: a directory with `.factory` config or
+ * `.git`. Null when the file lives outside any repo (a scratch dir).
+ */
+function findRepoRoot(fromDir: string): string | null {
+  let dir = path.resolve(fromDir);
+  while (true) {
+    if (
+      fs.existsSync(path.join(dir, ".factory", "repo.yaml")) ||
+      fs.existsSync(path.join(dir, ".factory", "process.yaml")) ||
+      fs.existsSync(path.join(dir, ".git"))
+    ) {
+      return dir;
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+}
+
+/**
+ * Merged process flows for validation: the repo owning the file wins and the
+ * `--repo` fallback covers scratch files. `loadConfigs` merges the package
+ * defaults, so the built-in flows still apply; an invalid config throws.
+ */
+function flowsForValidation(
+  startDir: string,
+  repoFallback?: string,
+): Record<string, FlowDefinition> {
+  const root =
+    findRepoRoot(startDir) ??
+    (repoFallback ? path.resolve(repoFallback) : process.cwd());
+  return loadConfigs(root).process.flows;
+}
+
+/**
+ * The step and round a record directory's `started.yaml` gives its outcome.
+ * Absent when the file is not in a record directory; a broken record is an
+ * error, never a silently weaker check.
+ */
+function startedMeta(
+  absPath: string,
+): { step: string; round: number } | undefined {
+  const started = path.join(path.dirname(absPath), "started.yaml");
+  if (!fs.existsSync(started)) return undefined;
+  let parsed: unknown;
+  try {
+    parsed = yaml.parse(fs.readFileSync(started, "utf8"));
+  } catch (err) {
+    throw new Error(`${started}: not valid YAML: ${(err as Error).message}`);
+  }
+  const meta = parsed as { step?: unknown; round?: unknown } | null;
+  if (typeof meta?.step !== "string" || !meta.step) {
+    throw new Error(`${started}: no step to infer the outcome's contract from`);
+  }
+  if (typeof meta.round !== "number" || !Number.isInteger(meta.round)) {
+    throw new Error(
+      `${started}: no round to infer the review's last call from`,
+    );
+  }
+  return { step: meta.step, round: meta.round };
+}
+
+export interface ValidateFileOptions {
+  /** Flow step the outcome is given for; overrides started.yaml's step. */
+  step?: string;
+  /** Repo root fallback when the file lives outside any repo. */
+  repo?: string;
+}
+
+export interface ValidateResult {
+  findings: string[];
+  /** No `--step` and no started.yaml: only step-independent checks ran. */
+  stepIndependent?: boolean;
+}
+
+/**
+ * One outcome's findings for the step it was given for: `--step` wins, the
+ * record's `started.yaml` supplies it otherwise. Without either, only the
+ * schema is enforced and the caller reports the narrower check.
+ */
+function outcomeResult(
+  abs: string,
+  text: string,
+  opts: ValidateFileOptions,
+): ValidateResult {
+  try {
+    const outcome = parseOutcome(text);
+    const started = startedMeta(abs);
+    const step = opts.step ?? started?.step;
+    if (!step) return { findings: [], stepIndependent: true };
+    const flows = flowsForValidation(path.dirname(abs), opts.repo);
+    const expectation = expectationForStep(step, flows);
+    const review = flowStepFor(step, flows);
+    const lastCall =
+      review?.review === true &&
+      started?.step === step &&
+      isLastReviewCall(review, started.round);
+    return {
+      findings: validateExpectation(outcome, expectation, {
+        lastCall,
+      }).map((finding) => `${abs}: ${finding}`),
+    };
+  } catch (err) {
+    return { findings: [`${abs}: ${(err as Error).message}`] };
+  }
+}
+
+/**
+ * One task file plus its directory's graph, as the gate groups them: sibling
+ * tasks load together so a missing dependency reads as a finding, not a crash.
+ */
+async function taskFindings(
+  absPath: string,
+  opts: ValidateFileOptions = {},
+): Promise<string[]> {
   const dir = path.dirname(absPath);
   const names = (await fs.promises.readdir(dir))
     .filter((name) => name.endsWith(".md"))
@@ -262,15 +383,24 @@ async function taskFindings(absPath: string): Promise<string[]> {
   for (const finding of validateTaskGraph(tasks)) {
     findings.push(`${dir}: ${finding}`);
   }
+  for (const finding of validateTaskFlows(
+    tasks,
+    flowsForValidation(dir, opts.repo),
+  )) {
+    findings.push(`${dir}: ${finding}`);
+  }
   return findings;
 }
 
 /**
-+ * Validates one schema-enforced file with the same validators as the
-+ * schema-validation gate. Findings, empty when valid; unknown kinds and
-+ * missing files throw.
-+ */
-export async function validateFile(file: string): Promise<string[]> {
+ * Validates one schema-enforced file with the same validators as the
+ * schema-validation gate. Findings, empty when valid; unknown kinds and
+ * missing files throw.
+ */
+export async function validateFile(
+  file: string,
+  opts: ValidateFileOptions = {},
+): Promise<ValidateResult> {
   const abs = path.resolve(file);
   const stat = await fs.promises.stat(abs).catch(() => null);
   if (!stat) throw new Error(`no such file: ${file}`);
@@ -284,24 +414,18 @@ export async function validateFile(file: string): Promise<string[]> {
   const text = await fs.promises.readFile(abs, "utf8");
   switch (kind) {
     case "task":
-      return taskFindings(abs);
+      return { findings: await taskFindings(abs, opts) };
     case "class":
-      return zodFindings(text, abs, classSchema);
-    case "outcome": {
-      try {
-        parseOutcome(text);
-        return [];
-      } catch (err) {
-        return [`${abs}: ${(err as Error).message}`];
-      }
-    }
+      return { findings: zodFindings(text, abs, classSchema) };
+    case "outcome":
+      return outcomeResult(abs, text, opts);
     case "hold":
-      return holdFindings(text, abs);
+      return { findings: holdFindings(text, abs) };
     case "repo":
-      return zodFindings(text, abs, repoConfigSchema);
+      return { findings: zodFindings(text, abs, repoConfigSchema) };
     case "run":
-      return zodFindings(text, abs, runConfigSchema);
+      return { findings: zodFindings(text, abs, runConfigSchema) };
     case "process":
-      return zodFindings(text, abs, processConfigSchema);
+      return { findings: zodFindings(text, abs, processConfigSchema) };
   }
 }

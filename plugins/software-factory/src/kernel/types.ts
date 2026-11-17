@@ -9,6 +9,7 @@ import type { PromptLibrary } from "./prompts.js";
 import type {
   Harness,
   ModelRef,
+  ServedUsage,
   SessionRef,
   Stop,
   TurnAttempt,
@@ -39,12 +40,18 @@ export const steerRouteEntrySchema = z.object({
   answer: z.string().optional(),
 });
 
+/**
+ * What the decider does with one parked slug: amend keeps the slug (a new
+ * revision of its file), cancel spends it, replace and split continue the kept
+ * branch under new slugs, leave defers to the architect.
+ */
 export const stallRouteEntrySchema = z.object({
   slug: z.string().min(1),
-  action: z.enum(["continue", "leave"]),
+  action: z.enum(["amend", "cancel", "replace", "split", "leave"]),
   reason: z.string().min(1),
 });
 export type StallRouteEntry = z.infer<typeof stallRouteEntrySchema>;
+export type StallDecision = StallRouteEntry["action"];
 
 /** One plan item's check result: what the checker inspected and what it showed. */
 export const planCheckEvidenceSchema = z.object({
@@ -54,10 +61,22 @@ export const planCheckEvidenceSchema = z.object({
 });
 export type PlanCheckEvidence = z.infer<typeof planCheckEvidenceSchema>;
 
-/** One mechanical follow-up the PM can write without new direction. */
+/**
+ * One follow-up the checker names without new direction. A parked slug gets
+ * the decider's four decisions — amend under the same slug, cancel, replace
+ * with one new task, split into several; a dead dep or unmerged work keeps its
+ * mechanical fix.
+ */
 export const planCheckFollowUpSchema = z.object({
-  kind: z.enum(["continuation", "missing-dep", "unmerged"]),
-  /** The parked slug to continue, or the pending task a dead dep blocks. */
+  kind: z.enum([
+    "amend",
+    "cancel",
+    "replace",
+    "split",
+    "missing-dep",
+    "unmerged",
+  ]),
+  /** The slug this follow-up acts on: a parked task, or the pending task a dead dep blocks. */
   slug: z.string().min(1),
   /** A missing-dep follow-up's dead dependency; absent for every other kind. */
   dep: z.string().optional(),
@@ -78,7 +97,11 @@ export const planCheckSchema = z.object({
 export type PlanCheck = z.infer<typeof planCheckSchema>;
 export type PlanCheckVerdict = PlanCheck["verdict"];
 
-/** One plan-check follow-up the PM routed: `continue` writes a task, `leave` keeps it for the architect. */
+/**
+ * One plan-check follow-up the PM routed: `continue` carries the checker's
+ * kind out now (amend, cancel, replace, split, a dead-dep drop), `leave` keeps
+ * it for the architect.
+ */
 export const planCheckRouteEntrySchema = z.object({
   slug: z.string().min(1),
   action: z.enum(["continue", "leave"]),
@@ -129,16 +152,16 @@ export const outcomeSchema = z.object({
     .array(steerRouteEntrySchema)
     .optional()
     .describe("PM steer turns only: one route per claimed steer"),
-  // The kernel continues `continue` slugs and records `leave` reasons for
-  // the next boundary.
+  // The kernel resumes amend/replace/split slugs, cancels `cancel` slugs and
+  // records `leave` reasons for the next boundary.
   stallRoutes: z
     .array(stallRouteEntrySchema)
     .optional()
     .describe("PM stall turns only: one entry per parked slug"),
   // The kernel branches on the verdict.
   planCheck: planCheckSchema.optional().describe("plan-checker turns only"),
-  // The kernel continues `continue` slugs and records `leave` reasons for
-  // the next boundary.
+  // The kernel resumes amended/continued follow-ups, cancels a cancel
+  // follow-up and records `leave` reasons for the next boundary.
   planCheckRoutes: z
     .array(planCheckRouteEntrySchema)
     .optional()
@@ -163,12 +186,19 @@ export interface TaskFile {
   deps: string[];
   scope: string[];
   tier?: string;
+  /**
+   * The decider's revision of this task, 0 until it amends a park under the
+   * same slug. Derive counts only records after the park an earlier revision
+   * ended, so a bump restarts the flow with its counts while the kept branch
+   * and the records stay.
+   */
+  revision: number;
   /** A parked task whose kept branch this task continues from. */
   base?: string;
   /** Plan heading this task derives from. */
   source: string;
   body: string;
-  /** Outcome-repair turns for this task's turns; defaults to REPAIR_TURNS. */
+  /** Outcome reminders for this task's turns; defaults to process `reminders`. */
   repairTurns?: number;
   /**
    * Per-turn wall bound in minutes for this task's turns; overrides the alias
@@ -203,7 +233,7 @@ export interface ProgressRepeat {
 export interface TaskState {
   status: TaskStatus;
   cause?: string;
-  /** Non-infra agent turns spent on this slug (item budget). */
+  /** Agent turns spent on this slug, a spend fact only: no bound reads it. */
   turns: number;
   /** Current implementation/review round, 1-based. */
   round: number;
@@ -246,6 +276,11 @@ export interface FlowStep {
   role: string;
   /** Review steps carry the verdict contract and consume a review round. */
   review?: boolean;
+  /**
+   * Review steps only: how many `changes` verdicts this agent may issue before
+   * its call is the last one. Absent means the reviewer default (two).
+   */
+  changeRequests?: number;
 }
 
 /** How a fix turn follows the turn it repairs. */
@@ -257,13 +292,11 @@ export interface FollowUp {
 
 export interface FlowDefinition {
   steps: FlowStep[];
-  reviewRounds: number;
   followUp?: FollowUp;
 }
 
 /** Limits the pure `next` needs; resolved from the three config layers. */
 export interface Limits {
-  itemTurns: number;
   flows: Record<string, FlowDefinition>;
   iterations: number;
   concurrency: {
@@ -287,6 +320,13 @@ export interface Limits {
 
 export type StepActor = "agent" | "script";
 
+/**
+ * Why a launch ran again: a technical glitch (infra stop or fallback hop),
+ * a bona fide change request (a review `changes`), or a bona fide failure
+ * (agent `failed`/`blocked` or no outcome after reminders).
+ */
+export type LaunchKind = "glitch" | "change-request" | "failure";
+
 /** Idle is separate from wall: a long tool call streams nothing but is not stuck. */
 export interface Timeouts {
   idleMs: number;
@@ -301,10 +341,10 @@ export const DEFAULT_TIMEOUTS: Timeouts = {
 
 /**
  * One append-only record, materialized from `records/<dir>/`: `started.yaml`
- * exists before a turn, `end.yaml` commits it, `outcome.yaml` holds the agent's
- * accepted outcome. Script steps have actor `script` and no outcome, except
- * `steer-routes`: it stores the accepted steer-route map so the boundary never
- * reads a failed rung's routes.
+ * exists before a turn, `end.yaml` commits it and seals its files read-only,
+ * `outcome.yaml` holds the agent's accepted outcome. Script steps have actor
+ * `script` and no outcome, except `steer-routes`: it stores the accepted
+ * steer-route map so the boundary never reads a failed rung's routes.
  */
 export interface StepRecord {
   seq: number;
@@ -318,10 +358,25 @@ export interface StepRecord {
   model?: ModelRef;
   /** Every retry/fallback hop the harness made for this turn. */
   attempts?: TurnAttempt[];
+  /**
+   * Models the turn actually served, each with its share of the tokens.
+   * Measurement only: routing, admission and fallback counts keep the alias.
+   */
+  served?: ServedUsage[];
+  /** Validator findings that triggered outcome reminders, in round order. */
+  repairFindings?: string[];
+  /** Incident launches only: why this launch ran again. */
+  launchKind?: LaunchKind;
   /** Resumed turn: unsplit input is priced as the cached prefix. */
   cachedPrefix?: boolean;
   /** Task hash at dispatch, for the frozen-task check. */
   taskHash?: string;
+  /**
+   * The task revision this record belongs to. A park carries the revision it
+   * ended, so derive can ignore the parks of revisions the task has amended
+   * past; absent reads as 0.
+   */
+  revision?: number;
   /** Integration head (or parked branch tip) the branch started from. */
   base?: string;
   stop?: Stop;
@@ -371,6 +426,8 @@ export interface RecordStart {
   alias?: string;
   model?: ModelRef;
   taskHash?: string;
+  /** The task revision this record belongs to; absent reads as 0. */
+  revision?: number;
   base?: string;
   /** Merge steps: the planned squash commit, written before the ref moves. */
   commit?: string;
@@ -392,6 +449,12 @@ export interface RecordEnd {
   packBytes?: number;
   transcript?: string;
   attempts?: TurnAttempt[];
+  /** Per-model split of a turn whose harness resolved its model natively. */
+  served?: ServedUsage[];
+  /** Validator findings that triggered outcome reminders, in round order. */
+  repairFindings?: string[];
+  /** Incident launches only: why this launch ran again. */
+  launchKind?: LaunchKind;
   commit?: string;
   tree?: string;
   /** base-advance only: integration head tree at the creation advance. */
@@ -411,6 +474,7 @@ export interface TurnRecord {
   meta: StepRecord;
   /** Absolute path the agent writes its outcome file to. */
   outcomePath: string;
+  /** Writes outcome, then end.yaml, then seals the record read-only. */
   finish(end: RecordEnd): Promise<StepRecord>;
 }
 
@@ -455,7 +519,8 @@ export interface RoleConfig {
 export interface ProcessConfig {
   flows: Record<string, FlowDefinition>;
   roles: Record<string, RoleConfig>;
-  itemTurns: number;
+  /** Outcome reminders after the first attempt; a task file's `repairTurns` overrides it for that task's turns only. */
+  reminders: number;
   calibration?: string;
   promptsDir?: string;
 }
@@ -484,14 +549,17 @@ export interface AliasConfig {
   timeouts?: Timeouts;
 }
 
-/** One run-config harness entry: a config name bound to an adapter. */
+/** One run-config harness entry: an adapter binding or an executable override. */
 export interface HarnessConfig {
-  acpx: import("../harness/acpx/config.js").AcpxConfig;
+  /** Adapter binding; absent for a native adapter that only takes a binary. */
+  acpx?: import("../harness/acpx/config.js").AcpxConfig;
+  /** Executable override; absent resolves through PATH. */
+  binary?: string;
 }
 
 export interface RunConfig {
   aliases: Record<string, AliasConfig>;
-  /** Harness id -> adapter binding; native harnesses need no entry. */
+  /** Harness id -> adapter or binary override; native omp takes only a binary. */
   harnesses?: Record<string, HarnessConfig>;
   /** Harness model id -> OpenRouter model id, for ids matching cannot resolve. */
   priceIds?: Record<string, string>;

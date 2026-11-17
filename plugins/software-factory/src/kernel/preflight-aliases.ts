@@ -1,4 +1,4 @@
-import { OMP_ID } from "../harness/omp/types.js";
+import { OMP_ID, OMP_THINKING_LEVELS } from "../harness/omp/types.js";
 import type { Caps, Harness, ModelProbe, ModelRef } from "../harness/types.js";
 import type { Finding } from "./findings.js";
 import type { AliasConfig, ConfigBundle, ConfigFiles } from "./types.js";
@@ -30,8 +30,8 @@ function add(
 
 /**
  * omp role aliases (`@free`) resolve inside omp's own chain, so the binary
- * catalog never lists them and no effort level applies; omp refuses a bad id
- * itself at runtime.
+ * catalog never lists them and no model-level effort list exists; omp refuses
+ * a bad id itself at runtime.
  */
 function isOmpAlias(harness: string, model: string): boolean {
   return harness === OMP_ID && model.startsWith("@");
@@ -97,7 +97,18 @@ async function resolveEffort(
   liveLevels?: readonly string[],
 ): Promise<string | undefined> {
   if (!effort) return undefined;
-  if (isOmpAlias(harness, model.id)) return effort;
+  if (isOmpAlias(harness, model.id)) {
+    // Only omp's CLI enum is knowable for an alias: `highest` is a factory
+    // sentinel omp does not parse, and passing it through aborts the launch.
+    if (!OMP_THINKING_LEVELS.includes(effort)) {
+      add(
+        ctx,
+        `${key}.effort`,
+        `effort "${effort}" is not an omp thinking level; alias "${model.id}" accepts: ${OMP_THINKING_LEVELS.join(", ")}`,
+      );
+    }
+    return effort;
+  }
   let levels: readonly string[];
   if (liveLevels !== undefined) {
     levels = liveLevels;

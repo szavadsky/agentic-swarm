@@ -116,17 +116,16 @@ describe("KERNEL0 scenario 5 — red gates on the merged result", () => {
       expect(
         records.filter((r) => r.slug === "task" && r.step === "park"),
       ).toHaveLength(0);
-      const mergeChecks = records.filter(
-        (r) => r.slug === "task" && r.step === "merge-checks",
-      );
-      expect(mergeChecks).toHaveLength(1);
-      expect(mergeChecks[0]!.ok).toBe(true);
-      expect(mergeChecks[0]!.checks![0]!.ok).toBe(false);
       expect(
-        records.filter(
-          (r) => r.slug === "task" && r.step === "merge" && r.ok === true,
-        ),
-      ).toHaveLength(1);
+        records.filter((r) => r.slug === "task" && r.step === "merge-checks"),
+      ).toHaveLength(0);
+      const merges = records.filter(
+        (r) => r.slug === "task" && r.step === "merge" && r.ok === true,
+      );
+      expect(merges).toHaveLength(1);
+      expect(merges[0]!.cause).toContain("skipped merge-checks");
+      // The inherited red travels with the reused checks.
+      expect(merges[0]!.checks![0]!.ok).toBe(false);
       expect(harness.calls.length).toBe(2);
     } finally {
       cleanupFlowRepo(repo);

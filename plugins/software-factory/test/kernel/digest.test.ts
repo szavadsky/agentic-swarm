@@ -25,7 +25,7 @@ function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
   const process: ProcessConfig = {
     flows: {},
     roles: { digest: { prompt: "digest" } },
-    itemTurns: 8,
+    reminders: 1,
   };
   const repo: RepoConfig = {
     baseBranch: "main",
@@ -57,7 +57,6 @@ function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
     harnesses: new Map([["fake", fake]]),
     prompts: loadPrompts(process, root),
     limits: {
-      itemTurns: 8,
       flows: {},
       iterations: 1,
       concurrency: { overall: 1, perSubscription: {}, perModel: {} },

@@ -13,7 +13,7 @@ Decide whether mechanical follow-ups can still move the plan forward with net po
 
 ## Verdict
 
-- `progress` — mechanical follow-ups exist whose landed value outweighs their task-tier cost: a continuation for a mechanical park, a missing dependency that restores dispatchability, done work left unmerged. Name each follow-up with its kind, slug, and reason.
+- `progress` — mechanical follow-ups exist whose landed value outweighs their task-tier cost: `amend` a park whose direction is clear, `replace` a mechanical park under a new slug, `split` one holding separable outcomes, `cancel` work no longer worth an attempt, a missing dependency that restores dispatchability, done work left unmerged. Name each follow-up with its kind, slug, and reason.
 - `architect` — no follow-up would make net positive progress: the plan stands fully implemented with good quality, a direction problem blocks the road, or a requirement has no plan item. A review rejection or a deterministic red counts as a direction problem: leave it for the architect, never mark it `progress`.
 
 ## Scrutiny

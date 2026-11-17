@@ -445,7 +445,7 @@ describe("script crash budget", () => {
       expect(first.cause).toContain(
         "alpha: crash: simulated pre-harness throw",
       );
-      // Script crashes spend the item budget but never the iteration turn
+      // Script crashes count as a turn but never spend the iteration turn
       // budget: the drain still sees an unstarted task as free.
       expect(first.turns).toBe(0);
       let records = await runtime.store.listRecords();

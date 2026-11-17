@@ -79,10 +79,10 @@ const ROLES: Record<string, Record<string, string>> = {
     steers: "- s1 (mailbox/inbox/s1.md):\n  keep the API stable",
     holds_dir: "/goal/mailbox/holds",
     stalls:
-      "- alpha\n  cause: blocked: stuck\n  records: /goal/records/00007-i3-alpha-implement-r1\n  branch: factory-task/demo/alpha\n  turns: 1 of 8 spent\n  done-when: Done when: it works.",
+      "- alpha\n  cause: blocked: stuck\n  records: /goal/records/00007-i3-alpha-implement-r1\n  branch: factory-task/demo/alpha\n  turns: 1 spent\n  done-when: Done when: it works.",
     outcome_path: "/goal/records/00043-i3-pm-r1/outcome.yaml",
     plan_checks:
-      "- alpha (continuation): mechanical park\n  cause: infra: runner lost\n  records: /goal/records/00007-i3-alpha-implement-r1\n  branch: factory-task/demo/alpha\n  turns: 1 of 8 spent\n  done-when: Done when: it works.",
+      "- alpha (replace): mechanical park\n  cause: infra: runner lost\n  records: /goal/records/00007-i3-alpha-implement-r1\n  branch: factory-task/demo/alpha\n  turns: 1 spent\n  done-when: Done when: it works.",
     validate_cmd: "bun /factory/bin/factory.ts validate",
     outcome_schema: OUTCOME_SCHEMA,
     task_frontmatter: TASK_FRONTMATTER,
@@ -109,7 +109,8 @@ const ROLES: Record<string, Record<string, string>> = {
     base_hash: "abc1234",
     head_hash: "def5678",
     round: "1",
-    max_rounds: "2",
+    max_rounds: "3",
+    last_call: "false",
     baseline_checks: "- test: 2 failing",
     prior_findings: "",
     upscope_ask: "",
@@ -162,7 +163,7 @@ function processConfig(): ProcessConfig {
     roles: Object.fromEntries(
       Object.keys(ROLES).map((role) => [role, { prompt: role }]),
     ),
-    itemTurns: 8,
+    reminders: 1,
   };
 }
 
@@ -410,6 +411,29 @@ describe("review findings carry", () => {
     const rendered = library().render("reviewer", ROLES.reviewer!);
     expect(rendered).toContain("numbered list in your outcome `summary`");
     expect(rendered).not.toContain("next implementer receives");
+  });
+
+  it("switches the reviewer decision to ship-or-park on the last call", () => {
+    const normal = library().render("reviewer", ROLES.reviewer!);
+    expect(normal).toContain(
+      "- `changes`: actionable findings for the next round.",
+    );
+    expect(normal).not.toContain("This is the last call");
+
+    const last = library().render("reviewer", {
+      ...ROLES.reviewer!,
+      last_call: "true",
+    });
+    expect(last).toContain("This is the last call");
+    expect(last).toContain(
+      "`changes` is not an accepted outcome — outcome validation refuses it.",
+    );
+    expect(last).toContain(
+      "- `reject`: park, keeping the branch; the work must not merge.",
+    );
+    expect(last).not.toContain(
+      "- `changes`: actionable findings for the next round.",
+    );
   });
 
   it("marks findings empty before the first review, not per fix round", () => {

@@ -46,6 +46,7 @@ import {
   startChecks,
 } from "./record.js";
 import { materialHash } from "./tasks.js";
+import { isLastReviewCall, reviewRoundLimit } from "./review.js";
 import type {
   Action,
   FlowDefinition,
@@ -295,7 +296,12 @@ async function handleStepResult(
   stop: StepRecord["stop"],
   outcome: StepRecord["outcome"],
 ): Promise<TaskActionResult> {
-  const meta = { iteration, slug: task.slug, round: state.round };
+  const meta = {
+    iteration,
+    slug: task.slug,
+    round: state.round,
+    revision: task.revision,
+  };
   const infraResult =
     stop?.kind === "infra"
       ? {
@@ -342,17 +348,23 @@ async function handleStepResult(
       if (isStandaloneTask(runtime, task)) escalateFrontClassToBigger(runtime);
       return infraResult ?? cancelledResult ?? {};
     }
-    const lastRound = state.round >= flow.reviewRounds;
+    const lastCall = isLastReviewCall(step, state.round);
     if (outcome?.verdict === "reject") {
       await appendPark(
         runtime.store,
         meta,
         `review rejected: ${outcome.summary}`,
       );
-    } else if (lastRound && outcome?.verdict === "changes") {
-      await appendDebt(runtime.store, meta, outcome.concerns, outcome.summary);
+    } else if (lastCall && outcome?.verdict === "changes") {
+      // The reviewer's outcome validator refuses this; a delivered record is
+      // a contract breach, never a merge.
+      await appendPark(
+        runtime.store,
+        meta,
+        `invalid outcome: changes on the last review call: ${outcome.summary}`,
+      );
     } else if (
-      lastRound &&
+      lastCall &&
       outcome?.verdict === "approve" &&
       outcome.concerns.length > 0
     ) {
@@ -384,7 +396,12 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
   if (ensured.error) {
     await appendPark(
       runtime.store,
-      { iteration, slug: task.slug, round: state.round },
+      {
+        iteration,
+        slug: task.slug,
+        round: state.round,
+        revision: task.revision,
+      },
       ensured.error,
     );
     return {};
@@ -400,13 +417,23 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
     );
     await appendPark(
       runtime.store,
-      { iteration, slug: task.slug, round: state.round },
+      {
+        iteration,
+        slug: task.slug,
+        round: state.round,
+        revision: task.revision,
+      },
       cause,
     );
     return {};
   }
 
-  const meta = { iteration, slug: task.slug, round: state.round };
+  const meta = {
+    iteration,
+    slug: task.slug,
+    round: state.round,
+    revision: task.revision,
+  };
   // A first-turn `base:` conflict resolves in the turn instead of parking: the
   // merge stays in progress and the ask rides the counted turn. Fix turns and
   // reviews keep the park; a resumed MERGE_HEAD (crash mid-resolve) always
@@ -558,6 +585,11 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
   );
   vars.base_hash = firstBase(records, task.slug) ?? startPoint;
   vars.head_hash = await headSha(ensured.path);
+  const lastCall = step.review && isLastReviewCall(step, state.round);
+  if (step.review) {
+    vars.max_rounds = String(reviewRoundLimit(step));
+    vars.last_call = String(lastCall);
+  }
   if (step.review && session) {
     // A resumed review already holds the prior rounds: the range carries the
     // delta since the last turn of this step, with the fix dispositions.
@@ -625,12 +657,12 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
     },
     vars,
     expectation: step.review ? "review" : "any",
+    lastCall,
     session,
     timeouts,
     ...(task.repairTurns !== undefined
       ? { repairTurns: task.repairTurns }
       : {}),
-    itemBudget: { used: state.turns, limit: runtime.limits.itemTurns },
     settle: async (_record, outcome, live) => {
       // A timeout commits nothing: the orphan still owns the tree, and `git add
       // -A` would sweep its half-written files into an attributed commit. The
@@ -773,7 +805,12 @@ async function runChecks(
   if (ensured.error) {
     await appendPark(
       runtime.store,
-      { iteration, slug: task.slug, round: state.round },
+      {
+        iteration,
+        slug: task.slug,
+        round: state.round,
+        revision: task.revision,
+      },
       ensured.error,
     );
     return {};
@@ -789,7 +826,12 @@ async function runChecks(
     );
     await appendPark(
       runtime.store,
-      { iteration, slug: task.slug, round: state.round },
+      {
+        iteration,
+        slug: task.slug,
+        round: state.round,
+        revision: task.revision,
+      },
       cause,
     );
     return {};
@@ -801,7 +843,12 @@ async function runChecks(
     await abortMerge(ensured.path);
     await appendPark(
       runtime.store,
-      { iteration, slug: task.slug, round: state.round },
+      {
+        iteration,
+        slug: task.slug,
+        round: state.round,
+        revision: task.revision,
+      },
       `base-conflict: ${named}`,
     );
     return {};
@@ -812,7 +859,12 @@ async function runChecks(
     await abortMerge(ensured.path);
     await appendPark(
       runtime.store,
-      { iteration, slug: task.slug, round: state.round },
+      {
+        iteration,
+        slug: task.slug,
+        round: state.round,
+        revision: task.revision,
+      },
       `base-conflict: ${named}`,
     );
     return {};
@@ -872,7 +924,12 @@ export async function executeTaskAction(
   if (action.kind === "park") {
     await appendPark(
       runtime.store,
-      { iteration, slug: task.slug, round: state.round },
+      {
+        iteration,
+        slug: task.slug,
+        round: state.round,
+        revision: task.revision,
+      },
       action.cause,
     );
     return {};

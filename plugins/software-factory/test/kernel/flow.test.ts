@@ -4,7 +4,11 @@ import os from "node:os";
 import path from "node:path";
 import yaml from "yaml";
 import { commitAll } from "../../src/core/git/commit.js";
-import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
+import {
+  FakeHarness,
+  fakeTurnIdentity,
+  fakeTurnResult,
+} from "../../src/harness/fake/index.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
 import { promptVars } from "../../src/kernel/flow-context.js";
@@ -66,11 +70,15 @@ describe("flow data drives the steps", () => {
       process: {
         flows: {
           "draft-polish": {
-            reviewRounds: 1,
             steps: [
               { id: "draft", role: "implementer" },
               { id: "polish", role: "implementer" },
-              { id: "critique", role: "reviewer", review: true },
+              {
+                id: "critique",
+                role: "reviewer",
+                review: true,
+                changeRequests: 0,
+              },
             ],
           },
         },
@@ -104,12 +112,7 @@ describe("flow data drives the steps", () => {
 
       const records = await runtime.store.listRecords();
       const steps = records
-        .filter(
-          (r) =>
-            r.slug === "task" &&
-            r.actor === "agent" &&
-            r.step !== "merge-attempt",
-        )
+        .filter((r) => r.slug === "task" && r.actor === "agent")
         .sort((a, b) => a.seq - b.seq);
       expect(steps.map((r) => r.step)).toEqual(["draft", "polish", "critique"]);
       const checks = records.filter(
@@ -178,12 +181,12 @@ describe("just-implement", () => {
       expect(
         records.filter((r) => r.slug === "task" && r.step === "merge-checks")
           .length,
-      ).toBe(1);
-      expect(
-        records.filter(
-          (r) => r.slug === "task" && r.step === "merge" && r.ok === true,
-        ).length,
-      ).toBe(1);
+      ).toBe(0);
+      const merges = records.filter(
+        (r) => r.slug === "task" && r.step === "merge" && r.ok === true,
+      );
+      expect(merges.length).toBe(1);
+      expect(merges[0]!.cause).toContain("skipped merge-checks");
 
       await writeIterationSummary(runtime.store, {
         iteration: 1,
@@ -205,12 +208,11 @@ describe("just-implement", () => {
 
   it("parks after a red merged gate and lets one gate-fix turn run first", async () => {
     const { repo, goal } = setupFlowRepo({
-      // Passes on the task branch, fails on the detached merge scratch: the
-      // task's own gates are green while the merged-result gate is red.
-      gates: [
-        { id: "branch-only", command: "git symbolic-ref -q --short HEAD" },
-      ],
+      // Green on the task worktree, red once a concurrent landing poisons the
+      // head: the merged tree differs, so the merge gates still run.
+      gates: [{ id: "poison-gate", command: "test ! -f poison.txt" }],
     });
+    const checkout = goalCheckout(repo, goal);
     try {
       const harness = new FakeHarness({ id: "fake" });
       harness.script((req, ctx) => {
@@ -223,13 +225,36 @@ describe("just-implement", () => {
         ctx.writeOutcome(outcome({ summary: "v2" }));
         return fakeTurnResult(req);
       });
-      scriptStallLeave(harness, ["task"]);
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await writeTask(
-        runtime,
-        task("task", { flow: "just-implement", scope: ["task.txt"] }),
-      );
+      const file = task("task", {
+        flow: "just-implement",
+        scope: ["task.txt"],
+      });
+      await writeTask(runtime, file);
+      const drive = async (action: Action): Promise<void> => {
+        const before = derive(
+          await runtime.store.listTasks(),
+          await runtime.store.listRecords(),
+          runtime.configs.process.flows,
+        );
+        await executeTaskAction(
+          runtime,
+          file,
+          action,
+          1,
+          before.tasks[file.slug]!,
+        );
+      };
+      await drive({ kind: "step", slug: "task", step: "implement", round: 1 });
+      // A concurrent landing poisons the head before the merge queue runs.
+      fs.writeFileSync(path.join(checkout, "poison.txt"), "poison\n", "utf8");
+      repo.git(["add", "poison.txt"], { cwd: checkout });
+      repo.git(["commit", "-m", "concurrent poison"], { cwd: checkout });
+      await drive({ kind: "merge", slug: "task" });
+      await drive({ kind: "step", slug: "task", step: "implement", round: 1 });
+      await drive({ kind: "merge", slug: "task" });
+      scriptStallLeave(harness, ["task"]);
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("boundary");
 
@@ -240,13 +265,17 @@ describe("just-implement", () => {
         runtime.configs.process.flows,
       );
       expect(state.tasks.task!.status).toBe("parked");
-      expect(state.tasks.task!.cause).toContain("gates: branch-only");
+      expect(state.tasks.task!.cause).toContain("gates: poison-gate");
       expect(state.tasks.task!.round).toBe(1);
       expect(harness.calls.length).toBe(3);
       expect(
         records.filter(
           (r) => r.slug === "task" && r.step === "merge" && r.ok === false,
         ).length,
+      ).toBe(2);
+      expect(
+        records.filter((r) => r.slug === "task" && r.step === "merge-checks")
+          .length,
       ).toBe(2);
       expect(
         records.filter((r) => r.slug === "task" && r.step === "review"),
@@ -510,10 +539,10 @@ describe("empty diff", () => {
       expect(
         records.filter((r) => r.slug === "task" && r.step === "park"),
       ).toHaveLength(0);
-      // Initial + re-run (both red), the post-fix checks, merge-checks: the
-      // deferral itself runs no extra gate.
+      // Initial + re-run (both red) and the post-fix checks; the merge skips
+      // its gates on the already-judged tree.
       const runs = fs.readFileSync(count, "utf8").trim().split("\n").length;
-      expect(runs).toBe(4);
+      expect(runs).toBe(3);
     } finally {
       cleanupFlowRepo(repo);
       fs.rmSync(dir, { recursive: true, force: true });
@@ -789,6 +818,228 @@ describe("continuation carry", () => {
   }, 60_000);
 });
 
+describe("review last call", () => {
+  function reviewCalls(harness: FakeHarness) {
+    return harness.calls.filter(
+      (req) => fakeTurnIdentity(req).step === "review",
+    );
+  }
+
+  it("renders the last-call prompt on the third review and refuses changes", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const implement = (content: string) => (req: any, ctx: any) => {
+        fs.writeFileSync(
+          path.join(req.cwd!, "task.txt"),
+          `${content}\n`,
+          "utf8",
+        );
+        ctx.writeOutcome(outcome({ summary: `wrote ${content}` }));
+        return fakeTurnResult(req);
+      };
+      const changes = (summary: string) => (req: any, ctx: any) => {
+        ctx.writeOutcome(outcome({ summary, verdict: "changes" }));
+        return fakeTurnResult(req);
+      };
+      harness.script(implement("v1"));
+      harness.script(changes("1. task.txt: needs v2"));
+      harness.script(implement("v2"));
+      harness.script(changes("1. task.txt: needs v3"));
+      harness.script(implement("v3"));
+      harness.script(changes("1. task.txt: still rough"));
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(
+          outcome({
+            summary: "ships with recorded debt",
+            verdict: "approve",
+            concerns: [
+              {
+                kind: "risk",
+                calibration: "architect",
+                text: "last call concern",
+              },
+            ],
+          }),
+        );
+        return fakeTurnResult(req);
+      });
+
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("task", { scope: ["task.txt"] }));
+      const result = await runDispatch(runtime, { iteration: 1 });
+      expect(result.reason).toBe("boundary");
+
+      const reviews = reviewCalls(harness);
+      expect(reviews).toHaveLength(4);
+      expect(reviews[0]!.prompt).toContain(
+        "- `changes`: actionable findings for the next round.",
+      );
+      expect(reviews[0]!.prompt).toContain("round: `1` of `3`");
+      expect(reviews[1]!.prompt).toContain("round: `2` of `3`");
+      expect(reviews[1]!.prompt).toContain(
+        "- `changes`: actionable findings for the next round.",
+      );
+      expect(reviews[2]!.prompt).toContain("round: `3` of `3`");
+      expect(reviews[2]!.prompt).toContain("This is the last call");
+      expect(reviews[2]!.prompt).not.toContain(
+        "- `changes`: actionable findings for the next round.",
+      );
+      expect(reviews[3]!.prompt).toContain(
+        '- verdict "changes" is not available on the last review call: approve with concerns, or reject',
+      );
+
+      const records = await runtime.store.listRecords();
+      const lastReview = records.find(
+        (r) =>
+          r.slug === "task" &&
+          r.step === "review" &&
+          r.round === 3 &&
+          r.actor === "agent",
+      );
+      expect(lastReview?.outcome?.verdict).toBe("approve");
+      expect(lastReview?.repairFindings).toContain(
+        'verdict "changes" is not available on the last review call: approve with concerns, or reject',
+      );
+      const debt = records.find((r) => r.slug === "task" && r.step === "debt");
+      expect(debt?.outcome?.concerns[0]?.kind).toBe("debt");
+      expect(debt?.outcome?.concerns[0]?.text).toBe("last call concern");
+
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
+      expect(state.tasks.task!.status).toBe("merged");
+      expect(state.tasks.task!.round).toBe(3);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("parks a reject on the spike's only review and keeps its branch", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script((req, ctx) => {
+        fs.writeFileSync(
+          path.join(req.cwd!, "finding.md"),
+          "# Finding\n\nUse the cache.\n",
+          "utf8",
+        );
+        ctx.writeOutcome(outcome({ summary: "finding written" }));
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(
+          outcome({ summary: "not worth shipping", verdict: "reject" }),
+        );
+        return fakeTurnResult(req);
+      });
+      scriptStallLeave(harness, ["probe"]);
+
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(
+        runtime,
+        task("probe", { kind: "spike", flow: "spike", scope: ["finding.md"] }),
+      );
+      const result = await runDispatch(runtime, { iteration: 1 });
+      expect(result.reason).toBe("boundary");
+
+      const reviews = reviewCalls(harness);
+      expect(reviews).toHaveLength(1);
+      expect(reviews[0]!.prompt).toContain("round: `1` of `1`");
+      expect(reviews[0]!.prompt).toContain("This is the last call");
+
+      const records = await runtime.store.listRecords();
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
+      expect(state.tasks.probe!.status).toBe("parked");
+      expect(state.tasks.probe!.cause).toContain("review rejected");
+      expect(
+        repo.git(["show", "factory-task/demo/probe:finding.md"]).stdout.trim(),
+      ).toBe("# Finding\n\nUse the cache.");
+      expect(
+        repo.git(["show", "factory/demo:finding.md"], { allowFail: true }).code,
+      ).not.toBe(0);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("returns a reply-only fix to review and consumes a change request", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script((req, ctx) => {
+        fs.writeFileSync(path.join(req.cwd!, "task.txt"), "v1\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "v1" }));
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(
+          outcome({ summary: "1. task.txt: needs v2", verdict: "changes" }),
+        );
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(
+          outcome({
+            summary: "replied without a change",
+            replies: [{ finding: 1, reply: "already covered in v1" }],
+          }),
+        );
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(
+          outcome({
+            summary: "1. task.txt: still needs v2",
+            verdict: "changes",
+          }),
+        );
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        fs.writeFileSync(path.join(req.cwd!, "task.txt"), "v2\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "v2" }));
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "approved", verdict: "approve" }));
+        return fakeTurnResult(req);
+      });
+
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("task", { scope: ["task.txt"] }));
+      const result = await runDispatch(runtime, { iteration: 1 });
+      expect(result.reason).toBe("boundary");
+
+      const reviews = reviewCalls(harness);
+      expect(reviews).toHaveLength(3);
+      expect(reviews[1]!.prompt).toContain("round: `2` of `3`");
+      expect(reviews[1]!.prompt).toContain(
+        "- `changes`: actionable findings for the next round.",
+      );
+      expect(reviews[2]!.prompt).toContain("round: `3` of `3`");
+      expect(reviews[2]!.prompt).toContain("This is the last call");
+
+      const state = derive(
+        await runtime.store.listTasks(),
+        await runtime.store.listRecords(),
+        runtime.configs.process.flows,
+      );
+      expect(state.tasks.task!.status).toBe("merged");
+      expect(state.tasks.task!.round).toBe(3);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+});
+
 describe("spikes", () => {
   it("finishes a spike without merging and keeps its branch", async () => {
     const { repo, goal } = setupFlowRepo();
@@ -860,8 +1111,6 @@ describe("delivery guard", () => {
       });
       scriptStallLeave(harness, ["task"]);
       harness.script((req) => fakeTurnResult(req, { text: "still nothing" }));
-      harness.script((req) => fakeTurnResult(req, { text: "still nothing" }));
-      harness.script((req) => fakeTurnResult(req, { text: "still nothing" }));
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("task", { scope: ["task.txt"] }));
@@ -876,7 +1125,7 @@ describe("delivery guard", () => {
       );
       expect(state.tasks.task!.status).toBe("parked");
       expect(state.tasks.task!.cause).toContain("no outcome after repair");
-      expect(harness.calls).toHaveLength(5);
+      expect(harness.calls).toHaveLength(3);
       expect(harness.calls[1]!.prompt).toContain(
         "You are the implementer. Your turn did not deliver its outcome.",
       );
@@ -905,15 +1154,7 @@ describe("delivery guard", () => {
         ctx.writeOutcome(outcome({ summary: "still no verdict" }));
         return fakeTurnResult(req);
       });
-      harness.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "still no verdict" }));
-        return fakeTurnResult(req);
-      });
       scriptStallLeave(harness, ["task"]);
-      harness.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "still no verdict" }));
-        return fakeTurnResult(req);
-      });
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("task", { scope: ["task.txt"] }));
@@ -928,7 +1169,7 @@ describe("delivery guard", () => {
       );
       expect(state.tasks.task!.status).toBe("parked");
       expect(state.tasks.task!.cause).toContain("verdict is required");
-      expect(harness.calls).toHaveLength(6);
+      expect(harness.calls).toHaveLength(4);
       expect(harness.calls[2]!.prompt).toContain(
         "You are the reviewer. Your turn did not deliver its verdict.",
       );
@@ -956,7 +1197,10 @@ describe("delivery guard", () => {
       });
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await writeTask(runtime, task("task", { scope: ["task.txt"] }));
+      await writeTask(
+        runtime,
+        task("task", { scope: ["task.txt"], repairTurns: 2 }),
+      );
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("boundary");
       expect(harness.calls).toHaveLength(4);
@@ -1155,10 +1399,10 @@ describe("gate flake re-run", () => {
       expect(flakes[0]!.cause).toContain("src/a.test.ts");
       expect(flakes[0]!.cause).toContain("flaky test");
 
-      // Only the red gate re-ran: flaky ran first + re-run + merge-checks,
-      // green ran checks + merge-checks.
-      expect(runs(flaky)).toBe(3);
-      expect(runs(green)).toBe(2);
+      // Only the red gate re-ran, and the merge skipped its gates on the
+      // already-judged tree: flaky ran first + re-run, green ran checks.
+      expect(runs(flaky)).toBe(2);
+      expect(runs(green)).toBe(1);
 
       await writeMetrics(runtime.store, {
         iteration: 1,

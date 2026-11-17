@@ -187,7 +187,7 @@ describe("front ladder", () => {
       expect(harness.calls).toHaveLength(2);
       const classPath = path.join(goal.goalDir, "class.yaml");
       expect(fs.readFileSync(classPath, "utf8")).toContain("class: trivial");
-      expect(await validateFile(classPath)).toEqual([]);
+      expect((await validateFile(classPath)).findings).toEqual([]);
       expect(
         fs.readFileSync(
           path.join(goal.goalDir, "iterations/1/summary.md"),

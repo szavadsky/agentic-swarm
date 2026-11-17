@@ -1,3 +1,4 @@
+import { reviewRoundLimit } from "./review.js";
 import type { Action, Limits, State } from "./types.js";
 
 function park(slug: string, cause: string): Action {
@@ -79,20 +80,17 @@ export function next(
       );
       continue;
     }
-    if (step.review && task.round > flow.reviewRounds) {
-      actions.push(
-        park(
-          slug,
-          `review round limit reached after verdict "${task.verdict ?? "none"}" (${flow.reviewRounds} rounds)`,
-        ),
-      );
-      continue;
-    }
-    if (task.turns >= limits.itemTurns) {
-      actions.push(
-        park(slug, `budget: item budget exhausted after ${task.turns} turns`),
-      );
-      continue;
+    if (step.review) {
+      const roundLimit = reviewRoundLimit(step);
+      if (task.round > roundLimit) {
+        actions.push(
+          park(
+            slug,
+            `review round limit reached after verdict "${task.verdict ?? "none"}" (${roundLimit} rounds)`,
+          ),
+        );
+        continue;
+      }
     }
     actions.push({ kind: "step", slug, step: step.id, round: task.round });
   }

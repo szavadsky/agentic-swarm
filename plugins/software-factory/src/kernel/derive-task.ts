@@ -2,6 +2,7 @@ import type { CheckResult } from "../core/checks/types.js";
 import { isInfraCheck } from "./gates.js";
 import { countOutcomeRepairs } from "./metrics.js";
 import { stepFingerprint } from "./progress.js";
+import { DEFAULT_CHANGE_REQUESTS, isLastReviewCall } from "./review.js";
 import type {
   FlowDefinition,
   ProgressRepeat,
@@ -16,21 +17,23 @@ import type {
 /** Used when a caller derives without the configured flow catalog. */
 export const DEFAULT_FLOWS: Record<string, FlowDefinition> = {
   "implement-review": {
-    reviewRounds: 2,
     steps: [
       { id: "implement", role: "implementer" },
-      { id: "review", role: "reviewer", review: true },
+      {
+        id: "review",
+        role: "reviewer",
+        review: true,
+        changeRequests: DEFAULT_CHANGE_REQUESTS,
+      },
     ],
   },
   "just-implement": {
-    reviewRounds: 2,
     steps: [{ id: "implement", role: "implementer" }],
   },
   spike: {
-    reviewRounds: 1,
     steps: [
       { id: "implement", role: "implementer" },
-      { id: "review", role: "reviewer", review: true },
+      { id: "review", role: "reviewer", review: true, changeRequests: 0 },
     ],
   },
 };
@@ -102,6 +105,29 @@ export function terminalFactFromRecords(
     }
   }
   return out;
+}
+
+/**
+ * The first record the task's current revision owns. A revision bump follows
+ * a park: what the records through the last park of an earlier revision built
+ * describes the brief the decider replaced, so phase, counts and terminal fact
+ * restart from the amended one. The current revision's parks stay, and a
+ * record without the field belongs to revision 0, so old records derive as
+ * today. The records themselves stay for the prompts' review history.
+ */
+function revisionStart(task: TaskFile, records: readonly StepRecord[]): number {
+  if (task.revision === 0) return 0;
+  let start = 0;
+  records.forEach((rec, index) => {
+    if (
+      rec.step === "park" &&
+      rec.endedAt &&
+      (rec.revision ?? 0) < task.revision
+    ) {
+      start = index + 1;
+    }
+  });
+  return start;
 }
 
 function phaseAfter(
@@ -192,9 +218,10 @@ function sameFailingSet(
 /**
  * A record recovery sealed after a hard death: a bare `infra: crash` with
  * nothing the turn itself reported. Mirrors `isRecoveryCrash` in derive.ts —
- * resume and budget share the seal. Bare seals are free interruptions,
- * redispatched; a crash the turn reported (cause, details, usage or prompt
- * bytes) spends the budget. Recovery only seals crash, never timeout.
+ * resume and the turn count share the seal. Bare seals are free
+ * interruptions, redispatched; a crash the turn reported (cause, details,
+ * usage or prompt bytes) counts as a turn. Recovery only seals crash, never
+ * timeout.
  */
 function isBareRecoverySeal(rec: StepRecord): boolean {
   if (rec.stop?.kind !== "infra" || rec.stop?.cause !== "crash") return false;
@@ -218,7 +245,8 @@ export function reduceTask(
   flow: FlowDefinition,
 ): TaskReduction {
   const flowIndex = new Map(flow.steps.map((step, i) => [step.id, i]));
-  const terminal = terminalFactFromRecords(records, task.slug, task.kind);
+  const owned = records.slice(revisionStart(task, records));
+  const terminal = terminalFactFromRecords(owned, task.slug, task.kind);
   const firstStep = flow.steps[0]?.id ?? "done";
 
   let phase: TaskPhase = firstStep;
@@ -251,7 +279,7 @@ export function reduceTask(
   let lastInfraStep: string | undefined;
   let infraRepeatCount = 0;
 
-  for (const rec of records) {
+  for (const rec of owned) {
     if (!rec.endedAt) continue;
     if (rec.step === "commit") {
       lastTree = rec.tree ?? lastTree;
@@ -262,7 +290,7 @@ export function reduceTask(
       // agent (creation merge or reused-worktree sync): the next turn's
       // empty-diff baseline is the post-advance tree, not the last counted
       // turn's. No existing record carries it — commit records only follow
-      // turns — so this script record is the baseline. Free: no budget.
+      // turns — so this script record is the baseline. Free: not a turn.
       if (rec.tree !== undefined) countedTree = rec.tree;
       // Only the creation advance carries, and only for the first counted
       // turn: a reused-worktree sync or merge-checks recreation either lacks
@@ -373,10 +401,10 @@ export function reduceTask(
       }
       continue;
     }
-    // A crash the script reports (dispatch `recordCrash`) budgets like a harness
+    // A crash the script reports (dispatch `recordCrash`) counts like a harness
     // crash on the same step: a throwing pre-harness step parks after two
     // repeats instead of redispatching forever. Only reported crashes on flow
-    // steps consume; bare recovery seals, script phases (checks, merge, park,
+    // steps count; bare recovery seals, script phases (checks, merge, park,
     // finish), quota/rate/auth/overflow and drain (tasks never started) stay free.
     if (rec.actor === "script") {
       const scriptStop = rec.stop;
@@ -414,8 +442,8 @@ export function reduceTask(
     const isTimeoutOrCrash =
       isInfra && (stop.cause === "timeout" || stop.cause === "crash");
 
-    // Infra without a valid outcome: a reported timeout/crash consumes the turn
-    // budget and parks after two repeats on the same step; bare recovery seals
+    // Infra without a valid outcome: a reported timeout/crash counts as a turn
+    // and parks after two repeats on the same step; bare recovery seals
     // (free interruptions) and other infra (quota, auth, ...) stay free and resumable.
     if (isInfra && !hasOutcome) {
       if (isTimeoutOrCrash && !isBareRecoverySeal(rec)) {
@@ -437,8 +465,8 @@ export function reduceTask(
     lastInfraStep = undefined;
     infraRepeatCount = 0;
 
-    // Outcome repairs are harness turns on the same record; each one spends the
-    // item budget like the turn that needed it.
+    // Outcome repairs are harness turns on the same record; each one counts
+    // like the turn that needed it.
     turns += 1 + countOutcomeRepairs(rec.attempts);
     if (isTruncated) continue;
     if (isCancelled && !hasOutcome) continue;
@@ -468,7 +496,8 @@ export function reduceTask(
     // skips the history fingerprint and lets the round limit decide.
     // An empty gate-fix turn repeats its tree by design too: the checks that
     // follow own the verdict, so a deferred turn must not loop-park a fix the
-    // checks would clear. The item budget still bounds repeated deferrals.
+    // checks would clear. The review round limit still bounds repeated
+    // deferrals.
     const answeredIndex = flowIndex.get(rec.step);
     const answeredStep =
       answeredIndex === undefined ? undefined : flow.steps[answeredIndex];
@@ -557,7 +586,7 @@ export function reduceTask(
       // Deferred: the fix round goes back for a verdict with its outcome's
       // dispositions — or the turn carries a continuation's kept work, which
       // is progress, not an empty diff — or the following checks settle an
-      // empty gate fix. Review rounds and the item budget still bound the loop.
+      // empty gate fix. Review rounds still bound the loop.
     }
     if (step.review) {
       // Standalone escalation (and any review upscope answer): parks with the
@@ -578,21 +607,22 @@ export function reduceTask(
         pendingChecks = null;
         phase = phaseAfter(flow, stepIndex, task.kind);
       } else if (verdict === "changes") {
-        if (rec.round < flow.reviewRounds) {
+        if (isLastReviewCall(step, rec.round)) {
+          // The outcome validator refuses this; a recorded changes on the
+          // last call is a contract breach, never a merge.
+          park = `invalid outcome: changes on the last review call: ${outcome?.summary ?? "no summary"}`;
+          phase = "parked";
+          changesPending = false;
+          pendingChecks = null;
+        } else {
           round = rec.round + 1;
           stepIndex = 0;
           gateFix = false;
           mergeFix = false;
           phase = firstStep;
-        } else {
-          // The last round decides: changes merge with the concerns as debt.
-          stepIndex = flow.steps.length;
-          gateFix = false;
-          mergeFix = false;
-          phase = phaseAfter(flow, stepIndex, task.kind);
+          changesPending = true;
+          pendingChecks = null;
         }
-        changesPending = true;
-        pendingChecks = null;
       } else if (verdict === "reject") {
         park = `review rejected: ${outcome?.summary ?? "no summary"}`;
         phase = "parked";

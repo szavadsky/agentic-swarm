@@ -11,6 +11,7 @@ export interface OmpTurnOpaque {
 }
 
 export interface OmpHarnessOptions {
+  /** Run-config `harnesses.omp.binary`; defaults to PATH, then the bare `omp`. */
   binary?: string;
   /** Caller-given session store; sessions and overlays live here, never in a worktree. */
   sessionDir: string;
@@ -24,6 +25,23 @@ export interface OmpHarnessOptions {
 }
 
 export const OMP_ID = "omp";
+
+/**
+ * Every value omp's `--thinking` flag parses; any other string fails its
+ * argument parse before a session starts (`omp --thinking highest` is the
+ * observed case). `models --json` carries per-model lists, but an `@` alias
+ * has no catalog entry, so this enum is all pre-flight can know of it.
+ */
+export const OMP_THINKING_LEVELS: readonly string[] = [
+  "off",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+  "auto",
+];
 
 /** Built-ins an unattended factory turn may use; `task` enables pinned subagents. */
 export const DEFAULT_TOOLS = [

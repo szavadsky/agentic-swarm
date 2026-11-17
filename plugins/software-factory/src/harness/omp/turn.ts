@@ -16,6 +16,8 @@ import { DEFAULT_TOOLS, OMP_ID, type OmpTurnOpaque } from "./types.js";
 import {
   isSessionCompacted,
   type OmpStats,
+  servedTotal,
+  servedUsage,
   summarizeOmpFrames,
   textOfContent,
   turnUsage,
@@ -307,13 +309,22 @@ export async function runOmpTurn(
   const state = stateFrame?.data;
   const sessionFile: string | undefined =
     state?.sessionFile ?? postStats?.sessionFile;
-  const usage = turnUsage({
-    before: baseline,
-    after: postStats,
-    fallback: summary.usage,
-    sessionFile,
-    sinceMs: startedAtMs,
-  });
+  // An `@` alias resolves inside omp's own chain and can switch models within
+  // this one call. The transcript carries per-message provider/model, so the
+  // turn is split per served model and priced from those counters; any other
+  // model keeps the session-stats aggregate unchanged.
+  const served = model.id.startsWith("@")
+    ? servedUsage(sessionFile, startedAtMs)
+    : undefined;
+  const usage = served
+    ? servedTotal(served)
+    : turnUsage({
+        before: baseline,
+        after: postStats,
+        fallback: summary.usage,
+        sessionFile,
+        sinceMs: startedAtMs,
+      });
 
   const failure: OmpTurnFailure | undefined =
     promptFailed instanceof OmpRpcExit
@@ -365,6 +376,7 @@ export async function runOmpTurn(
     usage,
     session,
     model: session?.model ?? model,
+    ...(served ? { served } : {}),
     transcript: sessionFile,
     attempts,
   };

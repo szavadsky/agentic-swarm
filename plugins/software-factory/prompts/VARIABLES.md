@@ -118,7 +118,16 @@ block.
 ## review-implementer.md
 
 The diff-review duties, included by `reviewer.md` when `author: implementer`.
-They contain no turn variables.
+It selects its decision block with `last_call`.
+
+| variable    | meaning                                                                                 |
+| ----------- | --------------------------------------------------------------------------------------- |
+| `last_call` | `true` when this review is the step's last call; selects `review-implementer-last-call` |
+
+## review-implementer-last-call.md
+
+The ship-or-park decision, included by `review-implementer.md` on the last call.
+It contains no turn variables.
 
 ## review-implementer-turn.md
 
@@ -128,7 +137,7 @@ They contain no turn variables.
 | `base_hash`        | commit hash before this task's first turn; the range spans every round                                                                                 |
 | `head_hash`        | commit hash after the latest implementer turn                                                                                                          |
 | `round`            | 1-based review round                                                                                                                                   |
-| `max_rounds`       | configured review round limit for this flow                                                                                                            |
+| `max_rounds`       | this review step's total review calls: its change-request bound plus the last call                                                                     |
 | `baseline_checks`  | gate failures recorded on the base before any task; pre-existing, not findings against this diff                                                       |
 | `prior_findings`   | previous round's numbered summary, concerns and forward (summary first); empty string in round 1                                                       |
 | `upscope_ask`      | escalation ask for a standalone task review, answered as `upscope: yes\|no` with the verdict; empty string when this task is part of an architect plan |

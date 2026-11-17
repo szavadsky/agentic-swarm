@@ -116,12 +116,6 @@ function incidentRecords() {
       ok: true,
       cause: "no-progress: implement r2 repeats r1 (deadbeef)",
     }),
-    script(9, {
-      slug: "d",
-      step: "park",
-      ok: true,
-      cause: "budget: item budget exhausted after 8 turns",
-    }),
     script(10, {
       slug: "e",
       step: "park",
@@ -143,7 +137,6 @@ const EXPECTED_INCIDENTS = {
   noProgressParks: 1,
   emptyDiffParks: 1,
   overflowParks: 1,
-  budgetParks: 1,
 };
 
 const SUMMARY_LABELS = {
@@ -157,7 +150,6 @@ const SUMMARY_LABELS = {
   "no-progress parks": "noProgressParks",
   "empty-diff parks": "emptyDiffParks",
   "overflow parks": "overflowParks",
-  "budget parks": "budgetParks",
 } as const;
 
 function summaryIncidents(text: string): IncidentCounts {
@@ -230,7 +222,7 @@ describe("iteration metrics incidents and spend tables", () => {
       });
 
       const state = derive(
-        [task("a"), task("b"), task("c"), task("d"), task("e"), task("f")],
+        [task("a"), task("b"), task("c"), task("e"), task("f")],
         records,
       );
       await writeIterationSummary(store, {
@@ -382,7 +374,6 @@ describe("iteration metrics incidents and spend tables", () => {
         noProgressParks: 0,
         emptyDiffParks: 0,
         overflowParks: 0,
-        budgetParks: 0,
       });
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
@@ -419,6 +410,119 @@ describe("iteration metrics incidents and spend tables", () => {
       expect(metrics.totals.incidents.outcomeRepairs).toBe(3);
       expect(metrics.iterations[0]!.incidents.infraRetries).toBe(0);
       expect(metrics.iterations[0]!.incidents.fallbackHops).toBe(0);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("counts launches per agent per kind and old incidents as unknown", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-launches-"));
+    const store = createFolderStore(path.join(root, "goal"));
+    try {
+      await store.ensureLayout();
+      const records = [
+        rec(1, {
+          slug: "a",
+          alias: "cheap",
+          usage: usage(0.01, 10, 1),
+          launchKind: "glitch",
+          stop: { kind: "infra", cause: "quota" },
+        }),
+        rec(2, {
+          slug: "a",
+          step: "review",
+          alias: "reviewer",
+          usage: usage(0.01, 10, 1),
+          launchKind: "change-request",
+          outcome: {
+            status: "done",
+            summary: "needs work",
+            concerns: [],
+            forward: [],
+            verdict: "changes",
+          },
+        }),
+        rec(3, {
+          slug: "b",
+          alias: "cheap",
+          usage: usage(0.01, 10, 1),
+          launchKind: "failure",
+          outcome: {
+            status: "failed",
+            summary: "broken",
+            concerns: [],
+            forward: [],
+          },
+        }),
+        rec(4, {
+          slug: "c",
+          alias: "cheap",
+          usage: usage(0.01, 10, 1),
+          outcome: {
+            status: "failed",
+            summary: "old failure",
+            concerns: [],
+            forward: [],
+          },
+        }),
+        rec(5, { slug: "d", alias: "cheap", usage: usage(0.01, 10, 1) }),
+      ];
+
+      await writeMetrics(store, {
+        iteration: 1,
+        status: "in-progress",
+        records,
+      });
+      const metrics = yaml.parse(
+        (await store.readFile("metrics.yaml"))!,
+      ) as GoalMetrics;
+      const one = metrics.iterations[0]!;
+      expect(one.aliases.cheap!.launches).toEqual({
+        glitch: 1,
+        "change-request": 0,
+        failure: 1,
+        unknown: 1,
+      });
+      expect(one.aliases.reviewer!.launches).toEqual({
+        glitch: 0,
+        "change-request": 1,
+        failure: 0,
+        unknown: 0,
+      });
+      expect(one.roles.implementer!.launches).toEqual({
+        glitch: 1,
+        "change-request": 0,
+        failure: 1,
+        unknown: 1,
+      });
+      expect(metrics.totals.aliases.cheap!.launches).toEqual({
+        glitch: 1,
+        "change-request": 0,
+        failure: 1,
+        unknown: 1,
+      });
+
+      const state = derive(
+        [task("a"), task("b"), task("c"), task("d")],
+        records,
+      );
+      await writeIterationSummary(store, {
+        iteration: 1,
+        state,
+        records,
+        status: "in-progress",
+      });
+      const text = fs.readFileSync(
+        path.join(store.goalDir, "iterations/1/summary.md"),
+        "utf8",
+      );
+      expect(text).toContain("## Launches by role");
+      expect(text).toContain("## Launches by alias");
+      expect(text).toContain(
+        "| alias | glitch | change-request | failure | unknown |",
+      );
+      expect(text).toContain("| cheap | 1 | 0 | 1 | 1 |");
+      expect(text).toContain("| reviewer | 0 | 1 | 0 | 0 |");
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }

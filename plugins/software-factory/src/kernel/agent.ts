@@ -2,15 +2,16 @@ import fs from "node:fs";
 import {
   portable,
   type ModelRef,
+  type ServedUsage,
   type SessionRef,
   type Stop,
   type TurnAttempt,
   type TurnResult,
   type Usage,
 } from "../harness/types.js";
-import { addUsage } from "../harness/usage.js";
+import { addUsage, reportsUsage, zeroUsage } from "../harness/usage.js";
 import { loadPriceTable } from "./openrouter.js";
-import { pricedUsage } from "./pricing.js";
+import { pricedServed, pricedUsage } from "./pricing.js";
 import { missingPlanFinding, snapshotPlan } from "./architect-session.js";
 import { contextPackRelPath } from "./context-pack.js";
 import type { RoleTarget } from "./flow-context.js";
@@ -23,10 +24,12 @@ import {
 } from "./outcome.js";
 import { renderRolePrompt } from "./prompts.js";
 import { outcomeRepairSchemaVar } from "./prompt-schema.js";
+import { hasFallbackHop } from "./metrics.js";
 import { appendPark } from "./record.js";
 import {
   DEFAULT_TIMEOUTS,
   type KernelRuntime,
+  type LaunchKind,
   type Outcome,
   type RecordEnd,
   type RecordStart,
@@ -42,16 +45,12 @@ export interface AgentTurnSpec {
   meta: Omit<RecordStart, "actor" | "alias" | "model">;
   vars: Record<string, string>;
   expectation: OutcomeExpectation;
+  /** Review steps only: the last call refuses a `changes` verdict. */
+  lastCall?: boolean;
   session?: SessionRef;
   timeouts?: { idleMs: number; wallMs: number };
-  /** Outcome-repair turns after the first attempt; defaults to REPAIR_TURNS. */
+  /** Outcome reminders after the first attempt; defaults to process `reminders`. */
   repairTurns?: number;
-  /**
-   * Item budget before this turn. The first attempt spends one turn, so the
-   * loop caps repairs at `limit - used - 1`. Steps without an item leave it
-   * unset and repair up to `repairTurns`.
-   */
-  itemBudget?: { used: number; limit: number };
   /**
    * Runs after the turn and before the end record commits. `settle` sees the
    * accepted outcome and the live session, so it can compact and return the
@@ -70,12 +69,6 @@ export interface AgentTurnResult {
   outcome?: Outcome;
   text: string;
 }
-
-/**
- * Outcome-repair turns after the first attempt. A constant, not a config knob;
- * a task file's `repairTurns` overrides it for that task's turns only.
- */
-export const REPAIR_TURNS = 3;
 
 /** Roles that run the boundary consult; only they see the iteration's pack. */
 const PACK_ROLES = new Set(["architect", "pm"]);
@@ -144,7 +137,7 @@ function missingOutcomeFinding(
 
 /**
  * One agent step: outcome path in the prompt (LOG D6), file first, fenced-block
- * fallback, up to REPAIR_TURNS same-session repair turns, then an invalid
+ * fallback, up to `reminders` same-session repair turns, then an invalid
  * outcome is `failed`. The end record is written only after `settle`
  * (mechanical commit), so a crash leaves an orphan that `derive` redispatches.
  */
@@ -191,6 +184,21 @@ async function turnWithTimeout(
   } finally {
     if (timer) clearTimeout(timer);
   }
+}
+
+/** Union per-model splits across calls, summing a model that served twice. */
+function mergeServed(
+  total: readonly ServedUsage[],
+  next: readonly ServedUsage[],
+): ServedUsage[] {
+  const byModel = new Map<string, Usage>();
+  for (const entry of [...total, ...next]) {
+    byModel.set(
+      entry.model.id,
+      addUsage(byModel.get(entry.model.id) ?? zeroUsage(), entry.usage),
+    );
+  }
+  return [...byModel].map(([id, usage]) => ({ model: { id }, usage }));
 }
 
 export async function runAgentTurn(
@@ -243,10 +251,13 @@ export async function runAgentTurn(
     endIndex: number;
     attempts: TurnAttempt[];
     usage: Usage;
+    served?: ServedUsage[];
   }> => {
     let index = fromIndex;
     let current = chainSession;
     const chainAttempts: TurnAttempt[] = [];
+    const chainServed: ServedUsage[] = [];
+    let servedOpen = true;
     let chainUsage: Usage | undefined;
     let result: TurnResult | undefined;
     for (;;) {
@@ -269,6 +280,18 @@ export async function runAgentTurn(
       chainUsage = chainUsage
         ? addUsage(chainUsage, result.usage)
         : result.usage;
+      if (result.served && (result.attempts?.length ?? 0) <= 1) {
+        chainServed.push(...result.served);
+      } else if (result.served) {
+        // A split covers one call's usage; with retried calls in the same
+        // harness turn their usage is outside it, so the aggregate stays.
+        servedOpen = false;
+      } else if (reportsUsage(result.usage)) {
+        // A call that measured tokens without a per-model split makes the
+        // whole launch unsplittable: attributing its usage to one model would
+        // be a guess, and dropping it would undercount the turn.
+        servedOpen = false;
+      }
       current = result.session;
       if (result.stop.kind !== "infra" || index + 1 >= tiers.length) break;
       index += 1;
@@ -286,6 +309,7 @@ export async function runAgentTurn(
       endIndex: index,
       attempts: chainAttempts,
       usage: chainUsage!,
+      ...(servedOpen && chainServed.length > 0 ? { served: chainServed } : {}),
     };
   };
 
@@ -298,6 +322,18 @@ export async function runAgentTurn(
   let attempts = first.attempts;
   let stop: Stop = first.result.stop;
   let usage = first.usage;
+  // Union of the per-model splits across every call; once a call reports
+  // tokens without a split the launch keeps its aggregate and no model split.
+  let served: ServedUsage[] = first.served ?? [];
+  let servedOpen = first.served !== undefined || !reportsUsage(first.usage);
+  const absorbServed = (call: {
+    usage: Usage;
+    served?: ServedUsage[];
+  }): void => {
+    if (!servedOpen) return;
+    if (call.served) served = mergeServed(served, call.served);
+    else if (reportsUsage(call.usage)) servedOpen = false;
+  };
   let session = first.result.session;
   let text = first.result.text;
   let tierIndex = first.endIndex;
@@ -315,6 +351,7 @@ export async function runAgentTurn(
     attempts = [...attempts, ...retry.attempts];
     stop = retry.result.stop;
     usage = addUsage(usage, retry.usage);
+    absorbServed(retry);
     session = retry.result.session;
     text = retry.result.text;
     tierIndex = retry.endIndex;
@@ -329,7 +366,9 @@ export async function runAgentTurn(
       const delivered = readDeliveredOutcome(outcomePath, text);
       if (delivered) {
         outcome = delivered.outcome;
-        findings = validateExpectation(outcome, spec.expectation);
+        findings = validateExpectation(outcome, spec.expectation, {
+          lastCall: spec.lastCall,
+        });
       }
     } catch (err) {
       if (!(err instanceof OutcomeInvalidError)) throw err;
@@ -357,18 +396,15 @@ export async function runAgentTurn(
     stop.kind === "infra" ||
     stop.kind === "refusal" ||
     stop.kind === "cancelled";
-  // The first attempt spent one turn of the item budget; repairs spend the rest.
-  const requestedRepairs = spec.repairTurns ?? REPAIR_TURNS;
-  const budgetRepairs = spec.itemBudget
-    ? Math.max(0, spec.itemBudget.limit - spec.itemBudget.used - 1)
-    : requestedRepairs;
-  const maxRepairs = Math.min(
-    Math.max(0, Math.floor(requestedRepairs)),
-    Math.max(0, Math.floor(budgetRepairs)),
-  );
+  // Repairs are bounded by the reminder count (the task may override it).
+  const requestedRepairs =
+    spec.repairTurns ?? runtime.configs.process.reminders ?? 1;
+  const maxRepairs = Math.max(0, Math.floor(requestedRepairs));
   const needsRepair = findings.length > 0 && !haltedNow();
   let repairs = 0;
+  const repairFindings: string[] = [];
   while (findings.length > 0 && !haltedNow() && repairs < maxRepairs) {
+    repairFindings.push(...findings);
     // One in-session repair ask, rendered from the process-config prompt
     // template so repos can reword it; a bare status:done only delivers
     // when no verdict or decision is required.
@@ -394,6 +430,7 @@ export async function runAgentTurn(
     attempts = [...attempts, ...repair.attempts];
     stop = repair.result.stop;
     usage = addUsage(usage, repair.usage);
+    absorbServed(repair);
     session = repair.result.session ?? session;
     text = repair.result.text;
     tierIndex = repair.endIndex;
@@ -427,10 +464,18 @@ export async function runAgentTurn(
       priceIds,
     }).usage,
   }));
-  const pricedTop = pricedUsage(usage, actualModel?.id, prices, {
-    cachedPrefix,
-    priceIds,
-  }).usage;
+  // A complete split prices each served model at its own row and replaces the
+  // aggregate, which would otherwise charge every token to one model.
+  const pricedSplit =
+    servedOpen && served.length > 0
+      ? pricedServed(served, prices, { cachedPrefix, priceIds })
+      : undefined;
+  const pricedTop =
+    pricedSplit?.usage ??
+    pricedUsage(usage, actualModel?.id, prices, {
+      cachedPrefix,
+      priceIds,
+    }).usage;
   // The settle ran while the cache was hot, so an unsplit compaction input is
   // the cached transcript, priced at the cached rate.
   const pricedCompact = settled.compactUsage
@@ -439,6 +484,18 @@ export async function runAgentTurn(
         priceIds,
       }).usage
     : undefined;
+  const launchKind: LaunchKind | undefined =
+    stop.kind === "infra"
+      ? "glitch"
+      : hasFallbackHop(attempts)
+        ? "glitch"
+        : outcome?.verdict === "changes"
+          ? "change-request"
+          : outcome?.status === "failed" || outcome?.status === "blocked"
+            ? "failure"
+            : repairFindings.length > 0
+              ? "failure"
+              : undefined;
   const record = await started.finish({
     ...settled,
     promptBytes,
@@ -449,6 +506,9 @@ export async function runAgentTurn(
     usage: pricedTop,
     ...(pricedCompact ? { compactUsage: pricedCompact } : {}),
     ...(pricedAttempts.length > 0 ? { attempts: pricedAttempts } : {}),
+    ...(pricedSplit ? { served: pricedSplit.served } : {}),
+    ...(repairFindings.length > 0 ? { repairFindings } : {}),
+    ...(launchKind ? { launchKind } : {}),
     ...(lastResult.transcript ? { transcript: lastResult.transcript } : {}),
     session: settled.session ?? session,
     outcome: outcome ?? undefined,
@@ -462,6 +522,7 @@ export async function runAgentTurn(
         iteration: spec.meta.iteration,
         slug: spec.meta.slug,
         round: spec.meta.round,
+        revision: spec.meta.revision ?? 0,
       },
       "overflow",
     );

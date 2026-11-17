@@ -2,8 +2,8 @@ import { git } from "../core/git/exec.js";
 
 /**
  * The one resolve ask for a task branch that conflicts with the integration
- * head. Shared by the merge-attempt turn and the continuation first turn, so a
- * reword stays one edit.
+ * head. The continuation first turn carries it when a `base:` merge conflicts,
+ * so a reword stays one edit.
  */
 export function mergeConflictAsk(head: string, paths: string[]): string {
   const named = paths.join(", ") || "git reported no unmerged paths";
