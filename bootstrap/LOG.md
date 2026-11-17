@@ -654,3 +654,10 @@ Verbatim, newest last; each with what it changed.
 - Steer→fix receipt: tier-latch confirmed real (runtime.workingTier pinned alias to winning fallback for whole launch); quota-pool-latch replaces it.
 - Forwards: (1) re-run p1-trivial/p1-task after these 3 merge (regression; Phase-1-done declaration expected after) — running next; (2) INTENT Q2 operator config stale 2/3 (subscriptions + efforts done i42; iterationUsd off per owner 0) — owner's call whether Q2 needs a refresh.
 - Owner gates line (6e7a55bb) synced MAIN→V3 (326da37e verified) + steered for i44.
+
+### 2026-11-17 — p1-trivial regression r3: exit 0, done, 0 iterations (5m, no drift)
+
+### 2026-11-17 — p1-task regression r3: exit 0, done, 0 iterations (5m, no drift)
+
+### 2026-11-17 — rotation for i44: flip-backs (ernie-first, @free digest, muse implementer)
+- Map: architect claude/opus (fb sonnet, fb2 omp/opus), pm omp/ernie (fb opencode/hy4), digest omp/@free (fb opencode/hy4), implementer omp-Go/muse:max (fb omp-Go/deepseek:max; cycle agy43 → muse44), reviewer omp/ernie (fb opencode/hy4), qa omp/ernie dormant (fb opencode/hy4), plan-rev+check agy (fb omp/ernie), esc omp/sonnet:high (fb omp-Go/muse), steward omp/ernie (fb agy). Subs + caps kept. Loader + price-coverage green before commit.
