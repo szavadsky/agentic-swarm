@@ -17,6 +17,7 @@ import {
   type PriceTable,
   priceTableOnly,
   priceUsage,
+  pricedRecord,
   pricedUsage,
 } from "../../src/kernel/pricing.js";
 import { createFolderStore } from "../../src/kernel/store.js";
@@ -210,6 +211,57 @@ describe("harness id matching against the OpenRouter table", () => {
     expect(priced.costKnown).toBe(true);
     expect(priced.usage.costUsd).toBe(0);
     expect(priced.usage.listCostUsd).toBe(0);
+  });
+});
+
+describe("served model split", () => {
+  it("prices each served model at its own row and never $0 for an unknown one", () => {
+    const served = [
+      {
+        model: { id: "free/zero" },
+        usage: usage({ in: 1_000_000, costUsd: 0 }),
+      },
+      { model: { id: "paid/one" }, usage: usage({ in: 1_000_000 }) },
+    ];
+    const priced = pricedRecord(
+      {
+        model: { id: "@free" },
+        usage: usage({ in: 2_000_000 }),
+        served,
+        // The alias maps to the free row; the served split must win over both
+        // this mapping and the attempts it also records.
+        attempts: [
+          {
+            model: { id: "@free" },
+            stop: { kind: "done" },
+            usage: usage({ in: 2_000_000 }),
+          },
+        ],
+      },
+      TABLE,
+      { "@free": "free/zero" },
+    );
+    expect(priced.usage.in).toBe(2_000_000);
+    expect(priced.usage.costUsd).toBeCloseTo(4, 10);
+    expect(priced.usage.listCostUsd).toBeCloseTo(4, 10);
+    expect(priced.costKnown).toBe(true);
+    expect(priced.served?.map((entry) => entry.usage.costUsd)).toEqual([0, 4]);
+
+    const partial = pricedRecord(
+      {
+        model: { id: "paid/one" },
+        served: [
+          ...served,
+          { model: { id: "mystery/hop" }, usage: usage({ in: 1_000 }) },
+        ],
+      },
+      TABLE,
+    );
+    expect(partial.costKnown).toBe(false);
+    // The priced share still sums; the unlisted model stays unknown, not $0.
+    expect(partial.usage.costUsd).toBeCloseTo(4, 10);
+    expect(partial.served?.[2]?.costKnown).toBe(false);
+    expect(partial.served?.[2]?.usage.costUsd).toBeUndefined();
   });
 });
 

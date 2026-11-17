@@ -9,6 +9,7 @@ import type { PromptLibrary } from "./prompts.js";
 import type {
   Harness,
   ModelRef,
+  ServedUsage,
   SessionRef,
   Stop,
   TurnAttempt,
@@ -325,6 +326,11 @@ export interface StepRecord {
   model?: ModelRef;
   /** Every retry/fallback hop the harness made for this turn. */
   attempts?: TurnAttempt[];
+  /**
+   * Models the turn actually served, each with its share of the tokens.
+   * Measurement only: routing, admission and fallback counts keep the alias.
+   */
+  served?: ServedUsage[];
   /** Validator findings that triggered outcome reminders, in round order. */
   repairFindings?: string[];
   /** Incident launches only: why this launch ran again. */
@@ -403,6 +409,8 @@ export interface RecordEnd {
   packBytes?: number;
   transcript?: string;
   attempts?: TurnAttempt[];
+  /** Per-model split of a turn whose harness resolved its model natively. */
+  served?: ServedUsage[];
   /** Validator findings that triggered outcome reminders, in round order. */
   repairFindings?: string[];
   /** Incident launches only: why this launch ran again. */

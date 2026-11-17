@@ -2,15 +2,16 @@ import fs from "node:fs";
 import {
   portable,
   type ModelRef,
+  type ServedUsage,
   type SessionRef,
   type Stop,
   type TurnAttempt,
   type TurnResult,
   type Usage,
 } from "../harness/types.js";
-import { addUsage } from "../harness/usage.js";
+import { addUsage, reportsUsage, zeroUsage } from "../harness/usage.js";
 import { loadPriceTable } from "./openrouter.js";
-import { pricedUsage } from "./pricing.js";
+import { pricedServed, pricedUsage } from "./pricing.js";
 import { missingPlanFinding, snapshotPlan } from "./architect-session.js";
 import { contextPackRelPath } from "./context-pack.js";
 import type { RoleTarget } from "./flow-context.js";
@@ -189,6 +190,21 @@ async function turnWithTimeout(
   }
 }
 
+/** Union per-model splits across calls, summing a model that served twice. */
+function mergeServed(
+  total: readonly ServedUsage[],
+  next: readonly ServedUsage[],
+): ServedUsage[] {
+  const byModel = new Map<string, Usage>();
+  for (const entry of [...total, ...next]) {
+    byModel.set(
+      entry.model.id,
+      addUsage(byModel.get(entry.model.id) ?? zeroUsage(), entry.usage),
+    );
+  }
+  return [...byModel].map(([id, usage]) => ({ model: { id }, usage }));
+}
+
 export async function runAgentTurn(
   runtime: KernelRuntime,
   spec: AgentTurnSpec,
@@ -239,10 +255,13 @@ export async function runAgentTurn(
     endIndex: number;
     attempts: TurnAttempt[];
     usage: Usage;
+    served?: ServedUsage[];
   }> => {
     let index = fromIndex;
     let current = chainSession;
     const chainAttempts: TurnAttempt[] = [];
+    const chainServed: ServedUsage[] = [];
+    let servedOpen = true;
     let chainUsage: Usage | undefined;
     let result: TurnResult | undefined;
     for (;;) {
@@ -265,6 +284,18 @@ export async function runAgentTurn(
       chainUsage = chainUsage
         ? addUsage(chainUsage, result.usage)
         : result.usage;
+      if (result.served && (result.attempts?.length ?? 0) <= 1) {
+        chainServed.push(...result.served);
+      } else if (result.served) {
+        // A split covers one call's usage; with retried calls in the same
+        // harness turn their usage is outside it, so the aggregate stays.
+        servedOpen = false;
+      } else if (reportsUsage(result.usage)) {
+        // A call that measured tokens without a per-model split makes the
+        // whole launch unsplittable: attributing its usage to one model would
+        // be a guess, and dropping it would undercount the turn.
+        servedOpen = false;
+      }
       current = result.session;
       if (result.stop.kind !== "infra" || index + 1 >= tiers.length) break;
       index += 1;
@@ -282,6 +313,7 @@ export async function runAgentTurn(
       endIndex: index,
       attempts: chainAttempts,
       usage: chainUsage!,
+      ...(servedOpen && chainServed.length > 0 ? { served: chainServed } : {}),
     };
   };
 
@@ -294,6 +326,18 @@ export async function runAgentTurn(
   let attempts = first.attempts;
   let stop: Stop = first.result.stop;
   let usage = first.usage;
+  // Union of the per-model splits across every call; once a call reports
+  // tokens without a split the launch keeps its aggregate and no model split.
+  let served: ServedUsage[] = first.served ?? [];
+  let servedOpen = first.served !== undefined || !reportsUsage(first.usage);
+  const absorbServed = (call: {
+    usage: Usage;
+    served?: ServedUsage[];
+  }): void => {
+    if (!servedOpen) return;
+    if (call.served) served = mergeServed(served, call.served);
+    else if (reportsUsage(call.usage)) servedOpen = false;
+  };
   let session = first.result.session;
   let text = first.result.text;
   let tierIndex = first.endIndex;
@@ -311,6 +355,7 @@ export async function runAgentTurn(
     attempts = [...attempts, ...retry.attempts];
     stop = retry.result.stop;
     usage = addUsage(usage, retry.usage);
+    absorbServed(retry);
     session = retry.result.session;
     text = retry.result.text;
     tierIndex = retry.endIndex;
@@ -393,6 +438,7 @@ export async function runAgentTurn(
     attempts = [...attempts, ...repair.attempts];
     stop = repair.result.stop;
     usage = addUsage(usage, repair.usage);
+    absorbServed(repair);
     session = repair.result.session ?? session;
     text = repair.result.text;
     tierIndex = repair.endIndex;
@@ -426,10 +472,18 @@ export async function runAgentTurn(
       priceIds,
     }).usage,
   }));
-  const pricedTop = pricedUsage(usage, actualModel?.id, prices, {
-    cachedPrefix,
-    priceIds,
-  }).usage;
+  // A complete split prices each served model at its own row and replaces the
+  // aggregate, which would otherwise charge every token to one model.
+  const pricedSplit =
+    servedOpen && served.length > 0
+      ? pricedServed(served, prices, { cachedPrefix, priceIds })
+      : undefined;
+  const pricedTop =
+    pricedSplit?.usage ??
+    pricedUsage(usage, actualModel?.id, prices, {
+      cachedPrefix,
+      priceIds,
+    }).usage;
   // The settle ran while the cache was hot, so an unsplit compaction input is
   // the cached transcript, priced at the cached rate.
   const pricedCompact = settled.compactUsage
@@ -460,6 +514,7 @@ export async function runAgentTurn(
     usage: pricedTop,
     ...(pricedCompact ? { compactUsage: pricedCompact } : {}),
     ...(pricedAttempts.length > 0 ? { attempts: pricedAttempts } : {}),
+    ...(pricedSplit ? { served: pricedSplit.served } : {}),
     ...(repairFindings.length > 0 ? { repairFindings } : {}),
     ...(launchKind ? { launchKind } : {}),
     ...(lastResult.transcript ? { transcript: lastResult.transcript } : {}),

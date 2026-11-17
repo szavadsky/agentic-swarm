@@ -37,3 +37,21 @@ export function addUsage(a: Usage, b: Usage): Usage {
     ...(harnessCostUsd !== undefined ? { harnessCostUsd } : {}),
   };
 }
+
+/**
+ * Whether a call reported usage at all. All-zero counters are not a report: a
+ * real turn consumes input, so a harness that leaves them at zero (pi via acpx)
+ * is silent, and a literal harness `0` cost is its unreported marker too.
+ */
+export function reportsUsage(usage: Usage): boolean {
+  return (
+    usage.in +
+      usage.cacheRead +
+      usage.cacheWrite5m +
+      usage.cacheWrite1h +
+      usage.out +
+      usage.reasoningOut >
+      0 ||
+    (usage.costUsd !== undefined && usage.costUsd !== 0)
+  );
+}

@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { Usage } from "../types.js";
-import { addUsage, zeroUsage } from "../usage.js";
+import type { ServedUsage, Usage } from "../types.js";
+import { addUsage, reportsUsage, zeroUsage } from "../usage.js";
 
 /** Raw usage omp reports on an assistant message (`message_end.message.usage`). */
 export interface OmpMessageUsage {
@@ -125,6 +125,39 @@ function jsonlFiles(dir: string): string[] {
   return out;
 }
 
+/** Child transcripts live in a directory named after the parent file. */
+function childTranscripts(sessionFile: string): string[] {
+  return jsonlFiles(sessionFile.replace(/\.jsonl$/, ""));
+}
+
+/** Assistant messages one transcript recorded at or after `sinceMs`. */
+function assistantMessages(file: string, sinceMs: number): any[] {
+  let text: string;
+  try {
+    text = fs.readFileSync(file, "utf8");
+  } catch {
+    return [];
+  }
+  const out: any[] = [];
+  for (const line of text.split("\n")) {
+    if (!line.trim()) continue;
+    let entry: any;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (entry?.type !== "message") continue;
+    const message = entry.message;
+    if (message?.role !== "assistant") continue;
+    const timestamp =
+      typeof message.timestamp === "number" ? message.timestamp : 0;
+    if (timestamp < sinceMs) continue;
+    out.push(message);
+  }
+  return out;
+}
+
 /**
  * omp keeps subagent transcripts in a directory named after the parent session
  * file (without `.jsonl`); the parent's `get_session_stats` excludes them.
@@ -135,33 +168,65 @@ export function subagentUsage(
   sinceMs: number,
 ): Usage {
   if (!sessionFile) return zeroUsage();
-  const artifacts = sessionFile.replace(/\.jsonl$/, "");
   let total = zeroUsage();
-  for (const file of jsonlFiles(artifacts)) {
-    let text: string;
-    try {
-      text = fs.readFileSync(file, "utf8");
-    } catch {
-      continue;
-    }
-    for (const line of text.split("\n")) {
-      if (!line.trim()) continue;
-      let entry: any;
-      try {
-        entry = JSON.parse(line);
-      } catch {
-        continue;
-      }
-      if (entry?.type !== "message") continue;
-      const message = entry.message;
-      if (message?.role !== "assistant") continue;
-      const timestamp =
-        typeof message.timestamp === "number" ? message.timestamp : 0;
-      if (timestamp < sinceMs) continue;
+  for (const file of childTranscripts(sessionFile)) {
+    for (const message of assistantMessages(file, sinceMs)) {
       total = addUsage(total, usageFromMessage(message.usage));
     }
   }
   return total;
+}
+
+/**
+ * The model that served one assistant message as a pricing id: the provider
+ * qualifies a bare model id (`opencode-go/beam-free`), while a message that
+ * already names its provider keeps the transcript's spelling. `undefined`
+ * when the transcript names no model.
+ */
+function servedModelId(message: any): string | undefined {
+  const model = message?.model;
+  if (typeof model !== "string" || model.length === 0) return undefined;
+  const provider = message?.provider;
+  if (typeof provider !== "string" || provider.length === 0) return model;
+  const prefix = `${provider}/`;
+  return model.toLowerCase().startsWith(prefix.toLowerCase())
+    ? model
+    : `${prefix}${model}`;
+}
+
+/**
+ * Split one turn's assistant usage by the model that served it, from the
+ * parent transcript plus the child sessions the turn spawned. `undefined`
+ * when there is no transcript or when a usage-bearing message names no model:
+ * a partial split would silently drop those tokens, so the caller keeps the
+ * aggregate usage instead.
+ */
+export function servedUsage(
+  sessionFile: string | undefined,
+  sinceMs: number,
+): ServedUsage[] | undefined {
+  if (!sessionFile) return undefined;
+  const byModel = new Map<string, Usage>();
+  const files = [sessionFile, ...childTranscripts(sessionFile)];
+  for (const file of files) {
+    for (const message of assistantMessages(file, sinceMs)) {
+      const usage = usageFromMessage(message.usage);
+      if (!reportsUsage(usage)) continue;
+      const id = servedModelId(message);
+      if (!id) return undefined;
+      byModel.set(id, addUsage(byModel.get(id) ?? zeroUsage(), usage));
+    }
+  }
+  if (byModel.size === 0) return undefined;
+  return [...byModel].map(([id, usage]) => ({ model: { id }, usage }));
+}
+
+/** Sum of a served split; the turn's total when the split is authoritative. */
+export function servedTotal(served: readonly ServedUsage[]): Usage {
+  return served.reduce(
+    (total, entry) => addUsage(total, entry.usage),
+    zeroUsage(),
+  );
 }
 
 export interface OmpTurnUsage {

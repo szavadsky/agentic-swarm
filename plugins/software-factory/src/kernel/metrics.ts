@@ -442,10 +442,37 @@ export function iterationMetrics(
     addTurn(aliasEntry, part, unpriced, promptBytes, work, launch);
     aliases[alias] = aliasEntry;
 
-    const model = rec.model?.id ?? "unknown";
-    const modelEntry = models[model] ?? { model, ...emptyGroup() };
-    addTurn(modelEntry, part, unpriced, promptBytes, work, launch);
-    models[model] = modelEntry;
+    if (priced.served) {
+      // A turn that served several models counts once per model it served, but
+      // its work and prompt belong to the record: they land on the record's own
+      // model row so a native hop does not double-count committed work.
+      const ownsWork = priced.served.some(
+        (entry) => entry.model.id === rec.model?.id,
+      )
+        ? rec.model!.id
+        : priced.served[0]!.model.id;
+      for (const entry of priced.served) {
+        const modelEntry = models[entry.model.id] ?? {
+          model: entry.model.id,
+          ...emptyGroup(),
+        };
+        const owner = entry.model.id === ownsWork;
+        addTurn(
+          modelEntry,
+          entry.usage,
+          entry.costKnown ? 0 : 1,
+          owner ? promptBytes : 0,
+          owner ? work : undefined,
+          owner ? launch : undefined,
+        );
+        models[entry.model.id] = modelEntry;
+      }
+    } else {
+      const model = rec.model?.id ?? "unknown";
+      const modelEntry = models[model] ?? { model, ...emptyGroup() };
+      addTurn(modelEntry, part, unpriced, promptBytes, work, launch);
+      models[model] = modelEntry;
+    }
 
     if (role === "architect" || rec.step === "architect") {
       architect.launches += 1;

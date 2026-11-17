@@ -107,6 +107,17 @@ export type AdapterTurnResult = Omit<TurnResult, "attempts"> & {
   attempts: TurnAttempt[];
 };
 
+/**
+ * One model a single call actually served, with the tokens it served. A
+ * harness-native chain (omp's `@` aliases) can switch models inside one call;
+ * these entries are measurement only — routing, admission and fallback
+ * accounting keep using the requested alias.
+ */
+export interface ServedUsage {
+  model: ModelRef;
+  usage: Usage;
+}
+
 export interface TurnRequest {
   model: ModelRef;
   effort?: string;
@@ -137,6 +148,13 @@ export type TurnResult = {
   model: ModelRef;
   /** Every attempt made for this turn; empty/one entry when no retry or fallback ran. */
   attempts?: TurnAttempt[];
+  /**
+   * Per-model split of this turn when the harness resolved its model inside one
+   * call (a native chain); `usage` is the sum of these entries. Absent when the
+   * call retried — earlier calls are outside it — so such a turn keeps the
+   * aggregate usage and its single attributable model.
+   */
+  served?: ServedUsage[];
   /** Path to the raw stream transcript, when the harness stores one. */
   transcript?: string;
 };

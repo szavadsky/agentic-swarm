@@ -1,5 +1,10 @@
-import type { ModelRef, TurnAttempt, Usage } from "../harness/types.js";
-import { addUsage, zeroUsage } from "../harness/usage.js";
+import type {
+  ModelRef,
+  ServedUsage,
+  TurnAttempt,
+  Usage,
+} from "../harness/types.js";
+import { addUsage, reportsUsage, zeroUsage } from "../harness/usage.js";
 
 /** USD per million tokens for one model. All four rates are required. */
 export interface ModelPrice {
@@ -143,18 +148,6 @@ function tokenTotal(usage: Usage): number {
 }
 
 /**
- * Whether a call reported usage at all. All-zero counters are not a report: a
- * real turn consumes input, so a harness that leaves them at zero (pi via acpx)
- * is silent, and a literal harness `0` cost is its unreported marker too.
- */
-function reportsUsage(usage: Usage): boolean {
-  return (
-    tokenTotal(usage) > 0 ||
-    (usage.costUsd !== undefined && usage.costUsd !== 0)
-  );
-}
-
-/**
  * OpenRouter price for one usage in USD, ignoring any harness figure: the
  * harness id is matched against the table (`matchPrice`), so a free-tier id
  * prices at its paid equivalent — this is the list-price column. When
@@ -215,10 +208,47 @@ export function priceUsage(
   return list;
 }
 
+/** One served model's usage with its own cost verdict. */
+export interface PricedServedUsage extends ServedUsage {
+  costKnown: boolean;
+}
+
 export interface PricedUsage {
   usage: Usage;
   /** False when any part of the turn has no source for its cost. */
   costKnown: boolean;
+  /**
+   * Per-model split when the turn resolved its model natively, each entry
+   * priced at its own row. Absent for an aggregate-priced turn.
+   */
+  served?: PricedServedUsage[];
+}
+
+/**
+ * A turn's usage split by the models that served it, each priced at its own
+ * row: `usage` is the sum and `costKnown` is false when any served model has
+ * neither a harness figure nor a table row. An unknown served model is
+ * unpriced, never $0.
+ */
+export function pricedServed(
+  served: readonly ServedUsage[],
+  table: PriceTable,
+  opts: { cachedPrefix?: boolean; priceIds?: Record<string, string> } = {},
+): PricedUsage {
+  let usage = zeroUsage();
+  let costKnown = true;
+  const entries: PricedServedUsage[] = [];
+  for (const entry of served) {
+    const priced = pricedUsage(entry.usage, entry.model.id, table, opts);
+    usage = addUsage(usage, priced.usage);
+    costKnown = costKnown && priced.costKnown;
+    entries.push({
+      model: entry.model,
+      usage: priced.usage,
+      costKnown: priced.costKnown,
+    });
+  }
+  return { usage, costKnown, served: entries };
 }
 
 /**
@@ -266,6 +296,12 @@ export interface UsageRecord {
   usage?: Usage;
   model?: ModelRef;
   attempts?: TurnAttempt[];
+  /**
+   * Models the turn actually served, with their share of the tokens. Present
+   * when one call switched models natively (omp `@` aliases); each is priced at
+   * its own row instead of the record's single model.
+   */
+  served?: ServedUsage[];
   /** Resumed turn whose unsplit input is the cached prefix, set at record time. */
   cachedPrefix?: boolean;
   /** This turn's session-end compaction, priced as the hot cache read it was. */
@@ -273,13 +309,16 @@ export interface UsageRecord {
 }
 
 /**
- * One record's usage with cost attached. `attempts` is the complete list of
- * calls the harness made, including the final call, while `usage` holds only
- * the last call of each harness turn: summing the attempts replaces `usage`
- * rather than adding to it, so the final call is counted once. An attempt list
- * that reports nothing falls back to the record's own counters, which is what a
- * harness without per-call usage leaves behind. The compaction is a separate
- * call outside every attempt, so it is always added on top.
+ * One record's usage with cost attached. `served`, when present, is the turn's
+ * complete per-model split: summing it replaces both `usage` and `attempts`,
+ * because the same tokens appear in all three and only the split prices each
+ * model at its own row. Otherwise `attempts` is the complete list of calls the
+ * harness made, including the final call, while `usage` holds only the last
+ * call of each harness turn: summing the attempts replaces `usage` rather than
+ * adding to it, so the final call is counted once. An attempt list that reports
+ * nothing falls back to the record's own counters, which is what a harness
+ * without per-call usage leaves behind. The compaction is a separate call
+ * outside every attempt, so it is always added on top.
  */
 export function pricedRecord(
   rec: UsageRecord,
@@ -290,19 +329,27 @@ export function pricedRecord(
   const reported = (rec.attempts ?? []).filter((attempt) =>
     reportsUsage(attempt.usage),
   );
-  let usage: Usage;
-  let costKnown: boolean;
-  if (reported.length === 0) {
-    ({ usage, costKnown } = pricedUsage(rec.usage, rec.model?.id, table, opts));
+  let priced: PricedUsage;
+  if (rec.served && rec.served.length > 0) {
+    priced = pricedServed(rec.served, table, opts);
+  } else if (reported.length === 0) {
+    priced = pricedUsage(rec.usage, rec.model?.id, table, opts);
   } else {
-    usage = zeroUsage();
-    costKnown = true;
+    let usage = zeroUsage();
+    let costKnown = true;
     for (const attempt of reported) {
-      const priced = pricedUsage(attempt.usage, attempt.model.id, table, opts);
-      usage = addUsage(usage, priced.usage);
-      costKnown = costKnown && priced.costKnown;
+      const attemptPriced = pricedUsage(
+        attempt.usage,
+        attempt.model.id,
+        table,
+        opts,
+      );
+      usage = addUsage(usage, attemptPriced.usage);
+      costKnown = costKnown && attemptPriced.costKnown;
     }
+    priced = { usage, costKnown };
   }
+  let { usage, costKnown } = priced;
   if (rec.compactUsage && reportsUsage(rec.compactUsage)) {
     const compact = pricedUsage(rec.compactUsage, rec.model?.id, table, {
       cachedPrefix: true,
@@ -310,6 +357,18 @@ export function pricedRecord(
     });
     usage = addUsage(usage, compact.usage);
     costKnown = costKnown && compact.costKnown;
+    // The compaction ran on the session's own model, so its tokens join that
+    // model's row; when the split does not carry that model they stay in the
+    // aggregate only rather than inventing an unpriced row.
+    const target = priced.served?.find(
+      (entry) => entry.model.id === rec.model?.id,
+    );
+    if (target) {
+      target.usage = addUsage(target.usage, compact.usage);
+      target.costKnown = target.costKnown && compact.costKnown;
+    }
   }
-  return { usage, costKnown };
+  return priced.served
+    ? { usage, costKnown, served: priced.served }
+    : { usage, costKnown };
 }

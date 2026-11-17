@@ -153,8 +153,13 @@ integration-moved merges), gate and commit wall time, and turns, tokens, cost
 and work (committed files/lines, attributed gate runs) by role, alias and
 model. Costs come from the price table, and every retry or fallback call the
 harness reports in `attempts` is priced too, each call once. A turn whose
-counters are all zero carries no usage report and is unpriced even when its
-model has a table entry. A turn neither the harness nor the table priced is
+harness resolved its model inside one call (an omp `@` alias, which can hop
+natively) records each served model with its own tokens and prices each at its
+own row; the model table counts the turn in every served row and keeps
+committed work on the record's own model row. The hop adds no attempt, the
+record keeps the configured alias, and a served model with no price row is
+unpriced, never `$0`. A turn whose counters are all zero carries no usage
+report and is unpriced even when its model has a table entry. A turn neither the harness nor the table priced is
 counted as unpriced, so a total containing one is partial; cost per merged
 task is unset only when nothing merged or no turn had a known cost. A free
 model prices to a known `$0` through its all-zero table entry, and its tokens

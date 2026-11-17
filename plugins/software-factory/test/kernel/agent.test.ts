@@ -3,7 +3,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { Repo } from "../../src/core/git/repo.js";
-import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
+import {
+  FakeHarness,
+  emptyUsage,
+  fakeTurnResult,
+} from "../../src/harness/fake/index.js";
 import type { SessionRef } from "../../src/harness/types.js";
 import { runAgentTurn } from "../../src/kernel/agent.js";
 import { renderContextPack } from "../../src/kernel/context-pack.js";
@@ -11,6 +15,7 @@ import { derive } from "../../src/kernel/derive.js";
 import { countOutcomeRepairs } from "../../src/kernel/metrics.js";
 import { resolveRole } from "../../src/kernel/flow-context.js";
 import { frontClassFlowsVar } from "../../src/kernel/front.js";
+import { writePriceCache } from "../../src/kernel/openrouter.js";
 import { loadPrompts } from "../../src/kernel/prompts.js";
 import { appendPark, parkLaunchKind } from "../../src/kernel/record.js";
 import { createFolderStore } from "../../src/kernel/store.js";
@@ -141,6 +146,60 @@ describe("agent turn outcome delivery", () => {
     expect(fake.calls[1]!.session?.id).toBe("fake-session-1");
     expect(result.outcome?.decision).toBe("continue");
     expect(result.record.usage?.in).toBe(13);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("records the models a call served and prices each at its own row", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-agent-"));
+    const fake = new FakeHarness({ id: "fake" });
+    const runtime = runtimeFor(fake, root);
+    await runtime.store.ensureLayout();
+    writePriceCache(path.join(root, "price-cache.json"), {
+      "free/zero": { input: 0, cachedInput: 0, output: 0, reasoning: 0 },
+      "paid/one": { input: 4, cachedInput: 0.2, output: 20, reasoning: 20 },
+    });
+    const planPath = path.join(runtime.store.goalDir, "plan.md");
+    fs.writeFileSync(planPath, "# Plan\n", "utf8");
+    fake.script((req) => {
+      fs.writeFileSync(
+        req.outcomePath!,
+        "status: done\nsummary: served two models\ndecision: done\n",
+      );
+      return fakeTurnResult(req, {
+        model: { id: "@free" },
+        usage: { in: 2_000_000 },
+        served: [
+          {
+            model: { id: "free/zero" },
+            usage: { ...emptyUsage(), in: 1_000_000 },
+          },
+          {
+            model: { id: "paid/one" },
+            usage: { ...emptyUsage(), in: 1_000_000 },
+          },
+        ],
+      });
+    });
+
+    const result = await runAgentTurn(runtime, {
+      target: resolveRole(runtime, "architect"),
+      cwd: root,
+      meta: { iteration: 1, step: "architect", round: 1 },
+      vars: { ...vars, plan_path: planPath },
+      expectation: "architect",
+    });
+
+    // The configured alias stays the record's model; the served models are
+    // measurement only and add no attempt hop.
+    expect(result.record.model).toEqual({ id: "@free" });
+    expect(result.record.attempts).toHaveLength(1);
+    expect(result.record.served?.map((entry) => entry.model.id)).toEqual([
+      "free/zero",
+      "paid/one",
+    ]);
+    expect(result.record.served?.[1]?.usage.costUsd).toBeCloseTo(4, 10);
+    expect(result.record.usage?.in).toBe(2_000_000);
+    expect(result.record.usage?.costUsd).toBeCloseTo(4, 10);
     fs.rmSync(root, { recursive: true, force: true });
   });
 
