@@ -605,3 +605,10 @@ Verbatim, newest last; each with what it changed.
 - INTENT synced MAIN 2984165 → V3 (16db7d78 verified): review-bounds + binary-config lines now in the factory tree.
 - Steers for i41: review-bounds (intent-change) + binary-config (intent-change) + steward-serialization (observation).
 - No promote (doc-only landing; pin unchanged c92247c216ca).
+
+### 2026-11-16 — p1-steers landed: exit 0, all 4 steer classes evidenced
+- Exit 0, done, 2 iterations, 1h42m wall. i1: 3 merged (rotation, steers, colliding), 0 parks; i2: single architect turn ($0.29), goal done. Receipts: s1 task-specific (amended pending colliding, steer-routes 00016), s2 redo (discarded review 00018, re-dispatched rotation post-merge 00030-32, steer-routes 00029), s3 spike (quota-terminology-check implement+commit+checks+review, 3 variants audited, no code change), s4 stall (AGREED, nothing pending to cancel — all merged; stall handling shown, cancellation unexercised). Legs: arch omp/opus $0.34+$0.29; PM agy $2.59 (6 turns); impl 6 agy $8.01; reviews 5 ernie $0; planreview agy $0.36. Total ~$11.60. 1 infra retry, 3 outcome-repairs, 1 benign merged-gate note (00020), 0 conflicts, 0 flakes.
+- Caveat for the record: s4 proved stall AGREEMENT, not pending-cancellation (race lost: work finished first). Steer-class evidence complete per Phase1.md wording; cancellation path unexercised.
+- Owner INTENT revision da194dc synced MAIN→V3 (80bc3917 verified) + steered (owner's commit-message words).
+- Steers for i41: review-bounds + binary-config + steward-serialization (from p1-steward landing) + intent3 (owner revision) + alias-bug (owner ruling).
+- No promote (doc-only landing; pin unchanged c92247c216ca).
