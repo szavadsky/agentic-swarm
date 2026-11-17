@@ -178,12 +178,12 @@ describe("just-implement", () => {
       expect(
         records.filter((r) => r.slug === "task" && r.step === "merge-checks")
           .length,
-      ).toBe(1);
-      expect(
-        records.filter(
-          (r) => r.slug === "task" && r.step === "merge" && r.ok === true,
-        ).length,
-      ).toBe(1);
+      ).toBe(0);
+      const merges = records.filter(
+        (r) => r.slug === "task" && r.step === "merge" && r.ok === true,
+      );
+      expect(merges.length).toBe(1);
+      expect(merges[0]!.cause).toContain("skipped merge-checks");
 
       await writeIterationSummary(runtime.store, {
         iteration: 1,
@@ -205,12 +205,11 @@ describe("just-implement", () => {
 
   it("parks after a red merged gate and lets one gate-fix turn run first", async () => {
     const { repo, goal } = setupFlowRepo({
-      // Passes on the task branch, fails on the detached merge scratch: the
-      // task's own gates are green while the merged-result gate is red.
-      gates: [
-        { id: "branch-only", command: "git symbolic-ref -q --short HEAD" },
-      ],
+      // Green on the task worktree, red once a concurrent landing poisons the
+      // head: the merged tree differs, so the merge gates still run.
+      gates: [{ id: "poison-gate", command: "test ! -f poison.txt" }],
     });
+    const checkout = goalCheckout(repo, goal);
     try {
       const harness = new FakeHarness({ id: "fake" });
       harness.script((req, ctx) => {
@@ -223,13 +222,36 @@ describe("just-implement", () => {
         ctx.writeOutcome(outcome({ summary: "v2" }));
         return fakeTurnResult(req);
       });
-      scriptStallLeave(harness, ["task"]);
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await writeTask(
-        runtime,
-        task("task", { flow: "just-implement", scope: ["task.txt"] }),
-      );
+      const file = task("task", {
+        flow: "just-implement",
+        scope: ["task.txt"],
+      });
+      await writeTask(runtime, file);
+      const drive = async (action: Action): Promise<void> => {
+        const before = derive(
+          await runtime.store.listTasks(),
+          await runtime.store.listRecords(),
+          runtime.configs.process.flows,
+        );
+        await executeTaskAction(
+          runtime,
+          file,
+          action,
+          1,
+          before.tasks[file.slug]!,
+        );
+      };
+      await drive({ kind: "step", slug: "task", step: "implement", round: 1 });
+      // A concurrent landing poisons the head before the merge queue runs.
+      fs.writeFileSync(path.join(checkout, "poison.txt"), "poison\n", "utf8");
+      repo.git(["add", "poison.txt"], { cwd: checkout });
+      repo.git(["commit", "-m", "concurrent poison"], { cwd: checkout });
+      await drive({ kind: "merge", slug: "task" });
+      await drive({ kind: "step", slug: "task", step: "implement", round: 1 });
+      await drive({ kind: "merge", slug: "task" });
+      scriptStallLeave(harness, ["task"]);
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("boundary");
 
@@ -240,13 +262,17 @@ describe("just-implement", () => {
         runtime.configs.process.flows,
       );
       expect(state.tasks.task!.status).toBe("parked");
-      expect(state.tasks.task!.cause).toContain("gates: branch-only");
+      expect(state.tasks.task!.cause).toContain("gates: poison-gate");
       expect(state.tasks.task!.round).toBe(1);
       expect(harness.calls.length).toBe(3);
       expect(
         records.filter(
           (r) => r.slug === "task" && r.step === "merge" && r.ok === false,
         ).length,
+      ).toBe(2);
+      expect(
+        records.filter((r) => r.slug === "task" && r.step === "merge-checks")
+          .length,
       ).toBe(2);
       expect(
         records.filter((r) => r.slug === "task" && r.step === "review"),
@@ -510,10 +536,10 @@ describe("empty diff", () => {
       expect(
         records.filter((r) => r.slug === "task" && r.step === "park"),
       ).toHaveLength(0);
-      // Initial + re-run (both red), the post-fix checks, merge-checks: the
-      // deferral itself runs no extra gate.
+      // Initial + re-run (both red) and the post-fix checks; the merge skips
+      // its gates on the already-judged tree.
       const runs = fs.readFileSync(count, "utf8").trim().split("\n").length;
-      expect(runs).toBe(4);
+      expect(runs).toBe(3);
     } finally {
       cleanupFlowRepo(repo);
       fs.rmSync(dir, { recursive: true, force: true });
@@ -1155,10 +1181,10 @@ describe("gate flake re-run", () => {
       expect(flakes[0]!.cause).toContain("src/a.test.ts");
       expect(flakes[0]!.cause).toContain("flaky test");
 
-      // Only the red gate re-ran: flaky ran first + re-run + merge-checks,
-      // green ran checks + merge-checks.
-      expect(runs(flaky)).toBe(3);
-      expect(runs(green)).toBe(2);
+      // Only the red gate re-ran, and the merge skipped its gates on the
+      // already-judged tree: flaky ran first + re-run, green ran checks.
+      expect(runs(flaky)).toBe(2);
+      expect(runs(green)).toBe(1);
 
       await writeMetrics(runtime.store, {
         iteration: 1,

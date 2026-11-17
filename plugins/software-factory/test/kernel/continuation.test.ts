@@ -7,7 +7,14 @@ import { runBoundary } from "../../src/kernel/boundary.js";
 import { contextPackRelPath } from "../../src/kernel/context-pack.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
-import type { KernelRuntime } from "../../src/kernel/types.js";
+import { executeTaskAction } from "../../src/kernel/flow.js";
+import type {
+  Action,
+  KernelRuntime,
+  TaskFile,
+} from "../../src/kernel/types.js";
+import type { TmpRepo } from "../helpers/tmp-repo.js";
+import { workCalls } from "./fake-defaults.js";
 import { task } from "./helpers.js";
 import {
   cleanupFlowRepo,
@@ -18,7 +25,6 @@ import {
   setupFlowRepo,
   writeTask,
 } from "./s2-helpers.js";
-import { workCalls } from "./fake-defaults.js";
 
 describe("parked continuation", () => {
   it("continues a task with base from the parked task's kept branch", async () => {
@@ -197,6 +203,39 @@ describe("kept-land", () => {
     });
   }
 
+  /**
+   * Runs the task's scripted steps, then lands a concurrent commit: the head
+   * moves after the branch checks ran, so the squash tree differs from the
+   * checked tree and the merge gates run instead of being skipped. The landing
+   * happens between turns: a commit during a turn is a containment refusal.
+   */
+  async function implementThenLand(
+    runtime: KernelRuntime,
+    file: TaskFile,
+    steps: string[],
+    repo: TmpRepo,
+  ): Promise<void> {
+    for (const step of steps) {
+      const state = await stateOf(runtime);
+      const action: Action = { kind: "step", slug: file.slug, step, round: 1 };
+      await executeTaskAction(
+        runtime,
+        file,
+        action,
+        1,
+        state.tasks[file.slug]!,
+      );
+    }
+    const checkout = runtime.paths.goalCheckout;
+    fs.writeFileSync(
+      path.join(checkout, "concurrent.txt"),
+      "concurrent.txt\n",
+      "utf8",
+    );
+    repo.git(["add", "concurrent.txt"], { cwd: checkout });
+    repo.git(["commit", "-m", "concurrent landing"], { cwd: checkout });
+  }
+
   it("lands a flake-parked kept branch with no new task", async () => {
     const counter = freshCounter();
     const { repo, goal } = setupFlowRepo({
@@ -217,8 +256,10 @@ describe("kept-land", () => {
       });
       scriptStallLeave(harness, ["kept-flake"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await writeTask(runtime, task("kept-flake", { scope: ["feature.txt"] }));
+      const file = task("kept-flake", { scope: ["feature.txt"] });
+      await writeTask(runtime, file);
       writePlan(runtime, ["kept-flake"]);
+      await implementThenLand(runtime, file, ["implement", "review"], repo);
 
       expect((await runDispatch(runtime, { iteration: 1 })).reason).toBe(
         "boundary",
@@ -283,11 +324,10 @@ describe("kept-land", () => {
       });
       scriptStallLeave(harness, ["kept-conflict"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await writeTask(
-        runtime,
-        task("kept-conflict", { scope: ["feature.txt"] }),
-      );
+      const file = task("kept-conflict", { scope: ["feature.txt"] });
+      await writeTask(runtime, file);
       writePlan(runtime, ["kept-conflict"]);
+      await implementThenLand(runtime, file, ["implement", "review"], repo);
 
       expect((await runDispatch(runtime, { iteration: 1 })).reason).toBe(
         "boundary",
@@ -365,8 +405,10 @@ describe("kept-land", () => {
       });
       scriptStallLeave(harness, ["kept-red"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await writeTask(runtime, task("kept-red", { scope: ["feature.txt"] }));
+      const file = task("kept-red", { scope: ["feature.txt"] });
+      await writeTask(runtime, file);
       writePlan(runtime, ["kept-red"]);
+      await implementThenLand(runtime, file, ["implement", "review"], repo);
 
       expect((await runDispatch(runtime, { iteration: 1 })).reason).toBe(
         "boundary",
@@ -495,8 +537,10 @@ describe("kept-land", () => {
       });
       scriptStallLeave(harness, ["kept-void"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await writeTask(runtime, task("kept-void", { scope: ["feature.txt"] }));
+      const file = task("kept-void", { scope: ["feature.txt"] });
+      await writeTask(runtime, file);
       writePlan(runtime, ["kept-void"]);
+      await implementThenLand(runtime, file, ["implement", "review"], repo);
 
       expect((await runDispatch(runtime, { iteration: 1 })).reason).toBe(
         "boundary",
@@ -555,11 +599,13 @@ describe("kept-land", () => {
       });
       scriptStallLeave(harness, ["kept-simple"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await writeTask(
-        runtime,
-        task("kept-simple", { flow: "just-implement", scope: ["feature.txt"] }),
-      );
+      const file = task("kept-simple", {
+        flow: "just-implement",
+        scope: ["feature.txt"],
+      });
+      await writeTask(runtime, file);
       writePlan(runtime, ["kept-simple"]);
+      await implementThenLand(runtime, file, ["implement"], repo);
 
       expect((await runDispatch(runtime, { iteration: 1 })).reason).toBe(
         "boundary",
@@ -611,7 +657,8 @@ describe("kept-land", () => {
       });
       scriptStallLeave(harness, ["kept-base"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await writeTask(runtime, task("kept-base", { scope: ["alpha.txt"] }));
+      const file = task("kept-base", { scope: ["alpha.txt"] });
+      await writeTask(runtime, file);
       await writeTask(
         runtime,
         task("kept-next", {
@@ -621,6 +668,7 @@ describe("kept-land", () => {
         }),
       );
       writePlan(runtime, ["kept-base", "kept-next"]);
+      await implementThenLand(runtime, file, ["implement", "review"], repo);
 
       expect((await runDispatch(runtime, { iteration: 1 })).reason).toBe(
         "boundary",
@@ -673,8 +721,10 @@ describe("kept-land", () => {
       });
       scriptStallLeave(harness, ["kept-flip"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await writeTask(runtime, task("kept-flip", { scope: ["feature.txt"] }));
+      const file = task("kept-flip", { scope: ["feature.txt"] });
+      await writeTask(runtime, file);
       writePlan(runtime, ["kept-flip"]);
+      await implementThenLand(runtime, file, ["implement", "review"], repo);
 
       expect((await runDispatch(runtime, { iteration: 1 })).reason).toBe(
         "boundary",
@@ -710,6 +760,59 @@ describe("kept-land", () => {
       expect(repo.git(["show", "factory/demo:feature.txt"]).stdout.trim()).toBe(
         "feature",
       );
+    } finally {
+      rmCounter(counter);
+      cleanupFlowRepo(repo);
+    }
+  }, 90_000);
+
+  it("skips merge gates on a branch tree the task checks already judged", async () => {
+    const counter = freshCounter();
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+      gates: [
+        {
+          id: "unit",
+          command: mergeOnlyGate("kept-skip", flakeRedTwice(counter)),
+        },
+      ],
+    });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      scriptImplementApprove(harness, "feature.txt", "feature\n");
+      // Consumed only if a merge gate ran and reddened: that path must fail.
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "nothing to fix" }));
+        return fakeTurnResult(req);
+      });
+      scriptStallLeave(harness, ["kept-skip"]);
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("kept-skip", { scope: ["feature.txt"] }));
+      writePlan(runtime, ["kept-skip"]);
+
+      expect((await runDispatch(runtime, { iteration: 1 })).reason).toBe(
+        "boundary",
+      );
+      // The head never moved: the squash lands the tree the checks judged.
+      expect((await stateOf(runtime)).tasks["kept-skip"]!.status).toBe(
+        "merged",
+      );
+
+      const records = await runtime.store.listRecords();
+      expect(
+        records.filter(
+          (r) => r.slug === "kept-skip" && r.step === "merge-checks",
+        ),
+      ).toHaveLength(0);
+      expect(fs.existsSync(counter)).toBe(false);
+      const merge = records.find(
+        (r) => r.slug === "kept-skip" && r.step === "merge" && r.ok === true,
+      );
+      expect(merge).toBeDefined();
+      expect(merge!.cause).toContain("skipped merge-checks");
+      expect(merge!.checks).toHaveLength(1);
+      expect(merge!.checks![0]!.ok).toBe(true);
+      expect(workCalls(harness)).toHaveLength(2);
     } finally {
       rmCounter(counter);
       cleanupFlowRepo(repo);

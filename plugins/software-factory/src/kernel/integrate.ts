@@ -209,6 +209,32 @@ async function recoverOpenMerge(
 }
 
 /**
+ * The last task-checks record that already judged `tree` under the current
+ * inherited-failure set. Tree identity, not commit: the squash commit always
+ * differs from the task tip. A gate-flake re-run that closed green counts —
+ * the checks record carries the re-run result.
+ */
+function judgedChecks(
+  records: StepRecord[],
+  slug: string,
+  tree: string,
+  preexisting: ReadonlySet<string>,
+): StepRecord | undefined {
+  return records
+    .filter(
+      (r) =>
+        r.slug === slug &&
+        r.step === "checks" &&
+        r.endedAt &&
+        r.tree === tree &&
+        r.checks !== undefined &&
+        newGateFailures(r.checks, preexisting).length === 0,
+    )
+    .sort(bySeq)
+    .at(-1);
+}
+
+/**
  * Serial squash-merge queue. The squash commit is built and gated in a scratch
  * worktree detached at the current integration head; the integration ref moves
  * only after green, and the stable goal checkout is synced afterwards.
@@ -326,44 +352,54 @@ export async function mergeTask(
       return {};
     }
 
-    const setup = await runWorktreeSetup({
-      commands: runtime.configs.repo.setup,
-      cwd: scratch,
-    });
-    if (!setup.ok) {
-      await removeMergeScratch(runtime);
-      await recordMerge(runtime, task, iteration, round, {
-        ok: false,
-        cause: `setup: ${setup.error ?? "unknown"}`,
-      });
-      return {};
-    }
-    const gate = await startChecks(
-      runtime.store,
-      { iteration, slug: task.slug, round },
-      { step: "merge-checks" },
-    );
-    let checks = await runGates(runtime, scratch);
+    const mergedTree = await treeSha(scratch);
     const preexisting = preexistingRed(recordedBaseGates(records));
-    if (opts.keptLand) {
-      checks = await rerunRedKeptGates(
-        runtime,
-        { iteration, slug: task.slug, round },
-        scratch,
-        checks,
-        preexisting,
-      );
-    }
-    await finishChecks(gate, checks, { preexisting });
-    const red = newGateFailures(checks, preexisting);
-    if (red.length > 0) {
-      await removeMergeScratch(runtime);
-      await recordMerge(runtime, task, iteration, round, {
-        ok: false,
-        cause: `gates: ${red.map((c) => c.name).join(", ")}`,
-        checks,
+    const judged = judgedChecks(records, task.slug, mergedTree, preexisting);
+    let checks: CheckResult[];
+    let skipCause: string | undefined;
+    if (judged) {
+      checks = judged.checks ?? [];
+      skipCause = `skipped merge-checks: merged tree equals checked tree ${mergedTree}`;
+    } else {
+      const setup = await runWorktreeSetup({
+        commands: runtime.configs.repo.setup,
+        cwd: scratch,
       });
-      return {};
+      if (!setup.ok) {
+        await removeMergeScratch(runtime);
+        await recordMerge(runtime, task, iteration, round, {
+          ok: false,
+          cause: `setup: ${setup.error ?? "unknown"}`,
+        });
+        return {};
+      }
+      const gate = await startChecks(
+        runtime.store,
+        { iteration, slug: task.slug, round },
+        { step: "merge-checks" },
+      );
+      let ran = await runGates(runtime, scratch);
+      if (opts.keptLand) {
+        ran = await rerunRedKeptGates(
+          runtime,
+          { iteration, slug: task.slug, round },
+          scratch,
+          ran,
+          preexisting,
+        );
+      }
+      await finishChecks(gate, ran, { preexisting });
+      const red = newGateFailures(ran, preexisting);
+      if (red.length > 0) {
+        await removeMergeScratch(runtime);
+        await recordMerge(runtime, task, iteration, round, {
+          ok: false,
+          cause: `gates: ${red.map((c) => c.name).join(", ")}`,
+          checks: ran,
+        });
+        return {};
+      }
+      checks = ran;
     }
 
     const commit = await headSha(scratch);
@@ -381,7 +417,11 @@ export async function mergeTask(
     }
     await syncCheckout(runtime, commit);
     await removeMergeScratch(runtime);
-    await turn.finish({ ok: true, commit, checks });
+    await turn.finish(
+      skipCause
+        ? { ok: true, commit, checks, cause: skipCause }
+        : { ok: true, commit, checks },
+    );
     return {};
   });
 }

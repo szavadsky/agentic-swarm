@@ -5,6 +5,8 @@ import yaml from "yaml";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
+import { executeTaskAction } from "../../src/kernel/flow.js";
+import type { Action } from "../../src/kernel/types.js";
 import {
   containmentSnapshot,
   containmentViolation,
@@ -650,6 +652,7 @@ describe("agent containment", () => {
     const { repo, goal } = setupFlowRepo({
       gates: [{ id: "detached", command: gate }],
     });
+    const checkout = goalCheckout(repo, goal);
     try {
       const harness = new FakeHarness({ id: "fake" });
       harness.script((req, ctx) => {
@@ -662,9 +665,32 @@ describe("agent containment", () => {
         return fakeTurnResult(req);
       });
 
-      scriptStallLeave(harness, ["task"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await writeTask(runtime, task("task", { scope: ["task.txt"] }));
+      const file = task("task", { scope: ["task.txt"] });
+      await writeTask(runtime, file);
+      const drive = async (action: Action): Promise<void> => {
+        const before = derive(
+          await runtime.store.listTasks(),
+          await runtime.store.listRecords(),
+          runtime.configs.process.flows,
+        );
+        await executeTaskAction(
+          runtime,
+          file,
+          action,
+          1,
+          before.tasks[file.slug]!,
+        );
+      };
+      await drive({ kind: "step", slug: "task", step: "implement", round: 1 });
+      await drive({ kind: "step", slug: "task", step: "review", round: 1 });
+      // Differ the merged tree so the merge gates run: without a concurrent
+      // landing the merge would skip them on the already-judged tree.
+      fs.writeFileSync(path.join(checkout, "other.txt"), "other\n", "utf8");
+      repo.git(["add", "other.txt"], { cwd: checkout });
+      repo.git(["commit", "-m", "concurrent landing"], { cwd: checkout });
+      await drive({ kind: "merge", slug: "task" });
+      scriptStallLeave(harness, ["task"]);
       await runDispatch(runtime, { iteration: 1 });
 
       const records = await runtime.store.listRecords();
