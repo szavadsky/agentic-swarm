@@ -656,3 +656,5 @@ Verbatim, newest last; each with what it changed.
 - Owner gates line (6e7a55bb) synced MAIN→V3 (326da37e verified) + steered for i44.
 
 ### 2026-11-17 — p1-trivial regression r3: exit 0, done, 0 iterations (5m, no drift)
+
+### 2026-11-17 — p1-task regression r3: exit 0, done, 0 iterations (5m, no drift)
