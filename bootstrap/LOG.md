@@ -622,3 +622,7 @@ Verbatim, newest last; each with what it changed.
 - FIX VERIFIED: architect claude/opus SINGLE attempt done, $1.88, zero crashes (approve-all + completed-exit work; 2-crash streak broken). Digest omp/Go-hy4:xhigh done $0 (new leg works). Implements 8 omp-Go/muse $0.25; reviews 3 omp-Go/deepseek $0.14; PM+plan roles agy $2.88. Cost $5.15 total (informational). 0 infra retries, 0 fallback hops, 7 outcome-repairs, 0 conflicts/flakes. Steward r1 01692 stub again.
 - Operator runbook fix (debt): SELF-IMPROVE.md:97 serialization line updated for admit-overlap (checks-evidence.md:23 is architect material, left).
 - Forward: (1) steward v2 colliding launch — running next on the new pin; (2) operator config (iterationUsd + subscription names + explicit efforts) — subscription map + escalation effort at i42 rotation, iterationUsd value asked of owner; (3) re-run p1-trivial/p1-task after park-amend merges — deferred (pending).
+
+### 2026-11-17 — p1-steward-v2 landed: STEWARD EVIDENCE PRODUCED
+- Exit 3 (iteration-limit), 53m. Implements 00006/00007 started 0.3s apart (concurrent dispatch — admit-overlap proof); real conflict on SELF-IMPROVE.md:69 → merge-attempt 00014 → park 00017 (conflict) → STEWARD AGENT TURN 00018 (ernie/high, done, 2 attempts, merge commit 6b90907 keeping own variant) → merge 00021. Both tasks merged (37922aa, 76b95b0), 0 parks pending, cost $1.99 (steward $0.00 ernie). Phase-1 steward evidence COMPLETE. Gates 925/0.
+- No promote (doc-only landing; pin unchanged 24934e2389f4).
