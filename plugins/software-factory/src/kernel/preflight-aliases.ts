@@ -28,6 +28,15 @@ function add(
   ctx.findings.push({ file, key, message });
 }
 
+/**
+ * omp role aliases (`@free`) resolve inside omp's own chain, so the binary
+ * catalog never lists them and no effort level applies; omp refuses a bad id
+ * itself at runtime.
+ */
+function isOmpAlias(harness: string, model: string): boolean {
+  return harness === OMP_ID && model.startsWith("@");
+}
+
 async function modelListed(
   ctx: AliasContext,
   harness: string,
@@ -88,6 +97,7 @@ async function resolveEffort(
   liveLevels?: readonly string[],
 ): Promise<string | undefined> {
   if (!effort) return undefined;
+  if (isOmpAlias(harness, model.id)) return effort;
   let levels: readonly string[];
   if (liveLevels !== undefined) {
     levels = liveLevels;
@@ -143,6 +153,7 @@ async function checkedModel(
   model: string,
   label: "model" | "fallback",
 ): Promise<CheckedModel | undefined> {
+  if (isOmpAlias(harness, model)) return {};
   let live: ModelProbe | undefined;
   try {
     live = await liveProbe(ctx, harness, { id: model });

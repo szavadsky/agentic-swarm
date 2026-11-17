@@ -218,6 +218,82 @@ describe("pre-flight", () => {
     }
   });
 
+  it("passes an @-prefixed omp alias the catalog does not list", async () => {
+    const f = await fixture(
+      SPLIT_HARNESSES.replace("model: impl }", 'model: "@free" }'),
+    );
+    try {
+      const seen: string[] = [];
+      const catalog: ModelCatalog = async (harness, model) => {
+        seen.push(`${harness}/${model}`);
+        return model !== "@free";
+      };
+      const result = await preflight({
+        ...f.input,
+        harnesses: splitHarnesses(f),
+        catalog,
+      });
+      expect(result.aliases.implementer).toBeUndefined();
+      expect(seen).not.toContain("omp/@free");
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("skips the effort check for an @-prefixed omp alias", async () => {
+    const f = await fixture(
+      SPLIT_HARNESSES.replace(
+        "model: impl }",
+        'model: "@free", effort: ultra }',
+      ),
+    );
+    try {
+      const catalog: ModelCatalog = async (_harness, model) =>
+        model !== "@free";
+      const result = await preflight({
+        ...f.input,
+        harnesses: splitHarnesses(f),
+        catalog,
+      });
+      expect(result.aliases.implementer).toBe("ultra");
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("still refuses an unlisted plain omp model id", async () => {
+    const f = await fixture(SPLIT_HARNESSES);
+    try {
+      const catalog: ModelCatalog = async (harness, model) =>
+        !(harness === "omp" && model === "impl");
+      const err = await refusal({
+        ...f.input,
+        harnesses: splitHarnesses(f),
+        catalog,
+      });
+      expect(err.findings).toContainEqual(
+        expect.objectContaining({
+          key: "aliases.implementer.model",
+          message: 'model "impl" is not listed by harness "omp"',
+        }),
+      );
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("still refuses an @-prefixed model on a non-omp harness", async () => {
+    const f = await fixture(RUN_HEAD.replace("model: pm", 'model: "@free"'));
+    try {
+      const catalog: ModelCatalog = async (_harness, model) =>
+        model !== "@free";
+      const err = await refusal({ ...f.input, catalog });
+      expect(err.findings.map((x) => x.key)).toContain("aliases.pm.model");
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
   it("checks scouts against omp, not the architect's harness", async () => {
     const f = await fixture(
       withScouts(SPLIT_HARNESSES, "scouts: { model: ernie, effort: highest }"),

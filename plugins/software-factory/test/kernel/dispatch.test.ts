@@ -7,7 +7,7 @@ import {
   fakeTurnResult,
 } from "../../src/harness/fake/index.js";
 import { derive } from "../../src/kernel/derive.js";
-import { areasOverlap, runDispatch } from "../../src/kernel/dispatch.js";
+import { runDispatch } from "../../src/kernel/dispatch.js";
 import { createDrainController } from "../../src/kernel/signals.js";
 import { task } from "./helpers.js";
 import {
@@ -83,15 +83,6 @@ async function runPair(opts: {
 }
 
 describe("dispatch admission", () => {
-  it("knows which declared areas overlap", () => {
-    expect(areasOverlap(["dispatch"], ["dispatch"])).toBe(true);
-    expect(areasOverlap(["auth", "billing"], ["billing"])).toBe(true);
-    expect(areasOverlap(["auth"], ["billing"])).toBe(false);
-    expect(areasOverlap(["shared/file.ts"], ["shared/**"])).toBe(false);
-    expect(areasOverlap([], ["billing"])).toBe(false);
-    expect(areasOverlap(["auth"], [])).toBe(false);
-  });
-
   it("runs disjoint areas concurrently up to the absolute limit", async () => {
     const run = await runPair({
       scopeA: ["alpha-area"],
@@ -103,13 +94,15 @@ describe("dispatch admission", () => {
     expect(run.max).toBe(2);
   }, 60_000);
 
-  it("never runs two tasks with the same area at once", async () => {
+  it("runs overlapping scopes concurrently when no dep orders them", async () => {
     const run = await runPair({
       scopeA: ["shared-area"],
       scopeB: ["shared-area"],
       limits: { concurrency: { overall: 2 } },
+      rendezvous: true,
     });
-    expect(run.max).toBe(1);
+    expect(run.reason).toBe("boundary");
+    expect(run.max).toBe(2);
   }, 60_000);
 
   it("runs disjoint areas concurrently even when their diffs touch the same file", async () => {
@@ -156,7 +149,7 @@ describe("dispatch admission", () => {
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("boundary");
       expect(counter.max).toBe(2);
-      // Admission is about areas, not files: both implement turns ran even
+      // Admission gates on limits, not files: both implement turns ran even
       // though both diffs touch shared.txt. The second merge parks as a
       // no-progress empty diff; that is the merge queue's verdict, not dispatch.
       const records = await runtime.store.listRecords();

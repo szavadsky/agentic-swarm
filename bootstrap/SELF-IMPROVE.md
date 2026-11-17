@@ -94,7 +94,7 @@ Every recovery act is journaled and reported as an incident, so the architect ow
 ## Operator launches
 
 - Interrupt test (after the architect's `forward` says relaunch is ready): during a launch with at least one task running and one queued, send one `pkill -INT -f "factory.ts run"`, wait for exit 130, relaunch the same command. Journal the first record ids of the relaunch.
-- Two dependency-free tasks editing the same line must be dispatched concurrently so the steward arbitrates the conflict at merge, and two sequential merges mean serialization via `overlapsRunning` (`plugins/software-factory/src/kernel/dispatch.ts:525,542`), not steward evidence (p1-steward landed that way, commit `27bf9d0`).
+- Two dependency-free tasks editing the same line are dispatched concurrently so the steward arbitrates the conflict at merge (`admit-overlap` removed the `overlapsRunning` serialization; p1-steward v1 landed sequential before the fix, commit `27bf9d0`).
 - Small goals (after `forward` says the trivial and task paths are ready), one at a time, no `self` run live:
   ```bash
   bun run $PIN/bin/factory.ts init --repo $V3 --goal p1-trivial --intent /tmp/p1-trivial.md
