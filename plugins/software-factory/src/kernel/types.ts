@@ -309,10 +309,10 @@ export const DEFAULT_TIMEOUTS: Timeouts = {
 
 /**
  * One append-only record, materialized from `records/<dir>/`: `started.yaml`
- * exists before a turn, `end.yaml` commits it, `outcome.yaml` holds the agent's
- * accepted outcome. Script steps have actor `script` and no outcome, except
- * `steer-routes`: it stores the accepted steer-route map so the boundary never
- * reads a failed rung's routes.
+ * exists before a turn, `end.yaml` commits it and seals its files read-only,
+ * `outcome.yaml` holds the agent's accepted outcome. Script steps have actor
+ * `script` and no outcome, except `steer-routes`: it stores the accepted
+ * steer-route map so the boundary never reads a failed rung's routes.
  */
 export interface StepRecord {
   seq: number;
@@ -434,6 +434,7 @@ export interface TurnRecord {
   meta: StepRecord;
   /** Absolute path the agent writes its outcome file to. */
   outcomePath: string;
+  /** Writes outcome, then end.yaml, then seals the record read-only. */
   finish(end: RecordEnd): Promise<StepRecord>;
 }
 

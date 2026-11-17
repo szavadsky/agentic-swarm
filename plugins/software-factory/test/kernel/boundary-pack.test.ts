@@ -212,8 +212,10 @@ describe("boundary context pack", () => {
       });
       await turn.finish({ packBytes: 782 });
       // Pre-uncap records committed end.yaml with the retired flag; listRecords
-      // must neither throw on nor drop the unknown key.
+      // must neither throw on nor drop the unknown key. Pre-seal records were
+      // written open, so reopen this one to stage history as it exists.
       const endPath = path.join(turn.dir, "end.yaml");
+      fs.chmodSync(endPath, 0o644);
       const raw = fs.readFileSync(endPath, "utf8");
       fs.writeFileSync(
         endPath,

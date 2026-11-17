@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { writeYamlAtomic } from "../core/records/io.js";
+import { sealRecord } from "./store.js";
 import { backfillSummaries } from "./summary.js";
 import type { ArtifactStore, KernelRuntime } from "./types.js";
 import { prepareIntegrationCheckout } from "./worktree.js";
@@ -14,9 +15,11 @@ import { prepareIntegrationCheckout } from "./worktree.js";
  * prompt bytes, from harness or script) spends one turn and parks
  * `infra-repeat` after two repeats on the same step. Never invent an outcome,
  * usage or commit. Still free: quota/rate/auth/overflow stops and drain
- * (tasks never started).
+ * (tasks never started). Every record that already has `end.yaml` is sealed
+ * too, so history written before records were read-only becomes sealed as
+ * well.
  */
-async function closeInterruptedRecords(store: ArtifactStore): Promise<number> {
+async function settleRecords(store: ArtifactStore): Promise<number> {
   let entries: fs.Dirent[];
   try {
     entries = await fs.promises.readdir(store.recordsDir, {
@@ -31,12 +34,16 @@ async function closeInterruptedRecords(store: ArtifactStore): Promise<number> {
     if (!entry.isDirectory()) continue;
     const dir = path.join(store.recordsDir, entry.name);
     if (!fs.existsSync(path.join(dir, "started.yaml"))) continue;
-    if (fs.existsSync(path.join(dir, "end.yaml"))) continue;
+    if (fs.existsSync(path.join(dir, "end.yaml"))) {
+      await sealRecord(dir);
+      continue;
+    }
     await writeYamlAtomic(path.join(dir, "end.yaml"), {
       stop: { kind: "infra", cause: "crash" },
       ok: false,
       endedAt: new Date().toISOString(),
     });
+    await sealRecord(dir);
     closed += 1;
   }
   return closed;
@@ -48,7 +55,7 @@ async function closeInterruptedRecords(store: ArtifactStore): Promise<number> {
  * summaries missing from iterations that were killed.
  */
 export async function recoverLaunch(runtime: KernelRuntime): Promise<number> {
-  const closed = await closeInterruptedRecords(runtime.store);
+  const closed = await settleRecords(runtime.store);
   await prepareIntegrationCheckout(runtime);
   await backfillSummaries(runtime);
   if (closed > 0)

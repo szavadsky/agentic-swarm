@@ -5,6 +5,7 @@ import { runWorktreeSetup, type SetupResult } from "../core/checks/setup.js";
 import { isAncestor } from "../core/git/commit.js";
 import { GitError, git } from "../core/git/exec.js";
 import { parseWorktreeList } from "../core/git/status.js";
+import { sealedRecordDirs } from "./store.js";
 import type { KernelRuntime, StepRecord, TaskFile } from "./types.js";
 
 /** Task branches and worktrees are goal-scoped and disposable. */
@@ -416,6 +417,8 @@ export interface ContainmentSnapshot {
   inFlight: ReadonlySet<number>;
   /** Highest record sequence the snapshot saw; higher ones opened after it did. */
   maxSeq: number;
+  /** Record directories already sealed at the snapshot; their files are history. */
+  sealed: ReadonlySet<string>;
   /** Every goal artifact except the operator's mailbox channels: path -> hash. */
   artifacts: ReadonlyMap<string, string>;
   /** The integration branch ref; the merge queue advances it after a merge record. */
@@ -485,11 +488,17 @@ function artifactState(dir: string): Map<string, string> {
 }
 
 const RECORD_DIR = /^records\/(\d{5})-/;
+const RECORD_FILE = /^(records\/[^/]+)\//;
 
 /** The sequence encoded in a record's goal-relative path, if it names one. */
 function recordSeqOf(rel: string): number | undefined {
   const match = RECORD_DIR.exec(rel);
   return match?.[1] ? Number(match[1]) : undefined;
+}
+
+/** The record directory a goal-relative path lives in, if it names one. */
+function recordDirOf(rel: string): string | undefined {
+  return RECORD_FILE.exec(rel)?.[1];
 }
 
 /** Records that started before the snapshot and had not closed when it was taken. */
@@ -535,7 +544,8 @@ function pmOwned(rel: string): boolean {
  * A turn may write only its own outcome file. A record directory that belongs
  * to a record the snapshot never saw (this turn's own included) or still open
  * at the snapshot is the script's or another turn's; a directory no record
- * explains, and a seen record's files, are the turn's write. Unseen means a
+ * explains, and a seen unsealed record's files, are the turn's write. A record
+ * sealed at the snapshot is history and is never attributed. Unseen means a
  * higher sequence, never a later timestamp: a sibling that opens across the
  * snapshot's record read stamps before it but lands after.
  */
@@ -545,6 +555,7 @@ function artifactBreaches(
   opts: {
     maxSeq: number;
     inFlight: ReadonlySet<number>;
+    sealed: ReadonlySet<string>;
     records: readonly StepRecord[];
     pmActive: boolean;
   },
@@ -553,6 +564,8 @@ function artifactBreaches(
   for (const record of opts.records) live.set(record.seq, record);
   const ignored = (rel: string): boolean => {
     if (opts.pmActive && pmOwned(rel)) return true;
+    const dir = recordDirOf(rel);
+    if (dir !== undefined && opts.sealed.has(dir)) return true;
     const seq = recordSeqOf(rel);
     if (seq === undefined) return false;
     // The store allocates sequences under one lock, so a record the read
@@ -635,6 +648,7 @@ export async function containmentSnapshot(
     at,
     inFlight: recordsInFlight(records, at),
     maxSeq: records.reduce((max, r) => Math.max(max, r.seq), 0),
+    sealed: sealedRecordDirs(records),
     artifacts,
     integration,
     root,
@@ -678,6 +692,7 @@ export async function containmentViolation(
   const changedArtifacts = artifactBreaches(snapshot.artifacts, artifacts, {
     maxSeq: snapshot.maxSeq,
     inFlight: snapshot.inFlight,
+    sealed: snapshot.sealed,
     records,
     pmActive: pmWroteDuring(records, snapshot.at, settledAt),
   });
