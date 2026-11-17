@@ -9,6 +9,7 @@ import {
   readFrontClass,
 } from "./flow-context.js";
 import { scanInbox } from "./mailbox.js";
+import { KERNEL_TURN_STEPS } from "./outcome.js";
 import { parseTaskFile, TaskFileError, validateTaskGraph } from "./tasks.js";
 import type { KernelRuntime, StepRecord, TaskFile } from "./types.js";
 
@@ -216,7 +217,7 @@ export async function runFront(
         gate_commands: gateCommands(runtime),
         class_flows: frontClassFlowsVar(),
       },
-      expectation: "any",
+      expectation: KERNEL_TURN_STEPS.front,
     });
     if (!result.outcome) {
       return {

@@ -33,6 +33,7 @@ import {
   writeOutbox,
   type Steer,
 } from "./mailbox.js";
+import { KERNEL_TURN_STEPS } from "./outcome.js";
 import { latestPlanCheck } from "./plan-check.js";
 import { latestPlanReview, runPlanReview } from "./plan-review.js";
 import { type PmRung, runPm } from "./pm.js";
@@ -324,7 +325,7 @@ export async function runBoundary(
         digest_path: digestPath ?? "",
         steers: formatSteers(forArchitect),
       },
-      expectation: "architect",
+      expectation: KERNEL_TURN_STEPS.architect,
       session: resume,
       settle: async (_record, outcome, live) => {
         if (!live || outcome?.decision !== "continue") return {};
