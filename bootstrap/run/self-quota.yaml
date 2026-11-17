@@ -1,8 +1,8 @@
-# Self-run, full rotation (iteration 44 forward, owner 2026-11-16/17):
-# A-shape continues (claude-code architect, 3 clean outings). PM/review/QA
-# flip back to ernie-first (hy4 ran i43 with zero ernie turns). Mechanical
-# digest flips back to literal `@free` (Go-hy4 ran i43 clean). Implementer
-# cycles to muse (deepseek42 → agy43 → muse44). Subscriptions + caps kept;
+# Self-run, full rotation (iteration 45 forward, owner 2026-11-16/17):
+# A-shape continues (claude-code architect, 4 clean outings). PM/review/QA
+# flip to hy4-first (timely: ernie hit DAILY quota in i44, retry-after ~6.5h).
+# Mechanical digest flips to Go-hy4 (@free ran i44 clean). Implementer cycles
+# to deepseek (agy43 → muse44 → deepseek45). Subscriptions + caps kept;
 # iterationUsd off per owner call. pi/codex/opencode-CLI Go still out (sub A).
 aliases:
   architect:
@@ -19,20 +19,21 @@ aliases:
         model: anthropic/claude-opus-5-5
         effort: high
   pm:
-    harness: omp
-    model: openrouter/baidu/ernie-5.5-flash-preview:free
+    harness: opencode
+    model: opencode/hy4-flash-free
     effort: high
-    subscription: openrouter-free
+    subscription: opencode-free
     escalateTo: escalation
     fallbacks:
-      - harness: opencode
-        model: opencode/hy4-flash-free
+      - harness: omp
+        model: openrouter/baidu/ernie-5.5-flash-preview:free
         effort: high
-        subscription: opencode-free
+        subscription: openrouter-free
   digest:
     harness: omp
-    model: "@free"
-    subscription: openrouter-free
+    model: opencode-go/hy4-flash-free
+    effort: xhigh
+    subscription: opencode-go
     fallbacks:
       - harness: opencode
         model: opencode/hy4-flash-free
@@ -40,38 +41,38 @@ aliases:
         subscription: opencode-free
   implementer:
     harness: omp
-    model: opencode-go/muse-spark-1.3-contributor
+    model: opencode-go/deepseek-v4.1-flash
     effort: max
     subscription: opencode-go
     timeouts:
       wallMs: 14400000 # 4 h: suite-heavy turns (20x reruns) exceed 1 h
     fallbacks:
-      - model: opencode-go/deepseek-v4.1-flash
+      - model: opencode-go/muse-spark-1.3-contributor
         effort: max
   reviewer:
-    harness: omp
-    model: openrouter/baidu/ernie-5.5-flash-preview:free
+    harness: opencode
+    model: opencode/hy4-flash-free
     effort: high
-    subscription: openrouter-free
+    subscription: opencode-free
     timeouts:
       wallMs: 14400000 # 4 h: same rule as implementer
     fallbacks:
-      - harness: opencode
-        model: opencode/hy4-flash-free
+      - harness: omp
+        model: openrouter/baidu/ernie-5.5-flash-preview:free
         effort: high
-        subscription: opencode-free
+        subscription: openrouter-free
   qa:
-    harness: omp
-    model: openrouter/baidu/ernie-5.5-flash-preview:free
+    harness: opencode
+    model: opencode/hy4-flash-free
     effort: high
-    subscription: openrouter-free
+    subscription: opencode-free
     timeouts:
       wallMs: 14400000 # 4 h: same rule as implementer
     fallbacks:
-      - harness: opencode
-        model: opencode/hy4-flash-free
+      - harness: omp
+        model: openrouter/baidu/ernie-5.5-flash-preview:free
         effort: high
-        subscription: opencode-free
+        subscription: openrouter-free
   plan-reviewer:
     harness: agy
     model: gemini-3.8-flash
