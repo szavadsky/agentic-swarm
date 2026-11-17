@@ -678,3 +678,8 @@ Verbatim, newest last; each with what it changed.
 
 ### 2026-11-17 — rotation for i46: flip-backs (ernie-first, @free digest, agy implementer)
 - Map: architect claude/opus (fb sonnet, fb2 omp/opus), pm omp/ernie (fb opencode/hy4), digest omp/@free (fb opencode/hy4), implementer agy/gemini (fb omp-Go/deepseek:max; cycle deepseek45 → agy46), reviewer omp/ernie (fb opencode/hy4), qa omp/ernie dormant (fb opencode/hy4), plan-rev+check agy (fb omp/ernie), esc omp/sonnet:high (fb omp-Go/muse), steward omp/ernie (fb agy). Subs + caps kept. Loader + price-coverage green before commit.
+
+### 2026-11-17 — i46 landed: 2 merges; ernie still exhausted, fallbacks held
+- Exit 3 (iteration-limit), 1h20m wall. factory/self +2: git-optional-locks (--no-optional-locks race fix), gates-fast (run-tests follow-up + base-sync-resolve test + git exec). 2 new parks: gate-fail-names (lint), followup-plan-bound (gates format/tests/typecheck + infra flakes). PM CANCELLED 12 retired slugs. Parks total 48. Pending 0, inbox empty. Phase-1-done NOT declared — blocked on the 2 parks landing.
+- Legs: architect opus 1 turn clean (6th clean outing); ernie ZERO turns (daily quota STILL exhausted, digest end.yaml proof) — all ernie-first aliases latched (digest/pm/reviewer→hy4 $0, steward→gemini $0.07); pm 2 escalation sonnet turns $0.63; implementer 10 turns agy/gemini $4.44 with 4 failures; plan roles agy $0.14. Cost $5.28 partial (highest lately — priced agy implementer). 2 infra retries, 1 fallback hop, 6 outcome-repairs.
+- Owner directive: new goal `delta` (everything not yet done in INTENT.md) starts next; self pauses. Map kept as-is (fallbacks proved working).
