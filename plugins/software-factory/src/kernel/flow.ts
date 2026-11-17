@@ -46,6 +46,7 @@ import {
   startChecks,
 } from "./record.js";
 import { materialHash } from "./tasks.js";
+import { isLastReviewCall, reviewRoundLimit } from "./review.js";
 import type {
   Action,
   FlowDefinition,
@@ -342,17 +343,23 @@ async function handleStepResult(
       if (isStandaloneTask(runtime, task)) escalateFrontClassToBigger(runtime);
       return infraResult ?? cancelledResult ?? {};
     }
-    const lastRound = state.round >= flow.reviewRounds;
+    const lastCall = isLastReviewCall(step, state.round);
     if (outcome?.verdict === "reject") {
       await appendPark(
         runtime.store,
         meta,
         `review rejected: ${outcome.summary}`,
       );
-    } else if (lastRound && outcome?.verdict === "changes") {
-      await appendDebt(runtime.store, meta, outcome.concerns, outcome.summary);
+    } else if (lastCall && outcome?.verdict === "changes") {
+      // The reviewer's outcome validator refuses this; a delivered record is
+      // a contract breach, never a merge.
+      await appendPark(
+        runtime.store,
+        meta,
+        `invalid outcome: changes on the last review call: ${outcome.summary}`,
+      );
     } else if (
-      lastRound &&
+      lastCall &&
       outcome?.verdict === "approve" &&
       outcome.concerns.length > 0
     ) {
@@ -558,6 +565,11 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
   );
   vars.base_hash = firstBase(records, task.slug) ?? startPoint;
   vars.head_hash = await headSha(ensured.path);
+  const lastCall = step.review && isLastReviewCall(step, state.round);
+  if (step.review) {
+    vars.max_rounds = String(reviewRoundLimit(step));
+    vars.last_call = String(lastCall);
+  }
   if (step.review && session) {
     // A resumed review already holds the prior rounds: the range carries the
     // delta since the last turn of this step, with the fix dispositions.
@@ -625,6 +637,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
     },
     vars,
     expectation: step.review ? "review" : "any",
+    lastCall,
     session,
     timeouts,
     ...(task.repairTurns !== undefined

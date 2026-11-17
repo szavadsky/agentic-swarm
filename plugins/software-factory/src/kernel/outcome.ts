@@ -1,6 +1,11 @@
 import fs from "node:fs";
 import yaml from "yaml";
-import { type FlowDefinition, type Outcome, outcomeSchema } from "./types.js";
+import {
+  type FlowDefinition,
+  type FlowStep,
+  type Outcome,
+  outcomeSchema,
+} from "./types.js";
 
 export type OutcomeExpectation = "any" | "review" | "architect";
 
@@ -105,17 +110,35 @@ export function expectationForStep(
   if (!step) return "any";
   // The architect consult is a boundary role, not a step of any flow.
   if (step === "architect") return "architect";
+  const found = flowStepFor(step, flows);
+  if (!found) {
+    throw new Error(`step "${step}" is not configured in the repo's flows`);
+  }
+  return found.review ? "review" : "any";
+}
+
+/** The first configured step with this id; step ids are kernel flow vocabulary. */
+export function flowStepFor(
+  step: string,
+  flows: Record<string, FlowDefinition>,
+): FlowStep | undefined {
   for (const flow of Object.values(flows)) {
     const found = flow.steps.find((s) => s.id === step);
-    if (found) return found.review ? "review" : "any";
+    if (found) return found;
   }
-  throw new Error(`step "${step}" is not configured in the repo's flows`);
+  return undefined;
+}
+
+export interface ExpectationOptions {
+  /** A review's last call: `changes` is not accepted, only ship or park. */
+  lastCall?: boolean;
 }
 
 /** Per-step contract the schema alone cannot express. */
 export function validateExpectation(
   outcome: Outcome,
   expectation: OutcomeExpectation,
+  opts: ExpectationOptions = {},
 ): string[] {
   const field = expectationField(expectation);
   if (field === "decision" && !outcome.decision) {
@@ -129,6 +152,17 @@ export function validateExpectation(
   ) {
     return [
       "verdict is required on a completed review: approve | changes | reject",
+    ];
+  }
+  if (
+    field === "verdict" &&
+    opts.lastCall &&
+    outcome.verdict === "changes" &&
+    outcome.status !== "failed" &&
+    outcome.status !== "blocked"
+  ) {
+    return [
+      'verdict "changes" is not available on the last review call: approve with concerns, or reject',
     ];
   }
   return [];

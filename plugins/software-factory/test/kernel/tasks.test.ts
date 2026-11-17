@@ -176,7 +176,6 @@ describe("task files", () => {
   it("rejects an unknown flow with the dispatcher text", () => {
     const flows = {
       "implement-review": {
-        reviewRounds: 2,
         steps: [{ id: "implement", role: "implementer" }],
       },
     };

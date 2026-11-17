@@ -51,6 +51,8 @@ export const flowStepSchema = z
       ),
     role: z.string().min(1),
     review: z.boolean().default(false),
+    /** Review steps only: change requests honored before the last call. */
+    changeRequests: z.number().int().nonnegative().optional(),
   })
   .strict();
 
@@ -66,7 +68,6 @@ export const followUpSchema = z
 export const flowSchema = z
   .object({
     steps: z.array(flowStepSchema).min(1),
-    reviewRounds: z.number().int().positive().default(2),
     followUp: followUpSchema,
   })
   .strict();

@@ -112,7 +112,7 @@ export async function commitEdits(
   return { files, added, removed };
 }
 
-/** The last-round reviewer concerns, recorded as debt once the item merges. */
+/** The last-call reviewer concerns, recorded as debt once the item merges. */
 export async function appendDebt(
   store: ArtifactStore,
   meta: { iteration: number; slug: string; round: number },
@@ -138,7 +138,7 @@ export async function appendDebt(
     ok: true,
     outcome: {
       status: "done",
-      summary: "last-round review concerns recorded as debt",
+      summary: "last-call review concerns recorded as debt",
       concerns: debt,
       forward: [],
     },

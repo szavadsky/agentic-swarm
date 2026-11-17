@@ -4,7 +4,11 @@ import os from "node:os";
 import path from "node:path";
 import yaml from "yaml";
 import { commitAll } from "../../src/core/git/commit.js";
-import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
+import {
+  FakeHarness,
+  fakeTurnIdentity,
+  fakeTurnResult,
+} from "../../src/harness/fake/index.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
 import { promptVars } from "../../src/kernel/flow-context.js";
@@ -66,11 +70,15 @@ describe("flow data drives the steps", () => {
       process: {
         flows: {
           "draft-polish": {
-            reviewRounds: 1,
             steps: [
               { id: "draft", role: "implementer" },
               { id: "polish", role: "implementer" },
-              { id: "critique", role: "reviewer", review: true },
+              {
+                id: "critique",
+                role: "reviewer",
+                review: true,
+                changeRequests: 0,
+              },
             ],
           },
         },
@@ -804,6 +812,228 @@ describe("continuation carry", () => {
       );
       expect(advance?.headTree).toBeDefined();
       expect(advance?.tree).toBe(advance?.headTree);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+});
+
+describe("review last call", () => {
+  function reviewCalls(harness: FakeHarness) {
+    return harness.calls.filter(
+      (req) => fakeTurnIdentity(req).step === "review",
+    );
+  }
+
+  it("renders the last-call prompt on the third review and refuses changes", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const implement = (content: string) => (req: any, ctx: any) => {
+        fs.writeFileSync(
+          path.join(req.cwd!, "task.txt"),
+          `${content}\n`,
+          "utf8",
+        );
+        ctx.writeOutcome(outcome({ summary: `wrote ${content}` }));
+        return fakeTurnResult(req);
+      };
+      const changes = (summary: string) => (req: any, ctx: any) => {
+        ctx.writeOutcome(outcome({ summary, verdict: "changes" }));
+        return fakeTurnResult(req);
+      };
+      harness.script(implement("v1"));
+      harness.script(changes("1. task.txt: needs v2"));
+      harness.script(implement("v2"));
+      harness.script(changes("1. task.txt: needs v3"));
+      harness.script(implement("v3"));
+      harness.script(changes("1. task.txt: still rough"));
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(
+          outcome({
+            summary: "ships with recorded debt",
+            verdict: "approve",
+            concerns: [
+              {
+                kind: "risk",
+                calibration: "architect",
+                text: "last call concern",
+              },
+            ],
+          }),
+        );
+        return fakeTurnResult(req);
+      });
+
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("task", { scope: ["task.txt"] }));
+      const result = await runDispatch(runtime, { iteration: 1 });
+      expect(result.reason).toBe("boundary");
+
+      const reviews = reviewCalls(harness);
+      expect(reviews).toHaveLength(4);
+      expect(reviews[0]!.prompt).toContain(
+        "- `changes`: actionable findings for the next round.",
+      );
+      expect(reviews[0]!.prompt).toContain("round: `1` of `3`");
+      expect(reviews[1]!.prompt).toContain("round: `2` of `3`");
+      expect(reviews[1]!.prompt).toContain(
+        "- `changes`: actionable findings for the next round.",
+      );
+      expect(reviews[2]!.prompt).toContain("round: `3` of `3`");
+      expect(reviews[2]!.prompt).toContain("This is the last call");
+      expect(reviews[2]!.prompt).not.toContain(
+        "- `changes`: actionable findings for the next round.",
+      );
+      expect(reviews[3]!.prompt).toContain(
+        '- verdict "changes" is not available on the last review call: approve with concerns, or reject',
+      );
+
+      const records = await runtime.store.listRecords();
+      const lastReview = records.find(
+        (r) =>
+          r.slug === "task" &&
+          r.step === "review" &&
+          r.round === 3 &&
+          r.actor === "agent",
+      );
+      expect(lastReview?.outcome?.verdict).toBe("approve");
+      expect(lastReview?.repairFindings).toContain(
+        'verdict "changes" is not available on the last review call: approve with concerns, or reject',
+      );
+      const debt = records.find((r) => r.slug === "task" && r.step === "debt");
+      expect(debt?.outcome?.concerns[0]?.kind).toBe("debt");
+      expect(debt?.outcome?.concerns[0]?.text).toBe("last call concern");
+
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
+      expect(state.tasks.task!.status).toBe("merged");
+      expect(state.tasks.task!.round).toBe(3);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("parks a reject on the spike's only review and keeps its branch", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script((req, ctx) => {
+        fs.writeFileSync(
+          path.join(req.cwd!, "finding.md"),
+          "# Finding\n\nUse the cache.\n",
+          "utf8",
+        );
+        ctx.writeOutcome(outcome({ summary: "finding written" }));
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(
+          outcome({ summary: "not worth shipping", verdict: "reject" }),
+        );
+        return fakeTurnResult(req);
+      });
+      scriptStallLeave(harness, ["probe"]);
+
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(
+        runtime,
+        task("probe", { kind: "spike", flow: "spike", scope: ["finding.md"] }),
+      );
+      const result = await runDispatch(runtime, { iteration: 1 });
+      expect(result.reason).toBe("boundary");
+
+      const reviews = reviewCalls(harness);
+      expect(reviews).toHaveLength(1);
+      expect(reviews[0]!.prompt).toContain("round: `1` of `1`");
+      expect(reviews[0]!.prompt).toContain("This is the last call");
+
+      const records = await runtime.store.listRecords();
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
+      expect(state.tasks.probe!.status).toBe("parked");
+      expect(state.tasks.probe!.cause).toContain("review rejected");
+      expect(
+        repo.git(["show", "factory-task/demo/probe:finding.md"]).stdout.trim(),
+      ).toBe("# Finding\n\nUse the cache.");
+      expect(
+        repo.git(["show", "factory/demo:finding.md"], { allowFail: true }).code,
+      ).not.toBe(0);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("returns a reply-only fix to review and consumes a change request", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script((req, ctx) => {
+        fs.writeFileSync(path.join(req.cwd!, "task.txt"), "v1\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "v1" }));
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(
+          outcome({ summary: "1. task.txt: needs v2", verdict: "changes" }),
+        );
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(
+          outcome({
+            summary: "replied without a change",
+            replies: [{ finding: 1, reply: "already covered in v1" }],
+          }),
+        );
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(
+          outcome({
+            summary: "1. task.txt: still needs v2",
+            verdict: "changes",
+          }),
+        );
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        fs.writeFileSync(path.join(req.cwd!, "task.txt"), "v2\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "v2" }));
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "approved", verdict: "approve" }));
+        return fakeTurnResult(req);
+      });
+
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("task", { scope: ["task.txt"] }));
+      const result = await runDispatch(runtime, { iteration: 1 });
+      expect(result.reason).toBe("boundary");
+
+      const reviews = reviewCalls(harness);
+      expect(reviews).toHaveLength(3);
+      expect(reviews[1]!.prompt).toContain("round: `2` of `3`");
+      expect(reviews[1]!.prompt).toContain(
+        "- `changes`: actionable findings for the next round.",
+      );
+      expect(reviews[2]!.prompt).toContain("round: `3` of `3`");
+      expect(reviews[2]!.prompt).toContain("This is the last call");
+
+      const state = derive(
+        await runtime.store.listTasks(),
+        await runtime.store.listRecords(),
+        runtime.configs.process.flows,
+      );
+      expect(state.tasks.task!.status).toBe("merged");
+      expect(state.tasks.task!.round).toBe(3);
     } finally {
       cleanupFlowRepo(repo);
     }

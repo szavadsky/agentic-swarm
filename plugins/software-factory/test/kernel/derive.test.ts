@@ -116,7 +116,7 @@ describe("derive", () => {
     expect(red.tasks.a!.round).toBe(1);
   });
 
-  it("advances the round after changes and merges when the last round decides", () => {
+  it("advances the round after changes and parks changes on the last call", () => {
     const tasks = [task("a")];
     const afterFirst = derive(tasks, [
       implement(1),
@@ -135,9 +135,27 @@ describe("derive", () => {
       doneCheck(5),
       review(6, "changes", 2),
     ]);
-    expect(afterSecond.tasks.a!.round).toBe(2);
-    expect(afterSecond.tasks.a!.phase).toBe("merge");
+    expect(afterSecond.tasks.a!.round).toBe(3);
+    expect(afterSecond.tasks.a!.phase).toBe("implement");
     expect(afterSecond.tasks.a!.turns).toBe(4);
+
+    const afterThird = derive(tasks, [
+      implement(1),
+      doneCheck(2),
+      review(3, "changes", 1),
+      implement(4, 2),
+      doneCheck(5),
+      review(6, "changes", 2),
+      implement(7, 3),
+      doneCheck(8),
+      review(9, "changes", 3),
+    ]);
+    expect(afterThird.tasks.a!.round).toBe(3);
+    expect(afterThird.tasks.a!.phase).toBe("parked");
+    expect(afterThird.tasks.a!.park).toBe(
+      "invalid outcome: changes on the last review call: review r3",
+    );
+    expect(afterThird.tasks.a!.turns).toBe(6);
   });
 
   it("derives a park request on a reject and keeps the cause", () => {
@@ -336,7 +354,15 @@ describe("derive", () => {
     expect(state.tasks.a!.park).toStartWith("empty-diff: implement r2");
   });
 
-  it("bounds a reply-only fix round by review rounds", () => {
+  it("parks last-call changes after a reply-only fix", () => {
+    const flows = {
+      "implement-review": {
+        steps: [
+          { id: "implement", role: "implementer" },
+          { id: "review", role: "reviewer", review: true, changeRequests: 1 },
+        ],
+      },
+    };
     const state = derive(
       [task("a")],
       [
@@ -359,12 +385,15 @@ describe("derive", () => {
         doneCheck(6),
         review(7, "changes", 2),
       ],
+      flows,
     );
-    // Last-round `changes` merges with the concerns as debt: the reply-only
-    // round cannot loop forever.
-    expect(state.tasks.a!.phase).toBe("merge");
+    // The reply-only fix returns to review and consumes the single change
+    // request, so the next changes is refused instead of looping.
+    expect(state.tasks.a!.phase).toBe("parked");
+    expect(state.tasks.a!.park).toContain(
+      "invalid outcome: changes on the last review call",
+    );
     expect(state.tasks.a!.round).toBe(2);
-    expect(state.tasks.a!.park).toBeUndefined();
   });
 
   it("sets gateFix on red task checks and names them when the repeated checks still fail", () => {
@@ -447,7 +476,7 @@ describe("derive", () => {
     expect(state.tasks.a!.park).toBeUndefined();
   });
 
-  it("parks an empty fix after last-round changes followed by a merge-gates failure", () => {
+  it("parks an empty fix after an approve followed by a merge-gates failure", () => {
     const tasks = [task("a")];
     const prefix = [
       implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
@@ -457,7 +486,7 @@ describe("derive", () => {
       implement(5, 2, { tree: "tree-2", commit: "c2", base: "c0" }),
       script(6, { step: "commit", ok: true, commit: "c2", tree: "tree-2" }),
       doneCheck(7),
-      review(8, "changes", 2),
+      review(8, "approve", 2),
       script(9, {
         step: "merge",
         ok: false,

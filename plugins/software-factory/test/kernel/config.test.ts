@@ -20,7 +20,9 @@ describe("three config layers", () => {
     expect(configs.repo.baseBranch).toBe("main");
     expect(configs.repo.artifactRoot).toBe(".factory/artifacts");
     expect(configs.run.limits.iterations).toBe(3);
-    expect(configs.process.flows["implement-review"]!.reviewRounds).toBe(2);
+    expect(
+      configs.process.flows["implement-review"]!.steps[1]!.changeRequests,
+    ).toBe(2);
     expect(configs.process.reminders).toBe(1);
     const paths = resolveGoalPaths(configs, root, "demo");
     expect(paths.goalDir).toBe(path.join(root, ".factory/artifacts/demo"));
@@ -43,20 +45,52 @@ describe("three config layers", () => {
     fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
     fs.writeFileSync(
       path.join(root, ".factory/process.yaml"),
-      "flows:\n  implement-review:\n    reviewRounds: 4\nreminders: 0\nroles:\n  architect:\n    prompt: architect\n    alias: boss\n",
+      "flows:\n  implement-review:\n    steps:\n      - id: implement\n        role: implementer\n      - id: review\n        role: reviewer\n        review: true\n        changeRequests: 4\nreminders: 0\nroles:\n  architect:\n    prompt: architect\n    alias: boss\n",
     );
     fs.writeFileSync(
       path.join(root, ".factory/run.yaml"),
       "aliases:\n  boss: { harness: fake, model: big }\nlimits: { iterations: 2 }\n",
     );
     const configs = loadConfigs(root);
-    expect(configs.process.flows["implement-review"]!.reviewRounds).toBe(4);
-    expect(configs.process.flows.spike!.reviewRounds).toBe(1);
+    expect(
+      configs.process.flows["implement-review"]!.steps[1]!.changeRequests,
+    ).toBe(4);
+    expect(configs.process.flows.spike!.steps[1]!.changeRequests).toBe(0);
     expect(configs.process.reminders).toBe(0);
     expect(configs.process.roles.architect!.alias).toBe("boss");
     expect(configs.run.aliases.boss!.model).toBe("big");
-    expect(toLimits(configs).flows["implement-review"]!.reviewRounds).toBe(4);
+    expect(
+      toLimits(configs).flows["implement-review"]!.steps[1]!.changeRequests,
+    ).toBe(4);
     expect(toLimits(configs).iterations).toBe(2);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("keeps a change-request bound per review step", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, ".factory/process.yaml"),
+      [
+        "flows:",
+        "  two-reviews:",
+        "    steps:",
+        "      - id: implement",
+        "        role: implementer",
+        "      - id: review",
+        "        role: reviewer",
+        "        review: true",
+        "        changeRequests: 0",
+        "      - id: security",
+        "        role: reviewer",
+        "        review: true",
+        "        changeRequests: 3",
+        "",
+      ].join("\n"),
+    );
+    const configs = loadConfigs(root);
+    const steps = configs.process.flows["two-reviews"]!.steps;
+    expect(steps.map((step) => step.changeRequests)).toEqual([undefined, 0, 3]);
     fs.rmSync(root, { recursive: true, force: true });
   });
 

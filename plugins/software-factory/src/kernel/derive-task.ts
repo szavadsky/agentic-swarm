@@ -2,6 +2,7 @@ import type { CheckResult } from "../core/checks/types.js";
 import { isInfraCheck } from "./gates.js";
 import { countOutcomeRepairs } from "./metrics.js";
 import { stepFingerprint } from "./progress.js";
+import { DEFAULT_CHANGE_REQUESTS, isLastReviewCall } from "./review.js";
 import type {
   FlowDefinition,
   ProgressRepeat,
@@ -16,21 +17,23 @@ import type {
 /** Used when a caller derives without the configured flow catalog. */
 export const DEFAULT_FLOWS: Record<string, FlowDefinition> = {
   "implement-review": {
-    reviewRounds: 2,
     steps: [
       { id: "implement", role: "implementer" },
-      { id: "review", role: "reviewer", review: true },
+      {
+        id: "review",
+        role: "reviewer",
+        review: true,
+        changeRequests: DEFAULT_CHANGE_REQUESTS,
+      },
     ],
   },
   "just-implement": {
-    reviewRounds: 2,
     steps: [{ id: "implement", role: "implementer" }],
   },
   spike: {
-    reviewRounds: 1,
     steps: [
       { id: "implement", role: "implementer" },
-      { id: "review", role: "reviewer", review: true },
+      { id: "review", role: "reviewer", review: true, changeRequests: 0 },
     ],
   },
 };
@@ -580,21 +583,22 @@ export function reduceTask(
         pendingChecks = null;
         phase = phaseAfter(flow, stepIndex, task.kind);
       } else if (verdict === "changes") {
-        if (rec.round < flow.reviewRounds) {
+        if (isLastReviewCall(step, rec.round)) {
+          // The outcome validator refuses this; a recorded changes on the
+          // last call is a contract breach, never a merge.
+          park = `invalid outcome: changes on the last review call: ${outcome?.summary ?? "no summary"}`;
+          phase = "parked";
+          changesPending = false;
+          pendingChecks = null;
+        } else {
           round = rec.round + 1;
           stepIndex = 0;
           gateFix = false;
           mergeFix = false;
           phase = firstStep;
-        } else {
-          // The last round decides: changes merge with the concerns as debt.
-          stepIndex = flow.steps.length;
-          gateFix = false;
-          mergeFix = false;
-          phase = phaseAfter(flow, stepIndex, task.kind);
+          changesPending = true;
+          pendingChecks = null;
         }
-        changesPending = true;
-        pendingChecks = null;
       } else if (verdict === "reject") {
         park = `review rejected: ${outcome?.summary ?? "no summary"}`;
         phase = "parked";

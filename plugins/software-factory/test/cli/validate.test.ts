@@ -10,11 +10,11 @@ function taskFile(slug: string, deps: string[]): string {
 
 /** A repo flow whose review step id is not one of the package defaults. */
 const CUSTOM_FLOW =
-  "flows:\n  custom:\n    reviewRounds: 1\n    steps:\n      - id: build\n        role: implementer\n      - id: audit\n        role: reviewer\n        review: true\n";
+  "flows:\n  custom:\n    steps:\n      - id: build\n        role: implementer\n      - id: audit\n        role: reviewer\n        review: true\n        changeRequests: 2\n";
 
 /** The fields inference reads from a record directory's started.yaml. */
-const STARTED = (step: string): string =>
-  `seq: 42\niteration: 1\nstep: ${step}\nround: 1\nactor: agent\n`;
+const STARTED = (step: string, round = 1): string =>
+  `seq: 42\niteration: 1\nstep: ${step}\nround: ${round}\nactor: agent\n`;
 
 function writeFile(root: string, rel: string, content: string): string {
   const abs = path.join(root, rel);
@@ -383,6 +383,30 @@ describe("factory validate", () => {
       const valid = await runValidate(file);
       expect(valid.code).toBe(0);
       expect(valid.out).toContain(": valid");
+    }),
+  );
+
+  it(
+    "refuses a changes verdict on a record's last review call",
+    withTmp(async (root) => {
+      writeFile(root, ".factory/process.yaml", CUSTOM_FLOW);
+      const record = "records/00042-alpha-review-r3";
+      writeFile(root, `${record}/started.yaml`, STARTED("audit", 3));
+      const file = writeFile(
+        root,
+        `${record}/outcome.yaml`,
+        "status: done\nsummary: reviewed\nverdict: changes\n",
+      );
+      const refused = await runValidate(file);
+      expect(refused.code).toBe(1);
+      expect(refused.err).toContain(
+        'verdict "changes" is not available on the last review call',
+      );
+
+      writeFile(root, `${record}/started.yaml`, STARTED("audit", 2));
+      const accepted = await runValidate(file);
+      expect(accepted.code).toBe(0);
+      expect(accepted.out).toContain(": valid");
     }),
   );
 

@@ -53,10 +53,9 @@ gates:
 ```yaml
 flows:
   implement-review:
-    reviewRounds: 2
     steps:
       - { id: implement, role: implementer }
-      - { id: review, role: reviewer, review: true }
+      - { id: review, role: reviewer, review: true, changeRequests: 2 }
 roles:
   architect: { prompt: architect }
   implementer: { prompt: implementer }

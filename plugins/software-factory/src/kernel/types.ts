@@ -247,6 +247,11 @@ export interface FlowStep {
   role: string;
   /** Review steps carry the verdict contract and consume a review round. */
   review?: boolean;
+  /**
+   * Review steps only: how many `changes` verdicts this agent may issue before
+   * its call is the last one. Absent means the reviewer default (two).
+   */
+  changeRequests?: number;
 }
 
 /** How a fix turn follows the turn it repairs. */
@@ -258,7 +263,6 @@ export interface FollowUp {
 
 export interface FlowDefinition {
   steps: FlowStep[];
-  reviewRounds: number;
   followUp?: FollowUp;
 }
 

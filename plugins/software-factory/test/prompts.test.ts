@@ -407,10 +407,7 @@ describe("prompts: schema defaults", () => {
     return loadPrompts(
       {
         flows: Object.fromEntries(
-          Object.keys(flows).map((name) => [
-            name,
-            { steps: [], reviewRounds: 1 },
-          ]),
+          Object.keys(flows).map((name) => [name, { steps: [] }]),
         ),
         roles: {},
         reminders: 1,

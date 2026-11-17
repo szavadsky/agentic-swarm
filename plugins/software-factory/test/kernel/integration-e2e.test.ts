@@ -153,7 +153,7 @@ describe("cross-slice E2E — init, steer and three launches through S2/S3/S4", 
         "utf8",
       );
 
-      // Launch 1: alpha merges, beta is rejected in the last round, gamma waits.
+      // Launch 1: alpha merges, beta is rejected on review, gamma waits.
       const first = new FakeHarness({ id: "fake" });
       first.script((req, ctx) => {
         expect(req.prompt).toContain("- turn: `first`");

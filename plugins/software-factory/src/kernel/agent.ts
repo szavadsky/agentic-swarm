@@ -45,6 +45,8 @@ export interface AgentTurnSpec {
   meta: Omit<RecordStart, "actor" | "alias" | "model">;
   vars: Record<string, string>;
   expectation: OutcomeExpectation;
+  /** Review steps only: the last call refuses a `changes` verdict. */
+  lastCall?: boolean;
   session?: SessionRef;
   timeouts?: { idleMs: number; wallMs: number };
   /** Outcome reminders after the first attempt; defaults to process `reminders`. */
@@ -364,7 +366,9 @@ export async function runAgentTurn(
       const delivered = readDeliveredOutcome(outcomePath, text);
       if (delivered) {
         outcome = delivered.outcome;
-        findings = validateExpectation(outcome, spec.expectation);
+        findings = validateExpectation(outcome, spec.expectation, {
+          lastCall: spec.lastCall,
+        });
       }
     } catch (err) {
       if (!(err instanceof OutcomeInvalidError)) throw err;

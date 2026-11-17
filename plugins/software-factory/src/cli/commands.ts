@@ -19,9 +19,11 @@ import { classSchema } from "../kernel/flow-context.js";
 import { holdFileSchema } from "../kernel/mailbox.js";
 import {
   expectationForStep,
+  flowStepFor,
   parseOutcome,
   validateExpectation,
 } from "../kernel/outcome.js";
+import { isLastReviewCall } from "../kernel/review.js";
 import { createFolderStore } from "../kernel/store.js";
 import {
   parseTaskFile,
@@ -279,11 +281,13 @@ function flowsForValidation(
 }
 
 /**
- * The step a record directory's `started.yaml` gives its outcome. Absent when
- * the file is not in a record directory; a broken record is an error, never a
- * silently weaker check.
+ * The step and round a record directory's `started.yaml` gives its outcome.
+ * Absent when the file is not in a record directory; a broken record is an
+ * error, never a silently weaker check.
  */
-function startedStep(absPath: string): string | undefined {
+function startedMeta(
+  absPath: string,
+): { step: string; round: number } | undefined {
   const started = path.join(path.dirname(absPath), "started.yaml");
   if (!fs.existsSync(started)) return undefined;
   let parsed: unknown;
@@ -292,11 +296,16 @@ function startedStep(absPath: string): string | undefined {
   } catch (err) {
     throw new Error(`${started}: not valid YAML: ${(err as Error).message}`);
   }
-  const step = (parsed as { step?: unknown } | null)?.step;
-  if (typeof step !== "string" || !step) {
+  const meta = parsed as { step?: unknown; round?: unknown } | null;
+  if (typeof meta?.step !== "string" || !meta.step) {
     throw new Error(`${started}: no step to infer the outcome's contract from`);
   }
-  return step;
+  if (typeof meta.round !== "number" || !Number.isInteger(meta.round)) {
+    throw new Error(
+      `${started}: no round to infer the review's last call from`,
+    );
+  }
+  return { step: meta.step, round: meta.round };
 }
 
 export interface ValidateFileOptions {
@@ -324,16 +333,20 @@ function outcomeResult(
 ): ValidateResult {
   try {
     const outcome = parseOutcome(text);
-    const step = opts.step ?? startedStep(abs);
+    const started = startedMeta(abs);
+    const step = opts.step ?? started?.step;
     if (!step) return { findings: [], stepIndependent: true };
-    const expectation = expectationForStep(
-      step,
-      flowsForValidation(path.dirname(abs), opts.repo),
-    );
+    const flows = flowsForValidation(path.dirname(abs), opts.repo);
+    const expectation = expectationForStep(step, flows);
+    const review = flowStepFor(step, flows);
+    const lastCall =
+      review?.review === true &&
+      started?.step === step &&
+      isLastReviewCall(review, started.round);
     return {
-      findings: validateExpectation(outcome, expectation).map(
-        (finding) => `${abs}: ${finding}`,
-      ),
+      findings: validateExpectation(outcome, expectation, {
+        lastCall,
+      }).map((finding) => `${abs}: ${finding}`),
     };
   } catch (err) {
     return { findings: [`${abs}: ${(err as Error).message}`] };

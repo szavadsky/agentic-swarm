@@ -62,13 +62,32 @@ describe("outcome delivery", () => {
     ).toEqual([]);
   });
 
+  it("refuses changes on the last review call", () => {
+    const changes = parseOutcome(
+      "status: done\nsummary: fixed\nverdict: changes\n",
+    );
+    expect(validateExpectation(changes, "review")).toEqual([]);
+    expect(validateExpectation(changes, "review", { lastCall: false })).toEqual(
+      [],
+    );
+    expect(validateExpectation(changes, "review", { lastCall: true })).toEqual([
+      'verdict "changes" is not available on the last review call: approve with concerns, or reject',
+    ]);
+    expect(
+      validateExpectation(
+        parseOutcome("status: failed\nsummary: broke\nverdict: changes\n"),
+        "review",
+        { lastCall: true },
+      ),
+    ).toEqual([]);
+  });
+
   it("maps steps to expectations from the flow catalog", () => {
     const flows = {
       "implement-review": {
-        reviewRounds: 2,
         steps: [
           { id: "implement", role: "implementer" },
-          { id: "review", role: "reviewer", review: true },
+          { id: "review", role: "reviewer", review: true, changeRequests: 2 },
         ],
       },
     };

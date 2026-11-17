@@ -249,10 +249,9 @@ describe("agent turn outcome delivery", () => {
 
   describe("resumed overflow", () => {
     const flow: FlowDefinition = {
-      reviewRounds: 2,
       steps: [
         { id: "implement", role: "implementer" },
-        { id: "review", role: "reviewer", review: true },
+        { id: "review", role: "reviewer", review: true, changeRequests: 2 },
       ],
     };
     const flows = { "implement-review": flow };
@@ -542,6 +541,7 @@ describe("delivery guard", () => {
     baseline_checks: "none",
     prior_findings: "",
     upscope_ask: "",
+    last_call: "false",
   };
 
   const frontVars = {
@@ -603,6 +603,51 @@ describe("delivery guard", () => {
       expect(repair).toContain("verdict: approve | changes | reject");
       expect(result.outcome?.status).toBe("failed");
       expect(result.outcome?.summary).toContain("verdict is required");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses a changes verdict on the last review call and names it in the repair", async () => {
+    const { root, fake, runtime } = await setup();
+    try {
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        fake.script((req, ctx) => {
+          ctx.writeOutcome({
+            status: "done",
+            summary: "more work remains",
+            verdict: "changes",
+          });
+          return fakeTurnResult(req);
+        });
+      }
+
+      const result = await runAgentTurn(runtime, {
+        target: resolveRole(runtime, "reviewer"),
+        cwd: root,
+        meta: { iteration: 1, slug: "a", step: "review", round: 3 },
+        vars: {
+          ...reviewerVars,
+          round: "3",
+          max_rounds: "3",
+          last_call: "true",
+        },
+        expectation: "review",
+        lastCall: true,
+        repairTurns: 1,
+      });
+
+      expect(fake.calls).toHaveLength(2);
+      expect(fake.calls[1]!.prompt).toContain(
+        '- verdict "changes" is not available on the last review call: approve with concerns, or reject',
+      );
+      expect(result.record.repairFindings).toContain(
+        'verdict "changes" is not available on the last review call: approve with concerns, or reject',
+      );
+      expect(result.outcome?.status).toBe("failed");
+      expect(result.outcome?.summary).toContain(
+        'verdict "changes" is not available on the last review call',
+      );
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
@@ -1418,6 +1463,7 @@ describe("repair findings and launch kinds", () => {
     baseline_checks: "none",
     prior_findings: "",
     upscope_ask: "",
+    last_call: "false",
   };
 
   it("stores validator findings that triggered the reminder on the record", async () => {

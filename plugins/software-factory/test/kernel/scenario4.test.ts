@@ -173,7 +173,19 @@ describe("KERNEL0 scenario 4 — infra stops and item turns", () => {
     const { repo, goal } = setupFlowRepo({
       process: {
         reminders: 2,
-        flows: { "implement-review": { reviewRounds: 4 } },
+        flows: {
+          "implement-review": {
+            steps: [
+              { id: "implement", role: "implementer" },
+              {
+                id: "review",
+                role: "reviewer",
+                review: true,
+                changeRequests: 3,
+              },
+            ],
+          },
+        },
       },
     });
     try {

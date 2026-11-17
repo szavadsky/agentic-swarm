@@ -7,17 +7,15 @@ import { rec, script, task } from "./helpers.js";
 const limits: Limits = {
   flows: {
     "implement-review": {
-      reviewRounds: 2,
       steps: [
         { id: "implement", role: "implementer" },
-        { id: "review", role: "reviewer", review: true },
+        { id: "review", role: "reviewer", review: true, changeRequests: 2 },
       ],
     },
     spike: {
-      reviewRounds: 1,
       steps: [
         { id: "implement", role: "implementer" },
-        { id: "review", role: "reviewer", review: true },
+        { id: "review", role: "reviewer", review: true, changeRequests: 0 },
       ],
     },
   },
@@ -126,8 +124,8 @@ describe("next", () => {
     ]);
   });
 
-  it("merges last-round changes instead of parking", () => {
-    const lastRound = derive(
+  it("parks changes on the last call and merges a last-call approve", () => {
+    const lastCallChanges = derive(
       [task("a")],
       [
         implement(1),
@@ -136,12 +134,42 @@ describe("next", () => {
         implement(4, 2),
         check(5),
         review(6, "changes", 2),
+        implement(7, 3),
+        check(8),
+        review(9, "changes", 3),
       ],
     );
-    expect(next(lastRound, limits, new Set())).toEqual([
+    expect(lastCallChanges.tasks.a!.park).toContain(
+      "invalid outcome: changes on the last review call",
+    );
+    expect(next(lastCallChanges, limits, new Set())).toEqual([
+      {
+        kind: "park",
+        slug: "a",
+        cause: expect.stringContaining(
+          "invalid outcome: changes on the last review call",
+        ),
+      },
+    ]);
+
+    const lastCallApprove = derive(
+      [task("a")],
+      [
+        implement(1),
+        check(2),
+        review(3, "changes", 1),
+        implement(4, 2),
+        check(5),
+        review(6, "changes", 2),
+        implement(7, 3),
+        check(8),
+        review(9, "approve", 3),
+      ],
+    );
+    expect(lastCallApprove.tasks.a!.round).toBe(3);
+    expect(next(lastCallApprove, limits, new Set())).toEqual([
       { kind: "merge", slug: "a" },
     ]);
-    expect(lastRound.tasks.a!.round).toBe(2);
   });
 
   it("does not redispatch a task that is already running", () => {

@@ -109,7 +109,8 @@ const ROLES: Record<string, Record<string, string>> = {
     base_hash: "abc1234",
     head_hash: "def5678",
     round: "1",
-    max_rounds: "2",
+    max_rounds: "3",
+    last_call: "false",
     baseline_checks: "- test: 2 failing",
     prior_findings: "",
     upscope_ask: "",
@@ -410,6 +411,29 @@ describe("review findings carry", () => {
     const rendered = library().render("reviewer", ROLES.reviewer!);
     expect(rendered).toContain("numbered list in your outcome `summary`");
     expect(rendered).not.toContain("next implementer receives");
+  });
+
+  it("switches the reviewer decision to ship-or-park on the last call", () => {
+    const normal = library().render("reviewer", ROLES.reviewer!);
+    expect(normal).toContain(
+      "- `changes`: actionable findings for the next round.",
+    );
+    expect(normal).not.toContain("This is the last call");
+
+    const last = library().render("reviewer", {
+      ...ROLES.reviewer!,
+      last_call: "true",
+    });
+    expect(last).toContain("This is the last call");
+    expect(last).toContain(
+      "`changes` is not an accepted outcome — outcome validation refuses it.",
+    );
+    expect(last).toContain(
+      "- `reject`: park, keeping the branch; the work must not merge.",
+    );
+    expect(last).not.toContain(
+      "- `changes`: actionable findings for the next round.",
+    );
   });
 
   it("marks findings empty before the first review, not per fix round", () => {

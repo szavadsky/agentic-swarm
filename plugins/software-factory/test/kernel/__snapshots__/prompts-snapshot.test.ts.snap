@@ -598,10 +598,9 @@ Findings are actionable: \`file:line\`, why it fails, what would satisfy. Write 
 
 ### Decision
 
-- \`approve\`: no blocking defect; done-when met, or on the last round its deficit recorded as a concern.
-- \`changes\`: actionable findings for the next round; unavailable on the last round.
-- \`reject\`: the diff must not merge — a failing gate, a security defect, a broken dependent interface, or code to throw away. Before the last round this is allowed when that bar is met.
-- Last round: \`reject\` only for negative value, citing a failing check you ran or a specific defect; otherwise \`approve\` with the unmet done-when and findings recorded as concerns.
+- \`approve\`: no blocking defect; done-when met.
+- \`changes\`: actionable findings for the next round.
+- \`reject\`: the diff must not merge — a failing gate, a security defect, a broken dependent interface, or code to throw away.
 - Do not manufacture findings; an approve in round 1 is normal.
 
 Forward only what the calibration calls remarkable.
@@ -614,7 +613,7 @@ Forward only what the calibration calls remarkable.
 
 - task: \`/goal/tasks/alpha.md\`
 - diff range: \`abc1234..def5678\` — spans every round of this task
-- round: \`1\` of \`2\`
+- round: \`1\` of \`3\`
 - pre-existing base gate failures: \`- test: 2 failing\` — not findings against this diff
 - prior findings: \`\` — empty in round 1; numbered, each answered by a change, a reply, or both
 - standalone upscope: \`\` — empty when this task is part of an architect plan; then give no upscope field
