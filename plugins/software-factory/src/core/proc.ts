@@ -103,8 +103,9 @@ class HeadTailBuffer {
 
 /**
  * Runs a process with process-group cleanup on timeout, bounded output
- * capture, and support for string shell command (via bash -lc) or argument
- * array.
+ * capture, and support for string shell commands (via non-login `bash -c`,
+ * so a developer's profile scripts cannot slow, alter or pollute a gate) or
+ * argument arrays.
  *
  * The promise resolves on `close`, or shortly after `exit`/timeout: stdio
  * streams are destroyed after a short grace period so a surviving grandchild
@@ -139,7 +140,7 @@ export function runProcess(options: RunProcessOptions): Promise<ProcessResult> {
 
     if (typeof cmd === "string") {
       executable = "bash";
-      args = ["-lc", cmd];
+      args = ["-c", cmd];
     } else {
       if (cmd.length === 0) {
         return resolve({

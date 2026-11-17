@@ -16,15 +16,28 @@ describe("Process runner & output capping (§5, §9)", () => {
     expect(res.timedOut).toBe(false);
   });
 
-  it("executes a shell command string via bash -lc with environment variables", async () => {
-    const res = await runProcess({
-      cmd: "echo $GREETING $TARGET",
-      cwd: process.cwd(),
-      env: { GREETING: "hi", TARGET: "factory" },
-    });
+  it("executes a shell command string with the caller's environment, not a login profile", async () => {
+    // Gates pay this path per run; a login shell would source the
+    // developer's profile scripts (slow, and they can change PATH or print).
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "proc-home-"));
+    const marker = path.join(home, "profile-ran");
+    fs.writeFileSync(
+      path.join(home, ".profile"),
+      `: > ${JSON.stringify(marker)}\n`,
+    );
+    try {
+      const res = await runProcess({
+        cmd: "echo $GREETING $TARGET",
+        cwd: process.cwd(),
+        env: { GREETING: "hi", TARGET: "factory", HOME: home },
+      });
 
-    expect(res.code).toBe(0);
-    expect(res.stdout.trim()).toBe("hi factory");
+      expect(res.code).toBe(0);
+      expect(res.stdout.trim()).toBe("hi factory");
+      expect(fs.existsSync(marker)).toBe(false);
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true });
+    }
   });
 
   it("pipes stdin into child process", async () => {
