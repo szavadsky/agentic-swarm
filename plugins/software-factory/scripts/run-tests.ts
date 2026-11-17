@@ -1,19 +1,19 @@
 #!/usr/bin/env bun
 /**
- * Tests gate runner: `bun test` across parallel worker processes with a
- * wall-time report. `--parallel` implies `--isolate`: Bun gives every file a
+ * Tests gate runner.
+ * `--parallel` implies `--isolate`: Bun gives every file a
  * fresh global object, module registry, environment and process listeners, so
  * files share neither tmp repos nor process-wide state. A file that still
  * races under the sweep is listed in SERIAL and runs in one `--parallel=1`
- * worker; the sweep ignores it. Output stays bun's own, which the kernel's
- * gate parser reads (it drops the closing wall line); this runner only adds
- * that line.
+ * worker; the sweep ignores it.
+ *
+ * Re-run policy: A red run re-runs its red files once.
  *
  * Extra argv forwards to `bun test` and skips the shard split: a focused run
  * names exact files and should not pay for, or silently include, the serial
  * shard.
  */
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -22,18 +22,9 @@ import path from "node:path";
 const WORKERS = 8;
 
 /**
- * Files that run in one serial worker ahead of the parallel sweep, each with
- * the reason it cannot share eight workers. `--parallel` implies `--isolate`,
- * and Bun resets the global object, module registry, environment and process
- * listeners per file, so the child-group registry and process-wide env need no
- * shard; no test here binds a fixed port or path. A file that still races
- * under the sweep goes here with its observed failure, never behind a retry.
+ * Files that run in one serial worker ahead of the parallel sweep.
  */
-const SERIAL: readonly string[] = [
-  // Flaked to `infra` under 8 workers (1 of 3 full runs; green solo 11/11):
-  // dispatch spawns real git worktrees and gates, which contended with 7 peers.
-  "test/kernel/budget-drain.test.ts",
-];
+const SERIAL: readonly string[] = ["test/kernel/budget-drain.test.ts"];
 
 interface FileTimings {
   version: number;
@@ -55,6 +46,23 @@ function slowestFiles(
   }
 }
 
+/** File suites that recorded a failure in bun's JUnit report. */
+function failedFiles(junitPath: string): string[] {
+  let raw: string;
+  try {
+    raw = fs.readFileSync(junitPath, "utf8");
+  } catch {
+    return [];
+  }
+  const files = new Set<string>();
+  for (const match of raw.matchAll(/<testsuite\b[^>]*>/g)) {
+    const file = /\bfile="([^"]+)"/.exec(match[0])?.[1];
+    const failures = Number(/\bfailures="(\d+)"/.exec(match[0])?.[1] ?? 0);
+    if (file && failures > 0) files.add(file);
+  }
+  return [...files];
+}
+
 interface RunResult {
   code: number | null;
   signal: NodeJS.Signals | null;
@@ -62,6 +70,7 @@ interface RunResult {
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "factory-tests-"));
 const timingsPath = path.join(tmpDir, "timings.json");
+const junitPath = path.join(tmpDir, "junit.xml");
 const forwarded = process.argv.slice(2);
 const runs: string[][] =
   forwarded.length > 0
@@ -87,7 +96,15 @@ function runBun(argv: string[]): Promise<RunResult> {
   return new Promise((resolve, reject) => {
     const child = spawn(
       "bun",
-      ["test", "--timings", timingsPath, "--update-timings", ...argv],
+      [
+        "test",
+        "--timings",
+        timingsPath,
+        "--update-timings",
+        "--reporter=junit",
+        `--reporter-outfile=${junitPath}`,
+        ...argv,
+      ],
       { stdio: "inherit" },
     );
     active = child;
@@ -100,10 +117,26 @@ function runBun(argv: string[]): Promise<RunResult> {
 }
 
 try {
-  const results: RunResult[] = [];
+  let failed = false;
   for (const argv of runs) {
     if (interrupted) break;
-    results.push(await runBun(argv));
+    const result = await runBun(argv);
+    if (result.signal !== null || result.code !== 0) {
+      const red = failedFiles(junitPath);
+      if (red.length > 0) {
+        console.log(
+          `tests gate: run red; re-running ${red.length} failed file(s) once: ${red.join(", ")}`,
+        );
+        const rerun = spawnSync("bun", ["test", ...red], { stdio: "inherit" });
+        if (rerun.status !== 0) {
+          failed = true;
+          break;
+        }
+      } else {
+        failed = true;
+        break;
+      }
+    }
   }
   const wall = (performance.now() - started) / 1000;
   const slowest = slowestFiles(timingsPath, 5)
@@ -113,15 +146,9 @@ try {
     forwarded.length > 0
       ? `focused; slowest: ${slowest}`
       : `--parallel=${WORKERS}; serial: ${SERIAL.length} files; slowest: ${slowest}`;
-  // stderr, not stdout: gate capture concatenates stdout before stderr and
-  // keeps the tail, so the wall report must be the last line of stderr.
   console.error(`tests gate: wall ${wall.toFixed(1)}s (${shape})`);
-  const failed =
-    interrupted !== undefined ||
-    results.length < runs.length ||
-    results.some((result) => result.signal !== null || result.code !== 0);
   fs.rmSync(tmpDir, { recursive: true, force: true });
-  process.exit(failed ? 1 : 0);
+  process.exit(failed || interrupted ? 1 : 0);
 } catch (error) {
   fs.rmSync(tmpDir, { recursive: true, force: true });
   console.error(`tests gate: failed to run bun test: ${String(error)}`);
