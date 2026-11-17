@@ -94,14 +94,17 @@ Every recovery act is journaled and reported as an incident, so the architect ow
 ## Operator launches
 
 - Interrupt test (after the architect's `forward` says relaunch is ready): during a launch with at least one task running and one queued, send one `pkill -INT -f "factory.ts run"`, wait for exit 130, relaunch the same command. Journal the first record ids of the relaunch.
+- Two dependency-free tasks editing the same line must be dispatched concurrently so the steward arbitrates the conflict at merge, and two sequential merges mean serialization via `overlapsRunning` (`plugins/software-factory/src/kernel/dispatch.ts:525,542`), not steward evidence (p1-steward landed that way, commit `27bf9d0`).
 - Small goals (after `forward` says the trivial and task paths are ready), one at a time, no `self` run live:
   ```bash
   bun run $PIN/bin/factory.ts init --repo $V3 --goal p1-trivial --intent /tmp/p1-trivial.md
   bun run $PIN/bin/factory.ts run  --repo $V3 --goal p1-trivial --run-config $V3/bootstrap/run/self.yaml --iterations 1 > /tmp/p1-trivial.log 2>&1
   ```
   Suggested intents — pick another small one if these are already done: trivial, *"Remove the unused `Caps.fork` flag from the harness types and adapters; gates stay green."*; task, *"Make the omp cache TTL a run-config key (default `short`) passed to the omp adapter; covered by a test."* Land `factory/<goal>` like `factory/self`. A misclassification is an incident, never a hand-written `class.yaml`.
+- A steer dropped into the goal mailbox while at least one task is running must get a `steer <id>:` answer while dispatch continues (no hold, running tasks unaffected), with the record ids journaled.
 - Stage B goals: `t-retention` — *"Session/transcript pruning keeps every transcript a record cites; covered by a test."*; `t-hygiene` — *"After implement, a cleanliness check flags new file extensions, oversized files and many added files; the author gets one follow-up prompt to fix or justify."* An escalation to bigger is a valid outcome.
 - Benchmark (`bootstrap/benchmark/README.md`, ~7 h): once at the end of Phase 1.
+- A Go monthly 429 (quota exhausted) triggers the off-Go rotation: relaunch with `bootstrap/run/self-quota.yaml`, all roles on omp / agy / opencode-free, and revert when Go resets.
 
 ## Stage C: the whole intent
 
