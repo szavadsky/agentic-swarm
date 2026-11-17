@@ -85,6 +85,26 @@ describe("Hardened git execution (§2, §7)", () => {
     }
   });
 
+  it("read probes leave the index alone so a concurrent reset keeps the lock", async () => {
+    const probe = createTmpRepo();
+    try {
+      probe.writeFile("probe.txt", "probe\n");
+      probe.commit("probe");
+      // A stale stat entry makes an optional-lock status refresh and rewrite
+      // the index while holding index.lock; a merge resetting the same
+      // checkout then dies with "Unable to create index.lock" and the launch
+      // stops as infra.
+      const stale = new Date("2000-01-01T00:00:00Z");
+      fs.utimesSync(path.join(probe.dir, "probe.txt"), stale, stale);
+      const indexPath = path.join(probe.dir, ".git", "index");
+      const before = fs.readFileSync(indexPath);
+      await git(probe.dir, ["status", "--porcelain"]);
+      expect(fs.readFileSync(indexPath).equals(before)).toBe(true);
+    } finally {
+      probe.cleanup();
+    }
+  });
+
   it("Repo.identityEnv builds the author/committer env once", async () => {
     const { Repo } = await import("../src/core/git/repo.js");
     const withIdentity = new Repo({

@@ -38,6 +38,9 @@ const HARDENED_GIT_ENV: Record<string, string> = {
   GIT_PAGER: "cat",
   PAGER: "cat",
   LC_ALL: "C",
+  // Read probes (status, diff) would otherwise refresh the index under
+  // index.lock; the merge queue resets the same integration checkout, so a
+  // probe holding the lock turns a merge into "Unable to create index.lock".
   GIT_OPTIONAL_LOCKS: "0",
 };
 
