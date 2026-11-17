@@ -647,3 +647,10 @@ Verbatim, newest last; each with what it changed.
 
 ### 2026-11-17 — rotation for i43: hy4-first PM/review/QA + Go-hy4 digest + agy implementer
 - Map: architect claude/opus (fb sonnet, fb2 omp/opus), pm opencode/hy4 (fb omp/ernie), digest omp-Go/hy4:xhigh (fb opencode/hy4), implementer agy/gemini (fb omp-Go/deepseek:max; cycle muse41 → deepseek42 → agy43), reviewer opencode/hy4 (fb omp/ernie), qa opencode/hy4 (fb omp/ernie; dormant — no kernel role), plan-rev+check agy (fb omp/ernie), esc omp/sonnet:high (fb omp-Go/muse), steward omp/ernie (fb agy). Subs + caps kept. Loader + price-coverage green before commit.
+
+### 2026-11-17 — i43 landed: 3 merges, 0 parks; latch fixed same-iteration
+- Exit 3 (iteration-limit), 2h49m wall. factory/self +3: quota-pool-latch (replaces workingTier sticky latch — only quota stops exhaust pools; timeout/rate/crash hop per-turn; answers the tier-latch steer same-iteration), gate-fix-bound, validate-steps. ZERO parks, pending 0, inbox empty.
+- Legs: digest omp/Go-hy4:xhigh DONE $0; architect claude/opus single attempt done (3rd clean outing — fix HOLDS 3/3); PM opencode/hy4 $0; implements 3+ agy/gemini ($12.33 of $14.53); reviews 6/6 opencode/hy4 $0 (3 changes r1 → 3 approve r2, textbook); plan roles agy $2.20. ZERO ernie turns (hy4-first held, no fallback needed). Cost $14.53 partial, list $15.08. 1 merged-gate failure + 1 flake (green at merge; 01818/01829/01834 merge-checks r2), 0 infra retries, 0 conflicts.
+- Steer→fix receipt: tier-latch confirmed real (runtime.workingTier pinned alias to winning fallback for whole launch); quota-pool-latch replaces it.
+- Forwards: (1) re-run p1-trivial/p1-task after these 3 merge (regression; Phase-1-done declaration expected after) — running next; (2) INTENT Q2 operator config stale 2/3 (subscriptions + efforts done i42; iterationUsd off per owner 0) — owner's call whether Q2 needs a refresh.
+- Owner gates line (6e7a55bb) synced MAIN→V3 (326da37e verified) + steered for i44.

@@ -220,6 +220,7 @@ Modern harnesses deliver a decent story (several hundred lines of code). The age
 
 ### Gates
 - A tree is judged once: a gate result is keyed by the tree it ran on, and the result and log go to the agents that follow.
+- Gates shall be reasonably fast and shall use no API/model calls. Slow gates run only case by case.
 - *Observed:* 75 of 134 merge-checks (56%) re-ran a tree byte-identical to the one the task's own checks had just passed — 7,708 s of the 15,141 s merge-checks took; the 6 that went red all ran on a tree that differed ([records](/home/slava/aiexp/agentic-swarm.wt/v3/.factory/artifacts/self/records)). No code compares trees ([`integrate.ts:216-386`](plugins/software-factory/src/kernel/integrate.ts)). Every gate run waits on one repo-wide mutex ([`gates.ts:303-319`](plugins/software-factory/src/kernel/gates.ts)) because the factory's own suite shares ports, caches and build dirs: i40 spent 590 s of gate wall per merge. Agents' test runs are outside that mutex — three concurrent `gates.sh` runs were seen under one agy turn.
 - *Improve:* skip the merge-check when the merged tree equals the checked tree; make the factory's suite safe in parallel worktrees (ports, caches, build dirs per worktree), then drop the mutex.
 
