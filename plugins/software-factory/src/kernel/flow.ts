@@ -296,7 +296,12 @@ async function handleStepResult(
   stop: StepRecord["stop"],
   outcome: StepRecord["outcome"],
 ): Promise<TaskActionResult> {
-  const meta = { iteration, slug: task.slug, round: state.round };
+  const meta = {
+    iteration,
+    slug: task.slug,
+    round: state.round,
+    revision: task.revision,
+  };
   const infraResult =
     stop?.kind === "infra"
       ? {
@@ -391,7 +396,12 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
   if (ensured.error) {
     await appendPark(
       runtime.store,
-      { iteration, slug: task.slug, round: state.round },
+      {
+        iteration,
+        slug: task.slug,
+        round: state.round,
+        revision: task.revision,
+      },
       ensured.error,
     );
     return {};
@@ -407,13 +417,23 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
     );
     await appendPark(
       runtime.store,
-      { iteration, slug: task.slug, round: state.round },
+      {
+        iteration,
+        slug: task.slug,
+        round: state.round,
+        revision: task.revision,
+      },
       cause,
     );
     return {};
   }
 
-  const meta = { iteration, slug: task.slug, round: state.round };
+  const meta = {
+    iteration,
+    slug: task.slug,
+    round: state.round,
+    revision: task.revision,
+  };
   // A first-turn `base:` conflict resolves in the turn instead of parking: the
   // merge stays in progress and the ask rides the counted turn. Fix turns and
   // reviews keep the park; a resumed MERGE_HEAD (crash mid-resolve) always
@@ -785,7 +805,12 @@ async function runChecks(
   if (ensured.error) {
     await appendPark(
       runtime.store,
-      { iteration, slug: task.slug, round: state.round },
+      {
+        iteration,
+        slug: task.slug,
+        round: state.round,
+        revision: task.revision,
+      },
       ensured.error,
     );
     return {};
@@ -801,7 +826,12 @@ async function runChecks(
     );
     await appendPark(
       runtime.store,
-      { iteration, slug: task.slug, round: state.round },
+      {
+        iteration,
+        slug: task.slug,
+        round: state.round,
+        revision: task.revision,
+      },
       cause,
     );
     return {};
@@ -813,7 +843,12 @@ async function runChecks(
     await abortMerge(ensured.path);
     await appendPark(
       runtime.store,
-      { iteration, slug: task.slug, round: state.round },
+      {
+        iteration,
+        slug: task.slug,
+        round: state.round,
+        revision: task.revision,
+      },
       `base-conflict: ${named}`,
     );
     return {};
@@ -824,7 +859,12 @@ async function runChecks(
     await abortMerge(ensured.path);
     await appendPark(
       runtime.store,
-      { iteration, slug: task.slug, round: state.round },
+      {
+        iteration,
+        slug: task.slug,
+        round: state.round,
+        revision: task.revision,
+      },
       `base-conflict: ${named}`,
     );
     return {};
@@ -884,7 +924,12 @@ export async function executeTaskAction(
   if (action.kind === "park") {
     await appendPark(
       runtime.store,
-      { iteration, slug: task.slug, round: state.round },
+      {
+        iteration,
+        slug: task.slug,
+        round: state.round,
+        revision: task.revision,
+      },
       action.cause,
     );
     return {};

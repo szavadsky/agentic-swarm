@@ -40,12 +40,18 @@ export const steerRouteEntrySchema = z.object({
   answer: z.string().optional(),
 });
 
+/**
+ * What the decider does with one parked slug: amend keeps the slug (a new
+ * revision of its file), cancel spends it, replace and split continue the kept
+ * branch under new slugs, leave defers to the architect.
+ */
 export const stallRouteEntrySchema = z.object({
   slug: z.string().min(1),
-  action: z.enum(["continue", "leave"]),
+  action: z.enum(["amend", "cancel", "replace", "split", "leave"]),
   reason: z.string().min(1),
 });
 export type StallRouteEntry = z.infer<typeof stallRouteEntrySchema>;
+export type StallDecision = StallRouteEntry["action"];
 
 /** One plan item's check result: what the checker inspected and what it showed. */
 export const planCheckEvidenceSchema = z.object({
@@ -55,10 +61,22 @@ export const planCheckEvidenceSchema = z.object({
 });
 export type PlanCheckEvidence = z.infer<typeof planCheckEvidenceSchema>;
 
-/** One mechanical follow-up the PM can write without new direction. */
+/**
+ * One follow-up the checker names without new direction. A parked slug gets
+ * the decider's four decisions — amend under the same slug, cancel, replace
+ * with one new task, split into several; a dead dep or unmerged work keeps its
+ * mechanical fix.
+ */
 export const planCheckFollowUpSchema = z.object({
-  kind: z.enum(["continuation", "missing-dep", "unmerged"]),
-  /** The parked slug to continue, or the pending task a dead dep blocks. */
+  kind: z.enum([
+    "amend",
+    "cancel",
+    "replace",
+    "split",
+    "missing-dep",
+    "unmerged",
+  ]),
+  /** The slug this follow-up acts on: a parked task, or the pending task a dead dep blocks. */
   slug: z.string().min(1),
   /** A missing-dep follow-up's dead dependency; absent for every other kind. */
   dep: z.string().optional(),
@@ -79,7 +97,11 @@ export const planCheckSchema = z.object({
 export type PlanCheck = z.infer<typeof planCheckSchema>;
 export type PlanCheckVerdict = PlanCheck["verdict"];
 
-/** One plan-check follow-up the PM routed: `continue` writes a task, `leave` keeps it for the architect. */
+/**
+ * One plan-check follow-up the PM routed: `continue` carries the checker's
+ * kind out now (amend, cancel, replace, split, a dead-dep drop), `leave` keeps
+ * it for the architect.
+ */
 export const planCheckRouteEntrySchema = z.object({
   slug: z.string().min(1),
   action: z.enum(["continue", "leave"]),
@@ -130,16 +152,16 @@ export const outcomeSchema = z.object({
     .array(steerRouteEntrySchema)
     .optional()
     .describe("PM steer turns only: one route per claimed steer"),
-  // The kernel continues `continue` slugs and records `leave` reasons for
-  // the next boundary.
+  // The kernel resumes amend/replace/split slugs, cancels `cancel` slugs and
+  // records `leave` reasons for the next boundary.
   stallRoutes: z
     .array(stallRouteEntrySchema)
     .optional()
     .describe("PM stall turns only: one entry per parked slug"),
   // The kernel branches on the verdict.
   planCheck: planCheckSchema.optional().describe("plan-checker turns only"),
-  // The kernel continues `continue` slugs and records `leave` reasons for
-  // the next boundary.
+  // The kernel resumes amended/continued follow-ups, cancels a cancel
+  // follow-up and records `leave` reasons for the next boundary.
   planCheckRoutes: z
     .array(planCheckRouteEntrySchema)
     .optional()
@@ -164,6 +186,13 @@ export interface TaskFile {
   deps: string[];
   scope: string[];
   tier?: string;
+  /**
+   * The decider's revision of this task, 0 until it amends a park under the
+   * same slug. Derive counts only records after the park an earlier revision
+   * ended, so a bump restarts the flow with its counts while the kept branch
+   * and the records stay.
+   */
+  revision: number;
   /** A parked task whose kept branch this task continues from. */
   base?: string;
   /** Plan heading this task derives from. */
@@ -342,6 +371,12 @@ export interface StepRecord {
   cachedPrefix?: boolean;
   /** Task hash at dispatch, for the frozen-task check. */
   taskHash?: string;
+  /**
+   * The task revision this record belongs to. A park carries the revision it
+   * ended, so derive can ignore the parks of revisions the task has amended
+   * past; absent reads as 0.
+   */
+  revision?: number;
   /** Integration head (or parked branch tip) the branch started from. */
   base?: string;
   stop?: Stop;
@@ -391,6 +426,8 @@ export interface RecordStart {
   alias?: string;
   model?: ModelRef;
   taskHash?: string;
+  /** The task revision this record belongs to; absent reads as 0. */
+  revision?: number;
   base?: string;
   /** Merge steps: the planned squash commit, written before the ref moves. */
   commit?: string;

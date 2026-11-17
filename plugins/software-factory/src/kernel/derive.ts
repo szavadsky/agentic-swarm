@@ -223,6 +223,7 @@ export function derive(
       flow: "implement-review",
       deps: [],
       scope: [],
+      revision: 0,
       source: "orphan terminal record",
       body: "",
     };

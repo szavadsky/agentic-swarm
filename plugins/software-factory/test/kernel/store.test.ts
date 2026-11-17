@@ -30,6 +30,7 @@ function task(over: Partial<TaskFile> = {}): TaskFile {
     flow: "implement-review",
     deps: [],
     scope: ["src/auth"],
+    revision: 0,
     source: "Plan §auth",
     body: "why login\n\ndone when: user can log in",
     ...over,

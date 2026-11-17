@@ -522,6 +522,7 @@ export async function runAgentTurn(
         iteration: spec.meta.iteration,
         slug: spec.meta.slug,
         round: spec.meta.round,
+        revision: spec.meta.revision ?? 0,
       },
       "overflow",
     );

@@ -26,6 +26,34 @@ describe("outcome delivery", () => {
     expect(() => parseOutcome("status: nope\nsummary: x\n")).toThrow(/status/);
   });
 
+  it("reads the retired continue route as a replace, and refuses unknown actions", () => {
+    const legacy = parseOutcome(
+      [
+        "status: done",
+        "summary: continued the park",
+        "stallRoutes:",
+        "  - slug: alpha",
+        "    action: continue",
+        "    reason: retry with direction",
+      ].join("\n"),
+    );
+    expect(legacy.stallRoutes).toEqual([
+      { slug: "alpha", action: "replace", reason: "retry with direction" },
+    ]);
+    expect(() =>
+      parseOutcome(
+        [
+          "status: done",
+          "summary: routed the park",
+          "stallRoutes:",
+          "  - slug: alpha",
+          "    action: redo",
+          "    reason: unknown",
+        ].join("\n"),
+      ),
+    ).toThrow(/action/);
+  });
+
   it("prefers the prompt-named file over a fenced block", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "factory-outcome-"));
     const file = path.join(dir, "outcome.yaml");

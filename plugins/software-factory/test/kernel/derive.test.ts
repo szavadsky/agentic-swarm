@@ -168,6 +168,55 @@ describe("derive", () => {
     expect(state.tasks.a!.phase).toBe("parked");
   });
 
+  it("restarts an amended task after the park its earlier revision ended", () => {
+    const parkRecord = (seq: number, revision: number, cause: string) =>
+      script(seq, {
+        step: "park",
+        ok: true,
+        cause,
+        revision,
+        startedAt: new Date(seq).toISOString(),
+      });
+    const firstRevision = [
+      implement(1),
+      doneCheck(2),
+      review(3, "changes", 1),
+      implement(4, 2),
+      doneCheck(5),
+      review(6, "reject", 2),
+      parkRecord(7, 0, "review rejected: not salvageable"),
+    ];
+    const parked = derive([task("a")], firstRevision);
+    expect(parked.tasks.a!.status).toBe("parked");
+    expect(parked.tasks.a!.turns).toBe(4);
+
+    // The amendment resets phase, counts and the terminal fact; the records
+    // stay for the prompts' review history.
+    const amended = derive(
+      [task("a", { revision: 1, body: "Retry.\nDone when: it works." })],
+      firstRevision,
+    );
+    expect(amended.tasks.a!.status).toBe("ready");
+    expect(amended.tasks.a!.phase).toBe("implement");
+    expect(amended.tasks.a!.round).toBe(1);
+    expect(amended.tasks.a!.turns).toBe(0);
+    expect(amended.tasks.a!.park).toBeUndefined();
+    expect(amended.tasks.a!.verdict).toBeUndefined();
+
+    // A park of the current revision still ends it.
+    const reparked = derive(
+      [task("a", { revision: 1 })],
+      [
+        ...firstRevision,
+        implement(8, 1, { base: undefined }),
+        parkRecord(9, 1, "blocked: still stuck"),
+      ],
+    );
+    expect(reparked.tasks.a!.status).toBe("parked");
+    expect(reparked.tasks.a!.cause).toBe("blocked: still stuck");
+    expect(reparked.tasks.a!.turns).toBe(1);
+  });
+
   it("derives park requests on blocked, failed and upscope outcomes, and parks on a park record", () => {
     const blocked = derive(
       [task("a")],

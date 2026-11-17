@@ -15,7 +15,7 @@ import type {
 export function scriptMeta(
   iteration: number,
   step: string,
-  opts: { slug?: string; round?: number } = {},
+  opts: { slug?: string; round?: number; revision?: number } = {},
 ): RecordStart {
   return {
     iteration,
@@ -23,6 +23,7 @@ export function scriptMeta(
     round: opts.round ?? 1,
     actor: "script",
     ...(opts.slug ? { slug: opts.slug } : {}),
+    ...(opts.revision !== undefined ? { revision: opts.revision } : {}),
   };
 }
 
@@ -160,16 +161,27 @@ export function parkLaunchKind(cause: string): LaunchKind {
   return "failure";
 }
 
+/**
+ * A park records the task revision it ends: a later amend bumps the file's
+ * revision, and derive then ignores the parks of the revisions it amended past.
+ */
 export async function appendPark(
   store: ArtifactStore,
-  meta: { iteration: number; slug: string; round: number },
+  meta: { iteration: number; slug: string; round: number; revision: number },
   cause: string,
 ): Promise<void> {
-  await store.appendRecord(scriptMeta(meta.iteration, "park", meta), {
-    ok: true,
-    cause,
-    launchKind: parkLaunchKind(cause),
-  });
+  await store.appendRecord(
+    scriptMeta(meta.iteration, "park", {
+      slug: meta.slug,
+      round: meta.round,
+      revision: meta.revision,
+    }),
+    {
+      ok: true,
+      cause,
+      launchKind: parkLaunchKind(cause),
+    },
+  );
 }
 
 export async function appendFinish(

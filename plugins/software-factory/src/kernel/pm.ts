@@ -30,6 +30,7 @@ import type {
   Outcome,
   PlanCheckFollowUp,
   PlanCheckRouteEntry,
+  StallDecision,
   StallRouteEntry,
   State,
   StepRecord,
@@ -334,6 +335,7 @@ async function cancelRemovedTasks(
   iteration: number,
 ): Promise<void> {
   const files = await runtime.store.listTasks();
+  const bySlug = new Map(files.map((file) => [file.slug, file]));
   const provenance = new Map(files.map((file) => [file.slug, file.source]));
   for (const [slug, task] of Object.entries(state.tasks)) {
     if (task.status !== "pending" && task.status !== "ready") continue;
@@ -344,7 +346,12 @@ async function cancelRemovedTasks(
     if (task.commit !== undefined) {
       await appendPark(
         runtime.store,
-        { iteration, slug, round: task.round },
+        {
+          iteration,
+          slug,
+          round: task.round,
+          revision: bySlug.get(slug)?.revision ?? 0,
+        },
         "dropped-with-commits",
       );
       continue;
@@ -947,7 +954,10 @@ export async function runSteerPm(
 /** Script step committing a stall turn's routes; its presence marks the iteration's one stall turn spent. */
 export const STALL_ROUTES_STEP = "stall-routes";
 
-/** Which parked slugs a stall turn continued; the rest stay parked with recorded reasons. */
+/**
+ * Which parked slugs a stall turn resumed (amend, replace, split); a leave
+ * stays parked with its reason and a cancel spends the slug.
+ */
 export interface StallResult {
   continued: string[];
   left: string[];
@@ -1040,11 +1050,192 @@ function stallLadderNote(
     );
   }
   notes.push(
-    "Restated PM stall contract: you are the PM — never edit the plan, never plan, never implement, never invent intent. Write one continuation task file per continued slug with source stall: <iteration>, then the outcome with stallRoutes.",
+    "Restated PM stall contract: you are the PM — never edit the plan, never plan, never implement, never invent intent. Route every parked slug in stallRoutes, then write the outcome: `amend` rewrites the slug's own file and bumps `revision` by one, `cancel` writes no task file, `replace` writes one task with a new slug, `base:` naming the parked slug and the same done-when, `split` writes one task per separable outcome, `leave` writes nothing.",
   );
   if (failure.length > 0)
     notes.push("", "Findings:", ...failure.map((reason) => `- ${reason}`));
   return notes.join("\n");
+}
+
+/**
+ * How the checker's follow-up kind maps onto the decider's vocabulary: an
+ * unmerged park still continues as a task, and a dead dep is the mechanical
+ * fix a replace carries.
+ */
+function planCheckDecision(kind: PlanCheckFollowUp["kind"]): StallDecision {
+  return kind === "missing-dep" || kind === "unmerged" ? "replace" : kind;
+}
+
+/** The revision a task file declares, or undefined when it does not parse. */
+function declaredRevision(
+  text: string | undefined,
+  slug: string,
+): number | undefined {
+  if (text === undefined) return undefined;
+  try {
+    return parseTaskFile(text, slug).revision;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * One PM turn's decisions over its slugs, checked against the task files the
+ * turn left. `amend` edits the slug's own file and bumps its revision;
+ * `cancel` and `leave` write nothing; `replace` writes exactly one task that
+ * continues the kept branch (or, when that branch conflicts with the head, a
+ * fresh task keeping the same done-when); `split` writes at least two, each
+ * naming the slug as its base. The kernel owns the consequences the files
+ * cannot carry: the cancel record, and derive's cut at the park a revision
+ * amended past.
+ */
+function decisionFindings(input: {
+  turn: "stall" | "plan-check";
+  slugs: string[];
+  decisionOf: ReadonlyMap<string, StallDecision>;
+  state: State;
+  before: ReadonlyMap<string, string>;
+  texts: ReadonlyMap<string, string>;
+  bySlug: ReadonlyMap<string, TaskFile>;
+  created: readonly TaskFile[];
+  /**
+   * Claims a mechanical fix already made, by slug: a dead-dep drop on the
+   * blocked task, or the new task that carries the dead dep's name.
+   */
+  credits: ReadonlyMap<string, readonly string[]>;
+  /** Slugs whose file edit a credit owns: the dead-dep drop. */
+  fixed: ReadonlySet<string>;
+}): string[] {
+  const { turn, slugs, decisionOf, bySlug, created, credits, fixed } = input;
+  const findings: string[] = [];
+  for (const slug of slugs) {
+    const decision = decisionOf.get(slug);
+    if (decision !== "amend" && decision !== "cancel") continue;
+    const status = input.state.tasks[slug]?.status;
+    if (status === "merged" || status === "finished" || status === "cancelled")
+      findings.push(
+        `slug "${slug}" is ${status}; ${decision} is refused: merged or finished work is history and a cancelled slug is spent`,
+      );
+  }
+  for (const [slug, original] of input.before) {
+    if (input.texts.get(slug) === original) continue;
+    if (fixed.has(slug)) continue;
+    const decision = decisionOf.get(slug);
+    if (decision === undefined) {
+      findings.push(
+        `task "${slug}" was edited; a ${turn} turn never edits a slug it does not amend`,
+      );
+      continue;
+    }
+    if (decision !== "amend") {
+      findings.push(
+        `task "${slug}" was edited; a ${turn} turn never edits a slug it does not amend, and ${decision} keeps this file as it was`,
+      );
+      continue;
+    }
+    const was = declaredRevision(original, slug);
+    const now = bySlug.get(slug)?.revision;
+    if (was === undefined || now !== was + 1) {
+      findings.push(
+        `task "${slug}" is amended; an amend bumps "revision" from ${was ?? "the parked value"} to ${was === undefined ? "the next integer" : was + 1}, not ${now ?? "absent"}`,
+      );
+    }
+  }
+  for (const slug of slugs) {
+    if (decisionOf.get(slug) !== "amend") continue;
+    if (input.texts.get(slug) === input.before.get(slug))
+      findings.push(
+        `slug "${slug}" is amended but its file is unchanged; write the amended brief and bump "revision"`,
+      );
+  }
+  const claimedBy = new Map<string, string[]>();
+  const claim = (slug: string, by: string): void => {
+    const list = claimedBy.get(slug) ?? [];
+    list.push(by);
+    claimedBy.set(slug, list);
+  };
+  const replaced = slugs.filter((slug) => decisionOf.get(slug) === "replace");
+  for (const made of [...created].sort((a, b) =>
+    a.slug.localeCompare(b.slug),
+  )) {
+    if (made.base !== undefined) {
+      const base = made.base;
+      const decision = decisionOf.get(base);
+      if (!slugs.includes(base)) {
+        findings.push(
+          `new task "${made.slug}" continues "${base}", which is not in this ${turn}`,
+        );
+        continue;
+      }
+      if (decision !== "replace" && decision !== "split") {
+        findings.push(
+          `new task "${made.slug}" continues "${base}", which was routed ${decision ?? "not at all"}; only replace and split write new tasks`,
+        );
+        continue;
+      }
+      const baseTask = bySlug.get(base);
+      if (
+        decision === "replace" &&
+        baseTask &&
+        doneWhen(made.body) !== doneWhen(baseTask.body)
+      ) {
+        findings.push(
+          `new task "${made.slug}" changes the done-when; a replace keeps its base's done-when`,
+        );
+      }
+      claim(base, made.slug);
+      continue;
+    }
+    // A fresh (rule-10) task continues a replace park without a base: it
+    // matches the parked done-when instead. A split part names its base: the
+    // parts divide the done-when, so no fresh task can claim one.
+    const candidates = replaced
+      .filter((slug) => (claimedBy.get(slug) ?? []).length === 0)
+      .filter((slug) => {
+        const base = bySlug.get(slug);
+        return (
+          base !== undefined && doneWhen(made.body) === doneWhen(base.body)
+        );
+      })
+      .sort();
+    if (candidates.length === 0) {
+      findings.push(
+        `new task "${made.slug}" names no base and matches no replace slug's done-when; name the parked slug as base or keep its done-when`,
+      );
+      continue;
+    }
+    claim(candidates[0]!, made.slug);
+  }
+  for (const slug of slugs) {
+    const decision = decisionOf.get(slug)!;
+    const claims = [
+      ...(claimedBy.get(slug) ?? []),
+      ...(credits.get(slug) ?? []),
+    ];
+    const count = claims.length;
+    const named = claims.join(", ");
+    if (decision === "replace") {
+      if (count === 0)
+        findings.push(
+          `slug "${slug}" is replaced but has no task; write one with base: ${slug}`,
+        );
+      else if (count > 1)
+        findings.push(
+          `slug "${slug}" has ${count} tasks (${named}); replace writes exactly one`,
+        );
+    } else if (decision === "split") {
+      if (count < 2)
+        findings.push(
+          `slug "${slug}" is split into ${count === 0 ? "nothing" : `${count} task`}; split writes at least two, each with base: ${slug}`,
+        );
+    } else if (decision === "cancel" || decision === "leave") {
+      if (count > 0)
+        findings.push(
+          `slug "${slug}" was ${decision === "cancel" ? "cancelled" : "left"} but gained ${named}; ${decision} writes no task`,
+        );
+    }
+  }
+  return findings;
 }
 
 async function validateStallTurn(
@@ -1074,7 +1265,7 @@ async function validateStallTurn(
   const routes = outcome?.stallRoutes;
   if (!routes) {
     findings.push(
-      `stall turn lists no stallRoutes; route each parked slug (${opts.slugs.join(", ")}) as continue|leave`,
+      `stall turn lists no stallRoutes; route each parked slug (${opts.slugs.join(", ")}) as amend|cancel|replace|split|leave`,
     );
     return [...new Set(findings)];
   }
@@ -1097,14 +1288,14 @@ async function validateStallTurn(
     }
     if (!entry.reason.trim()) {
       findings.push(
-        `slug "${entry.slug}" needs a reason; say why it continues or stays parked`,
+        `slug "${entry.slug}" needs a reason; say what happens to the parked work`,
       );
     }
   }
   for (const slug of opts.slugs) {
     if (!seen.has(slug)) {
       findings.push(
-        `slug "${slug}" has no route; route each parked slug as continue|leave`,
+        `slug "${slug}" has no route; route each parked slug as amend|cancel|replace|split|leave`,
       );
     }
     if (!texts.has(slug)) {
@@ -1116,107 +1307,68 @@ async function validateStallTurn(
 
   if (parseFindings.length === 0) {
     const bySlug = new Map(tasks.map((task) => [task.slug, task]));
-    for (const [slug, original] of taskSnapshot) {
-      if (texts.has(slug) && texts.get(slug) !== original) {
-        findings.push(
-          `task "${slug}" was edited; a stall turn writes continuations only, never edits`,
-        );
-      }
-    }
     const created = [...texts.keys()].filter((slug) => !taskSnapshot.has(slug));
     for (const slug of created) {
       const task = bySlug.get(slug);
       if (!task) continue;
       if (stallProvenance(task.source) !== String(opts.iteration)) {
         findings.push(
-          `new task "${slug}" has no provenance stall: ${opts.iteration}; a stall turn creates continuations only with source stall: ${opts.iteration}`,
+          `new task "${slug}" has no provenance stall: ${opts.iteration}; a stall turn creates tasks only with source stall: ${opts.iteration}`,
         );
       }
     }
-    // Each new task claims its parked slug: a base names it, a fresh
-    // (rule-10) task without a base matches its done-when instead.
-    const claimedBy = new Map<string, string[]>();
-    const claim = (park: string, slug: string): void => {
-      const list = claimedBy.get(park) ?? [];
-      list.push(slug);
-      claimedBy.set(park, list);
-    };
-    for (const slug of [...created].sort()) {
-      const task = bySlug.get(slug);
-      if (!task) continue;
-      if (task.base !== undefined) {
-        if (!claimed.has(task.base)) {
-          findings.push(
-            `new task "${slug}" continues "${task.base}", which is not in this stall`,
-          );
-          continue;
-        }
-        if (actionOf.get(task.base) !== "continue") {
-          findings.push(
-            `new task "${slug}" continues "${task.base}", which was left parked`,
-          );
-          continue;
-        }
-        const base = bySlug.get(task.base);
-        if (base && doneWhen(task.body) !== doneWhen(base.body)) {
-          findings.push(
-            `new task "${slug}" changes the done-when; a continuation keeps its base's done-when`,
-          );
-        }
-        claim(task.base, slug);
-        continue;
-      }
-      const candidates = opts.slugs
-        .filter((park) => actionOf.get(park) === "continue")
-        .filter((park) => (claimedBy.get(park) ?? []).length === 0)
-        .filter((park) => {
-          const base = bySlug.get(park);
-          return (
-            base !== undefined && doneWhen(task.body) === doneWhen(base.body)
-          );
-        })
-        .sort();
-      if (candidates.length === 0) {
-        findings.push(
-          `new task "${slug}" names no base and matches no continued slug's done-when; name the parked slug as base or keep its done-when`,
-        );
-        continue;
-      }
-      claim(candidates[0]!, slug);
-    }
-    for (const slug of opts.slugs) {
-      const action = actionOf.get(slug);
-      const claims = claimedBy.get(slug) ?? [];
-      if (action === "continue" && claims.length === 0) {
-        findings.push(
-          `slug "${slug}" continues but has no continuation task; write one with base: ${slug}`,
-        );
-      } else if (action === "continue" && claims.length > 1) {
-        findings.push(
-          `slug "${slug}" has ${claims.length} continuation tasks (${claims.join(", ")}); write exactly one`,
-        );
-      } else if (action === "leave" && claims.length > 0) {
-        findings.push(
-          `slug "${slug}" was left parked but gained ${claims.join(", ")}; leave means no new task`,
-        );
-      }
-    }
+    findings.push(
+      ...decisionFindings({
+        turn: "stall",
+        slugs: opts.slugs,
+        decisionOf: actionOf,
+        state: opts.state,
+        before: taskSnapshot,
+        texts,
+        bySlug,
+        created: created
+          .map((slug) => bySlug.get(slug))
+          .filter((task): task is TaskFile => task !== undefined),
+        credits: new Map(),
+        fixed: new Set(),
+      }),
+    );
   }
   return [...new Set(findings)];
 }
 
+/** A cancelled park becomes a kernel cancel record: the slug stays spent. */
+async function cancelRoutes(
+  runtime: KernelRuntime,
+  iteration: number,
+  state: State,
+  cancellations: readonly { slug: string; cause: string }[],
+): Promise<void> {
+  for (const { slug, cause } of cancellations) {
+    await appendCancel(
+      runtime.store,
+      { iteration, slug, round: state.tasks[slug]?.round ?? 1 },
+      cause,
+    );
+  }
+}
+
 /**
  * PM ladder for a zero-merge stall mid-iteration. Each parked slug of the
- * stall gets one route: `continue` writes a continuation task (a new slug
- * with `base:` naming the parked slug, or a fresh task when the kept branch
- * conflicts with the head) and dispatch resumes in the same iteration;
- * `leave` keeps the slug parked with a reason the next boundary sees. The
- * record uses the PM step, so it stays out of the item's turn count and prices
- * into the iteration's spend like every other PM turn.
+ * stall gets one route: `amend` rewrites its own file and bumps its revision,
+ * so dispatch resumes the slug on its kept branch; `replace` writes one task
+ * under a new slug with `base:` naming the parked one (a fresh task when the
+ * kept branch conflicts with the head); `split` writes one per separable
+ * outcome, each with `base:` and its own done-when; `cancel` spends the slug;
+ * `leave` keeps it parked with a reason the next boundary sees. Amend, replace
+ * and split resume dispatch in the same iteration. The record uses the PM
+ * step, so it stays out of the item's turn count and prices into the
+ * iteration's spend like every other PM turn.
  *
- * Accepted routes commit to a `stall-routes` script record; a failed rung's
- * routes die with its rollback. A turn that exhausts the ladder or stops on
- * infra falls back to the boundary as today: the writes are rolled back, the
+ * Accepted routes commit to a `stall-routes` script record; the cancels are
+ * kernel records, not task writes, so they precede it. A failed rung's routes
+ * die with its rollback. A turn that exhausts the ladder or stops on infra
+ * falls back to the boundary as today: the writes are rolled back, the
  * attempt is recorded so dispatch does not retry it, and the stall still
  * reaches the architect.
  */
@@ -1271,6 +1423,15 @@ export async function runStallPm(
       const accepted: StallRouteEntry[] = [...(outcome.stallRoutes ?? [])].sort(
         (a, b) => a.slug.localeCompare(b.slug),
       );
+      // A cancelled park is spent by a kernel record, not a task write.
+      await cancelRoutes(
+        runtime,
+        opts.iteration,
+        opts.state,
+        accepted
+          .filter((entry) => entry.action === "cancel")
+          .map((entry) => ({ slug: entry.slug, cause: entry.reason })),
+      );
       // The boundary reads routes from this record only, never from the agent
       // rung outcomes: a failed rung's routes die with its rollback.
       await runtime.store.appendRecord(
@@ -1288,10 +1449,17 @@ export async function runStallPm(
       );
       return {
         continued: accepted
-          .filter((entry) => entry.action === "continue")
+          .filter(
+            (entry) =>
+              entry.action === "amend" ||
+              entry.action === "replace" ||
+              entry.action === "split",
+          )
           .map((entry) => entry.slug),
         left: accepted
-          .filter((entry) => entry.action === "leave")
+          .filter(
+            (entry) => entry.action === "leave" || entry.action === "cancel",
+          )
           .map((entry) => entry.slug),
       };
     }
@@ -1324,7 +1492,10 @@ export async function runStallPm(
 /** Script step committing a plan-check turn's routes; one record per checker round. */
 export const PLAN_CHECK_ROUTES_STEP = "plan-check-routes";
 
-/** Which follow-up slugs a plan-check turn continued; the rest stay for the architect. */
+/**
+ * Which follow-up slugs a plan-check turn resumed; a cancel spends its slug
+ * and a leave keeps it for the architect.
+ */
 export interface PlanCheckPmResult {
   continued: string[];
   left: string[];
@@ -1374,7 +1545,7 @@ function planCheckLadderNote(
     );
   }
   notes.push(
-    "Restated PM plan-check contract: you are the PM — never edit the plan, never plan, never implement, never invent intent. Write one follow-up task file per continued slug with source plan-check: <iteration>, then the outcome with planCheckRoutes.",
+    "Restated PM plan-check contract: you are the PM — never edit the plan, never plan, never implement, never invent intent. Route every follow-up in planCheckRoutes, then write the outcome: `continue` carries the checker's kind — `amend` rewrites the slug's own file and bumps `revision` by one, `cancel` writes no task file, `replace` writes one task with a new slug, `base:` naming the parked slug and the same done-when, `split` writes one task per separable outcome, a dead dep is written as the dep task or dropped from the slug's list, `unmerged` work continues its branch; `leave` writes nothing.",
   );
   if (failure.length > 0)
     notes.push("", "Findings:", ...failure.map((reason) => `- ${reason}`));
@@ -1474,8 +1645,8 @@ async function validatePlanCheckTurn(
 
   if (parseFindings.length === 0) {
     const bySlug = new Map(tasks.map((task) => [task.slug, task]));
-    // The one edit a plan-check turn may make: a missing-dep follow-up drops
-    // its dead deps from its own slug. Anything else edited is a finding.
+    // Besides an amend, the one edit a plan-check turn may make: a
+    // missing-dep follow-up drops its dead deps from its own slug.
     const depFixed = new Set<string>();
     for (const [slug, original] of taskSnapshot) {
       const now = texts.get(slug);
@@ -1507,13 +1678,37 @@ async function validatePlanCheckTurn(
           continue;
         }
         depFixed.add(slug);
+      }
+    }
+    const decisionOf = new Map<string, StallDecision>();
+    for (const item of opts.followUps)
+      decisionOf.set(item.slug, planCheckDecision(item.kind));
+    const created = [...texts.keys()].filter((slug) => !taskSnapshot.has(slug));
+    const credits = new Map<string, string[]>();
+    const credit = (slug: string, by: string): void => {
+      const list = credits.get(slug) ?? [];
+      list.push(by);
+      credits.set(slug, list);
+    };
+    for (const slug of depFixed) credit(slug, "dep fix");
+    // A missing-dep follow-up may also write the dead dep as a new task
+    // carrying its name; that task claims the blocked slug it unblocks.
+    const depRewrites = new Set<string>();
+    for (const slug of created) {
+      const depClaim = opts.followUps.find(
+        (item) => item.kind === "missing-dep" && item.dep === slug,
+      );
+      if (!depClaim) continue;
+      if (actionOf.get(depClaim.slug) !== "continue") {
+        findings.push(
+          `new task "${slug}" rewrites the dead dep of "${depClaim.slug}", which was left for the architect`,
+        );
+        depRewrites.add(slug);
         continue;
       }
-      findings.push(
-        `task "${slug}" was edited; a plan-check turn writes follow-ups only, never edits`,
-      );
+      credit(depClaim.slug, slug);
+      depRewrites.add(slug);
     }
-    const created = [...texts.keys()].filter((slug) => !taskSnapshot.has(slug));
     for (const slug of created) {
       const task = bySlug.get(slug);
       if (!task) continue;
@@ -1523,114 +1718,46 @@ async function validatePlanCheckTurn(
         );
       }
     }
-    // Each new task claims its follow-up: a base names it, a fresh (rule-10)
-    // task without a base matches its done-when instead, and a missing-dep
-    // rewrite carries the dead dep's name. A fresh task never claims a
-    // missing-dep slug: that slug is pending, and matching its done-when
-    // would duplicate live work.
-    const claimedBy = new Map<string, string[]>();
-    const claim = (followUp: string, slug: string): void => {
-      const list = claimedBy.get(followUp) ?? [];
-      list.push(slug);
-      claimedBy.set(followUp, list);
-    };
-    for (const slug of [...created].sort()) {
-      const task = bySlug.get(slug);
-      if (!task) continue;
-      const depClaim = opts.followUps.find(
-        (item) => item.kind === "missing-dep" && item.dep === slug,
-      );
-      if (depClaim) {
-        if (actionOf.get(depClaim.slug) !== "continue") {
-          findings.push(
-            `new task "${slug}" rewrites the dead dep of "${depClaim.slug}", which was left for the architect`,
-          );
-          continue;
-        }
-        claim(depClaim.slug, slug);
-        continue;
-      }
-      if (task.base !== undefined) {
-        if (!claimed.has(task.base)) {
-          findings.push(
-            `new task "${slug}" continues "${task.base}", which is not in this plan-check`,
-          );
-          continue;
-        }
-        if (actionOf.get(task.base) !== "continue") {
-          findings.push(
-            `new task "${slug}" continues "${task.base}", which was left for the architect`,
-          );
-          continue;
-        }
-        const base = bySlug.get(task.base);
-        if (base && doneWhen(task.body) !== doneWhen(base.body)) {
-          findings.push(
-            `new task "${slug}" changes the done-when; a continuation keeps its base's done-when`,
-          );
-        }
-        claim(task.base, slug);
-        continue;
-      }
-      const candidates = slugs
-        .filter((park) => actionOf.get(park) === "continue")
-        .filter((park) => followUpOf.get(park)?.kind !== "missing-dep")
-        .filter((park) => (claimedBy.get(park) ?? []).length === 0)
-        .filter((park) => {
-          const base = bySlug.get(park);
-          return (
-            base !== undefined && doneWhen(task.body) === doneWhen(base.body)
-          );
-        })
-        .sort();
-      if (candidates.length === 0) {
-        findings.push(
-          `new task "${slug}" names no base and matches no continued slug's done-when; name the follow-up slug as base or keep its done-when`,
-        );
-        continue;
-      }
-      claim(candidates[0]!, slug);
-    }
-    for (const slug of slugs) {
-      const action = actionOf.get(slug);
-      const claims = claimedBy.get(slug) ?? [];
-      const fixed = depFixed.has(slug) ? 1 : 0;
-      if (action === "continue" && claims.length + fixed === 0) {
-        findings.push(
-          `slug "${slug}" continues but has no follow-up task; write one with base: ${slug} or fix its dead dep`,
-        );
-      } else if (action === "continue" && claims.length + fixed > 1) {
-        findings.push(
-          `slug "${slug}" has ${claims.length + fixed} follow-ups (${[...claims, ...(fixed ? ["dep fix"] : [])].join(", ")}); write exactly one`,
-        );
-      } else if (
-        action === "leave" &&
-        (claims.length > 0 || depFixed.has(slug))
-      ) {
-        findings.push(
-          `slug "${slug}" was left for the architect but gained ${[...claims, ...(depFixed.has(slug) ? ["dep fix"] : [])].join(", ")}; leave means no new task`,
-        );
-      }
-    }
+    findings.push(
+      ...decisionFindings({
+        turn: "plan-check",
+        slugs,
+        decisionOf,
+        state: opts.state,
+        before: taskSnapshot,
+        texts,
+        bySlug,
+        created: created
+          .filter((slug) => !depRewrites.has(slug))
+          .map((slug) => bySlug.get(slug))
+          .filter((task): task is TaskFile => task !== undefined),
+        credits,
+        fixed: depFixed,
+      }),
+    );
   }
   return [...new Set(findings)];
 }
 
 /**
  * PM ladder for a plan-checker's follow-ups at dispatch exhaustion. Each
- * follow-up slug gets one route: `continue` writes one follow-up task (a new
- * slug with `base:` naming the parked slug, a fresh task when the kept branch
- * conflicts with the head, a rewrite of a dead dep, or a dead-dep drop on a
- * missing-dep slug) and dispatch resumes in the same iteration; `leave`
- * keeps the slug for the architect with a reason. The record uses the PM
- * step, so it stays out of the item's turn count and prices into the
- * iteration's spend like every other PM turn.
+ * follow-up slug gets one route; `continue` carries out the checker's kind:
+ * an `amend` rewrites the parked file and bumps its revision, so dispatch
+ * resumes the slug on its kept branch; a `cancel` becomes a kernel cancel
+ * record; a `replace` writes one task under a new slug with `base:` naming the
+ * parked one (a fresh task when the kept branch conflicts with the head); a
+ * `split` writes one per separable outcome, each with `base:` and its own
+ * done-when; `missing-dep` drops the dead dep or rewrites it as a task; an
+ * `unmerged` park continues as a task. `leave` keeps the slug for the
+ * architect with a reason. The record uses the PM step, so it stays out of the
+ * item's turn count and prices into the iteration's spend like every other PM
+ * turn.
  *
- * Accepted routes commit to a `plan-check-routes` script record; a failed
- * rung's routes die with its rollback. A turn that exhausts the ladder or
- * stops on infra falls back to the boundary as today: the writes are rolled
- * back, the attempt is recorded so the round counts once, and the evidence
- * still reaches the architect through the pack.
+ * Accepted routes commit to a `plan-check-routes` script record after their
+ * cancels; a failed rung's routes die with its rollback. A turn that exhausts
+ * the ladder or stops on infra falls back to the boundary as today: the writes
+ * are rolled back, the attempt is recorded so the round counts once, and the
+ * evidence still reaches the architect through the pack.
  */
 export async function runPlanCheckPm(
   runtime: KernelRuntime,
@@ -1684,6 +1811,21 @@ export async function runPlanCheckPm(
       const accepted: PlanCheckRouteEntry[] = [
         ...(outcome.planCheckRoutes ?? []),
       ].sort((a, b) => a.slug.localeCompare(b.slug));
+      const kindOf = new Map(
+        opts.followUps.map((item) => [item.slug, item.kind]),
+      );
+      await cancelRoutes(
+        runtime,
+        opts.iteration,
+        opts.state,
+        accepted
+          .filter(
+            (entry) =>
+              entry.action === "continue" &&
+              kindOf.get(entry.slug) === "cancel",
+          )
+          .map((entry) => ({ slug: entry.slug, cause: entry.reason })),
+      );
       // The boundary reads routes from this record only, never from the agent
       // rung outcomes: a failed rung's routes die with its rollback.
       await runtime.store.appendRecord(
@@ -1701,7 +1843,11 @@ export async function runPlanCheckPm(
       );
       return {
         continued: accepted
-          .filter((entry) => entry.action === "continue")
+          .filter(
+            (entry) =>
+              entry.action === "continue" &&
+              kindOf.get(entry.slug) !== "cancel",
+          )
           .map((entry) => entry.slug),
         left: accepted
           .filter((entry) => entry.action === "leave")

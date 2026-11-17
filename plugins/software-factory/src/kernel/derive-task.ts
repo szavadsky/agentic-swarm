@@ -107,6 +107,29 @@ export function terminalFactFromRecords(
   return out;
 }
 
+/**
+ * The first record the task's current revision owns. A revision bump follows
+ * a park: what the records through the last park of an earlier revision built
+ * describes the brief the decider replaced, so phase, counts and terminal fact
+ * restart from the amended one. The current revision's parks stay, and a
+ * record without the field belongs to revision 0, so old records derive as
+ * today. The records themselves stay for the prompts' review history.
+ */
+function revisionStart(task: TaskFile, records: readonly StepRecord[]): number {
+  if (task.revision === 0) return 0;
+  let start = 0;
+  records.forEach((rec, index) => {
+    if (
+      rec.step === "park" &&
+      rec.endedAt &&
+      (rec.revision ?? 0) < task.revision
+    ) {
+      start = index + 1;
+    }
+  });
+  return start;
+}
+
 function phaseAfter(
   flow: FlowDefinition,
   index: number,
@@ -222,7 +245,8 @@ export function reduceTask(
   flow: FlowDefinition,
 ): TaskReduction {
   const flowIndex = new Map(flow.steps.map((step, i) => [step.id, i]));
-  const terminal = terminalFactFromRecords(records, task.slug, task.kind);
+  const owned = records.slice(revisionStart(task, records));
+  const terminal = terminalFactFromRecords(owned, task.slug, task.kind);
   const firstStep = flow.steps[0]?.id ?? "done";
 
   let phase: TaskPhase = firstStep;
@@ -255,7 +279,7 @@ export function reduceTask(
   let lastInfraStep: string | undefined;
   let infraRepeatCount = 0;
 
-  for (const rec of records) {
+  for (const rec of owned) {
     if (!rec.endedAt) continue;
     if (rec.step === "commit") {
       lastTree = rec.tree ?? lastTree;

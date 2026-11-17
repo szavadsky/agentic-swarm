@@ -82,7 +82,7 @@ const ROLES: Record<string, Record<string, string>> = {
       "- alpha\n  cause: blocked: stuck\n  records: /goal/records/00007-i3-alpha-implement-r1\n  branch: factory-task/demo/alpha\n  turns: 1 spent\n  done-when: Done when: it works.",
     outcome_path: "/goal/records/00043-i3-pm-r1/outcome.yaml",
     plan_checks:
-      "- alpha (continuation): mechanical park\n  cause: infra: runner lost\n  records: /goal/records/00007-i3-alpha-implement-r1\n  branch: factory-task/demo/alpha\n  turns: 1 spent\n  done-when: Done when: it works.",
+      "- alpha (replace): mechanical park\n  cause: infra: runner lost\n  records: /goal/records/00007-i3-alpha-implement-r1\n  branch: factory-task/demo/alpha\n  turns: 1 spent\n  done-when: Done when: it works.",
     validate_cmd: "bun /factory/bin/factory.ts validate",
     outcome_schema: OUTCOME_SCHEMA,
     task_frontmatter: TASK_FRONTMATTER,

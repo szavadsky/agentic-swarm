@@ -108,6 +108,37 @@ describe("task files", () => {
     );
   });
 
+  it("parses an optional revision and round-trips it", () => {
+    expect(parseTaskFile(TEXT, "auth.token-refresh").revision).toBe(0);
+    const amended = TEXT.replace(
+      "source: Milestone auth / refresh",
+      "source: Milestone auth / refresh\nrevision: 2",
+    );
+    const parsed = parseTaskFile(amended, "auth.token-refresh");
+    expect(parsed.revision).toBe(2);
+    expect(parseTaskFile(renderTaskFile(parsed), parsed.slug)).toEqual(parsed);
+    expect(
+      renderTaskFile(parseTaskFile(TEXT, "auth.token-refresh")),
+    ).not.toContain("revision:");
+  });
+
+  it("rejects a negative or fractional revision", () => {
+    for (const value of ["-1", "1.5", "two"]) {
+      const bad = TEXT.replace(
+        "source: Milestone auth / refresh",
+        `source: Milestone auth / refresh\nrevision: ${value}`,
+      );
+      expect(() => parseTaskFile(bad, "auth.token-refresh")).toThrow(
+        /revision/,
+      );
+    }
+  });
+
+  it("hashes the revision, so an amend is material", () => {
+    const base = parseTaskFile(TEXT, "auth.token-refresh");
+    expect(materialHash({ ...base, revision: 1 })).not.toBe(materialHash(base));
+  });
+
   it("hashes material fields, not cosmetic body prose", () => {
     const base = parseTaskFile(TEXT, "auth.token-refresh");
     const cosmetic = {

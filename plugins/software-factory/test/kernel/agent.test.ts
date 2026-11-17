@@ -1670,17 +1670,17 @@ describe("repair findings and launch kinds", () => {
 
       await appendPark(
         runtime.store,
-        { iteration: 1, slug: "a", round: 1 },
+        { iteration: 1, slug: "a", round: 1, revision: 0 },
         "overflow",
       );
       await appendPark(
         runtime.store,
-        { iteration: 1, slug: "b", round: 1 },
+        { iteration: 1, slug: "b", round: 1, revision: 0 },
         'review round limit reached after verdict "changes" (2 rounds)',
       );
       await appendPark(
         runtime.store,
-        { iteration: 1, slug: "c", round: 1 },
+        { iteration: 1, slug: "c", round: 1, revision: 0 },
         "failed: no plan",
       );
       const records = await runtime.store.listRecords();

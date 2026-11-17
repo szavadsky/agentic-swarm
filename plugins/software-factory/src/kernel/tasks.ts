@@ -26,6 +26,12 @@ export const taskFrontmatterSchema = z.object({
     .default([]),
   scope: z.array(z.string().describe("a predicted area")),
   tier: z.string().min(1).optional().describe("default, or a run-config alias"),
+  revision: z
+    .number()
+    .int()
+    .nonnegative()
+    .optional()
+    .describe("one more than the parked revision when amending under its slug"),
   base: z.string().min(1).optional().describe("the parked slug this continues"),
   source: z
     .string()
@@ -124,6 +130,18 @@ export function parseTaskFile(text: string, fileSlug: string): TaskFile {
     throw new TaskFileError(
       `task "${slug}" frontmatter "turnMinutes" must be a positive number`,
     );
+  const revision =
+    meta.revision === undefined
+      ? 0
+      : typeof meta.revision === "number" &&
+          Number.isInteger(meta.revision) &&
+          meta.revision >= 0
+        ? meta.revision
+        : null;
+  if (revision === null)
+    throw new TaskFileError(
+      `task "${slug}" frontmatter "revision" must be a non-negative integer`,
+    );
   return {
     slug,
     title,
@@ -132,6 +150,7 @@ export function parseTaskFile(text: string, fileSlug: string): TaskFile {
     deps: stringList(meta.deps ?? meta.after, "deps"),
     scope: stringList(meta.scope, "scope"),
     tier: typeof meta.tier === "string" ? meta.tier : undefined,
+    revision,
     base: typeof meta.base === "string" && meta.base ? meta.base : undefined,
     source: typeof meta.source === "string" ? meta.source : "",
     body: (match[2] ?? "").trim(),
@@ -150,6 +169,7 @@ export function renderTaskFile(task: TaskFile): string {
     scope: task.scope,
   };
   if (task.tier) front.tier = task.tier;
+  if (task.revision > 0) front.revision = task.revision;
   if (task.base) front.base = task.base;
   if (task.source) front.source = task.source;
   if (task.repairTurns !== undefined) front.repairTurns = task.repairTurns;
@@ -165,7 +185,8 @@ export function doneWhen(body: string): string {
 
 /**
  * Material hash: frozen-task comparisons must ignore cosmetic edits but catch
- * a changed dependency set, scope, flow, tier, kind, slug or done-when.
+ * a changed dependency set, scope, flow, tier, revision, kind, slug or
+ * done-when.
  */
 export function materialHash(task: TaskFile): string {
   const canonical = JSON.stringify([
@@ -175,6 +196,7 @@ export function materialHash(task: TaskFile): string {
     [...task.deps].sort(),
     [...task.scope],
     task.tier ?? "",
+    task.revision,
     task.base ?? "",
     doneWhen(task.body),
   ]);

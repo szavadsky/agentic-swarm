@@ -1311,7 +1311,7 @@ describe("stall PM — zero-merge stall in the running iteration", () => {
               stallRoutes: [
                 {
                   slug: "alpha",
-                  action: "continue",
+                  action: "replace",
                   reason: "retry with the records",
                 },
               ],
@@ -1358,7 +1358,7 @@ describe("stall PM — zero-merge stall in the running iteration", () => {
       const routes = records.filter((r) => r.step === "stall-routes");
       expect(routes).toHaveLength(1);
       expect(routes[0]!.outcome?.stallRoutes).toEqual([
-        { slug: "alpha", action: "continue", reason: "retry with the records" },
+        { slug: "alpha", action: "replace", reason: "retry with the records" },
       ]);
       // The stall turn saw the park's cause, record paths, kept branch and spent turns.
       expect(stallPrompt).toContain("alpha stuck on the API");
@@ -1460,7 +1460,7 @@ describe("stall PM — zero-merge stall in the running iteration", () => {
             outcome({
               summary: "continue alpha",
               stallRoutes: [
-                { slug: "alpha", action: "continue", reason: "retry" },
+                { slug: "alpha", action: "replace", reason: "retry" },
               ],
             }),
           );
@@ -1490,6 +1490,337 @@ describe("stall PM — zero-merge stall in the running iteration", () => {
       );
       expect(state.tasks.alpha!.status).toBe("parked");
       expect(state.tasks["alpha-2"]!.status).toBe("parked");
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("amends a parked task under its slug and resumes it on its kept branch", async () => {
+    const { repo, goal, harness } = stallSetup();
+    try {
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await runtime.store.writeTask(
+        task("alpha", { scope: ["alpha.txt"], body: ALPHA_BODY }),
+      );
+      harness.script(
+        (req, ctx) => {
+          fs.writeFileSync(path.join(req.cwd!, "alpha.txt"), "alpha\n", "utf8");
+          ctx.writeOutcome(outcome({ summary: "alpha implemented" }));
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ slug: "alpha", step: "implement" }) },
+      );
+      harness.script(
+        (req, ctx) => {
+          ctx.writeOutcome(
+            outcome({
+              summary: "1. alpha.txt needs a test that reads it",
+              verdict: "changes",
+            }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ slug: "alpha", step: "review" }) },
+      );
+      harness.script(
+        (req, ctx) => {
+          fs.appendFileSync(path.join(req.cwd!, "alpha.txt"), "more\n", "utf8");
+          ctx.writeOutcome(
+            outcome({
+              summary: "added the test",
+              replies: [
+                { finding: 1, reply: "added a test that reads alpha.txt" },
+              ],
+            }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ slug: "alpha", step: "implement" }) },
+      );
+      harness.script(
+        (req, ctx) => {
+          ctx.writeOutcome(
+            outcome({
+              summary: "1. alpha.txt still misses the alpha line",
+              verdict: "reject",
+            }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ slug: "alpha", step: "review" }) },
+      );
+      harness.script(
+        (req, ctx) => {
+          const file = path.join(runtime.store.tasksDir, "alpha.md");
+          const current = parseTaskFile(fs.readFileSync(file, "utf8"), "alpha");
+          fs.writeFileSync(
+            file,
+            renderTaskFile({
+              ...current,
+              revision: 1,
+              body: `Amended brief: keep the alpha line.\nDone when: alpha.txt holds the alpha line and a test reads it.`,
+            }),
+            "utf8",
+          );
+          ctx.writeOutcome(
+            outcome({
+              summary: "amended alpha",
+              stallRoutes: [
+                {
+                  slug: "alpha",
+                  action: "amend",
+                  reason: "the brief never said the alpha line must stay",
+                },
+              ],
+            }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: "pm" }) },
+      );
+      harness.script(
+        (req, ctx) => {
+          // The kept branch is the worktree: revision 0's commit is still here.
+          expect(
+            fs.readFileSync(path.join(req.cwd!, "alpha.txt"), "utf8"),
+          ).toContain("alpha");
+          // The review history rides the prompt: the last review's findings.
+          expect(req.prompt).toContain("alpha.txt still misses the alpha line");
+          fs.appendFileSync(path.join(req.cwd!, "alpha.txt"), "test\n", "utf8");
+          ctx.writeOutcome(outcome({ summary: "amended brief implemented" }));
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ slug: "alpha", step: "implement" }) },
+      );
+      harness.script(
+        (req, ctx) => {
+          ctx.writeOutcome(
+            outcome({ summary: "alpha approved", verdict: "approve" }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ slug: "alpha", step: "review" }) },
+      );
+
+      const result = await runDispatch(runtime, { iteration: 1 });
+      expect(result.reason).toBe("boundary");
+      expect(pmCalls(harness)).toBe(1);
+      const records = await runtime.store.listRecords();
+      expect(records.filter((r) => r.step === "stall-routes")).toHaveLength(1);
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
+      expect(state.tasks.alpha!.status).toBe("merged");
+      // The amend restarts the counts: implement and review return to round 1.
+      expect(
+        records
+          .filter((r) => r.slug === "alpha" && r.step === "implement")
+          .sort((a, b) => a.seq - b.seq)
+          .map((r) => r.round),
+      ).toEqual([1, 2, 1]);
+      expect(
+        records
+          .filter((r) => r.slug === "alpha" && r.step === "review")
+          .sort((a, b) => a.seq - b.seq)
+          .map((r) => r.round),
+      ).toEqual([1, 2, 1]);
+      const amended = parseTaskFile(
+        fs.readFileSync(path.join(runtime.store.tasksDir, "alpha.md"), "utf8"),
+        "alpha",
+      );
+      expect(amended.revision).toBe(1);
+      expect(repo.git(["show", "factory/demo:alpha.txt"]).stdout).toContain(
+        "test",
+      );
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("starts an amended task fresh when its park kept no branch", async () => {
+    const { repo, goal, harness } = stallSetup();
+    try {
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await runtime.store.writeTask(
+        task("alpha", {
+          scope: ["alpha.txt"],
+          flow: "no-such-flow",
+          body: ALPHA_BODY,
+        }),
+      );
+      harness.script(
+        (req, ctx) => {
+          // The park never dispatched a turn, so there is no branch to keep.
+          expect(
+            repo.git(
+              ["rev-parse", "--verify", "refs/heads/factory-task/demo/alpha"],
+              {
+                allowFail: true,
+              },
+            ).code,
+          ).not.toBe(0);
+          const file = path.join(runtime.store.tasksDir, "alpha.md");
+          const current = parseTaskFile(fs.readFileSync(file, "utf8"), "alpha");
+          fs.writeFileSync(
+            file,
+            renderTaskFile({
+              ...current,
+              flow: "just-implement",
+              revision: 1,
+              body: "Retry on a real flow.\nDone when: alpha.txt holds alpha.",
+            }),
+            "utf8",
+          );
+          ctx.writeOutcome(
+            outcome({
+              summary: "amended alpha",
+              stallRoutes: [
+                {
+                  slug: "alpha",
+                  action: "amend",
+                  reason: "the flow name was never configured",
+                },
+              ],
+            }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: "pm" }) },
+      );
+      harness.script(
+        (req, ctx) => {
+          fs.writeFileSync(path.join(req.cwd!, "alpha.txt"), "alpha\n", "utf8");
+          ctx.writeOutcome(outcome({ summary: "alpha implemented" }));
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ slug: "alpha", step: "implement" }) },
+      );
+
+      const result = await runDispatch(runtime, { iteration: 1 });
+      expect(result.reason).toBe("boundary");
+      const records = await runtime.store.listRecords();
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
+      expect(state.tasks.alpha!.status).toBe("merged");
+      // One agent turn only: the amendment started the work, nothing preceded it.
+      expect(
+        records.filter(
+          (r) =>
+            r.slug === "alpha" && r.actor === "agent" && r.step === "implement",
+        ),
+      ).toHaveLength(1);
+      expect(repo.git(["show", "factory/demo:alpha.txt"]).stdout.trim()).toBe(
+        "alpha",
+      );
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("splits a parked park into one task per outcome, each on its kept branch", async () => {
+    const { repo, goal, harness } = stallSetup();
+    try {
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await runtime.store.writeTask(
+        task("alpha", { scope: ["alpha.txt"], body: ALPHA_BODY }),
+      );
+      harness.script(
+        (req, ctx) => {
+          ctx.writeOutcome(
+            outcome({ status: "blocked", summary: "alpha too big" }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ slug: "alpha", step: "implement" }) },
+      );
+      harness.script(
+        (req, ctx) => {
+          fs.writeFileSync(
+            path.join(runtime.store.tasksDir, "alpha-a.md"),
+            renderTaskFile(
+              task("alpha-a", {
+                scope: ["alpha-a.txt"],
+                base: "alpha",
+                source: "stall: 1",
+                body: `First half.\nDone when: alpha-a.txt holds a.`,
+              }),
+            ),
+            "utf8",
+          );
+          fs.writeFileSync(
+            path.join(runtime.store.tasksDir, "alpha-b.md"),
+            renderTaskFile(
+              task("alpha-b", {
+                scope: ["alpha-b.txt"],
+                base: "alpha",
+                source: "stall: 1",
+                body: `Second half.\nDone when: alpha-b.txt holds b.`,
+              }),
+            ),
+            "utf8",
+          );
+          ctx.writeOutcome(
+            outcome({
+              summary: "split alpha",
+              stallRoutes: [
+                {
+                  slug: "alpha",
+                  action: "split",
+                  reason: "two separable outcomes",
+                },
+              ],
+            }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: "pm" }) },
+      );
+      for (const half of ["alpha-a", "alpha-b"]) {
+        harness.script(
+          (req, ctx) => {
+            fs.writeFileSync(
+              path.join(req.cwd!, `${half}.txt`),
+              `${half}\n`,
+              "utf8",
+            );
+            ctx.writeOutcome(outcome({ summary: `${half} implemented` }));
+            return fakeTurnResult(req);
+          },
+          { when: whenTurn({ slug: half, step: "implement" }) },
+        );
+        harness.script(
+          (req, ctx) => {
+            ctx.writeOutcome(
+              outcome({ summary: `${half} approved`, verdict: "approve" }),
+            );
+            return fakeTurnResult(req);
+          },
+          { when: whenTurn({ slug: half, step: "review" }) },
+        );
+      }
+
+      const result = await runDispatch(runtime, { iteration: 1 });
+      expect(result.reason).toBe("boundary");
+      const records = await runtime.store.listRecords();
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
+      expect(state.tasks.alpha!.status).toBe("parked");
+      expect(state.tasks["alpha-a"]!.status).toBe("merged");
+      expect(state.tasks["alpha-b"]!.status).toBe("merged");
+      expect(repo.git(["show", "factory/demo:alpha-a.txt"]).stdout).toContain(
+        "alpha-a",
+      );
+      expect(repo.git(["show", "factory/demo:alpha-b.txt"]).stdout).toContain(
+        "alpha-b",
+      );
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -1612,7 +1943,7 @@ describe("stall PM — zero-merge stall in the running iteration", () => {
               stallRoutes: [
                 {
                   slug: "alpha",
-                  action: "continue",
+                  action: "replace",
                   reason: "kept branch conflicts; apply the diff fresh",
                 },
               ],
@@ -1698,7 +2029,7 @@ describe("stall PM validation", () => {
     return { repo, runtime, harness, state };
   }
 
-  it("rejects a continuation that changes the done-when", async () => {
+  it("rejects a replace that changes the done-when", async () => {
     const { repo, runtime, harness, state } = await stallFixture(["alpha"]);
     try {
       for (let i = 0; i < 2; i++) {
@@ -1720,7 +2051,7 @@ describe("stall PM validation", () => {
               outcome({
                 summary: "continue alpha",
                 stallRoutes: [
-                  { slug: "alpha", action: "continue", reason: "retry" },
+                  { slug: "alpha", action: "replace", reason: "retry" },
                 ],
               }),
             );
@@ -1745,6 +2076,172 @@ describe("stall PM validation", () => {
       expect(
         fs.existsSync(path.join(runtime.store.tasksDir, "alpha-2.md")),
       ).toBe(false);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("rejects an amend that does not bump the revision", async () => {
+    const { repo, runtime, harness, state } = await stallFixture(["alpha"]);
+    try {
+      for (let i = 0; i < 2; i++) {
+        harness.script(
+          (req, ctx) => {
+            fs.appendFileSync(
+              path.join(runtime.store.tasksDir, "alpha.md"),
+              "\nRetry with more direction.\n",
+              "utf8",
+            );
+            ctx.writeOutcome(
+              outcome({
+                summary: "amend alpha",
+                stallRoutes: [
+                  {
+                    slug: "alpha",
+                    action: "amend",
+                    reason: "retry with direction",
+                  },
+                ],
+              }),
+            );
+            return fakeTurnResult(req);
+          },
+          { when: whenTurn({ step: "pm" }) },
+        );
+      }
+      const result = await runStallPm(runtime, {
+        iteration: 1,
+        state,
+        slugs: ["alpha"],
+        cwd: runtime.paths.goalCheckout,
+      });
+      expect(result.continued).toEqual([]);
+      const validations = (await runtime.store.listRecords()).filter(
+        (r) => r.step === "pm-validate",
+      );
+      expect(validations[0]!.cause).toContain('bumps "revision"');
+      expect(
+        fs.readFileSync(path.join(runtime.store.tasksDir, "alpha.md"), "utf8"),
+      ).not.toContain("Retry with more direction.");
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("refuses an amend of a merged task and restores its file", async () => {
+    const { repo, runtime, harness } = await stallFixture(["alpha"]);
+    try {
+      await runtime.store.writeTask(
+        task("done", {
+          scope: ["done.txt"],
+          body: "Done.\nDone when: done works.",
+        }),
+      );
+      await runtime.store.appendRecord(
+        scriptMeta(1, "merge", { slug: "done" }),
+        {
+          ok: true,
+          commit: "abc123",
+        },
+      );
+      const merged = derive(
+        await runtime.store.listTasks(),
+        await runtime.store.listRecords(),
+        runtime.configs.process.flows,
+      );
+      expect(merged.tasks.done!.status).toBe("merged");
+      const donePath = path.join(runtime.store.tasksDir, "done.md");
+      const before = fs.readFileSync(donePath, "utf8");
+      for (let i = 0; i < 2; i++) {
+        harness.script(
+          (req, ctx) => {
+            const current = parseTaskFile(
+              fs.readFileSync(donePath, "utf8"),
+              "done",
+            );
+            fs.writeFileSync(
+              donePath,
+              renderTaskFile({
+                ...current,
+                revision: 1,
+                body: "Amended.\nDone when: done still works.",
+              }),
+              "utf8",
+            );
+            ctx.writeOutcome(
+              outcome({
+                summary: "leave alpha",
+                stallRoutes: [
+                  {
+                    slug: "alpha",
+                    action: "leave",
+                    reason: "needs the architect",
+                  },
+                ],
+              }),
+            );
+            return fakeTurnResult(req);
+          },
+          { when: whenTurn({ step: "pm" }) },
+        );
+      }
+      const result = await runStallPm(runtime, {
+        iteration: 1,
+        state: merged,
+        slugs: ["alpha"],
+        cwd: runtime.paths.goalCheckout,
+      });
+      expect(result.continued).toEqual([]);
+      const validations = (await runtime.store.listRecords()).filter(
+        (r) => r.step === "pm-validate",
+      );
+      expect(validations[0]!.cause).toContain('frozen task "done" was edited');
+      expect(fs.readFileSync(donePath, "utf8")).toBe(before);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("cancels a parked slug with a kernel record and writes no task", async () => {
+    const { repo, runtime, harness, state } = await stallFixture(["alpha"]);
+    try {
+      harness.script(
+        (req, ctx) => {
+          ctx.writeOutcome(
+            outcome({
+              summary: "cancel alpha",
+              stallRoutes: [
+                {
+                  slug: "alpha",
+                  action: "cancel",
+                  reason: "the direction is gone",
+                },
+              ],
+            }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: "pm" }) },
+      );
+      const result = await runStallPm(runtime, {
+        iteration: 1,
+        state,
+        slugs: ["alpha"],
+        cwd: runtime.paths.goalCheckout,
+      });
+      expect(result).toEqual({ continued: [], left: ["alpha"] });
+      const records = await runtime.store.listRecords();
+      const cancel = records.find(
+        (r) => r.step === "cancel" && r.slug === "alpha",
+      );
+      expect(cancel?.cause).toBe("the direction is gone");
+      expect(await runtime.store.listDir("tasks")).toEqual(["alpha.md"]);
+      const after = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
+      expect(after.tasks.alpha!.status).toBe("cancelled");
     } finally {
       cleanupFlowRepo(repo);
     }
