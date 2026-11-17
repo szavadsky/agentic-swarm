@@ -38,6 +38,7 @@ const HARDENED_GIT_ENV: Record<string, string> = {
   GIT_PAGER: "cat",
   PAGER: "cat",
   LC_ALL: "C",
+  GIT_OPTIONAL_LOCKS: "0",
 };
 
 // Cache of repo-identity probes per resolved cwd. Each probe costs two
