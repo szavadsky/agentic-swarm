@@ -169,7 +169,7 @@ export async function makeRuntime(
     harnesses: new Map(Object.entries(harnesses)),
     prompts: loadPrompts(configs.process, repo.dir, configs.run.aliases),
     limits: toLimits(configs),
-    workingTier: new Map(),
+    exhaustedPools: new Set(),
     // Hermetic prices: the repo-local cache, never the network.
     priceSource: {
       cachePath: priceCachePath(repo.dir),

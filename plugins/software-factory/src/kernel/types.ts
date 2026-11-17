@@ -621,11 +621,10 @@ export interface KernelRuntime {
   prompts: PromptLibrary;
   limits: Limits;
   /**
-   * Alias -> chain index of the tier to start at. A turn that lands on a
-   * fallback records it here, so the rest of the launch starts on the working
-   * tier instead of restarting at exhausted ones.
+   * Quota pool keys (subscription, or harness+model when none) exhausted during
+   * this launch. Subsequent turns skip tiers drawing on these pools.
    */
-  workingTier: Map<string, number>;
+  exhaustedPools: Set<string>;
   /** Price cache and fetcher; undefined means the shared cache plus network. */
   priceSource?: PriceSource;
 }

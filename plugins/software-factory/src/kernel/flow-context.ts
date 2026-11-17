@@ -34,6 +34,19 @@ export interface ResolvedTier {
   opaque?: unknown;
 }
 
+/** Pool key for quota tracking: explicit subscription, or harness+model when none. */
+export function tierPoolKey(tier: {
+  harness: Harness | string;
+  model: ModelRef | string;
+  subscription?: string;
+}): string {
+  if (tier.subscription) return tier.subscription;
+  const harnessId =
+    typeof tier.harness === "string" ? tier.harness : tier.harness.id;
+  const modelId = typeof tier.model === "string" ? tier.model : tier.model.id;
+  return `${harnessId}+${modelId}`;
+}
+
 /** Everything one turn needs to run: the resolved alias, harness, model and its own limits. */
 export interface RoleTarget {
   role: string;
@@ -43,11 +56,11 @@ export interface RoleTarget {
   effort?: string;
   subscription?: string;
   /**
-   * Effective fallback chain, primary first: exhausted tiers the launch already
-   * recorded in `workingTier` are dropped, so `[0]` mirrors the fields above.
+   * Effective fallback chain, primary first: tiers whose quota pool is recorded
+   * in `exhaustedPools` are dropped, so `[0]` mirrors the fields above.
    */
   tiers: ResolvedTier[];
-  /** Chain index `tiers[0]` had before the drop; the agent reports wins against it. */
+  /** Chain index `tiers[0]` had in the alias's configured chain before exhausted tiers were dropped. */
   tierOffset: number;
   timeouts?: Timeouts;
   /** Harness configuration passed through `TurnRequest.opaque`. */
@@ -233,12 +246,12 @@ function targetForAlias(
       `run config has no alias "${aliasName}" (needed by role "${role}")`,
     );
   const chain = resolveChain(runtime, aliasName);
-  const offset = Math.min(
-    Math.max(0, runtime.workingTier.get(aliasName) ?? 0),
-    chain.length - 1,
+  const available = chain.filter(
+    (tier) => !runtime.exhaustedPools.has(tierPoolKey(tier)),
   );
-  const tiers = chain.slice(offset);
+  const tiers = available.length > 0 ? available : [chain[chain.length - 1]!];
   const first = tiers[0]!;
+  const offset = chain.indexOf(first);
   return {
     role,
     alias: aliasName,
@@ -302,11 +315,11 @@ function resolveChain(
 /** The harness a turn on this alias would actually start on. */
 function effectiveAliasHarness(runtime: KernelRuntime, alias: string): string {
   const chain = resolveChain(runtime, alias);
-  const offset = Math.min(
-    Math.max(0, runtime.workingTier.get(alias) ?? 0),
-    chain.length - 1,
+  const available = chain.filter(
+    (tier) => !runtime.exhaustedPools.has(tierPoolKey(tier)),
   );
-  return chain[offset]!.harness.id;
+  const first = available[0] ?? chain[chain.length - 1]!;
+  return first.harness.id;
 }
 
 /**
