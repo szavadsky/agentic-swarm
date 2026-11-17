@@ -174,7 +174,7 @@ priceIds:
   sonnet: anthropic/claude-sonnet-5-5
 
 limits:
-  concurrency: { overall: 3, perSubscription: { opencode-go: 2, openrouter-free: 1 } }
+  concurrency: { overall: 3, perSubscription: { opencode-go: 2, openrouter-free: 1, claude: 1, antigravity: 2, opencode-free: 1 } }
   iterations: 1
 
 sessions:

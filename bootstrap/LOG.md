@@ -631,3 +631,6 @@ Verbatim, newest last; each with what it changed.
 - Map: architect claude/opus (fb sonnet, fb2 omp/opus; verified clean i41), pm omp/ernie (fb opencode/hy4), digest omp/@free literal, no effort key (fb opencode/hy4; alias-pricing limitation steered), implementer omp-Go/deepseek:max (fb omp-Go/muse:max; flip of i41), reviewer omp/ernie (fb opencode/hy4), qa omp/ernie (fb opencode/hy4; NEW alias, dormant — no kernel qa role yet), plan-reviewer + plan-checker agy (fb omp/ernie), escalation omp/sonnet:high (fb omp-Go/muse:max; explicit effort per forward ask), steward omp/ernie (fb agy).
 - Subscriptions named on every alias; per-pool caps: opencode-go 2 (2 keys), openrouter-free 1 (i40 ernie quota evidence). iterationUsd stays off (owner: 0). priceIds gains @free → $0 ernie row.
 - i43 flips PM/review/QA to hy4-first/ernie-fallback per the rotation directive.
+
+### 2026-11-17 — i42 pre-flight refusal: named subscriptions require pools (fixed)
+- First i42 launch refused exit 1 (nothing written): every subscription name must have a limits.concurrency.perSubscription entry — bare labels are invalid. Fixed: claude 1 (architect single-threaded + rare escalation), antigravity 2 (4 agy primaries, no rate hits at 3 so far — gentle), opencode-free 1 (fallbacks only). Kept: go 2 (2 keys), openrouter-free 1 (i40 quota evidence).
