@@ -493,7 +493,7 @@ export async function runPm(
   let failure: string[] = [];
 
   for (const [index, rung] of rungSteps(runtime).entries()) {
-    const target = resolveRole(runtime, "pm", rung.alias);
+    const target = resolveRole(runtime, "pm", rung.alias, opts.iteration);
     const round = index + 1;
     const { tasks } = parseTasks(await readTaskTexts(runtime));
     const result = await runAgentTurn(runtime, {
@@ -850,7 +850,7 @@ export async function runSteerPm(
   let failure: string[] = [];
 
   for (const [index, rung] of rungSteps(runtime).entries()) {
-    const target = resolveRole(runtime, "pm", rung.alias);
+    const target = resolveRole(runtime, "pm", rung.alias, opts.iteration);
     const round = index + 1;
     const { tasks } = parseTasks(await readTaskTexts(runtime));
     const result = await runAgentTurn(runtime, {
@@ -1391,7 +1391,7 @@ export async function runStallPm(
   let failure: string[] = [];
 
   for (const [index, rung] of rungSteps(runtime).entries()) {
-    const target = resolveRole(runtime, "pm", rung.alias);
+    const target = resolveRole(runtime, "pm", rung.alias, opts.iteration);
     const round = index + 1;
     const { tasks } = parseTasks(await readTaskTexts(runtime));
     const result = await runAgentTurn(runtime, {
@@ -1779,7 +1779,7 @@ export async function runPlanCheckPm(
   let failure: string[] = [];
 
   for (const [index, rung] of rungSteps(runtime).entries()) {
-    const target = resolveRole(runtime, "pm", rung.alias);
+    const target = resolveRole(runtime, "pm", rung.alias, opts.iteration);
     const round = index + 1;
     const { tasks } = parseTasks(await readTaskTexts(runtime));
     const result = await runAgentTurn(runtime, {

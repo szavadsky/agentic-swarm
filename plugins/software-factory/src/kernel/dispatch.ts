@@ -479,7 +479,13 @@ export async function runDispatch(
         if (agentCount() >= runtime.limits.concurrency.overall) continue;
         // The target is already on the working tier: admission counts the pool
         // and model the turn will actually draw on, whichever harness that is.
-        const target = stepTarget(runtime, task, taskState, action.step);
+        const target = stepTarget(
+          runtime,
+          task,
+          taskState,
+          action.step,
+          iteration,
+        );
         if (target.subscription !== undefined) {
           const poolLimit =
             runtime.limits.concurrency.perSubscription[target.subscription];

@@ -63,7 +63,7 @@ esac
 run_gate() {
   case "$1" in
     typecheck) bun run typecheck ;;
-    tests) bun test ;;
+    tests) bun run test:gate ;;
     format) bun run format ;;
     lint) bun run lint ;;
     schema | schema-validation) bun run schema-validation ;;

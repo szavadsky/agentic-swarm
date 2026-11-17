@@ -538,10 +538,22 @@ export interface FallbackConfig {
   subscription?: string;
 }
 
+/** One rotation entry: the alias's primary harness, model and effort for an iteration. */
+export interface AliasEntry {
+  harness: string;
+  model: string;
+  effort?: string;
+}
+
 export interface AliasConfig {
   harness: string;
   model: string;
   effort?: string;
+  /**
+   * Per-iteration primaries: iteration N resolves `rotate[N % rotate.length]`.
+   * Absent or empty keeps the alias's own harness and model on every iteration.
+   */
+  rotate?: AliasEntry[];
   /** Quota pool this alias draws on; absent means throttled only overall. */
   subscription?: string;
   fallbacks?: FallbackConfig[];

@@ -262,6 +262,7 @@ export async function preflight(
   const usedHarnesses = new Set<string>();
   for (const alias of Object.values(configs.run.aliases)) {
     usedHarnesses.add(alias.harness);
+    for (const entry of alias.rotate ?? []) usedHarnesses.add(entry.harness);
     for (const fallback of alias.fallbacks ?? []) {
       if (fallback.harness) usedHarnesses.add(fallback.harness);
     }

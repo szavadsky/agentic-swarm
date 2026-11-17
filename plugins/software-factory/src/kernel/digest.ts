@@ -168,7 +168,7 @@ export async function writeLaunchDigest(
   // by throwing — pre-flight deliberately does not require a digest alias.
   let scoutTarget: RoleTarget | undefined;
   try {
-    scoutTarget = resolveRole(runtime, "digest");
+    scoutTarget = resolveRole(runtime, "digest", undefined, iteration);
   } catch {
     scoutTarget = undefined;
   }

@@ -35,7 +35,7 @@ export async function runPlanReview(
   const planPath = path.join(runtime.store.goalDir, "plan.md");
   const snapshot = await snapshotTurn(runtime, planPath);
   const result = await runAgentTurn(runtime, {
-    target: resolveRole(runtime, "plan-reviewer"),
+    target: resolveRole(runtime, "plan-reviewer", undefined, opts.iteration),
     cwd: runtime.paths.goalCheckout,
     meta: { iteration: opts.iteration, step: PLAN_REVIEW_STEP, round: 1 },
     vars: {

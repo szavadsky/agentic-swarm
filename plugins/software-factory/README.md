@@ -90,6 +90,17 @@ its own model, harness and effort, and the quota pool it draws on; a turn that
 lands on a tier keeps the launch on it, and dispatch throttles each pool and
 model within the overall limit.
 
+An alias may carry `rotate: [{ harness, model, effort }]` to change its primary
+per iteration: iteration N resolves `rotate[N % rotate.length]`, so iteration 1
+uses the second entry and the cycle wraps to the first. The rotated entry
+replaces the alias's own harness, model and effort for that turn; its fallbacks
+apply to the rotated entry, and a fallback without `harness` runs on the
+rotated harness. Pre-flight validates every entry's harness, model and effort,
+and a fallback that can land on several rotated harnesses is checked against
+each of them. Without `rotate` (or with an empty list) the alias keeps its own
+harness and model. Shipped example: `bootstrap/run/self-rotate.yaml` cycles the
+implementer across opencode, pi and codex.
+
 `prices` maps a model id to USD per million tokens: `input`, `cachedInput`,
 `output` and `reasoning`, all four required. A turn costs its harness's
 non-zero figure, else the table's price for the model. Every agent record
