@@ -66,7 +66,7 @@ Incident report (observations only):
 ```markdown
 # Incident report — iteration N (operator)
 Observed, not prescribed; what to do about it is yours.
-- <what happened> — evidence: <record id, path or log line> (keep each to one line)
+- <what happened> — evidence: <record id, path or log line> (one line per incident)
 ```
 
 Intent change:
