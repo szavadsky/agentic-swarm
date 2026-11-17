@@ -52,34 +52,10 @@ export interface DispatchOptions {
 
 interface Running {
   promise: Promise<void>;
-  scope: readonly string[];
   agent: boolean;
   /** Quota pool and model the turn drew admission against; agent turns only. */
   subscription?: string;
   model?: string;
-}
-
-/** Declared-area overlap: two tasks collide only when they name the same area. */
-export function areasOverlap(
-  a: readonly string[],
-  b: readonly string[],
-): boolean {
-  const areas = new Set(
-    a.map((entry) => entry.trim()).filter((entry) => entry !== ""),
-  );
-  if (areas.size === 0) return false;
-  return b.some((entry) => areas.has(entry.trim()));
-}
-
-function overlapsRunning(
-  scope: readonly string[],
-  running: ReadonlyMap<string, Running>,
-): boolean {
-  if (scope.length === 0) return false;
-  for (const entry of running.values()) {
-    if (areasOverlap(scope, entry.scope)) return true;
-  }
-  return false;
 }
 
 /** Agent turns charged to the item budget; boundary roles and infra stops are free. */
@@ -242,11 +218,11 @@ function heldBoundaryCause(
 
 /**
  * The dispatch loop: `next` proposes, this loop admits. Admission holds the
- * overall, per-subscription and per-model turn limits and never starts two
- * tasks whose declared areas overlap. On an optional iteration limit — turns,
- * wall clock or dollars — the loop drains: a task that has not started this
- * iteration gets no turn, tasks already started finish their flow, in-flight
- * work settles, then the caller ends the iteration normally.
+ * overall, per-subscription and per-model turn limits; within a wave, order
+ * comes from `deps` only. On an optional iteration limit — turns, wall clock
+ * or dollars — the loop drains: a task that has not started this iteration
+ * gets no turn, tasks already started finish their flow, in-flight work
+ * settles, then the caller ends the iteration normally.
  */
 export async function runDispatch(
   runtime: KernelRuntime,
@@ -399,7 +375,6 @@ export async function runDispatch(
     });
     running.set(action.slug, {
       promise,
-      scope: task.scope,
       agent,
       subscription: quota?.subscription,
       model: quota?.model,
@@ -522,7 +497,6 @@ export async function runDispatch(
           ).length;
           if (onModel >= modelLimit) continue;
         }
-        if (overlapsRunning(task.scope, running)) continue;
         start(action, taskState, task, true, {
           subscription: target.subscription,
           model: target.model.id,
@@ -539,7 +513,6 @@ export async function runDispatch(
           taskState.turns === 0
         )
           continue;
-        if (overlapsRunning(task.scope, running)) continue;
         start(action, taskState, task, false);
         continue;
       }
