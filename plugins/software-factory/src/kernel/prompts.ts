@@ -254,3 +254,8 @@ export function renderRolePrompt(
   if (!config) throw new Error(`process config has no role "${role}"`);
   return library.render(config.prompt, vars);
 }
+
+/** Last-call instruction rendered on the checks step's final fix turn. */
+export const GATE_LAST_CALL_TEXT =
+  "make the gates green, or return `blocked`/`failed` with the cause";
+export const GATE_LAST_CALL_ASK = `This is the last call: ${GATE_LAST_CALL_TEXT}.`;

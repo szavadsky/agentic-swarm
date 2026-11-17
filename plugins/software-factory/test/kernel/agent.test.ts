@@ -84,7 +84,7 @@ function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
       concurrency: { overall: 1, perSubscription: {}, perModel: {} },
       planCheckRounds: 2,
     },
-    workingTier: new Map(),
+    exhaustedPools: new Set(),
     // Hermetic prices: the test-local cache, never the network.
     priceSource: {
       cachePath: path.join(root, "price-cache.json"),
@@ -1559,8 +1559,44 @@ describe("repair findings and launch kinds", () => {
 
       expect(result.outcome?.summary).toBe("via fallback");
       expect(result.record.launchKind).toBe("glitch");
+      expect(runtime.exhaustedPools.has("fake+fake-a")).toBe(true);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("records exhausted pool on quota stop but not on timeout, rate, or crash", async () => {
+    for (const cause of ["timeout", "rate", "crash"] as const) {
+      const { root, fake, runtime } = await setup();
+      try {
+        const base = resolveRole(runtime, "implementer");
+        const target = {
+          ...base,
+          tiers: [
+            { harness: fake, model: { id: "fake-a" } },
+            { harness: fake, model: { id: "fake-b" } },
+          ],
+        };
+        fake.script((req) =>
+          fakeTurnResult(req, { stop: { kind: "infra", cause } }),
+        );
+        fake.script((req, ctx) => {
+          ctx.writeOutcome({ status: "done", summary: "delivered" });
+          return fakeTurnResult(req);
+        });
+
+        await runAgentTurn(runtime, {
+          target,
+          cwd: root,
+          meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
+          vars: implementerVars,
+          expectation: "any",
+        });
+
+        expect(runtime.exhaustedPools.size).toBe(0);
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+      }
     }
   });
 

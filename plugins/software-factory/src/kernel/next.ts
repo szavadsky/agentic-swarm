@@ -1,4 +1,4 @@
-import { reviewRoundLimit } from "./review.js";
+import { agentSteps, reviewRoundLimit } from "./review.js";
 import type { Action, Limits, State } from "./types.js";
 
 function park(slug: string, cause: string): Action {
@@ -73,7 +73,7 @@ export function next(
       continue;
     }
 
-    const step = flow.steps.find((s) => s.id === task.phase);
+    const step = agentSteps(flow).find((s) => s.id === task.phase);
     if (!step) {
       actions.push(
         park(slug, `flow "${task.flow}" has no step "${task.phase}"`),

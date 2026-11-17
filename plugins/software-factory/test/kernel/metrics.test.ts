@@ -674,7 +674,7 @@ describe("record cost truth", () => {
         concurrency: { overall: 1, perSubscription: {}, perModel: {} },
         planCheckRounds: 2,
       },
-      workingTier: new Map(),
+      exhaustedPools: new Set(),
       // Hermetic prices: the test-local cache, never the network.
       priceSource: {
         cachePath: path.join(root, "price-cache.json"),

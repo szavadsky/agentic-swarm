@@ -2,6 +2,7 @@ import path from "node:path";
 import { runAgentTurn } from "./agent.js";
 import type { PlanReviewPack } from "./context-pack.js";
 import { resolveRole } from "./flow-context.js";
+import { KERNEL_TURN_STEPS } from "./outcome.js";
 import { restoreTurn, snapshotTurn } from "./pm.js";
 import { scriptMeta } from "./record.js";
 import type { KernelRuntime, StepRecord } from "./types.js";
@@ -45,7 +46,7 @@ export async function runPlanReview(
       pack_path: path.join(runtime.store.goalDir, opts.packRel),
       worktree: runtime.paths.goalCheckout,
     },
-    expectation: "any",
+    expectation: KERNEL_TURN_STEPS[PLAN_REVIEW_STEP],
   });
   const restored = await restoreTurn(runtime, snapshot);
   const touched = [

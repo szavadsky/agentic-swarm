@@ -5,6 +5,7 @@ import { type RoleTarget, resolveRole } from "./flow-context.js";
 import { type Steer, postSteer, scanInbox } from "./mailbox.js";
 import { costText, DEFAULT_ROLE_BY_STEP, rolesByStep } from "./metrics.js";
 import { loadPriceTable } from "./openrouter.js";
+import { KERNEL_TURN_STEPS } from "./outcome.js";
 import { type PriceTable, pricedRecord } from "./pricing.js";
 import type { KernelRuntime, StepRecord } from "./types.js";
 
@@ -200,7 +201,7 @@ export async function writeLaunchDigest(
           transcripts_dir: runtime.paths.sessionsDir,
           digest_path: digestPath,
         },
-        expectation: "any",
+        expectation: KERNEL_TURN_STEPS.digest,
       });
     } catch {
       // The scout is an enhancement; the derived table already answers the facts.

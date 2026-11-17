@@ -2,6 +2,7 @@ import path from "node:path";
 import { runAgentTurn } from "./agent.js";
 import type { PlanCheckPack } from "./context-pack.js";
 import { resolveRole } from "./flow-context.js";
+import { KERNEL_TURN_STEPS } from "./outcome.js";
 import { existingTasks, restoreTurn, snapshotTurn } from "./pm.js";
 import { scriptMeta } from "./record.js";
 import type {
@@ -77,7 +78,7 @@ export async function runPlanCheck(
       tasks_dir: runtime.store.tasksDir,
       existing_tasks: planCheckBrief(opts.state, tasks),
     },
-    expectation: "any",
+    expectation: KERNEL_TURN_STEPS[PLAN_CHECK_STEP],
   });
   const restored = await restoreTurn(runtime, snapshot);
   const touched = [

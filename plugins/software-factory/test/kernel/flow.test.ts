@@ -13,6 +13,7 @@ import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
 import { promptVars } from "../../src/kernel/flow-context.js";
 import { executeTaskAction } from "../../src/kernel/flow.js";
+import { GATE_LAST_CALL_TEXT } from "../../src/kernel/prompts.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import { type GoalMetrics, writeMetrics } from "../../src/kernel/metrics.js";
 import { writeIterationSummary } from "../../src/kernel/summary.js";
@@ -1034,6 +1035,82 @@ describe("review last call", () => {
       );
       expect(state.tasks.task!.status).toBe("merged");
       expect(state.tasks.task!.round).toBe(3);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+});
+
+describe("checks step bound and last call", () => {
+  it("honors checks step changeRequests: 1 by rendering last call on the 2nd fix turn and parking on 2nd failure", async () => {
+    const { repo, goal } = setupFlowRepo({
+      gates: [{ id: "unit", command: "test ! -f broken.txt" }],
+    });
+    try {
+      const processYaml = [
+        "flows:",
+        "  implement-review:",
+        "    steps:",
+        "      - id: implement",
+        "        role: implementer",
+        "      - id: checks",
+        "        changeRequests: 1",
+        "      - id: review",
+        "        role: reviewer",
+        "        review: true",
+        "",
+      ].join("\n");
+      repo.writeFile(".factory/process.yaml", processYaml);
+
+      const harness = new FakeHarness({ id: "fake" });
+      const prompts: string[] = [];
+
+      // Initial turn creates broken.txt
+      harness.script((req, ctx) => {
+        prompts.push(req.prompt ?? "");
+        fs.writeFileSync(path.join(req.cwd!, "broken.txt"), "bad\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "wrote broken" }));
+        return fakeTurnResult(req);
+      });
+      // Fix 1
+      harness.script((req, ctx) => {
+        prompts.push(req.prompt ?? "");
+        fs.writeFileSync(path.join(req.cwd!, "fix-1.txt"), "f1\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "fix 1" }));
+        return fakeTurnResult(req);
+      });
+      // Fix 2 (last call)
+      harness.script((req, ctx) => {
+        prompts.push(req.prompt ?? "");
+        fs.writeFileSync(path.join(req.cwd!, "fix-2.txt"), "f2\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "fix 2" }));
+        return fakeTurnResult(req);
+      });
+      scriptStallLeave(harness, ["task"]);
+
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(
+        runtime,
+        task("task", { scope: ["broken.txt", "fix-1.txt", "fix-2.txt"] }),
+      );
+
+      const result = await runDispatch(runtime, { iteration: 1 });
+      expect(result.reason).toBe("boundary");
+
+      const records = await runtime.store.listRecords();
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
+
+      expect(state.tasks.task!.status).toBe("parked");
+      expect(state.tasks.task!.cause).toBe("gates: unit");
+
+      // Initial + Fix 1 + Fix 2 = 3 turns
+      expect(prompts).toHaveLength(3);
+      expect(prompts[1]).not.toContain(GATE_LAST_CALL_TEXT);
+      expect(prompts[2]).toContain(GATE_LAST_CALL_TEXT);
     } finally {
       cleanupFlowRepo(repo);
     }

@@ -120,20 +120,20 @@ describe("alias fallback tiers", () => {
         ["b", "mb", "done"],
       ]);
       expect(result.outcome?.status).toBe("done");
-      expect(t.runtime.workingTier.get("implementer")).toBe(1);
+      expect(t.runtime.exhaustedPools.has("a+ma")).toBe(true);
     } finally {
       cleanupFlowRepo(t.repo);
     }
   });
 
-  it("starts the next turn on the recorded working tier", async () => {
+  it("skips exhausted pools on subsequent turns", async () => {
     const t = await tierRuntime({
       harness: "a",
       model: "ma",
       fallbacks: [{ harness: "b", model: "mb" }],
     });
     try {
-      t.runtime.workingTier.set("implementer", 1);
+      t.runtime.exhaustedPools.add("a+ma");
       t.b.script((req, ctx) => {
         ctx.writeOutcome(outcome({ summary: "done on b" }));
         return fakeTurnResult(req);
@@ -225,7 +225,132 @@ describe("alias fallback tiers", () => {
     }
   });
 
-  it("returns the last infra stop when every tier fails and retries the primary next", async () => {
+  it("returns the last infra stop when every tier fails on transient error and retries the primary next", async () => {
+    const t = await tierRuntime({
+      harness: "a",
+      model: "ma",
+      fallbacks: [{ harness: "b", model: "mb" }],
+    });
+    try {
+      const timeoutStop = {
+        stop: { kind: "infra", cause: "timeout" } as const,
+      };
+      t.a.scriptResult(timeoutStop);
+      t.b.scriptResult(timeoutStop);
+      t.a.scriptResult(timeoutStop);
+      t.b.scriptResult(timeoutStop);
+
+      const spec = {
+        target: resolveRole(t.runtime, "implementer"),
+        cwd: t.repo.dir,
+        meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
+        vars: implementerVars,
+        expectation: "any" as const,
+      };
+      const first = await runAgentTurn(t.runtime, spec);
+      expect(first.record.stop).toEqual({ kind: "infra", cause: "timeout" });
+      expect(t.runtime.exhaustedPools.size).toBe(0);
+
+      // Transient timeout sticks to nothing: the next turn restarts at the primary.
+      const second = await runAgentTurn(t.runtime, {
+        ...spec,
+        target: resolveRole(t.runtime, "implementer"),
+      });
+      expect(second.record.stop).toEqual({ kind: "infra", cause: "timeout" });
+      expect(t.a.calls).toHaveLength(2);
+      expect(t.b.calls).toHaveLength(2);
+    } finally {
+      cleanupFlowRepo(t.repo);
+    }
+  });
+
+  it("leaves next turn starting at primary when primary stops on timeout, rate or crash and fallback delivers", async () => {
+    for (const cause of ["timeout", "rate", "crash"] as const) {
+      const t = await tierRuntime({
+        harness: "a",
+        model: "ma",
+        fallbacks: [{ harness: "b", model: "mb" }],
+      });
+      try {
+        t.a.scriptResult({ stop: { kind: "infra", cause } });
+        t.b.script((req, ctx) => {
+          ctx.writeOutcome(outcome({ summary: "fallback delivered" }));
+          return fakeTurnResult(req);
+        });
+
+        const spec = {
+          target: resolveRole(t.runtime, "implementer"),
+          cwd: t.repo.dir,
+          meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
+          vars: implementerVars,
+          expectation: "any" as const,
+        };
+        const first = await runAgentTurn(t.runtime, spec);
+        expect(first.outcome?.status).toBe("done");
+        expect(t.runtime.exhaustedPools.size).toBe(0);
+
+        // Next turn must start at the primary harness/model
+        const targetNext = resolveRole(t.runtime, "implementer");
+        expect(targetNext.harness.id).toBe("a");
+        expect(targetNext.model).toEqual({ id: "ma" });
+        expect(targetNext.tierOffset).toBe(0);
+      } finally {
+        cleanupFlowRepo(t.repo);
+      }
+    }
+  });
+
+  it("marks pool exhausted by subscription on quota and skips it for other aliases on that pool", async () => {
+    const { repo, goal } = setupFlowRepo({
+      aliases: {
+        ...BASE_ALIASES,
+        alias1: {
+          harness: "a",
+          model: "ma",
+          subscription: "pool-shared",
+          fallbacks: [{ harness: "b", model: "mb" }],
+        },
+        alias2: {
+          harness: "a",
+          model: "ma2",
+          subscription: "pool-shared",
+          fallbacks: [{ harness: "b", model: "mb2" }],
+        },
+      },
+    });
+    try {
+      const a = new FakeHarness({ id: "a" });
+      const b = new FakeHarness({ id: "b" });
+      const runtime = await makeRuntime(repo, goal, { a, b });
+
+      a.scriptResult(quota());
+      b.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "fallback done" }));
+        return fakeTurnResult(req);
+      });
+
+      const spec = {
+        target: resolveRole(runtime, "implementer", "alias1"),
+        cwd: repo.dir,
+        meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
+        vars: implementerVars,
+        expectation: "any" as const,
+      };
+      const res = await runAgentTurn(runtime, spec);
+      expect(res.outcome?.status).toBe("done");
+      expect(runtime.exhaustedPools.has("pool-shared")).toBe(true);
+
+      // alias2 also draws on pool-shared, so it skips its primary and starts on fallback
+      const target2 = resolveRole(runtime, "implementer", "alias2");
+      expect(target2.harness.id).toBe("b");
+      expect(target2.model).toEqual({ id: "mb2" });
+      expect(target2.tierOffset).toBe(1);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  });
+
+  it("retries the last tier when every tier is exhausted", async () => {
     const t = await tierRuntime({
       harness: "a",
       model: "ma",
@@ -234,7 +359,6 @@ describe("alias fallback tiers", () => {
     try {
       t.a.scriptResult(quota());
       t.b.scriptResult(quota());
-      t.a.scriptResult(quota());
       t.b.scriptResult(quota());
 
       const spec = {
@@ -246,22 +370,28 @@ describe("alias fallback tiers", () => {
       };
       const first = await runAgentTurn(t.runtime, spec);
       expect(first.record.stop).toEqual({ kind: "infra", cause: "quota" });
-      expect(t.runtime.workingTier.get("implementer")).toBeUndefined();
+      expect(t.runtime.exhaustedPools.has("a+ma")).toBe(true);
+      expect(t.runtime.exhaustedPools.has("b+mb")).toBe(true);
 
-      // Exhaustion sticks to nothing: the next turn restarts at the primary.
+      // Every tier is exhausted: still tries last tier (b), rather than failing without a call
+      const target = resolveRole(t.runtime, "implementer");
+      expect(target.harness.id).toBe("b");
+      expect(target.tierOffset).toBe(1);
+      expect(target.tiers).toHaveLength(1);
+
       const second = await runAgentTurn(t.runtime, {
         ...spec,
-        target: resolveRole(t.runtime, "implementer"),
+        target,
       });
       expect(second.record.stop).toEqual({ kind: "infra", cause: "quota" });
-      expect(t.a.calls).toHaveLength(2);
+      expect(t.a.calls).toHaveLength(1);
       expect(t.b.calls).toHaveLength(2);
     } finally {
       cleanupFlowRepo(t.repo);
     }
   });
 
-  it("stays on the working tier for the rest of the dispatch", async () => {
+  it("skips the exhausted pool for the rest of the dispatch", async () => {
     const { repo, goal } = setupFlowRepo({
       limits: { concurrency: { overall: 1 } },
       aliases: {
