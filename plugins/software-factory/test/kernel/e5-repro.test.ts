@@ -5,6 +5,7 @@ import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
 import { executeTaskAction } from "../../src/kernel/flow.js";
+import { GATE_LAST_CALL_TEXT } from "../../src/kernel/prompts.js";
 import type { Action } from "../../src/kernel/types.js";
 import { integrationHead } from "../../src/kernel/worktree.js";
 import { task } from "./helpers.js";
@@ -322,6 +323,93 @@ describe("E5 inverted — inherited red is matched per failing signature", () =>
         repo.git(["show", "factory/demo:base-broken.txt"], { allowFail: true })
           .code,
       ).not.toBe(0);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("drives three differing red fixes and parks on the third", async () => {
+    const { repo, goal } = setupFlowRepo({
+      gates: [{ id: "package", command: GATE }],
+    });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const promptsSeen: string[] = [];
+
+      // Initial turn: introduces task-broken.txt
+      harness.script((req, ctx) => {
+        promptsSeen.push(req.prompt ?? "");
+        fs.writeFileSync(path.join(req.cwd!, "task-broken.txt"), "Y\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "feature broken implemented" }));
+        return fakeTurnResult(req);
+      });
+      // Fix turn 1: writes fix-1.txt, still keeping task-broken.txt (red)
+      harness.script((req, ctx) => {
+        promptsSeen.push(req.prompt ?? "");
+        fs.writeFileSync(path.join(req.cwd!, "fix-1.txt"), "fix 1\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "fix 1 attempt" }));
+        return fakeTurnResult(req);
+      });
+      // Fix turn 2: writes fix-2.txt, still keeping task-broken.txt (red)
+      harness.script((req, ctx) => {
+        promptsSeen.push(req.prompt ?? "");
+        fs.writeFileSync(path.join(req.cwd!, "fix-2.txt"), "fix 2\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "fix 2 attempt" }));
+        return fakeTurnResult(req);
+      });
+      // Fix turn 3 (last call): writes fix-3.txt, still keeping task-broken.txt (red)
+      harness.script((req, ctx) => {
+        promptsSeen.push(req.prompt ?? "");
+        fs.writeFileSync(path.join(req.cwd!, "fix-3.txt"), "fix 3\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "fix 3 attempt" }));
+        return fakeTurnResult(req);
+      });
+      scriptStallLeave(harness, ["task"]);
+
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(
+        runtime,
+        task("task", {
+          scope: ["task-broken.txt", "fix-1.txt", "fix-2.txt", "fix-3.txt"],
+        }),
+      );
+
+      const result = await runDispatch(runtime, { iteration: 1 });
+      expect(result.reason).toBe("boundary");
+
+      const records = await runtime.store.listRecords();
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
+
+      // Verify task parked after 3rd red fix
+      expect(state.tasks.task!.status).toBe("parked");
+      expect(state.tasks.task!.cause).toBe("gates: package");
+
+      // Verify harness was called 4 times (1 initial + 3 fixes)
+      expect(promptsSeen).toHaveLength(4);
+
+      // Fix 1 and 2 prompts do NOT have last call text
+      expect(promptsSeen[1]).not.toContain(GATE_LAST_CALL_TEXT);
+      expect(promptsSeen[2]).not.toContain(GATE_LAST_CALL_TEXT);
+
+      // Fix 3 (last call) prompt MUST have last call text
+      expect(promptsSeen[3]).toContain(GATE_LAST_CALL_TEXT);
+
+      // Verify checks ran 4 times and all 4 failed
+      const checks = records.filter(
+        (r) => r.slug === "task" && r.step === "checks",
+      );
+      expect(checks).toHaveLength(4);
+      expect(checks.every((r) => r.ok === false)).toBe(true);
+
+      // Branch was kept (branch exists)
+      const head = repo.git(["rev-parse", "factory-task/demo/task"], {
+        allowFail: true,
+      });
+      expect(head.code).toBe(0);
     } finally {
       cleanupFlowRepo(repo);
     }

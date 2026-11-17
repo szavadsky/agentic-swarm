@@ -49,12 +49,16 @@ export const flowStepSchema = z
         /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/,
         "step id must be a simple name (no path separators)",
       ),
-    role: z.string().min(1),
+    role: z.string().min(1).optional(),
     review: z.boolean().default(false),
-    /** Review steps only: change requests honored before the last call. */
+    /** Review and checks steps: change requests honored before the last call. */
     changeRequests: z.number().int().nonnegative().optional(),
   })
-  .strict();
+  .strict()
+  .refine((step) => step.id === "checks" || step.role !== undefined, {
+    message: "role is required on flow steps other than checks",
+    path: ["role"],
+  });
 
 export const followUpSchema = z
   .object({

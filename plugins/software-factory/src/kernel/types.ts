@@ -248,6 +248,8 @@ export interface TaskState {
   loop?: ProgressRepeat;
   /** A red gate run sent the task back to implement: the fix turn resumes its session, and only a merged-result fix skips the next review. */
   gateFix?: boolean;
+  /** True when this gate-fix turn is the last allowed fix turn before red gates park. */
+  gateLastCall?: boolean;
 }
 
 export type GoalStatus = "active" | "done" | "blocked";
@@ -273,12 +275,12 @@ export type Action =
 
 export interface FlowStep {
   id: string;
-  role: string;
+  role?: string;
   /** Review steps carry the verdict contract and consume a review round. */
   review?: boolean;
   /**
-   * Review steps only: how many `changes` verdicts this agent may issue before
-   * its call is the last one. Absent means the reviewer default (two).
+   * Review and checks steps: how many change requests this step may issue before
+   * its call is the last one. Absent means the default (two).
    */
   changeRequests?: number;
 }

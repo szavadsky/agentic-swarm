@@ -14,6 +14,8 @@ import { contextPackRelPath } from "./context-pack.js";
 import { formatFailingChecks, newGateFailures } from "./gates.js";
 import { formatFixDispositions, formatReviewFindings } from "./record.js";
 import { sessionCacheHot } from "./sessions.js";
+import { GATE_LAST_CALL_ASK } from "./prompts.js";
+import { agentSteps, isLastChecksFixCall } from "./review.js";
 import type {
   FlowDefinition,
   FlowStep,
@@ -210,13 +212,10 @@ export function findStep(flow: FlowDefinition, id: string): FlowStep {
   return step;
 }
 
-function stepIndex(flow: FlowDefinition, id: string): number {
-  return flow.steps.findIndex((s) => s.id === id);
-}
-
 /** Gates run after the last productive step, immediately before a review (or the end). */
 export function checksDue(flow: FlowDefinition, id: string): boolean {
-  const next = flow.steps[stepIndex(flow, id) + 1];
+  const steps = agentSteps(flow);
+  const next = steps[steps.findIndex((s) => s.id === id) + 1];
   return !next || next.review === true;
 }
 
@@ -225,9 +224,27 @@ export function isFixTurn(
   state: TaskState,
   stepId: string,
 ): boolean {
-  return (
-    flow.steps[0]?.id === stepId && (state.round > 1 || state.gateFix === true)
-  );
+  const steps = agentSteps(flow);
+  return steps[0]?.id === stepId && (state.round > 1 || state.gateFix === true);
+}
+
+/** Counts red gate runs that requested a fix for the slug. */
+export function countRedGateRequests(
+  records: readonly StepRecord[],
+  slug: string,
+): number {
+  let count = 0;
+  for (const rec of records) {
+    if (rec.slug !== slug || !rec.endedAt) continue;
+    if (rec.step === "checks" && rec.ok === false) count += 1;
+    else if (
+      rec.step === "merge" &&
+      rec.ok === false &&
+      rec.cause?.startsWith("gates:")
+    )
+      count += 1;
+  }
+  return count;
 }
 
 /**
@@ -356,6 +373,11 @@ function stepRole(
       );
     }
     return followUp.role;
+  }
+  if (!step.role) {
+    throw new Error(
+      `flow "${task.flow}": step "${stepId}" has no configured role`,
+    );
   }
   return step.role;
 }
@@ -725,6 +747,7 @@ export function promptVars(
   records: StepRecord[],
   round: number,
   flow: FlowDefinition,
+  state?: TaskState,
 ): Record<string, string> {
   const review = lastReview(records, task.slug, flow);
   const checks = lastChecks(records, task.slug);
@@ -740,6 +763,18 @@ export function promptVars(
     findings = formatReviewFindings(review.outcome);
   else if (latest?.checks)
     findings = formatFailingChecks(newGateFailures(latest.checks, preexisting));
+
+  const isGateLastCall =
+    state?.gateLastCall === true ||
+    (state === undefined &&
+      (latest === checks || latest === mergeChecks) &&
+      isLastChecksFixCall(flow, countRedGateRequests(records, task.slug)));
+  if (isGateLastCall) {
+    findings = findings
+      ? `${GATE_LAST_CALL_ASK}\n\n${findings}`
+      : GATE_LAST_CALL_ASK;
+  }
+
   return {
     task_path: `${runtime.store.tasksDir}/${task.slug}.md`,
     worktree,

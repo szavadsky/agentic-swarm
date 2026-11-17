@@ -476,6 +476,152 @@ describe("derive", () => {
     );
   });
 
+  it("bounds task red-gate fixes and marks gateLastCall on the third fix turn before parking on the fourth failure", () => {
+    const tasks = [task("a")];
+    // Failure 1 -> Fix 1
+    const r1 = derive(tasks, [
+      implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
+      redCheck(2),
+    ]);
+    expect(r1.tasks.a!.phase).toBe("implement");
+    expect(r1.tasks.a!.gateFix).toBe(true);
+    expect(r1.tasks.a!.gateLastCall).toBeUndefined();
+
+    // Failure 2 -> Fix 2
+    const r2 = derive(tasks, [
+      implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
+      redCheck(2),
+      implement(3, 1, { tree: "tree-2", commit: "c2", base: "c0" }),
+      redCheck(4),
+    ]);
+    expect(r2.tasks.a!.phase).toBe("implement");
+    expect(r2.tasks.a!.gateFix).toBe(true);
+    expect(r2.tasks.a!.gateLastCall).toBeUndefined();
+
+    // Failure 3 -> Fix 3 (last call!)
+    const r3 = derive(tasks, [
+      implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
+      redCheck(2),
+      implement(3, 1, { tree: "tree-2", commit: "c2", base: "c0" }),
+      redCheck(4),
+      implement(5, 1, { tree: "tree-3", commit: "c3", base: "c0" }),
+      redCheck(6),
+    ]);
+    expect(r3.tasks.a!.phase).toBe("implement");
+    expect(r3.tasks.a!.gateFix).toBe(true);
+    expect(r3.tasks.a!.gateLastCall).toBe(true);
+
+    // Failure 4 -> parks!
+    const r4 = derive(tasks, [
+      implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
+      redCheck(2),
+      implement(3, 1, { tree: "tree-2", commit: "c2", base: "c0" }),
+      redCheck(4),
+      implement(5, 1, { tree: "tree-3", commit: "c3", base: "c0" }),
+      redCheck(6),
+      implement(7, 1, { tree: "tree-4", commit: "c4", base: "c0" }),
+      redCheck(8),
+    ]);
+    expect(r4.tasks.a!.phase).toBe("parked");
+    expect(r4.tasks.a!.park).toBe("gates: unit");
+    expect(r4.tasks.a!.gateFix).toBeUndefined();
+    expect(r4.tasks.a!.gateLastCall).toBeUndefined();
+  });
+
+  it("bounds task red-gate fixes by checks step changeRequests in flow", () => {
+    const tasks = [task("a")];
+    const flows = {
+      "implement-review": {
+        steps: [
+          { id: "implement", role: "implementer" },
+          { id: "checks", changeRequests: 1 },
+          { id: "review", role: "reviewer", review: true },
+        ],
+      },
+    };
+    // Failure 1 -> Fix 1
+    const r1 = derive(
+      tasks,
+      [
+        implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
+        redCheck(2),
+      ],
+      flows,
+    );
+    expect(r1.tasks.a!.phase).toBe("implement");
+    expect(r1.tasks.a!.gateFix).toBe(true);
+    expect(r1.tasks.a!.gateLastCall).toBeUndefined();
+
+    // Failure 2 -> Fix 2 (last call because bound is 1, so fix 2 is last call!)
+    const r2 = derive(
+      tasks,
+      [
+        implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
+        redCheck(2),
+        implement(3, 1, { tree: "tree-2", commit: "c2", base: "c0" }),
+        redCheck(4),
+      ],
+      flows,
+    );
+    expect(r2.tasks.a!.phase).toBe("implement");
+    expect(r2.tasks.a!.gateFix).toBe(true);
+    expect(r2.tasks.a!.gateLastCall).toBe(true);
+
+    // Failure 3 -> parks!
+    const r3 = derive(
+      tasks,
+      [
+        implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
+        redCheck(2),
+        implement(3, 1, { tree: "tree-2", commit: "c2", base: "c0" }),
+        redCheck(4),
+        implement(5, 1, { tree: "tree-3", commit: "c3", base: "c0" }),
+        redCheck(6),
+      ],
+      flows,
+    );
+    expect(r3.tasks.a!.phase).toBe("parked");
+    expect(r3.tasks.a!.park).toBe("gates: unit");
+  });
+
+  it("counts merge-gate failures against the same checks bound", () => {
+    const tasks = [task("a")];
+    // 2 red checks, then 3rd check passes -> review approves -> merge fails with gates: unit
+    const records = [
+      implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
+      redCheck(2),
+      implement(3, 1, { tree: "tree-2", commit: "c2", base: "c0" }),
+      redCheck(4),
+      implement(5, 1, { tree: "tree-3", commit: "c3", base: "c0" }),
+      doneCheck(6),
+      review(7, "approve"),
+      script(8, { step: "merge", ok: false, cause: "gates: unit" }),
+    ];
+    // Total red gate requests = 2 checks + 1 merge = 3.
+    // Since bound is 2 (limit 3), this is the 3rd fix turn -> gateLastCall = true!
+    const r = derive(tasks, records);
+    expect(r.tasks.a!.phase).toBe("implement");
+    expect(r.tasks.a!.gateFix).toBe(true);
+    expect(r.tasks.a!.gateLastCall).toBe(true);
+
+    // If 3 red checks occurred previously, merge failure would exceed bound and park immediately!
+    const records4 = [
+      implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
+      redCheck(2),
+      implement(3, 1, { tree: "tree-2", commit: "c2", base: "c0" }),
+      redCheck(4),
+      implement(5, 1, { tree: "tree-3", commit: "c3", base: "c0" }),
+      redCheck(6),
+      implement(7, 1, { tree: "tree-4", commit: "c4", base: "c0" }),
+      doneCheck(8),
+      review(9, "approve"),
+      script(10, { step: "merge", ok: false, cause: "gates: unit" }),
+    ];
+    const r4 = derive(tasks, records4);
+    expect(r4.tasks.a!.phase).toBe("parked");
+    expect(r4.tasks.a!.park).toBe("gates: unit");
+  });
+
   it("routes a task-checks fix turn to review on green, never skipping to merge", () => {
     const state = derive(
       [task("a")],

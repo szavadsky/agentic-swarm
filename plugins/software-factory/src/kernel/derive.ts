@@ -263,6 +263,7 @@ export function derive(
       park: terminal ? undefined : reduction.park,
       loop: terminal ? undefined : reduction.loop,
       gateFix: terminal ? undefined : reduction.gateFix,
+      gateLastCall: terminal ? undefined : reduction.gateLastCall,
     };
   }
   for (const slug of [...orphanSlugs].sort()) {
@@ -287,6 +288,7 @@ export function derive(
       park: undefined,
       loop: undefined,
       gateFix: undefined,
+      gateLastCall: undefined,
     };
   }
 

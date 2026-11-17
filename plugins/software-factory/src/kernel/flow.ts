@@ -582,6 +582,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
     records,
     state.round,
     flow,
+    state,
   );
   vars.base_hash = firstBase(records, task.slug) ?? startPoint;
   vars.head_hash = await headSha(ensured.path);
@@ -589,6 +590,8 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
   if (step.review) {
     vars.max_rounds = String(reviewRoundLimit(step));
     vars.last_call = String(lastCall);
+  } else if (state.gateFix && state.gateLastCall) {
+    vars.last_call = "true";
   }
   if (step.review && session) {
     // A resumed review already holds the prior rounds: the range carries the
