@@ -365,11 +365,6 @@ describe("kept-land", () => {
       ).toHaveLength(1);
       expect(
         records.filter(
-          (r) => r.slug === "kept-conflict" && r.step === "merge-attempt",
-        ),
-      ).toHaveLength(0);
-      expect(
-        records.filter(
           (r) => r.slug === "kept-conflict" && r.actor === "agent",
         ),
       ).toHaveLength(3);

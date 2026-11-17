@@ -104,12 +104,7 @@ describe("flow data drives the steps", () => {
 
       const records = await runtime.store.listRecords();
       const steps = records
-        .filter(
-          (r) =>
-            r.slug === "task" &&
-            r.actor === "agent" &&
-            r.step !== "merge-attempt",
-        )
+        .filter((r) => r.slug === "task" && r.actor === "agent")
         .sort((a, b) => a.seq - b.seq);
       expect(steps.map((r) => r.step)).toEqual(["draft", "polish", "critique"]);
       const checks = records.filter(

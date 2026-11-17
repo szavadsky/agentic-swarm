@@ -253,9 +253,6 @@ describe("parked continuation syncs to the integration head", () => {
         (r) => r.slug === "beta" && r.actor === "agent" && r.endedAt,
       );
       expect(betaAgents).toHaveLength(2);
-      expect(
-        records.filter((r) => r.slug === "beta" && r.step === "merge-attempt"),
-      ).toHaveLength(0);
       // Whole-item budget: beta's own 2 turns plus alpha's 2 spent turns.
       expect(state.tasks.beta!.turns).toBe(4);
       const betaTip = repo

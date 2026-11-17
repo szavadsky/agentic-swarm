@@ -13,7 +13,6 @@ import {
   newGateFailures,
   runGates,
 } from "./gates.js";
-import { attemptConflictMerge } from "./merge-attempt.js";
 import {
   appendGateFlake,
   finishChecks,
@@ -44,8 +43,8 @@ export interface MergeResult {
 
 export interface MergeOptions {
   /**
-   * Kept-land mode: no implementer conflict attempt (a conflict parks the
-   * branch) and one flake re-run on red merge gates.
+   * Kept-land mode: one flake re-run on red merge gates. Conflicts park the
+   * branch in every mode; no boundary merge starts an agent turn.
    */
   keptLand?: boolean;
 }
@@ -267,54 +266,21 @@ export async function mergeTask(
       return {};
     }
 
-    let head = await integrationHead(runtime);
-    let scratch = await resetMergeScratch(runtime, head);
-    let squash = await git(scratch, ["merge", "--squash", branch], {
+    const head = await integrationHead(runtime);
+    const scratch = await resetMergeScratch(runtime, head);
+    const squash = await git(scratch, ["merge", "--squash", branch], {
       allowFail: true,
     });
     if (squash.code !== 0) {
-      if (opts.keptLand) {
-        // No agent turn at the boundary: a conflict leaves the kept branch
-        // parked for the next boundary (or a continuation) to retry.
-        const paths = await unmergedFiles(scratch);
-        await removeMergeScratch(runtime);
-        await recordMerge(runtime, task, iteration, round, {
-          ok: false,
-          cause: `conflict: ${paths.join(", ") || "squash merge conflicts with the integration head"}`,
-        });
-        return {};
-      }
+      // No agent turn at the merge boundary: the conflict parks the branch and
+      // the wave-end steward owns it (or a continuation ports the work).
+      const paths = await unmergedFiles(scratch);
       await removeMergeScratch(runtime);
-      const attempt = await attemptConflictMerge(
-        runtime,
-        task,
-        records,
-        iteration,
-        state,
-      );
-      if (attempt.infra) return { infra: attempt.infra };
-      if (attempt.cancelled) return { cancelled: true };
-      if (!attempt.ok) {
-        await recordMerge(runtime, task, iteration, round, {
-          ok: false,
-          cause: `conflict: ${attempt.cause ?? "unresolved"}`,
-        });
-        return {};
-      }
-      head = await integrationHead(runtime);
-      scratch = await resetMergeScratch(runtime, head);
-      squash = await git(scratch, ["merge", "--squash", branch], {
-        allowFail: true,
+      await recordMerge(runtime, task, iteration, round, {
+        ok: false,
+        cause: `conflict: ${paths.join(", ") || "squash merge conflicts with the integration head"}`,
       });
-      if (squash.code !== 0) {
-        await removeMergeScratch(runtime);
-        await recordMerge(runtime, task, iteration, round, {
-          ok: false,
-          cause:
-            "conflict: squash merge still conflicts after one implementer attempt",
-        });
-        return {};
-      }
+      return {};
     }
 
     const staged = await git(scratch, ["diff", "--cached", "--quiet"], {
