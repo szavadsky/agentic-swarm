@@ -612,3 +612,7 @@ Verbatim, newest last; each with what it changed.
 - Owner INTENT revision da194dc synced MAIN→V3 (80bc3917 verified) + steered (owner's commit-message words).
 - Steers for i41: review-bounds + binary-config + steward-serialization (from p1-steward landing) + intent3 (owner revision) + alias-bug (owner ruling).
 - No promote (doc-only landing; pin unchanged c92247c216ca).
+
+### 2026-11-16 — rotation for i41: A-shape + omp-Go legs (sub B live, verified)
+- Map: architect claude-code/opus:high (fb sonnet, fb2 omp/opus — reinstated per owner call, approve-all + crash fix in pin), pm agy/gemini (fb omp-Go/deepseek:max), digest omp/Go-hy4:xhigh (fb opencode/hy4:high), implementer omp-Go/muse:max (fb omp-Go/deepseek:max; muse 2nd data point), reviewer omp-Go/deepseek:max (fb omp-Go/muse:max), plan-reviewer + plan-checker agy (fb omp/ernie), escalation omp/sonnet (fb omp-Go/muse:max), steward omp/ernie (fb agy). priceIds gains Go-hy4 ($0 row).
+- @free joins the mechanical alternation after the pre-flight alias fix (steered as bug). pi/codex/opencode Go legs at sub-A reset (~13d). Loader + price-coverage green before commit.
