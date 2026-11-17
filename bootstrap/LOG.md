@@ -644,3 +644,6 @@ Verbatim, newest last; each with what it changed.
 ### 2026-11-17 — p1-trivial re-run: exit 0, done, 0 iterations (4m, no drift)
 
 ### 2026-11-17 — p1-task re-run: exit 0, done, 0 iterations (4m, no drift)
+
+### 2026-11-17 — rotation for i43: hy4-first PM/review/QA + Go-hy4 digest + agy implementer
+- Map: architect claude/opus (fb sonnet, fb2 omp/opus), pm opencode/hy4 (fb omp/ernie), digest omp-Go/hy4:xhigh (fb opencode/hy4), implementer agy/gemini (fb omp-Go/deepseek:max; cycle muse41 → deepseek42 → agy43), reviewer opencode/hy4 (fb omp/ernie), qa opencode/hy4 (fb omp/ernie; dormant — no kernel role), plan-rev+check agy (fb omp/ernie), esc omp/sonnet:high (fb omp-Go/muse), steward omp/ernie (fb agy). Subs + caps kept. Loader + price-coverage green before commit.
