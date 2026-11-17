@@ -303,7 +303,7 @@ export async function runBoundary(
   }
 
   const tasksBefore = await taskSnapshot(runtime.store.goalDir);
-  const session = await resumableSession(runtime, records);
+  const session = await resumableSession(runtime, records, iteration);
   const planPath = path.join(runtime.store.goalDir, "plan.md");
   // The guard inside the turn owns the plan-edit rule and its repair ask; the
   // post-turn check below is the same rule as a backstop for a halted turn
@@ -312,7 +312,7 @@ export async function runBoundary(
 
   const architectTurn = (resume: SessionRef | undefined) =>
     runAgentTurn(runtime, {
-      target: resolveRole(runtime, "architect"),
+      target: resolveRole(runtime, "architect", undefined, iteration),
       cwd: runtime.paths.goalCheckout,
       meta: { iteration, step: "architect", round: 1 },
       vars: {

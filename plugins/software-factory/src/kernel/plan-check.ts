@@ -63,7 +63,7 @@ export async function runPlanCheck(
   const snapshot = await snapshotTurn(runtime, planPath);
   const tasks = await runtime.store.listTasks();
   const result = await runAgentTurn(runtime, {
-    target: resolveRole(runtime, "plan-checker"),
+    target: resolveRole(runtime, "plan-checker", undefined, opts.iteration),
     cwd: runtime.paths.goalCheckout,
     meta: {
       iteration: opts.iteration,

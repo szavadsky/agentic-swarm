@@ -192,7 +192,7 @@ async function attemptStewardMerge(
     };
   }
 
-  const target = resolveRole(runtime, "steward");
+  const target = resolveRole(runtime, "steward", undefined, iteration);
   const base = records
     .filter((r) => r.slug === task.slug && r.actor === "agent" && r.base)
     .sort((a, b) => a.seq - b.seq)[0]?.base;

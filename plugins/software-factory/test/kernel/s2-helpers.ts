@@ -42,6 +42,11 @@ export interface FlowRepoOptions {
       effort?: string;
       subscription?: string;
       escalateTo?: string;
+      rotate?: {
+        harness: string;
+        model: string;
+        effort?: string;
+      }[];
       fallbacks?: {
         harness?: string;
         model: string;

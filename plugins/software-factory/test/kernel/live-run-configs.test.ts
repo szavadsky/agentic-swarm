@@ -238,6 +238,7 @@ describe("shipped run-config coverage", () => {
       const ids = new Set<string>();
       for (const alias of Object.values(run.aliases)) {
         ids.add(alias.model);
+        for (const entry of alias.rotate) ids.add(entry.model);
         for (const fb of alias.fallbacks) ids.add(fb.model);
       }
       if (run.scouts) ids.add(run.scouts.model);
@@ -257,4 +258,34 @@ describe("shipped run-config coverage", () => {
       }
     });
   }
+});
+
+describe("self-rotate run config", () => {
+  it("is self.yaml with only the implementer rotating across the probe harnesses", () => {
+    const selfPath = path.join(BOOTSTRAP_RUN, "self.yaml");
+    const rotatePath = path.join(BOOTSTRAP_RUN, "self-rotate.yaml");
+    if (!fs.existsSync(selfPath) || !fs.existsSync(rotatePath)) return;
+    const self = runConfigSchema.parse(
+      yaml.parse(fs.readFileSync(selfPath, "utf8")),
+    );
+    const rotating = runConfigSchema.parse(
+      yaml.parse(fs.readFileSync(rotatePath, "utf8")),
+    );
+    const { implementer: selfImplementer, ...selfAliases } = self.aliases;
+    const { implementer: rotatingImplementer, ...rotatingAliases } =
+      rotating.aliases;
+    expect(rotatingAliases).toEqual(selfAliases);
+    expect(rotatingImplementer).toMatchObject({
+      harness: selfImplementer!.harness,
+      model: selfImplementer!.model,
+    });
+    expect(rotatingImplementer!.rotate.map((entry) => entry.harness)).toEqual([
+      "opencode",
+      "pi",
+      "codex",
+    ]);
+    // The owner adopts rotation by pointing a run at self-rotate; self.yaml
+    // itself stays unrotated.
+    expect(selfImplementer!.rotate).toEqual([]);
+  });
 });

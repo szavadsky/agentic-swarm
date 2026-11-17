@@ -50,12 +50,12 @@ describe("task tier resolution", () => {
         .tasks.plain!;
 
       expect(
-        stepTarget(runtime, escalated, escalatedState, "implement").alias,
+        stepTarget(runtime, escalated, escalatedState, "implement", 1).alias,
       ).toBe("escalation");
       expect(
-        stepTarget(runtime, escalated, escalatedState, "review").alias,
+        stepTarget(runtime, escalated, escalatedState, "review", 1).alias,
       ).toBe("reviewer");
-      expect(stepTarget(runtime, plain, plainState, "implement").alias).toBe(
+      expect(stepTarget(runtime, plain, plainState, "implement", 1).alias).toBe(
         "implementer",
       );
 
@@ -116,7 +116,13 @@ describe("task tier resolution", () => {
       )!;
       const initialState = derive([taskFile], [], runtime.configs.process.flows)
         .tasks.task!;
-      const admitted = stepTarget(runtime, taskFile, initialState, "implement");
+      const admitted = stepTarget(
+        runtime,
+        taskFile,
+        initialState,
+        "implement",
+        1,
+      );
       expect(admitted.harness.id).toBe("expensive");
 
       expect((await runDispatch(runtime, { iteration: 1 })).reason).toBe(

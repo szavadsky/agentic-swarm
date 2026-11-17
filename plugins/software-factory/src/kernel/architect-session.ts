@@ -58,13 +58,19 @@ export function missingPlanFinding(
 export async function resumableSession(
   runtime: KernelRuntime,
   records: StepRecord[],
+  iteration: number,
 ): Promise<SessionRef | undefined> {
   const last = records
     .filter((r) => r.step === "architect" && r.session && r.endedAt)
     .sort((a, b) => a.seq - b.seq)
     .at(-1);
   if (!last?.session) return undefined;
-  const { harness, model } = resolveRole(runtime, "architect");
+  const { harness, model } = resolveRole(
+    runtime,
+    "architect",
+    undefined,
+    iteration,
+  );
   let resume = false;
   try {
     resume = (await harness.caps(model)).resume;

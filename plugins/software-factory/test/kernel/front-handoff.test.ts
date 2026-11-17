@@ -35,7 +35,7 @@ describe("front prompt handoff", () => {
       );
 
       expect(vars.front_pack).toBe("");
-      expect(stepTarget(runtime, taskFile, state, "implement").alias).toBe(
+      expect(stepTarget(runtime, taskFile, state, "implement", 1).alias).toBe(
         "implementer",
       );
     } finally {
@@ -94,6 +94,7 @@ describe("front prompt handoff", () => {
         taskFile,
         { ...state, round: 2 },
         "implement",
+        1,
       );
 
       expect(vars.front_pack).toBe(
@@ -173,10 +174,10 @@ describe("trivial session resume", () => {
       const records = await runtime.store.listRecords();
 
       expect(
-        await trivialResumeSession(runtime, taskFile, records, false),
+        await trivialResumeSession(runtime, taskFile, records, false, 1),
       ).toEqual({ session: frontSession });
       expect(
-        await trivialResumeSession(runtime, taskFile, records, true),
+        await trivialResumeSession(runtime, taskFile, records, true, 1),
       ).toEqual({ session: implementSession });
     } finally {
       cleanupFlowRepo(repo);
@@ -213,6 +214,7 @@ describe("trivial session resume", () => {
         taskFile,
         records,
         false,
+        1,
       );
       if (!("cause" in resumed)) throw new Error("expected a park cause");
       expect(resumed.cause).toContain("is not the front alias harness");

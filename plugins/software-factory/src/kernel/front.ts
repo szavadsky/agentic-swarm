@@ -194,7 +194,7 @@ export async function runFront(
         iteration: opts.iteration,
       });
 
-    const target = frontTarget(runtime);
+    const target = frontTarget(runtime, opts.iteration);
     const packRel = contextPackRelPath(opts.iteration);
     // The front writes its pack; the script owns the directory so the agent
     // never has to create a path outside the goal artifacts.
