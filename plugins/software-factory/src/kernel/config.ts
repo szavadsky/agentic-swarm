@@ -87,6 +87,7 @@ export const processConfigSchema = z
       )
       .default({}),
     itemTurns: z.number().int().positive().default(8),
+    reminders: z.number().int().nonnegative().default(1),
     calibration: z.string().optional(),
     promptsDir: z.string().min(1).optional(),
   })

@@ -26,6 +26,7 @@ function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
     flows: {},
     roles: { digest: { prompt: "digest" } },
     itemTurns: 8,
+    reminders: 1,
   };
   const repo: RepoConfig = {
     baseBranch: "main",

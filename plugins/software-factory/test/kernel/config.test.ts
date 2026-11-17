@@ -21,6 +21,7 @@ describe("three config layers", () => {
     expect(configs.repo.artifactRoot).toBe(".factory/artifacts");
     expect(configs.run.limits.iterations).toBe(3);
     expect(configs.process.flows["implement-review"]!.reviewRounds).toBe(2);
+    expect(configs.process.reminders).toBe(1);
     const paths = resolveGoalPaths(configs, root, "demo");
     expect(paths.goalDir).toBe(path.join(root, ".factory/artifacts/demo"));
     expect(paths.goalCheckout.startsWith(root)).toBe(false);
@@ -42,7 +43,7 @@ describe("three config layers", () => {
     fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
     fs.writeFileSync(
       path.join(root, ".factory/process.yaml"),
-      "flows:\n  implement-review:\n    reviewRounds: 4\nitemTurns: 12\nroles:\n  architect:\n    prompt: architect\n    alias: boss\n",
+      "flows:\n  implement-review:\n    reviewRounds: 4\nitemTurns: 12\nreminders: 0\nroles:\n  architect:\n    prompt: architect\n    alias: boss\n",
     );
     fs.writeFileSync(
       path.join(root, ".factory/run.yaml"),
@@ -52,6 +53,7 @@ describe("three config layers", () => {
     expect(configs.process.flows["implement-review"]!.reviewRounds).toBe(4);
     expect(configs.process.flows.spike!.reviewRounds).toBe(1);
     expect(configs.process.itemTurns).toBe(12);
+    expect(configs.process.reminders).toBe(0);
     expect(configs.process.roles.architect!.alias).toBe("boss");
     expect(configs.run.aliases.boss!.model).toBe("big");
     expect(toLimits(configs).flows["implement-review"]!.reviewRounds).toBe(4);

@@ -142,21 +142,9 @@ describe("delivery guard", () => {
         );
         return fakeTurnResult(req);
       });
-      harness.script((req, ctx) => {
-        ctx.writeOutcome(
-          outcome({ summary: "still going", decision: "continue" }),
-        );
-        return fakeTurnResult(req);
-      });
-      harness.script((req, ctx) => {
-        ctx.writeOutcome(
-          outcome({ summary: "still going", decision: "continue" }),
-        );
-        return fakeTurnResult(req);
-      });
 
       await expectLaunch(3, goal.repo, harness);
-      expect(harness.calls).toHaveLength(4);
+      expect(harness.calls).toHaveLength(2);
       expect(harness.calls[1]!.prompt).toContain("plan edit or stop decision");
       const summary = fs.readFileSync(
         path.join(goal.goalDir, "iterations/1/summary.md"),
@@ -186,21 +174,9 @@ describe("delivery guard", () => {
         );
         return fakeTurnResult(req);
       });
-      harness.script((req, ctx) => {
-        ctx.writeOutcome(
-          outcome({ summary: "still going", decision: "continue" }),
-        );
-        return fakeTurnResult(req);
-      });
-      harness.script((req, ctx) => {
-        ctx.writeOutcome(
-          outcome({ summary: "still going", decision: "continue" }),
-        );
-        return fakeTurnResult(req);
-      });
 
       await expectLaunch(3, goal.repo, harness);
-      expect(harness.calls).toHaveLength(4);
+      expect(harness.calls).toHaveLength(2);
       expect(harness.calls[1]!.prompt).toContain("plan edit or stop decision");
       expect(harness.calls[1]!.prompt).toContain(
         "is unchanged since the turn started",
@@ -224,11 +200,9 @@ describe("delivery guard", () => {
       const harness = new FakeHarness({ id: "fake" });
       harness.script((req) => fakeTurnResult(req, { text: "nothing" }));
       harness.script((req) => fakeTurnResult(req, { text: "still nothing" }));
-      harness.script((req) => fakeTurnResult(req, { text: "still nothing" }));
-      harness.script((req) => fakeTurnResult(req, { text: "still nothing" }));
 
       await expectLaunch(1, goal.repo, harness);
-      expect(harness.calls).toHaveLength(4);
+      expect(harness.calls).toHaveLength(2);
       expect(harness.calls[1]!.prompt).toContain(
         "You are the front. Your turn did not deliver its class, task, and pack.",
       );

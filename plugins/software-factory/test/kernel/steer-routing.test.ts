@@ -235,8 +235,6 @@ describe("steer PM routing", () => {
         return fakeTurnResult(req);
       });
       harness.script(approver("beta is correct"));
-      harness.script(implementer("alpha.txt"));
-      harness.script(approver("alpha retry is correct"));
 
       const dispatched = await runDispatch(runtime, { iteration: 1 });
       expect(dispatched.reason).toBe("boundary");

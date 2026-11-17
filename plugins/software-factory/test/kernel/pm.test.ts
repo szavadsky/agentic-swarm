@@ -49,6 +49,7 @@ function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
     flows: {},
     roles: { pm: { prompt: "pm" } },
     itemTurns: 8,
+    reminders: 1,
   };
   const repo: RepoConfig = {
     baseBranch: "main",
@@ -1225,7 +1226,8 @@ describe("PM turn reconciliation", () => {
   it("fails every rung naming task files when PM turns deliver no outcome", async () => {
     const { root, runtime, fake, planPath } = await setup();
     try {
-      for (let i = 0; i < 8; i++) {
+      // Two rungs, each an attempt plus the default one reminder.
+      for (let i = 0; i < 4; i++) {
         fake.script((req) => fakeTurnResult(req, { text: "nothing" }));
       }
 
@@ -1237,7 +1239,7 @@ describe("PM turn reconciliation", () => {
       });
       expect(result.status).toBe("exhausted");
       expect(result.rungs).toHaveLength(2);
-      expect(fake.calls).toHaveLength(8);
+      expect(fake.calls).toHaveLength(4);
       expect(fake.calls[1]!.prompt).toContain(
         "You are the pm. Your turn did not deliver its task files.",
       );

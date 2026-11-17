@@ -168,7 +168,7 @@ export interface TaskFile {
   /** Plan heading this task derives from. */
   source: string;
   body: string;
-  /** Outcome-repair turns for this task's turns; defaults to REPAIR_TURNS. */
+  /** Outcome reminders for this task's turns; defaults to process `reminders`. */
   repairTurns?: number;
   /**
    * Per-turn wall bound in minutes for this task's turns; overrides the alias
@@ -287,6 +287,13 @@ export interface Limits {
 
 export type StepActor = "agent" | "script";
 
+/**
+ * Why a launch ran again: a technical glitch (infra stop or fallback hop),
+ * a bona fide change request (a review `changes`), or a bona fide failure
+ * (agent `failed`/`blocked` or no outcome after reminders).
+ */
+export type LaunchKind = "glitch" | "change-request" | "failure";
+
 /** Idle is separate from wall: a long tool call streams nothing but is not stuck. */
 export interface Timeouts {
   idleMs: number;
@@ -318,6 +325,10 @@ export interface StepRecord {
   model?: ModelRef;
   /** Every retry/fallback hop the harness made for this turn. */
   attempts?: TurnAttempt[];
+  /** Validator findings that triggered outcome reminders, in round order. */
+  repairFindings?: string[];
+  /** Incident launches only: why this launch ran again. */
+  launchKind?: LaunchKind;
   /** Resumed turn: unsplit input is priced as the cached prefix. */
   cachedPrefix?: boolean;
   /** Task hash at dispatch, for the frozen-task check. */
@@ -392,6 +403,10 @@ export interface RecordEnd {
   packBytes?: number;
   transcript?: string;
   attempts?: TurnAttempt[];
+  /** Validator findings that triggered outcome reminders, in round order. */
+  repairFindings?: string[];
+  /** Incident launches only: why this launch ran again. */
+  launchKind?: LaunchKind;
   commit?: string;
   tree?: string;
   /** base-advance only: integration head tree at the creation advance. */
@@ -456,6 +471,8 @@ export interface ProcessConfig {
   flows: Record<string, FlowDefinition>;
   roles: Record<string, RoleConfig>;
   itemTurns: number;
+  /** Outcome reminders after the first attempt; a task file's `repairTurns` overrides it for that task's turns only. */
+  reminders: number;
   calibration?: string;
   promptsDir?: string;
 }

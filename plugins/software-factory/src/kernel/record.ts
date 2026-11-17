@@ -4,6 +4,7 @@ import { newGateFailures } from "./gates.js";
 import type {
   ArtifactStore,
   Concern,
+  LaunchKind,
   Outcome,
   RecordEnd,
   RecordStart,
@@ -144,6 +145,21 @@ export async function appendDebt(
   });
 }
 
+/**
+ * A park's launch kind from its cause: infra-like parks are glitches, the
+ * round limit reached after a review `changes` verdict is a change request,
+ * everything else failed. Only that exact cause is a change request: a failure
+ * summary quoting the verdict enum (`approve | changes | reject`) stays a
+ * failure.
+ */
+export function parkLaunchKind(cause: string): LaunchKind {
+  if (/^(overflow\b|infra-repeat:)/i.test(cause)) return "glitch";
+  if (/^review round limit reached after verdict "changes"/i.test(cause)) {
+    return "change-request";
+  }
+  return "failure";
+}
+
 export async function appendPark(
   store: ArtifactStore,
   meta: { iteration: number; slug: string; round: number },
@@ -152,6 +168,7 @@ export async function appendPark(
   await store.appendRecord(scriptMeta(meta.iteration, "park", meta), {
     ok: true,
     cause,
+    launchKind: parkLaunchKind(cause),
   });
 }
 

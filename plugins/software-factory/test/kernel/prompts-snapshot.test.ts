@@ -163,6 +163,7 @@ function processConfig(): ProcessConfig {
       Object.keys(ROLES).map((role) => [role, { prompt: role }]),
     ),
     itemTurns: 8,
+    reminders: 1,
   };
 }
 

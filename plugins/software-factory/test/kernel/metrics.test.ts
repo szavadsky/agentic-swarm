@@ -555,6 +555,7 @@ describe("record cost truth", () => {
       flows: {},
       roles: { implementer: { prompt: "implementer" } },
       itemTurns: 8,
+      reminders: 1,
     };
     const repo: RepoConfig = {
       baseBranch: "main",

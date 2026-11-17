@@ -886,8 +886,6 @@ describe("delivery guard", () => {
       });
       scriptStallLeave(harness, ["task"]);
       harness.script((req) => fakeTurnResult(req, { text: "still nothing" }));
-      harness.script((req) => fakeTurnResult(req, { text: "still nothing" }));
-      harness.script((req) => fakeTurnResult(req, { text: "still nothing" }));
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("task", { scope: ["task.txt"] }));
@@ -902,7 +900,7 @@ describe("delivery guard", () => {
       );
       expect(state.tasks.task!.status).toBe("parked");
       expect(state.tasks.task!.cause).toContain("no outcome after repair");
-      expect(harness.calls).toHaveLength(5);
+      expect(harness.calls).toHaveLength(3);
       expect(harness.calls[1]!.prompt).toContain(
         "You are the implementer. Your turn did not deliver its outcome.",
       );
@@ -931,15 +929,7 @@ describe("delivery guard", () => {
         ctx.writeOutcome(outcome({ summary: "still no verdict" }));
         return fakeTurnResult(req);
       });
-      harness.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "still no verdict" }));
-        return fakeTurnResult(req);
-      });
       scriptStallLeave(harness, ["task"]);
-      harness.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "still no verdict" }));
-        return fakeTurnResult(req);
-      });
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("task", { scope: ["task.txt"] }));
@@ -954,7 +944,7 @@ describe("delivery guard", () => {
       );
       expect(state.tasks.task!.status).toBe("parked");
       expect(state.tasks.task!.cause).toContain("verdict is required");
-      expect(harness.calls).toHaveLength(6);
+      expect(harness.calls).toHaveLength(4);
       expect(harness.calls[2]!.prompt).toContain(
         "You are the reviewer. Your turn did not deliver its verdict.",
       );
@@ -982,7 +972,10 @@ describe("delivery guard", () => {
       });
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await writeTask(runtime, task("task", { scope: ["task.txt"] }));
+      await writeTask(
+        runtime,
+        task("task", { scope: ["task.txt"], repairTurns: 2 }),
+      );
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("boundary");
       expect(harness.calls).toHaveLength(4);

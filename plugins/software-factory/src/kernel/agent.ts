@@ -23,10 +23,12 @@ import {
 } from "./outcome.js";
 import { renderRolePrompt } from "./prompts.js";
 import { outcomeRepairSchemaVar } from "./prompt-schema.js";
+import { hasFallbackHop } from "./metrics.js";
 import { appendPark } from "./record.js";
 import {
   DEFAULT_TIMEOUTS,
   type KernelRuntime,
+  type LaunchKind,
   type Outcome,
   type RecordEnd,
   type RecordStart,
@@ -44,7 +46,7 @@ export interface AgentTurnSpec {
   expectation: OutcomeExpectation;
   session?: SessionRef;
   timeouts?: { idleMs: number; wallMs: number };
-  /** Outcome-repair turns after the first attempt; defaults to REPAIR_TURNS. */
+  /** Outcome reminders after the first attempt; defaults to process `reminders`. */
   repairTurns?: number;
   /**
    * Item budget before this turn. The first attempt spends one turn, so the
@@ -70,12 +72,6 @@ export interface AgentTurnResult {
   outcome?: Outcome;
   text: string;
 }
-
-/**
- * Outcome-repair turns after the first attempt. A constant, not a config knob;
- * a task file's `repairTurns` overrides it for that task's turns only.
- */
-export const REPAIR_TURNS = 3;
 
 /** Roles that run the boundary consult; only they see the iteration's pack. */
 const PACK_ROLES = new Set(["architect", "pm"]);
@@ -144,7 +140,7 @@ function missingOutcomeFinding(
 
 /**
  * One agent step: outcome path in the prompt (LOG D6), file first, fenced-block
- * fallback, up to REPAIR_TURNS same-session repair turns, then an invalid
+ * fallback, up to `reminders` same-session repair turns, then an invalid
  * outcome is `failed`. The end record is written only after `settle`
  * (mechanical commit), so a crash leaves an orphan that `derive` redispatches.
  */
@@ -358,7 +354,8 @@ export async function runAgentTurn(
     stop.kind === "refusal" ||
     stop.kind === "cancelled";
   // The first attempt spent one turn of the item budget; repairs spend the rest.
-  const requestedRepairs = spec.repairTurns ?? REPAIR_TURNS;
+  const requestedRepairs =
+    spec.repairTurns ?? runtime.configs.process.reminders ?? 1;
   const budgetRepairs = spec.itemBudget
     ? Math.max(0, spec.itemBudget.limit - spec.itemBudget.used - 1)
     : requestedRepairs;
@@ -368,7 +365,9 @@ export async function runAgentTurn(
   );
   const needsRepair = findings.length > 0 && !haltedNow();
   let repairs = 0;
+  const repairFindings: string[] = [];
   while (findings.length > 0 && !haltedNow() && repairs < maxRepairs) {
+    repairFindings.push(...findings);
     // One in-session repair ask, rendered from the process-config prompt
     // template so repos can reword it; a bare status:done only delivers
     // when no verdict or decision is required.
@@ -439,6 +438,18 @@ export async function runAgentTurn(
         priceIds,
       }).usage
     : undefined;
+  const launchKind: LaunchKind | undefined =
+    stop.kind === "infra"
+      ? "glitch"
+      : hasFallbackHop(attempts)
+        ? "glitch"
+        : outcome?.verdict === "changes"
+          ? "change-request"
+          : outcome?.status === "failed" || outcome?.status === "blocked"
+            ? "failure"
+            : repairFindings.length > 0
+              ? "failure"
+              : undefined;
   const record = await started.finish({
     ...settled,
     promptBytes,
@@ -449,6 +460,8 @@ export async function runAgentTurn(
     usage: pricedTop,
     ...(pricedCompact ? { compactUsage: pricedCompact } : {}),
     ...(pricedAttempts.length > 0 ? { attempts: pricedAttempts } : {}),
+    ...(repairFindings.length > 0 ? { repairFindings } : {}),
+    ...(launchKind ? { launchKind } : {}),
     ...(lastResult.transcript ? { transcript: lastResult.transcript } : {}),
     session: settled.session ?? session,
     outcome: outcome ?? undefined,

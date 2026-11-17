@@ -6,9 +6,18 @@ import type { SummaryStatus } from "./summary.js";
 import type {
   ArtifactStore,
   FlowDefinition,
+  LaunchKind,
   State,
   StepRecord,
 } from "./types.js";
+
+/** Incident launches by kind; `unknown` is an old record without a stored kind. */
+export interface LaunchCounts {
+  glitch: number;
+  "change-request": number;
+  failure: number;
+  unknown: number;
+}
 
 /** Spend and work one role, alias or model accumulated over an iteration. */
 export interface GroupMetrics {
@@ -25,6 +34,8 @@ export interface GroupMetrics {
   removedLines: number;
   /** Gates run by checks records attributed to these turns. */
   testRuns: number;
+  /** Incident launches for these turns, per kind. */
+  launches: LaunchCounts;
 }
 
 export interface RoleMetrics extends GroupMetrics {
@@ -222,6 +233,7 @@ function addTurn<T extends GroupMetrics>(
     added: 0,
     removed: 0,
   },
+  launch: LaunchKind | "unknown" | undefined = undefined,
 ): void {
   entry.turns += 1;
   entry.unpricedTurns += unpriced;
@@ -231,6 +243,11 @@ function addTurn<T extends GroupMetrics>(
   entry.edits += work.edits;
   entry.addedLines += work.added;
   entry.removedLines += work.removed;
+  if (launch) entry.launches[launch] += 1;
+}
+
+function emptyLaunches(): LaunchCounts {
+  return { glitch: 0, "change-request": 0, failure: 0, unknown: 0 };
 }
 
 function emptyGroup(): Omit<GroupMetrics, "turns"> & { turns: number } {
@@ -244,6 +261,7 @@ function emptyGroup(): Omit<GroupMetrics, "turns"> & { turns: number } {
     addedLines: 0,
     removedLines: 0,
     testRuns: 0,
+    launches: emptyLaunches(),
   };
 }
 
@@ -265,6 +283,29 @@ function isOutsideAct(rec: StepRecord): boolean {
 }
 
 /**
+ * An infra stop followed by a different model or harness: the tier walk moved
+ * on because retries could not cure the stop.
+ */
+export function hasFallbackHop(
+  attempts: readonly TurnAttempt[] | undefined,
+): boolean {
+  if (!attempts) return false;
+  for (let i = 1; i < attempts.length; i += 1) {
+    const previous = attempts[i - 1]!;
+    const next = attempts[i]!;
+    if (previous.stop.kind !== "infra") continue;
+    if (
+      sameModel(previous.model, next.model) &&
+      previous.harness === next.harness
+    ) {
+      continue;
+    }
+    return true;
+  }
+  return false;
+}
+
+/**
  * Retries, fallbacks and outcome repairs all live in one `attempts` array.
  * Inside a harness turn attempts continue only after an infra stop; a call
  * that follows any other stop is the separate repair turn `agent.ts` appends.
@@ -278,6 +319,31 @@ export function countOutcomeRepairs(
     if (attempts[i - 1]!.stop.kind !== "infra") repairs += 1;
   }
   return repairs;
+}
+
+/**
+ * One record's launch kind for the per-agent counts. A stored kind wins; an
+ * old incident record without one counts as unknown; a normal turn counts
+ * nowhere. Parks are incidents with stored kinds; other script records are not
+ * launches.
+ */
+export function deriveLaunchKind(
+  rec: StepRecord,
+): LaunchKind | "unknown" | undefined {
+  if (rec.launchKind) return rec.launchKind;
+  if (rec.actor === "script") {
+    return rec.step === "park" && rec.endedAt ? "unknown" : undefined;
+  }
+  if (!rec.endedAt) return undefined;
+  if (rec.stop?.kind === "infra") return "unknown";
+  if (hasFallbackHop(rec.attempts)) return "unknown";
+  if (rec.outcome?.verdict === "changes") return "unknown";
+  if (rec.outcome?.status === "failed" || rec.outcome?.status === "blocked") {
+    return "unknown";
+  }
+  if ((rec.repairFindings?.length ?? 0) > 0) return "unknown";
+  if (countOutcomeRepairs(rec.attempts) > 0) return "unknown";
+  return undefined;
 }
 
 function attemptIncidents(recs: StepRecord[], incidents: IncidentCounts): void {
@@ -364,20 +430,21 @@ export function iterationMetrics(
 
     const role =
       roleByStep[rec.step] ?? DEFAULT_ROLE_BY_STEP[rec.step] ?? rec.step;
+    const launch = deriveLaunchKind(rec);
     const roleEntry = roles[role] ?? { role, ...emptyGroup() };
-    addTurn(roleEntry, part, unpriced, promptBytes, work);
+    addTurn(roleEntry, part, unpriced, promptBytes, work, launch);
     roles[role] = roleEntry;
 
     // Records written before aliases existed fall back to the role name, so a
     // spend row always names a grouping the run config can resolve.
     const alias = rec.alias ?? role;
     const aliasEntry = aliases[alias] ?? { alias, ...emptyGroup() };
-    addTurn(aliasEntry, part, unpriced, promptBytes, work);
+    addTurn(aliasEntry, part, unpriced, promptBytes, work, launch);
     aliases[alias] = aliasEntry;
 
     const model = rec.model?.id ?? "unknown";
     const modelEntry = models[model] ?? { model, ...emptyGroup() };
-    addTurn(modelEntry, part, unpriced, promptBytes, work);
+    addTurn(modelEntry, part, unpriced, promptBytes, work, launch);
     models[model] = modelEntry;
 
     if (role === "architect" || rec.step === "architect") {
@@ -532,6 +599,10 @@ function totalsOf(iterations: IterationMetrics[]): MetricsTotals {
     total.addedLines += entry.addedLines;
     total.removedLines += entry.removedLines;
     total.testRuns += entry.testRuns;
+    total.launches.glitch += entry.launches.glitch;
+    total.launches["change-request"] += entry.launches["change-request"];
+    total.launches.failure += entry.launches.failure;
+    total.launches.unknown += entry.launches.unknown;
   };
   for (const iteration of iterations) {
     usage = addUsage(usage, iteration.usage);

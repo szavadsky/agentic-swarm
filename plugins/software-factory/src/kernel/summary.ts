@@ -71,6 +71,21 @@ function spendTable(
   ];
 }
 
+function launchTable(
+  label: string,
+  rows: Array<{ name: string } & GroupMetrics>,
+): string[] {
+  if (rows.length === 0) return ["- none"];
+  return [
+    `| ${label} | glitch | change-request | failure | unknown |`,
+    "| --- | --- | --- | --- | --- |",
+    ...rows.map(
+      (row) =>
+        `| ${row.name} | ${row.launches.glitch} | ${row.launches["change-request"]} | ${row.launches.failure} | ${row.launches.unknown} |`,
+    ),
+  ];
+}
+
 function incidentLines(
   incidents: IncidentCounts,
   loopIncidents: number,
@@ -354,6 +369,12 @@ export async function writeIterationSummary(
     "",
     "## Incidents",
     ...incidentLines(incidents, loopIncidents),
+    "",
+    "## Launches by role",
+    ...launchTable("role", roleNames),
+    "",
+    "## Launches by alias",
+    ...launchTable("alias", aliasNames),
     "",
     "## Spend by role",
     ...spendTable("role", roleNames),
