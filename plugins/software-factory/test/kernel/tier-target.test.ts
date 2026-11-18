@@ -4,7 +4,7 @@ import path from "node:path";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
-import { resolveRole, stepTarget } from "../../src/kernel/flow-context.js";
+import { resolveTurn, stepTarget } from "../../src/kernel/flow-context.js";
 import { task } from "./helpers.js";
 import {
   cleanupFlowRepo,
@@ -49,9 +49,16 @@ describe("task tier resolution", () => {
       const plainState = derive([plain], [], runtime.configs.process.flows)
         .tasks.plain!;
 
-      expect(
-        stepTarget(runtime, escalated, escalatedState, "implement", 1).alias,
-      ).toBe("escalation");
+      const escalatedTarget = stepTarget(
+        runtime,
+        escalated,
+        escalatedState,
+        "implement",
+        1,
+      );
+      expect(escalatedTarget.alias).toBe("escalation");
+      // A tier moves the same prompt to another alias; it declares no role.
+      expect(escalatedTarget.prompt).toBe("implementer");
       expect(
         stepTarget(runtime, escalated, escalatedState, "review", 1).alias,
       ).toBe("reviewer");
@@ -60,17 +67,24 @@ describe("task tier resolution", () => {
       );
 
       // A tier value is an alias name; `default` is no override.
-      expect(resolveRole(runtime, "implementer", "default").alias).toBe(
-        "implementer",
-      );
-      expect(resolveRole(runtime, "implementer", "escalation")).toMatchObject({
+      expect(
+        resolveTurn(runtime, "implementer", "implementer", "default").alias,
+      ).toBe("implementer");
+      expect(
+        resolveTurn(runtime, "implementer", "implementer", "escalation"),
+      ).toMatchObject({
         alias: "escalation",
         model: { id: "fake-escalated", effort: "high" },
         effort: "high",
         tierOffset: 0,
         timeouts: { idleMs: 123, wallMs: 456 },
       });
-      const tiers = resolveRole(runtime, "implementer", "escalation").tiers;
+      const tiers = resolveTurn(
+        runtime,
+        "implementer",
+        "implementer",
+        "escalation",
+      ).tiers;
       expect(tiers.map((tier) => tier.harness.id)).toEqual([
         "expensive",
         "expensive",

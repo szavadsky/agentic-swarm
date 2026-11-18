@@ -1,15 +1,19 @@
 import fs from "node:fs";
 import path from "node:path";
 import yaml from "yaml";
-import { z } from "zod";
+import type { z } from "zod";
 import {
+  loadProcessConfig,
   processConfigSchema,
+  processOverrideSchema,
   repoConfigSchema,
   runConfigSchema,
 } from "./kernel/config.js";
-import { parseTaskFile, validateTaskGraph } from "./kernel/tasks.js";
-import { parseOutcome } from "./kernel/outcome.js";
 import { classSchema } from "./kernel/flow-context.js";
+import { holdFileSchema } from "./kernel/mailbox.js";
+import { parseOutcome } from "./kernel/outcome.js";
+import { parseTaskFile, validateTaskGraph } from "./kernel/tasks.js";
+import type { TaskTypeDefinition } from "./kernel/types.js";
 
 let failed = false;
 let checked = 0;
@@ -92,12 +96,25 @@ if (fs.existsSync(treeFactoryDir)) {
   else missing.push(treeFiles.run);
 
   if (fs.existsSync(treeFiles.processOverride))
-    validateYamlFile(treeFiles.processOverride, processConfigSchema);
+    validateYamlFile(treeFiles.processOverride, processOverrideSchema);
 } else {
   missing.push(`${treeFactoryDir} (tree-level: repo/run config)`);
 }
 
 if (fs.existsSync(artifactFactoryDir)) {
+  // The artifact checkout's merged process layer supplies the task types its
+  // files name. Its repo/run files belong to another checkout, so only the
+  // process layer is read; a broken process file is reported here too.
+  let taskTypes: Record<string, TaskTypeDefinition> = {};
+  try {
+    taskTypes = loadProcessConfig(artifactRoot).taskTypes ?? {};
+  } catch (err) {
+    report(
+      artifactFactoryDir,
+      `task types unavailable: ${(err as Error).message}`,
+    );
+  }
+
   // Task files, grouped by their containing directory.
   const taskFiles = walk(artifactFactoryDir, (file) =>
     /\/tasks\/[^/]+\.md$/.test(file),
@@ -117,6 +134,7 @@ if (fs.existsSync(artifactFactoryDir)) {
           parseTaskFile(
             fs.readFileSync(file, "utf8"),
             path.basename(file, ".md"),
+            taskTypes,
           ),
         );
       } catch (err) {
@@ -129,6 +147,17 @@ if (fs.existsSync(artifactFactoryDir)) {
       const findings = validateTaskGraph(tasks);
       for (const finding of findings) report(dir, finding);
     }
+  }
+
+  // Pending-steer holds: one YAML per steer, written by the PM's steer turn.
+  // Dotfiles are the writer's temp siblings, not holds `readHolds` would read.
+  for (const file of walk(
+    artifactFactoryDir,
+    (f) =>
+      /\/mailbox\/holds\/[^/]+\.ya?ml$/.test(f) &&
+      !path.basename(f).startsWith("."),
+  )) {
+    validateYamlFile(file, holdFileSchema);
   }
 
   // Class files.

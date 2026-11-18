@@ -279,6 +279,8 @@ export async function checkAlias(
   }
 
   for (const [index, fallback] of (alias.fallbacks ?? []).entries()) {
+    // A named alias is checked under its own key, its whole ladder included.
+    if ("alias" in fallback) continue;
     const tierKey = `${key}.fallbacks.${index}`;
     if (
       fallback.harness !== undefined &&
@@ -361,7 +363,7 @@ function runsOnOmp(aliases: Record<string, AliasConfig>): boolean {
         : [alias.harness];
     if (primaries.includes(OMP_ID)) return true;
     for (const fallback of alias.fallbacks ?? []) {
-      if (fallback.harness === OMP_ID) return true;
+      if ("model" in fallback && fallback.harness === OMP_ID) return true;
     }
   }
   return false;

@@ -17,6 +17,7 @@ import type {
   StepRecord,
   TaskFile,
   TaskStatus,
+  TaskTypeDefinition,
   TurnRecord,
 } from "./types.js";
 
@@ -97,16 +98,23 @@ class FolderStore implements ArtifactStore {
   readonly iterationsDir: string;
   /** Directory holding all goals; its `.gitignore` keeps records out of git. */
   private readonly artifactRoot?: string;
+  /** Process task types; a file naming one resolves its flow and kind here. */
+  private readonly taskTypes: Record<string, TaskTypeDefinition>;
   /** Concurrent dispatches allocate sequence numbers; one allocator per store. */
   private readonly seqLock = new AsyncMutex();
 
-  constructor(goalDir: string, artifactRoot?: string) {
+  constructor(
+    goalDir: string,
+    artifactRoot?: string,
+    taskTypes: Record<string, TaskTypeDefinition> = {},
+  ) {
     this.goalDir = goalDir;
     this.tasksDir = path.join(goalDir, "tasks");
     this.recordsDir = path.join(goalDir, "records");
     this.mailboxDir = path.join(goalDir, "mailbox");
     this.iterationsDir = path.join(goalDir, "iterations");
     this.artifactRoot = artifactRoot;
+    this.taskTypes = taskTypes;
   }
 
   async ensureLayout(): Promise<void> {
@@ -178,7 +186,7 @@ class FolderStore implements ArtifactStore {
       const text = await this.readFile(`tasks/${name}`);
       if (text === null) continue;
       try {
-        tasks.push(parseTaskFile(text, slug));
+        tasks.push(parseTaskFile(text, slug, this.taskTypes));
       } catch (err) {
         if (!(err instanceof TaskFileError)) throw err;
         records ??= await this.listRecords();
@@ -286,7 +294,7 @@ class FolderStore implements ArtifactStore {
 
   async readTask(slug: string): Promise<TaskFile | null> {
     const text = await this.readFile(`tasks/${slug}.md`);
-    return text === null ? null : parseTaskFile(text, slug);
+    return text === null ? null : parseTaskFile(text, slug, this.taskTypes);
   }
 
   async writeTask(task: TaskFile): Promise<void> {
@@ -413,6 +421,7 @@ class FolderStore implements ArtifactStore {
 export function createFolderStore(
   goalDir: string,
   artifactRoot?: string,
+  taskTypes: Record<string, TaskTypeDefinition> = {},
 ): ArtifactStore {
-  return new FolderStore(goalDir, artifactRoot);
+  return new FolderStore(goalDir, artifactRoot, taskTypes);
 }

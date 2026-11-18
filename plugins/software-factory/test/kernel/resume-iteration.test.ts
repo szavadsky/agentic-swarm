@@ -185,7 +185,6 @@ describe("resume iteration — SIGINT and hard death", () => {
 
         // The resume skips the architect but still runs the digest, and the PM
         // routes its evidence before dispatch.
-        addAlias(repo, "digest", "fake-digest");
         const second = new FakeHarness({ id: "fake" });
         let pmSawDigest = false;
         queueDigestSteer(second, (req, ctx) => {

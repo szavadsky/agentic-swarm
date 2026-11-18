@@ -407,8 +407,14 @@ describe("derive", () => {
     const flows = {
       "implement-review": {
         steps: [
-          { id: "implement", role: "implementer" },
-          { id: "review", role: "reviewer", review: true, changeRequests: 1 },
+          { id: "implement", prompt: "implementer", alias: "implementer" },
+          {
+            id: "review",
+            prompt: "reviewer",
+            alias: "reviewer",
+            review: true,
+            changeRequests: 1,
+          },
         ],
       },
     };
@@ -533,9 +539,9 @@ describe("derive", () => {
     const flows = {
       "implement-review": {
         steps: [
-          { id: "implement", role: "implementer" },
+          { id: "implement", prompt: "implementer", alias: "implementer" },
           { id: "checks", changeRequests: 1 },
-          { id: "review", role: "reviewer", review: true },
+          { id: "review", prompt: "reviewer", alias: "reviewer", review: true },
         ],
       },
     };

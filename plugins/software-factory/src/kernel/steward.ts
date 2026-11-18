@@ -5,7 +5,7 @@ import type { SessionRef } from "../harness/types.js";
 import { runAgentTurn } from "./agent.js";
 import { recordedBaseGates } from "./baseline.js";
 import { derive } from "./derive.js";
-import { compactSession, resolveRole } from "./flow-context.js";
+import { boundaryTarget, compactSession } from "./flow-context.js";
 import { formatFailingChecks } from "./gates.js";
 import { mergeTask } from "./integrate.js";
 import { abortMerge } from "./merge-conflict.js";
@@ -192,7 +192,7 @@ async function attemptStewardMerge(
     };
   }
 
-  const target = resolveRole(runtime, "steward", undefined, iteration);
+  const target = boundaryTarget(runtime, "steward", iteration);
   const base = records
     .filter((r) => r.slug === task.slug && r.actor === "agent" && r.base)
     .sort((a, b) => a.seq - b.seq)[0]?.base;

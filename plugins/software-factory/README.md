@@ -14,6 +14,7 @@ bun bin/factory.ts status --repo <path> --goal <name>
 bun bin/factory.ts benchmark --repo <path> --goal <name>
 bun bin/factory.ts steer  --repo <path> --goal <name> <file | ->
 bun bin/factory.ts validate [--step <id>] <file>
+bun bin/factory.ts schemas --out <dir>
 ```
 
 `init` writes `.factory/repo.yaml` if missing, creates the goal directory and
@@ -25,7 +26,9 @@ schema-enforced file with the gate's validators (tasks/*.md with its
 directory's dependency graph and flow existence against the merged process
 config, class.yaml, outcome.yaml keyed by the step in the sibling
 started.yaml or `--step`, mailbox/holds/*.yaml, repo.yaml, run.yaml,
-process.yaml); exit 0 valid, 1 invalid or unknown kind.
+process.yaml); exit 0 valid, 1 invalid or unknown kind. `schemas` writes every
+kernel file schema as JSON Schema (`task`, `outcome`, `hold`, `class`, `repo`,
+`run`, `process`) into `--out` for editors and the artifact LSP.
 
 Exit codes for `run`: `0` goal done, `1` failure, `2` blocked, `3` iteration
 limit, `130`/`143` interrupted by SIGINT/SIGTERM. The first signal drains (no
@@ -55,11 +58,18 @@ gates:
 flows:
   implement-review:
     steps:
-      - { id: implement, role: implementer }
-      - { id: review, role: reviewer, review: true, changeRequests: 2 }
-roles:
-  architect: { prompt: architect }
-  implementer: { prompt: implementer }
+      - { id: implement, prompt: implementer, alias: implementer }
+      - { id: review, prompt: reviewer, alias: reviewer, review: true, changeRequests: 2 }
+taskTypes:
+  development: { flow: implement-review, kind: development, schema: outcome }
+boundary:                       # the kernel turns outside any task flow
+  architect: { prompt: architect, alias: architect }
+  digest: { prompt: digest, alias: digest }
+  front: { prompt: front, alias: pm }
+  plancheck: { prompt: plan-checker, alias: plan-checker }
+  planreview: { prompt: reviewer, alias: plan-reviewer }
+  pm: { prompt: pm, alias: pm }
+  steward: { prompt: steward, alias: steward }
 ```
 
 **Run** — transient, passed with `--run-config`:
@@ -78,18 +88,34 @@ limits:
   iterationUsd: 5
 sessions: { dir: ~/.local/share/factory/sessions, keepRuns: 5, retention: short }
 worktreeRoot: ~/.local/share/factory/worktrees
+lsp: true                                             # artifact LSP on omp
 scouts: { model: opencode-go/deepseek-v4.1-flash }   # omp architect subagents
 ```
+
+`lsp: true` enables artifact diagnostics where the harness supports them. At
+launch the factory writes every kernel schema as JSON Schema and one omp LSP
+config into the goal's artifact folder (`.factory/artifacts/<goal>/schemas/`
+and `.factory/artifacts/<goal>/.omp/lsp.json`). On omp, every turn installs
+that config into its own cwd (`<cwd>/.omp/.lsp.json`, added to the clone's
+`.git/info/exclude` and never committed) and omp runs without `--no-lsp`;
+`yaml-language-server` must be on PATH, and pre-flight refuses the launch when
+it is not. The config maps the YAML artifacts
+(`outcome.yaml`, hold files, `class.yaml`) to their schemas and sends task files
+to a small bundled frontmatter server, because a YAML server would parse a
+task's Markdown body as a second document and flag it. Harnesses without an LSP
+surface (opencode, pi, codex) ignore the flag and keep the validation command.
 
 An alias may carry `escalateTo: <alias>` to name the PM's next rung. A PM turn
 that is not usable gets a fresh retry on the same alias; after two failed turns
 the ladder climbs to `escalateTo`, which carries a broader mandate and may stop
 with one question for the architect. Without `escalateTo` the iteration blocks
 with every rung in the summary. `fallbacks` stay infrastructure-only (quota and
-crash), so escalation is model routing, not a retry. Each fallback tier names
-its own model, harness and effort, and the quota pool it draws on; a turn that
-lands on a tier keeps the launch on it, and dispatch throttles each pool and
-model within the overall limit.
+crash), so escalation is model routing, not a retry. Each fallback tier either
+names its own model, harness and effort, and the quota pool it draws on, or
+names another alias (`{ alias: backup }`) and reuses that alias's whole ladder,
+each of its tiers keeping its own quota pool; pre-flight refuses a missing alias
+or a fallback cycle. A turn that lands on a tier keeps the launch on it, and
+dispatch throttles each pool and model within the overall limit.
 
 An alias may carry `rotate: [{ harness, model, effort }]` to change its primary
 per iteration: iteration N resolves `rotate[N % rotate.length]`, so iteration 1
@@ -146,6 +172,18 @@ Gates run once on the base; a red base is recorded and warned once, not fatal.
 `mailbox/inbox` without a partial-file window. The architect reads it at the
 next boundary, marks it processed and writes its answer to
 `mailbox/outbox/steer-<id>.md`.
+
+A steer whose file starts with `urgent: true` frontmatter is the exception: it
+is not answered by the PM. Dispatch stops starting new work, in-flight tasks
+finish, and the next iteration's architect consult reads the steer with the
+flag shown as `[urgent]`. The frontmatter block is not part of the steer text.
+
+```markdown
+---
+urgent: true
+---
+Stop the rollout and consult me.
+```
 
 ## Summary and metrics
 

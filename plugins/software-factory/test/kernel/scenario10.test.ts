@@ -9,8 +9,8 @@ import {
   cleanupFlowRepo,
   makeRuntime,
   outcome,
-  setupFlowRepo,
   scriptStallLeave,
+  setupFlowRepo,
   writeTask,
 } from "./s2-helpers.js";
 
@@ -141,10 +141,11 @@ describe("KERNEL0 scenario 10 — review reply round-trip", () => {
         flows: {
           "implement-review": {
             steps: [
-              { id: "implement", role: "implementer" },
+              { id: "implement", prompt: "implementer", alias: "implementer" },
               {
                 id: "review",
-                role: "reviewer",
+                prompt: "reviewer",
+                alias: "reviewer",
                 review: true,
                 changeRequests: 1,
               },

@@ -19,7 +19,7 @@ import {
   writePlan,
 } from "./e2e-helpers.js";
 import { testPriceSource } from "../helpers/price-source.js";
-import { withPlanRoleFallbacks, workCalls } from "./fake-defaults.js";
+import { withKernelRoleFallbacks, workCalls } from "./fake-defaults.js";
 
 const PLAN =
   "# Milestone 1\n\n## alpha\nCreate alpha.txt.\nDone when: alpha.txt exists.\n";
@@ -55,7 +55,7 @@ function diesOn(
  * leaves a compacted architect session the next launch resumes.
  */
 async function seedResumableSession(goal: E2EGoal): Promise<SessionRef> {
-  const harness = withPlanRoleFallbacks(new FakeHarness({ id: "fake" }));
+  const harness = withKernelRoleFallbacks(new FakeHarness({ id: "fake" }));
   harness.script((req, ctx) => {
     writePlan(goal.goalDir, PLAN);
     ctx.writeOutcome(
@@ -96,7 +96,7 @@ describe("E6 inverted: an architect infra death is infra, not blocked-by-user", 
   it("retries a quota death once, then stops the launch as infra with the cause", async () => {
     const goal = makeGoal();
     try {
-      const harness = withPlanRoleFallbacks(new FakeHarness({ id: "fake" }));
+      const harness = withKernelRoleFallbacks(new FakeHarness({ id: "fake" }));
       harness.script(diesOn("quota", "quota exceeded for fake-architect"));
       harness.script(diesOn("quota", "quota exceeded for fake-architect"));
       const result = await runGoal({
@@ -128,7 +128,7 @@ describe("E6 inverted: an architect infra death is infra, not blocked-by-user", 
   it("treats a crash the same way and exits 1 through the CLI", async () => {
     const goal = makeGoal();
     try {
-      const harness = withPlanRoleFallbacks(new FakeHarness({ id: "fake" }));
+      const harness = withKernelRoleFallbacks(new FakeHarness({ id: "fake" }));
       harness.script(diesOn("crash", "session not found"));
       harness.script(diesOn("crash", "session not found"));
       await expectLaunch(1, goal.repo, harness);
@@ -142,7 +142,7 @@ describe("E6 inverted: an architect infra death is infra, not blocked-by-user", 
     const goal = makeGoal();
     try {
       const resumed = await seedResumableSession(goal);
-      const harness = withPlanRoleFallbacks(new FakeHarness({ id: "fake" }));
+      const harness = withKernelRoleFallbacks(new FakeHarness({ id: "fake" }));
       scriptDigest(harness, goal.goalDir, 2);
       harness.script(diesOn("quota", "quota exceeded for fake-architect"));
       harness.script((req, ctx) => {
@@ -187,11 +187,12 @@ describe("E6 inverted: an architect infra death is infra, not blocked-by-user", 
     const goal = makeGoal();
     try {
       const resumed = await seedResumableSession(goal);
-      const harness = withPlanRoleFallbacks(new FakeHarness({ id: "fake" }));
+      const harness = withKernelRoleFallbacks(new FakeHarness({ id: "fake" }));
       scriptDigest(harness, goal.goalDir, 2);
       // The first two are the resumed turn and the harness's own de-novo retry.
       // The third makes an unguarded boundary retry fail as a call count, not
-      // as an unscripted-turn error.
+      // as an unscripted-turn error. The digest scout is background, so
+      // `workCalls` counts only the architect attempts.
       harness.script(diesOn("overflow", "context window exceeded"));
       harness.script(diesOn("overflow", "context window exceeded"));
       harness.script(diesOn("overflow", "context window exceeded"));
@@ -207,7 +208,7 @@ describe("E6 inverted: an architect infra death is infra, not blocked-by-user", 
       expect(result.cause).toContain("overflow");
       expect(harness.calls[1]?.session?.id).toBe(resumed.id);
       expect(harness.calls[2]?.session).toBeUndefined();
-      expect(workCalls(harness)).toHaveLength(3);
+      expect(workCalls(harness)).toHaveLength(2);
       expect(summary).toContain("status: stopped-with-debt");
       expect(summary).not.toContain("blocked-by-user");
     } finally {
@@ -218,7 +219,7 @@ describe("E6 inverted: an architect infra death is infra, not blocked-by-user", 
   it("a real owner block (the escalated PM asks) is still blocked-by-user with exit 3", async () => {
     const goal = makeGoal({ runYaml: PM_CHAIN_YAML });
     try {
-      const harness = withPlanRoleFallbacks(new FakeHarness({ id: "fake" }));
+      const harness = withKernelRoleFallbacks(new FakeHarness({ id: "fake" }));
       harness.script((req, ctx) => {
         writePlan(goal.goalDir, PLAN);
         ctx.writeOutcome(

@@ -26,7 +26,7 @@ function task(over: Partial<TaskFile> = {}): TaskFile {
   return {
     slug: "auth.login",
     title: "Login",
-    kind: "task",
+    kind: "development",
     flow: "implement-review",
     deps: [],
     scope: ["src/auth"],
@@ -104,6 +104,24 @@ describe("createFolderStore", () => {
     await store.writeFile("notes/alpha.txt", "alpha");
     expect(await store.readFile("notes/hello.txt")).toBe("hello");
     expect(await store.listDir("notes")).toEqual(["alpha.txt", "hello.txt"]);
+  });
+
+  it("resolves a task file's type through the store's process config", async () => {
+    const store = createFolderStore(goalDir, undefined, {
+      spike: { flow: "spike", kind: "spike", schema: "outcome" },
+    });
+    await store.writeTask({ ...task(), type: "spike" });
+    const [parsed] = await store.listTasks();
+    expect(parsed).toMatchObject({
+      slug: "auth.login",
+      type: "spike",
+      kind: "spike",
+      flow: "spike",
+    });
+    expect(await store.readTask("auth.login")).toMatchObject({
+      type: "spike",
+      kind: "spike",
+    });
   });
 
   it("round-trips task files sorted by slug", async () => {

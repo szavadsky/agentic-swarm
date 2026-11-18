@@ -23,10 +23,11 @@ describe("KERNEL0 scenario 2 — last-call review decisions", () => {
         flows: {
           "implement-review": {
             steps: [
-              { id: "implement", role: "implementer" },
+              { id: "implement", prompt: "implementer", alias: "implementer" },
               {
                 id: "review",
-                role: "reviewer",
+                prompt: "reviewer",
+                alias: "reviewer",
                 review: true,
                 changeRequests: 1,
               },
@@ -145,10 +146,11 @@ describe("KERNEL0 scenario 2 — last-call review decisions", () => {
         flows: {
           "implement-review": {
             steps: [
-              { id: "implement", role: "implementer" },
+              { id: "implement", prompt: "implementer", alias: "implementer" },
               {
                 id: "review",
-                role: "reviewer",
+                prompt: "reviewer",
+                alias: "reviewer",
                 review: true,
                 changeRequests: 1,
               },

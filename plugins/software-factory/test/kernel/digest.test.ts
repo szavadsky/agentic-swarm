@@ -10,8 +10,8 @@ import {
   DEFAULT_ROLE_BY_STEP,
   iterationMetrics,
 } from "../../src/kernel/metrics.js";
-import type { PriceTable } from "../../src/kernel/pricing.js";
 import { writePriceCache } from "../../src/kernel/openrouter.js";
+import type { PriceTable } from "../../src/kernel/pricing.js";
 import { loadPrompts } from "../../src/kernel/prompts.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import type {
@@ -20,11 +20,12 @@ import type {
   RepoConfig,
   RunConfig,
 } from "../../src/kernel/types.js";
+import { TEST_BOUNDARY } from "./helpers.js";
 
 function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
   const process: ProcessConfig = {
     flows: {},
-    roles: { digest: { prompt: "digest" } },
+    boundary: TEST_BOUNDARY,
     reminders: 1,
   };
   const repo: RepoConfig = {
@@ -55,7 +56,7 @@ function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
     repo: new Repo({ mainRoot: root, worktreeRoot: root }),
     store: createFolderStore(path.join(root, "goal")),
     harnesses: new Map([["fake", fake]]),
-    prompts: loadPrompts(process, root),
+    prompts: loadPrompts(process, root, {}),
     limits: {
       flows: {},
       iterations: 1,

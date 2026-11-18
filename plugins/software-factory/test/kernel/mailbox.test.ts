@@ -43,6 +43,55 @@ describe("mailbox", () => {
     }
   });
 
+  it("reads the urgent flag from frontmatter and keeps the header out of the steer text", async () => {
+    const { root, store } = await setup();
+    try {
+      await postSteer(
+        store,
+        "s1",
+        "---\nurgent: true\n---\nStop the rollout and consult me.",
+      );
+      await postSteer(store, "s2", "Take your time with this one.");
+      // A leading rule that parses as prose is not frontmatter: keep it as text.
+      await postSteer(store, "s3", "---\nTake your time.\n---\nBody");
+      // Malformed YAML is not metadata either; the steer still reaches the PM.
+      await postSteer(store, "s4", "---\nurgent: [\n---\nBody");
+      // Prose with a colon parses as a mapping but carries no recognized key.
+      await postSteer(store, "s5", "---\nNote: take your time.\n---\nBody");
+      // A recognized key still needs its boolean value to count as metadata.
+      await postSteer(store, "s6", '---\nurgent: "yes"\n---\nBody');
+      const steers = await scanInbox(store, { settleMs: 0 });
+      expect(
+        steers.map((steer) => ({
+          id: steer.id,
+          urgent: steer.urgent,
+          text: steer.text,
+        })),
+      ).toEqual([
+        { id: "s1", urgent: true, text: "Stop the rollout and consult me.\n" },
+        { id: "s2", urgent: false, text: "Take your time with this one.\n" },
+        {
+          id: "s3",
+          urgent: false,
+          text: "---\nTake your time.\n---\nBody\n",
+        },
+        { id: "s4", urgent: false, text: "---\nurgent: [\n---\nBody\n" },
+        {
+          id: "s5",
+          urgent: false,
+          text: "---\nNote: take your time.\n---\nBody\n",
+        },
+        {
+          id: "s6",
+          urgent: false,
+          text: '---\nurgent: "yes"\n---\nBody\n',
+        },
+      ]);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("ignores an inbox file whose size is still changing", async () => {
     const { root, store } = await setup();
     const file = path.join(store.goalDir, "mailbox/inbox/growing.md");

@@ -1,23 +1,24 @@
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { FakeHarness } from "../../src/harness/fake/index.js";
 import { packageRoot } from "../../src/kernel/config.js";
 import { promptVars } from "../../src/kernel/flow-context.js";
-import { frontClassFlowsVar } from "../../src/kernel/front.js";
+import { frontClassTypesVar } from "../../src/kernel/front.js";
 import {
-  flowNamesVar,
   outcomeSchemaVar,
   taskFrontmatterVar,
+  taskTypesVar,
   tierNamesVar,
 } from "../../src/kernel/prompt-schema.js";
-import { loadPromptLibrary } from "../../src/kernel/prompts.js";
+import { loadPromptLibrary, loadPrompts } from "../../src/kernel/prompts.js";
 import {
   formatFixDispositions,
   formatReviewFindings,
 } from "../../src/kernel/record.js";
-import type { ProcessConfig } from "../../src/kernel/types.js";
-import { rec, task } from "./helpers.js";
+import type { ProcessConfig, RunConfig } from "../../src/kernel/types.js";
+import { rec, TEST_BOUNDARY, task } from "./helpers.js";
 import {
   cleanupFlowRepo,
   makeRuntime,
@@ -27,13 +28,24 @@ import {
 
 const OUTCOME_SCHEMA = outcomeSchemaVar();
 const TASK_FRONTMATTER = taskFrontmatterVar();
-const FLOWS = flowNamesVar({
-  "implement-review": {},
-  "just-implement": {},
-  spike: {},
+const TASK_TYPES = taskTypesVar({
+  development: {
+    flow: "implement-review",
+    kind: "development",
+    schema: "outcome",
+  },
+  spike: { flow: "spike", kind: "spike", schema: "outcome" },
+  trivial: { flow: "just-implement", kind: "development", schema: "outcome" },
 });
 const TIERS = tierNamesVar({ implementer: {}, escalation: {} });
-const CLASS_FLOWS = frontClassFlowsVar();
+const CLASS_TYPES = frontClassTypesVar({
+  development: {
+    flow: "implement-review",
+    kind: "development",
+    schema: "outcome",
+  },
+  trivial: { flow: "just-implement", kind: "development", schema: "outcome" },
+});
 
 const ROLES: Record<string, Record<string, string>> = {
   architect: {
@@ -48,7 +60,7 @@ const ROLES: Record<string, Record<string, string>> = {
     outcome_path: "/goal/records/00042-i3-architect-r1/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
     outcome_schema: OUTCOME_SCHEMA,
-    flows: FLOWS,
+    task_types: TASK_TYPES,
     tiers: TIERS,
   },
   front: {
@@ -65,9 +77,9 @@ const ROLES: Record<string, Record<string, string>> = {
     validate_cmd: "bun /factory/bin/factory.ts validate",
     outcome_schema: OUTCOME_SCHEMA,
     task_frontmatter: TASK_FRONTMATTER,
-    flows: FLOWS,
+    task_types: TASK_TYPES,
     tiers: TIERS,
-    class_flows: CLASS_FLOWS,
+    class_types: CLASS_TYPES,
   },
   pm: {
     iteration: "3",
@@ -86,7 +98,7 @@ const ROLES: Record<string, Record<string, string>> = {
     validate_cmd: "bun /factory/bin/factory.ts validate",
     outcome_schema: OUTCOME_SCHEMA,
     task_frontmatter: TASK_FRONTMATTER,
-    flows: FLOWS,
+    task_types: TASK_TYPES,
     tiers: TIERS,
   },
   implementer: {
@@ -158,34 +170,26 @@ function library() {
 }
 
 function processConfig(): ProcessConfig {
-  return {
-    flows: {},
-    roles: Object.fromEntries(
-      Object.keys(ROLES).map((role) => [role, { prompt: role }]),
-    ),
-    reminders: 1,
-  };
+  return { flows: {}, boundary: TEST_BOUNDARY, reminders: 1 };
 }
 
 describe("role prompts", () => {
   for (const [role, vars] of Object.entries(ROLES)) {
     it(`renders ${role} from exactly its documented variables`, () => {
       const lib = library();
-      const placeholders = new Set(
-        lib.placeholders(processConfig().roles[role]!.prompt, vars),
-      );
+      const placeholders = new Set(lib.placeholders(role, vars));
       expect([...placeholders].sort()).toEqual(Object.keys(vars).sort());
 
-      const rendered = lib.render(processConfig().roles[role]!.prompt, vars);
+      const rendered = lib.render(role, vars);
       expect(rendered).toMatchSnapshot(role);
       expect(rendered).not.toContain("{{");
 
       for (const name of placeholders) {
         const missing = { ...vars };
         delete missing[name];
-        expect(() =>
-          lib.render(processConfig().roles[role]!.prompt, missing),
-        ).toThrow("Missing required prompt variables");
+        expect(() => lib.render(role, missing)).toThrow(
+          "Missing required prompt variables",
+        );
       }
     });
   }
@@ -193,10 +197,7 @@ describe("role prompts", () => {
   it("keeps role text out of a separate system channel", () => {
     // The harness contract has `system`, but OpenCode has no system flag; role
     // identity must therefore live in the rendered prompt itself (KERNEL0 S3).
-    const rendered = library().render(
-      processConfig().roles.architect!.prompt,
-      ROLES.architect!,
-    );
+    const rendered = library().render("architect", ROLES.architect!);
     expect(rendered.startsWith("You are the architect")).toBe(true);
   });
 });
@@ -259,7 +260,7 @@ describe("reviewer includes its author's body", () => {
     expect(architectPlaceholders).toEqual(
       expect.arrayContaining([
         "tiers",
-        "flows",
+        "task_types",
         "iteration",
         "intent_path",
         "plan_path",
@@ -270,7 +271,7 @@ describe("reviewer includes its author's body", () => {
     expect(architectPlaceholders).not.toContain("task_path");
     expect(architectPlaceholders).not.toContain("base_hash");
     expect(implementerPlaceholders).not.toContain("tiers");
-    expect(implementerPlaceholders).not.toContain("flows");
+    expect(implementerPlaceholders).not.toContain("task_types");
     expect(implementerPlaceholders).not.toContain("intent_path");
 
     const rendered = lib.render("reviewer", {
@@ -441,6 +442,31 @@ describe("review findings carry", () => {
     expect(rendered).not.toContain("empty on the first turn");
     expect(rendered).toContain("empty before the first review");
   });
+});
+
+describe("preset snapshots", () => {
+  for (const preset of ["autonomous", "principal", "detailed"]) {
+    for (const role of ["architect", "pm"]) {
+      it(`renders ${role} with ${preset} preset`, () => {
+        const process: ProcessConfig = {
+          flows: {},
+          boundary: TEST_BOUNDARY,
+          reminders: 1,
+          presets: {
+            autonomous: { calibration: "AUTO" },
+            principal: { calibration: "PRINCIPAL" },
+            detailed: { calibration: "DETAILED" },
+          },
+        };
+        const run: RunConfig = {
+          preset,
+        } as RunConfig;
+        const lib = loadPrompts(process, os.tmpdir(), { run });
+        const rendered = lib.render(role, ROLES[role]!);
+        expect(rendered).toMatchSnapshot(`${role}-${preset}`);
+      });
+    }
+  }
 });
 
 describe("prompt debloat", () => {

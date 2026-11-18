@@ -39,6 +39,7 @@ export function createRealHarnesses(
       subagentModel: context.scouts,
       retention: context.retention,
       binary: context.harnesses?.[OMP_ID]?.binary,
+      lspConfig: context.lsp?.config,
     }),
   };
   for (const [id, entry] of Object.entries(context.harnesses ?? {})) {

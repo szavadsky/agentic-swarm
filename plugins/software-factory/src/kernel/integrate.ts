@@ -547,7 +547,7 @@ export async function runKeptLand(
     const taskState = derive(tasks, records, runtime.configs.process.flows)
       .tasks[task.slug];
     if (!taskState || taskState.status !== "parked") continue;
-    if (task.kind !== "task") continue;
+    if (task.kind !== "development") continue;
     if (continued.has(task.slug)) continue;
     // One attempt per branch per boundary; the merge record is the ledger.
     if (

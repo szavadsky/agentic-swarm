@@ -23,7 +23,7 @@ When in doubt, choose `bigger`. A class changes only by escalation.
 
 {% include 'task-frontmatter' %}
 
-For the front's file: `kind: task`, `flow` ({{class_flows}}), `deps: []`, `source: front`, a unique slug, a non-empty `scope` (the predicted area), no missing dependency, and a `tier` naming `default` or a configured alias. Body: the brief with a `Done when:` line.
+For the front's file: `type` ({{class_types}}; a class with no configured type is `bigger`), `deps: []`, `source: front`, a unique slug, a non-empty `scope` (the predicted area), no missing dependency, and a `tier` naming `default` or a configured alias. Body: the brief with a `Done when:` line.
 
 3. The context pack at the pack path, for every class: a deterministic index — paths, risks, open questions; never paste file bodies. On `trivial` or `task`, carry the area and risks the task file leaves implicit.
 

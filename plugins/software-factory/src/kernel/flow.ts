@@ -30,6 +30,7 @@ import {
   runGates,
 } from "./gates.js";
 import { type MergeResult, mergeTask } from "./integrate.js";
+import { taskOutcomeSchema } from "./outcome-schemas.js";
 import {
   abortMerge,
   mergeConflictAsk,
@@ -673,6 +674,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
     },
     vars,
     expectation: step.review ? "review" : "any",
+    outcomeSchema: taskOutcomeSchema(task, runtime.configs.process.taskTypes),
     lastCall,
     session,
     timeouts,

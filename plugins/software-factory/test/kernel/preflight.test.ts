@@ -24,6 +24,7 @@ import { task } from "./helpers.js";
 const RUN_HEAD = `aliases:
   architect: { harness: fake, model: arch, effort: highest }
   pm: { harness: fake, model: pm }
+  digest: { harness: fake, model: digest }
   implementer: { harness: fake, model: impl }
   reviewer: { harness: fake, model: rev }
   steward: { harness: fake, model: steward }
@@ -68,6 +69,7 @@ function withScouts(runYaml: string, scouts: string): string {
 async function fixture(
   runYaml = RUN_HEAD,
   repoYaml?: string,
+  processYaml?: string,
 ): Promise<Fixture> {
   const repo = createTmpRepo();
   const base = path.basename(repo.dir);
@@ -80,12 +82,18 @@ async function fixture(
       "baseBranch: main\nartifactRoot: .factory/artifacts\nsetup: []\ngates: []\n",
   );
   repo.writeFile(".factory/run.yaml", run);
+  if (processYaml !== undefined)
+    repo.writeFile(".factory/process.yaml", processYaml);
   repo.commit("factory config");
   const configs = loadConfigs(repo.dir);
   const paths = resolveGoalPaths(configs, repo.dir, "demo");
   fs.mkdirSync(paths.goalDir, { recursive: true });
   fs.writeFileSync(path.join(paths.goalDir, "intent.md"), "# Goal\n", "utf8");
-  const store = createFolderStore(paths.goalDir);
+  const store = createFolderStore(
+    paths.goalDir,
+    undefined,
+    configs.process.taskTypes,
+  );
   await store.ensureLayout();
   const harness = new FakeHarness({
     id: "fake",
@@ -117,10 +125,104 @@ describe("pre-flight", () => {
     }
   });
 
-  it("reports an alias missing for a required role with file and key", async () => {
+  it("reports a task type naming an unconfigured flow", async () => {
+    const f = await fixture(
+      RUN_HEAD,
+      undefined,
+      "taskTypes:\n  odd: { flow: no-such-flow, kind: development, schema: outcome }\n",
+    );
+    try {
+      const err = await refusal(f.input);
+      expect(err.findings).toContainEqual(
+        expect.objectContaining({
+          file: path.join(f.repo.dir, ".factory/process.yaml"),
+          key: "taskTypes.odd.flow",
+          message: 'flow "no-such-flow" is not configured',
+        }),
+      );
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("reports a task type naming a prototype-key flow", async () => {
+    const f = await fixture(
+      RUN_HEAD,
+      undefined,
+      "taskTypes:\n  odd: { flow: toString, kind: development, schema: outcome }\n",
+    );
+    try {
+      const err = await refusal(f.input);
+      expect(err.findings).toContainEqual(
+        expect.objectContaining({
+          file: path.join(f.repo.dir, ".factory/process.yaml"),
+          key: "taskTypes.odd.flow",
+          message: 'flow "toString" is not configured',
+        }),
+      );
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("reports a task type naming an unknown output schema", async () => {
+    const f = await fixture(
+      RUN_HEAD,
+      undefined,
+      "taskTypes:\n  odd: { flow: implement-review, kind: development, schema: nope }\n",
+    );
+    try {
+      const err = await refusal(f.input);
+      expect(err.findings).toContainEqual(
+        expect.objectContaining({
+          file: path.join(f.repo.dir, ".factory/process.yaml"),
+          key: "taskTypes.odd.schema",
+          message: 'schema "nope" is not a kernel outcome schema (outcome)',
+        }),
+      );
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("reports a task type naming a prototype-key output schema", async () => {
+    const f = await fixture(
+      RUN_HEAD,
+      undefined,
+      "taskTypes:\n  odd: { flow: implement-review, kind: development, schema: constructor }\n",
+    );
+    try {
+      const err = await refusal(f.input);
+      expect(err.findings).toContainEqual(
+        expect.objectContaining({
+          file: path.join(f.repo.dir, ".factory/process.yaml"),
+          key: "taskTypes.odd.schema",
+          message:
+            'schema "constructor" is not a kernel outcome schema (outcome)',
+        }),
+      );
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("accepts a task type whose flow and schema exist", async () => {
+    const f = await fixture(
+      RUN_HEAD,
+      undefined,
+      "taskTypes:\n  docs: { flow: just-implement, kind: development, schema: outcome }\n",
+    );
+    try {
+      await preflight(f.input);
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("reports a renamed boundary alias missing from the run config", async () => {
     const f = await fixture();
     try {
-      f.configs.process.roles.architect = {
+      f.configs.process.boundary.architect = {
         prompt: "architect",
         alias: "boss",
       };
@@ -132,30 +234,54 @@ describe("pre-flight", () => {
         }),
       );
       expect(err.report).toContain("aliases.boss");
+      expect(err.report).toContain('boundary step "architect"');
       expect(err.report).toContain(".factory/run.yaml");
     } finally {
       f.repo.cleanup();
     }
   });
 
-  for (const role of ["plan-checker", "plan-reviewer"]) {
-    it(`refuses a missing ${role} alias before a plan exists`, async () => {
+  for (const [step, alias] of [
+    ["plancheck", "plan-checker"],
+    ["planreview", "plan-reviewer"],
+  ] as const) {
+    it(`refuses the missing ${alias} alias its boundary step names`, async () => {
       const f = await fixture();
       try {
-        delete f.configs.run.aliases[role];
+        delete f.configs.run.aliases[alias];
         const err = await refusal(f.input);
         expect(err.findings).toContainEqual({
           file: path.join(f.repo.dir, ".factory/run.yaml"),
-          key: `aliases.${role}`,
-          message: `required by role "${role}" but missing`,
+          key: `aliases.${alias}`,
+          message: `required by boundary step "${step}" but missing`,
         });
-        expect(err.report).toContain(`aliases.${role}`);
-        expect(err.report).toContain(`role "${role}"`);
+        expect(err.report).toContain(`aliases.${alias}`);
+        expect(err.report).toContain(`boundary step "${step}"`);
       } finally {
         f.repo.cleanup();
       }
     });
   }
+
+  it("requires only the aliases process config names, not role names", async () => {
+    const f = await fixture();
+    try {
+      // The PM and front boundaries name `escalation`; the role names `pm` and
+      // `front` are not required, so removing them changes nothing.
+      f.configs.process.boundary.pm = { prompt: "pm", alias: "escalation" };
+      f.configs.process.boundary.front = {
+        prompt: "front",
+        alias: "escalation",
+      };
+      f.configs.run.aliases.escalation = { harness: "fake", model: "esc" };
+      delete f.configs.run.aliases.pm;
+      const result = await preflight(f.input);
+      expect(result.aliases.architect).toBe("max");
+      expect(f.configs.run.aliases.front).toBeUndefined();
+    } finally {
+      f.repo.cleanup();
+    }
+  });
 
   it("refuses an effort level the model does not accept", async () => {
     const f = await fixture(
@@ -488,8 +614,8 @@ describe("pre-flight", () => {
       const result = await preflight({ ...f.input, harnesses });
       expect(result.aliases.implementer).toBe("max");
       const fallbacks = f.configs.run.aliases.implementer!.fallbacks!;
-      expect(fallbacks[0]!.effort).toBe("high");
-      expect(fallbacks[1]!.effort).toBe("max");
+      expect(fallbacks[0]).toMatchObject({ effort: "high" });
+      expect(fallbacks[1]).toMatchObject({ effort: "max" });
     } finally {
       f.repo.cleanup();
     }
@@ -562,9 +688,8 @@ describe("pre-flight", () => {
       const entries = f.configs.run.aliases.implementer!.rotate!;
       expect(entries[0]!.effort).toBe("high");
       expect(entries[1]!.effort).toBe("max");
-      expect(
-        f.configs.run.aliases.implementer!.fallbacks![0]!.effort,
-      ).toBeUndefined();
+      const rotating = f.configs.run.aliases.implementer!.fallbacks![0]!;
+      expect("model" in rotating ? rotating.effort : undefined).toBeUndefined();
     } finally {
       f.repo.cleanup();
     }
@@ -821,6 +946,92 @@ describe("pre-flight", () => {
       );
       expect(finding?.message).toContain("cycle");
       expect(finding?.message).toContain("pm -> esc -> pm");
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("refuses a fallback that names no alias", async () => {
+    const f = await fixture(
+      RUN_HEAD.replace(
+        "implementer: { harness: fake, model: impl }",
+        "implementer: { harness: fake, model: impl, fallbacks: [{ alias: ghost }] }",
+      ),
+    );
+    try {
+      const err = await refusal(f.input);
+      expect(err.findings).toContainEqual(
+        expect.objectContaining({
+          file: path.join(f.repo.dir, ".factory/run.yaml"),
+          key: "aliases.implementer.fallbacks.0.alias",
+          message: 'fallback alias "ghost" names no run-config alias',
+        }),
+      );
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("refuses a fallback that names its own alias", async () => {
+    const f = await fixture(
+      RUN_HEAD.replace(
+        "implementer: { harness: fake, model: impl }",
+        "implementer: { harness: fake, model: impl, fallbacks: [{ alias: implementer }] }",
+      ),
+    );
+    try {
+      const err = await refusal(f.input);
+      const finding = err.findings.find(
+        (item) => item.key === "aliases.implementer.fallbacks.0.alias",
+      );
+      expect(finding?.message).toContain("cycle");
+      expect(finding?.message).toContain("implementer -> implementer");
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("refuses a mutual fallback alias cycle", async () => {
+    const f = await fixture(
+      RUN_HEAD.replace(
+        "implementer: { harness: fake, model: impl }",
+        "implementer: { harness: fake, model: impl, fallbacks: [{ alias: reviewer }] }",
+      ).replace(
+        "reviewer: { harness: fake, model: rev }",
+        "reviewer: { harness: fake, model: rev, fallbacks: [{ alias: implementer }] }",
+      ),
+    );
+    try {
+      const err = await refusal(f.input);
+      const findings = err.findings.filter((item) =>
+        item.key.endsWith(".fallbacks.0.alias"),
+      );
+      expect(findings.map((item) => item.key).sort()).toEqual([
+        "aliases.implementer.fallbacks.0.alias",
+        "aliases.reviewer.fallbacks.0.alias",
+      ]);
+      expect(findings.map((item) => item.message)).toContain(
+        "fallback alias chain forms a cycle: implementer -> reviewer -> implementer",
+      );
+      expect(err.report).toContain("cycle");
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("accepts a fallback that reuses another alias's ladder", async () => {
+    const f = await fixture(
+      RUN_HEAD.replace(
+        "implementer: { harness: fake, model: impl }",
+        "implementer: { harness: fake, model: impl, fallbacks: [{ alias: reviewer }] }",
+      ).replace(
+        "reviewer: { harness: fake, model: rev }",
+        "reviewer: { harness: fake, model: rev, effort: highest }",
+      ),
+    );
+    try {
+      const result = await preflight(f.input);
+      expect(result.aliases.reviewer).toBe("max");
     } finally {
       f.repo.cleanup();
     }
@@ -1099,6 +1310,85 @@ describe("configuration report", () => {
       }
     } finally {
       repo.cleanup();
+    }
+  });
+});
+
+describe("pre-flight artifact LSP", () => {
+  const binaries = {
+    omp: process.execPath,
+    fake: process.execPath,
+    "claude-code": process.execPath,
+  };
+
+  /** A PATH with git only: the base check still runs, the YAML server does not. */
+  function toolPath(dir: string): void {
+    const git = Bun.which("git");
+    if (!git) throw new Error("git is not on PATH");
+    fs.symlinkSync(git, path.join(dir, "git"));
+  }
+
+  function withPath<T>(dir: string, fn: () => Promise<T>): Promise<T> {
+    const saved = process.env.PATH;
+    process.env.PATH = dir;
+    return fn().finally(() => {
+      process.env.PATH = saved;
+    });
+  }
+
+  it("refuses omp with lsp enabled when the YAML server is not on PATH", async () => {
+    const f = await fixture(
+      SPLIT_HARNESSES.replace("limits:", "lsp: true\nlimits:"),
+    );
+    const empty = fs.mkdtempSync(path.join(os.tmpdir(), "no-yamlls-"));
+    toolPath(empty);
+    try {
+      const err = await withPath(empty, () =>
+        refusal({ ...f.input, harnesses: splitHarnesses(f), binaries }),
+      );
+      expect(err.findings).toContainEqual({
+        file: path.join(f.repo.dir, ".factory/run.yaml"),
+        key: "lsp",
+        message:
+          'lsp is enabled but "yaml-language-server" is not on PATH: omp does not ship the YAML language server',
+      });
+    } finally {
+      f.repo.cleanup();
+      fs.rmSync(empty, { recursive: true, force: true });
+    }
+  });
+
+  it("passes when the YAML server is on PATH", async () => {
+    const f = await fixture(
+      SPLIT_HARNESSES.replace("limits:", "lsp: true\nlimits:"),
+    );
+    const bin = fs.mkdtempSync(path.join(os.tmpdir(), "has-yamlls-"));
+    toolPath(bin);
+    fs.writeFileSync(path.join(bin, "yaml-language-server"), "#!/bin/sh\n", {
+      mode: 0o755,
+    });
+    try {
+      await withPath(bin, () =>
+        preflight({ ...f.input, harnesses: splitHarnesses(f), binaries }),
+      );
+    } finally {
+      f.repo.cleanup();
+      fs.rmSync(bin, { recursive: true, force: true });
+    }
+  });
+
+  it("does not check the YAML server for harnesses without an LSP surface", async () => {
+    const f = await fixture(RUN_HEAD.replace("limits:", "lsp: true\nlimits:"));
+    const empty = fs.mkdtempSync(path.join(os.tmpdir(), "no-yamlls-fake-"));
+    toolPath(empty);
+    try {
+      const result = await withPath(empty, () =>
+        preflight({ ...f.input, binaries }),
+      );
+      expect(result.aliases.architect).toBe("max");
+    } finally {
+      f.repo.cleanup();
+      fs.rmSync(empty, { recursive: true, force: true });
     }
   });
 });

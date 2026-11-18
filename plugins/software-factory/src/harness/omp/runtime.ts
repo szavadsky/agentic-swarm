@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { runProcess } from "../../core/proc.js";
+import { installLspConfig } from "./lsp.js";
 import type { ModelRef } from "../types.js";
 import { writeOmpOverlay } from "./overlay.js";
 import { OmpRpc } from "./rpc.js";
@@ -24,6 +25,8 @@ export class OmpRuntime {
   readonly overlayExtra?: Record<string, unknown>;
   readonly readyTimeoutMs: number;
   readonly retention: "short" | "long";
+  /** Canonical artifact LSP config; when set, every turn cwd gets it and `--no-lsp` is dropped. */
+  readonly lspConfig?: string;
   private modelsCache?: Promise<any[]>;
 
   constructor(opts: OmpHarnessOptions) {
@@ -33,6 +36,7 @@ export class OmpRuntime {
     this.overlayExtra = opts.overlayExtra;
     this.readyTimeoutMs = opts.readyTimeoutMs ?? 30_000;
     this.retention = opts.retention ?? "short";
+    this.lspConfig = opts.lspConfig;
   }
 
   models(): Promise<any[]> {
@@ -88,11 +92,12 @@ export class OmpRuntime {
     resumeId: string | undefined,
     extraArgs: string[],
   ): Promise<OmpRpc> {
+    if (this.lspConfig) await installLspConfig(cwd, this.lspConfig);
     const args = [
       "--mode",
       "rpc",
       "--no-ui",
-      "--no-lsp",
+      ...(this.lspConfig ? [] : ["--no-lsp"]),
       "--model",
       model.id,
       "--cwd",

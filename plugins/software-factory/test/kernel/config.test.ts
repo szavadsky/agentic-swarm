@@ -24,6 +24,19 @@ describe("three config layers", () => {
       configs.process.flows["implement-review"]!.steps[1]!.changeRequests,
     ).toBe(2);
     expect(configs.process.reminders).toBe(1);
+    expect(configs.process.taskTypes).toEqual({
+      development: {
+        flow: "implement-review",
+        kind: "development",
+        schema: "outcome",
+      },
+      spike: { flow: "spike", kind: "spike", schema: "outcome" },
+      trivial: {
+        flow: "just-implement",
+        kind: "development",
+        schema: "outcome",
+      },
+    });
     const paths = resolveGoalPaths(configs, root, "demo");
     expect(paths.goalDir).toBe(path.join(root, ".factory/artifacts/demo"));
     expect(paths.goalCheckout.startsWith(root)).toBe(false);
@@ -31,11 +44,27 @@ describe("three config layers", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
+  it("refuses a task type kind outside spike and development", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, ".factory/process.yaml"),
+      "taskTypes:\n  odd: { flow: implement-review, kind: task, schema: outcome }\n",
+    );
+    expect(() => loadConfigs(root)).toThrow(/taskTypes/);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
   it("defines just-implement as one implement step with no reviewer", () => {
     const root = tmpRepo();
     const configs = loadConfigs(root);
     expect(configs.process.flows["just-implement"]!.steps).toEqual([
-      { id: "implement", role: "implementer", review: false },
+      {
+        id: "implement",
+        prompt: "implementer",
+        alias: "implementer",
+        review: false,
+      },
     ]);
     fs.rmSync(root, { recursive: true, force: true });
   });
@@ -45,7 +74,7 @@ describe("three config layers", () => {
     fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
     fs.writeFileSync(
       path.join(root, ".factory/process.yaml"),
-      "flows:\n  implement-review:\n    steps:\n      - id: implement\n        role: implementer\n      - id: review\n        role: reviewer\n        review: true\n        changeRequests: 4\nreminders: 0\nroles:\n  architect:\n    prompt: architect\n    alias: boss\n",
+      "flows:\n  implement-review:\n    steps:\n      - id: implement\n        prompt: implementer\n        alias: implementer\n      - id: review\n        prompt: reviewer\n        alias: reviewer\n        review: true\n        changeRequests: 4\nreminders: 0\nboundary:\n  architect: { prompt: architect, alias: boss }\n",
     );
     fs.writeFileSync(
       path.join(root, ".factory/run.yaml"),
@@ -57,7 +86,12 @@ describe("three config layers", () => {
     ).toBe(4);
     expect(configs.process.flows.spike!.steps[1]!.changeRequests).toBe(0);
     expect(configs.process.reminders).toBe(0);
-    expect(configs.process.roles.architect!.alias).toBe("boss");
+    expect(configs.process.boundary.architect.alias).toBe("boss");
+    // A boundary override retargets one step; the package default fills the rest.
+    expect(configs.process.boundary.pm).toEqual({
+      prompt: "pm",
+      alias: "pm",
+    });
     expect(configs.run.aliases.boss!.model).toBe("big");
     expect(
       toLimits(configs).flows["implement-review"]!.steps[1]!.changeRequests,
@@ -76,13 +110,16 @@ describe("three config layers", () => {
         "  two-reviews:",
         "    steps:",
         "      - id: implement",
-        "        role: implementer",
+        "        prompt: implementer",
+        "        alias: implementer",
         "      - id: review",
-        "        role: reviewer",
+        "        prompt: reviewer",
+        "        alias: reviewer",
         "        review: true",
         "        changeRequests: 0",
         "      - id: security",
-        "        role: reviewer",
+        "        prompt: reviewer",
+        "        alias: reviewer",
         "        review: true",
         "        changeRequests: 3",
         "",
@@ -94,7 +131,7 @@ describe("three config layers", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
-  it("allows checks flow step without a role and retains changeRequests", () => {
+  it("allows a checks step without a prompt or alias and retains changeRequests", () => {
     const root = tmpRepo();
     fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
     fs.writeFileSync(
@@ -104,11 +141,13 @@ describe("three config layers", () => {
         "  custom:",
         "    steps:",
         "      - id: implement",
-        "        role: implementer",
+        "        prompt: implementer",
+        "        alias: implementer",
         "      - id: checks",
         "        changeRequests: 1",
         "      - id: review",
-        "        role: reviewer",
+        "        prompt: reviewer",
+        "        alias: reviewer",
         "        review: true",
         "",
       ].join("\n"),
@@ -117,12 +156,68 @@ describe("three config layers", () => {
     const checks = configs.process.flows.custom!.steps.find(
       (s) => s.id === "checks",
     );
-    expect(checks).toEqual({
-      id: "checks",
-      role: undefined,
-      review: false,
-      changeRequests: 1,
+    expect(checks).toEqual({ id: "checks", review: false, changeRequests: 1 });
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("names a prompt and alias for every boundary step, plan review included", () => {
+    const root = tmpRepo();
+    const boundary = loadConfigs(root).process.boundary;
+    expect(Object.keys(boundary).sort()).toEqual([
+      "architect",
+      "digest",
+      "front",
+      "plancheck",
+      "planreview",
+      "pm",
+      "steward",
+    ]);
+    // Plan review shares the reviewer prompt on its own alias: no second role.
+    expect(boundary.planreview).toEqual({
+      prompt: "reviewer",
+      alias: "plan-reviewer",
     });
+    expect(boundary.front).toEqual({ prompt: "front", alias: "pm" });
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("refuses a step that names no alias", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, ".factory/process.yaml"),
+      "flows:\n  custom:\n    steps:\n      - id: implement\n        prompt: implementer\n",
+    );
+    expect(() => loadConfigs(root)).toThrow(/prompt and an alias/);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("refuses a different-model follow-up that names no alias", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, ".factory/process.yaml"),
+      "flows:\n  custom:\n    followUp: { mode: different-model }\n    steps:\n      - id: implement\n        prompt: implementer\n        alias: implementer\n",
+    );
+    expect(() => loadConfigs(root)).toThrow(/different-model needs an alias/);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("refuses a boundary step the kernel does not run", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, ".factory/process.yaml"),
+      "boundary:\n  reviewer: { prompt: reviewer, alias: reviewer }\n",
+    );
+    let error: ConfigError | undefined;
+    try {
+      loadConfigs(root);
+    } catch (err) {
+      error = err as ConfigError;
+    }
+    expect(error).toBeInstanceOf(ConfigError);
+    expect(error!.report).toContain("reviewer");
     fs.rmSync(root, { recursive: true, force: true });
   });
 
@@ -249,6 +344,27 @@ describe("three config layers", () => {
     expect(alias.fallbacks).toEqual([
       { harness: "agy", model: "g", effort: "high", subscription: "ag" },
     ]);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("parses a fallback that names another alias and refuses a mixed tier", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    const runYaml = path.join(root, ".factory/run.yaml");
+    const config = (fallbacks: string): string =>
+      [
+        "aliases:",
+        "  backup: { harness: omp, model: m, subscription: go }",
+        `  implementer: { harness: omp, model: p, fallbacks: [${fallbacks}] }`,
+        "limits: { iterations: 1 }",
+        "",
+      ].join("\n");
+    fs.writeFileSync(runYaml, config("{ alias: backup }"));
+    expect(loadConfigs(root).run.aliases.implementer!.fallbacks).toEqual([
+      { alias: "backup" },
+    ]);
+    fs.writeFileSync(runYaml, config("{ alias: backup, model: m }"));
+    expect(() => loadConfigs(root)).toThrow(/fallbacks\.0/);
     fs.rmSync(root, { recursive: true, force: true });
   });
 

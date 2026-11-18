@@ -1,14 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
-import { Liquid, type FS } from "liquidjs";
+import { type FS, Liquid } from "liquidjs";
 import { packageRoot } from "./config.js";
 import {
-  flowNamesVar,
   outcomeSchemaVar,
   taskFrontmatterVar,
+  taskTypesVar,
   tierNamesVar,
 } from "./prompt-schema.js";
-import type { ProcessConfig } from "./types.js";
+import type { ProcessConfig, RunConfig } from "./types.js";
 
 /**
  * Prompt templates render through LiquidJS in strict mode: an unknown variable
@@ -209,21 +209,28 @@ export function validateCmd(
  * template under `.factory/prompts/` and replace the calibration partial with
  * process-config text. Schema and config names render as launch-wide defaults
  * so turn code never passes them: the outcome and task-frontmatter skeletons
- * from the kernel schemas, flow names from the process config, tier names
+ * from the kernel schemas, task type names from the process config, tier names
  * from the run-config aliases.
  */
 export function loadPrompts(
   process: ProcessConfig,
   repoRoot: string,
-  aliases?: Record<string, unknown>,
+  options?: { aliases?: Record<string, unknown>; run?: RunConfig },
 ): PromptLibrary {
+  const { aliases, run } = options ?? {};
   const overrideDirs: string[] = [];
   if (process.promptsDir)
     overrideDirs.push(path.resolve(repoRoot, process.promptsDir));
   overrideDirs.push(path.join(repoRoot, ".factory", "prompts"));
   const overrides: Record<string, string> = {};
-  if (process.calibration !== undefined)
-    overrides.calibration = process.calibration;
+
+  let calibration = process.calibration;
+  const preset = run?.preset;
+  if (preset && process.presets && process.presets[preset]) {
+    calibration = process.presets[preset].calibration;
+  }
+
+  if (calibration !== undefined) overrides.calibration = calibration;
   return loadPromptLibrary({
     builtinDir: path.join(packageRoot, "prompts"),
     overrideDirs,
@@ -238,21 +245,10 @@ export function loadPrompts(
       fix_dispositions: "",
       outcome_schema: outcomeSchemaVar(),
       task_frontmatter: taskFrontmatterVar(),
-      flows: flowNamesVar(process.flows),
+      task_types: taskTypesVar(process.taskTypes),
       tiers: tierNamesVar(aliases),
     },
   });
-}
-
-export function renderRolePrompt(
-  library: PromptLibrary,
-  process: ProcessConfig,
-  role: string,
-  vars: Record<string, string>,
-): string {
-  const config = process.roles[role];
-  if (!config) throw new Error(`process config has no role "${role}"`);
-  return library.render(config.prompt, vars);
 }
 
 /** Last-call instruction rendered on the checks step's final fix turn. */

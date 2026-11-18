@@ -227,7 +227,8 @@ limits: { concurrency: { overall: 2 }, iterations: 1 }
     const f = await fixture(text, stub);
     try {
       await preflight(f.input);
-      expect(f.configs.run.aliases.pm!.fallbacks![0]!.effort).toBe("medium");
+      const fallback = f.configs.run.aliases.pm!.fallbacks![0]!;
+      expect("model" in fallback ? fallback.effort : undefined).toBe("medium");
       const creates = sessionCalls(stub, "new");
       const models = creates.map(
         (args) => args[args.indexOf("--model") + 1] ?? "",

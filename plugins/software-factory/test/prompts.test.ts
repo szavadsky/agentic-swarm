@@ -3,18 +3,19 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { z } from "zod";
-import { FRONT_CLASS_FLOWS, frontClassFlowsVar } from "../src/kernel/front.js";
+import { FRONT_CLASS_FLOWS, frontClassTypesVar } from "../src/kernel/front.js";
 import type { OutcomeExpectation } from "../src/kernel/outcome.js";
 import {
-  flowNamesVar,
   outcomeRepairSchemaVar,
   outcomeSchemaVar,
   renderSkeleton,
   taskFrontmatterVar,
+  taskTypesVar,
   tierNamesVar,
 } from "../src/kernel/prompt-schema.js";
 import { loadPromptLibrary, loadPrompts } from "../src/kernel/prompts.js";
 import { parseTaskFile, taskFrontmatterSchema } from "../src/kernel/tasks.js";
+import type { ProcessConfig, RunConfig } from "../src/kernel/types.js";
 import {
   concernSchema,
   outcomeSchema,
@@ -27,7 +28,7 @@ import {
   stallRouteEntrySchema,
   steerRouteEntrySchema,
 } from "../src/kernel/types.js";
-import type { ProcessConfig } from "../src/kernel/types.js";
+import { TEST_BOUNDARY } from "./kernel/helpers.js";
 
 describe("prompts: PromptLibrary", () => {
   let dir: string;
@@ -72,16 +73,17 @@ describe("prompts: PromptLibrary", () => {
   it("lets the process config replace the calibration partial", () => {
     const process = {
       flows: {},
-      roles: {},
+      boundary: TEST_BOUNDARY,
       reminders: 1,
       calibration: "CUSTOM CALIBRATION",
     } as ProcessConfig;
-    const lib = loadPrompts(process, dir);
+    const lib = loadPrompts(process, dir, { run: {} as RunConfig });
     expect(lib.render("calibration", {})).toBe("CUSTOM CALIBRATION");
     // Built-ins still render when the process config sets no calibration.
     const builtin = loadPrompts(
-      { flows: {}, roles: {}, reminders: 1 } as ProcessConfig,
+      { flows: {}, boundary: TEST_BOUNDARY, reminders: 1 } as ProcessConfig,
       dir,
+      { run: {} as RunConfig },
     );
     expect(builtin.render("calibration", {})).toContain(
       "A concern is a recorded debt",
@@ -246,10 +248,20 @@ describe("prompts: schema skeletons", () => {
     );
   });
 
-  it("renders every task-frontmatter schema field", () => {
-    expect(skeletonKeys(taskFrontmatterVar())).toEqual(
-      Object.keys(taskFrontmatterSchema.shape),
-    );
+  it("renders the fields a prompt author writes", () => {
+    expect(skeletonKeys(taskFrontmatterVar())).toEqual([
+      "slug",
+      "title",
+      "type",
+      "deps",
+      "scope",
+      "tier",
+      "revision",
+      "base",
+      "source",
+      "repairTurns",
+      "turnMinutes",
+    ]);
   });
 
   it("pins the task-frontmatter skeleton wording", () => {
@@ -258,8 +270,7 @@ describe("prompts: schema skeletons", () => {
         "```yaml",
         "slug: namespaced kebab-case, matches the file name",
         "title: one line",
-        "kind: task | spike  # task merges, spike finishes with findings",
-        "flow: one of the configured flows",
+        "type: one of the configured task types; it supplies flow, kind and schema",
         "deps: [a slug that must merge first]",
         "scope: [a predicted area]",
         "tier: default, or a run-config alias  # optional",
@@ -278,8 +289,7 @@ describe("prompts: schema skeletons", () => {
       "---",
       "slug: auth.token-refresh",
       "title: Refresh tokens",
-      "kind: spike",
-      "flow: spike",
+      "type: development",
       "deps: [auth.session-store]",
       "scope: [auth]",
       "tier: escalation",
@@ -297,12 +307,22 @@ describe("prompts: schema skeletons", () => {
     const { body: _body, ...frontmatter } = parseTaskFile(
       text,
       "auth.token-refresh",
+      {
+        development: {
+          flow: "implement-review",
+          kind: "development",
+          schema: "outcome",
+        },
+      },
     );
     expect(Object.keys(frontmatter).sort()).toEqual(
       Object.keys(taskFrontmatterSchema.shape).sort(),
     );
     expect(() => taskFrontmatterSchema.parse(frontmatter)).not.toThrow();
-    expect(taskFrontmatterVar()).toContain("kind: task | spike");
+    expect(taskFrontmatterVar()).toContain(
+      "type: one of the configured task types",
+    );
+    expect(taskFrontmatterVar()).not.toContain("kind:");
   });
 });
 
@@ -373,19 +393,24 @@ describe("prompts: repair skeleton", () => {
 });
 
 describe("prompts: config names", () => {
-  it("marks the kernel default flow in config order", () => {
+  it("lists task types in config order with what each supplies", () => {
     expect(
-      flowNamesVar({
-        "implement-review": {},
-        "just-implement": {},
-        spike: {},
+      taskTypesVar({
+        development: {
+          flow: "implement-review",
+          kind: "development",
+          schema: "outcome",
+        },
+        spike: { flow: "spike", kind: "spike", schema: "outcome" },
       }),
-    ).toBe("implement-review (default), just-implement, spike");
+    ).toBe(
+      "development (flow: implement-review, kind: development, schema: outcome), spike (flow: spike, kind: spike, schema: outcome)",
+    );
   });
 
-  it("renders no default marker when the config lacks the default flow", () => {
-    expect(flowNamesVar({ custom: {} })).toBe("custom");
-    expect(flowNamesVar({})).toBe("none");
+  it("renders an empty task type list as none", () => {
+    expect(taskTypesVar({})).toBe("none");
+    expect(taskTypesVar(undefined)).toBe("none");
   });
 
   it("lists run-config aliases in config order", () => {
@@ -396,34 +421,53 @@ describe("prompts: config names", () => {
     expect(tierNamesVar(undefined)).toBe("none");
   });
 
-  it("renders the front class mapping from the enforced mapping", () => {
-    const rendered = frontClassFlowsVar();
-    for (const [cls, flow] of Object.entries(FRONT_CLASS_FLOWS)) {
-      expect(rendered).toContain(`\`${flow}\` for ${cls}`);
-    }
+  it("renders the task type each front class writes", () => {
+    const rendered = frontClassTypesVar({
+      development: {
+        flow: FRONT_CLASS_FLOWS.task,
+        kind: "development",
+        schema: "outcome",
+      },
+      trivial: {
+        flow: FRONT_CLASS_FLOWS.trivial,
+        kind: "development",
+        schema: "outcome",
+      },
+    });
+    expect(rendered).toContain("`development` for task");
+    expect(rendered).toContain("`trivial` for trivial");
+    expect(frontClassTypesVar({})).toContain("none for task");
   });
 });
 
 describe("prompts: schema defaults", () => {
-  function library(
-    flows: Record<string, unknown>,
+  const TASK_TYPES = {
+    development: {
+      flow: "implement-review",
+      kind: "development" as const,
+      schema: "outcome",
+    },
+    spike: { flow: "spike", kind: "spike" as const, schema: "outcome" },
+  };
+
+  function libraryWithConfig(
+    taskTypes: Record<string, unknown> = TASK_TYPES,
     aliases?: Record<string, unknown>,
   ) {
     return loadPrompts(
       {
-        flows: Object.fromEntries(
-          Object.keys(flows).map((name) => [name, { steps: [] }]),
-        ),
-        roles: {},
+        flows: {},
+        taskTypes,
+        boundary: TEST_BOUNDARY,
         reminders: 1,
       } as ProcessConfig,
       os.tmpdir(),
-      aliases,
+      { aliases },
     );
   }
 
   it("fills the outcome partial from the schema without turn vars", () => {
-    const rendered = library({}).render("outcome", {});
+    const rendered = libraryWithConfig({}).render("outcome", {});
     expect(rendered).toContain("status: done | blocked | failed | upscope");
     expect(rendered).toContain(
       "verdict: approve | changes | reject  # optional; review steps only",
@@ -432,40 +476,41 @@ describe("prompts: schema defaults", () => {
   });
 
   it("fills the task-frontmatter partial from schema and config", () => {
-    const rendered = library(
-      { "implement-review": {}, spike: {} },
-      { escalation: {} },
-    ).render("task-frontmatter", {});
-    expect(rendered).toContain("kind: task | spike");
+    const rendered = libraryWithConfig(TASK_TYPES, {
+      escalation: {},
+    }).render("task-frontmatter", {});
     expect(rendered).toContain(
-      "Configured flows: implement-review (default), spike.",
+      "type: one of the configured task types; it supplies flow, kind and schema",
+    );
+    expect(rendered).toContain(
+      "Configured task types: development (flow: implement-review, kind: development, schema: outcome), spike (flow: spike, kind: spike, schema: outcome).",
     );
     expect(rendered).toContain("Configured tiers: escalation.");
     expect(rendered).not.toContain("{{");
   });
 
   it("requires the new variables on the authoring roles", () => {
-    const lib = library({ "implement-review": {} }, { escalation: {} });
+    const lib = libraryWithConfig();
     expect(lib.placeholders("front")).toEqual(
       expect.arrayContaining([
         "outcome_schema",
         "task_frontmatter",
-        "flows",
+        "task_types",
         "tiers",
-        "class_flows",
+        "class_types",
       ]),
     );
     expect(lib.placeholders("pm")).toEqual(
       expect.arrayContaining([
         "outcome_schema",
         "task_frontmatter",
-        "flows",
+        "task_types",
         "tiers",
       ]),
     );
-    expect(lib.placeholders("pm")).not.toContain("class_flows");
+    expect(lib.placeholders("pm")).not.toContain("class_types");
     expect(lib.placeholders("architect")).toEqual(
-      expect.arrayContaining(["outcome_schema", "flows", "tiers"]),
+      expect.arrayContaining(["outcome_schema", "task_types", "tiers"]),
     );
   });
 });

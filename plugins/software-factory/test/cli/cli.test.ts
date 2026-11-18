@@ -11,8 +11,8 @@ import {
   resolveRuntimeDir,
 } from "../../src/cli/lock.js";
 import { FakeHarness } from "../../src/harness/fake/index.js";
-import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 import { testPriceSource } from "../helpers/price-source.js";
+import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 
 function conflictingBaseRepo(): TmpRepo {
   const repo = createTmpRepo();
@@ -27,6 +27,7 @@ function conflictingBaseRepo(): TmpRepo {
       "aliases:",
       "  architect: { harness: fake, model: fake-architect }",
       "  pm: { harness: fake, model: fake-pm }",
+      "  digest: { harness: fake, model: fake-digest }",
       "  implementer: { harness: fake, model: fake-impl }",
       "  reviewer: { harness: fake, model: fake-review }",
       "  steward: { harness: fake, model: fake-steward }",
@@ -80,6 +81,9 @@ describe("CLI dispatch", () => {
     });
     expect(parseCliArgs(["--help"]).help).toBe(true);
     expect(parseCliArgs(["-v"]).version).toBe(true);
+    expect(parseCliArgs(["schemas", "--out=/tmp/editor"]).out).toBe(
+      "/tmp/editor",
+    );
   });
 
   it("documents the run command in help", async () => {

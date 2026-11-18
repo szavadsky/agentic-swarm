@@ -202,6 +202,7 @@ describe("front ladder", () => {
   it("runs a trivial task's implement turn in the front's session, on the front alias, with the pack variable", async () => {
     const goal = makeGoal({
       classYaml: null,
+      processYaml: "boundary:\n  front: { prompt: front, alias: front }\n",
       runYaml: [
         "aliases:",
         "  front: { harness: fake, model: fake-front }",
