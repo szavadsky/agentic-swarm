@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { acquireRunLock, type RunLockHandle } from "../cli/lock.js";
 import { Repo } from "../core/git/repo.js";
@@ -28,7 +29,12 @@ import { rolesByStep, writeMetrics } from "./metrics.js";
 import type { PriceSource } from "./openrouter.js";
 import { loadPriceTable } from "./openrouter.js";
 import { runSteerPm } from "./pm.js";
-import { type ModelCatalog, preflight } from "./preflight.js";
+import {
+  DEFAULT_MIN_TMP_FREE_BYTES,
+  type ModelCatalog,
+  preflight,
+  tmpHeadroom,
+} from "./preflight.js";
 import { loadPrompts } from "./prompts.js";
 import { scriptMeta } from "./record.js";
 import { recoverLaunch } from "./recovery.js";
@@ -332,6 +338,14 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
     runConfigPath: opts.runConfigPath,
   });
   const paths = resolveGoalPaths(configs, repoRoot, opts.goal);
+  // First: everything below writes to disk, and a full tmp filesystem must
+  // read as infrastructure loss, not as a failure of the work.
+  const headroom = tmpHeadroom(
+    os.tmpdir(),
+    fs.statfsSync,
+    toLimits(configs).minTmpFreeBytes ?? DEFAULT_MIN_TMP_FREE_BYTES,
+  );
+  if (!headroom.ok) throw new LaunchError(headroom.cause);
   const intentPath = path.join(paths.goalDir, "intent.md");
   if (!fs.existsSync(intentPath)) {
     throw new LaunchError(`goal "${opts.goal}" has no intent: ${intentPath}`);
@@ -373,6 +387,16 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
     });
   }
 
+  await preflight({
+    configs,
+    paths,
+    store,
+    harnesses: new Map(Object.entries(harnesses)),
+    binaries: opts.binaries,
+    catalog: opts.modelCatalog,
+    baseGates: opts.baseGates,
+  });
+
   const runtime: KernelRuntime = {
     paths,
     configs,
@@ -409,15 +433,6 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
   }
 
   try {
-    await preflight({
-      configs,
-      paths,
-      store,
-      harnesses: runtime.harnesses,
-      binaries: opts.binaries,
-      catalog: opts.modelCatalog,
-      baseGates: opts.baseGates,
-    });
     const interrupted = (await store.listRecords()).filter(
       (r) => !r.endedAt,
     ).length;

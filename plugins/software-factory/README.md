@@ -146,6 +146,11 @@ reaches it, dispatch drains — no new task starts; tasks already started finish
 their remaining steps and merge, and the summary records the cause and how many
 turns the brake could not price.
 
+`limits.minTmpFreeBytes` (default 2 GiB) is the free space the temp directory
+(`os.tmpdir()`, so `TMPDIR` is respected) must hold. Below it, `run` exits 1
+before it writes any session, lock or record, with a cause naming the
+directory, the free bytes and `operator: purge <tmpdir>`.
+
 A relaunch into an interrupted iteration resumes it as a recorded attempt (a
 `resume` script record) bounded by `limits.resumeAttempts` (default 2). It
 refuses, with a `resume-refused` record naming the cause, when attempts are

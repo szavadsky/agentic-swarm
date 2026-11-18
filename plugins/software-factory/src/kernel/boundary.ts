@@ -13,6 +13,7 @@ import {
   contextPackRelPath,
   forwardedConcerns,
   renderContextPack,
+  type SpikeFinding,
   shallowCodeMap,
   summaryRelPath,
 } from "./context-pack.js";
@@ -38,7 +39,9 @@ import { latestPlanCheck } from "./plan-check.js";
 import { latestPlanReview, runPlanReview } from "./plan-review.js";
 import { type PmRung, runPm } from "./pm.js";
 import { scriptMeta } from "./record.js";
+import { spikeFinding } from "./spike-report.js";
 import type {
+  ArtifactStore,
   GoalDecision,
   KernelRuntime,
   Outcome,
@@ -161,26 +164,37 @@ function spikeTerminal(state: State, linked: TaskFile[]): boolean {
   });
 }
 
-function spikeAnswer(
+async function spikeAnswer(
+  store: ArtifactStore,
   records: StepRecord[],
   state: State,
   linked: TaskFile[],
-): string {
-  const sorted = [...records].sort((a, b) => b.seq - a.seq);
-  const parts = linked.map((task) => {
-    const own = sorted.filter(
-      (record) => record.slug === task.slug && record.outcome,
-    );
-    const outcome =
-      own.find((record) => record.step === "implement")?.outcome ??
-      own[0]?.outcome;
-    if (outcome?.summary) return `${task.slug}: ${outcome.summary}`;
-    const cause = state.tasks[task.slug]?.cause;
-    return cause
-      ? `${task.slug}: ${cause}`
-      : `${task.slug}: no outcome recorded`;
-  });
+): Promise<string> {
+  const parts = await Promise.all(
+    linked.map(async (task) => {
+      const finding = await spikeFinding(store, records, task.slug);
+      if (finding) return `${task.slug}: ${finding}`;
+      const cause = state.tasks[task.slug]?.cause;
+      return cause
+        ? `${task.slug}: ${cause}`
+        : `${task.slug}: no outcome recorded`;
+    }),
+  );
   return parts.join("; ");
+}
+
+async function spikeFindings(
+  store: ArtifactStore,
+  records: StepRecord[],
+  tasks: TaskFile[],
+): Promise<SpikeFinding[]> {
+  const findings: SpikeFinding[] = [];
+  for (const task of tasks) {
+    if (task.kind !== "spike") continue;
+    const finding = await spikeFinding(store, records, task.slug);
+    if (finding) findings.push({ slug: task.slug, finding });
+  }
+  return findings;
 }
 
 /**
@@ -249,7 +263,7 @@ export async function runBoundary(
         await writeOutbox(
           runtime.store,
           steer.id,
-          `# Steer ${steer.id}\n\n${spikeAnswer(records, state, linked)}\n\nSource: ${steer.relPath}`,
+          `# Steer ${steer.id}\n\n${await spikeAnswer(runtime.store, records, state, linked)}\n\nSource: ${steer.relPath}`,
         );
         await markProcessed(runtime.store, steer);
         await expireHold(runtime.store, steer.id);
@@ -286,6 +300,7 @@ export async function runBoundary(
       digestPath,
       tasks,
       state,
+      spikeFindings: await spikeFindings(runtime.store, records, tasks),
       codeMap: await codeMap(runtime.paths.goalCheckout),
       steers: forArchitect,
       holds,

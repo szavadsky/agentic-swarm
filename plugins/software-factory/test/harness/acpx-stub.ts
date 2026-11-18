@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { removeAtFileEnd } from "../setup/tmp-cleanup.js";
 
 export interface AcpxStub {
   binary: string;
@@ -422,9 +423,12 @@ process.exit(promptExitCode);
 
   fs.writeFileSync(binary, script, { mode: 0o755 });
 
-  return {
+  const stub: AcpxStub = {
     binary,
-    cleanup: () => fs.rmSync(dir, { recursive: true, force: true }),
+    cleanup: () => {
+      unregisterCleanup();
+      fs.rmSync(dir, { recursive: true, force: true });
+    },
     sessionNames: () => {
       if (!fs.existsSync(stateDir)) return [];
       return fs
@@ -444,4 +448,7 @@ process.exit(promptExitCode);
         .map((line) => JSON.parse(line) as string[]);
     },
   };
+
+  const unregisterCleanup = removeAtFileEnd(() => stub.cleanup());
+  return stub;
 }

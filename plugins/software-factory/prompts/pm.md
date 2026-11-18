@@ -66,6 +66,8 @@ On a plan-check turn, `plan_checks` lists the checker's follow-ups with their ki
 
 ## Rules
 
+{% include 'spike-report-general' %}
+
 - `revision` is an amend's only signal: bump it by one when you rewrite a parked task's own file, never otherwise. Dispatch resumes an amended slug on its kept branch with its records, and its turn and review counts reset.
 - `cancel` spends the slug: the kernel records the cancellation with your reason, so a cancelled route writes no task file.
 - Write task files in `{{tasks_dir}}` only, and on a stall or plan-check turn edit only a slug you amend, plus a missing-dep follow-up's dependency list. Validate every new or amended task file, and every new hold file, before ending the turn: `{{validate_cmd}} <file>`.

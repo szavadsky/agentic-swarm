@@ -27,6 +27,9 @@ import {
   type ProcessConfig,
 } from "./types.js";
 
+/** Free bytes the temp filesystem must hold when `limits.minTmpFreeBytes` is unset. */
+export const DEFAULT_MIN_TMP_FREE_BYTES = 2 * 1024 * 1024 * 1024;
+
 export type { ModelCatalog } from "./preflight-aliases.js";
 
 export interface PreflightInput {
@@ -59,6 +62,32 @@ export class PreflightError extends Error {
     this.name = "PreflightError";
     this.findings = findings;
     this.report = report;
+  }
+}
+
+/**
+ * Whether `tmpdir` has `minBytes` free. A full temp filesystem is an
+ * infrastructure loss, not a task failure: the launch refuses before it writes
+ * anything, so the cause names the operator action.
+ */
+export function tmpHeadroom(
+  tmpdir: string,
+  statfs: (path: string) => ReturnType<typeof fs.statfsSync>,
+  minBytes: number,
+): { ok: true } | { ok: false; cause: string } {
+  try {
+    const stats = statfs(tmpdir);
+    const free = BigInt(stats.bavail) * BigInt(stats.bsize);
+    if (free >= BigInt(minBytes)) return { ok: true };
+    return {
+      ok: false,
+      cause: `temporary directory "${tmpdir}" has insufficient headroom: ${free} bytes free, need ${minBytes} bytes. operator: purge ${tmpdir}`,
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      cause: `failed to stat "${tmpdir}": ${(e as Error).message}`,
+    };
   }
 }
 
