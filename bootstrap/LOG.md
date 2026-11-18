@@ -744,3 +744,9 @@ Verbatim, newest last; each with what it changed.
 - ROOT CAUSE: /tmp tmpfs 96% full (9.4G/9.8G, 68k leaked factory-hermetic/acpx-stub/factory-test-repo dirs + 38 stale 225M factory-gates copies) — every gates.sh run copies the package into /tmp, so all gates red as infra. Architect explicitly asked OPERATOR to purge before next launch. Operator purged (96%→15%, 8.4G free); node-compile-cache + small tool dirs left alone.
 - Legs: architect opus unpriced clean (11th shaping); implementer agy/gemini $1.71; plancheck $0.04; planreview $0.02; pm/reviewer/digest $0 hy4/free. Cost $1.77 partial ($1.77/merge). No no-outcome spike noted.
 - Goal NOT complete — resume-gate must re-drive after /tmp purge. No stop pressure (merge resets counter).
+
+### 2026-11-18 — repair-i5 landed: resume-gate-2 (M2 crux LANDS); pending 0, no declaration
+- Exit 3 (iteration-limit), 1h02m wall, status in-progress. factory/repair +1: resume-gate-2 (M2 THE CRUX LANDS). 3 NEW parks (8 total): spike-report-contracts-3 (failed, pre-existing test failures incl scenario8), tmp-hygiene-2 (gates format/tests), tmp-preflight (empty-diff after red lint). Pending 0, debt 1 (plancheck r1, superseded). Inbox empty. /tmp healthy 16% (purge held).
+- Legs: architect opus 1t unpriced clean (12th shaping); implementer 9t gemini $8.17; escalation 1t sonnet $1.12; plancheck $0.04; planreview $0.07; pm/reviewer/digest hy4 $0. Cost $9.39 partial ($9.39/merge).
+- Friction: 4 outcome-repairs; launches impl 3 failure + plancheck 1 + planreview 1 + reviewer 1 change-request + digest 1 glitch; 2 infra retries, 1 fallback hop, 1 loop incident.
+- Goal NOT complete (no declaration; M3 contracts + hygiene + debt remain). No stop pressure.
