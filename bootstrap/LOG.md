@@ -711,3 +711,9 @@ Verbatim, newest last; each with what it changed.
 - Pending 29→31 (2 new spikes), parks 18, debt 2 (+plancheck r2). Milestone A still open. Inbox 6 files (2 routed with holds). Segment cost ~$0.08.
 - STALL RISK: plancheck demands architect but resumes have no architect turn. Next launch resume-vs-advance uncertain; a repeat = 2nd consecutive 0-merge → stop-and-report.
 - Gates skipped: tree unchanged since last green (1106/0), nothing merged.
+
+### 2026-11-18 — delta decisive run: 2ND consecutive 0-merge → STOP-AND-REPORT
+- Exit 3 (iteration-limit), 19min wall. 0 merges (factory/delta empty). Dispatched 2 spikes (resume2/resume3-friction-spike, records 00376-00387) → BOTH PARKED review-rejected (no report artifact — 2nd+3rd consecutive no-report spikes). Pending 31 (flat), parks 20 (+2), debt 5 (+3). No plancheck repeat, no architect turn, still iteration 1. Segment cost ~$0.21.
+- STUCK MECHANISM: spike→no-report→park→debt loop with the spike-report mechanism itself missing (debt item); plancheck-r2 ARCHITECT verdict unaddressable on resume (resume skips architect by design, launch.ts:439-441); pending flat, debt growing, zero forward motion across 2 segments. No operator force-advance exists (state derived from tasks/records; factory decides resume-vs-advance).
+- Cumulative: 11 merges, 20 parks, 31 pending, 5 debt; milestone A 2/4 (Phase-1-done gated on plancheck-bound recovery).
+- Operator: STOP — no relaunch. Gates skipped (tree unchanged). Awaiting owner decision.
