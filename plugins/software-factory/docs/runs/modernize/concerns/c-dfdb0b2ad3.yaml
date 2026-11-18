@@ -1,7 +1,8 @@
 id: c-dfdb0b2ad3
 kind: risk
 summary: Fixture data test file is collected and leaks a temp directory
-detail: tests/data/minimal_sample_project/tests/test_tempfile.py::test_create_temp_dir
+detail:
+  tests/data/minimal_sample_project/tests/test_tempfile.py::test_create_temp_dir
   is collected in the default suite (verified with pytest --collect-only) and
   calls tempfile.mkdtemp without cleanup. tests/data should be excluded from
   collection.

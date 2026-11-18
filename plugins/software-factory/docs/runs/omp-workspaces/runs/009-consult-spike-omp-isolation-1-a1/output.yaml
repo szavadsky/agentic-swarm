@@ -24,7 +24,8 @@ remarkable:
         engine as option)"
     chosen: "omp worktree add + omp --cwd is the 19.1 root mapping; isolation:
       engine kept as fallback"
-    why: Only mechanism proven to give omp-managed workspaces with full retention
+    why:
+      Only mechanism proven to give omp-managed workspaces with full retention
       for headless -p root turns; task.isolation stays scoped to subagent tasks,
       engine merges retained.
 text: "Rulings (iteration-2 planning; no spike rework): (1) PREFLIGHT: no-op

@@ -13,7 +13,8 @@ suggestions:
       file: tests/_golden.py
       line: 392
     summary: Add runs guard and messages to byte-identical hash asserts
-  - detail: Findings get both byte-equality and SHA-256 comparisons while counts get
+  - detail:
+      Findings get both byte-equality and SHA-256 comparisons while counts get
       only byte-equality. Hashing counts payloads the same way would make the
       determinism proof symmetric and match the assignment wording more
       literally.

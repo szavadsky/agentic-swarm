@@ -1,9 +1,11 @@
 # Step: Architect Consult (Item)
 
 ## Goal
+
 Resolve an item-level blockage, retry exhaustion, size violation, or reviewer escalation.
 
 ## Rules
+
 - Exploration budget: diagnose root causes from the assignment, prior attempts, current diff, review feedback, and the prepared context pack (`# Context Pack — `modernize`
 
 > Repository: `python-setup` v1.2.10, `requires-python = ">=3.14"` (`pyproject.toml:4`), branch `topic/modernize`. All citations are `path:line` at HEAD. Line numbers verified 2026-11-07.
@@ -13,18 +15,18 @@ Resolve an item-level blockage, retry exhaustion, size violation, or reviewer es
 
 ## 1. Module Map
 
-| Subsystem | Path | Size | Responsibility |
-|---|---|---|---|
-| Checker framework | `src/python_setup_lint/checkers/_base.py` (238) + `_base.pyi` (96) | 2 files | `MessageDef`, `_msgs`, `SourceRootMixin`, `FunctionVisitMixin`, `check_if_meaningful` (heuristic + semantic gate) |
-| **Semantic pipeline (swap target)** | `src/python_setup_lint/checkers/_semantic.py` (189) + `_semantic.pyi` (27) | 2 files | Lazy `sentence_transformers.CrossEncoder` reranker, SHA-256 result cache, 0.5 threshold |
-| Conformance checkers | `src/python_setup_lint/checkers/conformance/` | 16 `.py` + 16 `.pyi` | 15 checkers (W9001…W9741) incl. `suppression_justification_checker.py` (393) and `bare_except_comment_checker.py` (128) — the two consumers of `check_if_meaningful` |
-| Stub checkers | `src/python_setup_lint/checkers/stub/` | 10 `.py` + 10 `.pyi` | `.pyi` contract/fidelity/coverage/docstring checks (`checker.py` 379, `fidelity/annotation.py` 281, `fidelity/signature.py` 269) |
-| Runner | `src/python_setup_lint/runner/` | 20 modules | `cli.py` (379) entry (`main`, `run_lint`), `dispatch.py` (473) tool registry + strategies, `cmd_build.py` (291) argv building, `parsers.py` (290) + `_record_parsers.py` (277), `baseline.py` (303) diff/cleanup, `output.py` (265), `extra_tools.py` (322), `_autofix.py` (125), `_config.py` (151), `_cli_complexity.py` (154) |
-| Installer | `src/python_setup_lint/setup.py` (413), `_setup_precommit.py` (145), `_setup_pyproject.py` (97), `_setup_update.py` (108) | 4 files | Materialises configs, pre-commit hooks, `lint.baseline` in consumer projects |
-| Test support (shipped) | `src/python_setup_lint/testing.py` (196) + `.pyi` (156) | 2 files | `_make_tc`, `_walk_and_release`, `make_lint_result`, `FakeRunCmd`, `assert_precommit_*` |
-| Shipped configs | `config/` | 10 files | `.pylintrc`, `.pylintrc-pyi`, `.pylintrc-tests`, `ruff.toml`, `mypy.ini`, `pyrightconfig.json`, `rumdl.toml`, `ty.toml`, `.yamllint`, `tach.toml` |
-| Tests | `tests/checkers/` (24 files), `tests/runner/` (27 files), `tests/integration.py` (627), `tests/conftest.py` (178), `tests/data/minimal_sample_project/` | ~19.7k LOC | Unit + integration + gated self-lint |
-| Docs | `docs/semantic-justification.md` (62), `docs/custom-checks.md` (104), `docs/overlays.md` (86), `docs/troubleshooting.md` (177), `docs/tutorials.md` (122), `AGENTS.md` (139), `CodingRules.md` (307), `design/0001`, `design/0002`, `docs/adr/ADR-001…004` | — | Contract documentation; ADR-001…004 already record modernization decisions (3-line stubs) |
+| Subsystem                           | Path                                                                                                                                                                                                                                                       | Size                 | Responsibility                                                                                                                                                                                                                                                                                                                   |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Checker framework                   | `src/python_setup_lint/checkers/_base.py` (238) + `_base.pyi` (96)                                                                                                                                                                                         | 2 files              | `MessageDef`, `_msgs`, `SourceRootMixin`, `FunctionVisitMixin`, `check_if_meaningful` (heuristic + semantic gate)                                                                                                                                                                                                                |
+| **Semantic pipeline (swap target)** | `src/python_setup_lint/checkers/_semantic.py` (189) + `_semantic.pyi` (27)                                                                                                                                                                                 | 2 files              | Lazy `sentence_transformers.CrossEncoder` reranker, SHA-256 result cache, 0.5 threshold                                                                                                                                                                                                                                          |
+| Conformance checkers                | `src/python_setup_lint/checkers/conformance/`                                                                                                                                                                                                              | 16 `.py` + 16 `.pyi` | 15 checkers (W9001…W9741) incl. `suppression_justification_checker.py` (393) and `bare_except_comment_checker.py` (128) — the two consumers of `check_if_meaningful`                                                                                                                                                             |
+| Stub checkers                       | `src/python_setup_lint/checkers/stub/`                                                                                                                                                                                                                     | 10 `.py` + 10 `.pyi` | `.pyi` contract/fidelity/coverage/docstring checks (`checker.py` 379, `fidelity/annotation.py` 281, `fidelity/signature.py` 269)                                                                                                                                                                                                 |
+| Runner                              | `src/python_setup_lint/runner/`                                                                                                                                                                                                                            | 20 modules           | `cli.py` (379) entry (`main`, `run_lint`), `dispatch.py` (473) tool registry + strategies, `cmd_build.py` (291) argv building, `parsers.py` (290) + `_record_parsers.py` (277), `baseline.py` (303) diff/cleanup, `output.py` (265), `extra_tools.py` (322), `_autofix.py` (125), `_config.py` (151), `_cli_complexity.py` (154) |
+| Installer                           | `src/python_setup_lint/setup.py` (413), `_setup_precommit.py` (145), `_setup_pyproject.py` (97), `_setup_update.py` (108)                                                                                                                                  | 4 files              | Materialises configs, pre-commit hooks, `lint.baseline` in consumer projects                                                                                                                                                                                                                                                     |
+| Test support (shipped)              | `src/python_setup_lint/testing.py` (196) + `.pyi` (156)                                                                                                                                                                                                    | 2 files              | `_make_tc`, `_walk_and_release`, `make_lint_result`, `FakeRunCmd`, `assert_precommit_*`                                                                                                                                                                                                                                          |
+| Shipped configs                     | `config/`                                                                                                                                                                                                                                                  | 10 files             | `.pylintrc`, `.pylintrc-pyi`, `.pylintrc-tests`, `ruff.toml`, `mypy.ini`, `pyrightconfig.json`, `rumdl.toml`, `ty.toml`, `.yamllint`, `tach.toml`                                                                                                                                                                                |
+| Tests                               | `tests/checkers/` (24 files), `tests/runner/` (27 files), `tests/integration.py` (627), `tests/conftest.py` (178), `tests/data/minimal_sample_project/`                                                                                                    | ~19.7k LOC           | Unit + integration + gated self-lint                                                                                                                                                                                                                                                                                             |
+| Docs                                | `docs/semantic-justification.md` (62), `docs/custom-checks.md` (104), `docs/overlays.md` (86), `docs/troubleshooting.md` (177), `docs/tutorials.md` (122), `AGENTS.md` (139), `CodingRules.md` (307), `design/0001`, `design/0002`, `docs/adr/ADR-001…004` | —                    | Contract documentation; ADR-001…004 already record modernization decisions (3-line stubs)                                                                                                                                                                                                                                        |
 
 Data flow (documented `AGENTS.md:57-73`, implemented in `runner/cli.py:190-260`):
 
@@ -39,35 +41,35 @@ suppressed violation → check_if_meaningful → _semantic.py (reranker) → sco
 
 ### Public/consumed API of the check pipeline
 
-| Symbol | Location | Signature / contract |
-|---|---|---|
-| `check_if_meaningful` | `checkers/_base.py:142-149` (stub `_base.pyi:69-96`) | `(text: str, *, rule: str | None = None, code_context: str | None = None, comment: str | None = None) -> bool` — **never returns `None`**; env gate `PYTHON_SETUP_LINT_SEMANTIC` (default `"1"`, `_base.py:151`) |
-| `semantic_check_if_meaningful` | `checkers/_semantic.py:125-132` (stub `_semantic.pyi:3-27`) | `(text, *, rule, code_context, comment) -> bool | None`; `None` ⇒ “backend unavailable, keep heuristic” |
-| `_load_reranker` | `checkers/_semantic.py:93-122` | `() -> CrossEncoder | None`, lazy singleton, `_RERANKER_UNAVAILABLE` sentinel |
-| `_reset_cache` | `checkers/_semantic.py:81-90` | clears in-memory cache, resets sentinel, unlinks `results.json` (test helper) |
-| `SuppressionJustificationChecker` | `conformance/suppression_justification_checker.py:31-41` | W9704 `unjustified-suppression`; visits module + `AnnAssign` + function annotations |
-| `BareExceptCommentChecker` | `conformance/bare_except_comment_checker.py:21-124` | W9738 `bare-except-comment`; second consumer of `check_if_meaningful` |
-| `register(linter)` | 18 modules (`grep -c '^def register' src`) | pylint entry point; all carry `# pylint: disable=missing-beartype` (26 occurrences repo-wide) |
+| Symbol                            | Location                                                    | Signature / contract                                                                          |
+| --------------------------------- | ----------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `check_if_meaningful`             | `checkers/_base.py:142-149` (stub `_base.pyi:69-96`)        | `(text: str, *, rule: str                                                                     | None = None, code_context: str                          | None = None, comment: str | None = None) -> bool`— **never returns`None`**; env gate `PYTHON_SETUP_LINT_SEMANTIC`(default`"1"`, `_base.py:151`) |
+| `semantic_check_if_meaningful`    | `checkers/_semantic.py:125-132` (stub `_semantic.pyi:3-27`) | `(text, *, rule, code_context, comment) -> bool                                               | None`; `None` ⇒ “backend unavailable, keep heuristic”   |
+| `_load_reranker`                  | `checkers/_semantic.py:93-122`                              | `() -> CrossEncoder                                                                           | None`, lazy singleton, `_RERANKER_UNAVAILABLE` sentinel |
+| `_reset_cache`                    | `checkers/_semantic.py:81-90`                               | clears in-memory cache, resets sentinel, unlinks `results.json` (test helper)                 |
+| `SuppressionJustificationChecker` | `conformance/suppression_justification_checker.py:31-41`    | W9704 `unjustified-suppression`; visits module + `AnnAssign` + function annotations           |
+| `BareExceptCommentChecker`        | `conformance/bare_except_comment_checker.py:21-124`         | W9738 `bare-except-comment`; second consumer of `check_if_meaningful`                         |
+| `register(linter)`                | 18 modules (`grep -c '^def register' src`)                  | pylint entry point; all carry `# pylint: disable=missing-beartype` (26 occurrences repo-wide) |
 
 ### Runner/type surface (relevant if a new backend module is added)
 
-| Symbol | Location | Notes |
-|---|---|---|
-| `TOOLS: list[ToolSpec]` | `runner/dispatch.py:38-129` | **14 entries** (see §4.4 drift note) |
-| `LINT_TOOLS: list[ToolSpec]` | `runner/dispatch.py:435` | live registry; `TOOLS` is a “legacy-compat alias” |
-| `ToolSpec` | `runner/types.py:1-65`, `dispatch.py:42-128` | `supports_fix`, `supports_path`, `fix_flags`, `memory_limit_mb`, `default_paths` |
-| `RunnerConfig` | `runner/types.py`, `runner/_config.py:1-151` | `cwd`, `package_name`, `config_paths`, `tool_timeouts`, `tool_memory_limits` |
-| `main` / `run_lint` | `runner/cli.py:1-379`, `runner/__init__.py:24-38` | CLI + programmatic entry |
+| Symbol                       | Location                                          | Notes                                                                            |
+| ---------------------------- | ------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `TOOLS: list[ToolSpec]`      | `runner/dispatch.py:38-129`                       | **14 entries** (see §4.4 drift note)                                             |
+| `LINT_TOOLS: list[ToolSpec]` | `runner/dispatch.py:435`                          | live registry; `TOOLS` is a “legacy-compat alias”                                |
+| `ToolSpec`                   | `runner/types.py:1-65`, `dispatch.py:42-128`      | `supports_fix`, `supports_path`, `fix_flags`, `memory_limit_mb`, `default_paths` |
+| `RunnerConfig`               | `runner/types.py`, `runner/_config.py:1-151`      | `cwd`, `package_name`, `config_paths`, `tool_timeouts`, `tool_memory_limits`     |
+| `main` / `run_lint`          | `runner/cli.py:1-379`, `runner/__init__.py:24-38` | CLI + programmatic entry                                                         |
 
 ### Shipped test helpers (`python_setup_lint.testing`)
 
-| Symbol | Location | Purpose |
-|---|---|---|
-| `_make_tc(checker_class, /)` | `testing.py:18-22` | builds pylint `CheckerTestCase` |
-| `_walk_and_release(code, checker_class, /, *, file_path, module_name)` | `testing.py:25-38` | parse + walk + `release_messages()`; returns `list[Any]` |
-| `make_lint_result(...)` | `testing.py:44-61` | `LintResult` factory |
-| `FakeRunCmd` / `fake_run_cmd_factory` | `testing.py:64-103` | subprocess boundary fake |
-| `assert_precommit_config_valid`, `assert_precommit_hooks_shape` | `testing.py:138-196` | consumer-agnostic health checks |
+| Symbol                                                                 | Location             | Purpose                                                  |
+| ---------------------------------------------------------------------- | -------------------- | -------------------------------------------------------- |
+| `_make_tc(checker_class, /)`                                           | `testing.py:18-22`   | builds pylint `CheckerTestCase`                          |
+| `_walk_and_release(code, checker_class, /, *, file_path, module_name)` | `testing.py:25-38`   | parse + walk + `release_messages()`; returns `list[Any]` |
+| `make_lint_result(...)`                                                | `testing.py:44-61`   | `LintResult` factory                                     |
+| `FakeRunCmd` / `fake_run_cmd_factory`                                  | `testing.py:64-103`  | subprocess boundary fake                                 |
+| `assert_precommit_config_valid`, `assert_precommit_hooks_shape`        | `testing.py:138-196` | consumer-agnostic health checks                          |
 
 ### Pytest markers (`pyproject.toml:48-55`)
 
@@ -118,8 +120,9 @@ result = score >= 0.5
 ```
 
 Behavioural facts the modernization must preserve or consciously change:
+
 - Empty/whitespace primary ⇒ `False` **before** any model work (`_semantic.py:139-140`).
-- Result cache is persisted on *every* new entry (`_save_result_cache`, `_semantic.py:71-78,187-188`), little-endian-free 64-bit key ⇒ collision surface.
+- Result cache is persisted on _every_ new entry (`_save_result_cache`, `_semantic.py:71-78,187-188`), little-endian-free 64-bit key ⇒ collision surface.
 - Failure sentinel prevents retry storms (`_semantic.py:99-109`; CHANGELOG v0.11.0 fix at `CHANGELOG.md:113`).
 - Model weights and results share one directory `~/.cache/python-setup/semantic` (`_semantic.py:38,112-117`), which is `.gitignore`d (`gitignore:243-244`).
 
@@ -191,7 +194,7 @@ semantic = ["sentence-transformers>=3.0.0"]
 - Doc surfaces naming the model/env var: `AGENTS.md:79-85`, `docs/semantic-justification.md:1-62`, `docs/troubleshooting.md:97-111`, `docs/tutorials.md:12-16`, `README.md:29,105`, `docs/custom-checks.md:104`.
 - `tach.toml` declares only two module boundaries (`python_setup_lint/checkers`, `python_setup_lint/runner`, `config/tach.toml:15-21`), so new private modules under `checkers/` need no boundary change.
 
-### 3.5 In-repo precedents for a *git-stored, self-cleaning* cache
+### 3.5 In-repo precedents for a _git-stored, self-cleaning_ cache
 
 `lint.baseline` is the closest analogue: a committed, JSON, sorted artefact whose shrink-path is auto-cleaned.
 
@@ -219,8 +222,9 @@ if baseline_modified:
 ```
 
 Other relevant precedents/constraints for a committed cache file:
+
 - `.secrets.baseline` is a committed JSON artefact regenerated by `detect-secrets-hook` with `generated_at` stripped (`dispatch.py:216-232`); **detect-secrets scans `git ls-files`**, so a committed decision cache is scanned for high-entropy strings.
-- `.gitignore:243-244` currently *excludes* the semantic cache; a git-stored cache reverses that decision and needs an ignore-rule for weights (never commit weights).
+- `.gitignore:243-244` currently _excludes_ the semantic cache; a git-stored cache reverses that decision and needs an ignore-rule for weights (never commit weights).
 - `lint.baseline` is currently `[]` (2 bytes) — zero tolerated violations.
 
 ### 3.6 Tool registry (registry fact that already breaks tests)
@@ -243,12 +247,12 @@ TOOLS: list[ToolSpec] = [
 
 ### 4.1 Layout and helpers
 
-| Layer | Location | Count |
-|---|---|---|
-| Checker units | `tests/checkers/test_*.py` | 24 modules; shared tables in `tests/checkers/_factories.py` (1,393 lines, `# pylint: disable=too-many-lines`) |
-| Runner units | `tests/runner/test_*.py` | 27 modules; factories split across `_factories.py` (173), `_factories_baseline.py` (279), `_factories_extras.py` (502), `_factories_tables.py` (394), `_autofix_helpers.py` (135) |
-| Integration | `tests/integration.py` (627, `too-many-lines` disabled) | 9 tests, `TestMinimalSampleProject` |
-| Fixtures | `tests/conftest.py` only (no `tests/checkers/conftest.py`, no `tests/assumptions/`) | session `_ensure_venv_on_path` (`:30-36`), `configured_project` (`:62-89`), `isolated_runner_registries` (`:126-159`), `sample_project` (`:161-164`), `shipped_config_paths()` (`:170-178`) |
+| Layer         | Location                                                                            | Count                                                                                                                                                                                       |
+| ------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Checker units | `tests/checkers/test_*.py`                                                          | 24 modules; shared tables in `tests/checkers/_factories.py` (1,393 lines, `# pylint: disable=too-many-lines`)                                                                               |
+| Runner units  | `tests/runner/test_*.py`                                                            | 27 modules; factories split across `_factories.py` (173), `_factories_baseline.py` (279), `_factories_extras.py` (502), `_factories_tables.py` (394), `_autofix_helpers.py` (135)           |
+| Integration   | `tests/integration.py` (627, `too-many-lines` disabled)                             | 9 tests, `TestMinimalSampleProject`                                                                                                                                                         |
+| Fixtures      | `tests/conftest.py` only (no `tests/checkers/conftest.py`, no `tests/assumptions/`) | session `_ensure_venv_on_path` (`:30-36`), `configured_project` (`:62-89`), `isolated_runner_registries` (`:126-159`), `sample_project` (`:161-164`), `shipped_config_paths()` (`:170-178`) |
 
 Conventions enforced by `CodingRules.md:276-307`: test naming `test_<method>_given_<condition>_then_<expected>`, parametrisation over loops, `hypothesis` for parsers (`tests/runner/test_parsers_hypothesis.py`), factories for complex objects, no shared fixtures in test files.
 
@@ -261,7 +265,7 @@ assert {m.msg_id for m in msgs} == {"unjustified-suppression"}
 
 ### 4.2 Markers / selection
 
-`addopts = "-m 'not slow'"` (`pyproject.toml:49`). 19 `@pytest.mark.slow` uses ⇒ 18 deselected. `with_real_api` is used **once** (`tests/runner/test_real_pipeline_smoke.py:15`) and is *not* deselected, so the real 14-tool pipeline runs in the default suite (2.6 s). `tests/runner/test_self_lint_clean.py:17` is `slow` ⇒ the self-lint gate is **not** in the default suite.
+`addopts = "-m 'not slow'"` (`pyproject.toml:49`). 19 `@pytest.mark.slow` uses ⇒ 18 deselected. `with_real_api` is used **once** (`tests/runner/test_real_pipeline_smoke.py:15`) and is _not_ deselected, so the real 14-tool pipeline runs in the default suite (2.6 s). `tests/runner/test_self_lint_clean.py:17` is `slow` ⇒ the self-lint gate is **not** in the default suite.
 
 ### 4.3 Integration gate (the only end-to-end behaviour contract today)
 
@@ -276,15 +280,15 @@ bare-except-comment, pyi-underscore-symbol, docstring-in-impl,
 signature-mismatch, …, MD072, duplicate-code
 ```
 
-Weakness relevant to “preserve every material behavior”: this asserts *presence only* — duplicate findings, moved lines, and new false positives are invisible. `docs/adr/ADR-001.md` already records the decision to add a normalized golden snapshot (`{tool,file,line,col,rule}`), which does not exist yet (`tests/data/golden/` absent).
+Weakness relevant to “preserve every material behavior”: this asserts _presence only_ — duplicate findings, moved lines, and new false positives are invisible. `docs/adr/ADR-001.md` already records the decision to add a normalized golden snapshot (`{tool,file,line,col,rule}`), which does not exist yet (`tests/data/golden/` absent).
 
 ### 4.4 Measured gate state on this checkout (2026-11-07)
 
-| Gate | Command | Result |
-|---|---|---|
-| Unit+integration | `uv run pytest -q` | **6 failed, 1300 passed, 4 skipped, 18 deselected** in ~21 s |
-| Self-lint | `uv run lint --baseline <tmp copy>` | **4 “new violations” reported; exit non-zero** |
-| Format cleanliness | `uv run ruff format --check src/ tests/` (ruff 0.15.17) | **105 files would be reformatted, 79 already formatted** |
+| Gate               | Command                                                 | Result                                                       |
+| ------------------ | ------------------------------------------------------- | ------------------------------------------------------------ |
+| Unit+integration   | `uv run pytest -q`                                      | **6 failed, 1300 passed, 4 skipped, 18 deselected** in ~21 s |
+| Self-lint          | `uv run lint --baseline <tmp copy>`                     | **4 “new violations” reported; exit non-zero**               |
+| Format cleanliness | `uv run ruff format --check src/ tests/` (ruff 0.15.17) | **105 files would be reformatted, 79 already formatted**     |
 
 Failing tests (all one root cause — hard-coded 13-tool sets that omit `ruff format`, while `TOOLS` has 14):
 
@@ -300,19 +304,19 @@ Documentation drift on the same fact: `AGENTS.md:43,63,92,93`, `docs/overlays.md
 
 ### 4.5 Known test-quality problems (debloat targets)
 
-| Problem | Evidence |
-|---|---|
-| Duplicate heuristic tables | `tests/checkers/test_semantic_check.py:212-257` (`TestMeaningfulPatterns`, 33 rows) duplicates `tests/checkers/test_semantic_threshold.py:29-63` (30 rows, near-identical strings) |
-| Over-limit module hiding behind a disable | `test_semantic_check.py:1` disables `too-many-lines` while claiming “504 lines” for a 506-line file (`CodingRules.md:139-141` requires splitting, not baselining) |
-| Mocking first-party code | `patch("python_setup_lint.checkers._semantic._load_reranker")`, `patch(…_RESULT_CACHE)`, `patch("builtins.__import__")` at `test_semantic_check.py:25-42,58-61,98-117,310-357`; contradicts `CodingRules.md:240-254` (mock only at external boundaries) |
-| Vacuous assertions | `assert result is None or isinstance(result, bool)` (`test_semantic_check.py:286`), `assert result is True or result is None` (`:449`), `assert result is False or result is None` (`:418,469`) — pass under any backend state |
-| Private-symbol imports with blanket ignores | `# type: ignore[attr-defined]  # private symbol removed from .pyi per M3(b)` repeated 8× in `test_semantic_check.py` and 2× in `test_suppression_justification_checker.py:368,382` |
-| Slow reranker suite guarded by `importorskip` | `test_suppression_justification_checker.py:356-390` (`@pytest.mark.slow`), `test_semantic_check.py:424-506` (`TestRerankerPairs`) — dead in this venv |
-| Test-name/behaviour mismatch | `test_semantic_threshold.py:65-69` is named “threshold” but exercises the heuristic with `PYTHON_SETUP_LINT_SEMANTIC=0`; the 0.5 threshold is untested |
-| Structural suppressions repeated per checker | 26× `# pylint: disable=missing-beartype` on `register()`, 4× `# type: ignore[misc]` on checker classes; src total suppressions: 87 pylint-disable, 60 type-ignore, 23 ty-ignore, 16 noqa; tests: 117/104/3/37 |
-| Legacy compat surface | `runner/baseline.py:20-38` (`_FALLBACK_TOOLS`, `peek_fallback_tools` returning `frozenset()`), `runner/parsers.py:7,31` re-exports, `dispatch.py:435-437` `LINT_TOOLS` “legacy-compat alias”; `trivial_wrapper_checker.py:34-36` carve-outs for `_legacy_*` names |
-| Stale code comments | `test_semantic_check.py:1` (“504 lines”), `test_t3_coverage.py:1-2` (“T3 coverage … implementer's tests”), `test_t5/test_t9_7/test_t11` reference non-existent `T*.envelope.md` documents |
-| Deprecated astroid API | `tests/checkers/test_stub_checker.py:410` uses `astroid.NodeNG` (DeprecationWarning: removed in astroid v5) |
+| Problem                                       | Evidence                                                                                                                                                                                                                                                          |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Duplicate heuristic tables                    | `tests/checkers/test_semantic_check.py:212-257` (`TestMeaningfulPatterns`, 33 rows) duplicates `tests/checkers/test_semantic_threshold.py:29-63` (30 rows, near-identical strings)                                                                                |
+| Over-limit module hiding behind a disable     | `test_semantic_check.py:1` disables `too-many-lines` while claiming “504 lines” for a 506-line file (`CodingRules.md:139-141` requires splitting, not baselining)                                                                                                 |
+| Mocking first-party code                      | `patch("python_setup_lint.checkers._semantic._load_reranker")`, `patch(…_RESULT_CACHE)`, `patch("builtins.__import__")` at `test_semantic_check.py:25-42,58-61,98-117,310-357`; contradicts `CodingRules.md:240-254` (mock only at external boundaries)           |
+| Vacuous assertions                            | `assert result is None or isinstance(result, bool)` (`test_semantic_check.py:286`), `assert result is True or result is None` (`:449`), `assert result is False or result is None` (`:418,469`) — pass under any backend state                                    |
+| Private-symbol imports with blanket ignores   | `# type: ignore[attr-defined]  # private symbol removed from .pyi per M3(b)` repeated 8× in `test_semantic_check.py` and 2× in `test_suppression_justification_checker.py:368,382`                                                                                |
+| Slow reranker suite guarded by `importorskip` | `test_suppression_justification_checker.py:356-390` (`@pytest.mark.slow`), `test_semantic_check.py:424-506` (`TestRerankerPairs`) — dead in this venv                                                                                                             |
+| Test-name/behaviour mismatch                  | `test_semantic_threshold.py:65-69` is named “threshold” but exercises the heuristic with `PYTHON_SETUP_LINT_SEMANTIC=0`; the 0.5 threshold is untested                                                                                                            |
+| Structural suppressions repeated per checker  | 26× `# pylint: disable=missing-beartype` on `register()`, 4× `# type: ignore[misc]` on checker classes; src total suppressions: 87 pylint-disable, 60 type-ignore, 23 ty-ignore, 16 noqa; tests: 117/104/3/37                                                     |
+| Legacy compat surface                         | `runner/baseline.py:20-38` (`_FALLBACK_TOOLS`, `peek_fallback_tools` returning `frozenset()`), `runner/parsers.py:7,31` re-exports, `dispatch.py:435-437` `LINT_TOOLS` “legacy-compat alias”; `trivial_wrapper_checker.py:34-36` carve-outs for `_legacy_*` names |
+| Stale code comments                           | `test_semantic_check.py:1` (“504 lines”), `test_t3_coverage.py:1-2` (“T3 coverage … implementer's tests”), `test_t5/test_t9_7/test_t11` reference non-existent `T*.envelope.md` documents                                                                         |
+| Deprecated astroid API                        | `tests/checkers/test_stub_checker.py:410` uses `astroid.NodeNG` (DeprecationWarning: removed in astroid v5)                                                                                                                                                       |
 
 ### 4.6 Coding-rule gates that constrain refactors
 
@@ -330,29 +334,29 @@ Documentation drift on the same fact: `AGENTS.md:43,63,92,93`, `docs/overlays.md
 
 Facts gathered from the model cards (see §6):
 
-| Candidate | Params / size | Runtime | License | Fit for a CPU lint tool |
-|---|---|---|---|---|
+| Candidate                               | Params / size                                   | Runtime                                                                                                                                                                        | License                                                                                                                     | Fit for a CPU lint tool                                                                                                                                                                                         |
+| --------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `fastino/GLiDE-0.4B` (intent's example) | 0.40B, **790 MB bf16 safetensors**, 812 MB repo | `glide` package vendored in the repo (**not on PyPI**), `torch==2.14.0` (CUDA 13 wheels), `transformers==5.17.0`, **tested on Python 3.12**, `GLIDE_DEVICE` defaults to `cuda` | **fastino-community** — restricts Commercial Use and “Production” deployment, forbids redistribution terms of MIT-style use | Poor: GPU-first latency numbers only (6.9 ms median on RTX PRO 6000), no CPU benchmarks, no PyPI package, Python 3.14 untested, non-OSI license conflicts with this repo's MIT license (`pyproject.toml:19-20`) |
-| `minishlab/potion-base-8M` | 7.56M params, static embeddings (`model2vec`) | CPU-native, ONNX variant available, `pip install model2vec` | **MIT** | Good cost/profile, but it is an *embedding* model — needs a prototype/similarity or trained head to produce P(meaningful) |
-| `cross-encoder/nli-deberta-v3-xsmall` | 70.8M params | sentence-transformers (`torch`) or ONNX export | **Apache-2.0** | Good accuracy/size trade-off, still a torch dependency unless ONNX-only path is chosen |
+| `minishlab/potion-base-8M`              | 7.56M params, static embeddings (`model2vec`)   | CPU-native, ONNX variant available, `pip install model2vec`                                                                                                                    | **MIT**                                                                                                                     | Good cost/profile, but it is an _embedding_ model — needs a prototype/similarity or trained head to produce P(meaningful)                                                                                       |
+| `cross-encoder/nli-deberta-v3-xsmall`   | 70.8M params                                    | sentence-transformers (`torch`) or ONNX export                                                                                                                                 | **Apache-2.0**                                                                                                              | Good accuracy/size trade-off, still a torch dependency unless ONNX-only path is chosen                                                                                                                          |
 
 Open decisions for a spike: (a) license compatibility for a redistributable MIT package; (b) CPU-only latency/RSS budget per lint run (W9704 currently runs on every suppression line in `src/`, `tests/`); (c) Python 3.14 wheel availability (`requires-python = ">=3.14"`, `pyproject.toml:4`); (d) whether the backend is `transformers`, `onnxruntime`, `model2vec`, or a pure-numpy scorer; (e) pinned revision/digest + offline-first behaviour; (f) whether `PYTHON_SETUP_LINT_RERANKER_MODEL` survives as a deprecated alias (ADR-002 narrative in `docs/adr/ADR-002.md`).
 
 ### 5.2 Cache design (open)
 
 - **Location**: committed file at the linted project root (e.g. next to `lint.baseline`) vs. in-repo `.python-setup/`. `docs/adr/ADR-003.md` records the intent but not the path/format.
-- **Key**: today's key is a 64-bit truncation of SHA-256 over `(text, rule, code_context, comment, model)` (`_semantic.py:143-155`) — collisions silently flip verdicts. A committed cache makes a collision *permanent and shared*.
+- **Key**: today's key is a 64-bit truncation of SHA-256 over `(text, rule, code_context, comment, model)` (`_semantic.py:143-155`) — collisions silently flip verdicts. A committed cache makes a collision _permanent and shared_.
 - **Correctness coupling**: the key includes `code_context`, so cache entries churn on any line edit; a committed cache would produce large, noisy diffs.
 - **Eviction**: what is “cleanup”? Options: drop entries for deleted files, cap by age (`created`/`last_used`), cap by size, or shrink when a suppression disappears (mirrors `baseline.py:280-292`).
 - **Concurrency/atomicity**: must reuse the temp-file + `shutil.move` pattern (`baseline.py:207-222`) to avoid torn writes from parallel pylint workers.
-- **Determinism across machines**: with a committed cache, verdicts become machine-independent — but only for cache hits; misses still diverge when the model is absent. Decide whether a miss with no model *rejects*, *accepts*, or *falls back to heuristic* (today: heuristic, `_base.py:156-158`).
+- **Determinism across machines**: with a committed cache, verdicts become machine-independent — but only for cache hits; misses still diverge when the model is absent. Decide whether a miss with no model _rejects_, _accepts_, or _falls back to heuristic_ (today: heuristic, `_base.py:156-158`).
 - **detect-secrets**: `git ls-files` is scanned (`dispatch.py:216-232`) — a JSON cache of free-text justifications may trip entropy heuristics and must be either allowlisted or excluded.
 - **Merge conflicts**: JSON object keyed by hash is conflict-prone; consider sorted list-of-records with a stable sort key.
 
 ### 5.3 Behavior preservation boundaries
 
 - Exact W9704/W9738 outcomes on `tests/data/minimal_sample_project` are the de-facto spec (`violations.txt`), but only presence is asserted.
-- The heuristic is a **hard** pre-filter only if you decide so; today the semantic result *replaces* the heuristic when it returns a bool (`_base.py:156-158`). ADR-002 proposes heuristic-first gating (“its rejections never reach the model”), which is a deliberate behaviour change for the model-accepted-but-heuristic-rejected set (e.g. `"carried from library httpx for type compatibility"` is accepted today by heuristic; `"pre-existing"` is rejected by heuristic and would be guaranteed rejected).
+- The heuristic is a **hard** pre-filter only if you decide so; today the semantic result _replaces_ the heuristic when it returns a bool (`_base.py:156-158`). ADR-002 proposes heuristic-first gating (“its rejections never reach the model”), which is a deliberate behaviour change for the model-accepted-but-heuristic-rejected set (e.g. `"carried from library httpx for type compatibility"` is accepted today by heuristic; `"pre-existing"` is rejected by heuristic and would be guaranteed rejected).
 - `bare_except_comment_checker` is a second consumer; any signature change must update both call sites (`:103,:116`) and `docs/custom-checks.md`.
 - `_base.pyi` and `_semantic.pyi` are part of the shipped contract (`mypy.stubtest` gate); `check_if_meaningful` must keep its name, keyword-only params and `-> bool` return.
 
@@ -395,7 +399,8 @@ Open decisions for a spike: (a) license compatibility for a redistributable MIT 
 4. `pyproject.toml:1-55`, `config/.pylintrc:1-19`, `runner/dispatch.py:38-131`.
 5. `runner/baseline.py:20-38,182-292` (cache precedent) and `.gitignore:242-244`.
 6. `tests/checkers/test_semantic_check.py`, `tests/checkers/test_semantic_threshold.py`, `tests/checkers/test_suppression_justification_checker.py:356-390`, `tests/integration.py:1-123`.
-`). Read code ONLY to verify a specific failure site or interface contract (few targeted reads, never broad scans). If root cause remains unknown, split the item, outline a spike, or escalate instead of investigating. Keep terse.
+   `). Read code ONLY to verify a specific failure site or interface contract (few targeted reads, never broad scans). If root cause remains unknown, split the item, outline a spike, or escalate instead of investigating. Keep terse.
+
 - Decision options (yield `decision` matching `decisions.schema.json` with `context: "item"`):
   - `retry-with-guidance`: provide concrete technical steering for another developer attempt. Set `persist: true` if guidance applies to subsequent rounds.
   - `split`: decompose oversized or unfocused item into smaller, independent item outlines (respecting the configured split-depth limit).
@@ -405,18 +410,22 @@ Open decisions for a spike: (a) license compatibility for a redistributable MIT 
 - Grounded judgment: inspect prior attempts, failure output, reviewer feedback, and the current code diff to identify root cause before deciding.
 
 ## Item
+
 golden-snapshot-wiring
 
 ## Assignment
+
 {"slug":"golden-snapshot-wiring","kind":"dev","title":"Commit golden files and wire integration capture","assignment":"Using tests/_golden.py from golden-helpers-unit and probe verdict. (1) Commit tests/data/golden/minimal_sample_project_findings.json + ..._tool_counts.json via helper serialization, outside sample dir, never copied/linted; violations.txt RETAINED as oracle. (2) Edit tests/integration.py test_setup_new_and_lint only: keep first run (no baseline, rc!=0) AND retain tool-section/SKIPPED/[CRASH]/W9705 assertions; add dedicated second capture (caller owns tmp, copy_sample, git-init, _make_config with package_name+rumdl override, monkeypatched PYTHON_SETUP_LINT_SEMANTIC=0) calling collect_findings; replace substring loop with golden equality + oracle/tool coverage; brush-off/carry as tool-qualified lookups (tool='pylint', file='src/minimal_sample/mod.py', line 49 present / 56 absent); drift injection on in-memory list copies only. Run captures on temp copies only — never bare `uv run lint` on repo (ruff-format write hazard). Bounded src allowance ONLY if probe proved test-side insufficient: runner/baseline.py relativize/sort + runner/parsers.py|_record_parsers.py ordering, <=40 added lines, determinism-only (no finding added/removed), reviewed diff in report. Acceptance: `uv run pytest tests/integration.py -v` and `uv run pytest tests/test_golden.py -q` pass; PYTHON_SETUP_LINT_UPDATE_GOLDEN=1 regen twice byte-identical; golden+counts byte-stable.","outlineRef":"golden-snapshot-wiring","milestone":"M1","wave":7,"deps":["golden-determinism-probe","golden-helpers-unit"],"scenarioRefs":["M1: Golden snapshot pins current behavior","M1: Behavior drift is reported precisely","M1: Deterministic regeneration","M1: Planted-rule and per-tool coverage preserved","M1: Crash/skip coverage retained outside golden"],"citations":["tests/_golden.py","tests/integration.py","tests/data/golden/minimal_sample_project_findings.json","ADR-001","TD-3"]}
 
 ## Prior Attempts & Failures
+
 2 attempts recorded for qa (all rejected); next would be 3 > max 2
 
 Failing checks:
 [red-test] red-test failed: test tests/integration.py::TestMinimalSampleProject::test_setup_new_and_lint passes even without production code changes. Command: uv run pytest tests/integration.py::TestMinimalSampleProject::test_setup_new_and_lint --junitxml=/home/slava/aiexp/python-setup.factory-wt/.factory-runtime/tmp/junit-redtest-1794117145240-epmeefq3bl5.xml
 
 ## Current Diff
+
 .factory/tasks/modernize/items/golden-snapshot-wiring/steps/001-test-first-r1-a1/checks.yaml +23/-0
 .factory/tasks/modernize/items/golden-snapshot-wiring/steps/001-test-first-r1-a1/input.md +73/-0
 .factory/tasks/modernize/items/golden-snapshot-wiring/steps/001-test-first-r1-a1/meta.yaml +19/-0
@@ -437,20 +446,21 @@ tests/data/golden/minimal_sample_project_tool_counts.json +16/-0
 tests/integration.py +61/-27
 
 ## Review Feedback
+
 Failing check: red-test
 
 Message: red-test failed: test tests/integration.py::TestMinimalSampleProject::test_setup_new_and_lint passes even without production code changes. Command: uv run pytest tests/integration.py::TestMinimalSampleProject::test_setup_new_and_lint --junitxml=/home/slava/aiexp/python-setup.factory-wt/.factory-runtime/tmp/junit-redtest-1794117145240-epmeefq3bl5.xml
 
 Detail:
 {
-  "command": "uv run pytest tests/integration.py::TestMinimalSampleProject::test_setup_new_and_lint --junitxml=/home/slava/aiexp/python-setup.factory-wt/.factory-runtime/tmp/junit-redtest-1794117145240-epmeefq3bl5.xml",
-  "junitCaseCount": 1,
-  "junitCaseIds": [
-    "tests.integration.TestMinimalSampleProject.test_setup_new_and_lint"
-  ],
-  "junitTruncated": false,
-  "collected": true,
-  "collectionErrors": []
+"command": "uv run pytest tests/integration.py::TestMinimalSampleProject::test_setup_new_and_lint --junitxml=/home/slava/aiexp/python-setup.factory-wt/.factory-runtime/tmp/junit-redtest-1794117145240-epmeefq3bl5.xml",
+"junitCaseCount": 1,
+"junitCaseIds": [
+"tests.integration.TestMinimalSampleProject.test_setup_new_and_lint"
+],
+"junitTruncated": false,
+"collected": true,
+"collectionErrors": []
 }
 
 Output tail:
@@ -463,12 +473,13 @@ collected 1 item
 [Tach] 1 test in 4 files unaffected by changes. Skip with: pytest --tach
 [Tach] To disable: pytest -p no:tach (https://docs.gauge.sh/usage/commands#using-the-pytest-plugin-directly)
 
-tests/integration.py .                                                   [100%]
+tests/integration.py . [100%]
 
 - generated xml file: /home/slava/aiexp/python-setup.factory-wt/.factory-runtime/tmp/junit-redtest-1794117145240-epmeefq3bl5.xml -
-============================== 1 passed in 30.15s ==============================
+  ============================== 1 passed in 30.15s ==============================
 
 ## Context Pack
+
 # Context Pack — `modernize`
 
 > Repository: `python-setup` v1.2.10, `requires-python = ">=3.14"` (`pyproject.toml:4`), branch `topic/modernize`. All citations are `path:line` at HEAD. Line numbers verified 2026-11-07.
@@ -478,18 +489,18 @@ tests/integration.py .                                                   [100%]
 
 ## 1. Module Map
 
-| Subsystem | Path | Size | Responsibility |
-|---|---|---|---|
-| Checker framework | `src/python_setup_lint/checkers/_base.py` (238) + `_base.pyi` (96) | 2 files | `MessageDef`, `_msgs`, `SourceRootMixin`, `FunctionVisitMixin`, `check_if_meaningful` (heuristic + semantic gate) |
-| **Semantic pipeline (swap target)** | `src/python_setup_lint/checkers/_semantic.py` (189) + `_semantic.pyi` (27) | 2 files | Lazy `sentence_transformers.CrossEncoder` reranker, SHA-256 result cache, 0.5 threshold |
-| Conformance checkers | `src/python_setup_lint/checkers/conformance/` | 16 `.py` + 16 `.pyi` | 15 checkers (W9001…W9741) incl. `suppression_justification_checker.py` (393) and `bare_except_comment_checker.py` (128) — the two consumers of `check_if_meaningful` |
-| Stub checkers | `src/python_setup_lint/checkers/stub/` | 10 `.py` + 10 `.pyi` | `.pyi` contract/fidelity/coverage/docstring checks (`checker.py` 379, `fidelity/annotation.py` 281, `fidelity/signature.py` 269) |
-| Runner | `src/python_setup_lint/runner/` | 20 modules | `cli.py` (379) entry (`main`, `run_lint`), `dispatch.py` (473) tool registry + strategies, `cmd_build.py` (291) argv building, `parsers.py` (290) + `_record_parsers.py` (277), `baseline.py` (303) diff/cleanup, `output.py` (265), `extra_tools.py` (322), `_autofix.py` (125), `_config.py` (151), `_cli_complexity.py` (154) |
-| Installer | `src/python_setup_lint/setup.py` (413), `_setup_precommit.py` (145), `_setup_pyproject.py` (97), `_setup_update.py` (108) | 4 files | Materialises configs, pre-commit hooks, `lint.baseline` in consumer projects |
-| Test support (shipped) | `src/python_setup_lint/testing.py` (196) + `.pyi` (156) | 2 files | `_make_tc`, `_walk_and_release`, `make_lint_result`, `FakeRunCmd`, `assert_precommit_*` |
-| Shipped configs | `config/` | 10 files | `.pylintrc`, `.pylintrc-pyi`, `.pylintrc-tests`, `ruff.toml`, `mypy.ini`, `pyrightconfig.json`, `rumdl.toml`, `ty.toml`, `.yamllint`, `tach.toml` |
-| Tests | `tests/checkers/` (24 files), `tests/runner/` (27 files), `tests/integration.py` (627), `tests/conftest.py` (178), `tests/data/minimal_sample_project/` | ~19.7k LOC | Unit + integration + gated self-lint |
-| Docs | `docs/semantic-justification.md` (62), `docs/custom-checks.md` (104), `docs/overlays.md` (86), `docs/troubleshooting.md` (177), `docs/tutorials.md` (122), `AGENTS.md` (139), `CodingRules.md` (307), `design/0001`, `design/0002`, `docs/adr/ADR-001…004` | — | Contract documentation; ADR-001…004 already record modernization decisions (3-line stubs) |
+| Subsystem                           | Path                                                                                                                                                                                                                                                       | Size                 | Responsibility                                                                                                                                                                                                                                                                                                                   |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Checker framework                   | `src/python_setup_lint/checkers/_base.py` (238) + `_base.pyi` (96)                                                                                                                                                                                         | 2 files              | `MessageDef`, `_msgs`, `SourceRootMixin`, `FunctionVisitMixin`, `check_if_meaningful` (heuristic + semantic gate)                                                                                                                                                                                                                |
+| **Semantic pipeline (swap target)** | `src/python_setup_lint/checkers/_semantic.py` (189) + `_semantic.pyi` (27)                                                                                                                                                                                 | 2 files              | Lazy `sentence_transformers.CrossEncoder` reranker, SHA-256 result cache, 0.5 threshold                                                                                                                                                                                                                                          |
+| Conformance checkers                | `src/python_setup_lint/checkers/conformance/`                                                                                                                                                                                                              | 16 `.py` + 16 `.pyi` | 15 checkers (W9001…W9741) incl. `suppression_justification_checker.py` (393) and `bare_except_comment_checker.py` (128) — the two consumers of `check_if_meaningful`                                                                                                                                                             |
+| Stub checkers                       | `src/python_setup_lint/checkers/stub/`                                                                                                                                                                                                                     | 10 `.py` + 10 `.pyi` | `.pyi` contract/fidelity/coverage/docstring checks (`checker.py` 379, `fidelity/annotation.py` 281, `fidelity/signature.py` 269)                                                                                                                                                                                                 |
+| Runner                              | `src/python_setup_lint/runner/`                                                                                                                                                                                                                            | 20 modules           | `cli.py` (379) entry (`main`, `run_lint`), `dispatch.py` (473) tool registry + strategies, `cmd_build.py` (291) argv building, `parsers.py` (290) + `_record_parsers.py` (277), `baseline.py` (303) diff/cleanup, `output.py` (265), `extra_tools.py` (322), `_autofix.py` (125), `_config.py` (151), `_cli_complexity.py` (154) |
+| Installer                           | `src/python_setup_lint/setup.py` (413), `_setup_precommit.py` (145), `_setup_pyproject.py` (97), `_setup_update.py` (108)                                                                                                                                  | 4 files              | Materialises configs, pre-commit hooks, `lint.baseline` in consumer projects                                                                                                                                                                                                                                                     |
+| Test support (shipped)              | `src/python_setup_lint/testing.py` (196) + `.pyi` (156)                                                                                                                                                                                                    | 2 files              | `_make_tc`, `_walk_and_release`, `make_lint_result`, `FakeRunCmd`, `assert_precommit_*`                                                                                                                                                                                                                                          |
+| Shipped configs                     | `config/`                                                                                                                                                                                                                                                  | 10 files             | `.pylintrc`, `.pylintrc-pyi`, `.pylintrc-tests`, `ruff.toml`, `mypy.ini`, `pyrightconfig.json`, `rumdl.toml`, `ty.toml`, `.yamllint`, `tach.toml`                                                                                                                                                                                |
+| Tests                               | `tests/checkers/` (24 files), `tests/runner/` (27 files), `tests/integration.py` (627), `tests/conftest.py` (178), `tests/data/minimal_sample_project/`                                                                                                    | ~19.7k LOC           | Unit + integration + gated self-lint                                                                                                                                                                                                                                                                                             |
+| Docs                                | `docs/semantic-justification.md` (62), `docs/custom-checks.md` (104), `docs/overlays.md` (86), `docs/troubleshooting.md` (177), `docs/tutorials.md` (122), `AGENTS.md` (139), `CodingRules.md` (307), `design/0001`, `design/0002`, `docs/adr/ADR-001…004` | —                    | Contract documentation; ADR-001…004 already record modernization decisions (3-line stubs)                                                                                                                                                                                                                                        |
 
 Data flow (documented `AGENTS.md:57-73`, implemented in `runner/cli.py:190-260`):
 
@@ -504,35 +515,35 @@ suppressed violation → check_if_meaningful → _semantic.py (reranker) → sco
 
 ### Public/consumed API of the check pipeline
 
-| Symbol | Location | Signature / contract |
-|---|---|---|
-| `check_if_meaningful` | `checkers/_base.py:142-149` (stub `_base.pyi:69-96`) | `(text: str, *, rule: str | None = None, code_context: str | None = None, comment: str | None = None) -> bool` — **never returns `None`**; env gate `PYTHON_SETUP_LINT_SEMANTIC` (default `"1"`, `_base.py:151`) |
-| `semantic_check_if_meaningful` | `checkers/_semantic.py:125-132` (stub `_semantic.pyi:3-27`) | `(text, *, rule, code_context, comment) -> bool | None`; `None` ⇒ “backend unavailable, keep heuristic” |
-| `_load_reranker` | `checkers/_semantic.py:93-122` | `() -> CrossEncoder | None`, lazy singleton, `_RERANKER_UNAVAILABLE` sentinel |
-| `_reset_cache` | `checkers/_semantic.py:81-90` | clears in-memory cache, resets sentinel, unlinks `results.json` (test helper) |
-| `SuppressionJustificationChecker` | `conformance/suppression_justification_checker.py:31-41` | W9704 `unjustified-suppression`; visits module + `AnnAssign` + function annotations |
-| `BareExceptCommentChecker` | `conformance/bare_except_comment_checker.py:21-124` | W9738 `bare-except-comment`; second consumer of `check_if_meaningful` |
-| `register(linter)` | 18 modules (`grep -c '^def register' src`) | pylint entry point; all carry `# pylint: disable=missing-beartype` (26 occurrences repo-wide) |
+| Symbol                            | Location                                                    | Signature / contract                                                                          |
+| --------------------------------- | ----------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `check_if_meaningful`             | `checkers/_base.py:142-149` (stub `_base.pyi:69-96`)        | `(text: str, *, rule: str                                                                     | None = None, code_context: str                          | None = None, comment: str | None = None) -> bool`— **never returns`None`**; env gate `PYTHON_SETUP_LINT_SEMANTIC`(default`"1"`, `_base.py:151`) |
+| `semantic_check_if_meaningful`    | `checkers/_semantic.py:125-132` (stub `_semantic.pyi:3-27`) | `(text, *, rule, code_context, comment) -> bool                                               | None`; `None` ⇒ “backend unavailable, keep heuristic”   |
+| `_load_reranker`                  | `checkers/_semantic.py:93-122`                              | `() -> CrossEncoder                                                                           | None`, lazy singleton, `_RERANKER_UNAVAILABLE` sentinel |
+| `_reset_cache`                    | `checkers/_semantic.py:81-90`                               | clears in-memory cache, resets sentinel, unlinks `results.json` (test helper)                 |
+| `SuppressionJustificationChecker` | `conformance/suppression_justification_checker.py:31-41`    | W9704 `unjustified-suppression`; visits module + `AnnAssign` + function annotations           |
+| `BareExceptCommentChecker`        | `conformance/bare_except_comment_checker.py:21-124`         | W9738 `bare-except-comment`; second consumer of `check_if_meaningful`                         |
+| `register(linter)`                | 18 modules (`grep -c '^def register' src`)                  | pylint entry point; all carry `# pylint: disable=missing-beartype` (26 occurrences repo-wide) |
 
 ### Runner/type surface (relevant if a new backend module is added)
 
-| Symbol | Location | Notes |
-|---|---|---|
-| `TOOLS: list[ToolSpec]` | `runner/dispatch.py:38-129` | **14 entries** (see §4.4 drift note) |
-| `LINT_TOOLS: list[ToolSpec]` | `runner/dispatch.py:435` | live registry; `TOOLS` is a “legacy-compat alias” |
-| `ToolSpec` | `runner/types.py:1-65`, `dispatch.py:42-128` | `supports_fix`, `supports_path`, `fix_flags`, `memory_limit_mb`, `default_paths` |
-| `RunnerConfig` | `runner/types.py`, `runner/_config.py:1-151` | `cwd`, `package_name`, `config_paths`, `tool_timeouts`, `tool_memory_limits` |
-| `main` / `run_lint` | `runner/cli.py:1-379`, `runner/__init__.py:24-38` | CLI + programmatic entry |
+| Symbol                       | Location                                          | Notes                                                                            |
+| ---------------------------- | ------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `TOOLS: list[ToolSpec]`      | `runner/dispatch.py:38-129`                       | **14 entries** (see §4.4 drift note)                                             |
+| `LINT_TOOLS: list[ToolSpec]` | `runner/dispatch.py:435`                          | live registry; `TOOLS` is a “legacy-compat alias”                                |
+| `ToolSpec`                   | `runner/types.py:1-65`, `dispatch.py:42-128`      | `supports_fix`, `supports_path`, `fix_flags`, `memory_limit_mb`, `default_paths` |
+| `RunnerConfig`               | `runner/types.py`, `runner/_config.py:1-151`      | `cwd`, `package_name`, `config_paths`, `tool_timeouts`, `tool_memory_limits`     |
+| `main` / `run_lint`          | `runner/cli.py:1-379`, `runner/__init__.py:24-38` | CLI + programmatic entry                                                         |
 
 ### Shipped test helpers (`python_setup_lint.testing`)
 
-| Symbol | Location | Purpose |
-|---|---|---|
-| `_make_tc(checker_class, /)` | `testing.py:18-22` | builds pylint `CheckerTestCase` |
-| `_walk_and_release(code, checker_class, /, *, file_path, module_name)` | `testing.py:25-38` | parse + walk + `release_messages()`; returns `list[Any]` |
-| `make_lint_result(...)` | `testing.py:44-61` | `LintResult` factory |
-| `FakeRunCmd` / `fake_run_cmd_factory` | `testing.py:64-103` | subprocess boundary fake |
-| `assert_precommit_config_valid`, `assert_precommit_hooks_shape` | `testing.py:138-196` | consumer-agnostic health checks |
+| Symbol                                                                 | Location             | Purpose                                                  |
+| ---------------------------------------------------------------------- | -------------------- | -------------------------------------------------------- |
+| `_make_tc(checker_class, /)`                                           | `testing.py:18-22`   | builds pylint `CheckerTestCase`                          |
+| `_walk_and_release(code, checker_class, /, *, file_path, module_name)` | `testing.py:25-38`   | parse + walk + `release_messages()`; returns `list[Any]` |
+| `make_lint_result(...)`                                                | `testing.py:44-61`   | `LintResult` factory                                     |
+| `FakeRunCmd` / `fake_run_cmd_factory`                                  | `testing.py:64-103`  | subprocess boundary fake                                 |
+| `assert_precommit_config_valid`, `assert_precommit_hooks_shape`        | `testing.py:138-196` | consumer-agnostic health checks                          |
 
 ### Pytest markers (`pyproject.toml:48-55`)
 
@@ -583,8 +594,9 @@ result = score >= 0.5
 ```
 
 Behavioural facts the modernization must preserve or consciously change:
+
 - Empty/whitespace primary ⇒ `False` **before** any model work (`_semantic.py:139-140`).
-- Result cache is persisted on *every* new entry (`_save_result_cache`, `_semantic.py:71-78,187-188`), little-endian-free 64-bit key ⇒ collision surface.
+- Result cache is persisted on _every_ new entry (`_save_result_cache`, `_semantic.py:71-78,187-188`), little-endian-free 64-bit key ⇒ collision surface.
 - Failure sentinel prevents retry storms (`_semantic.py:99-109`; CHANGELOG v0.11.0 fix at `CHANGELOG.md:113`).
 - Model weights and results share one directory `~/.cache/python-setup/semantic` (`_semantic.py:38,112-117`), which is `.gitignore`d (`gitignore:243-244`).
 
@@ -656,7 +668,7 @@ semantic = ["sentence-transformers>=3.0.0"]
 - Doc surfaces naming the model/env var: `AGENTS.md:79-85`, `docs/semantic-justification.md:1-62`, `docs/troubleshooting.md:97-111`, `docs/tutorials.md:12-16`, `README.md:29,105`, `docs/custom-checks.md:104`.
 - `tach.toml` declares only two module boundaries (`python_setup_lint/checkers`, `python_setup_lint/runner`, `config/tach.toml:15-21`), so new private modules under `checkers/` need no boundary change.
 
-### 3.5 In-repo precedents for a *git-stored, self-cleaning* cache
+### 3.5 In-repo precedents for a _git-stored, self-cleaning_ cache
 
 `lint.baseline` is the closest analogue: a committed, JSON, sorted artefact whose shrink-path is auto-cleaned.
 
@@ -684,8 +696,9 @@ if baseline_modified:
 ```
 
 Other relevant precedents/constraints for a committed cache file:
+
 - `.secrets.baseline` is a committed JSON artefact regenerated by `detect-secrets-hook` with `generated_at` stripped (`dispatch.py:216-232`); **detect-secrets scans `git ls-files`**, so a committed decision cache is scanned for high-entropy strings.
-- `.gitignore:243-244` currently *excludes* the semantic cache; a git-stored cache reverses that decision and needs an ignore-rule for weights (never commit weights).
+- `.gitignore:243-244` currently _excludes_ the semantic cache; a git-stored cache reverses that decision and needs an ignore-rule for weights (never commit weights).
 - `lint.baseline` is currently `[]` (2 bytes) — zero tolerated violations.
 
 ### 3.6 Tool registry (registry fact that already breaks tests)
@@ -708,12 +721,12 @@ TOOLS: list[ToolSpec] = [
 
 ### 4.1 Layout and helpers
 
-| Layer | Location | Count |
-|---|---|---|
-| Checker units | `tests/checkers/test_*.py` | 24 modules; shared tables in `tests/checkers/_factories.py` (1,393 lines, `# pylint: disable=too-many-lines`) |
-| Runner units | `tests/runner/test_*.py` | 27 modules; factories split across `_factories.py` (173), `_factories_baseline.py` (279), `_factories_extras.py` (502), `_factories_tables.py` (394), `_autofix_helpers.py` (135) |
-| Integration | `tests/integration.py` (627, `too-many-lines` disabled) | 9 tests, `TestMinimalSampleProject` |
-| Fixtures | `tests/conftest.py` only (no `tests/checkers/conftest.py`, no `tests/assumptions/`) | session `_ensure_venv_on_path` (`:30-36`), `configured_project` (`:62-89`), `isolated_runner_registries` (`:126-159`), `sample_project` (`:161-164`), `shipped_config_paths()` (`:170-178`) |
+| Layer         | Location                                                                            | Count                                                                                                                                                                                       |
+| ------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Checker units | `tests/checkers/test_*.py`                                                          | 24 modules; shared tables in `tests/checkers/_factories.py` (1,393 lines, `# pylint: disable=too-many-lines`)                                                                               |
+| Runner units  | `tests/runner/test_*.py`                                                            | 27 modules; factories split across `_factories.py` (173), `_factories_baseline.py` (279), `_factories_extras.py` (502), `_factories_tables.py` (394), `_autofix_helpers.py` (135)           |
+| Integration   | `tests/integration.py` (627, `too-many-lines` disabled)                             | 9 tests, `TestMinimalSampleProject`                                                                                                                                                         |
+| Fixtures      | `tests/conftest.py` only (no `tests/checkers/conftest.py`, no `tests/assumptions/`) | session `_ensure_venv_on_path` (`:30-36`), `configured_project` (`:62-89`), `isolated_runner_registries` (`:126-159`), `sample_project` (`:161-164`), `shipped_config_paths()` (`:170-178`) |
 
 Conventions enforced by `CodingRules.md:276-307`: test naming `test_<method>_given_<condition>_then_<expected>`, parametrisation over loops, `hypothesis` for parsers (`tests/runner/test_parsers_hypothesis.py`), factories for complex objects, no shared fixtures in test files.
 
@@ -726,7 +739,7 @@ assert {m.msg_id for m in msgs} == {"unjustified-suppression"}
 
 ### 4.2 Markers / selection
 
-`addopts = "-m 'not slow'"` (`pyproject.toml:49`). 19 `@pytest.mark.slow` uses ⇒ 18 deselected. `with_real_api` is used **once** (`tests/runner/test_real_pipeline_smoke.py:15`) and is *not* deselected, so the real 14-tool pipeline runs in the default suite (2.6 s). `tests/runner/test_self_lint_clean.py:17` is `slow` ⇒ the self-lint gate is **not** in the default suite.
+`addopts = "-m 'not slow'"` (`pyproject.toml:49`). 19 `@pytest.mark.slow` uses ⇒ 18 deselected. `with_real_api` is used **once** (`tests/runner/test_real_pipeline_smoke.py:15`) and is _not_ deselected, so the real 14-tool pipeline runs in the default suite (2.6 s). `tests/runner/test_self_lint_clean.py:17` is `slow` ⇒ the self-lint gate is **not** in the default suite.
 
 ### 4.3 Integration gate (the only end-to-end behaviour contract today)
 
@@ -741,15 +754,15 @@ bare-except-comment, pyi-underscore-symbol, docstring-in-impl,
 signature-mismatch, …, MD072, duplicate-code
 ```
 
-Weakness relevant to “preserve every material behavior”: this asserts *presence only* — duplicate findings, moved lines, and new false positives are invisible. `docs/adr/ADR-001.md` already records the decision to add a normalized golden snapshot (`{tool,file,line,col,rule}`), which does not exist yet (`tests/data/golden/` absent).
+Weakness relevant to “preserve every material behavior”: this asserts _presence only_ — duplicate findings, moved lines, and new false positives are invisible. `docs/adr/ADR-001.md` already records the decision to add a normalized golden snapshot (`{tool,file,line,col,rule}`), which does not exist yet (`tests/data/golden/` absent).
 
 ### 4.4 Measured gate state on this checkout (2026-11-07)
 
-| Gate | Command | Result |
-|---|---|---|
-| Unit+integration | `uv run pytest -q` | **6 failed, 1300 passed, 4 skipped, 18 deselected** in ~21 s |
-| Self-lint | `uv run lint --baseline <tmp copy>` | **4 “new violations” reported; exit non-zero** |
-| Format cleanliness | `uv run ruff format --check src/ tests/` (ruff 0.15.17) | **105 files would be reformatted, 79 already formatted** |
+| Gate               | Command                                                 | Result                                                       |
+| ------------------ | ------------------------------------------------------- | ------------------------------------------------------------ |
+| Unit+integration   | `uv run pytest -q`                                      | **6 failed, 1300 passed, 4 skipped, 18 deselected** in ~21 s |
+| Self-lint          | `uv run lint --baseline <tmp copy>`                     | **4 “new violations” reported; exit non-zero**               |
+| Format cleanliness | `uv run ruff format --check src/ tests/` (ruff 0.15.17) | **105 files would be reformatted, 79 already formatted**     |
 
 Failing tests (all one root cause — hard-coded 13-tool sets that omit `ruff format`, while `TOOLS` has 14):
 
@@ -765,19 +778,19 @@ Documentation drift on the same fact: `AGENTS.md:43,63,92,93`, `docs/overlays.md
 
 ### 4.5 Known test-quality problems (debloat targets)
 
-| Problem | Evidence |
-|---|---|
-| Duplicate heuristic tables | `tests/checkers/test_semantic_check.py:212-257` (`TestMeaningfulPatterns`, 33 rows) duplicates `tests/checkers/test_semantic_threshold.py:29-63` (30 rows, near-identical strings) |
-| Over-limit module hiding behind a disable | `test_semantic_check.py:1` disables `too-many-lines` while claiming “504 lines” for a 506-line file (`CodingRules.md:139-141` requires splitting, not baselining) |
-| Mocking first-party code | `patch("python_setup_lint.checkers._semantic._load_reranker")`, `patch(…_RESULT_CACHE)`, `patch("builtins.__import__")` at `test_semantic_check.py:25-42,58-61,98-117,310-357`; contradicts `CodingRules.md:240-254` (mock only at external boundaries) |
-| Vacuous assertions | `assert result is None or isinstance(result, bool)` (`test_semantic_check.py:286`), `assert result is True or result is None` (`:449`), `assert result is False or result is None` (`:418,469`) — pass under any backend state |
-| Private-symbol imports with blanket ignores | `# type: ignore[attr-defined]  # private symbol removed from .pyi per M3(b)` repeated 8× in `test_semantic_check.py` and 2× in `test_suppression_justification_checker.py:368,382` |
-| Slow reranker suite guarded by `importorskip` | `test_suppression_justification_checker.py:356-390` (`@pytest.mark.slow`), `test_semantic_check.py:424-506` (`TestRerankerPairs`) — dead in this venv |
-| Test-name/behaviour mismatch | `test_semantic_threshold.py:65-69` is named “threshold” but exercises the heuristic with `PYTHON_SETUP_LINT_SEMANTIC=0`; the 0.5 threshold is untested |
-| Structural suppressions repeated per checker | 26× `# pylint: disable=missing-beartype` on `register()`, 4× `# type: ignore[misc]` on checker classes; src total suppressions: 87 pylint-disable, 60 type-ignore, 23 ty-ignore, 16 noqa; tests: 117/104/3/37 |
-| Legacy compat surface | `runner/baseline.py:20-38` (`_FALLBACK_TOOLS`, `peek_fallback_tools` returning `frozenset()`), `runner/parsers.py:7,31` re-exports, `dispatch.py:435-437` `LINT_TOOLS` “legacy-compat alias”; `trivial_wrapper_checker.py:34-36` carve-outs for `_legacy_*` names |
-| Stale code comments | `test_semantic_check.py:1` (“504 lines”), `test_t3_coverage.py:1-2` (“T3 coverage … implementer's tests”), `test_t5/test_t9_7/test_t11` reference non-existent `T*.envelope.md` documents |
-| Deprecated astroid API | `tests/checkers/test_stub_checker.py:410` uses `astroid.NodeNG` (DeprecationWarning: removed in astroid v5) |
+| Problem                                       | Evidence                                                                                                                                                                                                                                                          |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Duplicate heuristic tables                    | `tests/checkers/test_semantic_check.py:212-257` (`TestMeaningfulPatterns`, 33 rows) duplicates `tests/checkers/test_semantic_threshold.py:29-63` (30 rows, near-identical strings)                                                                                |
+| Over-limit module hiding behind a disable     | `test_semantic_check.py:1` disables `too-many-lines` while claiming “504 lines” for a 506-line file (`CodingRules.md:139-141` requires splitting, not baselining)                                                                                                 |
+| Mocking first-party code                      | `patch("python_setup_lint.checkers._semantic._load_reranker")`, `patch(…_RESULT_CACHE)`, `patch("builtins.__import__")` at `test_semantic_check.py:25-42,58-61,98-117,310-357`; contradicts `CodingRules.md:240-254` (mock only at external boundaries)           |
+| Vacuous assertions                            | `assert result is None or isinstance(result, bool)` (`test_semantic_check.py:286`), `assert result is True or result is None` (`:449`), `assert result is False or result is None` (`:418,469`) — pass under any backend state                                    |
+| Private-symbol imports with blanket ignores   | `# type: ignore[attr-defined]  # private symbol removed from .pyi per M3(b)` repeated 8× in `test_semantic_check.py` and 2× in `test_suppression_justification_checker.py:368,382`                                                                                |
+| Slow reranker suite guarded by `importorskip` | `test_suppression_justification_checker.py:356-390` (`@pytest.mark.slow`), `test_semantic_check.py:424-506` (`TestRerankerPairs`) — dead in this venv                                                                                                             |
+| Test-name/behaviour mismatch                  | `test_semantic_threshold.py:65-69` is named “threshold” but exercises the heuristic with `PYTHON_SETUP_LINT_SEMANTIC=0`; the 0.5 threshold is untested                                                                                                            |
+| Structural suppressions repeated per checker  | 26× `# pylint: disable=missing-beartype` on `register()`, 4× `# type: ignore[misc]` on checker classes; src total suppressions: 87 pylint-disable, 60 type-ignore, 23 ty-ignore, 16 noqa; tests: 117/104/3/37                                                     |
+| Legacy compat surface                         | `runner/baseline.py:20-38` (`_FALLBACK_TOOLS`, `peek_fallback_tools` returning `frozenset()`), `runner/parsers.py:7,31` re-exports, `dispatch.py:435-437` `LINT_TOOLS` “legacy-compat alias”; `trivial_wrapper_checker.py:34-36` carve-outs for `_legacy_*` names |
+| Stale code comments                           | `test_semantic_check.py:1` (“504 lines”), `test_t3_coverage.py:1-2` (“T3 coverage … implementer's tests”), `test_t5/test_t9_7/test_t11` reference non-existent `T*.envelope.md` documents                                                                         |
+| Deprecated astroid API                        | `tests/checkers/test_stub_checker.py:410` uses `astroid.NodeNG` (DeprecationWarning: removed in astroid v5)                                                                                                                                                       |
 
 ### 4.6 Coding-rule gates that constrain refactors
 
@@ -795,29 +808,29 @@ Documentation drift on the same fact: `AGENTS.md:43,63,92,93`, `docs/overlays.md
 
 Facts gathered from the model cards (see §6):
 
-| Candidate | Params / size | Runtime | License | Fit for a CPU lint tool |
-|---|---|---|---|---|
+| Candidate                               | Params / size                                   | Runtime                                                                                                                                                                        | License                                                                                                                     | Fit for a CPU lint tool                                                                                                                                                                                         |
+| --------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `fastino/GLiDE-0.4B` (intent's example) | 0.40B, **790 MB bf16 safetensors**, 812 MB repo | `glide` package vendored in the repo (**not on PyPI**), `torch==2.14.0` (CUDA 13 wheels), `transformers==5.17.0`, **tested on Python 3.12**, `GLIDE_DEVICE` defaults to `cuda` | **fastino-community** — restricts Commercial Use and “Production” deployment, forbids redistribution terms of MIT-style use | Poor: GPU-first latency numbers only (6.9 ms median on RTX PRO 6000), no CPU benchmarks, no PyPI package, Python 3.14 untested, non-OSI license conflicts with this repo's MIT license (`pyproject.toml:19-20`) |
-| `minishlab/potion-base-8M` | 7.56M params, static embeddings (`model2vec`) | CPU-native, ONNX variant available, `pip install model2vec` | **MIT** | Good cost/profile, but it is an *embedding* model — needs a prototype/similarity or trained head to produce P(meaningful) |
-| `cross-encoder/nli-deberta-v3-xsmall` | 70.8M params | sentence-transformers (`torch`) or ONNX export | **Apache-2.0** | Good accuracy/size trade-off, still a torch dependency unless ONNX-only path is chosen |
+| `minishlab/potion-base-8M`              | 7.56M params, static embeddings (`model2vec`)   | CPU-native, ONNX variant available, `pip install model2vec`                                                                                                                    | **MIT**                                                                                                                     | Good cost/profile, but it is an _embedding_ model — needs a prototype/similarity or trained head to produce P(meaningful)                                                                                       |
+| `cross-encoder/nli-deberta-v3-xsmall`   | 70.8M params                                    | sentence-transformers (`torch`) or ONNX export                                                                                                                                 | **Apache-2.0**                                                                                                              | Good accuracy/size trade-off, still a torch dependency unless ONNX-only path is chosen                                                                                                                          |
 
 Open decisions for a spike: (a) license compatibility for a redistributable MIT package; (b) CPU-only latency/RSS budget per lint run (W9704 currently runs on every suppression line in `src/`, `tests/`); (c) Python 3.14 wheel availability (`requires-python = ">=3.14"`, `pyproject.toml:4`); (d) whether the backend is `transformers`, `onnxruntime`, `model2vec`, or a pure-numpy scorer; (e) pinned revision/digest + offline-first behaviour; (f) whether `PYTHON_SETUP_LINT_RERANKER_MODEL` survives as a deprecated alias (ADR-002 narrative in `docs/adr/ADR-002.md`).
 
 ### 5.2 Cache design (open)
 
 - **Location**: committed file at the linted project root (e.g. next to `lint.baseline`) vs. in-repo `.python-setup/`. `docs/adr/ADR-003.md` records the intent but not the path/format.
-- **Key**: today's key is a 64-bit truncation of SHA-256 over `(text, rule, code_context, comment, model)` (`_semantic.py:143-155`) — collisions silently flip verdicts. A committed cache makes a collision *permanent and shared*.
+- **Key**: today's key is a 64-bit truncation of SHA-256 over `(text, rule, code_context, comment, model)` (`_semantic.py:143-155`) — collisions silently flip verdicts. A committed cache makes a collision _permanent and shared_.
 - **Correctness coupling**: the key includes `code_context`, so cache entries churn on any line edit; a committed cache would produce large, noisy diffs.
 - **Eviction**: what is “cleanup”? Options: drop entries for deleted files, cap by age (`created`/`last_used`), cap by size, or shrink when a suppression disappears (mirrors `baseline.py:280-292`).
 - **Concurrency/atomicity**: must reuse the temp-file + `shutil.move` pattern (`baseline.py:207-222`) to avoid torn writes from parallel pylint workers.
-- **Determinism across machines**: with a committed cache, verdicts become machine-independent — but only for cache hits; misses still diverge when the model is absent. Decide whether a miss with no model *rejects*, *accepts*, or *falls back to heuristic* (today: heuristic, `_base.py:156-158`).
+- **Determinism across machines**: with a committed cache, verdicts become machine-independent — but only for cache hits; misses still diverge when the model is absent. Decide whether a miss with no model _rejects_, _accepts_, or _falls back to heuristic_ (today: heuristic, `_base.py:156-158`).
 - **detect-secrets**: `git ls-files` is scanned (`dispatch.py:216-232`) — a JSON cache of free-text justifications may trip entropy heuristics and must be either allowlisted or excluded.
 - **Merge conflicts**: JSON object keyed by hash is conflict-prone; consider sorted list-of-records with a stable sort key.
 
 ### 5.3 Behavior preservation boundaries
 
 - Exact W9704/W9738 outcomes on `tests/data/minimal_sample_project` are the de-facto spec (`violations.txt`), but only presence is asserted.
-- The heuristic is a **hard** pre-filter only if you decide so; today the semantic result *replaces* the heuristic when it returns a bool (`_base.py:156-158`). ADR-002 proposes heuristic-first gating (“its rejections never reach the model”), which is a deliberate behaviour change for the model-accepted-but-heuristic-rejected set (e.g. `"carried from library httpx for type compatibility"` is accepted today by heuristic; `"pre-existing"` is rejected by heuristic and would be guaranteed rejected).
+- The heuristic is a **hard** pre-filter only if you decide so; today the semantic result _replaces_ the heuristic when it returns a bool (`_base.py:156-158`). ADR-002 proposes heuristic-first gating (“its rejections never reach the model”), which is a deliberate behaviour change for the model-accepted-but-heuristic-rejected set (e.g. `"carried from library httpx for type compatibility"` is accepted today by heuristic; `"pre-existing"` is rejected by heuristic and would be guaranteed rejected).
 - `bare_except_comment_checker` is a second consumer; any signature change must update both call sites (`:103,:116`) and `docs/custom-checks.md`.
 - `_base.pyi` and `_semantic.pyi` are part of the shipped contract (`mypy.stubtest` gate); `check_if_meaningful` must keep its name, keyword-only params and `-> bool` return.
 
@@ -864,6 +877,7 @@ Open decisions for a spike: (a) license compatibility for a redistributable MIT 
 ## Output
 
 Yield a structured JSON object matching this schema:
+
 - id (string, optional): Unique identifier for this decision (assigned by engine if omitted)
 - context (string, optional, enum: ["item","non-item","wave","plan-closeup"]): Decision context scope (item, non-item, wave, plan-closeup)
 - decision (string, required, enum: ["retry-with-guidance","split","escalate","accept-with-debt","abandon","fix-item","human-async","abort","continue","amend","end-iteration","complete","next-iteration","blocked"]): Architect decision verdict

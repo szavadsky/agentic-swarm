@@ -1,6 +1,7 @@
 amendmentIndex: 2
 items:
-  - assignment: "Docs-only salvage retry (zero prod lines, no-behavior kind). Source
+  - assignment:
+      "Docs-only salvage retry (zero prod lines, no-behavior kind). Source
       branch topic/omp-workspaces--spike-findings-recovery holds the 5 approved
       files from the failed wave-2 recovery. Using read-only `git show
       <branch>:<path>` ONLY — NEVER checkout/switch/branch/merge and NEVER write

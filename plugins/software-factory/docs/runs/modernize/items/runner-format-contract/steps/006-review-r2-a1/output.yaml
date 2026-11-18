@@ -11,7 +11,8 @@ suggestions:
   - id: ruff-format-config-override-gap
     disposition: optional
     summary: Consumer ruff config overrides do not reach ruff format
-    detail: _RuffFormatLintTool._build reads config_paths["ruff format"] then falls
+    detail:
+      _RuffFormatLintTool._build reads config_paths["ruff format"] then falls
       back to _default_config_paths; it never consults the "ruff check" entry
       that _apply_config_overrides composes from [tool.ruff] / --config
       ruff=.... Consumer ruff overlays therefore apply to ruff check but not
@@ -36,7 +37,8 @@ suggestions:
   - id: overlays-doc-lacks-ruff-format-mechanism
     disposition: optional
     summary: overlays.md claims 14 tools but documents only ruff check's overlay
-    detail: docs/overlays.md:3 now claims coverage of all 14 shipped tools, but the
+    detail:
+      docs/overlays.md:3 now claims coverage of all 14 shipped tools, but the
       Ruff section documents only the `extend` overlay used by ruff check; ruff
       format is invoked with `--config <shipped ruff.toml>` and does not consume
       the consumer [tool.ruff] overlay. Add a one-line note (or document the
@@ -47,7 +49,8 @@ suggestions:
   - id: integration-comment-stale-check-only
     disposition: optional
     summary: Integration comment still says first run lets ruff format rewrite its copy
-    detail: tests/integration.py:166 says 'The first run lets ruff format rewrite
+    detail:
+      tests/integration.py:166 says 'The first run lets ruff format rewrite
       its copy'. After the check-only normal pass, run_lint(..., fix=False) no
       longer mutates; the first run only checks. The pristine-copy snapshot
       remains valid, but the rationale is now false. Update the comment to say
@@ -73,7 +76,8 @@ suggestions:
   - id: redundant-statistics-assertion
     disposition: optional
     summary: Tautological parser-set assertion adds no coverage
-    detail: "`assert statistics_tools == frozenset(_STATISTICS_PARSERS)` is true by
+    detail:
+      "`assert statistics_tools == frozenset(_STATISTICS_PARSERS)` is true by
       construction because STATISTICS_PARSER_TOOLS is derived from the same
       table; it cannot catch drift. The following `TOOLS - FORMATTER_ONLY ==
       statistics_tools` assertion carries the real coverage. Drop the tautology
@@ -98,7 +102,8 @@ suggestions:
   - id: agents-test-counts-stale
     disposition: optional
     summary: AGENTS.md test counts are stale (1290/7 vs 1352/9)
-    detail: AGENTS.md:10-11 still say 1290 unit / 7 integration tests; current run
+    detail:
+      AGENTS.md:10-11 still say 1290 unit / 7 integration tests; current run
       is 1352 passed + 4 skipped / 9 integration passed. Owned by the
       docs-counts-sync follow-up per the QA/steer record; non-blocking here.
     location:
@@ -107,7 +112,8 @@ suggestions:
   - id: factories-extras-line-count-comment-stale
     disposition: optional
     summary: Factory helper header says 502 lines; file is now 511
-    detail: tests/runner/_factories_extras.py:1 says '502 lines'; the file is 511
+    detail:
+      tests/runner/_factories_extras.py:1 says '502 lines'; the file is 511
       lines after this story's additions. Update the count or drop the number so
       the too-many-lines rationale stays accurate.
     location:

@@ -3,7 +3,7 @@ decision: amend
 outlines:
   - deps:
       - cache-contract-assumptions
-    description: "Owns NEW python_setup_lint/decisions/_decision_cache.py + .pyi
+    description: 'Owns NEW python_setup_lint/decisions/_decision_cache.py + .pyi
       (__init__, lookup(), resolve_cache_path(), refresh/merge/prune,
       jobs_from_rcfile, refresh_blockers) + BOTH tach.toml (sole owner, exact
       3-module TOML, byte-consistent stanzas) + NEW
@@ -11,8 +11,8 @@ outlines:
       _base/_semantic/_decision_backend bodies, CLI threading, checker
       observation, tests/data, baseline, docs, .gitignore/hatch/.secrets.
       Implements ADR-019 storage: sorted (rule,justification,model) indent=2
-      sort_keys, entry {justification, rule, model '<id> rev <short12>
-      prompt-vN', score [0,1]+decision, files POSIX} + {version, prompt hash
+      sort_keys, entry {justification, rule, model ''<id> rev <short12>
+      prompt-vN'', score [0,1]+decision, files POSIX} + {version, prompt hash
       hexdigest[:12], last-seen change-only}, secrets-clean (verbatim SHA
       structlog-warns + risk-accepted), DECISIONS_PATH test-only under
       PYTEST_CURRENT_TEST else config.cwd + traversal guard, lockfile O_EXCL
@@ -22,10 +22,10 @@ outlines:
       Export-consistency protocol (I4 ImportError fix): refresh_blockers exact
       spelling in .py+.pyi, grep both trees, python -c import, stubtest clean,
       clear __pycache__, prove red/green locally (prod aside fails red, restored
-      passes). Declare target {\"command\":\"uv run pytest
-      -q\",\"customTarget\":true} NEVER {\"gate\":\"tests\"}. Verify: tmp
+      passes). Declare target {"command":"uv run pytest
+      -q","customTarget":true} NEVER {"gate":"tests"}. Verify: tmp
       round-trip double-run byte-identical, prune granularity, CI/jobs guards,
-      tach+detect-secrets clean, no new failures, golden hash-equal."
+      tach+detect-secrets clean, no new failures, golden hash-equal.'
     escalate: true
     kind: story
     milestoneId: M3
@@ -34,7 +34,8 @@ outlines:
   - deps:
       - decision-cache-storage-v2
       - source-simplifications
-    description: "Owns runner CLI threading (cli.py --refresh-decisions branch+help,
+    description:
+      "Owns runner CLI threading (cli.py --refresh-decisions branch+help,
       types.py RunnerConfig.refresh_decisions:bool=False, _cli_complexity
       threading, --path scope reuse) + _semantic.py read-branch +
       semantic_score()->float|None (+.pyi, clamped [0,1]) + memo
@@ -117,7 +118,8 @@ outlines:
       - semantic-on-golden-pin-v2
       - model-backend-wiring-v2
       - pyi-scope-fix
-    description: "Docs-only, sole writer in I5. Owns docs/semantic-justification.md
+    description:
+      "Docs-only, sole writer in I5. Owns docs/semantic-justification.md
       (full rewrite, grep-zero 'reranker' case-insensitive) + custom-checks.md +
       troubleshooting.md (incl deprecated RERANKER_MODEL note + counts + pyi
       branch strings) + tutorials.md + AGENTS.md + README.md + CHANGELOG.md +
@@ -138,7 +140,8 @@ outlines:
       - semantic-on-golden-pin-v2
       - model-backend-wiring-v2
       - pyi-scope-fix
-    description: "Sole tests/data/golden writer; FORBIDDEN all other paths. ONLY on
+    description:
+      "Sole tests/data/golden writer; FORBIDDEN all other paths. ONLY on
       reviewed shift report (justification-class + added/removed keys +
       CHANGELOG snippet + file:line) from behavior items: run
       PYTHON_SETUP_LINT_UPDATE_GOLDEN=1 locally (never under CI), double-run
@@ -161,7 +164,8 @@ outlines:
       - pyi-scope-fix
       - docs-adr-reconciliation-v2
       - golden-regen-hatch-v2
-    description: "Report-only, zero writes. Record final gate table at HEAD: format
+    description:
+      "Report-only, zero writes. Record final gate table at HEAD: format
       exit 0; lint 14/14 per-tool; pytest -q counts; integration
       9-collected-0-failed; golden hash or regen diff; baseline []; docs
       exact-strings with INDEPENDENT rerun; :bash proof via git ls-files.

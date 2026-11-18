@@ -17,7 +17,8 @@ suggestions:
   - id: c-ba416d7313
     disposition: architect
     summary: Mock provider proven feasible; schedule M8 helper
-    detail: Spike demonstrates throwaway models.yml (openai-completions) + local SSE
+    detail:
+      Spike demonstrates throwaway models.yml (openai-completions) + local SSE
       stub capturing full system prompts with zero paid calls. Feasibility
       de-risked; architect to schedule M8 scripted helper (request recorder +
       scripted yield) and per-role request-body assertions per §7.1.
@@ -51,7 +52,8 @@ suggestions:
   - id: c-64046e8e72
     disposition: optional
     summary: Preserve worktree-root cwd; .omp/rules + .claude/CLAUDE.md are cwd-only
-    detail: "Probe: subdir launch loads root+sub AGENTS.md and root RULES.md but not
+    detail:
+      "Probe: subdir launch loads root+sub AGENTS.md and root RULES.md but not
       root .omp/rules or .claude/CLAUDE.md. Factory launches from worktree roots
       today (taskWt/childWt); preserve that invariant and document. Low
       severity."

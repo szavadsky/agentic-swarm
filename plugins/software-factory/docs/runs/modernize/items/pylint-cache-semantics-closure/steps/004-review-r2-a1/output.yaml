@@ -5,7 +5,8 @@ suggestions:
   - id: predict-failure-no-write-unpinned
     disposition: optional
     summary: Prediction-failure None path not enumerated in Timing bullet
-    detail: src/python_setup_lint/checkers/_semantic.py:182-184 returns None without
+    detail:
+      src/python_setup_lint/checkers/_semantic.py:182-184 returns None without
       writing when reranker.predict raises (OSError/RuntimeError/ValueError), a
       fourth no-write path beyond hits, reranker-unavailable, and empty-primary.
       Timing bullet's parenthetical '(reranker unavailable)' narrows the
@@ -17,7 +18,8 @@ suggestions:
   - id: open-close-nonwriter-indirect
     disposition: optional
     summary: open()/close() non-writer claim pinned only indirectly
-    detail: Verdict line 16 claims checker open()/close() hooks do not write, but
+    detail:
+      Verdict line 16 claims checker open()/close() hooks do not write, but
       the watchdog pins only direct _save_result_cache callers plus text scans
       for _save/_RESULT_CACHE_FILE. An open()/close() hook calling
       semantic_check_if_meaningful (or _base.check_if_meaningful) would write

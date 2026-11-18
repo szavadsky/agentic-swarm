@@ -219,7 +219,8 @@ uncertainties:
         py3.14 CPU wheels + import/device/offline + custom-code pinning for
         chosen runtime; on no-go report-only skip, no file"
   - id: U2
-    description: Whether pylint-pyi companion-stub skip is fixed (with latent stub
+    description:
+      Whether pylint-pyi companion-stub skip is fixed (with latent stub
       cleanup + golden regen) or documented as orphan-only scope is unknown;
       fixing changes golden (42/43 on .py per old probe) and exposes large
       latent cleanup (205 symbols per old probe, verify at HEAD).
@@ -232,7 +233,8 @@ itemOutlines:
   - slug: cache-contract-assumptions
     kind: test-assumptions
     title: Pin tracked-cache file and refresh contracts
-    description: "Tests-only, NEW tests/assumptions/test_decision_cache_contracts.py
+    description:
+      "Tests-only, NEW tests/assumptions/test_decision_cache_contracts.py
       ONLY (append-only; FORBIDDEN root __init__ + astroid/beartype/pylint
       contracts + test_pylint_cache_semantics.py, src, docs, tests/data,
       baseline). Red-test-exempt (pins future contract; M3 consumes without
@@ -304,7 +306,8 @@ itemOutlines:
   - slug: model-eval-poc
     kind: poc
     title: CPU accuracy/latency evaluation (veto-only)
-    description: "Prototype on tmp/venv only; zero committed files; network inside
+    description:
+      "Prototype on tmp/venv only; zero committed files; network inside
       spike only. Consumes matrix + corpus reports (never invents
       candidates/labels). Mapping: justification=primary=(comment or
       text).strip(), rule=joined codes (current symbol where unavailable,
@@ -344,7 +347,8 @@ itemOutlines:
   - slug: pylint-pyi-scope-spike
     kind: fact-finder
     title: Decide pylint-pyi companion-stub scope
-    description: "Report-only, zero writes, tmp copies only. Reproduce at HEAD: tmp
+    description:
+      "Report-only, zero writes, tmp copies only. Reproduce at HEAD: tmp
       .pyi with companion .py (even syntactically broken — skipped?) vs orphan
       .pyi (linted, pyi-underscore fires?) with exact commands + outputs.
       Recount golden impact (pyi findings on .py vs .pyi) + latent budget
@@ -360,7 +364,8 @@ itemOutlines:
   - slug: checker-harness-dedup
     kind: story
     title: Single-source checker-test harness
-    description: "Owns src/python_setup_lint/testing.py (_make_tc/_walk_and_release
+    description:
+      "Owns src/python_setup_lint/testing.py (_make_tc/_walk_and_release
       options only) + tests/checkers/test_*.py local
       _make_tc/_walk_and_release/_msg_ids wrappers ONLY (enumerate via grep at
       HEAD: ~13/10/8 per pack, verify actual; report full list). FORBIDDEN docs,
@@ -401,7 +406,8 @@ itemOutlines:
   - slug: runner-test-helpers-dedup
     kind: story
     title: Single-source runner/setup helpers and prune dead tests
-    description: "Tests-only. Owns tests/runner/_factories.py + _factories_extras.py
+    description:
+      "Tests-only. Owns tests/runner/_factories.py + _factories_extras.py
       + _factories_baseline.py + test_setup.py + test_setup_install.py +
       test_real_pipeline_smoke.py + tests/conftest.py (sample_project fixture
       lines only) ONLY. FORBIDDEN src, docs, baseline, tests/data, checker
@@ -442,7 +448,8 @@ itemOutlines:
   - slug: decision-cache-impl
     kind: story
     title: Implement tracked decision cache and refresh
-    description: "Owns NEW python_setup_lint/decisions/_decision_cache.py + .pyi +
+    description:
+      "Owns NEW python_setup_lint/decisions/_decision_cache.py + .pyi +
       __init__.py + tach.toml (sole owner: add decisions depends_on=[] +
       checkers/runner depends_on=[decisions]) + runner CLI threading (cli.py
       --refresh-decisions branch + help, types.py RunnerConfig.refresh_decisions
@@ -552,7 +559,8 @@ itemOutlines:
   - slug: docs-adr-reconciliation
     kind: story
     title: Reconcile docs, ADRs, and version pins
-    description: "Docs-only, sole writer in I5. Owns docs/semantic-justification.md
+    description:
+      "Docs-only, sole writer in I5. Owns docs/semantic-justification.md
       + docs/custom-checks.md (semantic bullets only) + docs/troubleshooting.md
       (semantic section + counts) + docs/tutorials.md (semantic lines) +
       AGENTS.md + README.md + CHANGELOG.md + config/ty.toml (comment only,
@@ -583,7 +591,8 @@ itemOutlines:
   - slug: golden-regen-hatch
     kind: story
     title: Conditional golden regen on shift reports
-    description: "Sole tests/data/golden writer; FORBIDDEN all other paths. ONLY on
+    description:
+      "Sole tests/data/golden writer; FORBIDDEN all other paths. ONLY on
       reviewed shift report (justification-class + added/removed keys +
       CHANGELOG snippet + file:line) from behavior items (cache-impl,
       backend-wiring, pyi-fix; source-simplifications + golden-pin declare
@@ -605,7 +614,8 @@ itemOutlines:
   - slug: final-gate-validation
     kind: fact-finder
     title: Final gate table and docs check
-    description: "Report-only, zero writes. Record final gate table at HEAD: format
+    description:
+      "Report-only, zero writes. Record final gate table at HEAD: format
       exit 0 (ruff format --check --config config/ruff.toml src tests); lint
       14/14 per-tool (uv run lint; cite exit + per-tool PASSED + duration);
       pytest -q counts (pass/deselect/warnings, cite); integration
@@ -637,58 +647,70 @@ assumptions:
     why: Preserves I1/I2 operator-approved boundary; golden stays the mechanical
       contract; operator acknowledged tightening intentional, not a regression.
     disposition: confirm with human
-  - assumption: Dev/CI do not install [semantic]; gates run heuristic + cache hits
+  - assumption:
+      Dev/CI do not install [semantic]; gates run heuristic + cache hits
       (+ FakeBackend in tests). Real-model tests are slow + with_real_api (+
       importorskip), never in default suite.
     why: "Matches current venv (I5 pack: extra empty, no torch); keeps gates
       offline, fast, deterministic."
-  - assumption: "'Never test linting' bans pytest asserting this repo passes its own
+  - assumption:
+      "'Never test linting' bans pytest asserting this repo passes its own
       gates (subprocess re-lint, AST re-implementation, config re-checks).
       Golden/integration contracts retained; smoke disposition follows 644774e
       prune precedent."
-    why: Operator-approved in I1; removes gate-duplicating tests without deleting
+    why:
+      Operator-approved in I1; removes gate-duplicating tests without deleting
       the fit-for-purpose contract.
     disposition: confirm with human
-  - assumption: Integration contract is 9 collected, 0 failed with pre-commit env
+  - assumption:
+      Integration contract is 9 collected, 0 failed with pre-commit env
       pinned (9 passed with it per I5 pack 56.6s; 7 passed + 2 skipped without
       per skip logic). AGENTS.md reconciled to recount at HEAD.
-    why: tests/integration.py skip logic; unconditional 9/9 fails on minimal envs
+    why:
+      tests/integration.py skip logic; unconditional 9/9 fails on minimal envs
       while stale 7 under-reports.
-  - assumption: Gates green at I5 HEAD per pack (1357 passed / 9 passed / 14-tool
+  - assumption:
+      Gates green at I5 HEAD per pack (1357 passed / 9 passed / 14-tool
       lint exit 0 at 0944670); the 2026-11-07 infra baseline (red lint/test,
       ruff-format mutation) is superseded by I2/I4 fixes; items verify
       no-new-failures vs I5 HEAD recount, not vs stale infra baseline.
     why: Avoids re-litigating fixed reds; closeup-4 + I5 pack prove green at HEAD.
-  - assumption: No child epics in I5; all work as 18 root items within the 50-item
+  - assumption:
+      No child epics in I5; all work as 18 root items within the 50-item
       cap, file-level single-writer + dep serialization (ADR-023 extends
       ADR-013).
     why: I3 epic gate caused 3 empty waves + zero delivery; I4 root-serialized
       delivery unblocked M2 verified + M3/M4 partials.
-  - assumption: "Model license allowlist: Apache-2.0 / MIT / BSD-2/3-Clause allowed;
+  - assumption:
+      "Model license allowlist: Apache-2.0 / MIT / BSD-2/3-Clause allowed;
       CC-BY-NC-4.0 and other non-commercial excluded; Fastino Community +
       unclear/no-license flagged for human review; no model ships without a
       license verdict + human approval if Fastino recommended."
-    why: MIT tool cannot absorb non-commercial/unclear licensing; I5 bake-off needs
+    why:
+      MIT tool cannot absorb non-commercial/unclear licensing; I5 bake-off needs
       the gating criterion before any verdict.
     disposition: confirm with human
   - assumption: "Iteration 5 may close infra-only again if U1 verdict is
       no-go/blocked (model swap NOT complete, must not be claimed). I6 triggers:
       double-rated corpus with independent second rater, human Fastino decision
       if GLiDE recommended, CPU bench pass."
-    why: ADR-009 no-go gating extended by ADR-020; operator must approve infra-only
+    why:
+      ADR-009 no-go gating extended by ADR-020; operator must approve infra-only
       close-up if gates fail again.
     disposition: confirm with human
   - assumption: Cache file location/name is .python-setup-decisions.json at the
       linted project root (next to lint.baseline), committed, no hatch entry,
       secrets-clean; weights in user model cache, never git.
-    why: Decisions depend on project content and must reproduce in that project's CI
+    why:
+      Decisions depend on project content and must reproduce in that project's CI
       without the model; committed file affects
       gitignore/hatch/consumers/secrets; operator acknowledged root placement in
       I1.
     disposition: confirm with human
 techDebt:
   - id: TD5-B1
-    description: No compliant model proven (215/0 unevaluable, single-author labels,
+    description:
+      No compliant model proven (215/0 unevaluable, single-author labels,
       Fastino review open, no CPU bench).
     category: blocking
     resolution: U1 spikes + M4 branch (go only on license+CPU+corpus gates with
@@ -699,12 +721,14 @@ techDebt:
     description: "I4 cache producer gap (awareness: refresh prune-only until
       producer; decisions/ missing at HEAD so gap is unmerged, not live)."
     category: blocking
-    resolution: ADR-019 + decision-cache-impl owns storage + observation producer
+    resolution:
+      ADR-019 + decision-cache-impl owns storage + observation producer
       atomically (checker-layer file identity during refresh only); M3
       acceptance requires end-to-end population proof on tmp (not prune-only);
       no split.
   - id: TD5-I1
-    description: Pylint-pyi blind spot (42/43 findings on .py, latent private stub
+    description:
+      Pylint-pyi blind spot (42/43 findings on .py, latent private stub
       symbols, companion stubs unenforced per old probe).
     category: impacting
     resolution: pyi-scope-spike recounts at HEAD + recommends; M5 pyi-scope-fix
@@ -712,10 +736,12 @@ techDebt:
       orphan-only doc note; over-budget cleanup routes to I6 follow-ups; golden
       unchanged unless fix merges via hatch.
   - id: TD5-I2
-    description: Semantic-on behavior unpinned (golden + integration capture with
+    description:
+      Semantic-on behavior unpinned (golden + integration capture with
       SEMANTIC=0; model could change W9704/W9738 silently).
     category: impacting
-    resolution: semantic-on-golden-pin adds deterministic fake-backend integration
+    resolution:
+      semantic-on-golden-pin adds deterministic fake-backend integration
       (default suite) + slow skeleton (skipped until model); M4 wiring asserts
       no SEMANTIC=0 drift; golden stays SEMANTIC=0 per ADR-021.
   - id: TD5-A1
@@ -724,7 +750,8 @@ techDebt:
       CHANGELOG, ty.toml, ADR-002/009/011/014/016 staleness, ADR index omits
       013..016).
     category: adjacent
-    resolution: docs-adr-reconciliation sole writer with exact-strings checklist;
+    resolution:
+      docs-adr-reconciliation sole writer with exact-strings checklist;
       ADRs 019..024 formalize I5 decisions.
   - id: TD5-A2
     description: Test-harness duplication + dead code (13 _make_tc, 10
@@ -740,13 +767,15 @@ techDebt:
       (verify at HEAD via git ls-files) + minor version drift (pyproject 1.2.10
       vs CHANGELOG v1.2.9).
     category: adjacent
-    resolution: Operator deletes ':bash' outside iteration (no item owns root junk;
+    resolution:
+      Operator deletes ':bash' outside iteration (no item owns root junk;
       final-gate-validation reports presence); docs item pins versions.
   - id: TD5-A4
     description: Legacy .gitignore .cache/python-setup/semantic/ lines (retired
       machine cache) alongside new root decisions file.
     category: adjacent
-    resolution: Retained intentionally (.cache still ignored; root decisions file
+    resolution:
+      Retained intentionally (.cache still ignored; root decisions file
       committed; no hatch entry); cache-impl forbids .gitignore changes.
 adrs:
   - id: ADR-019
@@ -761,7 +790,8 @@ adrs:
       writer-first verdict pins jobs=1 sequential. I4 ADR-017/018 planned
       lint-flag refresh + decisions-module placement but never merged (files
       missing at HEAD).
-    decision: "Re-affirm ADR-017/018 shape with I5 resolutions: (1) semantic_check
+    decision:
+      "Re-affirm ADR-017/018 shape with I5 resolutions: (1) semantic_check
       stays path-free; file identity supplied at checker layer via observation
       producer during refresh only (node.root().file into decisions API; normal
       lint path unchanged, zero _base/_semantic diff for identity). (2) Tracked
@@ -796,7 +826,8 @@ adrs:
       corpus artifacts, no CPU bench); get_backend has no production path
       (DECISION_MODEL warn-only, PROMPT_VERSION dead); veto semantics mean
       default-on tightens W9704/W9738 for every consumer installing the extra.
-    decision: "Gate wiring on U1 verdict with allowlist (Apache-2.0/MIT/BSD allowed;
+    decision:
+      "Gate wiring on U1 verdict with allowlist (Apache-2.0/MIT/BSD allowed;
       CC-BY-NC excluded; Fastino/unclear flagged for human review; no ship
       without license verdict + human approval if Fastino recommended) + CPU
       bench (cold-load/warm p50/p95 + RSS on target class, GLIDE_MAX_BATCH=1
@@ -811,7 +842,8 @@ adrs:
       regenerated. Default heuristic-only until M4 go merges; semantic-on pinned
       by M4 fake-backend integration regardless. On no-go/blocked: zero prod
       writes, no-op attestation, heuristic-only docs."
-    consequences: No silent swap; gates stay offline/fast/deterministic; packaging
+    consequences:
+      No silent swap; gates stay offline/fast/deterministic; packaging
       change only on compliant verdict; close-up must not claim swap complete on
       no-go; I6 triggers explicit (independent rater, Fastino decision, CPU
       bench).
@@ -831,7 +863,8 @@ adrs:
       until go; on go wired with importorskip + CPU budgets). Golden stays
       SEMANTIC=0 (heuristic contract); semantic-on contract lives in new tests,
       not the golden file."
-    consequences: Veto tightening visible before any model ships; no golden churn
+    consequences:
+      Veto tightening visible before any model ships; no golden churn
       for semantic-on; real-model coverage gated behind slow + importorskip; M4
       wiring asserts no SEMANTIC=0 drift.
   - id: ADR-022
@@ -896,6 +929,7 @@ adrs:
       (never baseline edits), golden via hatch only; ORPHAN-ONLY merges zero
       prod diff with scope-note text for docs (companion .pyi governed by
       mypy.stubtest). 'Coding rules enforced' not overstated either way."
-    consequences: Golden stable unless fix merges via hatch; latent cleanup budgeted
+    consequences:
+      Golden stable unless fix merges via hatch; latent cleanup budgeted
       explicitly; I6 follow-ups concrete if over-budget; docs state scope
       truthfully.

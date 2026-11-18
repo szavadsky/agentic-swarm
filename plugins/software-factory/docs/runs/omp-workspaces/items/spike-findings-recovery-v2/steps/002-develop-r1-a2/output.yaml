@@ -29,7 +29,8 @@ concerns:
     summary: "Gate environment lacks dependency install: child/item worktrees
       without infra.setup fail typecheck and tests with `Cannot find package
       'yaml'` / missing `@types/bun`."
-    detail: Before `bun install --frozen-lockfile` in plugins/software-factory, `bun
+    detail:
+      Before `bun install --frozen-lockfile` in plugins/software-factory, `bun
       run typecheck` failed with TS2688 (no @types/bun) and test files failed to
       resolve `yaml`; after install, typecheck exits 0 and previously failing
       test files pass. This is the same environmental merge failure that sank

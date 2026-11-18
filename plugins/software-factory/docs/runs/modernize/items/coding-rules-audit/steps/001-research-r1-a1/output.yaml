@@ -268,7 +268,8 @@ recommendations:
     describe a git-stored cache.
 concerns:
   - kind: tech-debt
-    summary: W9707 .pyi enforcement is blind, so 203 private stub declarations are
+    summary:
+      W9707 .pyi enforcement is blind, so 203 private stub declarations are
       unguarded
     detail: PyiUnderscoreChecker sets _is_pyi from node.file; pylint maps a .pyi
       path to the .py module file, so no W9707 fires even though extra_tools.pyi
@@ -284,7 +285,8 @@ concerns:
       - pylint-pyi
   - kind: tech-debt
     summary: Production-dead _baseline_helpers module is pinned only by tests
-    detail: runner/_baseline_helpers.py (82 lines) and its 31-line stub are unused
+    detail:
+      runner/_baseline_helpers.py (82 lines) and its 31-line stub are unused
       by src; tests/runner/test_baseline_diff.py:13 imports _compare_sorted.
       Deleting it requires test-debloat coordination, otherwise the tests keep
       dead code alive.
@@ -297,7 +299,8 @@ concerns:
       - test-debloat-audit
   - kind: tech-debt
     summary: peek_fallback_tools debt comment names a completed owner
-    detail: baseline.py:18-22 says the shim is debt owned by dispatch-split, but the
+    detail:
+      baseline.py:18-22 says the shim is debt owned by dispatch-split, but the
       dispatch split is complete (dispatch.py is 449 lines, no C0302 disable).
       The comment risks leaving an orphaned export chain; the audit assigns it
       to runner.
@@ -311,7 +314,8 @@ concerns:
   - kind: risk
     summary: Semantic docs still describe the removed cross-encoder while the
       decision cache does not exist
-    detail: AGENTS.md:82-85 and docs/semantic-justification.md:3-26,51-53 document
+    detail:
+      AGENTS.md:82-85 and docs/semantic-justification.md:3-26,51-53 document
       sentence-transformers/cross-encoder/reranker, but the tree contains
       _decision_backend.py and no _decision_cache.py. Docs must not claim a
       git-stored cache before the semantic cache item lands; this is root-owned
@@ -326,7 +330,8 @@ concerns:
       - decision-cache-impl
   - kind: assumption
     summary: LoC deltas are gross estimates; public renames offset stub deletion
-    detail: Private stub declarations that are imported cross-module cannot simply
+    detail:
+      Private stub declarations that are imported cross-module cannot simply
       be deleted; they must be renamed public, so the net reduction is lower
       than the gross -165 LoC estimated for PYI-1..3. Use the rows as
       prioritization, not as a precise budget.
@@ -337,7 +342,8 @@ concerns:
     affects:
       - coding-rules-audit
 remarkable:
-  - chosen: Group the 203 private stub declarations into three per-owner rows plus
+  - chosen:
+      Group the 203 private stub declarations into three per-owner rows plus
       the W9707 enforcement row, rather than 203 individual rows
     why: The fix is one mechanical stub-surface cleanup per owner, and per-owner
       totals make the inter-dep ownership map actionable; individual rows would
@@ -346,7 +352,8 @@ remarkable:
       - One row per declaration (precise but noisy and duplicates the same fix)
       - Report only aggregate counts without per-owner evidence (loses the map
         contract)
-  - chosen: Run the lint gate with PYTHON_SETUP_LINT_NO_AUTOFIX=1 and rely on direct
+  - chosen:
+      Run the lint gate with PYTHON_SETUP_LINT_NO_AUTOFIX=1 and rely on direct
       AST/pylint probes for the audit
     why: Preserves the read-only repository invariant while still proving 14/14
       tools pass and that the debt is suppressed; bare `uv run lint` would
@@ -356,7 +363,8 @@ remarkable:
       - Skip lint entirely and cite only prior audit results (weaker final-state
         evidence)
   - chosen: Treat TD-11 as resolved at the config layer rather than as a runner hack
-    why: The only tests/data exclusion is config/rumdl.toml:3, consistent with ruff,
+    why:
+      The only tests/data exclusion is config/rumdl.toml:3, consistent with ruff,
       pylint, and pyright config excludes; dispatch.py:300 only contains a
       path-scanning comment. Recording a false runner-side TD-11 would misassign
       work to runner.

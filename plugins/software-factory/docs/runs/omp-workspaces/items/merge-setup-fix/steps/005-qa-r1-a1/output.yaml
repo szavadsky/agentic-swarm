@@ -12,7 +12,8 @@ suggestions:
       file: plugins/software-factory/test/engine/merge-setup.test.ts
       line: 182
     summary: Parity tests could assert absence of infra.setup evidence
-  - detail: runMergeSetup implements sequential stop-on-first-failure plus timeout
+  - detail:
+      runMergeSetup implements sequential stop-on-first-failure plus timeout
       mirroring runner.ts:797-810, but tests cover single-command
       success/failure only. Assignment acceptance does not require it; consider
       follow-up coverage.

@@ -1,13 +1,16 @@
 adrs:
-  - consequences: Regression detection across all tools and checkers becomes exact
+  - consequences:
+      Regression detection across all tools and checkers becomes exact
       and cheap; golden updates are explicit review points. Message text is not
       snapshotted. Tool upgrades via uv.lock may require reviewed regeneration.
       CI cannot silently rewrite the golden.
-    context: The modernization enforces coding rules, debloats code/tests, and swaps
+    context:
+      The modernization enforces coding rules, debloats code/tests, and swaps
       the semantic model while preserving every material behavior. lint.baseline
       is empty. The integration test only checks planted rule-name presence, so
       duplicates, moved lines and new false positives go undetected.
-    decision: "Commit a normalized snapshot of every finding, Finding {tool, file,
+    decision:
+      "Commit a normalized snapshot of every finding, Finding {tool, file,
       line, col, rule} (file/line/col nullable for __CRASH__), for
       tests/data/minimal_sample_project at
       tests/data/golden/minimal_sample_project_findings.json (outside the linted
@@ -26,16 +29,19 @@ adrs:
       are deferred as blocking debt."
     id: ADR-001
     title: Golden findings snapshot as the behavior-preservation contract
-  - consequences: Brush-off rejections are guaranteed regardless of model; model can
+  - consequences:
+      Brush-off rejections are guaranteed regardless of model; model can
       only tighten acceptance. sentence-transformers is dropped; no-try-import
       patterns list the new runtime. Real-model coverage is one slow +
       with_real_api test. Old env var warns via CHANGELOG-documented
       deprecation.
-    context: _semantic.py misuses a sentence-transformers cross-encoder as a quality
+    context:
+      _semantic.py misuses a sentence-transformers cross-encoder as a quality
       judge. The dependency is heavy and absent in dev/CI, so the heuristic
       decides everything today. The intent asks for a CPU-friendly small
       decision model.
-    decision: "Keep check_if_meaningful signature and PYTHON_SETUP_LINT_SEMANTIC.
+    decision:
+      "Keep check_if_meaningful signature and PYTHON_SETUP_LINT_SEMANTIC.
       Heuristic runs first as a hard gate; rejections never reach the model.
       Accepted text goes to cache, then to a local decision model behind a
       public DecisionBackend Protocol decide(justification, rule, context) ->
@@ -76,11 +82,13 @@ adrs:
       ADR. Weights stay in user model cache."
     id: ADR-003
     title: Git-stored, self-cleaning decision cache
-  - consequences: Shared test infra never edited concurrently; debloat runs behind
+  - consequences:
+      Shared test infra never edited concurrently; debloat runs behind
       golden + assumptions. Source and its tests stay together per subsystem.
       Subsystem epics start one iteration later but scoped from evidence.
       Symbol-level sharing needs review discipline on 4 files.
-    context: Three workstreams span ~28.6k LOC. Parallel edits to shared test infra
+    context:
+      Three workstreams span ~28.6k LOC. Parallel edits to shared test infra
       would conflict. Intent requires test infra/assumptions before debloat. The
       semantic epic is not file-disjoint (AGENTS.md, _base.py,
       no_try_import_checker.py, one test class, tests/assumptions, golden dir),
@@ -102,7 +110,8 @@ adrs:
     id: ADR-004
     title: Progressive saga decomposition with symbol-level sequencing
 assumptions:
-  - assumption: "'Material lint/check behavior' = findings {tool,file,line,col,rule}
+  - assumption:
+      "'Material lint/check behavior' = findings {tool,file,line,col,rule}
       pinned by golden (SEMANTIC=0) + checker unit tests; CLI flags/exit codes;
       baseline/autofix semantics; shipped configs/scopes. Other three limbs are
       pinned by surviving tests inventoried in M3 (CLI: tests/runner/test_cli_*;
@@ -117,7 +126,8 @@ assumptions:
       (python-setup itself and consumers alike), at .python-setup-decisions.json
       next to lint.baseline. Only decisions committed; weights (0.03-0.8 GB, own
       licenses) stay in the user model cache.
-    why: Decisions depend on project content and must reproduce in that project's CI
+    why:
+      Decisions depend on project content and must reproduce in that project's CI
       without the model.
     disposition: confirm with human
   - assumption: Dev and CI do not install the `semantic` extra;
@@ -128,12 +138,14 @@ assumptions:
       tests/integration.py` and `uv run lint` are gate contracts: paths and
       commands do not change."
     why: Infra gates and AGENTS.md reference them; renaming silently breaks gating.
-  - assumption: "'Never test linting' means pytest must not assert this repository
+  - assumption:
+      "'Never test linting' means pytest must not assert this repository
       passes its own lint gates — whether by re-running tools in subprocess, by
       AST/source scanning that re-implements a gate, or by config-consistency
       checks that re-lint the repo. `uv run lint` and pre-commit enforce that.
       Tests exercise logic on synthetic inputs and the sample project."
-    why: AST guards and config re-checks duplicate the gate and rot with rule churn;
+    why:
+      AST guards and config re-checks duplicate the gate and rot with rule churn;
       broadening the definition removes them with rationale.
     disposition: confirm with human
   - assumption: Only semantic-decision-model starts now;
@@ -141,13 +153,15 @@ assumptions:
       audits. Semantic starts under the symbol-level sequencing protocol
       (AGENTS.md rebase, golden regen after M1, shared-file symbols, assumptions
       append-only).
-    why: Debloat follows safety net + assumptions; sequencing prevents concurrent
+    why:
+      Debloat follows safety net + assumptions; sequencing prevents concurrent
       edits to shared files.
   - assumption: At least one model among GLiDE-0.4B and smaller Decision-Index
       models has compatible license, Python 3.14 CPU wheels and pinnable
       revision. Else the semantic epic escalates instead of shipping
       non-compliant.
-    why: GLiDE uses a custom community license, tested on 3.12; smaller candidates
+    why:
+      GLiDE uses a custom community license, tested on 3.12; smaller candidates
       vary.
     disposition: verify via semantic-decision-model spikes
 epics:
@@ -274,7 +288,8 @@ epics:
       run lint` pass with empty lint.baseline.
     slug: semantic-decision-model
 itemOutlines:
-  - description: "Make the integration gate pin exact behavior. Dedicated capture
+  - description:
+      "Make the integration gate pin exact behavior. Dedicated capture
       run (SEPARATE from the rc!=0 run): fresh temp copy via
       _copy_sample+_init_git, config via _make_config (package_name + rumdl
       override), monkeypatched SEMANTIC=0, run_lint(baseline=<tmp>/capture.json,
@@ -334,7 +349,8 @@ itemOutlines:
     title: Single-source helpers; integration.py under 500 lines
     deps:
       - golden-findings-snapshot
-  - description: "Read-only audit of src/** and scripts/** vs CodingRules/AGENTS.
+  - description:
+      "Read-only audit of src/** and scripts/** vs CodingRules/AGENTS.
       Symbol-level semantic exclusions only (check_if_meaningful in
       _base.py/.pyi, _semantic.py/.pyi, _OPTIONAL_IMPORT_PATTERNS): mark those
       symbols skipped, audit rest of those files normally (incl. TD-5).
@@ -388,10 +404,10 @@ milestones:
         None, rule: '__CRASH__'}; golden holds zero, any crash fails naming the
         tool. Outside sample dir, never copied/linted. violations.txt RETAINED
         as planted-rule oracle; coverage = every oracle rule in golden."
-      - "Runner config: make_runner_config(project: Path) -> RunnerConfig
-        replicating _make_config (package_name='minimal_sample' + rumdl override
-        stripping '\"tests/data\", '). M1 uses existing _make_config; M2
-        extracts it unchanged."
+      - 'Runner config: make_runner_config(project: Path) -> RunnerConfig
+        replicating _make_config (package_name=''minimal_sample'' + rumdl override
+        stripping ''"tests/data", ''). M1 uses existing _make_config; M2
+        extracts it unchanged.'
       - "tests/_golden.py (new, sole golden owner): Finding TypedDict;
         collect_findings(project, tmp) -> list[Finding] = dedicated second
         run_lint(config, path='.', baseline=tmp/'capture.json',
@@ -497,14 +513,17 @@ milestones:
     title: Modernization debt inventory and subsystem epic decomposition
 techDebt:
   - category: impacting
-    description: Suppression/bare-except checkers pass their own symbol as `rule`;
+    description:
+      Suppression/bare-except checkers pass their own symbol as `rule`;
       the rule-echo heuristic and model never see the actually-suppressed codes.
     id: TD-1
-    resolution: "Semantic req5: extract all codes, pass comma-joined sorted string;
+    resolution:
+      "Semantic req5: extract all codes, pass comma-joined sorted string;
       echo matches any element; golden regen + CHANGELOG behavior description if
       outcomes shift."
   - category: impacting
-    description: Semantic tests patch module globals and builtins.__import__, import
+    description:
+      Semantic tests patch module globals and builtins.__import__, import
       privates under type:ignore; several assertions vacuous (`is None or ...`).
     id: TD-2
     resolution: "Semantic req6: FakeBackend via public Protocol (direct kwarg +
@@ -517,12 +536,14 @@ techDebt:
     resolution: M1 pins exact findings; M2 single-sources 7 helpers, moves
       overlay/assertion blocks, reaches <=500 without suppression.
   - category: impacting
-    description: test_semantic_check.py 506 lines + suppression; heuristic tables
+    description:
+      test_semantic_check.py 506 lines + suppression; heuristic tables
       duplicate test_semantic_threshold.py.
     id: TD-4
     resolution: "Semantic req6: one merged parametrized table; modules <=500."
   - category: adjacent
-    description: ~15 checkers repeat structural suppressions (missing-beartype on
+    description:
+      ~15 checkers repeat structural suppressions (missing-beartype on
       register(), type:ignore[misc] on mixin classes) + copied stream
       read/decode.
     id: TD-5
@@ -539,16 +560,19 @@ techDebt:
       disable=unjustified-suppression` suppresses the justification checker
       itself."
     id: TD-7
-    resolution: "Iteration-2 runner epic: move rationale to design/0002, leave short
+    resolution:
+      "Iteration-2 runner epic: move rationale to design/0002, leave short
       justified comment."
   - category: adjacent
-    description: tests/checkers/_factories.py ~1400 lines; ~40 pytest.param tables
+    description:
+      tests/checkers/_factories.py ~1400 lines; ~40 pytest.param tables
       typed list[Any] with pasted justifications; cases far from tests.
     id: TD-8
     resolution: "Iteration-2 checkers epic per test-debloat-audit: ParameterSet
       typing, cases next to tests, split per checker."
   - category: adjacent
-    description: Task-ID test names (test_t5_*, test_t9_7_*, test_t11_*, test_t1b_*,
+    description:
+      Task-ID test names (test_t5_*, test_t9_7_*, test_t11_*, test_t1b_*,
       test_t3_*); repo-self-lint tests (test_self_lint_clean.py,
       AST/source-scanning guards, config re-checks) duplicate the `uv run lint`
       gate.
@@ -556,7 +580,8 @@ techDebt:
     resolution: "Iteration-2 epics per test-debloat-audit: rename by behavior;
       remove self-lint tests (broadened never-linting definition)."
   - category: adjacent
-    description: "ADR locations disagree: CodingRules requires design/, factory ADRs
+    description:
+      "ADR locations disagree: CodingRules requires design/, factory ADRs
       go to docs/adr."
     id: TD-10
     resolution: "Iteration-2 replan: cross-reference (design/README or AGENTS.md
@@ -565,7 +590,8 @@ techDebt:
     description: Shipped rumdl.toml excludes tests/data, forcing the integration
       per-run rewrite to lint the sample AGENTS.md; affects golden determinism.
     id: TD-11
-    resolution: coding-rules-audit inventories; iteration-2 runner epic fixes (e.g.
+    resolution:
+      coding-rules-audit inventories; iteration-2 runner epic fixes (e.g.
       narrow exclude); M1/M2 retain the override.
 uncertainties:
   - description: "Which decision model meets all constraints (CPU-friendly,
@@ -584,7 +610,8 @@ uncertainties:
         meaningless-precision, >=85% meaningful-recall)"
       - "semantic epic test-assumptions: install chosen runtime via `semantic`
         extra on 3.14, pin loader/inference API in tests/assumptions/"
-  - description: "Git-stored cache behavior under concurrency/cleanup from inside
+  - description:
+      "Git-stored cache behavior under concurrency/cleanup from inside
       pylint unknown: jobs, open()/close() timing, partial/staged runs, 3 pylint
       invocations sharing one project."
     id: U2
@@ -602,7 +629,8 @@ uncertainties:
         needed is recorded as blocking debt for iteration 2, not done in-story.
         Excluding any field that drops a planted oracle rule is forbidden
         without an ADR."
-  - description: Size/shape of coding-rules debt in src/ and redundant/lint-testing
+  - description:
+      Size/shape of coding-rules debt in src/ and redundant/lint-testing
       tests in tests/ (~28.6k LOC) unknown; subsystem epics cannot be scoped
       yet.
     id: U4

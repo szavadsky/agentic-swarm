@@ -33,7 +33,8 @@ suggestions:
   - id: torch-requires-python-nit
     disposition: optional
     summary: torch requires_python stated as >=3.11, PyPI says >=3.10
-    detail: Verified torch 2.12.1 requires_python is >=3.10. The cp314 wheel matrix
+    detail:
+      Verified torch 2.12.1 requires_python is >=3.10. The cp314 wheel matrix
       itself is exactly right (manylinux_2_28 x86_64/aarch64, macosx_14_0_arm64,
       win_amd64 incl. free-threaded variants; no Intel mac, no win_arm64), so
       conclusions are unaffected — correct on next touch.
@@ -54,9 +55,11 @@ suggestions:
       line: 43
   - id: fastino-license-human-review
     disposition: human-awareness
-    summary: "Operator awareness: Fastino Community License gates any GLiDE default
+    summary:
+      "Operator awareness: Fastino Community License gates any GLiDE default
       adoption"
-    detail: "Verified LICENSE §§2-6 verbatim: >$10M-revenue written agreement for
+    detail:
+      "Verified LICENSE §§2-6 verbatim: >$10M-revenue written agreement for
       Production commercial use, 'Built with Fastino GLiDE' attribution on ANY
       commercial use, derivative copyleft (§§2-4 carry-forward);
       evaluation/testing/benchmarking expressly permitted (§6b), so eval-poc
@@ -69,9 +72,11 @@ suggestions:
       line: 43
   - id: bekko-unlicensed-human-review
     disposition: human-awareness
-    summary: "Operator awareness: bekko-17m has no license and must stay excluded
+    summary:
+      "Operator awareness: bekko-17m has no license and must stay excluded
       until clarified"
-    detail: Verified card text verbatim ('remains to be finalized. This card does
+    detail:
+      Verified card text verbatim ('remains to be finalized. This card does
       not assign a license.') and HF API license:null; verified 1,702-line
       trust_remote_code module and requirements pin torch>=2.10,<2.11 (downgrade
       vs lock 2.12.1). Report correctly excludes from default; record ensures no

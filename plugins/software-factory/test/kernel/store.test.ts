@@ -6,6 +6,9 @@ import { readYaml, writeYamlAtomic } from "../../src/core/records/io.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import type { RecordStart, TaskFile } from "../../src/kernel/types.js";
 import { createTmpRepo } from "../helpers/tmp-repo.js";
+import { forwardedConcerns } from "../../src/kernel/context-pack.js";
+import { openDebts } from "../../src/kernel/derive.js";
+import { writeIterationSummary } from "../../src/kernel/summary.js";
 
 const MODEL = { id: "fake/model" };
 
@@ -333,5 +336,66 @@ describe("createFolderStore", () => {
     const records = await store.listRecords();
     expect(records).toHaveLength(1);
     expect(records[0]!.stop).toBeUndefined();
+  });
+
+  it("normalizes missing concerns/forward in outcome.yaml on read", async () => {
+    const store = createFolderStore(goalDir, undefined, {});
+    const turn = await store.startRecord(start());
+
+    // Outcome without concerns or forward
+    const incompleteOutcome = {
+      status: "done",
+      summary: "incomplete",
+    };
+    await writeYamlAtomic(
+      path.join(turn.dir, "outcome.yaml"),
+      incompleteOutcome,
+    );
+
+    // Outcome with concerns but no forward
+    const turn2 = await store.startRecord(start());
+    const concernsOnlyOutcome = {
+      status: "done",
+      summary: "concerns only",
+      concerns: [
+        { kind: "debt" as const, calibration: "fyi" as const, text: "fixme" },
+      ],
+    };
+    await writeYamlAtomic(
+      path.join(turn2.dir, "outcome.yaml"),
+      concernsOnlyOutcome,
+    );
+
+    const records = await store.listRecords();
+    expect(records).toHaveLength(2);
+
+    const r1 = records.find((r) => r.seq === turn.meta.seq)!;
+    expect(r1.outcome!.concerns).toEqual([]);
+    expect(r1.outcome!.forward).toEqual([]);
+
+    const r2 = records.find((r) => r.seq === turn2.meta.seq)!;
+    expect(r2.outcome!.concerns).toEqual(concernsOnlyOutcome.concerns);
+    expect(r2.outcome!.forward).toEqual([]);
+  });
+
+  it("verifies context pack, open debts and summary builder do not throw on seeded records", async () => {
+    const store = createFolderStore(goalDir, undefined, {});
+    await store.ensureLayout();
+    await store.appendRecord(start(), { stop: { kind: "done" } });
+    const records = await store.listRecords();
+
+    forwardedConcerns(records);
+    openDebts(records);
+    await writeIterationSummary(store, {
+      iteration: 1,
+      state: {
+        goal: "active",
+        iteration: 1,
+        terminal: false,
+        interrupted: false,
+        tasks: {},
+      },
+      records,
+    });
   });
 });

@@ -3,7 +3,8 @@ decision: amend
 outlines:
   - deps:
       - golden-determinism-probe
-    description: "Create tests/_golden.py as SOLE golden owner (no pipeline run in
+    description:
+      "Create tests/_golden.py as SOLE golden owner (no pipeline run in
       this item): UPDATE_ENV=PYTHON_SETUP_LINT_UPDATE_GOLDEN,
       SEMANTIC_ENV=PYTHON_SETUP_LINT_SEMANTIC; Finding TypedDict
       {tool,file|None,line|None,col|None,rule}; finding_key(f) None-safe (tool,

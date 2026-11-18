@@ -16,35 +16,35 @@ live in this `poc/` folder.
 
 ## What was prototyped
 
-| File | Role |
-|---|---|
-| `decision_cache.py` | schema, normalization, dotted-base32 key encoding, root guard, test-only `DECISIONS_PATH`, load/serialize, merge/prune, lock + atomic replace |
-| `decision_pipeline.py` | heuristic-first veto pipeline over the cache (hits, misses, no-model fallback) |
-| `refresh_cli.py` | prototype `lint --refresh-decisions [--path ...]`: CI guard, jobs guard, three sequential pylint passes, read-only normal lint |
-| `run_proofs.py` | 26 checks: the four required proofs plus every ADR-017/018 field |
-| `measure_memory_time.py` | three real pylint loads under `RLIMIT_AS=2048 MB`; ML-runtime and model-eval memory notes |
-| `encoding_lab.py` | empirical detect-secrets comparison of candidate encodings |
-| `make_verdict.py` | assembles `out/verdict.json` from the proof outputs |
+| File                     | Role                                                                                                                                          |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `decision_cache.py`      | schema, normalization, dotted-base32 key encoding, root guard, test-only `DECISIONS_PATH`, load/serialize, merge/prune, lock + atomic replace |
+| `decision_pipeline.py`   | heuristic-first veto pipeline over the cache (hits, misses, no-model fallback)                                                                |
+| `refresh_cli.py`         | prototype `lint --refresh-decisions [--path ...]`: CI guard, jobs guard, three sequential pylint passes, read-only normal lint                |
+| `run_proofs.py`          | 26 checks: the four required proofs plus every ADR-017/018 field                                                                              |
+| `measure_memory_time.py` | three real pylint loads under `RLIMIT_AS=2048 MB`; ML-runtime and model-eval memory notes                                                     |
+| `encoding_lab.py`        | empirical detect-secrets comparison of candidate encodings                                                                                    |
+| `make_verdict.py`        | assembles `out/verdict.json` from the proof outputs                                                                                           |
 
 Everything is recreated under `poc/tmp/` on every run and can be deleted safely.
 
 ## ADR-017 contract validation
 
-| Contract field | Pinned value | PoC result | Evidence key |
-|---|---|---|---|
-| Project root | `config.cwd` | cache resolves to `<cwd>/.python-setup-decisions.json`; symlink, parent, absolute and mismatched-root-hint escapes rejected | `contract_root_guard`, `contract_checker_root_hint` |
-| `DECISIONS_PATH` | test-only, only under `PYTEST_CURRENT_TEST` | ignored in production (uses cwd); honored under pytest and writes only the override | `contract_decisions_path_test_only` |
-| Schema | JSON array; entries `{justification, rule, model, decision, files}` + `{version, prompt_hash, last_seen}` | implemented; `key` is an additional derived field | `contract_schema_sort` |
-| Sort | `(rule, justification, model)` | exactly that order; `key` is a deterministic tie-break | `contract_schema_sort` |
-| Serialization | `indent=2`, `sort_keys`, trailing newline | byte-identical double refresh | `contract_schema_sort`, `contract_determinism` |
-| Encoding | non-hex, no bare hex >= 20, detect-secrets clean, collision-safe | `dk1.` + dot-separated lowercase base32 groups of 8 over full SHA-256; 25 000-key probe had zero collisions; repo `.secrets.baseline` scan clean, full-hex negative control flagged | `contract_encoding_collision`, `contract_detect_secrets` |
-| Prune | automatic missing files + stale model; no `--prune` flag | both pruned; stale prompt hash also pruned | `contract_prune` |
-| `files` | sorted unique POSIX relpaths, union-merged | one key observed in three files produced `["src/a.py","src/b.py","src/c.py"]` | `contract_files_union_posix` |
-| `--path` scoping | scoped sweep, unscanned retained | unscanned existing and deleted files retained; full refresh prunes them; stale mixed entry keeps its unscanned share | `contract_path_scoping`, `contract_scoped_stale_mixed` |
-| Refresh shape | `lint --refresh-decisions [--path ...]` | prototype CLI, lock + merge + atomic replace; normal lint is a separate read-only path | `contract_determinism`, `contract_atomic_failure`, `contract_lock_contention` |
-| CI failure | `CI`/`GITHUB_ACTIONS` exit non-zero | exit 2 before any write, cache hash unchanged | `contract_ci_fail` |
-| jobs | must be exactly 1, fail loudly | `--jobs=2`, `--jobs=0` and an rcfile `jobs=2` all fail; HEAD's three rcfiles have no override | `contract_jobs_guard` |
-| Placement (ADR-018) | new `python_setup_lint/decisions/_decision_cache.py(+.pyi)`, checkers/runner depend on it, decisions depends on nothing | tach check passes the legal tree; `decisions -> checkers` negative control fails | `contract_tach_placement` |
+| Contract field      | Pinned value                                                                                                            | PoC result                                                                                                                                                                          | Evidence key                                                                  |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Project root        | `config.cwd`                                                                                                            | cache resolves to `<cwd>/.python-setup-decisions.json`; symlink, parent, absolute and mismatched-root-hint escapes rejected                                                         | `contract_root_guard`, `contract_checker_root_hint`                           |
+| `DECISIONS_PATH`    | test-only, only under `PYTEST_CURRENT_TEST`                                                                             | ignored in production (uses cwd); honored under pytest and writes only the override                                                                                                 | `contract_decisions_path_test_only`                                           |
+| Schema              | JSON array; entries `{justification, rule, model, decision, files}` + `{version, prompt_hash, last_seen}`               | implemented; `key` is an additional derived field                                                                                                                                   | `contract_schema_sort`                                                        |
+| Sort                | `(rule, justification, model)`                                                                                          | exactly that order; `key` is a deterministic tie-break                                                                                                                              | `contract_schema_sort`                                                        |
+| Serialization       | `indent=2`, `sort_keys`, trailing newline                                                                               | byte-identical double refresh                                                                                                                                                       | `contract_schema_sort`, `contract_determinism`                                |
+| Encoding            | non-hex, no bare hex >= 20, detect-secrets clean, collision-safe                                                        | `dk1.` + dot-separated lowercase base32 groups of 8 over full SHA-256; 25 000-key probe had zero collisions; repo `.secrets.baseline` scan clean, full-hex negative control flagged | `contract_encoding_collision`, `contract_detect_secrets`                      |
+| Prune               | automatic missing files + stale model; no `--prune` flag                                                                | both pruned; stale prompt hash also pruned                                                                                                                                          | `contract_prune`                                                              |
+| `files`             | sorted unique POSIX relpaths, union-merged                                                                              | one key observed in three files produced `["src/a.py","src/b.py","src/c.py"]`                                                                                                       | `contract_files_union_posix`                                                  |
+| `--path` scoping    | scoped sweep, unscanned retained                                                                                        | unscanned existing and deleted files retained; full refresh prunes them; stale mixed entry keeps its unscanned share                                                                | `contract_path_scoping`, `contract_scoped_stale_mixed`                        |
+| Refresh shape       | `lint --refresh-decisions [--path ...]`                                                                                 | prototype CLI, lock + merge + atomic replace; normal lint is a separate read-only path                                                                                              | `contract_determinism`, `contract_atomic_failure`, `contract_lock_contention` |
+| CI failure          | `CI`/`GITHUB_ACTIONS` exit non-zero                                                                                     | exit 2 before any write, cache hash unchanged                                                                                                                                       | `contract_ci_fail`                                                            |
+| jobs                | must be exactly 1, fail loudly                                                                                          | `--jobs=2`, `--jobs=0` and an rcfile `jobs=2` all fail; HEAD's three rcfiles have no override                                                                                       | `contract_jobs_guard`                                                         |
+| Placement (ADR-018) | new `python_setup_lint/decisions/_decision_cache.py(+.pyi)`, checkers/runner depend on it, decisions depends on nothing | tach check passes the legal tree; `decisions -> checkers` negative control fails                                                                                                    | `contract_tach_placement`                                                     |
 
 ### Example entry
 
@@ -76,12 +76,12 @@ PoC injects the date, and production should inject a clock in tests.
 `encoding_lab.py` scanned realistic cache lines with the repository's own
 plugins/filters:
 
-| Candidate | Findings |
-|---|---|
-| full 64-char hex digest | 1 (`Hex High Entropy String`) — rejected |
-| plain base32 | 0 for this digest, but entropy 4.36 is marginal against the 4.5 base64 limit |
-| base32 with `.` every 8 chars | 0 — neither quoted-string matcher can match through `.` |
-| base64url / base58 / base36 | flagged as `Base64 High Entropy String` |
+| Candidate                     | Findings                                                                     |
+| ----------------------------- | ---------------------------------------------------------------------------- |
+| full 64-char hex digest       | 1 (`Hex High Entropy String`) — rejected                                     |
+| plain base32                  | 0 for this digest, but entropy 4.36 is marginal against the 4.5 base64 limit |
+| base32 with `.` every 8 chars | 0 — neither quoted-string matcher can match through `.`                      |
+| base64url / base58 / base36   | flagged as `Base64 High Entropy String`                                      |
 
 The dotted-base32 scheme is therefore chosen: it preserves the full 256-bit
 digest, has no contiguous hex run (groups of 8), and is robustly outside both
@@ -132,25 +132,25 @@ Three real pylint loads under the runner's `RLIMIT_AS=2048 MB`, using the
 repository rcfiles on a tmp project (one representative run; wall time varies by
 ±0.3 s on this host):
 
-| Load | Exit | Wall | Peak RSS |
-|---|---|---|---|
-| `pylint` | 0 | 1.328 s | 80.08 MB |
-| `pylint-pyi` | 0 | 1.170 s | 79.67 MB |
-| `pylint tests` | 0 | 0.617 s | 62.09 MB |
-| **total** | — | **3.115 s** | — |
+| Load           | Exit | Wall        | Peak RSS |
+| -------------- | ---- | ----------- | -------- |
+| `pylint`       | 0    | 1.328 s     | 80.08 MB |
+| `pylint-pyi`   | 0    | 1.170 s     | 79.67 MB |
+| `pylint tests` | 0    | 0.617 s     | 62.09 MB |
+| **total**      | —    | **3.115 s** | —        |
 
 All three are far under 2048 MB; no `MemoryError`. The current dev environment
 has **no torch, onnxruntime, sentence-transformers or transformers**
 (`sentence_transformers` is the optional `[semantic]` extra). The sibling
 model-eval PoC measured torch-CPU backends:
 
-| Model | Params | Peak RSS | Load |
-|---|---|---|---|
-| minilm-l6-v2 | 22.7 M | 556 MB | 0.72 s |
-| bekko-17m | 16.8 M | 624 MB | 0.68 s |
-| ettin-reranker-150m | 149 M | 991 MB | 0.68 s |
-| decider-nano | 149 M | 1 464 MB | 12.9 s |
-| GLiDE | 395 M | **2 846 MB** | 33.9 s |
+| Model               | Params | Peak RSS     | Load   |
+| ------------------- | ------ | ------------ | ------ |
+| minilm-l6-v2        | 22.7 M | 556 MB       | 0.72 s |
+| bekko-17m           | 16.8 M | 624 MB       | 0.68 s |
+| ettin-reranker-150m | 149 M  | 991 MB       | 0.68 s |
+| decider-nano        | 149 M  | 1 464 MB     | 12.9 s |
+| GLiDE               | 395 M  | **2 846 MB** | 33.9 s |
 
 Consequences for the backend/cache impls:
 
@@ -198,7 +198,7 @@ Consequences for the backend/cache impls:
   resilient.
 - **Job guard scope.** The prototype checks an explicit `--jobs` value and
   every rcfile it is given. The production runner must feed the guard the
-  three *resolved* rcfiles (including `pyproject.toml` config overrides and
+  three _resolved_ rcfiles (including `pyproject.toml` config overrides and
   extra-tool args), not a fixed `cwd/config` guess; the PoC's
   `_default_rcfiles` is a simplification.
 - **`short12` model revision** is a 48-bit prefix. It fits the pinned format

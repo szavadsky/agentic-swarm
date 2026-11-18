@@ -3,7 +3,8 @@ items:
   - slug: spike-omp-isolation
     kind: fact-finder
     title: "Spike: omp isolation mechanics + backend decision"
-    assignment: "Fact-finder spike, no prod code. Probe installed omp (18.18.5) with
+    assignment:
+      "Fact-finder spike, no prod code. Probe installed omp (18.18.5) with
       throwaway --profile and mktemp-isolated temp git repos (unique per run,
       parallel-safe). 1) Enumerate isolation.backend allowed values via omp
       help/config schema plus trial overlays. 2) Run retention matrix: omp
@@ -67,7 +68,8 @@ items:
   - slug: spike-cache-key
     kind: fact-finder
     title: "Spike: prompt-cache keying + compaction/warming audit"
-    assignment: "Fact-finder spike, no prod code. 1) Render the same agent prompt
+    assignment:
+      "Fact-finder spike, no prod code. 1) Render the same agent prompt
       twice via current transport and diff bytes/argv (system-prompt content,
       overlay bytes, prompt path/argv). 2) Run bounded live resume probes with
       cache-miss markers: same vs changed prompt path, model switch, TTL expiry;
@@ -96,7 +98,8 @@ items:
   - slug: spike-repo-rules
     kind: fact-finder
     title: "Spike: repo-rules sources + omp injection audit"
-    assignment: "Fact-finder spike, no prod code. 1) Enumerate rule/context sources
+    assignment:
+      "Fact-finder spike, no prod code. 1) Enumerate rule/context sources
       (AGENTS.md/CLAUDE.md/.cursorrules/.omp/rules, root plus subdirs) and
       precedence via omp docs plus config inspection. 2) With a sentinel fixture
       repo (unique temp dir), probe root omp processes with and without
