@@ -5,7 +5,9 @@ import {
   classifyOmpError,
   classifyOmpLaunchFailure,
   classifyOmpStopReason,
+  classifyOmpTurn,
 } from "../../src/harness/omp/classify.js";
+import { zeroUsage } from "../../src/harness/usage.js";
 
 const FIXTURES = path.resolve(import.meta.dir, "../fixtures/omp");
 
@@ -132,5 +134,68 @@ describe("classifyOmpLaunchFailure", () => {
       cause: "crash",
       details: "boom",
     });
+  });
+});
+
+describe("classifyOmpTurn", () => {
+  it("classifies zero-usage no-output as glitch", () => {
+    const stop = classifyOmpTurn({
+      usage: zeroUsage(),
+      text: "",
+      promptResult: { status: "completed" },
+    });
+    expect(stop).toMatchObject({ kind: "infra", cause: "glitch" });
+  });
+
+  it("returns done for completed with usage", () => {
+    const stop = classifyOmpTurn({
+      usage: {
+        in: 1,
+        out: 1,
+        cacheRead: 0,
+        cacheWrite5m: 0,
+        cacheWrite1h: 0,
+        reasoningOut: 0,
+      },
+      text: "hello",
+      promptResult: { status: "completed" },
+    });
+    expect(stop).toMatchObject({ kind: "done" });
+  });
+
+  it("returns truncated for completed with max_tokens stop reason", () => {
+    const stop = classifyOmpTurn({
+      usage: {
+        in: 1,
+        out: 1,
+        cacheRead: 0,
+        cacheWrite5m: 0,
+        cacheWrite1h: 0,
+        reasoningOut: 0,
+      },
+      text: "hello",
+      promptResult: { status: "completed" },
+      lastStopReason: "max_tokens",
+    });
+    expect(stop).toMatchObject({ kind: "truncated", cause: "max-tokens" });
+  });
+
+  it("prefers refusal over glitch", () => {
+    const stop = classifyOmpTurn({
+      usage: zeroUsage(),
+      text: "",
+      promptResult: { status: "completed" },
+      lastStopReason: "refusal",
+    });
+    expect(stop).toMatchObject({ kind: "refusal" });
+  });
+
+  it("returns done for zero usage with text", () => {
+    const stop = classifyOmpTurn({
+      usage: zeroUsage(),
+      text: "some output",
+      promptResult: { status: "completed" },
+    });
+    expect(stop).toMatchObject({ kind: "done" });
   });
 });

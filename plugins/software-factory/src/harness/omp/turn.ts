@@ -326,6 +326,9 @@ export async function runOmpTurn(
         sinceMs: startedAtMs,
       });
 
+  const turnText = summary.assistantText ?? "";
+  const text = textFrame?.data?.text ?? turnText;
+
   const failure: OmpTurnFailure | undefined =
     promptFailed instanceof OmpRpcExit
       ? {
@@ -349,6 +352,8 @@ export async function runOmpTurn(
           failure,
           promptResult,
           lastStopReason: summary.lastAssistantStopReason,
+          usage,
+          text: turnText,
         });
 
   const sessionId: string | undefined =
@@ -372,7 +377,7 @@ export async function runOmpTurn(
 
   return {
     stop,
-    text: textFrame?.data?.text ?? summary.assistantText ?? "",
+    text,
     usage,
     session,
     model: session?.model ?? model,
