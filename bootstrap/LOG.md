@@ -686,3 +686,9 @@ Verbatim, newest last; each with what it changed.
 
 ### 2026-11-17 — goal `delta` init (owner directive): everything not yet done in INTENT.md
 - Fresh orchestration subfolder, factory iteration 1, self-quota map unchanged, inbox EMPTY (no steers at all — architect assesses status alone). Intent delegates assessment (INTENT.md minus built+evidenced) and defines done (declared complete with evidence pointers; 0-merge-because-done = success). Self goal pauses. Loop till satisfied; recovery-only steers.
+
+### 2026-11-17 — delta-i1 landed: INTERRUPTED (exit 130/SIGINT, unknown cause), 1 merge
+- 2h58m wall, status stopped-with-debt, graceful summary. Interrupter unknown: single 'interrupted' line, no owner message, wrapper had no deadline, tree clean. factory/delta +1: evidence-docs (R6 checks-evidence + doc drift). 6 parks: compact-agy-cc (review-rejected), boundary-contain (failed/regressions), cleanliness + delivery-repair-config (gates-tests), gate-handoff-log (failed, missing checks_* vars), env-allowlist (empty-diff after red tests). Pending 47, debt 0, inbox empty.
+- Legs: architect opus 1 turn $4.67 clean (7th clean outing); implementer 27 turns ALL agy/gemini $16.58 with 14 failures; planreview 1 gemini $0.06; pm+reviewer 9 turns ALL hy4 $0 (ernie ZERO turns, 3rd day exhausted); no escalation/steward/digest. Cost $21.32 partial (highest ever). 2 infra retries, 1 fallback hop, 14 outcome-repairs, 1 merged-gate failure, 2 flakes, 1 loop.
+- Architect: 50-task A-J plan stands; asks deferred (2 operator launches at milestone A; canary goals after compact+harness-opaque). INTENT concern lines fixed on head — deletion is owner's call, not operated.
+- Operator call: relaunch i2 per standing directive; unknown kill flagged to owner (veto = hold).
