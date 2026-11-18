@@ -750,3 +750,9 @@ Verbatim, newest last; each with what it changed.
 - Legs: architect opus 1t unpriced clean (12th shaping); implementer 9t gemini $8.17; escalation 1t sonnet $1.12; plancheck $0.04; planreview $0.07; pm/reviewer/digest hy4 $0. Cost $9.39 partial ($9.39/merge).
 - Friction: 4 outcome-repairs; launches impl 3 failure + plancheck 1 + planreview 1 + reviewer 1 change-request + digest 1 glitch; 2 infra retries, 1 fallback hop, 1 loop incident.
 - Goal NOT complete (no declaration; M3 contracts + hygiene + debt remain). No stop pressure.
+
+### 2026-11-18 — repair-i6 landed: 3 merges, all mechanisms built; declaration expected next
+- Exit 3 (iteration-limit), 55min wall, status in-progress. factory/repair +3: spike-report-contracts-4, tmp-hygiene-3, tmp-preflight-2. 0 parks, pending 0, debt 1 (plancheck r1, superseded). Inbox empty. M3 contracts + M4 hygiene LAND; all mechanisms built (M1 read-pure, M2 resume-gate, M3 check+seal+contracts, M4 hygiene+preflight).
+- CORRECTION (operator owned): architect found all 3 i5 parks were implementer misattributing its own reds — contracts-3 claimed pre-existing scenario8 failures with NO checks run on a green base. My repair5 steer item 1 (pre-existing-red-first) was based on that false claim. Lesson: verify pre-existing-red claims against base-gate evidence before steering on them.
+- Legs: opus 1t unpriced clean (13th shaping); implementer $1.29; plancheck $0.08; planreview $0.07; pm/reviewer/digest $0. Cost $1.44 partial ($0.48/merge). Incidents: 2 infra retries, 1 fallback hop, 2 outcome-repairs, 1 digest glitch, plancheck+planreview 1 failure each.
+- Goal NOT complete (no declaration yet — expected next segment). No stop pressure.
