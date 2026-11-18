@@ -614,8 +614,8 @@ describe("pre-flight", () => {
       const result = await preflight({ ...f.input, harnesses });
       expect(result.aliases.implementer).toBe("max");
       const fallbacks = f.configs.run.aliases.implementer!.fallbacks!;
-      expect(fallbacks[0]!.effort).toBe("high");
-      expect(fallbacks[1]!.effort).toBe("max");
+      expect(fallbacks[0]).toMatchObject({ effort: "high" });
+      expect(fallbacks[1]).toMatchObject({ effort: "max" });
     } finally {
       f.repo.cleanup();
     }
@@ -688,9 +688,8 @@ describe("pre-flight", () => {
       const entries = f.configs.run.aliases.implementer!.rotate!;
       expect(entries[0]!.effort).toBe("high");
       expect(entries[1]!.effort).toBe("max");
-      expect(
-        f.configs.run.aliases.implementer!.fallbacks![0]!.effort,
-      ).toBeUndefined();
+      const rotating = f.configs.run.aliases.implementer!.fallbacks![0]!;
+      expect("model" in rotating ? rotating.effort : undefined).toBeUndefined();
     } finally {
       f.repo.cleanup();
     }
@@ -947,6 +946,92 @@ describe("pre-flight", () => {
       );
       expect(finding?.message).toContain("cycle");
       expect(finding?.message).toContain("pm -> esc -> pm");
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("refuses a fallback that names no alias", async () => {
+    const f = await fixture(
+      RUN_HEAD.replace(
+        "implementer: { harness: fake, model: impl }",
+        "implementer: { harness: fake, model: impl, fallbacks: [{ alias: ghost }] }",
+      ),
+    );
+    try {
+      const err = await refusal(f.input);
+      expect(err.findings).toContainEqual(
+        expect.objectContaining({
+          file: path.join(f.repo.dir, ".factory/run.yaml"),
+          key: "aliases.implementer.fallbacks.0.alias",
+          message: 'fallback alias "ghost" names no run-config alias',
+        }),
+      );
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("refuses a fallback that names its own alias", async () => {
+    const f = await fixture(
+      RUN_HEAD.replace(
+        "implementer: { harness: fake, model: impl }",
+        "implementer: { harness: fake, model: impl, fallbacks: [{ alias: implementer }] }",
+      ),
+    );
+    try {
+      const err = await refusal(f.input);
+      const finding = err.findings.find(
+        (item) => item.key === "aliases.implementer.fallbacks.0.alias",
+      );
+      expect(finding?.message).toContain("cycle");
+      expect(finding?.message).toContain("implementer -> implementer");
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("refuses a mutual fallback alias cycle", async () => {
+    const f = await fixture(
+      RUN_HEAD.replace(
+        "implementer: { harness: fake, model: impl }",
+        "implementer: { harness: fake, model: impl, fallbacks: [{ alias: reviewer }] }",
+      ).replace(
+        "reviewer: { harness: fake, model: rev }",
+        "reviewer: { harness: fake, model: rev, fallbacks: [{ alias: implementer }] }",
+      ),
+    );
+    try {
+      const err = await refusal(f.input);
+      const findings = err.findings.filter((item) =>
+        item.key.endsWith(".fallbacks.0.alias"),
+      );
+      expect(findings.map((item) => item.key).sort()).toEqual([
+        "aliases.implementer.fallbacks.0.alias",
+        "aliases.reviewer.fallbacks.0.alias",
+      ]);
+      expect(findings.map((item) => item.message)).toContain(
+        "fallback alias chain forms a cycle: implementer -> reviewer -> implementer",
+      );
+      expect(err.report).toContain("cycle");
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("accepts a fallback that reuses another alias's ladder", async () => {
+    const f = await fixture(
+      RUN_HEAD.replace(
+        "implementer: { harness: fake, model: impl }",
+        "implementer: { harness: fake, model: impl, fallbacks: [{ alias: reviewer }] }",
+      ).replace(
+        "reviewer: { harness: fake, model: rev }",
+        "reviewer: { harness: fake, model: rev, effort: highest }",
+      ),
+    );
+    try {
+      const result = await preflight(f.input);
+      expect(result.aliases.reviewer).toBe("max");
     } finally {
       f.repo.cleanup();
     }

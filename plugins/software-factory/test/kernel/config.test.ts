@@ -347,6 +347,27 @@ describe("three config layers", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
+  it("parses a fallback that names another alias and refuses a mixed tier", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    const runYaml = path.join(root, ".factory/run.yaml");
+    const config = (fallbacks: string): string =>
+      [
+        "aliases:",
+        "  backup: { harness: omp, model: m, subscription: go }",
+        `  implementer: { harness: omp, model: p, fallbacks: [${fallbacks}] }`,
+        "limits: { iterations: 1 }",
+        "",
+      ].join("\n");
+    fs.writeFileSync(runYaml, config("{ alias: backup }"));
+    expect(loadConfigs(root).run.aliases.implementer!.fallbacks).toEqual([
+      { alias: "backup" },
+    ]);
+    fs.writeFileSync(runYaml, config("{ alias: backup, model: m }"));
+    expect(() => loadConfigs(root)).toThrow(/fallbacks\.0/);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
   it("rejects an unsafe goal name", () => {
     const root = tmpRepo();
     const configs = loadConfigs(root);

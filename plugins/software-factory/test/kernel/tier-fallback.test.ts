@@ -52,7 +52,10 @@ const BASE_ALIASES = {
 
 type AliasSpec = NonNullable<FlowRepoOptions["aliases"]>[string];
 
-async function tierRuntime(implementer: AliasSpec): Promise<{
+async function tierRuntime(
+  implementer: AliasSpec,
+  extraAliases: Record<string, AliasSpec> = {},
+): Promise<{
   repo: TmpRepo;
   runtime: KernelRuntime;
   a: FakeHarness;
@@ -60,7 +63,7 @@ async function tierRuntime(implementer: AliasSpec): Promise<{
 }> {
   const { repo, goal } = setupFlowRepo({
     limits: { concurrency: { overall: 2 } },
-    aliases: { ...BASE_ALIASES, implementer },
+    aliases: { ...BASE_ALIASES, ...extraAliases, implementer },
   });
   const a = new FakeHarness({ id: "a" });
   const b = new FakeHarness({ id: "b" });
@@ -461,4 +464,98 @@ describe("alias fallback tiers", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+
+  it("expands a fallback that names another alias and keeps its pools and effort", async () => {
+    const t = await tierRuntime(
+      {
+        harness: "a",
+        model: "ma",
+        subscription: "outer",
+        fallbacks: [{ alias: "backup" }],
+      },
+      {
+        backup: {
+          harness: "b",
+          model: "mb",
+          effort: "high",
+          subscription: "inner",
+          fallbacks: [{ model: "mb2" }],
+        },
+      },
+    );
+    try {
+      const target = resolveTurn(t.runtime, "implementer", "implementer");
+      expect(
+        target.tiers.map((tier) => [
+          tier.harness.id,
+          tier.model.id,
+          tier.effort,
+          tier.subscription,
+        ]),
+      ).toEqual([
+        ["a", "ma", undefined, "outer"],
+        ["b", "mb", "high", "inner"],
+        ["b", "mb2", "high", "inner"],
+      ]);
+
+      // One pool covers the named alias's whole ladder: both its tiers drop.
+      t.runtime.exhaustedPools.add("inner");
+      const withoutInner = resolveTurn(t.runtime, "implementer", "implementer");
+      expect(withoutInner.harness.id).toBe("a");
+      expect(withoutInner.tiers.map((tier) => tier.model.id)).toEqual(["ma"]);
+
+      t.runtime.exhaustedPools.add("outer");
+      const withoutPools = resolveTurn(t.runtime, "implementer", "implementer");
+      expect(withoutPools.model.id).toBe("mb2");
+      expect(withoutPools.tierOffset).toBe(2);
+    } finally {
+      cleanupFlowRepo(t.repo);
+    }
+  });
+
+  it("runs a named alias's ladder and exhausts only the pool that answered quota", async () => {
+    const t = await tierRuntime(
+      {
+        harness: "a",
+        model: "ma",
+        subscription: "outer",
+        fallbacks: [{ alias: "backup" }],
+      },
+      { backup: { harness: "b", model: "mb", subscription: "inner" } },
+    );
+    try {
+      t.a.scriptResult(quota());
+      t.b.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "done on backup" }));
+        return fakeTurnResult(req);
+      });
+
+      const result = await runAgentTurn(t.runtime, {
+        target: resolveTurn(t.runtime, "implementer", "implementer"),
+        cwd: t.repo.dir,
+        meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
+        vars: implementerVars,
+        expectation: "any",
+      });
+
+      expect(
+        result.record.attempts?.map((attempt) => [
+          attempt.harness,
+          attempt.model.id,
+          attempt.stop.kind,
+        ]),
+      ).toEqual([
+        ["a", "ma", "infra"],
+        ["b", "mb", "done"],
+      ]);
+      // Quota latches the tier's own subscription, not the alias naming it.
+      expect(t.runtime.exhaustedPools.has("outer")).toBe(true);
+      expect(t.runtime.exhaustedPools.has("inner")).toBe(false);
+      expect(
+        resolveTurn(t.runtime, "implementer", "implementer").harness.id,
+      ).toBe("b");
+    } finally {
+      cleanupFlowRepo(t.repo);
+    }
+  });
 });

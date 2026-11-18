@@ -833,8 +833,10 @@ priceIds:
     expect(run.aliases.architect!.model).toBe("anthropic/claude-opus-5-5");
     for (const alias of Object.values(run.aliases)) {
       expect(matchPrice(catalog, alias.model, run.priceIds)).toBeDefined();
-      for (const fb of alias.fallbacks)
-        expect(matchPrice(catalog, fb.model, run.priceIds)).toBeDefined();
+      for (const fb of alias.fallbacks) {
+        if ("model" in fb)
+          expect(matchPrice(catalog, fb.model, run.priceIds)).toBeDefined();
+      }
     }
     expect(
       matchPrice(catalog, "opencode/beam-free", run.priceIds),

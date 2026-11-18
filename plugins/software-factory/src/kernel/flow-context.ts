@@ -314,52 +314,104 @@ function primaryEntry(
   };
 }
 
+/** Tiers accumulated for one chain, deduplicated across nested alias ladders. */
+interface ChainTiers {
+  seen: Set<string>;
+  tiers: ResolvedTier[];
+}
+
+/** Adds one tier unless an earlier tier already names the same harness, model and effort. */
+function pushTier(
+  runtime: KernelRuntime,
+  out: ChainTiers,
+  owner: string,
+  harnessId: string,
+  modelId: string,
+  effort: string | undefined,
+  subscription: string | undefined,
+): void {
+  const key = `${harnessId}\u0000${modelId}\u0000${effort ?? ""}`;
+  if (out.seen.has(key)) return;
+  out.seen.add(key);
+  const harness = runtime.harnesses.get(harnessId);
+  if (!harness)
+    throw new Error(
+      `no harness "${harnessId}" registered for alias "${owner}"`,
+    );
+  out.tiers.push({
+    harness,
+    model: { id: modelId, ...(effort ? { effort } : {}) },
+    ...(effort ? { effort } : {}),
+    ...(subscription ? { subscription } : {}),
+    opaque: runtime.configs.run.harnesses?.[harnessId]?.acpx,
+  });
+}
+
 /**
- * The alias's full fallback chain, primary first, deduplicated by harness,
- * model and effort. A fallback names another harness to leave the primary's;
- * effort and subscription default to the primary's.
+ * Appends one alias's ladder to `out`: its primary for the iteration, then
+ * each fallback in order. A literal fallback defaults its effort and
+ * subscription to this alias's; a fallback that names another alias
+ * contributes that alias's whole ladder on the same iteration, so each of its
+ * tiers keeps the named alias's own defaults and quota pools. An alias already
+ * on `path` is a cycle, refused at pre-flight and never walked twice here.
  */
-function resolveChain(
+function collectTiers(
   runtime: KernelRuntime,
   aliasName: string,
-  iteration?: number,
-): ResolvedTier[] {
+  iteration: number | undefined,
+  path: readonly string[],
+  out: ChainTiers,
+): void {
   const alias = runtime.configs.run.aliases[aliasName]!;
   const primary = primaryEntry(alias, iteration);
-  const seen = new Set<string>();
-  const chain: ResolvedTier[] = [];
-  const push = (
-    harnessId: string,
-    modelId: string,
-    effort: string | undefined,
-    subscription: string | undefined,
-  ): void => {
-    const key = `${harnessId}\u0000${modelId}\u0000${effort ?? ""}`;
-    if (seen.has(key)) return;
-    seen.add(key);
-    const harness = runtime.harnesses.get(harnessId);
-    if (!harness)
-      throw new Error(
-        `no harness "${harnessId}" registered for alias "${aliasName}"`,
-      );
-    chain.push({
-      harness,
-      model: { id: modelId, ...(effort ? { effort } : {}) },
-      ...(effort ? { effort } : {}),
-      ...(subscription ? { subscription } : {}),
-      opaque: runtime.configs.run.harnesses?.[harnessId]?.acpx,
-    });
-  };
-  push(primary.harness, primary.model, primary.effort, alias.subscription);
+  pushTier(
+    runtime,
+    out,
+    aliasName,
+    primary.harness,
+    primary.model,
+    primary.effort,
+    alias.subscription,
+  );
   for (const fallback of alias.fallbacks ?? []) {
-    push(
+    if ("alias" in fallback) {
+      const target = fallback.alias;
+      if (!runtime.configs.run.aliases[target])
+        throw new Error(
+          `fallback alias "${target}" names no run-config alias (needed by alias "${aliasName}")`,
+        );
+      if (path.includes(target))
+        throw new Error(
+          `fallback alias chain forms a cycle: ${[...path, target].join(" -> ")}`,
+        );
+      collectTiers(runtime, target, iteration, [...path, target], out);
+      continue;
+    }
+    pushTier(
+      runtime,
+      out,
+      aliasName,
       fallback.harness ?? primary.harness,
       fallback.model,
       fallback.effort ?? primary.effort,
       fallback.subscription ?? alias.subscription,
     );
   }
-  return chain;
+}
+
+/**
+ * The alias's full fallback chain, primary first, deduplicated by harness,
+ * model and effort. A fallback names a model on another harness, or another
+ * alias whose ladder is reused as-is.
+ */
+function resolveChain(
+  runtime: KernelRuntime,
+  aliasName: string,
+  iteration?: number,
+): ResolvedTier[] {
+  const out: ChainTiers = { seen: new Set(), tiers: [] };
+  collectTiers(runtime, aliasName, iteration, [aliasName], out);
+  return out.tiers;
 }
 
 /** The harness a turn on this alias would actually start on. */

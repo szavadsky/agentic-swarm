@@ -572,8 +572,17 @@ export interface ProcessConfig {
   presets?: Record<string, { calibration: string }>;
 }
 
-/** One fallback tier: a model on the alias's harness or another, with its own effort. */
-export interface FallbackConfig {
+/** One fallback tier: another alias's whole ladder, or a model with its own effort. */
+export type FallbackConfig = FallbackAliasConfig | FallbackModelConfig;
+
+/** A fallback that reuses another alias's ladder, primary first. */
+export interface FallbackAliasConfig {
+  /** Run-config alias whose primary and fallback tiers this entry contributes. */
+  alias: string;
+}
+
+/** A fallback that names a model on the alias's harness or another, with its own effort. */
+export interface FallbackModelConfig {
   /** Harness id; defaults to the alias's harness. */
   harness?: string;
   model: string;

@@ -108,6 +108,47 @@ function escalationFindings(
 }
 
 /**
+ * A fallback may name another alias, so its ladder is that alias's chain. A
+ * missing name or a cycle would only fail while resolving a turn, after the
+ * plan spent, so pre-flight refuses either here.
+ */
+function fallbackAliasFindings(
+  aliases: Record<string, AliasConfig>,
+  file: string,
+): Finding[] {
+  const findings: Finding[] = [];
+  const walk = (name: string, path: readonly string[]): void => {
+    for (const [index, fallback] of (
+      aliases[name]!.fallbacks ?? []
+    ).entries()) {
+      if (!("alias" in fallback)) continue;
+      const target = fallback.alias;
+      const key = `aliases.${name}.fallbacks.${index}.alias`;
+      if (!aliases[target]) {
+        findings.push({
+          file,
+          key,
+          message: `fallback alias "${target}" names no run-config alias`,
+        });
+        continue;
+      }
+      const at = path.indexOf(target);
+      if (at !== -1) {
+        findings.push({
+          file,
+          key,
+          message: `fallback alias chain forms a cycle: ${[...path.slice(at), target].join(" -> ")}`,
+        });
+        continue;
+      }
+      walk(target, [...path, target]);
+    }
+  };
+  for (const name of Object.keys(aliases)) walk(name, [name]);
+  return findings;
+}
+
+/**
  * Exactly the aliases process config names, each with the step that names it:
  * every boundary step, every flow step and every different-model follow-up.
  * Nothing is derived from a role name, so a renamed alias is the only
@@ -236,6 +277,7 @@ export async function preflight(
   }
 
   findings.push(...escalationFindings(configs.run.aliases, files.run));
+  findings.push(...fallbackAliasFindings(configs.run.aliases, files.run));
 
   // A task type owns its flow and output schema. A type naming either one
   // wrongly would quarantine every task of that type or fail mid-turn, after
@@ -279,7 +321,8 @@ export async function preflight(
     usedHarnesses.add(alias.harness);
     for (const entry of alias.rotate ?? []) usedHarnesses.add(entry.harness);
     for (const fallback of alias.fallbacks ?? []) {
-      if (fallback.harness) usedHarnesses.add(fallback.harness);
+      if ("model" in fallback && fallback.harness)
+        usedHarnesses.add(fallback.harness);
     }
   }
   const unavailable = new Set<string>();

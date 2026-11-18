@@ -110,10 +110,12 @@ that is not usable gets a fresh retry on the same alias; after two failed turns
 the ladder climbs to `escalateTo`, which carries a broader mandate and may stop
 with one question for the architect. Without `escalateTo` the iteration blocks
 with every rung in the summary. `fallbacks` stay infrastructure-only (quota and
-crash), so escalation is model routing, not a retry. Each fallback tier names
-its own model, harness and effort, and the quota pool it draws on; a turn that
-lands on a tier keeps the launch on it, and dispatch throttles each pool and
-model within the overall limit.
+crash), so escalation is model routing, not a retry. Each fallback tier either
+names its own model, harness and effort, and the quota pool it draws on, or
+names another alias (`{ alias: backup }`) and reuses that alias's whole ladder,
+each of its tiers keeping its own quota pool; pre-flight refuses a missing alias
+or a fallback cycle. A turn that lands on a tier keeps the launch on it, and
+dispatch throttles each pool and model within the overall limit.
 
 An alias may carry `rotate: [{ harness, model, effort }]` to change its primary
 per iteration: iteration N resolves `rotate[N % rotate.length]`, so iteration 1

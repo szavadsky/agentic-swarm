@@ -239,7 +239,9 @@ describe("shipped run-config coverage", () => {
       for (const alias of Object.values(run.aliases)) {
         ids.add(alias.model);
         for (const entry of alias.rotate) ids.add(entry.model);
-        for (const fb of alias.fallbacks) ids.add(fb.model);
+        for (const fb of alias.fallbacks) {
+          if ("model" in fb) ids.add(fb.model);
+        }
       }
       if (run.scouts) ids.add(run.scouts.model);
       expect(ids.size).toBeGreaterThan(0);

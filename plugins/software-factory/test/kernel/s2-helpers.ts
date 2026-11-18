@@ -51,12 +51,15 @@ export interface FlowRepoOptions {
         model: string;
         effort?: string;
       }[];
-      fallbacks?: {
-        harness?: string;
-        model: string;
-        effort?: string;
-        subscription?: string;
-      }[];
+      fallbacks?: (
+        | { alias: string }
+        | {
+            harness?: string;
+            model: string;
+            effort?: string;
+            subscription?: string;
+          }
+      )[];
       timeouts?: { idleMs: number; wallMs: number };
     }
   >;

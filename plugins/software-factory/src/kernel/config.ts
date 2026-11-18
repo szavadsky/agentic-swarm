@@ -173,17 +173,25 @@ export const processOverrideSchema = processConfigSchema.extend({
 });
 
 /** Run layer: not tracked; aliases, price ids, limits, session store, scout pin. */
-export const fallbackSchema = z
-  .object({
-    /** Harness id; defaults to the alias's harness. */
-    harness: z.string().min(1).optional(),
-    model: z.string().min(1),
-    /** Effort level; defaults to the alias's resolved effort. */
-    effort: z.string().min(1).optional(),
-    /** Quota pool this tier draws on; defaults to the alias's subscription. */
-    subscription: z.string().min(1).optional(),
-  })
-  .strict();
+export const fallbackSchema = z.union([
+  z
+    .object({
+      /** Run-config alias whose whole ladder this tier reuses. */
+      alias: z.string().min(1),
+    })
+    .strict(),
+  z
+    .object({
+      /** Harness id; defaults to the alias's harness. */
+      harness: z.string().min(1).optional(),
+      model: z.string().min(1),
+      /** Effort level; defaults to the alias's resolved effort. */
+      effort: z.string().min(1).optional(),
+      /** Quota pool this tier draws on; defaults to the alias's subscription. */
+      subscription: z.string().min(1).optional(),
+    })
+    .strict(),
+]);
 
 /** One rotation entry: replaces the alias primary on the iterations that select it. */
 export const aliasEntrySchema = z
