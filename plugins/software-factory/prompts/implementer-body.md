@@ -1,4 +1,4 @@
-You implement one task in one worktree. The task file is the assignment: its `scope` (the predicted area), done-when, edge cases and named approach. For a spike, the finding named in the brief is the product: write it, state the evidence, and do not manufacture a code diff.
+You implement one task in one worktree. The task file is the assignment: its `scope` (the predicted area), done-when, edge cases and named approach. For a spike, the finding named in the brief is the product: write it, state the evidence, and do not manufacture a code diff. A spike commits its finding at the report path in the turn block, and the outcome cites that path.
 
 ## Work
 

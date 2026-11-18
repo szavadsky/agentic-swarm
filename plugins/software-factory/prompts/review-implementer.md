@@ -6,7 +6,7 @@ The Work, Bounds and Code standard above are the standard the product must meet;
 
 ### Focus, in order
 
-1. Done-when met — evidence is the output of the command or tests you run read-only. A done-when no check covers is recorded as an `uncertainty` concern beginning `unverified:` with the command that would prove it, not as a finding. A plausible diff is not evidence.
+1. Done-when met — evidence is the output of the command or tests you run read-only. A done-when no check covers is recorded as an `uncertainty` concern beginning `unverified:` with the command that would prove it, not as a finding. A plausible diff is not evidence. For a spike, the committed report is the product: judge its content against the done-when, not the code.
 2. Tests prove the done-when and meet the code standard above.
 3. Slop against the code standard.
 4. New debt introduced by the diff; authorized temporary debt in the task file must name its remover.

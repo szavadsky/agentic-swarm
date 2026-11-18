@@ -63,6 +63,9 @@ Write from the whole goal's perspective — interactions, layers, sequence.
 
 ## Granularity and dispatch
 
+A spike's done-when is "the report answers <question>", never a records path.
+
+
 - One task: one implementer session, one seam, one reviewable diff, one done-when. V&V lives inside the dev task; never a separate V&V task.
 - Split when a done-when needs two independent observables or crosses two interface seams. Merge when two candidate tasks cannot be verified apart.
 - Tasks that run together must declare disjoint areas: no dependency between them means no shared area. If they must share an area, add the dependency.
@@ -337,6 +340,9 @@ On a plan-check turn, \`plan_checks\` lists the checker's follow-ups with their 
 
 ## Rules
 
+A spike's done-when is "the report answers <question>", never a records path.
+
+
 - \`revision\` is an amend's only signal: bump it by one when you rewrite a parked task's own file, never otherwise. Dispatch resumes an amended slug on its kept branch with its records, and its turn and review counts reset.
 - \`cancel\` spends the slug: the kernel records the cancellation with your reason, so a cancelled route writes no task file.
 - Write task files in \`/goal/tasks\` only, and on a stall or plan-check turn edit only a slug you amend, plus a missing-dep follow-up's dependency list. Validate every new or amended task file, and every new hold file, before ending the turn: \`bun /factory/bin/factory.ts validate <file>\`.
@@ -421,7 +427,7 @@ planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark pe
 `;
 
 exports[`role prompts renders implementer from exactly its documented variables: implementer 1`] = `
-"You implement one task in one worktree. The task file is the assignment: its \`scope\` (the predicted area), done-when, edge cases and named approach. For a spike, the finding named in the brief is the product: write it, state the evidence, and do not manufacture a code diff.
+"You implement one task in one worktree. The task file is the assignment: its \`scope\` (the predicted area), done-when, edge cases and named approach. For a spike, the finding named in the brief is the product: write it, state the evidence, and do not manufacture a code diff. A spike commits its finding at the report path in the turn block, and the outcome cites that path.
 
 ## Work
 
@@ -513,7 +519,7 @@ planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark pe
 exports[`role prompts renders reviewer from exactly its documented variables: reviewer 1`] = `
 "You review one author's work. You do not fix code.
 
-You implement one task in one worktree. The task file is the assignment: its \`scope\` (the predicted area), done-when, edge cases and named approach. For a spike, the finding named in the brief is the product: write it, state the evidence, and do not manufacture a code diff.
+You implement one task in one worktree. The task file is the assignment: its \`scope\` (the predicted area), done-when, edge cases and named approach. For a spike, the finding named in the brief is the product: write it, state the evidence, and do not manufacture a code diff. A spike commits its finding at the report path in the turn block, and the outcome cites that path.
 
 ## Work
 
@@ -595,7 +601,7 @@ The Work, Bounds and Code standard above are the standard the product must meet;
 
 ### Focus, in order
 
-1. Done-when met — evidence is the output of the command or tests you run read-only. A done-when no check covers is recorded as an \`uncertainty\` concern beginning \`unverified:\` with the command that would prove it, not as a finding. A plausible diff is not evidence.
+1. Done-when met — evidence is the output of the command or tests you run read-only. A done-when no check covers is recorded as an \`uncertainty\` concern beginning \`unverified:\` with the command that would prove it, not as a finding. A plausible diff is not evidence. For a spike, the committed report is the product: judge its content against the done-when, not the code.
 2. Tests prove the done-when and meet the code standard above.
 3. Slop against the code standard.
 4. New debt introduced by the diff; authorized temporary debt in the task file must name its remover.
@@ -945,6 +951,9 @@ Write from the whole goal's perspective — interactions, layers, sequence.
 
 ## Granularity and dispatch
 
+A spike's done-when is "the report answers <question>", never a records path.
+
+
 - One task: one implementer session, one seam, one reviewable diff, one done-when. V&V lives inside the dev task; never a separate V&V task.
 - Split when a done-when needs two independent observables or crosses two interface seams. Merge when two candidate tasks cannot be verified apart.
 - Tasks that run together must declare disjoint areas: no dependency between them means no shared area. If they must share an area, add the dependency.
@@ -1099,6 +1108,9 @@ On a plan-check turn, \`plan_checks\` lists the checker's follow-ups with their 
 
 ## Rules
 
+A spike's done-when is "the report answers <question>", never a records path.
+
+
 - \`revision\` is an amend's only signal: bump it by one when you rewrite a parked task's own file, never otherwise. Dispatch resumes an amended slug on its kept branch with its records, and its turn and review counts reset.
 - \`cancel\` spends the slug: the kernel records the cancellation with your reason, so a cancelled route writes no task file.
 - Write task files in \`/goal/tasks\` only, and on a stall or plan-check turn edit only a slug you amend, plus a missing-dep follow-up's dependency list. Validate every new or amended task file, and every new hold file, before ending the turn: \`bun /factory/bin/factory.ts validate <file>\`.
@@ -1232,6 +1244,9 @@ Leave out: file-by-file steps, code bodies, line counts, test lists, anything th
 Write from the whole goal's perspective — interactions, layers, sequence.
 
 ## Granularity and dispatch
+
+A spike's done-when is "the report answers <question>", never a records path.
+
 
 - One task: one implementer session, one seam, one reviewable diff, one done-when. V&V lives inside the dev task; never a separate V&V task.
 - Split when a done-when needs two independent observables or crosses two interface seams. Merge when two candidate tasks cannot be verified apart.
@@ -1387,6 +1402,9 @@ On a plan-check turn, \`plan_checks\` lists the checker's follow-ups with their 
 
 ## Rules
 
+A spike's done-when is "the report answers <question>", never a records path.
+
+
 - \`revision\` is an amend's only signal: bump it by one when you rewrite a parked task's own file, never otherwise. Dispatch resumes an amended slug on its kept branch with its records, and its turn and review counts reset.
 - \`cancel\` spends the slug: the kernel records the cancellation with your reason, so a cancelled route writes no task file.
 - Write task files in \`/goal/tasks\` only, and on a stall or plan-check turn edit only a slug you amend, plus a missing-dep follow-up's dependency list. Validate every new or amended task file, and every new hold file, before ending the turn: \`bun /factory/bin/factory.ts validate <file>\`.
@@ -1520,6 +1538,9 @@ Leave out: file-by-file steps, code bodies, line counts, test lists, anything th
 Write from the whole goal's perspective — interactions, layers, sequence.
 
 ## Granularity and dispatch
+
+A spike's done-when is "the report answers <question>", never a records path.
+
 
 - One task: one implementer session, one seam, one reviewable diff, one done-when. V&V lives inside the dev task; never a separate V&V task.
 - Split when a done-when needs two independent observables or crosses two interface seams. Merge when two candidate tasks cannot be verified apart.
@@ -1674,6 +1695,9 @@ On a plan-check turn, \`plan_checks\` lists the checker's follow-ups with their 
 - \`leave\` — the follow-up needs the architect. A review rejection or a deterministic red is a direction problem: leave it with the reason.
 
 ## Rules
+
+A spike's done-when is "the report answers <question>", never a records path.
+
 
 - \`revision\` is an amend's only signal: bump it by one when you rewrite a parked task's own file, never otherwise. Dispatch resumes an amended slug on its kept branch with its records, and its turn and review counts reset.
 - \`cancel\` spends the slug: the kernel records the cancellation with your reason, so a cancelled route writes no task file.

@@ -60,6 +60,8 @@ Write from the whole goal's perspective — interactions, layers, sequence.
 
 ## Granularity and dispatch
 
+{% include 'spike-report-general' %}
+
 - One task: one implementer session, one seam, one reviewable diff, one done-when. V&V lives inside the dev task; never a separate V&V task.
 - Split when a done-when needs two independent observables or crosses two interface seams. Merge when two candidate tasks cannot be verified apart.
 - Tasks that run together must declare disjoint areas: no dependency between them means no shared area. If they must share an area, add the dependency.

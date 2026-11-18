@@ -1,17 +1,23 @@
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { git } from "../../src/core/git/exec.js";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
 import {
   checkSpikeReport,
+  spikeFinding,
   spikeReport,
   SPIKE_REPORT_CHECK,
   spikeReportPath,
 } from "../../src/kernel/spike-report.js";
-import type { KernelRuntime, StepRecord } from "../../src/kernel/types.js";
-import { task } from "./helpers.js";
+import type {
+  ArtifactStore,
+  KernelRuntime,
+  StepRecord,
+} from "../../src/kernel/types.js";
+import { rec, task } from "./helpers.js";
 import {
   cleanupFlowRepo,
   makeRuntime,
@@ -264,5 +270,36 @@ describe("checkSpikeReport", () => {
     } finally {
       cleanupFlowRepo(repo);
     }
+  });
+});
+
+describe("spikeFinding", () => {
+  const withOutcome = (summary: string): StepRecord[] => [
+    rec(1, { slug: "probe", step: "implement", outcome: outcome({ summary }) }),
+  ];
+  const storeWith = (report?: string) => {
+    const goalDir = fs.mkdtempSync(path.join(os.tmpdir(), "spike-finding-"));
+    if (report !== undefined) {
+      fs.mkdirSync(path.join(goalDir, "finish/probe"), { recursive: true });
+      fs.writeFileSync(path.join(goalDir, "finish/probe/report.md"), report);
+    }
+    return { goalDir } as ArtifactStore;
+  };
+
+  it("prefers the sealed report over the outcome summary", async () => {
+    const store = storeWith("# Finding\nCursor wins.\n");
+    expect(await spikeFinding(store, withOutcome("short"), "probe")).toBe(
+      "# Finding\nCursor wins.",
+    );
+  });
+
+  it("falls back to the implement outcome summary for a legacy spike", async () => {
+    expect(
+      await spikeFinding(storeWith(), withOutcome("legacy summary"), "probe"),
+    ).toBe("legacy summary");
+  });
+
+  it("is undefined when there is neither a report nor an outcome", async () => {
+    expect(await spikeFinding(storeWith(), [], "probe")).toBeUndefined();
   });
 });
