@@ -367,6 +367,8 @@ export interface Limits {
   iterationMinutes?: number;
   /** Plan-checker re-runs per iteration; exhausted rounds consult the architect. */
   planCheckRounds: number;
+  /** Resume attempts limit; default 2. */
+  resumeAttempts?: number;
 }
 
 export type StepActor = "agent" | "script";
@@ -650,6 +652,8 @@ export interface RunConfig {
     iterations: number;
     /** Plan-checker re-runs per iteration; exhausted rounds consult the architect. */
     planCheckRounds: number;
+    /** Resume attempts limit; default 2. */
+    resumeAttempts?: number;
     turns?: number;
     wallMinutes?: number;
     /** Optional USD brake: crossing it drains the iteration. */

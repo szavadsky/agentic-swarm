@@ -5,6 +5,7 @@ import { expectDispatch } from "./e2e-helpers.js";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { derive, FRONT_STOP_STEP } from "../../src/kernel/derive.js";
 import { createFolderStore } from "../../src/kernel/store.js";
+import { whenTurn } from "./s2-helpers.js";
 import {
   PLAN,
   ALPHA,
@@ -32,8 +33,16 @@ describe("resume guards — front-stop, holds and terminal", () => {
         );
         return fakeTurnResult(req);
       });
+      // The resumed pass is not budgeted: the boundary closes the goal.
+      second.script(
+        (req, ctx) => {
+          ctx.writeOutcome(outcome({ summary: "goal met", decision: "done" }));
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: "architect" }) },
+      );
       await expectDispatch(
-        3,
+        0,
         ["run", "--repo", repo.dir, "--goal", "demo", "--iterations", "1"],
         { harnesses: { fake: second } },
       );
@@ -94,6 +103,9 @@ describe("resume guards — front-stop, holds and terminal", () => {
         ).length,
       ).toBe(1);
       expect(records.filter((r) => r.slug === "beta")).toHaveLength(0);
+      const refused = records.filter((r) => r.step === "resume-refused");
+      expect(refused).toHaveLength(1);
+      expect(refused[0]!.cause).toContain("holds could not be read");
     } finally {
       repo.cleanup();
     }
