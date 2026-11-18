@@ -257,7 +257,7 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
     throw new LaunchError(`goal "${opts.goal}" has no intent: ${intentPath}`);
   }
 
-  const taskTypes = configs.process.taskTypes ?? {};
+  const taskTypes = configs.process.taskTypes;
   const store = createFolderStore(
     paths.goalDir,
     path.dirname(paths.goalDir),
