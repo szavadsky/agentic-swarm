@@ -6,7 +6,11 @@ import { stepTarget } from "./flow-context.js";
 import type { MergeResult } from "./integrate.js";
 import { type Hold, readHolds, type Steer, scanInbox } from "./mailbox.js";
 import { next } from "./next.js";
-import { PLAN_CHECK_STEP, runPlanCheck } from "./plan-check.js";
+import {
+  latestPlanCheck,
+  PLAN_CHECK_STEP,
+  runPlanCheck,
+} from "./plan-check.js";
 import {
   runPlanCheckPm,
   runStallPm,
@@ -32,6 +36,11 @@ export interface DispatchResult {
   cause?: string;
   /** Completed agent turns in this iteration. */
   turns: number;
+  /** Started task turns in this iteration. */
+  taskTurnsStarted: number;
+  /** The latest plancheck verdict of the pass, if any. */
+  planCheck?: "progress" | "architect";
+  allReadyHeld: boolean;
 }
 
 export interface DispatchOptions {
@@ -236,6 +245,8 @@ export async function runDispatch(
     runtime.configs.process.flows,
   );
   const iteration = opts.iteration ?? Math.max(1, initial.iteration);
+  let taskTurnsStarted = 0;
+  let planCheck: "progress" | "architect" | undefined;
   const running = new Map<string, Running>();
   const started = new Set(
     initialRecords
@@ -269,6 +280,8 @@ export async function runDispatch(
       reason: "infra",
       cause: `steer holds: ${(err as Error).message}`,
       turns: settledTurns(initialRecords, iteration),
+      taskTurnsStarted: 0,
+      allReadyHeld: false,
     };
   }
 
@@ -388,6 +401,7 @@ export async function runDispatch(
       model: quota?.model,
     });
     if (agent) started.add(action.slug);
+    if (action.kind === "step") taskTurnsStarted += 1;
   };
 
   for (;;) {
@@ -403,14 +417,25 @@ export async function runDispatch(
     if (state.terminal) {
       await Promise.allSettled([...running.values()].map((r) => r.promise));
       const turns = settledTurns(recordsBefore, iteration);
-      return { reason: "terminal", turns };
+      return {
+        reason: "terminal",
+        turns,
+        taskTurnsStarted,
+        allReadyHeld: false,
+      };
     }
 
     const polled = await pollSteers(state, tasks);
     if (polled.holdError) {
       await Promise.allSettled([...running.values()].map((r) => r.promise));
       const turns = settledTurns(await runtime.store.listRecords(), iteration);
-      return { reason: "infra", cause: polled.holdError, turns };
+      return {
+        reason: "infra",
+        cause: polled.holdError,
+        turns,
+        taskTurnsStarted,
+        allReadyHeld: false,
+      };
     }
     const hold = polled.hold;
     // A steer PM turn is an agent record written after the first read; re-read
@@ -419,6 +444,17 @@ export async function runDispatch(
       ? await runtime.store.listRecords()
       : recordsBefore;
     const turnsUsed = settledTurns(records, iteration);
+
+    let effectiveState = state;
+    let effectiveTasks = tasks;
+    if (polled.steerTurn) {
+      effectiveTasks = await runtime.store.listTasks();
+      effectiveState = derive(
+        effectiveTasks,
+        records,
+        runtime.configs.process.flows,
+      );
+    }
 
     const agentCount = (): number =>
       [...running.values()].filter((r) => r.agent).length;
@@ -457,7 +493,11 @@ export async function runDispatch(
       }
     }
 
-    const candidates = next(state, runtime.limits, runningAtRead).filter(
+    const candidates = next(
+      effectiveState,
+      runtime.limits,
+      runningAtRead,
+    ).filter(
       (a): a is Action & { slug: string } =>
         a.kind !== "boundary" && a.kind !== "exit",
     );
@@ -470,9 +510,9 @@ export async function runDispatch(
       if (drain === undefined && opts.signals?.shouldStop()) {
         drain = "signal: drain requested";
       }
-      const task = tasks.find((t) => t.slug === action.slug);
+      const task = effectiveTasks.find((t) => t.slug === action.slug);
       if (!task) throw new Error(`action names unknown task "${action.slug}"`);
-      const taskState = state.tasks[action.slug]!;
+      const taskState = effectiveState.tasks[action.slug]!;
 
       // A hold is an admission filter only: it keeps an unstarted task from
       // starting and never parks or blocks a task mid-flow. Parks happen only
@@ -561,14 +601,33 @@ export async function runDispatch(
       // its fresh records are visible but its slug was excluded above. Re-derive
       // instead of reporting boundary with dispatchable work on disk.
       if (runningAtRead.size > 0) continue;
-      if (cancelled) return { reason: "cancelled", turns: turnsUsed };
+      if (cancelled)
+        return {
+          reason: "cancelled",
+          turns: turnsUsed,
+          taskTurnsStarted,
+          allReadyHeld: false,
+        };
       if (infra.size > 0) {
         const causes = [...infra.entries()].map(([slug, cause]) =>
           cause ? `${slug}: ${cause}` : slug,
         );
-        return { reason: "infra", cause: causes.join("; "), turns: turnsUsed };
+        return {
+          reason: "infra",
+          cause: causes.join("; "),
+          turns: turnsUsed,
+          taskTurnsStarted,
+          allReadyHeld: false,
+        };
       }
-      if (drain) return { reason: "drained", cause: drain, turns: turnsUsed };
+      if (drain)
+        return {
+          reason: "drained",
+          cause: drain,
+          turns: turnsUsed,
+          taskTurnsStarted,
+          allReadyHeld: false,
+        };
       // Wave end: the steward owns remaining merge conflicts. A wave that did
       // work re-derives (landed merges unblock deps); a skipped or held wave
       // is the boundary.
@@ -581,21 +640,38 @@ export async function runDispatch(
           await runtime.store.listRecords(),
           iteration,
         );
-        return { reason: "infra", cause: `steward: ${cause}`, turns };
+        return {
+          reason: "infra",
+          cause: `steward: ${cause}`,
+          turns,
+          taskTurnsStarted,
+          allReadyHeld: false,
+        };
       }
       if (steward.infra) {
         const turns = settledTurns(
           await runtime.store.listRecords(),
           iteration,
         );
-        return { reason: "infra", cause: steward.infra.cause, turns };
+        return {
+          reason: "infra",
+          cause: steward.infra.cause,
+          turns,
+          taskTurnsStarted,
+          allReadyHeld: false,
+        };
       }
       if (steward.cancelled) {
         const turns = settledTurns(
           await runtime.store.listRecords(),
           iteration,
         );
-        return { reason: "cancelled", turns };
+        return {
+          reason: "cancelled",
+          turns,
+          taskTurnsStarted,
+          allReadyHeld: false,
+        };
       }
       if (!steward.skipped) continue;
       // Zero-merge stall: the dispatch set ran out with no merges and fresh
@@ -681,6 +757,7 @@ export async function runDispatch(
             round: rounds + 1,
             state: checkState,
           });
+          planCheck = checked.verdict;
           if (
             !checked.infra &&
             checked.verdict === "progress" &&
@@ -694,13 +771,31 @@ export async function runDispatch(
             });
             if (followed.continued.length > 0) continue;
           }
+        } else {
+          planCheck = latestPlanCheck(checkRecords)?.verdict as
+            | "progress"
+            | "architect"
+            | undefined;
         }
       }
       const turns = settledTurns(await runtime.store.listRecords(), iteration);
       const heldCause = heldBoundaryCause(hold, state);
       return heldCause
-        ? { reason: "boundary", cause: heldCause, turns }
-        : { reason: "boundary", turns };
+        ? {
+            reason: "boundary",
+            cause: heldCause,
+            turns,
+            taskTurnsStarted,
+            planCheck,
+            allReadyHeld: true,
+          }
+        : {
+            reason: "boundary",
+            turns,
+            taskTurnsStarted,
+            planCheck,
+            allReadyHeld: false,
+          };
     }
     await Promise.race([...running.values()].map((r) => r.promise));
   }

@@ -4,11 +4,14 @@ import path from "node:path";
 import {
   FakeHarness,
   type FakeTurnHandler,
+  fakeTurnIdentity,
   fakeTurnResult,
 } from "../../src/harness/fake/index.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
+import { postSteer } from "../../src/kernel/mailbox.js";
 import { createDrainController } from "../../src/kernel/signals.js";
+import { spikeReportPath } from "../../src/kernel/spike-report.js";
 import { task } from "./helpers.js";
 import {
   cleanupFlowRepo,
@@ -22,6 +25,7 @@ import {
   whenTurn,
   writeTask,
 } from "./s2-helpers.js";
+import { writeHold } from "./steer-helpers.js";
 
 async function runPair(opts: {
   scopeA: string[];
@@ -571,6 +575,296 @@ describe("script crash budget", () => {
       expect(logged).not.toContain("undefined");
     } finally {
       console.warn = originalWarn;
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+});
+
+const PLAN = "# Plan\n\n## alpha\nDo alpha.\n";
+
+/** Fallback work turns: implement writes `<slug>.txt` (and the spike report for `probe`), review approves. */
+function scriptWork(harness: FakeHarness): void {
+  const handler: FakeTurnHandler = (req, ctx) => {
+    const slug = path.basename(req.cwd!);
+    if (req.prompt.startsWith("You review")) {
+      ctx.writeOutcome(
+        outcome({ summary: `${slug} approved`, verdict: "approve" }),
+      );
+    } else {
+      fs.writeFileSync(path.join(req.cwd!, `${slug}.txt`), `${slug}\n`, "utf8");
+      if (slug === "probe") {
+        const report = path.join(req.cwd!, spikeReportPath("probe"));
+        fs.mkdirSync(path.dirname(report), { recursive: true });
+        fs.writeFileSync(report, "# Finding\n\nIt works.\n", "utf8");
+      }
+      ctx.writeOutcome(outcome({ summary: `${slug} implemented` }));
+    }
+    return fakeTurnResult(req);
+  };
+  for (const step of ["implement", "review"]) {
+    harness.script(handler, { when: whenTurn({ step }), fallback: true });
+  }
+}
+
+function stepsCalled(harness: FakeHarness, step: string): number {
+  return harness.calls.filter((call) => fakeTurnIdentity(call).step === step)
+    .length;
+}
+
+describe("dispatch pass signals", () => {
+  it("dispatches a task a steer PM turn created within the same pass, and its turns are the only ones counted", async () => {
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      scriptWork(harness);
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await postSteer(runtime.store, "s1", "Add gamma.");
+      harness.script(
+        (req, ctx) => {
+          fs.writeFileSync(
+            path.join(runtime.store.tasksDir, "gamma.md"),
+            [
+              "---",
+              "slug: gamma",
+              "title: gamma",
+              "flow: implement-review",
+              "deps: []",
+              "scope: [gamma.txt]",
+              "source: 'steer: s1'",
+              "---",
+              "",
+              "Add gamma.",
+              "Done when: gamma exists.",
+              "",
+            ].join("\n"),
+            "utf8",
+          );
+          writeHold(runtime, "s1", []);
+          ctx.writeOutcome(
+            outcome({
+              summary: "wrote gamma for s1",
+              steerRoutes: [
+                { steer: "s1", route: "task", answer: "gamma written" },
+              ],
+            }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: "pm" }) },
+      );
+
+      // No task existed when the pass began: only re-deriving after the steer
+      // PM turn lets gamma run before the boundary.
+      const result = await runDispatch(runtime, { iteration: 1 });
+
+      expect(result.reason).toBe("boundary");
+      expect(stepsCalled(harness, "pm")).toBe(1);
+      const records = await runtime.store.listRecords();
+      for (const step of ["implement", "review"]) {
+        expect(records.some((r) => r.slug === "gamma" && r.step === step)).toBe(
+          true,
+        );
+      }
+      expect(
+        derive(
+          await runtime.store.listTasks(),
+          records,
+          runtime.configs.process.flows,
+        ).tasks.gamma!.status,
+      ).toBe("merged");
+      // gamma's implement and review only; the PM turn, checks and merge add none.
+      expect(result.taskTurnsStarted).toBe(2);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("counts only implement and review turns: checks, merge, finish, plancheck and boundary work do not count", async () => {
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 }, planCheckRounds: 1 },
+    });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      scriptWork(harness);
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      fs.writeFileSync(
+        path.join(runtime.store.goalDir, "plan.md"),
+        PLAN,
+        "utf8",
+      );
+      await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
+      await writeTask(
+        runtime,
+        task("probe", { kind: "spike", flow: "spike", scope: ["probe.txt"] }),
+      );
+
+      const result = await runDispatch(runtime, { iteration: 1 });
+
+      expect(result.reason).toBe("boundary");
+      const records = await runtime.store.listRecords();
+      const ran = (step: string, slug?: string) =>
+        records.some(
+          (r) => r.step === step && (slug === undefined || r.slug === slug),
+        );
+      // Script steps ran for both flows, and the plan checker took a turn.
+      expect(ran("checks", "alpha")).toBe(true);
+      expect(ran("merge", "alpha")).toBe(true);
+      expect(ran("finish", "probe")).toBe(true);
+      expect(stepsCalled(harness, "plancheck")).toBe(1);
+      // alpha and probe each ran implement + review.
+      expect(
+        records.filter(
+          (r) =>
+            r.actor === "agent" &&
+            (r.step === "implement" || r.step === "review"),
+        ),
+      ).toHaveLength(4);
+      expect(result.taskTurnsStarted).toBe(4);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("reports taskTurnsStarted 0 when nothing ran", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+
+      const result = await runDispatch(runtime, { iteration: 1 });
+
+      expect(result.reason).toBe("boundary");
+      expect(result.taskTurnsStarted).toBe(0);
+      expect(result.allReadyHeld).toBe(false);
+      expect(harness.calls).toHaveLength(0);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("carries the iteration's latest plancheck verdict once the rounds are exhausted", async () => {
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 }, planCheckRounds: 2 },
+    });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      fs.writeFileSync(
+        path.join(runtime.store.goalDir, "plan.md"),
+        PLAN,
+        "utf8",
+      );
+      for (const verdict of ["architect", "progress"] as const) {
+        await runtime.store.appendRecord(
+          {
+            iteration: 1,
+            step: "plancheck",
+            round: verdict === "architect" ? 1 : 2,
+            actor: "agent",
+            alias: "plan-checker",
+            model: { id: "fake" },
+          },
+          {
+            ok: true,
+            outcome: outcome({
+              summary: `checked ${verdict}`,
+              planCheck: { verdict, evidence: [] },
+            }),
+          },
+        );
+      }
+
+      const result = await runDispatch(runtime, { iteration: 1 });
+
+      // No further checker turn ran; the newest record, not the older one, wins.
+      expect(stepsCalled(harness, "plancheck")).toBe(0);
+      expect(result.planCheck).toBe("progress");
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("reports allReadyHeld when a pending steer holds every ready task, and not when the hold has expired", async () => {
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      scriptWork(harness);
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("a", { scope: ["a-area"] }));
+      await writeTask(runtime, task("b", { scope: ["b-area"] }));
+
+      // The hold names both tasks, but s1 is not pending: the hold is expired.
+      writeHold(runtime, "s1", ["a", "b"]);
+      const expired = await runDispatch(runtime, { iteration: 1 });
+      expect(expired.reason).toBe("boundary");
+      expect(expired.allReadyHeld).toBe(false);
+      expect(expired.taskTurnsStarted).toBe(4);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+
+    const held = setupFlowRepo({ limits: { concurrency: { overall: 1 } } });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      scriptWork(harness);
+      const runtime = await makeRuntime(held.repo, held.goal, {
+        fake: harness,
+      });
+      await writeTask(runtime, task("a", { scope: ["a-area"] }));
+      await writeTask(runtime, task("b", { scope: ["b-area"] }));
+      await postSteer(runtime.store, "s1", "Hold a and b.");
+      writeHold(runtime, "s1", ["a", "b"]);
+
+      const result = await runDispatch(runtime, {
+        iteration: 1,
+        seenSteers: ["s1"],
+      });
+
+      expect(result.reason).toBe("boundary");
+      expect(result.cause).toBe("steer: s1 holds a, b");
+      expect(result.allReadyHeld).toBe(true);
+      expect(result.taskTurnsStarted).toBe(0);
+      expect(harness.calls).toHaveLength(0);
+    } finally {
+      cleanupFlowRepo(held.repo);
+    }
+  }, 60_000);
+
+  it("reports allReadyHeld after the unheld work ran and only held tasks remain", async () => {
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      scriptWork(harness);
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("a", { scope: ["a-area"] }));
+      await writeTask(runtime, task("b", { scope: ["b-area"] }));
+      await postSteer(runtime.store, "s1", "Hold a.");
+      writeHold(runtime, "s1", ["a"]);
+
+      const result = await runDispatch(runtime, {
+        iteration: 1,
+        seenSteers: ["s1"],
+      });
+
+      // Boundary after work: b's implement and review ran, a stays held.
+      expect(result.reason).toBe("boundary");
+      expect(result.cause).toBe("steer: s1 holds a");
+      expect(result.allReadyHeld).toBe(true);
+      expect(result.taskTurnsStarted).toBe(2);
+      const state = derive(
+        await runtime.store.listTasks(),
+        await runtime.store.listRecords(),
+        runtime.configs.process.flows,
+      );
+      expect(state.tasks.b!.status).toBe("merged");
+      expect(state.tasks.a!.turns).toBe(0);
+    } finally {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
