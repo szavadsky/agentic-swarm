@@ -508,7 +508,11 @@ export interface RepoConfig {
   worktreeRoot?: string;
   identity?: { name: string; email: string };
   setup: string[];
-  gates: { id: string; command: string }[];
+  gates: {
+    id: string;
+    command: string;
+    format?: { junit?: string; pattern?: "pytest" | "jest" | "cargo" };
+  }[];
 }
 
 export interface RoleConfig {

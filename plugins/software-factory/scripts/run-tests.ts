@@ -63,6 +63,35 @@ function failedFiles(junitPath: string): string[] {
   return [...files];
 }
 
+/** Individual failed tests recorded in bun's JUnit report. */
+function getFailedTests(junitPath: string): string[] {
+  let raw: string;
+  try {
+    raw = fs.readFileSync(junitPath, "utf8");
+  } catch {
+    return [];
+  }
+  const failedTests: string[] = [];
+  // Find testsuites
+  for (const suiteMatch of raw.matchAll(
+    /<testsuite\b[^>]*\bfile="([^"]+)"[^>]*>([\s\S]*?)<\/testsuite>/g,
+  )) {
+    const file = suiteMatch[1]!;
+    const suiteContent = suiteMatch[2]!;
+    // Find failed testcases within this suite
+    for (const caseMatch of suiteContent.matchAll(
+      /<testcase\b[^>]*\bname="([^"]+)"[^>]*>([\s\S]*?)<\/testcase>/g,
+    )) {
+      const name = caseMatch[1]!;
+      const caseContent = caseMatch[2]!;
+      if (caseContent.includes("<failure")) {
+        failedTests.push(`${file} > ${name}`);
+      }
+    }
+  }
+  return failedTests;
+}
+
 interface RunResult {
   code: number | null;
   signal: NodeJS.Signals | null;
@@ -132,6 +161,13 @@ try {
           failed = true;
           break;
         }
+      } else if (result.code !== 0) {
+        // Crash detected: report files in this batch as crashed
+        for (const file of argv.filter((a) => a.endsWith(".test.ts"))) {
+          console.error(`${file}: worker exit ${result.code}`);
+        }
+        failed = true;
+        break;
       } else {
         failed = true;
         break;
@@ -147,6 +183,11 @@ try {
       ? `focused; slowest: ${slowest}`
       : `--parallel=${WORKERS}; serial: ${SERIAL.length} files; slowest: ${slowest}`;
   console.error(`tests gate: wall ${wall.toFixed(1)}s (${shape})`);
+  if (failed) {
+    for (const test of getFailedTests(junitPath)) {
+      console.error(test);
+    }
+  }
   fs.rmSync(tmpDir, { recursive: true, force: true });
   process.exit(failed || interrupted ? 1 : 0);
 } catch (error) {

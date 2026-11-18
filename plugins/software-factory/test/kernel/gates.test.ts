@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { CheckResult } from "../../src/core/checks/types.js";
-import { isInfraCheck } from "../../src/kernel/gates.js";
+import { gateSignatures, isInfraCheck } from "../../src/kernel/gates.js";
 
 function check(patch: Partial<CheckResult> = {}): CheckResult {
   return {
@@ -12,6 +12,40 @@ function check(patch: Partial<CheckResult> = {}): CheckResult {
     ...patch,
   };
 }
+
+describe("gateSignatures", () => {
+  it("includes failing JUnit cases in signatures", () => {
+    const c = check({
+      name: "test-junit",
+      details: {
+        junit: {
+          cases: [
+            { name: "test1", status: "pass" },
+            { name: "test2", status: "fail" },
+          ],
+          suiteFailed: false,
+        },
+      },
+    });
+    const signatures = gateSignatures(c);
+    expect(signatures).toContain("test-junit > test2");
+    expect(signatures).not.toContain("test-junit > test1");
+  });
+
+  it("handles suite-level failures", () => {
+    const c = check({
+      name: "test-junit",
+      details: {
+        junit: {
+          cases: [],
+          suiteFailed: true,
+        },
+      },
+    });
+    const signatures = gateSignatures(c);
+    expect(signatures).toContain("test-junit > suite-failure");
+  });
+});
 
 describe("isInfraCheck", () => {
   it("matches a marked check that could not start", () => {

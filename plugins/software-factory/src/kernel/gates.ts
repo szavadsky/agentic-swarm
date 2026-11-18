@@ -1,4 +1,11 @@
+import fs from "node:fs";
+import path from "node:path";
 import type { CheckResult } from "../core/checks/types.js";
+import {
+  parseJunit,
+  buildGateWithJunitCommand,
+  type ParsedJunit,
+} from "../core/checks/junit.js";
 import { fingerprintText } from "../core/fingerprint.js";
 import { KeyedMutex } from "../core/mutex.js";
 import { runProcess } from "../core/proc.js";
@@ -199,6 +206,22 @@ export function gateSignatures(check: CheckResult): Set<string> {
     .split("\n")
     .map((line) => normaliseRoots(line.replace(ANSI, "").trim(), roots));
   const signatures = new Set<string>();
+
+  if (
+    check.details &&
+    typeof check.details === "object" &&
+    "junit" in check.details &&
+    (check.details as { junit: unknown }).junit
+  ) {
+    const parsed = (check.details as { junit: ParsedJunit }).junit;
+    for (const c of parsed.cases) {
+      if (c.status === "fail") signatures.add(`${check.name} > ${c.name}`);
+    }
+    if (parsed.suiteFailed && signatures.size === 0) {
+      signatures.add(`${check.name} > suite-failure`);
+    }
+  }
+
   let file = "";
   // Inside a bun file report. Its detail lines only repeat the failure the
   // header, `(fail)` line or unhandled block already names, and their line
@@ -331,14 +354,50 @@ async function runGatesUnlocked(
       ? runtime.configs.repo.gates
       : runtime.configs.repo.gates.filter((gate) => only.has(gate.id));
   for (const gate of gates) {
+    let command = gate.command;
+    let junitPath: string | undefined;
+    if (gate.format?.junit) {
+      junitPath = path.join(cwd, gate.format.junit);
+      command = buildGateWithJunitCommand(command, junitPath);
+    }
+
     const res = await runProcess({
-      cmd: gate.command,
+      cmd: command,
       cwd,
       timeoutSec: GATE_TIMEOUT_SEC,
       maxOutputBytes: GATE_OUTPUT_CAP * 4,
     });
-    const ok = !res.timedOut && res.code === 0;
+    let ok = !res.timedOut && res.code === 0;
+
+    const details: Record<string, unknown> = { roots: [cwd] };
+
+    if (junitPath && fs.existsSync(junitPath)) {
+      const xml = fs.readFileSync(junitPath, "utf8");
+      const parsed = parseJunit(xml);
+      details.junit = parsed;
+      if (
+        parsed.suiteFailed ||
+        parsed.cases.some((c) => c.status === "fail") ||
+        parsed.cases.length === 0
+      ) {
+        ok = false;
+      }
+      fs.unlinkSync(junitPath);
+    } else if (junitPath) {
+      ok = false;
+      details.error = "JUnit report not generated";
+    }
+
     const capped = capGateOutput(`${res.stdout}\n${res.stderr}`, [cwd]);
+    let identity = capped.output;
+    if (details.junit) {
+      const parsed = details.junit as ParsedJunit;
+      identity = parsed.cases
+        .map((c) => `${c.name}:${c.status}`)
+        .sort()
+        .join(",");
+    }
+
     results.push({
       name: gate.id,
       ok,
@@ -348,10 +407,10 @@ async function runGatesUnlocked(
           ? `timed out after ${GATE_TIMEOUT_SEC}s`
           : `exit ${res.code}`,
       output: capped.output,
-      fingerprint: fingerprintText(`${gate.id}:${capped.output}`, {
+      fingerprint: fingerprintText(`${gate.id}:${identity}`, {
         lowercase: false,
       }),
-      details: { roots: [cwd], truncated: capped.truncated },
+      details: { ...details, truncated: capped.truncated },
     });
   }
   return results;
