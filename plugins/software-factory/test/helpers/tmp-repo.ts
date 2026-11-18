@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { removeAtFileEnd } from "../setup/tmp-cleanup.js";
 
 export interface TmpRepo {
   dir: string;
@@ -31,17 +32,6 @@ const DEFAULT_ENV: Record<string, string> = {
   GIT_CONFIG_NOSYSTEM: "1",
   LC_ALL: "C",
 };
-
-const activeTmpRepos = new Set<TmpRepo>();
-
-process.on("exit", () => {
-  for (const r of Array.from(activeTmpRepos)) {
-    try {
-      r.cleanup();
-    } catch {}
-  }
-  activeTmpRepos.clear();
-});
 
 export function createTmpRepo(options?: {
   initialCommitMessage?: string;
@@ -162,7 +152,7 @@ export function createTmpRepo(options?: {
     },
 
     cleanup(): void {
-      activeTmpRepos.delete(this);
+      unregisterCleanup();
       for (const wt of worktrees) {
         try {
           runGit(["worktree", "remove", "--force", wt], { allowFail: true });
@@ -227,6 +217,6 @@ export function createTmpRepo(options?: {
     },
   };
 
-  activeTmpRepos.add(repo);
+  const unregisterCleanup = removeAtFileEnd(() => repo.cleanup());
   return repo;
 }

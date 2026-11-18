@@ -18,6 +18,29 @@
 # invoking directory.
 set -euo pipefail
 
+# Temp dirs of this factory (gate exports, test repos, acpx stubs) older than
+# this many minutes belong to a killed run: an EXIT trap misses SIGKILL and
+# timeouts. Far above the longest gate wall, so a live concurrent run is safe.
+STALE_TMP_MINUTES=360
+
+# evict_stale_tmp <dir> <minutes> [keep-name]
+# Removes factory-* and acpx-stub-* directories directly under <dir> whose
+# mtime is more than <minutes> old, except <keep-name>. A failed removal warns
+# and does not fail the gate.
+evict_stale_tmp() {
+  local dir="$1" minutes="$2" keep="${3:-}"
+  local -a keep_args=()
+  [ -z "$keep" ] || keep_args=(! -name "$keep")
+  find "$dir" -mindepth 1 -maxdepth 1 -type d \
+    \( -name 'factory-*' -o -name 'acpx-stub-*' \) \
+    -mmin "+$minutes" "${keep_args[@]}" -ignore_readdir_race \
+    -exec rm -rf {} + ||
+    echo "gates: could not evict every stale temp dir under $dir" >&2
+}
+
+# Sourced for evict_stale_tmp (the cleanup test): define only.
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+
 pkg="${1:-$(dirname "$(readlink -f "$0")")/..}"
 gate="${2:-all}"
 # The checkout carrying the artifact tree. The kernel spawns gates from a task
@@ -71,9 +94,16 @@ run_gate() {
   esac
 }
 
-tmp="$(mktemp -d /tmp/factory-gates.XXXXXX)"
+tmp_root="${TMPDIR:-/tmp}"
+tmp_root="${tmp_root%/}"
+tmp="$(mktemp -d "$tmp_root/factory-gates.XXXXXX")"
 trap 'rm -rf "$tmp"' EXIT
+
+evict_stale_tmp "$tmp_root" "$STALE_TMP_MINUTES" "$(basename "$tmp")"
 tar -C "$pkg" --exclude=node_modules --exclude=.git -cf - . | tar -x -C "$tmp"
+# tar restores the source dir's old mtime onto "$tmp"; a concurrent run's
+# eviction would read that as stale.
+touch "$tmp"
 [ -f "$tmp/package.json" ] || { echo "gates: no package.json in export" >&2; exit 1; }
 
 cd "$tmp"

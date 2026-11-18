@@ -1,2 +1,2 @@
 [test]
-preload = ["./test/setup/clean-env.ts", "./test/setup/hermetic-guard.ts"]
+preload = ["./test/setup/clean-env.ts", "./test/setup/tmp-cleanup.ts", "./test/setup/hermetic-guard.ts"]
