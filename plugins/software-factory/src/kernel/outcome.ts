@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import yaml from "yaml";
+import type { z } from "zod";
 import {
   type FlowDefinition,
   type FlowStep,
@@ -49,7 +50,10 @@ function migrateStallRoutes(raw: unknown): unknown {
 }
 
 /** Parses one YAML/JSON outcome body; zod is the only validator. */
-export function parseOutcome(text: string): Outcome {
+export function parseOutcome(
+  text: string,
+  schema: z.ZodType<Outcome> = outcomeSchema,
+): Outcome {
   let raw: unknown;
   try {
     raw = yaml.parse(text);
@@ -59,7 +63,7 @@ export function parseOutcome(text: string): Outcome {
     ]);
   }
   try {
-    return outcomeSchema.parse(migrateStallRoutes(raw));
+    return schema.parse(migrateStallRoutes(raw));
   } catch (err) {
     throw new OutcomeInvalidError(zodFindings(err));
   }
@@ -87,23 +91,24 @@ export interface OutcomeSource {
 export function readDeliveredOutcome(
   outcomePath: string,
   message: string,
+  schema: z.ZodType<Outcome> = outcomeSchema,
 ): OutcomeSource | null {
   if (fs.existsSync(outcomePath)) {
     const text = fs.readFileSync(outcomePath, "utf8");
     try {
-      return { outcome: parseOutcome(text), source: "file" };
+      return { outcome: parseOutcome(text, schema), source: "file" };
     } catch (err) {
       if (!(err instanceof OutcomeInvalidError)) throw err;
       // A malformed file still gets the fenced fallback.
       const fenced = fencedOutcome(message);
       if (fenced !== null)
-        return { outcome: parseOutcome(fenced), source: "fenced" };
+        return { outcome: parseOutcome(fenced, schema), source: "fenced" };
       throw err;
     }
   }
   const fenced = fencedOutcome(message);
   if (fenced === null) return null;
-  return { outcome: parseOutcome(fenced), source: "fenced" };
+  return { outcome: parseOutcome(fenced, schema), source: "fenced" };
 }
 
 /**

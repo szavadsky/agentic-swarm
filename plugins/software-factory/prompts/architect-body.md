@@ -52,7 +52,7 @@ One section per milestone; one bullet per task. For each task, in this order:
 
 Each bullet starts with its slug: short kebab-case, unique across the goal, never renamed or reused. A merged task's bullet is history: do not edit it; collapse a merged milestone to one line. Rework is a new bullet with a new slug.
 
-Name a non-default flow ({{flows}}) on the bullet, and a parked task's slug as `base` when this task continues it.
+Name a non-default task type ({{task_types}}) on the bullet, and a parked task's slug as `base` when this task continues it.
 
 Leave out: file-by-file steps, code bodies, line counts, test lists, anything the repo's conventions already say.
 

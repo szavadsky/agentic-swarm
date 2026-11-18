@@ -1,7 +1,12 @@
 import { createHash } from "node:crypto";
 import { z, type ZodIssue } from "zod";
 import yaml from "yaml";
-import type { FlowDefinition, TaskFile } from "./types.js";
+import type {
+  FlowDefinition,
+  TaskFile,
+  TaskKind,
+  TaskTypeDefinition,
+} from "./types.js";
 
 /** The flow a task file gets when its frontmatter names none. */
 export const DEFAULT_FLOW = "implement-review";
@@ -19,15 +24,24 @@ export const taskFrontmatterSchema = z
       .min(1)
       .describe("namespaced kebab-case, matches the file name"),
     title: z.string().trim().min(1).describe("one line"),
+    type: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        "one of the configured task types; it supplies flow, kind and schema",
+      ),
     kind: z
-      .enum(["task", "spike"])
-      .default("task")
-      .describe("task merges, spike finishes with findings"),
+      .enum(["task", "spike", "development"])
+      .optional()
+      .describe(
+        "legacy: the task type supplies it; development merges, spike finishes with findings",
+      ),
     flow: z
       .string()
       .min(1)
-      .default(DEFAULT_FLOW)
-      .describe("one of the configured flows"),
+      .optional()
+      .describe("legacy: the task type supplies it"),
     deps: z
       .array(z.string().describe("a slug that must merge first"))
       .default([]),
@@ -109,7 +123,7 @@ function frontmatterIssue(
   }
   const field = String(issue.path[0] ?? "");
   if (field === "kind") {
-    return `task "${fileSlug}" has kind "${String(meta.kind)}": expected "task" or "spike"`;
+    return `task "${fileSlug}" has kind "${String(meta.kind)}": expected "development" or "spike" (legacy "task" reads as development)`;
   }
   if (field === "title") {
     return typeof meta.title === "string"
@@ -118,6 +132,7 @@ function frontmatterIssue(
   }
   const expected: Record<string, string> = {
     slug: "a non-empty string",
+    type: "a non-empty string",
     flow: "a non-empty string",
     deps: "a list of strings",
     scope: "a list of strings",
@@ -134,11 +149,36 @@ function frontmatterIssue(
 }
 
 /**
+ * The flow and kind a named type supplies. A missing type is a file finding:
+ * the config that should carry it is not the file's problem to guess around.
+ */
+function resolveTaskType(
+  fileSlug: string,
+  type: string,
+  taskTypes: Record<string, TaskTypeDefinition>,
+): { kind: TaskKind; flow: string } {
+  const definition = Object.hasOwn(taskTypes, type)
+    ? taskTypes[type]
+    : undefined;
+  if (!definition) {
+    throw new TaskFileError(
+      `task "${fileSlug}" has type "${type}": type "${type}" is not configured`,
+    );
+  }
+  return { kind: definition.kind, flow: definition.flow };
+}
+
+/**
  * Parses one task file through `taskFrontmatterSchema`. The file name is
  * authoritative for the slug: a frontmatter slug that disagrees with it is a
- * validation finding, not a silent rename.
+ * validation finding, not a silent rename. A file naming a type takes its
+ * flow and kind from that configured type; a legacy file declares them itself.
  */
-export function parseTaskFile(text: string, fileSlug: string): TaskFile {
+export function parseTaskFile(
+  text: string,
+  fileSlug: string,
+  taskTypes: Record<string, TaskTypeDefinition> = {},
+): TaskFile {
   const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(text);
   if (!match) {
     throw new TaskFileError(`task "${fileSlug}" has no --- frontmatter ---`);
@@ -171,8 +211,25 @@ export function parseTaskFile(text: string, fileSlug: string): TaskFile {
       `task file "${fileSlug}" declares slug "${result.data.slug}": slugs are immutable and file names authoritative`,
     );
   }
+  const type = result.data.type;
+  const legacy = ["kind", "flow"].filter((key) => meta[key] !== undefined);
+  if (type !== undefined && legacy.length > 0) {
+    throw new TaskFileError(
+      `task "${fileSlug}" names type "${type}" and legacy ${legacy.join(" and ")}: the type supplies flow and kind`,
+    );
+  }
+  const resolved =
+    type !== undefined
+      ? resolveTaskType(fileSlug, type, taskTypes)
+      : {
+          kind: (result.data.kind === "spike"
+            ? "spike"
+            : "development") as TaskKind,
+          flow: result.data.flow ?? DEFAULT_FLOW,
+        };
   return {
     ...result.data,
+    ...resolved,
     revision: result.data.revision ?? 0,
     body: (match[2] ?? "").trim(),
   };
@@ -182,11 +239,14 @@ export function renderTaskFile(task: TaskFile): string {
   const front: Record<string, unknown> = {
     slug: task.slug,
     title: task.title,
-    kind: task.kind,
-    flow: task.flow,
-    deps: task.deps,
-    scope: task.scope,
   };
+  if (task.type !== undefined) front.type = task.type;
+  else {
+    front.kind = task.kind;
+    front.flow = task.flow;
+  }
+  front.deps = task.deps;
+  front.scope = task.scope;
   if (task.tier) front.tier = task.tier;
   if (task.revision > 0) front.revision = task.revision;
   if (task.base) front.base = task.base;
@@ -204,7 +264,7 @@ export function doneWhen(body: string): string {
 
 /**
  * Material hash: frozen-task comparisons must ignore cosmetic edits but catch
- * a changed dependency set, scope, flow, tier, revision, kind, slug or
+ * a changed dependency set, scope, type, flow, tier, revision, kind, slug or
  * done-when.
  */
 export function materialHash(task: TaskFile): string {
@@ -212,6 +272,7 @@ export function materialHash(task: TaskFile): string {
     task.slug,
     task.kind,
     task.flow,
+    task.type ?? "",
     [...task.deps].sort(),
     [...task.scope],
     task.tier ?? "",
@@ -296,7 +357,7 @@ export function validateTaskFlows(
 ): string[] {
   const findings: string[] = [];
   for (const task of tasks) {
-    if (!flows[task.flow]) {
+    if (!Object.hasOwn(flows, task.flow)) {
       findings.push(
         `task "${task.slug}" uses flow "${task.flow}": flow "${task.flow}" is not configured`,
       );

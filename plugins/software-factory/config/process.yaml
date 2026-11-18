@@ -20,6 +20,13 @@ flows:
         role: reviewer
         review: true
         changeRequests: 0
+# A task file names one type; the type owns its flow, kind and output schema.
+# `development` merges, `spike` finishes with findings, `trivial` runs the
+# front's single-step path.
+taskTypes:
+  development: { flow: implement-review, kind: development, schema: outcome }
+  spike: { flow: spike, kind: spike, schema: outcome }
+  trivial: { flow: just-implement, kind: development, schema: outcome }
 roles:
   architect: { prompt: architect }
   front: { prompt: front }

@@ -3,6 +3,7 @@ import path from "node:path";
 import yaml from "yaml";
 import { z } from "zod";
 import {
+  loadProcessConfig,
   processConfigSchema,
   repoConfigSchema,
   runConfigSchema,
@@ -11,6 +12,7 @@ import { parseTaskFile, validateTaskGraph } from "./kernel/tasks.js";
 import { parseOutcome } from "./kernel/outcome.js";
 import { holdFileSchema } from "./kernel/mailbox.js";
 import { classSchema } from "./kernel/flow-context.js";
+import type { TaskTypeDefinition } from "./kernel/types.js";
 
 let failed = false;
 let checked = 0;
@@ -99,6 +101,19 @@ if (fs.existsSync(treeFactoryDir)) {
 }
 
 if (fs.existsSync(artifactFactoryDir)) {
+  // The artifact checkout's merged process layer supplies the task types its
+  // files name. Its repo/run files belong to another checkout, so only the
+  // process layer is read; a broken process file is reported here too.
+  let taskTypes: Record<string, TaskTypeDefinition> = {};
+  try {
+    taskTypes = loadProcessConfig(artifactRoot).taskTypes ?? {};
+  } catch (err) {
+    report(
+      artifactFactoryDir,
+      `task types unavailable: ${(err as Error).message}`,
+    );
+  }
+
   // Task files, grouped by their containing directory.
   const taskFiles = walk(artifactFactoryDir, (file) =>
     /\/tasks\/[^/]+\.md$/.test(file),
@@ -118,6 +133,7 @@ if (fs.existsSync(artifactFactoryDir)) {
           parseTaskFile(
             fs.readFileSync(file, "utf8"),
             path.basename(file, ".md"),
+            taskTypes,
           ),
         );
       } catch (err) {

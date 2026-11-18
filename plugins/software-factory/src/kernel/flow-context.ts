@@ -13,6 +13,8 @@ import { preexistingRed, recordedBaseGates } from "./baseline.js";
 import { contextPackRelPath } from "./context-pack.js";
 import { formatFailingChecks, newGateFailures } from "./gates.js";
 import { formatFixDispositions, formatReviewFindings } from "./record.js";
+import { taskOutcomeSchema } from "./outcome-schemas.js";
+import { outcomeSchemaVar } from "./prompt-schema.js";
 import { sessionCacheHot } from "./sessions.js";
 import { GATE_LAST_CALL_ASK } from "./prompts.js";
 import { agentSteps, isLastChecksFixCall } from "./review.js";
@@ -854,5 +856,11 @@ export function promptVars(
     // A de-novo turn carries no follow-up notice; the trivial path overrides
     // this with `trivialResumeNote` before rendering the implement prompt.
     resume_note: "",
+    // The task type's output schema, not the role's: a spike and a development
+    // task may deliver different shapes even when the same role runs both.
+    outcome_schema: outcomeSchemaVar(
+      undefined,
+      taskOutcomeSchema(task, runtime.configs.process.taskTypes),
+    ),
   };
 }

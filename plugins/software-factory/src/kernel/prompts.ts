@@ -3,9 +3,9 @@ import path from "node:path";
 import { Liquid, type FS } from "liquidjs";
 import { packageRoot } from "./config.js";
 import {
-  flowNamesVar,
   outcomeSchemaVar,
   taskFrontmatterVar,
+  taskTypesVar,
   tierNamesVar,
 } from "./prompt-schema.js";
 import type { ProcessConfig, RunConfig } from "./types.js";
@@ -209,7 +209,7 @@ export function validateCmd(
  * template under `.factory/prompts/` and replace the calibration partial with
  * process-config text. Schema and config names render as launch-wide defaults
  * so turn code never passes them: the outcome and task-frontmatter skeletons
- * from the kernel schemas, flow names from the process config, tier names
+ * from the kernel schemas, task type names from the process config, tier names
  * from the run-config aliases.
  */
 export function loadPrompts(
@@ -245,7 +245,7 @@ export function loadPrompts(
       fix_dispositions: "",
       outcome_schema: outcomeSchemaVar(),
       task_frontmatter: taskFrontmatterVar(),
-      flows: flowNamesVar(process.flows),
+      task_types: taskTypesVar(process.taskTypes),
       tiers: tierNamesVar(aliases),
     },
   });

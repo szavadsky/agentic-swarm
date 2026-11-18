@@ -17,6 +17,7 @@ import {
   checkScouts,
   type ModelCatalog,
 } from "./preflight-aliases.js";
+import { outcomeSchemaFor, outcomeSchemaNames } from "./outcome-schemas.js";
 import type {
   AliasConfig,
   ArtifactStore,
@@ -248,6 +249,31 @@ export async function preflight(
   }
 
   findings.push(...escalationFindings(configs.run.aliases, files.run));
+
+  // A task type owns its flow and output schema. A type naming either one
+  // wrongly would quarantine every task of that type or fail mid-turn, after
+  // the plan spent, so pre-flight refuses the config instead.
+  const taskTypeFile = fs.existsSync(files.processOverride)
+    ? files.processOverride
+    : files.processDefault;
+  for (const [name, definition] of Object.entries(
+    configs.process.taskTypes ?? {},
+  )) {
+    if (!Object.hasOwn(configs.process.flows, definition.flow)) {
+      findings.push({
+        file: taskTypeFile,
+        key: `taskTypes.${name}.flow`,
+        message: `flow "${definition.flow}" is not configured`,
+      });
+    }
+    if (!outcomeSchemaFor(definition.schema)) {
+      findings.push({
+        file: taskTypeFile,
+        key: `taskTypes.${name}.schema`,
+        message: `schema "${definition.schema}" is not a kernel outcome schema (${outcomeSchemaNames()})`,
+      });
+    }
+  }
 
   // A task tier names a run-config alias directly; an escalated task that names
   // one the run config lacks would fail only mid-turn, after the plan spent.

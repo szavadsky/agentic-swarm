@@ -5,11 +5,11 @@ import os from "node:os";
 import { FakeHarness } from "../../src/harness/fake/index.js";
 import { packageRoot } from "../../src/kernel/config.js";
 import { promptVars } from "../../src/kernel/flow-context.js";
-import { frontClassFlowsVar } from "../../src/kernel/front.js";
+import { frontClassTypesVar } from "../../src/kernel/front.js";
 import {
-  flowNamesVar,
   outcomeSchemaVar,
   taskFrontmatterVar,
+  taskTypesVar,
   tierNamesVar,
 } from "../../src/kernel/prompt-schema.js";
 import { loadPromptLibrary, loadPrompts } from "../../src/kernel/prompts.js";
@@ -28,13 +28,24 @@ import {
 
 const OUTCOME_SCHEMA = outcomeSchemaVar();
 const TASK_FRONTMATTER = taskFrontmatterVar();
-const FLOWS = flowNamesVar({
-  "implement-review": {},
-  "just-implement": {},
-  spike: {},
+const TASK_TYPES = taskTypesVar({
+  development: {
+    flow: "implement-review",
+    kind: "development",
+    schema: "outcome",
+  },
+  spike: { flow: "spike", kind: "spike", schema: "outcome" },
+  trivial: { flow: "just-implement", kind: "development", schema: "outcome" },
 });
 const TIERS = tierNamesVar({ implementer: {}, escalation: {} });
-const CLASS_FLOWS = frontClassFlowsVar();
+const CLASS_TYPES = frontClassTypesVar({
+  development: {
+    flow: "implement-review",
+    kind: "development",
+    schema: "outcome",
+  },
+  trivial: { flow: "just-implement", kind: "development", schema: "outcome" },
+});
 
 const ROLES: Record<string, Record<string, string>> = {
   architect: {
@@ -49,7 +60,7 @@ const ROLES: Record<string, Record<string, string>> = {
     outcome_path: "/goal/records/00042-i3-architect-r1/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
     outcome_schema: OUTCOME_SCHEMA,
-    flows: FLOWS,
+    task_types: TASK_TYPES,
     tiers: TIERS,
   },
   front: {
@@ -66,9 +77,9 @@ const ROLES: Record<string, Record<string, string>> = {
     validate_cmd: "bun /factory/bin/factory.ts validate",
     outcome_schema: OUTCOME_SCHEMA,
     task_frontmatter: TASK_FRONTMATTER,
-    flows: FLOWS,
+    task_types: TASK_TYPES,
     tiers: TIERS,
-    class_flows: CLASS_FLOWS,
+    class_types: CLASS_TYPES,
   },
   pm: {
     iteration: "3",
@@ -87,7 +98,7 @@ const ROLES: Record<string, Record<string, string>> = {
     validate_cmd: "bun /factory/bin/factory.ts validate",
     outcome_schema: OUTCOME_SCHEMA,
     task_frontmatter: TASK_FRONTMATTER,
-    flows: FLOWS,
+    task_types: TASK_TYPES,
     tiers: TIERS,
   },
   implementer: {
@@ -260,7 +271,7 @@ describe("reviewer includes its author's body", () => {
     expect(architectPlaceholders).toEqual(
       expect.arrayContaining([
         "tiers",
-        "flows",
+        "task_types",
         "iteration",
         "intent_path",
         "plan_path",
@@ -271,7 +282,7 @@ describe("reviewer includes its author's body", () => {
     expect(architectPlaceholders).not.toContain("task_path");
     expect(architectPlaceholders).not.toContain("base_hash");
     expect(implementerPlaceholders).not.toContain("tiers");
-    expect(implementerPlaceholders).not.toContain("flows");
+    expect(implementerPlaceholders).not.toContain("task_types");
     expect(implementerPlaceholders).not.toContain("intent_path");
 
     const rendered = lib.render("reviewer", {

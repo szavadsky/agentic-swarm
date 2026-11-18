@@ -55,7 +55,7 @@ One section per milestone; one bullet per task. For each task, in this order:
 
 Each bullet starts with its slug: short kebab-case, unique across the goal, never renamed or reused. A merged task's bullet is history: do not edit it; collapse a merged milestone to one line. Rework is a new bullet with a new slug.
 
-Name a non-default flow (implement-review (default), just-implement, spike) on the bullet, and a parked task's slug as \`base\` when this task continues it.
+Name a non-default task type (development (flow: implement-review, kind: development, schema: outcome), spike (flow: spike, kind: spike, schema: outcome), trivial (flow: just-implement, kind: development, schema: outcome)) on the bullet, and a parked task's slug as \`base\` when this task continues it.
 
 Leave out: file-by-file steps, code bodies, line counts, test lists, anything the repo's conventions already say.
 
@@ -172,8 +172,7 @@ Every task file is \`---\` frontmatter plus a brief body:
 \`\`\`yaml
 slug: namespaced kebab-case, matches the file name
 title: one line
-kind: task | spike  # task merges, spike finishes with findings
-flow: one of the configured flows
+type: one of the configured task types; it supplies flow, kind and schema
 deps: [a slug that must merge first]
 scope: [a predicted area]
 tier: default, or a run-config alias  # optional
@@ -184,10 +183,10 @@ repairTurns: outcome-repair turns for this task's turns  # optional
 turnMinutes: per-turn wall bound in minutes  # optional
 \`\`\`
 
-Configured flows: implement-review (default), just-implement, spike. Configured tiers: implementer, escalation.
+Every new task file names a \`type\`; \`kind\` and \`flow\` are legacy fields an old file may still carry. Configured task types: development (flow: implement-review, kind: development, schema: outcome), spike (flow: spike, kind: spike, schema: outcome), trivial (flow: just-implement, kind: development, schema: outcome). Configured tiers: implementer, escalation.
 
 
-For the front's file: \`kind: task\`, \`flow\` (\`just-implement\` for trivial, \`implement-review\` for task), \`deps: []\`, \`source: front\`, a unique slug, a non-empty \`scope\` (the predicted area), no missing dependency, and a \`tier\` naming \`default\` or a configured alias. Body: the brief with a \`Done when:\` line.
+For the front's file: \`type\` (\`trivial\` for trivial, \`development\` for task; a class with no configured type is \`bigger\`), \`deps: []\`, \`source: front\`, a unique slug, a non-empty \`scope\` (the predicted area), no missing dependency, and a \`tier\` naming \`default\` or a configured alias. Body: the brief with a \`Done when:\` line.
 
 3. The context pack at the pack path, for every class: a deterministic index — paths, risks, open questions; never paste file bodies. On \`trivial\` or \`task\`, carry the area and risks the task file leaves implicit.
 
@@ -266,8 +265,7 @@ Every task file is \`---\` frontmatter plus a brief body:
 \`\`\`yaml
 slug: namespaced kebab-case, matches the file name
 title: one line
-kind: task | spike  # task merges, spike finishes with findings
-flow: one of the configured flows
+type: one of the configured task types; it supplies flow, kind and schema
 deps: [a slug that must merge first]
 scope: [a predicted area]
 tier: default, or a run-config alias  # optional
@@ -278,7 +276,7 @@ repairTurns: outcome-repair turns for this task's turns  # optional
 turnMinutes: per-turn wall bound in minutes  # optional
 \`\`\`
 
-Configured flows: implement-review (default), just-implement, spike. Configured tiers: implementer, escalation.
+Every new task file names a \`type\`; \`kind\` and \`flow\` are legacy fields an old file may still carry. Configured task types: development (flow: implement-review, kind: development, schema: outcome), spike (flow: spike, kind: spike, schema: outcome), trivial (flow: just-implement, kind: development, schema: outcome). Configured tiers: implementer, escalation.
 
 
 - \`slug\` — keep the architect's slug; assign a short kebab-case one only when the bullet has none. Immutable, never reused, safe as a branch and file name, unique across the goal including dropped tasks.
@@ -938,7 +936,7 @@ One section per milestone; one bullet per task. For each task, in this order:
 
 Each bullet starts with its slug: short kebab-case, unique across the goal, never renamed or reused. A merged task's bullet is history: do not edit it; collapse a merged milestone to one line. Rework is a new bullet with a new slug.
 
-Name a non-default flow (implement-review (default), just-implement, spike) on the bullet, and a parked task's slug as \`base\` when this task continues it.
+Name a non-default task type (development (flow: implement-review, kind: development, schema: outcome), spike (flow: spike, kind: spike, schema: outcome), trivial (flow: just-implement, kind: development, schema: outcome)) on the bullet, and a parked task's slug as \`base\` when this task continues it.
 
 Leave out: file-by-file steps, code bodies, line counts, test lists, anything the repo's conventions already say.
 
@@ -1028,8 +1026,7 @@ Every task file is \`---\` frontmatter plus a brief body:
 \`\`\`yaml
 slug: namespaced kebab-case, matches the file name
 title: one line
-kind: task | spike  # task merges, spike finishes with findings
-flow: one of the configured flows
+type: one of the configured task types; it supplies flow, kind and schema
 deps: [a slug that must merge first]
 scope: [a predicted area]
 tier: default, or a run-config alias  # optional
@@ -1040,7 +1037,7 @@ repairTurns: outcome-repair turns for this task's turns  # optional
 turnMinutes: per-turn wall bound in minutes  # optional
 \`\`\`
 
-Configured flows: implement-review (default), just-implement, spike. Configured tiers: implementer, escalation.
+Every new task file names a \`type\`; \`kind\` and \`flow\` are legacy fields an old file may still carry. Configured task types: development (flow: implement-review, kind: development, schema: outcome), spike (flow: spike, kind: spike, schema: outcome), trivial (flow: just-implement, kind: development, schema: outcome). Configured tiers: implementer, escalation.
 
 
 - \`slug\` — keep the architect's slug; assign a short kebab-case one only when the bullet has none. Immutable, never reused, safe as a branch and file name, unique across the goal including dropped tasks.
@@ -1227,7 +1224,7 @@ One section per milestone; one bullet per task. For each task, in this order:
 
 Each bullet starts with its slug: short kebab-case, unique across the goal, never renamed or reused. A merged task's bullet is history: do not edit it; collapse a merged milestone to one line. Rework is a new bullet with a new slug.
 
-Name a non-default flow (implement-review (default), just-implement, spike) on the bullet, and a parked task's slug as \`base\` when this task continues it.
+Name a non-default task type (development (flow: implement-review, kind: development, schema: outcome), spike (flow: spike, kind: spike, schema: outcome), trivial (flow: just-implement, kind: development, schema: outcome)) on the bullet, and a parked task's slug as \`base\` when this task continues it.
 
 Leave out: file-by-file steps, code bodies, line counts, test lists, anything the repo's conventions already say.
 
@@ -1317,8 +1314,7 @@ Every task file is \`---\` frontmatter plus a brief body:
 \`\`\`yaml
 slug: namespaced kebab-case, matches the file name
 title: one line
-kind: task | spike  # task merges, spike finishes with findings
-flow: one of the configured flows
+type: one of the configured task types; it supplies flow, kind and schema
 deps: [a slug that must merge first]
 scope: [a predicted area]
 tier: default, or a run-config alias  # optional
@@ -1329,7 +1325,7 @@ repairTurns: outcome-repair turns for this task's turns  # optional
 turnMinutes: per-turn wall bound in minutes  # optional
 \`\`\`
 
-Configured flows: implement-review (default), just-implement, spike. Configured tiers: implementer, escalation.
+Every new task file names a \`type\`; \`kind\` and \`flow\` are legacy fields an old file may still carry. Configured task types: development (flow: implement-review, kind: development, schema: outcome), spike (flow: spike, kind: spike, schema: outcome), trivial (flow: just-implement, kind: development, schema: outcome). Configured tiers: implementer, escalation.
 
 
 - \`slug\` — keep the architect's slug; assign a short kebab-case one only when the bullet has none. Immutable, never reused, safe as a branch and file name, unique across the goal including dropped tasks.
@@ -1516,7 +1512,7 @@ One section per milestone; one bullet per task. For each task, in this order:
 
 Each bullet starts with its slug: short kebab-case, unique across the goal, never renamed or reused. A merged task's bullet is history: do not edit it; collapse a merged milestone to one line. Rework is a new bullet with a new slug.
 
-Name a non-default flow (implement-review (default), just-implement, spike) on the bullet, and a parked task's slug as \`base\` when this task continues it.
+Name a non-default task type (development (flow: implement-review, kind: development, schema: outcome), spike (flow: spike, kind: spike, schema: outcome), trivial (flow: just-implement, kind: development, schema: outcome)) on the bullet, and a parked task's slug as \`base\` when this task continues it.
 
 Leave out: file-by-file steps, code bodies, line counts, test lists, anything the repo's conventions already say.
 
@@ -1606,8 +1602,7 @@ Every task file is \`---\` frontmatter plus a brief body:
 \`\`\`yaml
 slug: namespaced kebab-case, matches the file name
 title: one line
-kind: task | spike  # task merges, spike finishes with findings
-flow: one of the configured flows
+type: one of the configured task types; it supplies flow, kind and schema
 deps: [a slug that must merge first]
 scope: [a predicted area]
 tier: default, or a run-config alias  # optional
@@ -1618,7 +1613,7 @@ repairTurns: outcome-repair turns for this task's turns  # optional
 turnMinutes: per-turn wall bound in minutes  # optional
 \`\`\`
 
-Configured flows: implement-review (default), just-implement, spike. Configured tiers: implementer, escalation.
+Every new task file names a \`type\`; \`kind\` and \`flow\` are legacy fields an old file may still carry. Configured task types: development (flow: implement-review, kind: development, schema: outcome), spike (flow: spike, kind: spike, schema: outcome), trivial (flow: just-implement, kind: development, schema: outcome). Configured tiers: implementer, escalation.
 
 
 - \`slug\` — keep the architect's slug; assign a short kebab-case one only when the bullet has none. Immutable, never reused, safe as a branch and file name, unique across the goal including dropped tasks.

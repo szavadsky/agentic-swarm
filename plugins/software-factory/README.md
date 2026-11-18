@@ -60,6 +60,8 @@ flows:
     steps:
       - { id: implement, role: implementer }
       - { id: review, role: reviewer, review: true, changeRequests: 2 }
+taskTypes:
+  development: { flow: implement-review, kind: development, schema: outcome }
 roles:
   architect: { prompt: architect }
   implementer: { prompt: implementer }

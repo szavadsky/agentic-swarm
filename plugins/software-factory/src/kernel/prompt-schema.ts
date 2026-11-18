@@ -1,7 +1,11 @@
 import { z } from "zod";
 import { type OutcomeExpectation, expectationField } from "./outcome.js";
-import { DEFAULT_FLOW, taskFrontmatterSchema } from "./tasks.js";
-import { outcomeSchema } from "./types.js";
+import { taskFrontmatterSchema } from "./tasks.js";
+import {
+  type Outcome,
+  outcomeSchema,
+  type TaskTypeDefinition,
+} from "./types.js";
 
 /**
  * Prompt variables rendered from kernel schemas and config, supplied as
@@ -124,8 +128,11 @@ export function renderSkeleton(
 }
 
 /** The `outcome_schema` prompt variable: the fenced outcome skeleton block. */
-export function outcomeSchemaVar(keep?: readonly string[]): string {
-  return `\`\`\`yaml\n${renderSkeleton(outcomeSchema, keep)}\n\`\`\``;
+export function outcomeSchemaVar(
+  keep?: readonly string[],
+  schema: z.ZodType<Outcome> = outcomeSchema,
+): string {
+  return `\`\`\`yaml\n${renderSkeleton(schema, keep)}\n\`\`\``;
 }
 
 /** The unconditional outcome fields every turn delivers. */
@@ -153,29 +160,54 @@ const ROLE_OUTCOME_FIELDS: Record<string, string[]> = {
 export function outcomeRepairSchemaVar(
   role: string,
   expectation: OutcomeExpectation,
+  schema: z.ZodType<Outcome> = outcomeSchema,
 ): string {
   const delivered = expectationField(expectation);
-  return outcomeSchemaVar([
-    ...BASE_OUTCOME_FIELDS,
-    ...(ROLE_OUTCOME_FIELDS[role] ?? []),
-    ...(delivered ? [delivered] : []),
-  ]);
-}
-
-/** The `task_frontmatter` prompt variable: the fenced frontmatter skeleton. */
-export function taskFrontmatterVar(): string {
-  return `\`\`\`yaml\n${renderSkeleton(taskFrontmatterSchema)}\n\`\`\``;
+  return outcomeSchemaVar(
+    [
+      ...BASE_OUTCOME_FIELDS,
+      ...(ROLE_OUTCOME_FIELDS[role] ?? []),
+      ...(delivered ? [delivered] : []),
+    ],
+    schema,
+  );
 }
 
 /**
- * The `flows` prompt variable: configured flow names in config order, the
- * kernel default marked. No configured flows renders `none`, as for gates.
+ * What a prompt author writes: a type is required and owns flow/kind, so the
+ * legacy fields stay out of the skeleton even though the parser still reads
+ * them from old files.
  */
-export function flowNamesVar(flows: Record<string, unknown>): string {
-  const names = Object.keys(flows);
-  if (names.length === 0) return "none";
-  return names
-    .map((name) => (name === DEFAULT_FLOW ? `${name} (default)` : name))
+const authoredTaskFrontmatterSchema = taskFrontmatterSchema
+  .omit({ kind: true, flow: true })
+  .extend({
+    type: z
+      .string()
+      .min(1)
+      .describe(
+        "one of the configured task types; it supplies flow, kind and schema",
+      ),
+  });
+
+/** The `task_frontmatter` prompt variable: the fenced frontmatter skeleton. */
+export function taskFrontmatterVar(): string {
+  return `\`\`\`yaml\n${renderSkeleton(authoredTaskFrontmatterSchema)}\n\`\`\``;
+}
+
+/**
+ * The `task_types` prompt variable: configured type names in config order with
+ * the flow, kind and output schema each supplies.
+ */
+export function taskTypesVar(
+  taskTypes: Record<string, TaskTypeDefinition> | undefined,
+): string {
+  const entries = Object.entries(taskTypes ?? {});
+  if (entries.length === 0) return "none";
+  return entries
+    .map(
+      ([name, definition]) =>
+        `${name} (flow: ${definition.flow}, kind: ${definition.kind}, schema: ${definition.schema})`,
+    )
     .join(", ");
 }
 

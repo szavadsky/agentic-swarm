@@ -14,7 +14,7 @@ import { renderContextPack } from "../../src/kernel/context-pack.js";
 import { derive } from "../../src/kernel/derive.js";
 import { countOutcomeRepairs } from "../../src/kernel/metrics.js";
 import { resolveRole } from "../../src/kernel/flow-context.js";
-import { frontClassFlowsVar } from "../../src/kernel/front.js";
+import { frontClassTypesVar } from "../../src/kernel/front.js";
 import { writePriceCache } from "../../src/kernel/openrouter.js";
 import { loadPrompts } from "../../src/kernel/prompts.js";
 import { appendPark, parkLaunchKind } from "../../src/kernel/record.js";
@@ -554,7 +554,18 @@ describe("delivery guard", () => {
     checkout: "/wt",
     setup_command: "none",
     gate_commands: "none",
-    class_flows: frontClassFlowsVar(),
+    class_types: frontClassTypesVar({
+      development: {
+        flow: "implement-review",
+        kind: "development",
+        schema: "outcome",
+      },
+      trivial: {
+        flow: "just-implement",
+        kind: "development",
+        schema: "outcome",
+      },
+    }),
   };
 
   async function setup() {

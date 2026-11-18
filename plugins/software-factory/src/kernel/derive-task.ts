@@ -80,14 +80,14 @@ interface PendingChecks {
  * terminal rules: `reduceTask` and the store's unreadable-file check both
  * read through here, so a change to what counts as terminal lands once.
  * Records are filtered by slug; callers may pass the whole store.
- * An unreadable file cannot supply `kind`, so the default is `task`:
+ * An unreadable file cannot supply `kind`, so the default is `development`:
  * a spike merge then reads as `merged`, but spike flows finish rather than
  * merge, so the default holds in practice.
  */
 export function terminalFactFromRecords(
   records: StepRecord[],
   slug: string,
-  kind: TaskKind = "task",
+  kind: TaskKind = "development",
 ): TerminalFact | null {
   let out: TerminalFact | null = null;
   for (const rec of records) {

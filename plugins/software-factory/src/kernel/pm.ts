@@ -38,6 +38,7 @@ import type {
   SteerRoute,
   TaskFile,
   TaskStatus,
+  TaskTypeDefinition,
 } from "./types.js";
 import { integrationHead, taskBranchName } from "./worktree.js";
 
@@ -122,7 +123,10 @@ export async function restoreTurn(
   return { plan: planChanged, tasks: [...changed].sort() };
 }
 
-function parseTasks(texts: Map<string, string>): {
+function parseTasks(
+  texts: Map<string, string>,
+  taskTypes: Record<string, TaskTypeDefinition> | undefined,
+): {
   tasks: TaskFile[];
   findings: string[];
 } {
@@ -132,7 +136,7 @@ function parseTasks(texts: Map<string, string>): {
     a[0].localeCompare(b[0]),
   )) {
     try {
-      tasks.push(parseTaskFile(text, slug));
+      tasks.push(parseTaskFile(text, slug, taskTypes));
     } catch (err) {
       findings.push(
         err instanceof TaskFileError
@@ -269,7 +273,11 @@ async function reconcile(
     if (cancelledSlugs(opts.state).includes(slug)) continue;
     let source = "";
     try {
-      source = parseTaskFile(original, slug).source;
+      source = parseTaskFile(
+        original,
+        slug,
+        runtime.configs.process.taskTypes,
+      ).source;
     } catch {
       continue;
     }
@@ -305,6 +313,7 @@ async function validate(
   const findings = await reconcile(runtime, opts, planBefore, taskSnapshot);
   const { tasks, findings: parseFindings } = parseTasks(
     await readTaskTexts(runtime),
+    runtime.configs.process.taskTypes,
   );
   findings.push(...parseFindings);
   const parked = new Set(
@@ -495,7 +504,10 @@ export async function runPm(
   for (const [index, rung] of rungSteps(runtime).entries()) {
     const target = resolveRole(runtime, "pm", rung.alias, opts.iteration);
     const round = index + 1;
-    const { tasks } = parseTasks(await readTaskTexts(runtime));
+    const { tasks } = parseTasks(
+      await readTaskTexts(runtime),
+      runtime.configs.process.taskTypes,
+    );
     const result = await runAgentTurn(runtime, {
       target,
       cwd: opts.cwd,
@@ -661,7 +673,10 @@ async function validateSteerTurn(
 ): Promise<string[]> {
   const findings = await reconcile(runtime, opts, planBefore, taskSnapshot);
   const texts = await readTaskTexts(runtime);
-  const { tasks, findings: parseFindings } = parseTasks(texts);
+  const { tasks, findings: parseFindings } = parseTasks(
+    texts,
+    runtime.configs.process.taskTypes,
+  );
   findings.push(...parseFindings);
   const parked = new Set(
     Object.keys(opts.state.tasks).filter(
@@ -852,7 +867,10 @@ export async function runSteerPm(
   for (const [index, rung] of rungSteps(runtime).entries()) {
     const target = resolveRole(runtime, "pm", rung.alias, opts.iteration);
     const round = index + 1;
-    const { tasks } = parseTasks(await readTaskTexts(runtime));
+    const { tasks } = parseTasks(
+      await readTaskTexts(runtime),
+      runtime.configs.process.taskTypes,
+    );
     const result = await runAgentTurn(runtime, {
       target,
       cwd: opts.cwd,
@@ -1071,10 +1089,11 @@ function planCheckDecision(kind: PlanCheckFollowUp["kind"]): StallDecision {
 function declaredRevision(
   text: string | undefined,
   slug: string,
+  taskTypes: Record<string, TaskTypeDefinition> | undefined,
 ): number | undefined {
   if (text === undefined) return undefined;
   try {
-    return parseTaskFile(text, slug).revision;
+    return parseTaskFile(text, slug, taskTypes).revision;
   } catch {
     return undefined;
   }
@@ -1098,6 +1117,7 @@ function decisionFindings(input: {
   before: ReadonlyMap<string, string>;
   texts: ReadonlyMap<string, string>;
   bySlug: ReadonlyMap<string, TaskFile>;
+  taskTypes: Record<string, TaskTypeDefinition> | undefined;
   created: readonly TaskFile[];
   /**
    * Claims a mechanical fix already made, by slug: a dead-dep drop on the
@@ -1134,7 +1154,7 @@ function decisionFindings(input: {
       );
       continue;
     }
-    const was = declaredRevision(original, slug);
+    const was = declaredRevision(original, slug, input.taskTypes);
     const now = bySlug.get(slug)?.revision;
     if (was === undefined || now !== was + 1) {
       findings.push(
@@ -1254,7 +1274,10 @@ async function validateStallTurn(
 ): Promise<string[]> {
   const findings = await reconcile(runtime, opts, planBefore, taskSnapshot);
   const texts = await readTaskTexts(runtime);
-  const { tasks, findings: parseFindings } = parseTasks(texts);
+  const { tasks, findings: parseFindings } = parseTasks(
+    texts,
+    runtime.configs.process.taskTypes,
+  );
   findings.push(...parseFindings);
   const parked = new Set(
     Object.keys(opts.state.tasks).filter(
@@ -1327,6 +1350,7 @@ async function validateStallTurn(
         before: taskSnapshot,
         texts,
         bySlug,
+        taskTypes: runtime.configs.process.taskTypes,
         created: created
           .map((slug) => bySlug.get(slug))
           .filter((task): task is TaskFile => task !== undefined),
@@ -1393,7 +1417,10 @@ export async function runStallPm(
   for (const [index, rung] of rungSteps(runtime).entries()) {
     const target = resolveRole(runtime, "pm", rung.alias, opts.iteration);
     const round = index + 1;
-    const { tasks } = parseTasks(await readTaskTexts(runtime));
+    const { tasks } = parseTasks(
+      await readTaskTexts(runtime),
+      runtime.configs.process.taskTypes,
+    );
     const result = await runAgentTurn(runtime, {
       target,
       cwd: opts.cwd,
@@ -1557,12 +1584,17 @@ function planCheckLadderNote(
  * Whether two task texts differ only in their dependency list. An
  * unparseable side is not a dep fix: the caller reports the edit as is.
  */
-function onlyDepsChanged(before: string, after: string, slug: string): boolean {
+function onlyDepsChanged(
+  before: string,
+  after: string,
+  slug: string,
+  taskTypes: Record<string, TaskTypeDefinition> | undefined,
+): boolean {
   let oldTask: TaskFile;
   let newTask: TaskFile;
   try {
-    oldTask = parseTaskFile(before, slug);
-    newTask = parseTaskFile(after, slug);
+    oldTask = parseTaskFile(before, slug, taskTypes);
+    newTask = parseTaskFile(after, slug, taskTypes);
   } catch {
     return false;
   }
@@ -1590,7 +1622,10 @@ async function validatePlanCheckTurn(
 ): Promise<string[]> {
   const findings = await reconcile(runtime, opts, planBefore, taskSnapshot);
   const texts = await readTaskTexts(runtime);
-  const { tasks, findings: parseFindings } = parseTasks(texts);
+  const { tasks, findings: parseFindings } = parseTasks(
+    texts,
+    runtime.configs.process.taskTypes,
+  );
   findings.push(...parseFindings);
   const parked = new Set(
     Object.keys(opts.state.tasks).filter(
@@ -1655,10 +1690,18 @@ async function validatePlanCheckTurn(
       const followUp = followUpOf.get(slug);
       if (
         followUp?.kind === "missing-dep" &&
-        onlyDepsChanged(original, now, slug)
+        onlyDepsChanged(original, now, slug, runtime.configs.process.taskTypes)
       ) {
-        const before = parseTaskFile(original, slug);
-        const after = parseTaskFile(now, slug);
+        const before = parseTaskFile(
+          original,
+          slug,
+          runtime.configs.process.taskTypes,
+        );
+        const after = parseTaskFile(
+          now,
+          slug,
+          runtime.configs.process.taskTypes,
+        );
         const dropped = before.deps.filter((dep) => !after.deps.includes(dep));
         const added = after.deps.filter((dep) => !before.deps.includes(dep));
         if (added.length > 0) {
@@ -1728,6 +1771,7 @@ async function validatePlanCheckTurn(
         before: taskSnapshot,
         texts,
         bySlug,
+        taskTypes: runtime.configs.process.taskTypes,
         created: created
           .filter((slug) => !depRewrites.has(slug))
           .map((slug) => bySlug.get(slug))
@@ -1781,7 +1825,10 @@ export async function runPlanCheckPm(
   for (const [index, rung] of rungSteps(runtime).entries()) {
     const target = resolveRole(runtime, "pm", rung.alias, opts.iteration);
     const round = index + 1;
-    const { tasks } = parseTasks(await readTaskTexts(runtime));
+    const { tasks } = parseTasks(
+      await readTaskTexts(runtime),
+      runtime.configs.process.taskTypes,
+    );
     const result = await runAgentTurn(runtime, {
       target,
       cwd: opts.cwd,

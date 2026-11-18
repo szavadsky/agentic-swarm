@@ -68,6 +68,7 @@ function withScouts(runYaml: string, scouts: string): string {
 async function fixture(
   runYaml = RUN_HEAD,
   repoYaml?: string,
+  processYaml?: string,
 ): Promise<Fixture> {
   const repo = createTmpRepo();
   const base = path.basename(repo.dir);
@@ -80,12 +81,18 @@ async function fixture(
       "baseBranch: main\nartifactRoot: .factory/artifacts\nsetup: []\ngates: []\n",
   );
   repo.writeFile(".factory/run.yaml", run);
+  if (processYaml !== undefined)
+    repo.writeFile(".factory/process.yaml", processYaml);
   repo.commit("factory config");
   const configs = loadConfigs(repo.dir);
   const paths = resolveGoalPaths(configs, repo.dir, "demo");
   fs.mkdirSync(paths.goalDir, { recursive: true });
   fs.writeFileSync(path.join(paths.goalDir, "intent.md"), "# Goal\n", "utf8");
-  const store = createFolderStore(paths.goalDir);
+  const store = createFolderStore(
+    paths.goalDir,
+    undefined,
+    configs.process.taskTypes,
+  );
   await store.ensureLayout();
   const harness = new FakeHarness({
     id: "fake",
@@ -112,6 +119,100 @@ describe("pre-flight", () => {
       const result = await preflight(f.input);
       expect(result.aliases.architect).toBe("max");
       expect(f.configs.run.aliases.architect!.effort).toBe("max");
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("reports a task type naming an unconfigured flow", async () => {
+    const f = await fixture(
+      RUN_HEAD,
+      undefined,
+      "taskTypes:\n  odd: { flow: no-such-flow, kind: development, schema: outcome }\n",
+    );
+    try {
+      const err = await refusal(f.input);
+      expect(err.findings).toContainEqual(
+        expect.objectContaining({
+          file: path.join(f.repo.dir, ".factory/process.yaml"),
+          key: "taskTypes.odd.flow",
+          message: 'flow "no-such-flow" is not configured',
+        }),
+      );
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("reports a task type naming a prototype-key flow", async () => {
+    const f = await fixture(
+      RUN_HEAD,
+      undefined,
+      "taskTypes:\n  odd: { flow: toString, kind: development, schema: outcome }\n",
+    );
+    try {
+      const err = await refusal(f.input);
+      expect(err.findings).toContainEqual(
+        expect.objectContaining({
+          file: path.join(f.repo.dir, ".factory/process.yaml"),
+          key: "taskTypes.odd.flow",
+          message: 'flow "toString" is not configured',
+        }),
+      );
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("reports a task type naming an unknown output schema", async () => {
+    const f = await fixture(
+      RUN_HEAD,
+      undefined,
+      "taskTypes:\n  odd: { flow: implement-review, kind: development, schema: nope }\n",
+    );
+    try {
+      const err = await refusal(f.input);
+      expect(err.findings).toContainEqual(
+        expect.objectContaining({
+          file: path.join(f.repo.dir, ".factory/process.yaml"),
+          key: "taskTypes.odd.schema",
+          message: 'schema "nope" is not a kernel outcome schema (outcome)',
+        }),
+      );
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("reports a task type naming a prototype-key output schema", async () => {
+    const f = await fixture(
+      RUN_HEAD,
+      undefined,
+      "taskTypes:\n  odd: { flow: implement-review, kind: development, schema: constructor }\n",
+    );
+    try {
+      const err = await refusal(f.input);
+      expect(err.findings).toContainEqual(
+        expect.objectContaining({
+          file: path.join(f.repo.dir, ".factory/process.yaml"),
+          key: "taskTypes.odd.schema",
+          message:
+            'schema "constructor" is not a kernel outcome schema (outcome)',
+        }),
+      );
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("accepts a task type whose flow and schema exist", async () => {
+    const f = await fixture(
+      RUN_HEAD,
+      undefined,
+      "taskTypes:\n  docs: { flow: just-implement, kind: development, schema: outcome }\n",
+    );
+    try {
+      await preflight(f.input);
     } finally {
       f.repo.cleanup();
     }

@@ -259,6 +259,37 @@ describe("factory validate", () => {
   );
 
   it(
+    "accepts a task file that names a configured type",
+    withTmp(async (root) => {
+      const typed = taskFile("alpha", []).replace(
+        "kind: task\nflow: implement-review",
+        "type: spike",
+      );
+      const file = writeFile(root, "tasks/alpha.md", typed);
+      const result = await runValidate(file);
+      expect(result.code).toBe(0);
+      expect(result.out).toContain(": valid");
+      expect(result.err).toBe("");
+    }),
+  );
+
+  it(
+    "rejects a task file that names a type the config lacks",
+    withTmp(async (root) => {
+      const typed = taskFile("alpha", []).replace(
+        "kind: task\nflow: implement-review",
+        "type: nope",
+      );
+      const file = writeFile(root, "tasks/alpha.md", typed);
+      const result = await runValidate(file);
+      expect(result.code).toBe(1);
+      expect(result.err).toContain(
+        'task "alpha" has type "nope": type "nope" is not configured',
+      );
+    }),
+  );
+
+  it(
     "rejects kind banana with the kernel finding",
     withTmp(async (root) => {
       const bad = taskFile("alpha", []).replace("kind: task", "kind: banana");
@@ -266,7 +297,7 @@ describe("factory validate", () => {
       const result = await runValidate(file);
       expect(result.code).toBe(1);
       expect(result.err).toContain(
-        'task "alpha" has kind "banana": expected "task" or "spike"',
+        'task "alpha" has kind "banana": expected "development" or "spike" (legacy "task" reads as development)',
       );
     }),
   );

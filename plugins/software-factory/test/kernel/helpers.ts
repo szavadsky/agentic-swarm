@@ -8,7 +8,7 @@ export function task(slug: string, patch: Partial<TaskFile> = {}): TaskFile {
   return {
     slug,
     title: slug,
-    kind: "task",
+    kind: "development",
     flow: "implement-review",
     deps: [],
     scope: [],

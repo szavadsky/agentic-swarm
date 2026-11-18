@@ -24,10 +24,34 @@ describe("three config layers", () => {
       configs.process.flows["implement-review"]!.steps[1]!.changeRequests,
     ).toBe(2);
     expect(configs.process.reminders).toBe(1);
+    expect(configs.process.taskTypes).toEqual({
+      development: {
+        flow: "implement-review",
+        kind: "development",
+        schema: "outcome",
+      },
+      spike: { flow: "spike", kind: "spike", schema: "outcome" },
+      trivial: {
+        flow: "just-implement",
+        kind: "development",
+        schema: "outcome",
+      },
+    });
     const paths = resolveGoalPaths(configs, root, "demo");
     expect(paths.goalDir).toBe(path.join(root, ".factory/artifacts/demo"));
     expect(paths.goalCheckout.startsWith(root)).toBe(false);
     expect(paths.integrationBranch).toBe("factory/demo");
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("refuses a task type kind outside spike and development", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, ".factory/process.yaml"),
+      "taskTypes:\n  odd: { flow: implement-review, kind: task, schema: outcome }\n",
+    );
+    expect(() => loadConfigs(root)).toThrow(/taskTypes/);
     fs.rmSync(root, { recursive: true, force: true });
   });
 

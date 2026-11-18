@@ -89,10 +89,24 @@ export const flowSchema = z
   })
   .strict();
 
+/**
+ * One task type: the flow a task runs, whether it is a spike or development
+ * work, and the kernel output schema its turns deliver. The type owns all
+ * three so a task file cannot pair a spike kind with a review-only flow.
+ */
+export const taskTypeSchema = z
+  .object({
+    flow: z.string().min(1),
+    kind: z.enum(["spike", "development"]),
+    schema: z.string().min(1),
+  })
+  .strict();
+
 /** Process layer: package default deep-merged with an optional repo override. */
 export const processConfigSchema = z
   .object({
     flows: z.record(z.string(), flowSchema).default({}),
+    taskTypes: z.record(z.string(), taskTypeSchema).default({}),
     roles: z
       .record(
         z.string(),
@@ -391,6 +405,49 @@ function processFileFor(
 }
 
 /**
+ * The process layer alone: package default deep-merged with the repo override.
+ * Exported for callers that read process vocabulary without validating a
+ * repo/run config they do not own.
+ */
+export function loadProcessConfig(repoRoot: string): ProcessConfig {
+  const files = configFilePaths(repoRoot);
+  const findings: Finding[] = [];
+  const process = processLayer(files, findings);
+  if (findings.length > 0) throw new ConfigError(findings);
+  return process as ProcessConfig;
+}
+
+function processLayer(
+  files: ConfigFiles,
+  findings: Finding[],
+): ProcessConfig | undefined {
+  const baseLayer = readLayer(files.processDefault);
+  const overrideLayer = readLayer(files.processOverride);
+  findings.push(...baseLayer.findings, ...overrideLayer.findings);
+  const processData = parseLayer(
+    processConfigSchema,
+    deepMerge(baseLayer.data ?? {}, overrideLayer.data),
+    (issue) => processFileFor(overrideLayer.data, issue, files),
+    findings,
+  );
+  if (!processData) return undefined;
+  for (const [name, flow] of Object.entries(processData.flows)) {
+    if (flow.followUp?.mode === "different-model" && !flow.followUp.role) {
+      findings.push({
+        file: processFileFor(
+          overrideLayer.data,
+          { path: ["flows", name] },
+          files,
+        ),
+        key: `flows.${name}.followUp.role`,
+        message: "follow-up mode different-model needs a role",
+      });
+    }
+  }
+  return processData as ProcessConfig;
+}
+
+/**
  * Loads the three layers into one report. Missing files take schema defaults;
  * a missing run config leaves aliases empty so pre-flight names the roles
  * instead of inventing a harness.
@@ -402,15 +459,8 @@ export function loadConfigs(
   const files = configFilePaths(repoRoot, opts);
   const findings: Finding[] = [];
   const repoLayer = readLayer(files.repo);
-  const baseLayer = readLayer(files.processDefault);
-  const overrideLayer = readLayer(files.processOverride);
   const runLayer = readLayer(files.run);
-  findings.push(
-    ...repoLayer.findings,
-    ...baseLayer.findings,
-    ...overrideLayer.findings,
-    ...runLayer.findings,
-  );
+  findings.push(...repoLayer.findings, ...runLayer.findings);
 
   const repo = parseLayer(
     repoConfigSchema,
@@ -418,39 +468,18 @@ export function loadConfigs(
     files.repo,
     findings,
   );
-  const processMerged = deepMerge(baseLayer.data ?? {}, overrideLayer.data);
-  const processData = parseLayer(
-    processConfigSchema,
-    processMerged,
-    (issue) => processFileFor(overrideLayer.data, issue, files),
-    findings,
-  );
+  const processData = processLayer(files, findings);
   const run = parseLayer(runConfigSchema, runLayer.data, files.run, findings);
-  if (processData) {
-    for (const [name, flow] of Object.entries(processData.flows)) {
-      if (flow.followUp?.mode === "different-model" && !flow.followUp.role) {
-        findings.push({
-          file: processFileFor(
-            overrideLayer.data,
-            { path: ["flows", name] },
-            files,
-          ),
-          key: `flows.${name}.followUp.role`,
-          message: "follow-up mode different-model needs a role",
-        });
-      }
-    }
-    if (run && run.preset && processData.presets) {
-      if (
-        Object.keys(processData.presets).length > 0 &&
-        !(run.preset in processData.presets)
-      ) {
-        findings.push({
-          file: files.run,
-          key: "preset",
-          message: `preset "${run.preset}" is not defined in process config`,
-        });
-      }
+  if (processData && run?.preset && processData.presets) {
+    if (
+      Object.keys(processData.presets).length > 0 &&
+      !(run.preset in processData.presets)
+    ) {
+      findings.push({
+        file: files.run,
+        key: "preset",
+        message: `preset "${run.preset}" is not defined in process config`,
+      });
     }
   }
   if (findings.length > 0) throw new ConfigError(findings);

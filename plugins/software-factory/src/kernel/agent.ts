@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import type { z } from "zod";
 import {
   portable,
   type ModelRef,
@@ -31,6 +32,7 @@ import {
   type KernelRuntime,
   type LaunchKind,
   type Outcome,
+  outcomeSchema,
   type RecordEnd,
   type RecordStart,
   type StepRecord,
@@ -45,6 +47,11 @@ export interface AgentTurnSpec {
   meta: Omit<RecordStart, "actor" | "alias" | "model">;
   vars: Record<string, string>;
   expectation: OutcomeExpectation;
+  /**
+   * The task type's output schema; defaults to the kernel outcome schema for
+   * kernel turns and legacy tasks.
+   */
+  outcomeSchema?: z.ZodType<Outcome>;
   /** Review steps only: the last call refuses a `changes` verdict. */
   lastCall?: boolean;
   session?: SessionRef;
@@ -352,7 +359,11 @@ export async function runAgentTurn(
     outcome = null;
     findings = [];
     try {
-      const delivered = readDeliveredOutcome(outcomePath, text);
+      const delivered = readDeliveredOutcome(
+        outcomePath,
+        text,
+        spec.outcomeSchema ?? outcomeSchema,
+      );
       if (delivered) {
         outcome = delivered.outcome;
         findings = validateExpectation(outcome, spec.expectation, {
@@ -410,6 +421,7 @@ export async function runAgentTurn(
         outcome_schema: outcomeRepairSchemaVar(
           spec.target.role,
           spec.expectation,
+          spec.outcomeSchema ?? outcomeSchema,
         ),
       }),
       session,

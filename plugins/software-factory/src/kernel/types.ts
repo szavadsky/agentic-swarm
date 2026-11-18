@@ -176,12 +176,25 @@ export type Concern = z.infer<typeof concernSchema>;
 export type Outcome = z.infer<typeof outcomeSchema>;
 export type ReviewVerdict = NonNullable<Outcome["verdict"]>;
 export type GoalDecision = NonNullable<Outcome["decision"]>;
-export type TaskKind = "task" | "spike";
+/** Spike finishes with findings; development merges its branch. */
+export type TaskKind = "development" | "spike";
+
+/** One configured task type: the flow it runs, its kind and its output schema. */
+export interface TaskTypeDefinition {
+  flow: string;
+  kind: TaskKind;
+  /** A kernel outcome schema name; a task type never supplies its own. */
+  schema: string;
+}
 
 export interface TaskFile {
   slug: string;
   title: string;
+  /** The configured type this file named; absent on a legacy file. */
+  type?: string;
+  /** Resolved from `type`; a legacy file declares it directly. */
   kind: TaskKind;
+  /** Resolved from `type`; a legacy file declares it directly. */
   flow: string;
   deps: string[];
   scope: string[];
@@ -524,6 +537,11 @@ export interface RoleConfig {
 
 export interface ProcessConfig {
   flows: Record<string, FlowDefinition>;
+  /**
+   * Task type name -> what a task file naming it runs. The type owns the
+   * flow, kind and output schema; a task file names only the type.
+   */
+  taskTypes?: Record<string, TaskTypeDefinition>;
   roles: Record<string, RoleConfig>;
   /** Outcome reminders after the first attempt; a task file's `repairTurns` overrides it for that task's turns only. */
   reminders: number;

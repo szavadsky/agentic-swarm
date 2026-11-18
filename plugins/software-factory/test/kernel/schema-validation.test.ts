@@ -62,6 +62,18 @@ scope:
 done when: the demo works
 `;
 
+const TYPED_TASK = `---
+slug: demo.task
+title: Demo task
+type: spike
+deps: []
+scope:
+  - "src/**"
+---
+
+done when: the demo works
+`;
+
 const VALID_OUTCOME = "status: done\nsummary: landed\n";
 const VALID_HOLD = "slugs: [demo.task]\ngoal: false\n";
 
@@ -117,6 +129,15 @@ describe("schema validation", () => {
     // Eight files: package process.yaml, repo/run config, bootstrap run
     // layer, task, class, hold and outcome. The count proves each path ran;
     // noteChecked increments only after the schema accepts the file.
+    expect(result.output).toContain("8 schema-enforced file(s) valid");
+  });
+
+  it("passes a task file that names a configured type", () => {
+    freshCase(() =>
+      write(".factory/artifacts/demo/tasks/demo.task.md", TYPED_TASK),
+    );
+    const result = validRun();
+    expect(result.code).toBe(0);
     expect(result.output).toContain("8 schema-enforced file(s) valid");
   });
 
