@@ -180,7 +180,10 @@ export async function makeRuntime(
     }),
     store,
     harnesses: new Map(Object.entries(harnesses)),
-    prompts: loadPrompts(configs.process, repo.dir, configs.run.aliases),
+    prompts: loadPrompts(configs.process, repo.dir, {
+      aliases: configs.run.aliases,
+      run: configs.run,
+    }),
     limits: toLimits(configs),
     exhaustedPools: new Set(),
     // Hermetic prices: the repo-local cache, never the network.

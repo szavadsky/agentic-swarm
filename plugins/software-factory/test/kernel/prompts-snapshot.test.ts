@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import { FakeHarness } from "../../src/harness/fake/index.js";
 import { packageRoot } from "../../src/kernel/config.js";
 import { promptVars } from "../../src/kernel/flow-context.js";
@@ -11,12 +12,12 @@ import {
   taskFrontmatterVar,
   tierNamesVar,
 } from "../../src/kernel/prompt-schema.js";
-import { loadPromptLibrary } from "../../src/kernel/prompts.js";
+import { loadPromptLibrary, loadPrompts } from "../../src/kernel/prompts.js";
+import type { ProcessConfig, RunConfig } from "../../src/kernel/types.js";
 import {
   formatFixDispositions,
   formatReviewFindings,
 } from "../../src/kernel/record.js";
-import type { ProcessConfig } from "../../src/kernel/types.js";
 import { rec, task } from "./helpers.js";
 import {
   cleanupFlowRepo,
@@ -441,6 +442,33 @@ describe("review findings carry", () => {
     expect(rendered).not.toContain("empty on the first turn");
     expect(rendered).toContain("empty before the first review");
   });
+});
+
+describe("preset snapshots", () => {
+  for (const preset of ["autonomous", "principal", "detailed"]) {
+    for (const role of ["architect", "pm"]) {
+      it(`renders ${role} with ${preset} preset`, () => {
+        const process: ProcessConfig = {
+          flows: {},
+          roles: Object.fromEntries(
+            Object.keys(ROLES).map((role) => [role, { prompt: role }]),
+          ),
+          reminders: 1,
+          presets: {
+            autonomous: { calibration: "AUTO" },
+            principal: { calibration: "PRINCIPAL" },
+            detailed: { calibration: "DETAILED" },
+          },
+        };
+        const run: RunConfig = {
+          preset,
+        } as RunConfig;
+        const lib = loadPrompts(process, os.tmpdir(), { run });
+        const rendered = lib.render(process.roles[role]!.prompt, ROLES[role]!);
+        expect(rendered).toMatchSnapshot(`${role}-${preset}`);
+      });
+    }
+  }
 });
 
 describe("prompt debloat", () => {

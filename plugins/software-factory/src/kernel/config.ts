@@ -107,6 +107,16 @@ export const processConfigSchema = z
     reminders: z.number().int().nonnegative().default(1),
     calibration: z.string().optional(),
     promptsDir: z.string().min(1).optional(),
+    presets: z
+      .record(
+        z.string(),
+        z
+          .object({
+            calibration: z.string().min(1),
+          })
+          .strict(),
+      )
+      .optional(),
   })
   .strict();
 
@@ -241,6 +251,7 @@ export const runConfigSchema = z
       })
       .strict()
       .optional(),
+    preset: z.string().min(1).optional(),
   })
   .strict();
 
@@ -419,6 +430,18 @@ export function loadConfigs(
           ),
           key: `flows.${name}.followUp.role`,
           message: "follow-up mode different-model needs a role",
+        });
+      }
+    }
+    if (run && run.preset && processData.presets) {
+      if (
+        Object.keys(processData.presets).length > 0 &&
+        !(run.preset in processData.presets)
+      ) {
+        findings.push({
+          file: files.run,
+          key: "preset",
+          message: `preset "${run.preset}" is not defined in process config`,
         });
       }
     }

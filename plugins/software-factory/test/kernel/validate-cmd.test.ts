@@ -84,6 +84,7 @@ function library() {
   return loadPrompts(
     { flows: {}, roles: {}, reminders: 1 } as ProcessConfig,
     os.tmpdir(),
+    {},
   );
 }
 

@@ -529,6 +529,7 @@ export interface ProcessConfig {
   reminders: number;
   calibration?: string;
   promptsDir?: string;
+  presets?: Record<string, { calibration: string }>;
 }
 
 /** One fallback tier: a model on the alias's harness or another, with its own effort. */
@@ -603,6 +604,7 @@ export interface RunConfig {
   worktreeRoot?: string;
   /** Cheap model pinned for architect subagents. */
   scouts?: { model: string; effort?: string };
+  preset?: string;
 }
 
 /** Absolute paths of the three layers, for findings that must name the file. */

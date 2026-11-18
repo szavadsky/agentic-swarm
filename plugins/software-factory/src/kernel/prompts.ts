@@ -8,7 +8,7 @@ import {
   taskFrontmatterVar,
   tierNamesVar,
 } from "./prompt-schema.js";
-import type { ProcessConfig } from "./types.js";
+import type { ProcessConfig, RunConfig } from "./types.js";
 
 /**
  * Prompt templates render through LiquidJS in strict mode: an unknown variable
@@ -215,15 +215,22 @@ export function validateCmd(
 export function loadPrompts(
   process: ProcessConfig,
   repoRoot: string,
-  aliases?: Record<string, unknown>,
+  options?: { aliases?: Record<string, unknown>; run?: RunConfig },
 ): PromptLibrary {
+  const { aliases, run } = options ?? {};
   const overrideDirs: string[] = [];
   if (process.promptsDir)
     overrideDirs.push(path.resolve(repoRoot, process.promptsDir));
   overrideDirs.push(path.join(repoRoot, ".factory", "prompts"));
   const overrides: Record<string, string> = {};
-  if (process.calibration !== undefined)
-    overrides.calibration = process.calibration;
+
+  let calibration = process.calibration;
+  const preset = run?.preset;
+  if (preset && process.presets && process.presets[preset]) {
+    calibration = process.presets[preset].calibration;
+  }
+
+  if (calibration !== undefined) overrides.calibration = calibration;
   return loadPromptLibrary({
     builtinDir: path.join(packageRoot, "prompts"),
     overrideDirs,

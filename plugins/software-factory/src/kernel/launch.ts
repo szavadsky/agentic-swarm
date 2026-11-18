@@ -292,7 +292,10 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
     }),
     store,
     harnesses: new Map(Object.entries(harnesses)),
-    prompts: loadPrompts(configs.process, repoRoot, configs.run.aliases),
+    prompts: loadPrompts(configs.process, repoRoot, {
+      aliases: configs.run.aliases,
+      run: configs.run,
+    }),
     limits: toLimits(configs),
     exhaustedPools: new Set(),
     priceSource: opts.priceSource,

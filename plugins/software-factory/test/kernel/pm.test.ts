@@ -78,7 +78,7 @@ function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
     repo: new Repo({ mainRoot: root, worktreeRoot: root }),
     store: createFolderStore(path.join(root, "goal")),
     harnesses: new Map([["fake", fake]]),
-    prompts: loadPrompts(process, root),
+    prompts: loadPrompts(process, root, {}),
     limits: {
       flows: {},
       iterations: 1,

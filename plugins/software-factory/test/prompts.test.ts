@@ -27,7 +27,7 @@ import {
   stallRouteEntrySchema,
   steerRouteEntrySchema,
 } from "../src/kernel/types.js";
-import type { ProcessConfig } from "../src/kernel/types.js";
+import type { ProcessConfig, RunConfig } from "../src/kernel/types.js";
 
 describe("prompts: PromptLibrary", () => {
   let dir: string;
@@ -76,12 +76,13 @@ describe("prompts: PromptLibrary", () => {
       reminders: 1,
       calibration: "CUSTOM CALIBRATION",
     } as ProcessConfig;
-    const lib = loadPrompts(process, dir);
+    const lib = loadPrompts(process, dir, { run: {} as RunConfig });
     expect(lib.render("calibration", {})).toBe("CUSTOM CALIBRATION");
     // Built-ins still render when the process config sets no calibration.
     const builtin = loadPrompts(
       { flows: {}, roles: {}, reminders: 1 } as ProcessConfig,
       dir,
+      { run: {} as RunConfig },
     );
     expect(builtin.render("calibration", {})).toContain(
       "A concern is a recorded debt",
@@ -405,7 +406,7 @@ describe("prompts: config names", () => {
 });
 
 describe("prompts: schema defaults", () => {
-  function library(
+  function libraryWithConfig(
     flows: Record<string, unknown>,
     aliases?: Record<string, unknown>,
   ) {
@@ -418,12 +419,12 @@ describe("prompts: schema defaults", () => {
         reminders: 1,
       } as ProcessConfig,
       os.tmpdir(),
-      aliases,
+      { aliases },
     );
   }
 
   it("fills the outcome partial from the schema without turn vars", () => {
-    const rendered = library({}).render("outcome", {});
+    const rendered = libraryWithConfig({}).render("outcome", {});
     expect(rendered).toContain("status: done | blocked | failed | upscope");
     expect(rendered).toContain(
       "verdict: approve | changes | reject  # optional; review steps only",
@@ -432,7 +433,7 @@ describe("prompts: schema defaults", () => {
   });
 
   it("fills the task-frontmatter partial from schema and config", () => {
-    const rendered = library(
+    const rendered = libraryWithConfig(
       { "implement-review": {}, spike: {} },
       { escalation: {} },
     ).render("task-frontmatter", {});
@@ -445,7 +446,10 @@ describe("prompts: schema defaults", () => {
   });
 
   it("requires the new variables on the authoring roles", () => {
-    const lib = library({ "implement-review": {} }, { escalation: {} });
+    const lib = libraryWithConfig(
+      { "implement-review": {} },
+      { escalation: {} },
+    );
     expect(lib.placeholders("front")).toEqual(
       expect.arrayContaining([
         "outcome_schema",
