@@ -13,6 +13,7 @@ import {
   holdsDir,
   postSteer,
   quarantineDir,
+  scanInbox,
 } from "../../src/kernel/mailbox.js";
 import { task } from "./helpers.js";
 import {
@@ -329,6 +330,52 @@ describe("mid-run steer holds", () => {
         ),
       ).toBe(false);
       expect(harness.calls).toHaveLength(3);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("an urgent steer drains dispatch, leaves the steer for the next consult, and lets in-flight work finish", async () => {
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
+      await writeTask(runtime, task("gamma", { scope: ["gamma.txt"] }));
+
+      harness.script(
+        implementer("alpha.txt", async () => {
+          await postSteer(
+            runtime.store,
+            "s1",
+            "---\nurgent: true\n---\nStop the rollout and consult me.",
+          );
+        }),
+      );
+      harness.script(approver("alpha is correct"));
+      // Without the drain, gamma would run and need these next two scripts.
+      harness.script(implementer("gamma.txt"));
+      harness.script(approver("gamma is correct"));
+
+      const dispatched = await runDispatch(runtime, { iteration: 1 });
+      expect(dispatched.reason).toBe("drained");
+      expect(dispatched.cause).toBe("steer: s1 marked urgent");
+
+      const state = await tasks(runtime);
+      expect(state.tasks.alpha!.status).toBe("merged");
+      expect(state.tasks.gamma!.status).toBe("ready");
+      const records = await runtime.store.listRecords();
+      expect(records.some((record) => record.slug === "gamma")).toBe(false);
+      // Urgent is the owner's exception: the PM does not answer it and the
+      // steer stays pending for the consult the next iteration opens.
+      expect(records.filter((record) => record.step === "pm")).toHaveLength(0);
+      const pending = await scanInbox(runtime.store, { settleMs: 0 });
+      expect(pending.map((steer) => [steer.id, steer.urgent])).toEqual([
+        ["s1", true],
+      ]);
+      expect(harness.calls).toHaveLength(2);
     } finally {
       cleanupFlowRepo(repo);
     }

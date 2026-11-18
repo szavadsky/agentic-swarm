@@ -22,6 +22,8 @@ export interface Steer {
   text: string;
   /** Content hash: archive suffix and settle-change detector, never the identity. */
   hash: string;
+  /** Leading frontmatter `urgent: true`; the steer drains its iteration. */
+  urgent: boolean;
 }
 
 export interface ScanOptions {
@@ -57,6 +59,34 @@ function contentHash(text: string): string {
   return createHash("sha1")
     .update(text.replace(/\r\n/g, "\n"), "utf8")
     .digest("hex");
+}
+
+/** Leading `---` block and the text after it; a file without one is all text. */
+const STEER_FRONTMATTER =
+  /^---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)([\s\S]*)$/;
+
+/**
+ * A steer is free text; its only script-level metadata is the urgency flag in
+ * optional leading frontmatter. Malformed YAML is not metadata: the file is
+ * read as plain text so a bad header can never wedge the inbox.
+ */
+function parseSteerText(raw: string): { urgent: boolean; text: string } {
+  const match = STEER_FRONTMATTER.exec(raw);
+  if (!match) return { urgent: false, text: raw };
+  let meta: unknown;
+  try {
+    meta = yaml.parse(match[1] ?? "");
+  } catch {
+    return { urgent: false, text: raw };
+  }
+  // Frontmatter must carry a recognized key: prose can parse as a YAML mapping
+  // (`Note: take your time.`), and stripping it would silently drop the line.
+  if (typeof meta !== "object" || meta === null || Array.isArray(meta)) {
+    return { urgent: false, text: raw };
+  }
+  const urgent = (meta as { urgent?: unknown }).urgent;
+  if (typeof urgent !== "boolean") return { urgent: false, text: raw };
+  return { urgent, text: match[2] ?? "" };
 }
 
 function isENOENT(err: unknown): boolean {
@@ -165,12 +195,14 @@ export async function scanInbox(
       throw err;
     }
     const hash = contentHash(text);
+    const parsed = parseSteerText(text);
     const steer: Steer = {
       id: path.basename(file, path.extname(file)),
       file,
       relPath: `mailbox/inbox/${file}`,
-      text,
+      text: parsed.text,
       hash,
+      urgent: parsed.urgent,
     };
     if (seen.has(file)) {
       // The same file name was already processed: a replay, not a new steer.
@@ -463,7 +495,7 @@ export function formatSteers(steers: Steer[]): string {
   return steers
     .map((s) => {
       const first = s.text.trim().split(/\r?\n/)[0] ?? "";
-      return `- ${s.id} (${s.relPath}): ${first}`;
+      return `- ${s.id} (${s.relPath})${s.urgent ? " [urgent]" : ""}: ${first}`;
     })
     .join("\n");
 }
@@ -473,7 +505,8 @@ export function formatSteerTurn(steers: Steer[]): string {
   if (steers.length === 0) return "none";
   return steers
     .map(
-      (s) => `- ${s.id} (${s.relPath}):\n${s.text.trim().replace(/^/gm, "  ")}`,
+      (s) =>
+        `- ${s.id} (${s.relPath})${s.urgent ? " [urgent]" : ""}:\n${s.text.trim().replace(/^/gm, "  ")}`,
     )
     .join("\n");
 }

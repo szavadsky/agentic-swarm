@@ -150,6 +150,18 @@ Gates run once on the base; a red base is recorded and warned once, not fatal.
 next boundary, marks it processed and writes its answer to
 `mailbox/outbox/steer-<id>.md`.
 
+A steer whose file starts with `urgent: true` frontmatter is the exception: it
+is not answered by the PM. Dispatch stops starting new work, in-flight tasks
+finish, and the next iteration's architect consult reads the steer with the
+flag shown as `[urgent]`. The frontmatter block is not part of the steer text.
+
+```markdown
+---
+urgent: true
+---
+Stop the rollout and consult me.
+```
+
 ## Summary and metrics
 
 Each iteration writes exactly one `iterations/<n>/summary.md` (also copied to

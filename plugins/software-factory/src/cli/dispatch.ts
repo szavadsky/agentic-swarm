@@ -108,7 +108,8 @@ const STEER_USAGE = `
 factory steer --repo <path> --goal <name> <file | ->
 
 Atomically drops the file (or stdin) into mailbox/inbox. The architect reads it
-at the next iteration boundary and answers in mailbox/outbox.
+at the next iteration boundary and answers in mailbox/outbox. A leading
+\`urgent: true\` frontmatter block ends the current iteration early instead.
 `;
 
 const VALIDATE_USAGE = `
