@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { commitAll, isAncestor } from "../../src/core/git/commit.js";
 import { git } from "../../src/core/git/exec.js";
+import { installLspConfig } from "../../src/harness/omp/lsp.js";
 import { Repo } from "../../src/core/git/repo.js";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 
@@ -47,6 +48,27 @@ describe("Git commit and revision inspection (§7)", () => {
     });
     expect(shaEmpty).toBeString();
     expect(shaEmpty).not.toBe(sha1);
+  });
+
+  it("never commits the harness LSP config installed into the worktree", async () => {
+    const source = path.join(wtRoot, "canonical-lsp.json");
+    fs.writeFileSync(source, '{"servers":{}}\n', "utf8");
+    await installLspConfig(tmpRepo.dir, source);
+    fs.writeFileSync(path.join(tmpRepo.dir, "task.txt"), "work\n", "utf8");
+
+    const sha = await commitAll(repo, tmpRepo.dir, "factory: task");
+    expect(sha).toBeString();
+    const committed = (
+      await git(tmpRepo.dir, ["show", "--name-only", "--format=", sha!])
+    ).stdout;
+    expect(committed).toContain("task.txt");
+    expect(committed).not.toContain(".lsp.json");
+    // Still on disk for the harness, ignored by git: status stays clean so
+    // containment and the merge queue's clean do not see it.
+    expect(fs.existsSync(path.join(tmpRepo.dir, ".omp", ".lsp.json"))).toBe(
+      true,
+    );
+    expect((await git(tmpRepo.dir, ["status", "--porcelain"])).stdout).toBe("");
   });
 
   it("isAncestor distinguishes older from newer commits", async () => {

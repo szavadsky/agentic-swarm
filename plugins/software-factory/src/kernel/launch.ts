@@ -4,6 +4,7 @@ import { acquireRunLock, type RunLockHandle } from "../cli/lock.js";
 import { Repo } from "../core/git/repo.js";
 import type { Harness, ModelRef } from "../harness/types.js";
 import { type BoundaryResult, runBoundary } from "./boundary.js";
+import { artifactLspConfigPath, writeArtifactLsp } from "./artifact-lsp.js";
 import { loadConfigs, resolveGoalPaths, toLimits } from "./config.js";
 import { derive, FRONT_STOP_STEP } from "./derive.js";
 import { postLaunchDigest } from "./digest.js";
@@ -56,6 +57,8 @@ export interface HarnessFactoryContext {
   harnesses?: Record<string, HarnessConfig>;
   /** Provider cache window from `sessions.retention`; omp overlay and session stamp share it. */
   retention?: "short" | "long";
+  /** Artifact LSP enabled by the run config: the canonical config each omp turn installs. */
+  lsp?: { config: string };
 }
 
 export type HarnessFactory = (
@@ -279,6 +282,9 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
         : undefined,
       harnesses: configs.run.harnesses,
       retention: configs.run.sessions.retention,
+      ...(configs.run.lsp
+        ? { lsp: { config: artifactLspConfigPath(paths.goalDir) } }
+        : {}),
     });
   }
 
@@ -349,6 +355,10 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
         recoveredRecords: interrupted,
       };
     }
+    // The artifact folder carries the schemas and one LSP config for editors
+    // and any harness rooted there; it is written before the first turn
+    // snapshots goal artifacts, so containment never sees a launch write.
+    await writeArtifactLsp(paths.goalDir);
     const relaunch = (await store.listRecords()).some(
       (r) => r.iteration > 0 && r.step !== "task-quarantine",
     );

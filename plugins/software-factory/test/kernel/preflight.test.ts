@@ -1102,3 +1102,82 @@ describe("configuration report", () => {
     }
   });
 });
+
+describe("pre-flight artifact LSP", () => {
+  const binaries = {
+    omp: process.execPath,
+    fake: process.execPath,
+    "claude-code": process.execPath,
+  };
+
+  /** A PATH with git only: the base check still runs, the YAML server does not. */
+  function toolPath(dir: string): void {
+    const git = Bun.which("git");
+    if (!git) throw new Error("git is not on PATH");
+    fs.symlinkSync(git, path.join(dir, "git"));
+  }
+
+  function withPath<T>(dir: string, fn: () => Promise<T>): Promise<T> {
+    const saved = process.env.PATH;
+    process.env.PATH = dir;
+    return fn().finally(() => {
+      process.env.PATH = saved;
+    });
+  }
+
+  it("refuses omp with lsp enabled when the YAML server is not on PATH", async () => {
+    const f = await fixture(
+      SPLIT_HARNESSES.replace("limits:", "lsp: true\nlimits:"),
+    );
+    const empty = fs.mkdtempSync(path.join(os.tmpdir(), "no-yamlls-"));
+    toolPath(empty);
+    try {
+      const err = await withPath(empty, () =>
+        refusal({ ...f.input, harnesses: splitHarnesses(f), binaries }),
+      );
+      expect(err.findings).toContainEqual({
+        file: path.join(f.repo.dir, ".factory/run.yaml"),
+        key: "lsp",
+        message:
+          'lsp is enabled but "yaml-language-server" is not on PATH: omp does not ship the YAML language server',
+      });
+    } finally {
+      f.repo.cleanup();
+      fs.rmSync(empty, { recursive: true, force: true });
+    }
+  });
+
+  it("passes when the YAML server is on PATH", async () => {
+    const f = await fixture(
+      SPLIT_HARNESSES.replace("limits:", "lsp: true\nlimits:"),
+    );
+    const bin = fs.mkdtempSync(path.join(os.tmpdir(), "has-yamlls-"));
+    toolPath(bin);
+    fs.writeFileSync(path.join(bin, "yaml-language-server"), "#!/bin/sh\n", {
+      mode: 0o755,
+    });
+    try {
+      await withPath(bin, () =>
+        preflight({ ...f.input, harnesses: splitHarnesses(f), binaries }),
+      );
+    } finally {
+      f.repo.cleanup();
+      fs.rmSync(bin, { recursive: true, force: true });
+    }
+  });
+
+  it("does not check the YAML server for harnesses without an LSP surface", async () => {
+    const f = await fixture(RUN_HEAD.replace("limits:", "lsp: true\nlimits:"));
+    const empty = fs.mkdtempSync(path.join(os.tmpdir(), "no-yamlls-fake-"));
+    toolPath(empty);
+    try {
+      const result = await withPath(empty, () =>
+        preflight({ ...f.input, binaries }),
+      );
+      expect(result.aliases.architect).toBe("max");
+    } finally {
+      f.repo.cleanup();
+      fs.rmSync(empty, { recursive: true, force: true });
+    }
+  });
+});

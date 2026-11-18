@@ -22,6 +22,11 @@ export interface OmpHarnessOptions {
   retry?: Partial<RetryPolicy>;
   overlayExtra?: Record<string, unknown>;
   readyTimeoutMs?: number;
+  /**
+   * Canonical artifact LSP config. When set, each turn installs it into the
+   * turn cwd and omp runs without `--no-lsp`; absent keeps LSP off.
+   */
+  lspConfig?: string;
 }
 
 export const OMP_ID = "omp";

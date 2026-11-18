@@ -1,7 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { resolveAcpxCommand } from "../harness/acpx/command.js";
+import { OMP_ID } from "../harness/omp/types.js";
 import type { Harness } from "../harness/types.js";
+import { YAML_LSP_BINARY, yamlLspBinary } from "./artifact-lsp.js";
 import {
   type BaselineResult,
   checkBase,
@@ -300,6 +302,20 @@ export async function preflight(
         `harnesses.${harness}.binary`,
         unavailable,
       );
+    }
+    // omp's built-in yamlls entry needs the server binary; it does not ship
+    // one. Only a real launch checks executables (`binaries` omitted means an
+    // injected harness and no executable surface).
+    if (
+      configs.run.lsp &&
+      usedHarnesses.has(OMP_ID) &&
+      !executable(yamlLspBinary())
+    ) {
+      findings.push({
+        file: files.run,
+        key: "lsp",
+        message: `lsp is enabled but "${YAML_LSP_BINARY}" is not on PATH: omp does not ship the YAML language server`,
+      });
     }
   }
 

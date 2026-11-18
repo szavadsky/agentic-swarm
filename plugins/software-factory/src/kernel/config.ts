@@ -244,6 +244,13 @@ export const runConfigSchema = z
       .strict()
       .default(() => ({ dir: "", keepRuns: 5, retention: "short" as const })),
     worktreeRoot: z.string().min(1).optional(),
+    /**
+     * Enable artifact LSP where the harness supports it. omp runs without
+     * `--no-lsp` and installs the artifact config into each turn's cwd;
+     * harnesses without an LSP surface ignore it and keep the validation
+     * command.
+     */
+    lsp: z.boolean().default(false),
     scouts: z
       .object({
         model: z.string().min(1),

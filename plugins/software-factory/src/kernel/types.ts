@@ -602,6 +602,8 @@ export interface RunConfig {
   };
   sessions: { dir: string; keepRuns: number; retention: "short" | "long" };
   worktreeRoot?: string;
+  /** Enable artifact LSP where the harness supports it. */
+  lsp?: boolean;
   /** Cheap model pinned for architect subagents. */
   scouts?: { model: string; effort?: string };
   preset?: string;

@@ -81,8 +81,22 @@ limits:
   iterationUsd: 5
 sessions: { dir: ~/.local/share/factory/sessions, keepRuns: 5, retention: short }
 worktreeRoot: ~/.local/share/factory/worktrees
+lsp: true                                             # artifact LSP on omp
 scouts: { model: opencode-go/deepseek-v4.1-flash }   # omp architect subagents
 ```
+
+`lsp: true` enables artifact diagnostics where the harness supports them. At
+launch the factory writes every kernel schema as JSON Schema and one omp LSP
+config into the goal's artifact folder (`.factory/artifacts/<goal>/schemas/`
+and `.factory/artifacts/<goal>/.omp/lsp.json`). On omp, every turn installs
+that config into its own cwd (`<cwd>/.omp/.lsp.json`, added to the clone's
+`.git/info/exclude` and never committed) and omp runs without `--no-lsp`;
+`yaml-language-server` must be on PATH, and pre-flight refuses the launch when
+it is not. The config maps the YAML artifacts
+(`outcome.yaml`, hold files, `class.yaml`) to their schemas and sends task files
+to a small bundled frontmatter server, because a YAML server would parse a
+task's Markdown body as a second document and flag it. Harnesses without an LSP
+surface (opencode, pi, codex) ignore the flag and keep the validation command.
 
 An alias may carry `escalateTo: <alias>` to name the PM's next rung. A PM turn
 that is not usable gets a fresh retry on the same alias; after two failed turns
