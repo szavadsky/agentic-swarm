@@ -146,6 +146,16 @@ reaches it, dispatch drains — no new task starts; tasks already started finish
 their remaining steps and merge, and the summary records the cause and how many
 turns the brake could not price.
 
+A relaunch into an interrupted iteration resumes it as a recorded attempt (a
+`resume` script record) bounded by `limits.resumeAttempts` (default 2). It
+refuses, with a `resume-refused` record naming the cause, when attempts are
+spent, the previous resume started no task turn, the iteration's latest
+plan-check is `architect`, every ready task is held by a pending steer, a hold
+file is unreadable, or a goal hold or iteration brake stands. A refused resume
+goes straight to the boundary at the next iteration. A resumed pass that starts
+no task turn or ends on `architect` does not consume the `iterations` budget:
+the boundary runs next in the same launch.
+
 Pre-flight resolves every alias (and fallback) through the harness, checks the
 model list, `effort: highest` (highest level the model accepts), binaries, the
 base branch, and that session/worktree roots are writable and outside the repo.
