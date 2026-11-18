@@ -259,10 +259,9 @@ export async function runDispatch(
 
   let holds: Hold[];
   try {
-    holds = await readHolds(runtime.store, {
-      iteration,
+    ({ holds } = await readHolds(runtime.store, {
       knownSlugs: initialTasks.map((task) => task.slug),
-    });
+    }));
   } catch (err) {
     // A hold file that cannot be read decides what may merge, so nothing is
     // dispatched this iteration; the launch surfaces the infra stop.
@@ -341,10 +340,9 @@ export async function runDispatch(
       // The steer turn may have created tasks; validate holds against the files
       // on disk now, not the pre-turn list, so a hold naming a new task stands.
       const after = await runtime.store.listTasks();
-      holds = await readHolds(runtime.store, {
-        iteration,
+      ({ holds } = await readHolds(runtime.store, {
         knownSlugs: after.map((task) => task.slug),
-      });
+      }));
     } catch (err) {
       return {
         hold: activeHolds(holds, pending),

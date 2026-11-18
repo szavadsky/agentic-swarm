@@ -8,7 +8,6 @@ import {
   holdsDir,
   markProcessed,
   postSteer,
-  quarantineDir,
   readHolds,
   scanInbox,
   steerResponses,
@@ -165,57 +164,13 @@ describe("mailbox", () => {
         "utf8",
       );
 
-      expect(await readHolds(store)).toEqual([
-        { steer: "s1", slugs: ["alpha", "beta"], goal: false },
-        { steer: "s2", slugs: [], goal: true },
-      ]);
-    } finally {
-      fs.rmSync(root, { recursive: true, force: true });
-    }
-  });
-
-  it("quarantines a malformed hold with a record instead of wedging the launch", async () => {
-    const { root, store } = await setup();
-    try {
-      const dir = holdsDir(store);
-      fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(
-        path.join(dir, "s1.yaml"),
-        "slugs: alpha\ngoal: false\n",
-        "utf8",
-      );
-      fs.writeFileSync(path.join(dir, "s2.yaml"), "slugs: [unclosed\n", "utf8");
-      fs.writeFileSync(
-        path.join(dir, "s3.yaml"),
-        "slugs: []\ngoal: true\n",
-        "utf8",
-      );
-
-      expect(await readHolds(store)).toEqual([
-        { steer: "s3", slugs: [], goal: true },
-      ]);
-      const quarantine = quarantineDir(store);
-      expect(fs.readdirSync(quarantine).sort()).toEqual(["s1.yaml", "s2.yaml"]);
-      expect(
-        fs.readFileSync(path.join(quarantine, "s1.yaml"), "utf8"),
-      ).toContain("slugs: alpha");
-      expect(fs.existsSync(path.join(dir, "s1.yaml"))).toBe(false);
-
-      const records = (await store.listRecords()).filter(
-        (r) => r.step === "hold-quarantine",
-      );
-      expect(records).toHaveLength(2);
-      expect(records[0]?.ok).toBe(false);
-      expect(records[0]?.cause).toContain('"s1.yaml"');
-      expect(records[1]?.cause).toContain('"s2.yaml"');
-
-      // A later read has nothing left to quarantine and appends no second record.
-      expect(await readHolds(store)).toEqual([
-        { steer: "s3", slugs: [], goal: true },
-      ]);
-      expect(
-        (await store.listRecords()).filter((r) => r.step === "hold-quarantine"),
-      ).toHaveLength(2);
+      expect(await readHolds(store)).toEqual({
+        holds: [
+          { steer: "s1", slugs: ["alpha", "beta"], goal: false },
+          { steer: "s2", slugs: [], goal: true },
+        ],
+        findings: [],
+      });
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
@@ -274,57 +229,5 @@ describe("mailbox", () => {
     expect(responses.get('we"ird')).toBe("quoted too");
     // The longest id wins: "a:b: split it" answers a:b, not a.
     expect(responses.get("a")).toBe("wrong split for a:b must not win");
-  });
-
-  it("quarantines a hold naming an unknown slug", async () => {
-    const { root, store } = await setup();
-    try {
-      const dir = holdsDir(store);
-      fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(
-        path.join(dir, "s1.yaml"),
-        "slugs: [alpha, ghost]\ngoal: false\n",
-        "utf8",
-      );
-      fs.writeFileSync(
-        path.join(dir, "s2.yaml"),
-        "slugs: [alpha]\ngoal: false\n",
-        "utf8",
-      );
-      expect(
-        await readHolds(store, { iteration: 3, knownSlugs: ["alpha"] }),
-      ).toEqual([{ steer: "s2", slugs: ["alpha"], goal: false }]);
-      expect(fs.readdirSync(quarantineDir(store))).toEqual(["s1.yaml"]);
-      const records = (await store.listRecords()).filter(
-        (r) => r.step === "hold-quarantine",
-      );
-      expect(records).toHaveLength(1);
-      expect(records[0]?.iteration).toBe(3);
-      expect(records[0]?.cause).toContain('"s1.yaml"');
-      expect(records[0]?.cause).toContain("ghost");
-    } finally {
-      fs.rmSync(root, { recursive: true, force: true });
-    }
-  });
-
-  it("records quarantines in the caller's iteration, not the max record", async () => {
-    const { root, store } = await setup();
-    try {
-      await store.appendRecord(
-        { iteration: 5, step: "architect", round: 1, actor: "agent" },
-        { ok: true },
-      );
-      const dir = holdsDir(store);
-      fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(path.join(dir, "s9.yaml"), "slugs: [oops\n", "utf8");
-      expect(await readHolds(store, { iteration: 9 })).toEqual([]);
-      const records = (await store.listRecords()).filter(
-        (r) => r.step === "hold-quarantine",
-      );
-      expect(records).toHaveLength(1);
-      expect(records[0]?.iteration).toBe(9);
-    } finally {
-      fs.rmSync(root, { recursive: true, force: true });
-    }
   });
 });

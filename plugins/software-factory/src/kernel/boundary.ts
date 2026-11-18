@@ -266,11 +266,11 @@ export async function runBoundary(
   if (!opts.frontPack) {
     const head = await integrationHead(runtime);
     const previous = previousSummary(runtime.store.goalDir, iteration - 1);
-    const holds = await readHolds(runtime.store).catch((err) => {
+    const { holds } = await readHolds(runtime.store).catch((err) => {
       console.warn(
         `[factory] pending-steer holds unreadable: ${(err as Error).message}`,
       );
-      return [];
+      return { holds: [] };
     });
     const pack = renderContextPack({
       goal: path.basename(runtime.paths.goalDir),

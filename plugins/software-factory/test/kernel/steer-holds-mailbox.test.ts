@@ -105,7 +105,7 @@ describe("mid-run steer holds", () => {
     }
   }, 60_000);
 
-  it("quarantines a malformed hold left in the mailbox and dispatches normally", async () => {
+  it("ignores a malformed hold left in the mailbox, leaves it for the launch sweep, and dispatches normally", async () => {
     const { repo, goal } = setupFlowRepo({
       limits: { concurrency: { overall: 1 } },
     });
@@ -135,13 +135,14 @@ describe("mid-run steer holds", () => {
       const state = await tasks(runtime);
       expect(state.tasks.alpha!.status).toBe("merged");
       expect(state.tasks.gamma!.status).toBe("merged");
+      // Dispatch never sweeps: the file stays and no record is written.
+      expect(fs.existsSync(path.join(dir, "s1.yaml"))).toBe(true);
+      expect(fs.existsSync(quarantineDir(runtime.store))).toBe(false);
       expect(
-        fs.existsSync(path.join(quarantineDir(runtime.store), "s1.yaml")),
-      ).toBe(true);
-      const record = (await runtime.store.listRecords()).find(
-        (r) => r.step === "hold-quarantine",
-      );
-      expect(record?.cause).toContain("s1.yaml");
+        (await runtime.store.listRecords()).some(
+          (r) => r.step === "hold-quarantine",
+        ),
+      ).toBe(false);
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -205,7 +206,7 @@ describe("mid-run steer holds", () => {
       expect(fs.existsSync(path.join(holdsDir(runtime.store), "s1.yaml"))).toBe(
         false,
       );
-      expect(await readHolds(runtime.store)).toEqual([]);
+      expect((await readHolds(runtime.store)).holds).toEqual([]);
       const expired = (await runtime.store.listRecords()).find(
         (r) => r.step === "steer-unanswered",
       );
