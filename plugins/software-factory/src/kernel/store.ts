@@ -16,6 +16,7 @@ import type {
   RecordStart,
   StepRecord,
   TaskFile,
+  TaskFileFinding,
   TaskStatus,
   TaskTypeDefinition,
   TurnRecord,
@@ -105,8 +106,8 @@ class FolderStore implements ArtifactStore {
 
   constructor(
     goalDir: string,
-    artifactRoot?: string,
-    taskTypes: Record<string, TaskTypeDefinition> = {},
+    artifactRoot: string | undefined,
+    taskTypes: Record<string, TaskTypeDefinition>,
   ) {
     this.goalDir = goalDir;
     this.tasksDir = path.join(goalDir, "tasks");
@@ -179,7 +180,6 @@ class FolderStore implements ArtifactStore {
 
   async listTasks(): Promise<TaskFile[]> {
     const tasks: TaskFile[] = [];
-    let records: StepRecord[] | undefined;
     for (const name of await this.listDir("tasks")) {
       if (!name.endsWith(".md")) continue;
       const slug = name.slice(0, -".md".length);
@@ -189,30 +189,65 @@ class FolderStore implements ArtifactStore {
         tasks.push(parseTaskFile(text, slug, this.taskTypes));
       } catch (err) {
         if (!(err instanceof TaskFileError)) throw err;
-        records ??= await this.listRecords();
-        const terminal = terminalFactFromRecords(records, slug)?.status ?? null;
-        // Quarantine reports land on the current iteration so the summary
-        // and metrics for this launch name the vanished task; iteration 0
-        // is invisible to every operator surface.
-        const iteration = records.reduce(
-          (max, record) => Math.max(max, record.iteration),
-          1,
-        );
-        if (isTerminalHistory(terminal)) {
-          await this.reportTerminalHistory(
-            name,
-            slug,
-            terminal,
-            err.message,
-            records,
-            iteration,
-          );
-        } else {
-          await this.quarantineTask(name, slug, err.message, iteration);
-        }
       }
     }
     return tasks.sort((a, b) => a.slug.localeCompare(b.slug));
+  }
+
+  async scanTaskFindings(): Promise<TaskFileFinding[]> {
+    const findings: TaskFileFinding[] = [];
+    for (const name of await this.listDir("tasks")) {
+      if (!name.endsWith(".md")) continue;
+      const slug = name.slice(0, -".md".length);
+      const text = await this.readFile(`tasks/${name}`);
+      if (text === null) continue;
+      try {
+        parseTaskFile(text, slug, this.taskTypes);
+      } catch (err) {
+        if (!(err instanceof TaskFileError)) throw err;
+        findings.push({
+          slug,
+          file: `tasks/${name}`,
+          kind: err.kind,
+          reason: err.message,
+        });
+      }
+    }
+    return findings;
+  }
+
+  async sweepTasks(iteration: number): Promise<void> {
+    const records = await this.listRecords();
+    for (const finding of await this.scanTaskFindings()) {
+      if (finding.kind !== "malformed") continue;
+      const name = path.basename(finding.file);
+      const taskRecords = records.filter((r) => r.slug === finding.slug);
+      const status = taskRecords.some((r) => r.step === "merge")
+        ? "merged"
+        : taskRecords.some((r) => r.step === "finish")
+          ? "finished"
+          : taskRecords.some((r) => r.step === "cancel")
+            ? "cancelled"
+            : undefined;
+
+      if (status) {
+        await this.reportTerminalHistory(
+          name,
+          finding.slug,
+          status,
+          finding.reason,
+          records,
+          iteration,
+        );
+      } else {
+        await this.quarantineTask(
+          name,
+          finding.slug,
+          finding.reason,
+          iteration,
+        );
+      }
+    }
   }
 
   /**
@@ -420,8 +455,8 @@ class FolderStore implements ArtifactStore {
 /** `artifactRoot` (the goal's parent) receives a `.gitignore` so records stay out of git. */
 export function createFolderStore(
   goalDir: string,
-  artifactRoot?: string,
-  taskTypes: Record<string, TaskTypeDefinition> = {},
+  artifactRoot: string | undefined,
+  taskTypes: Record<string, TaskTypeDefinition>,
 ): ArtifactStore {
   return new FolderStore(goalDir, artifactRoot, taskTypes);
 }

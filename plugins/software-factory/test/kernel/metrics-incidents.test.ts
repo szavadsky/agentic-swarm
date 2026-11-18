@@ -165,7 +165,7 @@ function summaryIncidents(text: string): IncidentCounts {
 describe("iteration metrics incidents and spend tables", () => {
   it("counts each incident kind and reports identical counts and spend tables in the summary", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-incidents-"));
-    const store = createFolderStore(path.join(root, "goal"));
+    const store = createFolderStore(path.join(root, "goal"), undefined, {});
     try {
       await store.ensureLayout();
       const records = incidentRecords();
@@ -254,7 +254,7 @@ describe("iteration metrics incidents and spend tables", () => {
 
   it("counts an empty-diff park as a loop incident but not a spike's empty finish", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-incidents-"));
-    const store = createFolderStore(path.join(root, "goal"));
+    const store = createFolderStore(path.join(root, "goal"), undefined, {});
     try {
       await store.ensureLayout();
       const records = [
@@ -300,7 +300,7 @@ describe("iteration metrics incidents and spend tables", () => {
   });
   it("counts a same-model hop across harnesses as a fallback, not a retry", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-incidents-"));
-    const store = createFolderStore(path.join(root, "goal"));
+    const store = createFolderStore(path.join(root, "goal"), undefined, {});
     try {
       await store.ensureLayout();
       const records = [
@@ -332,7 +332,7 @@ describe("iteration metrics incidents and spend tables", () => {
 
   it("counts zero loop incidents and zero unpriced turns when no signal is present", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-incidents-"));
-    const store = createFolderStore(path.join(root, "goal"));
+    const store = createFolderStore(path.join(root, "goal"), undefined, {});
     try {
       await store.ensureLayout();
       const records = [
@@ -382,7 +382,7 @@ describe("iteration metrics incidents and spend tables", () => {
 
   it("counts each outcome repair on one record", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-incidents-"));
-    const store = createFolderStore(path.join(root, "goal"));
+    const store = createFolderStore(path.join(root, "goal"), undefined, {});
     try {
       await store.ensureLayout();
       const records = [
@@ -417,7 +417,7 @@ describe("iteration metrics incidents and spend tables", () => {
 
   it("counts launches per agent per kind and old incidents as unknown", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-launches-"));
-    const store = createFolderStore(path.join(root, "goal"));
+    const store = createFolderStore(path.join(root, "goal"), undefined, {});
     try {
       await store.ensureLayout();
       const records = [

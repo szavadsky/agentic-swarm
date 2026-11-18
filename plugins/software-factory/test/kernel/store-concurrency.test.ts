@@ -10,7 +10,7 @@ describe("record store under concurrent dispatch", () => {
       path.join(os.tmpdir(), "factory-store-race-"),
     );
     try {
-      const store = createFolderStore(goalDir);
+      const store = createFolderStore(goalDir, undefined, {});
       await store.ensureLayout();
       const turns = await Promise.all(
         Array.from({ length: 20 }, (_, i) =>

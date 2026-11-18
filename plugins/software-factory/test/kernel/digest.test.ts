@@ -24,6 +24,7 @@ import { TEST_BOUNDARY } from "./helpers.js";
 
 function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
   const process: ProcessConfig = {
+    taskTypes: {},
     flows: {},
     boundary: TEST_BOUNDARY,
     reminders: 1,
@@ -54,7 +55,7 @@ function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
     },
     configs: { repo, process, run },
     repo: new Repo({ mainRoot: root, worktreeRoot: root }),
-    store: createFolderStore(path.join(root, "goal")),
+    store: createFolderStore(path.join(root, "goal"), undefined, {}),
     harnesses: new Map([["fake", fake]]),
     prompts: loadPrompts(process, root, {}),
     limits: {

@@ -342,7 +342,7 @@ describe("unreadable task files", () => {
       path.join(os.tmpdir(), "factory-task-quarantine-"),
     );
     try {
-      const store = createFolderStore(path.join(root, "goal"));
+      const store = createFolderStore(path.join(root, "goal"), undefined, {});
       await store.ensureLayout();
       fs.writeFileSync(
         path.join(store.tasksDir, "broken.md"),
@@ -351,6 +351,7 @@ describe("unreadable task files", () => {
       );
       await store.writeTask(parseTaskFile(TEXT, "auth.token-refresh"));
 
+      await store.sweepTasks(1);
       const tasks = await store.listTasks();
       expect(tasks.map((candidate) => candidate.slug)).toEqual([
         "auth.token-refresh",
@@ -379,7 +380,7 @@ describe("unreadable task files", () => {
       path.join(os.tmpdir(), "factory-task-terminal-"),
     );
     try {
-      const store = createFolderStore(path.join(root, "goal"));
+      const store = createFolderStore(path.join(root, "goal"), undefined, {});
       await store.ensureLayout();
       const terminal = [
         { slug: "merged-task", step: "merge" },
@@ -397,6 +398,7 @@ describe("unreadable task files", () => {
           "utf8",
         );
       }
+      await store.sweepTasks(1);
 
       expect(await store.listTasks()).toEqual([]);
 

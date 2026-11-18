@@ -12,7 +12,7 @@ import { rec, script, task } from "./helpers.js";
 describe("iteration summary", () => {
   it("is derived from records: decision, debt, parked root causes, owner attention, metrics", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-summary-"));
-    const store = createFolderStore(path.join(root, "goal"));
+    const store = createFolderStore(path.join(root, "goal"), undefined, {});
     try {
       await store.ensureLayout();
       await postSteer(store, "s9", "Do we still support node 18?");
@@ -112,7 +112,7 @@ describe("iteration summary", () => {
     const root = fs.mkdtempSync(
       path.join(os.tmpdir(), "factory-summary-quarantine-"),
     );
-    const store = createFolderStore(path.join(root, "goal"));
+    const store = createFolderStore(path.join(root, "goal"), undefined, {});
     try {
       await store.ensureLayout();
       const tasks = [task("alpha")];
@@ -146,7 +146,7 @@ describe("iteration summary", () => {
     const root = fs.mkdtempSync(
       path.join(os.tmpdir(), "factory-summary-distance-"),
     );
-    const store = createFolderStore(path.join(root, "goal"));
+    const store = createFolderStore(path.join(root, "goal"), undefined, {});
     try {
       await store.ensureLayout();
       const tasks = [task("parked1"), task("pending1")];
@@ -202,7 +202,7 @@ describe("iteration summary", () => {
     const root = fs.mkdtempSync(
       path.join(os.tmpdir(), "factory-summary-parks-"),
     );
-    const store = createFolderStore(path.join(root, "goal"));
+    const store = createFolderStore(path.join(root, "goal"), undefined, {});
     try {
       await store.ensureLayout();
       const tasks = [task("old-park"), task("new-park")];
@@ -245,7 +245,7 @@ describe("iteration summary", () => {
     const root = fs.mkdtempSync(
       path.join(os.tmpdir(), "factory-summary-status-"),
     );
-    const store = createFolderStore(path.join(root, "goal"));
+    const store = createFolderStore(path.join(root, "goal"), undefined, {});
     try {
       await store.ensureLayout();
       const tasks = [task("a")];

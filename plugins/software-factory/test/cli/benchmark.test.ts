@@ -24,7 +24,7 @@ function fixtureGoal(): FixtureGoal {
   );
   const goalDir = path.join(repo.dir, ".factory/artifacts/demo");
   fs.mkdirSync(goalDir, { recursive: true });
-  return { repo, goalDir, store: createFolderStore(goalDir) };
+  return { repo, goalDir, store: createFolderStore(goalDir, undefined, {}) };
 }
 
 /** Writes one record directory exactly as the store lays it out on disk. */

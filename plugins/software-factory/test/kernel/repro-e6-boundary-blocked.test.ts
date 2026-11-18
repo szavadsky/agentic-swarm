@@ -68,7 +68,9 @@ async function seedResumableSession(goal: E2EGoal): Promise<SessionRef> {
     return fakeTurnResult(req);
   });
   await expectLaunch(3, goal.repo, harness);
-  const architect = (await createFolderStore(goal.goalDir).listRecords())
+  const architect = (
+    await createFolderStore(goal.goalDir, undefined, {}).listRecords()
+  )
     .filter((record) => record.step === "architect")
     .at(-1);
   if (!architect?.session)
@@ -174,7 +176,7 @@ describe("E6 inverted: an architect infra death is infra, not blocked-by-user", 
       expect(summary).not.toContain("blocked-by-user");
       expect(summary).not.toContain("stopped-with-debt");
       const architect = (
-        await createFolderStore(goal.goalDir).listRecords()
+        await createFolderStore(goal.goalDir, undefined, {}).listRecords()
       ).filter((record) => record.step === "architect");
       expect(architect).toHaveLength(3);
       expect(architect.at(-1)?.outcome?.decision).toBe("continue");

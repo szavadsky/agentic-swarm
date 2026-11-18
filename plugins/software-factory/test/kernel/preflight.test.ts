@@ -92,7 +92,7 @@ async function fixture(
   const store = createFolderStore(
     paths.goalDir,
     undefined,
-    configs.process.taskTypes,
+    configs.process.taskTypes ?? {},
   );
   await store.ensureLayout();
   const harness = new FakeHarness({

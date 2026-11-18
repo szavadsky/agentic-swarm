@@ -34,7 +34,11 @@ import { withKernelRoleFallbacks } from "./fake-defaults.js";
 async function runtimeFor(repo: TmpRepo, goal: string): Promise<KernelRuntime> {
   const configs = loadConfigs(repo.dir);
   const paths = resolveGoalPaths(configs, repo.dir, goal);
-  const store = createFolderStore(paths.goalDir, path.dirname(paths.goalDir));
+  const store = createFolderStore(
+    paths.goalDir,
+    path.dirname(paths.goalDir),
+    {},
+  );
   await store.ensureLayout();
   return {
     paths,

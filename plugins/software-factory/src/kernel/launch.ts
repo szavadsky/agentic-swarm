@@ -257,10 +257,11 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
     throw new LaunchError(`goal "${opts.goal}" has no intent: ${intentPath}`);
   }
 
+  const taskTypes = configs.process.taskTypes ?? {};
   const store = createFolderStore(
     paths.goalDir,
     path.dirname(paths.goalDir),
-    configs.process.taskTypes,
+    taskTypes,
   );
   await store.ensureLayout();
   const sessions = await createLaunchSessions(
@@ -433,6 +434,7 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
         }
       }
       let iteration = resume ? before.iteration : before.iteration + 1;
+      await store.sweepTasks(iteration);
       let humanInterventions = 0;
       let digestSteer: Steer | null = null;
       try {

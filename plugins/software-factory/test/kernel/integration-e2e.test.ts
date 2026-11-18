@@ -335,7 +335,11 @@ describe("cross-slice E2E — init, steer and three launches through S2/S3/S4", 
       expect(repo.git(["show", "factory/demo:gamma.txt"]).stdout.trim()).toBe(
         "gamma",
       );
-      const records = await createFolderStore(goalDir).listRecords();
+      const records = await createFolderStore(
+        goalDir,
+        undefined,
+        {},
+      ).listRecords();
       const betaMerge = records.find(
         (r) => r.slug === "beta" && r.step === "merge",
       );

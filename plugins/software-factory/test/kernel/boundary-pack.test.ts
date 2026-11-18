@@ -59,7 +59,11 @@ describe("boundary context pack", () => {
 
       await launch(goal.repo, harness);
 
-      const records = await createFolderStore(goal.goalDir).listRecords();
+      const records = await createFolderStore(
+        goal.goalDir,
+        undefined,
+        {},
+      ).listRecords();
       const architect = records.find((r) => r.step === "architect");
       expect(architect).toBeDefined();
       const packPath = path.join(goal.goalDir, contextPackRelPath(1));
@@ -79,7 +83,7 @@ describe("boundary context pack", () => {
   it("never truncates the status table with a hundred parked tasks", async () => {
     const goal = makeGoal();
     try {
-      const store = createFolderStore(goal.goalDir);
+      const store = createFolderStore(goal.goalDir, undefined, {});
       const slugs: string[] = [];
       for (let i = 0; i < 100; i++) {
         const slug = `bulk-${String(i).padStart(3, "0")}`;
@@ -106,7 +110,11 @@ describe("boundary context pack", () => {
 
       await launch(goal.repo, harness);
 
-      const records = await createFolderStore(goal.goalDir).listRecords();
+      const records = await createFolderStore(
+        goal.goalDir,
+        undefined,
+        {},
+      ).listRecords();
       const architect = records.find((r) => r.step === "architect");
       expect(architect).toBeDefined();
       const pack = fs.readFileSync(
@@ -202,7 +210,7 @@ describe("boundary context pack", () => {
   it("lists legacy records whose end.yaml still carries packTruncated", async () => {
     const goal = makeGoal();
     try {
-      const store = createFolderStore(goal.goalDir);
+      const store = createFolderStore(goal.goalDir, undefined, {});
       const turn = await store.startRecord({
         iteration: 1,
         slug: "alpha",

@@ -46,6 +46,7 @@ import {
 
 function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
   const process: ProcessConfig = {
+    taskTypes: {},
     flows: {},
     boundary: TEST_BOUNDARY,
     reminders: 1,
@@ -76,7 +77,7 @@ function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
     },
     configs: { repo, process, run },
     repo: new Repo({ mainRoot: root, worktreeRoot: root }),
-    store: createFolderStore(path.join(root, "goal")),
+    store: createFolderStore(path.join(root, "goal"), undefined, {}),
     harnesses: new Map([["fake", fake]]),
     prompts: loadPrompts(process, root, {}),
     limits: {
@@ -625,7 +626,11 @@ describe("PM turn reconciliation", () => {
       );
       expect(summary).toContain("status: blocked-by-user");
       expect(summary).toContain("PM ladder exhausted");
-      const records = await createFolderStore(goal.goalDir).listRecords();
+      const records = await createFolderStore(
+        goal.goalDir,
+        undefined,
+        {},
+      ).listRecords();
       expect(records.filter((r) => r.step === "architect")).toHaveLength(1);
       expect(
         records.some((r) => r.step === "pm-validate" && r.ok === false),
@@ -905,9 +910,9 @@ describe("PM turn reconciliation", () => {
       expect(summary).toContain("rung 4 escalation (fake-escalated)");
       expect(summary).toContain('depends on missing task "ghost"');
 
-      const pm = (await createFolderStore(goal.goalDir).listRecords()).filter(
-        (record) => record.step === "pm",
-      );
+      const pm = (
+        await createFolderStore(goal.goalDir, undefined, {}).listRecords()
+      ).filter((record) => record.step === "pm");
       expect(pm.map((record) => [record.round, record.alias])).toEqual([
         [1, "pm"],
         [2, "pm"],
@@ -977,9 +982,9 @@ describe("PM turn reconciliation", () => {
       expect(summary).not.toContain("fake-deeper");
       expect(fs.existsSync(path.join(goal.tasksDir, "b.md"))).toBe(false);
 
-      const pm = (await createFolderStore(goal.goalDir).listRecords()).filter(
-        (record) => record.step === "pm",
-      );
+      const pm = (
+        await createFolderStore(goal.goalDir, undefined, {}).listRecords()
+      ).filter((record) => record.step === "pm");
       expect(pm.map((record) => record.round)).toEqual([1, 2, 3]);
     } finally {
       cleanup(goal);

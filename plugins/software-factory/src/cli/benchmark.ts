@@ -113,10 +113,11 @@ export async function benchmarkGoal(
   const paths = resolveGoalPaths(configs, repoRoot, goal);
   if (!fs.existsSync(paths.goalDir))
     throw new Error(`goal "${goal}" has no directory at ${paths.goalDir}`);
+  const taskTypes = configs.process.taskTypes;
   const store = createFolderStore(
     paths.goalDir,
     path.dirname(paths.goalDir),
-    configs.process.taskTypes,
+    taskTypes,
   );
   const metricsPath = path.join(paths.goalDir, "metrics.yaml");
   const text = await store.readFile("metrics.yaml");

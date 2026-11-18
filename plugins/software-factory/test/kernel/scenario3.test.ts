@@ -136,7 +136,7 @@ function done(harness: FakeHarness): FakeHarness {
 async function stateOf(
   goalDir: string,
 ): Promise<{ state: State; records: StepRecord[] }> {
-  const store = createFolderStore(goalDir);
+  const store = createFolderStore(goalDir, undefined, {});
   const records = await store.listRecords();
   return { state: derive(await store.listTasks(), records), records };
 }
