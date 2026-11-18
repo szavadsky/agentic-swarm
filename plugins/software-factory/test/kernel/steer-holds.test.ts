@@ -516,7 +516,7 @@ describe("mid-run steer holds", () => {
     }
   }, 60_000);
 
-  it("quarantines a malformed hold the steer turn writes and keeps dispatching", async () => {
+  it("ignores a malformed hold the steer turn writes, leaves it for the launch sweep, and keeps dispatching", async () => {
     const { repo, goal } = setupFlowRepo({
       limits: { concurrency: { overall: 2 } },
     });
@@ -573,19 +573,18 @@ describe("mid-run steer holds", () => {
       });
       expect(dispatched.reason).toBe("boundary");
 
-      // The malformed hold is parked where it cannot decide anything, with a record.
+      // The malformed hold gates nothing, and dispatch leaves it for the
+      // launch sweep: still in place, no quarantine, no record.
+      expect(fs.existsSync(path.join(holdsDir(runtime.store), "s1.yaml"))).toBe(
+        true,
+      );
       expect(
         fs.existsSync(path.join(quarantineDir(runtime.store), "s1.yaml")),
-      ).toBe(true);
-      expect(fs.existsSync(path.join(holdsDir(runtime.store), "s1.yaml"))).toBe(
+      ).toBe(false);
+      const records = await runtime.store.listRecords();
+      expect(records.some((record) => record.step === "hold-quarantine")).toBe(
         false,
       );
-      const records = await runtime.store.listRecords();
-      const quarantined = records.find(
-        (record) => record.step === "hold-quarantine",
-      );
-      expect(quarantined?.ok).toBe(false);
-      expect(quarantined?.cause).toContain("s1.yaml");
 
       // The turn already in flight settled, and the launch kept dispatching.
       expect(

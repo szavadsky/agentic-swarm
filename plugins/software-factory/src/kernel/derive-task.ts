@@ -2,6 +2,7 @@ import type { CheckResult } from "../core/checks/types.js";
 import { isInfraCheck } from "./gates.js";
 import { countOutcomeRepairs } from "./metrics.js";
 import { stepFingerprint } from "./progress.js";
+import { SPIKE_REPORT_CHECK, spikeReportPath } from "./spike-report.js";
 import {
   agentSteps,
   checksFixLimit,
@@ -219,6 +220,16 @@ function failingNames(red: readonly CheckResult[]): string[] {
     .sort();
 }
 
+/** The exhausted gates named in a park; a missing spike report names its path. */
+function parkedGateNames(task: TaskFile, red: readonly CheckResult[]): string {
+  const names = failingNames(red).map((name) =>
+    name === SPIKE_REPORT_CHECK
+      ? `${name} (${spikeReportPath(task.slug)})`
+      : name,
+  );
+  return names.join(", ") || "failing checks";
+}
+
 /** Whether the follow-up red names the same actionable set as the red that sent the fix. */
 function sameFailingSet(
   red: readonly CheckResult[],
@@ -350,7 +361,7 @@ export function reduceTask(
           } else {
             gateFixCount += 1;
             if (gateFixCount > checksFixLimit(flow)) {
-              park = `gates: ${failingNames(red).join(", ") || "failing checks"}`;
+              park = `gates: ${parkedGateNames(task, red)}`;
               phase = "parked";
               gateFix = false;
               gateLastCall = false;

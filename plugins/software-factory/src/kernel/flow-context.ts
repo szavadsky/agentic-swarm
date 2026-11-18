@@ -18,6 +18,7 @@ import { GATE_LAST_CALL_ASK } from "./prompts.js";
 import { formatFixDispositions, formatReviewFindings } from "./record.js";
 import { agentSteps, isLastChecksFixCall } from "./review.js";
 import { sessionCacheHot } from "./sessions.js";
+import { spikeReportPath } from "./spike-report.js";
 import type {
   AliasConfig,
   BoundaryStep,
@@ -900,6 +901,8 @@ export function promptVars(
   return {
     task_path: `${runtime.store.tasksDir}/${task.slug}.md`,
     worktree,
+    // Where a spike commits its finding; empty for every other task.
+    report_path: task.kind === "spike" ? spikeReportPath(task.slug) : "",
     setup_command: runtime.configs.repo.setup.join(" && ") || "none",
     gate_commands:
       runtime.configs.repo.gates

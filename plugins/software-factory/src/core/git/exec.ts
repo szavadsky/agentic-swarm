@@ -17,6 +17,7 @@ interface GitOptions {
   allowFail?: boolean;
   input?: string;
   env?: Record<string, string>;
+  stripNewline?: boolean;
 }
 
 interface GitResult {
@@ -89,7 +90,7 @@ async function probeRepoIdentity(cwd: string): Promise<boolean> {
  * - Hardened environment: GIT_TERMINAL_PROMPT=0, GIT_EDITOR=true, no pager, LC_ALL=C
  * - Uses factory identity via GIT_AUTHOR / GIT_COMMITTER env if repo has no user.name/email
  *   (probed once per directory and cached)
- * - Trims trailing newline only from stdout
+ * - Trims trailing newline from stdout by default unless `stripNewline: false`
  * - Throws GitError on failure unless allowFail: true
  */
 export async function git(
@@ -127,7 +128,9 @@ export async function git(
     stdin: opts?.input,
   });
 
-  const stdout = res.stdout.replace(/\r?\n$/, "");
+  const rawStdout = res.stdout;
+  const stdout =
+    (opts?.stripNewline ?? true) ? rawStdout.replace(/\r?\n$/, "") : rawStdout;
   const stderr = res.stderr;
   const code = res.code ?? 0;
 

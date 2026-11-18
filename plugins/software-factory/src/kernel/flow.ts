@@ -46,6 +46,7 @@ import {
   scriptMeta,
   startChecks,
 } from "./record.js";
+import { checkSpikeReport } from "./spike-report.js";
 import { materialHash } from "./tasks.js";
 import { isLastReviewCall, reviewRoundLimit } from "./review.js";
 import type {
@@ -153,6 +154,7 @@ function markInfraGates(checks: CheckResult[]): void {
  */
 async function runTaskGates(
   runtime: KernelRuntime,
+  task: TaskFile,
   meta: { iteration: number; slug: string; round: number },
   worktree: string,
   preexisting: ReadonlySet<string>,
@@ -196,6 +198,13 @@ async function runTaskGates(
       if (!next || (!next.ok && isInfraCheck(next))) return check;
       return next;
     });
+  }
+  // A spike's product is its committed report, gated like a repo gate but
+  // never re-run: it reads the commit, which a re-run cannot change.
+  if (task.kind === "spike") {
+    checks.push(
+      await checkSpikeReport(worktree, task.slug, await headSha(worktree)),
+    );
   }
   await finishChecks(gate, checks, { preexisting, tree });
 }
@@ -376,7 +385,7 @@ async function handleStepResult(
     return infraResult ?? cancelledResult ?? {};
   }
   if (checksDue(flow, step.id)) {
-    await runTaskGates(runtime, meta, worktree, preexisting, prior);
+    await runTaskGates(runtime, task, meta, worktree, preexisting, prior);
   }
   return infraResult ?? cancelledResult ?? {};
 }
@@ -904,6 +913,7 @@ async function runChecks(
   const preexisting = preexistingRed(recordedBaseGates(prior));
   await runTaskGates(
     runtime,
+    task,
     { iteration, slug: task.slug, round: state.round },
     ensured.path,
     preexisting,
@@ -935,6 +945,7 @@ export async function executeTaskAction(
     await appendFinish(
       runtime.store,
       { iteration, slug: task.slug, round: state.round },
+      task,
       state.commit,
     );
     return {};

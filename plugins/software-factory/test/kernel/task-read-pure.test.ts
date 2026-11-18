@@ -108,7 +108,7 @@ describe("task read pure", () => {
         });
 
       await expect(run()).rejects.toThrow(
-        /task "unconfigured" has type "unknown": type "unknown" is not configured/,
+        /tasks\/unconfigured.md:.*task "unconfigured" has type "unknown"/,
       );
 
       // Verify no records appended

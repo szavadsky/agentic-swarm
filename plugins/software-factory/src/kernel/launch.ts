@@ -17,7 +17,13 @@ import {
   settledTurns,
 } from "./dispatch.js";
 import { runFront } from "./front.js";
-import { type Hold, type Steer, readHolds, scanInbox } from "./mailbox.js";
+import {
+  type Hold,
+  type Steer,
+  readHolds,
+  scanInbox,
+  sweepHolds,
+} from "./mailbox.js";
 import { rolesByStep, writeMetrics } from "./metrics.js";
 import type { PriceSource } from "./openrouter.js";
 import { loadPriceTable } from "./openrouter.js";
@@ -257,7 +263,7 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
     throw new LaunchError(`goal "${opts.goal}" has no intent: ${intentPath}`);
   }
 
-  const taskTypes = configs.process.taskTypes ?? {};
+  const taskTypes = configs.process.taskTypes;
   const store = createFolderStore(
     paths.goalDir,
     path.dirname(paths.goalDir),
@@ -396,10 +402,13 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
       let resumeHolds: Hold[] = [];
       if (resume) {
         try {
-          resumeHolds = await readHolds(store, {
-            iteration: Math.max(1, before.iteration),
+          const read = await readHolds(store, {
             knownSlugs: Object.keys(before.tasks),
           });
+          resumeHolds = read.holds;
+          // A malformed hold may have been meant to gate work; the sweep below
+          // parks it, but this launch must not resume as if it were absent.
+          if (read.findings.some((f) => f.kind === "malformed")) resume = false;
         } catch {
           // A hold file that cannot be read decides what may run, so the
           // boundary (and dispatch's infra stop) owns it — never a silent resume.
@@ -435,6 +444,7 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
       }
       let iteration = resume ? before.iteration : before.iteration + 1;
       await store.sweepTasks(iteration);
+      await sweepHolds(store, iteration, Object.keys(before.tasks));
       let humanInterventions = 0;
       let digestSteer: Steer | null = null;
       try {
