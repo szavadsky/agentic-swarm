@@ -21,7 +21,7 @@ async function setup(): Promise<{
   store: ReturnType<typeof createFolderStore>;
 }> {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-mailbox-"));
-  const store = createFolderStore(path.join(root, "goal"));
+  const store = createFolderStore(path.join(root, "goal"), undefined, {});
   await store.ensureLayout();
   return { root, store };
 }

@@ -155,7 +155,7 @@ async function runScenario(): Promise<void> {
     scriptPlanning(first, goalDir, path.join(goalDir, "tasks"));
     await expectLaunch(3, repo, first);
 
-    let store = createFolderStore(goalDir);
+    let store = createFolderStore(goalDir, undefined, {});
     const state = derive(await store.listTasks(), await store.listRecords());
     expect(state.goal).toBe("active");
     expect(state.tasks.alpha!.status).toBe("merged");
@@ -199,7 +199,7 @@ async function runScenario(): Promise<void> {
     });
     await expectLaunch(0, repo, second);
 
-    store = createFolderStore(goalDir);
+    store = createFolderStore(goalDir, undefined, {});
     const after = derive(await store.listTasks(), await store.listRecords());
     expect(after.goal).toBe("done");
     expect(after.iteration).toBe(2);
@@ -218,7 +218,7 @@ async function runScenario(): Promise<void> {
       if (entry === "tasks" || entry === "records") continue;
       fs.rmSync(path.join(goalDir, entry), { recursive: true, force: true });
     }
-    const stripped = createFolderStore(goalDir);
+    const stripped = createFolderStore(goalDir, undefined, {});
     const derivedAgain = derive(
       await stripped.listTasks(),
       await stripped.listRecords(),

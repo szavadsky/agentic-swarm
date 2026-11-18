@@ -95,7 +95,7 @@ function trivialImplementerTurn(file: string): FakeTurnHandler {
 }
 
 async function recordsOf(goal: E2EGoal) {
-  return createFolderStore(goal.goalDir).listRecords();
+  return createFolderStore(goal.goalDir, undefined, {}).listRecords();
 }
 
 /** The `factory status` output, with console.log captured. */

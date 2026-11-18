@@ -85,7 +85,7 @@ async function fixture(
   const paths = resolveGoalPaths(configs, repo.dir, "self-acpx");
   fs.mkdirSync(paths.goalDir, { recursive: true });
   fs.writeFileSync(path.join(paths.goalDir, "intent.md"), "# Goal\n", "utf8");
-  const store = createFolderStore(paths.goalDir);
+  const store = createFolderStore(paths.goalDir, undefined, {});
   await store.ensureLayout();
   const harnesses = new Map<string, Harness>([
     ["omp", new FakeHarness({ id: "omp", caps: { effort: ["low", "high"] } })],

@@ -187,7 +187,7 @@ export function cleanup(goal: E2EGoal): void {
 }
 
 export async function stateOf(goalDir: string): Promise<State> {
-  const store = createFolderStore(goalDir);
+  const store = createFolderStore(goalDir, undefined, {});
   return derive(await store.listTasks(), await store.listRecords());
 }
 

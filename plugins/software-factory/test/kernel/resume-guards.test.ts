@@ -25,7 +25,7 @@ describe("resume guards — holds and budgets", () => {
   it("a goal hold sends the relaunch to the boundary instead of resuming", async () => {
     const { repo, goalDir } = await drainedAfterAlpha();
     try {
-      const store = createFolderStore(goalDir);
+      const store = createFolderStore(goalDir, undefined, {});
       await postSteer(store, "s1", "Hold the goal.");
       fs.mkdirSync(path.join(goalDir, "mailbox/holds"), { recursive: true });
       fs.writeFileSync(
@@ -56,9 +56,13 @@ describe("resume guards — holds and budgets", () => {
         { harnesses: { fake: second } },
       );
 
-      const records = await createFolderStore(goalDir).listRecords();
+      const records = await createFolderStore(
+        goalDir,
+        undefined,
+        {},
+      ).listRecords();
       const state = derive(
-        await createFolderStore(goalDir).listTasks(),
+        await createFolderStore(goalDir, undefined, {}).listTasks(),
         records,
       );
       // Boundary ran for iteration 2; the hold drained dispatch, so beta
@@ -117,7 +121,7 @@ describe("resume guards — holds and budgets", () => {
         { harnesses: { fake: second } },
       );
 
-      const store = createFolderStore(goalDir);
+      const store = createFolderStore(goalDir, undefined, {});
       const records = await store.listRecords();
       expect(
         records.filter(
@@ -208,7 +212,7 @@ describe("resume guards — holds and budgets", () => {
         { harnesses: { fake: second } },
       );
 
-      const store = createFolderStore(s.goalDir);
+      const store = createFolderStore(s.goalDir, undefined, {});
       const records = await store.listRecords();
       expect(
         records.filter(
@@ -264,7 +268,7 @@ describe("resume guards — holds and budgets", () => {
         },
       );
 
-      const store = createFolderStore(goalDir);
+      const store = createFolderStore(goalDir, undefined, {});
       const records = await store.listRecords();
       expect(
         records.filter(

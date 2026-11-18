@@ -84,9 +84,11 @@ export const taskFrontmatterSchema = z
   .strict();
 
 export class TaskFileError extends Error {
-  constructor(message: string) {
+  readonly kind: "unconfigured-type" | "malformed";
+  constructor(message: string, kind: "unconfigured-type" | "malformed") {
     super(message);
     this.name = "TaskFileError";
+    this.kind = kind;
   }
 }
 
@@ -163,6 +165,7 @@ function resolveTaskType(
   if (!definition) {
     throw new TaskFileError(
       `task "${fileSlug}" has type "${type}": type "${type}" is not configured`,
+      "unconfigured-type",
     );
   }
   return { kind: definition.kind, flow: definition.flow };
@@ -181,7 +184,10 @@ export function parseTaskFile(
 ): TaskFile {
   const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(text);
   if (!match) {
-    throw new TaskFileError(`task "${fileSlug}" has no --- frontmatter ---`);
+    throw new TaskFileError(
+      `task "${fileSlug}" has no --- frontmatter ---`,
+      "malformed",
+    );
   }
   let raw: unknown;
   try {
@@ -189,10 +195,14 @@ export function parseTaskFile(
   } catch (err) {
     throw new TaskFileError(
       `task "${fileSlug}" frontmatter is not valid YAML: ${(err as Error).message}`,
+      "malformed",
     );
   }
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
-    throw new TaskFileError(`task "${fileSlug}" frontmatter is not a mapping`);
+    throw new TaskFileError(
+      `task "${fileSlug}" frontmatter is not a mapping`,
+      "malformed",
+    );
   }
   const meta = raw as Record<string, unknown>;
   const result = taskFrontmatterSchema.safeParse({
@@ -204,11 +214,13 @@ export function parseTaskFile(
       result.error.issues
         .map((issue) => frontmatterIssue(issue, fileSlug, meta))
         .join("; "),
+      "malformed",
     );
   }
   if (result.data.slug !== fileSlug) {
     throw new TaskFileError(
       `task file "${fileSlug}" declares slug "${result.data.slug}": slugs are immutable and file names authoritative`,
+      "malformed",
     );
   }
   const type = result.data.type;
@@ -216,6 +228,7 @@ export function parseTaskFile(
   if (type !== undefined && legacy.length > 0) {
     throw new TaskFileError(
       `task "${fileSlug}" names type "${type}" and legacy ${legacy.join(" and ")}: the type supplies flow and kind`,
+      "malformed",
     );
   }
   const resolved =

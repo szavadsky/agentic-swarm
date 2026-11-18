@@ -593,7 +593,7 @@ describe("standalone upscope", () => {
       await expectLaunch(3, goal.repo, first, 1);
       expect(reviewPrompt).toContain("standalone task");
 
-      const store = createFolderStore(goal.goalDir);
+      const store = createFolderStore(goal.goalDir, undefined, {});
       const escalated = await stateOf(goal.goalDir);
       expect(escalated.tasks.solo!.status).toBe("parked");
       expect(escalated.tasks.solo!.cause).toMatch(/^upscope: /);

@@ -440,6 +440,20 @@ export async function preflight(
       finding,
     );
   const all = [...unique.values()];
+
+  const taskFindings = await store.scanTaskFindings();
+  if (taskFindings.length > 0) {
+    for (const finding of taskFindings) {
+      if (finding.kind === "unconfigured-type") {
+        all.push({
+          file: finding.file,
+          key: "task",
+          message: `${finding.kind}: ${finding.reason}`,
+        });
+      }
+    }
+  }
+
   if (all.length > 0) throw new PreflightError(all);
 
   const result: PreflightResult = { aliases: resolvedAliases };

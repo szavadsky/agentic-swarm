@@ -146,7 +146,7 @@ describe("repro E4: first signal does not stop dispatch admission", () => {
 
       // The signaled turn finished and recorded: it was not cancelled, its
       // review ran, and its merge landed. No other task has a record.
-      const store = createFolderStore(s.goalDir);
+      const store = createFolderStore(s.goalDir, undefined, {});
       const records = await store.listRecords();
       const ended = (step: string) =>
         records.find(

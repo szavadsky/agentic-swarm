@@ -49,7 +49,7 @@ describe("createFolderStore", () => {
   });
 
   it("creates the goal layout", async () => {
-    const store = createFolderStore(goalDir);
+    const store = createFolderStore(goalDir, undefined, {});
     await store.ensureLayout();
     for (const rel of [
       "tasks",
@@ -75,6 +75,7 @@ describe("createFolderStore", () => {
       const store = createFolderStore(
         path.join(artifactRoot, "demo"),
         artifactRoot,
+        {},
       );
       await store.ensureLayout();
       await store.writeFile("records/00001/started.yaml", "seq: 1\n");
@@ -85,6 +86,7 @@ describe("createFolderStore", () => {
       const other = createFolderStore(
         path.join(artifactRoot, "other"),
         artifactRoot,
+        {},
       );
       await other.ensureLayout();
       expect(
@@ -96,7 +98,7 @@ describe("createFolderStore", () => {
   });
 
   it("reads, writes and lists goal-relative files", async () => {
-    const store = createFolderStore(goalDir);
+    const store = createFolderStore(goalDir, undefined, {});
     expect(await store.readFile("missing.txt")).toBeNull();
     expect(await store.listDir("missing")).toEqual([]);
 
@@ -125,7 +127,7 @@ describe("createFolderStore", () => {
   });
 
   it("round-trips task files sorted by slug", async () => {
-    const store = createFolderStore(goalDir);
+    const store = createFolderStore(goalDir, undefined, {});
     const login = task();
     const base = task({
       slug: "api.base",
@@ -148,7 +150,7 @@ describe("createFolderStore", () => {
   });
 
   it("writes started.yaml before returning and shows the unfinished record", async () => {
-    const store = createFolderStore(goalDir);
+    const store = createFolderStore(goalDir, undefined, {});
     const turn = await store.startRecord(start());
 
     expect(turn.dir).toBe(
@@ -175,7 +177,7 @@ describe("createFolderStore", () => {
   });
 
   it("finishes atomically: outcome.yaml, then end.yaml with endedAt", async () => {
-    const store = createFolderStore(goalDir);
+    const store = createFolderStore(goalDir, undefined, {});
     const turn = await store.startRecord(start());
     const outcome = {
       status: "done" as const,
@@ -219,7 +221,7 @@ describe("createFolderStore", () => {
   });
 
   it("increments seq from the highest existing record dir", async () => {
-    const store = createFolderStore(goalDir);
+    const store = createFolderStore(goalDir, undefined, {});
     const first = await store.appendRecord(start(), { stop: { kind: "done" } });
     const reviewOutcome = {
       status: "done" as const,
@@ -253,7 +255,7 @@ describe("createFolderStore", () => {
   });
 
   it("skips record dirs without a parseable started.yaml", async () => {
-    const store = createFolderStore(goalDir);
+    const store = createFolderStore(goalDir, undefined, {});
     await store.startRecord(start());
 
     fs.mkdirSync(path.join(goalDir, "records", "00002-empty"), {
@@ -283,7 +285,7 @@ describe("createFolderStore", () => {
   });
 
   it("reads outcome.yaml when present and prefers it over end.yaml", async () => {
-    const store = createFolderStore(goalDir);
+    const store = createFolderStore(goalDir, undefined, {});
     const turn = await store.startRecord(start());
     await turn.finish({
       stop: { kind: "done" },
@@ -308,7 +310,7 @@ describe("createFolderStore", () => {
   });
 
   it("survives a truncated agent-written outcome.yaml (rehydrates without outcome)", async () => {
-    const store = createFolderStore(goalDir);
+    const store = createFolderStore(goalDir, undefined, {});
     const turn = await store.startRecord(start());
     // Truncated JSON mid-string, as a cut-off reviewer turn leaves it.
     await fs.promises.writeFile(
@@ -322,7 +324,7 @@ describe("createFolderStore", () => {
   });
 
   it("degrades a torn end.yaml to an orphan instead of throwing", async () => {
-    const store = createFolderStore(goalDir);
+    const store = createFolderStore(goalDir, undefined, {});
     const turn = await store.startRecord(start());
     await fs.promises.writeFile(
       path.join(turn.dir, "end.yaml"),

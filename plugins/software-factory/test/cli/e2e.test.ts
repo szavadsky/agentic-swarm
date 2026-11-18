@@ -259,7 +259,7 @@ describe("CLI end to end — init, steer, run, status", () => {
       expect(finalStatus.out).toContain("goal demo: done (iteration 2)");
       expect(finalStatus.out).toContain("iterations/2/summary.md");
 
-      const store = createFolderStore(goalDir);
+      const store = createFolderStore(goalDir, undefined, {});
       expect(
         (await store.listRecords()).filter(
           (r) => r.step === "merge" && r.ok === true,

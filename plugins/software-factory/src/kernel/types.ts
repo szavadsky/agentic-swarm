@@ -218,6 +218,14 @@ export interface TaskFile {
    * wall, still capped by the run's `limits.turnMinutes`. Owner ruling 2.
    */
   turnMinutes?: number;
+  /** Plan-checker re-runs per iteration; exhausted rounds consult the architect. */
+}
+
+export interface TaskFileFinding {
+  slug: string;
+  file: string;
+  kind: "malformed" | "unconfigured-type";
+  reason: string;
 }
 
 export type TaskStatus =
@@ -534,6 +542,8 @@ export interface ArtifactStore {
   /** Goal-relative directory listing, sorted; empty when absent. */
   listDir(rel: string): Promise<string[]>;
   listTasks(): Promise<TaskFile[]>;
+  scanTaskFindings(): Promise<TaskFileFinding[]>;
+  sweepTasks(iteration: number): Promise<void>;
   readTask(slug: string): Promise<TaskFile | null>;
   writeTask(task: TaskFile): Promise<void>;
   startRecord(meta: RecordStart): Promise<TurnRecord>;
@@ -562,7 +572,7 @@ export interface ProcessConfig {
    * Task type name -> what a task file naming it runs. The type owns the
    * flow, kind and output schema; a task file names only the type.
    */
-  taskTypes?: Record<string, TaskTypeDefinition>;
+  taskTypes: Record<string, TaskTypeDefinition>;
   /** Each kernel boundary step's prompt and alias; pre-flight requires these aliases. */
   boundary: Record<BoundaryStep, TurnSpec>;
   /** Outcome reminders after the first attempt; a task file's `repairTurns` overrides it for that task's turns only. */
