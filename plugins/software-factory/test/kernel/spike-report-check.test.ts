@@ -6,6 +6,7 @@ import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
 import {
   checkSpikeReport,
+  spikeReport,
   SPIKE_REPORT_CHECK,
   spikeReportPath,
 } from "../../src/kernel/spike-report.js";
@@ -171,6 +172,43 @@ describe("spike report check", () => {
           SPIKE_REPORT_CHECK,
         );
       }
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("seals the report in the finish record", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const report = "# Finding\nSealed\n";
+      implementTurn(harness, "sealed", "done", report);
+      approveTurn(harness);
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, spike("sealed"));
+      await runDispatch(runtime, { iteration: 1 });
+
+      const content = await spikeReport(runtime.store, "sealed");
+      expect(content).toBe(report);
+      const stats = fs.statSync(
+        path.join(runtime.store.goalDir, "finish/sealed/report.md"),
+      );
+      expect(stats.mode & 0o777).toBe(0o444);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("spikeReport returns null for a legacy spike with no report.md", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      approveTurn(harness);
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, spike("legacy"));
+      await runDispatch(runtime, { iteration: 1 });
+
+      expect(await spikeReport(runtime.store, "legacy")).toBe(null);
     } finally {
       cleanupFlowRepo(repo);
     }

@@ -1,6 +1,9 @@
 import type { CheckResult } from "../core/checks/types.js";
 import { fingerprintText } from "../core/fingerprint.js";
 import { GitError, git } from "../core/git/exec.js";
+import type { ArtifactStore } from "./types.js";
+import path from "node:path";
+import fs from "node:fs";
 
 /** Check name a spike's task gates carry for its report. */
 export const SPIKE_REPORT_CHECK = "spike-report";
@@ -8,6 +11,24 @@ export const SPIKE_REPORT_CHECK = "spike-report";
 /** Where a spike commits its finding: the one destination the check reads. */
 export function spikeReportPath(slug: string): string {
   return `.factory/spikes/${slug}.md`;
+}
+
+/**
+ * Returns the sealed spike report for a slug, or null if it does not exist.
+ */
+export async function spikeReport(
+  store: ArtifactStore,
+  slug: string,
+): Promise<string | null> {
+  const reportPath = path.join(store.goalDir, `finish/${slug}/report.md`);
+  try {
+    return await fs.promises.readFile(reportPath, "utf8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      return null;
+    }
+    throw err;
+  }
 }
 
 /** What `git show <commit>:<path>` prints when the path is not in the commit's tree. */

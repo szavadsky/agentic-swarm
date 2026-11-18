@@ -1,6 +1,10 @@
+import fs from "node:fs";
+import path from "node:path";
 import type { CheckResult } from "../core/checks/types.js";
 import { git } from "../core/git/exec.js";
 import { newGateFailures } from "./gates.js";
+import { spikeReportPath } from "./spike-report.js";
+import { writeTextAtomic } from "../core/records/io.js";
 import type {
   ArtifactStore,
   Concern,
@@ -9,6 +13,7 @@ import type {
   RecordEnd,
   RecordStart,
   StepRecord,
+  TaskFile,
   WorkEdits,
 } from "./types.js";
 
@@ -187,8 +192,34 @@ export async function appendPark(
 export async function appendFinish(
   store: ArtifactStore,
   meta: { iteration: number; slug: string; round: number },
+  task: TaskFile,
   commit?: string,
 ): Promise<void> {
+  if (task.kind === "spike" && commit) {
+    const reportPath = spikeReportPath(task.slug);
+    const ABSENT_FROM_TREE = /does not exist in|exists on disk, but not in/;
+    const shown = await git(
+      store.goalDir,
+      ["show", `${commit}:${reportPath}`],
+      {
+        allowFail: true,
+        stripNewline: false,
+      },
+    );
+    if (shown.code === 0) {
+      const reportFile = path.join(
+        store.goalDir,
+        `finish/${task.slug}/report.md`,
+      );
+      await writeTextAtomic(reportFile, shown.stdout);
+      await fs.promises.chmod(reportFile, 0o444);
+    } else if (!ABSENT_FROM_TREE.test(shown.stderr)) {
+      throw new Error(
+        `failed to show ${commit}:${reportPath}: ${shown.stderr}`,
+      );
+    }
+  }
+
   await store.appendRecord(scriptMeta(meta.iteration, "finish", meta), {
     ok: true,
     commit,

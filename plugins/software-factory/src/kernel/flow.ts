@@ -945,6 +945,7 @@ export async function executeTaskAction(
     await appendFinish(
       runtime.store,
       { iteration, slug: task.slug, round: state.round },
+      task,
       state.commit,
     );
     return {};
